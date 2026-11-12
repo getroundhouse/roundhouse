@@ -40,6 +40,9 @@ pub fn versions_named(newest: u32, oldest: Option<u32>) -> String {
     }
 }
 
+
+pub use build::{BUILD_NUMBER, BUILD_VERSION, STAMPED_BUILD, StampedBuild};
+
 #[cfg(test)]
 mod tests {
     use super::newest_shared;
@@ -54,5 +57,3 @@ mod tests {
         assert_eq!(newest_shared(4..=5, 3, Some(2)), None, "one older than this side speaks");
     }
 }
-
-pub use build::{BUILD_NUMBER, BUILD_VERSION, STAMPED_BUILD, StampedBuild};
