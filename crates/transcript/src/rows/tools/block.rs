@@ -22,7 +22,7 @@ use crate::window_selection::SelectableText;
 /// Above this, output goes through [`LogBlock`], which can hold anything but has no text selection yet.
 const LOG_BLOCK_ABOVE: usize = 16 * 1024;
 /// How tall a block's output gets before it scrolls: about a dozen lines.
-const MAX_HEIGHT: f32 = 236.0;
+pub(super) const MAX_HEIGHT: f32 = 236.0;
 /// The space between the lines of what a command printed, so a line that wraps reads as one: about a fifth of a line.
 const LINE_GAP: f32 = 4.0;
 /// Up to how many lines a command's output is drawn a line at a time, with space between. Each line is a text of its

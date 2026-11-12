@@ -106,10 +106,10 @@
 - **One character is found only in what's loaded,** since it's in nearly every part of a chat, and so is anything when the hub is too old to say or fails to. Then the count ends in `+`, such as `3 of 12+`, or says `No matches loaded`, unless the whole chat is loaded.
 - **The first match shown is the first at or below the top of the chat,** or the first of all with none below. Enter or ⌘G goes to the next, and ⇧Enter or ⇧⌘G to the one before, round from the last to the first. The one shown is marked more strongly than the rest.
 - **Going to a match loads its part of the chat if it isn't, opens the call or thinking it's in, and scrolls it into view below the bar,** a block that scrolls in a call too. What it opened stays open.
-- **A match in a command shows the command whole, and one in a line too long for its block scrolls the block sideways to it.** *Unconfirmed.*
+- **A match in a line too long for its block scrolls the block sideways to it.** *Unconfirmed.*
 - **Escape closes the bar,** the marks go, and focus goes back to the message box.
 
-**Finding `fmt`: the first of four matches, in a command opened to show it, then one in each closed command below, whose line marks it, and one in the reply.** *Unconfirmed.*
+**Finding `fmt`: the first of four matches, in a call opened to show it, then one in each closed command below, whose line marks it, and one in the reply.** *Unconfirmed.*
 
 ![Finding text in a chat](screens/finding.png)
 
@@ -144,19 +144,16 @@
 Every call is drawn the same way, as `look.md` says, and each kind fills in what its line says and what it opens to. A tool that has no drawing of its own still gets a readable line, so a new tool, or one from an MCP server, never shows as raw JSON until it's opened.
 
 - **A command's title is what the agent said it's doing,** with the command beside it, cut off with an ellipsis when it doesn't fit. A command the agent didn't describe says `Run`. *Unconfirmed.*
-- **Opened, the command comes first, faded, on one line, and what it printed comes under it in the foreground colour,** since the title has already said what the command does, and what it printed is what's read. The command is highlighted as shell, after a faint `$`. A command too long for the line is cut off with an ellipsis, and one of several lines shows its first, as the call's line does. Clicking it shows it whole, wrapping under itself rather than under the `$`, and clicking again cuts it off. The pointer is a hand over it only when a click would change it. A command that printed nothing says `No output` under it, faintly, so one that's done doesn't look as if it never answered, and one still running shows only itself. *Unconfirmed.*
+- **Opened, the command comes first, faded and whole, and what it printed comes under it in the foreground colour,** since the title has already said what the command does, and what it printed is what's read. The command is highlighted as shell, after a faint `$`, and wraps under itself rather than under the `$`. Opening the call is what shows it, so nothing in it opens further. A command taller than about five lines scrolls on its own, at half the height at which what it printed starts to scroll, so a long command leaves room for what it printed. A command that printed nothing says `No output` under it, faintly, so one that's done doesn't look as if it never answered, and one still running shows only itself. *Unconfirmed.*
+- **The command is text to select, to copy and run elsewhere, and a button at its top right copies all of it,** the same button a finished turn has for its final message, shown only while the command is hovered. The button stays there while a long command scrolls under it, and the command leaves room for it, so its text never runs under the button. *Unconfirmed.*
 - **What a command printed has a little space between its lines,** about a fifth of a line, so a line too long for the block reads as one where it wraps. It still selects and copies as one text, its lines one under another, as it was printed. Output of more than 200 lines is drawn without the space, so a long log stays as quick to draw as before. *Unconfirmed.*
 - **A call that failed says so on a red line under it,** with how a command exited, such as `Exit 1`, or `Error` for anything else, and the first line of what went wrong. It shows while the call is closed, so a failure is never hidden. Opened, the call shows all of what went wrong, since the line only has room for its start, then what it tried, such as an edit's diff. What went wrong stays in muted text rather than red, so it's still easy to read, and what a command printed is in the foreground colour, as it is when the command works. *Unconfirmed.*
 - **A result whose call is too far back to find is drawn on a line of its own,** saying `Output` and how many lines or images came back, and opens to them, so nothing the agent was told is lost. *Unconfirmed.*
 - **Any other tool's title is its name made readable,** such as `Create issue` for `create_issue`, then the MCP server it's from in an outlined chip, and its most telling input in faint monospace. If the agent described the call, the description is the title and the tool's name follows it. Opened, its input as JSON, then what came back. *Unconfirmed.*
 
-**Commands: one that failed, one opened that printed nothing, one the agent didn't describe, and two too long for their line, one of them opened, its output wrapping.** *Unconfirmed.*
+**Commands: one that failed, one opened that printed nothing, one the agent didn't describe, and two too long for their line, one of them opened to show it whole, its output wrapping.** *Unconfirmed.*
 
 ![Commands, one opened with its output](screens/tool-commands.png)
-
-**The opened command, clicked to show it whole.** *Unconfirmed.*
-
-![An opened command shown whole](screens/tool-command-whole.png)
 
 **Tools with no drawing of their own: one from an MCP server opened, one that failed, and a built-in one.** *Unconfirmed.*
 

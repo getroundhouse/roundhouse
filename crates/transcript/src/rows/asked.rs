@@ -3,6 +3,7 @@
 //! answered under it. While it waits it's asked in the composer's place instead, by `questions::QuestionPanel`.
 
 use gpui_kit::assets::IconName;
+
 use gpui_kit::component::{ActiveTheme as _, Icon, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
@@ -36,8 +37,7 @@ pub(super) fn draw(seq: Seq, asked: &Asked, shared: &Shared, cx: &App) -> AnyEle
     let find = FindLook::default();
     let (key, open) = (&asked.key, asked.open);
     // It's in the approval's own row, though nothing a question draws is placed by its block.
-    let toggle =
-        Toggle { seq, key, fold: Fold::Output, open, whole: false, shared, find: &find, in_row: InRow::Own(0) };
+    let toggle = Toggle { seq, key, fold: Fold::Output, open, shared, find: &find, in_row: InRow::Own(0) };
     let title = if questions.len() > 1 { format!("Asked {} questions", questions.len()) } else { "Asked".to_string() };
     let mut line = Line::new(ICON, title);
     for header in questions.iter().filter_map(|question| question.header.clone()) {

@@ -165,7 +165,7 @@ fn what_went_wrong_is_found_but_not_what_the_app_says_of_it() {
 }
 
 #[test]
-fn a_match_in_a_command_opens_its_call_and_shows_the_command_whole() {
+fn a_match_in_a_command_opens_its_call() {
     let log = log([event(1, call("run", "Bash", json!({ "command": "cargo build\ncargo fmt --all" })))]);
 
     let found = of_row(&log, &Model::default(), &Needle::new("fmt").unwrap(), 0);
@@ -173,7 +173,7 @@ fn a_match_in_a_command_opens_its_call_and_shows_the_command_whole() {
     let [found] = &found[..] else { panic!("{found:?}") };
     assert_eq!(found.id.1, Part::Command);
     let key = &found.id.0;
-    assert_eq!(found.opens, [(key.clone(), Fold::Output), (key.clone(), Fold::Command)], "past its first line");
+    assert_eq!(found.opens, [(key.clone(), Fold::Output)], "which shows the command whole");
 }
 
 #[test]

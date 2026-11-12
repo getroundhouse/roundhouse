@@ -22,6 +22,7 @@ mod prose;
 mod questions;
 mod rows;
 mod scroll_area;
+mod selectable_layout;
 mod selectable_lines;
 mod selection;
 mod transcript;

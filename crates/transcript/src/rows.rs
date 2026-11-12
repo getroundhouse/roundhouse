@@ -358,8 +358,8 @@ fn render_block(
     cx: &App,
 ) -> Option<AnyElement> {
     let key = &drawing.key;
-    let (fold, open, whole) = (drawing.fold, drawing.open, drawing.whole);
-    let toggle = Toggle { seq, key, fold, open, whole, shared, find, in_row };
+    let (fold, open) = (drawing.fold, drawing.open);
+    let toggle = Toggle { seq, key, fold, open, shared, find, in_row };
     Some(match block {
         ContentBlock::Text { text, images } => written(&toggle, Part::Text, text, None, Some(images)),
         ContentBlock::Thinking { text } if text.is_empty() => return None,
