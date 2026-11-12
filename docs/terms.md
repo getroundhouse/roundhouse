@@ -143,7 +143,7 @@ These sound alike, and do different things.
 | Cancel | A turn | Ends the current turn and any setup still running. The agent's process stays up. `session_cancel`, `AgentCancel` | It takes the next prompt |
 | Stop, in the interface | A turn | The Stop button and `Cmd-.` mean cancel, not a process stop | As for cancel |
 | Interrupt | A turn | What the agent CLI calls a cancel. Only the adapter says this, as in `AgentProcess::interrupt` | As for cancel |
-| Interrupted | A session | A status, not an action: the agent went away mid-turn without being asked. A cancel doesn't cause it | The next prompt resumes the conversation |
+| Interrupted | A session | A status, not an action: the agent went away mid-turn rather than ending the turn, whatever the reason, as when it exits by itself, its worker goes, or it's stopped by closing its chat, archiving its workspace or stopping the hub. A cancel ends the turn first, so it doesn't cause it | The next prompt resumes the conversation |
 | Stop, in code | A process | Ends it, and gives it time to finish. `AgentStop`, `Provider::stop` | The next prompt starts a new one |
 | Kill | An instance | Like stop, without the time. For a worker that isn't responding. `Provider::kill` | The next prompt starts a new one |
 | Close | A session | Stops its agent and hides it from the tabs. The history stays. `session_close` | It can be reopened with `session_reopen` |
