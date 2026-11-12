@@ -20,6 +20,7 @@ mod drafts;
 mod effort;
 mod feed;
 mod finding_a_hub;
+mod hub_copies;
 mod hub_settings;
 mod instructions;
 mod launch_flags;

@@ -89,6 +89,10 @@ fn main() -> anyhow::Result<()> {
     // Before anything is started. A worker's input and output are its hub's pipes, and the hub learns that the worker
     // has exited when its output ends.
     process::keep_stdio_from_children();
+    // Whatever this runs as, and for as long as it runs, so a client removing the copies of the daemon that nothing
+    // runs from leaves the one this runs from. One that can't be marked is being removed just then, which can stop it
+    // as it starts, so it goes on unmarked and leaves the rest to that.
+    let _running_from = std::env::current_exe().and_then(|program| process::RunningFrom::mark(&program)).ok();
     // Logs always go to stderr, because a worker's stdout is its protocol stream.
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::try_from_env(protocol::paths::ENV_LOG).unwrap_or_else(|_| EnvFilter::new("info")))

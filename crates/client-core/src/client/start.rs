@@ -1,6 +1,9 @@
 //! Starting a hub when there's none, which a client does so its user never has to: which daemon it runs, and running
 //! it apart from this client. A stamped build's hubs run from its own copy of the daemon, for the reason "Updating
-//! the app" in `docs/architecture.md` gives, and any other build starts the daemon where it is.
+//! the app" in `docs/architecture.md` gives, and any other build starts the daemon where it is. Starting one is also
+//! when the copies that nothing runs from anymore are removed.
+
+mod old_copies;
 
 use std::fs::{File, OpenOptions};
 use std::io;
@@ -19,23 +22,37 @@ const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
 
 impl Client {
     /// Connects, starting a hub first if none is running. The hub is a separate process that
-    /// outlives this client, which is why closing a client doesn't stop its agents.
+    /// outlives this client, which is why closing a client doesn't stop its agents. Once a hub this started is up, it
+    /// removes the copies of the daemon in the data directory that nothing runs from anymore.
     pub fn connect_or_start(paths: &Paths, daemon: &Daemon, client_name: &str) -> Result<Client> {
         match Client::connect(&paths.socket, client_name) {
             Ok(client) => return Ok(client),
             Err(e) if hub_is_missing(&e) => {}
             Err(e) => return Err(e),
         }
-        start_hub(paths, daemon)?;
-        let deadline = Instant::now() + Duration::from_secs(10);
-        loop {
-            match Client::connect(&paths.socket, client_name) {
-                Ok(client) => return Ok(client),
-                Err(e) if hub_is_missing(&e) && Instant::now() < deadline => {
-                    std::thread::sleep(Duration::from_millis(25));
-                }
-                Err(e) => return Err(e),
+        if let Err(couldnt) = start_hub(paths, daemon) {
+            // Another client may have started one meanwhile, and removed the copy this one was about to start.
+            return Client::connect(&paths.socket, client_name).map_err(|_| couldnt.into());
+        }
+        let client = connect_once_started(&paths.socket, client_name)?;
+        // A client starts a hub once the one before has gone, as for an update, which is when a copy goes out of use.
+        if let Some(build) = &daemon.build {
+            old_copies::remove_unused(paths, build);
+        }
+        Ok(client)
+    }
+}
+
+/// Connects to the hub just started at `socket`, waiting for it to listen.
+fn connect_once_started(socket: &Path, client_name: &str) -> Result<Client> {
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        match Client::connect(socket, client_name) {
+            Ok(client) => return Ok(client),
+            Err(e) if hub_is_missing(&e) && Instant::now() < deadline => {
+                std::thread::sleep(Duration::from_millis(25));
             }
+            Err(e) => return Err(e),
         }
     }
 }
@@ -76,7 +93,8 @@ impl Daemon {
             return Ok(self.path.clone());
         };
         let copy = paths.hub_copy(build);
-        // A copy only appears once it's whole and checked, and nothing replaces it, so one that's there is ready.
+        // A copy only appears once it's whole and checked, and nothing replaces it, so one that's there is ready. Another
+        // client can still remove it before it's started, which `connect_or_start` allows for.
         if !copy.exists() {
             publish_copy(&self.path, build, &copy).map_err(|e| {
                 io::Error::new(e.kind(), format!("copying {} to {}: {e}", self.path.display(), copy.display()))
@@ -194,13 +212,18 @@ fn create_temporary(copy: &Path) -> io::Result<(PathBuf, File)> {
     loop {
         let n = NEXT_TEMPORARY.fetch_add(1, Ordering::Relaxed);
         // With the extension Windows wants on a file it runs, which `check_build` does.
-        let name = format!(".{DAEMON_NAME}.{}.{n}{}", std::process::id(), std::env::consts::EXE_SUFFIX);
+        let name = format!("{}{}.{n}{}", temporary_prefix(), std::process::id(), std::env::consts::EXE_SUFFIX);
         let temporary = copy.with_file_name(name);
         match OpenOptions::new().write(true).create_new(true).open(&temporary) {
             Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {}
             opened => return opened.map(|file| (temporary, file)),
         }
     }
+}
+
+/// What a temporary copy's name starts with, so it's hidden, and never the name of a copy.
+fn temporary_prefix() -> String {
+    format!(".{DAEMON_NAME}.")
 }
 
 /// Copies only the contents, so a quarantine mark on the original doesn't follow. A Mach-O binary carries its

@@ -22,7 +22,13 @@ pub(crate) enum Does {
 }
 
 /// Stands in for a hub on `socket`, doing with each request what `does` says, and connects to it.
-pub(crate) fn connect(socket: &Path, mut does: impl FnMut(ClientRequest) -> Does + Send + 'static) -> Client {
+pub(crate) fn connect(socket: &Path, does: impl FnMut(ClientRequest) -> Does + Send + 'static) -> Client {
+    listen(socket, does);
+    Client::connect(socket, "test").unwrap()
+}
+
+/// Stands in for a hub on `socket`, doing with each request what `does` says, for the first client to connect.
+pub(crate) fn listen(socket: &Path, mut does: impl FnMut(ClientRequest) -> Does + Send + 'static) {
     let listener = UnixListener::bind(socket).unwrap();
     std::thread::spawn(move || {
         let (mut stream, _) = listener.accept().unwrap();
@@ -39,7 +45,6 @@ pub(crate) fn connect(socket: &Path, mut does: impl FnMut(ClientRequest) -> Does
             }
         }
     });
-    Client::connect(socket, "test").unwrap()
 }
 
 fn reply(stream: &mut UnixStream, id: u64, outcome: ReplyOutcome) {
