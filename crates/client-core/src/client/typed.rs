@@ -5,15 +5,15 @@
 use protocol::attachment::{Attachment, AttachmentBytes, MediaType};
 use protocol::client::{ClientRequest, ClientResponse, drafts};
 use protocol::model::{
-    AnswerDraft, AttachmentId, CommentDraft, NewDraft, Session, SessionId, Workspace, WorkspaceDraft,
-    WorkspaceDraftToKeep, WorkspaceId,
+    AnswerDraft, AttachmentId, CommentDraft, DraftToKeep, NewWorkspaceDraft, NewWorkspaceDraftToKeep, Session,
+    SessionId, Workspace, WorkspaceId,
 };
 
 use super::{Client, Result, unexpected};
 
 impl Client {
     /// See [`drafts::SessionDraft`]. A hub older than this refuses it, as `is_unsupported` says.
-    pub fn session_draft(&self, id: &SessionId, draft: &NewDraft) -> Result<Session> {
+    pub fn session_draft(&self, id: &SessionId, draft: &DraftToKeep) -> Result<Session> {
         self.expect_session(ClientRequest::SessionDraft(drafts::SessionDraft { id: id.clone(), draft: draft.clone() }))
     }
 
@@ -33,16 +33,16 @@ impl Client {
         }))
     }
 
-    /// See [`drafts::WorkspaceDraftKeep`]. A hub older than this refuses it, as `is_unsupported` says.
-    pub fn workspace_draft_keep(&self, draft: &WorkspaceDraftToKeep) -> Result<WorkspaceDraft> {
+    /// See [`drafts::NewWorkspaceDraftKeep`]. A hub older than this refuses it, as `is_unsupported` says.
+    pub fn new_workspace_draft_keep(&self, draft: &NewWorkspaceDraftToKeep) -> Result<NewWorkspaceDraft> {
         let reply =
-            self.call(ClientRequest::WorkspaceDraftKeep(drafts::WorkspaceDraftKeep { draft: draft.clone() }))?;
-        let ClientResponse::WorkspaceDraft(kept) = reply else { return unexpected(&reply) };
+            self.call(ClientRequest::NewWorkspaceDraftKeep(drafts::NewWorkspaceDraftKeep { draft: draft.clone() }))?;
+        let ClientResponse::NewWorkspaceDraft(kept) = reply else { return unexpected(&reply) };
         Ok(kept)
     }
 
-    /// See [`drafts::WorkspaceDraftFileAdd`]. A hub older than this refuses it, as `is_unsupported` says.
-    pub fn workspace_draft_file_add(
+    /// See [`drafts::NewWorkspaceDraftFileAdd`]. A hub older than this refuses it, as `is_unsupported` says.
+    pub fn new_workspace_draft_file_add(
         &self,
         id: &AttachmentId,
         name: &str,
@@ -50,7 +50,7 @@ impl Client {
         data: Vec<u8>,
     ) -> Result<Attachment> {
         let data = AttachmentBytes::new(data);
-        let request = ClientRequest::WorkspaceDraftFileAdd(drafts::WorkspaceDraftFileAdd {
+        let request = ClientRequest::NewWorkspaceDraftFileAdd(drafts::NewWorkspaceDraftFileAdd {
             id: id.clone(),
             name: name.to_string(),
             media_type,
@@ -61,16 +61,18 @@ impl Client {
         Ok(file)
     }
 
-    /// See [`drafts::WorkspaceDraftFileRead`]. A hub older than this refuses it, as `is_unsupported` says.
-    pub fn workspace_draft_file_read(&self, id: &AttachmentId) -> Result<Vec<u8>> {
+    /// See [`drafts::NewWorkspaceDraftFileRead`]. A hub older than this refuses it, as `is_unsupported` says.
+    pub fn new_workspace_draft_file_read(&self, id: &AttachmentId) -> Result<Vec<u8>> {
         let reply =
-            self.call(ClientRequest::WorkspaceDraftFileRead(drafts::WorkspaceDraftFileRead { id: id.clone() }))?;
+            self.call(ClientRequest::NewWorkspaceDraftFileRead(drafts::NewWorkspaceDraftFileRead { id: id.clone() }))?;
         let ClientResponse::AttachmentData { data } = reply else { return unexpected(&reply) };
         Ok(data.into_vec())
     }
 
-    /// See [`drafts::WorkspaceDraftFileRemove`]. A hub older than this refuses it, as `is_unsupported` says.
-    pub fn workspace_draft_file_remove(&self, id: &AttachmentId) -> Result<()> {
-        self.expect_ok(ClientRequest::WorkspaceDraftFileRemove(drafts::WorkspaceDraftFileRemove { id: id.clone() }))
+    /// See [`drafts::NewWorkspaceDraftFileRemove`]. A hub older than this refuses it, as `is_unsupported` says.
+    pub fn new_workspace_draft_file_remove(&self, id: &AttachmentId) -> Result<()> {
+        self.expect_ok(ClientRequest::NewWorkspaceDraftFileRemove(drafts::NewWorkspaceDraftFileRemove {
+            id: id.clone(),
+        }))
     }
 }

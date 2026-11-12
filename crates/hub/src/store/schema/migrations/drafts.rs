@@ -71,3 +71,20 @@ pub(super) const WORKSPACE_DRAFT: &str = r"
         created_at_ms INTEGER NOT NULL
     );
 ";
+
+/// The dialog's record and its files, named for the new-workspace dialog, as the protocol names them, with the
+/// record's triggers made again under that name.
+pub(super) const NEW_WORKSPACE_DRAFT: &str = r"
+    ALTER TABLE workspace_draft RENAME TO new_workspace_draft;
+    ALTER TABLE workspace_draft_files RENAME TO new_workspace_draft_files;
+    DROP TRIGGER workspace_draft_rev_on_insert;
+    DROP TRIGGER workspace_draft_rev_on_update;
+    CREATE TRIGGER new_workspace_draft_rev_on_insert AFTER INSERT ON new_workspace_draft BEGIN
+        UPDATE counters SET value = value + 1 WHERE name = 'rev';
+        UPDATE new_workspace_draft SET rev = (SELECT value FROM counters WHERE name = 'rev');
+    END;
+    CREATE TRIGGER new_workspace_draft_rev_on_update AFTER UPDATE ON new_workspace_draft WHEN NEW.rev = OLD.rev BEGIN
+        UPDATE counters SET value = value + 1 WHERE name = 'rev';
+        UPDATE new_workspace_draft SET rev = (SELECT value FROM counters WHERE name = 'rev');
+    END;
+";

@@ -376,4 +376,6 @@ pub(super) const MIGRATIONS: &[&str] = &[
     // has open, in `waits`.
     waits::WAITS,
     waits::SESSIONS_SHOW_WAITS,
+    // The new-workspace dialog's tables, named for it.
+    drafts::NEW_WORKSPACE_DRAFT,
 ];

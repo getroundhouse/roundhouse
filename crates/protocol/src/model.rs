@@ -29,7 +29,9 @@ pub use branches::{Branch, Branches, Head, Upstream};
 pub use cache::{CACHE_WORTH_TELLING_TOKENS, CacheRequest, CacheState, CacheTtl, PromptCache};
 pub use compaction_line::CompactionLine;
 pub use context::{ContextPart, ContextPartKind, ContextUsage};
-pub use draft::{AnswerDraft, AnswerSoFar, CommentDraft, Draft, NewDraft, WorkspaceDraft, WorkspaceDraftToKeep};
+pub use draft::{
+    AnswerDraft, AnswerSoFar, CommentDraft, Draft, DraftToKeep, NewWorkspaceDraft, NewWorkspaceDraftToKeep,
+};
 pub use effort::Effort;
 pub use files::{FileContents, FileOpened, FilePage, FilePages, OpenedText, PageLine, WorktreeFiles};
 pub use git::{GitDiff, GitFile, GitStatus};
@@ -208,8 +210,8 @@ pub enum RecordKey {
     },
     /// A hub has one record of its settings.
     HubSettings,
-    /// And one of what's in the new-workspace dialog, as [`WorkspaceDraft`] says.
-    WorkspaceDraft,
+    /// And one of what's in the new-workspace dialog, as [`NewWorkspaceDraft`] says.
+    NewWorkspaceDraft,
     Account {
         id: AccountId,
     },
@@ -232,7 +234,7 @@ pub struct Records {
     pub accounts: Vec<Account>,
     /// `None` from a hub from before it kept one.
     #[serde(default)]
-    pub workspace_draft: Option<WorkspaceDraft>,
+    pub new_workspace_draft: Option<NewWorkspaceDraft>,
     /// The hub's newest revision when this was read. A record missing from the list is gone, unless
     /// a client holds a copy newer than this.
     pub rev: Rev,

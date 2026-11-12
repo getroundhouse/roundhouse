@@ -116,10 +116,10 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
             Err(ApiError::new(ErrorCode::Unsupported, "the gallery's hub doesn't keep a comment being written"))
         }
         // The same, for what's in the new-workspace dialog.
-        R::WorkspaceDraftKeep(_)
-        | R::WorkspaceDraftFileAdd(_)
-        | R::WorkspaceDraftFileRead(_)
-        | R::WorkspaceDraftFileRemove(_) => Err(ApiError::new(
+        R::NewWorkspaceDraftKeep(_)
+        | R::NewWorkspaceDraftFileAdd(_)
+        | R::NewWorkspaceDraftFileRead(_)
+        | R::NewWorkspaceDraftFileRemove(_) => Err(ApiError::new(
             ErrorCode::Unsupported,
             "the gallery's hub doesn't keep what's in the new-workspace dialog",
         )),

@@ -15,6 +15,7 @@ mod comments;
 mod feed;
 mod hub_settings;
 mod instances;
+mod new_workspace_draft;
 mod pull_requests;
 mod queues;
 mod repos;
@@ -26,7 +27,6 @@ mod titles;
 mod tools;
 mod waits;
 mod workers;
-mod workspace_draft;
 mod workspaces;
 mod worktree;
 

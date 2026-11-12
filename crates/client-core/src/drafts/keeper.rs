@@ -202,7 +202,7 @@ impl Keeper {
                 .map(|workspace| Agreed { rev: workspace.rev, said: Said::Comment(workspace.comment_draft) }),
             Change::NewWorkspace(draft) => self
                 .client
-                .workspace_draft_keep(draft)
+                .new_workspace_draft_keep(draft)
                 .map(|kept| Agreed { rev: kept.rev, said: Said::new_workspace(&kept) }),
         }
     }
@@ -247,7 +247,7 @@ impl Keeper {
             FilesFor::Chat(chat) if self.client.has_given(chat, id) => Ok(()),
             FilesFor::Chat(chat) => self.client.attachment_add(chat, id, name, kind, file.data.clone()).map(drop),
             FilesFor::NewWorkspace => {
-                let add = |kind| self.client.workspace_draft_file_add(id, name, kind, file.data.clone()).map(drop);
+                let add = |kind| self.client.new_workspace_draft_file_add(id, name, kind, file.data.clone()).map(drop);
                 // A hub refuses a kind it doesn't know, such as one newer than it, as it refuses a request it doesn't
                 // know, so the file is tried again as one any hub that keeps the dialog takes. Refused again, it's
                 // the request that's refused.
@@ -269,7 +269,7 @@ impl Keeper {
             }
             let removed = match &from {
                 FilesFor::Chat(chat) => self.client.attachment_remove(chat, &file),
-                FilesFor::NewWorkspace => self.client.workspace_draft_file_remove(&file),
+                FilesFor::NewWorkspace => self.client.new_workspace_draft_file_remove(&file),
             };
             match removed {
                 // A hub that doesn't keep the dialog, such as an older one reached since, which the file waits for.

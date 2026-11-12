@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use protocol::attachment::{Attachment, AttachmentBytes, MediaType, file_name};
 use protocol::client::{ApiError, ErrorCode, HubNotice};
-use protocol::model::{AttachmentId, WorkspaceDraft, WorkspaceDraftToKeep};
+use protocol::model::{AttachmentId, NewWorkspaceDraft, NewWorkspaceDraftToKeep};
 use tracing::warn;
 
 use super::Hub;
@@ -22,10 +22,13 @@ const UNNAMED_FOR: Duration = Duration::from_hours(24);
 
 impl Hub {
     /// Keeps `draft`, and tells every client following the feed when that changed it.
-    pub(crate) async fn workspace_draft_keep(&self, draft: WorkspaceDraftToKeep) -> Result<WorkspaceDraft, ApiError> {
-        let (kept, changed) = self.blocking(move |store| store.set_workspace_draft(&draft)).await?;
+    pub(crate) async fn new_workspace_draft_keep(
+        &self,
+        draft: NewWorkspaceDraftToKeep,
+    ) -> Result<NewWorkspaceDraft, ApiError> {
+        let (kept, changed) = self.blocking(move |store| store.set_new_workspace_draft(&draft)).await?;
         if changed {
-            self.notify(HubNotice::WorkspaceDraft(kept.clone()));
+            self.notify(HubNotice::NewWorkspaceDraft(kept.clone()));
             self.let_go_of_unnamed_draft_files().await;
         }
         Ok(kept)
@@ -35,7 +38,7 @@ impl Hub {
     /// client took out without the hub hearing. One left behind only takes room, so a failure is logged.
     async fn let_go_of_unnamed_draft_files(&self) {
         let before = now_ms().saturating_sub(i64::try_from(UNNAMED_FOR.as_millis()).unwrap_or(i64::MAX));
-        let unnamed = self.blocking(move |store| store.let_go_of_unnamed_workspace_draft_files(before)).await;
+        let unnamed = self.blocking(move |store| store.let_go_of_unnamed_new_workspace_draft_files(before)).await;
         let unnamed = unnamed.unwrap_or_else(|e| {
             warn!("couldn't let go of the new-workspace dialog's files nothing names: {e}");
             Vec::new()
@@ -51,7 +54,7 @@ impl Hub {
     /// bytes on disk with no file of the dialog's, which nothing could ask for.
     pub(crate) async fn tidy_draft_files(&self) {
         self.let_go_of_unnamed_draft_files().await;
-        let tidied = match self.blocking(Store::workspace_draft_file_ids).await {
+        let tidied = match self.blocking(Store::new_workspace_draft_file_ids).await {
             Ok(kept) => self.attachment_files.remove_draft_files_except(kept).await,
             Err(e) => Err(e),
         };
@@ -62,7 +65,7 @@ impl Hub {
 
     /// Sent again with the same ID, it returns what the first one added without looking at the rest, as a chat's file
     /// does.
-    pub(crate) async fn workspace_draft_file_add(
+    pub(crate) async fn new_workspace_draft_file_add(
         &self,
         id: AttachmentId,
         name: String,
@@ -72,7 +75,7 @@ impl Hub {
         self.attachment_files.check_draft_file(&id)?;
         let earlier = {
             let id = id.clone();
-            self.blocking(move |store| store.workspace_draft_file(&id)).await?
+            self.blocking(move |store| store.new_workspace_draft_file(&id)).await?
         };
         if let Some(earlier) = earlier {
             return Ok(earlier);
@@ -81,17 +84,17 @@ impl Hub {
         let size_bytes = u64::try_from(data.len()).unwrap_or(u64::MAX);
         let file = Attachment { id: id.clone(), name: file_name(&name), media_type, size_bytes };
         self.attachment_files.write_draft_file(&id, data.into_vec()).await?;
-        let added = self.blocking(move |store| store.add_workspace_draft_file(&file)).await;
+        let added = self.blocking(move |store| store.add_new_workspace_draft_file(&file)).await;
         if added.is_err() {
             let _ = self.attachment_files.remove_draft_file(&id).await;
         }
         added
     }
 
-    pub(crate) async fn workspace_draft_file_read(&self, id: AttachmentId) -> Result<AttachmentBytes, ApiError> {
+    pub(crate) async fn new_workspace_draft_file_read(&self, id: AttachmentId) -> Result<AttachmentBytes, ApiError> {
         let file = {
             let id = id.clone();
-            self.blocking(move |store| store.workspace_draft_file(&id)).await?
+            self.blocking(move |store| store.new_workspace_draft_file(&id)).await?
         };
         let Some(file) = file else {
             return Err(ApiError::new(ErrorCode::NotFound, format!("no attachment {id}")));
@@ -107,11 +110,11 @@ impl Hub {
 
     /// Lets go of a file the draft doesn't name, and of its bytes. One whose bytes can't be let go of is only left on
     /// disk, so it's logged.
-    pub(crate) async fn workspace_draft_file_remove(&self, id: AttachmentId) -> Result<(), ApiError> {
+    pub(crate) async fn new_workspace_draft_file_remove(&self, id: AttachmentId) -> Result<(), ApiError> {
         self.attachment_files.check_draft_file(&id)?;
         let removed = {
             let id = id.clone();
-            self.blocking(move |store| store.let_go_of_workspace_draft_file(&id)).await?
+            self.blocking(move |store| store.let_go_of_new_workspace_draft_file(&id)).await?
         };
         if removed && let Err(e) = self.attachment_files.remove_draft_file(&id).await {
             warn!(attachment = %id, "couldn't let go of a file nothing will send: {e}");

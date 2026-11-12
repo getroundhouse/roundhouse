@@ -1,7 +1,7 @@
 use protocol::attachment::{Attachment, MAX_PER_PROMPT, MediaType};
 use protocol::event::EventBody;
 use protocol::model::{
-    AnswerDraft, AnswerSoFar, AttachmentId, CommentDraft, DiffSide, Draft, NewDraft, QueuedPrompt, SessionId,
+    AnswerDraft, AnswerSoFar, AttachmentId, CommentDraft, DiffSide, Draft, DraftToKeep, QueuedPrompt, SessionId,
     WorkspaceId,
 };
 
@@ -18,14 +18,14 @@ fn a_draft_is_kept_until_another_replaces_it_and_an_empty_one_clears_it() {
     let store = store_with_session(dir.path());
     assert_eq!(store.get_session(&id()).unwrap().session.draft, Draft::default(), "nothing's typed yet");
 
-    let kept = store.set_draft(&id(), &NewDraft::new("half a thought")).unwrap();
+    let kept = store.set_draft(&id(), &DraftToKeep::new("half a thought")).unwrap();
 
     assert!(kept.changed);
     assert_eq!(kept.session.session.draft.text, "half a thought");
     assert_eq!(kept.session.session, store.get_session(&id()).unwrap().session, "it comes back as stored");
-    store.set_draft(&id(), &NewDraft::new("half a thought, and more")).unwrap();
+    store.set_draft(&id(), &DraftToKeep::new("half a thought, and more")).unwrap();
     assert_eq!(store.get_session(&id()).unwrap().session.draft.text, "half a thought, and more");
-    let cleared = store.set_draft(&id(), &NewDraft::default()).unwrap();
+    let cleared = store.set_draft(&id(), &DraftToKeep::default()).unwrap();
     assert!(cleared.changed);
     assert_eq!(store.get_session(&id()).unwrap().session.draft, Draft::default());
 }
@@ -34,10 +34,11 @@ fn a_draft_is_kept_until_another_replaces_it_and_an_empty_one_clears_it() {
 fn keeping_the_same_draft_again_leaves_the_revision_alone() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
-    let first = store.set_draft(&id(), &NewDraft::new("same")).unwrap().session.session.rev;
+    let first = store.set_draft(&id(), &DraftToKeep::new("same")).unwrap().session.session.rev;
 
-    let again = store.set_draft(&id(), &NewDraft::new("same")).unwrap();
-    let cleared_twice = [NewDraft::default(), NewDraft::default()].map(|d| store.set_draft(&id(), &d).unwrap().changed);
+    let again = store.set_draft(&id(), &DraftToKeep::new("same")).unwrap();
+    let cleared_twice =
+        [DraftToKeep::default(), DraftToKeep::default()].map(|d| store.set_draft(&id(), &d).unwrap().changed);
 
     assert!(!again.changed, "nothing changed, so nothing is announced");
     assert_eq!(again.session.session.rev, first);
@@ -50,7 +51,7 @@ fn a_change_to_the_draft_gives_the_session_a_newer_revision() {
     let store = store_with_session(dir.path());
     let before = store.get_session(&id()).unwrap().session.rev;
 
-    let after = store.set_draft(&id(), &NewDraft::new("typed")).unwrap().session.session.rev;
+    let after = store.set_draft(&id(), &DraftToKeep::new("typed")).unwrap().session.session.rev;
 
     assert!(after > before, "clients follow records by revision, so the feed would miss it otherwise");
 }
@@ -61,7 +62,7 @@ fn a_draft_for_a_session_that_isnt_there_is_refused() {
     let store = open_in(dir.path());
 
     assert!(matches!(
-        store.set_draft(&id(), &NewDraft::new("typed")),
+        store.set_draft(&id(), &DraftToKeep::new("typed")),
         Err(StoreError::NotFound { kind: "session", .. })
     ));
 }
@@ -71,8 +72,8 @@ fn log_file(id: &str, name: &str) -> Attachment {
 }
 
 /// A draft with `files`, as a client names them, by ID.
-fn with_files(files: &[Attachment]) -> NewDraft {
-    NewDraft { text: "see these".to_string(), files: files.iter().map(|file| file.id.clone()).collect() }
+fn with_files(files: &[Attachment]) -> DraftToKeep {
+    DraftToKeep { text: "see these".to_string(), files: files.iter().map(|file| file.id.clone()).collect() }
 }
 
 #[test]
@@ -177,7 +178,7 @@ fn closing_a_session_takes_its_draft_and_lets_go_of_the_files_only_the_draft_nam
     assert_eq!(let_go_of, [AttachmentId::from("drafted")]);
     assert_eq!(store.get_session(&id()).unwrap().session.draft, Draft::default());
     assert!(store.attachment(&id(), &"also sent".into()).unwrap().is_some());
-    let typed_late = store.set_draft(&id(), &NewDraft::new("typed as it closed")).unwrap();
+    let typed_late = store.set_draft(&id(), &DraftToKeep::new("typed as it closed")).unwrap();
     assert!(!typed_late.changed, "a closed session keeps none");
     assert_eq!(store.set_session_closed(&id(), None).unwrap(), [], "and none comes back as it opens again");
     assert_eq!(store.get_session(&id()).unwrap().session.draft, Draft::default());

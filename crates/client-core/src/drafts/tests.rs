@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use protocol::attachment::{Attachment, MediaType};
 use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, ReplyOutcome, drafts};
-use protocol::model::{AnswerDraft, CommentDraft, Workspace, WorkspaceDraft, WorkspaceId};
+use protocol::model::{AnswerDraft, CommentDraft, NewWorkspaceDraft, Workspace, WorkspaceId};
 
 use super::*;
 use crate::stand_in_hub::{self, Does};
@@ -71,7 +71,8 @@ fn hub(socket: &Path, answer: Answer) -> (Client, Heard) {
 /// The file a request adds, as a hub that takes it answers.
 fn added(request: &ClientRequest) -> Option<Attachment> {
     let (ClientRequest::AttachmentAdd { id, name, media_type, data, .. }
-    | ClientRequest::WorkspaceDraftFileAdd(drafts::WorkspaceDraftFileAdd { id, name, media_type, data })) = request
+    | ClientRequest::NewWorkspaceDraftFileAdd(drafts::NewWorkspaceDraftFileAdd { id, name, media_type, data })) =
+        request
     else {
         return None;
     };
@@ -100,14 +101,14 @@ fn heard_of(request: ClientRequest) -> Option<(String, String)> {
         return Some((id.to_string(), format!("comment {}", text.as_deref().unwrap_or("none"))));
     }
     let dialog = || "dialog".to_string();
-    if let ClientRequest::WorkspaceDraftKeep(drafts::WorkspaceDraftKeep { draft }) = request {
+    if let ClientRequest::NewWorkspaceDraftKeep(drafts::NewWorkspaceDraftKeep { draft }) = request {
         let named = draft.files.iter().map(|file| format!(" {file}"));
         return Some((dialog(), named.fold(draft.text, |text, file| text + &file)));
     }
-    if let ClientRequest::WorkspaceDraftFileAdd(drafts::WorkspaceDraftFileAdd { id, .. }) = request {
+    if let ClientRequest::NewWorkspaceDraftFileAdd(drafts::NewWorkspaceDraftFileAdd { id, .. }) = request {
         return Some((dialog(), format!("+{id}")));
     }
-    if let ClientRequest::WorkspaceDraftFileRemove(drafts::WorkspaceDraftFileRemove { id }) = request {
+    if let ClientRequest::NewWorkspaceDraftFileRemove(drafts::NewWorkspaceDraftFileRemove { id }) = request {
         return Some((dialog(), format!("-{id}")));
     }
     None
@@ -138,13 +139,13 @@ fn only_the_newest_of_each_chat_is_kept_once_the_hub_has_answered_the_first() {
     let dir = tempfile::tempdir().unwrap();
     let (client, heard) = hub(&dir.path().join("hub.sock"), Answer::Answered);
     let drafts = Drafts::start(&client);
-    drafts.typed(&chat("a"), NewDraft::new("h"));
+    drafts.typed(&chat("a"), DraftToKeep::new("h"));
     heard.recv_timeout(TIMEOUT).unwrap();
 
     for text in ["he", "hel", "hello"] {
-        drafts.typed(&chat("a"), NewDraft::new(text));
+        drafts.typed(&chat("a"), DraftToKeep::new(text));
     }
-    drafts.typed(&chat("b"), NewDraft::new("other"));
+    drafts.typed(&chat("b"), DraftToKeep::new("other"));
 
     let mut later = kept(&drafts, &heard);
     later.sort();
@@ -156,7 +157,7 @@ fn typing_that_goes_on_is_still_kept_every_so_often() {
     let dir = tempfile::tempdir().unwrap();
     let (client, heard) = hub(&dir.path().join("hub.sock"), Answer::Answered);
     let drafts = Drafts::start(&client);
-    drafts.typed(&chat("a"), NewDraft::new("h"));
+    drafts.typed(&chat("a"), DraftToKeep::new("h"));
     heard.recv_timeout(TIMEOUT).unwrap();
     let (stop, stopped) = flume::bounded::<()>(1);
     // A letter at a time, more often than the pause, until told to stop. Each change would put off a keeper that waits
@@ -167,7 +168,7 @@ fn typing_that_goes_on_is_still_kept_every_so_often() {
             let mut text = String::new();
             while stopped.recv_timeout(PAUSE / 10).is_err() {
                 text.push('a');
-                drafts.typed(&chat("a"), NewDraft::new(text.clone()));
+                drafts.typed(&chat("a"), DraftToKeep::new(text.clone()));
             }
         }
     });
@@ -184,11 +185,11 @@ fn a_change_kept_at_once_takes_the_place_of_one_still_waiting() {
     let dir = tempfile::tempdir().unwrap();
     let (client, heard) = hub(&dir.path().join("hub.sock"), Answer::Answered);
     let drafts = Drafts::start(&client);
-    drafts.typed(&chat("a"), NewDraft::new("sent"));
+    drafts.typed(&chat("a"), DraftToKeep::new("sent"));
     heard.recv_timeout(TIMEOUT).unwrap();
 
-    drafts.typed(&chat("a"), NewDraft::new("sent, and more"));
-    drafts.set(&chat("a"), NewDraft::default());
+    drafts.typed(&chat("a"), DraftToKeep::new("sent, and more"));
+    drafts.set(&chat("a"), DraftToKeep::default());
 
     assert_eq!(heard.recv_timeout(TIMEOUT).unwrap(), ("a".to_string(), String::new()));
     assert_eq!(kept(&drafts, &heard), [], "what it replaced is never kept, so it can't outlive it");
@@ -200,12 +201,12 @@ fn what_a_hub_that_doesnt_keep_drafts_refuses_waits_for_the_next_connection() {
     let dir = tempfile::tempdir().unwrap();
     let (old, heard_by_old) = hub(&dir.path().join("old.sock"), Answer::Refused);
     let drafts = Drafts::start(&old);
-    drafts.typed(&chat("a"), NewDraft::new("h"));
+    drafts.typed(&chat("a"), DraftToKeep::new("h"));
     assert_eq!(kept(&drafts, &heard_by_old), pairs(&[("a", "h")]), "the first goes at once");
     let notes = file("f1");
     drafts.attach(&chat("b"), notes.clone());
-    drafts.set(&chat("b"), NewDraft { text: "look".to_string(), files: vec![notes.attachment.id.clone()] });
-    drafts.typed(&chat("a"), NewDraft::new("hi"));
+    drafts.set(&chat("b"), DraftToKeep { text: "look".to_string(), files: vec![notes.attachment.id.clone()] });
+    drafts.typed(&chat("a"), DraftToKeep::new("hi"));
     assert_eq!(kept(&drafts, &heard_by_old), [], "it's asked no more");
     assert!(drafts.unkept(&chat("a")) && drafts.unkept(&chat("b")));
     let (new, heard) = hub(&dir.path().join("new.sock"), Answer::Answered);
@@ -224,7 +225,7 @@ fn what_hasnt_reached_the_hub_is_counted_until_it_has() {
     let (gone, _) = hub(&dir.path().join("gone.sock"), Answer::HangsUp);
     let drafts = Drafts::start(&gone);
 
-    drafts.typed(&chat("a"), NewDraft::new("typed as the hub went"));
+    drafts.typed(&chat("a"), DraftToKeep::new("typed as the hub went"));
 
     assert!(drafts.unkept(&chat("a")), "from the moment it's handed over");
     drafts.flushed().recv_timeout(TIMEOUT).unwrap();
@@ -241,7 +242,7 @@ fn a_draft_the_connection_couldnt_take_is_kept_on_the_next() {
     let dir = tempfile::tempdir().unwrap();
     let (gone, _) = hub(&dir.path().join("gone.sock"), Answer::HangsUp);
     let drafts = Drafts::start(&gone);
-    drafts.typed(&chat("a"), NewDraft::new("typed while the hub went"));
+    drafts.typed(&chat("a"), DraftToKeep::new("typed while the hub went"));
     drafts.flushed().recv_timeout(TIMEOUT).unwrap();
     let (client, heard) = hub(&dir.path().join("hub.sock"), Answer::Answered);
 
@@ -265,11 +266,11 @@ fn a_file_reaches_the_hub_before_the_draft_that_names_it() {
     let dir = tempfile::tempdir().unwrap();
     let (gone, _) = hub(&dir.path().join("gone.sock"), Answer::HangsUp);
     let drafts = Drafts::start(&gone);
-    drafts.typed(&chat("a"), NewDraft::new("first"));
+    drafts.typed(&chat("a"), DraftToKeep::new("first"));
     drafts.flushed().recv_timeout(TIMEOUT).unwrap();
     // Given while the hub was gone, so the next connection has both to keep at once.
     let notes = file("f1");
-    drafts.set(&chat("a"), NewDraft { text: "look".to_string(), files: vec![notes.attachment.id.clone()] });
+    drafts.set(&chat("a"), DraftToKeep { text: "look".to_string(), files: vec![notes.attachment.id.clone()] });
     drafts.attach(&chat("a"), notes);
     let (client, heard) = hub(&dir.path().join("hub.sock"), Answer::Answered);
 
@@ -283,9 +284,9 @@ fn a_file_let_go_of_waits_for_the_draft_that_stopped_naming_it() {
     let dir = tempfile::tempdir().unwrap();
     let (client, heard) = hub(&dir.path().join("hub.sock"), Answer::Answered);
     let drafts = Drafts::start(&client);
-    drafts.typed(&chat("a"), NewDraft::new("h"));
+    drafts.typed(&chat("a"), DraftToKeep::new("h"));
     heard.recv_timeout(TIMEOUT).unwrap();
-    drafts.typed(&chat("a"), NewDraft::new("without it"));
+    drafts.typed(&chat("a"), DraftToKeep::new("without it"));
 
     drafts.detach(&chat("a"), &"f1".into());
 
@@ -318,8 +319,8 @@ fn keeping_hub(socket: &Path, first: u64) -> Client {
             ClientResponse::Session(Session { answer_draft: draft, ..told(id.as_str(), next, "") })
         } else if let ClientRequest::WorkspaceCommentDraft(drafts::WorkspaceCommentDraft { id, draft }) = request {
             ClientResponse::Workspace(writing(id.as_str(), next, draft))
-        } else if let ClientRequest::WorkspaceDraftKeep(drafts::WorkspaceDraftKeep { draft }) = request {
-            ClientResponse::WorkspaceDraft(WorkspaceDraft {
+        } else if let ClientRequest::NewWorkspaceDraftKeep(drafts::NewWorkspaceDraftKeep { draft }) = request {
+            ClientResponse::NewWorkspaceDraft(NewWorkspaceDraft {
                 rev: Rev::new(next),
                 text: draft.text,
                 ..Default::default()
@@ -348,7 +349,7 @@ fn a_newer_record_is_from_elsewhere_only_when_its_draft_isnt_the_one_kept_from_h
     let dir = tempfile::tempdir().unwrap();
     let drafts = Drafts::start(&keeping_hub(&dir.path().join("hub.sock"), 5));
 
-    drafts.set(&chat("a"), NewDraft::new("typed here"));
+    drafts.set(&chat("a"), DraftToKeep::new("typed here"));
     drafts.flushed().recv_timeout(TIMEOUT).unwrap();
 
     assert!(!drafts.from_elsewhere(&told("a", 5, "typed here")), "the record the hub kept it in is this client's");
@@ -382,7 +383,7 @@ fn nothing_from_elsewhere_is_taken_while_a_draft_from_here_is_on_its_way() {
     let dir = tempfile::tempdir().unwrap();
     let (gone, _) = hub(&dir.path().join("gone.sock"), Answer::HangsUp);
     let drafts = Drafts::start(&gone);
-    drafts.typed(&chat("a"), NewDraft::new("typed as the hub went"));
+    drafts.typed(&chat("a"), DraftToKeep::new("typed as the hub went"));
     drafts.flushed().recv_timeout(TIMEOUT).unwrap();
 
     assert!(!drafts.from_elsewhere(&told("a", 100, "typed elsewhere")), "what's typed here goes on and replaces it");

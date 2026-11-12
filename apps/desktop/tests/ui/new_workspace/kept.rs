@@ -6,19 +6,19 @@ use client_core::records::HubRecords;
 use gpui_kit::{AppContext as _, ClipboardEntry, ClipboardItem, ExternalPaths, TestAppContext};
 use protocol::attachment::MediaType;
 use protocol::event::EventBody;
-use protocol::model::{Effort, ModelName, PermissionMode, WorkspaceDraft, WorkspaceDraftToKeep};
+use protocol::model::{Effort, ModelName, NewWorkspaceDraft, NewWorkspaceDraftToKeep, PermissionMode};
 
 use super::open_with_a_repo;
 use crate::support::{Frozen, Stack, Ui, wait_until};
 
 /// What the hub keeps of the dialog.
-fn kept(stack: &Stack) -> WorkspaceDraft {
-    stack.client().records_list().unwrap().workspace_draft.unwrap()
+fn kept(stack: &Stack) -> NewWorkspaceDraft {
+    stack.client().records_list().unwrap().new_workspace_draft.unwrap()
 }
 
 /// What another client would keep for the dialog with `text` typed in it.
-fn typed_elsewhere(text: &str) -> WorkspaceDraftToKeep {
-    WorkspaceDraftToKeep { text: text.to_string(), ..WorkspaceDraftToKeep::default() }
+fn typed_elsewhere(text: &str) -> NewWorkspaceDraftToKeep {
+    NewWorkspaceDraftToKeep { text: text.to_string(), ..NewWorkspaceDraftToKeep::default() }
 }
 
 fn chosen(ui: &Ui<'_>) -> (ModelName, Effort) {
@@ -77,8 +77,8 @@ fn a_change_made_to_the_dialog_elsewhere_shows_in_it(cx: &mut TestAppContext) {
     let elsewhere = stack.client();
     let notes = FileToSend::checked("notes.txt", MediaType::Text, b"a line\n".to_vec()).unwrap();
     let file = notes.attachment.id.clone();
-    elsewhere.workspace_draft_file_add(&file, "notes.txt", MediaType::Text, notes.data).unwrap();
-    let changed = WorkspaceDraftToKeep {
+    elsewhere.new_workspace_draft_file_add(&file, "notes.txt", MediaType::Text, notes.data).unwrap();
+    let changed = NewWorkspaceDraftToKeep {
         files: vec![file],
         model: Some(ModelName::named("sonnet")),
         effort: Some(Effort::High),
@@ -86,13 +86,13 @@ fn a_change_made_to_the_dialog_elsewhere_shows_in_it(cx: &mut TestAppContext) {
         ..typed_elsewhere("typed elsewhere")
     };
 
-    elsewhere.workspace_draft_keep(&changed).unwrap();
+    elsewhere.new_workspace_draft_keep(&changed).unwrap();
 
     ui.wait("what was typed elsewhere", |ui| ui.dialog_text() == "typed elsewhere");
     ui.wait("the file attached elsewhere", |ui| ui.dialog_attached() == ["notes.txt"]);
     assert!(ui.dialog_planning());
     assert_eq!(chosen(&ui), (ModelName::named("sonnet"), Effort::High));
-    elsewhere.workspace_draft_keep(&typed_elsewhere("")).unwrap();
+    elsewhere.new_workspace_draft_keep(&typed_elsewhere("")).unwrap();
     ui.wait("the dialog to empty", |ui| ui.dialog_text().is_empty() && ui.dialog_attached().is_empty());
     assert_eq!(ui.cx.read_entity(&ui.dialog(), |d, _| d.mode()), PermissionMode::FullAccess);
 }
@@ -110,10 +110,10 @@ fn a_change_made_to_the_dialog_elsewhere_while_something_from_here_is_on_its_way
     let drafts = ui.view().drafts().unwrap();
     drafts.flushed().recv().unwrap();
     let pid = stack.client().hub_status().unwrap().pid;
-    stack.client().workspace_draft_keep(&typed_elsewhere("typed elsewhere")).unwrap();
+    stack.client().new_workspace_draft_keep(&typed_elsewhere("typed elsewhere")).unwrap();
     // Arrived in client-core, but nothing has run on the main thread since, so the dialog hasn't seen it.
     let records = ui.view().records().unwrap();
-    let in_records = || records.read(HubRecords::workspace_draft).map(|draft| draft.text).unwrap_or_default();
+    let in_records = || records.read(HubRecords::new_workspace_draft).map(|draft| draft.text).unwrap_or_default();
     wait_until("client-core to hear of the change", || in_records() == "typed elsewhere");
 
     let frozen = Frozen::stop(pid);
@@ -139,12 +139,12 @@ fn create_waits_for_the_files_the_hub_kept_to_be_read_back(cx: &mut TestAppConte
     let elsewhere = stack.client();
     let notes = FileToSend::checked("notes.txt", MediaType::Text, b"a line\n".to_vec()).unwrap();
     let file = notes.attachment.id.clone();
-    elsewhere.workspace_draft_file_add(&file, "notes.txt", MediaType::Text, notes.data).unwrap();
+    elsewhere.new_workspace_draft_file_add(&file, "notes.txt", MediaType::Text, notes.data).unwrap();
     elsewhere
-        .workspace_draft_keep(&WorkspaceDraftToKeep { files: vec![file], ..typed_elsewhere("say:with notes") })
+        .new_workspace_draft_keep(&NewWorkspaceDraftToKeep { files: vec![file], ..typed_elsewhere("say:with notes") })
         .unwrap();
     let records = ui.view().records().unwrap();
-    let in_records = || records.read(HubRecords::workspace_draft).filter(|draft| draft.text == "say:with notes");
+    let in_records = || records.read(HubRecords::new_workspace_draft).filter(|draft| draft.text == "say:with notes");
     wait_until("client-core to hear of the change", || in_records().is_some());
     let (dialog, kept) = (ui.dialog(), in_records().unwrap());
     ui.cx

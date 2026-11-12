@@ -25,6 +25,7 @@ mod hub_settings;
 mod instances;
 mod lines;
 mod made;
+mod new_workspace_draft;
 #[cfg(test)]
 mod older;
 mod prompts;
@@ -41,7 +42,6 @@ pub(crate) mod tests;
 mod titles;
 mod tools;
 mod waits;
-mod workspace_draft;
 mod workspaces;
 
 use schema::{migrate, open_connection};

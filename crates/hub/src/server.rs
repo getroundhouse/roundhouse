@@ -299,17 +299,17 @@ async fn handle(
             hub.attachment_remove(session_id, id).await?;
             C::Ok
         }
-        R::WorkspaceDraftKeep(drafts::WorkspaceDraftKeep { draft }) => {
-            C::WorkspaceDraft(hub.workspace_draft_keep(draft).await?)
+        R::NewWorkspaceDraftKeep(drafts::NewWorkspaceDraftKeep { draft }) => {
+            C::NewWorkspaceDraft(hub.new_workspace_draft_keep(draft).await?)
         }
-        R::WorkspaceDraftFileAdd(drafts::WorkspaceDraftFileAdd { id, name, media_type, data }) => {
-            C::Attachment(hub.workspace_draft_file_add(id, name, media_type, data).await?)
+        R::NewWorkspaceDraftFileAdd(drafts::NewWorkspaceDraftFileAdd { id, name, media_type, data }) => {
+            C::Attachment(hub.new_workspace_draft_file_add(id, name, media_type, data).await?)
         }
-        R::WorkspaceDraftFileRead(drafts::WorkspaceDraftFileRead { id }) => {
-            C::AttachmentData { data: hub.workspace_draft_file_read(id).await? }
+        R::NewWorkspaceDraftFileRead(drafts::NewWorkspaceDraftFileRead { id }) => {
+            C::AttachmentData { data: hub.new_workspace_draft_file_read(id).await? }
         }
-        R::WorkspaceDraftFileRemove(drafts::WorkspaceDraftFileRemove { id }) => {
-            hub.workspace_draft_file_remove(id).await?;
+        R::NewWorkspaceDraftFileRemove(drafts::NewWorkspaceDraftFileRemove { id }) => {
+            hub.new_workspace_draft_file_remove(id).await?;
             C::Ok
         }
         R::SessionAccount { id } => C::SessionAccount(hub.session_account(id).await?),

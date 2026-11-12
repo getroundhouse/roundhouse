@@ -71,7 +71,7 @@ fn of(notice: &HubNotice) -> Option<(Of, Rev)> {
         HubNotice::Comment(comment) => record(RecordKey::Comment { id: comment.id.clone() }, comment.rev),
         HubNotice::HubSettings(settings) => record(RecordKey::HubSettings, settings.rev),
         HubNotice::Account(account) => record(RecordKey::Account { id: account.id.clone() }, account.rev),
-        HubNotice::WorkspaceDraft(draft) => record(RecordKey::WorkspaceDraft, draft.rev),
+        HubNotice::NewWorkspaceDraft(draft) => record(RecordKey::NewWorkspaceDraft, draft.rev),
         HubNotice::Subagent(subagent) => {
             Some((Of::Subagent(subagent.session_id.clone(), subagent.call.clone()), subagent.rev))
         }
