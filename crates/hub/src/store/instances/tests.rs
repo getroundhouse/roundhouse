@@ -46,6 +46,25 @@ fn a_workspaces_instance_is_recorded_with_it_before_its_made_and_until_its_destr
     assert_eq!(stages(&store), [("w".into(), InstanceStage::Ready)]);
 }
 
+/// As for a workspace being made whose instance is made again under another name.
+#[test]
+fn an_instance_destroyed_is_recorded_again_before_its_made_again() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_session(dir.path());
+    let workspace = being_made(&store, "birch", 1);
+    store.instance_made(&workspace.instance_id).unwrap();
+
+    let while_recorded = store.instance_creating(&workspace.instance_id, "incus");
+    store.instance_destroying(&workspace.instance_id).unwrap();
+    store.instance_destroyed(&workspace.instance_id).unwrap();
+    store.instance_creating(&workspace.instance_id, "incus").unwrap();
+
+    assert!(while_recorded.is_err(), "{while_recorded:?}");
+    let recorded = store.recorded_instances().unwrap();
+    assert_eq!((recorded[1].id.as_str(), recorded[1].provider.as_str()), ("birch-instance", "incus"));
+    assert_eq!(recorded[1].stage, InstanceStage::Creating);
+}
+
 #[test]
 fn a_workspace_given_another_workspaces_instance_isnt_made() {
     let dir = tempfile::tempdir().unwrap();

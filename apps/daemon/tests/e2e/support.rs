@@ -4,7 +4,6 @@
 
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
-use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
 use client_core::{Client, Subscription, SubscriptionItem};
@@ -17,30 +16,15 @@ use protocol::paths::Paths;
 use protocol::tail::Tail;
 use tempfile::TempDir;
 
+use examples::fake_agent;
 pub(crate) use feed::next_notice;
 pub(crate) use processes::{is_alive, parent_of, signal, terminate};
 
+mod examples;
 mod feed;
 mod processes;
 
 pub(crate) const TIMEOUT: Duration = Duration::from_secs(20);
-
-/// `cargo test --test e2e` doesn't build examples, so a plain path could run an out-of-date fake
-/// without saying so. Building here means tests always use the current one.
-pub(crate) fn fake_agent() -> &'static Path {
-    static FAKE: OnceLock<PathBuf> = OnceLock::new();
-    FAKE.get_or_init(|| {
-        let bin_dir = Path::new(env!("CARGO_BIN_EXE_roundhoused")).parent().unwrap();
-        let mut build = Command::new(env!("CARGO"));
-        build.args(["build", "-p", "daemon", "--example", "fake_claude"]);
-        if bin_dir.file_name().is_some_and(|name| name == "release") {
-            build.arg("--release");
-        }
-        let output = build.output().unwrap();
-        assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
-        bin_dir.join("examples/fake_claude")
-    })
-}
 
 /// Where `gh` finds a login other than in `HOME`.
 const GH_LOGINS: [&str; 6] =

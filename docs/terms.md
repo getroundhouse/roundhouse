@@ -114,7 +114,7 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 | Project, repository | The same record. A project is what people see, and a repository is the git codebase behind it | "Project" in the desktop app and its spec, and "repository" in code, the CLI and the other docs, and wherever git itself is meant, as in "repository settings" |
 | Claude, Claude Code | The agent, and Anthropic's own product. The Agent SDK's terms bar calling an agent in another product "Claude Code" | "Claude" or "Claude Agent" in the interface. "Claude CLI" for the `claude` binary in docs |
 | Workspace, worktree, instance | The record, the files, and where its worker runs | The one you mean. Archiving removes the worktree, not the workspace |
-| Name, title | A workspace's name, such as `holly`, is its directory and the branch it started on, and never changes. Its title is what the sidebar shows | "Name" only for the directory and branch. Renaming a workspace changes its title |
+| Name, title | A workspace's name, such as `holly`, is its directory and the branch it started on, and never changes once it's made. Its title is what the sidebar shows | "Name" only for the directory and branch. Renaming a workspace changes its title |
 | Worker, agent | A worker is our process, and an agent is the CLI it runs | The one you mean. A worker can outlive its agents, and agents can outlive a killed worker |
 | Agent, harness | What other tools call a harness, the program that runs a model with its tools, such as the Claude CLI, is an agent here | "Agent". "Harness" only as another tool's word |
 | Hub, daemon | `roundhoused` is one binary that runs as a hub, as a worker, or as the local provider's adapter | "Hub" or "worker". "Daemon" only for the binary |

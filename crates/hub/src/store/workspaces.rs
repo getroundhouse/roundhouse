@@ -116,6 +116,21 @@ impl Store {
         self.get_workspace(id)
     }
 
+    /// Gives a workspace still being made another name, and the branch of the same name, as when git already has a
+    /// branch or directory by the one it had. Only before it's ready, since a workspace's name is its worktree's
+    /// directory once it has one. Returns the workspace renamed, or `None` if another in its repository has the name,
+    /// or it's no longer being made.
+    pub fn rename_unready_workspace(&self, id: &WorkspaceId, name: &str) -> Result<Option<Workspace>, StoreError> {
+        let changed = lock(&self.writer).execute(
+            "UPDATE OR IGNORE workspaces SET name = ?1, branch = ?1 WHERE id = ?2 AND status = ?3",
+            params![name, id.as_str(), text_of(&WorkspaceStatus::Creating)],
+        )?;
+        if changed == 0 {
+            return Ok(None);
+        }
+        self.get_workspace(id).map(Some)
+    }
+
     pub fn set_workspace_archived(&self, id: &WorkspaceId, archived: bool) -> Result<Workspace, StoreError> {
         let (status, archived_at) =
             if archived { (WorkspaceStatus::Archived, Some(now_ms())) } else { (WorkspaceStatus::Ready, None) };

@@ -236,7 +236,8 @@ pub struct Workspace {
     pub id: WorkspaceId,
     pub repo_id: RepoId,
     /// Its worktree's directory, the branch it started on, and `CONDUCTOR_WORKSPACE_NAME`. Unique in its
-    /// repository, and never changes, because renaming a worktree under a running agent would break it.
+    /// repository, and never changes once it's ready, because renaming a worktree under a running agent would break
+    /// it. While it's being made it can take another, if git already has a branch or directory by the one it has.
     pub name: String,
     pub branch: String,
     /// What the branch was created from, such as `origin/main`. Diffs are taken against this.
