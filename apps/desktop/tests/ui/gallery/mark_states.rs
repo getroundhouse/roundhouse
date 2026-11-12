@@ -1,6 +1,7 @@
 //! Every state the status mark can show, in one picture: each thing its agent can be doing, against each colour a
-//! pull request gives its fan, at the sidebar's size and at a tab's. Under them, the ring a background task has. Each
-//! is drawn by the app's own mark, held still as the screens hold it.
+//! pull request gives its fan, at the sidebar's size and at Home's. A tab's mark is the `None` one at Home's size,
+//! since a chat's mark doesn't show the pull request. Under them, the ring a background task has. Each is drawn by the
+//! app's own mark, held still as the screens hold it.
 
 #![cfg(test)]
 

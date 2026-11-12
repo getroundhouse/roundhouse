@@ -33,7 +33,7 @@ pub use hand::{Hand, Off, hand_once_laid_out};
 pub use highlight::{Spans, highlight, language, preload_highlighting, try_highlight};
 pub use hover::hover_card;
 pub use icon::{IconSize, IconStyle, icon};
-pub use mark::{Signal, Size, brand, mark};
+pub use mark::{Signal, Size, brand, chat_mark, mark};
 pub use palette::{faint, field_edge, found, found_here, prompt, tab_underline};
 pub use plan::{plan_colors, plan_texture};
 pub use raised::raised;

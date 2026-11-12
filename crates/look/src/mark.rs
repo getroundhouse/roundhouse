@@ -1,8 +1,9 @@
 //! The status mark: a half circle of fine dots around a turntable, like a roundhouse seen from above. It has three
-//! layers, each about one thing. The fan's colour is the work, where its pull request stands, and nothing else changes
-//! it. A white light over it is the agent: sweeping the fan while it works, and kept to the inner row once its turn has
-//! ended with something still running. And the turntable is about you: red when the agent stopped short. A chat
-//! waiting on you, or with a reply you haven't read, isn't on the mark, since the name beside it says to look.
+//! layers, each about one thing. The fan's colour is the work, where the workspace's pull request stands, and nothing
+//! else changes it. A chat's fan is grey, since the pull request is the workspace's. A white light over it is the
+//! agent: sweeping the fan while it works, and kept to the inner row once its turn has ended with something still
+//! running. And the turntable is about you: red when the agent stopped short. A chat waiting on you, or with a reply
+//! you haven't read, isn't on the mark, since the name beside it says to look.
 
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::{App, Bounds, Hsla, IntoElement, Pixels, Styled, Window, canvas, px};
@@ -12,7 +13,7 @@ use gpui_kit::{App, Bounds, Hsla, IntoElement, Pixels, Styled, Window, canvas, p
 pub enum Size {
     /// In the sidebar.
     Row,
-    /// Beside text: chat tabs, cards and the working line.
+    /// Beside text: chat tabs, Home's rows and the working line.
     Inline,
 }
 
@@ -59,10 +60,10 @@ const TRAIL: f32 = 0.06;
 /// How strongly the agent's light shows over the fan's colour, where it's brightest.
 pub(crate) const LIGHT: f32 = 0.92;
 
-/// The mark for one workspace or chat.
+/// A workspace's mark, whose fan is in its pull request's colour.
 pub fn mark(signal: Signal, work: Work, size: Size, cx: &App) -> impl IntoElement {
     let theme = cx.theme();
-    // The fan is always the pull request's, so its colour means one thing. A reply nobody has read, or a question
+    // Only the pull request colours the fan, so its colour means one thing. A reply nobody has read, or a question
     // waiting on an answer, isn't on the mark at all: the name beside it says to look.
     let color = work.fan();
     let hub = match signal {
@@ -73,6 +74,12 @@ pub fn mark(signal: Signal, work: Work, size: Size, cx: &App) -> impl IntoElemen
     let moves = matches!(signal, Signal::Working | Signal::Background | Signal::SettingUp) && clock::moving(cx);
     let t = if moves { clock::elapsed() } else { STILL_S };
     drawn(signal, color, hub, size.width(), t, moves, cx)
+}
+
+/// A chat's mark, which says only what its agent is doing. A pull request is the workspace's, not one chat's, so the
+/// fan is grey, and the workspace's mark shows the pull request.
+pub fn chat_mark(signal: Signal, size: Size, cx: &App) -> impl IntoElement {
+    mark(signal, Work::NoPr, size, cx)
 }
 
 /// The mark in copper with nothing on it: the brand, for empty states. Copper is the theme's focus ring, because

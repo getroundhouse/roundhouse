@@ -55,7 +55,7 @@ Each colour means one thing.
 - **The diff uses the colours review tools do,** because they're about a file rather than about you or the agent: lines added and removed are green and red, and a modified file's icon is yellow.
 - **A file's icon is in its kind's colours,** as Catppuccin's Mocha flavour draws them, in thin lines, which editors have made familiar, and a folder's is the plain folder in the muted text colour, whatever it holds, as is the plain file's, for a file with no icon of its own. They say what a file is, never how anything stands, so they sit beside a name and nowhere a status would.
 - **A pull request's state is shown in GitHub's colours,** which the people Roundhouse is for already know: green when it's open, purple when it's merged, a muted red when it's closed, and a grey of its own when it's a draft.
-- **The pull request's bar says more with the same colours.** It's green only once nothing is in the way of merging, and on the theme's raised surface, in the text colour, while there's something to do first. A place in the merge queue is GitHub's yellow, which GitHub uses for what's waiting on it, and the bar always says in words what it's waiting for, so it isn't taken for amber's turn of yours. The fan is yellow there too, and green for every other open pull request, since it's too small to say what's in the way of merging. Amber is never on the mark, so the queue's yellow isn't taken for it. `look::Work` holds these colours, so the fan and the bar can't disagree. *Unconfirmed.*
+- **The pull request's bar says more with the same colours.** It's green only once nothing is in the way of merging, and on the theme's raised surface, in the text colour, while there's something to do first. A place in the merge queue is GitHub's yellow, which GitHub uses for what's waiting on it, and the bar always says in words what it's waiting for, so it isn't taken for amber's turn of yours. The fan is yellow there too, and green for every other open pull request, since it's too small to say what's in the way of merging. Amber is never on the mark, so the queue's yellow isn't taken for it. `look::Work` holds these colours, so a workspace's fan and the bar can't disagree. *Unconfirmed.*
 
 ## The status mark
 
@@ -65,12 +65,13 @@ The mark has three layers, and each is about one thing, so several facts can sho
 
 | Layer | It's about | What it shows |
 |---|---|---|
-| The fan's colour | The work | Where its pull request stands: grey for none, then green, yellow in the merge queue, purple, muted red or a lighter grey, as above |
+| The fan's colour | The work | Where the workspace's pull request stands: grey for none, then green, yellow in the merge queue, purple, muted red or a lighter grey, as above |
 | A white light over the fan | The agent | A light sweeps the fan while the agent works, keeps to the inner row once its turn has ended with something still running, and the fan fills in while the workspace is set up |
 | The turntable in red | You | Red when the agent stopped short. It goes back to the fan's colour once that's dealt with |
 
 - **Only an agent with something running moves the mark.** Motion says something is going on there, so nothing else moves. While the agent waits on you, the fan holds still. A moving mark is redrawn on every frame of the display, as smoothly as it can show, and the system's Reduce Motion setting holds it still. Pictures of the app hold every mark still at one moment, so they come out the same every time.
-- **Only the pull request changes the fan's colour,** so the colour always means one thing, and matches the bar. What's about you is on the turntable and the name, which leave the fan as it is.
+- **Only the pull request changes the colour of a workspace's fan,** so the colour always means one thing, and matches the bar. What's about you is on the turntable and the name, which leave the fan as it is.
+- **A chat's fan is grey,** in its tab and on its working line, since a pull request belongs to the workspace, not to one of its chats. So a chat's mark says only what its agent is doing, and the workspace's mark shows the pull request.
 - **The turntable shows one thing at a time:** red, then the white of something still running. *Unconfirmed.*
 - **The light sweeps the whole fan only for the agent's own work:** a turn, or a subagent it left going when its turn ended. *Unconfirmed.*
 - **Once a turn has ended with anything else still running, the light keeps to the inner row, beside the turntable, which is lit, and goes slower.** A command left running might end by itself, as a test run does, or be held open, as an app is, and the agent doesn't say which. So the mark claims only what's known: something is running there, and it isn't the agent. *Unconfirmed.*
@@ -80,7 +81,7 @@ The mark has three layers, and each is about one thing, so several facts can sho
 - **The sidebar shows every workspace's pull request.**
 - **A background task has a ring, not a mark:** ten dots around a hub, which is the fan's turntable on its own, 16px wide so what follows it lines up with the working line's. The fan is for an agent, and a task isn't one. `chats.md` says when its light goes round. *Unconfirmed.*
 
-**Every state of the mark, against each colour a pull request gives its fan, at the sidebar's size and a tab's, and the ring of a background task.** *Unconfirmed.*
+**Every state of the mark, against each colour a pull request gives its fan, at the sidebar's size and Home's, and the ring of a background task.** A tab's mark is the `None` column at Home's size. *Unconfirmed.*
 
 ![Every state of the mark](screens/mark-states.png)
 
