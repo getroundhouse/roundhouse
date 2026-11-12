@@ -133,6 +133,13 @@ fn images_on_lines_of_their_own_are_each_a_paragraph() {
 }
 
 #[test]
+fn a_text_the_parser_panics_on_is_left_as_it_is() {
+    let text = "![Before](before.png)\n![After](after.png)\n\na\n===\n---\nb\n===";
+
+    assert_eq!(images_apart(text), text);
+}
+
+#[test]
 fn images_on_one_line_are_each_a_paragraph() {
     let text = "![Before](before.png) ![After](after.png)  \n[![Linked](linked.png)](https://example.com)";
 

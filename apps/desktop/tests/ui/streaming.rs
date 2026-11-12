@@ -177,3 +177,20 @@ fn a_turn_says_how_long_its_taken_until_it_ends_and_then_copies_its_reply(cx: &m
     let copied = ui.cx.read_from_clipboard().and_then(|item| item.text());
     assert_eq!(copied.as_deref(), Some("done"), "what the fake agent says its turn came to");
 }
+
+/// The `markdown` crate the kit parses with panics on some texts, which the agent can write. A reply recorded with one
+/// is drawn as it's written whenever its chat is, rather than ending the app each time.
+#[gpui_kit::test]
+fn a_reply_the_markdown_parser_panics_on_is_drawn_as_it_is_written(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let session = stack.chat_in_a_new_workspace();
+    let reply = "a\n===\n---\nb\n===";
+    stack.run(&session, &format!("say:{reply}"));
+
+    let mut ui = Ui::open(cx, &stack);
+
+    ui.wait("the reply to be drawn", |ui| {
+        ui.transcript()
+            .is_some_and(|t| ui.cx.read_entity(&t, |t, cx| t.kept_texts(cx).iter().any(|text| text == reply)))
+    });
+}
