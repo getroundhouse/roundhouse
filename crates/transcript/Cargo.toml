@@ -28,6 +28,7 @@ similar.workspace = true
 
 [dev-dependencies]
 proptest.workspace = true
+protocol = { workspace = true, features = ["testing"] }
 transcript = { workspace = true, features = ["testing"] }
 # For a test of what the kit's text view reads at once, which the transcript keeps text views by.
 gpui-kit = { workspace = true, features = ["test-support"] }
