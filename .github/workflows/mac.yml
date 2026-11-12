@@ -47,11 +47,14 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: mac-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
+          key: mac-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', '**/Cargo.toml') }}
           restore-keys: mac-
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       # The gallery's images match the Mac that approved them, pixel for pixel.
       - run: cargo test --workspace --locked -- --skip 'gallery::'
+      # Only the dependencies are worth keeping, as in ci.yml.
+      - if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
+        run: cargo clean --workspace
       - if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
