@@ -8,6 +8,9 @@ use crate::git::tests::{new_repo, run};
 /// Long enough for a busy machine, and only waited out when the watcher has failed to send.
 const PATIENCE: Duration = Duration::from_secs(20);
 
+/// How long a watcher has to stay asleep to count as not woken, which is waited out each time.
+const QUIET: Duration = Duration::from_millis(500);
+
 struct Watching {
     worktree: PathBuf,
     frames: mpsc::Receiver<WorkerFrame>,
@@ -34,6 +37,84 @@ impl Watching {
     fn git(&self, args: &[&str]) {
         run(&self.worktree, args);
     }
+}
+
+/// The OS's watcher for `worktree`, once anything it heard of before it was watching has come and gone, and what it
+/// wakes.
+async fn listening(worktree: &Path) -> (Arc<Wakes>, Option<Box<dyn Watcher + Send>>) {
+    let places = branches::places(worktree).await.unwrap();
+    let read = branches::read(worktree, &places).await.unwrap();
+    let wakes = Arc::new(Wakes { places, last: Mutex::new(Some(read)), wake: Notify::new() });
+    let watcher = start(&wakes);
+    let _ = tokio::time::timeout(QUIET, wakes.wake.notified()).await;
+    (wakes, watcher)
+}
+
+async fn woke(wakes: &Wakes, within: Duration) -> bool {
+    tokio::time::timeout(within, wakes.wake.notified()).await.is_ok()
+}
+
+fn heard(kind: EventKind, file: PathBuf) -> Event {
+    Event::new(kind).add_path(file)
+}
+
+/// Every git command opens `HEAD` and the config, which inotify tells of, so a watcher woken by that would read again
+/// after each of its own reads, for ever.
+#[tokio::test]
+async fn reading_the_branches_wakes_nothing_and_switching_does() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = new_repo(dir.path());
+    let worktree = dir.path().join("aspen");
+    run(&repo, &["worktree", "add", "-q", "--no-track", "-b", "aspen", worktree.to_str().unwrap(), "main"]);
+    let (wakes, _watcher) = listening(&worktree).await;
+
+    branches::read(&worktree, &wakes.places).await.unwrap();
+    let read = woke(&wakes, QUIET).await;
+    run(&worktree, &["switch", "-q", "-c", "header"]);
+    let switched = woke(&wakes, PATIENCE).await;
+
+    assert!(!read, "woken by its own read");
+    assert!(switched, "so it was listening");
+}
+
+/// Another worktree's commit rewrites only its own branch's ref, and its own files.
+#[tokio::test]
+async fn another_worktrees_commit_wakes_nothing() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = new_repo(dir.path());
+    let (worktree, elm) = (dir.path().join("aspen"), dir.path().join("elm"));
+    for (path, name) in [(&worktree, "aspen"), (&elm, "elm")] {
+        run(&repo, &["worktree", "add", "-q", "--no-track", "-b", name, path.to_str().unwrap(), "main"]);
+    }
+    let (wakes, _watcher) = listening(&worktree).await;
+
+    run(&elm, &["commit", "-q", "--allow-empty", "-m", "on elm"]);
+    let elsewhere = woke(&wakes, QUIET).await;
+    run(&worktree, &["commit", "-q", "--allow-empty", "-m", "on aspen"]);
+    let here = woke(&wakes, PATIENCE).await;
+
+    assert!(!elsewhere, "woken by another worktree's commit");
+    assert!(here, "so it was listening");
+}
+
+/// As inotify tells of them, whatever the OS the test runs on.
+#[tokio::test]
+async fn a_file_only_opened_or_read_doesnt_matter_and_one_written_does() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = new_repo(dir.path());
+    let places = branches::places(&repo).await.unwrap();
+    let wakes = Wakes { places, last: Mutex::new(None), wake: Notify::new() };
+    let head = repo.canonicalize().unwrap().join(".git").join("HEAD");
+    let access = |kind| heard(EventKind::Access(kind), head.clone());
+
+    let opened = [AccessKind::Open(AccessMode::Any), AccessKind::Read, AccessKind::Close(AccessMode::Read)];
+    let written = [
+        heard(EventKind::Modify(notify::event::ModifyKind::Any), head.clone()),
+        access(AccessKind::Close(AccessMode::Write)),
+    ];
+
+    assert!(!opened.into_iter().any(|kind| mattered(&wakes, &Ok(access(kind)))));
+    assert!(written.into_iter().all(|event| mattered(&wakes, &Ok(event))));
 }
 
 #[tokio::test]

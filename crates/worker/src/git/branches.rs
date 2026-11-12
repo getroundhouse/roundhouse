@@ -71,8 +71,11 @@ pub(crate) async fn checked_out(worktree: &Path) -> Option<BranchName> {
 
 pub(crate) async fn read(worktree: &Path, places: &Places) -> Result<Read, ApiError> {
     let head = head(worktree).await?;
-    // Empty when the repository keeps no reflogs, and then only the branch checked out is known.
-    let mut names = left(&git_ok(worktree, &["reflog", "show", "--format=%gs", "HEAD", "--"]).await?);
+    // Empty when the repository keeps no reflogs, and then only the branch checked out is known. So it is when git
+    // can't read HEAD's reflog, as on a branch with no commits yet, which `git switch --orphan` makes, rather than
+    // nothing being known.
+    let reflog = git(worktree, &["reflog", "show", "--format=%gs", "HEAD", "--"]).await?;
+    let mut names = if reflog.success { left(&reflog.stdout) } else { BTreeSet::new() };
     if let Head::Branch { name } = &head {
         names.insert(name.clone());
     }
@@ -110,18 +113,21 @@ pub(crate) fn watched(places: &Places) -> [Watched; 4] {
 }
 
 /// Whether git writing `file` may have changed what `read` found: the worktree's `HEAD` or reflog, the repository's
-/// config or packed refs, a reftable, which holds every ref, or the file of a ref that was read. Not the index, which
-/// every `git status` in any worktree rewrites, nor another worktree's files, nor a branch the worktree hasn't had,
-/// which only becomes one of its own by being checked out, which changes its `HEAD`.
+/// config or packed refs, a reftable, which holds every ref, or the file of a ref that was read, or a directory it's
+/// in. Packing refs takes away the directories it empties, and git makes one again just before it writes a ref into
+/// it, sooner than inotify can watch what's in it, so the directory being made may be all that's heard. Not the index,
+/// which every `git status` in any worktree rewrites, nor another worktree's files, nor a branch the worktree hasn't
+/// had, which only becomes one of its own by being checked out, which changes its `HEAD`.
 pub(crate) fn matters(places: &Places, read: Option<&Read>, file: &Path) -> bool {
     if let Ok(own) = file.strip_prefix(&places.git_dir) {
         return own == Path::new("HEAD") || own == Path::new("logs").join("HEAD") || own.starts_with("reftable");
     }
     let Ok(shared) = file.strip_prefix(&places.common_dir) else { return false };
+    let in_refs = shared.starts_with("refs") && shared != Path::new("refs");
     shared == Path::new("config")
         || shared == Path::new("packed-refs")
         || shared.starts_with("reftable")
-        || read.is_some_and(|read| read.refs.iter().any(|read| read == file))
+        || read.is_some_and(|read| read.refs.iter().any(|read| read == file || (in_refs && read.starts_with(file))))
 }
 
 async fn head(worktree: &Path) -> Result<Head, ApiError> {

@@ -7,7 +7,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use notify::{Event, PollWatcher, RecursiveMode, Watcher};
+use notify::event::{AccessKind, AccessMode};
+use notify::{Event, EventKind, PollWatcher, RecursiveMode, Watcher};
 use parking_lot::Mutex;
 use protocol::worker::WorkerFrame;
 use tokio::sync::{Notify, mpsc, oneshot, watch};
@@ -126,11 +127,22 @@ fn watching<W: Watcher>(mut watcher: W, places: &Places) -> notify::Result<W> {
     Ok(watcher)
 }
 
-/// Whether what the watcher heard may have changed the branches. One it lost track with, or an error, may have.
+/// Whether what the watcher heard may have changed the branches. One it lost track with, or an error, may have. A file
+/// opened, read or closed without being written to hasn't, which inotify tells of too, and every git command opens
+/// `HEAD` and the config, so counting those, the watcher's own reads would wake it again, and every other worker's on
+/// the same repository, for ever.
 fn mattered(wakes: &Wakes, event: &notify::Result<Event>) -> bool {
     let Ok(event) = event else { return true };
+    if event.need_rescan() {
+        return true;
+    }
+    if let EventKind::Access(access) = event.kind
+        && access != AccessKind::Close(AccessMode::Write)
+    {
+        return false;
+    }
     let last = wakes.last.lock();
-    event.need_rescan() || event.paths.iter().any(|file| branches::matters(&wakes.places, last.as_ref(), file))
+    event.paths.iter().any(|file| branches::matters(&wakes.places, last.as_ref(), file))
 }
 
 /// Reads the branches and sends them if they've changed. False once the hub's gone.

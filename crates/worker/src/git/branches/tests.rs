@@ -151,6 +151,18 @@ async fn a_repository_that_keeps_no_reflogs_knows_only_the_branch_checked_out() 
     assert_eq!(names(&branches), ["header"]);
 }
 
+/// HEAD names a branch with no commits yet, so git can't read HEAD's reflog.
+#[tokio::test]
+async fn a_branch_with_no_commits_yet_is_the_one_checked_out() {
+    let dir = tempfile::tempdir().unwrap();
+    let (_, worktree) = worktree(dir.path());
+    run(&worktree, &["switch", "-q", "--orphan", "fresh"]);
+
+    let branches = read_branches(&worktree).await;
+
+    assert_eq!(branches.head, Head::Branch { name: BranchName::from("fresh") });
+}
+
 #[test]
 fn a_branch_counts_from_the_reflog_once_its_been_left() {
     let subjects = [
@@ -185,6 +197,8 @@ async fn only_what_git_writes_the_branches_in_matters() {
 
     assert!(mattering.into_iter().all(matters));
     assert!(matters(ref_read), "the ref of a branch it has");
+    assert!(matters(shared.join("refs").join("heads")), "a directory one is in, which git makes again after packing");
+    assert!(!matters(shared.join("refs")), "but not every ref's");
     assert!(matters(shared.join("reftable").join("tables.list")) && matters(own.join("reftable").join("tables.list")));
     assert!(!not.into_iter().any(matters), "not the index, nor a branch it hasn't had");
     assert!(!matters(elsewhere), "nor another worktree's HEAD");
