@@ -7,9 +7,9 @@ use protocol::client::{ApiError, ClientResponse, ErrorCode, HubNotice};
 use protocol::event::{ApprovalDecision, SessionEvent};
 use protocol::find::{Found, Needle};
 use protocol::model::{
-    AgentKind, ApprovalId, AttachmentId, ClientMessageId, ClientRequestId, Draft, NewDraft, PermissionMode, Place,
-    PromptLine, RecordKey, Rev, Seq, Session, SessionId, SessionSettings, SessionSettingsChange, SessionStatus,
-    TitleSource, ToolUseId, WorkspaceId, WorkspaceStatus,
+    AgentKind, ApprovalId, AttachmentId, ClientMessageId, ClientRequestId, CompactionLine, Draft, NewDraft,
+    PermissionMode, Place, PromptLine, RecordKey, Rev, Seq, Session, SessionId, SessionSettings, SessionSettingsChange,
+    SessionStatus, TitleSource, ToolUseId, WorkspaceId, WorkspaceStatus,
 };
 use protocol::prompt::check_prompt;
 use tokio::sync::oneshot;
@@ -159,6 +159,16 @@ impl Hub {
         self.blocking(move |store| {
             store.get_session(&id)?;
             store.prompt_lines(&id)
+        })
+        .await
+    }
+
+    /// Every compaction of the agent's own conversation that compacted, as a line each. A session that isn't there is
+    /// refused, as a read is.
+    pub(crate) async fn session_compaction_list(&self, id: SessionId) -> Result<Vec<CompactionLine>, ApiError> {
+        self.blocking(move |store| {
+            store.get_session(&id)?;
+            store.compaction_lines(&id)
         })
         .await
     }

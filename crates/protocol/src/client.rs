@@ -6,8 +6,9 @@ use crate::attachment::{Attachment, AttachmentBytes};
 use crate::event::SessionEvent;
 use crate::find::Found;
 use crate::model::{
-    Account, DiffComment, FileContents, GitDiff, GitStatus, HubSettings, Place, PromptLine, PullRequest, RecordKey,
-    Records, Repo, Rev, Seq, Session, SessionAccount, Subagent, TitleError, Workspace, WorktreeFiles,
+    Account, CompactionLine, DiffComment, FileContents, GitDiff, GitStatus, HubSettings, Place, PromptLine,
+    PullRequest, RecordKey, Records, Repo, Rev, Seq, Session, SessionAccount, Subagent, TitleError, Workspace,
+    WorktreeFiles,
 };
 use crate::tail::{StreamDelta, Tail};
 
@@ -76,6 +77,9 @@ pub enum ClientResponse {
     },
     Prompts {
         prompts: Vec<PromptLine>,
+    },
+    Compactions {
+        compactions: Vec<CompactionLine>,
     },
     Found(Found),
     PromptRecorded {
