@@ -353,16 +353,20 @@ class Publishing(unittest.TestCase):
             publish.check(url, other, "0.1.2", work, wait=0)
 
 
-class Windows(Publishing):
-    """Windows' releases, which go in the bucket macOS's are in, under a feed of their own. Every test above runs
-    again for them, since `Publishing`'s are inherited, and the ones here are about two platforms side by side."""
+class BesideAnother:
+    """A platform's releases, which go in the bucket macOS's are in, under a feed of their own. Mixed into a
+    `Publishing` for each platform, so every test above runs again for it, and the ones here are about two platforms
+    side by side."""
 
-    CHANNEL = "win"
-    # Another platform's, published into the same bucket first.
-    BESIDE = "osx"
-    PACKAGE = "Roundhouse-0.1.1-full.nupkg"
+    # The platform's channel, and another's, published into the same bucket first.
+    CHANNEL = ""
+    BESIDE = ""
+    # Its first full package, and what people download, as vpk names them.
+    PACKAGE = ""
+    DOWNLOADS: tuple[str, ...] = ()
 
     def setUp(self) -> None:
+        # Publishing's, which comes after this in each platform's bases.
         super().setUp()
         publish.use_channel(self.CHANNEL)
         self.addCleanup(publish.use_channel, "osx")
@@ -373,8 +377,7 @@ class Windows(Publishing):
         self.assertEqual(self.published(), [("0.1.1", "Full")])
         self.assert_packages_match()
         feed = f"releases.{self.CHANNEL}.json"
-        for name in (feed, feed + ".sig", f"Roundhouse-{self.CHANNEL}-Setup.exe",
-                     f"Roundhouse-{self.CHANNEL}-Portable.zip", self.PACKAGE):
+        for name in (feed, feed + ".sig", *self.DOWNLOADS, self.PACKAGE):
             self.assertTrue((self.bucket / name).exists(), name)
 
     def test_a_platform_s_releases_leave_the_other_s_alone(self) -> None:
@@ -394,12 +397,40 @@ class Windows(Publishing):
             self.assertEqual((self.bucket / name).read_bytes(), content, name)
 
 
-class WindowsOnArm(Windows):
-    """ARM64 Windows' releases, a third feed in the same bucket, beside x64 Windows'."""
+class Windows(BesideAnother, Publishing):
+    """x64 Windows' releases, beside macOS's."""
+
+    CHANNEL = "win"
+    BESIDE = "osx"
+    PACKAGE = "Roundhouse-0.1.1-full.nupkg"
+    DOWNLOADS = ("Roundhouse-win-Setup.exe", "Roundhouse-win-Portable.zip")
+
+
+class WindowsOnArm(BesideAnother, Publishing):
+    """ARM64 Windows' releases, beside x64 Windows'."""
 
     CHANNEL = "win-arm64"
     BESIDE = "win"
     PACKAGE = "Roundhouse-0.1.1-win-arm64-full.nupkg"
+    DOWNLOADS = ("Roundhouse-win-arm64-Setup.exe", "Roundhouse-win-arm64-Portable.zip")
+
+
+class Linux(BesideAnother, Publishing):
+    """amd64 Linux's releases, beside Windows', with the AppImage to download."""
+
+    CHANNEL = "linux-amd64"
+    BESIDE = "win"
+    PACKAGE = "Roundhouse-0.1.1-linux-amd64-full.nupkg"
+    DOWNLOADS = ("Roundhouse-linux-amd64.AppImage",)
+
+
+class LinuxOnArm(BesideAnother, Publishing):
+    """ARM64 Linux's releases, beside amd64 Linux's."""
+
+    CHANNEL = "linux-arm64"
+    BESIDE = "linux-amd64"
+    PACKAGE = "Roundhouse-0.1.1-linux-arm64-full.nupkg"
+    DOWNLOADS = ("Roundhouse-linux-arm64.AppImage",)
 
 
 if __name__ == "__main__":
