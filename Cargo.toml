@@ -134,6 +134,14 @@ dbg_macro = "warn"
 mod_module_files = "warn"
 undocumented_unsafe_blocks = "warn"
 
+# Line numbers for backtraces, without the rest of the debug info, which only a debugger reads. On a Mac, each
+# incremental rebuild leaves its object files, and the debug info in them, in `target/debug/deps`, and nothing deletes
+# them, so a checkout that rebuilds all day grows by tens of GB. With line tables only they're about a quarter the size,
+# and rebuilds are no slower. `split-debuginfo = "packed"` would stop them piling up, but it runs `dsymutil` over every
+# test binary that links, which made a rebuild of the desktop app's tests about 20 s slower.
+[profile.dev]
+debug = "line-tables-only"
+
 # GPUI is unusably slow unoptimized, and dependencies only build once.
 [profile.dev.package."*"]
 opt-level = 2
