@@ -131,7 +131,7 @@ tools/
   install.sh       Installs this commit as a version of its own, outside `target/`
   package/         Packages this commit as Roundhouse.app with Velopack, signed and notarized when given the keys, or Windows binaries as an installer, and publishes either as an update
   perf/            Performance tests against the real app. Not built, see `docs/performance.md`
-.github/workflows/ CI: the full checks on Linux for every PR that changes more than Markdown, and on a Mac when dependencies change. On Windows, for every PR that changes Rust, a lint of the product's code as built for it, and a hub started and stopped. The release workflow publishes each merge to `main`
+.github/workflows/ CI: the full checks on Linux for every PR that changes more than Markdown and the marketing site, and on a Mac when dependencies change. On Windows, for every PR that changes Rust, a lint of the product's code as built for it, and a hub started and stopped. The release workflow publishes each merge to `main`
 ```
 
 The binaries are `roundhouse`, `roundhoused` and `roundhouse-desktop`. `crates/protocol/src/paths.rs` names the data directory and the variables that move it. Only a release build defaults to the real data. A debug build uses `roundhouse-dev`, `cargo run` and `cargo test` use a directory in the checkout, and nothing a worker starts inherits these variables, so what's built in a workspace can't reach the hub it's running under.
