@@ -134,3 +134,27 @@ fn whats_kept_of_the_dialog_before_its_tables_were_named_for_it_is_still_kept() 
     assert_eq!(after.files, vec![file], "its file is still the hub's");
     assert!(after.rev > before.rev, "clients follow records by revision, so the feed would miss it otherwise");
 }
+
+/// So the hub empties the dialog once a workspace is made from it, without losing what's typed in it since.
+#[test]
+fn whats_in_the_dialog_is_replaced_only_if_it_says_what_was_asked() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_session(dir.path());
+    store.add_new_workspace_draft_file(&log_file("f1")).unwrap();
+    let (made, _) = store.set_new_workspace_draft(&typed("fix the login", &["f1"])).unwrap();
+    let emptied = typed("", &[]);
+    let since = [typed("fix the login and more", &["f1"]), typed("fix the login", &[]), {
+        NewWorkspaceDraftToKeep { plan: false, ..typed("fix the login", &["f1"]) }
+    }];
+
+    for typed_since in since {
+        let (there, changed) = store.replace_new_workspace_draft(&typed_since, &emptied).unwrap();
+
+        assert!(!changed, "{typed_since:?} isn't what's there");
+        assert_eq!(there, made);
+    }
+    let (there, changed) = store.replace_new_workspace_draft(&typed("fix the login", &["f1"]), &emptied).unwrap();
+    assert!(changed);
+    assert_eq!((there.text.as_str(), there.files.as_slice(), there.plan), ("", [].as_slice(), true));
+    assert!(there.rev > made.rev);
+}

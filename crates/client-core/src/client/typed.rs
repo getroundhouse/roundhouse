@@ -1,12 +1,13 @@
 //! The calls that keep what's typed and not sent: a chat's draft, an answer being typed to its question, a comment
 //! being written on a workspace's diff, and what's in the new-workspace dialog, with its files. `Drafts` makes them, on
-//! a thread of its own.
+//! a thread of its own. And the one that makes a workspace from what's kept of the dialog.
 
 use protocol::attachment::{Attachment, AttachmentBytes, MediaType};
+use protocol::client::new_workspace::{NewWorkspaceCreate, NewWorkspaceMade};
 use protocol::client::{ClientRequest, ClientResponse, drafts};
 use protocol::model::{
-    AnswerDraft, AttachmentId, CommentDraft, DraftToKeep, NewWorkspaceDraft, NewWorkspaceDraftToKeep, Session,
-    SessionId, Workspace, WorkspaceId,
+    AnswerDraft, AttachmentId, ClientRequestId, CommentDraft, DraftToKeep, NewWorkspaceDraft, NewWorkspaceDraftToKeep,
+    Session, SessionId, Workspace, WorkspaceId,
 };
 
 use super::{Client, Result, unexpected};
@@ -74,5 +75,18 @@ impl Client {
         self.expect_ok(ClientRequest::NewWorkspaceDraftFileRemove(drafts::NewWorkspaceDraftFileRemove {
             id: id.clone(),
         }))
+    }
+
+    /// See [`NewWorkspaceCreate`]. A hub older than this refuses it, as `is_unsupported` says, and a client then makes
+    /// the workspace a step at a time, sending the files itself.
+    pub fn new_workspace_create(
+        &self,
+        made_of: &NewWorkspaceDraftToKeep,
+        client_request_id: ClientRequestId,
+    ) -> Result<NewWorkspaceMade> {
+        let request = NewWorkspaceCreate { made_of: made_of.clone(), client_request_id };
+        let reply = self.call(ClientRequest::NewWorkspaceCreate(request))?;
+        let ClientResponse::NewWorkspaceMade(made) = reply else { return unexpected(&reply) };
+        Ok(*made)
     }
 }

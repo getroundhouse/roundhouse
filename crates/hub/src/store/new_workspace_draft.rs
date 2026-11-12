@@ -43,15 +43,23 @@ impl Store {
         draft: &NewWorkspaceDraftToKeep,
     ) -> Result<(NewWorkspaceDraft, bool), StoreError> {
         let conn = lock(&self.writer);
-        let files = named_on(&conn, &FileFor::NewWorkspace, &draft.files)?;
-        let NewWorkspaceDraftToKeep { repo_id, text, model, effort, plan, .. } = draft.clone();
-        // Without its revision, which is the row's, so the same draft is always the same JSON.
-        let kept = NewWorkspaceDraft { repo_id, text, files, model, effort, plan, rev: Rev::default() };
-        let changed = conn.execute(
-            "UPDATE new_workspace_draft SET draft = ?1 WHERE draft IS NOT ?1",
-            params![serde_json::to_string(&kept)?],
-        )? > 0;
-        Ok((new_workspace_draft(&conn)?, changed))
+        keep(&conn, draft)
+    }
+
+    /// Keeps `then` in place of what's in the new-workspace dialog, as [`Self::set_new_workspace_draft`] does, but only
+    /// if what's there says what `now` does, so what's typed in it meanwhile, such as in another client, is never
+    /// replaced. Returns the draft, and whether it changed.
+    pub fn replace_new_workspace_draft(
+        &self,
+        now: &NewWorkspaceDraftToKeep,
+        then: &NewWorkspaceDraftToKeep,
+    ) -> Result<(NewWorkspaceDraft, bool), StoreError> {
+        let conn = lock(&self.writer);
+        let there = new_workspace_draft(&conn)?;
+        if !says(&there, now) {
+            return Ok((there, false));
+        }
+        keep(&conn, then)
     }
 
     /// Records `file` for the draft to name, unless one with its ID is there already, and returns the one recorded, so
@@ -97,6 +105,27 @@ impl Store {
         let ids = statement.query_map([], |row| row.get::<_, String>(0).map(AttachmentId::from))?;
         Ok(ids.collect::<rusqlite::Result<_>>()?)
     }
+}
+
+/// Keeps `draft`, on the writer, as [`Store::set_new_workspace_draft`] says.
+fn keep(conn: &Connection, draft: &NewWorkspaceDraftToKeep) -> Result<(NewWorkspaceDraft, bool), StoreError> {
+    let files = named_on(conn, &FileFor::NewWorkspace, &draft.files)?;
+    let NewWorkspaceDraftToKeep { repo_id, text, model, effort, plan, .. } = draft.clone();
+    // Without its revision, which is the row's, so the same draft is always the same JSON.
+    let kept = NewWorkspaceDraft { repo_id, text, files, model, effort, plan, rev: Rev::default() };
+    let changed = conn.execute(
+        "UPDATE new_workspace_draft SET draft = ?1 WHERE draft IS NOT ?1",
+        params![serde_json::to_string(&kept)?],
+    )? > 0;
+    Ok((new_workspace_draft(conn)?, changed))
+}
+
+/// Whether what's kept says what `draft` does, its files in the same order.
+fn says(kept: &NewWorkspaceDraft, draft: &NewWorkspaceDraftToKeep) -> bool {
+    let files = kept.files.iter().map(|file| &file.id);
+    (&kept.repo_id, &kept.text, &kept.model, kept.effort, kept.plan)
+        == (&draft.repo_id, &draft.text, &draft.model, draft.effort, draft.plan)
+        && files.eq(draft.files.iter())
 }
 
 pub(super) fn read_draft_file(conn: &Connection, id: &AttachmentId) -> Result<Option<Attachment>, StoreError> {
