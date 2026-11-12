@@ -27,9 +27,9 @@ use crate::error::internal;
 use crate::provider_set::ProviderSet;
 use crate::session::{Item, LiveSession};
 use crate::store::{MadeByRequest, Store, StoreError, now_ms};
+use crate::versions;
 use crate::worker_link::WorkerLink;
 use parking_lot::Mutex;
-use protocol::PROTOCOL_VERSION;
 use protocol::client::{ApiError, ErrorCode, HubNotice, HubStatus};
 use protocol::model::{ClientRequestId, Records, SessionId, Workspace, WorkspaceId};
 use protocol::worker::WorkerResponse;
@@ -228,7 +228,7 @@ impl Hub {
         HubStatus {
             pid: std::process::id(),
             hub_version: protocol::BUILD_VERSION.to_string(),
-            protocol_version: PROTOCOL_VERSION,
+            protocol_version: versions::CLIENTS.newest,
             started_at_ms: self.started_at_ms,
             workers: u32::try_from(self.workers.lock().len()).unwrap_or(u32::MAX),
             running_sessions: u32::try_from(running_sessions).unwrap_or(u32::MAX),

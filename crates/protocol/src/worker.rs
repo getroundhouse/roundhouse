@@ -14,6 +14,10 @@ use crate::model::{
 };
 use crate::tail::StreamDelta;
 
+/// The worker protocol's version, apart from the client protocol's, so a break in one doesn't break the other. It
+/// changes only for a real break, as "Changing the protocol" in `docs/architecture.md` says.
+pub const WORKER_PROTOCOL_VERSION: u32 = 3;
+
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct WorkerCall {
     pub id: u64,
@@ -23,8 +27,12 @@ pub struct WorkerCall {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(tag = "method", rename_all = "snake_case")]
 pub enum WorkerRequest {
+    /// It names the newest version of the protocol the hub speaks, and the oldest, which a hub from before ranges
+    /// leaves out, since it speaks only the one.
     Hello {
         protocol_version: u32,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        oldest_protocol_version: Option<u32>,
     },
     /// Creates the worktree and its branch. Fails with `NameTaken` if either already exists.
     PrepareWorkspace {
@@ -189,6 +197,7 @@ pub struct AgentSpec {
 #[serde(tag = "result", rename_all = "snake_case")]
 pub enum WorkerResponse {
     Hello {
+        /// The one chosen: the newest both sides speak.
         protocol_version: u32,
     },
     Ok,

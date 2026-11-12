@@ -334,7 +334,7 @@ mod tests {
         HubStatus {
             pid: 1,
             hub_version: "older".to_string(),
-            protocol_version: protocol::PROTOCOL_VERSION,
+            protocol_version: protocol::client::CLIENT_PROTOCOL_VERSION,
             started_at_ms: 0,
             workers: agents,
             running_sessions: agents,

@@ -4,10 +4,11 @@ use std::io::{BufRead as _, BufReader, Write as _};
 use std::path::Path;
 use std::time::{Duration, Instant};
 
+use protocol::client::CLIENT_PROTOCOL_VERSION;
 use protocol::client::{ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HubFrame, ReplyOutcome};
 use protocol::event::{EventBody, NoticeLevel, SessionEvent};
+use protocol::frame;
 use protocol::model::{Place, Session, ToolUseId};
-use protocol::{PROTOCOL_VERSION, frame};
 use serde_json::json;
 
 use super::super::{OpenSession, View};
@@ -71,7 +72,7 @@ fn start_hub(socket: &Path, era: Era) -> flume::Receiver<ClientRequest> {
             match request {
                 ClientRequest::Hello { .. } => {
                     send(&outcome(ClientResponse::Hello {
-                        protocol_version: PROTOCOL_VERSION,
+                        protocol_version: CLIENT_PROTOCOL_VERSION,
                         hub_version: "o".into(),
                     }));
                 }

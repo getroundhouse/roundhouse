@@ -26,7 +26,7 @@ pub struct HubSource {
 /// its own protocol, so that only counts across a real break.
 pub(super) fn may_restart(hub: &HubStatus, app_build: Option<u64>) -> bool {
     let older_build = matches!((hub.build_number, app_build), (Some(hub), Some(app)) if hub < app);
-    hub.on_demand && (older_build || hub.protocol_version < protocol::PROTOCOL_VERSION)
+    hub.on_demand && (older_build || hub.protocol_version < protocol::client::CLIENT_PROTOCOL_VERSION)
 }
 
 /// Whether to replace this hub with this app's own without asking: one it may restart, and only if nothing would
@@ -74,7 +74,7 @@ mod tests {
         HubStatus {
             pid: 1,
             hub_version: "older".to_string(),
-            protocol_version: protocol::PROTOCOL_VERSION,
+            protocol_version: protocol::client::CLIENT_PROTOCOL_VERSION,
             started_at_ms: 0,
             workers: 0,
             running_sessions: 0,
@@ -124,11 +124,15 @@ mod tests {
 
     #[test]
     fn a_hub_on_an_older_protocol_can_be_restarted_whatever_its_build() {
-        let across_a_break = HubStatus { protocol_version: protocol::PROTOCOL_VERSION - 1, ..older_idle_hub() };
+        let across_a_break =
+            HubStatus { protocol_version: protocol::client::CLIENT_PROTOCOL_VERSION - 1, ..older_idle_hub() };
         assert!(may_restart(&HubStatus { build_number: None, ..across_a_break.clone() }, None));
         assert!(!may_restart(&HubStatus { on_demand: false, ..across_a_break }, None));
-        let newer =
-            HubStatus { protocol_version: protocol::PROTOCOL_VERSION + 1, build_number: None, ..older_idle_hub() };
+        let newer = HubStatus {
+            protocol_version: protocol::client::CLIENT_PROTOCOL_VERSION + 1,
+            build_number: None,
+            ..older_idle_hub()
+        };
         assert!(!may_restart(&newer, None));
     }
 

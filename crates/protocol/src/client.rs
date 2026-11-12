@@ -14,6 +14,10 @@ use crate::tail::{StreamDelta, Tail};
 
 mod request;
 
+/// The client protocol's version, apart from the worker protocol's, so a break in one doesn't break the other. It
+/// changes only for a real break, as "Changing the protocol" in `docs/architecture.md` says.
+pub const CLIENT_PROTOCOL_VERSION: u32 = 3;
+
 pub use request::ClientRequest;
 
 /// Replies to a [`ClientFrame`] carry its `id`, and can arrive in any order.
@@ -27,6 +31,7 @@ pub struct ClientFrame {
 #[serde(tag = "result", rename_all = "snake_case")]
 pub enum ClientResponse {
     Hello {
+        /// The one chosen: the newest both sides speak.
         protocol_version: u32,
         hub_version: String,
     },

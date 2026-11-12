@@ -5,10 +5,10 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
 use parking_lot::Mutex;
-use protocol::PROTOCOL_VERSION;
 use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, HubFrame, HubNotice, ReplyOutcome};
 use protocol::frame::{self, Call};
 use protocol::model::{Place, SessionId};
+use protocol::versions::Versions;
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use tokio::sync::{broadcast, mpsc};
 use tokio::task::AbortHandle;
@@ -18,6 +18,7 @@ use crate::frames::FrameReader;
 use crate::hub::Hub;
 use crate::listener::Listener;
 use crate::store::AddedBy;
+use crate::versions;
 use pump::{Following, pump};
 
 mod pump;
@@ -129,22 +130,23 @@ fn works_without_hello(request: &ClientRequest) -> bool {
 /// `None` for a first request this hub couldn't read, which can't be a hello it can answer.
 fn hello(request: Option<&ClientRequest>) -> (ReplyOutcome, bool) {
     let error = |message: String| (ReplyOutcome::Error(ApiError::new(ErrorCode::VersionMismatch, message)), false);
-    let Some(ClientRequest::Hello { protocol_version, .. }) = request else {
+    let Some(ClientRequest::Hello { protocol_version, oldest_protocol_version, .. }) = request else {
         return error("the first request on a connection must be hello".to_string());
     };
-    if *protocol_version == PROTOCOL_VERSION {
-        (
+    let theirs = Versions::from_hello(*protocol_version, *oldest_protocol_version);
+    match versions::CLIENTS.newest_shared(theirs) {
+        Some(chosen) => (
             ReplyOutcome::Response(ClientResponse::Hello {
-                protocol_version: PROTOCOL_VERSION,
+                protocol_version: chosen,
                 hub_version: protocol::BUILD_VERSION.to_string(),
             }),
             true,
-        )
-    } else {
-        error(format!(
-            "this hub is version {} on protocol {PROTOCOL_VERSION}, and this client speaks protocol {protocol_version}. Stopping the hub, which also stops its agents, lets one that matches start",
-            protocol::BUILD_VERSION
-        ))
+        ),
+        None => error(format!(
+            "this hub is version {} on {}, and this client speaks {theirs}. Stopping the hub, which also stops its agents, lets one that matches start",
+            protocol::BUILD_VERSION,
+            versions::CLIENTS,
+        )),
     }
 }
 

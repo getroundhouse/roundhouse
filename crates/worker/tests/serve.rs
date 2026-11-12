@@ -4,14 +4,22 @@
 
 use std::time::Duration;
 
-use protocol::PROTOCOL_VERSION;
 use protocol::client::ErrorCode;
 use protocol::frame;
 use protocol::model::{AgentKind, RunId, SessionSettings};
+use protocol::worker::WORKER_PROTOCOL_VERSION;
 use protocol::worker::{AgentSpec, WorkerCall, WorkerFrame, WorkerOutcome, WorkerRequest, WorkerResponse};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::time::timeout;
 use worker::{Config, Deleter, serve};
+
+/// What a hub of this build says first.
+fn hello() -> WorkerRequest {
+    WorkerRequest::Hello {
+        protocol_version: WORKER_PROTOCOL_VERSION,
+        oldest_protocol_version: Some(WORKER_PROTOCOL_VERSION),
+    }
+}
 
 #[tokio::test]
 async fn a_start_racing_the_hub_going_away_cannot_leave_the_worker_running() {
@@ -33,7 +41,7 @@ async fn a_start_racing_the_hub_going_away_cannot_leave_the_worker_running() {
         });
 
         let calls = [
-            WorkerRequest::Hello { protocol_version: PROTOCOL_VERSION },
+            hello(),
             WorkerRequest::AgentStart(AgentSpec {
                 session_id: format!("s{attempt}").into(),
                 run: RunId::new(1),
@@ -73,7 +81,7 @@ async fn a_stop_right_behind_a_setup_stops_it_even_before_its_script_starts() {
     tokio::spawn(serve(worker_read, worker_write, config));
     let path = dir.path().to_string_lossy().into_owned();
     let calls = [
-        WorkerRequest::Hello { protocol_version: PROTOCOL_VERSION },
+        hello(),
         WorkerRequest::SetupWorkspace { repo_path: path.clone(), path, env: vec![] },
         WorkerRequest::CancelSetup,
     ];
@@ -104,7 +112,6 @@ async fn a_stop_right_behind_a_setup_stops_it_even_before_its_script_starts() {
 #[tokio::test]
 async fn a_request_from_a_newer_hub_is_refused_and_the_worker_carries_on() {
     let dir = tempfile::tempdir().unwrap();
-    let hello = || WorkerRequest::Hello { protocol_version: PROTOCOL_VERSION };
     let calls = [
         frame::encode(&WorkerCall { id: 0, request: hello() }).unwrap(),
         b"{\"id\":1,\"request\":{\"method\":\"from_a_newer_hub\",\"path\":\"a\"}}\n".to_vec(),
@@ -165,4 +172,29 @@ async fn replies_to(config: Config, calls: &[Vec<u8>]) -> std::collections::BTre
         }
     }
     answered
+}
+
+/// A hub speaks the version before its own too, for 30 days after a break, and a worker takes one whose hello names
+/// its own version, but not one that no longer speaks it.
+#[tokio::test]
+async fn a_worker_takes_a_hub_whose_hello_names_its_version_in_a_range() {
+    let dir = tempfile::tempdir().unwrap();
+    let ours = WORKER_PROTOCOL_VERSION;
+    let hellos = [
+        WorkerRequest::Hello { protocol_version: ours + 1, oldest_protocol_version: Some(ours) },
+        WorkerRequest::Hello { protocol_version: ours + 2, oldest_protocol_version: Some(ours + 1) },
+        WorkerRequest::Hello { protocol_version: ours, oldest_protocol_version: None },
+    ];
+    let calls: Vec<_> = hellos
+        .into_iter()
+        .enumerate()
+        .map(|(id, request)| frame::encode(&WorkerCall { id: id as u64, request }).unwrap())
+        .collect();
+
+    let answered = replies_to(config(dir.path()), &calls).await;
+
+    let chosen = WorkerOutcome::Response(WorkerResponse::Hello { protocol_version: ours });
+    assert_eq!(answered[&0], chosen, "a newer hub that still speaks this worker's version");
+    assert!(matches!(&answered[&1], WorkerOutcome::Error(e) if e.code == ErrorCode::VersionMismatch), "{answered:?}");
+    assert_eq!(answered[&2], chosen, "a hub from before ranges");
 }

@@ -131,7 +131,7 @@ mod tests {
     use std::path::Path;
     use std::time::Duration;
 
-    use protocol::PROTOCOL_VERSION;
+    use protocol::client::CLIENT_PROTOCOL_VERSION;
     use protocol::client::{ClientResponse, HubFrame, ReplyOutcome};
     use protocol::frame;
 
@@ -146,7 +146,8 @@ mod tests {
             let (mut stream, _) = listener.accept().unwrap();
             let mut requests = BufReader::new(stream.try_clone().unwrap()).lines();
             requests.next();
-            let hello = ClientResponse::Hello { protocol_version: PROTOCOL_VERSION, hub_version: "a".to_string() };
+            let hello =
+                ClientResponse::Hello { protocol_version: CLIENT_PROTOCOL_VERSION, hub_version: "a".to_string() };
             let outcome = ReplyOutcome::Response(hello);
             stream.write_all(&frame::encode(&HubFrame::Reply { id: 1, outcome }).unwrap()).unwrap();
             // Stays connected for as long as the client is.
