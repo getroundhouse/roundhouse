@@ -311,21 +311,22 @@ mod tests {
         assert!(!Idle.counts_as_running(&[]));
     }
 
+    /// A chat in `status`, as a hub names it, whose agent's context holds `used_tokens`.
     fn session(status: &str, used_tokens: u64) -> Session {
-        let mut session: Session = serde_json::from_value(json!({
-            "id": "s", "workspace_id": "w", "agent": "claude", "model": "opus", "permission_mode": "default",
-            "effort": "high", "status": status, "last_seq": 4, "created_at_ms": 0, "updated_at_ms": 0,
-        }))
-        .unwrap();
-        session.context = Some(ContextUsage {
+        let context = ContextUsage {
             used_tokens,
             max_tokens: 1_000_000,
             model_tokens: None,
             max_set_by: None,
             parts: Vec::new(),
-        });
-        session.prompt_cache = Some(PromptCache { used_at_ms: 0, ttl: CacheTtl::OneHour, model: None, tokens: 0 });
-        session
+        };
+        Session {
+            status: serde_json::from_value(json!(status)).unwrap(),
+            last_seq: 4,
+            context: Some(context),
+            prompt_cache: Some(PromptCache { used_at_ms: 0, ttl: CacheTtl::OneHour, model: None, tokens: 0 }),
+            ..crate::fixtures::session("s")
+        }
     }
 
     /// A hub that doesn't keep waits sends none. One that does sends the open one in this form, which its store's query

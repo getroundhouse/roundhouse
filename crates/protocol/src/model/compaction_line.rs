@@ -45,16 +45,7 @@ mod tests {
     use super::*;
 
     fn event(subagent: Option<&str>, body: EventBody) -> SessionEvent {
-        SessionEvent {
-            session_id: "s".into(),
-            seq: 9,
-            ts_ms: 0,
-            run: None,
-            subagent: subagent.map(Into::into),
-            place: Place::new(7),
-            body,
-            raw: None,
-        }
+        SessionEvent { subagent: subagent.map(Into::into), place: Place::new(7), ..crate::fixtures::event(9, body) }
     }
 
     fn compacted(by: CompactedBy) -> EventBody {

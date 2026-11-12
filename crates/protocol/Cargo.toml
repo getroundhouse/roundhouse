@@ -5,6 +5,10 @@ edition.workspace = true
 publish.workspace = true
 license.workspace = true
 
+[features]
+# What only tests use: made-up records and events, for the tests of every crate.
+testing = []
+
 [dependencies]
 base64.workspace = true
 serde.workspace = true
@@ -13,6 +17,7 @@ thiserror.workspace = true
 
 [dev-dependencies]
 proptest.workspace = true
+protocol = { workspace = true, features = ["testing"] }
 
 [lints]
 workspace = true
