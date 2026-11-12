@@ -16,6 +16,7 @@ members = [
     "crates/terminal-state",
     "tools/policy",
     "tools/guide",
+    "tools/spec-page",
 ]
 # Everything that builds without GPUI, so `cargo test` stays fast and works on a Linux server. Use
 # `--workspace` for the window too.
@@ -32,6 +33,7 @@ default-members = [
     "crates/terminal-state",
     "tools/policy",
     "tools/guide",
+    "tools/spec-page",
 ]
 # The mobile proof of concept is a standalone project with its own lockfiles and pinned GPUI snapshots.
 exclude = ["mobile-poc"]
@@ -87,6 +89,8 @@ libghostty-vt = { git = "https://github.com/Uzaaft/libghostty-rs", rev = "cd4d49
 # text view doesn't. 1.0.0 is its latest release, of April 2025, and nothing has been pushed to it since, so the guards
 # stay until a release fixes the panic.
 markdown = "1.0.0"
+# Writes the spec's page as HTML, escaping what it puts in.
+maud = "0.27.0"
 # Already under serde_json. Finds and counts the line endings in a file the worker reads a few lines of at a time.
 memchr = "2.8.3"
 # Already under gpui-component. Tells a worker when git writes a worktree's branches, from the OS's own file events.

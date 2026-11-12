@@ -128,6 +128,7 @@ services/
 tools/
   policy/          Tests that enforce the license and dependency rules below
   guide/           Builds `docs/guide` as the pages the site serves under `/docs/`, and refuses a link or a picture that isn't there
+  spec-page/       Draws the spec as a page to read in a browser, each area's screens beside its rules, and which are confirmed. Unconfirmed
   smoke/           Runs the stack against the real Claude CLI, and regenerates its fixture
   file-icons/      Replaces the desktop app's file icons with a pinned, checked release of Catppuccin's icons. Unconfirmed
   build.sh         Builds the binaries in release, stamped with which build they are, for `install.sh`, `package/` and the release workflow
