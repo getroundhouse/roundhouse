@@ -2,42 +2,14 @@
 
 use client_core::session_log::SessionLog;
 use protocol::event::{ApprovalOutcome, Asking, ContentBlock, EventBody, QuestionAnswer, SessionEvent};
-use protocol::model::{Place, RecentWork, Rev, Seq, Subagent, SubagentStatus};
+pub(crate) use protocol::fixtures::event;
+use protocol::model::{Rev, Subagent, SubagentStatus};
 use serde_json::{Value, json};
 
-pub(crate) fn event(seq: Seq, body: EventBody) -> SessionEvent {
-    SessionEvent {
-        session_id: "s".into(),
-        seq,
-        ts_ms: 0,
-        run: None,
-        subagent: None,
-        place: Place::default(),
-        body,
-        raw: None,
-    }
-}
-
-/// The record of the subagent the call `call` started, at `status`, with nothing else known about it yet. A test sets
-/// what it's about.
+/// The record of the subagent the call `call` started, in the background, at `status`, with nothing else known about
+/// it yet. A test sets what it's about.
 pub(crate) fn record(call: &str, status: SubagentStatus) -> Subagent {
-    Subagent {
-        session_id: "s".into(),
-        call: call.into(),
-        kind: None,
-        description: None,
-        prompt: None,
-        in_background: true,
-        model: None,
-        status,
-        started_at_ms: 0,
-        ended_at_ms: None,
-        calls: 0,
-        latest_call: None,
-        recent: RecentWork::default(),
-        report: None,
-        rev: Rev::new(1),
-    }
+    Subagent { in_background: true, status, rev: Rev::new(1), ..protocol::fixtures::subagent(call) }
 }
 
 pub(crate) fn log(events: impl IntoIterator<Item = SessionEvent>) -> SessionLog {
