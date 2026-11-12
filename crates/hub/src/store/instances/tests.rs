@@ -54,10 +54,10 @@ fn an_instance_destroyed_is_recorded_again_before_its_made_again() {
     let workspace = being_made(&store, "birch", 1);
     store.instance_made(&workspace.instance_id).unwrap();
 
-    let while_recorded = store.instance_creating(&workspace.instance_id, "incus");
+    let while_recorded = store.instance_creating(&workspace.instance_id, &"incus".into());
     store.instance_destroying(&workspace.instance_id).unwrap();
     store.instance_destroyed(&workspace.instance_id).unwrap();
-    store.instance_creating(&workspace.instance_id, "incus").unwrap();
+    store.instance_creating(&workspace.instance_id, &"incus".into()).unwrap();
 
     assert!(while_recorded.is_err(), "{while_recorded:?}");
     // By its ID, since it's recorded again at the time it is, which can be the millisecond `w` was made in, and then

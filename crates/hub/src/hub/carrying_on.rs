@@ -10,7 +10,7 @@ use std::sync::Arc;
 use parking_lot::Mutex;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::event::{EventBody, ExitReason};
-use protocol::model::{InstanceId, RunId, Seq, SessionId, SessionStatus, Workspace, WorkspaceId};
+use protocol::model::{InstanceId, ProviderName, RunId, Seq, SessionId, SessionStatus, Workspace, WorkspaceId};
 use protocol::provider::InstanceState;
 use tokio::task::JoinSet;
 use tracing::{debug, info, warn};
@@ -69,9 +69,9 @@ impl Hub {
 
     /// Those of `workspaces` whose instance their provider says is running, which a worker may be on.
     async fn with_instances_running(&self, workspaces: &[Workspace]) -> Vec<WorkspaceId> {
-        let mut by_provider: HashMap<&str, Vec<&Workspace>> = HashMap::new();
+        let mut by_provider: HashMap<&ProviderName, Vec<&Workspace>> = HashMap::new();
         for workspace in workspaces {
-            by_provider.entry(workspace.provider.as_str()).or_default().push(workspace);
+            by_provider.entry(&workspace.provider).or_default().push(workspace);
         }
         let mut running = Vec::new();
         for (name, workspaces) in by_provider {
@@ -89,7 +89,7 @@ impl Hub {
                     .map(|instance| instance.instance_id)
                     .collect(),
                 Err(e) => {
-                    warn!(provider = name, "listing the instances an earlier hub left: {}", e.message);
+                    warn!(provider = %name, "listing the instances an earlier hub left: {}", e.message);
                     continue;
                 }
             };

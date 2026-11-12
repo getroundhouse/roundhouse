@@ -199,7 +199,7 @@ fn workspace(pull_request: Option<PullRequestFound>) -> crate::model::Workspace 
         base_ref: None,
         path: None,
         status: crate::model::WorkspaceStatus::Ready,
-        provider: "local".to_string(),
+        provider: "local".into(),
         instance_id: "w".into(),
         created_at_ms: 1,
         archived_at_ms: None,

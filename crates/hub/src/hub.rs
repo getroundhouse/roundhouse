@@ -40,7 +40,7 @@ use crate::versions;
 use crate::worker_link::WorkerLink;
 use parking_lot::Mutex;
 use protocol::client::{ApiError, ErrorCode, HubNotice, HubStatus};
-use protocol::model::{ClientRequestId, Records, SessionId, Workspace, WorkspaceId};
+use protocol::model::{ClientRequestId, ProviderName, Records, SessionId, Workspace, WorkspaceId};
 use protocol::worker::WorkerResponse;
 use providers::Provider;
 use std::collections::HashMap;
@@ -149,7 +149,7 @@ impl Hub {
 
     /// A workspace's provider. One the hub isn't set up with, such as one taken out of its settings, is unavailable
     /// until it's back.
-    fn provider(&self, name: &str) -> Result<Arc<dyn Provider>, ApiError> {
+    fn provider(&self, name: &ProviderName) -> Result<Arc<dyn Provider>, ApiError> {
         self.providers
             .get(name)
             .ok_or_else(|| ApiError::new(ErrorCode::Unavailable, format!("there's no provider {name}")))

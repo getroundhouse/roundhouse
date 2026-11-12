@@ -13,7 +13,7 @@ fn workspace(name: &str) -> Workspace {
         base_ref: None,
         path: None,
         status: WorkspaceStatus::Ready,
-        provider: "local".to_string(),
+        provider: "local".into(),
         instance_id: InstanceId::from("local"),
         created_at_ms: 0,
         archived_at_ms: None,

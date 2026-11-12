@@ -12,7 +12,7 @@ fn workspace(name: &str, created_at_ms: i64) -> Workspace {
         base_ref: None,
         path: None,
         status: WorkspaceStatus::Ready,
-        provider: "local".to_string(),
+        provider: "local".into(),
         instance_id: InstanceId::from("local"),
         created_at_ms,
         archived_at_ms: None,

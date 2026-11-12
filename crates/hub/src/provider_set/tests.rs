@@ -43,7 +43,7 @@ fn loaded(dir: &Path, file: Option<String>) -> ProviderSet {
 
 fn default_name(set: &ProviderSet) -> Result<String, ApiError> {
     set.default_provider().map(|(name, provider)| {
-        assert_eq!(provider.name(), name, "the provider it names");
+        assert_eq!(provider.name(), name.as_str(), "the provider it names");
         name.to_string()
     })
 }
@@ -53,7 +53,7 @@ async fn without_a_file_there_is_only_the_local_provider() {
     let dir = tempfile::tempdir().unwrap();
     let set = loaded(dir.path(), None);
     assert_eq!(default_name(&set).unwrap(), "local");
-    assert!(set.get("local").is_some());
+    assert!(set.get(&"local".into()).is_some());
 }
 
 #[tokio::test]
@@ -63,7 +63,7 @@ async fn new_workspaces_go_to_the_provider_the_file_makes_the_default() {
     let file = serde_json::json!({"default": "vms", "providers": [{"name": "vms", "program": program}]});
     let set = loaded(dir.path(), Some(file.to_string()));
     assert_eq!(default_name(&set).unwrap(), "vms", "named as the file names it");
-    assert!(set.get("local").is_some(), "the local provider is still there for workspaces made on it");
+    assert!(set.get(&"local".into()).is_some(), "the local provider is still there for workspaces made on it");
     set.say_hello().await;
     assert_eq!(set.adapters[0].name(), "vms");
     set.shut_down().await;
@@ -78,7 +78,7 @@ async fn a_provider_whose_adapter_wont_start_is_kept_and_fails_until_it_does() {
     set.say_hello().await;
 
     assert_eq!(default_name(&set).unwrap(), "vms", "new workspaces don't go local instead");
-    let listed = set.get("vms").unwrap().list().await;
+    let listed = set.get(&"vms".into()).unwrap().list().await;
     assert!(matches!(listed, Err(ProviderError::Io { .. })), "{listed:?}");
 }
 
@@ -89,7 +89,7 @@ async fn a_file_that_doesnt_parse_leaves_no_provider_for_new_workspaces() {
     let refused = default_name(&set).unwrap_err();
     assert_eq!(refused.code, ErrorCode::Unavailable);
     assert!(refused.message.contains("didn't parse"), "{}", refused.message);
-    assert!(set.get("local").is_some(), "local workspaces still work");
+    assert!(set.get(&"local".into()).is_some(), "local workspaces still work");
 }
 
 #[tokio::test]
