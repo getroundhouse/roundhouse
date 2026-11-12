@@ -2,7 +2,10 @@
 
 #![cfg(test)]
 
-use gpui_kit::TestAppContext;
+use gpui_kit::{
+    AppContext as _, InputEvent as _, MouseButton, MouseDownEvent, MouseUpEvent, Pixels, Point, TestAppContext, point,
+    px,
+};
 
 use super::{KEEP_AWAKE, open_settings, settings_showing, typing};
 use crate::support::{Stack, Ui};
@@ -114,4 +117,48 @@ fn the_page_shows_again_once_the_search_no_longer_hides_it(cx: &mut TestAppConte
 
     assert!(!ui.has("settings-nothing-found"));
     assert_eq!(left(&mut ui), (true, true));
+}
+
+/// The strip along the top stands in for a title bar in Settings too, so pressing it leaves the cursor where it was.
+#[gpui_kit::test]
+fn a_click_on_the_strip_leaves_the_cursor_in_the_search(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = in_settings(cx, &stack);
+    search_for(&mut ui, "awake");
+
+    click_at(&mut ui, point(px(700.), px(20.)));
+    ui.input(" nothing like it");
+    ui.frame();
+
+    assert_eq!(left(&mut ui), (false, false), "what's typed after it goes on in the search");
+}
+
+/// A press on the page below the strip that nothing there takes puts the cursor in no field, and keys still reach
+/// Settings.
+#[gpui_kit::test]
+fn a_click_on_the_page_takes_the_cursor_out_of_the_search(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = in_settings(cx, &stack);
+    search_for(&mut ui, "awake");
+
+    click_at(&mut ui, point(px(700.), px(300.)));
+    ui.input(" nothing like it");
+    ui.frame();
+
+    assert_eq!(left(&mut ui), (false, true), "what's typed after it isn't in the search");
+    ui.press("escape");
+    assert!(!settings_showing(&mut ui), "Escape still goes back");
+}
+
+/// Presses and lets go of the left button at `position`, without moving, so it's no drag.
+fn click_at(ui: &mut Ui<'_>, position: Point<Pixels>) {
+    let down = MouseDownEvent { button: MouseButton::Left, position, click_count: 1, ..Default::default() };
+    let up = MouseUpEvent { button: MouseButton::Left, position, click_count: 1, ..Default::default() };
+    ui.cx
+        .update_window(ui.handle, |_, window, cx| {
+            window.dispatch_event(down.to_platform_input(), cx);
+            window.dispatch_event(up.to_platform_input(), cx);
+        })
+        .unwrap();
+    ui.frame();
 }

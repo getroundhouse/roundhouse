@@ -80,7 +80,6 @@ impl RenderOnce for SettingsView {
         div()
             .id("settings")
             .key_context(KEY_CONTEXT)
-            .track_focus(&self.focus)
             // With what's typed selected, as a search field does, so what's typed next takes its place.
             .on_action(move |_: &FindSetting, window, cx| {
                 find.update(cx, |search, cx| {
@@ -91,10 +90,19 @@ impl RenderOnce for SettingsView {
             .relative()
             .size_full()
             .flex()
+            .child(takes_focus(&self.focus))
             .child(sidebar)
             .child(div().flex_1().min_w_0().h_full().child(shown_page))
             .child(way_back(self.width, self.back, cx))
     }
+}
+
+/// Where keys reach Settings through `focus`, which a press on the page that nothing in it takes puts there, as it
+/// takes the cursor out of the search. Under all of the page, and only below the strip along the top, since taking
+/// focus marks a press as taken, and a press on the strip has to reach the window to move it, leaving focus where it
+/// was.
+fn takes_focus(focus: &FocusHandle) -> impl IntoElement {
+    div().absolute().top(HEADER_HEIGHT).left_0().right_0().bottom_0().track_focus(focus)
 }
 
 /// Whether a setting is on, or `None` for one that can't be read or changed just now, such as a hub's while the hub
