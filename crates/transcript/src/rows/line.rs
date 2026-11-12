@@ -4,6 +4,7 @@
 
 use std::rc::Rc;
 
+use client_core::calls::{Failure, failure, first_line};
 use gpui_kit::assets::IconName;
 use gpui_kit::component::{ActiveTheme as _, Icon, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
@@ -16,7 +17,6 @@ use look::{Hand as _, LineText};
 use super::shown::Gather;
 use super::tools::{Toggle, block};
 use crate::calls::lines::Counts;
-use crate::calls::{Failure, failure, first_line};
 use crate::find::{self, Marks, Part as Text};
 use crate::folds::Fold;
 use crate::item_key::ItemKey;

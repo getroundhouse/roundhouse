@@ -5,27 +5,27 @@ const EXIT_CODE: &str = "Exit code ";
 const TOOL_ERROR_OPEN: &str = "<tool_use_error>";
 const TOOL_ERROR_CLOSE: &str = "</tool_use_error>";
 
-pub(crate) struct Failure<'a> {
+pub struct Failure<'a> {
     /// The command's exit code, when it was a command that exited.
     exit_code: Option<i32>,
     /// What went wrong, on one line.
-    pub(crate) message: &'a str,
+    pub message: &'a str,
 }
 
 impl<'a> Failure<'a> {
-    pub(crate) fn read(text: &'a str) -> Self {
+    pub fn read(text: &'a str) -> Self {
         Self { exit_code: exit_code(text), message: super::first_line(output(text)) }
     }
 
     /// What its line says first, such as `Exit 2`.
-    pub(crate) fn label(&self) -> String {
+    pub fn label(&self) -> String {
         self.exit_code.map_or_else(|| "Error".to_string(), |code| format!("Exit {code}"))
     }
 }
 
 /// What went wrong, in full, as an opened call shows it: a command's output without the line saying how it exited,
 /// which the line under the call already says, or a tool's refusal without its tags.
-pub(crate) fn output(text: &str) -> &str {
+pub fn output(text: &str) -> &str {
     if exit_code(text).is_some() {
         return after_first_line(text);
     }

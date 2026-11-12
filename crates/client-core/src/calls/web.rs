@@ -5,10 +5,10 @@ use serde_json::Value;
 
 use super::{count, str_field};
 
-pub(crate) struct Fetch<'a> {
-    pub(crate) url: &'a str,
+pub struct Fetch<'a> {
+    pub url: &'a str,
     /// What the agent asked of the page.
-    pub(crate) prompt: Option<&'a str>,
+    pub prompt: Option<&'a str>,
 }
 
 impl<'a> Fetch<'a> {
@@ -17,8 +17,8 @@ impl<'a> Fetch<'a> {
     }
 }
 
-pub(crate) struct WebSearch<'a> {
-    pub(crate) query: &'a str,
+pub struct WebSearch<'a> {
+    pub query: &'a str,
 }
 
 impl<'a> WebSearch<'a> {
@@ -28,28 +28,28 @@ impl<'a> WebSearch<'a> {
 }
 
 /// The site a page is on, without its scheme or a leading `www.`, which is enough to tell pages apart on a line.
-pub(crate) fn site(url: &str) -> &str {
+pub fn site(url: &str) -> &str {
     let rest = url.split_once("://").map_or(url, |(_, rest)| rest);
     let host = rest.split(['/', '?', '#']).next().unwrap_or(rest);
     host.strip_prefix("www.").unwrap_or(host)
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub(crate) struct Link {
-    pub(crate) title: String,
-    pub(crate) url: String,
+pub struct Link {
+    pub title: String,
+    pub url: String,
 }
 
 /// What a web search sent back.
 #[derive(Debug, PartialEq, Eq)]
-pub(crate) struct Results<'a> {
-    pub(crate) links: Vec<Link>,
+pub struct Results<'a> {
+    pub links: Vec<Link>,
     /// What was made of the pages, after the links.
-    pub(crate) summary: &'a str,
+    pub summary: &'a str,
 }
 
 impl<'a> Results<'a> {
-    pub(crate) fn read(text: &'a str) -> Self {
+    pub fn read(text: &'a str) -> Self {
         let (mut links, mut after_links, mut at) = (Vec::new(), None, 0);
         for line in text.split_inclusive('\n') {
             at += line.len();
@@ -70,7 +70,7 @@ impl<'a> Results<'a> {
     }
 
     /// How many pages it found, in a few words.
-    pub(crate) fn summary(&self) -> String {
+    pub fn summary(&self) -> String {
         match self.links.len() {
             0 => "Nothing found".to_string(),
             n => count(n, "result", "results"),

@@ -4,6 +4,7 @@
 
 use std::time::Duration;
 
+use client_core::calls::agent;
 use client_core::session_log::{By, PendingPrompt, SessionLog};
 use gpui_kit::component::button::Button;
 use gpui_kit::component::tooltip::Tooltip;
@@ -24,7 +25,6 @@ use super::prompt::{Progress, Prompt, prompt_bubble};
 use super::tools::agent::open_tab;
 use super::{Shared, empty, render_event, row, thinking, turn_times};
 use crate::attachments::{self, Carried};
-use crate::calls::agent;
 use crate::find::{FindLook, Part};
 use crate::item_key::ItemKey;
 use crate::transcript::{AtWork, Model, PullRequestStanding, Transcript};

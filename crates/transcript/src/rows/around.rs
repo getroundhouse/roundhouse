@@ -2,12 +2,12 @@
 //! while it's drawn.
 
 use client_core::Approval;
+use client_core::calls::agent;
 use client_core::session_log::{PromptAt, PromptState, SessionLog};
 use protocol::event::{ContentBlock, EventBody, Question, SessionEvent};
 use protocol::model::{AgentKind, PermissionMode, Seq, ToolUseId};
 
 use crate::attachments::{self, Carried};
-use crate::calls::agent;
 use crate::folds::Fold;
 use crate::item_key::ItemKey;
 use crate::transcript::{IdleCache, Model};

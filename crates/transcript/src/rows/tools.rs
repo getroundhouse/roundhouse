@@ -2,6 +2,7 @@
 //! in between when the agent runs several at once, so each call's result is found in the log by [`super::around`].
 //! What each kind of call looks like is in the modules below, all on the same [`super::line`].
 
+use client_core::calls::{ToolCall, count};
 use gpui_kit::assets::IconName;
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::prelude::FluentBuilder as _;
@@ -12,7 +13,6 @@ use serde_json::Value;
 use super::around::{Answer, Reply, Subagent};
 use super::shown::Gather;
 use super::{InRow, Shared};
-use crate::calls::{ToolCall, count};
 use crate::find::{FindLook, Marks, Part as Text};
 use crate::folds::Fold;
 use crate::item_key::ItemKey;

@@ -5,16 +5,16 @@ use serde_json::Value;
 
 use super::{count, str_field};
 
-pub(crate) struct Search<'a> {
-    pub(crate) pattern: &'a str,
+pub struct Search<'a> {
+    pub pattern: &'a str,
     /// Where it looked, when it was told.
-    pub(crate) path: Option<&'a str>,
-    pub(crate) looks: Looks,
+    pub path: Option<&'a str>,
+    pub looks: Looks,
 }
 
 /// What a search matches its pattern against.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Looks {
+pub enum Looks {
     /// What's in each file, as `Grep` does.
     InFiles,
     /// Each file's name, as `Glob` does.
@@ -23,7 +23,7 @@ pub(crate) enum Looks {
 
 /// What a search found.
 #[derive(Debug, PartialEq, Eq)]
-pub(crate) enum Found<'a> {
+pub enum Found<'a> {
     /// Matching lines, by file.
     Lines(Vec<FileLines<'a>>),
     /// Files, without their lines.
@@ -34,9 +34,9 @@ pub(crate) enum Found<'a> {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub(crate) struct FileLines<'a> {
-    pub(crate) path: &'a str,
-    pub(crate) lines: Vec<(u32, &'a str)>,
+pub struct FileLines<'a> {
+    pub path: &'a str,
+    pub lines: Vec<(u32, &'a str)>,
 }
 
 impl<'a> Search<'a> {
@@ -45,7 +45,7 @@ impl<'a> Search<'a> {
     }
 
     /// What its line says it did.
-    pub(crate) fn title(&self) -> &'static str {
+    pub fn title(&self) -> &'static str {
         match self.looks {
             Looks::InFiles => "Search",
             Looks::ForNames => "Find files",
@@ -54,7 +54,7 @@ impl<'a> Search<'a> {
 }
 
 impl<'a> Found<'a> {
-    pub(crate) fn read(text: &'a str) -> Self {
+    pub fn read(text: &'a str) -> Self {
         let lines: Vec<&str> = text.lines().map(str::trim_end).filter(|line| !line.is_empty()).collect();
         if lines.is_empty() || lines.iter().all(|line| line.starts_with("No ") && line.ends_with(" found")) {
             return Found::Nothing;
@@ -81,7 +81,7 @@ impl<'a> Found<'a> {
     }
 
     /// How much it found, in a few words.
-    pub(crate) fn summary(&self) -> String {
+    pub fn summary(&self) -> String {
         match self {
             Found::Lines(files) => {
                 let lines = files.iter().map(|file| file.lines.len()).sum();

@@ -2,6 +2,8 @@
 //! to open in the browser, then what was made of them. A fetch shows the site, and opens to the page's address, what
 //! was asked of it, and the answer.
 
+use client_core::calls::web::{Link, Results, site};
+use client_core::calls::{Fetch, WebSearch};
 use gpui_kit::assets::IconName;
 use gpui_kit::component::{ActiveTheme as _, h_flex};
 use gpui_kit::prelude::FluentBuilder as _;
@@ -13,8 +15,6 @@ use look::{Hand as _, LineText};
 
 use super::line::{Line, Part};
 use super::{Answer, Toggle, block, line};
-use crate::calls::web::{Link, Results, site};
-use crate::calls::{Fetch, WebSearch};
 use crate::find::{self, Marks, Part as Text};
 use crate::folds::Fold;
 use crate::item_key::ItemKey;

@@ -4,21 +4,21 @@ use serde_json::Value;
 
 use super::str_field;
 
-pub(crate) struct ReadFile<'a> {
-    pub(crate) path: &'a str,
+pub struct ReadFile<'a> {
+    pub path: &'a str,
 }
 
-pub(crate) struct WriteFile<'a> {
-    pub(crate) path: &'a str,
+pub struct WriteFile<'a> {
+    pub path: &'a str,
     /// All of what the file holds afterwards.
-    pub(crate) content: &'a str,
+    pub content: &'a str,
 }
 
 /// One edit or several, to one file.
-pub(crate) struct EditFile<'a> {
-    pub(crate) path: &'a str,
+pub struct EditFile<'a> {
+    pub path: &'a str,
     /// What each edit replaced, and with what, in order.
-    pub(crate) edits: Vec<(&'a str, &'a str)>,
+    pub edits: Vec<(&'a str, &'a str)>,
 }
 
 impl<'a> ReadFile<'a> {
@@ -47,15 +47,13 @@ impl<'a> EditFile<'a> {
 }
 
 /// The last part of a path, which is what a line has room for.
-pub(crate) fn file_name(path: &str) -> &str {
+pub fn file_name(path: &str) -> &str {
     path.rsplit('/').find(|part| !part.is_empty()).unwrap_or(path)
 }
 
-pub(crate) use look::language;
-
 /// The lines of a read, each with its number in the file. Claude puts each line's number in front of it, then a tab,
 /// or an arrow in older versions. Whatever follows the numbered lines, such as a note to the agent, isn't the file.
-pub(crate) fn numbered_lines(text: &str) -> Vec<(u32, &str)> {
+pub fn numbered_lines(text: &str) -> Vec<(u32, &str)> {
     text.lines().map_while(numbered).collect()
 }
 

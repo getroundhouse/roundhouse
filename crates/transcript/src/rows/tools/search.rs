@@ -1,15 +1,16 @@
 //! Searching the workspace: the pattern, where, and how much it found. Opened, matching lines grouped by file, or the
 //! files it found.
 
+use client_core::calls::files::file_name;
+use client_core::calls::{FileLines, Found, Search};
 use gpui_kit::assets::IconName;
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::{AnyElement, App, InteractiveElement as _, IntoElement, ParentElement, Styled, div};
+use look::language;
 
 use super::line::{Line, Part};
 use super::{Answer, Toggle, block, line, numbered};
-use crate::calls::files::{file_name, language};
 use crate::calls::lines::NumberedLine;
-use crate::calls::{FileLines, Found, Search};
 use crate::find::Part as Text;
 use crate::folds::Fold;
 use crate::item_key::ItemKey;

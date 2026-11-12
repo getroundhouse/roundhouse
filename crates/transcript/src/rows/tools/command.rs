@@ -2,6 +2,7 @@
 //! output, in one block. The command is faded and cut off at the end of its line, since the call's title has said
 //! what it does and what it printed is what's read, and clicking it shows it whole.
 
+use client_core::calls::{Command, failure};
 use gpui_kit::assets::IconName;
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::prelude::FluentBuilder as _;
@@ -13,7 +14,6 @@ use gpui_kit::{
 use super::highlight::spans;
 use super::line::{Line, Part};
 use super::{Answer, Toggle, block, line};
-use crate::calls::{Command, failure};
 use crate::find::Part as Text;
 use crate::find::reveal;
 use crate::folds::Fold;

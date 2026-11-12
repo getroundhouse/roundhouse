@@ -1,6 +1,7 @@
 //! Any tool without a drawing of its own, such as one from an MCP server. Opened, its input as JSON, then what came
 //! back.
 
+use client_core::calls::Other;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::prelude::FluentBuilder as _;
@@ -9,7 +10,6 @@ use serde_json::Value;
 
 use super::line::{Line, Part};
 use super::{Answer, Toggle, block, line};
-use crate::calls::Other;
 use crate::find::Part as Text;
 use crate::folds::Fold;
 use crate::item_key::ItemKey;

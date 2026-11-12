@@ -12,14 +12,14 @@ use gpui_kit::{
     SharedString, StatefulInteractiveElement as _, Styled, TestSupportExt as _, Window, div, px,
 };
 
-use look::{InRegion as _, Region};
+use client_core::calls::files::{file_name, numbered_lines};
+use client_core::calls::{EditFile, ReadFile, WriteFile, count};
+use look::{InRegion as _, Region, language};
 
 use super::line::{Line, Part, Preview};
 use super::{Answer, Toggle, amount, block, line, numbered};
 use crate::calls::diff;
-use crate::calls::files::{file_name, language, numbered_lines};
 use crate::calls::lines::{Mark, NumberedLine, Section};
-use crate::calls::{EditFile, ReadFile, WriteFile, count};
 use crate::find::{Marks, Part as Text};
 use crate::folds::Fold;
 use crate::item_key::ItemKey;

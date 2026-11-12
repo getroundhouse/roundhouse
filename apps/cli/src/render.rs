@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 use std::io::Write;
 
+use client_core::calls::{ToolCall, first_line};
 use protocol::attachment::Attachment;
 use protocol::event::{
     AgentTask, CompactionOutcome, ContentBlock, EventBody, Question, SessionEvent, SubagentOutcome, TurnOutcome,
@@ -176,13 +177,7 @@ impl Printer {
             ContentBlock::Thinking { text } if !text.is_empty() => {
                 self.line(seq, &format!("(thinking) {}", first_line(text)));
             }
-            // Such as the advisor, which takes none.
-            ContentBlock::ToolUse { name, input, .. } if input.as_object().is_some_and(serde_json::Map::is_empty) => {
-                self.line(seq, &format!("tool {name}"));
-            }
-            ContentBlock::ToolUse { name, input, .. } => {
-                self.line(seq, &format!("tool {name}: {}", summarize_input(input)));
-            }
+            ContentBlock::ToolUse { name, input, .. } => self.line(seq, &format!("tool {}", called(name, input))),
             ContentBlock::ToolResult { encrypted: true, .. } => {
                 self.line(seq, "tool result: encrypted, for the model alone");
             }
@@ -262,18 +257,15 @@ impl Printer {
     }
 }
 
-fn first_line(text: &str) -> &str {
-    text.lines().next().unwrap_or("")
+/// A call to the tool `name`, with what it's about, as every client says it, if it says anything.
+fn called(name: &str, input: &Value) -> String {
+    about(name, ToolCall::read(name, input).summary())
 }
 
-fn summarize_input(input: &Value) -> String {
-    for key in ["command", "file_path", "path", "pattern", "url", "query", "description"] {
-        if let Some(value) = input.get(key).and_then(Value::as_str) {
-            return first_line(value).to_string();
-        }
-    }
-    let text = input.to_string();
-    text.chars().take(120).collect()
+/// The tool `name`, then `summary` after a colon, if there's one. Such as the advisor, which takes no input, a call can
+/// have nothing to say.
+fn about(name: &str, summary: Option<String>) -> String {
+    summary.map_or_else(|| name.to_string(), |summary| format!("{name}: {summary}"))
 }
 
 /// That someone asked the agent to compact its conversation, and what to keep if they said.
@@ -308,8 +300,9 @@ fn compacted(outcome: &CompactionOutcome) -> String {
 #[cfg(test)]
 mod tests {
     use protocol::event::{AgentTask, SubagentOutcome, TaskKind};
+    use serde_json::json;
 
-    use super::Printer;
+    use super::{Printer, called};
 
     fn task(id: &str, kind: TaskKind) -> AgentTask {
         AgentTask { id: id.into(), description: Some(format!("Do {id}")), kind, call: None }
@@ -326,6 +319,14 @@ mod tests {
         assert_eq!(printer.newly_running(&listed[..1]).as_deref(), Some("running in the background: Do a"));
         assert_eq!(printer.newly_running(&[]).as_deref(), Some("running in the background: nothing"));
         assert_eq!(printer.newly_running(&listed[..1]).as_deref(), Some("running in the background: Do a"));
+    }
+
+    #[test]
+    fn a_call_says_what_it_s_about_as_every_client_does() {
+        assert_eq!(called("Bash", &json!({ "command": "\ncargo test\n--workspace" })), "Bash: cargo test");
+        assert_eq!(called("Read", &json!({ "file_path": "src/a.rs" })), "Read: src/a.rs");
+        assert_eq!(called("mcp__github__list", &json!({ "labels": ["bug"] })), "mcp__github__list: labels: [\"bug\"]");
+        assert_eq!(called("advisor", &json!({})), "advisor", "it takes no input");
     }
 
     #[test]

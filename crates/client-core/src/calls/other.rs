@@ -1,6 +1,5 @@
-//! A tool the transcript has no drawing of its own for, such as one from an MCP server. Its line is the agent's
-//! description of the call if it gave one, or the tool's name made readable, then the server it's from and the input
-//! that matters most.
+//! A tool with no kind of its own, such as one from an MCP server. Its line is the agent's description of the call if
+//! it gave one, or the tool's name made readable, then the server it's from and the input that matters most.
 
 use serde_json::Value;
 
@@ -12,14 +11,17 @@ const MCP_SEPARATOR: &str = "__";
 /// More than a line has room for, so a huge input isn't copied to be cut off.
 const DETAIL_CHARS: usize = 200;
 
-pub(crate) struct Other {
-    pub(crate) title: String,
+pub struct Other {
+    pub title: String,
     /// The MCP server it's from.
-    pub(crate) server: Option<String>,
+    pub server: Option<String>,
     /// The tool's name made readable, when the title is the agent's description instead.
-    pub(crate) tool: Option<String>,
+    pub tool: Option<String>,
     /// The input that matters most, on one line.
-    pub(crate) detail: Option<String>,
+    pub detail: Option<String>,
+    /// What [`super::ToolCall::summary`] says of it: the usual input, if it has one, or else what the agent said it's
+    /// for, which says more than whichever input comes first.
+    pub(super) summary: Option<String>,
 }
 
 impl Other {
@@ -28,11 +30,15 @@ impl Other {
             Some((server, tool)) => (Some(server.to_string()), readable(tool)),
             None => (None, readable(name)),
         };
-        let (title, tool) = match description(input) {
+        let described = description(input);
+        let (title, tool) = match described {
             Some(description) => (description.to_string(), Some(tool)),
             None => (tool, None),
         };
-        Self { title, server, tool, detail: detail(input) }
+        let usual = main_input(input).map(line);
+        let detail = usual.clone().or_else(|| first_input(input));
+        let summary = usual.or_else(|| described.map(str::to_string)).or_else(|| detail.clone());
+        Self { title, server, tool, detail, summary }
     }
 }
 
@@ -81,12 +87,13 @@ fn split_case(part: &str) -> Vec<String> {
     words
 }
 
-/// The input that matters most: one of the usual ones, or else the first, with its name.
-fn detail(input: &Value) -> Option<String> {
-    let line = |text: &str| first_line(text).chars().take(DETAIL_CHARS).collect::<String>();
-    if let Some(main) = main_input(input) {
-        return Some(line(main));
-    }
+/// `text` on one line, and no more of it than a line has room for.
+fn line(text: &str) -> String {
+    first_line(text).chars().take(DETAIL_CHARS).collect()
+}
+
+/// The first input, with its name, for a tool with none of the usual ones.
+fn first_input(input: &Value) -> Option<String> {
     let (key, value) = input.as_object()?.iter().find(|(key, _)| *key != "description")?;
     let value = match value.as_str() {
         Some(text) => format!("\"{}\"", line(text)),
