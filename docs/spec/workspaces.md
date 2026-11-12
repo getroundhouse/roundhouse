@@ -62,6 +62,12 @@
 
 ![Waiting for a new title](screens/regenerating-title.png)
 
+## Where a workspace is
+
+**Resting the pointer on a workspace's name in its header shows where it is,** in a card under the name: the path of its worktree in the code font, cut at its start if it's too long, since its end is the workspace's own folder, with a button that copies it whole, then under a rule, the version its agents run on, where they run, and the ten ports set aside for it, the first of which is `CONDUCTOR_PORT`. One worker does all of a workspace's work, every chat's included, so the card is the workspace's rather than a chat's. The card goes a third of a second after the pointer leaves the name, as the context's card does, so the pointer can cross to the button, and stays while it's on the card. What isn't known is left out, such as the path before the worktree is made. A workspace still on a version before the app's says so, as `updates.md` shows. *Unconfirmed.*
+
+![The card a workspace's name opens](screens/workspace-card.png)
+
 ## Settings from Conductor
 
 A repository set up for Conductor works here unchanged, because Roundhouse reads its settings and sets its variables under Conductor's names. There are no names of Roundhouse's own for these.

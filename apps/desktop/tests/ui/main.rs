@@ -57,3 +57,4 @@ mod updating;
 mod waits;
 mod window_buttons;
 mod window_place;
+mod workspace_card;

@@ -9,9 +9,9 @@ use protocol::client::ApiError;
 use protocol::client::ErrorCode;
 use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{
-    Account, AttachmentId, CacheTtl, ContextUsage, DiffComment, FileContents, GitDiff, InstanceId, ModelName, Place,
-    PromptCache, PullRequest, Records, Repo, RepoId, Rev, Seq, Session, SessionId, SessionStatus, Subagent, Title,
-    ToolUseId, Workspace, WorkspaceId, WorktreeFiles,
+    Account, AttachmentId, CacheTtl, ContextUsage, DiffComment, FileContents, GitDiff, InstanceId, ModelName,
+    PORTS_PER_WORKSPACE, Place, PromptCache, PullRequest, Records, Repo, RepoId, Rev, Seq, Session, SessionId,
+    SessionStatus, Subagent, Title, ToolUseId, Workspace, WorkspaceId, WorktreeFiles,
 };
 use protocol::prompt::Prompt;
 use protocol::tail::Tail;
@@ -89,7 +89,7 @@ impl World {
     pub(crate) fn workspace(&mut self, repo: &RepoId, name: &str) -> WorkspaceId {
         let id = WorkspaceId::from(format!("ws-{}", self.workspaces.len() + 1));
         let created_at_ms = self.next_time();
-        let port_base = 4000 + 10 * u16::try_from(self.workspaces.len()).unwrap();
+        let port_base = 4000 + PORTS_PER_WORKSPACE * u16::try_from(self.workspaces.len()).unwrap();
         self.workspaces.push(Workspace {
             repo_id: repo.clone(),
             name: name.to_string(),

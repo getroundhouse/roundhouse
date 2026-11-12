@@ -23,8 +23,6 @@ mod words;
 const RING: Pixels = px(16.);
 /// How thick the ring's line is.
 const LINE: f32 = 2.;
-/// How long the context's card waits after the pointer leaves the ring, so it can reach the card's button.
-const CROSSING: std::time::Duration = std::time::Duration::from_millis(300);
 /// How tall a limit's bar is, and how far it is from the next. The same, and on the grid, so one bar or two come to a
 /// whole number of pixels either side of the slot's middle.
 const LIMIT: Pixels = px(4.);
@@ -74,8 +72,7 @@ impl WorkspacePane {
         let (pane, off, compacts) =
             (cx.weak_entity(), session.compaction_waits() || self.hub == Hub::Away, self.compacts());
         // It holds a button, so it waits a moment for the pointer to cross the gap between the ring and the card.
-        let hover = card_over("context-hover", ring)
-            .close_delay(CROSSING)
+        let hover = card_over(look::hover_card_with_a_button("context-hover"), ring)
             .content(move |_, _, cx| card::context_card(&context, account.as_ref(), &pane, compacts, off, cx));
         // Said in words too, since the ring alone says nothing to someone who can't see it.
         let said = format!("Context {} used", words::percent(used));
@@ -96,8 +93,8 @@ impl WorkspacePane {
         let bars = middle().size(Slot::SIZE).child(bars(&left, cx));
         // Said in words too, as the ring is. The least of them is the one that runs out first.
         let said = format!("{called} {} left", words::whole_percent(least));
-        let hover =
-            card_over("usage-hover", bars).content(move |_, _, cx| card::usage_card(&usage, called.clone(), cx));
+        let hover = card_over(look::hover_card("usage-hover"), bars)
+            .content(move |_, _, cx| card::usage_card(&usage, called.clone(), cx));
         Some(Slot::holding(div().id("usage").role(Role::Status).aria_label(said).child(hover).test_support()))
     }
 }
@@ -111,10 +108,10 @@ impl WorkspacePane {
     }
 }
 
-/// A card that opens above `slot` while the pointer rests on it, with its right edge on the slot's, so it covers
-/// nothing in the bar.
-fn card_over(id: &'static str, slot: Div) -> HoverCard {
-    look::hover_card(id).appearance(false).anchor(Anchor::BottomRight).trigger(slot)
+/// `card`, opening above `slot` while the pointer rests on it, with its right edge on the slot's, so it covers nothing
+/// in the bar.
+fn card_over(card: HoverCard, slot: Div) -> HoverCard {
+    card.appearance(false).anchor(Anchor::BottomRight).trigger(slot)
 }
 
 /// A ring filled clockwise from the top by `used`, from 0 to 1, over a fainter whole ring. It's drawn at once, with

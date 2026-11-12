@@ -58,6 +58,9 @@ pub(crate) const QUESTION: Frame = Frame::Around(Part::Region(Region::Question),
 /// The card a finished turn's line opens. It reaches past the chat's column, over the sidebar in a narrow window, and
 /// the line has an ID made from the screen's data, so the card is shown by itself.
 pub(crate) const TURN_CARD: Frame = Frame::Around(Part::Region(Region::TurnCard), NOTHING_MORE);
+/// The workspace's header, and the card its name opens, which hangs over the tabs and the chat.
+pub(crate) const WORKSPACE_CARD: Frame =
+    Frame::Around(Part::Region(Region::Header), &[Part::Region(Region::WorkspaceCard)]);
 /// What's drawn in the chat.
 pub(crate) const CHAT: Frame = Frame::Transcript(NOTHING_MORE);
 /// What's drawn in the chat, and the outline at the pane's edge, with the list of prompts it opens.
@@ -137,7 +140,8 @@ fn region_in_the_column(region: Region) -> bool {
         | Region::Outline
         | Region::FindBar
         | Region::Home
-        | Region::UpdateDetails => false,
+        | Region::UpdateDetails
+        | Region::WorkspaceCard => false,
     }
 }
 

@@ -1,5 +1,5 @@
-//! The screens of what someone sees when the app or its hub updates, or when there's no hub, apart from the rest in
-//! `screens.rs` only to keep each list a readable length.
+//! The screens of what someone sees when the app or its hub updates, or when there's no hub, and of which version a
+//! workspace is on, apart from the rest in `screens.rs` only to keep each list a readable length.
 
 #![cfg(test)]
 
@@ -9,7 +9,7 @@ use protocol::model::SessionStatus;
 
 use super::events::{replied, taken, text, user_prompt};
 use super::fake_hub::BUILD;
-use super::frame::{CHAT, Frame, Part, SIDEBAR};
+use super::frame::{CHAT, Frame, Part, SIDEBAR, WORKSPACE_CARD};
 use super::screens::FOCUS;
 use super::steps::{Screen, Step, Target};
 use super::world::World;
@@ -73,7 +73,42 @@ pub(crate) const UPDATE_SCREENS: &[Screen] = &[
         steps: &[Step::Select(FOCUS), Step::UpdateProblem],
     },
     Screen { name: "updated", spec: "updates.md", world: Some(updated), frame: CHAT, steps: &[Step::Select(FOCUS)] },
+    Screen {
+        name: "workspace-card",
+        spec: "workspaces.md",
+        world: Some(under_a_home_folder),
+        frame: WORKSPACE_CARD,
+        steps: &[Step::Select(FOCUS), Step::Hover { on: Target::Id(TITLE), shows: Region::WorkspaceCard.id() }],
+    },
+    Screen {
+        name: "workspace-card-moving",
+        spec: "updates.md",
+        world: Some(on_the_older_build),
+        frame: WORKSPACE_CARD,
+        steps: &[Step::Select(FOCUS), Step::Hover { on: Target::Id(TITLE), shows: Region::WorkspaceCard.id() }],
+    },
 ];
+
+/// The workspace's name in its header, which the card opens from.
+const TITLE: &str = "workspace-title";
+
+/// The conversation, in a workspace under a home folder, as one is outside the gallery, with a path too long for the
+/// card.
+fn under_a_home_folder() -> World {
+    let mut world = conversation();
+    let shown = world.workspaces.iter_mut().find(|workspace| workspace.name == FOCUS).unwrap();
+    shown.path = Some(format!("/Users/sam/Developer/roundhouse/workspaces/signals/{FOCUS}"));
+    world
+}
+
+/// The same, in a workspace whose worker is still the build before the hub's, as after an update while something in
+/// it was at work.
+fn on_the_older_build() -> World {
+    let mut world = under_a_home_folder();
+    let shown = world.workspaces.iter_mut().find(|workspace| workspace.name == FOCUS).unwrap();
+    shown.worker_build = Some("0.9.0".to_string());
+    world
+}
 
 /// A short chat, all of it in sight: a prompt whose agent started on the build before, which says nothing of builds,
 /// then one sent once the app had updated, whose agent started on the new build, which does.
