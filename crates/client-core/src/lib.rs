@@ -14,9 +14,13 @@ pub mod session_log;
 
 mod attachments;
 mod client;
+mod drafts;
 mod sending;
+#[cfg(test)]
+mod stand_in_hub;
 
 pub use attachments::{FileToSend, NotAttached};
+pub use drafts::Drafts;
 pub use sending::{NotTaken, Taking, Written};
 
 pub use client::{
