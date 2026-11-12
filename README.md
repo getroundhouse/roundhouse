@@ -103,6 +103,8 @@ Roundhouse keeps its data in `~/Library/Application Support/roundhouse`, and put
 | `Shift-Tab` | Turn plan mode on or off, in the composer and the new-workspace dialog |
 | `Cmd-,` | Open Settings |
 
+On Windows and Linux, `Ctrl` takes the place of `Cmd`.
+
 ### From a terminal
 
 The `roundhouse` command-line client is inside the app, and talks to the same hub, so a workspace made in one shows in the other.
@@ -120,8 +122,8 @@ roundhouse --help
 | **Agents** | Claude, through the Claude CLI. Others are not built. |
 | **Hub** | Runs on your Mac. One on your own server or in the cloud, with workspaces in VMs or sandboxes, is designed for and not built. |
 | **iPhone** | Not built. `mobile-poc/` is a proof of concept. |
-| **Windows** | A first preview. An installer is published from every merge, for [amd64](https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-win-amd64-Setup.exe) and [ARM64](https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-win-arm64-Setup.exe). It's unsigned, so Windows warns about it, and the only checks that run on Windows are a lint and a hub starting and stopping. |
-| **Linux** | A first preview. An AppImage is published from every merge, for [amd64](https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-linux-amd64.AppImage) and [ARM64](https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-linux-arm64.AppImage). Make it executable and open it, and it updates itself. It needs glibc 2.35 or newer, as on Ubuntu 22.04 and later, Vulkan and FUSE. The only checks that run on Linux are the tests and a hub starting and stopping, and the keys and menus are the Mac's. |
+| **Windows** | A first preview. An installer is published from every merge, for [amd64](https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-win-amd64-Setup.exe) and [ARM64](https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-win-arm64-Setup.exe). It's unsigned, so Windows warns about it, and the only checks that run on Windows are a lint and a hub starting and stopping. It has no menus. |
+| **Linux** | A first preview. An AppImage is published from every merge, for [amd64](https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-linux-amd64.AppImage) and [ARM64](https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-linux-arm64.AppImage). Make it executable and open it, and it updates itself. It needs glibc 2.35 or newer, as on Ubuntu 22.04 and later, Vulkan and FUSE. The only checks that run on Linux are the tests and a hub starting and stopping. It has no menus. |
 
 What's left is on GitHub: [issues](https://github.com/getroundhouse/roundhouse/issues) for features, bugs, tasks, questions and risks, and [milestones](https://github.com/getroundhouse/roundhouse/milestones) for the build order.
 

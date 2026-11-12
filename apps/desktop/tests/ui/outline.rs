@@ -182,7 +182,7 @@ fn a_list_left_open_in_a_chat_that_stopped_showing_is_closed_when_it_shows_again
     stack.run(&session, "say:second");
     let mut ui = Ui::open(cx, &stack);
     ui.wait("the outline", |ui| ui.has("outline"));
-    ui.press("cmd-t");
+    ui.press("secondary-t");
     ui.wait("a second chat", |ui| !ui.has("outline"));
     let other = ui.cx.read_entity(&ui.pane().unwrap(), |p, _| p.session().unwrap().id.clone());
     ui.activate_chat(&session);

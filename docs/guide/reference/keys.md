@@ -1,6 +1,6 @@
 # Keys
 
-The app's keyboard shortcuts. They're written as a Mac's, and the Linux preview uses the same keys.
+The app's keyboard shortcuts. They're written as a Mac's. On Windows and Linux, `Ctrl` takes the place of `Cmd`, so `Cmd-N` is `Ctrl-N` there.
 
 ## Workspaces
 
@@ -22,6 +22,7 @@ The app's keyboard shortcuts. They're written as a Mac's, and the Linux preview 
 | `Ctrl-Tab`, `Ctrl-Shift-Tab` | The tab after, and before |
 | `Cmd-F` | Find in the chat |
 | `Cmd-G`, `Cmd-Shift-G` | The next match, and the one before |
+| `F3`, `Shift-F3` | On Windows and Linux, the next match, and the one before, too |
 | `Enter`, `Shift-Enter` | In Find's bar, the next match, and the one before |
 | Escape | Close Find's bar, or an image opened from a prompt |
 
@@ -68,9 +69,9 @@ The app's keyboard shortcuts. They're written as a Mac's, and the Linux preview 
 | `Cmd-,` | Open Settings |
 | Escape, `Cmd-W` | Go back from Settings |
 | `Cmd-F` | In Settings, search them |
-| `Cmd-H` | Hide Roundhouse |
-| `Cmd-Option-H` | Hide the other apps |
-| `Cmd-M` | Minimize the window |
+| `Cmd-H` | On a Mac, hide Roundhouse |
+| `Cmd-Option-H` | On a Mac, hide the other apps |
+| `Cmd-M` | On a Mac, minimize the window |
 | `Cmd-Q` | Quit. Agents keep running |
 
 Every key with a menu item shows beside it in the menu bar.

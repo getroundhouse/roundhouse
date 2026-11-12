@@ -195,7 +195,7 @@ fn the_subagent_tab_sits_after_the_file_tab_before_the_chats_and_cmd_w_closes_it
     ui.show_chat(&first);
     ui.press("ctrl-shift-tab");
     assert_eq!(showing(&ui), Showing::Subagent, "just before the first chat");
-    ui.press("cmd-w");
+    ui.press("secondary-w");
 
     assert_eq!(showing(&ui), Showing::Chat);
     assert!(!ui.has("show-subagent-tab"));

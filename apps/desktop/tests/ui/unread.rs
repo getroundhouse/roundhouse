@@ -96,7 +96,7 @@ fn a_reply_while_another_app_is_in_front_waits_for_the_app_to_come_back(cx: &mut
 fn a_reply_while_settings_shows_waits_until_you_go_back(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let (mut ui, workspace, chat) = open_with_a_workspace(cx, &stack);
-    ui.press("cmd-,");
+    ui.press("secondary-,");
     ui.wait("Settings", |ui| ui.has("settings-back"));
 
     stack.client().session_prompt(&chat, "say:while you were in Settings", None).unwrap();
@@ -234,12 +234,12 @@ fn the_key_marks_the_workspace_showing_unread_and_read_again(cx: &mut TestAppCon
     ui.wait_idle_with("the reply", |text| text.contains("already read"));
     ui.wait("the hub to have it read", |_| read_at_the_hub(&stack, &chat));
 
-    ui.press("cmd-shift-u");
+    ui.press("secondary-shift-u");
 
     ui.wait("it to be unread", |ui| row_unread(ui, &workspace));
     assert!(stack.client().session_get(&chat).unwrap().unread(), "the hub has it unread too");
 
-    ui.press("cmd-shift-u");
+    ui.press("secondary-shift-u");
 
     ui.wait("it to be read again", |ui| !row_unread(ui, &workspace));
     ui.wait("the hub to have it read again", |_| read_at_the_hub(&stack, &chat));

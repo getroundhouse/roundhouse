@@ -22,6 +22,7 @@ pub mod file_view;
 mod haptics;
 mod home;
 pub mod image_diff;
+mod keys;
 pub mod lost_release;
 mod menus;
 mod model_picker;
@@ -54,8 +55,7 @@ mod app_icon_res;
 
 pub use assets::Assets;
 use checkout::Checkout;
-use gpui_kit::component::input::{Copy, SelectAll};
-use gpui_kit::{AnyWindowHandle, App, AppContext, Entity, KeyBinding, TitlebarOptions, WindowOptions, actions, point};
+use gpui_kit::{AnyWindowHandle, App, AppContext, Entity, TitlebarOptions, WindowOptions, actions, point};
 pub use window_place::Opens;
 
 /// How long a list's order holds still after the pointer last moved over it, the sidebar's or Home's, which a test can
@@ -119,42 +119,7 @@ pub fn open_main_window(
     settings::load(&hub.paths.data_dir, cx);
     #[cfg(target_os = "macos")]
     accessibility_focus::install();
-    // As the kit binds them in what's typed in, so the diff's text copies as any other text does.
-    let (copy, select_all) = if cx.platform_info().is_mac() { ("cmd-c", "cmd-a") } else { ("ctrl-c", "ctrl-a") };
-    cx.bind_keys([
-        KeyBinding::new("cmd-h", Hide, None),
-        KeyBinding::new("alt-cmd-h", HideOthers, None),
-        KeyBinding::new("cmd-q", Quit, None),
-        KeyBinding::new("cmd-m", Minimize, None),
-        KeyBinding::new("cmd-,", OpenSettings, None),
-        // Only while Settings shows. Otherwise Cmd-W closes a chat.
-        KeyBinding::new("escape", CloseSettings, Some(settings::KEY_CONTEXT)),
-        KeyBinding::new("cmd-w", CloseSettings, Some(settings::KEY_CONTEXT)),
-        KeyBinding::new(settings::FIND_KEY, FindSetting, Some(settings::KEY_CONTEXT)),
-        KeyBinding::new("cmd-n", NewWorkspace, None),
-        KeyBinding::new("cmd-shift-d", ToggleDiff, None),
-        KeyBinding::new("space", FlipImage, Some(image_diff::KEY_CONTEXT)),
-        KeyBinding::new(copy, Copy, Some(file_diff::KEY_CONTEXT)),
-        KeyBinding::new(select_all, SelectAll, Some(file_diff::KEY_CONTEXT)),
-        KeyBinding::new("cmd-shift-p", CreatePullRequest, None),
-        KeyBinding::new("cmd-shift-a", ArchiveWorkspace, None),
-        KeyBinding::new("cmd-shift-u", MarkWorkspace, None),
-        KeyBinding::new("cmd-.", StopAgent, None),
-        KeyBinding::new("cmd-]", NextWorkspace, None),
-        KeyBinding::new("cmd-[", PreviousWorkspace, None),
-        KeyBinding::new("cmd-t", NewChat, None),
-        KeyBinding::new("cmd-w", CloseChat, None),
-        KeyBinding::new("ctrl-tab", NextChat, None),
-        KeyBinding::new("ctrl-shift-tab", PreviousChat, None),
-        // Bound after the text field's own Shift-Tab, which outdents, so this one wins where a prompt is written.
-        KeyBinding::new("shift-tab", TogglePlanMode, Some(format!("{} > Input", composing::KEY_CONTEXT).as_str())),
-        KeyBinding::new("cmd-f", FindInChat, None),
-        KeyBinding::new("cmd-g", FindNext, None),
-        KeyBinding::new("cmd-shift-g", FindPrevious, None),
-        // Selects all of the agent's words in a chat that has focus, which a press on them gives it, with the keys the
-        // kit selects all with, and copies with the keys it copies with, from its own binding.
-        KeyBinding::new(select_all, SelectAll, Some(transcript::KEY_CONTEXT)),
-    ]);
+    keys::set(cx);
     menus::set(hub.build_version, cx);
     std::thread::spawn(look::preload_highlighting);
     let (display_id, window_bounds) = window_place::open_at(opens, &hub.paths.data_dir, cx);

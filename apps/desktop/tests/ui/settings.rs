@@ -90,9 +90,9 @@ fn cmd_comma_opens_settings_and_escape_goes_back(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = typing(cx, &stack, "half");
 
-    ui.press("cmd-,");
+    ui.press("secondary-,");
     assert!(settings_showing(&mut ui));
-    ui.press("cmd-,");
+    ui.press("secondary-,");
     assert!(settings_showing(&mut ui), "still showing");
     ui.press("escape");
 
@@ -106,7 +106,7 @@ fn cmd_w_goes_back_from_settings_and_leaves_the_chat_open(cx: &mut TestAppContex
     let mut ui = typing(cx, &stack, "");
     open_settings(&mut ui);
 
-    ui.press("cmd-w");
+    ui.press("secondary-w");
 
     assert!(!settings_showing(&mut ui));
     assert_eq!(ui.open_chats().len(), 1);
@@ -137,7 +137,7 @@ fn the_workspaces_keys_do_nothing_while_settings_shows(cx: &mut TestAppContext) 
     let mut ui = typing(cx, &stack, "");
     open_settings(&mut ui);
 
-    ui.press("cmd-shift-d");
+    ui.press("secondary-shift-d");
     ui.press("escape");
 
     assert!(ui.changes_open(), "the sidebar of changes is still open");

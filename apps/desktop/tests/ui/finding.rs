@@ -1,5 +1,5 @@
-//! Finding text in a chat: `Cmd-F` opens a bar over it, which counts the matches in the whole chat, loaded or not, and
-//! steps through them, opening what each is in, until `Escape` closes it.
+//! Finding text in a chat: `Cmd-F`, or `Ctrl-F` off the Mac, opens a bar over it, which counts the matches in the
+//! whole chat, loaded or not, and steps through them, opening what each is in, until `Escape` closes it.
 
 #![cfg(test)]
 
@@ -52,7 +52,7 @@ fn cmd_f_finds_in_the_whole_chat_and_opens_what_a_match_is_in(cx: &mut TestAppCo
     assert!(ui.cx.read_entity(&transcript, |t, _| t.event_at(call_row).is_none()), "the call isn't loaded");
 
     // With focus in the message box, as it is when a chat opens.
-    ui.press("cmd-f");
+    ui.press("secondary-f");
     assert!(ui.has("find-bar"));
     ui.input("NEEDLE");
     ui.cx.executor().advance_clock(PAUSE);
@@ -77,7 +77,7 @@ fn cmd_f_finds_in_the_whole_chat_and_opens_what_a_match_is_in(cx: &mut TestAppCo
         ui.cx.read_entity(&transcript, |t, _| t.match_in_view()) == Some(true)
     });
 
-    ui.press("cmd-shift-g");
+    ui.press("secondary-shift-g");
     assert_eq!(says(&ui).as_deref(), Some("1 of 5"), "and back");
 
     ui.press("escape");
@@ -100,7 +100,7 @@ fn a_match_in_a_reply_far_up_the_chat_is_brought_into_view_below_the_bar(cx: &mu
     ui.wait("the chat", |ui| ui.transcript().is_some());
     let transcript = ui.transcript().unwrap();
 
-    ui.press("cmd-f");
+    ui.press("secondary-f");
     ui.input("needle");
     ui.cx.executor().advance_clock(PAUSE);
 
@@ -121,6 +121,27 @@ fn a_match_in_a_reply_far_up_the_chat_is_brought_into_view_below_the_bar(cx: &mu
     });
 }
 
+/// As Windows and Linux apps have them, besides Ctrl-G and Ctrl-Shift-G.
+#[cfg(not(target_os = "macos"))]
+#[gpui_kit::test]
+fn off_the_mac_f3_and_shift_f3_step_through_the_matches_too(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let session = stack.chat_in_a_new_workspace();
+    stack.run(&session, "say:a needle");
+    let mut ui = Ui::open(cx, &stack);
+    ui.wait("the chat", |ui| ui.transcript().is_some());
+    ui.press("secondary-f");
+    ui.input("needle");
+    ui.cx.executor().advance_clock(PAUSE);
+    // In the prompt and in the reply.
+    ui.wait("the matches", |ui| says(ui).as_deref() == Some("1 of 2"));
+
+    ui.press("f3");
+    assert_eq!(says(&ui).as_deref(), Some("2 of 2"));
+    ui.press("shift-f3");
+    assert_eq!(says(&ui).as_deref(), Some("1 of 2"));
+}
+
 #[gpui_kit::test]
 fn what_s_typed_is_found_as_it_s_typed_and_the_bar_says_when_nothing_is(cx: &mut TestAppContext) {
     let stack = Stack::new();
@@ -129,7 +150,7 @@ fn what_s_typed_is_found_as_it_s_typed_and_the_bar_says_when_nothing_is(cx: &mut
     let mut ui = Ui::open(cx, &stack);
     ui.wait("the chat", |ui| ui.transcript().is_some());
 
-    ui.press("cmd-f");
+    ui.press("secondary-f");
     ui.input("parser at");
     ui.cx.executor().advance_clock(PAUSE);
     // In the prompt, which is Markdown too, and in the reply, both across the bold.
@@ -153,7 +174,7 @@ fn one_letter_is_found_only_in_what_s_loaded_and_the_count_says_so(cx: &mut Test
     let transcript = ui.transcript().unwrap();
     assert!(ui.cx.read_entity(&transcript, |t, _| t.event_at(1).is_none()), "the first reply isn't loaded");
 
-    ui.press("cmd-f");
+    ui.press("secondary-f");
     ui.input("z");
     ui.cx.executor().advance_clock(PAUSE);
     ui.wait("the bar to say so", |ui| says(ui).is_some_and(|says| says.contains("No matches")));
@@ -175,7 +196,7 @@ fn a_match_in_what_a_subagent_was_asked_opens_its_call_and_is_drawn_with_its_mar
     let transcript = ui.transcript().unwrap();
     assert_eq!(ui.labelled(SUBAGENT_LINE).first().and_then(ElementSnapshot::expanded), Some(false));
 
-    ui.press("cmd-f");
+    ui.press("secondary-f");
     ui.input("around.");
     ui.cx.executor().advance_clock(PAUSE);
 
@@ -198,7 +219,7 @@ fn the_wheel_over_the_bar_scrolls_the_chat(cx: &mut TestAppContext) {
     stack.run(&session, &script.join("; "));
     let mut ui = Ui::open(cx, &stack);
     ui.wait("the chat", |ui| ui.transcript().is_some());
-    ui.press("cmd-f");
+    ui.press("secondary-f");
     ui.input("zebra");
     ui.cx.executor().advance_clock(PAUSE);
     ui.wait("the bar to say so", |ui| says(ui).is_some_and(|says| says.contains("No matches")));

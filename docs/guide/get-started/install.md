@@ -29,6 +29,8 @@ What differs from the Mac:
 - Agents stop when the hub does, so an update waits until nothing is running.
 - No sound plays when an agent needs you.
 - Nothing keeps the computer awake while agents work.
+- The app's keys have `Ctrl` where a Mac's have `Cmd`, as [Keys](../reference/keys.md) says.
+- There are no menus, so what's only in one, such as Check for Updates…, isn't there.
 
 ## On Linux
 
@@ -43,7 +45,8 @@ It updates itself. It needs glibc 2.35 or newer, as on Ubuntu 22.04 and later, V
 
 What differs from the Mac:
 
-- The keys and menus are the Mac's.
+- The app's keys have `Ctrl` where a Mac's have `Cmd`, as [Keys](../reference/keys.md) says.
+- There are no menus, so what's only in one, such as Check for Updates…, isn't there.
 - A notification needs a notification service, and no sound plays.
 - Nothing keeps the computer awake while agents work.
 

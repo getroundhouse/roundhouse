@@ -34,7 +34,7 @@ const TITLE_SIZE: Pixels = px(24.);
 pub(crate) const KEY_CONTEXT: &str = "Settings";
 
 /// The key that puts the cursor in the search, which the search shows at its right end.
-pub(crate) const FIND_KEY: &str = "cmd-f";
+pub(crate) const FIND_KEY: &str = "secondary-f";
 
 /// A hub's own settings as they are now, and the hub to ask to change them.
 pub(crate) struct OfHub {

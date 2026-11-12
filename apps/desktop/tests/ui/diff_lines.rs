@@ -134,7 +134,7 @@ fn what_was_opened_stays_open_while_another_file_shows_and_folds_once_the_tab_cl
     ui.open_diff_of(&diff, "other.txt");
     ui.open_diff_of(&diff, "long.txt");
     assert!(!ui.has(down_at_the_end()), "the lines opened below the change are still open");
-    ui.press("cmd-w");
+    ui.press("secondary-w");
     ui.open_diff_of(&diff, "long.txt");
 
     assert!(ui.has(down_at_the_end()), "and fold again once the tab has closed");

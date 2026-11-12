@@ -227,7 +227,7 @@ fn a_changed_image_lets_go_of_its_pictures_once_its_tab_closes(cx: &mut TestAppC
     };
     assert_eq!(on_gpu(&mut ui), 3, "before, after and what changed, as they've been drawn");
 
-    ui.press("cmd-w");
+    ui.press("secondary-w");
 
     ui.wait("them to be let go of", |ui| on_gpu(ui) == 0);
 }
