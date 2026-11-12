@@ -103,12 +103,13 @@ struct Jumps {
 }
 
 impl Jumps {
-    /// Shows the prompt in `row` at the top of the chat, and closes the list, so it isn't over where it jumped to.
+    /// Shows the prompt in `row` at the bottom of the chat, with what it answered above it, and closes the list, so
+    /// it isn't over where it jumped to.
     fn to(&self, row: usize) -> impl Fn(&ClickEvent, &mut Window, &mut App) + 'static {
         let Jumps { hover, chat_list, transcript } = self.clone();
         move |_, _, cx| {
             hover.update(cx, Hover::jumped);
-            chat_list.go_to_row(row);
+            chat_list.go_to_row_at_bottom(row);
             cx.notify(transcript);
         }
     }
@@ -129,7 +130,7 @@ impl Transcript {
         if lines.is_empty() {
             return around.child(chat);
         }
-        let at = being_read(&lines, self.list.top().row, !self.list.is_scrolled_up());
+        let at = being_read(&lines, self.list.bottom_row(), !self.list.is_scrolled_up());
         let hover = window.use_keyed_state("outline", cx, |_, _| Hover::default());
         let showing = hover.update(cx, |hover, _| hover.frame());
         if showing == Showing::Opened {
@@ -227,13 +228,14 @@ fn tick(row: usize, label: String, look: Tick, cx: &App) -> AnyElement {
         .into_any_element()
 }
 
-/// Which prompt is being read, as an index into `lines`: the last one at or above the top row. At the end of the chat,
-/// it's the last prompt, even if it starts lower down, since nothing after it can come to the top.
-fn being_read(lines: &[Prompt], top: usize, at_end: bool) -> usize {
+/// Which prompt is being read, as an index into `lines`: the last one at or above the bottom row, whose part of the
+/// chat is at the bottom. At the end of the chat, it's the last prompt, as its row makes it once the end is laid out,
+/// and also before then, when the list is first drawn.
+fn being_read(lines: &[Prompt], bottom: usize, at_end: bool) -> usize {
     if at_end {
         return lines.len().saturating_sub(1);
     }
-    lines.partition_point(|prompt| prompt.row <= top).saturating_sub(1)
+    lines.partition_point(|prompt| prompt.row <= bottom).saturating_sub(1)
 }
 
 /// The ticks to show, as a range of `count` prompts: all of them if they fit, and otherwise as many as fit, around the

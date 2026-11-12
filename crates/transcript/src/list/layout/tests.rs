@@ -288,3 +288,49 @@ fn rows_that_move_into_the_window_at_an_end_of_the_session_are_drawn() {
     assert_eq!(shown(&at_the_start), [0, 1, 2, 3, 4, 5]);
     assert_eq!(drew_at_the_start, [0, 1, 2, 3, 4, 5]);
 }
+
+/// Such as a prompt jumped to from the outline, with the reply it answered above it.
+#[test]
+fn a_row_sent_to_the_bottom_ends_there_with_the_rows_before_it_above() {
+    let (layout, _) = Session::of(&[50.; 100]).from(Start::AtBottom { row: 40 });
+    let unfetched = Session { fetched_from: 50, ..Session::of(&[50.; 100]) };
+    let (unfetched, _) = unfetched.from(Start::AtBottom { row: 40 });
+
+    let ends = |layout: &Layout<()>| layout.rows.iter().find(|row| row.row == 40).map(LaidRow::bottom);
+    assert_eq!(ends(&layout), Some(TALL));
+    assert_eq!(layout.top, at(35, 0.));
+    assert_eq!(layout.last_in_sight, 40, "it's the last row in the window");
+    assert!(!layout.end_in_sight);
+    assert_eq!(ends(&unfetched), Some(TALL), "at the height it's guessed to be, until it's fetched");
+    assert_eq!(unfetched.last_in_sight, 40);
+}
+
+#[test]
+fn a_row_sent_to_the_bottom_that_is_taller_than_the_window_shows_from_its_start() {
+    let mut heights = [50.; 100];
+    heights[40] = 500.;
+
+    let (layout, _) = Session::of(&heights).from(Start::AtBottom { row: 40 });
+
+    assert_eq!(layout.top, at(40, 0.));
+    assert_eq!(layout.last_in_sight, 40);
+}
+
+#[test]
+fn a_row_sent_to_the_bottom_near_the_start_stays_where_it_is_with_the_first_row_at_the_top() {
+    let (layout, _) = Session::of(&[50.; 100]).from(Start::AtBottom { row: 2 });
+
+    assert_eq!(layout.top, Place::default());
+    assert_eq!(tops(&layout).iter().find(|(row, _)| *row == 2), Some(&(2, px(100.))));
+    assert_eq!(layout.last_in_sight, 5, "and the rows below it fill the window");
+}
+
+#[test]
+fn the_bottom_row_is_the_last_with_more_than_a_pixel_in_the_window() {
+    // Row 16 starts 20 px above the window's bottom, and then half a pixel above it.
+    let (layout, _) = Session::of(&[50.; 100]).from(top(10, 20.));
+    let (nearly, _) = Session::of(&[50.; 100]).from(top(10, 0.5));
+
+    assert_eq!(layout.last_in_sight, 16);
+    assert_eq!(nearly.last_in_sight, 15);
+}

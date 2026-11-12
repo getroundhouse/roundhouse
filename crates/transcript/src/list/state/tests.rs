@@ -1,4 +1,7 @@
+use std::time::Instant;
+
 use gpui_kit::{Bounds, Pixels, point, px, size};
+use look::motion::Scrolling;
 
 use super::*;
 
@@ -11,7 +14,7 @@ pub(super) fn at(row: usize, offset: f32) -> Place {
 }
 
 /// A session of `rows` rows, all loaded and each measured at `height`, in a window 300 tall.
-fn session(rows: usize, height: f32) -> State {
+pub(super) fn session(rows: usize, height: f32) -> State {
     let mut state = State::new();
     state.set_rows(rows, std::iter::once(0..rows).collect());
     state.drawn_at(window(400., 300.));
@@ -30,7 +33,7 @@ pub(super) fn scrolled_to(rows: usize, height: f32, row: usize, offset: f32) -> 
 }
 
 /// The wheel's travel is walked row by row for up to 900 px.
-fn lay_from(state: &State) -> Start {
+pub(super) fn lay_from(state: &State) -> Start {
     state.lay_from(px(900.))
 }
 
@@ -80,6 +83,102 @@ fn a_frame_lays_the_rows_out_from_the_one_the_last_left_to_keep_still() {
     assert_eq!(lay_from(&state), Start::Top { at: at(40, 0.), moved: px(0.) }, "until something sends it somewhere");
 }
 
+/// The same, as a frame left it after sending row 40 to the bottom, with row 35 at the top.
+pub(super) fn kept_at_the_bottom() -> State {
+    let mut state = scrolled_to(100, 50., 10, 0.);
+    state.go_to_row_at_bottom(40);
+    state.laid_out(at(35, 0.), Some(Anchor { row: 35, top: px(0.) }), false);
+    state
+}
+
+#[test]
+fn a_row_sent_to_the_bottom_is_kept_there_frame_after_frame() {
+    let mut state = scrolled_to(100, 50., 10, 0.);
+
+    state.go_to_row_at_bottom(40);
+
+    assert_eq!(lay_from(&state), Start::AtBottom { row: 40 });
+    assert_eq!(state.kept_at_bottom(), Some(40), "before a frame has laid it out there");
+    assert!(state.is_scrolled_up());
+    let state = kept_at_the_bottom();
+    assert_eq!(lay_from(&state), Start::AtBottom { row: 40 }, "and after, as the rows above it load");
+}
+
+/// Something that moves the list, and what it is.
+type Move = (&'static str, fn(&mut State));
+
+#[test]
+fn anything_else_that_moves_the_list_lets_the_row_at_the_bottom_go() {
+    let moves: [Move; 6] = [
+        ("the wheel", |state| state.scroll_by(px(20.))),
+        ("opening something in sight", |state| state.keep_still(38)),
+        ("a drag of the scrollbar's thumb", State::start_drag),
+        ("a click on the scrollbar's track", |state| state.bar_scroll_to(px(100.))),
+        ("the button back down", |state| state.head_to_latest(Scrolling::since(Instant::now()))),
+        ("going to a row", |state| state.go_to_row(10)),
+    ];
+
+    for (what, moving) in moves {
+        let mut state = kept_at_the_bottom();
+        moving(&mut state);
+        assert_eq!(state.kept_at_bottom(), None, "{what}");
+        assert!(!matches!(lay_from(&state), Start::AtBottom { .. }), "{what}");
+    }
+}
+
+#[test]
+fn a_row_sent_to_the_bottom_has_the_top_where_the_heights_put_it_until_a_frame_lays_it_out() {
+    let mut state = scrolled_to(100, 50., 10, 0.);
+    let mut tall = scrolled_to(100, 50., 10, 0.);
+    tall.measured(40, px(500.));
+
+    state.go_to_row_at_bottom(40);
+    tall.go_to_row_at_bottom(40);
+
+    assert_eq!(state.top(), at(35, 0.), "so the wheel moves on from there");
+    assert_eq!(tall.top(), at(40, 0.), "or from the start of one taller than the window");
+}
+
+#[test]
+fn a_row_at_the_bottom_stays_as_rows_arrive_and_goes_once_the_end_is_in_sight() {
+    let mut arriving = kept_at_the_bottom();
+    let mut at_the_end = kept_at_the_bottom();
+
+    arriving.set_rows(120, vec![0..120]);
+    at_the_end.laid_out(at(94, 0.), None, true);
+
+    assert_eq!(lay_from(&arriving), Start::AtBottom { row: 40 });
+    assert_eq!(lay_from(&at_the_end), Start::Latest);
+}
+
+#[test]
+fn the_wheel_moves_on_from_where_the_last_frame_left_a_row_at_the_bottom() {
+    let mut state = kept_at_the_bottom();
+
+    state.scroll_by(px(20.));
+
+    assert_eq!(lay_from(&state), Start::Anchored { at: Anchor { row: 35, top: px(0.) }, moved: px(-20.) });
+}
+
+#[test]
+fn opening_something_above_a_row_at_the_bottom_keeps_what_was_clicked_still() {
+    let mut state = kept_at_the_bottom();
+
+    state.keep_still(38);
+
+    assert_eq!(lay_from(&state), Start::Anchored { at: Anchor { row: 38, top: px(150.) }, moved: px(0.) });
+}
+
+#[test]
+fn a_row_past_the_end_isnt_sent_to_the_bottom() {
+    let mut state = scrolled_to(100, 50., 10, 0.);
+
+    state.go_to_row_at_bottom(100);
+
+    assert_eq!(state.kept_at_bottom(), None);
+    assert_eq!(lay_from(&state), Start::Top { at: at(10, 0.), moved: px(0.) });
+}
+
 #[test]
 fn a_row_someone_opens_or_closes_something_in_is_kept_still_if_it_is_in_sight() {
     let mut state = scrolled_to(100, 50., 10, 20.);
@@ -127,65 +226,6 @@ fn laying_the_rows_out_with_the_end_in_sight_keeps_to_the_latest_row_again() {
     // And goes on doing so however the next frame comes out, until someone scrolls away.
     state.laid_out(at(94, 0.), None, false);
     assert_eq!(lay_from(&state), Start::Latest);
-}
-
-#[test]
-fn the_scrollbar_reads_how_far_the_session_is_scrolled_and_how_tall_it_is() {
-    let state = scrolled_to(100, 50., 10, 5.);
-    let short = session(3, 50.);
-
-    assert_eq!(state.bar_scrolled(), px(505.));
-    assert_eq!(state.bar_tall(), px(5000.));
-    assert_eq!(short.bar_tall(), px(300.), "never shorter than its window");
-}
-
-#[test]
-fn a_drag_of_the_thumb_goes_by_the_heights_as_they_were_when_it_began() {
-    let mut state = session(100, 50.);
-    state.start_drag();
-    state.bar_scroll_to(px(2000.));
-    let held = state.top();
-    assert_eq!(held, at(40, 0.));
-
-    // Rows load under the thumb and turn out far taller than they were taken to be.
-    for row in 0..30 {
-        state.measured(row, px(900.));
-    }
-    state.bar_scroll_to(px(2000.));
-
-    assert_eq!(state.top(), held, "the same place on the track is the same row");
-    assert_eq!(state.bar_scrolled(), px(2000.), "and the thumb is where it was put");
-    assert_eq!(state.bar_tall(), px(5000.), "on a track as long as it was");
-
-    state.end_drag();
-    assert_eq!(state.bar_tall(), px(30. * 900. + 70. * 50.), "which is put right once it's let go");
-}
-
-#[test]
-fn as_far_down_as_the_scrollbar_goes_keeps_to_the_latest_row_again() {
-    let mut dragged = scrolled_to(100, 50., 10, 0.);
-    dragged.start_drag();
-    dragged.bar_scroll_to(px(4699.));
-    assert!(dragged.is_scrolled_up());
-    dragged.bar_scroll_to(px(4700.));
-    let mut wheeled = scrolled_to(100, 50., 93, 0.);
-    wheeled.bar_scroll_to(px(4690.));
-    assert!(wheeled.is_scrolled_up());
-    wheeled.bar_scroll_to(px(4700.));
-
-    assert!(!dragged.is_scrolled_up());
-    // Before the next frame, so what's drawn in it has no button back to the latest row.
-    assert!(!wheeled.is_scrolled_up());
-    assert_eq!(lay_from(&wheeled), Start::Latest);
-}
-
-#[test]
-fn anything_else_that_scrolls_the_bar_moves_by_the_difference_as_the_wheel_does() {
-    let mut state = scrolled_to(100, 50., 10, 5.);
-
-    state.bar_scroll_to(px(475.));
-
-    assert_eq!(lay_from(&state), Start::Top { at: at(10, 5.), moved: px(-30.) }, "passed row by row at the next frame");
 }
 
 #[test]

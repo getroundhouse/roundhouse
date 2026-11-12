@@ -75,7 +75,7 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 | Subagent tab | A workspace's one tab for a subagent's work, at the far left, just after the file tab when that's open. Opening another subagent shows that one in it, rather than opening another | `WorkspacePane::subagent_tab`, `Showing::Subagent`, `Transcript::subagent` |
 | Working line | The line a chat ends with while its agent works: the mark with its light sweeping, and how long the turn has taken so far | `working_line` |
 | Outline | The ticks at the right of a chat, one for each prompt, with the one being read in white, and the list of prompts that opens over them, for jumping to one. `docs/spec/chats.md` has the rules | `Transcript::with_outline`, `SessionLog::prompt_lines`, `PromptLine`, `SessionPromptList` |
-| Prompt being read | The prompt whose part of the chat is at the top: the last to have reached the top, or at the end of the chat, the last prompt. The outline lights it. It says where someone is in a chat, and has nothing to do with whether a reply is unread | `being_read` |
+| Prompt being read | The prompt whose part of the chat is at the bottom, which is where a jump from the outline puts it, or at the end of the chat, the last prompt. One jumped to is the one being read until something else moves the chat. The outline lights it. It says where someone is in a chat, and has nothing to do with whether a reply is unread | `being_read` |
 | Unread | A chat whose newest reply the person hasn't read. The hub keeps how far each chat is read, and a client marks it read as it shows it | `Session::unread`, `read_seq`, `SessionMarkRead` |
 
 ## History and delivery

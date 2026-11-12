@@ -104,6 +104,20 @@ impl TranscriptList {
         self.state.borrow_mut().go_to_row(row);
     }
 
+    /// Shows `row` with its end at the bottom of the list, and the rows before it above, until something else moves
+    /// the list. A row taller than the list shows from its start, and one near the start of the session, with less
+    /// than the list's height above it, shows where it is with the first row at the top.
+    pub(crate) fn go_to_row_at_bottom(&self, row: usize) {
+        self.state.borrow_mut().go_to_row_at_bottom(row);
+    }
+
+    /// The row at the bottom of the list: the one [`TranscriptList::go_to_row_at_bottom`] sent there, until something
+    /// else moves the list, even near the start of the session, where it shows higher up, and otherwise the last row
+    /// with more than a pixel of it in the list, as the last frame laid them out.
+    pub(crate) fn bottom_row(&self) -> usize {
+        self.state.borrow().bottom_row()
+    }
+
     /// Whether any of the row at `row` showed in the last frame.
     pub(crate) fn shows(&self, row: usize) -> bool {
         self.state.borrow().shown.contains(&row)
