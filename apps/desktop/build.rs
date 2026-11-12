@@ -1,7 +1,11 @@
 //! Builds the tables the file icons are found in, from `file-icons/`, which `tools/file-icons/update.py` writes: every
 //! icon there, embedded with its colours filled in from `palette.json` and at the size it's drawn, and the file names
 //! and extensions Catppuccin's manifest gives an icon, lowercased and sorted, so the app finds each by a binary search
-//! and never reads the manifest itself.
+//! and never reads the manifest itself. On Windows it also puts the app's own icon in the program.
+
+// A module of the build script's own, kept apart from the app's source.
+#[path = "build/app_icon.rs"]
+mod app_icon;
 
 use std::collections::BTreeMap;
 use std::error::Error;
@@ -42,6 +46,7 @@ const MAX_ICON_BYTES: usize = 16 * 1024;
 const MAX_ELEMENTS: usize = 64;
 
 fn main() -> Result<(), Box<dyn Error>> {
+    app_icon::embed(Path::new(env!("CARGO_MANIFEST_DIR")))?;
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("file-icons");
     println!("cargo::rerun-if-changed={}", dir.display());
     let manifest: Value = serde_json::from_slice(&fs::read(dir.join("theme.json"))?)?;
