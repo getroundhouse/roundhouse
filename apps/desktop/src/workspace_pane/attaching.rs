@@ -69,7 +69,9 @@ impl WorkspacePane {
         match chat {
             // Closed while they were read, so they go with it.
             Some(chat) if !self.open_sessions().any(|session| &session.id == chat) => {
-                self.drafts.remove(chat);
+                if let Some(held) = self.chats.get_mut(chat) {
+                    held.draft = None;
+                }
             }
             Some(chat) => self.keep_draft(chat, cx),
             None => self.keep_typed(true, cx),
@@ -136,7 +138,7 @@ impl WorkspacePane {
             });
         } else {
             if !text.is_empty() {
-                let draft = self.drafts.entry(chat.clone()).or_default();
+                let draft = self.held(&chat).draft.get_or_insert_default();
                 draft.text = joined(text, &draft.text);
             }
             self.keep_draft(&chat, cx);
@@ -156,7 +158,9 @@ impl WorkspacePane {
     /// The files waiting in `chat`'s composer: the composer's own while it's showing, or else its draft's.
     pub(super) fn files_for(&mut self, chat: Option<&SessionId>) -> &mut Attachments {
         match chat {
-            Some(chat) if self.active.as_ref() != Some(chat) => &mut self.drafts.entry(chat.clone()).or_default().files,
+            Some(chat) if self.active.as_ref() != Some(chat) => {
+                &mut self.held(chat).draft.get_or_insert_default().files
+            }
             _ => &mut self.attached,
         }
     }

@@ -7,7 +7,7 @@ use client_core::{Client, Drafts, RecordsFeed};
 use gpui_kit::component::input::TextareaState;
 use gpui_kit::{AnyWindowHandle, Context, Entity, EventEmitter, Pixels, Subscription, Task, Window, px};
 use protocol::attachment::Attachment;
-use protocol::model::{Session, SessionId, Workspace, WorkspaceId};
+use protocol::model::{Seq, Session, SessionId, Workspace, WorkspaceId};
 use transcript::Transcript;
 
 use crate::all_files::AllFiles;
@@ -79,6 +79,23 @@ pub struct Diff {
     files_behind: bool,
 }
 
+/// What the pane holds for one chat, from the first time it holds anything for it until the chat closes, when it all
+/// goes at once.
+#[derive(Default)]
+struct Chat {
+    /// Made the first time the chat is shown, then kept so it stays current and keeps its place.
+    transcript: Option<(Entity<Transcript>, Subscription)>,
+    /// What's been typed and attached in it while it isn't showing.
+    draft: Option<Composed>,
+    /// The files the hub kept with its draft that haven't been read back yet.
+    restoring: Option<Vec<Attachment>>,
+    /// What Shift-Tab last asked, whether to plan, while the hub hasn't answered yet.
+    plan_asked: Option<bool>,
+    /// Its newest reply, while it's being marked read. It shows as read meanwhile, so a reply that comes while it's
+    /// showing doesn't flash as unread first.
+    marking: Option<Seq>,
+}
+
 #[derive(Clone, Debug)]
 pub enum PaneEvent {
     Error(String),
@@ -97,14 +114,10 @@ pub struct WorkspacePane {
     /// A chat to show once client-core's copy has it, such as one just made.
     showing_next: Option<SessionId>,
     pub active: Option<SessionId>,
-    /// Made the first time a chat is shown, then kept so it stays current and keeps its place.
-    transcripts: HashMap<SessionId, (Entity<Transcript>, Subscription)>,
-    /// What's been typed and attached in the chats not showing.
-    drafts: HashMap<SessionId, Composed>,
+    /// What the pane holds for each chat.
+    chats: HashMap<SessionId, Chat>,
     /// Keeps what's typed and attached in each chat on the hub, as `keeping.rs` says.
     keeper: Drafts,
-    /// The files the hub kept with each chat's draft that haven't been read back yet.
-    restoring: HashMap<SessionId, Vec<Attachment>>,
     /// What's attached in the chat showing, to go with what's typed.
     attached: Attachments,
     waiting: Option<Waiting>,
@@ -118,8 +131,6 @@ pub struct WorkspacePane {
     busy: Busy,
     /// The app is waiting on the hub for a new title for this workspace.
     retitling: bool,
-    /// Whether Shift-Tab last asked each chat whose hub hasn't answered yet to plan.
-    plan_asked: HashMap<SessionId, bool>,
     reading: Reading,
     pub composer: Entity<TextareaState>,
     pub diff: Option<Diff>,
@@ -169,18 +180,15 @@ impl WorkspacePane {
         });
         let pull_request = Lookup::recorded(shown.workspace()).unwrap_or(Lookup::Looking);
         // What the hub kept of each chat's composer, from when this app or another last had it.
-        let sessions = shown.sessions();
-        let (drafts, restoring) = (keeping::drafts_kept_in(sessions), keeping::files_kept_in(sessions));
+        let chats = keeping::kept_in(shown.sessions());
         let mut this = Self {
             client,
             records,
             shown,
             showing_next: None,
             active: None,
-            transcripts: HashMap::new(),
-            drafts,
+            chats,
             keeper,
-            restoring,
             attached: Attachments::default(),
             waiting: None,
             creating_chat: false,
@@ -189,7 +197,6 @@ impl WorkspacePane {
             closed_menu: closed::Menu::Shut,
             busy: Busy::Free,
             retitling: false,
-            plan_asked: HashMap::new(),
             reading: Reading::default(),
             composer,
             diff: None,
@@ -234,7 +241,12 @@ impl WorkspacePane {
     }
 
     pub fn transcript(&self) -> Option<Entity<Transcript>> {
-        self.active.as_ref().and_then(|id| self.transcripts.get(id)).map(|(view, _)| view.clone())
+        self.active.as_ref().and_then(|id| self.chats.get(id)?.transcript.as_ref()).map(|(view, _)| view.clone())
+    }
+
+    /// What the pane holds for a chat, made the first time it holds anything for it.
+    fn held(&mut self, id: &SessionId) -> &mut Chat {
+        self.chats.entry(id.clone()).or_default()
     }
 
     /// Carries on on a new connection to the hub, keeping everything shown and typed. What the hub reads from
