@@ -112,11 +112,12 @@ jobs:
             target/
           key: ${{ steps.cache.outputs.cache-primary-key }}
 
-  # The billed 8-core runner, since PRs and the queue wait for the tests. A cold run took over 20 minutes on 2 cores.
+  # The billed 16-core runner, since PRs and the queue wait for the tests, and nextest runs one per core. A cold run took
+  # over 20 minutes on 2 cores.
   test:
     needs: changes
     if: needs.changes.outputs.run == 'true'
-    runs-on: ubuntu-latest-arm64-8cores
+    runs-on: ubuntu-latest-arm64-16cores
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
