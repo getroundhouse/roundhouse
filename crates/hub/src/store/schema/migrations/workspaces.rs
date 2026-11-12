@@ -14,3 +14,9 @@ pub(super) const BRANCHES: &str = r"
     ALTER TABLE workspaces ADD COLUMN branches TEXT;
     ALTER TABLE workspaces ADD COLUMN pull_request_branch TEXT;
 ";
+
+/// Which build each workspace's worker is, while the hub carries on with one of another build than its own, as after an
+/// update. NULL otherwise, as for every workspace from before this. The workspaces' trigger takes every column.
+pub(super) const WORKER_BUILD: &str = r"
+    ALTER TABLE workspaces ADD COLUMN worker_build TEXT;
+";

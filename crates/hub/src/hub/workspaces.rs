@@ -141,6 +141,7 @@ impl Hub {
             comment_draft: None,
             branches: None,
             pull_request_branch: None,
+            worker_build: None,
         };
         let mut taken = None;
         while let Some(name) = names.next(self, &repo.id).await? {

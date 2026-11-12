@@ -17,6 +17,7 @@ mod accounts;
 mod approvals;
 mod attachments;
 mod backup;
+mod builds;
 mod comments;
 mod drafts;
 mod error;

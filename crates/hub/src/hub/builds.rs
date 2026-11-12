@@ -6,6 +6,7 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
+use protocol::client::HubNotice;
 use protocol::model::WorkspaceId;
 use tracing::{info, warn};
 
@@ -19,7 +20,8 @@ const LOOK_EVERY: Duration = Duration::from_secs(5);
 
 impl Hub {
     /// Replaces `link`, the workspace's worker, which is another build, once two looks in a row find nothing in the
-    /// workspace at work. Gives up once the worker has gone, or been replaced, or the hub is stopping.
+    /// workspace at work. Gives up once the worker has gone, or been replaced, or the hub is stopping. Its workspace's
+    /// record says which build it is until then, as [`Hub::record_worker_build`] has it say.
     pub(super) fn replace_once_idle(self: &Arc<Self>, workspace_id: WorkspaceId, link: Arc<WorkerLink>) {
         let hub = self.clone();
         tokio::spawn(async move {
@@ -27,15 +29,31 @@ impl Hub {
             loop {
                 tokio::select! {
                     () = tokio::time::sleep(LOOK_EVERY) => {}
-                    () = link.wait_closed() => return,
+                    () = link.wait_closed() => break,
                 }
                 let idle = hub.nothing_at_work_in(&workspace_id, &link);
                 if idle && idle_before && hub.replace_if_idle(&workspace_id, &link).await {
-                    return;
+                    break;
                 }
                 idle_before = idle;
             }
+            // The next worker is the hub's own build. A hub that's stopping leaves the record to the next hub, which
+            // forgets it as it starts.
+            if !hub.shutting_down.load(Ordering::SeqCst) {
+                hub.record_worker_build(&workspace_id, None).await;
+            }
         });
+    }
+
+    /// Records which build the workspace's worker is, `None` once it's the hub's own, and announces the workspace if
+    /// that changed it, so every client can say which build its agents are on.
+    pub(super) async fn record_worker_build(&self, workspace_id: &WorkspaceId, build: Option<&str>) {
+        let (id, build) = (workspace_id.clone(), build.map(str::to_string));
+        match self.blocking(move |store| store.set_workspace_worker_build(&id, build.as_deref())).await {
+            Ok(Some(workspace)) => self.notify(HubNotice::Workspace(workspace)),
+            Ok(None) => {}
+            Err(e) => warn!(%workspace_id, "recording which build its worker is: {}", e.message),
+        }
     }
 
     /// Stops the workspace's worker, so the next request for the workspace starts this hub's build, unless something

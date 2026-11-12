@@ -380,4 +380,6 @@ pub(super) const MIGRATIONS: &[&str] = &[
     // The approvals each session's agent is waiting on, which its record shows with what it has yet to take and whether
     // it has opened its conversation, in `waiting`.
     waiting::WAITING_ON,
+    // Which build each workspace's worker is, while it's another than the hub's, in `workspaces`.
+    workspaces::WORKER_BUILD,
 ];

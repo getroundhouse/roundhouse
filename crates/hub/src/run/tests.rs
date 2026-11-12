@@ -42,3 +42,16 @@ fn a_workspace_left_being_archived_or_restored_is_handed_over_as_it_was_left() {
     assert_eq!(store.get_workspace(&"w".into()).unwrap().status, WorkspaceStatus::Archiving);
     assert_eq!(store.get_workspace(&"birch".into()).unwrap().status, WorkspaceStatus::Restoring);
 }
+
+/// Only a worker this hub carries on with can be another build, and carrying on with one says which, so what the last
+/// run recorded, as when it was killed while carrying on with one, says nothing of the workers there are now.
+#[test]
+fn a_starting_hub_forgets_which_build_each_worker_was() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_session(dir.path());
+    store.set_workspace_worker_build(&"w".into(), Some("0.9.0")).unwrap();
+
+    recover(&store).unwrap();
+
+    assert_eq!(store.get_workspace(&"w".into()).unwrap().worker_build, None);
+}

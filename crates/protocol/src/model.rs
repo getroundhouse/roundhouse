@@ -273,6 +273,12 @@ pub struct Workspace {
     /// `pull_request` is. `None` before the hub kept it, and when HEAD was detached.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pull_request_branch: Option<BranchName>,
+    /// Which build its worker is, while that's another than the hub's: one an earlier hub left running, as after an
+    /// update, which the hub carries on with until nothing in the workspace is at work, and then replaces with its own.
+    /// `None` while its worker, or the next one, is the hub's own build, since every worker a hub starts is, and from a
+    /// hub too old to say.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub worker_build: Option<String>,
 }
 
 impl Workspace {
