@@ -111,6 +111,22 @@ fn a_file_nothing_names_is_let_go_of_once_its_waited_long_enough() {
     assert_eq!(store.new_workspace_draft_file_ids().unwrap(), [AttachmentId::from("named")].into());
 }
 
+#[test]
+fn a_file_renewed_waits_as_long_again_to_be_named() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_session(dir.path());
+    for id in ["renewed", "not"] {
+        store.add_new_workspace_draft_file(&log_file(id)).unwrap();
+    }
+    lock(&store.writer).execute("UPDATE new_workspace_draft_files SET created_at_ms = 0", []).unwrap();
+
+    store.renew_new_workspace_draft_files(&["renewed".into(), "never-added".into()]).unwrap();
+
+    let let_go_of = store.let_go_of_unnamed_new_workspace_draft_files(now_ms() - 60_000).unwrap();
+    assert_eq!(let_go_of, [AttachmentId::from("not")]);
+    assert_eq!(store.new_workspace_draft_file_ids().unwrap(), [AttachmentId::from("renewed")].into());
+}
+
 /// Renaming the tables keeps what's in them, and the record's revision still moves under its new name.
 #[test]
 fn whats_kept_of_the_dialog_before_its_tables_were_named_for_it_is_still_kept() {

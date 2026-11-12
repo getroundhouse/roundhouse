@@ -79,6 +79,18 @@ impl Store {
         read_draft_file(&lock(&self.reader), id)
     }
 
+    /// Has each of `ids` that the hub has for the draft wait as long again for a draft to name it, as if just added,
+    /// such as one a workspace is being made from, which the draft may stop naming meanwhile.
+    pub fn renew_new_workspace_draft_files(&self, ids: &[AttachmentId]) -> Result<(), StoreError> {
+        let conn = lock(&self.writer);
+        let mut statement = conn.prepare("UPDATE new_workspace_draft_files SET created_at_ms = ?1 WHERE id = ?2")?;
+        let now = now_ms();
+        for id in ids {
+            statement.execute(params![now, id.as_str()])?;
+        }
+        Ok(())
+    }
+
     /// Lets go of a file the draft doesn't name. Says whether it did, so the caller lets go of its bytes too.
     pub fn let_go_of_new_workspace_draft_file(&self, id: &AttachmentId) -> Result<bool, StoreError> {
         let removed = lock(&self.writer)

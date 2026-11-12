@@ -49,11 +49,15 @@ impl Hub {
     }
 
     /// Each file `made_of` names that the hub keeps for the dialog. One it doesn't is refused, unless the request was
-    /// sent `again`, when the chat may have it already.
+    /// sent `again`, when the chat may have it already. Each waits as long again for the dialog to name it, so one
+    /// the dialog has had for long isn't let go of while the workspace is made, if the dialog changes meanwhile.
     async fn dialog_files(&self, made_of: &NewWorkspaceDraftToKeep, again: bool) -> Result<Vec<Attachment>, ApiError> {
         let ids = made_of.files.clone();
-        let files = self.blocking(move |store| ids.iter().map(|id| store.new_workspace_draft_file(id)).collect()).await;
-        let files: Vec<Option<Attachment>> = files?;
+        let files = self.blocking(move |store| {
+            store.renew_new_workspace_draft_files(&ids)?;
+            ids.iter().map(|id| store.new_workspace_draft_file(id)).collect()
+        });
+        let files: Vec<Option<Attachment>> = files.await?;
         let mut found = Vec::new();
         for (file, id) in files.into_iter().zip(&made_of.files) {
             match file {

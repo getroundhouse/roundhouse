@@ -16,7 +16,8 @@ use crate::store::{Store, now_ms};
 mod tests;
 
 /// How long a file added to the dialog waits for a draft to name it. A client adds one just before keeping the draft
-/// that names it, so one nothing names after this never will be.
+/// that names it, so one nothing names after this never will be. It waits as long again as a workspace is made from
+/// it, since the dialog may stop naming it meanwhile.
 const UNNAMED_FOR: Duration = Duration::from_hours(24);
 
 impl Hub {
