@@ -1,31 +1,14 @@
 //! Letting go of a chat that's been deleted, against a hub that never starts a worker, since a chat nothing was sent
 //! in never has one.
 
-use std::path::Path;
 use std::time::{Duration, Instant};
 
-use providers::local::{LocalConfig, LocalProvider};
 use tokio::sync::broadcast::error::RecvError;
 
 use super::*;
-use crate::provider_set::ProviderSet;
-use crate::store::tests::store_with_session;
+use crate::hub::tests::hub_in;
 
 const TIMEOUT: Duration = Duration::from_secs(10);
-
-/// A hub whose store has the session `s`, with nothing sent in it.
-fn hub_in(dir: &Path) -> Arc<Hub> {
-    let store = Arc::new(store_with_session(dir));
-    let config = LocalConfig {
-        worker_exe: dir.join("no-worker"),
-        instances_dir: dir.join("instances"),
-        workspaces_root: dir.join("workspaces"),
-        shell: Some("/bin/sh".to_string()),
-        path: None,
-    };
-    let providers = ProviderSet::only(Arc::new(LocalProvider::new(config)));
-    Arc::new(Hub::new(store, dir.join("attachments"), dir.join("worker-logs"), providers, false))
-}
 
 #[tokio::test]
 async fn closing_an_unused_chat_lets_go_of_it_and_of_everyone_following_it() {

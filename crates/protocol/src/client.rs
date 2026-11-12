@@ -254,16 +254,34 @@ pub enum HubNotice {
     Unknown,
 }
 
+/// What a reply says: the answer, or why there's none. Every protocol's replies take this form, flattened into the
+/// frame beside the ID they answer.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "snake_case")]
-#[expect(
-    clippy::large_enum_variant,
-    reason = "a reply is decoded once and handed straight to its caller, and boxing it would stop callers matching through it"
-)]
-pub enum ReplyOutcome {
-    Response(ClientResponse),
+pub enum Outcome<T> {
+    Response(T),
     Error(ApiError),
 }
+
+impl<T> From<Result<T, ApiError>> for Outcome<T> {
+    fn from(result: Result<T, ApiError>) -> Self {
+        match result {
+            Ok(response) => Outcome::Response(response),
+            Err(error) => Outcome::Error(error),
+        }
+    }
+}
+
+impl<T> Outcome<T> {
+    pub fn into_result(self) -> Result<T, ApiError> {
+        match self {
+            Outcome::Response(response) => Ok(response),
+            Outcome::Error(error) => Err(error),
+        }
+    }
+}
+
+pub type ReplyOutcome = Outcome<ClientResponse>;
 
 impl std::fmt::Display for ApiError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

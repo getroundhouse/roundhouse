@@ -1,7 +1,7 @@
 //! How many of the calls that count against GitHub's hourly limit the hub makes to read pull requests: a steady
 //! number a minute for reads nobody is waiting on, with room for a burst, and never more than the limit can spare. The
-//! limit is shared with every agent's own `gh` and whatever else the user runs, so a read nobody is waiting on leaves
-//! part of it alone.
+//! limit is shared with every agent's own `gh` and whatever else the user runs, so a read nobody is waiting on, or one
+//! an agent asks for, leaves part of it alone.
 
 use std::time::{Duration, Instant};
 
@@ -65,12 +65,13 @@ impl Budget {
 
     /// Whether a read can spend `calls` now, or else when it's worth asking again. One someone is waiting on goes at
     /// once, ahead of the steady rate, unless GitHub has nothing left to give it. One nobody is waiting on waits for
-    /// the steady rate, and while GitHub's limit is down to the part kept for everything else, for it to reset.
+    /// the steady rate, and while GitHub's limit is down to the part kept for everything else, for it to reset. One an
+    /// agent asks for goes at once too, but not into the part kept for everything else.
     pub(super) fn allows(&self, calls: u32, asked: Asked, now: Instant) -> Result<(), Instant> {
         if let Some(said) = self.github.as_ref().filter(|said| now < said.resets_at) {
             let kept = match asked {
                 Asked::Waiting => 0,
-                Asked::InTurn => said.limit.saturating_mul(KEPT_FOR_OTHERS_PERCENT) / 100,
+                Asked::Agent | Asked::InTurn => said.limit.saturating_mul(KEPT_FOR_OTHERS_PERCENT) / 100,
             };
             if said.remaining.saturating_sub(said.spent_since) < calls.saturating_add(kept) {
                 return Err(said.resets_at);

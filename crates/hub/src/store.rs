@@ -39,6 +39,7 @@ mod subagents;
 #[cfg(test)]
 pub(crate) mod tests;
 mod titles;
+mod tools;
 mod workspaces;
 
 use schema::{migrate, open_connection};

@@ -12,13 +12,15 @@ use protocol::client::{ApiError, ErrorCode};
 use protocol::frame::{self, Call};
 use protocol::model::{RunId, SessionId};
 use protocol::versions::Versions;
-use protocol::worker::{WORKER_PROTOCOL_VERSION, WorkerFrame, WorkerOutcome, WorkerRequest, WorkerResponse};
+use protocol::worker::{ToWorker, WORKER_PROTOCOL_VERSION, WorkerFrame, WorkerRequest, WorkerResponse};
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::sync::{mpsc, watch};
 use tokio::task::JoinSet;
 use tracing::{error, info, warn};
 
+use crate::asks::Asks;
 use crate::deleting::Deleter;
+use crate::tools::Tools;
 use crate::{git, setup};
 
 mod agent;
@@ -71,6 +73,9 @@ struct State {
     /// How many one-off calls have started, which numbers their records.
     calls: AtomicU64,
     frames: mpsc::Sender<WorkerFrame>,
+    /// What the worker has asked its hub and waits to hear.
+    asks: Arc<Asks>,
+    tools: Arc<Tools>,
 }
 
 impl State {
@@ -92,6 +97,7 @@ where
 {
     let (frames, frames_rx) = mpsc::channel::<WorkerFrame>(1024);
     let writer_task = tokio::spawn(write_frames(writer, frames_rx));
+    let asks = Arc::new(Asks::new(frames.clone()));
 
     let state = Arc::new(State {
         config,
@@ -102,6 +108,8 @@ where
         stopping: watch::Sender::new(false),
         calls: AtomicU64::new(0),
         frames: frames.clone(),
+        tools: Arc::new(Tools::new(asks.clone())),
+        asks,
     });
     let forwarders = Arc::new(tokio::sync::Mutex::new(JoinSet::new()));
 
@@ -122,27 +130,7 @@ where
             error!("frame from the hub is too large");
             break;
         }
-        let Call { id, request } = match frame::read_call::<WorkerRequest>(&line) {
-            Ok(call) => call,
-            Err(e) => {
-                warn!("ignoring a frame that didn't parse: {e}");
-                continue;
-            }
-        };
-        // Each request runs on a task of its own, so a stop read after this could otherwise be handled
-        // before the setup it's for has begun.
-        if matches!(request, Ok(WorkerRequest::SetupWorkspace { .. })) {
-            setup_requested(&state);
-        }
-        let state = state.clone();
-        let forwarders = forwarders.clone();
-        tokio::spawn(async move {
-            let outcome = match handle(&state, &forwarders, request).await {
-                Ok(response) => WorkerOutcome::Response(response),
-                Err(e) => WorkerOutcome::Error(e),
-            };
-            let _ = state.frames.send(WorkerFrame::Reply { id, outcome }).await;
-        });
+        take(&state, &forwarders, &line);
     }
 
     info!("hub stream closed, stopping agents");
@@ -152,6 +140,32 @@ where
     let _ = writer_task.await;
 }
 
+/// Takes one line from the hub: an answer to something the worker asked, or a call, which is answered on a task of its
+/// own.
+fn take(state: &Arc<State>, forwarders: &Arc<tokio::sync::Mutex<JoinSet<()>>>, line: &[u8]) {
+    let Call { id, request } = match ToWorker::decode(line) {
+        Ok(ToWorker::Call(call)) => call,
+        Ok(ToWorker::Answer(answer)) => {
+            state.asks.answer(answer);
+            return;
+        }
+        Err(e) => {
+            warn!("ignoring a frame that didn't parse: {e}");
+            return;
+        }
+    };
+    // Each request runs on a task of its own, so a stop read after this could otherwise be handled
+    // before the setup it's for has begun.
+    if matches!(request, Ok(WorkerRequest::SetupWorkspace { .. })) {
+        setup_requested(state);
+    }
+    let (state, forwarders) = (state.clone(), forwarders.clone());
+    tokio::spawn(async move {
+        let outcome = handle(&state, &forwarders, request).await.into();
+        let _ = state.frames.send(WorkerFrame::Reply { id, outcome }).await;
+    });
+}
+
 async fn stop_everything(state: &State, forwarders: &tokio::sync::Mutex<JoinSet<()>>) {
     {
         // Waits out a start in flight, so its agent is on the list below.
@@ -159,6 +173,7 @@ async fn stop_everything(state: &State, forwarders: &tokio::sync::Mutex<JoinSet<
         state.shutting_down.store(true, Ordering::SeqCst);
     }
     state.stopping.send_replace(true);
+    state.asks.close();
     stop_setup_script(state);
     let agents: Vec<_> = state.agents.lock().values().map(|agent| agent.process.clone()).collect();
     let mut stops = JoinSet::new();
@@ -166,6 +181,9 @@ async fn stop_everything(state: &State, forwarders: &tokio::sync::Mutex<JoinSet<
         stops.spawn(async move { agent.stop().await });
     }
     stops.join_all().await;
+    // After the agents, so their connections close first, and the port isn't left waiting out the server's closes for
+    // the next worker to listen on.
+    state.tools.stop().await;
     let mut forwarders = std::mem::take(&mut *forwarders.lock().await);
     while forwarders.join_next().await.is_some() {}
 }
@@ -304,6 +322,7 @@ async fn handle(
         WorkerRequest::AgentStop { session_id } => stop_agent(state, &session_id).await,
         WorkerRequest::TitleFor { agent, prompt, images } => title_for(state, agent, &prompt, &images).await,
         WorkerRequest::AccountFor { agent } => account_for(state, agent).await,
+        WorkerRequest::ServeTools { port } => Ok(WorkerResponse::ToolsServing { port: state.tools.serve(port).await? }),
     }
 }
 

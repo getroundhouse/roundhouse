@@ -2,10 +2,12 @@
 //! them, for tests.
 
 mod activity;
+mod cache;
 mod drafts;
 mod first;
 mod providers;
 mod subagents;
+mod tools;
 
 /// Applied in order. `PRAGMA user_version` records how many have run.
 pub(super) const MIGRATIONS: &[&str] = &[
@@ -372,21 +374,8 @@ pub(super) const MIGRATIONS: &[&str] = &[
     // `activity`, since they're long.
     activity::BY_SESSION,
     activity::BY_WORKSPACE,
-    // What the API's cache holds of each session's conversation, as its agent's newest request left it, which the
-    // record shows, so it moves the revision.
-    r"
-    ALTER TABLE sessions ADD COLUMN prompt_cache TEXT;
-    DROP TRIGGER sessions_rev_on_update;
-    CREATE TRIGGER sessions_rev_on_update
-        AFTER UPDATE OF workspace_id, agent, model, permission_mode, status, title, closed_at_ms, reply_seq, read_seq,
-            background_tasks, title_source, queued, queue_held, turn_started_at_ms, effort, context, account_id,
-            user_active_at_ms, prompt_cache
-        ON sessions
-        WHEN NEW.rev = OLD.rev BEGIN
-        UPDATE counters SET value = value + 1 WHERE name = 'rev';
-        UPDATE sessions SET rev = (SELECT value FROM counters WHERE name = 'rev') WHERE rowid = NEW.rowid;
-    END;
-",
+    // What the API's cache holds of each session's conversation, in `cache`.
+    cache::PROMPT_CACHE,
     // What's typed and attached in each session's composer and not sent, and which files a client added, in `drafts`.
     drafts::DRAFT,
     drafts::ADDED_BY_CLIENT,
@@ -395,4 +384,6 @@ pub(super) const MIGRATIONS: &[&str] = &[
     providers::INSTANCES,
     // The model each subagent runs on, which its record shows.
     subagents::MODELS,
+    // The port each workspace's worker last served its tools on, and each session's token for them, in `tools`.
+    tools::PORTS_AND_TOKENS,
 ];

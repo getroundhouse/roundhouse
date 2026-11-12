@@ -73,6 +73,9 @@ pub(crate) async fn start_agent(
     if let Some(agent) = state.agents.lock().get(&session_id).filter(|a| !a.process.is_gone()) {
         return Ok(WorkerResponse::AgentStarted { pid: agent.process.pid(), run: agent.run, already_running: true });
     }
+    if let Some(token) = spec.tools_token.clone() {
+        state.tools.admit(token, session_id.clone());
+    }
     let (tx, rx) = mpsc::channel(1024);
     let options = AgentOptions {
         binary: binary(state),
