@@ -302,14 +302,37 @@ fn a_list_left_open_in_a_chat_that_stopped_showing_is_closed_when_it_shows_again
 }
 
 #[gpui_kit::test]
-fn a_chat_with_one_prompt_has_no_outline(cx: &mut TestAppContext) {
+fn a_chat_with_one_long_turn_jumps_back_up_to_its_prompt(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let session = stack.chat_in_a_new_workspace();
+    stack.run(&session, "burst:3000; say:only");
+    let mut ui = Ui::open(cx, &stack);
+    ui.wait("the outline", |ui| ui.has("outline"));
+    let [only] = prompt_rows(&ui)[..] else { panic!("one prompt: {:?}", prompt_rows(&ui)) };
+    ui.wait("the end of the chat", |ui| scrolled_to(ui) > only);
+
+    jump_to(&mut ui, only);
+
+    assert_eq!(scrolled_to(&ui), only, "the prompt is at the top");
+    assert!(selected(&mut ui, row_id("outline-tick", only)), "and its tick is lit");
+}
+
+/// The list opens once the pointer moves over the ticks, so one tick alone would be a small place to find.
+#[gpui_kit::test]
+fn a_lone_tick_is_as_easy_to_rest_on_as_three(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let session = stack.chat_in_a_new_workspace();
     stack.run(&session, "say:only");
     let mut ui = Ui::open(cx, &stack);
-    ui.wait("the reply", |ui| ui.assistant_text().contains("only"));
+    ui.wait("the outline", |ui| ui.has("outline"));
+    let only = row_id("outline-tick", prompt_rows(&ui)[0]);
+    let (ticks, tick) = (bounds(&mut ui, "outline"), bounds(&mut ui, only));
+    assert!(ticks.size.height >= tick.size.height * 3., "three ticks tall: {ticks:?} {tick:?}");
+    assert!(!tick.contains(&ticks.center()), "so the middle, where the pointer goes, is past the tick: {ticks:?}");
 
-    assert!(!ui.has("outline"));
+    open_the_list(&mut ui);
+
+    assert!(ui.has("outline-list"));
 }
 
 fn open_the_list(ui: &mut Ui<'_>) {
