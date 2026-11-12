@@ -76,3 +76,24 @@ async fn an_ask_nobody_waits_for_any_more_is_forgotten() {
 
     assert!(asks.waiting.lock().as_ref().is_some_and(HashMap::is_empty));
 }
+
+/// As when a hub goes, by restarting, before it has answered, or before it heard the ask at all.
+#[tokio::test]
+async fn an_ask_still_waiting_is_asked_again_and_only_its_first_answer_is_taken() {
+    let (asks, mut sent) = asks();
+    let waiting = asks.ask("s".into(), WorkerAsk::PullRequest);
+    let next_hub = async {
+        let first = asked(&mut sent).await;
+        asks.ask_again().await;
+        let again = tokio::time::timeout(Duration::from_secs(5), asked(&mut sent)).await.expect("asked again");
+        assert_eq!(again, first, "the same ask, by the same ID");
+        asks.answer(AskAnswer { answer: again, outcome: none() });
+        asks.answer(AskAnswer { answer: first, outcome: AskOutcome::Error(ApiError::new(ErrorCode::NotFound, "no")) });
+    };
+
+    let (waiting, ()) = tokio::join!(waiting, next_hub);
+
+    assert_eq!(waiting.unwrap(), AskReply::PullRequest { pull_request: None });
+    asks.ask_again().await;
+    assert!(sent.try_recv().is_err(), "nothing is left to ask once it's answered");
+}
