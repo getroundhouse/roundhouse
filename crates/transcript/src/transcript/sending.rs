@@ -14,8 +14,8 @@ impl Transcript {
         self.send_prompt_with(Prompt::new(text), cx)
     }
 
-    /// Shows the prompt at once with what it carries, then adds each file to the session and sends the prompt, in its
-    /// place in the chat's line. If any of that fails, it takes the prompt back and hands it back with
+    /// Sends the prompt with what it carries, which the chat shows at once, on its way, as
+    /// [`client_core::OpenSession::start_sending`] says. If it isn't taken, it stops showing and is handed back with
     /// [`TranscriptEvent::NotSent`]. Returns false if there's nothing to send.
     pub fn send_prompt_with(&mut self, prompt: Prompt<FileToSend>, cx: &mut Context<Self>) -> bool {
         if !prompt.says_or_carries() {
@@ -29,17 +29,14 @@ impl Transcript {
                 m.pictures.insert(file.attachment.id.clone(), picture);
             }
         }
-        self.session.add_pending(written.on_its_way());
+        let sending = self.session.start_sending(&self.client, written);
         self.catch_up(cx);
         self.list.go_to_latest();
         cx.notify();
 
-        let client_msg_id = written.client_msg_id.clone();
-        let sending = self.client.start_sending(&self.session_id, written);
         cx.spawn(async move |this, cx| {
             let Err(NotTaken { error, prompt }) = sending.recv().await else { return };
             let _ = this.update(cx, |t, cx| {
-                t.session.remove_pending(&client_msg_id);
                 t.catch_up(cx);
                 cx.emit(TranscriptEvent::NotSent { message: not_sent(&error), prompt });
                 cx.notify();
