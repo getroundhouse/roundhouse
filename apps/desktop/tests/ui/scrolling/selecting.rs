@@ -16,6 +16,7 @@ use crate::support::{Stack, Ui};
 
 mod calls;
 mod kinds;
+mod tab;
 
 /// A reply the tests find by what it says.
 const LAST: &str = "Signal boxes keep ledgers, and the lever frame holds each route clear.";

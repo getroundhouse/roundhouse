@@ -1,7 +1,8 @@
 //! The recorded texts that sit in a row of their own, drawn by the transcript from the kit's blocks rather than by the
 //! kit's text view, so what's selected of them, and what's found in them, is the transcript's to keep while their rows
 //! are out of sight. They're the agent's replies and thoughts, prompts, a plan to approve, a compaction's summary,
-//! and the prose a call in a row of its own shows of its own, such as a subagent's report. `docs/ui.md` has why.
+//! the prose a call in a row of its own shows of its own, such as a subagent's report, and what the subagent tab says
+//! its subagent was asked and reported, above and below its rows. `docs/ui.md` has why.
 //!
 //! The kit parses the Markdown and draws each block as its text view would, through its `editor_host`. Each
 //! paragraph, heading, code block and table cell is a leaf, keyed by its place in the text. The kit says where it drew
@@ -9,16 +10,17 @@
 //! which is how what's selected and what's found are drawn. `crate::selection` has the rest.
 //!
 //! A text is parsed the first time its row is drawn, which is soon after the row loads, since the list measures
-//! loaded rows out of sight. What it shows is kept while its row is loaded, or it's selected, for a copy. The blocks
+//! loaded rows out of sight. What it shows is kept while its row is loaded, or it's selected, for a copy, and the
+//! subagent tab's head and foot while the tab is open. The blocks
 //! it's drawn from are kept for a long one, and for a short one only while it's among those drawn most recently, as
 //! `budget` says, and a short one is parsed again when it's next drawn. One over [`AT_ONCE`] is parsed on
 //! another thread, and draws nothing until it's in, when its row is measured again. The text the agent is still
 //! writing, and a prompt being sent, are drawn by the kit's text view, which `crate::long_texts` keeps. Once it's
 //! recorded, its row goes on drawing that view until the record's own parse is in, so it doesn't go blank between.
 //!
-//! A row draws its event's texts through [`Prose::drawing_event`], which hides each it no longer draws, such as a
-//! thought that's been closed, so a copy has only what's shown. A hidden text is kept, as any other is, so it's drawn
-//! again at once when it's shown again.
+//! A row draws its event's texts through [`Prose::drawing`], as the subagent tab draws its head and foot, which hides
+//! each text it no longer draws, such as a thought that's been closed, so a copy has only what's shown. A hidden text
+//! is kept, as any other is, so it's drawn again at once when it's shown again.
 
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
@@ -45,12 +47,11 @@ mod parse;
 /// takes under a millisecond, and a longer one is parsed on another thread.
 const AT_ONCE: usize = 4 * 1024;
 
-/// Where a text is in the chat: the event whose row draws it, which of the event's blocks it's drawn in, and where it
-/// is among the texts that block draws. Ordered as the chat is, since a row draws its blocks in order, and a block its
-/// texts.
+/// Where a text is in the chat: what draws it, which of its blocks it's drawn in, and where it is among the texts that
+/// block draws. Ordered as the chat is, since a row draws its blocks in order, and a block its texts.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) struct TextAt {
-    pub(crate) seq: Seq,
+    pub(crate) of: Of,
     pub(crate) block: usize,
     pub(crate) among: Among,
 }
@@ -58,19 +59,37 @@ pub(crate) struct TextAt {
 impl TextAt {
     /// The only text the `block`th block of the event at `seq` draws, such as a reply's.
     pub(crate) fn only(seq: Seq, block: usize) -> Self {
-        Self { seq, block, among: Among::Only }
+        Self { of: Of::Event(seq), block, among: Among::Only }
     }
 
-    /// The first place in the row of the event at `seq`.
-    fn first_in(seq: Seq) -> Self {
-        Self::only(seq, 0)
+    /// The first place in what `of` draws, which is the only text's when it draws one, as the subagent tab's head and
+    /// foot do.
+    pub(crate) fn first_of(of: Of) -> Self {
+        Self { of, block: 0, among: Among::Only }
     }
+
+    /// The event its images are found by, if it's in one's row.
+    pub(crate) fn seq(self) -> Option<Seq> {
+        match self.of {
+            Of::Event(seq) => Some(seq),
+            Of::Head | Of::Foot => None,
+        }
+    }
+}
+
+/// What draws a text, in the chat's order: the subagent tab's head, which says what its subagent was asked above the
+/// tab's first row, an event's row, or the tab's foot, its report, below the last.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) enum Of {
+    Head,
+    Event(Seq),
+    Foot,
 }
 
 /// Where a text is among those one block draws, in the order the block draws them. Each is known by what it is, rather
 /// than by how many texts the block drew before it, so it keeps its place while the block draws more or fewer, such as
 /// a call that's opened or closed, and no other text takes it. Ordered as declared, so `Only` is the first place in a
-/// block, which [`TextAt::first_in`] counts on.
+/// block, which [`TextAt::first_of`] counts on, as the first place in what draws it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) enum Among {
     /// The only text the block draws, such as a reply's.
@@ -94,8 +113,8 @@ struct Store {
     frame: u64,
     /// How many short texts have been parsed since the blocks kept were last looked at.
     parses: u32,
-    /// The texts drawn so far in the row of the event being drawn, if one is.
-    in_row: Option<Vec<TextAt>>,
+    /// What's being drawn, if anything is, such as an event's row, and the texts it's drawn so far.
+    in_row: Option<(Of, Vec<TextAt>)>,
 }
 
 enum Text {
@@ -172,16 +191,16 @@ impl Prose {
         self.0.borrow_mut().frame_started();
     }
 
-    /// Draws the row of the event at `seq` with `draw`, and hides each of the event's texts it no longer draws, such
-    /// as one in a fold that's been closed, so a copy has only what's shown. Only the event's own texts are looked at,
-    /// so a row costs the same however many the chat holds.
-    pub(crate) fn drawing_event<T>(&self, seq: Seq, draw: impl FnOnce() -> T) -> T {
-        let outer = self.0.borrow_mut().in_row.replace(Vec::new());
+    /// Draws what `of` says with `draw`, such as the row of an event, and hides each of its texts it no longer draws,
+    /// such as one in a fold that's been closed, so a copy has only what's shown. Only its own texts are looked at, so
+    /// a row costs the same however many the chat holds.
+    pub(crate) fn drawing<T>(&self, of: Of, draw: impl FnOnce() -> T) -> T {
+        let outer = self.0.borrow_mut().in_row.replace((of, Vec::new()));
         let drawn = draw();
         let mut texts = self.0.borrow_mut();
-        let these = std::mem::replace(&mut texts.in_row, outer).unwrap_or_default();
+        let these = std::mem::replace(&mut texts.in_row, outer).map(|(_, these)| these).unwrap_or_default();
         let Store { texts, hidden, .. } = &mut *texts;
-        let in_row = texts.range(TextAt::first_in(seq)..).take_while(|(at, _)| at.seq == seq);
+        let in_row = texts.range(TextAt::first_of(of)..).take_while(|(at, _)| at.of == of);
         for at in in_row.map(|(at, _)| *at) {
             if these.contains(&at) {
                 hidden.remove(&at);
@@ -201,8 +220,15 @@ impl Prose {
         images: Option<Images>,
         until_parsed: impl FnOnce() -> Option<AnyElement>,
     ) -> AnyElement {
-        let in_row = self.0.borrow_mut().in_row.as_mut().map(|in_row| in_row.push(written.at)).is_some();
-        debug_assert!(in_row, "a text was drawn outside an event's row, so it's never hidden once it isn't drawn");
+        let drawing = self.0.borrow_mut().in_row.as_mut().map(|(of, these)| {
+            these.push(written.at);
+            *of
+        });
+        debug_assert_eq!(
+            drawing,
+            Some(written.at.of),
+            "a text drawn outside what draws it is never hidden once it isn't"
+        );
         let source = images_apart(written.text);
         let (text, marks) = match self.parsed(written.at, &source) {
             Some(parsed) => {
@@ -257,7 +283,7 @@ impl Prose {
                 let drawn = texts.frame;
                 texts.texts.insert(at, Text::Parsed { parsed: Rc::new(parsed), drawn })
             };
-            let _ = transcript.update(cx, |transcript, cx| transcript.redrawn(at.seq, cx));
+            let _ = transcript.update(cx, |transcript, cx| transcript.redrawn(at.of, cx));
         });
         texts.texts.insert(at, Text::Parsing { source: source.to_owned(), _task: parsing });
     }
@@ -283,9 +309,13 @@ impl Prose {
         Some((first, shown.next_back().copied().unwrap_or(first)))
     }
 
-    /// Lets go of each text whose event isn't loaded, but for those in `selected`, so a copy still has them.
+    /// Lets go of each text whose event isn't loaded, but for those in `selected`, so a copy still has them. The
+    /// subagent tab's head and foot are its subagent's, and kept with the tab.
     pub(crate) fn let_go(&self, log: &SessionLog, selected: Option<&RangeInclusive<TextAt>>) {
-        let loaded = |at: &TextAt| log.row_of(at.seq).is_some_and(|row| matches!(log.row(row), Row::Event(_)));
+        let loaded = |at: &TextAt| match at.of {
+            Of::Event(seq) => log.row_of(seq).is_some_and(|row| matches!(log.row(row), Row::Event(_))),
+            Of::Head | Of::Foot => true,
+        };
         let selected = |at: &TextAt| selected.is_some_and(|selected| selected.contains(at));
         let mut texts = self.0.borrow_mut();
         let Store { texts, hidden, .. } = &mut *texts;
@@ -317,11 +347,19 @@ mod tests {
     use gpui_kit::WeakEntity;
     use protocol::event::{ContentBlock, EventBody};
 
-    use super::{Prose, TextAt};
+    use super::{Of, Prose, TextAt};
     use crate::fixtures::{event, log};
 
     fn at(seq: u64) -> TextAt {
         TextAt::only(seq, 0)
+    }
+
+    #[test]
+    fn the_subagent_tab_s_head_comes_before_every_row_s_texts_and_its_foot_after() {
+        let (head, foot) = (TextAt::first_of(Of::Head), TextAt::first_of(Of::Foot));
+        let rows = [TextAt::only(0, 0), TextAt::only(u64::MAX, usize::MAX)];
+
+        assert!(rows.iter().all(|row| head < *row && *row < foot), "{head:?} {rows:?} {foot:?}");
     }
 
     #[test]
@@ -341,5 +379,17 @@ mod tests {
 
         assert_eq!(kept, [false, true, true], "what's loaded, and what's selected");
         assert!(prose.leaves_of(at(2)).is_none(), "until it isn't");
+    }
+
+    #[test]
+    fn the_subagent_tab_s_head_and_foot_are_kept_whatever_the_log_lets_go_of() {
+        let prose = Prose::new(WeakEntity::new_invalid());
+        let (head, foot) = (TextAt::first_of(Of::Head), TextAt::first_of(Of::Foot));
+        prose.parsed(head, "What it was asked");
+        prose.parsed(foot, "What it reported");
+
+        prose.let_go(&log([]), None);
+
+        assert!(prose.leaves_of(head).is_some() && prose.leaves_of(foot).is_some());
     }
 }

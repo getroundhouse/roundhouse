@@ -11,6 +11,7 @@ use protocol::event::AgentTask;
 use protocol::model::{PromptCache, Seq, Session, SessionStatus, Subagent, SubagentStatus};
 
 use super::Transcript;
+use crate::prose::Of;
 
 /// How often the time a turn has taken is drawn again while the agent works, for its tenths.
 const TICK: Duration = Duration::from_millis(100);
@@ -132,9 +133,10 @@ impl Transcript {
         // The tab draws what its subagent was asked above its first row, and its report in its last. Its last words go
         // once its report says them, from whichever row they're in.
         if shown {
-            let count = self.list.row_count();
-            self.list.out_of_date(0..1);
-            self.list.out_of_date(count.saturating_sub(1)..count);
+            let tail = self.list.row_count().saturating_sub(1);
+            for row in [Of::Head, Of::Foot].into_iter().filter_map(|of| crate::rows::tab_row_of(of, tail)) {
+                self.list.out_of_date(row..row + 1);
+            }
             let repeated = {
                 let m = self.model.borrow();
                 self.session.read(|log| crate::rows::rows_repeating_report(log, &m))

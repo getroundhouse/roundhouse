@@ -16,10 +16,10 @@ const ADVISOR_LINE: &str = "Ask the advisor";
 /// What the advisor says, in words nothing else in the chat says as its own text.
 const ADVICE: &str = "Test the points before the timetable changes.";
 /// The fake agent's subagent's call, and what it's asked, which the prompt that starts it doesn't say with the stop.
-const SUBAGENT_LINE: &str = "Look around";
-const ASKED: &str = "Look around.";
+pub(super) const SUBAGENT_LINE: &str = "Look around";
+pub(super) const ASKED: &str = "Look around.";
 /// What it reports, once it's done.
-const REPORT: &str = "There's a README here.";
+pub(super) const REPORT: &str = "There's a README here.";
 
 /// What the advisor said is copied with the rest while its call is open, between what came before and after it, and
 /// isn't once it's closed.
@@ -88,17 +88,23 @@ fn a_drag_held_past_a_long_ask_of_a_subagent_scrolls_its_area_on(cx: &mut TestAp
 }
 
 /// Words enough to be scrolled far past the area they're in, that nothing else in the chat says.
-fn long() -> String {
+pub(super) fn long() -> String {
     format!("{}Junctions last", "Timetables, sidings and points. ".repeat(120))
 }
 
-/// Opens the call whose line says `line`, presses in its text whose ID starts with `part`, and holds a drag below the
-/// area that scrolls it, which the area should follow to the text's end.
+/// Opens the call whose line says `line`, and holds a drag from its text whose ID starts with `part`, as [`held_past`]
+/// does.
 fn held_past_its_area(ui: &mut Ui<'_>, line: &str, part: &str) {
     settled(ui);
     ui.click_labelled(line, 0);
     settled(ui);
-    let text = ui.shown(part).into_iter().next().expect("the text, open");
+    held_past(ui, part);
+}
+
+/// Presses in the text whose ID starts with `part`, and holds a drag below the area that scrolls it, which the area
+/// should follow to the text's end.
+pub(super) fn held_past(ui: &mut Ui<'_>, part: &str) {
+    let text = ui.shown(part).into_iter().next().expect("the text, drawn");
     let area = bounds(ui, ElementId::from((ElementId::from((text.clone(), "scroll")), "area")));
     let before = bounds(ui, text.clone());
     let start = point(area.left() + px(60.), area.top() + px(20.));

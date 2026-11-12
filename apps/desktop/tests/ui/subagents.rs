@@ -22,7 +22,7 @@ const SUBAGENT_CALL: &str = "List what's here";
 /// The line of the agent's own call after the subagent, which runs something.
 const COMMAND_LINE: &str = "Run";
 
-fn showing(ui: &Ui<'_>) -> Showing {
+pub(crate) fn showing(ui: &Ui<'_>) -> Showing {
     ui.cx.read_entity(&ui.pane().unwrap(), |p, _| p.showing())
 }
 
@@ -41,7 +41,7 @@ fn a_finished_subagent(ui: &mut Ui<'_>) -> SharedString {
 
 /// Has the agent start a subagent for `what` and finish its turn. The ID of the button on its line that opens the
 /// subagent tab, once it's there.
-fn a_subagent_for(ui: &mut Ui<'_>, what: &str) -> SharedString {
+pub(crate) fn a_subagent_for(ui: &mut Ui<'_>, what: &str) -> SharedString {
     ui.input(&format!("agent:{what}; tool:echo after; say:done"));
     ui.press("enter");
     ui.wait_idle_with("the turn to finish", |text| text.contains("done"));

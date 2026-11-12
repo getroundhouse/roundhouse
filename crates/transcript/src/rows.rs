@@ -21,7 +21,7 @@ use crate::find::{self, FindLook, Marks, Part};
 use crate::item_key::ItemKey;
 use crate::linked_images::LinkedImages;
 use crate::long_texts::LongTexts;
-use crate::prose::Prose;
+use crate::prose::{Of, Prose};
 use crate::selection::Selection;
 use crate::transcript::{Model, Transcript};
 use crate::{calls, questions};
@@ -44,8 +44,8 @@ mod tools;
 mod turn_end;
 mod turn_times;
 
-pub(crate) use alone::rows_repeating_report;
 pub use alone::subagent_standing;
+pub(crate) use alone::{row_of as tab_row_of, rows_repeating_report};
 pub(crate) use around::{NEAR, REACH};
 pub(crate) use column::room_under;
 pub use column::{ABOVE_THE_COMPOSER, around_column, in_column};
@@ -94,8 +94,9 @@ pub(crate) fn render_row(
         return Some(column(drawn).into_any_element());
     }
     // The subagent tab starts with what it was asked and ends with its report.
-    let head = (ix == 0).then(|| alone::head(&m, &shared.texts, cx)).flatten();
-    let foot = (ix == tail).then(|| alone::foot(&m, &shared.texts, cx)).flatten();
+    let here = |of| alone::row_of(of, tail) == Some(ix);
+    let head = here(Of::Head).then(|| shared.prose.drawing(Of::Head, || alone::head(&m, shared, cx))).flatten();
+    let foot = here(Of::Foot).then(|| shared.prose.drawing(Of::Foot, || alone::foot(&m, shared, cx))).flatten();
     Some(column(v_flex().w_full().children(head).child(drawn).children(foot)).into_any_element())
 }
 
@@ -159,9 +160,9 @@ fn render_row_inner(
         // them once it's drawn elsewhere.
         Shown::Event(row, event, around) => {
             attachments::fetch_missing(model, &shared.this, Some(event.seq), around.images(), cx);
-            shared.prose.drawing_event(row, || render_event(&event, &around, Some(row), shared, &find, cx))
+            shared.prose.drawing(Of::Event(row), || render_event(&event, &around, Some(row), shared, &find, cx))
         }
-        Shown::InCall(seq) => shared.prose.drawing_event(seq, empty),
+        Shown::InCall(seq) => shared.prose.drawing(Of::Event(seq), empty),
         Shown::Unloaded => return None,
     })
 }

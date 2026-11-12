@@ -9,7 +9,7 @@ use protocol::event::LinkedImage;
 use super::Shared;
 use super::tools::Toggle;
 use crate::find::{self, Part};
-use crate::prose::{Among, Images, TextAt, Written};
+use crate::prose::{Among, Images, Of, TextAt, Written};
 
 /// A recorded text, the `part` of the item the block `toggle` draws, as the row it's in draws it, with the images the
 /// hub kept of those it points to, if it can point to any, and with its matches. In a row of its own, the transcript
@@ -31,7 +31,7 @@ pub(super) fn written(
         };
         return find::markdown_view(view, &id, find, area);
     };
-    let at = TextAt { seq: toggle.seq, block, among: among(part) };
+    let at = TextAt { of: Of::Event(toggle.seq), block, among: among(part) };
     recorded(&Written { area, ..Written::found(at, &id, find, text) }, images, shared)
 }
 
@@ -45,7 +45,7 @@ fn among(part: Part) -> Among {
 /// can point to any. Until it's parsed, it's the view it was written or sent into, if that's still kept and find looks
 /// in it, so it doesn't go blank between.
 pub(super) fn recorded(written: &Written<'_>, images: Option<&[LinkedImage]>, shared: &Shared) -> AnyElement {
-    let resolver = || images.map(|images| shared.linked.resolver(written.at.seq, images));
+    let resolver = || Some(shared.linked.resolver(written.at.seq()?, images?));
     let meanwhile = || {
         let (id, find) = written.found?;
         let view = shared.texts.kept(id, written.text)?;
