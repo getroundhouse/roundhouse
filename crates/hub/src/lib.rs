@@ -23,3 +23,10 @@ mod worker_link;
 
 pub use crate::error::HubError;
 pub use crate::run::{HubConfig, run};
+
+/// The names the hub picks a new workspace's from, so a test can have git refuse every one.
+#[cfg(feature = "testing")]
+#[must_use]
+pub fn workspace_names() -> &'static [&'static str] {
+    names::NAMES
+}

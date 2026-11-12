@@ -5,6 +5,10 @@ edition.workspace = true
 publish.workspace = true
 license.workspace = true
 
+[features]
+# What tests of the hub from outside it need, such as the names it picks from.
+testing = []
+
 [dependencies]
 async-trait.workspace = true
 parking_lot.workspace = true

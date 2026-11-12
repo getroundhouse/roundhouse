@@ -6,7 +6,7 @@ use protocol::model::InstanceId;
 use rusqlite::{Connection, Row, params};
 use serde::{Deserialize, Serialize};
 
-use super::{Store, StoreError, from_text, lock, text_of};
+use super::{Store, StoreError, from_text, lock, now_ms, text_of};
 
 #[cfg(test)]
 mod tests;
@@ -61,6 +61,13 @@ pub(super) fn record_instance(
 }
 
 impl Store {
+    /// Before its provider is asked to make it again, once it's been destroyed, as for a workspace being made that
+    /// has taken another name. One still recorded fails, as with [`record_instance`].
+    pub fn instance_creating(&self, id: &InstanceId, provider: &str) -> Result<(), StoreError> {
+        record_instance(&lock(&self.writer), id, provider, InstanceStage::Creating, now_ms())?;
+        Ok(())
+    }
+
     /// Its provider made it.
     pub fn instance_made(&self, id: &InstanceId) -> Result<(), StoreError> {
         let (creating, ready) = (text_of(&InstanceStage::Creating), text_of(&InstanceStage::Ready));

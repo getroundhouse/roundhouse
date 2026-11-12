@@ -1,6 +1,7 @@
-use protocol::model::{PrState, PullRequest, PullRequestFound, WorkspaceId};
+use protocol::model::{PrState, PullRequest, PullRequestFound, WorkspaceId, WorkspaceStatus};
 
-use super::super::tests::store_with_session;
+use super::super::tests::{store_with_session, workspace_w};
+use super::super::{Made, now_ms};
 use super::super::{Store, older, schema};
 
 fn open() -> PullRequest {
@@ -64,4 +65,33 @@ fn a_workspace_from_before_pull_requests_were_kept_has_not_been_looked_at() {
     let store = older::store_from_before(dir.path(), schema::BEFORE_PULL_REQUESTS, "");
 
     assert_eq!(store.get_workspace(&"w".into()).unwrap().pull_request, None);
+}
+
+/// A workspace on its way keeps its ID through a new name, so every client's note for it stays where it is.
+#[test]
+fn only_a_workspace_being_made_takes_a_new_name_and_only_one_nobody_else_has() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_session(dir.path());
+    let making = WorkspaceId::from("making");
+    let before = workspace_w(now_ms());
+    let workspace = protocol::model::Workspace {
+        id: making.clone(),
+        name: "birch".into(),
+        branch: "birch".into(),
+        instance_id: "making".into(),
+        status: WorkspaceStatus::Creating,
+        ..before.clone()
+    };
+    let Some(Made::New(made)) = store.insert_workspace(&workspace, None).unwrap() else { panic!("not made") };
+
+    let renamed = store.rename_unready_workspace(&making, "cedar").unwrap().unwrap();
+    let taken = store.rename_unready_workspace(&making, "alder").unwrap();
+    let ready = store.rename_unready_workspace(&before.id, "elm").unwrap();
+
+    assert_eq!((renamed.name.as_str(), renamed.branch.as_str()), ("cedar", "cedar"));
+    assert!(renamed.rev > made.rev);
+    assert_eq!(taken, None, "w has it");
+    assert_eq!(ready, None, "w has a worktree by its name");
+    assert_eq!(store.get_workspace(&making).unwrap().name, "cedar");
+    assert_eq!(store.get_workspace(&before.id).unwrap().name, "alder");
 }

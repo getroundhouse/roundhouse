@@ -64,9 +64,12 @@ fn the_feed_reports_what_a_sidebar_shows() {
     let repo = client.repo_add(stack.repo().to_str().unwrap()).unwrap();
     assert_eq!(next_notice(&feed, "the repo"), HubNotice::Repo(repo.clone()));
     let workspace = client.workspace_create(&repo.id, Some("watched".into()), None, None).unwrap();
-    // Ready, then its setup running and finishing.
+    // On its way as soon as it's recorded, then ready, then its setup running and finishing.
+    let HubNotice::Workspace(making) = next_notice(&feed, "the workspace on its way") else { panic!() };
+    assert_eq!((making.id.as_str(), making.status), (workspace.id.as_str(), WorkspaceStatus::Creating));
     let HubNotice::Workspace(ready) = next_notice(&feed, "the workspace") else { panic!() };
-    assert_eq!(ready.id, workspace.id);
+    assert_eq!((ready.id.as_str(), ready.status), (workspace.id.as_str(), WorkspaceStatus::Ready));
+    assert!(ready.rev > making.rev);
     wait_for_setup(&client, &workspace.id);
     for _ in 0..2 {
         assert!(matches!(next_notice(&feed, "setup"), HubNotice::Workspace(_)));
@@ -104,6 +107,26 @@ fn the_feed_reports_what_a_sidebar_shows() {
     let restored = client.workspace_restore(&workspace.id).unwrap();
     let HubNotice::Workspace(seen) = sidebar.next_notice(&feed, "the restore") else { panic!() };
     assert_eq!((seen.id.as_str(), seen.status), (restored.id.as_str(), WorkspaceStatus::Ready));
+}
+
+/// So a client shows it on its way until it goes.
+#[test]
+fn a_workspace_that_cant_be_made_is_announced_on_its_way_and_then_removed() {
+    let stack = Stack::start();
+    let client = stack.client();
+    let feed = client.feed_subscribe().unwrap();
+    let repo = client.repo_add(stack.repo().to_str().unwrap()).unwrap();
+    next_notice(&feed, "the repo");
+    std::fs::remove_dir_all(stack.repo()).unwrap();
+
+    client.workspace_create(&repo.id, Some("doomed".into()), None, None).unwrap_err();
+
+    let HubNotice::Workspace(making) = next_notice(&feed, "the workspace on its way") else { panic!() };
+    assert_eq!((making.name.as_str(), making.status), ("doomed", WorkspaceStatus::Creating));
+    let HubNotice::Removed { record, rev } = next_notice(&feed, "its removal") else { panic!() };
+    assert_eq!(record, RecordKey::Workspace { id: making.id });
+    assert!(rev > making.rev);
+    assert!(client.workspace_list(true).unwrap().is_empty());
 }
 
 #[test]
