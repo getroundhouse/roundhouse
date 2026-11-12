@@ -10,6 +10,7 @@ fn subagent(session: &str, call: &str, started_at_ms: i64, rev: u64) -> Subagent
         description: None,
         prompt: None,
         in_background: false,
+        model: None,
         status: SubagentStatus::Working,
         started_at_ms,
         ended_at_ms: None,

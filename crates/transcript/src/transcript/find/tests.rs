@@ -66,6 +66,7 @@ fn reported(call: &str, report: &str) -> Records {
         description: None,
         prompt: None,
         in_background: true,
+        model: None,
         status: SubagentStatus::Finished,
         started_at_ms: 0,
         ended_at_ms: Some(1),

@@ -55,9 +55,6 @@ fn tokens(result: &Value) -> Option<TokenUsage> {
     })
 }
 
-/// The CLI's name for the model of a message it wrote itself, such as one saying the API failed.
-const NO_MODEL: &str = "<synthetic>";
-
 /// The models the agent's own replies came from in the turn going, in the order they first did. The model the turn's
 /// `init` names isn't always the one that answers, as in plan mode.
 #[derive(Debug, Default)]
@@ -65,11 +62,11 @@ pub(super) struct TurnModels(Vec<ModelName>);
 
 impl TurnModels {
     /// Notes the model of one of the agent's own replies. A subagent's is left out, and so is a name that names no
-    /// model, or the CLI's for a message no model wrote.
+    /// model. One the CLI wrote itself names none by now.
     pub(super) fn note(&mut self, body: &EventBody) {
         let EventBody::Assistant { parent_tool_use_id: None, model: Some(model), .. } = body else { return };
         let Ok(model) = ModelName::try_from(model.clone()) else { return };
-        if model.as_str() != NO_MODEL && !self.0.contains(&model) {
+        if !self.0.contains(&model) {
             self.0.push(model);
         }
     }
@@ -126,7 +123,6 @@ mod tests {
             reply("claude-sonnet-5-5", None),
             reply("claude-fable-5-2", Some("toolu_1")),
             reply("claude-haiku-5-5", None),
-            reply(NO_MODEL, None),
             reply("claude-sonnet-5-5", None),
             reply("", None),
         ] {
@@ -134,7 +130,7 @@ mod tests {
         }
 
         let said: Vec<&str> = models.0.iter().map(ModelName::as_str).collect();
-        assert_eq!(said, ["claude-sonnet-5-5", "claude-haiku-5-5"], "not a subagent's, the CLI's own, or no name");
+        assert_eq!(said, ["claude-sonnet-5-5", "claude-haiku-5-5"], "not a subagent's, or no name");
         assert_eq!(models.take().len(), 2);
         assert!(models.take().is_empty());
     }

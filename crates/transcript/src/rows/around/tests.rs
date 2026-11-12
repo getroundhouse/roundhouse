@@ -135,6 +135,7 @@ fn working(call: &str, recent: RecentWork) -> Subagent {
         description: None,
         prompt: None,
         in_background: true,
+        model: None,
         status: SubagentStatus::Working,
         started_at_ms: 0,
         ended_at_ms: None,
