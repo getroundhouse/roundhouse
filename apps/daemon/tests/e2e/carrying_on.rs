@@ -263,8 +263,7 @@ fn a_worker_lets_go_of_what_its_hub_said_it_recorded() {
     stack.kill_hub();
 
     let instance = stack.paths().instances_dir.join(workspace.instance_id.to_string());
-    let mut next = Attached::start_in(&stack.path("workspaces"), &instance);
-    next.hello(true);
+    let mut next = Attached::next_hub(&stack.path("workspaces"), &instance);
     // What a worker kept comes straight after the hello's reply, so it would come before this one's.
     let running = next.call(2, WorkerRequest::RunningAgents);
     assert!(
