@@ -9382,9 +9382,11 @@ version = "0.1.0"
 dependencies = [
  "agents",
  "markdown",
+ "memchr",
  "parking_lot",
  "percent-encoding",
  "process",
+ "proptest",
  "protocol",
  "serde_json",
  "tempfile",

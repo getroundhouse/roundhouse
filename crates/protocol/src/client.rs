@@ -6,12 +6,13 @@ use crate::attachment::{Attachment, AttachmentBytes};
 use crate::event::SessionEvent;
 use crate::find::Found;
 use crate::model::{
-    Account, CompactionLine, DiffComment, FileContents, GitDiff, GitStatus, HubSettings, Place, PromptLine,
-    PullRequest, RecordKey, Records, Repo, Rev, Seq, Session, SessionAccount, Subagent, TitleError, Workspace,
-    WorktreeFiles,
+    Account, CompactionLine, DiffComment, FileContents, FileOpened, FilePages, GitDiff, GitStatus, HubSettings, Place,
+    PromptLine, PullRequest, RecordKey, Records, Repo, Rev, Seq, Session, SessionAccount, Subagent, TitleError,
+    Workspace, WorktreeFiles,
 };
 use crate::tail::{StreamDelta, Tail};
 
+pub mod files;
 mod request;
 
 /// The client protocol's version, apart from the worker protocol's, so a break in one doesn't break the other. It
@@ -98,6 +99,8 @@ pub enum ClientResponse {
     SessionAccount(SessionAccount),
     WorktreeFiles(WorktreeFiles),
     FileContents(FileContents),
+    FileOpened(FileOpened),
+    FilePages(FilePages),
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]

@@ -271,6 +271,13 @@ async fn handle(
         WorkerRequest::FileReadAt { path, commit, file } => {
             Ok(WorkerResponse::FileContents(crate::files::read_at(Path::new(&path), &commit, &file).await?))
         }
+        WorkerRequest::FileOpenAt { path, commit, file } => {
+            Ok(WorkerResponse::FileOpened(crate::files::open_at(Path::new(&path), &commit, &file).await?))
+        }
+        WorkerRequest::FilePages { path, commit, file, page_lines, pages } => {
+            let pages = crate::files::pages(Path::new(&path), &commit, &file, page_lines, &pages).await?;
+            Ok(WorkerResponse::FilePages(pages))
+        }
         WorkerRequest::AgentStart(spec) => start_agent(state, forwarders, spec).await,
         WorkerRequest::AgentPrompt { session_id, prompt, text, attachments } => {
             let agent = state.live_agent(&session_id);

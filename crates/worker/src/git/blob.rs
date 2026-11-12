@@ -1,6 +1,7 @@
 //! A file as a commit has it, read from the repository rather than the worktree, so a client can show what a change
 //! replaced: where it is, how big it is, and its bytes.
 
+use std::ops::ControlFlow;
 use std::path::Path;
 use std::process::Stdio;
 
@@ -9,6 +10,9 @@ use protocol::model::CommitId;
 use tokio::io::AsyncReadExt as _;
 
 use super::{command, git_error, run};
+
+/// How much of a file is read from git at a time when it's streamed: a pipe's worth, a few times over.
+const CHUNK_BYTES: usize = 256 * 1024;
 
 /// A file in a commit, by the object that holds it.
 #[derive(Debug)]
@@ -53,27 +57,76 @@ impl Blob {
         Ok(output.stdout)
     }
 
-    /// Its first `most` bytes, or all of it if it's shorter, and no more, so a big file costs only its start. Git is
-    /// stopped once they're read, if it hasn't finished writing the rest.
+    /// Its bytes, a chunk at a time, as [`stream`] gives them.
+    pub(crate) async fn stream(
+        &self,
+        worktree: &Path,
+        each: impl FnMut(&[u8]) -> ControlFlow<()>,
+    ) -> Result<Streamed, ApiError> {
+        stream(worktree, &self.object, each).await
+    }
+
+    /// Its first `most` bytes, or all of it if it's shorter, and no more, so a big file costs only its start.
     pub(crate) async fn start(&self, worktree: &Path, most: usize) -> Result<Vec<u8>, ApiError> {
-        let failed = |e: std::io::Error| git_error(format!("couldn't read {}: {e}", self.object));
-        let mut git = command(worktree, &["cat-file", "blob", &self.object])
-            .stdout(Stdio::piped())
-            .stderr(Stdio::null())
-            .spawn()
-            .map_err(failed)?;
-        let Some(mut stdout) = git.stdout.take() else {
-            return Err(git_error(format!("couldn't read {}: git's output wasn't piped", self.object)));
-        };
-        let mut start = vec![0; most.min(usize::try_from(self.bytes).unwrap_or(usize::MAX))];
-        let read = stdout.read_exact(&mut start).await;
-        // Closed first, so git can't be left waiting to write before it says why it stopped.
-        drop(stdout);
-        if let Err(e) = read {
-            let status = git.wait().await.map_err(failed)?;
-            return Err(git_error(format!("couldn't read {}: {e}, and git ended with {status}", self.object)));
-        }
+        let mut start = Vec::new();
+        self.stream(worktree, |chunk| {
+            start.extend_from_slice(&chunk[..chunk.len().min(most - start.len())]);
+            if start.len() < most { ControlFlow::Continue(()) } else { ControlFlow::Break(()) }
+        })
+        .await?;
         Ok(start)
+    }
+}
+
+/// How much of a file was streamed, and whether it stopped before the end.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Streamed {
+    pub(crate) bytes: u64,
+    pub(crate) stopped: bool,
+}
+
+/// The bytes of the blob `object`, given to `each` a chunk at a time as git writes them, until `each` says to stop,
+/// when git is stopped too. So a big file is never held whole by the worker, and what's past the part needed isn't
+/// read. Refused as not found when git reads nothing of it and fails, as for an object that isn't there.
+async fn stream(
+    worktree: &Path,
+    object: &str,
+    mut each: impl FnMut(&[u8]) -> ControlFlow<()>,
+) -> Result<Streamed, ApiError> {
+    let failed = |e: std::io::Error| git_error(format!("couldn't read {object}: {e}"));
+    let mut git = command(worktree, &["cat-file", "blob", object])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(failed)?;
+    let Some(mut stdout) = git.stdout.take() else {
+        return Err(git_error(format!("couldn't read {object}: git's output wasn't piped")));
+    };
+    let mut chunk = vec![0; CHUNK_BYTES];
+    let mut streamed = Streamed { bytes: 0, stopped: false };
+    loop {
+        let read = stdout.read(&mut chunk).await.map_err(failed)?;
+        if read == 0 {
+            break;
+        }
+        streamed.bytes += u64::try_from(read).unwrap_or(u64::MAX);
+        if each(&chunk[..read]).is_break() {
+            streamed.stopped = true;
+            break;
+        }
+    }
+    // Closed first, so git can't be left waiting to write before it's stopped or says why it stopped.
+    drop(stdout);
+    if streamed.stopped {
+        let _ = git.start_kill();
+        git.wait().await.map_err(failed)?;
+        return Ok(streamed);
+    }
+    let status = git.wait().await.map_err(failed)?;
+    match (status.success(), streamed.bytes) {
+        (true, _) => Ok(streamed),
+        (false, 0) => Err(ApiError::new(ErrorCode::NotFound, format!("{object} isn't here"))),
+        (false, _) => Err(git_error(format!("couldn't read {object}: git ended with {status}"))),
     }
 }
 

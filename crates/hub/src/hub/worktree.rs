@@ -2,9 +2,10 @@
 
 use std::sync::Arc;
 
-use protocol::client::ApiError;
+use protocol::client::{ApiError, files};
 use protocol::model::{
-    CommitId, FileContents, GitDiff, GitStatus, Workspace, WorkspaceId, WorkspaceStatus, WorktreeFiles,
+    CommitId, FileContents, FileOpened, FilePages, GitDiff, GitStatus, Workspace, WorkspaceId, WorkspaceStatus,
+    WorktreeFiles,
 };
 use protocol::worker::{WorkerRequest, WorkerResponse};
 
@@ -96,5 +97,35 @@ impl Hub {
             return Err(unexpected(&reply));
         };
         Ok(contents)
+    }
+
+    /// Opens a file as a commit of the workspace's repository held it, to be read a page at a time, as the worker
+    /// finds it.
+    pub(crate) async fn workspace_file_open_at(
+        self: &Arc<Self>,
+        id: WorkspaceId,
+        commit: CommitId,
+        file: String,
+    ) -> Result<FileOpened, ApiError> {
+        let (_, path, link) = self.ready_worktree(&id).await?;
+        let reply = link.call(WorkerRequest::FileOpenAt { path, commit, file }).await?;
+        let WorkerResponse::FileOpened(opened) = reply else {
+            return Err(unexpected(&reply));
+        };
+        Ok(opened)
+    }
+
+    /// Pages of a file opened with [`Self::workspace_file_open_at`], as the worker reads them.
+    pub(crate) async fn workspace_file_pages(
+        self: &Arc<Self>,
+        asked: files::WorkspaceFilePages,
+    ) -> Result<FilePages, ApiError> {
+        let files::WorkspaceFilePages { id, commit, path: file, page_lines, pages } = asked;
+        let (_, path, link) = self.ready_worktree(&id).await?;
+        let reply = link.call(WorkerRequest::FilePages { path, commit, file, page_lines, pages }).await?;
+        let WorkerResponse::FilePages(pages) = reply else {
+            return Err(unexpected(&reply));
+        };
+        Ok(pages)
     }
 }

@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
 use parking_lot::Mutex;
-use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, HubFrame, HubNotice, ReplyOutcome};
+use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, HubFrame, HubNotice, ReplyOutcome, files};
 use protocol::frame::{self, Call};
 use protocol::model::{Place, SessionId};
 use protocol::versions::Versions;
@@ -217,12 +217,20 @@ async fn handle(
         R::WorkspaceRegenerateTitle { id } => C::Workspace(hub.workspace_regenerate_title(id).await?),
         R::WorkspaceStatus { id } => C::GitStatus(hub.workspace_status(id).await?),
         R::WorkspaceDiff { id } => C::GitDiff(hub.workspace_diff(id).await?),
-        R::WorkspaceFiles { id } => C::WorktreeFiles(hub.workspace_files(id).await?),
-        R::WorkspaceFolderRead { id, path } => C::WorktreeFiles(hub.workspace_folder_read(id, path).await?),
-        R::WorkspaceFileRead { id, path } => C::FileContents(hub.workspace_file_read(id, path).await?),
-        R::WorkspaceFileReadAt { id, commit, path } => {
+        R::WorkspaceFiles(files::WorkspaceFiles { id }) => C::WorktreeFiles(hub.workspace_files(id).await?),
+        R::WorkspaceFolderRead(files::WorkspaceFolderRead { id, path }) => {
+            C::WorktreeFiles(hub.workspace_folder_read(id, path).await?)
+        }
+        R::WorkspaceFileRead(files::WorkspaceFileRead { id, path }) => {
+            C::FileContents(hub.workspace_file_read(id, path).await?)
+        }
+        R::WorkspaceFileReadAt(files::WorkspaceFileReadAt { id, commit, path }) => {
             C::FileContents(hub.workspace_file_read_at(id, commit, path).await?)
         }
+        R::WorkspaceFileOpenAt(files::WorkspaceFileOpenAt { id, commit, path }) => {
+            C::FileOpened(hub.workspace_file_open_at(id, commit, path).await?)
+        }
+        R::WorkspaceFilePages(asked) => C::FilePages(hub.workspace_file_pages(asked).await?),
         R::WorkspaceSetupLog { id } => C::SetupLog { text: hub.workspace_setup_log(id).await? },
         R::WorkspaceRerunSetup { id } => C::Workspace(hub.workspace_rerun_setup(id).await?),
         R::WorkspacePullRequest { id } => C::PullRequest { pull_request: hub.workspace_pull_request(id).await? },

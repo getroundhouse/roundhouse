@@ -11,6 +11,10 @@ use protocol::model::{CommitId, FileContents, WorktreeFiles};
 
 use crate::git::files::{Tracked, entries};
 
+mod pages;
+
+pub(crate) use pages::{open_at, pages};
+
 /// Far more than a repository an agent works in usually has, and few enough that a client lays them out in a moment.
 const MAX_FILES: usize = 50_000;
 /// About a hundred thousand lines, more than anyone reads in a viewer, and small enough to send at once.

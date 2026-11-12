@@ -27,7 +27,7 @@ pub use compaction_line::CompactionLine;
 pub use context::{ContextPart, ContextPartKind, ContextUsage};
 pub use draft::{Draft, NewDraft};
 pub use effort::Effort;
-pub use files::{FileContents, WorktreeFiles};
+pub use files::{FileContents, FileOpened, FilePage, FilePages, OpenedText, PageLine, WorktreeFiles};
 pub use hub_settings::{HubSettings, HubSettingsChange};
 pub use model_name::{ModelName, ModelNameError};
 pub use permission_mode::PermissionMode;

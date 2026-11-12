@@ -6,11 +6,12 @@
 
 use serde::{Deserialize, Serialize};
 
+use super::files;
 use crate::attachment::{AttachmentBytes, MediaType};
 use crate::event::ApprovalDecision;
 use crate::model::{
-    AgentKind, ApprovalId, AttachmentId, ClientMessageId, ClientRequestId, CommentId, CommitId, DiffSide,
-    HubSettingsChange, NewDraft, Place, RepoId, Seq, SessionId, SessionSettingsChange, ToolUseId, WorkspaceId,
+    AgentKind, ApprovalId, AttachmentId, ClientMessageId, ClientRequestId, CommentId, DiffSide, HubSettingsChange,
+    NewDraft, Place, RepoId, Seq, SessionId, SessionSettingsChange, ToolUseId, WorkspaceId,
 };
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -280,39 +281,18 @@ pub enum ClientRequest {
     SessionAccount {
         id: SessionId,
     },
-    /// The files in the workspace's worktree, for browsing them: tracked, new and ignored, apart from what's in a
-    /// folder git ignores whole, or that's a repository of its own, which is listed as a folder for
-    /// `WorkspaceFolderRead`. A hub older than this refuses it as unsupported.
-    WorkspaceFiles {
-        id: WorkspaceId,
-    },
-    /// What's directly in the folder at `path` in the workspace's worktree, its files and its folders, for opening one
-    /// that `WorkspaceFiles` lists as a folder. Refused unless it's a folder inside the worktree, links followed. A hub
-    /// older than this refuses it as unsupported.
-    WorkspaceFolderRead {
-        id: WorkspaceId,
-        path: String,
-    },
-    /// What the file at `path` in the workspace's worktree holds, for showing it. `path` is relative to the worktree,
-    /// as `WorkspaceFiles` gives it, and refused unless it's a file inside the worktree, links followed. A hub older
-    /// than this refuses it as unsupported.
-    WorkspaceFileRead {
-        id: WorkspaceId,
-        path: String,
-    },
-    /// What the file at `path` held in `commit`, in the repository of the workspace's worktree, for showing what a
-    /// change replaced: the diff's `base_commit`, so it's the side the diff was taken from. `path` is relative, as
-    /// `WorkspaceFiles` gives it, and a link there isn't followed, so it reads as the path it leads to. Refused with
-    /// `InvalidRequest` when `commit` isn't a full object ID, such as a short one or a branch's name, when `path`
-    /// isn't written as a list gives it, and when the commit has a folder or a submodule there. Refused with
-    /// `NotFound` when the repository has no commit by that ID, or the commit has nothing at `path`. A hub older than
-    /// this refuses it as unsupported, rather than reading the file as it is now, which a field added to
-    /// `WorkspaceFileRead` would get.
-    WorkspaceFileReadAt {
-        id: WorkspaceId,
-        commit: CommitId,
-        path: String,
-    },
+    /// See [`files::WorkspaceFiles`].
+    WorkspaceFiles(files::WorkspaceFiles),
+    /// See [`files::WorkspaceFolderRead`].
+    WorkspaceFolderRead(files::WorkspaceFolderRead),
+    /// See [`files::WorkspaceFileRead`].
+    WorkspaceFileRead(files::WorkspaceFileRead),
+    /// See [`files::WorkspaceFileReadAt`].
+    WorkspaceFileReadAt(files::WorkspaceFileReadAt),
+    /// See [`files::WorkspaceFileOpenAt`].
+    WorkspaceFileOpenAt(files::WorkspaceFileOpenAt),
+    /// See [`files::WorkspaceFilePages`].
+    WorkspaceFilePages(files::WorkspaceFilePages),
     /// Puts a prompt at the end of the queue. Sending it again under the same `client_msg_id` changes nothing, so a
     /// retry is safe, and `SessionChangeQueued` is what changes it. Refused with `Conflict` once that prompt has been
     /// sent, since the agent has it by then. Answers with the session. On an idle agent it's sent at once, unless the

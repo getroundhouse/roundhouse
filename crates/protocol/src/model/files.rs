@@ -35,6 +35,58 @@ pub enum FileContents {
     Unknown,
 }
 
+/// A file as a commit held it, opened to be read a page of lines at a time, so one too big to send whole can still be
+/// read, such as the lines a diff leaves out of it.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum FileOpened {
+    Text(OpenedText),
+    /// It's an image, or something else that isn't text, by what it starts with, which `WorkspaceFileReadAt` reads
+    /// whole.
+    NotText,
+    #[serde(other)]
+    Unknown,
+}
+
+/// A text file that's been opened, and any of its pages sent with it.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct OpenedText {
+    pub bytes: u64,
+    /// How many lines it has, a last one without a line ending included.
+    pub lines: u32,
+    /// How many lines a page has, which `WorkspaceFilePages` is asked for its pages with. Page `n` is lines
+    /// `n * page_lines + 1` to `(n + 1) * page_lines`, numbered from 1, and the last page has what's left.
+    pub page_lines: u32,
+    /// When the file is small enough to be sent at once, its pages, with no line cut short, as many as fit in what's
+    /// sent at once, which is all of them unless bytes that aren't UTF-8 make it bigger. Otherwise none.
+    #[serde(default)]
+    pub pages: Vec<FilePage>,
+}
+
+/// Pages of a file's lines, in the order the file has them.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Default)]
+pub struct FilePages {
+    pub pages: Vec<FilePage>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct FilePage {
+    /// Which page it is, from 0.
+    pub index: u32,
+    pub lines: Vec<PageLine>,
+}
+
+/// One line of a file, without its line ending.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct PageLine {
+    /// Bytes that aren't UTF-8 are replaced.
+    pub text: String,
+    /// How many bytes the whole line has in the file, when it's too long to be sent whole, and `text` is its start, cut
+    /// where a character ends.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cut: Option<u64>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::FileContents;
