@@ -214,7 +214,7 @@ fn an_agent_at_work_while_a_restart_waits(stack: &Stack) -> u32 {
     commit_settings(stack, "[scripts]\nsetup = \"sleep 30\"\n");
     client.workspace_create(&workspace.repo_id, None, None, None).unwrap();
     wait_until("the setup to start", || client.hub_status().unwrap().running_setups == 1);
-    assert!(matches!(client.call(ClientRequest::HubRestart), Ok(ClientResponse::Ok)));
+    assert_eq!(client_core::restart_hub(&client).unwrap(), Restart::Finishing);
     std::thread::sleep(Duration::from_millis(200));
     assert!(client.hub_status().is_ok(), "the restart waits for the setup script");
     agent
