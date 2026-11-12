@@ -21,10 +21,10 @@ fn the_first_prompt_titles_the_workspace_and_a_rename_replaces_it(cx: &mut TestA
     let client = stack.client();
     client.repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     let workspace = ui.new_workspace();
     let row = format!("workspace-{workspace}");
-    let name = ui.view().workspaces.iter().find(|w| w.id == workspace).unwrap().name.clone();
+    let name = ui.view().records().workspaces().iter().find(|w| w.id == workspace).unwrap().name.clone();
     assert!(ui.shows_label(&row, &name), "the name, until there's a prompt");
     ui.input("say:fix the login");
     ui.press("enter");
@@ -57,7 +57,7 @@ fn a_chat_is_renamed_from_its_tab(cx: &mut TestAppContext) {
     let client = stack.client();
     client.repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     ui.new_workspace();
     let chat = ui.active_chat();
     let tab = format!("chat-{chat}");
@@ -91,7 +91,7 @@ fn a_new_title_is_asked_for_from_the_header_and_the_rows_menu(cx: &mut TestAppCo
     let client = stack.client();
     client.repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     let workspace = ui.new_workspace();
     let row = format!("workspace-{workspace}");
     assert!(ui.disabled(SharedString::from("regenerate-title")), "nothing has been asked, so there's none to make");

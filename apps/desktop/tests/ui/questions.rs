@@ -54,7 +54,7 @@ fn a_question_is_answered_by_choosing_or_typing_or_skipped(cx: &mut TestAppConte
     let stack = Stack::new();
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     ui.new_workspace();
 
     // It takes the composer's place, and a choice waits for the arrow, so it can be changed first.
@@ -109,7 +109,7 @@ fn an_answered_question_stays_as_a_line_that_opens_to_what_was_answered(cx: &mut
     let stack = Stack::new();
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     ui.new_workspace();
 
     // While it waits, it's asked in the composer's place, and the transcript leaves it out.
@@ -144,7 +144,7 @@ fn several_questions_are_asked_one_at_a_time(cx: &mut TestAppContext) {
     let stack = Stack::new();
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     ui.new_workspace();
     open_question(&mut ui, "ask:*Which colors?=Red/Green/Blue|How many?=One/Two|Why?=Because");
     // Only the first question has a third option.
@@ -182,7 +182,7 @@ fn the_keys_move_between_questions_and_into_and_out_of_typing(cx: &mut TestAppCo
     let stack = Stack::new();
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     ui.new_workspace();
     open_question(&mut ui, "ask:*Which colors?=Red/Green/Blue|How many?=One/Two");
     let_it_settle(&mut ui);
@@ -215,7 +215,7 @@ fn closing_settings_gives_focus_to_a_question_that_came_meanwhile(cx: &mut TestA
     let stack = Stack::new();
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     ui.new_workspace();
     ui.wait("the chat", |ui| ui.pane().is_some_and(|pane| ui.cx.read_entity(&pane, |p, _| p.active.is_some())));
     let pane = ui.pane().unwrap();

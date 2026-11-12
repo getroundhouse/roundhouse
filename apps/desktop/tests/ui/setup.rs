@@ -16,7 +16,7 @@ fn a_failed_setup_is_shown_with_its_log_and_can_be_run_again(cx: &mut TestAppCon
     commit_settings(&stack, &format!("[scripts]\nsetup = \"echo from-the-script; test -f {}\"\n", flag.display()));
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     ui.new_workspace();
     let pane = ui.pane().unwrap();
     let setup = |ui: &Ui| ui.cx.read_entity(&pane, |p, _| p.workspace.setup);
@@ -45,7 +45,7 @@ fn a_setup_cut_off_by_the_hub_crashing_shows_as_failed_after_it_comes_back(cx: &
     commit_settings(&stack, "[scripts]\nsetup = \"sleep 60\"\n");
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     ui.new_workspace();
     let pane = ui.pane().unwrap();
     ui.wait("setup to start", |ui| ui.cx.read_entity(&pane, |p, _| p.workspace.setup == SetupStatus::Running));
@@ -63,7 +63,7 @@ fn setup_can_be_stopped_from_the_app(cx: &mut TestAppContext) {
     commit_settings(&stack, "[scripts]\nsetup = \"sleep 300\"\n");
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     ui.new_workspace();
     let pane = ui.pane().unwrap();
     ui.wait("setup to start", |ui| ui.cx.read_entity(&pane, |p, _| p.workspace.setup == SetupStatus::Running));

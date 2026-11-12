@@ -28,7 +28,7 @@ impl<'a> Ui<'a> {
     pub(crate) fn open_with_a_repository(cx: &'a mut TestAppContext, stack: &Stack) -> Self {
         stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
         let mut ui = Self::open(cx, stack);
-        ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+        ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
         ui
     }
 
@@ -44,12 +44,12 @@ impl<'a> Ui<'a> {
     }
 
     pub(crate) fn first_repo_id(&self) -> RepoId {
-        self.view().repos[0].id.clone()
+        self.view().records().repos()[0].id.clone()
     }
 
     pub(crate) fn worktree(&self, id: &WorkspaceId) -> PathBuf {
         let view = self.view();
-        let workspace = view.workspaces.iter().find(|w| &w.id == id).unwrap();
+        let workspace = view.records().workspace(id).unwrap();
         PathBuf::from(workspace.path.clone().unwrap())
     }
 }

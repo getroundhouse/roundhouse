@@ -38,7 +38,7 @@ fn a_workspace_that_cant_be_made_gives_the_prompt_back_to_the_dialog(cx: &mut Te
 
     ui.wait("the failure", |ui| ui.view().error.is_some() && ui.view().busy.is_free());
     assert!(ui.view().error.clone().unwrap().contains("couldn't create the workspace"));
-    assert!(ui.view().workspaces.is_empty());
+    assert!(ui.view().records().workspaces().is_empty());
     assert!(ui.has_dialog(), "the dialog opens again to show where the prompt went");
     assert_eq!(ui.dialog_text(), "say:never sent");
     assert!(ui.dialog_planning(), "plan mode comes back with the prompt");
@@ -84,7 +84,7 @@ fn a_prompt_the_new_chat_couldnt_be_sent_goes_to_its_composer_with_its_files_and
     let stack = Stack::new();
     let mut ui = open_with_a_repo(cx, &stack);
     ui.new_workspace();
-    let before = ui.view().workspaces.len();
+    let before = ui.view().records().workspaces().len();
 
     ui.open_new_workspace();
     // A level the hub doesn't know, as a newer app's would be to an older hub, so the workspace and its chat are made
@@ -139,7 +139,7 @@ fn a_new_workspace_whose_prompt_couldnt_be_sent_shows_even_after_another_was_cho
 fn a_prompt_that_couldnt_be_sent_goes_to_the_new_chats_composer_with_the_files_that_fit(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = open_with_a_repo(cx, &stack);
-    let before = ui.view().workspaces.len();
+    let before = ui.view().records().workspaces().len();
     let files: Vec<_> = (0..=MAX_PER_PROMPT).map(|i| file(&format!("file-{i}.txt"))).collect();
     let (model, effort) = (DEFAULT_MODEL, DEFAULT_EFFORT);
     let (repo, prompt, permission_mode) = (ui.first_repo_id(), "say:too many".to_string(), PermissionMode::FullAccess);
@@ -167,7 +167,7 @@ fn typing_in_the_dialog_stays_there_when_another_workspace_shows_behind_it(cx: &
     let other = client.workspace_create(&ui.first_repo_id(), None, None, None).unwrap().id;
     client.session_ensure(&other, AgentKind::Claude).unwrap();
     ui.wait("the other workspace, ready", |ui| {
-        ui.view().workspaces.iter().any(|w| w.id == other && w.status == WorkspaceStatus::Ready)
+        ui.view().records().workspaces().iter().any(|w| w.id == other && w.status == WorkspaceStatus::Ready)
     });
 
     ui.open_new_workspace();

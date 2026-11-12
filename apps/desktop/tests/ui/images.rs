@@ -73,7 +73,7 @@ fn changing_an_image<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> (Ui<'a>, 
     git(&stack.repo(), &["commit", "-qm", "shot"]);
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, stack);
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     let workspace = ui.new_workspace();
     let worktree = ui.worktree(&workspace);
     std::fs::write(worktree.join("shot.png"), &after).unwrap();
@@ -89,7 +89,7 @@ fn an_image_opened_from_all_files_says_what_kind_it_is_and_how_big(cx: &mut Test
     let stack = Stack::new();
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     let workspace = ui.new_workspace();
     let shot = png(30, 20);
     std::fs::write(ui.worktree(&workspace).join("shot"), &shot).unwrap();

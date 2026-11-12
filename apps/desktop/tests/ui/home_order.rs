@@ -44,7 +44,7 @@ fn the_rows_a_search_keeps_are_in_their_places_at_once_rather_than_sliding_there
     let stack = Stack::new();
     let (mut ui, [first, ..], _) = home_over_three(cx, &stack);
     let was = top(&mut ui, home_row(&first));
-    let branch = ui.view().workspaces.iter().find(|w| w.id == first).unwrap().branch.clone();
+    let branch = ui.view().records().workspaces().iter().find(|w| w.id == first).unwrap().branch.clone();
     ui.allow_motion();
 
     ui.input(&branch);

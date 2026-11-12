@@ -20,12 +20,12 @@ use crate::support::{Stack, Ui, git, home_row};
 fn starts_empty_and_shows_a_repository_added_from_elsewhere(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = Ui::open(cx, &stack);
-    assert!(ui.view().repos.is_empty());
+    assert!(ui.view().records().repos().is_empty());
     assert!(ui.pane().is_none());
 
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
-    ui.wait("the repository to appear", |ui| ui.view().repos.len() == 1);
-    assert_eq!(ui.view().repos[0].name, "repo");
+    ui.wait("the repository to appear", |ui| ui.view().records().repos().len() == 1);
+    assert_eq!(ui.view().records().repos()[0].name, "repo");
 }
 
 #[gpui_kit::test]
@@ -69,7 +69,7 @@ fn the_core_loop(cx: &mut TestAppContext) {
     let stack = Stack::new();
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
 
     // Create a workspace. The composer is ready to type in straight away.
     let id = ui.new_workspace();
@@ -102,13 +102,13 @@ fn the_core_loop(cx: &mut TestAppContext) {
     ui.cx.simulate_prompt_answer("Keep working");
     ui.frame();
     assert!(worktree.join("a.txt").exists());
-    assert_eq!(ui.view().workspaces.iter().find(|w| w.id == id).unwrap().status, WorkspaceStatus::Ready);
+    assert_eq!(ui.view().records().workspaces().iter().find(|w| w.id == id).unwrap().status, WorkspaceStatus::Ready);
 
     git(&worktree, &["add", "."]);
     git(&worktree, &["commit", "-qm", "the agent's work"]);
     ui.press("cmd-shift-a");
     ui.wait("the workspace to be archived", |ui| {
-        ui.view().workspaces.iter().find(|w| w.id == id).unwrap().status == WorkspaceStatus::Archived
+        ui.view().records().workspaces().iter().find(|w| w.id == id).unwrap().status == WorkspaceStatus::Archived
             && ui.view().busy == Busy::Free
     });
     assert!(!worktree.exists());
@@ -135,7 +135,7 @@ fn clicking_a_workspace_switches_to_it_and_typing_goes_to_the_right_place(cx: &m
     let stack = Stack::new();
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     let first = ui.new_workspace();
     let second = ui.new_workspace();
     assert_ne!(first, second);
@@ -162,7 +162,7 @@ fn the_keyboard_moves_between_workspaces_and_opens_the_diff(cx: &mut TestAppCont
     let stack = Stack::new();
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     let first = ui.new_workspace();
     let second = ui.new_workspace();
 
@@ -182,11 +182,13 @@ fn the_keyboard_moves_between_workspaces_and_opens_the_diff(cx: &mut TestAppCont
     let review = ui.cx.read_entity(&pane, |p, _| p.diff.as_ref().map(|d| d.review.clone())).unwrap();
     ui.wait("it to see there are no changes", |ui| ui.cx.read_entity(&review, |r, _| r.has_no_changes()));
 
-    let before = ui.view().workspaces.len();
+    let before = ui.view().records().workspaces().len();
     ui.press("cmd-n");
     ui.wait("the new-workspace dialog", Ui::has_dialog);
     ui.press("enter");
-    ui.wait("a third workspace", |ui| ui.view().workspaces.len() == before + 1 && ui.view().busy == Busy::Free);
+    ui.wait("a third workspace", |ui| {
+        ui.view().records().workspaces().len() == before + 1 && ui.view().busy == Busy::Free
+    });
 }
 
 #[gpui_kit::test]
@@ -194,7 +196,7 @@ fn new_shows_its_working_until_the_workspace_is_ready_or_fails(cx: &mut TestAppC
     let stack = Stack::new();
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     let repo = ui.first_repo_id();
 
     let view = ui.view.clone();
@@ -207,7 +209,7 @@ fn new_shows_its_working_until_the_workspace_is_ready_or_fails(cx: &mut TestAppC
     ui.cx.update_entity(&view, |v, cx| v.create_workspace(nothing_typed(&repo), cx)).unwrap();
     assert_eq!(ui.view().busy.creating_in(), Some(&repo));
     // The hub announced it on its way, and then removed it, so its note goes too.
-    let gone = |ui: &mut Ui| ui.view().workspaces.iter().all(|w| w.status != WorkspaceStatus::Creating);
+    let gone = |ui: &mut Ui| ui.view().records().workspaces().iter().all(|w| w.status != WorkspaceStatus::Creating);
     ui.wait("the failure", |ui| ui.view().error.is_some() && ui.view().busy.is_free() && gone(ui));
 }
 
@@ -230,7 +232,7 @@ fn an_archive_that_force_cant_help_shows_the_error_rather_than_offering_force(cx
     let stack = Stack::new();
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     let id = ui.new_workspace();
 
     // Archived from elsewhere, so what the app asks for can no longer work.

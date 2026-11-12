@@ -15,7 +15,7 @@ mod kept;
 fn open_with_a_repo<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> Ui<'a> {
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, stack);
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     ui
 }
 
@@ -32,7 +32,7 @@ fn prompts(ui: &Ui<'_>) -> Vec<String> {
 fn what_was_typed_is_the_new_workspaces_first_prompt(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = open_with_a_repo(cx, &stack);
-    let before = ui.view().workspaces.len();
+    let before = ui.view().records().workspaces().len();
 
     ui.open_new_workspace();
     ui.input("say:on it");
@@ -42,7 +42,7 @@ fn what_was_typed_is_the_new_workspaces_first_prompt(cx: &mut TestAppContext) {
     assert!(!ui.has_dialog(), "Create closes the dialog");
     ui.wait_idle_with("the agent to answer the first prompt", |text| text == "on it");
     assert_eq!(prompts(&ui), ["say:on it"]);
-    let made = ui.view().workspaces.iter().find(|w| w.id == workspace).map(|w| w.repo_id.clone());
+    let made = ui.view().records().workspaces().iter().find(|w| w.id == workspace).map(|w| w.repo_id.clone());
     assert_eq!(made, Some(ui.first_repo_id()));
     assert_eq!(ui.dialog_text(), "", "the next workspace starts with an empty dialog");
 }
@@ -62,7 +62,7 @@ fn creating_with_nothing_typed_sends_nothing(cx: &mut TestAppContext) {
 fn the_model_and_effort_picked_in_the_dialog_are_the_first_chats(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = open_with_a_repo(cx, &stack);
-    let before = ui.view().workspaces.len();
+    let before = ui.view().records().workspaces().len();
 
     ui.open_new_workspace();
     let at_first = ui.cx.read_entity(&ui.dialog(), |d, _| d.chosen());
@@ -96,7 +96,7 @@ fn closing_the_dialog_keeps_what_was_typed_for_next_time(cx: &mut TestAppContext
     ui.press("escape");
 
     assert!(!ui.has_dialog());
-    assert!(ui.view().workspaces.is_empty(), "closing makes nothing");
+    assert!(ui.view().records().workspaces().is_empty(), "closing makes nothing");
     ui.open_new_workspace();
     assert_eq!(ui.dialog_text(), "half a thought");
 }
@@ -112,15 +112,15 @@ fn the_dialog_can_make_the_workspace_in_another_repository(cx: &mut TestAppConte
     client.repo_add(stack.repo().to_str().unwrap()).unwrap();
     client.repo_add(other.to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, &stack);
-    ui.wait("both repositories", |ui| ui.view().repos.len() == 2);
+    ui.wait("both repositories", |ui| ui.view().records().repos().len() == 2);
     // The menu lists them as the sidebar does, and the dialog opens for the first.
-    let second = ui.view().repos[1].id.clone();
+    let second = ui.view().records().repos()[1].id.clone();
 
     ui.open_new_workspace();
     ui.pick("new-workspace-repo", 1);
     let workspace = ui.create_workspace();
 
-    let made = ui.view().workspaces.iter().find(|w| w.id == workspace).map(|w| w.repo_id.clone());
+    let made = ui.view().records().workspaces().iter().find(|w| w.id == workspace).map(|w| w.repo_id.clone());
     assert_eq!(made, Some(second));
 }
 
@@ -130,7 +130,7 @@ fn a_file_pasted_in_the_dialog_goes_with_the_first_prompt(cx: &mut TestAppContex
     let mut ui = open_with_a_repo(cx, &stack);
     let notes = stack.dir.path().join("notes.txt");
     std::fs::write(&notes, "the first line\n").unwrap();
-    let before = ui.view().workspaces.len();
+    let before = ui.view().records().workspaces().len();
 
     ui.open_new_workspace();
     ui.paste(ClipboardItem::from(ClipboardEntry::ExternalPaths(ExternalPaths(vec![notes].into()))));
@@ -156,7 +156,7 @@ fn a_file_pasted_in_the_dialog_goes_with_the_first_prompt(cx: &mut TestAppContex
 fn plan_mode_turned_on_in_the_dialog_is_the_first_chats(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = open_with_a_repo(cx, &stack);
-    let before = ui.view().workspaces.len();
+    let before = ui.view().records().workspaces().len();
 
     ui.open_new_workspace();
     ui.press("shift-tab");
@@ -216,13 +216,13 @@ fn a_workspace_chosen_while_another_is_made_stays_showing_once_it_is(cx: &mut Te
     ui.click(sidebar_row(&first));
     making.release();
 
-    let made = |ui: &Ui| ui.view().workspaces.iter().map(|w| w.id.clone()).find(|id| ![&first, &second].contains(&id));
+    let made = |ui: &Ui| {
+        ui.view().records().workspaces().iter().map(|w| w.id.clone()).find(|id| ![&first, &second].contains(&id))
+    };
     ui.wait("the new workspace", |ui| made(ui).is_some() && ui.view().busy.is_free());
     assert_eq!(ui.view().selected.as_ref(), Some(&first), "the one chosen meanwhile stays showing");
     let made = made(&ui).unwrap();
-    let prompted = |ui: &mut Ui| {
-        ui.view().sessions.get(&made).is_some_and(|chats| chats.iter().any(|c| c.user_active_at_ms.is_some()))
-    };
+    let prompted = |ui: &mut Ui| ui.view().records().sessions(&made).iter().any(|c| c.user_active_at_ms.is_some());
     ui.wait("the new workspace's chat to have its prompt", prompted);
 }
 
@@ -242,7 +242,7 @@ fn settings_opened_while_a_workspace_is_made_keeps_the_one_under_it_showing(cx: 
     ui.wait("Settings", |ui| ui.has("settings-back"));
     making.release();
 
-    ui.wait("the new workspace", |ui| ui.view().workspaces.len() == 2 && ui.view().busy.is_free());
+    ui.wait("the new workspace", |ui| ui.view().records().workspaces().len() == 2 && ui.view().busy.is_free());
     assert_eq!(ui.view().selected.as_ref(), Some(&showing));
     ui.press("escape");
     ui.input("here");
@@ -262,7 +262,7 @@ fn home_opened_while_a_workspace_is_made_stays_showing_once_it_is(cx: &mut TestA
     ui.click("home");
     making.release();
 
-    ui.wait("the new workspace", |ui| ui.view().workspaces.len() == 2 && ui.view().busy.is_free());
+    ui.wait("the new workspace", |ui| ui.view().records().workspaces().len() == 2 && ui.view().busy.is_free());
     assert!(ui.has("home-page"));
     ui.input("a name no workspace has");
     ui.wait("Home's search to have the keys", |ui| ui.has("home-nothing"));

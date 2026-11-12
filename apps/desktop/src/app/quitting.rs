@@ -138,12 +138,6 @@ impl AppView {
     pub fn drafts(&self) -> Option<Drafts> {
         self.drafts.clone()
     }
-
-    /// Client-core's copy of the hub's records, for a test to see what's arrived before any view has.
-    #[cfg(feature = "testing")]
-    pub fn records(&self) -> Option<client_core::RecordsFeed> {
-        self.feed.clone()
-    }
 }
 
 /// Has quitting wait for the commands started on `client`, rather than on the connection before it, and for `drafts`.

@@ -36,7 +36,7 @@ impl AppView {
     pub fn unread_chats(&self, id: &WorkspaceId, cx: &App) -> Vec<&Session> {
         let pane = self.panes.get(id).map(|pane| pane.read(cx));
         let shows_unread = |s: &&Session| pane.map_or(s.unread(), |pane| pane.shows_unread(s));
-        let sessions = self.sessions.get(id).into_iter().flatten();
+        let sessions = self.records.sessions(id).iter();
         sessions.filter(|s| s.closed_at_ms.is_none()).filter(shows_unread).collect()
     }
 
@@ -53,7 +53,7 @@ impl AppView {
 
     /// The workspace's open chat last worked in that has a reply.
     fn last_replied(&self, id: &WorkspaceId) -> Option<&Session> {
-        let sessions = self.sessions.get(id).into_iter().flatten();
+        let sessions = self.records.sessions(id).iter();
         let replied = sessions.filter(|s| s.closed_at_ms.is_none() && s.reply_seq > 0);
         replied.max_by_key(|s| (s.last_active_at_ms(), s.created_at_ms))
     }

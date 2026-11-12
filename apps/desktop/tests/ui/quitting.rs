@@ -19,7 +19,7 @@ fn a_prompt_sent_just_before_quitting_reaches_the_hub(cx: &mut TestAppContext) {
     let stack = Stack::new();
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     ui.new_workspace();
     let chat = ui.active_chat();
     let client = ui.view().client().unwrap();
@@ -47,7 +47,7 @@ fn whats_typed_just_before_quitting_is_kept(cx: &mut TestAppContext) {
     let stack = Stack::new();
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     ui.new_workspace();
     let chat = ui.active_chat();
     let kept = || stack.client().session_get(&chat).unwrap().draft.text;

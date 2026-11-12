@@ -228,7 +228,7 @@ fn a_draft_changed_elsewhere_as_the_chat_showing_closes_brings_each_file_once(cx
     ui.view().drafts().unwrap().flushed().recv().unwrap();
     ui.show_chat(&showing);
     let files = kept_files(&stack, &next).into_iter().map(|file| file.id).collect();
-    let records = ui.view().records().unwrap();
+    let records = ui.view().feed().unwrap();
 
     stack.client().session_draft(&next, &NewDraft { text: "look at this".to_string(), files }).unwrap();
     stack.client().session_close(&showing).unwrap();
@@ -308,7 +308,7 @@ fn a_change_made_elsewhere_while_something_from_here_is_on_its_way_shows_once_it
     let pid = stack.client().hub_status().unwrap().pid;
     stack.client().session_draft(&chat, &NewDraft::new("typed elsewhere")).unwrap();
     // Arrived in client-core, but nothing has run on the main thread since, so the pane hasn't seen it.
-    let records = ui.view().records().unwrap();
+    let records = ui.view().feed().unwrap();
     let draft_in = |records: &client_core::RecordsFeed| {
         records.snapshot().session(&chat).map(|s| s.draft.text.clone()).unwrap_or_default()
     };

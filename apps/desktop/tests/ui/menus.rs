@@ -80,7 +80,7 @@ pub(crate) fn choose(ui: &mut Ui<'_>, menu_name: &str, name: &str) {
 fn with_a_repository<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> Ui<'a> {
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, stack);
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     ui
 }
 

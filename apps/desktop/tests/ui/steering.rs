@@ -12,7 +12,7 @@ use crate::support::{Stack, Ui, top};
 
 /// A workspace whose agent is running a tool for a while.
 pub(crate) fn working(ui: &mut Ui, ms: u64) {
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     ui.new_workspace();
     ui.input(&format!("hang:{ms}"));
     ui.press("enter");
@@ -66,7 +66,7 @@ fn a_prompt_sent_while_the_agent_thinks_is_drawn_under_the_thought(cx: &mut Test
     let stack = Stack::new();
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().repos.len() == 1);
+    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     ui.new_workspace();
     let transcript = ui.transcript().unwrap();
     ui.cx.update_entity(&transcript, |t, cx| t.set_thinking_open(true, cx));

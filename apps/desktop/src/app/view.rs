@@ -82,7 +82,7 @@ impl AppView {
             }
             Connection::Ready(_) | Connection::Connecting => match self.pane_to_draw() {
                 Some(pane) => pane.into_any_element(),
-                None if self.repos.is_empty() => empty_state(
+                None if self.records.repos().is_empty() => empty_state(
                     "Add a project",
                     "Each workspace is a copy of a project on its own branch, with its own agents. Start by adding a \
                      project from a repository on this Mac.",

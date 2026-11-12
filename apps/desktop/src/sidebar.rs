@@ -80,8 +80,8 @@ impl Line {
     fn id(self, app: &AppView) -> LineId {
         match self {
             Line::Heading => LineId::Heading,
-            Line::Repo(r) => LineId::Repo(app.repos[r].id.clone()),
-            Line::Workspace(w) | Line::Creating(w) => LineId::Workspace(app.workspaces[w].id.clone()),
+            Line::Repo(r) => LineId::Repo(app.records().repos()[r].id.clone()),
+            Line::Workspace(w) | Line::Creating(w) => LineId::Workspace(app.records().workspaces()[w].id.clone()),
         }
     }
 
@@ -104,16 +104,16 @@ impl Line {
 /// list, at `now`, the workspaces stay in the order they were in, as [`Hold::held`](crate::reorder::Hold::held) says,
 /// and any that come meanwhile go after them.
 fn lines(app: &AppView, sort: Sort, now: Instant) -> Vec<Line> {
-    let heading = connected(app) || !app.repos.is_empty();
+    let heading = connected(app) || !app.records().repos().is_empty();
     let mut lines = if heading { vec![Line::Heading] } else { Vec::new() };
     let held = app.sidebar.hold.held(&sort, now);
-    let workspaces = &app.workspaces;
+    let workspaces = app.records().workspaces();
     let line = |w: usize| match workspaces[w].status {
         WorkspaceStatus::Ready => Some(Line::Workspace(w)),
         WorkspaceStatus::Creating => Some(Line::Creating(w)),
         WorkspaceStatus::Archived | WorkspaceStatus::Unknown => None,
     };
-    for (r, repo) in app.repos.iter().enumerate() {
+    for (r, repo) in app.records().repos().iter().enumerate() {
         lines.push(Line::Repo(r));
         let mut listed: Vec<usize> =
             (0..workspaces.len()).filter(|&w| workspaces[w].repo_id == repo.id && line(w).is_some()).collect();
@@ -152,7 +152,8 @@ pub(crate) fn arrange(app: &mut AppView, window: &mut Window, cx: &App) -> Arran
 /// The workspaces the sidebar lists, in its order, which is the order the keys that move between them go in.
 pub(crate) fn listed(app: &AppView, cx: &App) -> Vec<WorkspaceId> {
     let sort = crate::settings::get(cx).sidebar_sort;
-    let workspace = |line: Line| if let Line::Workspace(w) = line { Some(app.workspaces[w].id.clone()) } else { None };
+    let workspaces = app.records().workspaces();
+    let workspace = |line: Line| if let Line::Workspace(w) = line { Some(workspaces[w].id.clone()) } else { None };
     lines(app, sort, cx.background_executor().now()).into_iter().filter_map(workspace).collect()
 }
 
@@ -177,9 +178,9 @@ fn connected(app: &AppView) -> bool {
 fn line(app: &AppView, line: Line, offset: Pixels, line_text: &LineText, cx: &mut Context<AppView>) -> AnyElement {
     let drawn = match line {
         Line::Heading => heading::heading(app, connected(app), cx),
-        Line::Repo(r) => repo_header(app, &app.repos[r], cx),
-        Line::Workspace(w) => row::workspace_row(app, &app.workspaces[w], line_text, cx),
-        Line::Creating(w) => creating(&app.workspaces[w], cx),
+        Line::Repo(r) => repo_header(app, &app.records().repos()[r], cx),
+        Line::Workspace(w) => row::workspace_row(app, &app.records().workspaces()[w], line_text, cx),
+        Line::Creating(w) => creating(&app.records().workspaces()[w], cx),
     };
     crate::reorder::offset_by(drawn, offset)
 }
@@ -194,7 +195,7 @@ pub(crate) struct Standing {
 }
 
 pub(crate) fn standing(app: &AppView, workspace: &Workspace, cx: &App) -> Standing {
-    let chats = app.sessions.get(&workspace.id).map_or(&[][..], |chats| chats);
+    let chats = app.records().sessions(&workspace.id);
     let unread = workspace.status != WorkspaceStatus::Archived && !app.unread_chats(&workspace.id, cx).is_empty();
     let needs_a_look = unread || signal::waiting_on_you(chats);
     let signal = if workspace.setup == SetupStatus::Running { Signal::SettingUp } else { signal::workspace(chats) };
@@ -209,7 +210,7 @@ pub(crate) fn standing(app: &AppView, workspace: &Workspace, cx: &App) -> Standi
 impl AppView {
     /// What a workspace's mark shows of its pull request, in the sidebar or in Home.
     pub fn work_shown(&self, id: &protocol::model::WorkspaceId, cx: &App) -> Option<Work> {
-        let workspace = self.workspaces.iter().find(|w| &w.id == id)?;
+        let workspace = self.records().workspace(id)?;
         Some(standing(self, workspace, cx).work)
     }
 }

@@ -12,7 +12,7 @@ impl AppView {
         let client = self.client();
         let hub = client.as_ref().map(Client::hub_version);
         // As the hub counts them, from what the sidebar already has, so it's current without asking.
-        let agents = Agents::of(self.sessions.values().flatten().map(|s| (s.status, s.background_tasks.as_slice())));
+        let agents = Agents::of(self.records.every_session().map(|s| (s.status, s.background_tasks.as_slice())));
         BuildLine::new(self.hub.build_version, hub, self.restartable_hub.is_some(), agents, crate::updates::ready(cx))
     }
 }

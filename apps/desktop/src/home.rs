@@ -161,11 +161,12 @@ pub(crate) fn arrange(app: &mut AppView, window: &mut Window, cx: &App) -> Rows 
         sort: home.sort,
         search: home.search.read(cx).value().to_string(),
     };
-    let mut listed = listed(&app.workspaces, showing.repo.as_ref(), home.archived, home.sort, &showing.search);
+    let workspaces = app.records().workspaces();
+    let mut listed = listed(workspaces, showing.repo.as_ref(), home.archived, home.sort, &showing.search);
     if let Some(held) = home.hold.held(&showing, cx.background_executor().now()) {
-        reorder::keep_held(&mut listed, &app.workspaces, held);
+        reorder::keep_held(&mut listed, workspaces, held);
     }
-    let ids: Vec<WorkspaceId> = listed.iter().map(|&w| app.workspaces[w].id.clone()).collect();
+    let ids: Vec<WorkspaceId> = listed.iter().map(|&w| workspaces[w].id.clone()).collect();
     if home.hold.last_showing().is_some_and(|shown| shown.search != showing.search) {
         app.home.places.forget();
     }
@@ -181,7 +182,9 @@ pub(crate) fn page(app: &AppView, rows: Rows, cx: &mut Context<AppView>) -> impl
     // A moving mark builds this view again on every frame, so only the rows on screen are built.
     let list = v_virtual_list(cx.entity(), "home-rows", sizes, move |app, range, window, cx| {
         let line_text = LineText::new(window, cx);
-        let drawn = |ix: usize| reorder::offset_by(row(app, &app.workspaces[listed[ix]], &line_text, cx), offsets[ix]);
+        let drawn = |ix: usize| {
+            reorder::offset_by(row(app, &app.records().workspaces()[listed[ix]], &line_text, cx), offsets[ix])
+        };
         range.map(drawn).collect::<Vec<_>>()
     });
     let list = reorder::hears_the_pointer(
@@ -207,7 +210,7 @@ fn row(app: &AppView, workspace: &Workspace, line_text: &LineText, cx: &mut Cont
     let (border, hover, muted) = (theme.border, theme.list_hover, theme.muted_foreground);
     let Standing { signal, work, needs_a_look } = standing(app, workspace, cx);
     let repo = app.repo(&workspace.repo_id).map(|r| r.name.clone()).unwrap_or_default();
-    let its_chats = app.sessions.get(&workspace.id).into_iter().flatten().filter(|_| prompt_cache::told_of(workspace));
+    let its_chats = app.records().sessions(&workspace.id).iter().filter(|_| prompt_cache::told_of(workspace));
     let expiring = prompt_cache::soonest_expiring(its_chats, look::now_ms(cx))
         .map(|left_ms| line_text.small.set(div().flex_none().text_color(muted).child(look::expires_in(left_ms))));
     let id = workspace.id.clone();
