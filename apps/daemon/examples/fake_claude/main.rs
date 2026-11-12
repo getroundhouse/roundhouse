@@ -32,8 +32,8 @@
 //!                   file given in the prompt by its name and first line, and each file given by its path by its
 //!                   name and size on disk. The script is the prompt's last text block.
 //!   background:FILE Start a background task, and go on without it. Once FILE exists it finishes, and the agent
-//!                   picks up again by itself to say `finished FILE`, in a turn that starts with `init` alone.
-//!                   SIGTERM stops it, and lists none left.
+//!                   picks up again by itself to say `finished FILE`, in a turn that starts with `init` alone,
+//!                   after as many milliseconds as FILE says, if it says any. SIGTERM stops it, and lists none left.
 //!   monitor:FILE    The same, started by a `Monitor` call, so it's a monitor.
 //!   agent:TEXT      Start a subagent for TEXT in the background, asked TEXT with a full stop, which makes a call
 //!                   and reports a second later.

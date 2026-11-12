@@ -1,13 +1,13 @@
 use protocol::event::{AgentRunState, AgentTask, ApprovalOutcome, ExitReason, TaskKind, TurnOutcome};
 
 use super::ingest::{heard_before, says_something_new};
-use super::status::{Open, next_status, turn_edge, works_unattended};
+use super::status::{Open, after_background, next_status, turn_edge, works_unattended};
 use super::*;
 use crate::store::TurnEdge;
 
-const NOTHING: Open = Open { approvals: 0, tasks: 0 };
-const ONE_APPROVAL: Open = Open { approvals: 1, tasks: 0 };
-const ONE_TASK: Open = Open { approvals: 0, tasks: 1 };
+const NOTHING: Open = Open { approvals: 0, tasks: 0, agent: true };
+const ONE_APPROVAL: Open = Open { approvals: 1, tasks: 0, agent: true };
+const ONE_TASK: Open = Open { approvals: 0, tasks: 1, agent: true };
 
 fn turn_ended() -> EventBody {
     EventBody::TurnEnded {
@@ -117,19 +117,65 @@ fn a_turn_that_leaves_work_in_the_background_keeps_the_agent_at_work() {
     assert_eq!(turn_edge(Background, Idle), TurnEdge::Neither);
 }
 
+/// It picks up again by itself once that work is done, so it's still at work until it does, as the real CLI showed
+/// for a command that finished or failed, a monitor whose command ended, and a subagent that reported.
 #[test]
-fn background_work_finishing_between_turns_leaves_the_agent_idle() {
-    assert_eq!(next_status(Background, &tasks(0), NOTHING, false), Idle);
-    assert_eq!(next_status(Background, &tasks(2), Open { approvals: 0, tasks: 2 }, false), Background);
+fn background_work_finishing_between_turns_leaves_the_agent_at_work_until_it_picks_up_again() {
+    assert_eq!(next_status(Background, &tasks(0), NOTHING, false), Background);
+    assert!(after_background(Background, Background, 1, 0));
+    assert_eq!(next_status(Background, &tasks(2), Open { tasks: 2, ..NOTHING }, false), Background);
+    assert!(!after_background(Background, Background, 3, 2), "some of it is still going");
     // Listed after the turn ended, rather than before.
     assert_eq!(next_status(Idle, &tasks(1), ONE_TASK, false), Background);
+    // A list said again, with nothing in it, isn't the work going.
+    assert_eq!(next_status(Idle, &tasks(0), NOTHING, false), Idle);
+    assert!(!after_background(Background, Background, 0, 0));
+}
+
+/// As when the hub takes a wait off the list for an agent that's gone, which leaves nothing to pick up again.
+#[test]
+fn the_last_of_the_work_going_with_no_agent_running_leaves_the_chat_idle() {
+    let no_agent = Open { agent: false, ..NOTHING };
+    assert_eq!(next_status(Background, &tasks(0), no_agent, false), Idle);
+    assert!(!after_background(Background, Idle, 1, 0));
+    assert_eq!(next_status(Background, &tasks(1), Open { tasks: 1, ..no_agent }, false), Background);
+}
+
+/// The real CLI's lines once a command it left running finishes between turns, each with what's left running after
+/// it: what became of the task, the list without it, then the agent saying it's running, and the turn's `init`.
+#[test]
+fn the_agent_is_at_work_throughout_the_real_clis_picking_up_again() {
+    let lines =
+        [(notified(), ONE_TASK), (tasks(0), NOTHING), (state(AgentRunState::Running), NOTHING), (init(), NOTHING)];
+    let mut status = Background;
+    for (body, open) in &lines {
+        status = next_status(status, body, *open, false);
+        assert!(status.is_active(), "{status:?} after {body:?}");
+    }
+    assert_eq!(status, Running);
+}
+
+/// A monitor that times out says it was stopped, and the agent picks up again after it as after any other.
+#[test]
+fn a_monitor_timing_out_between_turns_leaves_the_agent_at_work_until_it_picks_up_again() {
+    let timed_out = [(notified(), ONE_TASK), (stopped(), NOTHING), (state(AgentRunState::Running), NOTHING)];
+    assert_eq!(next_status(Background, &stopped(), NOTHING, false), Background);
+    assert_eq!(after(Background, &timed_out), Running);
+}
+
+/// It hasn't, after a while, so the hub says it's idle, which a state event from the hub does as one from the agent
+/// would.
+#[test]
+fn the_agent_taken_to_be_idle_once_it_hasnt_picked_up_again_is_idle() {
+    assert_eq!(next_status(Background, &state(AgentRunState::Idle), NOTHING, false), Idle);
+    assert_eq!(turn_edge(Background, Idle), TurnEdge::Neither);
 }
 
 #[test]
 fn background_work_changing_mid_turn_leaves_the_turn_alone() {
     assert_eq!(next_status(Running, &tasks(1), ONE_TASK, false), Running);
     assert_eq!(next_status(Running, &tasks(0), NOTHING, false), Running);
-    assert_eq!(next_status(WaitingApproval, &tasks(1), Open { approvals: 1, tasks: 1 }, false), WaitingApproval);
+    assert_eq!(next_status(WaitingApproval, &tasks(1), Open { tasks: 1, ..ONE_APPROVAL }, false), WaitingApproval);
     assert_eq!(next_status(Interrupted, &tasks(1), ONE_TASK, false), Interrupted);
 }
 

@@ -1,15 +1,20 @@
-//! Letting go of a chat that's been deleted, and of what was typed in answer to a question that's been answered,
-//! against a hub that never starts a worker, since a chat nothing was sent in never has one.
+//! Letting go of a chat that's been deleted, and of what was typed in answer to a question that's been answered, and
+//! waiting for an agent to pick up again after its work in the background, against a hub that never starts a worker,
+//! with what an agent would say recorded as if it had.
 
 use std::time::{Duration, Instant};
 
-use protocol::model::AnswerSoFar;
+use protocol::event::{AgentTask, EventBody, TaskKind};
+use protocol::model::{AnswerSoFar, RunId, SessionStatus};
 use tokio::sync::broadcast::error::RecvError;
+use tokio::sync::oneshot;
 
 use super::*;
 use crate::hub::tests::hub_in;
-use crate::session::Origin;
+use crate::session::{Item, Origin, PICKS_UP_WITHIN};
 use crate::store::cancelled_approval;
+
+const FROM_AGENT: Origin = Origin::Run { run: RunId::new(1), current: true, numbered: None };
 
 const TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -74,4 +79,71 @@ async fn a_question_answered_takes_what_was_typed_in_answer_and_the_feed_tells_o
     });
     let session = told.await.expect("the feed never told of the chat");
     assert_eq!(session.answer_draft, None);
+}
+
+/// The list of what the agent runs in the background, with `count` tasks in it.
+fn listed(count: usize) -> EventBody {
+    let task =
+        |i: usize| AgentTask { id: format!("t{i}").into(), description: None, kind: TaskKind::Command, call: None };
+    EventBody::AgentTasks { tasks: (0..count).map(task).collect(), stopped: Vec::new() }
+}
+
+/// Once everything the session has been sent is recorded.
+async fn flushed(live: &LiveSession) {
+    let (done, taken) = oneshot::channel();
+    live.send_item(Item::Flush(done)).await;
+    taken.await.unwrap();
+}
+
+/// The last of its work in the background has gone, between turns.
+async fn background_over(live: &LiveSession) {
+    live.record(FROM_AGENT, listed(1), None, None).await.unwrap();
+    live.record(FROM_AGENT, listed(0), None, None).await.unwrap();
+}
+
+/// What the hub recorded of its own accord that the agent's state is.
+fn states_from_the_hub(hub: &Hub) -> usize {
+    let events = hub.store.read_events(&"s".into(), 0, 1000, u64::MAX, false).unwrap();
+    events.iter().filter(|event| event.run.is_none() && matches!(event.body, EventBody::AgentState { .. })).count()
+}
+
+/// One that never does, as a CLI that changed might not, isn't left at work for ever, keeping the machine awake.
+#[tokio::test(start_paused = true)]
+async fn an_agent_that_doesnt_pick_up_again_after_its_work_in_the_background_is_taken_to_be_idle() {
+    let dir = tempfile::tempdir().unwrap();
+    let hub = hub_in(dir.path());
+    let live = hub.live_session(&"s".into()).await.unwrap();
+
+    background_over(&live).await;
+    assert_eq!(live.status(), SessionStatus::Background, "it's still at work until it picks up again");
+    tokio::time::sleep(PICKS_UP_WITHIN.checked_sub(Duration::from_secs(1)).unwrap()).await;
+    flushed(&live).await;
+    assert_eq!(live.status(), SessionStatus::Background, "it was taken to be idle too soon");
+    tokio::time::sleep(Duration::from_secs(2)).await;
+    flushed(&live).await;
+
+    assert_eq!(live.status(), SessionStatus::Idle);
+    assert_eq!(states_from_the_hub(&hub), 1);
+}
+
+#[tokio::test(start_paused = true)]
+async fn an_agent_that_picks_up_again_isnt_taken_to_be_idle_later() {
+    let dir = tempfile::tempdir().unwrap();
+    let hub = hub_in(dir.path());
+    let live = hub.live_session(&"s".into()).await.unwrap();
+
+    background_over(&live).await;
+    let init = EventBody::AgentInit {
+        agent_session_id: None,
+        model: None,
+        cwd: None,
+        permission_mode: None,
+        agent_version: None,
+    };
+    live.record(FROM_AGENT, init, None, None).await.unwrap();
+    tokio::time::sleep(PICKS_UP_WITHIN + Duration::from_secs(1)).await;
+    flushed(&live).await;
+
+    assert_eq!(live.status(), SessionStatus::Running);
+    assert_eq!(states_from_the_hub(&hub), 0);
 }

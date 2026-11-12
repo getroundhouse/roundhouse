@@ -6,7 +6,7 @@ use protocol::model::{ClientMessageId, Session, SessionStatus, ToolUseId};
 use protocol::tail::Tail;
 use tracing::error;
 
-use super::status::{next_status, open_after, turn_edge};
+use super::status::{after_background, next_status, open_after, turn_edge};
 use super::{LiveItem, LiveSession, LiveState, Origin, publish};
 use crate::hub::Hub;
 use crate::store::{Appended, SessionChange, StatusChange, TurnEdge};
@@ -19,6 +19,8 @@ struct After {
     /// What of the status, the work in the background and the queue's hold has changed, to commit with it.
     change: SessionChange,
     tasks: Vec<AgentTask>,
+    /// Whether it leaves the session waiting for the agent to pick up again, as [`after_background`] says.
+    waits: bool,
 }
 
 /// The status and the work in the background once `body` is applied, and what has changed, to commit with it. Only
@@ -29,19 +31,22 @@ fn after(state: &LiveState, origin: Origin, mut body: EventBody) -> After {
     let outlived = state.outlives_this_hub && matches!(body, EventBody::AgentExited { .. });
     if !origin.speaks_for_session() || outlived {
         let (status, tasks) = (state.status, state.background_tasks.clone());
-        return After { body, status, change: SessionChange::default(), tasks };
+        return After { body, status, change: SessionChange::default(), tasks, waits: false };
     }
     if let EventBody::TurnEnded { started_at_ms, .. } = &mut body {
         *started_at_ms = state.turn_started_at_ms;
     }
-    let (open, tasks) = open_after(&state.pending_approvals, &state.background_tasks, &body);
+    // The current agent saying it, which only a running one can, or the hub with one running.
+    let agent = state.agent.is_some() || origin.run().is_some();
+    let (open, tasks) = open_after(&state.pending_approvals, &state.background_tasks, &body, agent);
     let next = next_status(state.status, &body, open, state.queue.idle_is_stale());
     let turn = turn_edge(state.status, next);
     let background_tasks = (tasks != state.background_tasks).then(|| tasks.clone());
     let changed = next != state.status || background_tasks.is_some();
     let status = changed.then_some(StatusChange { status: next, turn, background_tasks });
     let queue_held = state.queue.held_after(&body, state.status, next);
-    After { body, status: next, change: SessionChange { status, queue_held, recorded: None }, tasks }
+    let waits = after_background(state.status, next, state.background_tasks.len(), tasks.len());
+    After { body, status: next, change: SessionChange { status, queue_held, recorded: None }, tasks, waits }
 }
 
 impl LiveSession {
@@ -70,7 +75,7 @@ impl LiveSession {
         let _in_order = self.recording.lock().await;
         let hub = self.hub()?;
         let run = origin.run();
-        let After { body, status: next, mut change, tasks } = {
+        let After { body, status: next, mut change, tasks, waits } = {
             let state = self.state.lock();
             if let Some(refusal) = refused(&state) {
                 return Err(refusal);
@@ -95,6 +100,9 @@ impl LiveSession {
         }
         if apply(&mut self.state.lock(), origin, &appended, next, tasks, held) {
             self.wake_queue();
+        }
+        if waits {
+            self.wait_for_pickup();
         }
         if announce {
             hub.work_changed();

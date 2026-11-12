@@ -30,6 +30,7 @@ pub(crate) async fn run_ingest(session: Arc<LiveSession>, mut items: mpsc::Recei
             // Heard when the hub took it, by the hub's clock, as an event the agent said it in is timed.
             Item::Limits { run, limits, .. } => session.heard_limits(run, limits, crate::store::now_ms()),
             Item::AgentLost { link, reason } => session.agent_lost(link, reason).await,
+            Item::PickupDue => session.no_pickup().await,
             Item::Flush(done) => {
                 let _ = done.send(());
             }

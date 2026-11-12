@@ -39,13 +39,16 @@ pub(crate) struct Open {
     pub(crate) approvals: usize,
     /// Work it's running in the background.
     pub(crate) tasks: usize,
+    /// Whether it's running, so it can pick up again by itself once the last of that work has gone.
+    pub(crate) agent: bool,
 }
 
 /// The status after an event. A prompt sent mid-turn folds into that turn and produces no result of
 /// its own, so `AgentState` is what says when the agent is really idle. `TurnEnded` also goes to
 /// idle, in case a future CLI stops sending it, and any state event after that corrects it. Work left
 /// running in the background keeps the agent at work after its turn ends, since it picks up again by
-/// itself when that finishes. `AgentInit` starts every turn, and is the only sign of one the agent starts by
+/// itself when that finishes, and the last of it going between turns leaves a running agent at work until it does,
+/// as [`after_background`] says. `AgentInit` starts every turn, and is the only sign of one the agent starts by
 /// itself, which comes with no prompt and no state event. A prompt sent while the agent writes its last reply
 /// isn't folded in: the turn ends, and the agent takes the prompt as a turn of its own without saying it's running
 /// again, so taking a prompt says it. An `idle` that's `stale` comes from before a prompt the agent has yet to take,
@@ -70,14 +73,10 @@ pub(crate) fn next_status(current: SessionStatus, body: &EventBody, open: Open, 
             SessionStatus::WaitingApproval
         }
         EventBody::AgentState { state: AgentRunState::Idle } | EventBody::TurnEnded { .. } => at_rest,
-        // Between turns. During one, its end decides. When the last of them was stopped rather than finishing, the
-        // agent is being stopped too, and its exit says so.
-        EventBody::AgentTasks { stopped, .. } if matches!(current, SessionStatus::Idle | SessionStatus::Background) => {
-            if open.tasks == 0 && !stopped.is_empty() {
-                current
-            } else {
-                at_rest
-            }
+        // Between turns. During one, its end decides. With no agent running, as when the hub takes a wait off the list
+        // for one that's gone, nothing will pick up.
+        EventBody::AgentTasks { .. } if matches!(current, SessionStatus::Idle | SessionStatus::Background) => {
+            if open.tasks > 0 || !open.agent { at_rest } else { current }
         }
         EventBody::ApprovalResolved { .. } if current == SessionStatus::WaitingApproval && open.approvals == 0 => {
             SessionStatus::Running
@@ -104,6 +103,16 @@ pub(crate) fn next_status(current: SessionStatus, body: &EventBody, open: Open, 
         | EventBody::CacheExpired { .. }
         | EventBody::Unknown => current,
     }
+}
+
+/// Whether an event that took the session's status `from` one `to` another, and the work in the background from `had`
+/// tasks to `has`, left it waiting for what the agent does once the last of that work has gone between turns. However
+/// that work ended, the CLI says next either that it's running again, in a turn of its own that takes in how the work
+/// ended, or that it has exited, as it does once it's been asked to stop and has stopped its work too. Even a monitor
+/// that times out says it was stopped, and the agent picks up again after it. It starts that turn within a moment, so
+/// the agent is still at work in between, and nothing takes the moment for its being done.
+pub(crate) fn after_background(from: SessionStatus, to: SessionStatus, had: usize, has: usize) -> bool {
+    from == SessionStatus::Background && to == from && had > 0 && has == 0
 }
 
 /// Whether an agent in this status, with this much running in the background, is doing something that goes on without
@@ -135,9 +144,10 @@ pub(crate) fn open_after(
     pending: &HashMap<ApprovalId, Option<RunId>>,
     tasks: &[AgentTask],
     body: &EventBody,
+    agent: bool,
 ) -> (Open, Vec<AgentTask>) {
     let tasks = tasks_after(tasks, body);
-    (Open { approvals: approvals_after(pending, body), tasks: tasks.len() }, tasks)
+    (Open { approvals: approvals_after(pending, body), tasks: tasks.len(), agent }, tasks)
 }
 
 /// How many approvals stay open once this event is applied.

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Regenerates crates/agents/tests/fixtures/claude.jsonl, claude_controls.jsonl, claude_mcp_task.jsonl and
-claude_mcp_task_resumed.jsonl from the real `claude` CLI.
+"""Regenerates crates/agents/tests/fixtures/claude.jsonl, claude_controls.jsonl, claude_background.jsonl,
+claude_mcp_task.jsonl and claude_mcp_task_resumed.jsonl from the real `claude` CLI.
 
 Run this after upgrading the CLI, then run `cargo test -p agents`. A failure there means the CLI's
 output changed in a way the adapter depends on.
@@ -10,11 +10,13 @@ fraction of a cent. Machine details and personal configuration are removed befor
 written, because the output goes in the repo.
 
 With --controls, it only regenerates claude_controls.jsonl: control requests and the CLI's replies, with no
-prompt, so nothing is spent. With --mcp-task, it only regenerates the two claude_mcp_task files: a call to a tool
-that's answered with an MCP task, as `wait_for_pull_request` is, from a stand-in for the worker's tools, the task
-ending and the CLI picking up by itself, then another, and the CLI stopped with SIGTERM as a worker stops it. Then, in
-the second file, the same conversation resumed, which lists the task again, until it ends. It prints what the CLI
-asked of the stand-in, so a CLI that calls off its task as it stops shows.
+prompt, so nothing is spent. With --background, it only regenerates claude_background.jsonl: work the agent leaves
+running in the background, which takes a few seconds to finish, and then a few more to be stopped. With --mcp-task, it
+only regenerates the two claude_mcp_task files: a call to a tool that's answered with an MCP task, as
+`wait_for_pull_request` is, from a stand-in for the worker's tools, the task ending and the CLI picking up by itself,
+then another, and the CLI stopped with SIGTERM as a worker stops it. Then, in the second file, the same conversation
+resumed, which lists the task again, until it ends. It prints what the CLI asked of the stand-in, so a CLI that calls
+off its task as it stops shows.
 """
 import http.server
 import json
@@ -32,6 +34,7 @@ import time
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 FIXTURE = ROOT / "crates/agents/tests/fixtures/claude.jsonl"
 CONTROLS = ROOT / "crates/agents/tests/fixtures/claude_controls.jsonl"
+BACKGROUND = ROOT / "crates/agents/tests/fixtures/claude_background.jsonl"
 MCP_TASK = ROOT / "crates/agents/tests/fixtures/claude_mcp_task.jsonl"
 MCP_TASK_RESUMED = ROOT / "crates/agents/tests/fixtures/claude_mcp_task_resumed.jsonl"
 FLAGS = """-p --input-format stream-json --output-format stream-json --verbose --include-partial-messages
@@ -141,6 +144,34 @@ def capture(cwd):
     cli.wait_for(is_result)
     time.sleep(0.3)
     cli.proc.kill()
+    return cli.lines
+
+
+def capture_background(cwd):
+    """A command the agent leaves running in the background, which finishes once its turn has ended, and the turn the
+    agent starts by itself to take that in. Then another, still running when SIGTERM stops the CLI, as the worker
+    stops an agent, which stops that work, says so, and exits."""
+    cli = Cli(cwd)
+
+    def until_result(answer):
+        """Answers each approval asked for, until the turn ends. Some commands it runs without asking."""
+        while is_approval(request := cli.wait_for(lambda v: is_approval(v) or is_result(v))):
+            respond(cli, request, answer(request))
+
+    def leave_running(command):
+        cli.send(user(f"Use the Bash tool with run_in_background set to true to run exactly: {command}   "
+                      "Do not wait for it or check on it. Reply with the single word STARTED."))
+        until_result(lambda request: {"behavior": "allow", "updatedInput": request["request"]["input"]})
+
+    leave_running("sleep 3; echo finished")
+    # The turn it starts by itself, in which it may want to read what the command wrote, which it needn't.
+    until_result(lambda request: {"behavior": "deny", "message": "Not needed"})
+    time.sleep(0.3)
+    leave_running("sleep 300")
+    time.sleep(0.5)
+    cli.proc.terminate()
+    cli.proc.wait(timeout=30)
+    time.sleep(0.3)
     return cli.lines
 
 
@@ -443,11 +474,10 @@ def write(path, lines):
 
 
 def main():
-    controls_only = sys.argv[1:] == ["--controls"]
-    mcp_task_only = sys.argv[1:] == ["--mcp-task"]
+    only = sys.argv[1] if sys.argv[1:] in (["--controls"], ["--background"], ["--mcp-task"]) else None
     with tempfile.TemporaryDirectory(dir="/tmp") as cwd:
         subprocess.run(["git", "init", "-q", "-b", "main"], cwd=cwd, check=True)
-        if mcp_task_only:
+        if only == "--mcp-task":
             captured = [(path, kept_of(lines, cwd)) for path, lines in zip((MCP_TASK, MCP_TASK_RESUMED),
                                                                            capture_mcp_task(cwd))]
             forget_the_conversations(cwd)
@@ -455,15 +485,17 @@ def main():
                 write(path, kept)
                 print(f"wrote {len(kept)} lines from claude {version()} to {path}")
             return
-        kept = kept_of(capture(cwd), cwd) if not controls_only else []
-        controls = [sanitize(made_up_usage(keep_only_what_the_context_holds(keep_only_whats_applied(value))), cwd)
-                    for value in capture_controls(cwd)]
+        kept = kept_of(capture(cwd), cwd) if only is None else []
+        background = kept_of(capture_background(cwd), cwd) if only in (None, "--background") else []
+        controls = []
+        if only in (None, "--controls"):
+            controls = [sanitize(made_up_usage(keep_only_what_the_context_holds(keep_only_whats_applied(value))), cwd)
+                        for value in capture_controls(cwd)]
         forget_the_conversations(cwd)
-    if kept:
-        write(FIXTURE, kept)
-        print(f"wrote {len(kept)} lines from claude {version()} to {FIXTURE}")
-    write(CONTROLS, controls)
-    print(f"wrote {len(controls)} lines from claude {version()} to {CONTROLS}")
+    for path, lines in ((FIXTURE, kept), (BACKGROUND, background), (CONTROLS, controls)):
+        if lines:
+            write(path, lines)
+            print(f"wrote {len(lines)} lines from claude {version()} to {path}")
 
 
 def kept_of(lines, cwd):
@@ -481,9 +513,10 @@ def kept_of(lines, cwd):
 
 
 def forget_the_conversations(cwd):
-    """The CLI keeps a conversation file per directory. The random name makes this exact."""
+    """The CLI keeps a conversation file per directory, named for its path with anything but a letter or a digit made
+    a dash, as an underscore in a random name can be. The random name makes this exact."""
     projects = pathlib.Path.home() / ".claude/projects"
-    for leftover in projects.glob(f"*{pathlib.Path(cwd).name}*"):
+    for leftover in projects.glob(f"*{re.sub(r'[^A-Za-z0-9]', '-', pathlib.Path(cwd).name)}*"):
         shutil.rmtree(leftover, ignore_errors=True)
 
 
