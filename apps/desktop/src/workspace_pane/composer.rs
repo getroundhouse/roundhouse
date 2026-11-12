@@ -146,13 +146,14 @@ impl WorkspacePane {
     /// the hub hasn't answered the one before goes from what that asked, so it undoes it.
     fn toggle_plan_mode(&mut self, cx: &mut Context<Self>) {
         let Some(session) = self.session().map(|s| s.id.clone()) else { return };
-        let planning = !self.plan_asked.get(&session).copied().unwrap_or_else(|| self.planning());
+        let asked = self.chats.get(&session).and_then(|chat| chat.plan_asked);
+        let planning = !asked.unwrap_or_else(|| self.planning());
         self.want_plan_mode(session, planning, cx);
     }
 
     /// Asks for plan mode on or off in `session`, after any change already on its way there, which this then replaces.
     pub(super) fn want_plan_mode(&mut self, session: SessionId, planning: bool, cx: &mut Context<Self>) {
-        if self.plan_asked.insert(session.clone(), planning).is_none() {
+        if self.held(&session).plan_asked.replace(planning).is_none() {
             self.ask_plan_mode(session, planning, cx);
         }
     }
@@ -163,12 +164,14 @@ impl WorkspacePane {
         let mode = if planning { PermissionMode::Plan } else { PermissionMode::FullAccess };
         let change = SessionSettingsChange { permission_mode: Some(mode), ..SessionSettingsChange::default() };
         self.configure_chat(session.clone(), change, cx, move |t, now, cx| {
-            match (now, t.plan_asked.get(&session).copied()) {
+            match (now, t.chats.get(&session).and_then(|chat| chat.plan_asked)) {
                 (Some(now), Some(wanted)) if (now == PermissionMode::Plan) != wanted => {
                     t.ask_plan_mode(session, wanted, cx);
                 }
                 _ => {
-                    t.plan_asked.remove(&session);
+                    if let Some(chat) = t.chats.get_mut(&session) {
+                        chat.plan_asked = None;
+                    }
                 }
             }
         });

@@ -59,7 +59,7 @@ impl WorkspacePane {
     /// To each chat, for its line for a wait on the pull request.
     pub(super) fn pass_on_pull_request(&self, cx: &mut Context<Self>) {
         let standing = self.pull_request.for_a_wait();
-        for (transcript, _) in self.transcripts.values() {
+        for (transcript, _) in self.chats.values().filter_map(|chat| chat.transcript.as_ref()) {
             transcript.update(cx, |t, cx| t.set_pull_request(standing.clone(), cx));
         }
     }

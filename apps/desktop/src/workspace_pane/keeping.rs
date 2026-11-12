@@ -13,19 +13,19 @@ use protocol::prompt::says_or_carries;
 use transcript::QuestionPanel;
 
 use super::attaching::Composed;
-use super::{PaneEvent, WorkspacePane};
+use super::{Chat, PaneEvent, WorkspacePane};
 use crate::attached::{Attachments, ReadBack, came_back, read_back};
 
-/// What the hub kept of each open chat's composer, for a pane to start with. The files come once they're read back.
-pub(super) fn drafts_kept_in(sessions: &[Session]) -> HashMap<SessionId, Composed> {
+/// What the hub kept of each open chat's composer, for a pane to start with: its text, and the files to read back,
+/// which come once they're read.
+pub(super) fn kept_in(sessions: &[Session]) -> HashMap<SessionId, Chat> {
     let kept = sessions.iter().filter(|s| s.closed_at_ms.is_none() && !s.draft.is_empty());
-    kept.map(|s| (s.id.clone(), Composed { text: s.draft.text.clone(), files: Attachments::default() })).collect()
-}
-
-/// The files the hub kept with each open chat's draft, to read back.
-pub(super) fn files_kept_in(sessions: &[Session]) -> HashMap<SessionId, Vec<Attachment>> {
-    let kept = sessions.iter().filter(|s| s.closed_at_ms.is_none() && !s.draft.files.is_empty());
-    kept.map(|s| (s.id.clone(), s.draft.files.clone())).collect()
+    let chat = |s: &Session| Chat {
+        draft: Some(Composed { text: s.draft.text.clone(), files: Attachments::default() }),
+        restoring: Some(s.draft.files.clone()).filter(|files| !files.is_empty()),
+        ..Chat::default()
+    };
+    kept.map(|s| (s.id.clone(), chat(s))).collect()
 }
 
 /// Whether the hub keeps something typed or attached in one of these chats, for a workspace that has no pane yet.
@@ -84,8 +84,10 @@ impl WorkspacePane {
     /// Hands the hub each file in the chat's composer it hasn't got, then the draft that names them. Files the hub kept
     /// that haven't been read back yet come first, where they'll be put back, so the draft goes on naming them.
     fn keep_chat(&mut self, id: &SessionId, at_once: bool, cx: &App) {
+        let restoring = self.chats.get(id).and_then(|chat| chat.restoring.as_ref());
+        let coming_back: Vec<AttachmentId> = restoring.into_iter().flatten().map(|file| file.id.clone()).collect();
         let mut none = Attachments::default();
-        let (text, files) = match self.drafts.get_mut(id) {
+        let (text, files) = match self.chats.get_mut(id).and_then(|chat| chat.draft.as_mut()) {
             _ if self.active.as_ref() == Some(id) => (self.composer.read(cx).text().to_string(), &mut self.attached),
             Some(draft) => (draft.text.clone(), &mut draft.files),
             None => (String::new(), &mut none),
@@ -93,8 +95,7 @@ impl WorkspacePane {
         for file in files.not_yet_given(&Where::Composer(id.clone())) {
             self.keeper.attach(id, file);
         }
-        let coming_back = self.restoring.get(id).into_iter().flatten().map(|file| file.id.clone());
-        let draft = NewDraft { text, files: coming_back.chain(files.ids()).collect() };
+        let draft = NewDraft { text, files: coming_back.into_iter().chain(files.ids()).collect() };
         if at_once {
             self.keeper.set(id, draft);
         } else {
@@ -161,7 +162,8 @@ impl WorkspacePane {
 
     /// The question the chat's agent is waiting on, as its transcript asks it.
     fn question(&self, chat: &SessionId, cx: &App) -> Option<Entity<QuestionPanel>> {
-        self.transcripts.get(chat).and_then(|(transcript, _)| transcript.read(cx).question()).cloned()
+        let (transcript, _) = self.chats.get(chat)?.transcript.as_ref()?;
+        transcript.read(cx).question().cloned()
     }
 
     /// Has the hub keep the comment being written on the diff, as the file tab asks.
@@ -209,16 +211,17 @@ impl WorkspacePane {
             });
         } else {
             // Its files are its draft's, which `files_for` made if it had none.
-            let here = self.drafts.entry(id.clone()).or_default();
+            let chat = self.held(id);
+            let here = chat.draft.get_or_insert_default();
             here.text = draft.text;
             if here.text.is_empty() && here.files.is_empty() {
-                self.drafts.remove(id);
+                chat.draft = None;
             }
         }
         if missing.is_empty() {
-            self.restoring.remove(id);
+            self.held(id).restoring = None;
         } else {
-            self.restoring.insert(id.clone(), missing.clone());
+            self.held(id).restoring = Some(missing.clone());
             self.bring_back(id.clone(), missing, cx);
         }
         cx.notify();
@@ -226,8 +229,10 @@ impl WorkspacePane {
 
     /// Reads back the files the hub kept with each chat's draft that's waiting for them, off the main thread.
     pub(super) fn bring_back_files(&self, cx: &mut Context<Self>) {
-        for (id, files) in &self.restoring {
-            self.bring_back(id.clone(), files.clone(), cx);
+        for (id, chat) in &self.chats {
+            if let Some(files) = &chat.restoring {
+                self.bring_back(id.clone(), files.clone(), cx);
+            }
         }
     }
 
@@ -243,9 +248,9 @@ impl WorkspacePane {
     /// named them, so nothing needs keeping again, which could undo a change made elsewhere that hasn't arrived yet.
     /// Without a connection, they're read again on the next.
     fn brought_back(&mut self, chat: &SessionId, read: Vec<ReadBack>, cx: &mut Context<Self>) {
-        let waiting = self.restoring.get(chat).map_or(&[][..], Vec::as_slice);
+        let waiting = self.chats.get(chat).and_then(|held| held.restoring.as_deref()).unwrap_or_default();
         let Some((files, mut problems)) = came_back(waiting, read) else { return };
-        self.restoring.remove(chat);
+        self.held(chat).restoring = None;
         problems.extend(self.files_for(Some(chat)).bring_back(files, &Where::Composer(chat.clone())));
         for problem in problems {
             cx.emit(PaneEvent::Error(problem));
@@ -291,17 +296,20 @@ impl WorkspacePane {
                 None => Unsent { only_here: composed, ..Unsent::default() },
             }
         });
-        let drafted = move |id: &SessionId| Unsent {
+        let drafted = move |(id, chat): (&SessionId, &Chat)| Unsent {
             composed: Typed {
                 // A chat whose files are on their way back has them on the hub.
-                any: self.drafts.get(id).is_some_and(Composed::has_anything) || self.restoring.contains_key(id),
+                any: chat.draft.as_ref().is_some_and(Composed::has_anything) || chat.restoring.is_some(),
                 unkept: self.keeper.unkept(id),
             },
             answering: answering(id),
             only_here: only_here(id),
         };
-        let ids = self.drafts.keys().chain(self.transcripts.keys().filter(|id| !self.drafts.contains_key(*id)));
-        let others = ids.filter(|id| self.active.as_ref() != Some(*id)).map(drafted);
+        // Each chat with a draft or a transcript, other than the one showing.
+        let others = self.chats.iter().filter(|(id, chat)| {
+            (chat.draft.is_some() || chat.transcript.is_some()) && self.active.as_ref() != Some(*id)
+        });
+        let others = others.map(drafted);
         // Handed back before there was a chat to keep it in.
         let waiting = std::iter::once_with(|| Unsent {
             only_here: self.waiting.as_ref().is_some_and(|waiting| waiting.draft.has_anything()),

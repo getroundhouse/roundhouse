@@ -90,7 +90,7 @@ impl WorkspacePane {
     /// Every transcript the pane has: each chat's, and the subagent tab's.
     pub(super) fn every_transcript(&self) -> impl Iterator<Item = &Entity<Transcript>> {
         let tab = self.subagents.tab.as_ref().map(|tab| &tab.transcript);
-        self.transcripts.values().map(|(transcript, _)| transcript).chain(tab)
+        self.chats.values().filter_map(|chat| chat.transcript.as_ref()).map(|(transcript, _)| transcript).chain(tab)
     }
 
     /// A chat's subagents as the pane last had them, for a transcript to start with.
@@ -152,7 +152,8 @@ impl WorkspacePane {
     /// Passes each chat's subagents on to its transcript, and to the tab if it shows one of them, when they've changed
     /// since the pane last looked, as `changes` says.
     pub(super) fn pass_on_subagents(&self, changes: &Changes<'_>, cx: &mut Context<Self>) {
-        for (id, (transcript, _)) in &self.transcripts {
+        for (id, chat) in &self.chats {
+            let Some((transcript, _)) = &chat.transcript else { continue };
             if !changes.subagents(id) {
                 continue;
             }

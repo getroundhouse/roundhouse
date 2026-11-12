@@ -10,7 +10,7 @@ use protocol::model::{Effort, Record, Session, SessionId, SessionSettingsChange}
 use transcript::{Transcript, TranscriptEvent};
 
 use super::attaching::Composed;
-use super::{PaneEvent, Showing, WorkspacePane};
+use super::{Chat, PaneEvent, Showing, WorkspacePane};
 use crate::prompt_cache;
 use crate::rename::{self, Renaming};
 
@@ -87,13 +87,10 @@ impl WorkspacePane {
         if let Some(current) = self.active.take() {
             let text = self.composer.read(cx).text().to_string();
             let draft = Composed { text, files: std::mem::take(&mut self.attached) };
-            if draft.text.is_empty() && draft.files.is_empty() {
-                self.drafts.remove(&current);
-            } else {
-                self.drafts.insert(current, draft);
-            }
+            let kept = !draft.text.is_empty() || !draft.files.is_empty();
+            self.held(&current).draft = kept.then_some(draft);
         }
-        if !self.transcripts.contains_key(&id)
+        if self.chats.get(&id).is_none_or(|chat| chat.transcript.is_none())
             && let Some(session) = self.shown.session(&id).cloned()
         {
             self.make_transcript(session, cx);
@@ -114,7 +111,7 @@ impl WorkspacePane {
     /// between its being made active and this, such as with a prompt handed back, and they go after the draft's.
     fn show_draft(&mut self, cx: &mut Context<Self>) {
         self.with_window(cx, |t, window, cx| {
-            let draft = t.active.as_ref().and_then(|id| t.drafts.remove(id));
+            let draft = t.active.as_ref().and_then(|id| t.chats.get_mut(id)?.draft.take());
             let mut arrived = false;
             let draft = draft.or_else(|| {
                 let waiting = t.waiting.take()?;
@@ -186,7 +183,7 @@ impl WorkspacePane {
             // Typing goes back to the message box, as it would have before the bar opened.
             TranscriptEvent::FindClosed => this.with_window(cx, |t, window, cx| t.focus_showing(window, cx)),
         });
-        self.transcripts.insert(session.id, (view, events));
+        self.chats.entry(session.id).or_default().transcript = Some((view, events));
         self.pass_on_agents(cx);
     }
 
@@ -298,7 +295,7 @@ impl WorkspacePane {
         let was_open = earlier.sessions().iter().filter(|s| s.closed_at_ms.is_none()).map(|s| s.id.clone());
         let was_open: Vec<SessionId> = was_open.collect();
         for session in self.shown.sessions() {
-            if let Some((transcript, _)) = self.transcripts.get(&session.id) {
+            if let Some((transcript, _)) = self.chats.get(&session.id).and_then(|chat| chat.transcript.as_ref()) {
                 transcript.update(cx, |t, cx| t.set_session(session, cx));
             }
         }
@@ -340,7 +337,7 @@ impl WorkspacePane {
 
     /// Lets go of every chat's subagents' records, as the pane goes, such as when its workspace is archived.
     pub(crate) fn let_go_of_subagents(&self) {
-        for id in self.transcripts.keys() {
+        for (id, _) in self.chats.iter().filter(|(_, chat)| chat.transcript.is_some()) {
             self.records.unfollow_subagents(id);
         }
     }
@@ -349,19 +346,18 @@ impl WorkspacePane {
     /// were open, and starts one if none are left.
     fn keep_active_valid(&mut self, was_open: &[SessionId], cx: &mut Context<Self>) {
         let open: Vec<SessionId> = self.open_sessions().map(|s| s.id.clone()).collect();
-        // A chat that's gone takes its subagents' records with its transcript.
-        let gone: Vec<SessionId> = self.transcripts.keys().filter(|id| !open.contains(id)).cloned().collect();
-        for id in &gone {
-            self.transcripts.remove(id);
-            self.records.unfollow_subagents(id);
+        // A chat that's gone takes everything the pane held for it: its transcript, and with it its subagents'
+        // records, and what was typed and attached in it, as the hub's draft does as it closes, rather than going to
+        // the chat that shows instead.
+        let gone: Vec<(SessionId, Chat)> = self.chats.extract_if(|id, _| !open.contains(id)).collect();
+        for (id, chat) in gone {
+            if chat.transcript.is_some() {
+                self.records.unfollow_subagents(&id);
+            }
+            if let Some(draft) = chat.draft {
+                self.let_go_of_files(&id, &draft.files);
+            }
         }
-        // What was typed and attached in a chat goes with it, as the hub's draft does as it closes, rather than to the
-        // chat that shows instead.
-        let closed: Vec<(SessionId, Composed)> = self.drafts.extract_if(|id, _| !open.contains(id)).collect();
-        for (id, draft) in closed {
-            self.let_go_of_files(&id, &draft.files);
-        }
-        self.restoring.retain(|id, _| open.contains(id));
         if self.active.as_ref().is_some_and(|id| open.contains(id)) {
             return;
         }

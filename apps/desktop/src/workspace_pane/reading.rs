@@ -1,7 +1,5 @@
 //! Which chats have a reply that hasn't been read, and reading the one showing.
 
-use std::collections::HashMap;
-
 use gpui_kit::Context;
 use protocol::model::{Seq, Session, SessionId};
 
@@ -23,9 +21,6 @@ pub(super) struct Reading {
     /// The chat read last while on screen, and its newest reply then. A reply that comes while it's still showing is
     /// read too, and one marked unread again stays unread until the chat is shown again.
     shown: Option<(SessionId, Seq)>,
-    /// Replies being marked read, by chat. They show as read meanwhile, so a reply that comes in the chat showing
-    /// doesn't flash as unread first.
-    marking: HashMap<SessionId, Seq>,
 }
 
 impl WorkspacePane {
@@ -58,14 +53,15 @@ impl WorkspacePane {
         let shown_with = self.reading.shown.as_ref().filter(|(id, _)| *id == session.id).map(|(_, reply)| *reply);
         self.reading.shown = Some((session.id.clone(), session.reply_seq));
         if session.unread() && shown_with.is_none_or(|reply| session.reply_seq > reply) {
-            self.reading.marking.insert(session.id.clone(), session.reply_seq);
+            self.held(&session.id).marking = Some(session.reply_seq);
             self.mark(&session, Mark::Read, cx);
         }
     }
 
     /// Whether a chat shows as having a reply that hasn't been read.
     pub fn shows_unread(&self, session: &Session) -> bool {
-        session.unread() && self.reading.marking.get(&session.id).is_none_or(|reply| *reply < session.reply_seq)
+        session.unread()
+            && self.chats.get(&session.id).and_then(|chat| chat.marking).is_none_or(|reply| reply < session.reply_seq)
     }
 
     /// Marks a chat, from what client-core's copy says of it.
@@ -79,8 +75,10 @@ impl WorkspacePane {
         cx.spawn(async move |this, cx| {
             let marked = marking.recv().await;
             let _ = this.update(cx, |t, cx| {
-                if t.reading.marking.get(&id) == Some(&reply) {
-                    t.reading.marking.remove(&id);
+                if let Some(chat) = t.chats.get_mut(&id)
+                    && chat.marking == Some(reply)
+                {
+                    chat.marking = None;
                 }
                 match marked {
                     Ok(session) => t.took_reply(session, cx),

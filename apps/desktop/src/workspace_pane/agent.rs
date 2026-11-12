@@ -29,7 +29,7 @@ impl WorkspacePane {
     pub(super) fn pass_on_agents(&self, cx: &mut Context<Self>) {
         let held = self.records.snapshot();
         for session in self.sessions() {
-            if let Some((transcript, _)) = self.transcripts.get(&session.id) {
+            if let Some((transcript, _)) = self.chats.get(&session.id).and_then(|chat| chat.transcript.as_ref()) {
                 let agent = held.agents().of(session.agent);
                 transcript.update(cx, |t, cx| t.set_agent(agent, cx));
             }
