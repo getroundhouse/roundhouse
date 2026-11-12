@@ -197,3 +197,27 @@ fn recording_a_queued_prompt_takes_it_out_of_the_queue_in_the_same_commit() {
     store.unqueue_prompt(&"s".into(), &"b".into()).unwrap();
     assert!(store.sessions_with_queues().unwrap().is_empty());
 }
+
+/// Queuing a prompt is when the person sent it, so the hub sending it later isn't.
+#[test]
+fn a_queued_prompt_is_the_persons_as_its_queued_and_not_again_as_the_hub_sends_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_session(dir.path());
+    // Earlier than any clock could say, so a change can't land on the same moment.
+    let forget = "UPDATE sessions SET user_active_at_ms = 1; UPDATE workspaces SET user_active_at_ms = 1";
+    let forget = || lock(&store.writer).execute_batch(forget).unwrap();
+    let workspace = || store.get_workspace(&"w".into()).unwrap().user_active_at_ms;
+    forget();
+
+    queue(&store, &queued("a", "first"));
+    let queued_at = session(&store).user_active_at_ms;
+    let workspace_at = workspace();
+    forget();
+    let sent = EventBody::UserPrompt { text: "first".into(), client_msg_id: Some("a".into()), attachments: Vec::new() };
+    let appended = store.append(&"s".into(), None, &sent, None, Some(&"a".into()), None).unwrap();
+
+    assert!(queued_at.is_some_and(|at| at > 1), "{queued_at:?}");
+    assert_eq!(workspace_at, queued_at, "its workspace moves with it");
+    assert!(appended.dequeued && !appended.by_the_person);
+    assert_eq!((session(&store).user_active_at_ms, workspace()), (Some(1), Some(1)));
+}

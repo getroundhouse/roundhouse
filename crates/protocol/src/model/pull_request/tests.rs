@@ -203,6 +203,7 @@ fn workspace(pull_request: Option<PullRequestFound>) -> crate::model::Workspace 
         instance_id: "w".into(),
         created_at_ms: 1,
         archived_at_ms: None,
+        user_active_at_ms: None,
         setup: crate::model::SetupStatus::Succeeded,
         port_base: 55_000,
         rev: crate::model::Rev::default(),

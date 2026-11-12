@@ -8,7 +8,7 @@ use rusqlite::types::ValueRef;
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 
 use super::prompts::note_prompts;
-use super::queue::take_out_recorded;
+use super::sent::note_sent;
 use super::subagents::note_subagents;
 use super::{Appended, Store, StoreError, lock, now_ms, text_of};
 
@@ -97,6 +97,13 @@ fn change_session(
     Ok(())
 }
 
+impl Appended {
+    /// The event recorded before under the same `client_msg_id`, which recording it again leaves as it was.
+    fn already_recorded(event: SessionEvent) -> Self {
+        Appended { event, duplicate: true, dequeued: false, by_the_person: false, untaken: None, subagents: Vec::new() }
+    }
+}
+
 /// Which events a read by place takes: the agent's own, or those of the subagent `subagent` started, from `from` on,
 /// and none recorded after `through`, if it's set.
 #[derive(Clone, Copy, Debug)]
@@ -130,7 +137,7 @@ impl Store {
         if let Some(client_msg_id) = client_msg_id
             && let Some(event) = recorded_with(&tx, session_id, client_msg_id)?
         {
-            return Ok(Appended { event, duplicate: true, dequeued: false, untaken: None, subagents: Vec::new() });
+            return Ok(Appended::already_recorded(event));
         }
         let last_seq: Option<i64> = tx
             .query_row("SELECT last_seq FROM sessions WHERE id = ?", [session_id.as_str()], |row| row.get(0))
@@ -166,10 +173,7 @@ impl Store {
             params![seq, ts_ms, session_id.as_str()],
         )?;
         change_session(&tx, session_id, seq, ts_ms, change.unwrap_or_default())?;
-        let dequeued = match (body, client_msg_id) {
-            (EventBody::UserPrompt { .. }, Some(client_msg_id)) => take_out_recorded(&tx, session_id, client_msg_id)?,
-            _ => false,
-        };
+        let (dequeued, by_the_person) = note_sent(&tx, session_id, ts_ms, run, body, client_msg_id)?;
         let untaken = note_prompts(&tx, session_id, seq.cast_unsigned(), body)?;
         let event = SessionEvent {
             session_id: session_id.clone(),
@@ -183,7 +187,7 @@ impl Store {
         };
         let subagents = note_subagents(&tx, &event)?;
         tx.commit()?;
-        Ok(Appended { event, duplicate: false, dequeued, untaken, subagents })
+        Ok(Appended { event, duplicate: false, dequeued, by_the_person, untaken, subagents })
     }
 
     /// Always returns at least one event if any exist at or after `from_seq`, however large.

@@ -16,6 +16,7 @@ fn workspace(name: &str, repo: &str, status: WorkspaceStatus, created_at_ms: i64
         instance_id: InstanceId::from("local"),
         created_at_ms,
         archived_at_ms: None,
+        user_active_at_ms: None,
         setup: SetupStatus::NotStarted,
         port_base: 0,
         rev: Rev::default(),
@@ -47,6 +48,7 @@ fn session(workspace: &str, updated_at_ms: i64) -> Session {
         queued: Vec::new(),
         queue_held: false,
         turn_started_at_ms: None,
+        user_active_at_ms: None,
         rev: Rev::default(),
         title_source: TitleSource::FirstLine,
     }

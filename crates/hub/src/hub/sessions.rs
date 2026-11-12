@@ -90,6 +90,7 @@ impl Hub {
                 reply_seq: 0,
                 read_seq: 0,
                 turn_started_at_ms: None,
+                user_active_at_ms: None,
                 background_tasks: Vec::new(),
                 context: None,
                 queued: Vec::new(),
@@ -104,6 +105,8 @@ impl Hub {
         match self.blocking(move |store| store.insert_session(&stored, client_request_id.as_ref())).await? {
             Made::New(made) => {
                 self.notify(HubNotice::Session(made.session.clone()));
+                // Making it moved when the person last did something in its workspace.
+                self.announce_workspace(&made.session.workspace_id).await;
                 Ok(made.session)
             }
             Made::Earlier(made) => Ok(made.session),

@@ -74,6 +74,9 @@ fn the_feed_reports_what_a_sidebar_shows() {
     let session =
         client.session_create(&workspace.id, AgentKind::Claude, SessionSettingsChange::default(), None).unwrap();
     assert_eq!(next_notice(&feed, "the session"), HubNotice::Session(session.clone()));
+    // Making a chat is doing something in its workspace, which moves up the sidebar.
+    let HubNotice::Workspace(made_a_chat) = next_notice(&feed, "a chat made in it") else { panic!() };
+    assert_eq!(made_a_chat.user_active_at_ms, Some(session.created_at_ms));
 
     // One notice per change of status, not one per event. Once the first prompt is recorded, it titles the
     // workspace and the chat.
@@ -81,6 +84,9 @@ fn the_feed_reports_what_a_sidebar_shows() {
     let mut sidebar = Sidebar::default();
     let HubNotice::Session(running) = sidebar.next_notice(&feed, "running") else { panic!() };
     assert_eq!((running.id.as_str(), running.status), (session.id.as_str(), SessionStatus::Running));
+    // And so is sending its agent something.
+    let HubNotice::Workspace(sent) = sidebar.next_notice(&feed, "a prompt sent in it") else { panic!() };
+    assert_eq!(sent.user_active_at_ms, running.user_active_at_ms);
     let HubNotice::Workspace(titled) = sidebar.next_notice(&feed, "the workspace's title") else { panic!() };
     assert_eq!((titled.id.as_str(), titled.title.as_deref()), (workspace.id.as_str(), Some("say:hello")));
     let HubNotice::Session(titled) = sidebar.next_notice(&feed, "the chat's title") else { panic!() };

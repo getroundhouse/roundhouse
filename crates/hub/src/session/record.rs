@@ -93,10 +93,14 @@ impl LiveSession {
         if announce {
             hub.work_changed();
         }
-        if (announce || appended.dequeued)
+        // A prompt sent while the agent works changes no status, but it does change when the person was last active.
+        if (announce || appended.dequeued || appended.by_the_person)
             && let Err(e) = self.announce(&hub).await
         {
             error!(session = %self.id, "could not announce a change of status: {e}");
+        }
+        if appended.by_the_person {
+            hub.announce_workspace(&self.workspace_id).await;
         }
         if !appended.subagents.is_empty()
             && let Err(e) = self.announce_subagents(&hub, appended.subagents.clone()).await

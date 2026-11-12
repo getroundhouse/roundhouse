@@ -239,6 +239,11 @@ pub struct Workspace {
     pub instance_id: InstanceId,
     pub created_at_ms: i64,
     pub archived_at_ms: Option<i64>,
+    /// When the person last did something in it, by the hub's clock: made it, made a chat in it, or sent one of its
+    /// agents something, as that chat's `user_active_at_ms` says, which moves in the same commit. `None` from a hub
+    /// that doesn't keep it. [`Workspace::last_active_at_ms`] says when it was last worked in from it.
+    #[serde(default)]
+    pub user_active_at_ms: Option<i64>,
     pub setup: SetupStatus,
     /// The first of ten ports set aside for this workspace, so workspaces don't collide.
     pub port_base: u16,
@@ -264,6 +269,12 @@ impl Workspace {
     /// What to call it on screen: its title, or its name until it has one.
     pub fn label(&self) -> &str {
         self.title.as_deref().unwrap_or(&self.name)
+    }
+
+    /// When the person last worked in it, by the hub's clock, as `user_active_at_ms` says. Only what they did counts,
+    /// so it doesn't move as its agents work or reply. A hub too old to keep that says only when it was made.
+    pub fn last_active_at_ms(&self) -> i64 {
+        self.user_active_at_ms.map_or(self.created_at_ms, |at| at.max(self.created_at_ms))
     }
 }
 

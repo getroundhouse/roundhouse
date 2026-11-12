@@ -214,6 +214,18 @@ fn a_workspace_tells_a_pull_request_not_looked_for_from_none() {
     assert_eq!(found.and_then(|found| found.pull_request).map(|pr| pr.number), Some(7));
 }
 
+/// So a client sorting by when each workspace was last worked in puts one from a hub that doesn't keep it by when it was
+/// made.
+#[test]
+fn a_workspace_from_a_hub_that_doesnt_keep_when_it_was_last_worked_in_goes_by_when_it_was_made() {
+    let line = br#"{"notice":"workspace","id":"w","repo_id":"r","name":"n","branch":"n","base_ref":null,"path":null,"status":"ready","provider":"local","instance_id":"w","created_at_ms":7,"archived_at_ms":null,"setup":{"state":"succeeded"},"port_base":55000}"#;
+
+    let notice: HubNotice = frame::decode(line).unwrap();
+
+    let HubNotice::Workspace(workspace) = notice else { panic!("{notice:?}") };
+    assert_eq!((workspace.user_active_at_ms, workspace.last_active_at_ms()), (None, 7));
+}
+
 /// A hub stores an event as this and finds it by this kind, so both have to stay as they are once one is recorded.
 #[test]
 fn a_dropped_call_keeps_the_form_and_the_kind_it_s_stored_under() {

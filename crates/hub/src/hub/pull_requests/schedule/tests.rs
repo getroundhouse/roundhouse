@@ -37,6 +37,7 @@ fn workspace(id: &str, status: WorkspaceStatus, state: Option<PrState>) -> Works
         instance_id: id.into(),
         created_at_ms: 1,
         archived_at_ms: None,
+        user_active_at_ms: None,
         setup: SetupStatus::Succeeded,
         port_base: 55_000,
         rev: Rev::default(),

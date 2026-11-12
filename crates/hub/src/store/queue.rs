@@ -35,15 +35,19 @@ impl Store {
     /// nothing. A prompt that's been recorded is refused, so a retry that comes after it was sent doesn't queue it
     /// again.
     pub fn queue_prompt(&self, id: &SessionId, prompt: &QueuedPrompt) -> Result<Queued, StoreError> {
-        let conn = lock(&self.writer);
-        if was_sent(&conn, id, &prompt.client_msg_id)? {
+        let mut conn = lock(&self.writer);
+        let tx = conn.transaction()?;
+        if was_sent(&tx, id, &prompt.client_msg_id)? {
             return Ok(Queued::AlreadySent);
         }
-        let mut queue = read_queue(&conn, id)?;
+        let mut queue = read_queue(&tx, id)?;
         if !queue.iter().any(|queued| queued.client_msg_id == prompt.client_msg_id) {
             queue.push(prompt.clone());
         }
-        Ok(Queued::Done(Box::new(write_queue(&conn, id, &queue)?)))
+        // Queuing it is when the person sent it, rather than when the hub does.
+        let queued = write_queue(&tx, id, &queue, Some(super::now_ms()))?;
+        tx.commit()?;
+        Ok(Queued::Done(Box::new(queued)))
     }
 
     /// Changes the text of the prompt queued under `client_msg_id`, which keeps its place and its files. One that's
@@ -66,7 +70,7 @@ impl Store {
             return Ok(Changed::WouldBeEmpty);
         }
         text.clone_into(&mut queued.text);
-        Ok(Changed::Done(Box::new(write_queue(&conn, id, &queue)?)))
+        Ok(Changed::Done(Box::new(write_queue(&conn, id, &queue, None)?)))
     }
 
     /// Takes the prompt with this ID out of the queue, if it's there.
@@ -74,7 +78,7 @@ impl Store {
         let conn = lock(&self.writer);
         let mut queue = read_queue(&conn, id)?;
         queue.retain(|queued| queued.client_msg_id != *client_msg_id);
-        write_queue(&conn, id, &queue)
+        write_queue(&conn, id, &queue, None)
     }
 
     /// The prompt to send next, if any.
@@ -137,11 +141,20 @@ fn read_queue(conn: &Connection, id: &SessionId) -> Result<Vec<QueuedPrompt>, St
     Ok(queue_from(&json)?)
 }
 
-/// Saves the queue only if it changed, so the revision moves only then, and reads the session back.
-fn write_queue(conn: &Connection, id: &SessionId, queue: &[QueuedPrompt]) -> Result<Reading, StoreError> {
+/// Saves the queue only if it changed, so the revision moves only then, and reads the session back. `sent_at_ms` is
+/// when the person sent what changed it, which becomes when they were last active, if it did change.
+fn write_queue(
+    conn: &Connection,
+    id: &SessionId,
+    queue: &[QueuedPrompt],
+    sent_at_ms: Option<i64>,
+) -> Result<Reading, StoreError> {
     let json = serde_json::to_string(queue)?;
     let changed =
         conn.execute("UPDATE sessions SET queued = ?1 WHERE id = ?2 AND queued <> ?1", params![json, id.as_str()])? > 0;
+    if changed && let Some(sent_at_ms) = sent_at_ms {
+        super::sent::note_active(conn, id, sent_at_ms)?;
+    }
     let session = super::reading::session_on(conn, id)?;
     Ok(Reading { session, changed })
 }

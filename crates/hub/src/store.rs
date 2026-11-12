@@ -30,6 +30,7 @@ mod reading;
 mod records;
 mod repos;
 mod schema;
+mod sent;
 mod sessions;
 mod subagents;
 #[cfg(test)]
@@ -71,6 +72,8 @@ pub struct Appended {
     pub duplicate: bool,
     /// The event is a prompt that was waiting in the queue, and recording it took it out.
     pub dequeued: bool,
+    /// The person sent it, so it moved when they were last active, as `Session::user_active_at_ms` says.
+    pub by_the_person: bool,
     /// The prompts the agent has yet to take, oldest first, if the event changed them.
     pub untaken: Option<Vec<Seq>>,
     /// The subagents whose records the event changed.

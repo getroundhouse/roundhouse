@@ -4,13 +4,13 @@
 
 use client_core::{Client, ClientError, FileToSend, Written};
 use protocol::attachment::MediaType;
-use protocol::client::ErrorCode;
+use protocol::client::{ErrorCode, HubNotice};
 use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{ClientMessageId, QueuedPrompt, Seq, Session, SessionId, SessionStatus};
 
 use crate::attachments::{png, refused_with};
 use crate::steering::wait_for_tool;
-use crate::support::{Stack, assistant_text, read_all, wait_for_status, wait_for_turn_end, wait_until};
+use crate::support::{Stack, assistant_text, next_notice, read_all, wait_for_status, wait_for_turn_end, wait_until};
 
 /// Where the prompt queued under `id` was recorded, once it has been.
 fn sent_at(events: &[SessionEvent], id: &str) -> Option<Seq> {
@@ -75,6 +75,33 @@ fn a_queued_prompt_changes_or_goes_until_its_sent_and_not_after() {
     let late = change(&client, &session.id, "q1", "say:too late");
     assert_eq!(refused_with(late), ErrorCode::Conflict, "sent, so it can't change");
     assert!(client.session_get(&session.id).unwrap().queued.is_empty());
+}
+
+/// Queuing a prompt is when the person last did something in its chat's workspace, which the feed says then, and the
+/// hub sending it later, with nobody there, isn't.
+#[test]
+fn a_queued_prompt_moves_its_workspace_as_its_queued_and_not_again_as_its_sent() {
+    let stack = Stack::start();
+    let client = stack.client();
+    let (workspace, session) = stack.workspace(&client);
+    client.session_prompt(&session.id, "hang:1000", None).unwrap();
+    wait_for_tool(&client, &session.id);
+    let feed = client.feed_subscribe().unwrap();
+
+    let queued = client.session_queue(&session.id, "q1".into(), "say:after").unwrap().user_active_at_ms;
+
+    // Said at once, rather than with its pull request, which the hub reads once the turn the prompt waits on ends.
+    let told = loop {
+        match next_notice(&feed, "the workspace, as it was worked in") {
+            HubNotice::Workspace(w) if w.id == workspace.id => break w,
+            HubNotice::Session(s) => assert_eq!(s.status, SessionStatus::Running, "the turn ended first: {s:?}"),
+            _ => {}
+        }
+    };
+    assert_eq!(told.user_active_at_ms, queued);
+    wait_for_turn_end(&client, &session.id, 2);
+    let listed = client.records_list().unwrap().workspaces.into_iter().find(|w| w.id == workspace.id).unwrap();
+    assert_eq!(listed.user_active_at_ms, queued);
 }
 
 #[test]

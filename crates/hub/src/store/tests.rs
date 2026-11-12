@@ -40,6 +40,7 @@ pub(super) fn idle_session(now: i64) -> StoredSession {
             reply_seq: 0,
             read_seq: 0,
             turn_started_at_ms: None,
+            user_active_at_ms: None,
             background_tasks: Vec::new(),
             context: None,
             queued: Vec::new(),
@@ -69,6 +70,7 @@ pub(super) fn workspace_w(now: i64) -> Workspace {
         instance_id: "w".into(),
         created_at_ms: now,
         archived_at_ms: None,
+        user_active_at_ms: None,
         setup: SetupStatus::NotStarted,
         port_base: 55_000,
         rev: Rev::default(),
@@ -202,10 +204,11 @@ fn a_database_from_before_runs_and_revisions_keeps_everything_in_it() {
     let events = store.read_events(&"s".into(), 1, 10, u64::MAX, true).unwrap();
     assert_eq!((events[0].run, &events[0].body, events[0].raw.as_deref()), (None, &notice("old"), Some("line")));
     assert_eq!(store.append(&"s".into(), None, &notice("new"), None, None, None).unwrap().event.seq, 2);
-    // Records from before revisions are at the first one, and anything after moves past it, as a later migration
-    // naming the session's model and effort does.
+    // Records from before revisions are at the first one, and anything after moves past it, as later migrations
+    // naming the session's model and effort, and filling in when the person last did something in the workspace, do.
     let records = store.list_records().unwrap();
-    assert_eq!((records.repos[0].rev, records.workspaces[0].rev), (Rev::new(1), Rev::new(1)));
+    assert_eq!(records.repos[0].rev, Rev::new(1));
+    assert!(records.workspaces[0].rev > Rev::new(1));
     let migrated = records.sessions[0].rev;
     assert!(migrated > Rev::new(1));
     store.retitle_session(&"s".into(), &Title::typed("t").unwrap(), Retitle::ByHand).unwrap();
