@@ -15,6 +15,7 @@ anyhow.workspace = true
 clap.workspace = true
 hub.workspace = true
 libc.workspace = true
+process.workspace = true
 protocol.workspace = true
 tokio.workspace = true
 tracing-subscriber.workspace = true

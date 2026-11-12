@@ -107,7 +107,7 @@ crates/
   hub/             Workspaces, sessions, event log, platform API, SQLite storage
   worker/          Git, worktrees, running agents
   agents/          Claude adapter, raw event capture
-  process/         Signalling a process group, and recording a PID with its start time
+  process/         Signalling a process group, recording a PID with its start time, and keeping a process's own input and output from what it starts
   providers/       The trait a provider adapter written in Rust implements, the loop that serves it over the provider protocol, and the local provider
   client-core/     Connection, and each hub's records and open sessions, kept in sync. Shared by every Rust client. No UI
   transcript/      A session's history and live output, on the kit's list and text views
@@ -145,7 +145,7 @@ apps/cli ───────────────────────�
 apps/daemon ──> hub ──> protocol
 apps/daemon ──> providers ──> protocol
 apps/daemon ──> worker ──> agents ──> protocol
-agents, providers, worker ──> process
+agents, providers, worker, client-core, apps/daemon ──> process
 ```
 
 1. **Clients only talk to hubs.** They never touch git, terminals or agents directly. The hub fetches or proxies live data from the worker.
@@ -316,6 +316,7 @@ Any process can die at any point, so nothing depends on a clean exit. Whatever s
 - **When a worker goes, the hub stops its instance and tells its sessions,** which close their open approvals and record that the agent exited. The next prompt starts a new worker and agent.
 - **Workers, agents and setup scripts each start in their own process group,** so stopping one reaches everything it started, and a signal to the hub's terminal doesn't reach them directly. Signalling a group, and recording a PID with its start time, each have one implementation, in `crates/process`.
 - **On Windows, stopping a group ends its leader and everything the leader started, at once.** It doesn't ask first with Ctrl-Break, the nearest thing Windows has to `SIGTERM`, so nothing gets a chance to stop by itself. Windows has no process groups to stop, so what a leader started is found from each process's parent, which misses a process whose own parent has exited. A job object that ends its processes when its last handle closes would hold those too. *Unconfirmed.*
+- **On Windows, what a process starts gets its own input and output only when it's given them.** A child there gets a copy of every handle its parent can pass on, so a hub would hold the input and output of the client that started it for as long as it runs, and something an agent left running would hold its worker's pipes to the hub, which learns that the worker has exited when its output ends. So the daemon, and a client starting a hub, keep theirs from what they start, through `crates/process`. For the same reason a hub or a worker that has stopped waits only a second for what's left on tokio's blocking threads before it exits, since tokio reads a child's output on one of them, and such a leftover can keep that read waiting for ever. *Unconfirmed.*
 - **A worker that gets killed can't stop its agents, so it records them.** Each agent's PID and start time go in a file in the instance directory, and the local provider stops anything still recorded before the next worker starts. Otherwise an orphan and its replacement would both be working on one conversation and worktree.
 - **An archived worktree's files are deleted by a process of its own,** since the hub closes the worker as soon as archiving is done. The worker moves the worktree into `.deleting` beside it, has git forget it, then starts the daemon's hidden `delete` command on what's there, which makes read-only directories writable if they're in its way. Whatever is left in `.deleting` when the next workspace beside it is archived, such as what a shutdown cut short, is deleted with it, and so is a worktree whose worker stopped before git forgot it, once its archive is tried again. A lock in `.deleting` keeps a worktree that git refuses to forget, which goes back where it was, from being listed by another worker meanwhile, and one that can't go back is kept beside it, where nothing deletes it. What can't be deleted goes in the worker's log. *Unconfirmed.*
 - **Each launch of an agent has a run ID,** and its events carry it. A late event from a replaced agent still goes in the log, but can't change the status of the session its replacement is running, or clear its replacement's tail.
