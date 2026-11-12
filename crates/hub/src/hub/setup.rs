@@ -8,6 +8,7 @@ use protocol::worker::{WorkerRequest, WorkerResponse};
 use tokio::sync::watch;
 use tracing::warn;
 
+use super::ready::ReadyWorkspace;
 use super::workspaces::workspace_env;
 use super::{Hub, unexpected};
 
@@ -30,17 +31,21 @@ impl SetupGate {
 impl Hub {
     /// Records that setup is running, starts it in the background, and returns the workspace as stored,
     /// so a reply says only what the hub has recorded. Prompts wait for setup.
-    pub(super) async fn start_setup(self: &Arc<Self>, repo: Repo, workspace: Workspace) -> Result<Workspace, ApiError> {
+    pub(super) async fn start_setup(
+        self: &Arc<Self>,
+        repo: Repo,
+        ready: ReadyWorkspace,
+    ) -> Result<Workspace, ApiError> {
         let (done, _) = watch::channel(false);
         let (stop, stopped) = watch::channel(false);
-        self.setup_gates.lock().insert(workspace.id.clone(), SetupGate { done: done.clone(), stop });
+        self.setup_gates.lock().insert(ready.id().clone(), SetupGate { done: done.clone(), stop });
         self.work_changed();
-        let marked = workspace.id.clone();
+        let marked = ready.id().clone();
         let running = self.blocking(move |store| store.set_workspace_setup(&marked, SetupStatus::Running)).await;
         let running = match running {
             Ok(running) => running,
             Err(e) => {
-                self.setup_gates.lock().remove(&workspace.id);
+                self.setup_gates.lock().remove(ready.id());
                 self.work_changed();
                 done.send_replace(true);
                 return Err(e);
@@ -48,9 +53,9 @@ impl Hub {
         };
         self.notify(HubNotice::Workspace(running.clone()));
         let hub = self.clone();
-        let id = workspace.id.clone();
+        let id = ready.id().clone();
         tokio::spawn(async move {
-            let outcome = hub.run_setup(&repo, &workspace, stopped).await;
+            let outcome = hub.run_setup(&repo, &ready, stopped).await;
             let marked = id.clone();
             match hub.blocking(move |store| store.set_workspace_setup(&marked, outcome)).await {
                 Ok(workspace) => hub.notify(HubNotice::Workspace(workspace)),
@@ -68,10 +73,10 @@ impl Hub {
     async fn run_setup(
         self: &Arc<Self>,
         repo: &Repo,
-        workspace: &Workspace,
+        ready: &ReadyWorkspace,
         mut stopped: watch::Receiver<bool>,
     ) -> SetupStatus {
-        let Some(path) = workspace.path.clone() else { return SetupStatus::Failed { code: None } };
+        let workspace = ready.workspace();
         let link = match self.ensure_worker(&workspace.id).await {
             Ok(link) => link,
             Err(e) => {
@@ -79,8 +84,8 @@ impl Hub {
                 return SetupStatus::Failed { code: None };
             }
         };
-        let request =
-            WorkerRequest::SetupWorkspace { repo_path: repo.path.clone(), path, env: workspace_env(workspace, repo) };
+        let (repo_path, path, env) = (repo.path.clone(), ready.path().to_owned(), workspace_env(workspace, repo));
+        let request = WorkerRequest::SetupWorkspace { repo_path, path, env };
         let finished = async {
             let running = link.send(request).await?;
             tokio::pin!(running);
@@ -115,8 +120,9 @@ impl Hub {
     }
 
     pub(crate) async fn workspace_setup_log(self: &Arc<Self>, id: WorkspaceId) -> Result<String, ApiError> {
-        let (_, path, link) = self.ready_worktree(&id).await?;
-        let reply = link.call(WorkerRequest::SetupLog { path }).await?;
+        let worktree = self.ready_worktree(&id).await?;
+        let path = worktree.path().to_owned();
+        let reply = worktree.link().call(WorkerRequest::SetupLog { path }).await?;
         let WorkerResponse::SetupLog { text } = reply else {
             return Err(unexpected(&reply));
         };
@@ -124,13 +130,13 @@ impl Hub {
     }
 
     pub(crate) async fn workspace_rerun_setup(self: &Arc<Self>, id: WorkspaceId) -> Result<Workspace, ApiError> {
-        let (workspace, _, _) = self.ready_worktree(&id).await?;
+        let ready = self.ready_worktree(&id).await?.into_ready();
         if self.setup_gates.lock().contains_key(&id) {
             return Err(ApiError::new(ErrorCode::Conflict, "setup is already running"));
         }
-        let repo_id = workspace.repo_id.clone();
+        let repo_id = ready.workspace().repo_id.clone();
         let repo = self.blocking(move |store| store.get_repo(&repo_id)).await?;
-        self.start_setup(repo, workspace).await
+        self.start_setup(repo, ready).await
     }
 
     /// Stops the setup script if it's running, or keeps it from starting if it hasn't yet. The workspace stays

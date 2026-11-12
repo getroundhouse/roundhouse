@@ -146,17 +146,15 @@ impl Hub {
         if attachments.is_empty() {
             return Ok(Vec::new());
         }
-        let worktree = self.workspace(workspace_id).await?.path;
-        let worktree =
-            worktree.ok_or_else(|| ApiError::new(ErrorCode::Conflict, "the workspace has no worktree yet"))?;
-        let link = self.ensure_worker(workspace_id).await?;
+        let ready = self.ready_worktree(workspace_id).await?;
+        let (worktree, link) = (ready.path(), ready.link());
         let mut placed = Vec::with_capacity(attachments.len());
         for attachment in attachments {
             let (session, id) = (session_id.clone(), attachment.id.clone());
             let already = self.blocking(move |store| store.attachment_placed_at(&session, &id)).await?;
             let path = match already {
                 Some(path) => path,
-                None => self.place(session_id, &link, &worktree, attachment).await?,
+                None => self.place(session_id, link, worktree, attachment).await?,
             };
             placed.push(AttachmentFile { attachment: attachment.clone(), path });
         }

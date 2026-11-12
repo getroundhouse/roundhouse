@@ -11,12 +11,13 @@ use std::time::{Duration, Instant};
 use budget::{Budget, calls_to_read};
 use parking_lot::Mutex;
 use protocol::client::{ApiError, ErrorCode, HubNotice};
-use protocol::model::{BranchName, PullRequest, PullRequestFound, Workspace, WorkspaceId, WorkspaceStatus};
+use protocol::model::{BranchName, PullRequest, PullRequestFound, Workspace, WorkspaceId};
 use protocol::worker::{WorkerRequest, WorkerResponse};
 use schedule::{Schedule, Went};
 use tokio::sync::{Mutex as AsyncMutex, OwnedMutexGuard};
 use tracing::debug;
 
+use super::ready::ReadyWorkspace;
 use super::{Hub, unexpected};
 use crate::store::{Store, now_ms};
 use crate::worker_link::WorkerLink;
@@ -130,8 +131,9 @@ impl Hub {
         self: &Arc<Self>,
         id: WorkspaceId,
     ) -> Result<Option<PullRequest>, ApiError> {
-        let (_, path, link) = self.ready_worktree(&id).await?;
-        self.read_pull_request(&id, path, &link, Asked::Waiting, When::Always).await?.or_known()
+        let worktree = self.ready_worktree(&id).await?;
+        let path = worktree.path().to_owned();
+        self.read_pull_request(&id, path, worktree.link(), Asked::Waiting, When::Always).await?.or_known()
     }
 
     /// Reads it for an agent, through the worker of the agent that asked, as an [`Asked::Agent`] read, so it fails
@@ -141,7 +143,7 @@ impl Hub {
         id: &WorkspaceId,
         link: &WorkerLink,
     ) -> Result<Option<PullRequest>, ApiError> {
-        let (_, path) = self.ready_path(id).await?;
+        let path = self.ready_workspace(id).await?.path().to_owned();
         self.read_pull_request(id, path, link, Asked::Agent, When::Always).await?.read()
     }
 
@@ -152,7 +154,7 @@ impl Hub {
         id: &WorkspaceId,
         link: &WorkerLink,
     ) -> Result<(Option<PullRequest>, ReadsHeld), ApiError> {
-        let (_, path) = self.ready_path(id).await?;
+        let path = self.ready_workspace(id).await?.path().to_owned();
         let (answer, held) = self.read_holding(id, path, link, Asked::Agent, When::Always).await?;
         Ok((answer.read()?, held))
     }
@@ -295,8 +297,8 @@ impl Hub {
     fn read_pull_request_through(self: &Arc<Self>, id: &WorkspaceId, link: Arc<WorkerLink>, asked: Asked, when: When) {
         let (hub, id) = (self.clone(), id.clone());
         tokio::spawn(async move {
-            let Ok(workspace) = hub.workspace(&id).await else { return };
-            let Some(path) = workspace.path.filter(|_| workspace.status == WorkspaceStatus::Ready) else { return };
+            let Ok(ready) = hub.ready_workspace(&id).await else { return };
+            let path = ready.path().to_owned();
             let read = hub.read_pull_request(&id, path, &link, asked, when).await;
             if let Err(e) = read.and_then(Answer::or_known) {
                 debug!(%id, "reading the pull request as it may have changed: {}", e.message);
@@ -340,7 +342,7 @@ impl Hub {
     /// when the budget can't spare them.
     async fn read_in_turn(self: &Arc<Self>, workspace: &Workspace) -> Result<(), Instant> {
         let id = &workspace.id;
-        let Some(path) = workspace.path.clone() else {
+        let Ok(path) = ReadyWorkspace::new(workspace.clone()).map(|ready| ready.path().to_owned()) else {
             // So it doesn't come up again at once, ahead of the rest.
             self.pull_requests.wait_longer(id);
             return Ok(());

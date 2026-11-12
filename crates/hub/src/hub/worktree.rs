@@ -3,40 +3,15 @@
 use std::sync::Arc;
 
 use protocol::client::{ApiError, files};
-use protocol::model::{
-    CommitId, FileContents, FileOpened, FilePages, GitDiff, GitStatus, Workspace, WorkspaceId, WorkspaceStatus,
-    WorktreeFiles,
-};
+use protocol::model::{CommitId, FileContents, FileOpened, FilePages, GitDiff, GitStatus, WorkspaceId, WorktreeFiles};
 use protocol::worker::{WorkerRequest, WorkerResponse};
 
-use super::{Hub, not_ready, unexpected};
-use crate::error::internal;
-use crate::worker_link::WorkerLink;
+use super::{Hub, unexpected};
 
 impl Hub {
-    /// A workspace that's ready, its worktree's path, and its worker, started if it wasn't running.
-    pub(super) async fn ready_worktree(
-        self: &Arc<Self>,
-        id: &WorkspaceId,
-    ) -> Result<(Workspace, String, Arc<WorkerLink>), ApiError> {
-        let (workspace, path) = self.ready_path(id).await?;
-        let link = self.ensure_worker(id).await?;
-        Ok((workspace, path, link))
-    }
-
-    /// The workspace and its worktree's path, if it's ready, without its worker.
-    pub(super) async fn ready_path(&self, id: &WorkspaceId) -> Result<(Workspace, String), ApiError> {
-        let workspace = self.workspace(id).await?;
-        if workspace.status != WorkspaceStatus::Ready {
-            return Err(not_ready(&workspace));
-        }
-        let path = workspace.path.clone().ok_or_else(|| internal("a ready workspace has no path"))?;
-        Ok((workspace, path))
-    }
-
     pub(crate) async fn workspace_status(self: &Arc<Self>, id: WorkspaceId) -> Result<GitStatus, ApiError> {
-        let (_, path, link) = self.ready_worktree(&id).await?;
-        let reply = link.call(WorkerRequest::GitStatus { path }).await?;
+        let worktree = self.ready_worktree(&id).await?;
+        let reply = worktree.link().call(WorkerRequest::GitStatus { path: worktree.path().to_owned() }).await?;
         let WorkerResponse::GitStatus(status) = reply else {
             return Err(unexpected(&reply));
         };
@@ -44,8 +19,9 @@ impl Hub {
     }
 
     pub(crate) async fn workspace_diff(self: &Arc<Self>, id: WorkspaceId) -> Result<GitDiff, ApiError> {
-        let (workspace, path, link) = self.ready_worktree(&id).await?;
-        let reply = link.call(WorkerRequest::GitDiff { path, base_ref: workspace.base_ref }).await?;
+        let worktree = self.ready_worktree(&id).await?;
+        let (path, base_ref) = (worktree.path().to_owned(), worktree.workspace().base_ref.clone());
+        let reply = worktree.link().call(WorkerRequest::GitDiff { path, base_ref }).await?;
         let WorkerResponse::GitDiff(diff) = reply else {
             return Err(unexpected(&reply));
         };
@@ -54,8 +30,9 @@ impl Hub {
 
     /// The files in the workspace's worktree, as the worker lists them.
     pub(crate) async fn workspace_files(self: &Arc<Self>, id: WorkspaceId) -> Result<WorktreeFiles, ApiError> {
-        let (_, path, link) = self.ready_worktree(&id).await?;
-        let reply = link.call(WorkerRequest::ListFiles { path }).await?;
+        let worktree = self.ready_worktree(&id).await?;
+        let path = worktree.path().to_owned();
+        let reply = worktree.link().call(WorkerRequest::ListFiles { path }).await?;
         let WorkerResponse::Files(files) = reply else {
             return Err(unexpected(&reply));
         };
@@ -68,8 +45,9 @@ impl Hub {
         id: WorkspaceId,
         folder: String,
     ) -> Result<WorktreeFiles, ApiError> {
-        let (_, path, link) = self.ready_worktree(&id).await?;
-        let reply = link.call(WorkerRequest::FolderRead { path, folder }).await?;
+        let worktree = self.ready_worktree(&id).await?;
+        let path = worktree.path().to_owned();
+        let reply = worktree.link().call(WorkerRequest::FolderRead { path, folder }).await?;
         let WorkerResponse::Files(files) = reply else {
             return Err(unexpected(&reply));
         };
@@ -82,8 +60,9 @@ impl Hub {
         id: WorkspaceId,
         file: String,
     ) -> Result<FileContents, ApiError> {
-        let (_, path, link) = self.ready_worktree(&id).await?;
-        let reply = link.call(WorkerRequest::FileRead { path, file }).await?;
+        let worktree = self.ready_worktree(&id).await?;
+        let path = worktree.path().to_owned();
+        let reply = worktree.link().call(WorkerRequest::FileRead { path, file }).await?;
         let WorkerResponse::FileContents(contents) = reply else {
             return Err(unexpected(&reply));
         };
@@ -97,8 +76,9 @@ impl Hub {
         commit: CommitId,
         file: String,
     ) -> Result<FileContents, ApiError> {
-        let (_, path, link) = self.ready_worktree(&id).await?;
-        let reply = link.call(WorkerRequest::FileReadAt { path, commit, file }).await?;
+        let worktree = self.ready_worktree(&id).await?;
+        let path = worktree.path().to_owned();
+        let reply = worktree.link().call(WorkerRequest::FileReadAt { path, commit, file }).await?;
         let WorkerResponse::FileContents(contents) = reply else {
             return Err(unexpected(&reply));
         };
@@ -113,8 +93,9 @@ impl Hub {
         commit: CommitId,
         file: String,
     ) -> Result<FileOpened, ApiError> {
-        let (_, path, link) = self.ready_worktree(&id).await?;
-        let reply = link.call(WorkerRequest::FileOpenAt { path, commit, file }).await?;
+        let worktree = self.ready_worktree(&id).await?;
+        let path = worktree.path().to_owned();
+        let reply = worktree.link().call(WorkerRequest::FileOpenAt { path, commit, file }).await?;
         let WorkerResponse::FileOpened(opened) = reply else {
             return Err(unexpected(&reply));
         };
@@ -127,8 +108,9 @@ impl Hub {
         asked: files::WorkspaceFilePages,
     ) -> Result<FilePages, ApiError> {
         let files::WorkspaceFilePages { id, commit, path: file, page_lines, pages } = asked;
-        let (_, path, link) = self.ready_worktree(&id).await?;
-        let reply = link.call(WorkerRequest::FilePages { path, commit, file, page_lines, pages }).await?;
+        let worktree = self.ready_worktree(&id).await?;
+        let path = worktree.path().to_owned();
+        let reply = worktree.link().call(WorkerRequest::FilePages { path, commit, file, page_lines, pages }).await?;
         let WorkerResponse::FilePages(pages) = reply else {
             return Err(unexpected(&reply));
         };

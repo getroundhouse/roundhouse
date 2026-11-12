@@ -9,13 +9,13 @@ use protocol::find::{Found, Needle};
 use protocol::model::{
     AgentKind, AnswerDraft, ApprovalId, AttachmentId, ClientMessageId, ClientRequestId, CompactionLine, Draft,
     NewDraft, PermissionMode, Place, PromptLine, RecordKey, Rev, Seq, Session, SessionId, SessionSettings,
-    SessionSettingsChange, SessionStatus, TitleSource, ToolUseId, WorkspaceId, WorkspaceStatus,
+    SessionSettingsChange, SessionStatus, TitleSource, ToolUseId, WorkspaceId,
 };
 use protocol::prompt::check_prompt;
 use tokio::sync::oneshot;
 use tracing::warn;
 
-use super::{Hub, new_id, not_ready};
+use super::{Hub, new_id};
 use crate::error::internal;
 use crate::session::{Command, LiveSession};
 use crate::store::{Made, Places, Reading, Store, StoreError, StoredSession, now_ms};
@@ -64,10 +64,7 @@ impl Hub {
             return Err(ApiError::new(ErrorCode::InvalidRequest, "this hub doesn't know that kind of agent"));
         }
         known(&options)?;
-        let workspace = self.workspace(&workspace_id).await?;
-        if workspace.status != WorkspaceStatus::Ready {
-            return Err(not_ready(&workspace));
-        }
+        self.ready_workspace(&workspace_id).await?;
         let id = new_id();
         let now = now_ms();
         let SessionSettings { model, permission_mode, effort } = SessionSettings::default().changed(options);

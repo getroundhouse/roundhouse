@@ -146,8 +146,8 @@ impl Hub {
             link.keep();
             // Its watch of the branches goes on from the earlier hub, but sends only what changes, and what it sent
             // while there was no hub is lost, so asking again has it send what they are now.
-            match self.workspace(&workspace_id).await {
-                Ok(workspace) => self.watch_branches(&workspace, &link).await,
+            match self.ready_workspace(&workspace_id).await {
+                Ok(ready) => self.watch_branches(&ready, &link).await,
                 Err(e) => debug!(%workspace_id, "watching the branches of a worker carried on with: {}", e.message),
             }
             if link.is_another_build() {

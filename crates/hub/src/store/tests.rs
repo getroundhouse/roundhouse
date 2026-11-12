@@ -61,7 +61,7 @@ pub(crate) fn idle_session(now: i64) -> StoredSession {
 }
 
 /// The workspace `w`, ready in the repository `r`.
-pub(super) fn workspace_w(now: i64) -> Workspace {
+pub(crate) fn workspace_w(now: i64) -> Workspace {
     Workspace {
         id: "w".into(),
         repo_id: "r".into(),
