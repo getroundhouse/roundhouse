@@ -15,6 +15,8 @@ mod build;
 pub mod client;
 pub mod event;
 pub mod find;
+#[cfg(feature = "testing")]
+pub mod fixtures;
 pub mod frame;
 pub mod model;
 pub mod paths;

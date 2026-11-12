@@ -193,29 +193,7 @@ fn any_found() -> impl Strategy<Value = PullRequestFound> {
 
 /// A workspace whose hub found this of its pull request.
 fn workspace(pull_request: Option<PullRequestFound>) -> crate::model::Workspace {
-    crate::model::Workspace {
-        id: "w".into(),
-        repo_id: "r".into(),
-        name: "n".to_string(),
-        branch: "n".into(),
-        base_ref: None,
-        path: None,
-        status: crate::model::WorkspaceStatus::Ready,
-        provider: "local".into(),
-        instance_id: "w".into(),
-        created_at_ms: 1,
-        archived_at_ms: None,
-        user_active_at_ms: None,
-        setup: crate::model::SetupStatus::Succeeded,
-        port_base: 55_000,
-        rev: crate::model::Rev::default(),
-        title: None,
-        title_source: crate::model::TitleSource::FirstLine,
-        pull_request,
-        comment_draft: None,
-        branches: None,
-        pull_request_branch: None,
-    }
+    crate::model::Workspace { pull_request, ..crate::fixtures::workspace("w") }
 }
 
 /// One found on a branch other than the one checked out isn't the workspace's now, but none found on no branch, as

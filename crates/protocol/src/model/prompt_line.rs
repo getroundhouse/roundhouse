@@ -182,16 +182,7 @@ mod tests {
 
     #[test]
     fn a_prompt_has_a_line_at_its_place_and_nothing_else_does() {
-        let event = |seq, place, body| SessionEvent {
-            session_id: "s".into(),
-            seq,
-            ts_ms: 0,
-            run: None,
-            subagent: None,
-            place: Place::new(place),
-            body,
-            raw: None,
-        };
+        let event = |seq, place, body| SessionEvent { place: Place::new(place), ..crate::fixtures::event(seq, body) };
         let body = EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("Fix\nit") };
 
         assert_eq!(PromptLine::of(&event(4, 3, body)), Some(PromptLine::new(4, "Fix it", 0).placed(Place::new(3))));

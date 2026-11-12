@@ -1,28 +1,9 @@
-use crate::model::{
-    DiffComment, DiffSide, HubSettings, RecentWork, Record, RecordKey, Repo, Rev, Subagent, SubagentStatus,
-    WorkspaceDraft,
-};
+use crate::model::{DiffComment, DiffSide, HubSettings, Record, RecordKey, Repo, Rev, Subagent, WorkspaceDraft};
 
 use super::{HubNotice, RecordNotice};
 
 fn subagent(rev: u64) -> Subagent {
-    Subagent {
-        session_id: "s".into(),
-        call: "c".into(),
-        kind: None,
-        description: None,
-        prompt: None,
-        in_background: false,
-        model: None,
-        status: SubagentStatus::Working,
-        started_at_ms: 0,
-        ended_at_ms: None,
-        calls: 0,
-        latest_call: None,
-        recent: RecentWork::default(),
-        report: None,
-        rev: Rev::new(rev),
-    }
+    Subagent { rev: Rev::new(rev), ..crate::fixtures::subagent("c") }
 }
 
 /// A notice of each kind of record that's quick to make, with the key and revision it's of.
