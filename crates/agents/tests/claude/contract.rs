@@ -29,6 +29,18 @@ pub(super) fn events() -> Vec<EventBody> {
         .collect()
 }
 
+/// Every block of what the agent wrote and what its tools sent back, in order.
+pub(super) fn blocks() -> Vec<ContentBlock> {
+    events()
+        .into_iter()
+        .filter_map(|e| match e {
+            EventBody::Assistant { blocks, .. } | EventBody::AgentUser { blocks, .. } => Some(blocks),
+            _ => None,
+        })
+        .flatten()
+        .collect()
+}
+
 #[test]
 fn every_line_is_understood_or_deliberately_kept() {
     for (i, item) in parsed().into_iter().enumerate() {
@@ -188,16 +200,7 @@ fn state_events_cover_running_waiting_and_idle() {
 
 #[test]
 fn thinking_tools_and_results_all_normalize() {
-    let events = events();
-    let blocks: Vec<&ContentBlock> = events
-        .iter()
-        .flat_map(|e| match e {
-            EventBody::Assistant { blocks, .. } | EventBody::AgentUser { blocks, .. } => {
-                blocks.iter().collect::<Vec<_>>()
-            }
-            _ => vec![],
-        })
-        .collect();
+    let blocks = blocks();
     // Thinking is only readable because of --thinking-display. Without it the text is empty.
     assert!(blocks.iter().any(|b| matches!(b, ContentBlock::Thinking { text } if !text.is_empty())));
     assert!(blocks.iter().any(|b| matches!(b, ContentBlock::Text { text, .. } if text.contains("DONE"))));
