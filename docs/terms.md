@@ -62,7 +62,7 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 
 | Term | Meaning | In code |
 |---|---|---|
-| Mark | A workspace's or chat's status, drawn as a half circle of fine dots: its pull request's colour, a white light while its agent works or has left something running, and a turntable that's red when its agent stopped short. `docs/spec/look.md` has the rules | `look::mark` |
+| Mark | A workspace's or chat's status, drawn as a half circle of fine dots: a fan in the pull request's colour on a workspace's and grey on a chat's, a white light while its agent works or has left something running, and a turntable that's red when its agent stopped short. `docs/spec/look.md` has the rules | `look::mark`, `look::chat_mark` |
 | Task ring | What a background task's line starts with: a small circle of dots around a hub, with a light going round while the task runs, and still with its hub lit for a monitor. It isn't the ring beside Send, which shows how full the agent's context is | `look::task_ring`, `TaskRing` |
 | Your turn | A chat waiting on the person for an answer or an approval. Its name stands out, as one with an unread reply does. An approval's card is amber, and a question takes the composer's place | `SessionStatus::WaitingApproval`, `sidebar::signal::waiting_on_you` |
 | Sidebar of changes | The sidebar on the right. Its tabs switch it between All files and Changes, the files a workspace changes against its base. `docs/spec/diff.md` has the rules | `Changes`, `SidebarTab` |

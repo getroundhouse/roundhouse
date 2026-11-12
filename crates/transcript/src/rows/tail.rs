@@ -10,7 +10,7 @@ use gpui_kit::{
     AnyElement, App, Div, ElementId, InteractiveElement as _, IntoElement, ParentElement,
     StatefulInteractiveElement as _, Styled, TestSupportExt as _, div, px,
 };
-use look::{Signal, TaskRing, Work};
+use look::{Signal, TaskRing};
 use protocol::event::{AgentTask, TaskKind};
 use protocol::tail::{BlockKind, Compacting, Tail};
 
@@ -107,7 +107,7 @@ fn working_line(started_at_ms: Option<i64>, compacting: Option<&Compacting>, cx:
         .id("working-line")
         .font_family(theme.mono_font_family.clone())
         .text_size(theme.mono_font_size)
-        .child(look::mark(Signal::Working, Work::NoPr, look::Size::Inline, cx))
+        .child(look::chat_mark(Signal::Working, look::Size::Inline, cx))
         .children(so_far)
         .children(compacting.map(|compacting| {
             // Counted as tokens are, since it's said beside them.

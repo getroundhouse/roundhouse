@@ -39,7 +39,6 @@ impl WorkspacePane {
         let unread = self.shows_unread(session);
         let needs_a_look = unread || crate::sidebar::signal::waiting_on_you([session]);
         let mark = crate::sidebar::signal::chat(session);
-        let work = self.work();
         let (to_show, to_close) = (session.id.clone(), session.id.clone());
         let close = Button::new(ElementId::Name(format!("close-chat-{}", session.id).into()))
             .hand()
@@ -78,7 +77,7 @@ impl WorkspacePane {
                     .when(!needs_a_look, |d| d.text_color(muted))
                     .when(needs_a_look, |d| d.font_weight(FontWeight::MEDIUM))
                     .on_click(cx.listener(move |t, _, _, cx| t.activate(to_show.clone(), cx)))
-                    .child(look::mark(mark, work, look::Size::Inline, cx))
+                    .child(look::chat_mark(mark, look::Size::Inline, cx))
                     .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(title))
                     // Hidden rather than left out, so the title doesn't move when it shows.
                     .child(div().flex_none().invisible().group_hover(TAB_GROUP, Styled::visible).child(close)),
