@@ -10,6 +10,7 @@ on:
     branches: [main]
     paths:
       - Cargo.lock
+      - "**/Cargo.toml"
       - rust-toolchain.toml
       - .github/workflows/ci.yml
 
@@ -87,7 +88,9 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: linux-lint-deps-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
+          # Every Cargo.toml too, since a profile or a dependency's features change what's built without changing
+          # Cargo.lock.
+          key: linux-lint-deps-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', '**/Cargo.toml') }}
           # Main rebuilds from nothing when the key changes, so a cache holds one lockfile's build. PRs take any.
           restore-keys: ${{ github.ref != 'refs/heads/main' && 'linux-lint-deps-' || '' }}
       - run: cargo fmt --all --check
@@ -131,7 +134,7 @@ jobs:
             ~/.cargo/git/db/
             target/
           # As in lint. Our test binaries each link GPUI, so they're over half the build.
-          key: linux-test-deps-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
+          key: linux-test-deps-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', '**/Cargo.toml') }}
           restore-keys: ${{ github.ref != 'refs/heads/main' && 'linux-test-deps-' || '' }}
       # One pool for every binary's tests. It skips doc tests, so they run after.
       - run: cargo nextest run --profile ci --workspace --locked

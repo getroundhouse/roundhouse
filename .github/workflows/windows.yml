@@ -16,6 +16,7 @@ on:
     branches: [main]
     paths:
       - Cargo.lock
+      - "**/Cargo.toml"
       - rust-toolchain.toml
       - .github/workflows/windows.yml
   workflow_dispatch:
@@ -52,7 +53,7 @@ jobs:
             ~/.cargo/git/db/
             target/
           # Named for the runner, since a target/ fits only its image and checkout path.
-          key: windows-2025-vs2026-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
+          key: windows-2025-vs2026-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', '**/Cargo.toml') }}
           restore-keys: windows-2025-vs2026-
       # Not --all-targets, since most tests only build on Unix.
       - run: cargo clippy --workspace --locked -- -D warnings
@@ -84,6 +85,9 @@ jobs:
       - name: Show the hub's log
         if: always()
         run: cat "$RUNNER_TEMP/smoke/home/hub.log" || true
+      # Only the dependencies are worth keeping, as in ci.yml.
+      - if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
+        run: cargo clean --workspace
       - if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
