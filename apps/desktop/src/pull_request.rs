@@ -14,7 +14,7 @@ use gpui_kit::{
 };
 use look::Work;
 use look::{Hand as _, Off as _};
-use protocol::model::{Local, PullRequest, Standing, Workspace, WorkspaceId};
+use protocol::model::{BranchName, Local, PullRequest, Standing, Workspace, WorkspaceId};
 use transcript::PullRequestStanding;
 
 use crate::busy::Busy;
@@ -73,7 +73,8 @@ impl Lookup {
     pub fn for_a_wait(&self) -> Option<PullRequestStanding> {
         let pr = self.pull_request()?;
         let on_github = PullRequest { local: Local::default(), ..pr.clone() };
-        let words = words::for_a_wait(Standing::of(Some(&on_github)), pr.checks, pr.base.as_deref())?;
+        let words =
+            words::for_a_wait(Standing::of(Some(&on_github)), pr.checks, pr.base.as_ref().map(BranchName::as_str))?;
         Some(PullRequestStanding { number: pr.number, words })
     }
 
@@ -125,7 +126,7 @@ pub fn bar(
             .into_any_element();
     };
     let pr = lookup.pull_request();
-    let title = words::title(standing, pr.and_then(|pr| pr.base.as_deref()));
+    let title = words::title(standing, pr.and_then(|pr| pr.base.as_ref()).map(BranchName::as_str));
     let text = if pr.is_some() { work.text(cx) } else { theme.muted_foreground };
     let title = div()
         .flex_1()

@@ -205,7 +205,7 @@ impl WorkspacePane {
         let words = || div().min_w_0().overflow_hidden().text_ellipsis();
         let title = self.workspace.label().to_string();
         let title = words().id("workspace-title").role(gpui_kit::Role::Heading).aria_label(title.clone()).child(title);
-        let branch = words().text_color(muted).child(self.workspace.branch.clone());
+        let branch = words().text_color(muted).child(self.workspace.branch.to_string());
         let base = words().text_color(look::faint());
         let base = base.child(format!("from {}", self.workspace.base_ref.as_deref().unwrap_or("?")));
         h_flex()

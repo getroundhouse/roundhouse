@@ -80,3 +80,48 @@ fn what_a_worker_asks_of_a_wait_and_its_hubs_answer_keep_their_form() {
         AskAnswer { answer: AskId::new(4), outcome: AskOutcome::Response(AskReply::Wait { wait, pull_request: None }) }
     );
 }
+
+/// A branch is a type of its own, and a plain string on the wire, as it was before it had one.
+#[test]
+fn a_branch_keeps_its_form_in_what_a_hub_and_its_worker_send() {
+    let keeps_its_form = |call: WorkerCall, line: &str| {
+        assert_eq!(String::from_utf8(frame::encode(&call).unwrap()).unwrap(), format!("{line}\n"));
+        assert_eq!(frame::decode::<WorkerCall>(line.as_bytes()).unwrap(), call);
+    };
+    let prepare = WorkerRequest::PrepareWorkspace {
+        repo_name: "r".into(),
+        repo_path: "/r".into(),
+        workspace_name: "aspen".into(),
+        branch: "aspen".into(),
+        base_ref: Some("origin/main".into()),
+    };
+    keeps_its_form(
+        WorkerCall { id: 1, request: prepare },
+        r#"{"id":1,"request":{"method":"prepare_workspace","repo_name":"r","repo_path":"/r","workspace_name":"aspen","branch":"aspen","base_ref":"origin/main"}}"#,
+    );
+    let restore = WorkerRequest::RestoreWorkspace { repo_path: "/r".into(), path: "/w".into(), branch: "birch".into() };
+    keeps_its_form(
+        WorkerCall { id: 2, request: restore },
+        r#"{"id":2,"request":{"method":"restore_workspace","repo_path":"/r","path":"/w","branch":"birch"}}"#,
+    );
+
+    let ready: WorkerFrame = frame::decode(
+        br#"{"frame":"reply","id":1,"response":{"result":"workspace_ready","path":"/w","branch":"aspen","base_ref":"origin/main"}}"#,
+    )
+    .unwrap();
+    let status: WorkerFrame = frame::decode(
+        br#"{"frame":"reply","id":3,"response":{"result":"git_status","branch":"birch","head":null,"ahead":0,"behind":0,"files":[]}}"#,
+    )
+    .unwrap();
+
+    let WorkerFrame::Reply { outcome: WorkerOutcome::Response(WorkerResponse::WorkspaceReady { branch, .. }), .. } =
+        ready
+    else {
+        panic!("{ready:?}");
+    };
+    assert_eq!(branch.as_str(), "aspen");
+    let WorkerFrame::Reply { outcome: WorkerOutcome::Response(WorkerResponse::GitStatus(status)), .. } = status else {
+        panic!("{status:?}");
+    };
+    assert_eq!(status.branch, Some("birch".into()));
+}

@@ -47,7 +47,7 @@ fn the_rows_a_search_keeps_are_in_their_places_at_once_rather_than_sliding_there
     let branch = ui.view().records().workspaces().iter().find(|w| w.id == first).unwrap().branch.clone();
     ui.allow_motion();
 
-    ui.input(&branch);
+    ui.input(branch.as_str());
 
     let at_once = top(&mut ui, home_row(&first));
     ui.play(look::motion::PANEL);

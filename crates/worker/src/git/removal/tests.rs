@@ -33,7 +33,8 @@ impl Archived {
         let dir = tempfile::tempdir().unwrap();
         let repo = new_repo(dir.path());
         let root = dir.path().join("ws");
-        let prepared = prepare_workspace(&root, "repo", repo.to_str().unwrap(), "alder", "alder", None).await.unwrap();
+        let prepared =
+            prepare_workspace(&root, "repo", repo.to_str().unwrap(), "alder", &"alder".into(), None).await.unwrap();
         let path = PathBuf::from(prepared.path);
         std::fs::create_dir_all(path.join("ignored/deep")).unwrap();
         std::fs::write(path.join("ignored/deep/output"), "built\n").unwrap();
@@ -49,7 +50,7 @@ impl Archived {
     }
 
     async fn restore(&self) -> Result<(), ApiError> {
-        restore_workspace(self.repo.to_str().unwrap(), self.path.to_str().unwrap(), "alder").await
+        restore_workspace(self.repo.to_str().unwrap(), self.path.to_str().unwrap(), &"alder".into()).await
     }
 
     fn deleting(&self) -> PathBuf {

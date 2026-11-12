@@ -31,7 +31,7 @@ fn workspace(id: &str, status: WorkspaceStatus, state: Option<PrState>) -> Works
         id: id.into(),
         repo_id: "r".into(),
         name: id.to_string(),
-        branch: id.to_string(),
+        branch: id.into(),
         base_ref: None,
         path: Some(format!("/w/{id}")),
         status,

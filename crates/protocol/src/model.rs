@@ -223,7 +223,9 @@ pub struct Workspace {
     /// repository, and never changes once it's ready, because renaming a worktree under a running agent would break
     /// it. While it's being made it can take another, if git already has a branch or directory by the one it has.
     pub name: String,
-    pub branch: String,
+    /// The branch it was made on, which is its name, until it's archived, which records the one its worktree had
+    /// checked out then, so restoring puts that one back.
+    pub branch: BranchName,
     /// What the branch was created from, such as `origin/main`. Diffs are taken against this.
     pub base_ref: Option<String>,
     /// The worktree's path on the worker's machine. Empty until the worker has created it.

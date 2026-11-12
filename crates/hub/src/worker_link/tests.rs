@@ -31,7 +31,7 @@ fn provider_running(dir: &Path, script: &str) -> Arc<dyn Provider> {
 /// A hub whose store has the workspace `w`, ready at `/w`, and its session `s`, and whose workers `provider` starts.
 fn hub_using(dir: &Path, provider: &Arc<dyn Provider>) -> Arc<Hub> {
     let store = Arc::new(store_with_session(dir));
-    store.workspace_ready(&"w".into(), "/w", "alder", "main", None).unwrap();
+    store.workspace_ready(&"w".into(), "/w", &"alder".into(), "main", None).unwrap();
     let providers = ProviderSet::only(provider.clone());
     Arc::new(Hub::new(store, dir.join("attachments"), dir.join("logs"), providers, false))
 }

@@ -41,7 +41,7 @@ fn the_list_narrows_to_what_the_search_matches_as_its_typed(cx: &mut TestAppCont
     let branch = ui.view().records().workspaces().iter().find(|w| w.id == first).unwrap().branch.clone();
 
     // Home's search has the keys, since the composer under it is hidden.
-    ui.input(&branch);
+    ui.input(branch.as_str());
 
     ui.wait("the other workspace to go", |ui| !ui.has(home_row(&second)));
     assert!(ui.has(home_row(&first)));

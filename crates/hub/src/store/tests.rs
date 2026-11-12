@@ -250,9 +250,9 @@ fn every_change_to_a_record_gives_it_a_newer_revision() {
     newer(session(&store), "a title");
     store.set_session_closed(&"s".into(), Some(1)).unwrap();
     newer(session(&store), "closing");
-    newer(store.workspace_ready(&"w".into(), "/w", "alder", "main", None).unwrap().rev, "a ready workspace");
+    newer(store.workspace_ready(&"w".into(), "/w", &"alder".into(), "main", None).unwrap().rev, "a ready workspace");
     newer(store.set_workspace_setup(&"w".into(), SetupStatus::Running).unwrap().rev, "setup");
-    store.set_workspace_branch(&"w".into(), "renamed").unwrap();
+    store.set_workspace_branch(&"w".into(), &"renamed".into()).unwrap();
     newer(workspace(&store), "a branch");
     newer(store.retitle_workspace(&"w".into(), &title, Retitle::FirstLine).unwrap().record.rev, "a title");
     newer(store.set_workspace_archived(&"w".into(), true).unwrap().rev, "archiving");

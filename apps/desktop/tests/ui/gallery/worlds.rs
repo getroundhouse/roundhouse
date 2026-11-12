@@ -148,7 +148,7 @@ fn in_plan_mode(mut world: World) -> World {
 
 /// The finished turn in the screen's own workspace, on a branch with a pull request open.
 fn converse(world: &mut World, focus: &WorkspaceId) {
-    world.workspace_mut(focus).branch = "sidebar-pr-state".to_string();
+    world.workspace_mut(focus).branch = "sidebar-pr-state".into();
     finished_chat(world, focus);
     world.pull_requests.insert(
         focus.clone(),
@@ -156,7 +156,7 @@ fn converse(world: &mut World, focus: &WorkspaceId) {
             number: 182,
             url: "https://example.com/pull/182".to_string(),
             title: "Show PR state in the sidebar".to_string(),
-            base: Some("main".to_string()),
+            base: Some("main".into()),
             merge_state: MergeState::Clean,
             checks: Checks { passed: 5, failed: 0, pending: 0 },
             ..pull_requests::open()

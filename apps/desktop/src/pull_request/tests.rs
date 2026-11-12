@@ -90,7 +90,7 @@ fn a_waits_line_says_where_the_pull_request_stands_on_github_alone() {
         title: "T".to_string(),
         state: PrState::Open,
         is_draft: false,
-        base: Some("main".to_string()),
+        base: Some("main".into()),
         merge_state: MergeState::Blocked,
         review: Review::Required,
         checks: Checks { passed: 3, failed: 0, pending: 2 },

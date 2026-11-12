@@ -41,7 +41,7 @@ pub(super) fn workspace_from_row(row: &Row) -> rusqlite::Result<Workspace> {
         id: row.get::<_, String>(0)?.into(),
         repo_id: row.get::<_, String>(1)?.into(),
         name: row.get(2)?,
-        branch: row.get(3)?,
+        branch: row.get::<_, String>(3)?.into(),
         base_ref: row.get(4)?,
         path: row.get(5)?,
         status: from_text(row.get(6)?)?,
@@ -93,7 +93,7 @@ impl Store {
                 workspace.id.as_str(),
                 workspace.repo_id.as_str(),
                 workspace.name,
-                workspace.branch,
+                workspace.branch.as_str(),
                 workspace.base_ref,
                 workspace.path,
                 text_of(&workspace.status),
@@ -134,7 +134,7 @@ impl Store {
         &self,
         id: &WorkspaceId,
         path: &str,
-        branch: &str,
+        branch: &BranchName,
         base_ref: &str,
         branches: Option<&Branches>,
     ) -> Result<Workspace, StoreError> {
@@ -142,7 +142,7 @@ impl Store {
             "UPDATE workspaces SET path = ?, branch = ?, base_ref = ?, status = ?, branches = ? WHERE id = ?",
             params![
                 path,
-                branch,
+                branch.as_str(),
                 base_ref,
                 text_of(&WorkspaceStatus::Ready),
                 branches.map(serde_json::to_string).transpose()?,
@@ -239,8 +239,9 @@ impl Store {
         Ok(())
     }
 
-    pub fn set_workspace_branch(&self, id: &WorkspaceId, branch: &str) -> Result<(), StoreError> {
-        lock(&self.writer).execute("UPDATE workspaces SET branch = ? WHERE id = ?", params![branch, id.as_str()])?;
+    pub fn set_workspace_branch(&self, id: &WorkspaceId, branch: &BranchName) -> Result<(), StoreError> {
+        let update = "UPDATE workspaces SET branch = ? WHERE id = ?";
+        lock(&self.writer).execute(update, params![branch.as_str(), id.as_str()])?;
         Ok(())
     }
 

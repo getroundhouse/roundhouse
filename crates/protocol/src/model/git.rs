@@ -2,11 +2,12 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::CommitId;
+use super::{BranchName, CommitId};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Default)]
 pub struct GitStatus {
-    pub branch: Option<String>,
+    /// The branch checked out, or `None` on a detached HEAD.
+    pub branch: Option<BranchName>,
     pub head: Option<String>,
     /// Against the branch's upstream. Workspace branches have none until they're pushed, so these
     /// don't say how far a branch is from its base.

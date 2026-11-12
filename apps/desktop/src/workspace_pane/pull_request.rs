@@ -30,8 +30,8 @@ impl WorkspacePane {
 
     /// The branch the pull request merges into, or the one the workspace started from while there's none to say.
     fn base(&self) -> &str {
-        if let Some(base) = self.pull_request.pull_request().and_then(|pr| pr.base.as_deref()) {
-            return base;
+        if let Some(base) = self.pull_request.pull_request().and_then(|pr| pr.base.as_ref()) {
+            return base.as_str();
         }
         let from = self.workspace.base_ref.as_deref().unwrap_or("the default branch");
         from.strip_prefix("origin/").unwrap_or(from)

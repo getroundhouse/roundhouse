@@ -2,7 +2,7 @@
 
 use anyhow::{anyhow, bail};
 use client_core::Client;
-use protocol::model::Workspace;
+use protocol::model::{BranchName, Workspace};
 
 use crate::args::WorkspaceCmd;
 use crate::run::short;
@@ -52,7 +52,7 @@ pub(crate) fn workspace_command(client: &Client, command: WorkspaceCmd) -> anyho
         WorkspaceCmd::Status { workspace } => {
             let found = find_workspace(client, &workspace)?;
             let status = client.workspace_status(&found.id)?;
-            println!("on {}", status.branch.as_deref().unwrap_or("detached HEAD"));
+            println!("on {}", status.branch.as_ref().map_or("detached HEAD", BranchName::as_str));
             for file in status.files {
                 println!("{}  {}", file.status, file.path);
             }
