@@ -27,13 +27,13 @@ fn subagent(session: &str, call: &str, started_at_ms: i64, rev: u64) -> Subagent
 
 /// The calls that started a session's subagents, as a view would read them.
 fn calls(subagents: &Subagents, session: &str) -> Vec<String> {
-    let shown = Snapshot::new(Arc::default(), subagents.listed());
+    let shown = Snapshot::new(Arc::default(), subagents.listed(), Arc::default());
     shown.subagents(&session.into()).iter().map(|subagent| subagent.call.to_string()).collect()
 }
 
 /// The subagent `call` started, as a view would read it.
 fn shown(subagents: &Subagents, session: &str, call: &str) -> Option<Subagent> {
-    let shown = Snapshot::new(Arc::default(), subagents.listed());
+    let shown = Snapshot::new(Arc::default(), subagents.listed(), Arc::default());
     shown.subagent(&session.into(), &call.into()).map(|subagent| Subagent::clone(subagent))
 }
 

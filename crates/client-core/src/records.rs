@@ -1,6 +1,7 @@
 //! What a client holds of one hub's records: its repositories, workspaces, sessions and comments, its settings, the
-//! accounts its agents run under, and the subagents of the sessions a view is showing. Views read them through a
-//! [`Snapshot`].
+//! accounts its agents run under, and the subagents of the sessions a view is showing. Beside them, what each kind of
+//! agent the hub runs is called and offers, which isn't a record, since it doesn't change while the hub runs. Views
+//! read them all through a [`Snapshot`].
 //!
 //! No IO. Lists, feed notices and replies can arrive in any order, and each record keeps whichever copy
 //! has the newer revision, so the result is the same however they interleave. A hub that doesn't keep
@@ -13,6 +14,8 @@ use std::sync::Arc;
 
 use protocol::client::{HubNotice, RecordNotice};
 use protocol::model::{Record, RecordKey, Records, Rev};
+
+use crate::Agents;
 
 #[cfg(test)]
 mod laws;
@@ -37,6 +40,8 @@ pub struct HubRecords {
     taken: Taken,
     /// What views read of the records, made when they next look after a change.
     shown: OnceCell<Arc<Listed>>,
+    /// As the hub said on the newest connection, shared with every snapshot made since.
+    agents: Arc<Agents>,
 }
 
 /// A copy held, and when it was taken in.
@@ -153,7 +158,7 @@ impl HubRecords {
     pub fn snapshot(&self) -> Snapshot {
         let records =
             self.shown.get_or_init(|| Arc::new(Listed::of(self.held.values().map(|held| (&held.record, held.taken)))));
-        Snapshot::new(records.clone(), self.subagents.listed())
+        Snapshot::new(records.clone(), self.subagents.listed(), self.agents.clone())
     }
 
     pub(crate) fn subagents(&self) -> &Subagents {
@@ -162,5 +167,14 @@ impl HubRecords {
 
     pub(crate) fn subagents_mut(&mut self) -> &mut Subagents {
         &mut self.subagents
+    }
+
+    /// Takes in what the hub said of its agents. Returns whether that changed anything.
+    pub(crate) fn set_agents(&mut self, agents: Agents) -> bool {
+        let changed = agents != *self.agents;
+        if changed {
+            self.agents = Arc::new(agents);
+        }
+        changed
     }
 }

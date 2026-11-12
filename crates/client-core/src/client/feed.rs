@@ -6,6 +6,7 @@ use protocol::model::{Record, Records, SessionId};
 
 use super::follow::{Follow, FollowError, Source};
 use super::{Client, ClientError, Result, Subscription, SubscriptionItem};
+use crate::Agents;
 use crate::records::{HubRecords, Snapshot};
 
 /// One hub's records, kept current until every clone of this has gone. It carries on from a new connection
@@ -76,9 +77,16 @@ impl Source for RecordsSource {
 
     fn resume(&mut self, client: &Client, held: &Mutex<HubRecords>) -> Result<Subscription> {
         let subscription = client.feed_subscribe()?;
+        // Asked for on each connection, since it may be to another hub, and taken in with the records, so a view that
+        // has a chat's record has what its agent offers.
+        let agents = Agents::read(client)?;
         // Listed before the lock is taken, so nobody reading the records waits on the hub.
         let list = list_records(client)?;
-        held.lock().apply_list(list);
+        {
+            let mut held = held.lock();
+            held.set_agents(agents);
+            held.apply_list(list);
+        }
         held.lock().subagents_mut().relist();
         list_subagents(client, held)?;
         Ok(subscription)
@@ -144,3 +152,6 @@ fn list_subagents(client: &Client, held: &Mutex<HubRecords>) -> Result<bool> {
     }
     Ok(changed)
 }
+
+#[cfg(test)]
+mod tests;
