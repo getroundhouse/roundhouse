@@ -11,6 +11,7 @@ name = "roundhoused"
 path = "src/main.rs"
 
 [dependencies]
+agents.workspace = true
 anyhow.workspace = true
 clap.workspace = true
 hub.workspace = true

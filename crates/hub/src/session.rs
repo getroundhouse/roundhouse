@@ -296,6 +296,11 @@ impl LiveSession {
         self.state.lock().status
     }
 
+    /// The kind of agent it runs, as its record names it, which never changes.
+    pub(crate) fn agent(&self) -> AgentKind {
+        self.agent
+    }
+
     pub(crate) fn agent_running(&self) -> bool {
         self.state.lock().agent.is_some()
     }

@@ -5,6 +5,7 @@
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
+use protocol::client::ErrorCode;
 use protocol::event::{ApprovalDecision, EventBody};
 use protocol::model::PermissionMode::{FullAccess, Plan, Unknown};
 use protocol::model::{
@@ -123,7 +124,7 @@ fn only_full_access_and_plan_mode_are_taken() {
     let (workspace, session) = stack.workspace(&client);
 
     let refused = client.session_create(&workspace.id, AgentKind::Claude, in_mode(Unknown), None).unwrap_err();
-    assert!(refused.to_string().contains("full access or in plan mode"), "{refused}");
+    assert!(matches!(&refused, client_core::ClientError::Api(e) if e.code == ErrorCode::InvalidRequest), "{refused}");
     assert_eq!(client.session_list(&workspace.id).unwrap().len(), 1, "no chat was made");
     client.session_configure(&session.id, in_mode(Unknown)).unwrap_err();
     assert_eq!(client.session_get(&session.id).unwrap().permission_mode, FullAccess);

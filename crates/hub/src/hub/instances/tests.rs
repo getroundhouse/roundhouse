@@ -92,7 +92,7 @@ fn hub_with(dir: &Path, fake: Fake) -> (Arc<Hub>, Arc<Fake>) {
     let fake = Arc::new(fake);
     let providers = ProviderSet::only(fake.clone());
     let store = Arc::new(store_with_session(dir));
-    (Arc::new(Hub::new(store, dir.join("attachments"), dir.join("worker-logs"), providers, false)), fake)
+    (Arc::new(Hub::new(store, dir.join("attachments"), dir.join("worker-logs"), providers, Vec::new(), false)), fake)
 }
 
 async fn stages(hub: &Hub) -> Vec<(String, InstanceStage)> {

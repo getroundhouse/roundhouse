@@ -8,8 +8,8 @@ use protocol::event::{ApprovalDecision, SessionEvent};
 use protocol::find::{Found, Needle};
 use protocol::model::{
     AgentKind, AnswerDraft, ApprovalId, AttachmentId, ClientMessageId, ClientRequestId, CompactionLine, Draft,
-    NewDraft, PermissionMode, Place, PromptLine, RecordKey, Rev, Seq, Session, SessionId, SessionSettings,
-    SessionSettingsChange, SessionStatus, TitleSource, ToolUseId, WorkspaceId,
+    NewDraft, Place, PromptLine, RecordKey, Rev, Seq, Session, SessionId, SessionSettings, SessionSettingsChange,
+    SessionStatus, TitleSource, ToolUseId, WorkspaceId,
 };
 use protocol::prompt::check_prompt;
 use tokio::sync::oneshot;
@@ -60,14 +60,11 @@ impl Hub {
         if let Some(made) = self.made_earlier::<StoredSession>(client_request_id.as_ref()).await? {
             return Ok(made.session);
         }
-        if agent == AgentKind::Unknown {
-            return Err(ApiError::new(ErrorCode::InvalidRequest, "this hub doesn't know that kind of agent"));
-        }
-        known(&options)?;
+        self.offered(agent, &options)?;
         self.ready_workspace(&workspace_id).await?;
         let id = new_id();
         let now = now_ms();
-        let SessionSettings { model, permission_mode, effort } = SessionSettings::default().changed(options);
+        let SessionSettings { model, permission_mode, effort } = self.agent(agent)?.defaults.clone().changed(options);
         let stored = StoredSession {
             session: Session {
                 account: None,
@@ -280,10 +277,11 @@ impl Hub {
         id: SessionId,
         options: SessionSettingsChange,
     ) -> Result<Session, ApiError> {
-        known(&options)?;
+        let session = self.live_session(&id).await?;
+        self.offered(session.agent(), &options)?;
         // Not through the session's queue, because a prompt waiting on setup holds that. The choice
         // has to apply when that prompt finally starts the agent.
-        self.live_session(&id).await?.configure(options).await
+        session.configure(options).await
     }
 
     /// A chat nothing has been sent in has nothing to go back to, so closing it deletes it, along with any files added
@@ -351,6 +349,7 @@ impl Hub {
         keeping: Option<String>,
     ) -> Result<(), ApiError> {
         let session = self.live_session(&id).await?;
+        self.compacts(session.agent())?;
         let (reply, done) = oneshot::channel();
         session.command(Command::Compact { keeping, reply }).await?;
         done.await.map_err(|_| internal("the session has stopped"))?
@@ -364,22 +363,6 @@ impl Hub {
         session.command(Command::Cancel { reply }).await?;
         done.await.map_err(|_| internal("the session has stopped"))?
     }
-}
-
-/// A level of effort from a newer client can't be passed on to the agent, which wouldn't know it either. Nor can an
-/// approval mode this hub doesn't know, and every agent has full access unless it's planning, so those are the only
-/// modes it knows.
-fn known(options: &SessionSettingsChange) -> Result<(), ApiError> {
-    if options.effort.is_some_and(|effort| effort.known().is_none()) {
-        return Err(ApiError::new(ErrorCode::InvalidRequest, "this hub doesn't know that effort"));
-    }
-    if options.permission_mode == Some(PermissionMode::Unknown) {
-        return Err(ApiError::new(
-            ErrorCode::InvalidRequest,
-            "agents run with full access or in plan mode, so that isn't a mode a chat can have",
-        ));
-    }
-    Ok(())
 }
 
 #[cfg(test)]

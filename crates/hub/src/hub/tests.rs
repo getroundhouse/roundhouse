@@ -5,7 +5,10 @@ use std::sync::Arc;
 
 use parking_lot::Mutex;
 use protocol::client::ApiError;
-use protocol::model::{Checks, Local, MergeState, PrState, PullRequest, Review};
+use protocol::model::{
+    AgentDescription, AgentFeature, AgentKind, Checks, Effort, Local, MergeState, ModelChoice, ModelName,
+    PermissionMode, PrState, PullRequest, Review, SessionSettings,
+};
 use protocol::worker::{RateLimit, WorkerRequest, WorkerResponse};
 use providers::local::{LocalConfig, LocalProvider};
 
@@ -14,9 +17,33 @@ use crate::provider_set::ProviderSet;
 use crate::store::tests::store_with_session;
 use crate::worker_link::WorkerLink;
 
+/// Claude as a hub's tests describe it, which a chat nobody has chosen for runs on Sonnet at High, so a test can tell
+/// what the description gave a chat from what anything else would have.
+pub(super) fn described() -> AgentDescription {
+    AgentDescription {
+        kind: AgentKind::Claude,
+        name: "Claude".to_string(),
+        usage_heading: "Claude usage".to_string(),
+        models: vec![ModelChoice { model: ModelName::named("sonnet"), label: "Sonnet".to_string() }],
+        efforts: vec![Effort::Low, Effort::High],
+        modes: vec![PermissionMode::FullAccess, PermissionMode::Plan],
+        defaults: SessionSettings {
+            model: ModelName::named("sonnet"),
+            permission_mode: PermissionMode::FullAccess,
+            effort: Effort::High,
+        },
+        features: vec![AgentFeature::Compacts],
+    }
+}
+
 /// A hub whose store has the workspace `w` and its session `s`, with nothing sent in it, and that never starts a
-/// worker.
+/// worker. Its agents are as [`described`] says.
 pub(super) fn hub_in(dir: &Path) -> Arc<Hub> {
+    hub_describing(dir, vec![described()])
+}
+
+/// The same, whose agents are as `agents` says.
+pub(super) fn hub_describing(dir: &Path, agents: Vec<AgentDescription>) -> Arc<Hub> {
     let store = Arc::new(store_with_session(dir));
     let config = LocalConfig {
         worker_exe: dir.join("no-worker"),
@@ -26,7 +53,7 @@ pub(super) fn hub_in(dir: &Path) -> Arc<Hub> {
         path: None,
     };
     let providers = ProviderSet::only(Arc::new(LocalProvider::new(config)));
-    Arc::new(Hub::new(store, dir.join("attachments"), dir.join("worker-logs"), providers, false))
+    Arc::new(Hub::new(store, dir.join("attachments"), dir.join("worker-logs"), providers, agents, false))
 }
 
 /// The same, with `w`'s worktree at `/w`, so its pull request can be read through a stand-in for its worker.
