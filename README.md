@@ -56,3 +56,7 @@ Use `Add project` at the top of the sidebar, then the `+` beside the project. Ev
 - **What it does:** the product spec, in `docs/spec/`.
 - **Docs:** `docs/documentation.md` lists them, and says what goes in a doc and what goes on GitHub.
 - **What's left:** [issues](https://github.com/getroundhouse/roundhouse/issues) for features, bugs, tasks, questions and risks, and [milestones](https://github.com/getroundhouse/roundhouse/milestones) for the build order.
+
+## License
+
+Apache-2.0, in `LICENSE`, so anyone can use, change and build on it. It's the license GPUI uses, and it has each contributor grant the patents their contribution uses.

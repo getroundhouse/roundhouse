@@ -101,8 +101,8 @@ fn the_license_check_itself_works() {
     assert!(!may_ship("MPL-2.0 AND GPL-3.0", Some(CRATES_IO)));
 }
 
-/// What ends up in a binary on one platform: its dependencies, leaving out build tools and proc macros,
-/// which only run while compiling. Each maps to its license expression and its source.
+/// What ends up in a binary on one platform: its own package and its dependencies, leaving out build tools and
+/// proc macros, which only run while compiling. Each maps to its license expression and its source.
 fn shipped_packages(metadata: &Value, root: &str) -> BTreeMap<String, (String, Option<String>)> {
     let packages: HashMap<&str, &Value> =
         metadata["packages"].as_array().unwrap().iter().map(|p| (p["id"].as_str().unwrap(), p)).collect();
@@ -117,27 +117,20 @@ fn shipped_packages(metadata: &Value, root: &str) -> BTreeMap<String, (String, O
     };
     let start = packages.iter().find(|(_, p)| p["name"] == root).map(|(id, _)| *id).expect("the root package");
     let mut shipped = BTreeMap::new();
-    let mut seen = HashSet::new();
+    let mut seen = HashSet::from([start]);
     let mut stack = vec![start];
     while let Some(id) = stack.pop() {
+        // The project's own crates declare its license like any other, so one that declares none can't ship.
+        let package = packages[id];
+        let license = package["license"].as_str().unwrap_or("none declared").to_string();
+        let source = package["source"].as_str().map(str::to_string);
+        shipped.insert(package["name"].as_str().unwrap().to_string(), (license, source));
         for dep in nodes[id]["deps"].as_array().unwrap() {
             let dep_id = dep["pkg"].as_str().unwrap();
             let linked = dep["dep_kinds"].as_array().unwrap().iter().any(|kind| kind["kind"].is_null());
-            if !linked || is_proc_macro(packages[dep_id]) || !seen.insert(dep_id) {
-                continue;
+            if linked && !is_proc_macro(packages[dep_id]) && seen.insert(dep_id) {
+                stack.push(dep_id);
             }
-            let package = packages[dep_id];
-            let source = package["source"].as_str();
-            let license = package["license"].as_str();
-            // The project's own crates declare no license until #9 picks one. A copy of someone else's
-            // crate kept in the repo still declares theirs, so it gets checked.
-            if source.is_some() || license.is_some() {
-                shipped.insert(
-                    package["name"].as_str().unwrap().to_string(),
-                    (license.unwrap_or("none declared").to_string(), source.map(str::to_string)),
-                );
-            }
-            stack.push(dep_id);
         }
     }
     shipped
@@ -177,7 +170,7 @@ fn only_allowed_licenses_ship() {
     ] {
         for target in targets {
             let shipped = shipped_packages(&metadata_for(target), root);
-            assert!(!shipped.is_empty(), "{root} on {target} should have dependencies");
+            assert!(shipped.len() > 1, "{root} on {target} should have dependencies");
             let bad: BTreeMap<_, _> =
                 shipped.into_iter().filter(|(_, (license, source))| !may_ship(license, source.as_deref())).collect();
             assert!(bad.is_empty(), "{root} on {target} would ship licenses we can't: {bad:#?}");
@@ -386,7 +379,7 @@ fn files_kept_from_elsewhere_ship_with_an_allowed_license() {
     let listed = |dir: &PathBuf| VENDORED.iter().any(|(listed, _, _)| Path::new(listed) == dir);
     let missed: Vec<_> = VENDORED.iter().filter(|(dir, _, _)| !found.iter().any(|f| Path::new(dir) == f)).collect();
     assert!(missed.is_empty(), "the search for licenses didn't find these, so it isn't looking properly: {missed:?}");
-    // The repo's own license, once #9 picks one, is the only one that isn't someone else's.
+    // The repo's own license, at its root, is the only one that isn't someone else's.
     let unlisted: Vec<_> = found.iter().filter(|dir| !dir.as_os_str().is_empty() && !listed(dir)).collect();
     assert!(unlisted.is_empty(), "someone else's files, so add them to `VENDORED`: {unlisted:?}");
 }

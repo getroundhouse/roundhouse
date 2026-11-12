@@ -4,6 +4,7 @@ description = "Runs as a hub or a worker."
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
+license.workspace = true
 
 [[bin]]
 name = "roundhoused"

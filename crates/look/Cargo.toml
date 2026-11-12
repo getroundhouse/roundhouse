@@ -4,6 +4,7 @@ description = "How the app looks: its theme, the colours the kit has no name for
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
+license.workspace = true
 
 [features]
 # What only tests use: holding the marks and the time still for pictures, and setting off a scroll by a test's clock.
