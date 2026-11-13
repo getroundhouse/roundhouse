@@ -234,6 +234,22 @@
       matchUpdateTypes: ["lockFileMaintenance"],
       enabled: false,
     },
+    {
+      description: "infra/ is applied by hand, so its updates wait for approval, and come in one PR, as its providers have to agree with RunsOn's module.",
+      matchFileNames: ["infra/**"],
+      groupName: "the AWS account's Terraform",
+      groupSlug: "infra",
+      dependencyDashboardApproval: true,
+      prBodyNotes: [
+        "> [!WARNING]\n> Merging this changes nothing in AWS. Plan from `infra/` on this branch before merging, and apply once it's merged, as `infra/README.md` says, so `main` describes what the account runs.",
+      ],
+    },
+    {
+      description: "Renovate refreshes every lockfile in the one PR for Cargo.lock, which nobody applies.",
+      matchFileNames: ["infra/**"],
+      matchUpdateTypes: ["lockFileMaintenance"],
+      enabled: false,
+    },
   ],
   customManagers: [
     {

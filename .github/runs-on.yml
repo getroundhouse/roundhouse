@@ -1,0 +1,23 @@
+# RunsOn's runners, which a job names in its label. RunsOn reads this file only from main, so a change here reaches
+# every job at once; infra/README.md says how to change a runner.
+runners:
+  arm64-16:
+    cpu: 16
+    ram: [32, 128]
+    # Every Graviton c, m and r family from the 7th generation on, for Spot capacity. `.*` leaves out the pricier
+    # variants with local disks or faster networks.
+    family:
+      - c7g.*
+      - c8g.*
+      - c9g.*
+      - m7g.*
+      - m8g.*
+      - m9g.*
+      - r7g.*
+      - r8g.*
+      - r9g.*
+    image: ubuntu26-full-arm64
+    # gp3 needs 4,000 IOPS for 1,000 MiB/s.
+    volume: 80gb:gp3:1000mbs:4000iops
+    spot: price-capacity-optimized
+    extras: [s3-cache]

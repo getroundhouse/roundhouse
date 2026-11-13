@@ -45,6 +45,7 @@ The guide is the one kind written for someone using the product rather than buil
 | `site/README.md` | Instructions | Agents | How to preview the marketing site, and how it follows the app's look |
 | `docs/guide/` | Guide | Agents | How to use Roundhouse, a page for each task and each thing, published as the site's `/docs/` pages |
 | `tools/guide/README.md` | Instructions | Agents | How the guide is organized and written, and how it's built and published |
+| `infra/README.md` | Instructions | Agents | How the AWS account where RunsOn can run CI's jobs is set up, planned and applied, and how a job uses its runners. *Unconfirmed* |
 
 `AGENTS.md` is read at the start of every session, so it stays lean: it holds what every task needs, and points to the docs for the rest.
 
