@@ -82,11 +82,9 @@ colors! {
     "Edges" {
         /// The one thin edge that separates, around a card, along a header or between rows.
         edge = 0x2a26_24ff,
-        /// The edge of something to use: the composer, a chip, a key, and a button that opens something.
+        /// The edge of something to use: the composer, a chip, a key, a field such as Settings' search, a button that
+        /// opens something, and the button back down to a chat's end.
         control_edge = 0x3531_30ff,
-        /// The edge of a field on the sidebar, such as Settings' search, and of the button back down to a chat's end,
-        /// which sits over the chat's text: lighter again, since each is something to use on a surface that's busy.
-        field_edge = 0x4341_40ff,
     }
     "Text" {
         /// What to read.

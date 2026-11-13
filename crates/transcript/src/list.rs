@@ -268,7 +268,7 @@ impl TranscriptList {
             return None;
         }
         let colors = look::colors(cx);
-        let edge = colors.field_edge;
+        let edge = colors.control_edge;
         // Its edge is lighter than a line, so it reads as something to press over whatever is under it rather than as
         // a divider. A custom button's edge is its colour whatever state it's in, so the edge stays as the pointer
         // lights it, where a secondary one's would turn to a line's.

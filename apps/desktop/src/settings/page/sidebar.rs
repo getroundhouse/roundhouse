@@ -93,7 +93,7 @@ fn search_field(search: &Entity<InputState>, window: &Window, cx: &App) -> impl 
         .gap(px(9.))
         .rounded(theme.radius)
         .border_1()
-        .border_color(colors.field_edge)
+        .border_color(colors.control_edge)
         .bg(colors.pane)
         .when(focused, |field| field.focus_ring_style(window, cx))
         .on_mouse_down(MouseButton::Left, move |_, window, cx| {
