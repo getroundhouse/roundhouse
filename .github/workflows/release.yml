@@ -54,6 +54,7 @@ env:
   CARGO_INCREMENTAL: "0"
   # The .NET SDK the jobs that package install, since the vpk dotnet-tools.json pins runs on 8, 9 or 10. Each installs
   # it in a directory of its own, since next to the runner image's SDKs dotnet runs the newest, and 11 stopped vpk.sh.
+  # renovate: datasource=dotnet-version depName=dotnet-sdk
   DOTNET_SDK: 10.0.x
 
 jobs:
@@ -541,6 +542,7 @@ jobs:
         build-essential ca-certificates curl git jq
         zstd
       # rustup's installer, pinned by version and checksum.
+      # renovate: datasource=github-tags depName=rust-lang/rustup
       RUSTUP_VERSION: 1.29.3
     steps:
       # Before the checkout, which needs git for the history.

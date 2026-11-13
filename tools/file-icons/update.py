@@ -28,6 +28,7 @@ import urllib.request
 import xml.etree.ElementTree as ElementTree
 import zipfile
 
+# renovate: datasource=github-releases depName=catppuccin/vscode-icons
 VERSION = "1.26.0"
 INTEGRITY = "sha512-0te0Ryg3vFrCPE1RKnwUL1pKlqyrZvqfEhoDXK3eUFCpbxZQ8yIb3dHYDFBkmWaB/XI71fOnHgQlfA1pf3kPJw=="
 RELEASE = (

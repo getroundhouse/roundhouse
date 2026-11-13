@@ -26,6 +26,9 @@ env:
   CARGO_INCREMENTAL: "0"
   # Smaller caches and faster links. A panic still gets line numbers.
   CARGO_PROFILE_DEV_DEBUG: line-tables-only
+  # The test runner, which Renovate raises.
+  # renovate: datasource=crate depName=cargo-nextest
+  NEXTEST_VERSION: 0.9.151
   # What GPUI's Linux crates build against. Verified on 2026-11-08 in Docker, not minimized.
   LINUX_PACKAGES: >-
     pkg-config cmake clang libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libx11-xcb-dev libxcb1-dev
@@ -84,6 +87,7 @@ jobs:
       # hold only the Zig packages Ghostty fetches, and the cache below holds Ghostty's source and build, in target/.
       - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
         with:
+          # renovate: datasource=forgejo-tags depName=ziglang/zig registryUrl=https://codeberg.org
           version: 0.17.1
           use-cache: false
       - id: cache
@@ -132,14 +136,14 @@ jobs:
       # hold only the Zig packages Ghostty fetches, and the cache below holds Ghostty's source and build, in target/.
       - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
         with:
+          # renovate: datasource=forgejo-tags depName=ziglang/zig registryUrl=https://codeberg.org
           version: 0.17.1
           use-cache: false
       # The tests make commits.
       - run: git config --global user.name ci && git config --global user.email ci@example.com
-      # Pinned, and moved by hand like the toolchain.
       - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
         with:
-          tool: cargo-nextest@0.9.151
+          tool: cargo-nextest@${{ env.NEXTEST_VERSION }}
       - id: cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:

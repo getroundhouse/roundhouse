@@ -53,79 +53,79 @@ look = { path = "crates/look" }
 terminal-state = { path = "crates/terminal-state" }
 desktop = { path = "apps/desktop" }
 
-anyhow = "1"
-async-trait = "0.1"
+anyhow = "1.0.104"
+async-trait = "0.1.92"
 # Already under GPUI. Carries an attachment's bytes as text, the way JSON has to.
-base64 = "0.22"
+base64 = "0.22.1"
 # Already under GPUI. Says when something happened in the local time zone.
-chrono = { version = "0.4", default-features = false, features = ["clock"] }
-clap = { version = "4", features = ["derive"] }
-flume = "0.11"
+chrono = { version = "0.4.45", default-features = false, features = ["clock"] }
+clap = { version = "4.6.7", features = ["derive"] }
+flume = "0.11.1"
 # Already under GPUI. Compresses what a test serves, as a web server would.
-flate2 = "1"
+flate2 = "1.1.11"
 # Exact, because gpui-kit pins exact GPUI snapshots and upgrades should be deliberate.
 gpui-kit = { version = "=0.9.0", features = ["syntect"] }
 # Moves with gpui-kit: the version its GPUI uses. Only for drawing off the main thread, which tests run on.
 gpui-pre-apple = { version = "=0.3.11", features = ["font-kit"] }
 # The same as GPUI's, which hands its screenshots back as this crate's images.
-image = { version = "0.25", default-features = false }
+image = { version = "0.25.10", default-features = false }
 # Already under GPUI. Reads a request's body for the worker's tools, up to a limit.
-http-body-util = "0.1"
+http-body-util = "0.1.5"
 # Already under GPUI. Serves the worker's tools to its agents, over HTTP on 127.0.0.1.
-hyper = { version = "1", features = ["http1", "server"] }
+hyper = { version = "1.12.0", features = ["http1", "server"] }
 # Already under GPUI. Runs hyper's connections on tokio.
-hyper-util = { version = "0.1", features = ["tokio"] }
-libc = "0.2"
+hyper-util = { version = "0.1.21", features = ["tokio"] }
+libc = "0.2.191"
 # Ghostty's terminal core, through bindings pinned to the commit that builds its 1.0.1, which isn't on crates.io yet.
 # Its build script builds Ghostty with Zig 0.17, which has to be on the PATH, and fetches Ghostty's source as it builds.
 libghostty-vt = { git = "https://github.com/Uzaaft/libghostty-rs", rev = "cd4d497e8c698b27054a677ce19d1bd1a1a4d8bf" }
 # Already under gpui-kit, whose text view parses Markdown with it. Finds the images the agent's text points to as the
 # text view does.
-markdown = "1"
+markdown = "1.0.0"
 # Already under serde_json. Finds and counts the line endings in a file the worker reads a few lines of at a time.
-memchr = "2"
+memchr = "2.8.3"
 # Already under gpui-component. Tells a worker when git writes a worktree's branches, from the OS's own file events.
-notify = "8"
+notify = "8.2.1"
 # Already under GPUI. Gives GPUI's view on a Mac the accessibility answer it lacks.
-objc2 = "0.6"
+objc2 = "0.6.5"
 # Already under GPUI. Taps a Mac's trackpad as a sidebar's edge takes its usual width, and plays the sound for a chat
 # that needs a look.
-objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSHapticFeedback", "NSSound"] }
+objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std", "NSHapticFeedback", "NSSound"] }
 # Already under GPUI. Hands the sound for a chat that needs a look to AppKit, by its bytes or its name, and finds the
 # folders the computer keeps alert sounds in.
-objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSData", "NSEnumerator", "NSPathUtilities", "NSString"] }
-parking_lot = "0.12"
+objc2-foundation = { version = "0.3.2", default-features = false, features = ["std", "NSArray", "NSData", "NSEnumerator", "NSPathUtilities", "NSString"] }
+parking_lot = "0.12.5"
 # Already under GPUI, through `url`. Reads the address of an image the agent's text points to, which can be escaped.
-percent-encoding = "2"
-proptest = "1"
+percent-encoding = "2.3.2"
+proptest = "1.12.0"
 # Already under GPUI. The window's handle on Windows, for asking Windows to do what a window button does.
-raw-window-handle = "0.6"
+raw-window-handle = "0.6.2"
 # Already under rustls. Checks the update feed's signature.
-ring = "0.17"
-rusqlite = { version = "0.37", features = ["bundled"] }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+ring = "0.17.14"
+rusqlite = { version = "0.37.0", features = ["bundled"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
 # Already under gpui-kit, whose diff uses it. Works out an edit's lines before its patch comes back, and what changed
 # within a line of a diff.
-similar = "2.7"
-syntect = { version = "5", default-features = false }
-tempfile = "3"
-thiserror = "2"
-toml = "0.9"
-tokio = { version = "1", features = ["io-std", "io-util", "macros", "net", "process", "rt-multi-thread", "signal", "sync", "time"] }
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-two-face = { version = "0.4", default-features = false }
+similar = "2.7.0"
+syntect = { version = "5.3.0", default-features = false }
+tempfile = "3.27.0"
+thiserror = "2.0.21"
+toml = "0.9.12"
+tokio = { version = "1.54.1", features = ["io-std", "io-util", "macros", "net", "process", "rt-multi-thread", "signal", "sync", "time"] }
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+two-face = { version = "0.4.5", default-features = false }
 # The one Velopack uses, with its TLS, for fetching the update feed.
-ureq = "3"
-uuid = { version = "1", features = ["v4"] }
+ureq = "3.5.1"
+uuid = { version = "1.29.0", features = ["v4"] }
 # Exact, because tools/package/dotnet-tools.json pins vpk, which makes the packages this reads, to the same version.
 # `public-utils` makes public a type that its `UpdateSource` trait names, so another crate can implement it. Its
 # `file-logging` would add a log file and a panic hook, so it stays off.
 velopack = { version = "=1.2.161", features = ["public-utils"] }
 # Already under tokio and GPUI. The Win32 API, for what std leaves out on Windows: a process's descendants and start
 # time, and reading a named pipe while writing to it.
-windows-sys = "0.61"
+windows-sys = "0.61.2"
 
 # docs/rust.md says what each of these is for.
 [workspace.lints.rust]

@@ -1,0 +1,292 @@
+// How Renovate keeps every dependency up to date. Each change to Cargo.lock misses every CI cache and publishes an
+// update to everyone, and breaking updates need code changes, so compatible updates come in batches, a PR for each
+// kind, and the rest wait on the Dependency Dashboard: breaking updates, and those a person has to finish, such as a
+// checksum Renovate can't work out. Its PRs merge like any other, through the queue, once the owner asks.
+//
+// A version that no manifest holds, such as a tool a workflow installs, gets a `# renovate:` comment on the line
+// above it, which the first custom manager below reads.
+{
+  $schema: "https://docs.renovatebot.com/renovate-schema.json",
+  extends: [
+    // config:recommended, plus actions pinned to commits, weekly lock file maintenance, a warning for a dependency
+    // nobody maintains any more, and a PR to migrate this file when an option is renamed.
+    "config:best-practices",
+    // An action's comment names its exact version, as the workflows already do, rather than a major such as v7.
+    "helpers:pinGitHubActionDigestsToSemver",
+    // A crate is three days old before Renovate proposes it: crates.io's window for deleting one, and time for
+    // scanners to find malware.
+    "security:minimumReleaseAgeCrate",
+  ],
+  // docs/pull-requests.md: a title starts with a verb, with no prefix.
+  semanticCommits: "disabled",
+  // In UTC.
+  schedule: ["* * * * 1"],
+  // Everything but node_modules, including tests/, whose fixtures say which Claude CLI they came from.
+  ignorePaths: ["**/node_modules/**"],
+  // docs/documentation.md gives every issue one kind and an area.
+  dependencyDashboard: {
+    labels: ["kind/task", "area/dev"],
+  },
+  // Vulnerable direct dependencies, from OSV. Their PRs skip the schedule and approval.
+  osvVulnerabilityAlerts: true,
+  // Cargo.toml names the full version of each crate we use, so it says what's built. docs/rust.md
+  cargo: {
+    rangeStrategy: "bump",
+  },
+  // The crates under ours, which only Cargo.lock names, on the same days as the crates we use. It moves ours in
+  // Cargo.lock too, if a compatible release came out in the three days the bump waits, so the next bump catches
+  // Cargo.toml up.
+  lockFileMaintenance: {
+    schedule: ["* * */3 * *"],
+    commitMessageAction: "Update",
+    commitMessageTopic: "every crate in Cargo.lock",
+    commitMessageExtra: "to its newest compatible version",
+  },
+  packageRules: [
+    {
+      description: "CI runs everything for a Cargo.lock change but the gallery, which is pixel for pixel.",
+      matchManagers: ["cargo"],
+      prBodyNotes: [
+        "CI doesn't run the gallery. Run `cargo test -p desktop --test ui gallery` on a Mac before queueing this, since a crate that draws can move a screen's pixels.",
+      ],
+    },
+    {
+      description: [
+        "Every compatible update of the crates we use, in one PR that writes each new version into Cargo.toml, every",
+        "third day of the month in UTC: the 1st, the 4th and so on, so the 31st and the 1st come together.",
+      ],
+      matchManagers: ["cargo"],
+      matchUpdateTypes: ["major", "minor", "patch"],
+      matchIsBreaking: false,
+      groupName: "Rust crates",
+      groupSlug: "rust-crates",
+      schedule: ["* * */3 * *"],
+    },
+    {
+      description: [
+        "A breaking update, by Cargo's rules, waits for approval: many of our crates are the version GPUI uses, so one",
+        "can't move on its own, and most need code changes.",
+      ],
+      matchManagers: ["cargo"],
+      matchUpdateTypes: ["major", "minor", "patch"],
+      matchIsBreaking: true,
+      dependencyDashboardApproval: true,
+    },
+    {
+      description: [
+        "docs/architecture.md: exact pins, upgraded deliberately and together. gpui-pre-apple has to be the version",
+        "gpui-kit's GPUI uses, which may not be its newest.",
+      ],
+      matchPackageNames: ["gpui-kit", "gpui-pre-apple"],
+      groupName: "GPUI",
+      groupSlug: "gpui",
+      dependencyDashboardApproval: true,
+    },
+    {
+      description: [
+        "The crate reads the packages vpk makes, so both are pinned to one version. The updater delivers every later",
+        "fix, and a broken one can't be fixed by an update, so it waits for approval.",
+      ],
+      matchPackageNames: ["velopack", "vpk"],
+      groupName: "Velopack",
+      groupSlug: "velopack",
+      dependencyDashboardApproval: true,
+    },
+    {
+      description: [
+        "rust-toolchain.toml enforces a standard, so a new Rust needs the owner, and its new lints usually need code",
+        "changes. AGENTS.md's Docker command moves with it.",
+      ],
+      matchDatasources: ["rust-version"],
+      groupName: "Rust",
+      groupSlug: "rust",
+      dependencyDashboardApproval: true,
+      labels: ["needs/owner"],
+    },
+    {
+      description: "One PR for every action that keeps its major version. A major can change an action's inputs.",
+      matchManagers: ["github-actions"],
+      matchDepTypes: ["action"],
+      matchUpdateTypes: ["minor", "patch"],
+      groupName: "CI's actions and tools",
+      groupSlug: "ci",
+    },
+    {
+      description: "The tools the workflows install, which move with the actions.",
+      matchDepNames: ["cargo-nextest", "sccache"],
+      matchUpdateTypes: ["minor", "patch"],
+      groupName: "CI's actions and tools",
+      groupSlug: "ci",
+    },
+    {
+      description: "Zig's patch releases, which move with the actions.",
+      matchDepNames: ["ziglang/zig"],
+      matchUpdateTypes: ["patch"],
+      groupName: "CI's actions and tools",
+      groupSlug: "ci",
+    },
+    {
+      description: "Ghostty's build needs the Zig its release was written for, so a new Zig waits for approval.",
+      matchDepNames: ["ziglang/zig"],
+      matchUpdateTypes: ["minor", "major"],
+      dependencyDashboardApproval: true,
+      prBodyNotes: [
+        "> [!WARNING]\n> Ghostty's build script needs the Zig its release was written for. Check that the pinned `libghostty-vt` builds with this one, and change the \"Zig 0.17\" in `AGENTS.md`, `README.md` and `Cargo.toml` with it, before merging.",
+      ],
+    },
+    {
+      description: [
+        "libghostty-vt is pinned to the commit of its bindings that builds Ghostty 1.0.1, so a newer commit waits for",
+        "approval, until a release of it is on crates.io.",
+      ],
+      matchDepNames: ["libghostty-vt"],
+      dependencyDashboardApproval: true,
+      prBodyNotes: [
+        "> [!WARNING]\n> This moves the bindings to their newest commit, which may build another Ghostty, with another Zig. Check which before merging.",
+      ],
+    },
+    {
+      description: [
+        "Every action is pinned to the commit of an exact version, so a new commit for the same version means its tag",
+        "was moved, which is how a compromised action reaches the repos that use it. It waits for approval.",
+      ],
+      matchManagers: ["github-actions"],
+      matchDepTypes: ["action"],
+      matchUpdateTypes: ["digest"],
+      dependencyDashboardApproval: true,
+    },
+    {
+      description: "A new version of an action waits three days too, for someone to notice a bad one.",
+      matchManagers: ["github-actions"],
+      matchDepTypes: ["action"],
+      matchUpdateTypes: ["major", "minor", "patch"],
+      minimumReleaseAge: "3 days",
+      internalChecksFilter: "strict",
+    },
+    {
+      description: [
+        "The Linux build runs in Ubuntu 22.04 for its glibc, the oldest the AppImage supports, so it stays on 22.04,",
+        "pinned to an image that moves with 22.04's fixes, alongside the actions.",
+      ],
+      matchManagers: ["github-actions"],
+      matchDepTypes: ["container"],
+      matchPackageNames: ["ubuntu"],
+      allowedVersions: "/^22\\.04$/",
+      groupName: "CI's actions and tools",
+      groupSlug: "ci",
+    },
+    {
+      description: "Each workflow chose its runner, and a new image changes what's installed, so they wait for approval.",
+      matchManagers: ["github-actions"],
+      matchDepTypes: ["github-runner"],
+      dependencyDashboardApproval: true,
+    },
+    {
+      description: "The .NET SDK the jobs that package install takes each 10.0 release itself, as `10.0.x`.",
+      matchDepNames: ["dotnet-sdk"],
+      matchUpdateTypes: ["minor", "patch"],
+      enabled: false,
+    },
+    {
+      description: "vpk has to run on the .NET SDK, and stopped on 11, so a new major waits for approval.",
+      matchDepNames: ["dotnet-sdk"],
+      matchUpdateTypes: ["major"],
+      dependencyDashboardApproval: true,
+    },
+    {
+      description: "rustup's installer is pinned by checksum too, which Renovate can't work out.",
+      matchDepNames: ["rust-lang/rustup"],
+      dependencyDashboardApproval: true,
+      prBodyNotes: [
+        "> [!WARNING]\n> Renovate can't update the installer's checksums in `release.yml`. Replace both with the new release's, from `https://static.rust-lang.org/rustup/archive/{{{newVersion}}}/<x86_64 or aarch64>-unknown-linux-gnu/rustup-init.sha256`, before merging.",
+      ],
+    },
+    {
+      description: "The file icons are made from Catppuccin's release by a script, which checks it against a pinned checksum.",
+      matchDepNames: ["catppuccin/vscode-icons"],
+      dependencyDashboardApproval: true,
+      prBodyNotes: [
+        "> [!WARNING]\n> This changes only `VERSION`. Set `INTEGRITY` in `tools/file-icons/update.py` to the new release's, run the script, then `cargo test -p desktop` and accept the gallery's screens if the icons look different, before merging.",
+      ],
+    },
+    {
+      description: [
+        "The worker runs whichever Claude CLI the person has, so nothing pins it, but the fixtures say which release",
+        "they came from, so a newer one shows on the Dashboard as a reason to capture them again.",
+      ],
+      matchDepNames: ["@anthropic-ai/claude-code"],
+      dependencyDashboardApproval: true,
+      prBodyNotes: [
+        "> [!WARNING]\n> Don't merge this: it only renames the release in the fixtures. Capture them again with `tools/smoke/capture_claude_fixture.py` on the new CLI, then run `cargo test -p agents`.",
+      ],
+    },
+    {
+      description: [
+        "mobile-poc is a prototype on pinned GPUI snapshots, which docs/rust.md exempts, so all of its updates, its",
+        "patched sources' among them, are on the Dashboard, and come in one PR when approved.",
+      ],
+      matchFileNames: ["mobile-poc/**"],
+      groupName: "the mobile proof of concept",
+      groupSlug: "mobile-poc",
+      dependencyDashboardApproval: true,
+    },
+    {
+      description: "Its lockfiles hold the GPUI snapshots it was built on.",
+      matchFileNames: ["mobile-poc/**"],
+      matchUpdateTypes: ["lockFileMaintenance"],
+      enabled: false,
+    },
+  ],
+  customManagers: [
+    {
+      customType: "regex",
+      description: [
+        "A version with a `# renovate:` comment on the line above it, such as",
+        "`# renovate: datasource=crate depName=cargo-nextest` over `NEXTEST_VERSION: 0.9.151`.",
+      ],
+      managerFilePatterns: ["**/*.sh", "**/*.py", "/(^|/)\\.github/.+\\.ya?ml$/"],
+      matchStrings: [
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)(?: packageName=(?<packageName>\\S+))?(?: versioning=(?<versioning>\\S+))?(?: registryUrl=(?<registryUrl>\\S+))?\\s*\\n\\s*[\\w.-]+\\s*[=:]\\s*[\"']?v?(?<currentValue>[^\"'\\s]+)",
+      ],
+      versioningTemplate: "{{#if versioning}}{{{versioning}}}{{else}}loose{{/if}}",
+      extractVersionTemplate: "^v?(?<version>.+)$",
+    },
+    {
+      customType: "regex",
+      description: [
+        "A commit with a `# renovate:` comment on the line above it that names the branch it follows, such as",
+        "`# renovate: datasource=git-refs depName=gpui-mobile packageName=https://github.com/longbridge/gpui-mobile branch=main`.",
+      ],
+      managerFilePatterns: ["**/*.sh"],
+      matchStrings: [
+        "# renovate: datasource=(?<datasource>git-refs) depName=(?<depName>\\S+) packageName=(?<packageName>\\S+) branch=(?<currentValue>\\S+)\\s*\\n\\s*[\\w.-]+\\s*=\\s*[\"']?(?<currentDigest>[0-9a-f]{7,40})",
+      ],
+    },
+    {
+      customType: "regex",
+      description: "The Docker command in AGENTS.md uses the same Rust as rust-toolchain.toml.",
+      managerFilePatterns: ["/^AGENTS\\.md$/"],
+      matchStrings: ["rust:(?<currentValue>\\d+\\.\\d+\\.\\d+)"],
+      depNameTemplate: "rust",
+      datasourceTemplate: "rust-version",
+      versioningTemplate: "rust-release-channel",
+    },
+    {
+      customType: "regex",
+      description: "The Docker command in AGENTS.md installs the same Zig as the workflows.",
+      managerFilePatterns: ["/^AGENTS\\.md$/"],
+      matchStrings: ["\\bv=(?<currentValue>\\d+\\.\\d+\\.\\d+); z=zig-"],
+      depNameTemplate: "ziglang/zig",
+      datasourceTemplate: "forgejo-tags",
+      registryUrlTemplate: "https://codeberg.org",
+    },
+    {
+      customType: "regex",
+      description: "The Claude CLI release each fixture was captured from.",
+      managerFilePatterns: ["/^crates/agents/tests/fixtures/claude[^/]*\\.jsonl$/"],
+      matchStrings: ["\"claude_code_version\": \"(?<currentValue>\\d+\\.\\d+\\.\\d+)\""],
+      depNameTemplate: "@anthropic-ai/claude-code",
+      datasourceTemplate: "npm",
+    },
+  ],
+}
