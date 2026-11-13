@@ -183,6 +183,7 @@ fn with_a_long_summary<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> (Ui<'a>
     let seq = compacted.unwrap().seq;
     let line = SharedString::from(format!("compaction/event/{seq}/0"));
     ui.click(line.clone());
+    ui.keep_to_the_end();
     let window = settled(&mut ui, stack, &session);
     let area = ElementId::from(SharedString::from(format!("summary-scroll/event/{seq}/0")));
     (ui, Summary { session, window, area: ElementId::from((area, "area")), line })

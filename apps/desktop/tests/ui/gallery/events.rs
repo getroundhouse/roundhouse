@@ -157,16 +157,22 @@ pub(crate) fn subagent_started(call: &str, kind: &str, description: &str, prompt
     }
 }
 
+/// A task in the background as the hub lists it once the agent has said which call started it: what it's for, and
+/// that call.
+pub(crate) fn task(kind: TaskKind, call: &str, description: &str) -> AgentTask {
+    AgentTask {
+        id: format!("task-{call}").into(),
+        description: Some(description.to_string()),
+        kind,
+        call: Some(ToolUseId::from(call)),
+    }
+}
+
 /// The subagents working in the background, each by the call that started it and what it's for, as the hub records
 /// the list once the agent has said which call started each.
 pub(crate) fn subagents_listed(subagents: &[(&str, &str)]) -> EventBody {
-    let task = |(call, description): &(&str, &str)| AgentTask {
-        id: format!("task-{call}").into(),
-        description: Some(description.to_string()),
-        kind: TaskKind::Subagent,
-        call: Some(ToolUseId::from(*call)),
-    };
-    EventBody::AgentTasks { tasks: subagents.iter().map(task).collect(), stopped: Vec::new() }
+    let tasks = subagents.iter().map(|(call, description)| task(TaskKind::Subagent, call, description));
+    EventBody::AgentTasks { tasks: tasks.collect(), stopped: Vec::new() }
 }
 
 /// The agent's word that a subagent finished, with its report.

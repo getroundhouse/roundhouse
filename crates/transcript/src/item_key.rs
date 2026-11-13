@@ -5,6 +5,8 @@
 use gpui_kit::ElementId;
 use protocol::model::{AttachmentId, ClientMessageId, MessageId, Seq, ToolUseId};
 
+use crate::task_lines::TaskGroup;
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum ItemKey {
     /// A prompt, by the ID the client that sent it chose, pending or recorded.
@@ -22,6 +24,8 @@ pub(crate) enum ItemKey {
     /// What a subagent has written since a call, drawn from its record: since its newest, or since the one that
     /// started it, if it's made none. By that call's ID.
     After(ToolUseId),
+    /// The line for several background tasks of one group, at the chat's end.
+    Tasks(TaskGroup),
 }
 
 impl ItemKey {
@@ -57,6 +61,7 @@ impl ItemKey {
             ItemKey::Call(id) => format!("{part}/call/{id}"),
             ItemKey::Before(id) => format!("{part}/before/{id}"),
             ItemKey::After(id) => format!("{part}/after/{id}"),
+            ItemKey::Tasks(group) => format!("{part}/tasks/{}", group.name()),
         };
         ElementId::Name(name.into())
     }
@@ -104,6 +109,8 @@ mod tests {
             ItemKey::Call("1".into()).element("text"),
             ItemKey::Before("1".into()).element("text"),
             ItemKey::After("1".into()).element("text"),
+            ItemKey::Tasks(TaskGroup::Subagents).element("text"),
+            ItemKey::Tasks(TaskGroup::Commands).element("text"),
         ];
 
         for (i, id) in ids.iter().enumerate() {

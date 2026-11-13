@@ -269,6 +269,15 @@ impl Transcript {
         self.remeasure(seq, cx);
     }
 
+    /// Opens or closes a fold drawn at the chat's end, such as the line for several background tasks, which changes
+    /// the last row's height. The row stays where it is in the window, unless the chat is keeping to its latest row.
+    pub(crate) fn set_open_at_end(&mut self, key: ItemKey, fold: Fold, open: bool, cx: &mut Context<Self>) {
+        self.model.borrow_mut().folds.choose(key, fold, open);
+        self.list.keep_still(self.list.row_count().saturating_sub(1));
+        self.redraw_end();
+        cx.notify();
+    }
+
     /// Measures the row the event at `seq` is drawn in again, since what it draws has changed height, and draws it.
     pub(crate) fn remeasure(&mut self, seq: Seq, cx: &mut Context<Self>) {
         // Not loaded, so not measured either.

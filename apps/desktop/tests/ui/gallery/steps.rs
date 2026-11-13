@@ -64,8 +64,9 @@ pub(crate) enum Step {
     UpdateProblem,
     /// Opens Settings, as its menu item does.
     OpenSettings,
-    /// Clicks the transcript's line with this label, such as a tool call, to open it, then moves the pointer away,
-    /// so the picture shows it open rather than hovered. The first, if there are several.
+    /// Clicks the transcript's line with this label, such as a tool call, to open it, has the chat go back to its end,
+    /// and moves the pointer away, so the picture shows what it opened to rather than the line hovered. The first, if
+    /// there are several.
     Open(&'static str),
     /// Opens the bar for finding text in the chat, as `Cmd-F` does, looks for this, and waits for every match to be
     /// counted and the first to be shown.

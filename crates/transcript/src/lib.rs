@@ -25,6 +25,7 @@ mod scroll_area;
 mod selectable_layout;
 mod selectable_lines;
 mod selection;
+mod task_lines;
 mod transcript;
 mod window_selection;
 

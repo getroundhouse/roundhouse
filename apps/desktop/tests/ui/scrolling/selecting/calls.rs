@@ -97,6 +97,7 @@ pub(super) fn long() -> String {
 fn held_past_its_area(ui: &mut Ui<'_>, line: &str, part: &str) {
     settled(ui);
     ui.click_labelled(line, 0);
+    ui.keep_to_the_end();
     settled(ui);
     held_past(ui, part);
 }
