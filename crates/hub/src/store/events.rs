@@ -305,12 +305,7 @@ impl Store {
     /// The next run's ID. It's taken before the launch and never handed out again, so a run is
     /// unique even if it never records anything.
     pub fn next_run(&self) -> Result<RunId, StoreError> {
-        let conn = lock(&self.writer);
-        let value: i64 =
-            conn.query_row("UPDATE counters SET value = value + 1 WHERE name = 'run' RETURNING value", [], |row| {
-                row.get(0)
-            })?;
-        Ok(RunId::new(value.cast_unsigned()))
+        self.bump("run").map(RunId::new)
     }
 }
 

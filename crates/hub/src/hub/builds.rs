@@ -96,8 +96,8 @@ impl Hub {
     }
 
     /// Whether nothing in the workspace would be cut short by stopping its worker: no session at work, which covers one
-    /// waiting on an approval or with work in the background, no setup script, and no call to the worker under way,
-    /// such as a read or a title being written.
+    /// waiting on an approval or with work in the background, no setup script, no terminal open, whose shell would
+    /// end, and no call to the worker under way, such as a read or a title being written.
     fn nothing_at_work_in(&self, workspace_id: &WorkspaceId, link: &WorkerLink) -> bool {
         let session_at_work = self
             .sessions
@@ -105,7 +105,10 @@ impl Hub {
             .live
             .values()
             .any(|session| &session.workspace_id == workspace_id && session.status().is_active());
-        !session_at_work && !self.setup_gates.lock().contains_key(workspace_id) && link.calls_under_way() == 0
+        !session_at_work
+            && !self.setup_gates.lock().contains_key(workspace_id)
+            && !self.terminals.open_in(workspace_id)
+            && link.calls_under_way() == 0
     }
 }
 

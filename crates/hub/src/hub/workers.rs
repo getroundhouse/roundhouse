@@ -228,6 +228,8 @@ impl Hub {
         for session in sessions {
             session.send_item(Item::AgentLost { link: link.id, reason: ExitReason::WorkerLost }).await;
         }
+        // Their shells have gone with it.
+        self.terminals_lost(link.id).await;
     }
 
     /// Asks a worker to stop and waits for its output to end. If it's stuck, it's ended as [`Hub::end_stuck_worker`]
