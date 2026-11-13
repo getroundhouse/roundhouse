@@ -5,13 +5,13 @@
 //! is. Escape or a click closes it, on the image or around it.
 
 use gpui_kit::component::dialog::DialogClose;
-use gpui_kit::component::{ActiveTheme as _, TITLE_BAR_HEIGHT, WindowExt as _, h_flex, window_paddings};
+use gpui_kit::component::{TITLE_BAR_HEIGHT, WindowExt as _, h_flex, window_paddings};
 use gpui_kit::{
     AnyElement, App, ClickEvent, Div, ImageSource, Img, InteractiveElement as _, IntoElement as _, ObjectFit,
     ParentElement as _, Pixels, Size, Stateful, StatefulInteractiveElement as _, Styled as _, StyledImage as _,
     TestSupportExt as _, Window, div, img, px, size,
 };
-use look::{Hand as _, IMAGE_EDGE, fit, pixels};
+use look::{Hand as _, fit, pixels};
 
 /// `frame`, for an image that a click on it opens over the window, with the hand over it. `covers` is the image's
 /// pixels, turned as its orientation says. What it draws the image at, and the image, are the caller's.
@@ -47,7 +47,7 @@ fn open(image: ImageSource, covers: (u32, u32), window: &mut Window, cx: &mut Ap
         // Drawn again as the window is resized, so it always fits.
         let shown = fitted(covers, room(window));
         // The dialog's own corners, which its edge is drawn on, less the edge, so the image's meet them.
-        let corners = cx.theme().radius_lg - px(IMAGE_EDGE);
+        let corners = look::Corner::Card.radius() - look::EDGE;
         let opened = div()
             .id("opened-picture")
             .w(shown.width)
@@ -60,7 +60,7 @@ fn open(image: ImageSource, covers: (u32, u32), window: &mut Window, cx: &mut Ap
         dialog
             .p_0()
             .min_h(px(0.))
-            .w(shown.width + px(2. * IMAGE_EDGE))
+            .w(shown.width + look::EDGE * 2.)
             .bg(look::colors(cx).inset)
             .centered()
             .close_button(false)

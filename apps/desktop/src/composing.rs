@@ -11,10 +11,10 @@ use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
 use gpui_kit::component::{Icon, IconName, Sizable as _};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AbsoluteLength, Anchor, App, Context, FocusHandle, Hsla, InteractiveElement, IntoElement, ParentElement, Role,
+    Anchor, App, Context, FocusHandle, Hsla, InteractiveElement, IntoElement, ParentElement, Role,
     StatefulInteractiveElement as _, Styled, TestSupportExt as _, div,
 };
-use look::Hand as _;
+use look::{Hand as _, Shaped as _};
 
 use crate::TogglePlanMode;
 use crate::attached;
@@ -41,12 +41,12 @@ impl Plan {
 }
 
 /// `place`, a place where a prompt is written, made into one: `Shift-Tab` and the `+` menu's Plan mode reach `toggle`
-/// through it, and while `planning`, plan mode's texture lies under everything put in it after this, inside its
-/// corners, whose radius is `corner`. The texture is named, so assistive apps can say what it shows.
+/// through it, its corners are rounded as `corner`, and while `planning`, plan mode's texture lies under everything
+/// put in it after this, inside those corners. The texture is named, so assistive apps can say what it shows.
 pub(crate) fn place<T: 'static, E: InteractiveElement + IntoElement + ParentElement + Styled>(
     place: E,
     planning: bool,
-    corner: AbsoluteLength,
+    corner: look::Corner,
     cx: &mut Context<T>,
     toggle: fn(&mut T, &mut Context<T>),
 ) -> E {
@@ -61,6 +61,7 @@ pub(crate) fn place<T: 'static, E: InteractiveElement + IntoElement + ParentElem
     place
         .key_context(KEY_CONTEXT)
         .relative()
+        .corners(corner)
         .on_action(cx.listener(move |t, _: &TogglePlanMode, _, cx| toggle(t, cx)))
         .when(planning, |place| place.child(texture))
 }

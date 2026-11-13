@@ -11,7 +11,7 @@ use gpui_kit::{
     App, Context, FocusHandle, Focusable, InteractiveElement as _, IntoElement, KeyDownEvent, ParentElement, Render,
     Styled, WeakEntity, Window, div,
 };
-use look::{InRegion as _, Off as _, Region};
+use look::{InRegion as _, Off as _, Region, Shaped as _};
 use protocol::event::{ApprovalDecision, Question, QuestionAnswer};
 use protocol::model::{ApprovalId, ToolUseId};
 
@@ -287,7 +287,7 @@ impl Render for QuestionPanel {
             .gap_3()
             // The composer's corners, and the thin edge around the pane's own surface rather than a card's amber, since
             // being in the composer's place already says it's your turn.
-            .rounded_lg()
+            .corners(look::Corner::Card)
             .border_1()
             .border_color(edge)
             .child(heading)

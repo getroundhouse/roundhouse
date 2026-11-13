@@ -55,7 +55,7 @@ pub(crate) fn row_frame(id: String, list: List, depth: usize, showing: bool, cx:
     let colors = look::colors(cx);
     let (border, hover, raised) = (colors.edge, colors.row_hover, colors.raised);
     let guides = (0..depth).map(move |level| {
-        div().absolute().top_0().bottom_0().left(px(list.inset(level) + list.guide())).w(px(1.)).bg(border)
+        div().absolute().top_0().bottom_0().left(px(list.inset(level) + list.guide())).w(look::EDGE).bg(border)
     });
     h_flex()
         .id(ElementId::Name(id.into()))

@@ -68,7 +68,7 @@ impl Said {
             let text = text.typeset(look::Type::Code).child(path.clone());
             let copy = look::copy_button("copy-workspace-path", path, "Copy path");
             let row = h_flex().gap_2().text_color(colors.text_muted).child(text).child(copy);
-            v_flex().child(row).child(div().my_2().h(px(1.)).bg(colors.edge))
+            v_flex().child(row).child(div().my_2().h(look::EDGE).bg(colors.edge))
         });
         let version = self.version.clone().map(|version| {
             let moving = self.moving_to.clone().map(|to| {

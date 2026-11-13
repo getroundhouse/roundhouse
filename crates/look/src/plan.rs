@@ -6,10 +6,11 @@
 
 use std::f32::consts::PI;
 
-use gpui_kit::{AbsoluteLength, App, Bounds, Hsla, IntoElement, Pixels, Point, Styled, canvas, point, px};
+use gpui_kit::{App, Bounds, Hsla, IntoElement, Pixels, Point, Styled, canvas, point, px};
 
 use crate::colors::colors;
 use crate::fan::{self, as_f32};
+use crate::shape::Corner;
 
 /// Between neighbouring dots along a row, about. Much closer than the rows are, so each row reads as a dotted line. At
 /// the mark's own spacing the rows of a fan this big blur into an even field of dots.
@@ -35,14 +36,14 @@ pub fn plan_colors(surface: Hsla, cx: &App) -> (Hsla, Hsla) {
     (planning, planning.blend(copper.opacity(EDGE)))
 }
 
-/// Fills its parent, which it lies under, on the surface [`plan_colors`] gives. `corner` is the radius of the parent's
-/// corners, which the dots stay inside.
-pub fn plan_texture(cx: &App, corner: AbsoluteLength) -> impl IntoElement + use<> {
+/// Fills its parent, which it lies under, on the surface [`plan_colors`] gives. `corner` is the parent's corner, which
+/// the dots stay inside.
+pub fn plan_texture(cx: &App, corner: Corner) -> impl IntoElement + use<> {
     let copper = colors(cx).brand;
     canvas(
         |_, _, _| {},
         move |bounds, (), window, _| {
-            for (at, strength) in dots(bounds, corner.to_pixels(window.rem_size())) {
+            for (at, strength) in dots(bounds, corner.radius()) {
                 fan::disc(window, at, px(DOT), copper.opacity(strength));
             }
         },

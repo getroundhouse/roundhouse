@@ -13,7 +13,7 @@ use gpui_kit::{
     StyledImage as _, canvas, checkerboard, div, img, px,
 };
 use image::{DynamicImage, Frame, ImageDecoder as _, ImageReader, RgbaImage};
-use look::{IMAGE_EDGE, fit, pixels};
+use look::{fit, pixels};
 use protocol::attachment::{MediaType, describe_size};
 
 /// How big each square of the checkerboard behind an image is.
@@ -110,7 +110,7 @@ impl FileImage {
     /// the edge around that, so each pixel of it is where the same pixel of the other is.
     pub(crate) fn within(&self, covers: (u32, u32), scale: f32, cx: &App) -> Div {
         let (width, height) = covers;
-        let edged = |side: u32| px(pixels(side) * scale + 2. * IMAGE_EDGE);
+        let edged = |side: u32| px(pixels(side) * scale + 2. * f32::from(look::EDGE));
         div().flex_none().w(edged(width)).h(edged(height)).child(self.whole(scale, cx))
     }
 }
@@ -148,7 +148,7 @@ fn checkered(cx: &App) -> Div {
 
 /// `drawn` inside a thin edge, so an image shows where it ends even when its own colour at its sides is the pane's.
 pub(crate) fn edged(drawn: Div, cx: &App) -> Div {
-    div().flex_none().border_1().border_color(look::colors(cx).edge).child(drawn)
+    div().flex_none().border(look::EDGE).border_color(look::colors(cx).edge).child(drawn)
 }
 
 /// Where in the room what's fitted to it is put, down: across, it's always in the middle.

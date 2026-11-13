@@ -13,7 +13,7 @@ use gpui_kit::{
 };
 use look::{Hand as _, Off as _};
 
-use super::{NewWorkspaceDialog, RADIUS};
+use super::NewWorkspaceDialog;
 use crate::attached;
 use crate::composing::{self, Plan};
 use crate::model_picker::model_picker;
@@ -21,8 +21,8 @@ use crate::model_picker::model_picker;
 impl Render for NewWorkspaceDialog {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         // An edge of its own inside the dialog's, which shows only while files are dragged over it.
-        let target = v_flex().id("new-workspace").w_full().rounded(RADIUS).border_1().border_color(transparent_black());
-        let target = composing::place(target, self.planning(), RADIUS.into(), cx, Self::toggle_plan_mode);
+        let target = v_flex().id("new-workspace").w_full().border_1().border_color(transparent_black());
+        let target = composing::place(target, self.planning(), look::Corner::Card, cx, Self::toggle_plan_mode);
         attached::takes_drops(target, cx, |_, paths, cx| Self::attach_paths(paths, cx))
             .child(self.header(cx))
             .children(

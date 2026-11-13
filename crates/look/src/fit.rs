@@ -3,15 +3,13 @@
 
 use gpui_kit::{Pixels, Size};
 
-/// How wide the edge around an image is, on each side, so an image shows where it ends even when its own colour at its
-/// sides is what's behind it.
-pub const IMAGE_EDGE: f32 = 1.;
+use crate::shape::EDGE;
 
 /// The scale that fits something `width` by `height` pixels, inside its edge, into `room`, both ways, at most its own
 /// size, so images drawn at the same scale keep the sizes they have beside each other.
 pub fn fit((width, height): (u32, u32), room: Size<Pixels>) -> f32 {
-    let across = (f32::from(room.width) - 2. * IMAGE_EDGE) / pixels(width.max(1));
-    let down = (f32::from(room.height) - 2. * IMAGE_EDGE) / pixels(height.max(1));
+    let across = (f32::from(room.width) - 2. * f32::from(EDGE)) / pixels(width.max(1));
+    let down = (f32::from(room.height) - 2. * f32::from(EDGE)) / pixels(height.max(1));
     across.min(down).clamp(0., 1.)
 }
 

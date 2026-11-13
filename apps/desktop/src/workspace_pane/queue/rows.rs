@@ -9,7 +9,7 @@ use gpui_kit::{
     AnyElement, Context, ElementId, Hsla, InteractiveElement as _, IntoElement, ParentElement, SharedString,
     StatefulInteractiveElement as _, Styled, TestSupportExt as _, div, px,
 };
-use look::{Hand as _, InRegion as _, Region, Typeset as _};
+use look::{Hand as _, InRegion as _, Region, Shaped as _, Typeset as _};
 use protocol::model::QueuedPrompt;
 use protocol::short_text::one_line;
 
@@ -53,7 +53,7 @@ impl WorkspacePane {
             v_flex()
                 .region(Region::Queue)
                 .mx_3()
-                .rounded_t_lg()
+                .corners_top(look::Corner::Card)
                 .border_1()
                 .border_b_0()
                 .border_color(border)
@@ -98,7 +98,7 @@ impl WorkspacePane {
             .gap_2()
             .px_2()
             .py_1p5()
-            .rounded_md()
+            .corners(look::Corner::Control)
             .hover(move |style| style.bg(lit))
             .child(queued_line(prompt, text, muted))
             .child(queued_buttons(prompt, row, group, muted, cx))

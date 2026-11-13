@@ -5,6 +5,7 @@ use gpui_kit::component::{ActiveTheme as _, try_parse_color};
 
 use super::{Colors, config, kit_colors};
 use crate::colors::colors;
+use crate::shape::Corner;
 
 /// So a key the kit doesn't know, or a value it can't read, which it would pass over for one of its own when the theme
 /// is applied, fails here.
@@ -46,5 +47,7 @@ fn the_kits_theme_draws_with_the_apps_colours(cx: &mut TestAppContext) {
         assert_eq!(theme.list_hover, colors.row_hover);
         assert_eq!(theme.ring, colors.brand);
         assert_eq!(theme.selection, colors.selection());
+        assert_eq!(theme.radius, Corner::Control.radius());
+        assert_eq!(theme.radius_lg, Corner::Card.radius());
     });
 }

@@ -10,7 +10,7 @@ use gpui_kit::{
     AnyElement, App, Div, InteractiveElement as _, IntoElement, ParentElement, Role, StatefulInteractiveElement as _,
     Styled, TestSupportExt as _, div, px, relative,
 };
-use look::{Hand as _, Typeset as _};
+use look::{Hand as _, Shaped as _, Typeset as _};
 use protocol::event::{CompactedBy, CompactionOutcome, EventBody};
 use protocol::model::Seq;
 
@@ -75,7 +75,7 @@ fn line(compacted: &Compacted, shared: &Shared, cx: &App) -> AnyElement {
         .role(if opens { Role::Button } else { Role::Label })
         // In words, since a screen reader would read the arrow out as one.
         .aria_label(compacted.said("to", ", "))
-        .rounded(px(6.))
+        .corners(look::Corner::Control)
         .child(Icon::new(IconName::FoldVertical).size(px(RULE_ICON)))
         .child(compacted.said("→", " · "))
         .when(opens, |d| {
@@ -111,7 +111,7 @@ fn opened(seq: Seq, summary: &str, shared: &Shared, cx: &App) -> Div {
         .py_3()
         .pl_3()
         .pr_1()
-        .rounded_lg()
+        .corners(look::Corner::Card)
         .border_1()
         .border_color(colors.edge)
         .child(div().typeset(look::Type::Detail).text_color(colors.text_faint).child("What the agent carries on from"))

@@ -9,7 +9,7 @@ use gpui_kit::component::{Sizable as _, h_flex, v_flex};
 use gpui_kit::{
     AnyElement, App, Div, ElementId, Entity, IntoElement, ParentElement, Styled, WeakEntity, div, px, rems,
 };
-use look::{Hand as _, Off as _, Typeset as _};
+use look::{Hand as _, Off as _, Shaped as _, Typeset as _};
 use protocol::model::DiffComment;
 
 use super::FileDiff;
@@ -47,7 +47,7 @@ pub(super) fn draft_card(
     let field = div()
         .w_full()
         .p_1()
-        .rounded_md()
+        .corners(look::Corner::Control)
         .border_1()
         .border_color(colors.brand.opacity(0.6))
         .bg(colors.pane)

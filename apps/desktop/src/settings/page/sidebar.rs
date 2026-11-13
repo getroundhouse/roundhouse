@@ -3,14 +3,14 @@
 use gpui_kit::component::input::{Input, InputState};
 use gpui_kit::component::kbd::Kbd;
 use gpui_kit::component::scroll::ScrollableElement as _;
-use gpui_kit::component::{ActiveTheme as _, Icon, IconName, Sizable as _, ThemeStyled as _, h_flex, v_flex};
+use gpui_kit::component::{Icon, IconName, Sizable as _, ThemeStyled as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     App, Entity, Focusable as _, InteractiveElement as _, IntoElement, Keystroke, MouseButton, OperatingSystem,
     ParentElement as _, Pixels, Role, StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, Window, div,
     px, rems,
 };
-use look::{Hand as _, Typeset as _};
+use look::{Hand as _, Shaped as _, Typeset as _};
 
 use super::{FIND_KEY, Page, PageId, Section};
 use crate::sidebar::HEADING_HEIGHT;
@@ -67,7 +67,6 @@ pub(super) fn sidebar(
 /// setting at its right end. The kit's input draws only the text, since it would leave its own room before the key,
 /// and say what it's for in muted text.
 fn search_field(search: &Entity<InputState>, window: &Window, cx: &App) -> impl IntoElement {
-    let theme = cx.theme();
     let colors = look::colors(cx);
     let focused = search.read(cx).focus_handle(cx).is_focused(window);
     let empty = search.read(cx).value().is_empty();
@@ -91,7 +90,7 @@ fn search_field(search: &Entity<InputState>, window: &Window, cx: &App) -> impl 
         .pl(px(9.))
         .pr(px(7.))
         .gap(px(9.))
-        .rounded(theme.radius)
+        .corners(look::Corner::Control)
         .border_1()
         .border_color(colors.control_edge)
         .bg(colors.pane)
@@ -118,7 +117,7 @@ fn find_key(cx: &App) -> impl IntoElement {
         .h(px(16.))
         .px_1()
         .gap_1()
-        .rounded(px(4.))
+        .corners(look::Corner::InlineControl)
         .border_1()
         .border_color(colors.control_edge)
         .bg(colors.raised)
@@ -141,7 +140,6 @@ pub(super) fn find_key_says(os: OperatingSystem) -> Vec<String> {
 /// A page's row: its icon and name, filled a little lighter than the sidebar while it's the page showing, and while
 /// the pointer is on it. It tells assistive apps which page is showing, as a list's selected item.
 fn page_row(page: &Page, showing: bool, chosen: &Entity<Option<PageId>>, cx: &App) -> impl IntoElement {
-    let theme = cx.theme();
     let colors = look::colors(cx);
     let fill = colors.menu_hover;
     let (id, chosen) = (page.id, chosen.clone());
@@ -154,7 +152,7 @@ fn page_row(page: &Page, showing: bool, chosen: &Entity<Option<PageId>>, cx: &Ap
         .h(ROW_HEIGHT)
         .px(ROW_INSET)
         .gap_3()
-        .rounded(theme.radius)
+        .corners(look::Corner::Control)
         .typeset(look::Type::Body)
         .text_color(colors.text)
         .hand()

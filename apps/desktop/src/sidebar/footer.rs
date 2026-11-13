@@ -15,7 +15,7 @@ use gpui_kit::{
     AnyElement, App, Context, Hsla, InteractiveElement, IntoElement, ParentElement, Pixels, SharedString,
     StatefulInteractiveElement, Styled, TestSupportExt as _, div, px,
 };
-use look::{TaskRing, Typeset as _};
+use look::{Shaped as _, TaskRing, Typeset as _};
 
 use crate::app::{AppView, BuildLine};
 use crate::checkout::Checkout;
@@ -113,7 +113,7 @@ fn checkout_card(checkout: &Checkout, data_dir: &Path, cx: &App) -> AnyElement {
         .w_full()
         .p_2p5()
         .gap_0p5()
-        .rounded(px(10.))
+        .corners(look::Corner::Card)
         .bg(colors.raised)
         .border_1()
         .border_color(colors.edge)

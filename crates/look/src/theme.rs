@@ -4,10 +4,11 @@
 use std::rc::Rc;
 
 use gpui_kit::component::{Theme, ThemeConfig, ThemeMode};
-use gpui_kit::{App, Hsla, Rgba};
+use gpui_kit::{App, Hsla, Pixels, Rgba};
 use serde_json::{Map, Value, json};
 
 use crate::colors::Colors;
+use crate::shape::Corner;
 use crate::typography::{MONO, MONO_SIZE, REM};
 
 /// Installs the app's colours, and its theme as the kit's dark theme, and switches to it. Going through the kit,
@@ -44,12 +45,18 @@ fn config(colors: &Colors) -> ThemeConfig {
         "font.size": f32::from(REM),
         "mono_font.family": MONO,
         "mono_font.size": f32::from(MONO_SIZE),
-        "radius": 6,
-        "radius.lg": 10,
+        "radius": whole(Corner::Control.radius()),
+        "radius.lg": whole(Corner::Card.radius()),
         "shadow": false,
         "colors": kit,
     }))
     .expect("the kit reads the theme")
+}
+
+/// A corner as the kit's theme takes it, in whole pixels, as every corner it's given is.
+#[expect(clippy::cast_possible_truncation, clippy::cast_sign_loss, reason = "a corner is a few whole pixels")]
+fn whole(radius: Pixels) -> usize {
+    f32::from(radius) as usize
 }
 
 /// The kit's name for each of its colours, and the app's colour it takes: the role whose value it had, and of those,

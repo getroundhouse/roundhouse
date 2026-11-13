@@ -83,7 +83,7 @@ fn table(rows: Vec<(&'static str, String)>, cx: &App) -> Div {
 
 /// The rule each part of the card starts under.
 pub(super) fn rule(cx: &App) -> Div {
-    div().my_1().h(px(1.)).bg(look::colors(cx).edge)
+    div().my_1().h(look::EDGE).bg(look::colors(cx).edge)
 }
 
 /// A name and what it says, after `mark` if there is one, at either end of a line, said together to assistive apps.

@@ -13,6 +13,7 @@ use gpui_kit::{
     App, AppContext as _, ClipboardItem, Context, Entity, EventEmitter, Hsla, ParentElement as _, Pixels, Styled as _,
     Subscription, Window, px,
 };
+use look::Shaped as _;
 use protocol::attachment::Attachment;
 use protocol::model::{
     AgentDescription, AgentKind, AttachmentId, Effort, ModelName, NewWorkspaceDraftToKeep, PermissionMode, RepoId,
@@ -30,8 +31,6 @@ pub(crate) use keeping::Keeping;
 
 /// Wide enough for a few lines of a task's description, and narrower than the transcript's column.
 const WIDTH: Pixels = px(720.);
-/// The composer's corners.
-const RADIUS: Pixels = px(10.);
 
 /// What Create asks the app to make.
 #[derive(Debug)]
@@ -146,7 +145,7 @@ pub(crate) fn open(
             .close_button(false)
             .bg(background)
             .border_color(edge)
-            .rounded(RADIUS)
+            .corners(look::Corner::Card)
             .child(shown.clone())
             // Enter is the prompt's, which creates, and Create closes the dialog once it can act, so Enter pressed
             // while it waits leaves the dialog open.

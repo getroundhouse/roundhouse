@@ -12,7 +12,7 @@ use gpui_kit::{
     ListState, ParentElement, Pixels, Role, SharedString, StatefulInteractiveElement, Styled, TestSupportExt as _,
     Window, div, list, px,
 };
-use look::{Hand as _, LineText};
+use look::{Hand as _, LineText, Shaped as _};
 use protocol::model::{CompactionLine, PromptLine};
 
 use crate::rows::{RULE_ICON, compaction};
@@ -39,7 +39,7 @@ const LEAD: usize = 2;
 /// A row's width: the list's, less [`INSET`] and the edge on each side. It's set rather than left to the list, because
 /// the list measures a row before it knows how wide it is, which would count a long prompt's lines unwrapped.
 fn row_width() -> Pixels {
-    WIDTH - (INSET + look::RAISED_EDGE) * 2.
+    WIDTH - (INSET + look::EDGE) * 2.
 }
 
 /// The list's rows, kept for as long as the chat is, so each is measured once rather than each time the list opens.
@@ -120,7 +120,7 @@ pub(super) fn draw(
         .role(Role::ListBox)
         .aria_label("Jump to a prompt or a compaction")
         .w(WIDTH)
-        .max_h(TALLEST + (INSET + look::RAISED_EDGE) * 2.)
+        .max_h(TALLEST + (INSET + look::EDGE) * 2.)
         .p(INSET)
         // The wheel scrolls the list and not the chat under it.
         .occlude()
@@ -165,7 +165,7 @@ fn row(
         .pl_1()
         .pr_3()
         .py_2()
-        .rounded(px(8.))
+        .corners(look::Corner::Control)
         .hand()
         .when(lit, |d| d.bg(fill))
         .hover(move |d| d.bg(fill))
@@ -211,7 +211,7 @@ fn compaction_row(
         .pl_1()
         .pr_3()
         .py_1p5()
-        .rounded(px(8.))
+        .corners(look::Corner::Control)
         .hand()
         .hover(move |d| d.bg(fill))
         .on_click(jumps.to(row))

@@ -57,7 +57,7 @@ fn compact(pane: &WeakEntity<WorkspacePane>, off: bool, cx: &App) -> Div {
         .text_color(colors.text_faint)
         .child("Summarize to make room");
     let under = h_flex().justify_between().items_center().gap_3().child(said).child(button);
-    v_flex().child(div().my_2().h(px(1.)).bg(colors.edge)).child(under)
+    v_flex().child(div().my_2().h(look::EDGE).bg(colors.edge)).child(under)
 }
 
 /// The bars' card: the plan beside its heading, which is what it's `called`, how much of each limit shown is left, as a
@@ -164,7 +164,7 @@ fn whose(account: &Account, plan: Plan, cx: &App) -> Option<AnyElement> {
     let how = (!how.is_empty())
         .then(|| div().truncate().typeset(look::Type::Detail).text_color(colors.text_faint).child(how.join(" · ")));
     let said = v_flex().id("account").gap_0p5().children(who).children(how).test_support();
-    Some(v_flex().child(div().my_2().h(px(1.)).bg(colors.edge)).child(said).into_any_element())
+    Some(v_flex().child(div().my_2().h(look::EDGE).bg(colors.edge)).child(said).into_any_element())
 }
 
 /// A section's name, in medium weight, and what it comes to, if anything, at the far end.

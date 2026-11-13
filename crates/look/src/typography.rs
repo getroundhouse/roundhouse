@@ -5,6 +5,8 @@
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::{AbsoluteLength, App, FontWeight, Pixels, SharedString, Styled, px, rems};
 
+use crate::named::named;
+
 /// How big a rem is. The kit's theme is given it, and the window measures the kinds that are in rems by it.
 pub(crate) const REM: Pixels = px(16.);
 /// The code font. Every Mac has it, and Linux and Windows don't, so code there falls back to the system font.
@@ -14,39 +16,25 @@ pub(crate) const MONO_SIZE: Pixels = px(12.);
 /// How text that stands out from what's around it is set: medium, never bold, which shouts in a dense layout.
 const EMPHASIS: FontWeight = FontWeight::MEDIUM;
 
-/// Declares the kinds once, so the type and the list the spec's table and the sheet are checked against can't
-/// disagree about which kinds there are.
-macro_rules! kinds {
-    ($($(#[doc = $doc:literal])+ $kind:ident,)+) => {
-        /// A kind of text, by what it's for. [`Typeset::typeset`] sets an element's text as one.
-        #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-        pub enum Type {
-            $($(#[doc = $doc])+ $kind,)+
-        }
-
-        impl Type {
-            /// Every kind, in the order they're declared, which is the spec table's.
-            #[cfg(any(test, feature = "testing"))]
-            pub const ALL: &[Type] = &[$(Type::$kind,)+];
-        }
-    };
-}
-
-kinds! {
-    /// A page's name, such as each of Settings' pages: the largest kind, since it says where you are.
-    PageTitle,
-    /// What an empty pane says is missing, above why.
-    Heading,
-    /// What to read: what the agent wrote, a prompt, a call's line, a row's name, and most of the rest.
-    Body,
-    /// Details beside or under what to read, such as a time, a count, a hint or a heading over a list.
-    Detail,
-    /// Code, in the code font: a command, a path, a file, or what a call put out.
-    Code,
-    /// What a key says, such as the `F` of Settings' `⌘ F`.
-    Key,
-    /// What's held with a key, such as Settings' `⌘`, smaller than the key that's pressed, as on the keys themselves.
-    KeyHeld,
+named! {
+    /// A kind of text, by what it's for. [`Typeset::typeset`] sets an element's text as one.
+    Type {
+        /// A page's name, such as each of Settings' pages: the largest kind, since it says where you are.
+        PageTitle,
+        /// What an empty pane says is missing, above why.
+        Heading,
+        /// What to read: what the agent wrote, a prompt, a call's line, a row's name, and most of the rest.
+        Body,
+        /// Details beside or under what to read, such as a time, a count, a hint or a heading over a list.
+        Detail,
+        /// Code, in the code font: a command, a path, a file, or what a call put out.
+        Code,
+        /// What a key says, such as the `F` of Settings' `⌘ F`.
+        Key,
+        /// What's held with a key, such as Settings' `⌘`, smaller than the key that's pressed, as on the keys
+        /// themselves.
+        KeyHeld,
+    }
 }
 
 /// The fonts text is set in.

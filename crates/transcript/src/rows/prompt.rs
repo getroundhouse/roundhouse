@@ -4,10 +4,9 @@ use client_core::session_log::PromptState;
 use gpui_kit::component::v_flex;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, InteractiveElement as _, IntoElement, ParentElement, Styled, TestSupportExt as _, div, px,
-    relative,
+    AnyElement, App, InteractiveElement as _, IntoElement, ParentElement, Styled, TestSupportExt as _, div, relative,
 };
-use look::Typeset as _;
+use look::{Shaped as _, Typeset as _};
 
 use super::{Shared, from_blocks, row};
 use crate::attachments::{self, Carried};
@@ -54,7 +53,7 @@ pub(super) fn prompt_bubble(
                 .gap_2p5()
                 .px_4()
                 .py_3()
-                .rounded(px(6.))
+                .corners(look::Corner::Control)
                 .bg(colors.prompt)
                 .when(faint, |d| d.opacity(0.6))
                 .children(attachments::view(carried, cx))

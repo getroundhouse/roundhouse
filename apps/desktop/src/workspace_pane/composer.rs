@@ -7,10 +7,10 @@ use gpui_kit::component::input::{InputEvent, Textarea, TextareaState};
 use gpui_kit::component::{IconName, Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, AppContext as _, Context, Div, Entity, Focusable as _, IntoElement, ParentElement, Pixels, Rems,
-    Styled, Subscription, Window, div, px, rems,
+    AnyElement, AppContext as _, Context, Div, Entity, Focusable as _, IntoElement, ParentElement, Pixels, Styled,
+    Subscription, Window, div, px,
 };
-use look::{Hand as _, InRegion as _, Off as _, Region};
+use look::{Hand as _, InRegion as _, Off as _, Region, Shaped as _};
 use protocol::model::{Effort, ModelName, PermissionMode, SessionId, SessionSettingsChange};
 use protocol::prompt::Prompt;
 
@@ -18,9 +18,6 @@ use super::{PaneEvent, WorkspacePane};
 use crate::composing::{self, Plan};
 use crate::model_picker::{Picked, model_picker};
 use crate::{StopAgent, attached, prompt_cache};
-
-/// Its corners, which plan mode's texture stays inside.
-const CORNER: Rems = rems(0.5);
 
 /// Whether there's a hub to send what's typed to.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -219,9 +216,8 @@ impl WorkspacePane {
         let textarea = Textarea::new(&self.composer)
             .appearance(false)
             .on_paste(move |item, _, cx| this.update(cx, |t, cx| t.paste(item, cx)).unwrap_or(false));
-        let composer =
-            v_flex().region(Region::Composer).w_full().rounded(CORNER).border_1().border_color(border).bg(surface);
-        let composer = composing::place(composer, planning, CORNER.into(), cx, Self::toggle_plan_mode);
+        let composer = v_flex().region(Region::Composer).w_full().border_1().border_color(border).bg(surface);
+        let composer = composing::place(composer, planning, look::Corner::Card, cx, Self::toggle_plan_mode);
         let composer = attached::takes_drops(composer, cx, |t: &mut Self, paths, cx| t.attach_paths(paths, cx))
             .children(attached)
             .child(div().w_full().px_2().pt_2().child(textarea))
@@ -265,7 +261,7 @@ impl WorkspacePane {
                 .small()
                 .size_6()
                 .p_0()
-                .child(div().size_2p5().rounded_xs().bg(stop_mark))
+                .child(div().size_2p5().corners(look::Corner::Glyph).bg(stop_mark))
                 .accessibility_label("Stop")
                 .tooltip_with_action("Stop", &StopAgent, None)
                 .on_click(cx.listener(|t, _, _, cx| t.stop_agent(cx)))

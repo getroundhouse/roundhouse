@@ -10,7 +10,7 @@ use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, Div, ElementId, Hsla, InteractiveElement as _, IntoElement, ParentElement, SharedString, Stateful,
-    Styled, WeakEntity, div, px,
+    Styled, WeakEntity, div,
 };
 use look::{LineText, Typeset as _};
 use protocol::event::{ApprovalOutcome, ContentBlock, EventBody, SessionEvent};
@@ -202,7 +202,7 @@ fn rule_row(middle: impl IntoElement, cx: &App) -> AnyElement {
 /// drawn.
 fn rule_across(middle: impl IntoElement, cx: &App) -> Div {
     let border = look::colors(cx).edge;
-    let rule = || div().flex_1().h(px(1.)).bg(border);
+    let rule = || div().flex_1().h(look::EDGE).bg(border);
     h_flex().w_full().items_center().gap_3().child(rule()).child(middle).child(rule())
 }
 

@@ -87,7 +87,7 @@ impl WorkspacePane {
                     // Hidden rather than left out, so the title doesn't move when it shows.
                     .child(div().flex_none().invisible().group_hover(TAB_GROUP, Styled::visible).child(close)),
             )
-            .when(selected, |d| d.child(div().absolute().left_0().right_0().bottom_0().h(px(2.)).bg(current)));
+            .when(selected, |d| d.child(div().absolute().left_0().right_0().bottom_0().h(look::TAB_LINE).bg(current)));
         tab.context_menu(menu).into_any_element()
     }
 
@@ -134,7 +134,7 @@ impl WorkspacePane {
             .h(px(40.))
             // The bar's bottom edge, drawn under the tabs rather than as a border, so the line under the chat showing
             // can cover it. GPUI draws a border over what's inside it.
-            .child(div().absolute().left_0().right_0().bottom_0().h(px(1.)).bg(border))
+            .child(div().absolute().left_0().right_0().bottom_0().h(look::EDGE).bg(border))
             .child(
                 h_flex()
                     .size_full()
