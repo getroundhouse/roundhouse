@@ -85,7 +85,7 @@ markdown = "1.0.0"
 # Already under serde_json. Finds and counts the line endings in a file the worker reads a few lines of at a time.
 memchr = "2.8.3"
 # Already under gpui-component. Tells a worker when git writes a worktree's branches, from the OS's own file events.
-notify = "8.2.1"
+notify = "8.2.2"
 # Already under GPUI. Gives GPUI's view on a Mac the accessibility answer it lacks.
 objc2 = "0.6.5"
 # Already under GPUI. Taps a Mac's trackpad as a sidebar's edge takes its usual width, and plays the sound for a chat
@@ -118,7 +118,7 @@ tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 two-face = { version = "0.4.5", default-features = false }
 # The one Velopack uses, with its TLS, for fetching the update feed.
 ureq = "3.5.1"
-uuid = { version = "1.29.0", features = ["v4"] }
+uuid = { version = "1.29.2", features = ["v4"] }
 # Exact, because tools/package/dotnet-tools.json pins vpk, which makes the packages this reads, to the same version.
 # `public-utils` makes public a type that its `UpdateSource` trait names, so another crate can implement it. Its
 # `file-logging` would add a log file and a panic hook, so it stays off.
