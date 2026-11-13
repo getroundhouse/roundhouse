@@ -199,3 +199,23 @@ fn a_new_screen_has_nothing_selected() {
 
     assert_eq!(copy.selected_text().unwrap(), None);
 }
+
+/// Whatever modes the program set, as Command-Left on a Mac sends Ctrl-A, for the start of the line, even to a program
+/// that has keys sent as keys, which would have Ctrl-A sent otherwise.
+#[test]
+fn text_is_sent_as_it_is_and_goes_back_to_the_screen() {
+    let mut copy = TerminalCopy::new();
+    assert_eq!(copy.text("\x01").unwrap().input, b"", "nothing before the screen, as for a key");
+    let lines = (0..10).flat_map(|line| format!("{line}\r\n").into_bytes());
+    copy.take_in(screen(SMALL, &lines.chain(*b"\x1b[>1u").collect::<Vec<u8>>())).unwrap();
+    let on_screen = text(&copy.frame().unwrap().unwrap(), 0);
+    copy.wheel(-3).unwrap();
+    assert_ne!(text(&copy.frame().unwrap().unwrap(), 0), on_screen, "scrolled back through the history");
+    copy.select_all().unwrap();
+
+    let sent = copy.text("\x01").unwrap();
+
+    assert_eq!(sent.input, b"\x01");
+    assert_eq!(text(&copy.frame().unwrap().unwrap(), 0), on_screen);
+    assert_eq!(copy.selected_text().unwrap(), None, "typing clears what's selected");
+}

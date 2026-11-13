@@ -28,10 +28,10 @@ impl AppView {
         })
         // Home hides the selected workspace, so nothing acts on it unseen.
         .when(self.selected_pane().is_some() && !self.home_showing(), |root| with_workspace_shortcuts(root, cx))
-        .when(self.chat_showing(cx), |root| with_find_shortcuts(root, cx))
+        .when(self.chat_showing(cx), |root| with_chat_shortcuts(root, cx))
     }
 
-    /// Whether a chat shows, in front of the selected workspace's tabs, to find text in.
+    /// Whether a chat shows, in front of the selected workspace's tabs, to find text in and stop the agent of.
     fn chat_showing(&self, cx: &Context<Self>) -> bool {
         let pane = self.selected_pane().filter(|_| !self.home_showing()).map(|pane| pane.read(cx));
         pane.is_some_and(|pane| pane.showing() == Showing::Chat && pane.transcript().is_some())
@@ -64,17 +64,20 @@ impl AppView {
     }
 }
 
-/// Finding text in the chat showing, which there has to be.
-fn with_find_shortcuts(root: Div, cx: &mut Context<AppView>) -> Div {
-    root.on_action(cx.listener(|t, _: &FindInChat, window, cx| {
-        t.update_selected_pane(cx, |pane, cx| pane.find_in_chat(window, cx));
-    }))
-    .on_action(cx.listener(|t, _: &FindNext, window, cx| {
-        t.update_selected_pane(cx, |pane, cx| pane.find_next(true, window, cx));
-    }))
-    .on_action(cx.listener(|t, _: &FindPrevious, window, cx| {
-        t.update_selected_pane(cx, |pane, cx| pane.find_next(false, window, cx));
-    }))
+/// What acts on the chat showing, which there has to be: finding text in it, and stopping its agent. A terminal, a file
+/// tab or a subagent tab in front hides the chat, so nothing takes their actions then, rather than act on a chat out of
+/// sight, and off the Mac a terminal's program has their keys, as `keys.rs` leaves them out of a terminal.
+fn with_chat_shortcuts(root: Div, cx: &mut Context<AppView>) -> Div {
+    root.on_action(cx.listener(|t, _: &StopAgent, _, cx| t.update_selected_pane(cx, WorkspacePane::stop_agent)))
+        .on_action(cx.listener(|t, _: &FindInChat, window, cx| {
+            t.update_selected_pane(cx, |pane, cx| pane.find_in_chat(window, cx));
+        }))
+        .on_action(cx.listener(|t, _: &FindNext, window, cx| {
+            t.update_selected_pane(cx, |pane, cx| pane.find_next(true, window, cx));
+        }))
+        .on_action(cx.listener(|t, _: &FindPrevious, window, cx| {
+            t.update_selected_pane(cx, |pane, cx| pane.find_next(false, window, cx));
+        }))
 }
 
 /// What acts on the selected workspace, which there has to be.
@@ -92,7 +95,6 @@ fn with_workspace_shortcuts(root: Div, cx: &mut Context<AppView>) -> Div {
         .on_action(
             cx.listener(|t, _: &PreviousChat, _, cx| t.update_selected_pane(cx, |pane, cx| pane.step_chat(-1, cx))),
         )
-        .on_action(cx.listener(|t, _: &StopAgent, _, cx| t.update_selected_pane(cx, WorkspacePane::stop_agent)))
         // As the selected workspace's row offers them, for the row of the workspace showing.
         .on_action(cx.listener(|t, _: &ArchiveWorkspace, _, cx| {
             if let Some(id) = t.selected.clone() {
