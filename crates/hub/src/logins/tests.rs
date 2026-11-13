@@ -99,19 +99,19 @@ fn a_token_connected_is_kept_in_a_file_of_its_own_and_the_record_says_the_hub_ho
 }
 
 #[test]
-fn the_same_token_again_finds_its_account_and_changes_only_its_name() {
+fn the_same_token_again_finds_its_account_and_under_another_name_is_refused() {
     let dir = tempfile::tempdir().unwrap();
-    let (logins, _) = logins_in(dir.path());
+    let (logins, store) = logins_in(dir.path());
     let first = logins.connect(&connect("Work", "a-made-up-token", None)).unwrap().account;
 
     let again = logins.connect(&connect("Work", "a-made-up-token", None)).unwrap();
     let renamed = logins.connect(&Connect { connected_at_ms: 1500, ..connect("Day job", "a-made-up-token", None) });
 
     assert_eq!(again, AccountChange { account: first.clone(), changed: false });
-    let renamed = renamed.unwrap();
-    assert!(renamed.changed);
-    assert_eq!((renamed.account.id, renamed.account.name.as_deref()), (first.id, Some("Day job")));
-    assert_eq!(renamed.account.held_login, first.held_login, "when it was connected is when the token was");
+    let refused = renamed.unwrap_err();
+    assert_eq!(refused.code, ErrorCode::Conflict);
+    assert!(refused.message.contains("Work"), "it says which account holds it: {}", refused.message);
+    assert_eq!(store.account(&first.id).unwrap(), Some(first), "the account is as it was");
     assert_eq!(tokens_kept(dir.path()), ["a-made-up-token"]);
 }
 
@@ -274,26 +274,42 @@ fn a_login_whose_file_cant_be_written_makes_no_record() {
     assert_eq!(store.account(&"claude-login-Work".into()).unwrap(), None);
 }
 
-#[test]
-fn eight_connects_of_one_token_at_once_make_one_account() {
-    let dir = tempfile::tempdir().unwrap();
-    let (logins, _) = logins_in(dir.path());
+/// Connects `token` from eight threads at once, under the names `name` gives each, and answers with what each got.
+/// Each would make an account of its own ID, as each request's would be, so only the lock keeps them to one.
+fn eight_at_once(
+    logins: &Arc<Logins>,
+    token: &'static str,
+    name: fn(usize) -> String,
+) -> Vec<Result<AccountId, ErrorCode>> {
     let barrier = Arc::new(Barrier::new(8));
-
     let connects: Vec<_> = (0..8)
         .map(|at| {
             let (logins, barrier) = (logins.clone(), barrier.clone());
             std::thread::spawn(move || {
                 barrier.wait();
-                logins.connect(&connect(&format!("Work {at}"), "a-made-up-token", None)).unwrap().account.id
+                let new_id = AccountId::from(format!("claude-login-{token}-{at}"));
+                let connect = Connect { new_id, ..connect(&name(at), token, None) };
+                logins.connect(&connect).map(|change| change.account.id).map_err(|e| e.code)
             })
         })
         .collect();
-    let mut ids: Vec<AccountId> = connects.into_iter().map(|connect| connect.join().unwrap()).collect();
+    connects.into_iter().map(|connect| connect.join().unwrap()).collect()
+}
 
-    ids.dedup();
-    assert_eq!(ids.len(), 1, "{ids:?}");
-    assert_eq!(tokens_kept(dir.path()), ["a-made-up-token"]);
+#[test]
+fn eight_connects_of_one_token_at_once_make_one_account() {
+    let dir = tempfile::tempdir().unwrap();
+    let (logins, _) = logins_in(dir.path());
+
+    let mut alike = eight_at_once(&logins, "a-made-up-token", |_| "Work".to_string());
+    let named_apart = eight_at_once(&logins, "another-made-up-token", |at| format!("Work {at}"));
+
+    alike.dedup();
+    assert!(matches!(alike[..], [Ok(_)]), "the same again finds the one account: {alike:?}");
+    let (made, refused): (Vec<_>, Vec<_>) = named_apart.into_iter().partition(Result::is_ok);
+    assert_eq!(made.len(), 1, "{made:?}");
+    assert_eq!(refused, vec![Err(ErrorCode::Conflict); 7]);
+    assert_eq!(tokens_kept(dir.path()), ["a-made-up-token", "another-made-up-token"]);
 }
 
 #[test]
