@@ -191,10 +191,10 @@ impl Request for SessionRename {
     }
 }
 
-/// Whose account the session's agent runs under, read from the session's worker when asked, and what the hub has heard
-/// of that account's limits. It records nothing, so asking again only reads again, and like any read from a worker it
-/// starts the workspace's worker if none is running. Refused unless the workspace is ready. A hub older than this
-/// refuses it as unsupported.
+/// Whose account the session's agent runs under, and what the hub has heard of that account's limits. For a login the
+/// hub gave the agent, that's the hub's record of it. Otherwise it's read from the session's worker when asked, which,
+/// like any read from a worker, starts the workspace's worker if none is running, and is refused unless the workspace is
+/// ready. It records nothing, so asking again only reads again. A hub older than this refuses it as unsupported.
 ///
 /// Kept for clients from before accounts were records. A client now reads the session's `account` and that account's
 /// record, which the feed announces.

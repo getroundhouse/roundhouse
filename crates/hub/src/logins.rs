@@ -13,12 +13,12 @@ use std::sync::Arc;
 use parking_lot::Mutex;
 use protocol::client::accounts::AccountConnect;
 use protocol::client::{ApiError, ErrorCode};
-use protocol::model::{Account, AccountId, AgentKind, LoginDescription, LoginToken};
+use protocol::model::{Account, AccountId, AgentKind, AgentLogin, LoginDescription, LoginToken};
 use tracing::{info, warn};
 
 use crate::error::internal;
 use crate::login_files::{LoginFile, LoginFiles};
-use crate::store::{Connecting, IdFrom, Store, StoreError};
+use crate::store::{Connecting, Held, IdFrom, Store, StoreError};
 
 #[cfg(test)]
 mod tests;
@@ -29,14 +29,21 @@ const MAX_NAME_BYTES: usize = 200;
 /// Longer than any token an agent's CLI makes, which `claude setup-token`'s is about a hundred characters.
 const MAX_TOKEN_BYTES: usize = 4096;
 
-/// Connects, disconnects and tidies one at a time, so none finds another half done. Synchronous, and only called off
-/// the async threads.
+/// Connects, disconnects, tidies and hands out a login one at a time, so none finds another half done. Synchronous, and
+/// only called off the async threads.
 pub(crate) struct Logins {
     store: Arc<Store>,
     files: LoginFiles,
     /// A `parking_lot` lock held through file syncs and a synced commit, which is right only because it's only taken
     /// off the async threads, as the store's own are, and guards nothing in memory.
     one_at_a_time: Mutex<()>,
+}
+
+/// A login the hub gives an agent it launches, or a one-off call, with the account it holds it for.
+#[derive(Debug)]
+pub(crate) struct Handed {
+    pub(crate) account: AccountId,
+    pub(crate) login: AgentLogin,
 }
 
 /// A login to connect, as a client asked: checked, trimmed and given the ID a new account would get.
@@ -148,6 +155,26 @@ impl Logins {
         Ok(AccountChange { account: self.record(id)?, changed: false })
     }
 
+    /// The login to launch an agent of `agent`'s kind under at `now_ms`: of those the hub holds for that kind, the one
+    /// connected most recently that hasn't ended, or `None` when it holds none such. One whose token is gone fails,
+    /// rather than the agent running under an older login or its machine's own. A disconnect whose row couldn't be
+    /// cleared leaves one, until it's tried again or the hub next starts and tidies, as does a file something else
+    /// removed.
+    pub(crate) fn to_hand(&self, agent: AgentKind, now_ms: i64) -> Result<Option<Handed>, ApiError> {
+        let _one_at_a_time = self.one_at_a_time.lock();
+        let held = self.store.held_logins(agent)?;
+        let not_ended = |held: &Held| held.login.ends_at_ms.is_none_or(|ends_at_ms| ends_at_ms > now_ms);
+        let Some(Held { account, name, file, .. }) = held.into_iter().find(not_ended) else { return Ok(None) };
+        let called = name.unwrap_or_else(|| account.to_string());
+        match self.files.read(&file) {
+            Ok(Some(token)) => Ok(Some(Handed { account, login: AgentLogin { token } })),
+            Ok(None) => Err(internal(format!(
+                "the token of the hub's login for {called} is gone, so connect it again, or disconnect it"
+            ))),
+            Err(e) => Err(internal(format!("couldn't read the token of the hub's login for {called}: {e}"))),
+        }
+    }
+
     /// Makes the files and the rows agree, as the hub starts: a row whose file is gone, empty or not a token holds no
     /// login, and a file no row names is removed. A file that can't be read is left with its row, and said, so the
     /// rest are still tidied.
@@ -179,7 +206,7 @@ impl Logins {
     /// The account whose login of `agent`'s kind has `token`, if the hub holds one. A file that can't be read is said
     /// and passed over, so one account's file doesn't stop another's login being connected.
     fn holding(&self, agent: AgentKind, token: &LoginToken) -> Result<Option<AccountId>, ApiError> {
-        for (account, file) in self.store.held_logins(agent)? {
+        for Held { account, file, .. } in self.store.held_logins(agent)? {
             match self.files.read(&file) {
                 Ok(read) if read.as_ref() == Some(token) => return Ok(Some(account)),
                 Ok(_) => {}

@@ -162,11 +162,16 @@ fn a_chats_account_and_its_limits_can_still_be_asked_for_by_an_older_client() {
     assert!(after.limits[0].heard_at_ms.is_some_and(|at_ms| at_ms >= asked_at_ms), "{:?}", after.limits);
 }
 
+/// Even once it names the account its agent last launched under, since only the worker says whose a login on its
+/// machine is.
 #[test]
 fn a_chat_in_an_archived_workspace_cant_be_asked_its_account_so_asking_starts_no_worker() {
     let stack = Stack::start();
     let client = stack.client();
     let (workspace, session) = stack.workspace(&client);
+    client.session_prompt(&session.id, "say:hello", None).unwrap();
+    wait_for_turn_end(&client, &session.id, 1);
+    wait_for_adas_week(&client, &session.id);
     client.workspace_archive(&workspace.id, true).unwrap();
     let workers = client.hub_status().unwrap().workers;
 

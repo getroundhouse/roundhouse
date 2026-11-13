@@ -9,8 +9,17 @@ use tracing::warn;
 
 use super::super::{AgentRun, Command, LiveSession, Origin};
 use crate::hub::Hub;
+use crate::logins::Handed;
 use crate::store::Store;
 use crate::worker_link::WorkerLink;
+
+/// What an agent is launched with, besides what the session keeps.
+struct Launch {
+    cwd: String,
+    env: Vec<(String, String)>,
+    /// The login the hub gives it, as [`Hub::login_for`] chose, or `None` to run it under its machine's own.
+    login: Option<Handed>,
+}
 
 impl LiveSession {
     /// Finds or starts the worker and the agent, and returns the connection to use.
@@ -33,7 +42,8 @@ impl LiveSession {
         if self.is_closed() {
             return Err(ApiError::new(ErrorCode::Conflict, "this chat is closed"));
         }
-        self.start_agent(&hub, &link, cwd, env).await?;
+        let login = hub.login_for(&workspace, self.agent).await?;
+        self.start_agent(&hub, &link, Launch { cwd, env, login }).await?;
         Ok(link)
     }
 
@@ -86,18 +96,19 @@ impl LiveSession {
 
     /// Picks the run before the launch and marks it current, so the new agent's first deltas aren't
     /// taken for a replaced agent's and dropped.
-    async fn start_agent(
-        &self,
-        hub: &Hub,
-        link: &WorkerLink,
-        cwd: String,
-        env: Vec<(String, String)>,
-    ) -> Result<(), ApiError> {
+    async fn start_agent(&self, hub: &Hub, link: &WorkerLink, launch: Launch) -> Result<(), ApiError> {
+        let Launch { cwd, env, login } = launch;
         let (resume, settings) = {
             let state = self.state.lock();
             (state.agent_opened, state.settings.clone())
         };
         let asked = hub.blocking(Store::next_run).await?;
+        if let Some(Handed { account, .. }) = &login {
+            // Before the launch is sent, so no agent runs under a login the hub gave it without the hub's record of
+            // whose it is, since the token doesn't say, and a hub that stops after sending it can't learn it later.
+            let (id, account) = (self.id.clone(), account.clone());
+            hub.blocking(move |store| store.record_run_login(&id, asked, &account)).await?;
+        }
         let tools_token = hub.tools_for(&self.workspace_id, &self.id, link).await;
         // Before the launch, so the new agent's first events aren't recorded ahead of its start.
         let build = link.said_build().map(str::to_string);
@@ -112,7 +123,7 @@ impl LiveSession {
             settings,
             env,
             tools_token,
-            login: None,
+            login: login.map(|handed| handed.login),
         };
         let starting = AgentRun { link: link.id, run: asked };
         self.state.lock().agent = Some(starting);
@@ -133,6 +144,14 @@ impl LiveSession {
             }
             current
         };
+        // The worker has said which run the session's agent is, so the logins other runs were given are never asked
+        // after. Only on what it says, since a call that failed doesn't say the agent didn't start. One that couldn't be
+        // forgotten is only said: its run doesn't start again, so nothing reads it, and the next launch's reply tries
+        // again.
+        let id = self.id.clone();
+        if let Err(e) = hub.blocking(move |store| store.forget_other_run_logins(&id, run)).await {
+            warn!(session = %self.id, "couldn't forget the logins earlier launches were given: {}", e.message);
+        }
         if !already_running {
             // Whatever is still open was asked by a process that no longer exists.
             self.cancel_approvals(None).await;

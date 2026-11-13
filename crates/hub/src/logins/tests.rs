@@ -6,6 +6,8 @@ use protocol::model::{LimitWindow, UsageLimit};
 use super::*;
 use crate::store::tests::store_with_session;
 
+mod handing;
+
 /// The logins of a hub whose data directory is `dir`, and its store.
 fn logins_in(dir: &Path) -> (Arc<Logins>, Arc<Store>) {
     let store = Arc::new(store_with_session(dir));

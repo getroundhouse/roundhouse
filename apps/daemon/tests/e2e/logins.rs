@@ -1,12 +1,15 @@
-//! The logins a hub holds for agents' accounts, through a real hub that restarts.
+//! The logins a hub holds for agents' accounts, through a real hub, and the agents it launches under them on another
+//! provider's machine.
 
 #![cfg(test)]
 
 use client_core::Client;
 use protocol::client::accounts::{AccountConnect, AccountDisconnect};
+use protocol::event::EventBody;
 use protocol::model::{Account, AccountId, AgentKind, LoginToken};
 
-use crate::support::Stack;
+use crate::carrying_on::restart;
+use crate::support::{Stack, assistant_text, wait_for_turn_end, wait_until};
 
 fn listed(client: &Client, id: &AccountId) -> Account {
     client.records_list().unwrap().accounts.into_iter().find(|account| account.id == *id).unwrap()
@@ -41,4 +44,60 @@ fn a_login_a_client_connects_is_kept_through_a_restart_until_its_disconnected() 
     assert_eq!(kept_after_restart, ["a-made-up-token"], "the file no account names went as the hub started");
     assert_eq!((disconnected.held_login, disconnected.name.as_deref()), (None, Some("Work")));
     assert_eq!(tokens_kept(&stack), Vec::<String>::new());
+}
+
+/// Connects a made-up Claude login, named Work.
+fn connect_work(client: &Client) -> Account {
+    let token = LoginToken::new("a-made-up-token");
+    client.call(AccountConnect { agent: AgentKind::Claude, name: "Work".to_string(), token, account: None }).unwrap()
+}
+
+/// Through an adapter, as on another provider's machine, whose own login isn't the person's.
+#[test]
+fn an_agent_on_another_machine_runs_under_the_login_the_hub_holds_and_its_chat_names_that_account() {
+    let mut stack = Stack::start();
+    stack.make_through_an_adapter();
+    let client = stack.client();
+    let connected = connect_work(&client);
+    let (_, session) = stack.workspace(&client);
+
+    client.session_prompt(&session.id, "env:CLAUDE_CODE_OAUTH_TOKEN", None).unwrap();
+    let text = assistant_text(&wait_for_turn_end(&client, &session.id, 1));
+    wait_until("the chat to name the login's account, and the account what its agent heard of its limits", || {
+        client.session_get(&session.id).unwrap().account.as_ref() == Some(&connected.id)
+            && !listed(&client, &connected.id).limits.is_empty()
+    });
+    // As a client from before accounts were records asks.
+    let as_older_clients_ask = client.session_account(&session.id).unwrap();
+
+    assert!(text.contains("CLAUDE_CODE_OAUTH_TOKEN=a-made-up-token"), "{text}");
+    assert_eq!(client.records_list().unwrap().accounts.len(), 1, "no account but the login's");
+    assert_eq!(as_older_clients_ask.account.logged_in_as(), Some(&connected.id));
+    assert_eq!(as_older_clients_ask.limits, listed(&client, &connected.id).limits);
+    assert!(!stack.agent_state().join("auth-status-calls").exists(), "nothing asked the CLI whose the token is");
+}
+
+/// The case the hub's record of each run's login is for: the next hub carries the agent on, and nothing can say whose
+/// its token is but that record.
+#[test]
+fn an_agent_left_running_under_a_held_login_is_still_filed_under_it_once_the_hub_has_restarted() {
+    let mut stack = Stack::start();
+    stack.make_through_an_adapter();
+    let client = stack.client();
+    let connected = connect_work(&client);
+    let (_, session) = stack.workspace(&client);
+    client.session_prompt(&session.id, "say:hello", None).unwrap();
+    wait_for_turn_end(&client, &session.id, 1);
+
+    restart(&mut stack);
+    stack.start_hub();
+    let client = stack.client();
+    client.session_prompt(&session.id, "say:again", None).unwrap();
+    let events = wait_for_turn_end(&client, &session.id, 2);
+
+    let launches = events.iter().filter(|e| matches!(e.body, EventBody::AgentStarted { .. })).count();
+    assert_eq!(launches, 1, "the agent the last hub launched carried on");
+    assert_eq!(client.session_get(&session.id).unwrap().account, Some(connected.id));
+    assert_eq!(client.records_list().unwrap().accounts.len(), 1, "no account but the login's");
+    assert!(!stack.agent_state().join("auth-status-calls").exists(), "nothing asked the CLI whose the token is");
 }

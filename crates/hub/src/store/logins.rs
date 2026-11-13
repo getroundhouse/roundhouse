@@ -29,6 +29,14 @@ pub(crate) struct LoginRow {
     pub(crate) file: Option<LoginFile>,
 }
 
+/// A login the hub holds, with its account, what the person called it, and the file its token is in.
+pub(crate) struct Held {
+    pub(crate) account: AccountId,
+    pub(crate) name: Option<String>,
+    pub(crate) file: LoginFile,
+    pub(crate) login: HeldLogin,
+}
+
 /// A login being connected to an account, which is made if it has no record.
 #[derive(Clone, Copy)]
 pub(crate) struct Connecting<'a> {
@@ -60,17 +68,20 @@ pub(super) fn login_at(row: &Row<'_>, first: usize) -> rusqlite::Result<(IdFrom,
 }
 
 impl Store {
-    /// The file of every login the hub holds for agents of `agent`'s kind, with its account.
-    pub(crate) fn held_logins(&self, agent: AgentKind) -> Result<Vec<(AccountId, LoginFile)>, StoreError> {
+    /// Every login the hub holds for agents of `agent`'s kind, the one connected most recently first.
+    pub(crate) fn held_logins(&self, agent: AgentKind) -> Result<Vec<Held>, StoreError> {
         let conn = lock(&self.reader);
         let mut statement = conn.prepare_cached(&format!(
-            "SELECT id, {LOGIN_COLUMNS} FROM accounts WHERE login_agent = ? AND login_file IS NOT NULL"
+            "SELECT id, name, {LOGIN_COLUMNS} FROM accounts WHERE login_agent = ? AND login_file IS NOT NULL
+                 ORDER BY login_connected_at_ms DESC, id"
         ))?;
-        let rows = statement.query_map([text_of(&agent)], |row| Ok((row.get::<_, String>(0)?, login_at(row, 1)?.1)))?;
+        let rows = statement.query_map([text_of(&agent)], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?, login_at(row, 2)?.1))
+        })?;
         let mut held = Vec::new();
         for row in rows {
-            if let (account, Some((file, _))) = row? {
-                held.push((account.into(), file));
+            if let (account, name, Some((file, login))) = row? {
+                held.push(Held { account: account.into(), name, file, login });
             }
         }
         Ok(held)

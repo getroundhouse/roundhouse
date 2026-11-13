@@ -56,3 +56,19 @@ async fn every_client_is_told_of_what_changed_an_accounts_record_and_only_that()
     assert!(matches!(told_again, Err(TryRecvError::Empty)), "{told_again:?}");
     assert!(matches!(told_last, Ok(HubNotice::Account(record)) if record == disconnected));
 }
+
+#[tokio::test]
+async fn a_login_is_given_to_an_agent_on_another_machine_and_not_to_one_on_this_one() {
+    let dir = tempfile::tempdir().unwrap();
+    let hub = hub_in(dir.path());
+    let connected = hub.account_connect(asking("Work", "a-made-up-token")).await.unwrap();
+    let here = protocol::fixtures::workspace("w");
+    let elsewhere = Workspace { provider: "another".into(), ..protocol::fixtures::workspace("w") };
+
+    let given_here = hub.login_for(&here, AgentKind::Claude).await.unwrap();
+    let given_elsewhere = hub.login_for(&elsewhere, AgentKind::Claude).await.unwrap().unwrap();
+
+    assert!(here.provider.is_local());
+    assert!(given_here.is_none());
+    assert_eq!((given_elsewhere.account, given_elsewhere.login.token.as_str()), (connected.id, "a-made-up-token"));
+}

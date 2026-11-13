@@ -140,10 +140,7 @@ impl Store {
             }
             None => None,
         };
-        let session_changed = tx.execute(
-            "UPDATE sessions SET account_id = ?1 WHERE id = ?2 AND account_id IS NOT ?1",
-            params![id.map(AccountId::as_str), session.as_str()],
-        )? > 0;
+        let session_changed = name_account(&tx, session, id)?;
         tx.commit()?;
         Ok(Launched { account, session: session_changed })
     }
@@ -157,6 +154,19 @@ impl Store {
     pub fn account(&self, id: &AccountId) -> Result<Option<Account>, StoreError> {
         Ok(account(&lock(&self.reader), id)?)
     }
+}
+
+/// Has `session`'s record name `account` as the one its agent runs under, or none, and returns whether that changed it.
+pub(super) fn name_account(
+    conn: &Connection,
+    session: &SessionId,
+    account: Option<&AccountId>,
+) -> rusqlite::Result<bool> {
+    let changed = conn.execute(
+        "UPDATE sessions SET account_id = ?1 WHERE id = ?2 AND account_id IS NOT ?1",
+        params![account.map(AccountId::as_str), session.as_str()],
+    )?;
+    Ok(changed > 0)
 }
 
 /// The record of an account that was just written in the same transaction, so it's there.

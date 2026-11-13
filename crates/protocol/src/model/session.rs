@@ -187,10 +187,11 @@ pub struct Session {
     /// gone, since the cache doesn't go with it.
     #[serde(default)]
     pub prompt_cache: Option<PromptCache>,
-    /// The account the agent's newest launch runs under, as the worker said when it launched, and the record of it
-    /// says who that is and what's left of its limits. `None` until an agent has launched, when nobody was logged in
-    /// or the login can't be told from another, and from a hub that doesn't keep it. It stays once the agent has
-    /// gone, as the context does.
+    /// The account the agent's newest launch runs under, as the worker said when it launched, or for a login the hub
+    /// gave it, as the hub's own record of that says, and the record of it says who that is and what's left of its
+    /// limits. `None` until an agent has launched, when nobody was logged in or the login can't be told from another,
+    /// while the worker is asked about a launch the hub gave no login after one it gave one, and from a hub that
+    /// doesn't keep it. It stays once the agent has gone, as the context does.
     #[serde(default)]
     pub account: Option<AccountId>,
     /// Prompts waiting for the agent to finish, oldest first, as [`QueuedPrompt`] says.

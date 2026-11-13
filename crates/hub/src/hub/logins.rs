@@ -1,15 +1,15 @@
-//! Connecting a login for agents' accounts to run under, and disconnecting one, as a client asks. What's kept, and in
-//! what order, is `crate::logins`'s.
+//! Connecting a login for agents' accounts to run under, and disconnecting one, as a client asks, and which login an
+//! agent is launched under. What's kept, and in what order, is `crate::logins`'s.
 
 use std::sync::Arc;
 
 use protocol::client::accounts::AccountConnect;
 use protocol::client::{ApiError, ErrorCode, HubNotice};
-use protocol::model::{Account, AccountId};
+use protocol::model::{Account, AccountId, AgentKind, Workspace};
 use tracing::error;
 
 use super::{Hub, off_thread};
-use crate::logins::{AccountChange, Connect, Logins};
+use crate::logins::{AccountChange, Connect, Handed, Logins};
 use crate::store::now_ms;
 
 #[cfg(test)]
@@ -35,11 +35,23 @@ impl Hub {
     }
 
     /// Makes the logins' files and the accounts' rows agree, as the hub starts. If it fails, they stay as they are until
-    /// the next start, which costs nothing, since a file no row names is never read.
+    /// the next start, which costs little: a file no row names is never read, and a launch under a login whose token is
+    /// gone fails, saying so. Not starting the hub over it would cost every workspace.
     pub(crate) async fn tidy_logins(&self) {
         if let Err(e) = self.on_logins(Logins::tidy).await {
             error!("couldn't make the logins' files and the accounts agree: {}", e.message);
         }
+    }
+
+    /// The login an agent of `agent`'s kind runs under in `workspace`, launched or for a one-off call, with the account
+    /// the hub holds it for. `None` on the local provider, whose machine has the person's own login, and when the hub
+    /// holds none for that kind that hasn't ended, and then the agent runs under its machine's own login, if it has one.
+    pub(crate) async fn login_for(&self, workspace: &Workspace, agent: AgentKind) -> Result<Option<Handed>, ApiError> {
+        if workspace.provider.is_local() {
+            return Ok(None);
+        }
+        let now = now_ms();
+        self.on_logins(move |logins| logins.to_hand(agent, now)).await
     }
 
     fn announce_account(&self, AccountChange { account, changed }: AccountChange) -> Account {
