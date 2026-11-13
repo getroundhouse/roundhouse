@@ -6,12 +6,14 @@ use std::rc::Rc;
 use gpui_kit::App;
 
 use super::parse::{self, Again};
-use super::{AT_ONCE, Of, Parsed, Prose, ProseId, Text};
+use super::{AT_ONCE, ImagesAre, Of, Parsed, Prose, ProseId, Text};
 
-/// How a text is to be parsed on another thread: `source` whole, or again from where `again` says, as it goes on from
-/// `was`, which is what it was parsed as before, if it was, and what it's drawn as until it's in.
+/// How a text is to be parsed on another thread: `source` whole, with its images `images` to draw, or again from where
+/// `again` says, as it goes on from `was`, which is what it was parsed as before, if it was, and what it's drawn as
+/// until it's in.
 pub(super) struct Apart {
     source: String,
+    images: ImagesAre,
     was: Option<Rc<Parsed>>,
     again: Option<Again>,
 }
@@ -29,12 +31,21 @@ impl Prose {
     /// near its end, since what that makes of it can differ from a whole parse, as [`parse::again`] says. Drawn
     /// anywhere else, one joined from such parses is parsed whole, once, as a reply is the first time it's drawn in
     /// the row of its record, so it's drawn there as it will be whenever it's parsed afresh, such as when its chat is
-    /// next opened. So is one that says more there than it was parsed as.
-    pub(super) fn parsed(&self, id: &ProseId, source: &str, of: Of) -> (Option<Rc<Parsed>>, Option<Apart>) {
+    /// next opened. So is one that says more there than it was parsed as, and one whose images are `images` to draw
+    /// where they weren't, as a reply's are in the row of its record, and not while it's written.
+    pub(super) fn parsed(
+        &self,
+        id: &ProseId,
+        source: &str,
+        of: Of,
+        images: ImagesAre,
+    ) -> (Option<Rc<Parsed>>, Option<Apart>) {
         let can_go_on = of.can_go_on();
         let mut texts = self.0.borrow_mut();
         let was = match texts.texts.get(id) {
-            Some(Text::Parsed { parsed }) if parsed.source == source && (can_go_on || parsed.whole) => {
+            Some(Text::Parsed { parsed })
+                if parsed.source == source && parsed.images == images && (can_go_on || parsed.whole) =>
+            {
                 return (Some(parsed.clone()), None);
             }
             Some(Text::Parsing { source: parsing, was, .. }) if source.starts_with(parsing.as_str()) => {
@@ -43,14 +54,14 @@ impl Prose {
             Some(text) => text.was(),
             None => None,
         };
-        let gone_on = was.as_deref().filter(|was| can_go_on && source.starts_with(was.source.as_str()));
-        let again = gone_on.and_then(|was| parse::again(was, source));
+        let goes_on = |was: &&Parsed| can_go_on && was.images == images && source.starts_with(was.source.as_str());
+        let again = was.as_deref().filter(goes_on).and_then(|was| parse::again(was, source));
         if again.map_or(source.len(), |again| source.len() - again.byte) > AT_ONCE {
-            return (was.clone(), Some(Apart { source: source.to_owned(), was, again }));
+            return (was.clone(), Some(Apart { source: source.to_owned(), images, was, again }));
         }
         let parsed = Rc::new(match (was, again) {
             (Some(was), Some(again)) => parse::gone_on(&was, again, source.to_owned()),
-            _ => parse::parse(source.to_owned()),
+            _ => parse::parse(source.to_owned(), images),
         });
         texts.texts.insert(id.clone(), Text::Parsed { parsed: parsed.clone() });
         texts.parsed_one();
@@ -61,7 +72,7 @@ impl Prose {
     /// parsed of it, and measures the row it's in then again once it's in. It says what it said, so there's nothing
     /// new to find in it.
     pub(super) fn parse_apart(&self, id: ProseId, apart: Apart, cx: &mut App) {
-        let Apart { source, was, again } = apart;
+        let Apart { source, images, was, again } = apart;
         let mut texts = self.0.borrow_mut();
         if texts.texts.get(&id).is_some_and(|text| text.parsing().is_some_and(|parsing| source.starts_with(parsing))) {
             return;
@@ -73,14 +84,14 @@ impl Prose {
             let background = cx.background_executor().clone();
             let rest = match &from {
                 Some((_, again)) => {
-                    let rest = given[again.byte..].to_owned();
-                    background.spawn(async move { parse::read(&rest) }).await
+                    let (given, again) = (given.clone(), *again);
+                    background.spawn(async move { parse::rest(&given, again, images) }).await
                 }
                 None => None,
             };
             let parsed = match (from, rest) {
                 (Some((was, again)), Some(rest)) => parse::joined(&was, again, given, rest),
-                _ => background.spawn(async move { parse::parse(given) }).await,
+                _ => background.spawn(async move { parse::parse(given, images) }).await,
             };
             let Some(prose) = prose.upgrade() else { return };
             // What it replaces holds this task, which goes once it's done.

@@ -23,7 +23,7 @@ The app's keyboard shortcuts. They're written as a Mac's, and the Linux preview 
 | `Cmd-F` | Find in the chat |
 | `Cmd-G`, `Cmd-Shift-G` | The next match, and the one before |
 | `Enter`, `Shift-Enter` | In Find's bar, the next match, and the one before |
-| Escape | Close Find's bar, or an image opened from a prompt |
+| Escape | Close Find's bar, or an image opened from the chat |
 
 ## The composer
 

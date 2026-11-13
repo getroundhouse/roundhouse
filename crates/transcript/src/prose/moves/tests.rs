@@ -8,7 +8,7 @@ use proptest::test_runner::{Config, RngSeed};
 use protocol::event::{ContentBlock, EventBody};
 use protocol::model::Seq;
 
-use super::super::{AT_ONCE, Of, Prose, ProseId, Text, TextAt, Written};
+use super::super::{AT_ONCE, ImagesAre, Of, Prose, ProseId, Text, TextAt, Written};
 use crate::fixtures::{event, log};
 use crate::selection::Selection;
 
@@ -105,7 +105,7 @@ fn a_text_parsed_apart_is_parsed_wherever_it_s_moved_to_meanwhile(cx: &mut TestA
     let reply = ProseId::named("reply");
     let long = "The signal box keeps a ledger.\n\n".repeat(2 * AT_ONCE / 32);
     prose.0.borrow_mut().placed(&reply, at(1));
-    let (_, apart) = prose.parsed(&reply, &long, at(1).of);
+    let (_, apart) = prose.parsed(&reply, &long, at(1).of, ImagesAre::TheKits);
     cx.update(|cx| prose.parse_apart(reply.clone(), apart.expect("parsed apart"), cx));
     prose.new_frame();
 

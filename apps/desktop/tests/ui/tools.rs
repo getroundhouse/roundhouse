@@ -47,21 +47,44 @@ fn a_call_opens_to_what_it_did_and_closes_again(cx: &mut TestAppContext) {
 #[gpui_kit::test]
 fn a_read_of_an_image_opens_to_the_image_the_hub_kept(cx: &mut TestAppContext) {
     let stack = Stack::new();
-    stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
-    let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
-    let workspace = ui.new_workspace();
-    let mut png = Cursor::new(Vec::new());
-    image::RgbaImage::from_pixel(4, 3, image::Rgba([200, 30, 30, 255])).write_to(&mut png, ImageFormat::Png).unwrap();
-    std::fs::write(ui.worktree(&workspace).join("shot.png"), png.into_inner()).unwrap();
-    ui.input("read:shot.png; say:done");
-    ui.press("enter");
-    ui.wait_idle_with("the turn to finish", |text| text.contains("done"));
+    let mut ui = after_reading_an_image(cx, &stack);
     assert!(ui.shown("picture/").is_empty(), "a call starts closed");
 
     ui.click_labelled("Read 1 image", 0);
 
     ui.wait("the image, from the hub", |ui| ui.shown("picture/").len() == 1);
+}
+
+/// As a prompt's does, so a screenshot made smaller to fit the column can be looked at closely.
+#[gpui_kit::test]
+fn an_image_a_tool_sent_back_opens_over_the_window(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = after_reading_an_image(cx, &stack);
+    ui.click_labelled("Read 1 image", 0);
+    ui.wait("the image, from the hub", |ui| ui.shown("picture/").len() == 1);
+    assert!(!ui.has_dialog(), "nothing is over the window until it's clicked");
+
+    let sent_back = ui.shown("picture/").remove(0);
+    ui.click(sent_back);
+
+    assert!(ui.has_dialog() && ui.shown("opened-picture").len() == 1, "it opens over the window");
+    ui.press("escape");
+    assert!(!ui.has_dialog(), "and Escape closes it");
+}
+
+/// A new workspace where the agent has read `shot.png`, an image, and finished its turn.
+fn after_reading_an_image<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> Ui<'a> {
+    let mut ui = Ui::open_with_a_repository(cx, stack);
+    let workspace = ui.new_workspace();
+    // Wide enough to click as a hand does, which lets go a pixel from where it pressed: its frame takes a click
+    // inside its edge, which on an image four pixels wide leaves two.
+    let mut png = Cursor::new(Vec::new());
+    image::RgbaImage::from_pixel(40, 30, image::Rgba([200, 30, 30, 255])).write_to(&mut png, ImageFormat::Png).unwrap();
+    std::fs::write(ui.worktree(&workspace).join("shot.png"), png.into_inner()).unwrap();
+    ui.input("read:shot.png; say:done");
+    ui.press("enter");
+    ui.wait_idle_with("the turn to finish", |text| text.contains("done"));
+    ui
 }
 
 /// A new workspace, open in the app.

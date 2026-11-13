@@ -1,6 +1,6 @@
-//! What a prompt carries: each image drawn small, which a click opens over the window, and each other file as a chip.
-//! An image a tool sent back is drawn whole, in what its call opens to. An image's bytes come from the hub the first
-//! time a row draws it, and stay for as long as the transcript does.
+//! What a prompt carries: each image drawn small, and each other file as a chip. An image a tool sent back is drawn
+//! whole, in what its call opens to. A click on either opens it over the window. An image's bytes come from the hub
+//! the first time a row draws it, and stay for as long as the transcript does.
 
 use std::cell::RefCell;
 use std::io::Cursor;
@@ -10,22 +10,19 @@ use std::sync::Arc;
 use gpui_kit::component::attachment::{
     Attachment as Card, AttachmentContent, AttachmentDescription, AttachmentMedia, AttachmentTitle,
 };
-use gpui_kit::component::dialog::DialogClose;
-use gpui_kit::component::{
-    ActiveTheme as _, Icon, IconName, Sizable as _, TITLE_BAR_HEIGHT, WindowExt as _, h_flex, window_paddings,
-};
+use gpui_kit::component::{ActiveTheme as _, Icon, IconName, Sizable as _, h_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, Div, ElementId, Image, ImageFormat, InteractiveElement, IntoElement, ObjectFit, ParentElement,
-    Pixels, Size, Stateful, StatefulInteractiveElement, Styled, StyledImage as _, TestSupportExt as _, WeakEntity,
-    Window, div, img, px, size,
+    Stateful, Styled, StyledImage as _, TestSupportExt as _, WeakEntity, div, img, px,
 };
 use image::ImageDecoder as _;
 use image::metadata::Orientation;
-use look::{Hand as _, IMAGE_EDGE, fit, pixels};
+use look::pixels;
 use protocol::attachment::{Attachment, MediaType, describe_size};
 use protocol::model::Seq;
 
+use crate::images_that_open;
 use crate::item_key::ItemKey;
 use crate::transcript::{Model, Transcript};
 
@@ -133,79 +130,23 @@ pub(crate) fn view(carried: &[Carried], cx: &App) -> Option<AnyElement> {
     Some(h_flex().w_full().flex_wrap().items_start().gap_2().children(images).children(files).into_any_element())
 }
 
-/// An image drawn whole, as wide as it is, up to the column, at its own shape, with nothing to click. For an image a
-/// tool sent back, which opens with its call.
+/// An image drawn whole, as wide as it is, up to the column, at its own shape, for a click to open over the window.
+/// For an image a tool sent back, which opens with its call.
 pub(crate) fn whole(file: &Carried, cx: &App) -> AnyElement {
     let Some((image, width, height)) = ready(file) else { return not_ready(file, cx) };
-    let (width, height) = (pixels(width), pixels(height));
-    let shown = frame(file, cx)
-        .w_full()
-        .max_w(px(width))
-        .aspect_ratio(width / height)
-        .child(img(image).size_full().object_fit(ObjectFit::Contain))
-        .test_support();
-    // In a row, since in a column the layout takes its height from the column's width rather than its own, which
-    // leaves a gap under an image narrower than the column.
-    h_flex().w_full().child(shown).into_any_element()
+    images_that_open::whole(frame(file, cx), image, (width, height))
 }
 
 /// Small, and cropped to fill its place, for a click to open over the window.
 fn thumbnail(file: &Carried, cx: &App) -> AnyElement {
     let Some((image, width, height)) = ready(file) else { return not_ready(file, cx) };
-    let to_open = image.clone();
     let shape = pixels(width) / pixels(height);
-    frame(file, cx)
-        .hand()
-        .on_click(move |_, window, cx| open_over_the_window(to_open.clone(), (width, height), window, cx))
+    images_that_open::opening(frame(file, cx), image.clone(), (width, height))
         .h(px(THUMBNAIL_HEIGHT))
         .w(px((THUMBNAIL_HEIGHT * shape).clamp(32., THUMBNAIL_MAX_WIDTH)))
         .child(img(image).size_full().object_fit(ObjectFit::Cover))
         .test_support()
         .into_any_element()
-}
-
-/// Opens an image in a dialog, as big as it is, up to what fits in the window at its own shape, so the chat doesn't
-/// move under it however far from the bottom its prompt is. Escape or a click closes it, on the image or around it.
-/// `covers` is its pixels, turned as its orientation says.
-fn open_over_the_window(image: Arc<Image>, covers: (u32, u32), window: &mut Window, cx: &mut App) {
-    window.open_dialog(cx, move |dialog, window, cx| {
-        // Drawn again as the window is resized, so it always fits.
-        let shown = fitted(covers, room(window));
-        // The dialog's own corners, which its edge is drawn on, less the edge, so the image's meet them.
-        let corners = cx.theme().radius_lg - px(IMAGE_EDGE);
-        let picture = div()
-            .id("opened-picture")
-            .w(shown.width)
-            .h(shown.height)
-            .hand()
-            .child(img(image.clone()).size_full().rounded(corners).object_fit(ObjectFit::Contain))
-            .test_support();
-        // The dialog's own padding and the least height it gives, which a short image would leave a strip under, are
-        // let go, so the dialog is the image and its edge.
-        dialog
-            .p_0()
-            .min_h(px(0.))
-            .w(shown.width + px(2. * IMAGE_EDGE))
-            .bg(cx.theme().muted)
-            .centered()
-            .close_button(false)
-            .child(DialogClose::new().child(picture))
-    });
-}
-
-/// The room in the window for an opened image: all of it but the window's own frame, where it draws one, and as much
-/// around it as the strip along the top that the kit's dialogs leave to the window's buttons and to dragging it.
-fn room(window: &Window) -> Size<Pixels> {
-    let frame = window_paddings(window);
-    let clear = TITLE_BAR_HEIGHT * 2.;
-    let viewport = window.viewport_size();
-    size(viewport.width - frame.left - frame.right - clear, viewport.height - frame.top - frame.bottom - clear)
-}
-
-/// How big an image `covers` pixels is drawn, inside its edge, to fit in `room`.
-fn fitted((width, height): (u32, u32), room: Size<Pixels>) -> Size<Pixels> {
-    let scale = fit((width, height), room);
-    size(px(pixels(width) * scale), px(pixels(height) * scale))
 }
 
 fn frame(file: &Carried, cx: &App) -> Stateful<Div> {
@@ -255,27 +196,4 @@ pub fn file_card(id: impl Into<ElementId>, attachment: &Attachment) -> Card {
                 .title(AttachmentTitle::new(name))
                 .description(AttachmentDescription::new(describe_size(attachment.size_bytes))),
         )
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Room 932 by 732, which leaves 930 by 730 for an image inside its edge.
-    fn in_the_room(width: u32, height: u32) -> Size<Pixels> {
-        fitted((width, height), size(px(932.), px(732.)))
-    }
-
-    #[test]
-    fn an_image_that_fits_is_as_big_as_it_is() {
-        assert_eq!(in_the_room(400, 300), size(px(400.), px(300.)));
-        assert_eq!(in_the_room(930, 730), size(px(930.), px(730.)), "to the edge of the room");
-    }
-
-    #[test]
-    fn one_too_big_shrinks_to_fit_at_its_own_shape() {
-        assert_eq!(in_the_room(9300, 100), size(px(930.), px(10.)), "too wide");
-        assert_eq!(in_the_room(100, 7300), size(px(10.), px(730.)), "too tall");
-        assert_eq!(in_the_room(1860, 2920), size(px(465.), px(730.)), "both, by whichever is further over");
-    }
 }

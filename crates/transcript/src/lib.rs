@@ -12,6 +12,7 @@ mod find;
 mod fixtures;
 mod folds;
 mod images_apart;
+mod images_that_open;
 mod item_key;
 mod linked_images;
 mod list;

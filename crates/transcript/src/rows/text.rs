@@ -9,7 +9,7 @@ use protocol::event::LinkedImage;
 use super::Shared;
 use super::tools::Toggle;
 use crate::find::{self, Part};
-use crate::prose::{Among, Images, Of, TextAt, Written};
+use crate::prose::{Among, Of, TextAt, Written};
 
 /// A recorded text, the `part` of the item the block `toggle` draws, as the row it's in draws it, with the images the
 /// hub kept of those it points to, if it can point to any, and with its matches. In a row of its own, the transcript
@@ -42,9 +42,8 @@ fn among(part: Part) -> Among {
 }
 
 /// The text `written`, drawn from the kit's blocks, with the images the hub kept of those it points to, if it's in an
-/// event's row and can point to any.
+/// event's row and can point to any, which a click opens over the window.
 pub(super) fn from_blocks(written: &Written<'_>, images: Option<&[LinkedImage]>, shared: &Shared) -> AnyElement {
-    let resolver = (written.at.seq()).zip(images).map(|(seq, images)| shared.linked.resolver(seq, images));
-    let images = resolver.map(|resolver| -> Images { Box::new(resolver) });
+    let images = (written.at.seq()).zip(images).map(|(seq, images)| shared.linked.images(seq, images));
     shared.prose.draw(&shared.selection, written, images)
 }

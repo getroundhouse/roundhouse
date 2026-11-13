@@ -13,8 +13,9 @@ use gpui_kit::{
 };
 
 use super::parsing::Apart;
-use super::{Images, Parsed, Prose, ProseId, TextAt};
+use super::{Parsed, Prose, ProseId, TextAt};
 use crate::find::Marks;
+use crate::linked_images::Images;
 use crate::selection::Selection;
 
 pub(super) struct ProseElement {
@@ -64,8 +65,8 @@ impl Element for ProseElement {
         cx: &mut App,
     ) -> (LayoutId, Self::RequestLayoutState) {
         let mut context = RenderContext::from_app(cx).on_link_click(self.selection.on_link());
-        if let Some(images) = self.images.take() {
-            context = context.with_image_source(images);
+        if let Some(Images { plugins, resolver }) = self.images.take() {
+            context = context.with_image_source(resolver).with_markdown_extensions(plugins);
         }
         // In the colour of what it's in, such as a thought's muted one, as the kit's text view is, since the kit's
         // defaults have it follow that. The kit draws its other colours otherwise on a surface whose text is far

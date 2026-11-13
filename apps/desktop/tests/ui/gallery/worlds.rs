@@ -11,7 +11,7 @@ use protocol::model::{
 
 use super::screens::FOCUS;
 use super::world::{HubBuild, NOW_MS, World};
-use super::{chats, file_chats, image_chats, patch, pictures, pull_requests, worktree};
+use super::{chats, file_chats, patch, pictures, pull_requests, worktree};
 
 mod working;
 
@@ -308,21 +308,6 @@ pub(super) fn attachments() -> World {
         world.attachments.insert(AttachmentId::from(id), data);
     }
     world.chat(&focus, SessionStatus::Idle, chats::attached(carried));
-    world
-}
-
-/// The screen's chat, where the reply points to a screenshot in the worktree, which the hub kept.
-pub(super) fn pointed() -> World {
-    let board = pictures::signal_board();
-    let size_bytes = u64::try_from(board.len()).unwrap();
-    let screenshot = Attachment {
-        id: AttachmentId::from("after-1"),
-        name: "board-after.png".into(),
-        media_type: MediaType::Png,
-        size_bytes,
-    };
-    let mut world = chat_world(SessionStatus::Idle, image_chats::pointed(screenshot.clone()));
-    world.attachments.insert(screenshot.id, board);
     world
 }
 

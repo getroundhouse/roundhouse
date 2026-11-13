@@ -37,6 +37,7 @@ Each call is a line: what it is, and what it's about. Click it to open it.
 - **A call that failed says so on a red line under it,** such as `Exit 1`, with the first line of what went wrong. It shows while the call is closed, so a failure is never hidden.
 - **Hovering an edit shows its diff,** without opening it.
 - **A command is text to select,** and a button copies all of it.
+- **An image a call sent back, such as one it read, opens with a click,** as big as it is, up to what fits in the window. Escape or a click closes it.
 
 ![File calls, an edit opened to its diff](../../../spec/screens/tool-files.png)
 
@@ -81,3 +82,9 @@ An image the agent's reply points to shows in the reply, if it's in the workspac
 An image anywhere else on the machine, or on the web, shows nothing.
 
 ![A reply that points to a screenshot in the workspace](../../../spec/screens/reply-image.png)
+
+- **A click opens it,** as big as it is, up to what fits in the window, whether it's on a line of its own or among the reply's words. Escape or a click closes it.
+- **An image in a link goes where the link does** instead, as a badge does.
+- **Some images open nothing:** one in a heading, a table or a footnote, one written with its address given elsewhere in the reply, as `![The board][board]` is, several together in bold or italics with no words, one beside nothing but HTML, and one in what a subagent did, shown under its call.
+
+![The board's screenshot, opened](../../../spec/screens/reply-image-opened.png)
