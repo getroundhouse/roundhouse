@@ -96,7 +96,8 @@ impl Writing {
             | WorkerFrame::Reply { .. }
             | WorkerFrame::Ask { .. }
             | WorkerFrame::Branches { .. }
-            | WorkerFrame::ChildBranches { .. } => {}
+            | WorkerFrame::ChildBranches { .. }
+            | WorkerFrame::Terminal { .. } => {}
         }
     }
 
@@ -134,14 +135,15 @@ fn number_of(frame: &mut WorkerFrame) -> Option<&mut Option<u64>> {
         | WorkerFrame::AgentCache { seq, .. }
         | WorkerFrame::AgentLimits { seq, .. } => Some(seq),
         // A reply is only for the hub that asked, an ask is asked again of each hub until it's answered, the branches
-        // are read again for each hub that watches them, and what an agent is writing is sent again to each hub that
-        // connects.
+        // are read again for each hub that watches them, what an agent is writing is sent again to each hub that
+        // connects, and a hub asks what a terminal shows as a client attaches to it.
         WorkerFrame::AgentDelta { .. }
         | WorkerFrame::AgentRetrying { .. }
         | WorkerFrame::AgentTail { .. }
         | WorkerFrame::Reply { .. }
         | WorkerFrame::Ask { .. }
         | WorkerFrame::Branches { .. }
-        | WorkerFrame::ChildBranches { .. } => None,
+        | WorkerFrame::ChildBranches { .. }
+        | WorkerFrame::Terminal { .. } => None,
     }
 }

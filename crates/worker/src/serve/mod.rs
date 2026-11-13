@@ -2,6 +2,7 @@
 
 mod agent;
 mod connection;
+mod hello;
 #[cfg(unix)]
 mod listen;
 mod moves;
@@ -16,6 +17,7 @@ pub(crate) use outbox::Outbox;
 mod worker;
 
 #[cfg(feature = "testing")]
-pub use worker::TEST_BUILD;
+pub use hello::TEST_BUILD;
+use hello::hello;
 pub use worker::{Config, serve};
-use worker::{RunningAgent, State, Worker, handle, hello};
+use worker::{RunningAgent, State, Worker, handle};

@@ -98,8 +98,9 @@ impl Listed {
                 Record::FoundGithubLogin(found) => listed.github.found(found),
                 Record::GithubApp(app) => listed.github.app(app),
                 Record::GithubReach(reach) => listed.github.reach(reach),
-                // Held apart, as `HubRecords::apply_record` says.
-                Record::Subagent(_) => {}
+                // A subagent is held apart, as `HubRecords::apply_record` says, and a terminal is held, but no view
+                // shows terminals yet.
+                Record::Subagent(_) | Record::Terminal(_) => {}
             }
         }
         listed.github.order();

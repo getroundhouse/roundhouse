@@ -108,6 +108,8 @@ ids!(
     /// What GitHub calls a GitHub App in its addresses, such as `ada-roundhouse`, which its bot is named for, as
     /// `ada-roundhouse[bot]`. GitHub gives it as the app is made, from the name the person chose.
     GithubAppSlug,
+    /// Chosen by the client that opens the terminal, as a UUID, so opening it again can't open two.
+    TerminalId,
 );
 
 impl SubagentId {

@@ -37,6 +37,7 @@ mod repos;
 mod restarts;
 mod sessions;
 mod subagents;
+mod terminals;
 mod waits;
 mod worker;
 mod worker_calls;

@@ -170,6 +170,8 @@ impl World {
             found_github_logins: self.found_github_logins.clone(),
             github_apps: self.github_apps.clone(),
             github_reach: self.github_reach.clone(),
+            // No screen shows a terminal yet.
+            terminals: Vec::new(),
             rev: Rev::default(),
         }
     }

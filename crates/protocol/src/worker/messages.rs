@@ -1,6 +1,6 @@
 use super::{
-    agents, children, connection, found_login, git_credential, github, one_off, previous, repo_url, tools, workspaces,
-    worktree,
+    agents, children, connection, found_login, git_credential, github, one_off, previous, repo_url, terminals, tools,
+    workspaces, worktree,
 };
 use crate::client::Outcome;
 use crate::model;
@@ -23,6 +23,11 @@ use github::{
 use one_off::{AccountFor, TitleFor, TitleReply};
 use repo_url::{ReadRepoUrl, RepoUrlReply};
 use serde::{Deserialize, Serialize};
+#[cfg(test)]
+use terminals::RunningTerminals;
+use terminals::{
+    RunningTerminalsReply, TerminalInput, TerminalResize, TerminalShow, TerminalShown, TerminalStart, TerminalStop,
+};
 use tools::{ServeTools, ToolsServing};
 #[cfg(test)]
 use workspaces::CancelSetup;
@@ -124,6 +129,13 @@ pub enum WorkerRequest {
     /// See [`FindGithubLogin`](super::FindGithubLogin).
     FindGithubLogin,
     ReadRepoUrl(ReadRepoUrl),
+    TerminalStart(TerminalStart),
+    TerminalInput(TerminalInput),
+    TerminalResize(TerminalResize),
+    TerminalShow(TerminalShow),
+    TerminalStop(TerminalStop),
+    /// See [`RunningTerminals`](super::RunningTerminals).
+    RunningTerminals,
     /// Any request this build doesn't know, from a hub newer than it. A worker answers with
     /// [`ErrorCode::Unsupported`](crate::client::ErrorCode::Unsupported) and carries on, as a hub does a client's.
     #[serde(other)]
@@ -161,6 +173,8 @@ pub enum WorkerResponse {
     ToolsServing(ToolsServing),
     GithubLogin(GithubLoginReply),
     RepoUrl(RepoUrlReply),
+    TerminalShown(TerminalShown),
+    RunningTerminals(RunningTerminalsReply),
 }
 
 pub type WorkerOutcome = Outcome<WorkerResponse>;
@@ -178,6 +192,7 @@ mod tests {
         assert_eq!(sent(RunningAgents.into_request()), r#"{"method":"running_agents"}"#);
         assert_eq!(sent(CancelSetup.into_request()), r#"{"method":"cancel_setup"}"#);
         assert_eq!(sent(FindGithubLogin.into_request()), r#"{"method":"find_github_login"}"#);
+        assert_eq!(sent(RunningTerminals.into_request()), r#"{"method":"running_terminals"}"#);
     }
 
     /// The rest each read the variant that holds them, which the compiler checks.
