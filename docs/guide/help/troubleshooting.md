@@ -18,6 +18,7 @@ Pull requests are read with GitHub's CLI. Check that:
 
 - `gh` is installed, and `gh auth status` says you're logged in.
 - The repository has a GitHub remote.
+- The pull request is the branch's own: one the workspace pushed to, or whose branch it checked out. One opened from a branch of the same name somewhere else isn't.
 
 Everything else works without `gh`.
 

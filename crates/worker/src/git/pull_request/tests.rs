@@ -1,12 +1,14 @@
 use protocol::model::{Checks, LeftQueue, Local, MergeState, PrState, PullRequest, QueueState, Review};
 
 use super::super::tests::{new_repo, run};
-use super::{ByUrl, Failing, failing, local, parse_by_url, parse_pull_request, parse_rate_limit};
+use super::local::local;
+use super::{ByUrl, Failing, Viewed, failing, parse_by_url, parse_pull_request, parse_rate_limit};
 
 #[test]
 fn a_pull_request_parses_from_what_gh_prints() {
     let json = br#"{"isDraft":false,"number":12,"state":"OPEN","title":"Fix login","url":"https://example.com/12",
-        "baseRefName":"main","headRefOid":"abc123","mergeStateStatus":"BLOCKED","reviewDecision":"",
+        "baseRefName":"main","headRefName":"aspen","headRefOid":"abc123","commits":[{"oid":"abc122"},{"oid":"abc123"}],
+        "mergeStateStatus":"BLOCKED","reviewDecision":"",
         "statusCheckRollup":[
             {"__typename":"CheckRun","name":"test","status":"COMPLETED","conclusion":"SUCCESS"},
             {"__typename":"CheckRun","name":"docs","status":"COMPLETED","conclusion":"SKIPPED"},
@@ -17,12 +19,14 @@ fn a_pull_request_parses_from_what_gh_prints() {
             {"__typename":"StatusContext","context":"lint","state":"ERROR"}
         ]}"#;
 
-    let (pr, head) = parse_pull_request(json).unwrap();
+    let viewed = parse_pull_request(json).unwrap();
 
-    assert_eq!((pr.number, pr.state, pr.is_draft, pr.base), (12, PrState::Open, false, Some("main".into())));
+    let pr = &viewed.pull_request;
+    assert_eq!((pr.number, pr.state, pr.is_draft, &pr.base), (12, PrState::Open, false, &Some("main".into())));
     assert_eq!((pr.merge_state, pr.review), (MergeState::Blocked, Review::NotRequired));
     assert_eq!(pr.checks, Checks { passed: 2, failed: 3, pending: 2 });
-    assert_eq!(head.as_deref(), Some("abc123"));
+    assert_eq!((&viewed.from, &viewed.head), (&Some("aspen".into()), &Some("abc123".into())));
+    assert_eq!(viewed.commits(), ["abc122".into(), "abc123".into()]);
 }
 
 #[test]
@@ -43,7 +47,7 @@ fn each_check_counts_once_as_its_latest_run() {
         {"__typename":"StatusContext","context":"deploy","state":"SUCCESS","startedAt":"2026-11-02T10:02:00Z"}
     ]}"#;
 
-    let (pr, _) = parse_pull_request(json).unwrap();
+    let pr = parse_pull_request(json).unwrap().pull_request;
 
     assert_eq!(pr.checks, Checks { passed: 3, failed: 0, pending: 1 });
 }
@@ -52,10 +56,10 @@ fn each_check_counts_once_as_its_latest_run() {
 fn what_gh_leaves_out_is_unknown_but_a_pull_request_needs_its_number_and_url() {
     let json = br#"{"number":12,"state":"MERGED","url":"https://example.com/12"}"#;
 
-    let (pr, head) = parse_pull_request(json).unwrap();
+    let Viewed { pull_request: pr, from, head, first } = parse_pull_request(json).unwrap();
 
     assert_eq!((pr.state, pr.merge_state, pr.checks), (PrState::Merged, MergeState::Unknown, Checks::default()));
-    assert_eq!(head, None);
+    assert_eq!((from, head, first), (None, None, vec![]));
     assert_eq!(parse_pull_request(b"not json"), None);
     assert_eq!(parse_pull_request(br#"{"state":"OPEN"}"#), None);
 }
@@ -139,7 +143,8 @@ fn a_pull_request_the_queue_has_merged_is_merged_and_hasnt_left_it() {
 
 #[test]
 fn the_second_calls_word_on_its_state_is_the_later_one() {
-    let (mut viewed, _) = parse_pull_request(br#"{"number":7,"url":"https://example.com/7","state":"OPEN"}"#).unwrap();
+    let json = br#"{"number":7,"url":"https://example.com/7","state":"OPEN"}"#;
+    let mut viewed = parse_pull_request(json).unwrap().pull_request;
     let said = |state| ByUrl { state, queue: None, left_queue: None, changes_requested_at_ms: Some(5) };
     let (merged, unsaid) = (said(Some(PrState::Merged)), said(None));
 

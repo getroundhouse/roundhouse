@@ -61,14 +61,16 @@ impl Stack {
         std::fs::create_dir_all(&bin).unwrap();
         let answer = self.dir.path().join("gh-pr-view.json");
         // It's in no merge queue, and anything else fails, such as asking how much of GitHub's limit is left, which
-        // then goes unknown.
+        // then goes unknown. A pull request that doesn't say its newest commit gets the one checked out, as one
+        // pushed from the worktree has, so it's the branch's own.
         let (offline, answer_path) = (answer.with_extension("offline"), answer.display());
         let script = format!(
             r#"#!/bin/sh
 [ "$1 $2" = 'api graphql' ] && exec echo '{{"data":{{"resource":{{"mergeQueueEntry":null}}}}}}'
 [ "$1 $2" = 'pr view' ] || exit 1
 [ -f '{offline}' ] && {{ echo 'error connecting to api.github.com' >&2; exit 1; }}
-[ -f '{answer_path}' ] && exec cat '{answer_path}'
+[ -f '{answer_path}' ] && grep -q headRefOid '{answer_path}' && exec cat '{answer_path}'
+[ -f '{answer_path}' ] && exec sed "1s/^{{/{{\"headRefOid\":\"$(git rev-parse HEAD)\",/" '{answer_path}'
 echo 'no pull requests found for branch "x"' >&2
 exit 1
 "#,

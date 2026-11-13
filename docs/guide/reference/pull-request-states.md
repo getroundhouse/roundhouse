@@ -70,5 +70,6 @@ Roundhouse reads the pull request with `gh`:
 - **Each check counts once, as its latest run,** so a rerun that passed reads as passed.
 - **Reads nobody is waiting on stay within what GitHub can spare,** and leave the last fifth of its hourly limit to your agents.
 - **What was found is kept across restarts,** and `gh` failing, such as while offline, never takes away a pull request already found.
+- **A workspace's pull request is its branch's own:** one it pushed to, or one whose branch you checked out to work on. One from another computer's branch that only has the same name doesn't show. Once found, it stays the branch's, even after someone else pushes to it. Roundhouse keeps which it is as a setting of the branch in the repository's git config, `branch.<name>.roundhouse-pull-request`, which git renames and deletes with the branch.
 
 Without `gh`, a login to it, or a GitHub remote, a pull request can't be read, and the bar offers to create one.

@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use protocol::client::ApiError;
 use protocol::model::{Branch, BranchName, Branches, CommitId, Head, RemoteName, Upstream};
 
-use super::{git, git_error, git_ok};
+use super::{commit_of, git, git_error, git_ok};
 
 #[cfg(test)]
 pub(crate) mod tests;
@@ -141,8 +141,8 @@ async fn head(worktree: &Path) -> Result<Head, ApiError> {
     if symbolic.code != Some(1) {
         return Err(git_error(format!("git couldn't say what's checked out: {}", symbolic.stderr)));
     }
-    let commit = git_ok(worktree, &["rev-parse", "--verify", "--quiet", "HEAD^{commit}"]).await?;
-    Ok(Head::Detached { commit: CommitId::from(commit.trim()) })
+    let commit = commit_of(worktree, "HEAD").await?.ok_or_else(|| git_error("HEAD is detached at no commit"))?;
+    Ok(Head::Detached { commit })
 }
 
 /// The branch a rebase under way will go back to. HEAD is detached until it does, and nothing in the reflog names

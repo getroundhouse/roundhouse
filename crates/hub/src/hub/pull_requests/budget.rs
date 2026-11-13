@@ -30,7 +30,8 @@ const KEPT_FOR_OTHERS_PERCENT: u32 = 20;
 
 /// The calls reading a pull request takes: one to view it, and one more while it's open, for its place in the merge
 /// queue and what it has recorded of the queue and of reviews. Going by what was found last time, since what it is now
-/// is what's being read, and taking one never read to need both.
+/// is what's being read, and taking one never read to need both. Not the second view the worker makes when `gh` finds
+/// another by the branch's name than the one the branch is linked to, or none, which GitHub's own count takes in.
 pub(super) fn calls_to_read(found: Option<&PullRequestFound>) -> u32 {
     match found.map(|found| found.pull_request.as_ref()) {
         None => 2,

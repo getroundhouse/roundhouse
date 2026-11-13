@@ -91,10 +91,16 @@ pub(crate) async fn list_nul_separated(repo: &Path, args: &[String]) -> Result<V
     Ok(output.split('\0').filter(|f| !f.is_empty()).map(str::to_string).collect())
 }
 
-/// The commit `name` is in the worktree at `cwd`: a branch, a tag, a commit or `HEAD`. `None` if it's none there.
+/// The commit `name` is in the worktree at `cwd`: a branch, a tag, a commit or `HEAD`. `None` if it's none there, as
+/// a branch with no commits yet isn't, and an error when git couldn't say, as outside a repository.
 async fn commit_of(cwd: &Path, name: &str) -> Result<Option<CommitId>, ApiError> {
     let found = git(cwd, &["rev-parse", "--verify", "--quiet", &format!("{name}^{{commit}}")]).await?;
-    Ok(found.success.then(|| CommitId::from(found.stdout.trim())))
+    match found.code {
+        Some(0) => Ok(Some(CommitId::from(found.stdout.trim()))),
+        // git's word for a name that's no commit.
+        Some(1) => Ok(None),
+        _ => Err(git_error(format!("git couldn't say what {name} is: {}", found.stderr))),
+    }
 }
 
 async fn ref_exists(repo: &Path, name: &str) -> Result<bool, ApiError> {

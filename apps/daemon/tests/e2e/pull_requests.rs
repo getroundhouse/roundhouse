@@ -8,7 +8,7 @@ use client_core::{Client, ClientError};
 use protocol::client::ErrorCode;
 use protocol::model::{BranchName, Head, PrState, PullRequestFound, WorkspaceId};
 
-use crate::support::gh::{LOGGED_OUT, MERGED, NONE, OFFLINE, OPEN, StandInGh};
+use crate::support::gh::{LOGGED_OUT, MERGED, MOVED_ON, NONE, OFFLINE, OPEN, OPEN_URL, SOMEONE_ELSES, StandInGh};
 use crate::support::{self, Stack, is_alive, started_pid, wait_for_turn_end, wait_until};
 
 /// The number of the pull request on the workspace's record, as every client gets it.
@@ -56,6 +56,60 @@ fn a_gh_that_cant_say_keeps_the_pull_request_known_and_one_that_says_none_clears
     assert_eq!(gone, None);
     let found = support::workspace(&client, &workspace.id).pull_request;
     assert_eq!(found, Some(PullRequestFound { pull_request: None }), "looked, and found none");
+}
+
+/// `gh` goes by the branch's name, which another machine's workspace can share, so the pull request it finds can be
+/// from there. The branch was never at its newest commit, so the worker says there's none, as when `gh` finds none.
+#[test]
+fn a_pull_request_from_another_machines_branch_of_the_same_name_reads_as_none() {
+    let mut stack = Stack::start();
+    let gh = StandInGh::start(&mut stack);
+    let client = stack.client();
+    let (workspace, _) = stack.workspace(&client);
+    gh.say(SOMEONE_ELSES);
+
+    let read = client.workspace_pull_request(&workspace.id).unwrap();
+
+    assert_eq!(read, None);
+    let found = support::workspace(&client, &workspace.id).pull_request;
+    assert_eq!(found, Some(PullRequestFound { pull_request: None }), "looked, and found none");
+}
+
+/// The branch has been at one of its commits, so it's the branch's, though someone else has pushed to it since, as
+/// GitHub's Update branch does, and it's read for the first time only now, as just after an update to this version.
+#[test]
+fn a_pull_request_someone_else_has_pushed_to_is_the_branchs_from_its_first_read() {
+    let mut stack = Stack::start();
+    let gh = StandInGh::start(&mut stack);
+    let client = stack.client();
+    let (workspace, _) = stack.workspace(&client);
+    gh.say(MOVED_ON);
+
+    let views = gh.views();
+    let read = client.workspace_pull_request(&workspace.id).unwrap().unwrap();
+    let views = gh.views() - views;
+
+    assert_eq!((read.number, read.local.behind), (7, 1), "with a commit to pull");
+    assert_eq!(views, 1, "GitHub is asked once");
+}
+
+/// A branch's pull request stays its own once it's been found, by a link the worker keeps with the branch. So when
+/// another machine's branch of the same name has one, which is then the one `gh` finds, the worker reads the branch's
+/// own by its URL.
+#[test]
+fn a_pull_request_found_stays_the_branchs_once_another_machines_branch_of_the_same_name_has_one() {
+    let mut stack = Stack::start();
+    let gh = StandInGh::start(&mut stack);
+    let client = stack.client();
+    let (workspace, _) = stack.workspace(&client);
+    gh.say(OPEN);
+    client.workspace_pull_request(&workspace.id).unwrap();
+
+    gh.say(SOMEONE_ELSES);
+    gh.say_of(OPEN_URL, MERGED);
+    let read = client.workspace_pull_request(&workspace.id).unwrap().unwrap();
+
+    assert_eq!((read.number, read.state), (7, PrState::Merged));
 }
 
 /// Logged out, it can't be read until the user logs in, so with nothing known it's taken to be none, which offers to
