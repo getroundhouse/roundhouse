@@ -1,5 +1,6 @@
 # AGENTS.md's full checks and publish.py's tests, on Linux, for every PR and the queue. The gallery compiles only on
-# macOS, and mac.yml covers the Mac. Changes to only Markdown and the site skip them.
+# macOS, and mac.yml covers the Mac. Changes to only Markdown and the site skip them, and a change to what the guide
+# is made of builds the guide, whatever else it changes.
 name: CI
 
 on:
@@ -38,7 +39,7 @@ env:
 # stays pending. Actions are pinned to full commits.
 jobs:
   # Skips the checks when only Markdown and the site differ from the base, or when the queue would check a tree a PR's
-  # run already passed.
+  # run already passed. Says apart whether to build the guide, which is Markdown the checks don't read.
   changes:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -48,6 +49,7 @@ jobs:
       actions: read
     outputs:
       run: ${{ steps.diff.outputs.run }}
+      guide: ${{ steps.diff.outputs.guide }}
       tree: ${{ steps.diff.outputs.tree }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -60,19 +62,32 @@ jobs:
           REPO_ID: ${{ github.repository_id }}
         run: |
           run=true
+          guide=true
           tree=$(git rev-parse 'HEAD^{tree}')
-          if [ -n "$BASE" ] && git fetch --quiet --depth=1 origin "$BASE" &&
+          # Checking out fetched too, so only a fetch of the base that worked makes FETCH_HEAD the base.
+          based=false
+          if [ -n "$BASE" ] && git fetch --quiet --depth=1 origin "$BASE"; then based=true; fi
+          # What the guide is made of: its pages, the screens and the README they show and link to, the tool, and what
+          # the tool is built with. A page can link to any file, so a change that takes one away, or renames it, builds
+          # the guide too.
+          if $based && git diff --quiet FETCH_HEAD HEAD -- \
+            docs/guide docs/spec/screens README.md tools/guide Cargo.lock rust-toolchain.toml &&
+            git diff --quiet --no-renames --diff-filter=D FETCH_HEAD HEAD; then
+            guide=false
+          fi
+          if $based &&
             git diff --quiet FETCH_HEAD HEAD -- ':(exclude)*.md' ':(exclude)site' ':(exclude)tools/site'; then
             run=false
-          # gh prints an error's body, so check `passed` is a run ID.
+          # gh prints an error's body, so check `passed` is a run ID. A run that passed built the guide if it had to.
           elif [ "$GITHUB_EVENT_NAME" = merge_group ] &&
             passed=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=ci-passed-$tree" --jq \
               "[.artifacts[] | select(.workflow_run.head_repository_id == $REPO_ID and (.expired | not))][0].workflow_run.id // empty") &&
             [[ "$passed" =~ ^[0-9]+$ ]]; then
             run=false
+            guide=false
             echo "::notice::$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$passed passed this tree on its PR"
           fi
-          { echo "run=$run"; echo "tree=$tree"; } >> "$GITHUB_OUTPUT"
+          { echo "run=$run"; echo "guide=$guide"; echo "tree=$tree"; } >> "$GITHUB_OUTPUT"
 
   # The free arm64 runner, with the tests' image so the cache fits. It still finishes before them.
   lint:
@@ -180,9 +195,22 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: python3 -m unittest discover -s tools/package -v
 
+  # Builds the guide, docs/guide, as the site publishes it, which refuses a link, a heading or a picture that isn't
+  # there. No test does, since a change to only the guide's Markdown runs none, as tools/guide/README.md says. It
+  # builds nothing but the tool, so it needs neither Zig nor GPUI's packages.
+  guide:
+    needs: changes
+    # Not for a push to main, which only saves the other jobs' caches: the queue built what landed.
+    if: needs.changes.outputs.guide == 'true' && github.event_name != 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: cargo run --locked -p guide -- "$RUNNER_TEMP/docs"
+
   # The one required check. It fails if any job failed or was cancelled, and passes if the rest passed or were skipped.
   checks:
-    needs: [changes, lint, test, publish]
+    needs: [changes, lint, test, publish, guide]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5

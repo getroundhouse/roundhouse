@@ -24,6 +24,7 @@ The parts come in this order. The last four start with their label in bold, writ
 5. **Needs the owner:** which owner docs, or files that enforce a standard, change, and what each change is, so the owner can approve without hunting through the diff. List what's marked *Unconfirmed*, and say which changes the owner already agreed to in conversation. This part is there exactly when the PR has the `needs/owner` label.
 6. **Checked:** what was run, and what it showed:
    - the full checks from `AGENTS.md`, or that the PR changes only Markdown or the marketing site and needs none;
+   - for a change to what the product does, which pages of `docs/guide/` changed with it, or that none says what changed, since no test fails when a guide page goes stale;
    - each new test, and what it covers;
    - what was broken on purpose, and which test failed;
    - anything checked by hand, with the machine, the OS, what was done and what was seen;

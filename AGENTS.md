@@ -17,6 +17,7 @@ cargo run -p desktop --bin roundhouse-desktop -- --note "What to try"   # The ap
 cargo run -p desktop --example look -- <workspace> diff --note "What it shows"   # The app, opened on a view, for screenshots
 cargo test -p desktop --test ui gallery   # Every screen, from made-up data, against its image in docs/spec/screens, and every size of both styles of the app icon. No hub, no window
 ROUNDHOUSE_UPDATE_SCREENS=1 cargo test -p desktop --test ui gallery   # Accepts how they look now. A confirmed screen needs the owner
+cargo run -p guide -- OUT         # Builds docs/guide as the site's /docs/ pages in OUT, which mustn't exist, and refuses a link or a picture that isn't there. Run it after changing a page, as tools/guide/README.md says, since CI does
 tools/install.sh                  # Installs this commit as the app to use every day, outside target/. Run it by hand
 tools/package/package.sh          # Packages this commit as Roundhouse.app, unsigned, in target/package. Needs the .NET SDK
 tools/package/package-windows.sh --prebuilt DIR   # Packages Windows binaries, built on Windows by tools/build.sh, as the installer and its updates, unsigned. On a Mac or Linux, with the .NET SDK. `--arch arm64` for ARM64 ones
@@ -50,6 +51,7 @@ For a flaky test, repeat it only enough to see how often it fails, find the caus
 ## Rules
 
 - **Put what you learn and decide where `docs/documentation.md` says,** as part of the same work. Not in agent memory, and not only in chat.
+- **A change to what the product does changes what's written about it, in the same PR:** its rule in `docs/spec/`, the pages of `docs/guide/` that say it, and the README and the site where they say it too. A test fails when a screen no longer matches its picture, and nothing fails when a guide page goes stale, so search the guide for what you changed, and build it, as `tools/guide/README.md` says.
 - **Owner docs, and the files that enforce the standards, change only with the owner's approval, but propose a change whenever you see a better way.** `docs/documentation.md` says which they are, how to propose, and how an agent's choice gets in before the owner confirms it.
 - **Decide who owns the state before choosing where a change goes.** A bug in what a client shows often comes from a client keeping or working out what the hub should record, and the fix goes to the owner, with a protocol change if it needs one, even when fixing the client would be smaller. When the cause is an *Unconfirmed* design, question the design, not just the bug.
 - **Leave the code the way you'd want to find it.** Agents copy what they find here, so a workaround, of the kinds under "Workarounds" in `docs/reviews.md`, becomes the pattern the next change follows. Restructure what's in the way rather than working around it, in a PR of its own at the bottom of a stack when it stands alone, and give any workaround you keep the reason `docs/reviews.md` asks for. Don't copy a workaround you find: fix it when it's part of the change, and otherwise give it an issue and list it under **Left open:**.

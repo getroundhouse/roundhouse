@@ -16,8 +16,11 @@ Two things belong in neither place. Why a piece of code is the way it is goes in
 | Standards | How code, tests, docs and pull requests are written and reviewed |
 | Reference | Facts to look up: what words mean, how an outside system behaves, the bars to hit, what a person checks by hand |
 | Instructions | How to build, test, run and install |
+| Guide | How to use the product, for the person using it |
 
 A doc describes how things are. It leaves out what was removed or replaced, and how a change was made or checked, since git and the PR keep that. Each doc has one purpose, and something that fits none of them gets a doc of its own rather than a section in a nearby one.
+
+The guide is the one kind written for someone using the product rather than building it. It decides nothing: everything it says the app does is a rule in the spec, or where the spec doesn't reach, such as what installing needs and the command line, what the README and the code say. So agents keep it, and change a page in the PR that changes what it rests on.
 
 | Doc | Kind | Decided by | Its one purpose |
 |---|---|---|---|
@@ -40,6 +43,8 @@ A doc describes how things are. It leaves out what was removed or replaced, and 
 | `mobile-poc/README.md` | Instructions | Agents | How to build and run the mobile proof of concept |
 | `mobile-poc/test-server/README.md` | Instructions | Agents | The simulated hub for testing clients on a phone |
 | `site/README.md` | Instructions | Agents | How to preview the marketing site, and how it follows the app's look |
+| `docs/guide/` | Guide | Agents | How to use Roundhouse, a page for each task and each thing, published as the site's `/docs/` pages |
+| `tools/guide/README.md` | Instructions | Agents | How the guide is organized and written, and how it's built and published |
 
 `AGENTS.md` is read at the start of every session, so it stays lean: it holds what every task needs, and points to the docs for the rest.
 

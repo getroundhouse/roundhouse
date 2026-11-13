@@ -127,6 +127,7 @@ services/
   hosted/          Accounts and billing, only if a hosted service is run. Not built
 tools/
   policy/          Tests that enforce the license and dependency rules below
+  guide/           Builds `docs/guide` as the pages the site serves under `/docs/`, and refuses a link or a picture that isn't there
   smoke/           Runs the stack against the real Claude CLI, and regenerates its fixture
   file-icons/      Replaces the desktop app's file icons with a pinned, checked release of Catppuccin's icons. Unconfirmed
   build.sh         Builds the binaries in release, stamped with which build they are, for `install.sh`, `package/` and the release workflow
@@ -134,7 +135,7 @@ tools/
   install.sh       Installs this commit as a version of its own, outside `target/`
   package/         Packages this commit as Roundhouse.app with Velopack, signed and notarized when given the keys, or Windows binaries as an installer, or Linux binaries as an AppImage, and publishes each as an update
   perf/            Performance tests against the real app. Not built, see `docs/performance.md`
-.github/workflows/ CI: the full checks on Linux for every PR that changes more than Markdown and the marketing site, and on a Mac when dependencies change. On Windows, for every PR that changes Rust, a lint of the product's code as built for it, and a hub started and stopped. The release workflow publishes each merge to `main`
+.github/workflows/ CI: the full checks on Linux for every PR that changes more than Markdown and the marketing site, with the guide built for every PR that changes what it's made of, and on a Mac when dependencies change. On Windows, for every PR that changes Rust, a lint of the product's code as built for it, and a hub started and stopped. The release workflow publishes each merge to `main`
 ```
 
 The binaries are `roundhouse`, `roundhoused` and `roundhouse-desktop`. `crates/protocol/src/paths.rs` names the data directory and the variables that move it. Only a release build defaults to the real data. A debug build uses `roundhouse-dev`, `cargo run` and `cargo test` use a directory in the checkout, and nothing a worker starts inherits these variables, so what's built in a workspace can't reach the hub it's running under.

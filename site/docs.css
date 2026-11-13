@@ -1,0 +1,447 @@
+/* The guide's pages, under /docs/. They load style.css first, for the palette, the header, the buttons and the
+   footer, so the guide and the page before it are one site. tools/guide draws the pages this styles. */
+
+.guide {
+  --prose: #d3cdc7;
+  --amber: #d9a441;
+  /* Wider than the page before it, for three columns. The header and the footer keep to it too. */
+  --page: 1320px;
+}
+
+/* The header always has the edge the page before it gains once it scrolls, from `scrolled` in the page itself, since
+   there's no hero for it to sit over. It's a little more solid here, over words rather than a picture. */
+.guide .nav {
+  background: rgb(21 19 18 / 0.86);
+}
+
+.nav-links a.here {
+  color: var(--fg);
+}
+
+/* Three columns: every page, this page, and this page's headings. */
+.guide-page {
+  display: grid;
+  grid-template-columns: 236px minmax(0, 1fr) 196px;
+  gap: 0 clamp(32px, 4vw, 64px);
+  align-items: start;
+  max-width: var(--page);
+  margin: 0 auto;
+  padding: 0 var(--gutter);
+}
+
+/* Every page, as the contents list them */
+
+.guide-side,
+.guide-headings {
+  position: sticky;
+  top: var(--bar);
+  max-height: calc(100vh - var(--bar));
+  overflow-y: auto;
+  padding: 36px 0 48px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--edge) transparent;
+}
+
+.guide-menu {
+  display: none;
+}
+
+.guide-nav {
+  font-size: 14.5px;
+  line-height: 1.35;
+}
+
+.guide-nav h2 {
+  margin: 26px 0 6px;
+  padding-left: 12px;
+  font-size: 12.5px;
+  line-height: 1.35;
+  letter-spacing: 0.01em;
+  color: var(--faint);
+}
+
+.guide-nav ul,
+.guide-headings ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* The pages that are parts of a page sit a step in from it, under a line, as what a folder holds does in the app. */
+.guide-nav ul ul {
+  margin: 2px 0 6px 12px;
+  border-left: 1px solid var(--edge);
+}
+
+.guide-nav a {
+  display: block;
+  padding: 6px 12px;
+  border-radius: 7px;
+  color: var(--muted);
+  transition:
+    color 0.15s,
+    background-color 0.15s;
+}
+
+.guide-nav a:hover {
+  color: var(--fg);
+  background: #1d1a18;
+}
+
+/* The page showing is the one row that's filled, as the row showing is in the app's Settings. */
+.guide-nav a[aria-current] {
+  color: var(--fg);
+  font-weight: 500;
+  background: var(--raised);
+}
+
+/* This page */
+
+.guide-doc {
+  max-width: 760px;
+  padding: 44px 0 0;
+  color: var(--prose);
+  font-size: 16px;
+  line-height: 1.68;
+}
+
+.guide-doc h1 {
+  margin: 0 0 18px;
+  font-size: clamp(30px, 4vw, 40px);
+  line-height: 1.1;
+  letter-spacing: -0.032em;
+  color: var(--fg);
+}
+
+/* What a page is for, said once under its title. */
+.guide-doc h1 + p {
+  font-size: 19px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+.guide-doc h2 {
+  margin: 52px 0 12px;
+  font-size: 24px;
+  line-height: 1.2;
+  letter-spacing: -0.022em;
+  color: var(--fg);
+}
+
+.guide-doc h3 {
+  margin: 34px 0 8px;
+  font-size: 18px;
+  line-height: 1.3;
+  letter-spacing: -0.012em;
+  color: var(--fg);
+}
+
+.guide-doc h4 {
+  margin: 26px 0 6px;
+  font-weight: 500;
+  color: var(--fg);
+}
+
+/* A heading links to itself, so its address can be copied from it, and looks like a heading until it's pointed at. */
+.guide-doc :is(h2, h3, h4) a:hover::after {
+  content: " #";
+  color: var(--copper);
+}
+
+.guide-doc p,
+.guide-doc ul,
+.guide-doc ol,
+.guide-doc pre,
+.guide-doc .table,
+.guide-doc blockquote,
+.guide-doc .callout {
+  margin: 0 0 18px;
+}
+
+.guide-doc ul,
+.guide-doc ol {
+  padding-left: 1.35em;
+}
+
+.guide-doc li {
+  margin: 6px 0;
+  padding-left: 0.2em;
+}
+
+.guide-doc li::marker {
+  color: var(--faint);
+}
+
+.guide-doc li > ul,
+.guide-doc li > ol {
+  margin: 6px 0 0;
+}
+
+.guide-doc strong {
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.guide-doc code {
+  padding: 1.5px 5px;
+  border-radius: 5px;
+  background: var(--raised);
+  font-size: 0.86em;
+  overflow-wrap: break-word;
+}
+
+/* A block of code is on the surface the app's code blocks have. */
+.guide-doc pre {
+  padding: 14px 16px;
+  border: 1px solid var(--edge);
+  border-radius: 10px;
+  background: var(--inset);
+  overflow-x: auto;
+}
+
+.guide-doc pre code {
+  padding: 0;
+  background: none;
+  font: 400 13.5px/1.6 var(--mono);
+  overflow-wrap: normal;
+}
+
+.guide-doc hr {
+  height: 1px;
+  margin: 40px 0;
+  border: 0;
+  background: var(--copper-rule);
+}
+
+.guide-doc blockquote {
+  padding: 2px 0 2px 16px;
+  border-left: 2px solid var(--edge);
+  color: var(--muted);
+}
+
+.guide-doc blockquote > :last-child,
+.guide-doc .callout > :last-child {
+  margin-bottom: 0;
+}
+
+/* A note set apart, in copper. One that warns is amber, the app's colour for what needs you. */
+.guide-doc .callout {
+  --tone: var(--copper);
+  padding: 14px 18px 16px;
+  border: 1px solid var(--edge);
+  border-left: 2px solid var(--tone);
+  border-radius: 10px;
+  background: var(--sidebar);
+}
+
+.guide-doc .callout:is(.warning, .caution, .important) {
+  --tone: var(--amber);
+}
+
+.guide-doc .callout-kind {
+  margin: 0 0 4px;
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--tone);
+}
+
+/* A wide table scrolls in its own box, so it doesn't widen a phone's page. */
+.guide-doc .table {
+  overflow-x: auto;
+}
+
+.guide-doc table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.guide-doc th {
+  padding: 8px 14px 8px 0;
+  border-bottom: 1px solid var(--edge);
+  font-size: 12.5px;
+  font-weight: 500;
+  text-align: left;
+  color: var(--faint);
+  white-space: nowrap;
+}
+
+.guide-doc td {
+  padding: 10px 14px 10px 0;
+  border-bottom: 1px solid var(--edge);
+  vertical-align: top;
+}
+
+.guide-doc td:first-child {
+  color: var(--fg);
+}
+
+/* One of the app's own screens. It's drawn at its own size, or smaller to fit, and opens whole when clicked. */
+.guide-doc figure.screen {
+  margin: 26px 0 30px;
+}
+
+.guide-doc figure.screen a {
+  display: inline-block;
+  max-width: 100%;
+  border: 1px solid var(--edge);
+  border-radius: 10px;
+  overflow: hidden;
+  line-height: 0;
+  box-shadow: 0 30px 60px -36px rgb(0 0 0 / 0.9);
+  transition: border-color 0.2s;
+}
+
+.guide-doc figure.screen a:hover {
+  border-color: #3d3835;
+}
+
+.guide-doc figure.screen img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+/* The pages before and after */
+
+.guide-pager {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+  margin-top: 64px;
+}
+
+.guide-pager a {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 14px 18px 16px;
+  border: 1px solid var(--edge);
+  border-radius: 12px;
+  font-weight: 500;
+  line-height: 1.35;
+  color: var(--fg);
+  transition:
+    background-color 0.2s,
+    border-color 0.2s;
+}
+
+.guide-pager a:hover {
+  background: #1d1a18;
+  border-color: #353130;
+}
+
+.guide-pager a.after {
+  grid-column: 2;
+  align-items: flex-end;
+  text-align: right;
+}
+
+.guide-pager span {
+  font-size: 12.5px;
+  font-weight: 400;
+  color: var(--faint);
+}
+
+.guide-doc .guide-edit {
+  margin: 22px 0 0;
+  font-size: 13.5px;
+}
+
+.guide-edit .link {
+  color: var(--faint);
+}
+
+.guide-edit .link:hover {
+  color: var(--fg);
+}
+
+/* This page's headings */
+
+.guide-headings {
+  padding-top: 52px;
+  font-size: 13.5px;
+  line-height: 1.4;
+}
+
+.guide-headings p {
+  margin: 0 0 8px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--faint);
+}
+
+.guide-headings a {
+  display: block;
+  padding: 5px 0;
+  color: var(--muted);
+  transition: color 0.15s;
+}
+
+.guide-headings a:hover {
+  color: var(--fg);
+}
+
+.guide .footer {
+  margin-top: clamp(72px, 12vh, 120px);
+}
+
+/* Without room for the headings, they go, and the page keeps its width. */
+@media (max-width: 1180px) {
+  .guide-page {
+    grid-template-columns: 236px minmax(0, 1fr);
+  }
+
+  .guide-headings {
+    display: none;
+  }
+}
+
+/* On a narrow screen, every page is behind one row above this page. */
+@media (max-width: 860px) {
+  .guide-page {
+    display: block;
+  }
+
+  .guide-side {
+    display: none;
+  }
+
+  .guide-menu {
+    display: block;
+    margin: 16px 0 0;
+    border: 1px solid var(--edge);
+    border-radius: 10px;
+    background: var(--sidebar);
+  }
+
+  .guide-menu summary {
+    padding: 11px 14px;
+    font-size: 14.5px;
+    font-weight: 500;
+    cursor: pointer;
+  }
+
+  .guide-menu .guide-nav {
+    padding: 0 8px 12px;
+    border-top: 1px solid var(--edge);
+  }
+
+  .guide-menu .guide-nav > ul:first-child {
+    margin-top: 8px;
+  }
+
+  .guide-doc {
+    padding-top: 28px;
+  }
+
+  .guide-pager {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .guide-pager a.after {
+    grid-column: 1;
+  }
+}

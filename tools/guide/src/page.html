@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title} · Roundhouse</title>
+    <meta name="description" content="{summary}" />
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="Roundhouse" />
+    <meta property="og:title" content="{title}" />
+    <meta property="og:description" content="{summary}" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#151312" />
+    <link rel="icon" href="{site}assets/favicon.png" type="image/png" />
+    <link rel="apple-touch-icon" href="{site}assets/apple-touch-icon.png" />
+    <link rel="stylesheet" href="{site}style.css" />
+    <link rel="stylesheet" href="{site}docs.css" />
+    <script src="{site}fan.js" defer></script>
+  </head>
+  <body class="guide">
+    <!-- The header and the footer are site/index.html's, written again here, since that page has no build step to
+         share them through. A change to either goes in both. This one's Download goes to that page's downloads, so
+         it needn't know the visitor's platform, and its header has the edge that page's gains once it scrolls. The
+         stylesheets, the script and the icons this page loads are that page's too, in site/, by their names there. -->
+    <header class="nav scrolled">
+      <div class="nav-inner">
+        <a class="brand" href="{site}" aria-label="Roundhouse">
+          <canvas class="fan brand-mark" data-work="copper" aria-hidden="true"></canvas>
+          <span>Roundhouse</span>
+        </a>
+        <nav class="nav-links">
+          <a class="here" href="{docs}">Docs</a>
+          <a class="on-github" href="https://github.com/getroundhouse/roundhouse">GitHub</a>
+          <a class="button outline small" href="{site}#download">Download</a>
+        </nav>
+      </div>
+    </header>
+
+    <div class="guide-page">
+      <details class="guide-menu">
+        <summary>All pages</summary>
+        {nav}
+      </details>
+      <div class="guide-side">
+        {nav}
+      </div>
+      <main class="guide-doc">
+        <article>
+{content}
+        </article>
+        {pager}
+        <p class="guide-edit"><a class="link" href="{edit}">Edit this page on GitHub</a></p>
+      </main>
+      {headings}
+    </div>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        <a class="brand quiet" href="{site}">
+          <canvas class="fan brand-mark" data-work="none" aria-hidden="true"></canvas>
+          Roundhouse
+        </a>
+        <span>For Mac. Built in Rust. Open source on <a class="link" href="https://github.com/getroundhouse/roundhouse">GitHub</a>.</span>
+      </div>
+    </footer>
+  </body>
+</html>
