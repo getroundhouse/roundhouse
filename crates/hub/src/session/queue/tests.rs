@@ -91,6 +91,21 @@ fn a_stop_holds_the_queue_until_the_person_sends_a_prompt() {
     assert!(ready(&watch));
 }
 
+/// The next prompt could fail as the turn did, as on a usage limit, so it's for the person to say whether to go on.
+#[test]
+fn a_turn_that_failed_holds_the_queue_until_the_person_sends_a_prompt() {
+    use SessionStatus::{Idle, Running};
+    let mut watch = QueueWatch::default();
+
+    record(&mut watch, &ended(TurnOutcome::Error), Running, Idle);
+
+    assert!(!ready(&watch));
+    record(&mut watch, &prompt(), Idle, Running);
+    record(&mut watch, &EventBody::PromptTaken { prompt: 3 }, Running, Running);
+    record(&mut watch, &ended(TurnOutcome::Success), Running, Idle);
+    assert!(ready(&watch));
+}
+
 #[test]
 fn an_agent_gone_mid_turn_holds_the_queue_and_once_let_go_its_sent_to_a_new_one() {
     use SessionStatus::{Interrupted, Running};

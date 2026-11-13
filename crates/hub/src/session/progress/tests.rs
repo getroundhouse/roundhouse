@@ -68,7 +68,10 @@ fn a_turn_starts_when_its_event_is_recorded_and_its_end_says_so_whatever_the_age
     assert_eq!(progress.turn_started_at_ms, Some(42));
     let Step { body, change, .. } = progress.step(current(1), ended(Some(7)), true);
     assert!(matches!(body, EventBody::TurnEnded { started_at_ms: Some(42), .. }), "{body:?}");
-    assert_eq!(change.status.map(|status| (status.status, status.turn)), Some((SessionStatus::Idle, TurnEdge::Ends)));
+    assert_eq!(
+        change.status.map(|status| (status.status, status.turn)),
+        Some((SessionStatus::Idle, TurnEdge::Ends(Some(TurnOutcome::Success))))
+    );
 }
 
 #[test]

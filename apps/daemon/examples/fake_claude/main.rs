@@ -22,6 +22,8 @@
 //!                   might. The worker reads for 5 s after an exit.
 //!   recall          Say every prompt this conversation has seen, to prove a resume worked.
 //!   crash:CODE      Exit immediately with CODE.
+//!   fail:ERROR      Fail the next request to the model, as the real CLI says when the model's API refuses it, with
+//!                   ERROR as its kind, such as `rate_limit`: a message of its own, then the turn ends for it.
 //!   env:NAME        Say the value of an environment variable.
 //!   effort          Say the effort it's using, as `get_settings` reports it.
 //!   keep-effort     From now on, answer a change of effort as if it took, and change nothing.
@@ -87,6 +89,7 @@ mod advisor;
 mod background;
 mod cache;
 mod compact;
+mod fail;
 mod mcp;
 mod prompt;
 mod read;

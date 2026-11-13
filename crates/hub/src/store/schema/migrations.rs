@@ -9,6 +9,7 @@ mod first;
 mod hub_settings;
 mod logins;
 mod providers;
+mod replies;
 mod subagents;
 mod tools;
 mod waiting;
@@ -391,4 +392,6 @@ pub(super) const MIGRATIONS: &[&str] = &[
     logins::HELD,
     // Each workspace's other worktrees, made for its work, in `workspaces`.
     workspaces::CHILD_WORKTREES,
+    // How each session's newest turn ended, which its record shows, in `replies`.
+    replies::REPLY_OUTCOME,
 ];

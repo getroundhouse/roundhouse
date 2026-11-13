@@ -31,7 +31,7 @@ fn a_turn_starts_when_the_event_that_starts_it_was_recorded() {
     let prompt = change(&store, Running, TurnEdge::Starts);
     change(&store, WaitingApproval, TurnEdge::Neither);
     change(&store, Running, TurnEdge::Neither);
-    change(&store, Idle, TurnEdge::Ends);
+    change(&store, Idle, TurnEdge::Ends(None));
 
     assert_eq!(session(&store).turn_started_at_ms, Some(prompt.ts_ms), "it stays the newest turn's once it's over");
 }
@@ -78,7 +78,7 @@ fn the_next_turn_moves_it_and_its_revision() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
     change(&store, Running, TurnEdge::Starts);
-    change(&store, Idle, TurnEdge::Ends);
+    change(&store, Idle, TurnEdge::Ends(None));
     // Earlier than any clock could say, so the next turn can't land on the same moment.
     lock(&store.writer).execute("UPDATE sessions SET turn_started_at_ms = 1", []).unwrap();
     let before = session(&store);
@@ -325,3 +325,5 @@ fn a_read_by_place_takes_one_agent_or_subagents_events_up_to_a_seq_and_says_how_
     assert_eq!(read(2, Some(4), 10), (vec![(3, 2)], 3), "nothing recorded after the seq it stops at");
     assert_eq!(read(4, None, 10), (vec![], 3));
 }
+
+mod replies;

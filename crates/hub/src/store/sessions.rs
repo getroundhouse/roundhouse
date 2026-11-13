@@ -14,7 +14,7 @@ use super::{Store, StoreError, StoredSession, current_rev, from_text, json_at, l
 /// What a session's row holds, as it's written.
 macro_rules! session_row_columns {
     () => {
-        "id, workspace_id, agent, model, permission_mode, status, last_seq, created_at_ms, updated_at_ms, agent_session_id, agent_opened, title, closed_at_ms, reply_seq, read_seq, background_tasks, title_source, queued, queue_held, turn_started_at_ms, effort, context, account_id, user_active_at_ms, prompt_cache, draft, answer_draft, untaken, open_approvals"
+        "id, workspace_id, agent, model, permission_mode, status, last_seq, created_at_ms, updated_at_ms, agent_session_id, agent_opened, title, closed_at_ms, reply_seq, read_seq, background_tasks, title_source, queued, queue_held, turn_started_at_ms, effort, context, account_id, user_active_at_ms, prompt_cache, draft, answer_draft, untaken, open_approvals, reply_outcome"
     };
 }
 
@@ -59,8 +59,8 @@ pub(super) fn session_from_row(row: &Row) -> rusqlite::Result<StoredSession> {
             title: row.get::<_, Option<String>>(11)?.as_deref().and_then(Title::tidied),
             closed_at_ms: row.get(12)?,
             reply_seq: row.get::<_, i64>(13)?.cast_unsigned(),
-            // Nothing, as a hub that doesn't keep how the newest turn ended says.
-            reply_outcome: None,
+            // An outcome this build doesn't know is `Unknown`, as any is.
+            reply_outcome: row.get::<_, Option<String>>(29)?.map(from_text).transpose()?,
             read_seq: row.get::<_, i64>(14)?.cast_unsigned(),
             // Written only by this hub, as JSON. Anything it can't read is nothing it knows to be running.
             background_tasks: json_at(row, 15)?.unwrap_or_default(),
@@ -85,8 +85,8 @@ pub(super) fn session_from_row(row: &Row) -> rusqlite::Result<StoredSession> {
             open_approvals: json_at(row, 28)?,
             agent_opened: Some(row.get(10)?),
             // Written by the query, from the waits table, so one it can't read is a query that doesn't match `Wait`.
-            wait: row.get::<_, Option<String>>(29)?.map(|json| wait_from(&json)).transpose()?,
-            rev: rev_of(row, 30)?,
+            wait: row.get::<_, Option<String>>(30)?.map(|json| wait_from(&json)).transpose()?,
+            rev: rev_of(row, 31)?,
         },
         agent_session_id: row.get::<_, String>(9)?.into(),
         agent_opened: row.get(10)?,
@@ -112,7 +112,7 @@ impl Store {
                 "INSERT INTO sessions (",
                 session_row_columns!(),
                 ", client_request_id)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
             ),
             params![
                 session.id.as_str(),
@@ -144,6 +144,7 @@ impl Store {
                 session.answer_draft.as_ref().map(serde_json::to_string).transpose()?,
                 serde_json::to_string(session.untaken.as_deref().unwrap_or_default())?,
                 serde_json::to_string(session.open_approvals.as_deref().unwrap_or_default())?,
+                session.reply_outcome.as_ref().map(text_of),
                 client_request_id.map(ClientRequestId::as_str),
             ],
         )?;
