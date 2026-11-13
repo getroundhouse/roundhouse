@@ -308,6 +308,8 @@ fn read_frames(inner: &Arc<Inner>, stream: Stream) {
             HubFrame::Notice { subscription_id, notice } => {
                 deliver(inner, subscription_id, SubscriptionItem::Notice(Box::new(notice)));
             }
+            // Nothing attaches to a terminal yet, so no subscription follows one.
+            HubFrame::Terminal { .. } => {}
         }
     }
     *inner.disconnected.lock() = true;

@@ -244,7 +244,7 @@ fn a_client_that_stalled_during_a_message_ends_with_nothing_left_in_its_tail() {
             }
             HubFrame::Delta { delta, .. } => tail.apply(&delta),
             HubFrame::Tail { tail: snapshot, .. } => tail = snapshot,
-            HubFrame::Reply { .. } | HubFrame::Notice { .. } => {}
+            HubFrame::Reply { .. } | HubFrame::Notice { .. } | HubFrame::Terminal { .. } => {}
         }
     }
     assert!(ended, "the client should have read through the agent's exit");

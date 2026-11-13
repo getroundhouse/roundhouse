@@ -22,6 +22,7 @@ mod record;
 mod session;
 mod settings;
 mod subagent;
+mod terminal;
 mod title;
 mod wait;
 mod worktrees;
@@ -50,6 +51,7 @@ pub use record::{Record, RecordKey, Records};
 pub use session::{AgentKind, OpenApproval, Session, SessionStatus};
 pub use settings::{SessionSettings, SessionSettingsChange};
 pub use subagent::{Call, CallResult, RecentCall, RecentWork, Said, Subagent, SubagentStatus};
+pub use terminal::Terminal;
 pub use title::{Title, TitleError, TitleSource};
 pub use wait::{Wait, WaitEnd, WaitEnded, WaitUntil};
 pub use worktrees::{CHILDREN, ChildStatus, ChildWorktree, MadeBy, WorkName, WorkNameError};
@@ -140,6 +142,8 @@ ids!(
     /// asked, so a hub that hears the ask again, as each new hub does what the last didn't answer, makes it once.
     /// Unique within the session that asked, as a tool use's ID is.
     AskKey,
+    /// Chosen by the client that opens the terminal, as a UUID, so opening it again can't open two.
+    TerminalId,
 );
 
 /// Position in a session's event log. The first event is 1, and there are no gaps.

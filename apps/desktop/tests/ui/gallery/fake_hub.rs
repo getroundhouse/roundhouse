@@ -271,6 +271,12 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         R::SessionAccount(_) | R::Unknown => {
             Err(ApiError::new(ErrorCode::Unsupported, "the gallery's hub doesn't know that request"))
         }
+        // No screen shows a terminal yet, so the gallery's hub runs none, as a hub from before terminals.
+        R::TerminalOpen(_)
+        | R::TerminalAttach(_)
+        | R::TerminalInput(_)
+        | R::TerminalResize(_)
+        | R::TerminalClose(_) => Err(ApiError::new(ErrorCode::Unsupported, "the gallery's hub doesn't run terminals")),
     }
 }
 
@@ -351,6 +357,7 @@ fn status(world: &World) -> HubStatus {
         keeping_awake: false,
         keeps_workers: false,
         oldest_protocol_version: None,
+        open_terminals: 0,
     }
 }
 

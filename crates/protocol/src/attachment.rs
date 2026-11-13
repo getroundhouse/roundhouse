@@ -11,9 +11,7 @@
 //! same way as a prompt's, and the log stays as light. So is an image in the worktree that the agent's text points to,
 //! which the worker reads as the text comes, and the text's block names by the address the text gives it.
 
-use base64::Engine as _;
-use base64::engine::general_purpose::STANDARD;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Serialize};
 
 use crate::model::AttachmentId;
 
@@ -169,73 +167,20 @@ pub struct Attachment {
     pub size_bytes: u64,
 }
 
-/// An attachment's bytes, which travel as base64 text, since a frame is JSON.
-#[derive(Clone, PartialEq, Eq)]
-pub struct AttachmentBytes(Vec<u8>);
+crate::base64_bytes::base64_bytes!(
+    /// An attachment's bytes.
+    AttachmentBytes
+);
 
 impl AttachmentBytes {
-    pub fn new(bytes: Vec<u8>) -> Self {
-        Self(bytes)
-    }
-
-    pub fn as_slice(&self) -> &[u8] {
-        &self.0
-    }
-
-    pub fn into_vec(self) -> Vec<u8> {
-        self.0
-    }
-
-    pub fn len(&self) -> usize {
-        self.0.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
-    }
-
     /// The base64 an agent's API takes an image as.
     pub fn to_base64(&self) -> String {
-        STANDARD.encode(&self.0)
+        crate::base64_bytes::encode(self.as_slice())
     }
 
     /// Bytes an agent sent as base64, such as an image a tool returned. `None` if it isn't base64.
     pub fn from_base64(text: &str) -> Option<Self> {
-        STANDARD.decode(text).ok().map(Self)
-    }
-}
-
-/// Only its length, since a frame's debug output would otherwise be megabytes of numbers.
-impl std::fmt::Debug for AttachmentBytes {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "AttachmentBytes({} bytes)", self.0.len())
-    }
-}
-
-impl Serialize for AttachmentBytes {
-    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_str(&self.to_base64())
-    }
-}
-
-impl<'de> Deserialize<'de> for AttachmentBytes {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        deserializer.deserialize_str(Base64Visitor)
-    }
-}
-
-/// Decodes the text where it lies, rather than copying megabytes into a `String` first.
-struct Base64Visitor;
-
-impl serde::de::Visitor<'_> for Base64Visitor {
-    type Value = AttachmentBytes;
-
-    fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("base64 text")
-    }
-
-    fn visit_str<E: serde::de::Error>(self, text: &str) -> Result<AttachmentBytes, E> {
-        STANDARD.decode(text).map(AttachmentBytes).map_err(E::custom)
+        crate::base64_bytes::decode(text).ok().map(Self::new)
     }
 }
 

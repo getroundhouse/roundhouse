@@ -3,7 +3,8 @@
 use serde::{Deserialize, Serialize};
 
 use crate::model::{
-    Account, DiffComment, HubSettings, NewWorkspaceDraft, Record, RecordKey, Repo, Rev, Session, Subagent, Workspace,
+    Account, DiffComment, HubSettings, NewWorkspaceDraft, Record, RecordKey, Repo, Rev, Session, Subagent, Terminal,
+    Workspace,
 };
 
 /// A record changed. Carries the whole record and its revision, so a client only ever replaces its
@@ -21,6 +22,9 @@ pub enum HubNotice {
     /// A subagent's record changed. A client keeps those of the sessions it's showing, which it lists with
     /// `SessionSubagents`.
     Subagent(Subagent),
+    /// A terminal was opened, and a hub that kept its workers learned of it again as it started. One that ended or
+    /// was closed is `Removed`.
+    Terminal(Terminal),
     /// The record is gone, as of `rev`.
     Removed {
         record: RecordKey,
@@ -78,6 +82,7 @@ impl TryFrom<HubNotice> for RecordNotice {
             HubNotice::Account(account) => Record::Account(account),
             HubNotice::NewWorkspaceDraft(draft) => Record::NewWorkspaceDraft(draft),
             HubNotice::Subagent(subagent) => Record::Subagent(subagent),
+            HubNotice::Terminal(terminal) => Record::Terminal(terminal),
             HubNotice::Removed { record, rev } => return Ok(RecordNotice::Removed { record, rev }),
             HubNotice::Resync | HubNotice::Unknown => return Err(notice),
         };
@@ -96,6 +101,7 @@ impl From<Record> for HubNotice {
             Record::Account(account) => HubNotice::Account(account),
             Record::NewWorkspaceDraft(draft) => HubNotice::NewWorkspaceDraft(draft),
             Record::Subagent(subagent) => HubNotice::Subagent(subagent),
+            Record::Terminal(terminal) => HubNotice::Terminal(terminal),
         }
     }
 }
