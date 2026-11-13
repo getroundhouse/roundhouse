@@ -21,6 +21,7 @@ gpui_kit::assets::icon_assets!(
         FilePlus,
         FoldVertical,
         House,
+        KeyRound,
         Lightbulb,
         ListTree,
         Mail,

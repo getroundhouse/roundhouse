@@ -23,14 +23,6 @@ fn archived(ui: &Ui, id: &WorkspaceId) -> bool {
     listed && ui.view().busy == Busy::Free
 }
 
-/// Waits until no call the app started is under way, then for the app to take their replies, so whatever a call
-/// pressed by mistake would have done has been done.
-fn wait_for_every_call(ui: &mut Ui) {
-    let finished = ui.view().client().unwrap().commands().finished();
-    ui.wait("every call to end", |_| finished.try_recv().is_ok());
-    ui.frame();
-}
-
 #[gpui_kit::test]
 fn a_long_list_draws_only_the_workspaces_on_screen_and_scrolls_to_the_rest(cx: &mut TestAppContext) {
     let stack = Stack::new();
@@ -306,7 +298,7 @@ fn nothing_else_is_archived_or_restored_while_a_workspace_is_being_archived(cx: 
     ui.click(home_row(&earlier));
     held.release();
 
-    wait_for_every_call(&mut ui);
+    ui.wait_for_every_call();
     assert_eq!(held.runs(), 1, "the second press didn't archive it again");
     assert_eq!(ui.view().error, None);
     assert!(archived(&ui, &id));

@@ -23,9 +23,26 @@ impl Agents {
         }
     }
 
+    /// `described`, as a hub would say them, for a test of what shows them.
+    #[cfg(feature = "testing")]
+    pub fn new(described: Vec<AgentDescription>) -> Agents {
+        Agents { described }
+    }
+
     /// Every kind's description, in the order the hub gave them.
     pub fn described(&self) -> &[AgentDescription] {
         &self.described
+    }
+
+    /// The description of each kind this build can name, in the order the hub gave them.
+    pub fn named(&self) -> impl Iterator<Item = &AgentDescription> {
+        self.described.iter().filter(|agent| agent.kind != AgentKind::Unknown)
+    }
+
+    /// The description of each kind this build can name whose login the hub can be given, as it says what makes one,
+    /// in the order the hub gave them. None from a hub from before hubs kept logins, which says that of no kind.
+    pub fn with_logins(&self) -> impl Iterator<Item = &AgentDescription> {
+        self.named().filter(|agent| agent.login.is_some())
     }
 
     /// `kind`'s description. `None` for a kind the hub doesn't describe, one this build can't name, and before the hub
@@ -43,7 +60,7 @@ impl Agents {
 
     /// The description of what a new chat runs, as [`Agents::for_new_chat`] says. `None` from a hub too old to say.
     pub fn new_chat(&self) -> Option<&AgentDescription> {
-        self.described.iter().find(|agent| agent.kind != AgentKind::Unknown)
+        self.named().next()
     }
 }
 

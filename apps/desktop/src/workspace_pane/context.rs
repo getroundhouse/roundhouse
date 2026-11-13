@@ -27,20 +27,12 @@ const LINE: f32 = 2.;
 const LIMIT: Pixels = px(4.);
 
 /// The account the chat showing runs under, as its record says, with each of its limits there's something true to
-/// say of, and what it's called, shortest window first as the hub gives them. Worked out once each time the pane is
-/// drawn, so the bars, their card and the ring's card agree on whether there are any.
+/// say of, and what it's called, as [`crate::limits::shown`] says. Worked out once each time the pane is drawn, so the
+/// bars, their card and the ring's card agree on whether there are any.
 #[derive(Clone)]
 pub(super) struct Usage {
     account: Account,
     limits: Vec<(SharedString, UsageLimit)>,
-}
-
-/// Of `limits`, those there's something true to say of at `now_ms`, each with what it's called. One whose window has
-/// ended since it was heard has started again, so how much of it was used is no longer so, and one over a window this
-/// build has no name for, or a model's week that doesn't say whose, couldn't be told from another.
-fn shown(limits: &[UsageLimit], now_ms: i64) -> Vec<(SharedString, UsageLimit)> {
-    let current = limits.iter().filter(|limit| limit.resets_at_ms.is_none_or(|at_ms| at_ms > now_ms));
-    current.filter_map(|limit| Some((words::limit_name(limit)?.into(), limit.clone()))).collect()
 }
 
 impl WorkspacePane {
@@ -48,7 +40,7 @@ impl WorkspacePane {
     /// agent has launched, when the hub couldn't tell whose account it is, and from a hub that doesn't keep accounts.
     pub(super) fn usage(&self, cx: &App) -> Option<Usage> {
         let account = self.shown.all().account(self.session()?.account.as_ref()?)?.clone();
-        let limits = shown(&account.limits, look::now_ms(cx));
+        let limits = crate::limits::shown(&account.limits, look::now_ms(cx));
         Some(Usage { account, limits })
     }
 
@@ -168,42 +160,7 @@ fn between_limits(bars: usize) -> Pixels {
 
 #[cfg(test)]
 mod tests {
-    use protocol::model::{LimitWindow, ModelLabel};
-
     use super::*;
-
-    #[test]
-    fn a_limit_that_has_started_again_since_it_was_heard_or_has_no_name_here_isnt_shown() {
-        let limit = |window, resets_at_ms| UsageLimit {
-            window,
-            model: None,
-            used_percent: 40,
-            resets_at_ms,
-            heard_at_ms: None,
-        };
-        let (ended, going, open_ended, unnamed) = (
-            limit(LimitWindow::FiveHours, Some(999)),
-            limit(LimitWindow::SevenDays, Some(1_001)),
-            limit(LimitWindow::SevenDays, None),
-            limit(LimitWindow::Unknown, None),
-        );
-
-        let whose = UsageLimit { model: None, ..limit(LimitWindow::ModelSevenDays, None) };
-        let fables = UsageLimit { model: Some(ModelLabel::new("Fable")), ..whose.clone() };
-        let all = [ended, going.clone(), open_ended.clone(), unnamed, whose, fables.clone()];
-        let names = |shown: Vec<(SharedString, UsageLimit)>| {
-            shown.into_iter().map(|(name, limit)| (name.to_string(), limit)).collect::<Vec<_>>()
-        };
-        assert_eq!(
-            names(shown(&all, 1_000)),
-            [
-                ("7d limit".to_string(), going.clone()),
-                ("7d limit".to_string(), open_ended),
-                ("7d Fable limit".to_string(), fables)
-            ]
-        );
-        assert_eq!(shown(&[going], 1_001), [], "it starts again the moment its window ends");
-    }
 
     #[test]
     fn however_many_limits_there_are_the_bars_fit_in_the_slot_on_whole_pixels_and_show_those_with_least_left() {

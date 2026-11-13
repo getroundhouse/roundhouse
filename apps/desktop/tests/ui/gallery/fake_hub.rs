@@ -19,8 +19,8 @@ use protocol::find::{Found, Needle};
 use protocol::frame;
 use protocol::model::{
     AgentDescription, AgentFeature, AgentKind, CompactionLine, Effort, FileContents, FileOpened, FilePage, FilePages,
-    GitDiff, GitStatus, ModelChoice, ModelName, OpenedText, PageLine, PermissionMode, Place, PromptLine, Rev, Seq,
-    SessionId, SessionSettings, SessionStatus, ToolUseId, WorkspaceStatus,
+    GitDiff, GitStatus, LoginDescription, ModelChoice, ModelName, OpenedText, PageLine, PermissionMode, Place,
+    PromptLine, Rev, Seq, SessionId, SessionSettings, SessionStatus, ToolUseId, WorkspaceStatus,
 };
 
 use super::world::World;
@@ -87,8 +87,9 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         R::HubStatus => reply(C::HubStatus(status(world))),
         R::RepoList => reply(C::Repos(records::Repos { repos: world.repos.clone() })),
         R::RecordsList => reply(C::Records(world.records())),
-        // Even as an older hub, so a screen of one draws the agent as the app's own hub would describe it.
-        R::AgentList => reply(C::Agents(admin::Agents { agents: vec![claude()] })),
+        // As the app's own hub describes its agent, even as an older hub, so a screen of one draws the agent as it
+        // would, but for what makes a login, which a hub from before hubs kept them doesn't say.
+        R::AgentList => reply(C::Agents(admin::Agents { agents: vec![claude(world)] })),
         R::WorkspaceList(workspaces::WorkspaceList { include_archived }) => {
             reply(C::Workspaces(workspaces::Workspaces {
                 workspaces: world
@@ -121,6 +122,11 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         | R::SessionDraft(drafts::SessionDraft { id, .. })
         | R::SessionAnswerDraft(drafts::SessionAnswerDraft { id, .. }) => {
             reply(C::Session(world.session(&id)?.clone()))
+        }
+        // As an older hub refuses it. Accounts asks none, since such a hub says nothing of what makes a login, so the
+        // refusal itself is tested against a stand-in, with `Kept`.
+        R::AccountConnect(_) if world.keeps_no_logins => {
+            Err(ApiError::new(ErrorCode::Unsupported, "an older hub doesn't keep logins"))
         }
         // As a hub too old to keep it, so a comment being written is what restarting would lose.
         R::WorkspaceCommentDraft(_) => {
@@ -298,8 +304,9 @@ fn subscribe_places(
     Ok(Outcome::Reply(ClientResponse::Ok, events.chain(std::iter::once(tail)).collect()))
 }
 
-/// Claude as the app's own hub describes it, so the picker, the context's cards and a turn's card say what they would.
-fn claude() -> AgentDescription {
+/// Claude as the app's own hub describes it, so the picker, the context's cards, a turn's card and Accounts say what
+/// they would, or as a hub from before hubs kept logins does, which says nothing of what makes one.
+fn claude(world: &World) -> AgentDescription {
     let offered =
         |model: &'static str, label: &str| ModelChoice { model: ModelName::named(model), label: label.into() };
     AgentDescription {
@@ -320,7 +327,10 @@ fn claude() -> AgentDescription {
             effort: Effort::Xhigh,
         },
         features: vec![AgentFeature::Compacts],
-        login: None,
+        login: (!world.keeps_no_logins).then(|| LoginDescription {
+            made_with: "claude setup-token".into(),
+            lasts_ms: Some(365 * 24 * 60 * 60 * 1000),
+        }),
     }
 }
 

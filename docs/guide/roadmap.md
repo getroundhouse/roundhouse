@@ -32,6 +32,7 @@ These are part of the design, and the app is built to take them. None is built.
 - **Updates on Windows that don't wait for agents.**
 - **Alt opening the menus on Windows and Linux,** as `F10` does.
 - **Selecting all of what an opened call shows,** such as a file's lines, a diff, and output over 16 KB.
+- **Choosing which login agents run under,** so a machine with a login of its own can use one you've added in [Settings](reference/settings.md#accounts).
 
 ## Say what's missing
 

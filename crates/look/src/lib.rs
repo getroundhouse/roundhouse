@@ -37,7 +37,9 @@ pub use baseline::{LineText, Placed};
 pub use cache::{CacheMark, cache_mark, expires_in, minutes_left, next_minute_in_ms};
 #[cfg(feature = "testing")]
 pub use clock::hold_still;
-pub use clock::{date, date_and_time, day_and_time, local_time, now_ms, time_of_day};
+pub use clock::{
+    date, date_and_time, day_and_time, days_apart, local_time, months_apart, next_day_at_ms, now_ms, time_of_day,
+};
 #[cfg(feature = "testing")]
 pub use colors::NamedColor;
 pub use colors::{Colors, colors};

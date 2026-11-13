@@ -37,7 +37,7 @@ It's refused while the agent is on a turn, and before it has had one, when there
 
 A bar for each of your account's limits sits left of the ring, shortest window first. Each empties as the limit is used. With more than five limits, the bars show the five with the least left, and the card lists them all.
 
-Their card says how much of each is left, such as `96% left` of the `7d limit`, when it starts again, and your plan. Under the limits, it says whose account it is: the email, how it's logged in, and the model provider.
+Their card says how much of each is left, such as `96% left` of the `7d limit`, when it starts again, and your plan. Under the limits, it says whose account it is: the email, how it's logged in, and the model provider, or for a login you've added in [Settings](../settings.md#accounts), the name you gave it.
 
 ![The limits' card, open above their bars](../../../spec/screens/usage.png)
 

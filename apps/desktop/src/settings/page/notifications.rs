@@ -6,7 +6,7 @@ use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::menu::{PopupMenu, PopupMenuItem};
 use gpui_kit::{Context, Window};
 
-use super::{Control, Page, PageId, Setting};
+use super::{Body, Control, Page, PageId, Setting};
 use crate::settings::{change, get};
 use crate::sounds;
 
@@ -40,7 +40,7 @@ pub(super) fn page() -> Page {
         id: PageId::Notifications,
         name: "Notifications",
         icon: Lucide::Bell,
-        settings: vec![notify, play_sound, sound],
+        body: Body::Settings(vec![notify, play_sound, sound]),
     }
 }
 

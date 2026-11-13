@@ -15,7 +15,7 @@ mod page;
 #[cfg(test)]
 mod tests;
 
-pub(crate) use page::{FIND_KEY, KEY_CONTEXT, OfHub, page};
+pub(crate) use page::{Asking, FIND_KEY, KEY_CONTEXT, OfHub, page};
 
 use crate::saving::{Failure, Saver, write_json};
 use crate::sounds::Sound;

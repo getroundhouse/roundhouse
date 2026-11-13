@@ -7,6 +7,7 @@ use gpui_kit::{AppContext as _, ElementId, TestAppContext};
 use crate::menus::{SETTINGS, choose};
 use crate::support::{self, Stack, Ui, labelled};
 
+mod accounts;
 mod search;
 
 /// Whether Settings is showing, by its way back.

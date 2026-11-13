@@ -25,7 +25,7 @@ The hub starts by itself when the app, or the command line, needs it. It runs on
 
 ## Workers
 
-Each workspace has a worker, a process of its own that does the work there: git, the worktree, setup scripts and diffs. The worker runs the agent, which is the Claude CLI you already have, with your login.
+Each workspace has a worker, a process of its own that does the work there: git, the worktree, setup scripts and diffs. The worker runs the agent, which is the Claude CLI you already have, with its machine's own login, or with one you've added in [Settings](../reference/settings.md#accounts) where the machine has none.
 
 ## Where it runs
 
