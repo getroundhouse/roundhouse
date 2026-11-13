@@ -21,7 +21,6 @@ pub(super) fn card(name: impl IntoElement + 'static, workspace: &Workspace, hub_
     let said = Said::of(workspace, hub_version);
     // It holds the button that copies the path, so it waits a moment for the pointer to cross from the name to it.
     look::hover_card_with_a_button("workspace-card-hover")
-        .appearance(false)
         .anchor(Anchor::TopLeft)
         // So the name can still give way to the button beside it, and end in an ellipsis.
         .trigger_style(StyleRefinement::default().min_w_0().overflow_hidden())

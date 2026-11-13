@@ -48,7 +48,7 @@ pub use hover::{hover_card, hover_card_with_a_button};
 pub use icon::{IconSize, IconStyle, icon};
 pub use mark::{Signal, Size, brand, chat_mark, mark};
 pub use plan::{plan_colors, plan_texture};
-pub use raised::raised;
+pub use raised::{RAISED_EDGE, raised};
 pub use region::{InRegion, Region};
 pub use robot::{LINE_ICON, robot_at_work};
 pub use task_ring::{TaskRing, task_ring};

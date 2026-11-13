@@ -88,7 +88,6 @@ fn finished(
     let said = h_flex().id(ItemKey::Event(ended.seq, 0).element("turn-end")).gap_1().child(said).children(mark);
     let said = said.test_support();
     let said = look::hover_card(ItemKey::Event(ended.seq, 0).element("turn-card"))
-        .appearance(false)
         .anchor(Anchor::BottomCenter)
         .trigger(said)
         .content(move |_, _, cx| card.card(cx));

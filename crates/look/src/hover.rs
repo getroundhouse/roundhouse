@@ -2,8 +2,8 @@
 
 use std::time::Duration;
 
-use gpui_kit::ElementId;
 use gpui_kit::component::hover_card::HoverCard;
+use gpui_kit::{ElementId, Overflow, Styled as _};
 
 /// How long the pointer rests before a card shows: as long as GPUI waits before any other tooltip in the app shows,
 /// so a card doesn't feel slower than one.
@@ -15,9 +15,15 @@ const CLOSES_AFTER: Duration = Duration::ZERO;
 const CROSSING: Duration = Duration::from_millis(300);
 
 /// A hover card with `id`, which shows once the pointer has rested on what it's for as long as before a tooltip, and
-/// goes as soon as the pointer does. How it looks and where it opens are the caller's.
+/// goes as soon as the pointer does. The kit's look is off, so what it shows draws its own card, such as
+/// `look::raised`, or nothing, as the update's details do, which show elsewhere. Where it opens is the caller's.
 pub fn hover_card(id: impl Into<ElementId>) -> HoverCard {
-    HoverCard::new(id).open_delay(OPENS_AFTER).close_delay(CLOSES_AFTER)
+    let mut card = HoverCard::new(id).open_delay(OPENS_AFTER).close_delay(CLOSES_AFTER).appearance(false);
+    // The kit holds what a card shows inside a box of its own, which would cut off the shadow under the card drawn in
+    // it. With the kit's look off, that box is only as big as what's in it, so the shadow is all that reaches past.
+    card.style().overflow.x = Some(Overflow::Visible);
+    card.style().overflow.y = Some(Overflow::Visible);
+    card
 }
 
 /// A [`hover_card`] with a button in it, which waits a moment after the pointer leaves what it's for, long enough for

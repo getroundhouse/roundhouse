@@ -79,12 +79,14 @@ colors! {
         /// Something raised, pressed, and a row of the sidebar that's selected.
         raised_pressed = 0x322d_2aff,
     }
-    "Edges" {
+    "Edges and the shadow" {
         /// The one thin edge that separates, around a card, along a header or between rows.
         edge = 0x2a26_24ff,
         /// The edge of something to use: the composer, a chip, a key, a field such as Settings' search, a button that
         /// opens something, and the button back down to a chat's end.
         control_edge = 0x3531_30ff,
+        /// Under what opens over the rest, faint, at the strengths `look::raised` gives it.
+        shadow = 0x0000_00ff,
     }
     "Text" {
         /// What to read.

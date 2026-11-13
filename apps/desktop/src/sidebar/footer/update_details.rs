@@ -51,7 +51,7 @@ impl Details {
         let shown = shown.clone();
         // Only for when to show them, so it draws nothing, not even its own box. The kit keeps what a hover card shows
         // clear of the window's edge by more than the card is, so it couldn't line them up with the card.
-        let hover = look::hover_card("details").appearance(false).trigger(icon).on_open_change(move |open, _, cx| {
+        let hover = look::hover_card("details").trigger(icon).on_open_change(move |open, _, cx| {
             shown.update(cx, |shown, cx| {
                 shown.open = *open;
                 cx.notify();
