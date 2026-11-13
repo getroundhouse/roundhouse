@@ -5,10 +5,8 @@
 //! holds the whole file, so that's what can still make a record large.
 
 use protocol::event::ContentBlock;
-use protocol::model::{CallResult, RecentCall, RecentWork, Said};
+use protocol::model::{Call, CallResult, RecentCall, RecentWork, Said};
 use protocol::short_text::start_of;
-
-use super::call_in;
 
 /// How many of its newest calls are kept, which is as many as its call shows.
 const CALLS_KEPT: usize = 3;
@@ -41,7 +39,7 @@ pub(super) fn add(work: &mut RecentWork, blocks: &[ContentBlock], wrote: bool) -
                 changed = true;
             }
             ContentBlock::ToolUse { .. } => {
-                let Some(call) = call_in(block) else { continue };
+                let Some(call) = Call::of(block) else { continue };
                 work.calls.push(RecentCall { before: work.since.take(), call, result: None });
                 if work.calls.len() > CALLS_KEPT {
                     work.calls.remove(0);

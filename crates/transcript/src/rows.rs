@@ -4,6 +4,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use client_core::OpenSession;
+use client_core::calls::Recorded;
 use client_core::session_log::{By, Row};
 use gpui_kit::component::{ActiveTheme as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
@@ -17,7 +18,6 @@ use protocol::model::Seq;
 use protocol::tail::Tail;
 
 use crate::attachments;
-use crate::calls;
 use crate::find::{self, FindLook, Marks, Part};
 use crate::item_key::ItemKey;
 use crate::linked_images::LinkedImages;
@@ -355,11 +355,10 @@ fn render_block(
         ContentBlock::Text { text, images } => written(&toggle, Part::Text, text, None, Some(images)),
         ContentBlock::Thinking { text } if text.is_empty() => return None,
         ContentBlock::Thinking { text } => thinking::draw(text, &toggle, cx),
-        // These are drawn from their approvals, which have everything that was asked.
-        ContentBlock::ToolUse { name, call, .. } if calls::drawn_from_its_approval(call.as_ref(), name) => return None,
-        ContentBlock::ToolUse { name, input, call, .. } => {
-            let made = tools::Made { said: call.as_ref(), name, input };
-            tools::call(&toggle, made, &drawing.reply, drawing.subagent.as_ref(), cx)
+        ContentBlock::ToolUse { .. } => {
+            // One that asks the person something is drawn from its approval, which has everything that was asked.
+            let recorded = Recorded::of(block).filter(|call| !call.asks_the_person())?;
+            tools::call(&toggle, recorded, &drawing.reply, drawing.subagent.as_ref(), cx)
         }
         ContentBlock::ToolResult { .. } if drawing.with_call => return None,
         ContentBlock::ToolResult { .. } => tools::result(&toggle, drawing.reply.result()?, cx),

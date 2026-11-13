@@ -6,12 +6,12 @@
 
 use std::borrow::Cow;
 
-use protocol::event::CallKind;
+use protocol::event::{Asking, CallKind, ContentBlock, EventBody};
 use serde_json::Value;
 
 pub mod agent;
 mod command;
-pub mod failure;
+mod failure;
 pub mod files;
 mod older;
 mod other;
@@ -20,7 +20,7 @@ pub mod web;
 
 pub use agent::Agent;
 pub use command::Command;
-pub use failure::{Failed, Failure};
+pub use failure::{Failure, ResultForm};
 pub use files::{EditFile, ReadFile, WriteFile};
 pub use other::Other;
 pub use search::{FileLines, Found, Looks, Search};
@@ -42,28 +42,65 @@ pub enum ToolCall<'a> {
     Other(Other),
 }
 
-/// What kind of call one to the tool `name` is: `said`, which is what its adapter said it is, or for one recorded
-/// before adapters said, what Claude's tool of that name was.
-pub fn kind<'a>(said: Option<&'a CallKind>, name: &str) -> Cow<'a, CallKind> {
-    said.map_or_else(|| Cow::Owned(older::kind_of(name)), Cow::Borrowed)
+/// A call as it's recorded: what its adapter said it is, if it said, the agent's own name for the tool, and what the
+/// agent gave it. It's made only from the block that makes the call, or the request to make it, so the kind an adapter
+/// said is never left behind, and a call is read from its tool's name only when it was recorded before adapters said.
+#[derive(Clone, Copy, Debug)]
+pub struct Recorded<'a> {
+    kind: Option<&'a CallKind>,
+    /// The agent's own name for the tool.
+    pub name: &'a str,
+    pub input: &'a Value,
 }
 
-/// Whether the call hands work to a subagent.
-pub fn hands_off(said: Option<&CallKind>, name: &str) -> bool {
-    *kind(said, name) == CallKind::Subagent
+impl<'a> Recorded<'a> {
+    /// The call `block` makes, or `None` for any other block.
+    pub fn of(block: &'a ContentBlock) -> Option<Self> {
+        let ContentBlock::ToolUse { name, input, call, .. } = block else { return None };
+        Some(Self { kind: call.as_ref(), name, input })
+    }
+
+    /// The call the request for approval `body` asks to make, or `None` for any other event. A request that asks
+    /// something else is one too, to the tool that asks it, and what it asks says its kind. Only one that says no
+    /// kind, which is one recorded before adapters said, leaves the kind to its tool's name.
+    pub fn asked(body: &'a EventBody) -> Option<Self> {
+        let EventBody::ApprovalRequested { tool_name, input, asking, .. } = body else { return None };
+        Some(Self { kind: asking.as_deref().and_then(Asking::call), name: tool_name, input })
+    }
+
+    /// What kind of call it is: what its adapter said, or for one recorded before adapters said, what Claude's tool of
+    /// that name was.
+    fn kind(&self) -> Cow<'a, CallKind> {
+        self.kind.map_or_else(|| Cow::Owned(older::kind_of(self.name)), Cow::Borrowed)
+    }
+
+    /// Whether it hands work to a subagent.
+    pub fn hands_off(&self) -> bool {
+        *self.kind() == CallKind::Subagent
+    }
+
+    /// Whether it asks the person something, questions or to approve a plan, which its request for approval carries
+    /// in full, so a client draws that rather than the call.
+    pub fn asks_the_person(&self) -> bool {
+        matches!(*self.kind(), CallKind::Questions | CallKind::Plan)
+    }
+
+    /// One line saying what it's about, as [`ToolCall::summary`] says.
+    pub fn summary(&self) -> Option<String> {
+        ToolCall::read(*self).summary()
+    }
 }
 
-/// Whether the call asks the person something, questions or to approve a plan, which its request for approval carries
-/// in full.
-pub fn asks_the_person(said: Option<&CallKind>, name: &str) -> bool {
-    matches!(*kind(said, name), CallKind::Questions | CallKind::Plan)
+/// What a request to use a tool is about, on one line: what the agent said it's for, or what its call says, the same
+/// in every client. `None` for any other event, and for a call with nothing to say.
+pub fn asked_about(body: &EventBody) -> Option<String> {
+    let EventBody::ApprovalRequested { description, .. } = body else { return None };
+    description.clone().or_else(|| Recorded::asked(body)?.summary())
 }
 
 impl<'a> ToolCall<'a> {
-    /// The call as it's recorded: what its adapter `said` it is, if it said, the agent's own `name` for the tool, and
-    /// what it gave it.
-    pub fn read(said: Option<&CallKind>, name: &'a str, input: &'a Value) -> Self {
-        let kind = kind(said, name);
+    pub fn read(call: Recorded<'a>) -> Self {
+        let (kind, input) = (call.kind(), call.input);
         let known = match &*kind {
             CallKind::Command => Command::read(input).map(ToolCall::Command),
             CallKind::Read => ReadFile::read(input).map(ToolCall::Read),
@@ -81,7 +118,7 @@ impl<'a> ToolCall<'a> {
             CallKind::Questions | CallKind::Plan | CallKind::Other { .. } | CallKind::Unknown => None,
         };
         // A known kind whose input isn't what it should be is still drawn, as any tool would be.
-        known.unwrap_or_else(|| ToolCall::Other(Other::read(&kind, name, input)))
+        known.unwrap_or_else(|| ToolCall::Other(Other::read(&kind, call.name, input)))
     }
 
     /// One line saying what the call is about, the same wherever it's shown, such as on a card asking to run it or in

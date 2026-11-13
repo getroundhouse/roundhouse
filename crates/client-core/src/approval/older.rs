@@ -9,9 +9,9 @@ use protocol::event::{Asking, Question, QuestionAnswer, QuestionOption};
 use serde_json::Value;
 
 /// The tool that asked the person questions.
-const QUESTIONS: &str = "AskUserQuestion";
+pub(crate) const QUESTIONS: &str = "AskUserQuestion";
 /// The tool that asked to leave plan mode, with the plan.
-const PLAN: &str = "ExitPlanMode";
+pub(crate) const PLAN: &str = "ExitPlanMode";
 
 /// Told to the agent when the person wouldn't let it use a tool.
 const DENIED: &str = "The user denied this.";

@@ -8,6 +8,7 @@
 //! the chat, with the text still streaming in and the prompts the agent hasn't read yet, aren't found. A test in the
 //! desktop app's gallery draws every kind of call and checks that what each draws is what's counted here.
 
+use client_core::calls::Recorded;
 use client_core::session_log::{Row, SessionLog};
 use protocol::event::{ContentBlock, EventBody, SessionEvent, TurnOutcome};
 use protocol::find::Needle;
@@ -17,7 +18,6 @@ use super::around::{
     Around, BlockAround, Opening, blocks_of, drawn_in_its_call, drawn_in_row, drawn_with_its_call, its_call,
 };
 use super::{InRow, tools};
-use crate::calls;
 use crate::find::{self, Part, TextId};
 use crate::folds::Fold;
 use crate::images_apart::images_apart;
@@ -218,10 +218,11 @@ pub(in crate::rows) fn of_block(block: &ContentBlock, drawing: &BlockAround, in_
         ContentBlock::Thinking { text } => gather.inside(key, Fold::Thinking, |gather| {
             gather.written(key, Part::Thinking, text);
         }),
-        ContentBlock::ToolUse { name, call, .. } if calls::drawn_from_its_approval(call.as_ref(), name) => {}
-        ContentBlock::ToolUse { name, input, call, .. } => {
-            let made = tools::Made { said: call.as_ref(), name, input };
-            tools::shown(key, made, &drawing.reply, drawing.subagent.as_ref(), gather);
+        ContentBlock::ToolUse { .. } => {
+            // One that asks the person something is drawn from its approval, which has everything that was asked.
+            if let Some(recorded) = Recorded::of(block).filter(|call| !call.asks_the_person()) {
+                tools::shown(key, recorded, &drawing.reply, drawing.subagent.as_ref(), gather);
+            }
         }
         ContentBlock::ToolResult { .. } if drawing.with_call => {}
         ContentBlock::ToolResult { .. } => {

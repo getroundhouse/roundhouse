@@ -26,27 +26,12 @@ fn agent_says(text: &str) -> EventBody {
 }
 
 fn runs(id: &str, command: &str) -> EventBody {
-    let blocks = vec![ContentBlock::ToolUse {
-        id: id.into(),
-        name: "Bash".into(),
-        input: json!({ "command": command }),
-        call: None,
-    }];
+    let blocks = vec![protocol::fixtures::tool_use(id, "Bash", json!({ "command": command }))];
     EventBody::Assistant { message_id: None, parent_tool_use_id: None, model: None, blocks, first_index: None }
 }
 
 fn printed(id: &str, text: &str) -> EventBody {
-    let block = ContentBlock::ToolResult {
-        tool_use_id: id.into(),
-        is_error: false,
-        text: text.into(),
-        images: Vec::new(),
-        change: None,
-        encrypted: false,
-        call: None,
-        exit_code: None,
-    };
-    EventBody::AgentUser { parent_tool_use_id: None, blocks: vec![block] }
+    EventBody::AgentUser { parent_tool_use_id: None, blocks: vec![protocol::fixtures::tool_result(id, text, false)] }
 }
 
 /// `body` at `place` among the agent's own events, with a `seq` far from it, as the agent's are once a subagent has

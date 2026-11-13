@@ -6,7 +6,7 @@ use serde_json::Value;
 
 use super::{ModelName, Rev, SessionId, ToolUseId};
 use crate::attachment::Attachment;
-use crate::event::{CallKind, SubagentOutcome};
+use crate::event::{CallKind, ContentBlock, SubagentOutcome};
 
 /// One subagent, named by its session and the call that started it, which its events name as their parent.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -90,6 +90,14 @@ pub struct Call {
     pub kind: Option<CallKind>,
 }
 
+impl Call {
+    /// The call `block` makes, as a record keeps it, or `None` for any other block.
+    pub fn of(block: &ContentBlock) -> Option<Self> {
+        let ContentBlock::ToolUse { id, name, input, call } = block else { return None };
+        Some(Self { id: id.clone(), name: name.clone(), input: input.clone(), kind: call.clone() })
+    }
+}
+
 /// What a subagent has done lately: its newest calls, each with the text it wrote just before it and what came back
 /// once something has, then what it's written since the newest. Every change to a subagent's record goes to every
 /// client, so the hub keeps only a few calls and cuts each text short. A call's input is whole, as `latest_call`'s is,
@@ -151,6 +159,7 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+    use crate::fixtures;
 
     /// A record as a hub from before `recent` sent it.
     fn older() -> Value {
@@ -170,15 +179,8 @@ mod tests {
     /// Its form on the wire and in the hub's column, which a change of shape would fail.
     #[test]
     fn what_a_subagent_has_done_lately_has_one_form() {
-        let call = Call { id: "read".into(), name: "Read".into(), input: json!({ "file_path": "a.rs" }), kind: None };
-        let result = CallResult {
-            is_error: false,
-            text: "1→fn main".into(),
-            cut: true,
-            images: Vec::new(),
-            encrypted: false,
-            exit_code: None,
-        };
+        let call = fixtures::call("read", "Read", json!({ "file_path": "a.rs" }));
+        let result = CallResult { cut: true, ..fixtures::call_result("1→fn main") };
         let before = Some(Said { text: "I'll read it.".into(), cut: false });
         let since = Some(Said { text: "It's there.".into(), cut: false });
         let work = RecentWork { calls: vec![RecentCall { before, call, result: Some(result) }], since };

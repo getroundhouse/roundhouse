@@ -51,7 +51,8 @@ fn called(call: &Call, result: Option<&CallResult>) -> Lately {
         images: result.images.clone(),
         change: None,
         encrypted: result.encrypted,
-        // A subagent's result is read by the adapter that read its call, so it says its kind whenever the call does.
+        // An adapter that says what kind of call each is says it on every result too, so the result says one exactly
+        // when its call does, and with the call's it's read as it was recorded.
         call: call.kind.clone(),
         exit_code: result.exit_code,
     });
@@ -60,15 +61,15 @@ fn called(call: &Call, result: Option<&CallResult>) -> Lately {
 
 #[cfg(test)]
 mod tests {
-    use protocol::event::ContentBlock;
+    use protocol::event::{CallKind, ContentBlock};
     use protocol::model::{Call, CallResult, RecentCall, RecentWork, Said, Subagent, SubagentStatus};
     use serde_json::json;
 
-    use super::lately;
+    use super::{Lately, lately};
     use crate::item_key::ItemKey;
 
     fn call(id: &str) -> Call {
-        Call { id: id.into(), name: "Read".into(), input: json!({ "file_path": format!("{id}.rs") }), kind: None }
+        protocol::fixtures::call(id, "Read", json!({ "file_path": format!("{id}.rs") }))
     }
 
     fn said(text: &str, cut: bool) -> Said {
@@ -76,7 +77,7 @@ mod tests {
     }
 
     fn came_back(text: &str, cut: bool, is_error: bool) -> CallResult {
-        CallResult { is_error, text: text.into(), cut, images: Vec::new(), encrypted: false, exit_code: None }
+        CallResult { is_error, cut, ..protocol::fixtures::call_result(text) }
     }
 
     fn record(recent: RecentWork, latest: Option<Call>) -> Subagent {
@@ -146,5 +147,24 @@ mod tests {
         let record = record(RecentWork::default(), Some(call("d")));
 
         assert_eq!(shown(&record), [("call d".into(), ItemKey::Call("d".into()), None)]);
+    }
+
+    /// So a subagent's work draws from its record as it does from its events: by the kind each call says, and with
+    /// how a failed command exited beside what it printed.
+    #[test]
+    fn a_call_and_what_came_back_keep_the_kind_and_exit_code_the_record_has() {
+        let said = Some(CallKind::Command);
+        let made = Call { kind: said.clone(), ..protocol::fixtures::call("c", "shell", json!({ "command": "make" })) };
+        let failed = CallResult { is_error: true, exit_code: Some(2), ..protocol::fixtures::call_result("no rule") };
+        let calls = vec![RecentCall { before: None, call: made, result: Some(failed) }];
+
+        let shown = lately(&record(RecentWork { calls, since: None }, None));
+
+        let [Lately { block: ContentBlock::ToolUse { call: made, .. }, result: Some(result), .. }] = shown.as_slice()
+        else {
+            panic!("one call, with its result")
+        };
+        let ContentBlock::ToolResult { call, exit_code, .. } = result else { panic!("a result") };
+        assert_eq!((made, call, *exit_code), (&said, &said, Some(2)));
     }
 }

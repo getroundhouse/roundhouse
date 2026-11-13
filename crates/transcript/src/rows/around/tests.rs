@@ -5,11 +5,11 @@ use client_core::session_log::{RecordedApprovals, SessionLog};
 use protocol::attachment::{Attachment, MediaType};
 use protocol::event::{ApprovalOutcome, Asking, ContentBlock, EventBody, Question, QuestionAnswer, SessionEvent};
 use protocol::model::{
-    Call, CallResult, OpenApproval, PermissionMode, Place, RecentCall, RecentWork, Subagent, SubagentStatus,
+    CallResult, OpenApproval, PermissionMode, Place, RecentCall, RecentWork, Subagent, SubagentStatus,
 };
 use serde_json::json;
 
-use super::{Around, Reply, Settled, block_key};
+use super::{Answer, Around, Reply, Settled, block_key};
 use crate::fixtures::{
     asked, asking, calls, calls_to, closed, closed_by_position, event, from_the_agent, log, record, result, within,
 };
@@ -102,7 +102,8 @@ fn calls_made_at_once_each_get_their_own_result() {
 
     let around = Around::read(&log, &m, 1, &calls(&["a", "b"]));
 
-    let found: Vec<Option<String>> = around.blocks.iter().map(|b| b.reply.result().map(|a| a.text.clone())).collect();
+    let found: Vec<Option<String>> =
+        around.blocks.iter().map(|b| b.reply.result().map(|a| a.shown().to_string())).collect();
     assert_eq!(found, [Some("from a".to_string()), Some("from b".to_string())]);
     assert!(Around::read(&log, &m, 2, &result("b")).blocks[0].with_call);
     assert!(Around::read(&log, &m, 3, &result("a")).blocks[0].with_call);
@@ -153,15 +154,8 @@ fn a_working_subagent_s_latest_images_are_fetched_once_its_call_under_working_on
     let mut log = SessionLog::by_place(0);
     log.apply_event(SessionEvent { place: Place::new(1), ..event(1, agent.clone()) });
     let image = Attachment { id: "i1".into(), name: "image".into(), media_type: MediaType::Png, size_bytes: 1 };
-    let read = Call { id: "read".into(), name: "Read".into(), input: json!({ "file_path": "a.png" }), kind: None };
-    let came_back = CallResult {
-        is_error: false,
-        text: String::new(),
-        cut: false,
-        images: vec![image],
-        encrypted: false,
-        exit_code: None,
-    };
+    let read = protocol::fixtures::call("read", "Read", json!({ "file_path": "a.png" }));
+    let came_back = CallResult { images: vec![image], ..protocol::fixtures::call_result("") };
     let recent =
         RecentWork { calls: vec![RecentCall { before: None, call: read, result: Some(came_back) }], since: None };
     let mut m = Model::default();
@@ -186,7 +180,7 @@ fn a_result_from_the_agent_is_its_call_s_result_too() {
 
     let call = Around::read(&log, &m, 1, &calls_to("advisor", &["a"]));
 
-    assert_eq!(call.blocks[0].reply.result().map(|answer| answer.text.as_str()), Some("from a"));
+    assert_eq!(call.blocks[0].reply.result().map(Answer::shown), Some("from a"));
     assert!(Around::read(&log, &m, 2, &sent).blocks[0].with_call, "so it isn't drawn twice");
 }
 
@@ -202,7 +196,7 @@ fn a_call_the_log_says_was_dropped_has_no_result_unless_one_came_after_all() {
 
     assert!(matches!(beside.blocks[0].reply, Reply::Dropped));
     assert!(matches!(beside.blocks[1].reply, Reply::Nothing), "the call made beside it is still waiting");
-    assert_eq!(late.blocks[0].reply.result().map(|answer| answer.text.as_str()), Some("from a"), "it stands");
+    assert_eq!(late.blocks[0].reply.result().map(Answer::shown), Some("from a"), "it stands");
 }
 
 #[test]
@@ -226,4 +220,18 @@ fn a_result_without_its_call_nearby_is_drawn_where_it_is() {
         matches!(call.blocks[0].reply, Reply::Nothing),
         "a call whose result hasn't come back has nothing under it"
     );
+}
+
+/// A failed result is read as it was recorded: one that says what kind of call it answers says how the command exited
+/// beside its text, and one from before has it in its text.
+#[test]
+fn a_failed_result_says_how_its_command_exited_however_it_was_recorded() {
+    let before = protocol::fixtures::tool_result("c", "Exit code 2\nno rule to make it", true);
+    let since = protocol::fixtures::command_failed("c", "no rule to make it", 2);
+
+    for block in [before, since] {
+        let reply = Reply::of(&block, &Model::default());
+        let failure = reply.result().and_then(Answer::failure).unwrap();
+        assert_eq!((failure.label().as_str(), failure.output), ("Exit 2", "no rule to make it"));
+    }
 }

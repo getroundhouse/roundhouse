@@ -3,15 +3,13 @@
 use std::collections::HashMap;
 use std::io::Write;
 
-use client_core::calls::{ToolCall, first_line};
+use client_core::calls::{Failure, Recorded, first_line};
 use protocol::attachment::Attachment;
 use protocol::event::{
-    AgentTask, CallKind, CompactionOutcome, ContentBlock, EventBody, Question, SessionEvent, SubagentOutcome,
-    TurnOutcome,
+    AgentTask, CompactionOutcome, ContentBlock, EventBody, Question, SessionEvent, SubagentOutcome, TurnOutcome,
 };
 use protocol::model::{ApprovalId, MessageId, PermissionMode, Seq, TaskId, ToolUseId};
 use protocol::tail::{DeltaChange, StreamDelta, Tail};
-use serde_json::Value;
 
 mod approval;
 
@@ -178,19 +176,16 @@ impl Printer {
             ContentBlock::Thinking { text } if !text.is_empty() => {
                 self.line(seq, &format!("(thinking) {}", first_line(text)));
             }
-            ContentBlock::ToolUse { name, input, call, .. } => {
-                self.line(seq, &format!("tool {}", called(call.as_ref(), name, input)));
+            ContentBlock::ToolUse { .. } => {
+                if let Some(call) = Recorded::of(block) {
+                    self.line(seq, &format!("tool {}", called(call)));
+                }
             }
             ContentBlock::ToolResult { encrypted: true, .. } => {
                 self.line(seq, "tool result: encrypted, for the model alone");
             }
-            ContentBlock::ToolResult { is_error, text, images, exit_code, .. } => {
-                // One from before adapters said how a command exited says so in its text.
-                let label = match (is_error, exit_code) {
-                    (true, Some(code)) => format!("tool error, exit {code}"),
-                    (true, None) => "tool error".to_string(),
-                    (false, _) => "tool result".to_string(),
-                };
+            ContentBlock::ToolResult { text, images, .. } => {
+                let (label, text) = came_back(text, Failure::of(block));
                 let lines: Vec<&str> = text.lines().collect();
                 let first = lines.first().copied().unwrap_or("");
                 let shown = match images.len() {
@@ -265,10 +260,18 @@ impl Printer {
     }
 }
 
-/// A call to the tool `name`, with what it's about, as every client says it, if it says anything. `said` is the kind
-/// its adapter said it is, if it said.
-fn called(said: Option<&CallKind>, name: &str, input: &Value) -> String {
-    about(name, ToolCall::read(said, name, input).summary())
+/// A call, by the agent's name for its tool, with what it's about, as every client says it, if it says anything.
+fn called(call: Recorded<'_>) -> String {
+    about(call.name, call.summary())
+}
+
+/// What to call a result, and what it sent back: its `text`, or for one that failed, what `failure` says of it, which
+/// is how every client reads one. So it says how a command exited, and leaves that out of what it printed, however
+/// it was recorded.
+fn came_back<'a>(text: &'a str, failure: Option<Failure<'a>>) -> (String, &'a str) {
+    let Some(failure) = failure else { return ("tool result".to_string(), text) };
+    let label = failure.exit_code.map_or_else(|| "tool error".to_string(), |code| format!("tool error, exit {code}"));
+    (label, failure.output)
 }
 
 /// The tool `name`, then `summary` after a colon, if there's one. Such as the advisor, which takes no input, a call can
@@ -317,60 +320,4 @@ fn compacted(outcome: &CompactionOutcome) -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    use protocol::event::{AgentTask, SubagentOutcome, TaskKind};
-    use serde_json::json;
-
-    use super::{Printer, called, started};
-
-    fn task(id: &str, kind: TaskKind) -> AgentTask {
-        AgentTask { id: id.into(), description: Some(format!("Do {id}")), kind, call: None }
-    }
-
-    #[test]
-    fn a_list_of_background_tasks_said_again_with_a_kind_changed_prints_once() {
-        let mut printer = Printer::default();
-        let listed = [task("a", TaskKind::Command), task("b", TaskKind::Command)];
-        let again = [task("a", TaskKind::Command), task("b", TaskKind::Monitor)];
-
-        assert_eq!(printer.newly_running(&listed).as_deref(), Some("running in the background: Do a, Do b"));
-        assert_eq!(printer.newly_running(&again), None);
-        assert_eq!(printer.newly_running(&listed[..1]).as_deref(), Some("running in the background: Do a"));
-        assert_eq!(printer.newly_running(&[]).as_deref(), Some("running in the background: nothing"));
-        assert_eq!(printer.newly_running(&listed[..1]).as_deref(), Some("running in the background: Do a"));
-    }
-
-    #[test]
-    fn a_call_says_what_it_s_about_as_every_client_does() {
-        assert_eq!(called(None, "Bash", &json!({ "command": "\ncargo test\n--workspace" })), "Bash: cargo test");
-        assert_eq!(called(None, "Read", &json!({ "file_path": "src/a.rs" })), "Read: src/a.rs");
-        assert_eq!(
-            called(None, "mcp__github__list", &json!({ "labels": ["bug"] })),
-            "mcp__github__list: labels: [\"bug\"]"
-        );
-        assert_eq!(called(None, "advisor", &json!({})), "advisor", "it takes no input");
-    }
-
-    #[test]
-    fn an_agent_started_on_another_build_than_its_chat_s_last_says_it_was_updated() {
-        let said = "agent resumed, pid 7, Roundhouse chat worker updated from 0.9.0 to 1.0.0";
-        assert_eq!(started(7, true, Some("1.0.0"), Some("0.9.0")), said);
-        assert_eq!(started(7, false, Some("1.0.0"), None), "agent started, pid 7");
-        assert_eq!(started(7, true, None, None), "agent resumed, pid 7", "from a hub from before builds were recorded");
-    }
-
-    #[test]
-    fn a_subagents_end_says_which_it_was() {
-        let mut printer = Printer::default();
-        printer.subagent(1, Some("Find the tests"), &"toolu_a".into());
-        printer.subagent(2, None, &"toolu_b".into());
-
-        assert_eq!(printer.ending(&"toolu_a".into(), SubagentOutcome::Finished), "a subagent finished: Find the tests");
-        assert_eq!(printer.ending(&"toolu_b".into(), SubagentOutcome::Stopped), "a subagent stopped: toolu_b");
-        assert_eq!(
-            printer.ending(&"toolu_c".into(), SubagentOutcome::Failed),
-            "a subagent failed: toolu_c",
-            "one it didn't see start"
-        );
-    }
-}
+mod tests;

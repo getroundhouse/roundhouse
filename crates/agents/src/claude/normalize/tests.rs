@@ -1,9 +1,12 @@
 use protocol::attachment::{AttachmentBytes, MediaType};
 use protocol::event::{ContentBlock, FileChange, TurnOutcome};
+use protocol::fixtures;
 use protocol::model::{PermissionMode, ToolUseId};
 use serde_json::json;
 
 use super::*;
+
+mod kinds;
 
 #[test]
 fn output_that_is_not_json_is_kept_rather_than_failing() {
@@ -289,7 +292,8 @@ fn a_call_to_the_advisor_is_a_call_like_any_other() {
     let Parsed::Event(EventBody::Assistant { blocks, .. }) = recorded else { panic!("{recorded:?}") };
     assert_eq!(
         blocks,
-        [ContentBlock::ToolUse { id: "srvtoolu_1".into(), name: "advisor".into(), input: json!({}), call: None }]
+        [fixtures::tool_use("srvtoolu_1", "advisor", json!({}))],
+        "as a line alone reads, before the normalizer says what kind of call it is"
     );
     let Parsed::Delta(StreamDelta { change: DeltaChange::BlockStart { kind, .. }, .. }) = streamed else {
         panic!("{streamed:?}")

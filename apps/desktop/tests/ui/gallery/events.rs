@@ -6,6 +6,7 @@ use protocol::attachment::Attachment;
 use protocol::event::{
     AgentTask, ContentBlock, EventBody, FileChange, LinkedImage, SubagentOutcome, TaskKind, TokenUsage, TurnOutcome,
 };
+use protocol::fixtures;
 use protocol::model::{MessageId, ModelName, Seq, ToolUseId};
 use protocol::prompt::Prompt;
 
@@ -29,7 +30,7 @@ pub(crate) fn text_pointing(message: &str, text: &str, images: Vec<LinkedImage>)
 }
 
 pub(crate) fn tool_use(message: &str, id: &str, name: &str, input: serde_json::Value) -> EventBody {
-    from_the_agent(message, ContentBlock::ToolUse { id: id.into(), name: name.to_string(), input, call: None })
+    from_the_agent(message, fixtures::tool_use(id, name, input))
 }
 
 /// What the agent thought, as its own message.
@@ -95,18 +96,12 @@ fn tool_answer(id: &str, text: &str, is_error: bool, change: Option<FileChange>)
     EventBody::AgentUser { parent_tool_use_id: None, blocks: vec![answer(id, text, is_error, change)] }
 }
 
-fn answer(id: &str, text: &str, is_error: bool, change: Option<FileChange>) -> ContentBlock {
-    let (tool_use_id, text, images) = (ToolUseId::from(id), text.to_string(), Vec::new());
-    ContentBlock::ToolResult {
-        tool_use_id,
-        is_error,
-        text,
-        images,
-        change,
-        encrypted: false,
-        call: None,
-        exit_code: None,
+fn answer(id: &str, text: &str, is_error: bool, changed: Option<FileChange>) -> ContentBlock {
+    let mut block = fixtures::tool_result(id, text, is_error);
+    if let ContentBlock::ToolResult { change, .. } = &mut block {
+        *change = changed;
     }
+    block
 }
 
 /// The end of a turn that went well. Opus answered, and read most of what it was sent from the cache, as a turn that

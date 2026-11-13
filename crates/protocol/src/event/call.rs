@@ -29,9 +29,12 @@ pub enum CallKind {
     Subagent,
     /// Asking the advisor, a stronger model that reads the whole conversation and advises the agent.
     Advisor,
-    /// Asking the person questions, which its request for approval carries, as [`super::Asking::Questions`].
+    /// Asking the person questions, which its request for approval carries, as [`super::Asking::Questions`]. It's a
+    /// kind of call too, so a client can tell from the call alone that its approval is what draws it, without the
+    /// approval being loaded, and without knowing the agent's name for the tool.
     Questions,
-    /// Asking the person to approve its plan, which its request for approval carries, as [`super::Asking::Plan`].
+    /// Asking the person to approve its plan, which its request for approval carries, as [`super::Asking::Plan`], and
+    /// a kind of call for the same reason.
     Plan,
     /// A tool with no kind of its own, such as one from an MCP server.
     Other {
@@ -42,32 +45,8 @@ pub enum CallKind {
         #[serde(default)]
         tool: String,
     },
+    /// One this build doesn't know. An adapter also says it of a result whose call it no longer knows, such as one
+    /// the agent answers after it was started again, so that every result it records says a kind.
     #[serde(other)]
     Unknown,
-}
-
-#[cfg(test)]
-mod tests {
-    use serde_json::json;
-
-    use super::CallKind;
-
-    #[test]
-    fn a_kind_keeps_its_form_and_one_from_a_newer_adapter_reads_as_unknown() {
-        assert_eq!(serde_json::to_value(CallKind::FindFiles).unwrap(), json!({ "kind": "find_files" }));
-        let from_a_server = CallKind::Other { server: Some("github".into()), tool: "create_issue".into() };
-        assert_eq!(
-            serde_json::to_value(&from_a_server).unwrap(),
-            json!({ "kind": "other", "server": "github", "tool": "create_issue" })
-        );
-        let own = CallKind::Other { server: None, tool: "NotebookEdit".into() };
-        assert_eq!(serde_json::to_value(&own).unwrap(), json!({ "kind": "other", "tool": "NotebookEdit" }));
-        assert_eq!(
-            serde_json::from_value::<CallKind>(json!({ "kind": "other", "tool": "NotebookEdit" })).unwrap(),
-            own
-        );
-
-        let newer = json!({ "kind": "notebook", "cell": 3 });
-        assert_eq!(serde_json::from_value::<CallKind>(newer).unwrap(), CallKind::Unknown);
-    }
 }

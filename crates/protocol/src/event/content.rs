@@ -49,9 +49,9 @@ pub enum ContentBlock {
         /// What came back is encrypted, for the model alone, as the advisor's reply can be, so `text` holds none of it.
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         encrypted: bool,
-        /// What kind of call it answers, as the agent's adapter read it. With it, `text` is what came back alone, and
-        /// how a command exited is `exit_code`. `None` in one recorded before adapters said, and in one whose call
-        /// the adapter no longer knows, whose `text` is as the agent sent it, with whatever the agent put in it to
+        /// What kind of call it answers, as the agent's adapter read it, or `Unknown` when the adapter no longer knows
+        /// the call. With it, `text` is what came back alone, and how a command exited is `exit_code`. `None` only
+        /// in one recorded before adapters said, whose `text` is as Claude sent it then, with what it put in it to
         /// say how it failed.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         call: Option<CallKind>,

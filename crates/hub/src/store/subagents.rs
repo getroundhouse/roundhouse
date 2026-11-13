@@ -123,7 +123,7 @@ fn note_work(
 ) -> Result<Vec<ToolUseId>, StoreError> {
     let session = event.session_id.as_str();
     let model = note_model(tx, session, call, &event.body)?;
-    let made: Vec<Call> = blocks.iter().filter_map(call_in).collect();
+    let made: Vec<Call> = blocks.iter().filter_map(Call::of).collect();
     let latest = made.last().map(serde_json::to_string).transpose()?;
     let mut recent = recent_work(tx, session, call)?;
     let wrote = matches!(event.body, EventBody::Assistant { .. });
@@ -159,11 +159,6 @@ fn recent_work(tx: &Connection, session: &str, call: &ToolUseId) -> Result<Optio
         .optional()?;
     // Written only by this hub, as JSON. What it can't read is nothing it knows of.
     Ok(recent.map(Option::unwrap_or_default))
-}
-
-fn call_in(block: &ContentBlock) -> Option<Call> {
-    let ContentBlock::ToolUse { id, name, input, call } = block else { return None };
-    Some(Call { id: id.clone(), name: name.clone(), input: input.clone(), kind: call.clone() })
 }
 
 fn subagent_from_row(row: &Row<'_>) -> rusqlite::Result<Subagent> {

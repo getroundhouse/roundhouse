@@ -92,13 +92,14 @@ fn an_approved_edit_to_a_tools_input_is_what_runs() {
 }
 
 /// So a client draws each from what's recorded, with none of the agent's names for its tools: the request to run a
-/// command, the call, and what came back all say it's a command.
+/// command, the call, and what came back all say it's a command, and what came back says how the command exited
+/// apart from what it printed.
 #[test]
-fn a_call_its_request_for_approval_and_its_result_are_recorded_with_what_kind_of_call_it_is() {
+fn a_failed_command_is_recorded_as_one_from_its_request_to_how_it_exited() {
     let stack = Stack::start();
     let client = stack.client();
     let (_, session) = stack.workspace_planning(&client);
-    client.session_prompt(&session.id, "tool:echo kinds", None).unwrap();
+    client.session_prompt(&session.id, "tool:echo kinds && exit 3", None).unwrap();
     let approval_id = wait_for_approval(&client, &session.id);
     let allow = ApprovalDecision::Allow { updated_input: None, updated_permissions: None };
     client.session_approve(&session.id, &approval_id, allow).unwrap();
@@ -114,15 +115,19 @@ fn a_call_its_request_for_approval_and_its_result_are_recorded_with_what_kind_of
         })
         .collect();
     assert_eq!(asked, std::slice::from_ref(&command));
-    let blocks = events.iter().flat_map(|event| match &event.body {
-        EventBody::Assistant { blocks, .. } | EventBody::AgentUser { blocks, .. } => blocks.as_slice(),
-        _ => &[],
-    });
-    let said: Vec<_> = blocks
-        .filter_map(|block| match block {
-            ContentBlock::ToolUse { call, .. } | ContentBlock::ToolResult { call, .. } => Some(call.clone()),
-            _ => None,
+    let blocks: Vec<_> = events
+        .iter()
+        .flat_map(|event| match &event.body {
+            EventBody::Assistant { blocks, .. } | EventBody::AgentUser { blocks, .. } => blocks.as_slice(),
+            _ => &[],
         })
+        .filter(|block| matches!(block, ContentBlock::ToolUse { .. } | ContentBlock::ToolResult { .. }))
         .collect();
-    assert_eq!(said, [command.clone(), command], "the call, then its result");
+    let [ContentBlock::ToolUse { call: made, .. }, ContentBlock::ToolResult { call, exit_code, text, is_error, .. }] =
+        blocks.as_slice()
+    else {
+        panic!("the call, then its result: {blocks:?}")
+    };
+    assert_eq!((made, call), (&command, &command));
+    assert_eq!((*is_error, *exit_code, text.as_str()), (true, Some(3), "kinds\n"), "how it exited isn't in its text");
 }

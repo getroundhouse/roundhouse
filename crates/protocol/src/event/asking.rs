@@ -14,7 +14,9 @@ pub enum Asking {
     /// Whether the agent may use a tool, as the request's tool and input say.
     ToolUse {
         /// What kind of call that use is, as the agent's adapter read it. `None` in one recorded before adapters
-        /// said, which a client reads from the tool's name as Claude's were then.
+        /// said, which a client reads from the tool's name as Claude's were then. It's here rather than beside
+        /// `asking` on the request because only a tool's use needs it, since questions and a plan say their call's
+        /// kind by what they are, and because every event takes the room of the largest, and this is boxed already.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         call: Option<CallKind>,
     },
@@ -34,11 +36,15 @@ pub enum Asking {
 }
 
 impl Asking {
-    /// What kind of call the tool's use it asks about is, when it asks about one and the agent's adapter said.
+    /// What kind of call it asks to make: the kind a tool's use says, and for questions and a plan, the kind they
+    /// are. One this build doesn't know is a call of a kind it doesn't know. `None` only for a tool's use recorded
+    /// before adapters said its kind.
     pub fn call(&self) -> Option<&CallKind> {
         match self {
             Asking::ToolUse { call } => call.as_ref(),
-            Asking::Questions { .. } | Asking::Plan { .. } | Asking::Unknown => None,
+            Asking::Questions { .. } => Some(&CallKind::Questions),
+            Asking::Plan { .. } => Some(&CallKind::Plan),
+            Asking::Unknown => Some(&CallKind::Unknown),
         }
     }
 }

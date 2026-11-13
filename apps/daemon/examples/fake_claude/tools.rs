@@ -187,10 +187,16 @@ pub(crate) fn execute(turn: &mut Turn, tool_use_id: &str, command: &str) -> bool
     let output = std::process::Command::new("sh").args(["-c", command]).output().unwrap();
     let (stdout, stderr) = (String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
     let worked = output.status.success();
-    // As the CLI does, a command that worked and printed nothing says so in a sentence of its own.
-    let text = if worked && stdout.is_empty() && stderr.is_empty() { NOTHING_PRINTED } else { &stdout };
+    // As the CLI does, a command that worked and printed nothing says so in a sentence of its own, and one that exited
+    // with an error says how on a line of its own, before what it printed. Which stream the CLI puts first isn't
+    // checked.
+    let text = match output.status.code() {
+        _ if worked && stdout.is_empty() && stderr.is_empty() => NOTHING_PRINTED.to_string(),
+        Some(code) if !worked => format!("Exit code {code}\n{stdout}{stderr}"),
+        _ => stdout.to_string(),
+    };
     // With the record of what it printed that the CLI puts beside it.
-    let mut line = turn.result_line(tool_use_id, text, !worked);
+    let mut line = turn.result_line(tool_use_id, &text, !worked);
     line["tool_use_result"] = json!({ "stdout": stdout, "stderr": stderr, "interrupted": false });
     emit(turn.out, line);
     false
