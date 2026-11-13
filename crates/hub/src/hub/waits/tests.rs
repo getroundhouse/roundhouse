@@ -2,8 +2,11 @@
 //! request as each test says.
 
 use protocol::event::{AgentTask, EventBody, ExitReason, NoticeLevel, TaskKind};
-use protocol::model::{Checks, Local, MergeState, PrState, QueueState, SessionStatus, Workspace};
-use protocol::worker::{AskReply, PullRequestReply, RateLimit, WorkerAsk, WorkerRequest, WorkerResponse};
+use protocol::model::{Checks, Local, MergeState, PrState, PullRequest, QueueState, SessionStatus, Workspace};
+use protocol::worker::{
+    Answer as _, CancelWait, PullRequestReply, RateLimit, ReadWait, StartWait, WaitAnswer, WorkerAsk, WorkerRequest,
+    WorkerResponse,
+};
 
 use super::*;
 pub(super) use crate::hub::tests::open;
@@ -30,15 +33,14 @@ pub(super) fn wait(until: WaitUntil) -> Wait {
 
 /// What the hub answers the worker of `w` asking `ask` for the session `s`.
 async fn ask(hub: &Arc<Hub>, link: &WorkerLink, ask: WorkerAsk) -> Result<(Wait, Option<PullRequest>), ApiError> {
-    match hub.answer_ask(&"w".into(), link, "s".into(), ask).await? {
-        AskReply::Wait { wait, pull_request } => Ok((wait, pull_request)),
-        reply @ AskReply::PullRequest { .. } => panic!("a wait: {reply:?}"),
-    }
+    let reply = hub.answer_ask(&"w".into(), link, "s".into(), ask).await?;
+    let answer = WaitAnswer::read(reply).unwrap_or_else(|reply| panic!("a wait: {reply:?}"));
+    Ok((answer.wait, answer.pull_request))
 }
 
 /// Starts a wait until it's done, for the agent's call `call`.
 fn start(call: &str) -> WorkerAsk {
-    WorkerAsk::StartWait { until: WaitUntil::Done, call: Some(call.into()) }
+    WorkerAsk::StartWait(StartWait { until: WaitUntil::Done, call: Some(call.into()) })
 }
 
 fn how(wait: &Wait) -> Option<WaitEnd> {
@@ -94,7 +96,7 @@ async fn a_read_that_finds_the_pull_request_merged_ends_its_wait_and_one_that_fa
     hub.workspace_pull_request("w".into()).await.unwrap();
 
     assert_eq!(how(&after_failing), None, "a read that failed says nothing");
-    let (read, pull_request) = ask(&hub, &link, WorkerAsk::Wait { wait: wait.id }).await.unwrap();
+    let (read, pull_request) = ask(&hub, &link, WorkerAsk::Wait(ReadWait { wait: wait.id })).await.unwrap();
     assert_eq!((how(&read), pull_request), (Some(WaitEnd::Merged), Some(merged)));
 }
 
@@ -211,7 +213,7 @@ async fn a_worker_reads_a_wait_with_the_pull_request_as_last_read_and_only_for_i
     other.session.id = "t".into();
     hub.store.insert_session(&other, None).unwrap();
     let link = WorkerLink::unconnected();
-    let read = || WorkerAsk::Wait { wait: "a".into() };
+    let read = || WorkerAsk::Wait(ReadWait { wait: "a".into() });
 
     let (wait, pull_request) = ask(&hub, &link, read()).await.unwrap();
     let refused = hub.answer_ask(&"w".into(), &link, "t".into(), read()).await.unwrap_err();
@@ -225,7 +227,7 @@ async fn cancelling_a_wait_ends_it_once_and_a_wait_that_had_ended_stays_as_it_en
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_in(dir.path());
     hub.store.start_wait(&wait(WaitUntil::Done), Seen::default()).unwrap();
-    let (link, cancel) = (WorkerLink::unconnected(), || WorkerAsk::CancelWait { wait: "a".into() });
+    let (link, cancel) = (WorkerLink::unconnected(), || WorkerAsk::CancelWait(CancelWait { wait: "a".into() }));
 
     let (cancelled, _) = ask(&hub, &link, cancel()).await.unwrap();
     let (again, _) = ask(&hub, &link, cancel()).await.unwrap();

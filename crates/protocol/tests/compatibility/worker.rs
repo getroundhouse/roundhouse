@@ -4,9 +4,9 @@ use protocol::frame::{self, Call};
 use protocol::model::{Wait, WaitEnd, WaitEnded, WaitUntil};
 use protocol::worker::Request as _;
 use protocol::worker::{
-    AskAnswer, AskId, AskOutcome, AskReply, PrepareWorkspace, RestoreWorkspace, ServeTools, ToWorker, ToolsServing,
-    WorkerAsk, WorkerCall, WorkerFrame, WorkerOutcome, WorkerRequest, WorkerResponse, WorkspaceReady, WorktreeThere,
-    WorktreeThereReply,
+    AskAnswer, AskId, AskOutcome, AskReply, CancelWait, PrepareWorkspace, PullRequestAnswer, ReadWait,
+    RestoreWorkspace, ServeTools, StartWait, ToWorker, ToolsServing, WaitAnswer, WorkerAsk, WorkerCall, WorkerFrame,
+    WorkerOutcome, WorkerRequest, WorkerResponse, WorkspaceReady, WorktreeThere, WorktreeThereReply,
 };
 
 #[test]
@@ -25,10 +25,9 @@ fn an_agent_started_by_a_hub_from_before_the_tools_has_no_token_for_them() {
 #[test]
 fn what_a_worker_asks_and_what_its_hub_answers_keep_their_form() {
     let ask = WorkerFrame::Ask { id: AskId::new(3), session_id: "s".into(), ask: WorkerAsk::PullRequest };
-    assert_eq!(
-        frame::encode(&ask).unwrap(),
-        b"{\"frame\":\"ask\",\"id\":3,\"session_id\":\"s\",\"ask\":{\"method\":\"pull_request\"}}\n"
-    );
+    let written = frame::encode(&ask).unwrap();
+    assert_eq!(written, b"{\"frame\":\"ask\",\"id\":3,\"session_id\":\"s\",\"ask\":{\"method\":\"pull_request\"}}\n");
+    assert_eq!(frame::decode::<WorkerFrame>(&written).unwrap(), ask, "and it's read the way it's written");
 
     let answer = br#"{"answer":3,"response":{"result":"pull_request","pull_request":null}}"#;
     let ToWorker::Answer(answered) = ToWorker::decode(answer).unwrap() else {
@@ -38,9 +37,10 @@ fn what_a_worker_asks_and_what_its_hub_answers_keep_their_form() {
         answered,
         AskAnswer {
             answer: AskId::new(3),
-            outcome: AskOutcome::Response(AskReply::PullRequest { pull_request: None })
+            outcome: AskOutcome::Response(AskReply::PullRequest(PullRequestAnswer { pull_request: None }))
         }
     );
+    assert_eq!(serde_json::to_vec(&answered).unwrap(), answer, "and it's written the way it's read");
 
     let serving: WorkerCall = frame::decode(br#"{"id":5,"request":{"method":"serve_tools","port":50123}}"#).unwrap();
     assert_eq!(serving.request, WorkerRequest::ServeTools(ServeTools { port: Some(50_123) }));
@@ -55,16 +55,30 @@ fn what_a_worker_asks_and_what_its_hub_answers_keep_their_form() {
     );
 }
 
+/// An ask with no fields reads with fields a newer worker added to it, as a request with none does.
+#[test]
+fn an_ask_with_no_fields_reads_with_fields_it_doesnt_know() {
+    let newer: WorkerAsk = serde_json::from_str(r#"{"method":"pull_request","newer":1}"#).unwrap();
+    assert_eq!(newer, WorkerAsk::PullRequest);
+}
+
 /// A worker's asks for a wait, and the hub's answer with one, spelled out.
 #[test]
 fn what_a_worker_asks_of_a_wait_and_its_hubs_answer_keep_their_form() {
-    let start = WorkerAsk::StartWait { until: WaitUntil::Checks, call: Some("toolu_1".into()) };
-    assert_eq!(serde_json::to_string(&start).unwrap(), r#"{"method":"start_wait","until":"checks","call":"toolu_1"}"#);
+    let keeps_its_form = |ask: WorkerAsk, wire: &str| {
+        assert_eq!(serde_json::to_string(&ask).unwrap(), wire);
+        assert_eq!(serde_json::from_str::<WorkerAsk>(wire).unwrap(), ask);
+    };
+    keeps_its_form(
+        WorkerAsk::StartWait(StartWait { until: WaitUntil::Checks, call: Some("toolu_1".into()) }),
+        r#"{"method":"start_wait","until":"checks","call":"toolu_1"}"#,
+    );
+    let until_done = WorkerAsk::StartWait(StartWait { until: WaitUntil::Done, call: None });
+    keeps_its_form(until_done.clone(), r#"{"method":"start_wait","until":"done"}"#);
     let unsaid: WorkerAsk = serde_json::from_str(r#"{"method":"start_wait"}"#).unwrap();
-    assert_eq!(unsaid, WorkerAsk::StartWait { until: WaitUntil::Done, call: None }, "until the pull request is done");
-    let read: WorkerAsk = serde_json::from_str(r#"{"method":"wait","wait":"w"}"#).unwrap();
-    let cancel: WorkerAsk = serde_json::from_str(r#"{"method":"cancel_wait","wait":"w"}"#).unwrap();
-    assert_eq!((read, cancel), (WorkerAsk::Wait { wait: "w".into() }, WorkerAsk::CancelWait { wait: "w".into() }));
+    assert_eq!(unsaid, until_done, "until the pull request is done");
+    keeps_its_form(WorkerAsk::Wait(ReadWait { wait: "w".into() }), r#"{"method":"wait","wait":"w"}"#);
+    keeps_its_form(WorkerAsk::CancelWait(CancelWait { wait: "w".into() }), r#"{"method":"cancel_wait","wait":"w"}"#);
 
     let answer = br#"{"answer":4,"response":{"result":"wait","wait":{"id":"w","session_id":"s","workspace_id":"v","number":12,"until":"done","started_at_ms":5,"ended":{"at_ms":9,"how":"merged"}},"pull_request":null}}"#;
     let wait = Wait {
@@ -82,8 +96,12 @@ fn what_a_worker_asks_of_a_wait_and_its_hubs_answer_keep_their_form() {
     };
     assert_eq!(
         answered,
-        AskAnswer { answer: AskId::new(4), outcome: AskOutcome::Response(AskReply::Wait { wait, pull_request: None }) }
+        AskAnswer {
+            answer: AskId::new(4),
+            outcome: AskOutcome::Response(AskReply::Wait(WaitAnswer { wait, pull_request: None }))
+        }
     );
+    assert_eq!(serde_json::to_vec(&answered).unwrap(), answer, "and it's written the way it's read");
 }
 
 /// A branch is a type of its own, and a plain string on the wire, as it was before it had one.

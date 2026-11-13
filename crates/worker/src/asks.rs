@@ -7,8 +7,9 @@ use std::time::Duration;
 use parking_lot::Mutex;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::SessionId;
-use protocol::worker::{AskAnswer, AskId, AskOutcome, AskReply, WorkerAsk, WorkerFrame};
+use protocol::worker::{Answer, Ask, AskAnswer, AskId, AskOutcome, AskReply, WorkerAsk, WorkerFrame};
 use tokio::sync::{mpsc, oneshot};
+use tracing::warn;
 
 #[cfg(test)]
 mod tests;
@@ -46,9 +47,21 @@ impl Asks {
         Self { patience, next: AtomicU64::new(1), waiting: Mutex::new(Some(HashMap::new())), frames }
     }
 
-    /// Asks the hub, for the agent in `session_id`, and waits for its answer. Sending the ask counts as waiting, since
-    /// the way to the hub is shared with everything the agents say.
-    pub(crate) async fn ask(&self, session_id: SessionId, ask: WorkerAsk) -> Result<AskReply, ApiError> {
+    /// Asks the hub, for the agent in `session_id`, and waits for its answer, as what the ask is answered with. An
+    /// answer of another kind fails here, so whoever asked has only the answer it asked for to handle. Only a hub
+    /// that's wrong sends one, so what it was goes to the log, and the agent hears only that it came.
+    pub(crate) async fn ask<A: Ask>(&self, session_id: SessionId, ask: A) -> Result<A::Answer, ApiError> {
+        let reply = self.reply_to(session_id, ask.into_ask()).await?;
+        A::Answer::read(reply).map_err(|reply| {
+            let wrong = "the hub answered with another kind of answer than was asked for";
+            warn!(?reply, "{wrong}");
+            ApiError::new(ErrorCode::Internal, wrong)
+        })
+    }
+
+    /// Sends the ask as it goes on the wire, and waits for the hub's reply as it came, of whatever kind. Sending
+    /// counts as waiting, since the way to the hub is shared with everything the agents say.
+    async fn reply_to(&self, session_id: SessionId, ask: WorkerAsk) -> Result<AskReply, ApiError> {
         let id = AskId::new(self.next.fetch_add(1, Ordering::Relaxed));
         let (answered, answer) = oneshot::channel();
         let waiting = Waiting { answered, session_id: session_id.clone(), ask: ask.clone() };

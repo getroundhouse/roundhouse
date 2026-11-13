@@ -7,9 +7,9 @@ use std::time::Duration;
 
 use protocol::client::{ApiError, ErrorCode, HubNotice};
 use protocol::model::{
-    PullRequest, PullRequestFound, Session, SessionId, ToolUseId, Wait, WaitEnd, WaitEnded, WaitId, WaitUntil,
-    WorkspaceId,
+    PullRequestFound, Session, SessionId, ToolUseId, Wait, WaitEnd, WaitEnded, WaitId, WaitUntil, WorkspaceId,
 };
+use protocol::worker::WaitAnswer;
 use tracing::{error, info, warn};
 
 use super::{Hub, new_id, now_ms};
@@ -36,7 +36,7 @@ impl Hub {
         session_id: SessionId,
         until: WaitUntil,
         call: Option<ToolUseId>,
-    ) -> Result<(Wait, Option<PullRequest>), ApiError> {
+    ) -> Result<WaitAnswer, ApiError> {
         if let Some(started) = self.started_by(&session_id, call.as_ref()).await? {
             return self.with_pull_request(started).await;
         }
@@ -74,7 +74,7 @@ impl Hub {
         }
         info!(wait = %wait.id, session = %wait.session_id, ended = ?wait.ended, "an agent started a wait");
         self.announce_chat_of(&wait).await;
-        Ok((wait, Some(pull_request)))
+        Ok(WaitAnswer { wait, pull_request: Some(pull_request) })
     }
 
     /// The wait `call` started in the session, if it started one.
@@ -85,21 +85,13 @@ impl Hub {
     }
 
     /// One of the session's waits, and the pull request as it was last read, which costs no call to GitHub.
-    pub(crate) async fn wait_of(
-        &self,
-        session_id: &SessionId,
-        id: WaitId,
-    ) -> Result<(Wait, Option<PullRequest>), ApiError> {
+    pub(crate) async fn wait_of(&self, session_id: &SessionId, id: WaitId) -> Result<WaitAnswer, ApiError> {
         let wait = self.own_wait(session_id, id).await?;
         self.with_pull_request(wait).await
     }
 
     /// Ends one of the session's waits as cancelled, unless it has ended already, and says how it stands.
-    pub(crate) async fn cancel_wait(
-        &self,
-        session_id: &SessionId,
-        id: WaitId,
-    ) -> Result<(Wait, Option<PullRequest>), ApiError> {
+    pub(crate) async fn cancel_wait(&self, session_id: &SessionId, id: WaitId) -> Result<WaitAnswer, ApiError> {
         let mut wait = self.own_wait(session_id, id).await?;
         if wait.ended.is_none() {
             let (id, ended) = (wait.id.clone(), WaitEnded { at_ms: now_ms(), how: WaitEnd::Cancelled });
@@ -155,9 +147,9 @@ impl Hub {
         }
     }
 
-    async fn with_pull_request(&self, wait: Wait) -> Result<(Wait, Option<PullRequest>), ApiError> {
+    async fn with_pull_request(&self, wait: Wait) -> Result<WaitAnswer, ApiError> {
         let pull_request = self.workspace(&wait.workspace_id).await?.known_pull_request().cloned();
-        Ok((wait, pull_request))
+        Ok(WaitAnswer { wait, pull_request })
     }
 
     /// Has the session's agent started, if it isn't running, as after the hub started again, so its CLI asks after its

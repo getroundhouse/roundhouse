@@ -1,5 +1,9 @@
 //! What a worker asks its hub, for a tool its agent called, and the hub's answers. The hub knows which workspace a
 //! worker is for, so an ask reaches that workspace and nothing else.
+//!
+//! Each ask is a type of its own, which says what the hub answers it with, as [`Ask`] does, so a worker reads each
+//! answer as that, and one of any other kind fails in one place, as a hub reads a worker's replies. On the wire, an
+//! ask's fields sit beside its `method`, and an answer's beside its `result`.
 
 use serde::de::IgnoredAny;
 use serde::{Deserialize, Serialize};
@@ -7,7 +11,10 @@ use serde::{Deserialize, Serialize};
 use super::WorkerRequest;
 use crate::client::Outcome;
 use crate::frame::{self, Call};
-use crate::model::{PullRequest, ToolUseId, Wait, WaitId, WaitUntil};
+
+mod pull_requests;
+
+pub use pull_requests::{CancelWait, PullRequestAnswer, ReadPullRequest, ReadWait, StartWait, WaitAnswer};
 
 /// Which of a worker's asks an answer is for. They're numbered by the worker, apart from the hub's calls.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -72,36 +79,45 @@ pub struct AskAnswer {
 
 pub type AskOutcome = Outcome<AskReply>;
 
-/// What a worker asks its hub. A hub answers one it doesn't know with `Unsupported`, as it does a client's, and a hub
-/// from before workers could ask doesn't answer at all, so a worker gives up after a while.
+/// Something a worker asks its hub, which names what the hub answers it with.
+pub trait Ask {
+    type Answer: Answer;
+
+    /// It among every other ask, as it goes on the wire.
+    fn into_ask(self) -> WorkerAsk;
+}
+
+/// What a hub answers an ask with, read from the reply it came as.
+pub trait Answer: Sized {
+    /// Gives the reply back when it's of another kind, for whoever asked to say so.
+    #[expect(
+        clippy::result_large_err,
+        reason = "an answer is moved once, as it's read, so boxing one of another kind would only add an allocation"
+    )]
+    fn read(reply: AskReply) -> Result<Self, AskReply>;
+}
+
+/// Every ask. Each says on its type what it asks and what it's answered with. One with no fields is a variant with
+/// none, as [`WorkerRequest`] says of a request. A hub answers one it doesn't know with `Unsupported`, as it does a
+/// client's, and a hub from before workers could ask doesn't answer at all, so a worker gives up after a while.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(tag = "method", rename_all = "snake_case")]
 pub enum WorkerAsk {
-    /// The workspace's pull request, as the hub reads it for an agent.
+    /// See [`ReadPullRequest`].
     PullRequest,
-    /// Starts a wait on the workspace's pull request, for the agent's call `call`, from where it stands now. A branch
-    /// without one is refused.
-    StartWait {
-        #[serde(default)]
-        until: WaitUntil,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        call: Option<ToolUseId>,
-    },
-    /// How one of the session's waits stands.
-    Wait { wait: WaitId },
-    /// Ends one of the session's waits, as cancelled, unless it has ended already.
-    CancelWait { wait: WaitId },
+    StartWait(StartWait),
+    Wait(ReadWait),
+    CancelWait(CancelWait),
     #[serde(other)]
     Unknown,
 }
 
+/// Every answer, each read as the type of its own that an ask names.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(tag = "result", rename_all = "snake_case")]
 pub enum AskReply {
-    /// What the hub knows of it. `None` when the branch has none.
-    PullRequest { pull_request: Option<PullRequest> },
-    /// A wait as it stands, and the pull request as the hub last read it.
-    Wait { wait: Wait, pull_request: Option<PullRequest> },
+    PullRequest(PullRequestAnswer),
+    Wait(WaitAnswer),
 }
 
 #[cfg(test)]
@@ -128,7 +144,7 @@ mod tests {
             answered,
             AskAnswer {
                 answer: AskId::new(4),
-                outcome: Outcome::Response(AskReply::PullRequest { pull_request: None })
+                outcome: Outcome::Response(AskReply::PullRequest(PullRequestAnswer { pull_request: None }))
             }
         );
         let ToWorker::Answer(AskAnswer { outcome: Outcome::Error(error), .. }) = ToWorker::decode(refused).unwrap()
@@ -161,6 +177,20 @@ mod tests {
         assert_eq!(AskId::of_unreadable(ask), Some(AskId::new(9)));
         assert_eq!(AskId::of_unreadable(reply), None);
         assert_eq!(AskId::of_unreadable(b"not json"), None);
+    }
+
+    /// The rest are each the variant that holds them, which the compiler checks.
+    #[test]
+    fn an_ask_with_no_fields_is_sent_as_its_own_method() {
+        assert_eq!(serde_json::to_string(&ReadPullRequest.into_ask()).unwrap(), r#"{"method":"pull_request"}"#);
+    }
+
+    #[test]
+    fn an_answer_reads_as_what_its_ask_names_and_any_other_is_given_back() {
+        let pull_request = AskReply::PullRequest(PullRequestAnswer { pull_request: None });
+
+        assert_eq!(PullRequestAnswer::read(pull_request.clone()), Ok(PullRequestAnswer { pull_request: None }));
+        assert_eq!(WaitAnswer::read(pull_request.clone()), Err(pull_request));
     }
 
     #[test]

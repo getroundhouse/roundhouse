@@ -3,7 +3,7 @@
 
 use protocol::client::{ApiError, ClientRequest, ErrorCode, HubFrame, ReplyOutcome};
 use protocol::frame;
-use protocol::worker::{WorkerCall, WorkerFrame, WorkerOutcome, WorkerRequest};
+use protocol::worker::{AskAnswer, AskId, AskOutcome, WorkerCall, WorkerFrame, WorkerOutcome, WorkerRequest};
 
 #[test]
 fn a_refusal_keeps_its_form() {
@@ -11,6 +11,12 @@ fn a_refusal_keeps_its_form() {
     let from_a_hub: HubFrame =
         frame::decode(br#"{"frame":"reply","id":4,"error":{"code":"unsupported","message":"no"}}"#).unwrap();
     assert_eq!(from_a_hub, HubFrame::Reply { id: 4, outcome: ReplyOutcome::Error(unsupported.clone()) });
+
+    let to_a_worker = AskAnswer { answer: AskId::new(5), outcome: AskOutcome::Error(unsupported.clone()) };
+    assert_eq!(
+        frame::encode(&to_a_worker).unwrap(),
+        b"{\"answer\":5,\"error\":{\"code\":\"unsupported\",\"message\":\"no\"}}\n"
+    );
 
     let from_a_worker = WorkerFrame::Reply { id: 4, outcome: WorkerOutcome::Error(unsupported) };
     assert_eq!(
