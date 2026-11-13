@@ -6,10 +6,10 @@ use std::rc::Rc;
 use gpui_kit::App;
 
 use super::parse::{self, Again};
-use super::{AT_ONCE, Parsed, Prose, ProseId, Text};
+use super::{AT_ONCE, Of, Parsed, Prose, ProseId, Text};
 
 /// How a text is to be parsed on another thread: `source` whole, or again from where `again` says, as it goes on from
-/// `was`, which it's drawn as until it's in, if it goes on from that.
+/// `was`, which is what it was parsed as before, if it was, and what it's drawn as until it's in.
 pub(super) struct Apart {
     source: String,
     was: Option<Rc<Parsed>>,
@@ -20,20 +20,31 @@ impl Prose {
     /// What the text known as `id` is drawn as now that it says `source`, if it has a parse to draw, and how it's to be
     /// parsed on another thread, if it is. A text is parsed where it's drawn when what's to be parsed of it is short:
     /// all of it, or for one that goes on from what it was parsed as, what's parsed again from near its end. A longer
-    /// one is parsed on another thread, and one that goes on is drawn as it was meanwhile. While a parse is on another
-    /// thread, another isn't started for a text that goes on from what that's parsing, so a text that goes on faster
-    /// than a parse ends, such as one the agent is writing, is drawn as each parse comes in.
-    pub(super) fn parsed(&self, id: &ProseId, source: &str) -> (Option<Rc<Parsed>>, Option<Apart>) {
+    /// one is parsed on another thread, and is drawn as it was meanwhile, if it was parsed before, so it doesn't go
+    /// blank between, as a reply would if its record said other than what was written of it. While a parse is on
+    /// another thread, another isn't started for a text that goes on from what that's parsing, so a text that goes on
+    /// faster than a parse ends, such as one the agent is writing, is drawn as each parse comes in.
+    ///
+    /// Only a text drawn where it can go on, at the end of the chat, as [`Of::can_go_on`] says, is parsed again from
+    /// near its end, since what that makes of it can differ from a whole parse, as [`parse::again`] says. Drawn
+    /// anywhere else, one joined from such parses is parsed whole, once, as a reply is the first time it's drawn in
+    /// the row of its record, so it's drawn there as it will be whenever it's parsed afresh, such as when its chat is
+    /// next opened. So is one that says more there than it was parsed as.
+    pub(super) fn parsed(&self, id: &ProseId, source: &str, of: Of) -> (Option<Rc<Parsed>>, Option<Apart>) {
+        let can_go_on = of.can_go_on();
         let mut texts = self.0.borrow_mut();
         let was = match texts.texts.get(id) {
-            Some(Text::Parsed { parsed }) if parsed.source == source => return (Some(parsed.clone()), None),
+            Some(Text::Parsed { parsed }) if parsed.source == source && (can_go_on || parsed.whole) => {
+                return (Some(parsed.clone()), None);
+            }
             Some(Text::Parsing { source: parsing, was, .. }) if source.starts_with(parsing.as_str()) => {
                 return (was.clone(), None);
             }
-            Some(text) => text.was().filter(|was| source.starts_with(was.source.as_str())),
+            Some(text) => text.was(),
             None => None,
         };
-        let again = was.as_deref().and_then(|was| parse::again(was, source));
+        let gone_on = was.as_deref().filter(|was| can_go_on && source.starts_with(was.source.as_str()));
+        let again = gone_on.and_then(|was| parse::again(was, source));
         if again.map_or(source.len(), |again| source.len() - again.byte) > AT_ONCE {
             return (was.clone(), Some(Apart { source: source.to_owned(), was, again }));
         }
@@ -90,146 +101,4 @@ impl Prose {
 }
 
 #[cfg(test)]
-mod tests {
-    use std::rc::Rc;
-    use std::sync::Arc;
-
-    use gpui_kit::{Task, TestAppContext};
-
-    use super::super::{AT_ONCE, Parsed, Prose, ProseId, Text, TextAt, parse};
-
-    fn id() -> ProseId {
-        ProseId::of(TextAt::only(1, 0))
-    }
-
-    /// Paragraphs of a reply, `bytes` long or a little more.
-    fn paragraphs(bytes: usize) -> String {
-        let paragraph = "The signal box keeps a ledger of every train that passes, and the `ledger` is **kept**.\n\n";
-        paragraph.repeat(bytes / paragraph.len() + 1)
-    }
-
-    /// A list, one block, `bytes` long or a little more.
-    fn list(bytes: usize) -> String {
-        let item = "- An item of the list, with `code` and **emphasis** on it\n";
-        item.repeat(bytes / item.len() + 1)
-    }
-
-    /// `prose` with `parsed` as the text known as [`id`].
-    fn with(parsed: Parsed) -> Prose {
-        let prose = Prose::alone();
-        let mut store = prose.0.borrow_mut();
-        store.placed(&id(), TextAt::only(1, 0));
-        store.texts.insert(id(), Text::Parsed { parsed: Rc::new(parsed) });
-        drop(store);
-        prose
-    }
-
-    fn source_of(parsed: Option<Rc<Parsed>>) -> Option<String> {
-        parsed.map(|parsed| parsed.source.clone())
-    }
-
-    #[test]
-    fn a_long_text_that_goes_on_a_little_is_parsed_at_once_from_near_its_end() {
-        let was = paragraphs(3 * AT_ONCE);
-        let source = format!("{was}And a last few words.");
-        let prose = with(parse::parse(was));
-
-        let (parsed, apart) = prose.parsed(&id(), &source);
-
-        let parsed = parsed.expect("drawn at once");
-        assert!(apart.is_none(), "with nothing to parse on another thread");
-        assert_eq!(parsed.source, source);
-        assert_eq!(parsed.leaves, parse::parse(source.clone()).leaves, "as a whole parse would have it");
-    }
-
-    #[test]
-    fn a_text_that_goes_on_by_more_than_is_parsed_at_once_is_drawn_as_it_was_meanwhile() {
-        let was = paragraphs(AT_ONCE / 2);
-        let prose = with(parse::parse(was.clone()));
-
-        let (parsed, apart) = prose.parsed(&id(), &format!("{was}{}", list(2 * AT_ONCE)));
-
-        assert_eq!(source_of(parsed), Some(was), "what it was parsed as");
-        assert!(apart.is_some(), "while what it went on to is parsed on another thread");
-    }
-
-    /// A text that goes on to define a link is parsed whole, which takes long for a long one, and meanwhile it's what
-    /// it was, rather than nothing.
-    #[test]
-    fn a_long_text_that_goes_on_to_be_parsed_whole_is_drawn_as_it_was_meanwhile() {
-        let was = paragraphs(2 * AT_ONCE);
-        let prose = with(parse::parse(was.clone()));
-
-        let (parsed, apart) = prose.parsed(&id(), &format!("{was}[docs]: https://example.com\n"));
-
-        assert_eq!(source_of(parsed), Some(was));
-        assert!(apart.is_some());
-    }
-
-    #[test]
-    fn a_long_text_that_changes_other_than_by_going_on_isn_t_drawn_as_it_was() {
-        let prose = with(parse::parse(paragraphs(2 * AT_ONCE)));
-
-        let (parsed, apart) = prose.parsed(&id(), &list(2 * AT_ONCE));
-
-        assert_eq!(source_of(parsed), None, "drawn as nothing until it's in");
-        assert!(apart.is_some());
-    }
-
-    #[test]
-    fn a_text_that_goes_on_from_what_s_being_parsed_apart_waits_for_it() {
-        let was = paragraphs(AT_ONCE / 2);
-        let parsing = format!("{was}{}", list(2 * AT_ONCE));
-        let prose = with(parse::parse(was.clone()));
-        let old = prose.parsed(&id(), &was).0;
-        let task = Task::ready(());
-        prose.0.borrow_mut().texts.insert(id(), Text::Parsing { source: parsing.clone(), was: old, _task: task });
-
-        let (parsed, apart) = prose.parsed(&id(), &format!("{parsing}- One more\n"));
-
-        assert_eq!(source_of(parsed), Some(was), "drawn as it was");
-        assert!(apart.is_none(), "and no other parse started");
-    }
-
-    /// The blocks before where it's parsed again from are kept, as a leaf of them that says something a whole parse
-    /// wouldn't shows.
-    #[gpui_kit::test]
-    fn a_text_parsed_apart_from_near_its_end_keeps_what_was_before(cx: &mut TestAppContext) {
-        let was = paragraphs(AT_ONCE / 2);
-        let source = format!("{was}{}", list(2 * AT_ONCE));
-        let mut kept = parse::parse(was);
-        let mut leaves = kept.leaves.to_vec();
-        leaves[0] = "Kept as it was".to_owned();
-        kept.leaves = Arc::from(leaves);
-        let prose = with(kept);
-        let (_, apart) = prose.parsed(&id(), &source);
-
-        cx.update(|cx| prose.parse_apart(id(), apart.expect("parsed apart"), cx));
-        cx.run_until_parked();
-
-        let (parsed, _) = prose.parsed(&id(), &source);
-        let parsed = parsed.expect("parsed");
-        let whole = parse::parse(source.clone()).leaves;
-        assert_eq!(parsed.leaves[0], "Kept as it was");
-        assert_eq!(parsed.leaves[1..], whole[1..], "and the rest as a whole parse would have it");
-    }
-
-    /// A text that goes on while it's being parsed apart waits, and once that parse is in, goes on from it.
-    #[gpui_kit::test]
-    fn a_text_that_went_on_while_parsed_apart_goes_on_from_that_parse(cx: &mut TestAppContext) {
-        let was = paragraphs(AT_ONCE / 2);
-        let parsing = format!("{was}{}", list(2 * AT_ONCE));
-        let prose = with(parse::parse(was.clone()));
-        let (_, apart) = prose.parsed(&id(), &parsing);
-        cx.update(|cx| prose.parse_apart(id(), apart.expect("parsed apart"), cx));
-        let more = format!("{parsing}- One more\n");
-
-        let waiting = source_of(prose.parsed(&id(), &more).0);
-        cx.run_until_parked();
-        let (parsed, apart) = prose.parsed(&id(), &more);
-
-        assert_eq!(waiting, Some(was), "drawn as it was while the parse is apart");
-        assert_eq!(source_of(parsed), Some(parsing), "and as that parse once it's in");
-        assert!(apart.is_some(), "while what it's gone on to since is parsed");
-    }
-}
+mod tests;

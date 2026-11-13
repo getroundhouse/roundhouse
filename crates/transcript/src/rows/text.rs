@@ -1,7 +1,7 @@
-//! How a row draws a text written in the chat, by the person or the agent: once it's recorded in a row of its own,
-//! from the kit's blocks, through `crate::prose`, and otherwise with the kit's text view. Either way its view is known
-//! by [`find::view_id`], from its first word to its record, so what the view read while the text was written or sent
-//! carries over to the record until its parse is in.
+//! How a row draws a text written in the chat, by the person or the agent: in a row of its own, or at the end of the
+//! chat, from the kit's blocks, through `crate::prose`, and in a call's row with the kit's text view. Either way it's
+//! known by [`find::view_id`], from its first word to its record, so what it was parsed as while it was written or
+//! sent carries over to its record, where `crate::prose` parses a reply whole if it was parsed from near its end.
 
 use gpui_kit::{AnyElement, ElementId};
 use protocol::event::LinkedImage;
@@ -32,7 +32,7 @@ pub(super) fn written(
         return find::markdown_view(view, &id, find, area);
     };
     let at = TextAt { of: Of::Event(toggle.seq), block, among: among(part) };
-    recorded(&Written { area, ..Written::found(at, &id, find, text) }, images, shared)
+    from_blocks(&Written { area, ..Written::found(at, &id, find, text) }, images, shared)
 }
 
 /// Where a text goes among those its block draws, by what it is: a reply's text and a thought are all their blocks
@@ -41,20 +41,10 @@ fn among(part: Part) -> Among {
     if matches!(part, Part::Text | Part::Thinking) { Among::Only } else { Among::Call(part) }
 }
 
-/// The recorded text `written`, drawn from the kit's blocks, with the images the hub kept of those it points to, if it
-/// can point to any. Until it's parsed, it's the view it was written or sent into, if that's still kept and find looks
-/// in it, so it doesn't go blank between.
-pub(super) fn recorded(written: &Written<'_>, images: Option<&[LinkedImage]>, shared: &Shared) -> AnyElement {
-    let resolver = || Some(shared.linked.resolver(written.at.seq()?, images?));
-    let meanwhile = || {
-        let (id, find) = written.found?;
-        let view = shared.texts.kept(id, written.text)?;
-        let view = match resolver() {
-            Some(resolver) => view.image_source(resolver),
-            None => view,
-        };
-        Some(find::markdown_view(view, id, find, written.area.clone()))
-    };
-    let images = resolver().map(|resolver| -> Images { Box::new(resolver) });
-    shared.prose.draw(&shared.selection, written, images, meanwhile)
+/// The text `written`, drawn from the kit's blocks, with the images the hub kept of those it points to, if it's in an
+/// event's row and can point to any.
+pub(super) fn from_blocks(written: &Written<'_>, images: Option<&[LinkedImage]>, shared: &Shared) -> AnyElement {
+    let resolver = (written.at.seq()).zip(images).map(|(seq, images)| shared.linked.resolver(seq, images));
+    let images = resolver.map(|resolver| -> Images { Box::new(resolver) });
+    shared.prose.draw(&shared.selection, written, images)
 }

@@ -7,20 +7,17 @@
 //! the row first showed at the top of the window, the text grew there by all of its length and took the window up to
 //! its start.
 //!
-//! A row makes each text view it draws with [`LongTexts::markdown`], which keeps any long text it's given. A recorded
-//! text in a row of its own is drawn by `crate::prose` instead, and with a view from here only until it's parsed. The
-//! list draws each loaded row soon after it loads, to measure it, so a long text is read then, once, and its row is
-//! measured again whenever what's been read of it changes. Nothing lists ahead of time which texts a row shows, so a
-//! text view added to a row can't be left out, and `clippy.toml` disallows the kit's own ways to make one anywhere
-//! else.
+//! A row makes each text view it draws with [`LongTexts::markdown`], which keeps any long text it's given. A text in a
+//! row of its own, or at the end of the chat, is drawn by `crate::prose` instead, so these are what a call's row draws,
+//! such as a subagent's words. The list draws each loaded row soon after it loads, to measure it, so a long text is
+//! read then, once, and its row is measured again whenever what's been read of it changes. Nothing lists ahead of time
+//! which texts a row shows, so a text view added to a row can't be left out, and `clippy.toml` disallows the kit's own
+//! ways to make one anywhere else.
 //!
 //! A view draws matches over what it renders, so it keeps any text that has matches of what's being found too, and has
 //! it draw them, as `marks` says.
 //!
-//! A text is kept while the row that last drew it is loaded and still draws it. The text the agent is still writing
-//! is drawn with [`LongTexts::streaming`], which keeps it from its first word, so it doesn't go blank as it grows past
-//! what's read at once, and what's been read of it carries over when it's recorded, since it keeps its ID. The tail
-//! holds what it drew until a recorded row is drawn in its place, as [`LongTexts::draw_row`] says.
+//! A text is kept while the row that last drew it is loaded and still draws it.
 
 use std::borrow::Cow;
 use std::cell::{Cell, RefCell};
@@ -74,37 +71,11 @@ struct Drawn {
     text: Option<String>,
 }
 
-/// Which texts a row's drawing keeps.
-#[derive(Clone, Copy)]
-enum Keep {
-    /// Those over [`AT_ONCE`], which the kit reads on another thread.
-    Long,
-    /// Any with words in it. One with none is never read, as a thought can end with none.
-    Written,
-}
-
 impl LongTexts {
     /// `text`, the text `id`, as Markdown, in the view a row draws it by from one frame to the next, known by
     /// [`view_id`]. One over [`AT_ONCE`] is kept, from the end of its row's drawing.
     pub(crate) fn markdown(&self, id: &TextId, text: &str) -> TextView {
-        self.view(view_id(id), text, Keep::Long)
-    }
-
-    /// The text `id` the agent is still writing, as Markdown, kept from its first word, so the text view it grows in
-    /// is the one it's drawn in once it's recorded, by the same [`view_id`].
-    pub(crate) fn streaming(&self, id: &TextId, text: &str) -> TextView {
-        self.view(view_id(id), text, Keep::Written)
-    }
-
-    /// The view kept of the text `id`, brought up to `text`, if one's kept: one the agent wrote `text` into, which its
-    /// recorded row draws until it has a parse of its own.
-    pub(crate) fn kept(&self, id: &TextId, text: &str) -> Option<TextView> {
         let id = view_id(id);
-        let kept = self.0.borrow().kept.contains_key(&id);
-        kept.then(|| self.view(id, text, Keep::Written))
-    }
-
-    fn view(&self, id: ElementId, text: &str, keep: Keep) -> TextView {
         let (text, long) = as_drawn(text);
         let mut texts = self.0.borrow_mut();
         if let Some(kept) = texts.kept.get(&id) {
@@ -113,12 +84,7 @@ impl LongTexts {
             texts.drawn.push(Drawn { id, text });
             return view.selectable(true);
         }
-        let keeps = texts.marked.contains_key(&id)
-            || match keep {
-                Keep::Long => long,
-                Keep::Written => !text.is_empty(),
-            };
-        if !keeps {
+        if !long && !texts.marked.contains_key(&id) {
             return kit_view(id, &text);
         }
         texts.drawn.push(Drawn { id: id.clone(), text: Some(text.to_string()) });
@@ -127,17 +93,11 @@ impl LongTexts {
         kit_view(id, if long { "" } else { &text })
     }
 
-    /// Draws `row` with `draw`, then keeps what it drew as [`LongTexts::markdown`] and [`LongTexts::streaming`] say,
-    /// and notes that what the row drew last time and doesn't now is in no row.
-    ///
-    /// The streaming tail, which `tail` says `row` is, goes on holding what it drew. A reply that's done streaming
-    /// can leave the tail before its record arrives, since the hub sends the end of a stream as soon as it comes and
-    /// a record once it's stored. The record is drawn in the row the tail was in, under the same ID, so what's been
-    /// read of it carries over, rather than being read again from nothing.
+    /// Draws `row` with `draw`, then keeps what it drew as [`LongTexts::markdown`] says, and notes that what the row
+    /// drew last time and doesn't now is in no row.
     pub(crate) fn draw_row<T>(
         &self,
         row: usize,
-        tail: bool,
         this: &WeakEntity<Transcript>,
         cx: &mut App,
         draw: impl FnOnce(&mut App) -> T,
@@ -146,7 +106,7 @@ impl LongTexts {
         debug_assert!(stray.is_empty(), "a text view was made outside a row, and isn't kept");
         let drawn_row = draw(cx);
         let drawn = std::mem::take(&mut self.0.borrow_mut().drawn);
-        for kept in self.0.borrow().kept.values().filter(|kept| !tail && kept.row.get() == Some(row)) {
+        for kept in self.0.borrow().kept.values().filter(|kept| kept.row.get() == Some(row)) {
             kept.row.set(None);
         }
         for Drawn { id, text } in drawn {
@@ -162,11 +122,9 @@ impl LongTexts {
         drawn_row
     }
 
-    /// Lets go of each text that's in no row, or only in one that isn't loaded. The row after the log's is the
-    /// streaming tail, which always is.
+    /// Lets go of each text that's in no row, or only in one that isn't loaded.
     pub(crate) fn let_go(&self, log: &SessionLog) {
-        let rows = log.row_count();
-        let loaded = |row: usize| row == rows || (row < rows && !matches!(log.row(row), Row::Unloaded));
+        let loaded = |row: usize| row < log.row_count() && !matches!(log.row(row), Row::Unloaded);
         self.0.borrow_mut().kept.retain(|_, kept| kept.row.get().is_some_and(loaded));
     }
 

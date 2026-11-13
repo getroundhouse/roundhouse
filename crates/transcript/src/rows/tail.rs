@@ -1,5 +1,8 @@
 //! The end of the transcript: text the agent is still writing, the prompts it hasn't read yet, the working line while
-//! it works, and the lines for what it has in the background, which `tail/background.rs` draws.
+//! it works, and the lines for what it has in the background, which `tail/background.rs` draws. What the agent is
+//! writing and the prompts are drawn from the kit's blocks, through `crate::prose`, each at the end of the chat in the
+//! order they're drawn, so they're selected with the rest. Once it's recorded, each is drawn in the row of its record
+//! from what it was parsed as, and a reply parsed from near its end as it went on is parsed whole there, once.
 
 use std::time::Duration;
 
@@ -16,12 +19,13 @@ use protocol::tail::{BlockKind, Compacting, Tail};
 
 use super::around::Around;
 use super::line::{HEIGHT, still_icon};
-use super::prompt::{Progress, Prompt, prompt_bubble};
-use super::{Shared, empty, render_event, row, thinking, turn_times};
+use super::prompt::{Prompt, prompt_bubble};
+use super::{Shared, empty, from_blocks, render_event, row, thinking, turn_times};
 use crate::attachments::{self, Carried};
-use crate::find::{FindLook, Part};
+use crate::find::{self, FindLook, Part};
 use crate::folds::Folds;
 use crate::item_key::ItemKey;
+use crate::prose::{TextAt, Written};
 use crate::transcript::{AtWork, Model, PullRequestStanding};
 
 mod background;
@@ -62,10 +66,11 @@ pub(super) fn waiting(log: &SessionLog, m: &Model) -> Vec<Waiting> {
 /// what it's running in the background, then its wait on the pull request. A thought shows its latest line, or all of
 /// it when thinking starts open, the way it will once it's recorded. A call shows once it's recorded: until then it isn't
 /// running, and the working line says the agent is at work. A subagent's line opens the subagent tab when the log is
-/// read `by` place, which keeps its work apart, since only then can the tab read it.
-pub(super) fn render_tail(end: &EndOfChat, shared: &Shared, by: By, find: &FindLook, cx: &App) -> AnyElement {
+/// read `by` place, which keeps its work apart, since only then can the tab read it. Nothing's found at the end of the
+/// chat, since it isn't counted, so nothing's marked there either.
+pub(super) fn render_tail(end: &EndOfChat, shared: &Shared, by: By, cx: &App) -> AnyElement {
     let EndOfChat { tail, waiting, at_work, folds, pull_request } = *end;
-    let written = still_writing(tail, shared, folds.thinking_open(), cx);
+    let (written, placed) = still_writing(tail, shared, folds.thinking_open(), cx);
     let mut after: Vec<AnyElement> = Vec::new();
     if at_work.working {
         let line = working_line(at_work.turn_started_at_ms, tail.compacting.as_ref(), &shared.line_text, cx);
@@ -83,7 +88,7 @@ pub(super) fn render_tail(end: &EndOfChat, shared: &Shared, by: By, find: &FindL
     }
     // Each prompt is a row of its own, as it will be once it's read, between what the agent is writing and the
     // working line, which stays the chat's last.
-    let prompts = waiting.iter().map(|prompt| waiting_prompt(prompt, shared, find, cx));
+    let prompts = (placed..).zip(waiting).map(|(n, prompt)| waiting_prompt(prompt, TextAt::at_the_end(n), shared, cx));
     v_flex()
         .w_full()
         .when(!written.is_empty(), |d| d.child(row().children(written)))
@@ -92,22 +97,25 @@ pub(super) fn render_tail(end: &EndOfChat, shared: &Shared, by: By, find: &FindL
         .into_any_element()
 }
 
-/// What the agent is still writing, block by block. A subagent's work shows in the call that started it, once it's
-/// recorded.
-fn still_writing(tail: &Tail, shared: &Shared, thinking_open: bool, cx: &App) -> Vec<AnyElement> {
-    let texts = &shared.texts;
-    let mut out = Vec::new();
+/// What the agent is still writing, block by block, and how many texts that is, each at the next place at the end of
+/// the chat. Each is known as it will be once it's recorded. A subagent's work shows in the call that started it, once
+/// it's recorded.
+fn still_writing(tail: &Tail, shared: &Shared, thinking_open: bool, cx: &App) -> (Vec<AnyElement>, usize) {
+    let (mut out, mut placed) = (Vec::new(), 0);
     for message in tail.messages.iter().filter(|m| m.parent_tool_use_id.is_none()) {
         for block in &message.blocks {
             let key = ItemKey::Block(message.message_id.clone(), block.index);
+            let mut drawn = |part| {
+                let (element, at) = (find::view_id(&(key.clone(), part)), TextAt::at_the_end(placed));
+                placed += 1;
+                from_blocks(&Written::unfound(at, element, &block.text), None, shared)
+            };
             match block.kind {
-                BlockKind::Text => {
-                    out.push(texts.streaming(&(key.clone(), Part::Text), &block.text).into_any_element());
-                }
+                BlockKind::Text => out.push(drawn(Part::Text)),
                 BlockKind::Thinking if thinking_open => {
-                    let text = texts.streaming(&(key.clone(), Part::Thinking), &block.text);
+                    let thought_drawn = drawn(Part::Thinking);
                     out.push(thought("Thinking…".to_string(), cx).into_any_element());
-                    out.push(thinking::text(&key, text, cx).into_any_element());
+                    out.push(thinking::text(&key, thought_drawn, cx).into_any_element());
                 }
                 BlockKind::Thinking => {
                     out.push(thought(format!("Thinking… {}", last_line(&block.text)), cx).into_any_element());
@@ -116,17 +124,18 @@ fn still_writing(tail: &Tail, shared: &Shared, thinking_open: bool, cx: &App) ->
             }
         }
     }
-    out
+    (out, placed)
 }
 
-/// A prompt the agent hasn't read yet, drawn as it will be once it's read, faint until then.
-fn waiting_prompt(prompt: &Waiting, shared: &Shared, find: &FindLook, cx: &App) -> AnyElement {
+/// A prompt the agent hasn't read yet, at `at`, drawn as it will be once it's read, faint until then.
+fn waiting_prompt(prompt: &Waiting, at: TextAt, shared: &Shared, cx: &App) -> AnyElement {
+    let find = FindLook::default();
     match prompt {
-        Waiting::Recorded(event, around) => render_event(event, around, None, shared, find, cx),
+        Waiting::Recorded(event, around) => render_event(event, around, at, shared, &find, cx),
         Waiting::Sending(sent, carried) => {
             let key = ItemKey::Prompt(sent.client_msg_id.clone());
-            let text = Prompt { text: &sent.prompt.text, find };
-            prompt_bubble(&key, text, carried, Progress::Sending, shared, cx)
+            let text = Prompt { text: &sent.prompt.text, find: &find, at };
+            prompt_bubble(&key, text, carried, None, shared, cx)
         }
     }
 }

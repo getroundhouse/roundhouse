@@ -1,8 +1,9 @@
-//! The recorded texts that sit in a row of their own, drawn by the transcript from the kit's blocks rather than by the
-//! kit's text view, so what's selected of them, and what's found in them, is the transcript's to keep while their rows
-//! are out of sight. They're the agent's replies and thoughts, prompts, a plan to approve, a compaction's summary,
-//! the prose a call in a row of its own shows of its own, such as a subagent's report, and what the subagent tab says
-//! its subagent was asked and reported, above and below its rows. `docs/ui.md` has why.
+//! The texts of the chat that sit in a row of their own, or at its end, drawn by the transcript from the kit's blocks
+//! rather than by the kit's text view, so what's selected of them, and what's found in them, is the transcript's to
+//! keep while their rows are out of sight. They're the agent's replies and thoughts, from when it starts writing them,
+//! prompts, from when they're sent, a plan to approve, a compaction's summary, the prose a call in a row of its own
+//! shows of its own, such as a subagent's report, and what the subagent tab says its subagent was asked and reported,
+//! above and below its rows. `docs/ui.md` has why.
 //!
 //! The kit parses the Markdown and draws each block as its text view would, through its `editor_host`. Each
 //! paragraph, heading, code block and table cell is a leaf, keyed by its place in the text. The kit says where it drew
@@ -13,12 +14,13 @@
 //! loaded rows out of sight. What it shows is kept while its row is loaded, or it's selected, for a copy, and the
 //! subagent tab's head and foot while the tab is open. The blocks it's drawn from are kept for a long one, and for a
 //! short one only while it's among those drawn most recently, as `budget` says, and a short one is parsed again when
-//! it's next drawn. A text that goes on from what it was parsed as is parsed again from near its end, keeping the
-//! blocks before. When more than [`AT_ONCE`] is to be parsed, it's parsed on another thread, as `parsing` says, and
-//! draws what it was parsed as before until it's in, if it goes on from that, or nothing, and then its row is measured
-//! again. The text the agent is still writing, and a prompt being sent, are drawn by the kit's text view, which
-//! `crate::long_texts` keeps. Once it's recorded, its row goes on drawing that view until the record's own parse is
-//! in, so it doesn't go blank between.
+//! it's next drawn. A text at the end of the chat that goes on from what it was parsed as is parsed again from near
+//! its end, keeping the blocks before, and is parsed whole once it's drawn anywhere else, since the two can differ.
+//! When more than [`AT_ONCE`] is to be parsed, it's parsed on another thread, as `parsing` says, and draws what it was
+//! parsed as before until it's in, or nothing if it wasn't, and then its row is measured again. A text is kept by what
+//! it's known by, which is the same from a reply's first word to its record, and from a prompt being sent to the row
+//! where the agent took it, so it's drawn from what it was parsed as once it's moved there, as `moves` says, and
+//! doesn't go blank between.
 //!
 //! A row draws its event's texts through [`Prose::drawing`], as the subagent tab draws its head and foot, which hides
 //! each text it no longer draws, such as a thought that's been closed, so a copy has only what's shown. A hidden text
@@ -37,7 +39,7 @@ use protocol::model::Seq;
 use crate::find::{FindLook, Part, TextId, view_id};
 use crate::images_apart::images_apart;
 use crate::selection::Selection;
-use element::{Drawing, ProseElement};
+use element::ProseElement;
 use moves::Places;
 pub(crate) use parse::{ATOM, Parsed, leaves};
 
@@ -73,22 +75,41 @@ impl TextAt {
         Self { of, block: 0, among: Among::Only }
     }
 
+    /// The `n`th text the end of the chat draws, in the order it draws them: what the agent is still writing, then the
+    /// prompts it hasn't read yet.
+    pub(crate) fn at_the_end(n: usize) -> Self {
+        Self { of: Of::Tail, block: n, among: Among::Only }
+    }
+
     /// The event its images are found by, if it's in one's row.
     pub(crate) fn seq(self) -> Option<Seq> {
         match self.of {
             Of::Event(seq) => Some(seq),
-            Of::Head | Of::Foot => None,
+            Of::Head | Of::Tail | Of::Foot => None,
         }
     }
 }
 
 /// What draws a text, in the chat's order: the subagent tab's head, which says what its subagent was asked above the
-/// tab's first row, an event's row, or the tab's foot, its report, below the last.
+/// tab's first row, an event's row, the end of the chat, with what the agent is still writing and the prompts it
+/// hasn't read yet, or the tab's foot, its report, below that.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) enum Of {
     Head,
     Event(Seq),
+    Tail,
     Foot,
+}
+
+impl Of {
+    /// Whether a text drawn here can go on from what it says, as what the agent is still writing does at the end of
+    /// the chat. What's drawn anywhere else is recorded, and says all it will.
+    pub(crate) fn can_go_on(self) -> bool {
+        match self {
+            Of::Tail => true,
+            Of::Head | Of::Event(_) | Of::Foot => false,
+        }
+    }
 }
 
 /// Where a text is among those one block draws, in the order the block draws them. Each is known by what it is, rather
@@ -137,8 +158,8 @@ enum Text {
     /// A short text not drawn lately, with what it shows, for a copy, and not its blocks, which it's parsed for again
     /// when it's next drawn.
     Read { leaves: Arc<[String]> },
-    /// Being parsed from `source` on another thread, by a task that's dropped, and stops, with this. One that goes on
-    /// from what it was parsed as is drawn as that, `was`, until it's in.
+    /// Being parsed from `source` on another thread, by a task that's dropped, and stops, with this. It's drawn as what
+    /// it was parsed as before, `was`, if it was, until it's in.
     Parsing { source: String, was: Option<Rc<Parsed>>, _task: Task<()> },
 }
 
@@ -170,9 +191,9 @@ impl Text {
     }
 }
 
-/// One of the chat's recorded texts: where it is in the chat, what its element is known by from one frame to the
-/// next, what find knows it by and how what it finds is drawn, if find looks in it, what it says, and the area that
-/// scrolls it, if it's in one.
+/// One of the chat's texts drawn this way, recorded or not yet: where it is in the chat, what its element is known by
+/// from one frame to the next, what find knows it by and how what it finds is drawn, if find looks in it, what it says,
+/// and the area that scrolls it, if it's in one.
 pub(crate) struct Written<'a> {
     pub(crate) at: TextAt,
     pub(crate) element: ElementId,
@@ -242,14 +263,8 @@ impl Prose {
     }
 
     /// Draws `written`, with its images found by `images`. Until a long text is parsed, it's what it was parsed as
-    /// before, if it goes on from that, or what `until_parsed` draws, or nothing.
-    pub(crate) fn draw(
-        &self,
-        selection: &Selection,
-        written: &Written<'_>,
-        images: Option<Images>,
-        until_parsed: impl FnOnce() -> Option<AnyElement>,
-    ) -> AnyElement {
+    /// before, or nothing if it wasn't.
+    pub(crate) fn draw(&self, selection: &Selection, written: &Written<'_>, images: Option<Images>) -> AnyElement {
         let drawing = self.0.borrow_mut().in_row.as_mut().map(|(of, these)| {
             these.push(written.at);
             *of
@@ -262,17 +277,12 @@ impl Prose {
         let known = ProseId(written.element.clone());
         self.0.borrow_mut().placed(&known, written.at);
         let source = images_apart(written.text);
-        let (parsed, apart) = self.parsed(&known, &source);
-        let (text, marks) = match parsed {
-            Some(parsed) => {
-                let marks = written.found.map_or_else(Vec::new, |(id, find)| find.marks_in_leaves(id, &parsed.leaves));
-                (Drawing::Parsed(parsed), marks)
-            }
-            None => (Drawing::Meanwhile(until_parsed()), Vec::new()),
-        };
+        let (parsed, apart) = self.parsed(&known, &source, written.at.of);
+        let marks = (parsed.as_ref().zip(written.found))
+            .map_or_else(Vec::new, |(parsed, (id, find))| find.marks_in_leaves(id, &parsed.leaves));
         let (prose, selection) = (self.clone(), selection.clone());
         let (at, area) = (written.at, written.area.clone());
-        ProseElement { known, at, area, text, apart, marks, images, prose, selection }.into_any_element()
+        ProseElement { known, at, area, text: parsed, apart, marks, images, prose, selection }.into_any_element()
     }
 
     /// What the texts from `from` to `to`, both in, show, leaf by leaf, in order, as far as they've been parsed, but
@@ -298,16 +308,18 @@ impl Prose {
     }
 
     /// Lets go of each text last drawn in an event's row that isn't loaded, but for those in `selected`, so a copy
-    /// still has them. The subagent tab's head and foot are its subagent's, and kept with the tab.
+    /// still has them. The subagent tab's head and foot are its subagent's, and kept with the tab. The end of the chat
+    /// is always there, and keeps the few texts it's drawn most recently and doesn't now, as `moves` says.
     pub(crate) fn let_go(&self, log: &SessionLog, selected: Option<&RangeInclusive<TextAt>>) {
         let loaded = |at: &TextAt| match at.of {
             Of::Event(seq) => log.row_of(seq).is_some_and(|row| matches!(log.row(row), Row::Event(_))),
-            Of::Head | Of::Foot => true,
+            Of::Head | Of::Tail | Of::Foot => true,
         };
-        let keep = |at: &TextAt| loaded(at) || selected.is_some_and(|selected| selected.contains(at));
+        let held = |at: &TextAt| selected.is_some_and(|selected| selected.contains(at));
         let mut store = self.0.borrow_mut();
         let Store { texts, places, hidden, .. } = &mut *store;
-        places.retain(keep);
+        places.retain(|at| loaded(at) || held(at));
+        places.keep_few_left_at_the_end(hidden, held);
         texts.retain(|id, _| places.last_at(id).is_some());
         hidden.retain(|id| places.last_at(id).is_some());
     }
@@ -340,52 +352,4 @@ impl Prose {
 }
 
 #[cfg(test)]
-mod tests {
-    use protocol::event::{ContentBlock, EventBody};
-
-    use super::{Of, Prose, ProseId, TextAt};
-    use crate::fixtures::{event, log};
-
-    fn at(seq: u64) -> TextAt {
-        TextAt::only(seq, 0)
-    }
-
-    #[test]
-    fn the_subagent_tab_s_head_comes_before_every_row_s_texts_and_its_foot_after() {
-        let (head, foot) = (TextAt::first_of(Of::Head), TextAt::first_of(Of::Foot));
-        let rows = [TextAt::only(0, 0), TextAt::only(u64::MAX, usize::MAX)];
-
-        assert!(rows.iter().all(|row| head < *row && *row < foot), "{head:?} {rows:?} {foot:?}");
-    }
-
-    #[test]
-    fn a_text_whose_event_is_let_go_of_is_kept_while_any_of_it_is_selected() {
-        let prose = Prose::alone();
-        for seq in 1..=3 {
-            prose.drawn_at(at(seq), "words");
-        }
-        let blocks = vec![ContentBlock::Text { text: "words".into(), images: Vec::new() }];
-        let body =
-            EventBody::Assistant { message_id: None, parent_tool_use_id: None, model: None, blocks, first_index: None };
-        let held = log([event(3, body)]);
-
-        prose.let_go(&held, Some(&(at(2)..=at(3))));
-        let kept = [1, 2, 3].map(|seq| prose.keeps(&ProseId::of(at(seq))));
-        prose.let_go(&held, None);
-
-        assert_eq!(kept, [false, true, true], "what's loaded, and what's selected");
-        assert!(!prose.keeps(&ProseId::of(at(2))), "until it isn't");
-    }
-
-    #[test]
-    fn the_subagent_tab_s_head_and_foot_are_kept_whatever_the_log_lets_go_of() {
-        let prose = Prose::alone();
-        let (head, foot) = (TextAt::first_of(Of::Head), TextAt::first_of(Of::Foot));
-        prose.drawn_at(head, "What it was asked");
-        prose.drawn_at(foot, "What it reported");
-
-        prose.let_go(&log([]), None);
-
-        assert!(prose.keeps(&ProseId::of(head)) && prose.keeps(&ProseId::of(foot)));
-    }
-}
+mod tests;

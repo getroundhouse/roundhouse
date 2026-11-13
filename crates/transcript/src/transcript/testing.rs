@@ -42,8 +42,8 @@ impl Transcript {
         self.texts.all_read(cx) && self.prose.all_parsed()
     }
 
-    /// What each long text the rows have drawn, and each text the agent wrote as the transcript watched, shows as
-    /// of what's been read of it, and what each of the agent's texts that it draws from the kit's blocks shows.
+    /// What each long text the rows have drawn with the kit's text view shows, as of what's been read of it, and what
+    /// each text the transcript keeps the kit's blocks of was parsed from, which is what it shows.
     pub fn kept_texts(&self, cx: &gpui_kit::App) -> Vec<String> {
         let mut texts = self.texts.read(cx);
         texts.extend(self.prose.sources());
