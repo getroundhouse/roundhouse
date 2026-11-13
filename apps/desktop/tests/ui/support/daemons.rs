@@ -5,40 +5,55 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::OnceLock;
 
-/// The binaries live in other packages, so `cargo test -p desktop` wouldn't otherwise rebuild them.
+/// The binaries live in other packages, so `cargo test -p desktop` wouldn't otherwise rebuild them. They're in the
+/// folder Cargo says it built the hub in, with the examples in its `examples`. Where it keeps this test binary, and so
+/// what's near it, isn't something Cargo promises, and 1.100 moved it.
 pub(crate) fn binaries() -> &'static PathBuf {
     static DIR: OnceLock<PathBuf> = OnceLock::new();
     DIR.get_or_init(|| {
-        once_per_run("ui-binaries", || {
-            let output = Command::new(env!("CARGO"))
-                .args([
-                    "build",
-                    "-p",
-                    "daemon",
-                    "--bin",
-                    "roundhoused",
-                    "--example",
-                    "fake_claude",
-                    "--example",
-                    "stand_in_hub",
-                ])
-                .output()
-                .unwrap();
-            assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
-        });
-        // target/debug/deps/ui-xxxx
-        std::env::current_exe().unwrap().parent().unwrap().parent().unwrap().to_path_buf()
+        // The build says the folder here, for the tests a nextest run starts after it, which don't build.
+        let said = Path::new(env!("CARGO_TARGET_TMPDIR")).join("ui-binaries.dir");
+        once_per_run("ui-binaries", || std::fs::write(&said, build_binaries()).unwrap());
+        PathBuf::from(std::fs::read_to_string(&said).unwrap())
     })
+}
+
+/// Builds the hub and the examples, and answers the folder Cargo says it put the hub in.
+fn build_binaries() -> String {
+    let output = Command::new(env!("CARGO"))
+        .args([
+            "build",
+            "-p",
+            "daemon",
+            "--bin",
+            "roundhoused",
+            "--example",
+            "fake_claude",
+            "--example",
+            "stand_in_hub",
+            "--message-format=json-render-diagnostics",
+        ])
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+    let hub = output
+        .stdout
+        .split(|&byte| byte == b'\n')
+        .filter_map(|line| serde_json::from_slice::<serde_json::Value>(line).ok())
+        .find(|message| message["reason"] == "compiler-artifact" && message["target"]["name"] == "roundhoused")
+        .and_then(|message| message["executable"].as_str().map(PathBuf::from))
+        .expect("Cargo says where it built the hub");
+    hub.parent().unwrap().to_str().unwrap().to_string()
 }
 
 /// Builds once per nextest run, which starts a process for each test, so the `OnceLock` above alone would run cargo
 /// for every test, and those take turns on its lock on the target directory. Under `cargo test`, once per process.
 /// `name` names the lock, and the file that says which run built it.
 fn once_per_run(name: &str, build: impl FnOnce()) {
-    let Ok(run) = std::env::var("NEXTEST_RUN_ID") else { return build() };
     let dir = Path::new(env!("CARGO_TARGET_TMPDIR"));
-    // Cargo makes it only as it compiles a test.
+    // Cargo makes it only as it compiles a test, and the build writes what it found there, nextest or not.
     std::fs::create_dir_all(dir).unwrap();
+    let Ok(run) = std::env::var("NEXTEST_RUN_ID") else { return build() };
     let lock = File::create(dir.join(format!("{name}.lock"))).unwrap();
     // Let go as it drops, even in a panic.
     lock.lock().unwrap();
