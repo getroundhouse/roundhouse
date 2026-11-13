@@ -1,6 +1,6 @@
 [package]
 name = "transcript"
-description = "A session's history and live output, in a list of its own, on gpui-kit's Markdown blocks and text views."
+description = "A session's history and live output, in a list of its own, on gpui-kit's Markdown blocks."
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
@@ -19,9 +19,10 @@ gpui-kit.workspace = true
 image = { workspace = true, features = ["gif", "jpeg", "png", "webp"] }
 look.workspace = true
 # Finds the images written one after another in the agent's text or a prompt's, to draw each at its own width, as the
-# text view reads it.
+# kit parses it.
 markdown.workspace = true
-# Holds the images the agent's text points to, for the text view, which takes only what can be shared across threads.
+# Holds the images the agent's text points to, for the kit's drawing of a text, which takes only what can be shared
+# across threads.
 parking_lot.workspace = true
 serde_json.workspace = true
 similar.workspace = true
@@ -30,7 +31,7 @@ similar.workspace = true
 proptest.workspace = true
 protocol = { workspace = true, features = ["testing"] }
 transcript = { workspace = true, features = ["testing"] }
-# For a test of what the kit's text view reads at once, which the transcript keeps text views by.
+# For the tests that need an app, such as those of where a text is drawn and what's selected of it.
 gpui-kit = { workspace = true, features = ["test-support"] }
 
 [lints]

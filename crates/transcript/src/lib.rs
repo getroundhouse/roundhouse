@@ -1,5 +1,5 @@
-//! One session's transcript: its history by range and its live output, in a list of its own, with the agent's words
-//! drawn from the kit's Markdown blocks, and the rest by the kit's `TextView`. `docs/ui.md` has why it's built on
+//! One session's transcript: its history by range and its live output, in a list of its own, with its Markdown drawn
+//! from the kit's Markdown blocks, and the rest by the kit's selectable text. `docs/ui.md` has why it's built on
 //! those. Everything GPUI about a transcript is in here, and the data is in `client_core::session_log`, which knows
 //! nothing about rendering.
 
@@ -17,7 +17,6 @@ mod item_key;
 mod linked_images;
 mod list;
 mod log_block;
-mod long_texts;
 mod model_names;
 mod prose;
 mod questions;

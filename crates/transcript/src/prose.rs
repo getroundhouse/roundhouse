@@ -1,9 +1,9 @@
-//! The texts of the chat that sit in a row of their own, or at its end, drawn by the transcript from the kit's blocks
-//! rather than by the kit's text view, so what's selected of them, and what's found in them, is the transcript's to
-//! keep while their rows are out of sight. They're the agent's replies and thoughts, from when it starts writing them,
-//! prompts, from when they're sent, a plan to approve, a compaction's summary, the prose a call in a row of its own
-//! shows of its own, such as a subagent's report, and what the subagent tab says its subagent was asked and reported,
-//! above and below its rows. `docs/ui.md` has why.
+//! The chat's Markdown, drawn by the transcript from the kit's blocks rather than by the kit's text view, so what's
+//! selected of it, and what's found in it, is the transcript's to keep while its rows are out of sight. It's the
+//! agent's replies and thoughts, from when it starts writing them, prompts, from when they're sent, a plan to approve,
+//! a compaction's summary, the prose a call shows of its own, such as a subagent's report, what a call's row nests,
+//! such as a subagent's words, and what the subagent tab says its subagent was asked and reported, above and below its
+//! rows. `docs/ui.md` has why.
 //!
 //! The kit parses the Markdown and draws each block as its text view would, through its `editor_host`. Each
 //! paragraph, heading, code block and table cell is a leaf, keyed by its place in the text. The kit says where it drew
@@ -34,17 +34,18 @@ use std::sync::Arc;
 
 use client_core::session_log::{Row, SessionLog};
 use gpui_kit::{AnyElement, App, ElementId, IntoElement, Task};
-use protocol::model::Seq;
 
-use crate::find::{FindLook, Part, TextId, view_id};
+use crate::find::{FindLook, TextId, view_id};
 use crate::images_apart::images_apart;
 use crate::linked_images::Images;
 use crate::selection::Selection;
+pub(crate) use at::{Among, Of, Place, TextAt};
 use element::ProseElement;
 use moves::Places;
 use parse::ImagesAre;
 pub(crate) use parse::{ATOM, Parsed, leaves};
 
+mod at;
 mod budget;
 mod element;
 mod moves;
@@ -56,74 +57,12 @@ mod parsing;
 /// more is parsed on another thread. `docs/performance.md` has how that was measured.
 const AT_ONCE: usize = 4 * 1024;
 
-/// Where a text is in the chat: what draws it, which of its blocks it's drawn in, and where it is among the texts that
-/// block draws. Ordered as the chat is, since a row draws its blocks in order, and a block its texts.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub(crate) struct TextAt {
-    pub(crate) of: Of,
-    pub(crate) block: usize,
-    pub(crate) among: Among,
-}
-
-impl TextAt {
-    /// The only text the `block`th block of the event at `seq` draws, such as a reply's.
-    pub(crate) fn only(seq: Seq, block: usize) -> Self {
-        Self { of: Of::Event(seq), block, among: Among::Only }
-    }
-
-    /// The first place in what `of` draws, which is the only text's when it draws one, as the subagent tab's head and
-    /// foot do.
-    pub(crate) fn first_of(of: Of) -> Self {
-        Self { of, block: 0, among: Among::Only }
-    }
-
-    /// The `n`th text the end of the chat draws, in the order it draws them: what the agent is still writing, then the
-    /// prompts it hasn't read yet.
-    pub(crate) fn at_the_end(n: usize) -> Self {
-        Self { of: Of::Tail, block: n, among: Among::Only }
-    }
-
-    /// The event its images are found by, if it's in one's row.
-    pub(crate) fn seq(self) -> Option<Seq> {
-        match self.of {
-            Of::Event(seq) => Some(seq),
-            Of::Head | Of::Tail | Of::Foot => None,
-        }
-    }
-}
-
-/// What draws a text, in the chat's order: the subagent tab's head, which says what its subagent was asked above the
-/// tab's first row, an event's row, the end of the chat, with what the agent is still writing and the prompts it
-/// hasn't read yet, or the tab's foot, its report, below that.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub(crate) enum Of {
-    Head,
-    Event(Seq),
-    Tail,
-    Foot,
-}
-
-impl Of {
-    /// Whether a text drawn here can go on from what it says, as what the agent is still writing does at the end of
-    /// the chat. What's drawn anywhere else is recorded, and says all it will.
-    pub(crate) fn can_go_on(self) -> bool {
-        match self {
-            Of::Tail => true,
-            Of::Head | Of::Event(_) | Of::Foot => false,
-        }
-    }
-}
-
-/// Where a text is among those one block draws, in the order the block draws them. Each is known by what it is, rather
-/// than by how many texts the block drew before it, so it keeps its place while the block draws more or fewer, such as
-/// a call that's opened or closed, and no other text takes it. Ordered as declared, so `Only` is the first place in a
-/// block, which [`TextAt::first_of`] counts on, as the first place in what draws it.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub(crate) enum Among {
-    /// The only text the block draws, such as a reply's.
-    Only,
-    /// One of a call's own texts, such as what a subagent was asked, or its report, in the order of their parts.
-    Call(Part),
+/// What's being drawn, such as an event's row: the texts it's drawn so far, and how many of them each of its blocks
+/// nests.
+struct Drawing {
+    of: Of,
+    these: HashSet<TextAt>,
+    nested: HashMap<usize, usize>,
 }
 
 /// What a text drawn this way is known by: what its element is known by, which stays the same as it moves, as a reply
@@ -150,8 +89,8 @@ struct Store {
     frame: u64,
     /// How many short texts have been parsed since the blocks kept were last looked at.
     parses: u32,
-    /// What's being drawn, if anything is, such as an event's row, and the texts it's drawn so far.
-    in_row: Option<(Of, Vec<TextAt>)>,
+    /// What's being drawn, if anything is.
+    in_row: Option<Drawing>,
 }
 
 enum Text {
@@ -197,7 +136,7 @@ impl Text {
 /// from one frame to the next, what find knows it by and how what it finds is drawn, if find looks in it, what it says,
 /// and the area that scrolls it, if it's in one.
 pub(crate) struct Written<'a> {
-    pub(crate) at: TextAt,
+    pub(crate) at: Place,
     pub(crate) element: ElementId,
     pub(crate) found: Option<(&'a TextId, &'a FindLook)>,
     pub(crate) text: &'a str,
@@ -206,19 +145,44 @@ pub(crate) struct Written<'a> {
 
 impl<'a> Written<'a> {
     /// A text find looks in, which it knows as `id`, with what it finds drawn as `find` says.
-    pub(crate) fn found(at: TextAt, id: &'a TextId, find: &'a FindLook, text: &'a str) -> Self {
-        Self { at, element: view_id(id), found: Some((id, find)), text, area: None }
+    pub(crate) fn found(at: impl Into<Place>, id: &'a TextId, find: &'a FindLook, text: &'a str) -> Self {
+        Self { at: at.into(), element: view_id(id), found: Some((id, find)), text, area: None }
     }
 
     /// A text find doesn't look in, such as a plan, whose element is known as `element`.
     pub(crate) fn unfound(at: TextAt, element: ElementId, text: &'a str) -> Self {
-        Self { at, element, found: None, text, area: None }
+        Self { at: Place::At(at), element, found: None, text, area: None }
     }
 
     /// In the area `area`, which scrolls it, and scrolls on under a drag that starts in it.
     pub(crate) fn in_area(mut self, area: ElementId) -> Self {
         self.area = Some(area);
         self
+    }
+}
+
+impl Store {
+    /// Notes that what's being drawn draws the text known as `known` at `place`, and says where that is: where it
+    /// says, or for the next text a block nests, after those of them drawn so far in this drawing of the row.
+    fn noted(&mut self, known: &ProseId, place: Place) -> TextAt {
+        let nested = self.in_row.as_ref().map(|mine| &mine.nested);
+        let at = match place {
+            Place::At(at) => at,
+            Place::NextNested { seq, block } => {
+                let drawn = nested.and_then(|nested| nested.get(&block)).copied().unwrap_or(0);
+                TextAt { of: Of::Event(seq), block, among: Among::Nested(drawn) }
+            }
+        };
+        let drawing = self.in_row.as_mut().map(|mine| {
+            mine.these.insert(at);
+            if matches!(place, Place::NextNested { .. }) {
+                *mine.nested.entry(at.block).or_default() += 1;
+            }
+            mine.of
+        });
+        debug_assert_eq!(drawing, Some(at.of), "a text drawn outside what draws it is never hidden once it isn't");
+        self.placed(known, at);
+        at
     }
 }
 
@@ -243,20 +207,30 @@ impl Prose {
     }
 
     /// Draws what `of` says with `draw`, such as the row of an event, and hides each of its texts it no longer draws,
-    /// such as one in a fold that's been closed, so a copy has only what's shown. Only its own texts are looked at, so
+    /// such as one in a fold that's been closed, or for one a call nests, takes its place away, so a copy has only
+    /// what's shown. Only its own texts are looked at, so
     /// a row costs the same however many the chat holds.
     pub(crate) fn drawing<T>(&self, of: Of, draw: impl FnOnce() -> T) -> T {
-        let outer = self.0.borrow_mut().in_row.replace((of, Vec::new()));
+        let mine = Drawing { of, these: HashSet::new(), nested: HashMap::new() };
+        let outer = self.0.borrow_mut().in_row.replace(mine);
         let drawn = draw();
         let mut texts = self.0.borrow_mut();
-        let these = std::mem::replace(&mut texts.in_row, outer).map(|(_, these)| these).unwrap_or_default();
+        let these = std::mem::replace(&mut texts.in_row, outer).map(|mine| mine.these).unwrap_or_default();
         let Store { places, hidden, .. } = &mut *texts;
+        let mut left = Vec::new();
         for (at, id) in places.within(TextAt::first_of(of)..).take_while(|(at, _)| at.of == of) {
             if these.contains(at) {
                 hidden.remove(id);
+            } else if matches!(at.among, Among::Nested(_)) {
+                // Its place is only its turn among those drawn, which it has none of now, and another may have a
+                // later one that came before it.
+                left.push(*at);
             } else {
                 hidden.insert(id.clone());
             }
+        }
+        for at in left {
+            places.leave(&at);
         }
         drawn
     }
@@ -264,24 +238,15 @@ impl Prose {
     /// Draws `written`, with its images drawn as `images` says, or as the kit draws them if there's none. Until a long
     /// text is parsed, it's what it was parsed as before, or nothing if it wasn't.
     pub(crate) fn draw(&self, selection: &Selection, written: &Written<'_>, images: Option<Images>) -> AnyElement {
-        let drawing = self.0.borrow_mut().in_row.as_mut().map(|(of, these)| {
-            these.push(written.at);
-            *of
-        });
-        debug_assert_eq!(
-            drawing,
-            Some(written.at.of),
-            "a text drawn outside what draws it is never hidden once it isn't"
-        );
         let known = ProseId(written.element.clone());
-        self.0.borrow_mut().placed(&known, written.at);
+        let at = self.0.borrow_mut().noted(&known, written.at);
         let source = images_apart(written.text);
         let whose = ImagesAre::of(&source, images.is_some());
-        let (parsed, apart) = self.parsed(&known, &source, written.at.of, whose);
+        let (parsed, apart) = self.parsed(&known, &source, at.of, whose);
         let marks = (parsed.as_ref().zip(written.found))
             .map_or_else(Vec::new, |(parsed, (id, find))| find.marks_in_leaves(id, &parsed.leaves));
         let (prose, selection) = (self.clone(), selection.clone());
-        let (at, area) = (written.at, written.area.clone());
+        let area = written.area.clone();
         ProseElement { known, at, area, text: parsed, apart, marks, images, prose, selection }.into_any_element()
     }
 

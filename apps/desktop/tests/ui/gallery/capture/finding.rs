@@ -64,3 +64,21 @@ pub(crate) fn found_both_ways(
     app.close();
     found
 }
+
+/// What a copy holds of the chat `world` holds with everything selected, once each call in `calls` has been opened, as
+/// [`transcript::Transcript::all_as_copied`] says.
+pub(crate) fn copied_whole(
+    world: fn() -> World,
+    calls: &[&'static str],
+    text_system: &Arc<dyn PlatformTextSystem>,
+) -> String {
+    let (_dir, mut app) = open(Some(world), false, text_system);
+    app.step(&Step::Select(FOCUS));
+    for label in calls {
+        app.step(&Step::Open(label));
+    }
+    let transcript = app.cx.update(|cx| selected_pane(app.view.read(cx)).and_then(|pane| pane.read(cx).transcript()));
+    let copied = app.cx.update(|cx| transcript.expect("the chat").read(cx).all_as_copied());
+    app.close();
+    copied
+}

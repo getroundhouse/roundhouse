@@ -1,5 +1,5 @@
 //! What each item the transcript shows is, whichever state it's in. GPUI keeps an element's state,
-//! such as a text view's selection, under the element's ID, so an item keeps one key from pending to
+//! such as how far an area has scrolled, under the element's ID, so an item keeps one key from pending to
 //! recorded, and every element ID for an item comes from its key here.
 
 use gpui_kit::ElementId;
@@ -21,9 +21,12 @@ pub(crate) enum ItemKey {
     Call(ToolUseId),
     /// What a subagent wrote just before a call, drawn from its record, by the call's ID.
     Before(ToolUseId),
-    /// What a subagent has written since a call, drawn from its record: since its newest, or since the one that
-    /// started it, if it's made none. By that call's ID.
+    /// What a subagent has written since its newest call, drawn from its record, by that call's ID.
     After(ToolUseId),
+    /// What a subagent that's made no call has written since it started, drawn from its record, by the ID of the call
+    /// that started it. That call can be another subagent's newest, whose own words since it are [`ItemKey::After`]
+    /// it, and both are drawn in one row.
+    Since(ToolUseId),
     /// The line for several background tasks of one group, at the chat's end.
     Tasks(TaskGroup),
 }
@@ -61,6 +64,7 @@ impl ItemKey {
             ItemKey::Call(id) => format!("{part}/call/{id}"),
             ItemKey::Before(id) => format!("{part}/before/{id}"),
             ItemKey::After(id) => format!("{part}/after/{id}"),
+            ItemKey::Since(id) => format!("{part}/since/{id}"),
             ItemKey::Tasks(group) => format!("{part}/tasks/{}", group.name()),
         };
         ElementId::Name(name.into())
@@ -109,6 +113,7 @@ mod tests {
             ItemKey::Call("1".into()).element("text"),
             ItemKey::Before("1".into()).element("text"),
             ItemKey::After("1".into()).element("text"),
+            ItemKey::Since("1".into()).element("text"),
             ItemKey::Tasks(TaskGroup::Subagents).element("text"),
             ItemKey::Tasks(TaskGroup::Commands).element("text"),
         ];

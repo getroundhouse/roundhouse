@@ -141,7 +141,7 @@ fn a_place_further_into_its_row_than_the_row_is_now_tall_is_the_rows_end() {
     assert_eq!(and_moved.top, at(10, 20.), "and what the wheel has moved since is from there");
 }
 
-/// Such as a long text at the top of the window that's read once it's there, with the row after it 100 px down the
+/// Such as a long text at the top of the window that's parsed once it's there, with the row after it 100 px down the
 /// window.
 #[test]
 fn the_rows_above_the_row_kept_still_grow_up_past_the_windows_top() {

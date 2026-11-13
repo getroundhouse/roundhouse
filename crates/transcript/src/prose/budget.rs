@@ -16,11 +16,14 @@ impl Store {
     /// A frame has started: puts away blocks, as [`Store::keep_fewer_blocks`] says, if any text was parsed since the
     /// last look.
     pub(super) fn frame_started(&mut self) {
-        self.frame += 1;
+        // Before the frame is counted, so what the one just ended drew isn't put away. A row can draw more short texts
+        // than are kept, as a call does with a long subagent's work gathered into it, and it draws them all again in
+        // the next frame, which would parse them again, and so on each frame after.
         if self.parses > 0 {
             self.parses = 0;
             self.keep_fewer_blocks();
         }
+        self.frame += 1;
     }
 
     /// Counts a short text parsed, and after every [`PARSES_A_LOOK`] of them, puts away blocks.
@@ -101,6 +104,32 @@ mod tests {
         );
         let again = matches!(prose.0.borrow().texts.get(&ProseId::of(at(texts - 1))), Some(Text::Parsed { .. }));
         assert!(again, "and one drawn again is parsed again");
+    }
+
+    /// One row can draw more short texts than are kept, as a call does with a long subagent's work gathered into it,
+    /// and draws them all again each frame. They're parsed once, not again each frame.
+    #[test]
+    fn what_one_frame_drew_is_not_put_away_as_the_next_starts() {
+        let prose = Prose::alone();
+        let words = "word ".repeat(200);
+        let texts = u64::try_from(2 * BLOCKS_KEPT / words.len()).unwrap();
+        // So some are parsed since the last look when the frame ends, which is when the next frame looks.
+        assert!(!texts.is_multiple_of(u64::from(PARSES_A_LOOK)));
+        let draw_all = || {
+            prose.new_frame();
+            for seq in 0..texts {
+                prose.drawn_at(at(seq), &words);
+            }
+        };
+        draw_all();
+
+        draw_all();
+        let parsed_again = prose.0.borrow().parses;
+        prose.new_frame();
+
+        let texts_now = prose.0.borrow();
+        assert_eq!(parsed_again, 0, "none was parsed again");
+        assert!(texts_now.texts.values().all(|text| matches!(text, Text::Parsed { .. })), "and each keeps its blocks");
     }
 
     #[test]

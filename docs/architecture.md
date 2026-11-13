@@ -111,7 +111,7 @@ crates/
   process/         Signalling a process group, recording a PID with its start time, keeping a process's own input and output from what it starts, and marking the file a process runs from
   providers/       The trait a provider adapter written in Rust implements, the loop that serves it over the provider protocol, and the local provider
   client-core/     Connection, and each hub's records and open sessions, kept in sync. Shared by every Rust client. No UI
-  transcript/      A session's history and live output, on the kit's list and text views
+  transcript/      A session's history and live output, in a list of its own, on the kit's Markdown blocks
   look/            How the app looks: its theme, the colours the kit has no name for, code's colours, the words that changed in a diff's lines, the status mark, the app icon, and the parts of the window tests find
   terminal-state/  What a terminal shows, kept from what the program in it writes on Ghostty's terminal core, and the bytes that draw it again in another terminal. No IO and no UI
   terminal-view/   GPUI terminal element. Not built

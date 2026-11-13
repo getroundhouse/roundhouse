@@ -15,8 +15,8 @@ use super::reveal::Reveal;
 use crate::item_key::ItemKey;
 
 /// Which of an item's texts one is, such as a call's output, or the third link a search found. Ordered as declared,
-/// which orders the texts a call draws of its own in `crate::prose`, for a call that draws more than one, so those are
-/// declared in the order it draws them.
+/// which orders the texts a call draws of its own after what it nests, in `crate::prose`, if it draws more than one
+/// there, so those are declared in the order it draws them.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) enum Part {
     /// What the person wrote.
@@ -117,9 +117,8 @@ impl Part {
 pub(crate) type TextId = (ItemKey, Part);
 
 /// The ID of the element the Markdown text `id` is drawn in, which `crate::prose` knows it by, from its first word to
-/// its record, and `crate::long_texts` keeps the kit's text view of it under. A prompt, the agent's words and its
-/// thinking are only their element, and a report is drawn as the agent's words are. Prose in a block is an element
-/// inside the part.
+/// its record. A prompt, the agent's words and its thinking are only their element, and a report is drawn as the
+/// agent's words are. Prose in a block is an element inside the part.
 pub(crate) fn view_id((key, part): &TextId) -> ElementId {
     if matches!(part, Part::Prompt | Part::Text | Part::Thinking) {
         part.element(key)
@@ -157,16 +156,12 @@ impl FindLook {
         Self { needle, here, found: RefCell::default(), reveal }
     }
 
-    pub(crate) fn needle(&self) -> Option<&Needle> {
-        self.needle.as_ref()
-    }
-
     pub(crate) fn reveal(&self) -> &Reveal {
         &self.reveal
     }
 
     /// Which match in `id` is the one being shown, if it's in that text.
-    pub(crate) fn nth_here(&self, id: &TextId) -> Option<usize> {
+    fn nth_here(&self, id: &TextId) -> Option<usize> {
         self.here.as_ref().filter(|here| here.text == *id).map(|here| here.nth)
     }
 

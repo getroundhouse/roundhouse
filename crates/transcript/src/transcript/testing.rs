@@ -41,18 +41,20 @@ impl Transcript {
         self.session.read(|log| rows_and_loaded(log).1.iter().map(ExactSizeIterator::len).sum())
     }
 
-    /// Whether every long text the rows have drawn has been read. One is read on another thread from the first time
-    /// its row is drawn, and its row is measured again as it's read, so until then the session's height isn't
+    /// Whether every long text the rows have drawn has been parsed. One is parsed on another thread from the first
+    /// time its row is drawn, and its row is measured again once it's in, so until then the session's height isn't
     /// settled.
-    pub fn long_texts_read(&self, cx: &gpui_kit::App) -> bool {
-        self.texts.all_read(cx) && self.prose.all_parsed()
+    pub fn long_texts_parsed(&self) -> bool {
+        self.prose.all_parsed()
     }
 
-    /// What each long text the rows have drawn with the kit's text view shows, as of what's been read of it, and what
-    /// each text the transcript keeps the kit's blocks of was parsed from, which is what it shows.
-    pub fn kept_texts(&self, cx: &gpui_kit::App) -> Vec<String> {
-        let mut texts = self.texts.read(cx);
-        texts.extend(self.prose.sources());
-        texts
+    /// What a copy holds with everything selected: the chat's Markdown, in the order it's read.
+    pub fn all_as_copied(&self) -> String {
+        self.selection.all_as_copied()
+    }
+
+    /// What each text the transcript keeps the kit's blocks of was parsed from, which is what it shows.
+    pub fn kept_texts(&self) -> Vec<String> {
+        self.prose.sources()
     }
 }

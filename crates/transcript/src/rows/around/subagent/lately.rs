@@ -2,7 +2,7 @@
 //! each of its newest calls after what it wrote just before it, then what it's written since, as its record has them.
 
 use protocol::event::ContentBlock;
-use protocol::model::{Call, CallResult, Said, Subagent as Record, ToolUseId};
+use protocol::model::{Call, CallResult, Said, Subagent as Record};
 
 use crate::item_key::ItemKey;
 
@@ -27,8 +27,11 @@ pub(super) fn lately(record: &Record) -> Vec<Lately> {
         blocks.push(called(&made.call, made.result.as_ref()));
     }
     // What it's written since its newest call, or since it started, if it's made none.
-    let after: &ToolUseId = work.calls.last().map_or(&record.call, |made| &made.call.id);
-    blocks.extend(work.since.as_ref().map(|said| wrote(said, ItemKey::After(after.clone()))));
+    let since = work
+        .calls
+        .last()
+        .map_or_else(|| ItemKey::Since(record.call.clone()), |made| ItemKey::After(made.call.id.clone()));
+    blocks.extend(work.since.as_ref().map(|said| wrote(said, since)));
     blocks
 }
 
@@ -140,7 +143,7 @@ mod tests {
     fn what_it_wrote_before_any_call_follows_the_call_that_started_it() {
         let record = record(RecentWork { calls: Vec::new(), since: Some(said("Looking.", false)) }, None);
 
-        assert_eq!(shown(&record), [("text Looking.".into(), ItemKey::After("agent".into()), None)]);
+        assert_eq!(shown(&record), [("text Looking.".into(), ItemKey::Since("agent".into()), None)]);
     }
 
     #[test]

@@ -6,26 +6,19 @@ use gpui_kit::{Context, Window};
 
 use super::count::At;
 use super::{bar, is_loaded};
-use crate::find::{FindLook, Spot, TextId, reveal};
+use crate::find::{FindLook, Spot, reveal};
 use crate::rows::found_in_row;
 use crate::transcript::Transcript;
 
 /// How many frames the transcript goes on trying to bring a match into view, which only takes more than a couple
 /// while its row loads or an area in it scrolls.
 const FRAMES_TO_REVEAL: u32 = 120;
-/// How many frames Markdown's view says nothing of where the match is before it's taken to be in view, since it says
-/// only while it isn't.
-const QUIET: u32 = 10;
 
 /// How the match being shown is being brought into view.
 #[derive(Default)]
 pub(super) struct Revealing {
     /// How many more frames to go on.
     frames: u32,
-    /// The Markdown it's in, if it's in Markdown, whose view brings it into view itself.
-    markdown: Option<TextId>,
-    /// How many frames that view has said nothing for.
-    quiet: u32,
 }
 
 impl Transcript {
@@ -98,34 +91,25 @@ impl Transcript {
         let Some((found, nth)) = spots.get(at.nth).copied() else { return };
         let spot = Spot { text: found.id.clone(), nth };
         let reveal = finding.reveal.clone();
-        let find = {
+        {
             let mut m = self.model.borrow_mut();
             for (key, fold) in &found.opens {
                 m.folds.choose(key.clone(), *fold, true);
             }
-            m.find = Rc::new(FindLook::new(Some(needle), Some(spot.clone()), reveal.clone()));
-            m.find.clone()
-        };
-        if found.kit_view {
-            self.texts.mark(&found.id, &find, cx);
+            m.find = Rc::new(FindLook::new(Some(needle), Some(spot), reveal.clone()));
         }
-        self.texts.show_here(&find, cx);
         // What it opened makes its row taller.
         self.list.out_of_date(at.row..at.row + 1);
         if !self.list.shows(at.row) {
             self.list.go_to_row(at.row);
         }
         reveal.want();
-        let markdown = found.kit_view.then(|| spot.text.clone());
-        if let Some(id) = &markdown {
-            self.texts.reveal(id, cx);
-        }
-        finding.revealing = Revealing { frames: FRAMES_TO_REVEAL, markdown, quiet: 0 };
+        finding.revealing = Revealing { frames: FRAMES_TO_REVEAL };
         cx.notify();
     }
 
     /// Scrolls the list toward the match being shown, from where it was last drawn, until it's in view below the bar,
-    /// a frame at a time. Says what of the list is in view below the bar each frame, for Markdown's view.
+    /// a frame at a time.
     pub(crate) fn keep_revealing(&mut self, cx: &mut Context<Self>) {
         let Some(finding) = &mut self.finding else { return };
         let mut visible = self.list.viewport();
@@ -133,27 +117,21 @@ impl Transcript {
         visible.origin.y += under;
         visible.size.height -= under;
         let (reveal, revealing) = (finding.reveal.clone(), &mut finding.revealing);
+        #[cfg(feature = "testing")]
         reveal.set_visible(visible);
         if revealing.frames == 0 || !reveal.is_wanted() {
             return;
         }
         revealing.frames -= 1;
         let Some(drawn) = reveal.drawn() else {
-            if let Some(id) = &revealing.markdown
-                && !self.texts.reading_to_reveal(id)
-            {
-                revealing.quiet += 1;
-            }
-            if revealing.frames == 0 || revealing.quiet > QUIET {
+            if revealing.frames == 0 {
                 reveal.done();
             }
             return cx.notify();
         };
-        revealing.quiet = 0;
         match reveal::scroll_by(visible, drawn.bounds) {
             Some(by) if revealing.frames > 0 => {
                 self.list.scroll_down(by);
-                // Markdown's view says where it is again only if it's still out of view.
                 reveal.moved();
                 cx.notify();
             }

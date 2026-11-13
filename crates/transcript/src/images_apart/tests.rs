@@ -18,7 +18,7 @@ enum Paragraphs {
     Apart,
 }
 
-/// The blocks the text view reads `text` as, each by its kind with what's in it in brackets, and each image by its alt
+/// The blocks the kit's parser reads `text` as, each by its kind with what's in it in brackets, and each image by its alt
 /// text, so `Blockquote[Paragraph[A] Paragraph[B]]` is a quote of two paragraphs that are an image each.
 fn blocks(text: &str) -> String {
     blocks_with(text, Paragraphs::AsTheyAre)

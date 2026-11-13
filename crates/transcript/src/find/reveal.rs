@@ -3,20 +3,12 @@
 //! transcript scrolls its list to it, so it's below the bar. Each frame says where it's drawn now, so the two settle in
 //! a frame or two.
 //!
-//! Recorded Markdown the transcript draws from the kit's blocks, such as the agent's replies and a call's prose in a
-//! row of its own, says where a match is as plain text does. Other Markdown, such as a subagent's words in its call's
-//! row, is drawn by the kit's text view, which scrolls the transcript's list to a match itself, and says where it is
-//! only while it's out of view. So while it's being brought into view, it's laid out as if what the bar covers were
-//! out of view too, and what it says goes the same two ways.
+//! Markdown, which the transcript draws from the kit's blocks, says where a match is as plain text does.
 
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use gpui_kit::component::text::TextView;
-use gpui_kit::{
-    AnyElement, App, Bounds, ContentMask, Element, ElementId, GlobalElementId, InspectorElementId, IntoElement,
-    LayoutId, Pixels, Styled as _, TextLayout, Window, canvas, px,
-};
+use gpui_kit::{Bounds, ElementId, IntoElement, Pixels, Styled as _, TextLayout, canvas, px};
 
 /// How much room is left above the match when something scrolls to it, so it isn't on the very edge.
 pub(crate) const ROOM: Pixels = px(48.);
@@ -30,7 +22,9 @@ struct Slot {
     /// Whether the match is to be brought into view.
     wanted: bool,
     drawn: Option<Drawn>,
-    /// What of the transcript's list is in view, less what the bar covers, as it was last drawn.
+    /// What of the transcript's list is in view, less what the bar covers, as it was last drawn, for a test to see
+    /// whether the match ended up in it.
+    #[cfg(feature = "testing")]
     visible: Option<Bounds<Pixels>>,
     /// Where it was last drawn, wanted or not, for a test to see where it ended up.
     #[cfg(feature = "testing")]
@@ -87,6 +81,7 @@ impl Reveal {
     }
 
     /// Says what of the list is in view now, less what the bar covers.
+    #[cfg(feature = "testing")]
     pub(crate) fn set_visible(&self, visible: Bounds<Pixels>) {
         self.0.borrow_mut().visible = Some(visible);
     }
@@ -103,19 +98,12 @@ impl Reveal {
         }
     }
 
-    /// Whether the match was last drawn in view below the bar, once it has been drawn since it was wanted. The kit's
-    /// text view says where one is only while it isn't in view, so this is for a match that isn't in one.
+    /// Whether the match was last drawn in view below the bar, once it has been drawn since it was wanted.
     #[cfg(feature = "testing")]
     pub(crate) fn shows_in_view(&self) -> Option<bool> {
         let slot = self.0.borrow();
         let (painted, visible) = (slot.painted?, slot.visible?);
         Some(painted.top() >= visible.top() && painted.bottom() <= visible.bottom())
-    }
-
-    /// What's in view while the match is wanted.
-    fn in_view(&self) -> Option<Bounds<Pixels>> {
-        let slot = self.0.borrow();
-        slot.visible.filter(|_| slot.wanted)
     }
 }
 
@@ -131,90 +119,6 @@ pub(crate) fn here(layout: TextLayout, start: usize, area: Option<ElementId>, re
     )
     .absolute()
     .size_0()
-}
-
-/// The kit's view of Markdown that has the match being shown, in `area` if it's in an area that scrolls. The view
-/// brings the match into view itself, as it's asked to, laid out while it does as if what the bar covers were out of
-/// view, and says where the match is while it isn't.
-pub(crate) fn markdown(view: TextView, area: Option<ElementId>, reveal: &Reveal) -> AnyElement {
-    let said = reveal.clone();
-    let view = view.on_reveal(move |line, window, _| {
-        said.drawn_at(line, area.clone());
-        window.refresh();
-    });
-    BarredView { view: view.into_any_element(), reveal: reveal.clone() }.into_any_element()
-}
-
-/// A view laid out with what the bar covers out of view while the match is being brought into view.
-struct BarredView {
-    view: AnyElement,
-    reveal: Reveal,
-}
-
-impl IntoElement for BarredView {
-    type Element = Self;
-
-    fn into_element(self) -> Self::Element {
-        self
-    }
-}
-
-impl Element for BarredView {
-    type RequestLayoutState = ();
-    type PrepaintState = ();
-
-    fn id(&self) -> Option<ElementId> {
-        None
-    }
-
-    fn source_location(&self) -> Option<&'static core::panic::Location<'static>> {
-        None
-    }
-
-    fn request_layout(
-        &mut self,
-        _: Option<&GlobalElementId>,
-        _: Option<&InspectorElementId>,
-        window: &mut Window,
-        cx: &mut App,
-    ) -> (LayoutId, ()) {
-        (self.view.request_layout(window, cx), ())
-    }
-
-    fn prepaint(
-        &mut self,
-        _: Option<&GlobalElementId>,
-        _: Option<&InspectorElementId>,
-        _: Bounds<Pixels>,
-        (): &mut (),
-        window: &mut Window,
-        cx: &mut App,
-    ) {
-        // Only while it's laid out, which is when the view says whether the match is in view: it's drawn whole.
-        match self.reveal.in_view() {
-            Some(bounds) => {
-                window.with_content_mask(Some(ContentMask { bounds }), |window| {
-                    self.view.prepaint(window, cx);
-                });
-            }
-            None => {
-                self.view.prepaint(window, cx);
-            }
-        }
-    }
-
-    fn paint(
-        &mut self,
-        _: Option<&GlobalElementId>,
-        _: Option<&InspectorElementId>,
-        _: Bounds<Pixels>,
-        (): &mut (),
-        (): &mut (),
-        window: &mut Window,
-        cx: &mut App,
-    ) {
-        self.view.paint(window, cx);
-    }
 }
 
 /// How far an area showing `visible` would scroll down to bring `bounds` into view with [`ROOM`] above it, if it

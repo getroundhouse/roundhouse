@@ -5,10 +5,9 @@
 //! off the main thread before it's drawn, and then every row waiting for it is measured again, since the list keeps
 //! each row's height, and the image is only its own height once it's decoded.
 //!
-//! These are kept apart from the pictures a prompt carries, which the transcript keeps by attachment, because the text
-//! view asks for an image from any thread, by its address, so what answers has to be shared across threads. `drawn`
-//! has how a text drawn from the kit's blocks draws them, so a click on one opens it over the window. The kit's text
-//! view draws them itself, from the resolver.
+//! These are kept apart from the pictures a prompt carries, which the transcript keeps by attachment, because the
+//! kit's drawing of a text asks for an image from any thread, by its address, so what answers has to be shared across
+//! threads. `drawn` has how a text drawn from the kit's blocks draws them, so a click on one opens it over the window.
 
 use std::collections::HashMap;
 use std::sync::Arc;

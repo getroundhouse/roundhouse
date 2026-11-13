@@ -31,7 +31,7 @@ use crate::item_key::ItemKey;
 use crate::model_names::model_name;
 use crate::rows::around::{Around, blocks_of};
 use crate::rows::shown::{self, Gather};
-use crate::rows::{InRow, render_block, written};
+use crate::rows::{render_block, written};
 use crate::selection::Selection;
 use crate::transcript::Transcript;
 
@@ -81,7 +81,7 @@ pub(super) fn shown(
         }
         for (event, around) in events {
             for (block, drawing) in blocks_of(&event.body).iter().zip(&around.blocks) {
-                shown::of_block(block, drawing, InRow::Call, gather);
+                shown::of_block(block, drawing, gather);
             }
         }
         let report = match subagent {
@@ -138,14 +138,14 @@ pub(in crate::rows) fn open_tab(
 
 /// What it was asked, as the item `key`'s, quieter than what it reported, which is the outcome: a quote, with a rule
 /// at its left and its text fainter, under the word Asked, since a prompt is what a person sends. It scrolls past a
-/// dozen lines or so, as a block's prose does, with the matches of what `find` looks for, and under a drag of `drags`,
-/// if it's one's to follow. `text` draws it, in the area that scrolls it. The call and the subagent tab both start with
+/// dozen lines or so, as a block's prose does, with the matches of what `find` looks for, and under a drag of `drags`.
+/// `text` draws it, in the area that scrolls it. The call and the subagent tab both start with
 /// it.
 pub(in crate::rows) fn prompt_block(
     key: &ItemKey,
     text: impl FnOnce(ElementId) -> AnyElement,
     find: &FindLook,
-    drags: Option<&Selection>,
+    drags: &Selection,
     cx: &App,
 ) -> AnyElement {
     let theme = cx.theme();
@@ -166,7 +166,7 @@ pub(in crate::rows) fn prompt_block(
 fn asked(call: &Agent, toggle: &Toggle, cx: &App) -> Option<AnyElement> {
     let prompt = call.prompt?;
     let text = |area| written(toggle, Text::Asked, prompt, Some(area), None);
-    Some(prompt_block(toggle.key, text, toggle.find, toggle.drags(), cx))
+    Some(prompt_block(toggle.key, text, toggle.find, &toggle.shared.selection, cx))
 }
 
 /// What it reported, `text`, once it's done, as the subagent's answer, as the item `key`'s: the agent's own prose, in
@@ -197,11 +197,13 @@ fn apart_report<'a>(answer: Option<&'a Answer>, subagent: &'a Subagent) -> Optio
 /// Kept apart: the blocks the subagent tab starts and ends with, and between them, while it works, what it's done lately:
 /// its newest few calls, each after what it wrote just before it, then what it's written since.
 fn page(call: &Agent, answer: Option<&Answer>, subagent: &Subagent, toggle: &Toggle, cx: &App) -> AnyElement {
+    // Made in the order they're shown, which is the order a call nested in another's row has its texts placed in.
+    let asked = asked(call, toggle, cx);
     // It changes as the subagent works, so nothing's found in it.
     let unfound = FindLook::default();
     let drawn: Vec<AnyElement> = (subagent.lately.iter())
         .filter_map(|(block, drawing)| {
-            render_block(toggle.seq, InRow::Call, block, drawing, toggle.shared, &unfound, cx)
+            render_block(toggle.seq, toggle.in_row.nesting(), block, drawing, toggle.shared, &unfound, cx)
         })
         .collect();
     let lately = (!drawn.is_empty())
@@ -210,7 +212,7 @@ fn page(call: &Agent, answer: Option<&Answer>, subagent: &Subagent, toggle: &Tog
         .mt_1()
         .mb_2()
         .gap_2()
-        .children(asked(call, toggle, cx))
+        .children(asked)
         .children(lately)
         // A report names no images the hub kept, so only one written into it is drawn, and it loads in the call's row.
         .when_some(apart_report(answer, subagent), |d, report| {
@@ -243,11 +245,13 @@ fn gathered(
 ) -> AnyElement {
     let theme = cx.theme();
     let events = subagent.and_then(|s| s.events.as_deref()).unwrap_or_default();
+    // Made in the order they're shown, which is the order a call nested in another's row has its texts placed in.
+    let asked = asked(call, toggle, cx);
     let mut work = Vec::new();
     for (event, around) in events {
         // Drawn in the call's row, so opening one of its calls makes this row taller.
         let drawn = blocks_of(&event.body).iter().zip(&around.blocks).filter_map(|(block, drawing)| {
-            render_block(toggle.seq, InRow::Call, block, drawing, toggle.shared, toggle.find, cx)
+            render_block(toggle.seq, toggle.in_row.nesting(), block, drawing, toggle.shared, toggle.find, cx)
         });
         work.extend(drawn);
     }
@@ -260,7 +264,7 @@ fn gathered(
         .gap_2()
         .border_l_1()
         .border_color(theme.border)
-        .children(asked(call, toggle, cx))
+        .children(asked)
         .children(work)
         // A call's result names no images, so only one written into the report is drawn.
         .when_some(report, |d, report| d.child(report_text(report, toggle)))

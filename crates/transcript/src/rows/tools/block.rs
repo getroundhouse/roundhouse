@@ -199,7 +199,7 @@ pub(super) fn prose(toggle: &Toggle, part: Part, text: &str) -> AnyElement {
     let id = part.element(toggle.key);
     let view = written(toggle, part, text, Some(scroll_id(&id)), None);
     let shown = div().id(id.clone()).px_3().py_2().text_sm().child(view).test_support();
-    scrolling(toggle.find, &id, shown).follows_drags(toggle.drags()).into_any_element()
+    scrolling(toggle.find, &id, shown).follows_drags(&toggle.shared.selection).into_any_element()
 }
 
 /// A part of a block, such as its output, which keeps its own ID, in an area that scrolls it once it's taller than a

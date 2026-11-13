@@ -92,6 +92,12 @@ impl Places {
         self.last.get(id).map(|drawn| drawn.frame)
     }
 
+    /// The text at `at` isn't drawn there now, and has no place until it's drawn again. It's kept, by where it was last
+    /// drawn.
+    pub(super) fn leave(&mut self, at: &TextAt) {
+        self.now.remove(at);
+    }
+
     /// Lets go of each text last drawn where `keep` says not to keep.
     pub(super) fn retain(&mut self, keep: impl Fn(&TextAt) -> bool) {
         self.last.retain(|_, drawn| keep(&drawn.at));

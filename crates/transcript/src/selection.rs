@@ -163,7 +163,14 @@ impl Selection {
         let showing = leaves.into_iter().filter(|(_, geometry)| geometry.bounds().intersects(&bounds));
         let mut leaves: Vec<(u64, LeafGeometry)> = showing.collect();
         leaves.sort_by_key(|(key, _)| *key);
-        self.inner.borrow_mut().drawn.push(Drawn { text, at, bounds, area, leaves });
+        let mut selecting = self.inner.borrow_mut();
+        debug_assert!(
+            selecting.drawn.last().is_none_or(|before| before.at.of != at.of || before.at < at),
+            "{text:?} is painted after the text at {:?}, and placed at {at:?}, before it, so a copy would have them \
+             in another order than they're shown",
+            selecting.drawn.last().map(|before| before.at)
+        );
+        selecting.drawn.push(Drawn { text, at, bounds, area, leaves });
     }
 
     /// What's selected of the text at `at`, whose leaves are `leaves`, by leaf.
@@ -282,16 +289,35 @@ impl Selection {
     /// last, and lets go of what the kit has selected, so a copy is of this. With none, it's for whatever else would
     /// take it.
     fn select_all(&self, window: &mut Window, cx: &mut App) {
-        let Some((first, last)) = self.prose.ends() else {
+        let Some(ends) = self.whole() else {
             cx.propagate();
             return;
         };
         TextSelection::clear(window, cx);
-        let ends = (End { text: first, leaf: 0, byte: 0 }, End { text: last, leaf: u64::MAX, byte: usize::MAX });
         let mut selecting = self.inner.borrow_mut();
         selecting.set(Some(ends));
         selecting.drag = None;
         window.refresh();
+    }
+
+    /// What a copy holds with everything selected, by the ends [`Selection::select_all`] selects and the copy
+    /// [`Selection::text`] makes, for a test of the order the chat's texts are in.
+    #[cfg(feature = "testing")]
+    pub(crate) fn all_as_copied(&self) -> String {
+        self.whole()
+            .and_then(|ends| self.spots(&ends))
+            .map_or_else(String::new, |(start, end)| self.between(start, end))
+    }
+
+    /// The ends of everything: the start of the first text that's shown and the end of the last, if there are any.
+    fn whole(&self) -> Option<(End, End)> {
+        let (first, last) = self.prose.ends()?;
+        Some((End { text: first, leaf: 0, byte: 0 }, End { text: last, leaf: u64::MAX, byte: usize::MAX }))
+    }
+
+    /// What a copy holds of the texts from `start` to `end`.
+    fn between(&self, start: Spot, end: Spot) -> String {
+        copied(start, end, &self.prose.between(start.at, end.at))
     }
 
     /// Copies what's selected, drawn or not. With nothing selected, a copy is the kit's, of what it has selected.
@@ -306,8 +332,7 @@ impl Selection {
 
     /// What's selected, as text.
     fn text(&self) -> String {
-        let Some((start, end)) = self.ordered() else { return String::new() };
-        copied(start, end, &self.prose.between(start.at, end.at))
+        self.ordered().map_or_else(String::new, |(start, end)| self.between(start, end))
     }
 
     /// Its ends, first first, where they are now, if anything's selected.

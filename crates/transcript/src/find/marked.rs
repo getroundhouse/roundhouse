@@ -2,13 +2,12 @@
 
 use std::ops::Range;
 
-use gpui_kit::component::text::TextView;
 use gpui_kit::{
     AnyElement, ElementId, HighlightStyle, IntoElement, ParentElement as _, SharedString, Styled as _, StyledText, div,
 };
 
+use super::Marks;
 use super::reveal::{self, Reveal};
-use super::{FindLook, Marks, TextId};
 
 /// `text` with `styles`, such as code's colours, and its matches behind it. The match being shown says where it was
 /// drawn, in `area` if it's in an area that scrolls.
@@ -35,10 +34,4 @@ pub(crate) fn styled(
     let Some((start, reveal)) = here else { return shown.into_any_element() };
     let layout = shown.layout().clone();
     div().relative().child(shown).child(reveal::here(layout, start, area, reveal)).into_any_element()
-}
-
-/// The kit's view of the Markdown text `id`, which draws its own matches, as `crate::long_texts` has it do, and brings
-/// the match being shown into view itself when it's in it, in `area` if it's in an area that scrolls.
-pub(crate) fn markdown_view(view: TextView, id: &TextId, find: &FindLook, area: Option<ElementId>) -> AnyElement {
-    if find.nth_here(id).is_some() { reveal::markdown(view, area, find.reveal()) } else { view.into_any_element() }
 }
