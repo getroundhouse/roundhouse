@@ -155,7 +155,7 @@ allow_attributes_without_reason = "warn"
 unwrap_used = "warn"
 expect_used = "warn"
 dbg_macro = "warn"
-mod_module_files = "warn"
+self_named_module_files = "warn"
 undocumented_unsafe_blocks = "warn"
 
 [workspace.lints.cargo]

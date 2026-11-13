@@ -8,7 +8,7 @@ fn the_specs_table_has_every_kind_of_text_in_order_as_the_app_sets_it() {
     let table: Vec<[String; 4]> = spec_table::rows("**Every kind of text, by its name.**");
 
     let set: Vec<[String; 4]> = Type::ALL.iter().map(|kind| kind.written()).collect();
-    assert_eq!(table, set, "docs/spec/look.md's table of the kinds of text, against crates/look/src/typography.rs");
+    assert_eq!(table, set, "docs/spec/look.md's table of the kinds of text, against crates/look/src/typography/mod.rs");
 }
 
 #[test]

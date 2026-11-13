@@ -32,14 +32,14 @@ use crate::appimage;
 /// in `ROUNDHOUSE_UPDATE_URL`, such as a server on this Mac.
 const UPDATE_URL: &str = match option_env!("ROUNDHOUSE_UPDATE_URL") {
     Some(url) => url,
-    None => include_str!("updates/update-feed.url").trim_ascii(),
+    None => include_str!("update-feed.url").trim_ascii(),
 };
 
 /// The update feed's public key, in the form `source` says. The release workflow signs with the private half of the
 /// one in `update-feed.key`. A build can name another in `ROUNDHOUSE_UPDATE_KEY`, such as one made for a test.
 const UPDATE_FEED_KEY: UpdateFeedKey = UpdateFeedKey::from_base64(match option_env!("ROUNDHOUSE_UPDATE_KEY") {
     Some(key) => key,
-    None => include_str!("updates/update-feed.key").trim_ascii(),
+    None => include_str!("update-feed.key").trim_ascii(),
 });
 
 /// How long to wait before looking again. An update only installs when someone restarts the app for it or quits it, so

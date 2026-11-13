@@ -37,5 +37,5 @@ fn the_specs_table_has_every_colour_in_its_group_in_order_as_the_app_draws_it() 
         .into_iter()
         .map(|role| (role.group.to_string(), role.name.to_string(), role.hex()))
         .collect();
-    assert_eq!(table, drawn, "docs/spec/look.md's table of colours, against crates/look/src/colors.rs");
+    assert_eq!(table, drawn, "docs/spec/look.md's table of colours, against crates/look/src/colors/mod.rs");
 }

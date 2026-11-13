@@ -42,7 +42,7 @@ mod tests {
 
     use super::*;
 
-    /// The first of the agent's requests in the CLI's real output, which `tests/claude/contract.rs` reads whole, for
+    /// The first of the agent's requests in the CLI's real output, which `tests/claude/contract/mod.rs` reads whole, for
     /// each test to change only what it's about.
     fn real() -> Value {
         let fixture = include_str!("../../../tests/fixtures/claude.jsonl");

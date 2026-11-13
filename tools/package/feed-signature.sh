@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Signs the update feed, or checks its signature, so the app can tell that a feed came from the release workflow.
 # Velopack only checks each package against the checksum the feed gives, so whoever could change the feed could
-# change the app. `apps/desktop/src/updates/source.rs` defines the signature, and the form of the public key.
+# change the app. `apps/desktop/src/updates/source/mod.rs` defines the signature, and the form of the public key.
 #
 #   tools/package/feed-signature.sh sign FEED PRIVATE_KEY PUBLIC_KEY   Write FEED.sig, then check it as verify does
 #   tools/package/feed-signature.sh verify FEED PUBLIC_KEY             Check FEED.sig against the key the app holds
