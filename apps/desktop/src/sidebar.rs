@@ -9,7 +9,7 @@ use gpui_kit::{
     AnyElement, App, Context, Div, ElementId, Hsla, InteractiveElement as _, IntoElement, ParentElement, Pixels,
     Styled, TestSupportExt as _, Window, div, px,
 };
-use look::LineText;
+use look::{LineText, Typeset as _};
 use protocol::model::{RepoId, Workspace, WorkspaceId, WorkspaceStatus};
 
 use crate::app::{AppView, Connection};
@@ -297,7 +297,7 @@ fn creating(workspace: &Workspace, cx: &mut Context<AppView>) -> AnyElement {
         .h(ROW_HEIGHT)
         .flex()
         .items_center()
-        .text_sm()
+        .typeset(look::Type::Body)
         .text_color(look::colors(cx).text_muted)
         .child("Creating a workspace…")
         .test_support()

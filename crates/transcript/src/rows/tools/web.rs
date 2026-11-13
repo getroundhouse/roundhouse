@@ -11,7 +11,7 @@ use gpui_kit::{
     AnyElement, App, Div, ElementId, InteractiveElement as _, IntoElement, ParentElement, Role, SharedString,
     StatefulInteractiveElement as _, Styled, div, px,
 };
-use look::{Hand as _, LineText};
+use look::{Hand as _, LineText, Typeset as _};
 
 use super::line::{Line, Part};
 use super::{Answer, Toggle, block, line};
@@ -33,7 +33,7 @@ fn fetched(fetch: &Fetch, answer: Option<&Answer>, toggle: &Toggle, cx: &App) ->
     let answer = answer.and_then(Answer::success).filter(|text| !text.trim().is_empty());
     let asked = fetch.prompt.map(|prompt| {
         let marked = find::marked(prompt.to_string().into(), &toggle.marks(Text::Ask, prompt), &[], None);
-        div().px_3().pt_1().pb_2().text_sm().text_color(look::colors(cx).text_muted).child(marked)
+        div().px_3().pt_1().pb_2().typeset(look::Type::Body).text_color(look::colors(cx).text_muted).child(marked)
     });
     block::frame(cx)
         .child(block::found_label(toggle, Text::Label, fetch.url, cx))
@@ -131,6 +131,6 @@ fn link_row(id: ElementId, link: &Link, marks: &Marks, area: &ElementId, line_te
                 Some(area.clone()),
             )),
         ))
-        .child(line_text.small.set(div().flex_none().text_color(colors.text_faint).child(site(&link.url).to_string())))
+        .child(line_text.detail.set(div().flex_none().text_color(colors.text_faint).child(site(&link.url).to_string())))
         .into_any_element()
 }

@@ -3,12 +3,12 @@
 //! workspace's work, every chat's included, so this is the workspace's rather than a chat's.
 
 use gpui_kit::component::hover_card::HoverCard;
-use gpui_kit::component::{ActiveTheme as _, h_flex, v_flex};
+use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::{
     Anchor, AnyElement, App, Div, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Role, SharedString,
     Stateful, StatefulInteractiveElement as _, StyleRefinement, Styled as _, div, px,
 };
-use look::{InRegion as _, Region};
+use look::{InRegion as _, Region, Typeset as _};
 use protocol::model::{PORTS_PER_WORKSPACE, Workspace};
 
 const WIDTH: Pixels = px(380.);
@@ -61,13 +61,11 @@ impl Said {
 
     /// Raised like the app's other cards: the path and the button that copies it, then under a rule, the rest.
     fn card(&self, cx: &App) -> AnyElement {
-        let theme = cx.theme();
         let colors = look::colors(cx);
         let path = self.path.clone().map(|path| {
-            let mono = theme.mono_font_family.clone();
             // Cut at its start, if it's too long, since its end is the workspace's own folder.
             let text = div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis_start();
-            let text = text.font_family(mono).text_xs().child(path.clone());
+            let text = text.typeset(look::Type::Code).child(path.clone());
             let copy = look::copy_button("copy-workspace-path", path, "Copy path");
             let row = h_flex().gap_2().text_color(colors.text_muted).child(text).child(copy);
             v_flex().child(row).child(div().my_2().h(px(1.)).bg(colors.edge))
@@ -85,7 +83,7 @@ impl Said {
         let ports = self.ports.clone().map(|ports| row("Ports", format!("Ports {ports}"), div().child(ports), cx));
         let rows = v_flex()
             .gap_1()
-            .text_xs()
+            .typeset(look::Type::Detail)
             .text_color(colors.text_muted)
             .children(version)
             .child(row("Runs on", format!("Runs on {}", self.runs_on), div().child(self.runs_on.clone()), cx))

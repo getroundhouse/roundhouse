@@ -10,7 +10,7 @@ use gpui_kit::{
     AnyElement, App, Div, InteractiveElement as _, IntoElement, ParentElement, Role, StatefulInteractiveElement as _,
     Styled, TestSupportExt as _, div, px, relative,
 };
-use look::Hand as _;
+use look::{Hand as _, Typeset as _};
 use protocol::event::{CompactedBy, CompactionOutcome, EventBody};
 use protocol::model::Seq;
 
@@ -90,7 +90,7 @@ fn line(compacted: &Compacted, shared: &Shared, cx: &App) -> AnyElement {
     let across = rule_across(middle, cx);
     // In the words of whoever asked, in quotes, since they needn't start with "keep".
     let keeping = compacted.keeping.map(|keeping| {
-        let said = div().max_w(relative(0.8)).text_center().text_sm().text_color(colors.text_muted);
+        let said = div().max_w(relative(0.8)).text_center().typeset(look::Type::Body).text_color(colors.text_muted);
         h_flex().w_full().justify_center().child(said.child(format!("“{keeping}”")))
     });
     let summary = compacted.summary.filter(|_| open).map(|summary| opened(compacted.seq, summary, shared, cx));
@@ -104,7 +104,7 @@ fn opened(seq: Seq, summary: &str, shared: &Shared, cx: &App) -> Div {
     let area = key.element("summary-scroll");
     let written = Written::unfound(TextAt::only(seq, 0), key.element("summary"), summary).in_area(area.clone());
     let text = shared.texts.draw(&shared.selection, &written, None);
-    let text = div().pr_3().text_sm().text_color(colors.text_muted).child(text);
+    let text = div().pr_3().typeset(look::Type::Body).text_color(colors.text_muted).child(text);
     v_flex()
         .w_full()
         .gap_2()
@@ -114,7 +114,7 @@ fn opened(seq: Seq, summary: &str, shared: &Shared, cx: &App) -> Div {
         .rounded_lg()
         .border_1()
         .border_color(colors.edge)
-        .child(div().text_xs().text_color(colors.text_faint).child("What the agent carries on from"))
+        .child(div().typeset(look::Type::Detail).text_color(colors.text_faint).child("What the agent carries on from"))
         .child(ScrollArea::new(area, px(SUMMARY_HEIGHT), text, &shared.selection))
 }
 

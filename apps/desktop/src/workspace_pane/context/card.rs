@@ -6,10 +6,10 @@ use gpui_kit::base::ObservedElement;
 use gpui_kit::component::button::Button;
 use gpui_kit::component::{Sizable as _, h_flex, v_flex};
 use gpui_kit::{
-    AnyElement, App, Div, FontWeight, InteractiveElement as _, IntoElement, ParentElement, Pixels, SharedString,
-    Stateful, Styled, TestSupportExt as _, WeakEntity, div, px, relative,
+    AnyElement, App, Div, InteractiveElement as _, IntoElement, ParentElement, Pixels, SharedString, Stateful, Styled,
+    TestSupportExt as _, WeakEntity, div, px, relative,
 };
-use look::{InRegion as _, Off as _, Region};
+use look::{InRegion as _, Off as _, Region, Typeset as _};
 use protocol::model::{Account, ContextPart, ContextPartKind, ContextUsage, UsageLimit};
 
 use super::{Usage, words};
@@ -21,7 +21,7 @@ const BAR: Pixels = px(6.);
 
 /// Raised like the app's other cards, with a card's room around what it holds.
 fn surface(region: Region, cx: &App) -> ObservedElement<Stateful<Div>> {
-    look::raised(cx).region(region).flex().flex_col().w(WIDTH).px_3().py_2p5().text_sm()
+    look::raised(cx).region(region).flex().flex_col().w(WIDTH).px_3().py_2p5().typeset(look::Type::Body)
 }
 
 /// The ring's card: the chat's context. `account` is given only when the bars aren't drawn, since this is then the
@@ -50,7 +50,12 @@ fn compact(pane: &WeakEntity<WorkspacePane>, off: bool, cx: &App) -> Div {
             let _ = pane.update(cx, WorkspacePane::compact);
         },
     );
-    let said = div().min_w_0().truncate().text_xs().text_color(colors.text_faint).child("Summarize to make room");
+    let said = div()
+        .min_w_0()
+        .truncate()
+        .typeset(look::Type::Detail)
+        .text_color(colors.text_faint)
+        .child("Summarize to make room");
     let under = h_flex().justify_between().items_center().gap_3().child(said).child(button);
     v_flex().child(div().my_2().h(px(1.)).bg(colors.edge)).child(under)
 }
@@ -77,7 +82,7 @@ fn room(context: &ContextUsage, cx: &App) -> Div {
     let under = h_flex()
         .justify_between()
         .gap_3()
-        .text_xs()
+        .typeset(look::Type::Detail)
         .child(div().min_w_0().truncate().text_color(colors.text_muted).child(left))
         .child(div().flex_none().text_color(colors.text_faint).child(of));
     let parts: Vec<Div> =
@@ -87,11 +92,14 @@ fn room(context: &ContextUsage, cx: &App) -> Div {
         .child(heading("Context", Some(used.into()), cx))
         .child(bar_with_room_kept_back(context.used_fraction(), context.fraction(kept_back), cx))
         .child(under)
-        .children(
-            words::capped(context).map(|said| {
-                div().id("context-capped").text_xs().text_color(colors.text_faint).child(said).test_support()
-            }),
-        )
+        .children(words::capped(context).map(|said| {
+            div()
+                .id("context-capped")
+                .typeset(look::Type::Detail)
+                .text_color(colors.text_faint)
+                .child(said)
+                .test_support()
+        }))
         // Left out when the agent named no parts, so the card doesn't end in the room above them.
         .children((!parts.is_empty()).then(|| v_flex().mt_2().gap_1().children(parts)))
 }
@@ -125,8 +133,9 @@ fn limit(name: SharedString, limit: &UsageLimit, cx: &App) -> AnyElement {
         .justify_between()
         .gap_3()
         .child(div().min_w_0().truncate().text_color(colors.text_muted).child(name))
-        .child(div().flex_none().font_weight(FontWeight::MEDIUM).child(format!("{left}% left")));
-    let resets = resets.map(|when| div().text_xs().text_color(colors.text_faint).child(format!("Resets {when}")));
+        .child(div().flex_none().emphasis().child(format!("{left}% left")));
+    let resets = resets
+        .map(|when| div().typeset(look::Type::Detail).text_color(colors.text_faint).child(format!("Resets {when}")));
     v_flex().gap_1().child(said).child(bar(f32::from(left) / 100., cx)).children(resets).into_any_element()
 }
 
@@ -150,8 +159,8 @@ fn whose(account: &Account, plan: Plan, cx: &App) -> Option<AnyElement> {
     }
     // Either can be long, such as an email, so each is cut off with an ellipsis rather than wrapped.
     let who = who.map(|who| div().truncate().text_color(colors.text_muted).child(who));
-    let how =
-        (!how.is_empty()).then(|| div().truncate().text_xs().text_color(colors.text_faint).child(how.join(" · ")));
+    let how = (!how.is_empty())
+        .then(|| div().truncate().typeset(look::Type::Detail).text_color(colors.text_faint).child(how.join(" · ")));
     let said = v_flex().id("account").gap_0p5().children(who).children(how).test_support();
     Some(v_flex().child(div().my_2().h(px(1.)).bg(colors.edge)).child(said).into_any_element())
 }
@@ -161,7 +170,7 @@ fn heading(name: impl Into<SharedString>, comes_to: Option<SharedString>, cx: &A
     let muted = look::colors(cx).text_muted;
     h_flex()
         .justify_between()
-        .child(div().font_weight(FontWeight::MEDIUM).child(name.into()))
+        .child(div().emphasis().child(name.into()))
         .children(comes_to.map(|comes_to| div().text_color(muted).child(comes_to)))
 }
 

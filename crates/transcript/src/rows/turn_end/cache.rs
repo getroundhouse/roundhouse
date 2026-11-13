@@ -7,7 +7,7 @@ use gpui_kit::{
     App, Div, InteractiveElement as _, IntoElement, ParentElement as _, StatefulInteractiveElement as _, Styled as _,
     div,
 };
-use look::CacheMark;
+use look::{CacheMark, Typeset as _};
 use protocol::model::{CacheState, CacheTtl, PromptCache};
 
 use super::card;
@@ -49,7 +49,7 @@ pub(super) fn in_the_card(cache: &PromptCache, cx: &App) -> Option<Div> {
     let lasts = h_flex()
         .justify_between()
         .gap_6()
-        .text_xs()
+        .typeset(look::Type::Detail)
         .text_color(muted)
         .children(when)
         .child(div().whitespace_nowrap().child(format!("{} cache", ttl_words(cache.ttl)?)));

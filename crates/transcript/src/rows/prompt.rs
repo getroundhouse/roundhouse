@@ -7,6 +7,7 @@ use gpui_kit::{
     AnyElement, App, InteractiveElement as _, IntoElement, ParentElement, Styled, TestSupportExt as _, div, px,
     relative,
 };
+use look::Typeset as _;
 
 use super::{Shared, from_blocks, row};
 use crate::attachments::{self, Carried};
@@ -67,7 +68,7 @@ pub(super) fn prompt_bubble(
         .when(dropped, |d| {
             d.child(
                 div()
-                    .text_xs()
+                    .typeset(look::Type::Detail)
                     .text_color(colors.text_faint)
                     .child("The agent stopped before it read this, so it never got it."),
             )

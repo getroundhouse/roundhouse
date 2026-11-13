@@ -4,9 +4,8 @@
 use client_core::calls::files::file_name;
 use client_core::calls::{FileLines, Found, Search};
 use gpui_kit::assets::IconName;
-use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::{AnyElement, App, InteractiveElement as _, IntoElement, ParentElement, Styled, div};
-use look::language;
+use look::{Typeset as _, language};
 
 use super::line::{Line, Part};
 use super::{Answer, Toggle, block, line, numbered};
@@ -71,13 +70,7 @@ fn opened(found: &Found, toggle: &Toggle, cx: &App) -> Option<AnyElement> {
         }
         Found::Nothing => return None,
     };
-    Some(
-        block::frame(cx)
-            .font_family(cx.theme().mono_font_family.clone())
-            .text_size(cx.theme().mono_font_size)
-            .child(shown)
-            .into_any_element(),
-    )
+    Some(block::frame(cx).typeset(look::Type::Code).child(shown).into_any_element())
 }
 
 /// A file's matching lines, with their numbers.

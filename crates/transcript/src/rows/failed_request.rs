@@ -3,10 +3,8 @@
 use gpui_kit::component::button::Button;
 use gpui_kit::component::{Icon, IconName, h_flex};
 use gpui_kit::prelude::FluentBuilder as _;
-use gpui_kit::{
-    AnyElement, App, ClickEvent, ElementId, FontWeight, IntoElement, ParentElement, Styled, Window, div, px,
-};
-use look::Hand as _;
+use gpui_kit::{AnyElement, App, ClickEvent, ElementId, IntoElement, ParentElement, Styled, Window, div, px};
+use look::{Hand as _, Typeset as _};
 use protocol::event::{FailureKind, RequestFailure};
 use protocol::model::Seq;
 
@@ -37,16 +35,16 @@ pub(super) fn card(
     let head = h_flex()
         .gap_2()
         .child(Icon::new(IconName::CircleX).flex_none().size(px(ICON)).text_color(stopped))
-        .child(div().text_sm().font_weight(FontWeight::MEDIUM).child(title(failure.kind)))
-        .children(
-            resets.map(|when| div().ml_auto().text_xs().text_color(colors.text_faint).child(format!("Resets {when}"))),
-        );
+        .child(div().typeset(look::Type::Body).emphasis().child(title(failure.kind)))
+        .children(resets.map(|when| {
+            div().ml_auto().typeset(look::Type::Detail).text_color(colors.text_faint).child(format!("Resets {when}"))
+        }));
     let id = (ItemKey::Event(seq, 0), Part::FailedRequest);
     let said = from_blocks(&Written::found(TextAt::only(seq, 0), &id, find, &failure.message), None, shared);
     let card = card::tinted(Some(stopped), cx)
         .gap_1p5()
         .child(head)
-        .child(div().text_sm().text_color(colors.text_muted).child(said))
+        .child(div().typeset(look::Type::Body).text_color(colors.text_muted).child(said))
         .when(retry, |d| d.child(h_flex().pt_1().child(retry_button(seq, shared))));
     row().child(card).into_any_element()
 }

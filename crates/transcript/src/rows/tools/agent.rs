@@ -18,7 +18,7 @@ use gpui_kit::{
     AnyElement, App, Div, ElementId, FontWeight, InteractiveElement as _, IntoElement, ParentElement, Styled,
     TestSupportExt as _, WeakEntity, div,
 };
-use look::Hand as _;
+use look::{Hand as _, Typeset as _};
 use protocol::event::{ContentBlock, SessionEvent};
 use protocol::model::{SubagentStatus, ToolUseId};
 
@@ -152,14 +152,15 @@ pub(in crate::rows) fn prompt_block(
 ) -> AnyElement {
     let colors = look::colors(cx);
     let id = Text::Asked.element(key);
-    let text = div().id(id.clone()).text_sm().text_color(colors.text_muted).child(text(block::scroll_id(&id)));
+    let text =
+        div().id(id.clone()).typeset(look::Type::Body).text_color(colors.text_muted).child(text(block::scroll_id(&id)));
     v_flex()
         .mt_1()
         .gap_1()
         .pl_3()
         .border_l_2()
         .border_color(colors.edge)
-        .child(div().text_xs().text_color(colors.text_faint).child("Asked"))
+        .child(div().typeset(look::Type::Detail).text_color(colors.text_faint).child("Asked"))
         .child(block::scrolling(find, drags, &id, text.test_support()))
         .into_any_element()
 }
@@ -175,7 +176,10 @@ fn asked(call: &Agent, toggle: &Toggle, cx: &App) -> Option<AnyElement> {
 /// full, under a rule and a heading, so it carries more weight than what it was asked.
 pub(in crate::rows) fn report_block(key: &ItemKey, text: impl IntoElement, cx: &App) -> Div {
     let colors = look::colors(cx);
-    let heading = div().text_sm().font_weight(FontWeight::SEMIBOLD).text_color(colors.text).child("Report");
+    // Semibold, where `docs/spec/look.md` says text never is, and kept so until the tidy-ups decide it with pictures,
+    // since medium would change how it looks.
+    let heading =
+        div().typeset(look::Type::Body).font_weight(FontWeight::SEMIBOLD).text_color(colors.text).child("Report");
     v_flex()
         .mt_1()
         .gap_2()
@@ -211,7 +215,7 @@ fn page(call: &Agent, answer: Option<&Answer>, subagent: &Subagent, toggle: &Tog
     let lately = (!drawn.is_empty()).then(|| {
         v_flex()
             .gap_1()
-            .child(div().text_xs().text_color(look::colors(cx).text_faint).child("Working on"))
+            .child(div().typeset(look::Type::Detail).text_color(look::colors(cx).text_faint).child("Working on"))
             .children(drawn)
     });
     v_flex()

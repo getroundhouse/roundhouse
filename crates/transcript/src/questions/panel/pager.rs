@@ -9,7 +9,7 @@ use gpui_kit::{
     AnyElement, Context, ElementId, InteractiveElement as _, IntoElement, ParentElement,
     StatefulInteractiveElement as _, Styled, TestSupportExt as _, div, px,
 };
-use look::{Hand as _, Off as _};
+use look::{Hand as _, Off as _, Typeset as _};
 use protocol::event::QuestionAnswer;
 
 use super::QuestionPanel;
@@ -19,8 +19,12 @@ use super::heading::said;
 /// starts where the rows' numbers do.
 pub(super) fn more_waiting(more: usize, cx: &mut Context<QuestionPanel>) -> Option<AnyElement> {
     let muted = look::colors(cx).text_muted;
-    let waiting =
-        |more| said("question-more-waiting", format!("{more} more waiting")).pl_2().text_xs().text_color(muted);
+    let waiting = |more| {
+        said("question-more-waiting", format!("{more} more waiting"))
+            .pl_2()
+            .typeset(look::Type::Detail)
+            .text_color(muted)
+    };
     (more > 0).then(|| waiting(more).test_support().into_any_element())
 }
 

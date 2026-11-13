@@ -6,13 +6,13 @@ use std::rc::Rc;
 
 use client_core::calls::{Failure, first_line};
 use gpui_kit::assets::IconName;
-use gpui_kit::component::{ActiveTheme as _, Icon, h_flex, v_flex};
+use gpui_kit::component::{Icon, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, AnyView, App, Div, ElementId, Hsla, InteractiveElement, IntoElement, ParentElement, Pixels, Role,
     SharedString, Stateful, StatefulInteractiveElement, Styled, TestSupportExt as _, Window, div, px, relative,
 };
-use look::{Hand as _, LineText};
+use look::{Hand as _, LineText, Typeset as _};
 use protocol::event::Denied;
 
 use super::shown::Gather;
@@ -147,14 +147,14 @@ impl Part {
     fn render(self, line_text: &LineText, cx: &App) -> AnyElement {
         let colors = look::colors(cx);
         match self {
-            Part::Pill(text, marks) => pill(text, &marks, colors.text_muted, colors.raised, cx),
+            Part::Pill(text, marks) => pill(text, &marks, colors.text_muted, colors.raised),
             Part::Chip(text) => div()
                 .flex_none()
                 .px_2()
                 .rounded(px(6.))
                 .border_1()
                 .border_color(colors.control_edge)
-                .text_sm()
+                .typeset(look::Type::Body)
                 .text_color(colors.text_muted)
                 .child(text)
                 .into_any_element(),
@@ -239,8 +239,7 @@ fn glyph(kind: IconName, cx: &App) -> Icon {
 }
 
 /// Code on a pill, cut off with an ellipsis when it doesn't fit, with its matches.
-fn pill(text: SharedString, marks: &Marks, color: Hsla, background: Hsla, cx: &App) -> AnyElement {
-    let theme = cx.theme();
+fn pill(text: SharedString, marks: &Marks, color: Hsla, background: Hsla) -> AnyElement {
     div()
         .min_w_0()
         .px_2()
@@ -249,8 +248,7 @@ fn pill(text: SharedString, marks: &Marks, color: Hsla, background: Hsla, cx: &A
         .bg(background)
         .overflow_hidden()
         .text_ellipsis()
-        .font_family(theme.mono_font_family.clone())
-        .text_size(theme.mono_font_size)
+        .typeset(look::Type::Code)
         .text_color(color)
         .child(find::marked(text, marks, &[], None))
         .into_any_element()
@@ -309,7 +307,6 @@ fn failure(failure: &Failure, cx: &App) -> AnyElement {
                 &Marks::default(),
                 error_colour,
                 error_colour.opacity(0.09),
-                cx,
             ))
         })
         .into_any_element()

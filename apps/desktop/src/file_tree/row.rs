@@ -1,7 +1,7 @@
 //! How a row of a tree is drawn: indented to its depth, with a line down the side for each folder it's in.
 
-use gpui_kit::component::{ActiveTheme as _, Icon, IconName, h_flex};
-use look::Hand as _;
+use gpui_kit::component::{Icon, IconName, h_flex};
+use look::{Hand as _, Typeset as _};
 
 use crate::file_icons::{ICON_SIZE, file_icon};
 use gpui_kit::prelude::FluentBuilder as _;
@@ -66,7 +66,7 @@ pub(crate) fn row_frame(id: String, list: List, depth: usize, showing: bool, cx:
         .pl(px(list.inset(depth)))
         .pr_3()
         .gap(px(GAP))
-        .text_sm()
+        .typeset(look::Type::Body)
         .hand()
         .when(showing, |d| d.bg(raised))
         .when(!showing, |d| d.hover(|s| s.bg(hover)))
@@ -90,9 +90,8 @@ pub(crate) fn folder_row(
     icon: impl IntoElement,
     cx: &App,
 ) -> Stateful<gpui_kit::Div> {
-    let theme = cx.theme();
     let colors = look::colors(cx);
-    let (muted, mono) = (colors.text_muted, theme.mono_font_family.clone());
+    let muted = colors.text_muted;
     let chevron = if open { IconName::ChevronDown } else { IconName::ChevronRight };
     row_frame(id, list, depth, false, cx)
         .when(list == List::Changes, |d| d.child(Icon::new(chevron).size(px(CHEVRON)).text_color(colors.text_faint)))
@@ -104,8 +103,7 @@ pub(crate) fn folder_row(
                 .overflow_hidden()
                 .whitespace_nowrap()
                 .text_ellipsis()
-                .text_xs()
-                .font_family(mono)
+                .typeset(look::Type::Code)
                 .text_color(muted)
                 .child(names.join(" / ")),
         )

@@ -1,11 +1,11 @@
-//! How the app looks, everywhere it's drawn: every colour it draws with, by what it's for, the theme over the kit's
-//! made from them, code's colours, the words that changed within a diff's lines, text of different sizes on one
-//! baseline, the status mark, the ring for a background task and the robot for a subagent at work there, with the size
-//! of a call's icon, which the robot shares, how an image is fitted to the room there is, the app icon, plan mode's
-//! texture, which is made from the mark, the pointing hand, the button that copies, the parts of the window tests find
-//! by where they're drawn, how long things take to move, a hover card that waits like a tooltip, a chat's cache, how a
-//! count of tokens reads, and the time text on screen reads, which pictures hold still with everything that moves.
-//! `docs/spec/look.md` has the rules these follow.
+//! How the app looks, everywhere it's drawn: every colour it draws with and every kind of text it sets, by what each is
+//! for, the theme over the kit's made from them, code's colours, the words that changed within a diff's lines, text of
+//! different sizes on one baseline, the status mark, the ring for a background task and the robot for a subagent at
+//! work there, with the size of a call's icon, which the robot shares, how an image is fitted to the room there is, the
+//! app icon, plan mode's texture, which is made from the mark, the pointing hand, the button that copies, the parts of
+//! the window tests find by where they're drawn, how long things take to move, a hover card that waits like a tooltip,
+//! a chat's cache, how a count of tokens reads, and the time text on screen reads, which pictures hold still with
+//! everything that moves. `docs/spec/look.md` has the rules these follow.
 
 #![warn(clippy::wildcard_enum_match_arm)]
 
@@ -29,6 +29,7 @@ mod robot;
 mod task_ring;
 mod theme;
 mod tokens;
+mod typography;
 mod word_changes;
 mod work;
 
@@ -54,5 +55,6 @@ pub use robot::{LINE_ICON, robot_at_work};
 pub use task_ring::{TaskRing, task_ring};
 pub use theme::apply;
 pub use tokens::tokens;
+pub use typography::{Type, Typeset};
 pub use word_changes::{LineChange, word_changes};
 pub use work::Work;

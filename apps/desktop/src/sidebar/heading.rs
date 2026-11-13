@@ -6,10 +6,10 @@ use gpui_kit::component::menu::{DropdownMenu as _, PopupMenu, PopupMenuItem};
 use gpui_kit::component::{IconName, Sizable as _, h_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    Anchor, AnyElement, Context, FontWeight, Hsla, InteractiveElement as _, IntoElement, ParentElement, Styled,
+    Anchor, AnyElement, Context, Hsla, InteractiveElement as _, IntoElement, ParentElement, Styled,
     TestSupportExt as _, Window, div,
 };
-use look::{Hand as _, Off as _};
+use look::{Hand as _, Off as _, Typeset as _};
 
 use super::{HEADING_HEIGHT, SORTS};
 use crate::app::AppView;
@@ -28,7 +28,7 @@ pub(super) fn heading(app: &AppView, connected: bool, cx: &mut Context<AppView>)
         .w_full()
         .h(HEADING_HEIGHT)
         .px_1p5()
-        .child(div().flex_1().text_xs().font_weight(FontWeight::MEDIUM).text_color(faint).child("Workspaces"))
+        .child(div().flex_1().typeset(look::Type::Detail).emphasis().text_color(faint).child("Workspaces"))
         .child(sort_button(app, faint, cx))
         .child(
             Button::new("add-project")

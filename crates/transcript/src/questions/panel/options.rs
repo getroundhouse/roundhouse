@@ -8,7 +8,7 @@ use gpui_kit::{
     AnyElement, Context, ElementId, Entity, Hsla, InteractiveElement as _, IntoElement, ParentElement,
     StatefulInteractiveElement as _, Styled, TestSupportExt as _, div, px,
 };
-use look::Hand as _;
+use look::{Hand as _, Typeset as _};
 use protocol::event::{Question, QuestionOption};
 
 use super::QuestionPanel;
@@ -72,7 +72,15 @@ const CHECKBOX: f32 = 16.;
 
 /// A row's number, which is also its key, as a small detail.
 fn number(n: usize, muted: Hsla) -> impl IntoElement {
-    div().flex_none().w(px(12.)).h(px(LINE)).flex().items_center().text_xs().text_color(muted).child(n.to_string())
+    div()
+        .flex_none()
+        .w(px(12.))
+        .h(px(LINE))
+        .flex()
+        .items_center()
+        .typeset(look::Type::Detail)
+        .text_color(muted)
+        .child(n.to_string())
 }
 
 fn row(id: ElementId, chosen: bool, colors: Colors) -> gpui_kit::Stateful<gpui_kit::Div> {
@@ -84,7 +92,7 @@ fn row(id: ElementId, chosen: bool, colors: Colors) -> gpui_kit::Stateful<gpui_k
         .px_2()
         .py_1p5()
         .rounded_md()
-        .text_sm()
+        .typeset(look::Type::Body)
         .line_height(px(LINE))
         .hand()
         .map(|d| if chosen { d.bg(colors.chosen) } else { d.hover(move |style| style.bg(colors.hovered)) })
@@ -104,7 +112,12 @@ fn option_row(
 ) -> AnyElement {
     // What the option means, as a small detail under it.
     let description = option.description.clone().map(|description| {
-        div().mt_0p5().text_xs().line_height(px(DESCRIPTION_LINE)).text_color(colors.muted).child(description)
+        div()
+            .mt_0p5()
+            .typeset(look::Type::Detail)
+            .line_height(px(DESCRIPTION_LINE))
+            .text_color(colors.muted)
+            .child(description)
     });
     row(ElementId::Name(format!("question-answer-{o}").into()), chosen, colors)
         .on_click(cx.listener(move |this, _, window, cx| this.pick(o, window, cx)))
@@ -155,7 +168,7 @@ fn other_row(
                 .flex_1()
                 .min_w_0()
                 .ml(px(-TYPING_INSET))
-                .child(Textarea::new(other).appearance(false).xsmall().text_sm()),
+                .child(Textarea::new(other).appearance(false).xsmall().typeset(look::Type::Body)),
         )
         .when(multiple, |d| d.child(checkbox))
         .test_support()

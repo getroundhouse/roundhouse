@@ -145,7 +145,7 @@ fn row(
     let fill = colors.raised_hover;
     let label = label(prompt);
     let number = div().w(NUMBER_WIDTH).flex_none().text_right().text_color(colors.text_faint).child(number.to_string());
-    let number = line_text.small.set(number);
+    let number = line_text.detail.set(number);
     let text = div()
         .flex_1()
         .min_w_0()
@@ -199,7 +199,7 @@ fn compaction_row(
     let icon = Icon::new(IconName::FoldVertical).size(px(RULE_ICON)).text_color(colors.text_faint);
     let icon = div().w(NUMBER_WIDTH).flex_none().flex().justify_end().items_center().child(icon);
     let text = div().flex_1().min_w_0().truncate().text_color(colors.text_faint).child(said);
-    let text = line_text.small.set(text);
+    let text = line_text.detail.set(text);
     div()
         .id(ElementId::Name(format!("outline-compaction/{row}").into()))
         .role(Role::ListBoxOption)

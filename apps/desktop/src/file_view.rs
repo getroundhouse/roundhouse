@@ -3,12 +3,13 @@
 //! what kind it is and how big. Which file is the pane's to say, since the file tab is the pane's.
 
 use client_core::Client;
-use gpui_kit::component::{ActiveTheme as _, h_flex, v_flex};
+use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::{
     AnyElement, App, Context, FocusHandle, Focusable, InteractiveElement as _, IntoElement,
     ListHorizontalSizingBehavior, ParentElement as _, Pixels, Render, SharedString, Styled as _, StyledText,
     Subscription, UniformListScrollHandle, Window, div, px, uniform_list,
 };
+use look::Typeset as _;
 use protocol::model::WorkspaceId;
 
 use crate::file_header::file_header;
@@ -183,8 +184,6 @@ pub(crate) fn numbers_width(lines: usize) -> Pixels {
 
 impl Render for FileView {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = cx.theme();
-        let (mono, mono_size) = (theme.mono_font_family.clone(), theme.mono_font_size);
         let body = match &self.contents {
             Contents::Loading => placeholder("Loading…".into(), cx),
             Contents::Image(image) => picture(image),
@@ -197,8 +196,7 @@ impl Render for FileView {
                     .flex_1()
                     .w_full()
                     .py_1()
-                    .font_family(mono)
-                    .text_size(mono_size)
+                    .typeset(look::Type::Code)
                     .into_any_element()
             }
         };

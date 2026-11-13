@@ -10,9 +10,10 @@ use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::component::{Icon, IconName, Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, Context, FontWeight, InteractiveElement, IntoElement, ParentElement, StatefulInteractiveElement,
-    Styled, TestSupportExt as _, div, px,
+    AnyElement, App, Context, InteractiveElement, IntoElement, ParentElement, StatefulInteractiveElement, Styled,
+    TestSupportExt as _, div, px,
 };
+use look::Typeset as _;
 
 use crate::app::{AppView, BuildLine};
 use crate::checkout::Checkout;
@@ -29,7 +30,7 @@ fn update_problem(problem: &Problem, cx: &App) -> AnyElement {
         .id("update-problem")
         .px_2()
         .gap_1p5()
-        .text_xs()
+        .typeset(look::Type::Detail)
         .text_color(color)
         .child(Icon::new(IconName::TriangleAlert).xsmall())
         .child(problem.summary())
@@ -40,7 +41,7 @@ fn update_problem(problem: &Problem, cx: &App) -> AnyElement {
 
 /// The version, faint, and the hub's too when it's another build the app leaves alone.
 fn version(line: &BuildLine, cx: &App) -> AnyElement {
-    let text = div().id("build-line").px_2().pt_1().text_xs().text_color(look::colors(cx).text_faint);
+    let text = div().id("build-line").px_2().pt_1().typeset(look::Type::Detail).text_color(look::colors(cx).text_faint);
     match line {
         BuildLine::OtherHub { app, hub } => {
             let detail = format!(
@@ -65,7 +66,7 @@ fn checkout_card(checkout: &Checkout, data_dir: &Path, cx: &App) -> AnyElement {
     let built = format!("Built from {}. Its hub keeps its data in {}.", checkout.root().display(), data_dir.display());
     let hover = checkout.note().map_or_else(|| built.clone(), |note| format!("{note}\n\n{built}"));
     let note = checkout.note().map(|note| {
-        let text = div().id("checkout-note").text_xs().text_color(colors.text_muted).line_clamp(4);
+        let text = div().id("checkout-note").typeset(look::Type::Detail).text_color(colors.text_muted).line_clamp(4);
         text.child(note.to_string()).test_support()
     });
     v_flex()
@@ -77,7 +78,7 @@ fn checkout_card(checkout: &Checkout, data_dir: &Path, cx: &App) -> AnyElement {
         .bg(colors.raised)
         .border_1()
         .border_color(colors.edge)
-        .child(div().text_sm().font_weight(FontWeight::MEDIUM).truncate().child(checkout.name()))
+        .child(div().typeset(look::Type::Body).emphasis().truncate().child(checkout.name()))
         .when_some(note, ParentElement::child)
         .tooltip(move |window, cx| Tooltip::new(hover.clone()).build(window, cx))
         .test_support()
@@ -86,7 +87,14 @@ fn checkout_card(checkout: &Checkout, data_dir: &Path, cx: &App) -> AnyElement {
 
 /// What a check for updates is doing or found, faint, under the build.
 fn check_line(id: &'static str, text: &'static str, cx: &App) -> AnyElement {
-    div().id(id).px_2().text_xs().text_color(look::colors(cx).text_faint).child(text).test_support().into_any_element()
+    div()
+        .id(id)
+        .px_2()
+        .typeset(look::Type::Detail)
+        .text_color(look::colors(cx).text_faint)
+        .child(text)
+        .test_support()
+        .into_any_element()
 }
 
 pub(super) fn footer(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {

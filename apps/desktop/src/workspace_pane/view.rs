@@ -8,10 +8,10 @@ use gpui_kit::component::menu::{ContextMenuExt as _, PopupMenu};
 use gpui_kit::component::{IconName, Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, Context, ElementId, FontWeight, InteractiveElement, IntoElement, ParentElement, Pixels, Render,
+    AnyElement, App, Context, ElementId, InteractiveElement, IntoElement, ParentElement, Pixels, Render,
     StatefulInteractiveElement, Styled, TestSupportExt as _, Window, div, px, relative,
 };
-use look::{Hand as _, InRegion as _, LineText, Off as _, Region};
+use look::{Hand as _, InRegion as _, LineText, Off as _, Region, Typeset as _};
 use protocol::model::{Session, SessionStatus};
 
 use super::setup::setup_log_view;
@@ -73,13 +73,13 @@ impl WorkspacePane {
                     .gap_2()
                     .pl_3()
                     .pr_1p5()
-                    .text_sm()
+                    .typeset(look::Type::Body)
                     .line_height(relative(1.25))
                     // Only a chat that needs a look stands out: one with a reply that hasn't been read, or a question
                     // waiting on an answer. The open chat shows in its underline, so moving between chats doesn't
                     // change how their titles look.
                     .when(!needs_a_look, |d| d.text_color(muted))
-                    .when(needs_a_look, |d| d.font_weight(FontWeight::MEDIUM))
+                    .when(needs_a_look, look::Typeset::emphasis)
                     .on_click(cx.listener(move |t, _, _, cx| t.activate(to_show.clone(), cx)))
                     .child(look::chat_mark(mark, look::Size::Inline, cx))
                     .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(title))
@@ -204,11 +204,11 @@ impl WorkspacePane {
     fn heading(&self, line_text: &LineText, cx: &mut Context<Self>) -> impl IntoElement {
         let colors = look::colors(cx);
         let (muted, faint) = (colors.text_muted, colors.text_faint);
-        let LineText { body, small, code } = line_text;
+        let LineText { body, detail, code } = line_text;
         let words = || div().min_w_0().overflow_hidden().text_ellipsis();
         let title = self.workspace().label().to_string();
         let title = words().id("workspace-title").role(gpui_kit::Role::Heading).aria_label(title.clone()).child(title);
-        let title = body.set(title).font_weight(FontWeight::MEDIUM).test_support();
+        let title = body.set(title).emphasis().test_support();
         let title = workspace_card::card(title, self.workspace(), self.client.hub_version());
         let branch = words().text_color(muted).child(self.workspace().branch.to_string());
         let base = words().text_color(faint);
@@ -223,7 +223,7 @@ impl WorkspacePane {
             .child(div().flex_none().child(self.regenerate_title_button(cx)))
             .child(body.set(div().flex_none().text_color(faint).child("/")))
             .child(code.set(branch))
-            .child(small.set(base))
+            .child(detail.set(base))
     }
 
     /// Titles the workspace again from what's been asked in it, beside the title it replaces. It spins while the hub
@@ -298,7 +298,7 @@ impl WorkspacePane {
                     )
                     .flex_none()
                     .py_1()
-                    .text_xs()
+                    .typeset(look::Type::Detail)
                     .text_color(muted),
                 )
             })
@@ -306,7 +306,7 @@ impl WorkspacePane {
             .when_some(cache_expired, |d, said| {
                 let clock = look::cache_mark(look::CacheMark::Clock, faint);
                 let line = h_flex().gap_1p5().child(clock).child(said);
-                d.child(transcript::in_column(line).flex_none().py_1().text_xs().text_color(muted))
+                d.child(transcript::in_column(line).flex_none().py_1().typeset(look::Type::Detail).text_color(muted))
             })
             .child(composer)
             .into_any_element()

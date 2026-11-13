@@ -5,12 +5,12 @@
 
 use client_core::calls::Command;
 use gpui_kit::assets::IconName;
-use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, Div, ElementId, InteractiveElement, IntoElement, ParentElement, Role, SharedString,
     StatefulInteractiveElement as _, Styled, TestSupportExt as _, div, px,
 };
+use look::Typeset as _;
 
 use super::highlight::spans;
 use super::line::{Line, Part};
@@ -75,13 +75,11 @@ fn opened(command: &Command, answer: Option<&Answer>, toggle: &Toggle, cx: &App)
 
 /// Where a command's output goes, saying there wasn't any. It isn't selectable, so a copy never takes it for output.
 fn nothing_printed(toggle: &Toggle, cx: &App) -> AnyElement {
-    let theme = cx.theme();
     div()
         .id(toggle.key.element("no-output"))
         .px_3()
         .py_2()
-        .font_family(theme.mono_font_family.clone())
-        .text_size(theme.mono_font_size)
+        .typeset(look::Type::Code)
         .text_color(look::colors(cx).text_faint)
         .child("No output")
         .test_support()
@@ -91,7 +89,6 @@ fn nothing_printed(toggle: &Toggle, cx: &App) -> AnyElement {
 /// The command whole, after a faint `$`, wrapping under itself rather than under the `$`. It's text to select, and a
 /// button pinned at its top right, shown while it's hovered, copies all of it. It draws the matches in it.
 fn command_part(command: &Command, toggle: &Toggle, cx: &App) -> AnyElement {
-    let theme = cx.theme();
     let colors = look::colors(cx);
     let full: SharedString = command.command.trim().to_string().into();
     let marks = toggle.marks(Text::Command, &full);
@@ -128,8 +125,7 @@ fn command_part(command: &Command, toggle: &Toggle, cx: &App) -> AnyElement {
         .id(ElementId::from((id.clone(), "area")))
         .relative()
         .group(GROUP)
-        .font_family(theme.mono_font_family.clone())
-        .text_size(theme.mono_font_size)
+        .typeset(look::Type::Code)
         .child(scrolling)
         .child(copy_button(&id, full))
         .test_support()

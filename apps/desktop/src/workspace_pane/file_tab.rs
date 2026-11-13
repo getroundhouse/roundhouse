@@ -11,7 +11,7 @@ use gpui_kit::{
     AnyElement, Context, InteractiveElement as _, IntoElement as _, ParentElement as _, SharedString,
     StatefulInteractiveElement as _, Styled, Window, div, px, relative,
 };
-use look::Hand as _;
+use look::{Hand as _, Typeset as _};
 
 use super::view::{TAB_GROUP, TAB_WIDTH};
 use super::{Showing, WorkspacePane};
@@ -158,7 +158,7 @@ impl WorkspacePane {
                     .gap_2()
                     .pl_3()
                     .pr_1p5()
-                    .text_sm()
+                    .typeset(look::Type::Body)
                     .line_height(relative(1.25))
                     // Muted whether or not it's showing, as the chats' titles are: the underline says which tab is.
                     .text_color(muted)

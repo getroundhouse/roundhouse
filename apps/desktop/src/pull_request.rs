@@ -9,11 +9,11 @@ use gpui_kit::component::button::{Button, ButtonCustomVariant, ButtonVariants as
 use gpui_kit::component::{Icon, Sizable as _, h_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, Div, FontWeight, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Styled as _,
-    Window, div, px,
+    AnyElement, App, Div, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Styled as _, Window, div,
+    px,
 };
-use look::Work;
 use look::{Hand as _, Off as _};
+use look::{Typeset as _, Work};
 use protocol::model::{BranchName, Local, PullRequest, Standing, Workspace};
 use transcript::PullRequestStanding;
 
@@ -123,7 +123,7 @@ pub fn bar(
         .border_color(colors.edge);
     let Some(standing) = lookup.standing() else {
         return row
-            .child(div().text_sm().text_color(colors.text_faint).child("Looking for its pull request…"))
+            .child(div().typeset(look::Type::Body).text_color(colors.text_faint).child("Looking for its pull request…"))
             .into_any_element();
     };
     let pr = lookup.pull_request();
@@ -135,8 +135,8 @@ pub fn bar(
         .overflow_hidden()
         .whitespace_nowrap()
         .text_ellipsis()
-        .text_sm()
-        .font_weight(FontWeight::MEDIUM)
+        .typeset(look::Type::Body)
+        .emphasis()
         .text_color(text)
         .child(title);
     row.child(giving_way(pr.map(|pr| number(pr, work, cx)), title))

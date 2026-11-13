@@ -28,7 +28,7 @@ struct Sheet;
 impl Render for Sheet {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let line_text = LineText::new(window, cx);
-        let kinds = [&line_text.body, &line_text.small, &line_text.code];
+        let kinds = [&line_text.body, &line_text.detail, &line_text.code];
         let cells = |row: Div| kinds.iter().fold(row, |row, kind| row.child(kind.set(div().w(px(CELL)).child("H"))));
         // Centred, as most rows are, then lined up along the top, as the outline's are.
         let centred = ROWS.map(|height| cells(h_flex().h(px(height))));

@@ -6,6 +6,7 @@ use gpui_kit::assets::IconName;
 use gpui_kit::{
     AnyElement, App, InteractiveElement as _, IntoElement, ParentElement, Styled, TestSupportExt as _, div,
 };
+use look::Typeset as _;
 
 use super::line::{Line, Part};
 use super::{Answer, Reply, Toggle, block, line};
@@ -65,5 +66,15 @@ fn said(reply: &Reply, advice: Option<&str>, toggle: &Toggle, cx: &App) -> Optio
         Reply::Result(_) => ("empty-reply", EMPTY),
     };
     let (id, muted) = (toggle.key.element(name), look::colors(cx).text_muted);
-    Some(div().id(id).px_3().py_2().text_sm().text_color(muted).child(why).test_support().into_any_element())
+    Some(
+        div()
+            .id(id)
+            .px_3()
+            .py_2()
+            .typeset(look::Type::Body)
+            .text_color(muted)
+            .child(why)
+            .test_support()
+            .into_any_element(),
+    )
 }

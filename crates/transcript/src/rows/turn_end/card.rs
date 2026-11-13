@@ -5,10 +5,10 @@
 
 use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::{
-    AnyElement, App, Div, FontWeight, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, SharedString,
+    AnyElement, App, Div, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, SharedString,
     StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, div, px,
 };
-use look::{InRegion as _, Region};
+use look::{InRegion as _, Region, Typeset as _};
 use protocol::event::TokenUsage;
 use protocol::model::{ModelName, PromptCache};
 
@@ -54,8 +54,8 @@ impl TurnCard {
             .px_3()
             .py_2p5()
             .gap_1()
-            .text_sm()
-            .children(heading.map(|heading| div().font_weight(FontWeight::MEDIUM).child(heading)))
+            .typeset(look::Type::Body)
+            .children(heading.map(|heading| div().emphasis().child(heading)))
             .children(day.map(|day| div().whitespace_nowrap().text_color(look::colors(cx).text_muted).child(day)))
             .children(times)
             .children(counts)

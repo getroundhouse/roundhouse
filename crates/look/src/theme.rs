@@ -8,6 +8,7 @@ use gpui_kit::{App, Hsla, Rgba};
 use serde_json::{Map, Value, json};
 
 use crate::colors::Colors;
+use crate::typography::{MONO, MONO_SIZE, REM};
 
 /// Installs the app's colours, and its theme as the kit's dark theme, and switches to it. Going through the kit,
 /// rather than setting colours on the theme directly, is what lets its other layers, such as rich text, pick the
@@ -40,9 +41,9 @@ fn config(colors: &Colors) -> ThemeConfig {
     serde_json::from_value(json!({
         "name": "Roundhouse Dark",
         "mode": "dark",
-        "font.size": 16,
-        "mono_font.family": "Menlo",
-        "mono_font.size": 12,
+        "font.size": f32::from(REM),
+        "mono_font.family": MONO,
+        "mono_font.size": f32::from(MONO_SIZE),
         "radius": 6,
         "radius.lg": 10,
         "shadow": false,

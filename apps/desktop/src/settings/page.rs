@@ -10,10 +10,10 @@ use gpui_kit::component::menu::PopupMenu;
 use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::component::{IconName, Sizable as _, v_flex};
 use gpui_kit::{
-    App, ClickEvent, Context, FocusHandle, FontWeight, InteractiveElement as _, IntoElement, ParentElement as _,
-    Pixels, RenderOnce, SharedString, Styled as _, TestSupportExt as _, Window, div, px,
+    App, ClickEvent, Context, FocusHandle, InteractiveElement as _, IntoElement, ParentElement as _, Pixels,
+    RenderOnce, SharedString, Styled as _, TestSupportExt as _, Window, div, px,
 };
-use look::Hand as _;
+use look::{Hand as _, Typeset as _};
 
 use client_core::Client;
 use protocol::model::{HubSettings, HubSettingsChange};
@@ -26,9 +26,6 @@ mod rows;
 mod sidebar;
 #[cfg(test)]
 mod tests;
-
-/// How big a page's name is: the one thing in Settings larger than body text, since it says where you are.
-const TITLE_SIZE: Pixels = px(24.);
 
 /// The key context Settings' own keys are bound in.
 pub(crate) const KEY_CONTEXT: &str = "Settings";
@@ -271,8 +268,7 @@ fn settings_page(page: &Page, cx: &App) -> impl IntoElement {
         .px_8()
         .pt(HEADER_HEIGHT + px(20.))
         .pb_2()
-        .text_size(TITLE_SIZE)
-        .font_weight(FontWeight::MEDIUM)
+        .typeset(look::Type::PageTitle)
         .text_color(look::colors(cx).text)
         .child(page.name);
     let rows = page.settings.iter().map(|setting| rows::row(setting, cx));

@@ -9,7 +9,7 @@ use gpui_kit::{
     AnyElement, Context, ElementId, Hsla, InteractiveElement as _, IntoElement, ParentElement, SharedString,
     StatefulInteractiveElement as _, Styled, TestSupportExt as _, div, px,
 };
-use look::{Hand as _, InRegion as _, Region};
+use look::{Hand as _, InRegion as _, Region, Typeset as _};
 use protocol::model::QueuedPrompt;
 use protocol::short_text::one_line;
 
@@ -59,7 +59,14 @@ impl WorkspacePane {
                 .border_color(border)
                 .bg(colors.pane)
                 .child(
-                    div().px_3().py_1p5().border_b_1().border_color(border).text_xs().text_color(muted).child(heading),
+                    div()
+                        .px_3()
+                        .py_1p5()
+                        .border_b_1()
+                        .border_color(border)
+                        .typeset(look::Type::Detail)
+                        .text_color(muted)
+                        .child(heading),
                 )
                 // Its own height, so a long queue scrolls rather than pushing the composer out of the window.
                 .child(div().id("queue-rows").max_h(px(QUEUE_MOST_HEIGHT)).overflow_y_scroll().p_1().children(rows))
@@ -156,7 +163,9 @@ fn queued_line(prompt: &QueuedPrompt, text: Hsla, muted: Hsla) -> impl IntoEleme
         .min_w_0()
         .gap_2()
         .items_center()
-        .when(!line.is_empty(), |row| row.child(div().min_w_0().text_sm().text_color(text).truncate().child(line)))
+        .when(!line.is_empty(), |row| {
+            row.child(div().min_w_0().typeset(look::Type::Body).text_color(text).truncate().child(line))
+        })
         .children(carried(prompt, muted))
 }
 
@@ -175,7 +184,7 @@ fn carried(prompt: &QueuedPrompt, muted: Hsla) -> Option<AnyElement> {
             .max_w(px(CARRIED_MOST_WIDTH))
             .gap_1()
             .items_center()
-            .text_sm()
+            .typeset(look::Type::Body)
             .text_color(muted)
             .child(Icon::new(IconName::File).xsmall().flex_none())
             .child(div().min_w_0().truncate().child(label))

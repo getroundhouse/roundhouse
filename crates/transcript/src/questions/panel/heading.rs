@@ -6,7 +6,7 @@ use gpui_kit::{
     AnyElement, Context, Div, InteractiveElement as _, IntoElement, ParentElement, Role, SharedString, Stateful,
     StatefulInteractiveElement as _, Styled, TestSupportExt as _, div, px,
 };
-use look::Hand as _;
+use look::{Hand as _, Typeset as _};
 use protocol::event::Question;
 
 use super::QuestionPanel;
@@ -47,7 +47,11 @@ pub(super) fn heading(
             .on_click(cx.listener(|this, _, _, cx| this.skip(cx)))
     });
     let text = question.map(|question| {
-        said("question-text", question.text.clone()).w_full().text_sm().line_height(px(QUESTION_LINE)).test_support()
+        said("question-text", question.text.clone())
+            .w_full()
+            .typeset(look::Type::Body)
+            .line_height(px(QUESTION_LINE))
+            .test_support()
     });
     v_flex()
         .w_full()
@@ -62,7 +66,7 @@ pub(super) fn heading(
                         .flex_1()
                         .min_w_0()
                         .truncate()
-                        .text_xs()
+                        .typeset(look::Type::Detail)
                         .text_color(muted)
                         .test_support(),
                 )

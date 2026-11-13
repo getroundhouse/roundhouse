@@ -5,10 +5,10 @@ use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::{Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, Context, Div, FontWeight, InteractiveElement as _, IntoElement, ParentElement, RenderOnce,
-    Stateful, Styled as _, TestSupportExt as _, Window, div, px,
+    AnyElement, App, Context, Div, InteractiveElement as _, IntoElement, ParentElement, RenderOnce, Stateful,
+    Styled as _, TestSupportExt as _, Window, div, px,
 };
-use look::Hand as _;
+use look::{Hand as _, Typeset as _};
 use look::{IconSize, IconStyle};
 
 use super::update_details::{Details, Shown};
@@ -82,8 +82,8 @@ fn card_text(title: &str, detail: impl IntoElement, cx: &App) -> Stateful<Div> {
     v_flex()
         .id("update-about")
         .min_w_0()
-        .child(div().text_sm().font_weight(FontWeight::MEDIUM).child(title.to_string()))
-        .child(div().text_xs().text_color(look::colors(cx).text_muted).child(detail))
+        .child(div().typeset(look::Type::Body).emphasis().child(title.to_string()))
+        .child(div().typeset(look::Type::Detail).text_color(look::colors(cx).text_muted).child(detail))
 }
 
 /// Where a version's changes are linked from: beside the version of an update that's waiting to be installed, which
@@ -92,7 +92,7 @@ fn card_text(title: &str, detail: impl IntoElement, cx: &App) -> Stateful<Div> {
 fn whats_new(cx: &App) -> Stateful<Div> {
     div()
         .id("whats-new")
-        .text_xs()
+        .typeset(look::Type::Detail)
         .text_color(look::colors(cx).link)
         .hand()
         .hover(gpui_kit::Styled::underline)
@@ -158,7 +158,7 @@ fn asking(
     v_flex()
         .id("update-question")
         .gap_2p5()
-        .child(div().text_xs().text_color(muted).child(question.detail()))
+        .child(div().typeset(look::Type::Detail).text_color(muted).child(question.detail()))
         .child(h_flex().gap_2().child(stay).child(go))
         .test_support()
         .into_any_element()

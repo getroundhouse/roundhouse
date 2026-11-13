@@ -10,6 +10,7 @@ use gpui_kit::{
     AnyElement, App, Div, ElementId, Hsla, InteractiveElement as _, IntoElement, ParentElement, SharedString, Styled,
     TestSupportExt as _, div, px,
 };
+use look::Typeset as _;
 use protocol::event::Question;
 use protocol::model::Seq;
 
@@ -87,7 +88,7 @@ fn answers(questions: &[Question], asked: &Asked, toggle: &Toggle, cx: &App) -> 
                 .pb_3()
                 .gap_1p5()
                 .when_some(question.header.clone(), |d, header| {
-                    d.child(div().text_xs().text_color(colors.text_faint).child(header))
+                    d.child(div().typeset(look::Type::Detail).text_color(colors.text_faint).child(header))
                 })
                 .child(text(
                     toggle,
@@ -113,7 +114,7 @@ fn answered(toggle: &Toggle, area: &ElementId, i: usize, answer: AnswerTo, cx: &
         AnswerTo::Unknown => return None,
         AnswerTo::NotAnswered => {
             let id = key.element(&format!("not-answered-{i}"));
-            let said = div().id(id).text_sm().text_color(colors.text_faint).child(NOT_ANSWERED);
+            let said = div().id(id).typeset(look::Type::Body).text_color(colors.text_faint).child(NOT_ANSWERED);
             return Some(said.test_support().into_any_element());
         }
     };
@@ -139,7 +140,11 @@ fn text(toggle: &Toggle, part: Text, id: ElementId, text: &str, color: Hsla, are
     let (drawn, layout) = find::marked_with_layout(said.clone(), &toggle.marks(part, &said), &[], Some(area.clone()));
     let (at, area) = (place(toggle, part), area.clone());
     let plain = Plain { at, element: id, area, drawn, said, pieces: Pieces::whole(layout) };
-    div().min_w_0().text_sm().text_color(color).child(toggle.shared.texts.draw_plain(&toggle.shared.selection, plain))
+    div()
+        .min_w_0()
+        .typeset(look::Type::Body)
+        .text_color(color)
+        .child(toggle.shared.texts.draw_plain(&toggle.shared.selection, plain))
 }
 
 #[cfg(test)]

@@ -3,14 +3,13 @@
 //! once it's saved.
 
 use gpui_kit::assets::IconName as Lucide;
-use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::{Textarea, TextareaState};
 use gpui_kit::component::{Sizable as _, h_flex, v_flex};
 use gpui_kit::{
     AnyElement, App, Div, ElementId, Entity, IntoElement, ParentElement, Styled, WeakEntity, div, px, rems,
 };
-use look::{Hand as _, Off as _};
+use look::{Hand as _, Off as _, Typeset as _};
 use protocol::model::DiffComment;
 
 use super::FileDiff;
@@ -22,7 +21,6 @@ const WIDTH: f32 = 720.;
 /// the buttons there carry space of their own, and the eye measures from their labels. It's in the body's font, where
 /// the lines around it are in the code's.
 fn band(column: Div, cx: &App) -> AnyElement {
-    let theme = cx.theme();
     let colors = look::colors(cx);
     div()
         .w_full()
@@ -30,8 +28,7 @@ fn band(column: Div, cx: &App) -> AnyElement {
         .pt(rems(0.75 + 0.625))
         .pb(rems(0.75 + 0.125))
         .bg(colors.raised)
-        .font_family(theme.font_family.clone())
-        .text_sm()
+        .typeset(look::Type::Body)
         .child(column.w_full().max_w(px(WIDTH)).gap_3())
         .into_any_element()
 }

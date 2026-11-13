@@ -2,11 +2,11 @@
 
 use gpui_kit::component::{Icon, IconName, Sizable as _, v_flex};
 use gpui_kit::{
-    Anchor, AnchoredPositionMode, AnyElement, App, Entity, FontWeight, InteractiveElement as _, IntoElement as _,
+    Anchor, AnchoredPositionMode, AnyElement, App, Entity, InteractiveElement as _, IntoElement as _,
     ParentElement as _, Pixels, Styled as _, TestSupportExt as _, anchored, deferred, div, point, px,
 };
 
-use look::{InRegion as _, Region};
+use look::{InRegion as _, Region, Typeset as _};
 
 use crate::app::{Agents, BuildLine};
 
@@ -77,8 +77,8 @@ impl Details {
         let colors = look::colors(cx);
         let text = v_flex()
             .gap_1()
-            .child(div().text_sm().font_weight(FontWeight::MEDIUM).child(format!("{} → {}", self.from, self.to)))
-            .child(div().text_xs().text_color(colors.text_muted).child(self.what_happens.clone()));
+            .child(div().typeset(look::Type::Body).emphasis().child(format!("{} → {}", self.from, self.to)))
+            .child(div().typeset(look::Type::Detail).text_color(colors.text_muted).child(self.what_happens.clone()));
         let details = look::raised(cx)
             .region(Region::UpdateDetails)
             .w(shown.card_width + BORDER * 2.)

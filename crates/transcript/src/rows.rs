@@ -12,7 +12,7 @@ use gpui_kit::{
     AnyElement, App, Div, ElementId, Hsla, InteractiveElement as _, IntoElement, ParentElement, SharedString, Stateful,
     Styled, WeakEntity, div, px,
 };
-use look::LineText;
+use look::{LineText, Typeset as _};
 use protocol::event::{ApprovalOutcome, ContentBlock, EventBody, SessionEvent};
 use protocol::model::Seq;
 use protocol::tail::Tail;
@@ -208,11 +208,20 @@ fn rule_across(middle: impl IntoElement, cx: &App) -> Div {
 
 /// What's said in the middle of a rule across the chat, small and faint.
 fn rule_middle(id: impl Into<ElementId>, cx: &App) -> Stateful<Div> {
-    h_flex().id(id).flex_none().gap_1p5().px_2().py_0p5().text_xs().text_color(look::colors(cx).text_faint)
+    h_flex()
+        .id(id)
+        .flex_none()
+        .gap_1p5()
+        .px_2()
+        .py_0p5()
+        .typeset(look::Type::Detail)
+        .text_color(look::colors(cx).text_faint)
 }
 
 fn muted_line(text: impl Into<SharedString>, cx: &App) -> AnyElement {
-    row().child(div().text_xs().text_color(look::colors(cx).text_faint).child(text.into())).into_any_element()
+    row()
+        .child(div().typeset(look::Type::Detail).text_color(look::colors(cx).text_faint).child(text.into()))
+        .into_any_element()
 }
 
 /// A message of the agent's, or what came back to it, recorded at `seq`: each of its `blocks` as `around` says.
@@ -319,12 +328,14 @@ fn is_a_line(block: &ContentBlock) -> bool {
 
 /// A line of `text` in `color`, where nothing's found.
 fn colored_line(text: String, color: Hsla) -> AnyElement {
-    row().child(div().text_sm().text_color(color).child(text)).into_any_element()
+    row().child(div().typeset(look::Type::Body).text_color(color).child(text)).into_any_element()
 }
 
 /// A line of `text` in `color`, with its matches.
 fn marked_line(text: String, marks: &Marks, color: Hsla) -> AnyElement {
-    row().child(div().text_sm().text_color(color).child(find::marked(text.into(), marks, &[], None))).into_any_element()
+    row()
+        .child(div().typeset(look::Type::Body).text_color(color).child(find::marked(text.into(), marks, &[], None)))
+        .into_any_element()
 }
 
 /// Which row a block is drawn in: its event's own, as the `n`th of the event's blocks, or a call's, as a subagent's
@@ -370,7 +381,7 @@ fn render_block(
         ContentBlock::ToolResult { .. } if drawing.with_call => return None,
         ContentBlock::ToolResult { .. } => tools::result(&toggle, drawing.reply.result()?, cx),
         ContentBlock::Image { .. } => {
-            div().text_xs().text_color(look::colors(cx).text_muted).child("Image").into_any_element()
+            div().typeset(look::Type::Detail).text_color(look::colors(cx).text_muted).child("Image").into_any_element()
         }
         ContentBlock::Unknown => return None,
     })
