@@ -14,16 +14,9 @@ use protocol::worker::{AgentSpec, ToolsToken};
 use tokio::sync::mpsc;
 use tokio::time::timeout;
 
-/// Through `install`, because writing an executable from this multithreaded process can break running
-/// it on Linux. A fork in another test briefly inherits the open file, and `exec` then fails with
-/// "text file busy". This way, this process never has the file open for writing.
+/// A script standing in for the CLI, which runs `body`.
 fn script(dir: &Path, body: &str) -> PathBuf {
-    let source = dir.join("fake-cli.source");
-    std::fs::write(&source, format!("#!/bin/sh\n{body}\n")).unwrap();
-    let path = dir.join("fake-cli");
-    let status = std::process::Command::new("install").args(["-m", "755"]).arg(&source).arg(&path).status().unwrap();
-    assert!(status.success());
-    path
+    agents::conformance::executable(dir, "fake-cli", &format!("#!/bin/sh\n{body}\n")).unwrap()
 }
 
 fn spec(dir: &Path) -> AgentSpec {

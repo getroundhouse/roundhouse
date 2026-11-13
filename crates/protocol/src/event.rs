@@ -194,7 +194,8 @@ pub enum EventBody {
         errors: Vec<String>,
         /// How long the turn took, by the agent's own count.
         duration_ms: Option<u64>,
-        /// What the agent says its process has cost so far, which counts the turns before this one too.
+        /// What the agent says the conversation has cost so far, across every launch, which counts the turns before this
+        /// one too.
         cost_usd: Option<f64>,
         num_turns: Option<u64>,
         /// When the turn started, by the hub's clock, which the hub adds as it records the end. So every turn is timed

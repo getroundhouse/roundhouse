@@ -4,6 +4,8 @@
 #![warn(clippy::wildcard_enum_match_arm)]
 
 pub mod claude;
+#[cfg(feature = "testing")]
+pub mod conformance;
 mod error;
 
 use std::ffi::OsString;

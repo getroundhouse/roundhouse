@@ -26,6 +26,7 @@ tools/package/package-linux.sh --prebuilt DIR     # Packages Linux binaries, bui
 python3 -m unittest discover -s tools/package   # The scripts that publish releases, against a directory for the bucket, and the one that makes the Windows icon
 tools/smoke/real-claude.sh        # The backend against the real CLI. About $0.42, mostly a plan and one reply on Sonnet, so run it by hand
 tools/smoke/capture_claude_fixture.py   # After a CLI upgrade: re-capture its output, then run `cargo test -p agents`
+cargo run -p agents --example conformance   # The conformance scenarios, through the adapter, on the CLI the hub would find, against a scripted model, on a Mac. `--paid` adds the real one, under a cent a scenario on Haiku, so run it by hand. `--save` keeps the fixtures, as docs/conformance.md says
 cargo xwin clippy --workspace --locked --target x86_64-pc-windows-msvc -- -D warnings   # Windows, from a Mac: lints the product's code as built for it, and runs nothing. Needs cargo-xwin, LLVM and the rustup target
 docker run --rm -v "$PWD":/src:ro -e CARGO_TARGET_DIR=/tmp/t -w /src rust:1.100.0 sh -c 'v=0.17.1; z=zig-$(uname -m)-linux-$v; curl -sSfL https://ziglang.org/download/$v/$z.tar.xz | tar -xJ -C /opt && export PATH=/opt/$z:$PATH; git config --global user.name t; git config --global user.email t@example.com; cargo test --locked'   # Linux, with the Zig that builds Ghostty's terminal core
 ```

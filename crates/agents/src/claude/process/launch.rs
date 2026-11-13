@@ -9,6 +9,7 @@ use protocol::worker::AgentSpec;
 use tokio::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command};
 use tracing::warn;
 
+use super::Tap;
 use crate::{AgentError, AgentOptions, BinaryLookup};
 
 /// Set by a parent Claude session. If the hub was started from inside one, these would make a new
@@ -108,16 +109,22 @@ pub(super) struct Launched {
     pub(super) stderr: ChildStderr,
 }
 
+/// Starts the CLI for `spec`, telling `tap` what it's started with.
 pub(super) fn launch(
     bin: &Path,
     spec: &AgentSpec,
     resume: bool,
     options: &AgentOptions,
+    tap: Option<&Tap>,
 ) -> Result<Launched, AgentError> {
     let cwd = Path::new(&spec.cwd);
     let mut command = command(bin, cwd);
+    let args = build_args(spec, resume, options.instructions.as_deref())?;
+    if let Some(tap) = tap {
+        tap.launched(resume, &spec.agent_session_id, &args);
+    }
     command
-        .args(build_args(spec, resume, options.instructions.as_deref())?)
+        .args(args)
         // Reports idle, running and waiting directly. Counting `result` events can't, because a
         // prompt sent mid-turn folds into the running turn and produces no result of its own.
         .env("CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS", "1")

@@ -6,16 +6,22 @@ publish.workspace = true
 license.workspace = true
 
 [features]
-# What only tests use: a longer wait for an agent's last output.
-testing = []
+# What only tests use: a longer wait for an agent's last output, and the conformance runner, whose scripted model
+# serves the Messages API over HTTP.
+testing = ["dep:http-body-util", "dep:hyper", "dep:hyper-util", "dep:serde"]
 
 [dependencies]
 # Reads when a limit starts again, which `get_usage` says as an ISO time.
 chrono.workspace = true
+# Streams the scripted model's replies as they're made.
+http-body-util = { workspace = true, optional = true, features = ["channel"] }
+hyper = { workspace = true, optional = true }
+hyper-util = { workspace = true, optional = true }
 process.workspace = true
 parking_lot.workspace = true
 private-files.workspace = true
 protocol.workspace = true
+serde = { workspace = true, optional = true }
 thiserror.workspace = true
 async-trait.workspace = true
 serde_json.workspace = true
@@ -26,6 +32,7 @@ tracing.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
+agents = { workspace = true, features = ["testing"] }
 protocol = { workspace = true, features = ["testing"] }
 
 [lints]

@@ -35,6 +35,7 @@ mod plan;
 mod prompt;
 mod run_files;
 mod supervise;
+mod tap;
 #[cfg(test)]
 mod tests;
 mod tools;
@@ -49,6 +50,7 @@ use prompt::user_message;
 pub(super) use prompt::{image_block, user_line_saying};
 use run_files::RunFiles;
 use supervise::supervise;
+use tap::Tap;
 use usage::UsageWatch;
 
 /// A CLI that's still starting runs the user's hooks first, which can take a while.
@@ -104,6 +106,9 @@ struct Shared {
     /// `send_replace`, not `send`: a value sent with no receivers is otherwise lost, and a later
     /// `stop` would wait for it forever.
     exited: tokio::sync::watch::Sender<bool>,
+    /// Told each launch and exit of the CLI, and each line the adapter writes to it and reads from it, in order, for a
+    /// conformance trial.
+    tap: Option<Tap>,
 }
 
 pub(super) struct ClaudeProcess {
@@ -126,8 +131,31 @@ pub async fn spawn_at(
     output: mpsc::Sender<AgentOutput>,
     options: AgentOptions,
 ) -> Result<Arc<dyn AgentProcess>, AgentError> {
+    begin(bin, spec, output, options, None).await
+}
+
+/// As [`spawn_at`], telling `tap` each launch and exit of the CLI, and each line written to it and read from it, in
+/// order, for [`crate::conformance`] to capture a trial with.
+#[cfg(feature = "testing")]
+pub async fn spawn_tapped(
+    bin: PathBuf,
+    spec: AgentSpec,
+    output: mpsc::Sender<AgentOutput>,
+    options: AgentOptions,
+    tap: Tap,
+) -> Result<Arc<dyn AgentProcess>, AgentError> {
+    begin(bin, spec, output, options, Some(tap)).await
+}
+
+async fn begin(
+    bin: PathBuf,
+    spec: AgentSpec,
+    output: mpsc::Sender<AgentOutput>,
+    options: AgentOptions,
+    tap: Option<Tap>,
+) -> Result<Arc<dyn AgentProcess>, AgentError> {
     let files = RunFiles::of(&options);
-    let launched = launch(&bin, &spec, spec.resume, &options)?;
+    let launched = launch(&bin, &spec, spec.resume, &options, tap.as_ref())?;
     let shared = Arc::new(Shared {
         stdin: tokio::sync::Mutex::new(Some(launched.stdin)),
         pid: AtomicU32::new(launched.pid),
@@ -144,6 +172,7 @@ pub async fn spawn_at(
         entering_plan: AtomicBool::new(false),
         gone: AtomicBool::new(false),
         exited: tokio::sync::watch::channel(false).0,
+        tap,
     });
     plan::start_in(spec.settings.permission_mode, &shared, &mut *shared.stdin.lock().await, &output).await;
     tokio::spawn(supervise(
@@ -160,10 +189,14 @@ pub async fn spawn_at(
     Ok(Arc::new(ClaudeProcess { shared }))
 }
 
-async fn write_to(stdin: &mut Option<ChildStdin>, value: &Value) -> Result<(), AgentError> {
+/// Writes `value` as a line to `stdin`, telling `tap` first, since the CLI can answer before the write returns.
+async fn write_to(tap: Option<&Tap>, stdin: &mut Option<ChildStdin>, value: &Value) -> Result<(), AgentError> {
     let stdin = stdin.as_mut().ok_or(AgentError::Exited)?;
     let mut line = serde_json::to_vec(value)?;
     line.push(b'\n');
+    if let Some(tap) = tap {
+        tap.wrote(value);
+    }
     stdin.write_all(&line).await?;
     stdin.flush().await?;
     Ok(())
@@ -230,7 +263,7 @@ async fn set_effort(shared: &Shared, effort: Effort) -> Result<(), AgentError> {
 }
 
 async fn write_line(shared: &Shared, value: &Value) -> Result<(), AgentError> {
-    write_to(&mut *shared.stdin.lock().await, value).await
+    write_to(shared.tap.as_ref(), &mut *shared.stdin.lock().await, value).await
 }
 
 /// Writes `message` as what's recorded at `prompt`, so the CLI says when it takes it and when it drops it, and notes
@@ -254,7 +287,7 @@ async fn send(
     if let Some(asked) = asked {
         process.shared.compacts.lock().sent(&uuid, asked);
     }
-    match write_to(&mut stdin, &message).await {
+    match write_to(process.shared.tap.as_ref(), &mut stdin, &message).await {
         // A failed launch closes stdin. The supervisor replays this prompt if it relaunches.
         Err(e) if !confirmed => {
             debug!("prompt not delivered before the agent opened: {e:#}");
