@@ -1,4 +1,4 @@
-//! One of the chat's texts that `crate::prose` draws, from its parsed blocks, with what's selected and what's found
+//! One of the chat's texts that `crate::texts` draws, from its parsed blocks, with what's selected and what's found
 //! painted behind it. Once it's laid out, it tells the selection where its leaves are, and the match being shown where
 //! it is.
 
@@ -13,14 +13,14 @@ use gpui_kit::{
 };
 
 use super::parsing::Apart;
-use super::{Parsed, Prose, ProseId, TextAt};
+use super::{Parsed, TextAt, TextKey, Texts};
 use crate::find::Marks;
 use crate::linked_images::Images;
 use crate::selection::Selection;
 
 pub(super) struct ProseElement {
     /// What the text is known by, which its element is too.
-    pub(super) known: ProseId,
+    pub(super) known: TextKey,
     pub(super) at: TextAt,
     /// The area that scrolls it, if it's in one.
     pub(super) area: Option<ElementId>,
@@ -31,7 +31,7 @@ pub(super) struct ProseElement {
     /// What's found in each leaf, by key.
     pub(super) marks: Vec<Marks>,
     pub(super) images: Option<Images>,
-    pub(super) prose: Prose,
+    pub(super) texts: Texts,
     pub(super) selection: Selection,
 }
 
@@ -93,7 +93,7 @@ impl Element for ProseElement {
             None => div().into_any_element(),
         };
         if let Some(apart) = self.apart.take() {
-            self.prose.parse_apart(self.known.clone(), apart, cx);
+            self.texts.parse_apart(self.known.clone(), apart, cx);
         }
         (element.request_layout(window, cx), (element, style.selection()))
     }

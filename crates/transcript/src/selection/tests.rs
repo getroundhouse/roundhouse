@@ -1,21 +1,21 @@
 use gpui_kit::TestAppContext;
 
 use super::{End, Selection};
-use crate::prose::{Prose, ProseId, TextAt};
+use crate::texts::{TextAt, TextKey, Texts};
 
 /// A text that's selected keeps what's selected of it as it moves, and is copied from where it is now.
 #[gpui_kit::test]
 fn a_selection_stays_in_a_text_that_moves(cx: &mut TestAppContext) {
-    let prose = Prose::alone();
+    let texts = Texts::alone();
     let focus = cx.update(|cx| cx.focus_handle());
-    let selection = Selection::new(prose.clone(), focus);
-    let (reply, written, recorded) = (ProseId::named("reply"), TextAt::only(1, 0), TextAt::only(7, 0));
-    prose.drawn_as(&reply, written, "Hello world");
+    let selection = Selection::new(texts.clone(), focus);
+    let (reply, written, recorded) = (TextKey::named("reply"), TextAt::only(1, 0), TextAt::only(7, 0));
+    texts.drawn_as(&reply, written, "Hello world");
     let end = |byte| End { text: reply.clone(), leaf: 0, byte };
     selection.inner.borrow_mut().set(Some((end(0), end(5))));
-    prose.new_frame();
+    texts.new_frame();
 
-    prose.drawn_as(&reply, recorded, "Hello world");
+    texts.drawn_as(&reply, recorded, "Hello world");
 
     assert_eq!(selection.text(), "Hello");
     assert_eq!(selection.held(), Some(recorded..=recorded), "and it's where it is now that's kept for a copy");
@@ -25,11 +25,11 @@ fn a_selection_stays_in_a_text_that_moves(cx: &mut TestAppContext) {
 /// been let go of.
 #[gpui_kit::test]
 fn the_text_a_press_was_on_is_kept_with_nothing_selected(cx: &mut TestAppContext) {
-    let prose = Prose::alone();
+    let texts = Texts::alone();
     let focus = cx.update(|cx| cx.focus_handle());
-    let selection = Selection::new(prose.clone(), focus);
-    let (reply, at) = (ProseId::named("reply"), TextAt::only(3, 0));
-    prose.drawn_as(&reply, at, "Hello world");
+    let selection = Selection::new(texts.clone(), focus);
+    let (reply, at) = (TextKey::named("reply"), TextAt::only(3, 0));
+    texts.drawn_as(&reply, at, "Hello world");
     let pressed = End { text: reply, leaf: 0, byte: 2 };
 
     selection.inner.borrow_mut().set(Some((pressed.clone(), pressed)));

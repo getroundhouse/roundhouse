@@ -1,9 +1,9 @@
-//! The chat's Markdown, drawn by the transcript from the kit's blocks rather than by the kit's text view, so what's
-//! selected of it, and what's found in it, is the transcript's to keep while its rows are out of sight. It's the
-//! agent's replies and thoughts, from when it starts writing them, prompts, from when they're sent, a plan to approve,
-//! a compaction's summary, the prose a call shows of its own, such as a subagent's report, what a call's row nests,
-//! such as a subagent's words, and what the subagent tab says its subagent was asked and reported, above and below its
-//! rows. `docs/ui.md` has why.
+//! The chat's texts whose selection the transcript keeps, rather than the window, so what's selected of them, and
+//! what's found in them, outlasts their rows being drawn. They're the chat's Markdown, drawn from the kit's blocks
+//! rather than by the kit's text view: the agent's replies and thoughts, from when it starts writing them, prompts,
+//! from when they're sent, a plan to approve, a compaction's summary, the prose a call shows of its own, such as a
+//! subagent's report, what a call's row nests, such as a subagent's words, and what the subagent tab says its subagent
+//! was asked and reported, above and below its rows. `docs/ui.md` has why.
 //!
 //! The kit parses the Markdown and draws each block as its text view would, through its `editor_host`. Each
 //! paragraph, heading, code block and table cell is a leaf, keyed by its place in the text. The kit says where it drew
@@ -22,7 +22,7 @@
 //! where the agent took it, so it's drawn from what it was parsed as once it's moved there, as `moves` says, and
 //! doesn't go blank between.
 //!
-//! A row draws its event's texts through [`Prose::drawing`], as the subagent tab draws its head and foot, which hides
+//! A row draws its event's texts through [`Texts::drawing`], as the subagent tab draws its head and foot, which hides
 //! each text it no longer draws, such as a thought that's been closed, so a copy has only what's shown. A hidden text
 //! is kept, as any other is, so it's drawn again at once when it's shown again.
 
@@ -68,23 +68,23 @@ struct Drawing {
 /// What a text drawn this way is known by: what its element is known by, which stays the same as it moves, as a reply
 /// does from being written to its record, since `find::view_id` makes it the same.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub(crate) struct ProseId(ElementId);
+pub(crate) struct TextKey(ElementId);
 
 /// The texts drawn this way, parsed, by what each is known by, and where each is in the chat now. A copy reads the
 /// texts between a selection's ends from here, drawn or not. Cheap to clone.
 #[derive(Clone)]
-pub(crate) struct Prose(Rc<RefCell<Store>>);
+pub(crate) struct Texts(Rc<RefCell<Store>>);
 
 /// What's told when a text parsed on another thread is in, to measure the row that draws what it says again.
 type Redrawn = Rc<dyn Fn(Of, &mut App)>;
 
 struct Store {
     redrawn: Redrawn,
-    texts: HashMap<ProseId, Text>,
+    texts: HashMap<TextKey, Text>,
     /// Where each text is now, and where and when it was last drawn, as `moves` says.
     places: Places,
     /// The texts kept whose rows don't draw them now, such as a thought that's been closed, which a copy leaves out.
-    hidden: HashSet<ProseId>,
+    hidden: HashSet<TextKey>,
     /// How many frames the list has drawn, which says which text was drawn longest ago.
     frame: u64,
     /// How many short texts have been parsed since the blocks kept were last looked at.
@@ -164,7 +164,7 @@ impl<'a> Written<'a> {
 impl Store {
     /// Notes that what's being drawn draws the text known as `known` at `place`, and says where that is: where it
     /// says, or for the next text a block nests, after those of them drawn so far in this drawing of the row.
-    fn noted(&mut self, known: &ProseId, place: Place) -> TextAt {
+    fn noted(&mut self, known: &TextKey, place: Place) -> TextAt {
         let nested = self.in_row.as_ref().map(|mine| &mine.nested);
         let at = match place {
             Place::At(at) => at,
@@ -186,7 +186,7 @@ impl Store {
     }
 }
 
-impl Prose {
+impl Texts {
     /// The texts of a transcript, which `redrawn` tells when one parsed on another thread is in, so the row drawing
     /// what it says is measured again.
     pub(crate) fn new(redrawn: impl Fn(Of, &mut App) + 'static) -> Self {
@@ -214,9 +214,9 @@ impl Prose {
         let mine = Drawing { of, these: HashSet::new(), nested: HashMap::new() };
         let outer = self.0.borrow_mut().in_row.replace(mine);
         let drawn = draw();
-        let mut texts = self.0.borrow_mut();
-        let these = std::mem::replace(&mut texts.in_row, outer).map(|mine| mine.these).unwrap_or_default();
-        let Store { places, hidden, .. } = &mut *texts;
+        let mut store = self.0.borrow_mut();
+        let these = std::mem::replace(&mut store.in_row, outer).map(|mine| mine.these).unwrap_or_default();
+        let Store { places, hidden, .. } = &mut *store;
         let mut left = Vec::new();
         for (at, id) in places.within(TextAt::first_of(of)..).take_while(|(at, _)| at.of == of) {
             if these.contains(at) {
@@ -238,16 +238,16 @@ impl Prose {
     /// Draws `written`, with its images drawn as `images` says, or as the kit draws them if there's none. Until a long
     /// text is parsed, it's what it was parsed as before, or nothing if it wasn't.
     pub(crate) fn draw(&self, selection: &Selection, written: &Written<'_>, images: Option<Images>) -> AnyElement {
-        let known = ProseId(written.element.clone());
+        let known = TextKey(written.element.clone());
         let at = self.0.borrow_mut().noted(&known, written.at);
         let source = images_apart(written.text);
         let whose = ImagesAre::of(&source, images.is_some());
         let (parsed, apart) = self.parsed(&known, &source, at.of, whose);
         let marks = (parsed.as_ref().zip(written.found))
             .map_or_else(Vec::new, |(parsed, (id, find))| find.marks_in_leaves(id, &parsed.leaves));
-        let (prose, selection) = (self.clone(), selection.clone());
+        let (texts, selection) = (self.clone(), selection.clone());
         let area = written.area.clone();
-        ProseElement { known, at, area, text: parsed, apart, marks, images, prose, selection }.into_any_element()
+        ProseElement { known, at, area, text: parsed, apart, marks, images, texts, selection }.into_any_element()
     }
 
     /// What the texts from `from` to `to`, both in, show, leaf by leaf, in order, as far as they've been parsed, but
@@ -259,12 +259,12 @@ impl Prose {
     }
 
     /// What the text known as `id` shows, leaf by leaf, if it's been parsed.
-    pub(crate) fn leaves_of(&self, id: &ProseId) -> Option<Arc<[String]>> {
+    pub(crate) fn leaves_of(&self, id: &TextKey) -> Option<Arc<[String]>> {
         self.0.borrow().texts.get(id)?.leaves()
     }
 
     /// The first and last texts that aren't hidden, in the chat's order, if there are any.
-    pub(crate) fn ends(&self) -> Option<(ProseId, ProseId)> {
+    pub(crate) fn ends(&self) -> Option<(TextKey, TextKey)> {
         let store = self.0.borrow();
         let mut shown = store.places.within(..).map(|(_, id)| id).filter(|id| !store.hidden.contains(*id));
         let first = shown.next()?.clone();
@@ -298,8 +298,8 @@ impl Prose {
     /// What each text that keeps its blocks was parsed from.
     #[cfg(feature = "testing")]
     pub(crate) fn sources(&self) -> Vec<String> {
-        let texts = self.0.borrow();
-        (texts.texts.values())
+        let store = self.0.borrow();
+        (store.texts.values())
             .filter_map(|text| match text {
                 Text::Parsed { parsed, .. } => Some(parsed.source.clone()),
                 Text::Read { .. } | Text::Parsing { .. } => None,
@@ -309,7 +309,7 @@ impl Prose {
 }
 
 #[cfg(test)]
-impl Prose {
+impl Texts {
     /// Texts in no transcript, for a test, so nothing's told when one parsed on another thread is in.
     pub(crate) fn alone() -> Self {
         Self::new(|_, _| {})

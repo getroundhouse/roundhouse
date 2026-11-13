@@ -21,8 +21,8 @@ use crate::attachments;
 use crate::find::{self, FindLook, Marks, Part};
 use crate::item_key::ItemKey;
 use crate::linked_images::LinkedImages;
-use crate::prose::{Of, Prose, TextAt};
 use crate::selection::Selection;
+use crate::texts::{Of, TextAt, Texts};
 use crate::transcript::{Model, Transcript};
 
 mod alone;
@@ -79,7 +79,7 @@ pub(crate) struct Shared {
     pub(crate) linked: LinkedImages,
     pub(crate) line_text: LineText,
     /// The texts the rows draw from the kit's blocks, and what's selected of them.
-    pub(crate) prose: Prose,
+    pub(crate) texts: Texts,
     pub(crate) selection: Selection,
 }
 
@@ -98,8 +98,8 @@ pub(crate) fn render_row(
     }
     // The subagent tab starts with what it was asked and ends with its report.
     let here = |of| list_row_of(of, tail) == Some(ix);
-    let head = here(Of::Head).then(|| shared.prose.drawing(Of::Head, || alone::head(&m, shared, cx))).flatten();
-    let foot = here(Of::Foot).then(|| shared.prose.drawing(Of::Foot, || alone::foot(&m, shared, cx))).flatten();
+    let head = here(Of::Head).then(|| shared.texts.drawing(Of::Head, || alone::head(&m, shared, cx))).flatten();
+    let foot = here(Of::Foot).then(|| shared.texts.drawing(Of::Foot, || alone::foot(&m, shared, cx))).flatten();
     Some(column(v_flex().w_full().children(head).child(drawn).children(foot)).into_any_element())
 }
 
@@ -168,16 +168,16 @@ fn render_row_inner(
             let m = model.borrow();
             let pull_request = m.pull_request.as_ref();
             let end = EndOfChat { tail: &tail, waiting: &waiting, at_work: &m.at_work, folds: &m.folds, pull_request };
-            shared.prose.drawing(Of::Tail, || render_tail(&end, shared, by, cx))
+            shared.texts.drawing(Of::Tail, || render_tail(&end, shared, by, cx))
         }
         // Each text an event's row no longer draws is hidden, such as one in a fold that's been closed, or all of
         // them once it's drawn elsewhere.
         Shown::Event(row, event, around) => {
             attachments::fetch_missing(model, &shared.this, Some(event.seq), around.images(), cx);
             let prompt_at = TextAt::only(row, 0);
-            shared.prose.drawing(Of::Event(row), || render_event(&event, &around, prompt_at, shared, &find, cx))
+            shared.texts.drawing(Of::Event(row), || render_event(&event, &around, prompt_at, shared, &find, cx))
         }
-        Shown::InCall(seq) => shared.prose.drawing(Of::Event(seq), empty),
+        Shown::InCall(seq) => shared.texts.drawing(Of::Event(seq), empty),
         Shown::Unloaded => return None,
     })
 }

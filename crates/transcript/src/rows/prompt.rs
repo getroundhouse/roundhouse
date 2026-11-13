@@ -12,7 +12,7 @@ use super::{Shared, from_blocks, row};
 use crate::attachments::{self, Carried};
 use crate::find::{FindLook, Part};
 use crate::item_key::ItemKey;
-use crate::prose::{TextAt, Written};
+use crate::texts::{TextAt, Written};
 
 /// The widest a prompt is, as a share of the column. What was asked sits at the right, as wide as it needs, so it
 /// stands apart from the agent's work, which starts at the left.

@@ -18,7 +18,7 @@ use crate::calls::count;
 use crate::find::{self, FindLook, Part};
 use crate::item_key::ItemKey;
 use crate::model_names::model_name;
-use crate::prose::{Of, TextAt, Written};
+use crate::texts::{Of, TextAt, Written};
 use crate::transcript::Model;
 
 /// Where a subagent stands, for the top of its tab, such as `Finished · Haiku 5.5 · 3 calls · 18.2k context · 12s`.

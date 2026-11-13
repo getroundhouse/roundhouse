@@ -18,7 +18,6 @@ mod linked_images;
 mod list;
 mod log_block;
 mod model_names;
-mod prose;
 mod questions;
 mod rows;
 mod scroll_area;
@@ -26,6 +25,7 @@ mod selectable_layout;
 mod selectable_lines;
 mod selection;
 mod task_lines;
+mod texts;
 mod transcript;
 mod window_selection;
 

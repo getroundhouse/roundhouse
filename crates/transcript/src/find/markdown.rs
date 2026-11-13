@@ -1,11 +1,11 @@
 //! How many times the needle is in Markdown, as the chat shows it: in the text the kit renders of it, so `**parser** is` holds
 //! `parser is`, and a link's address holds nothing. That's read leaf by leaf, from the kit's own parse as
-//! `crate::prose` keys it, so a match never runs from one leaf into the next. Counting parses a text again rather than
-//! asking `crate::prose` for it, since it runs on another thread too.
+//! `crate::texts` keys it, so a match never runs from one leaf into the next. Counting parses a text again rather than
+//! asking `crate::texts` for it, since it runs on another thread too.
 
 use protocol::find::Needle;
 
-use crate::prose::leaves;
+use crate::texts::leaves;
 
 /// How many matches `source` shows, rendered.
 pub(crate) fn count(needle: &Needle, source: &str) -> usize {

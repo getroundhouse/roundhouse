@@ -4,7 +4,7 @@
 //! image on a line of its own is once `crate::images_apart` has set several apart, and an image among a paragraph's
 //! words. What [`to_draw`] gives the kit draws the first as wide as it is, up to the column's, and the second at the
 //! height of the text. Both are drawn as the kit draws its own, and [`Holds`] says which a paragraph's images are, by
-//! the kit's rule. `crate::prose` parses a text this way only when it has images to look up, and keeps whose images
+//! the kit's rule. `crate::texts` parses a text this way only when it has images to look up, and keeps whose images
 //! each was parsed for, since a reply is parsed for the kit's while it's written.
 //!
 //! Every other image is left to the kit, which draws it and opens nothing: one in a link, which goes where its link

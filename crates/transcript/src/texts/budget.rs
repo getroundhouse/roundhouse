@@ -3,7 +3,7 @@
 //! parsed again when they're next drawn. A long one keeps its blocks, since it's parsed on another thread and would
 //! draw nothing meanwhile, and so does one that's hidden, so it shows again at once.
 
-use super::{AT_ONCE, ProseId, Store, Text};
+use super::{AT_ONCE, Store, Text, TextKey};
 
 /// How long the short texts whose blocks are kept can come to, in bytes of what they say, but for those drawn in this
 /// frame. A text's blocks, with the kit's layout of them once they're drawn, take about 20 bytes for each of its own,
@@ -40,7 +40,7 @@ impl Store {
     /// again on another thread would leave it blank meanwhile.
     fn keep_fewer_blocks(&mut self) {
         let frame = self.frame;
-        let mut short: Vec<(u64, ProseId, usize)> = (self.texts.iter())
+        let mut short: Vec<(u64, TextKey, usize)> = (self.texts.iter())
             .filter_map(|(id, text)| match text {
                 Text::Parsed { parsed } if parsed.source.len() <= AT_ONCE => {
                     Some((self.places.last_drawn(id)?, id.clone(), parsed.source.len()))
@@ -65,44 +65,44 @@ impl Store {
 
 #[cfg(test)]
 mod tests {
-    use super::super::{Prose, ProseId, Text, TextAt};
+    use super::super::{Text, TextAt, TextKey, Texts};
     use super::{BLOCKS_KEPT, PARSES_A_LOOK};
 
     fn at(seq: u64) -> TextAt {
         TextAt::only(seq, 0)
     }
 
-    /// Has `prose` draw `texts` texts of `words`, each in a frame of its own, and says which then have blocks. They're
+    /// Has `texts` draw `count` texts of `words`, each in a frame of its own, and says which then have blocks. They're
     /// drawn from the last in the chat to the first, so going by when they were drawn isn't going by where they are.
-    fn drawn_from_the_last(prose: &Prose, words: &str, texts: u64) -> Vec<u64> {
-        for seq in (0..texts).rev() {
-            prose.new_frame();
-            prose.drawn_at(at(seq), words);
+    fn drawn_from_the_last(texts: &Texts, words: &str, count: u64) -> Vec<u64> {
+        for seq in (0..count).rev() {
+            texts.new_frame();
+            texts.drawn_at(at(seq), words);
         }
-        let texts_now = prose.0.borrow();
-        let parsed = |seq: &u64| matches!(texts_now.texts.get(&ProseId::of(at(*seq))), Some(Text::Parsed { .. }));
-        (0..texts).filter(parsed).collect()
+        let texts_now = texts.0.borrow();
+        let parsed = |seq: &u64| matches!(texts_now.texts.get(&TextKey::of(at(*seq))), Some(Text::Parsed { .. }));
+        (0..count).filter(parsed).collect()
     }
 
     #[test]
     fn the_blocks_of_the_short_texts_drawn_longest_ago_are_put_away_but_not_what_they_show() {
-        let prose = Prose::alone();
+        let texts = Texts::alone();
         let words = "word ".repeat(200);
-        let texts = u64::try_from(2 * BLOCKS_KEPT / words.len()).unwrap();
+        let count = u64::try_from(2 * BLOCKS_KEPT / words.len()).unwrap();
 
-        let with_blocks = drawn_from_the_last(&prose, &words, texts);
-        prose.new_frame();
-        prose.drawn_at(at(texts - 1), &words);
+        let with_blocks = drawn_from_the_last(&texts, &words, count);
+        texts.new_frame();
+        texts.drawn_at(at(count - 1), &words);
 
         assert!(with_blocks.contains(&0), "the last drawn keeps them");
-        assert!(!with_blocks.contains(&(texts - 1)), "the first drawn doesn't");
+        assert!(!with_blocks.contains(&(count - 1)), "the first drawn doesn't");
         let most = BLOCKS_KEPT / words.len() + usize::try_from(PARSES_A_LOOK).unwrap();
-        assert!(with_blocks.len() <= most, "{} of {texts} kept them", with_blocks.len());
+        assert!(with_blocks.len() <= most, "{} of {count} kept them", with_blocks.len());
         assert!(
-            (0..texts).all(|seq| prose.leaves_of(&ProseId::of(at(seq))).is_some()),
+            (0..count).all(|seq| texts.leaves_of(&TextKey::of(at(seq))).is_some()),
             "each still says what it shows"
         );
-        let again = matches!(prose.0.borrow().texts.get(&ProseId::of(at(texts - 1))), Some(Text::Parsed { .. }));
+        let again = matches!(texts.0.borrow().texts.get(&TextKey::of(at(count - 1))), Some(Text::Parsed { .. }));
         assert!(again, "and one drawn again is parsed again");
     }
 
@@ -110,40 +110,40 @@ mod tests {
     /// and draws them all again each frame. They're parsed once, not again each frame.
     #[test]
     fn what_one_frame_drew_is_not_put_away_as_the_next_starts() {
-        let prose = Prose::alone();
+        let texts = Texts::alone();
         let words = "word ".repeat(200);
-        let texts = u64::try_from(2 * BLOCKS_KEPT / words.len()).unwrap();
+        let count = u64::try_from(2 * BLOCKS_KEPT / words.len()).unwrap();
         // So some are parsed since the last look when the frame ends, which is when the next frame looks.
-        assert!(!texts.is_multiple_of(u64::from(PARSES_A_LOOK)));
+        assert!(!count.is_multiple_of(u64::from(PARSES_A_LOOK)));
         let draw_all = || {
-            prose.new_frame();
-            for seq in 0..texts {
-                prose.drawn_at(at(seq), &words);
+            texts.new_frame();
+            for seq in 0..count {
+                texts.drawn_at(at(seq), &words);
             }
         };
         draw_all();
 
         draw_all();
-        let parsed_again = prose.0.borrow().parses;
-        prose.new_frame();
+        let parsed_again = texts.0.borrow().parses;
+        texts.new_frame();
 
-        let texts_now = prose.0.borrow();
+        let texts_now = texts.0.borrow();
         assert_eq!(parsed_again, 0, "none was parsed again");
         assert!(texts_now.texts.values().all(|text| matches!(text, Text::Parsed { .. })), "and each keeps its blocks");
     }
 
     #[test]
     fn nothing_drawn_in_this_frame_is_put_away() {
-        let prose = Prose::alone();
+        let texts = Texts::alone();
         let words = "word ".repeat(200);
-        let texts = u64::try_from(2 * BLOCKS_KEPT / words.len()).unwrap();
+        let count = u64::try_from(2 * BLOCKS_KEPT / words.len()).unwrap();
 
-        prose.new_frame();
-        for seq in 0..texts {
-            prose.drawn_at(at(seq), &words);
+        texts.new_frame();
+        for seq in 0..count {
+            texts.drawn_at(at(seq), &words);
         }
 
-        let texts_now = prose.0.borrow();
+        let texts_now = texts.0.borrow();
         assert!(texts_now.texts.values().all(|text| matches!(text, Text::Parsed { .. })));
     }
 }

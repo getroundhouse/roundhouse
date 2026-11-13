@@ -18,8 +18,8 @@ use super::around::Around;
 use super::{RULE_ICON, Shared, colored_line, row, rule_across, rule_middle, turn_times};
 use crate::folds::Fold;
 use crate::item_key::ItemKey;
-use crate::prose::{TextAt, Written};
 use crate::scroll_area::ScrollArea;
+use crate::texts::{TextAt, Written};
 
 /// How tall an open summary gets before it scrolls: about fifteen of its lines, a little more than a tool's output, so
 /// a long one doesn't push the rest of the chat out of sight.
@@ -103,7 +103,7 @@ fn opened(seq: Seq, summary: &str, shared: &Shared, cx: &App) -> Div {
     // What a compaction says isn't found. A drag from it scrolls on its area, as the wheel does.
     let area = key.element("summary-scroll");
     let written = Written::unfound(TextAt::only(seq, 0), key.element("summary"), summary).in_area(area.clone());
-    let text = shared.prose.draw(&shared.selection, &written, None);
+    let text = shared.texts.draw(&shared.selection, &written, None);
     let text = div().pr_3().text_sm().text_color(theme.muted_foreground).child(text);
     v_flex()
         .w_full()

@@ -45,7 +45,7 @@ impl Transcript {
     /// time its row is drawn, and its row is measured again once it's in, so until then the session's height isn't
     /// settled.
     pub fn long_texts_parsed(&self) -> bool {
-        self.prose.all_parsed()
+        self.texts.all_parsed()
     }
 
     /// What a copy holds with everything selected: the chat's Markdown, in the order it's read.
@@ -55,6 +55,6 @@ impl Transcript {
 
     /// What each text the transcript keeps the kit's blocks of was parsed from, which is what it shows.
     pub fn kept_texts(&self) -> Vec<String> {
-        self.prose.sources()
+        self.texts.sources()
     }
 }
