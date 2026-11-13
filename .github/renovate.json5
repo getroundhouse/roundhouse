@@ -8,8 +8,8 @@
 {
   $schema: "https://docs.renovatebot.com/renovate-schema.json",
   extends: [
-    // config:recommended, plus actions pinned to commits, weekly lock file maintenance, a warning for a dependency
-    // nobody maintains any more, and a PR to migrate this file when an option is renamed.
+    // config:recommended, plus actions pinned to commits, lock file maintenance, a warning for a dependency nobody
+    // maintains any more, and a PR to migrate this file when an option is renamed.
     "config:best-practices",
     // An action's comment names its exact version, as the workflows already do, rather than a major such as v7.
     "helpers:pinGitHubActionDigestsToSemver",
@@ -24,9 +24,7 @@
   // Everything but node_modules, including tests/, whose fixtures say which Claude CLI they came from.
   ignorePaths: ["**/node_modules/**"],
   // docs/documentation.md gives every issue one kind and an area.
-  dependencyDashboard: {
-    labels: ["kind/task", "area/dev"],
-  },
+  dependencyDashboardLabels: ["kind/task", "area/dev"],
   // Vulnerable direct dependencies, from OSV. Their PRs skip the schedule and approval.
   osvVulnerabilityAlerts: true,
   // Cargo.toml names the full version of each crate we use, so it says what's built. docs/rust.md
@@ -131,13 +129,13 @@
       matchUpdateTypes: ["minor", "major"],
       dependencyDashboardApproval: true,
       prBodyNotes: [
-        "> [!WARNING]\n> Ghostty's build script needs the Zig its release was written for. Check that the pinned `libghostty-vt` builds with this one, and change the \"Zig 0.17\" in `AGENTS.md`, `README.md` and `Cargo.toml` with it, before merging.",
+        "> [!WARNING]\n> Ghostty's build script needs the Zig its release was written for. Check that the pinned `libghostty-vt` builds with this one, and change the Zig that `AGENTS.md`, `README.md` and `Cargo.toml` name with it, before merging.",
       ],
     },
     {
       description: [
-        "libghostty-vt is pinned to the commit of its bindings that builds Ghostty 1.0.1, so a newer commit waits for",
-        "approval, until a release of it is on crates.io.",
+        "libghostty-vt is pinned to the commit of its bindings that builds the Ghostty it needs, which Cargo.toml",
+        "names, so a newer commit waits for approval.",
       ],
       matchDepNames: ["libghostty-vt"],
       dependencyDashboardApproval: true,
@@ -165,8 +163,8 @@
     },
     {
       description: [
-        "The Linux build runs in Ubuntu 22.04 for its glibc, the oldest the AppImage supports, so it stays on 22.04,",
-        "pinned to an image that moves with 22.04's fixes, alongside the actions.",
+        "The Linux build runs in an Ubuntu release for its glibc, the oldest the AppImage supports, so it stays on",
+        "that release, pinned to an image that moves with its fixes, alongside the actions.",
       ],
       matchManagers: ["github-actions"],
       matchDepTypes: ["container"],
@@ -182,13 +180,13 @@
       dependencyDashboardApproval: true,
     },
     {
-      description: "The .NET SDK the jobs that package install takes each 10.0 release itself, as `10.0.x`.",
+      description: "The .NET SDK the jobs that package install names only its major and minor, so it takes their patches itself.",
       matchDepNames: ["dotnet-sdk"],
       matchUpdateTypes: ["minor", "patch"],
       enabled: false,
     },
     {
-      description: "vpk has to run on the .NET SDK, and stopped on 11, so a new major waits for approval.",
+      description: "vpk has to run on the .NET SDK, and a new major has stopped it before, so one waits for approval.",
       matchDepNames: ["dotnet-sdk"],
       matchUpdateTypes: ["major"],
       dependencyDashboardApproval: true,
@@ -242,7 +240,7 @@
       customType: "regex",
       description: [
         "A version with a `# renovate:` comment on the line above it, such as",
-        "`# renovate: datasource=crate depName=cargo-nextest` over `NEXTEST_VERSION: 0.9.151`.",
+        "`# renovate: datasource=crate depName=cargo-nextest` over the line that sets `NEXTEST_VERSION`.",
       ],
       managerFilePatterns: ["**/*.sh", "**/*.py", "/(^|/)\\.github/.+\\.ya?ml$/"],
       matchStrings: [
