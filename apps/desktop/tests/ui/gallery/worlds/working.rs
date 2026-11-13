@@ -50,9 +50,9 @@ pub(in crate::gallery) fn waiting_on_checks() -> World {
         number: 182,
         call: Some("toolu-1".into()),
         until: WaitUntil::Checks,
+        watch: None,
         started_at_ms: 0,
         ended: None,
-        watch: None,
     };
     world
         .sessions
@@ -63,6 +63,37 @@ pub(in crate::gallery) fn waiting_on_checks() -> World {
     let opened =
         PullRequest { number: 182, title: "Show PR state in the sidebar".to_string(), checks, ..pull_requests::open() };
     world.workspace_mut(&focus).pull_request = Some(PullRequestFound { pull_request: Some(opened) });
+    world
+}
+
+/// Two independent remote waits, one of them spanning a stack.
+pub(in crate::gallery) fn waiting_on_stacks() -> World {
+    let mut world = World::default();
+    let focus = sidebar(&mut world);
+    let chat = world.chat(
+        &focus,
+        SessionStatus::Background,
+        chats::answered(
+            "Watch #7's stack for required checks and also wait for #9 to merge.",
+            "I'm watching #6 and #7 for required checks, and #9 for its merge.",
+        ),
+    );
+    let mut wait = protocol::fixtures::pull_request_wait("stack");
+    wait.session_id = chat.clone();
+    wait.workspace_id = focus.clone();
+    let watch = wait.watch.as_mut().unwrap();
+    watch.snapshot.pull_requests[0].dependencies = vec![protocol::model::PullRequestNumber::try_from(6).unwrap()];
+    watch.snapshot.pull_requests.insert(0, protocol::fixtures::observed_pull_request(6));
+    let mut second = Wait { id: "merge".into(), until: WaitUntil::Merged, ..wait.clone() };
+    second.number = 9;
+    let watch = second.watch.as_mut().unwrap();
+    watch.requested =
+        protocol::model::PullRequestSelection::try_from(vec![protocol::model::PullRequestNumber::try_from(9).unwrap()])
+            .unwrap();
+    watch.snapshot.pull_requests = vec![protocol::fixtures::observed_pull_request(9)];
+    world.sessions.iter_mut().filter(|session| session.id == chat).for_each(|session| {
+        session.waits = Some(vec![wait.clone(), second.clone()]);
+    });
     world
 }
 

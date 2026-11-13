@@ -4,26 +4,31 @@
 
 use gpui_kit::{SharedString, TestAppContext};
 use protocol::model::SessionStatus;
+use serde_json::{Value, json};
 
 use crate::support::{Stack, Ui};
 
-/// A pull request that's open and needs a review, or with `approved`, is ready to merge.
-fn open(approved: bool) -> String {
-    let (review, merge) = if approved { ("APPROVED", "CLEAN") } else { ("REVIEW_REQUIRED", "BLOCKED") };
-    format!(
-        r#"{{"number":7,"url":"https://example.com/pull/7","title":"T","state":"OPEN","isDraft":false,"reviewDecision":"{review}","mergeStateStatus":"{merge}"}}"#
-    )
+/// The same PR with its required check running, then passed, while it still waits to merge.
+fn observation(passed: bool) -> String {
+    let mut response: Value =
+        serde_json::from_str(include_str!("../../../../crates/worker/tests/fixtures/remote_pull_requests.json"))
+            .unwrap();
+    response["data"]["repository"]["pullRequest"]["statusCheckRollup"]["contexts"]["nodes"] = json!([{
+        "__typename":"StatusContext", "context":"checks", "targetUrl":"https://example.com/check/1",
+        "state":if passed {"SUCCESS"} else {"PENDING"}, "createdAt":"2026-01-01T00:00:00Z",
+        "isRequired":true, "commit":{"oid":"remote-head"}
+    }]);
+    response.to_string()
 }
 
 /// The wait's line is drawn from the hub's wait, and says what it waits on and where the pull request stands on GitHub,
-/// in the bar's words, as they change. Its Stop calls that wait off, and the line goes as the hub records it. The agent
+/// as its checks change. Its Stop calls that wait off, and the line goes as the hub records it. The agent
 /// hears that the person stopped it, in a turn of its own.
 #[gpui_kit::test]
 fn a_wait_s_line_says_where_its_pull_request_stands_and_stop_calls_it_off(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let gh = stack.start_hub_with_stand_in_gh();
-    gh.report(&open(false));
-    gh.report_remote(include_str!("../../../../crates/worker/tests/fixtures/remote_pull_requests.json"));
+    gh.report_remote(&observation(false));
     let mut ui = Ui::open_with_a_repository(cx, &stack);
     ui.new_workspace();
     let chat = ui.active_chat();
@@ -33,11 +38,12 @@ fn a_wait_s_line_says_where_its_pull_request_stands_and_stop_calls_it_off(cx: &m
     ui.wait("the wait to start", |_| waiting().is_some());
     let wait = waiting().unwrap();
     let text = format!("wait-text/{}", wait.id);
-    ui.wait("the line to say it", |ui| ui.shows_label(&text, "Waiting on #7 \u{b7} Review required"));
+    ui.wait("the line to say it", |ui| ui.shows_label(&text, "Waiting on #7: merge · 1 check running"));
 
-    gh.report(&open(true));
-    stack.client().workspace_pull_request(&wait.workspace_id).unwrap();
-    ui.wait("the line to follow", |ui| ui.shows_label(&text, "Waiting on #7 \u{b7} Ready to merge"));
+    gh.report_remote(&observation(true));
+    ui.input(r#"mcp:get_pull_requests {"pull_requests":[7]}"#);
+    ui.press("enter");
+    ui.wait("the line to follow", |ui| ui.shows_label(&text, "Waiting on #7: merge · 0 checks running"));
 
     let stop = SharedString::from(format!("wait-stop/{}", wait.id));
     ui.click(stop.clone());

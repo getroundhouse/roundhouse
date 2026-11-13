@@ -31,7 +31,7 @@ pub(crate) struct AtWork {
     pub(crate) background: Vec<AgentTask>,
     /// The wait it has open on the pull request, as the hub keeps it, which the CLI's list of tasks only has a copy of,
     /// which can still list one that has ended.
-    pub(crate) wait: Option<Wait>,
+    pub(crate) waits: Vec<Wait>,
     /// The event that ended the newest turn, whose line and card say how long the cache has left. 0 until one has.
     pub(crate) reply_seq: Seq,
     /// Whether that turn failed and no turn has started since, so the agent is stopped short on it, and the request it
@@ -56,7 +56,7 @@ impl AtWork {
             working: session.status.is_working(),
             turn_started_at_ms: session.turn_started_at_ms,
             background: session.background_tasks.clone(),
-            wait: session.wait.clone(),
+            waits: session.open_waits().to_vec(),
             reply_seq: session.reply_seq,
             failed: session.turn_failed(),
             cache: session.idle_cache().filter(|_| !session.status.in_turn()).map(|cache| IdleCache {
@@ -72,7 +72,7 @@ impl AtWork {
             working: subagent.status == SubagentStatus::Working,
             turn_started_at_ms: Some(subagent.started_at_ms),
             background: Vec::new(),
-            wait: None,
+            waits: Vec::new(),
             reply_seq: Seq::default(),
             failed: false,
             cache: None,

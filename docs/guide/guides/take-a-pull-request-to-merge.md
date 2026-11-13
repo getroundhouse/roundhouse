@@ -44,7 +44,9 @@ While it's waiting on GitHub or on someone else, such as checks running or a rev
 
 Ask the agent to wait on the PR numbers you want. It can wait for required checks, all checks currently reported, or merging. A stack's lower PRs are included automatically, so a conflict below your PR wakes the agent while CI is still running. New pushed commits are followed as they arrive.
 
-You can have several waits at once. The chat shows the oldest wait with a `Stop` button; ask the agent to cancel another wait. Stopping one leaves the others waiting. Closing the chat or archiving the workspace stops them all.
+Each wait has its own line and `Stop` button in the chat. You can have several at once. Stopping one leaves the others waiting; closing the chat or archiving the workspace stops them all.
+
+![Independent waits on a stack's checks and another PR's merge](../../spec/screens/waiting-on-stacks.png)
 
 The hub keeps the waits, so they go on with the app closed, and through an update. You can ask for a time limit; without one, a wait continues until it reaches its condition or needs attention.
 
