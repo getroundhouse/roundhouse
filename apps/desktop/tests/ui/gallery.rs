@@ -13,6 +13,7 @@ mod approved;
 mod background_chats;
 mod baselines;
 mod cache_screens;
+mod call_screens;
 mod capture;
 mod chats;
 mod compaction_chats;
@@ -39,6 +40,7 @@ mod subagent_chats;
 mod subagent_records;
 mod tool_chats;
 mod tool_screens;
+mod turn_screens;
 mod update_screens;
 mod workspace_screens;
 mod worktree;
@@ -144,6 +146,8 @@ fn screens() -> impl Iterator<Item = &'static steps::Screen> {
         .chain(cache_screens::SCREENS)
         .chain(UPDATE_SCREENS)
         .chain(workspace_screens::SCREENS)
+        .chain(turn_screens::SCREENS)
+        .chain(call_screens::SCREENS)
 }
 
 /// What's wrong with a picture: its spec doesn't show it, it keeps changing, or it isn't as approved. With

@@ -166,7 +166,7 @@ pub(super) fn approval() -> World {
 }
 
 /// `world`, with the screen's chat in plan mode.
-fn in_plan_mode(mut world: World) -> World {
+pub(super) fn in_plan_mode(mut world: World) -> World {
     let focus = world.workspaces.iter().find(|w| w.name == FOCUS).unwrap().id.clone();
     let chat = world.sessions.iter_mut().find(|s| s.workspace_id == focus).unwrap();
     chat.permission_mode = PermissionMode::Plan;
