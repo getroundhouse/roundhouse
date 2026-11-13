@@ -35,6 +35,8 @@ pub(crate) enum Part {
     Output,
     /// All of what went wrong, under a call's line.
     Error,
+    /// What the person said as they denied a call, under its line.
+    Said,
     /// A file's lines.
     File,
     Notice,
@@ -92,6 +94,7 @@ impl Part {
             Part::Input => "input",
             Part::Output => "output",
             Part::Error => "error",
+            Part::Said => "said",
             Part::File => "file",
             Part::Notice => "notice",
             Part::Summary | Part::Findings => "summary",

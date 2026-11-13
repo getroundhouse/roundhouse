@@ -3,13 +3,16 @@ use std::sync::Arc;
 use client_core::Answered;
 use client_core::session_log::{RecordedApprovals, SessionLog};
 use protocol::attachment::{Attachment, MediaType};
-use protocol::event::{ApprovalOutcome, Asking, ContentBlock, EventBody, Question, QuestionAnswer, SessionEvent};
+use protocol::event::{
+    ApprovalOutcome, Asking, CallKind, ContentBlock, EventBody, Question, QuestionAnswer, SessionEvent,
+};
+use protocol::fixtures::{ApprovalRequest, approval_request};
 use protocol::model::{
     CallResult, OpenApproval, PermissionMode, Place, RecentCall, RecentWork, Subagent, SubagentStatus,
 };
 use serde_json::json;
 
-use super::{Answer, Around, Reply, Settled, block_key, retry_at};
+use super::{Answer, Around, Closes, Reply, Settled, block_key, retry_at};
 use crate::fixtures::{
     asked, asking, calls, calls_to, closed, closed_by_position, event, failed_request, from_the_agent, log, prompt,
     record, result, turn_ended, within,
@@ -65,23 +68,61 @@ fn a_request_its_adapter_says_asks_questions_is_drawn_as_one() {
             typed: Some("Blue".into())
         }]))
     );
-    assert!(Around::read(&log, &m, 2, &answered).closes_a_question);
+    assert!(matches!(Around::read(&log, &m, 2, &answered).closes, Closes::SaidElsewhere));
     assert!(Around::read(&log, &m, 3, &tool).asked.is_none(), "a tool's use is a card");
 }
 
+/// A command the agent asked to run, as the call `call`, and for the subagent `asked_by` if it's a subagent's.
+fn asked_to_run(id: &str, call: &str, asked_by: Option<&str>) -> EventBody {
+    let input = json!({ "command": "rm -rf build" });
+    let asking = Some(Asking::ToolUse { call: Some(CallKind::Command) });
+    let (tool_use_id, asked_by) = (Some(call.into()), asked_by.map(Into::into));
+    ApprovalRequest { tool_use_id, input, asking, asked_by, ..approval_request(id, "Bash") }.into()
+}
+
+/// The result of the call `id`, which the person denied.
+fn denied(id: &str) -> EventBody {
+    EventBody::AgentUser {
+        parent_tool_use_id: None,
+        blocks: vec![protocol::fixtures::tool_denied(id, "The user denied this.", None)],
+    }
+}
+
 #[test]
-fn the_record_that_closes_a_question_says_so_and_another_approval_s_does_not() {
-    let (question, command) = (closed("q", ApprovalOutcome::Denied, None), closed("c", ApprovalOutcome::Denied, None));
+fn what_else_says_what_became_of_an_approval_is_a_questions_line_a_denied_calls_result_or_nothing() {
+    let closing = |id: &str| closed(id, ApprovalOutcome::Denied, None);
     let log = log([
         event(1, asked("q", "AskUserQuestion")),
-        event(2, question.clone()),
-        event(3, asked("c", "Bash")),
-        event(4, command.clone()),
+        event(2, closing("q")),
+        event(3, asked_to_run("c", "run-c", None)),
+        event(4, closing("c")),
+        event(5, denied("run-c")),
+        event(6, asked_to_run("old", "run-old", None)),
+        event(7, closing("old")),
+        event(8, result("run-old")),
+        event(9, asked_to_run("s", "run-s", Some("agent"))),
+        event(10, closing("s")),
+        event(11, asked_to_run("x", "run-x", None)),
+        event(12, closing("x")),
+        event(13, denied("run-y")),
+        event(14, asked_to_run("z", "run-z", None)),
+        event(15, closed("z", ApprovalOutcome::Cancelled, None)),
+        event(16, denied("run-z")),
     ]);
-    let m = Model::default();
+    let mut m = Model::default();
+    let closes = |m: &Model, seq, id: &str| Around::read(&log, m, seq, &closing(id)).closes;
 
-    assert!(Around::read(&log, &m, 2, &question).closes_a_question, "its line says it wasn't answered");
-    assert!(!Around::read(&log, &m, 4, &command).closes_a_question, "so only a command's says it was denied");
+    assert!(matches!(closes(&m, 2, "q"), Closes::SaidElsewhere), "its line says it wasn't answered");
+    assert!(matches!(closes(&m, 4, "c"), Closes::SaidElsewhere), "its call's result says it was denied");
+    assert!(matches!(closes(&m, 7, "old"), Closes::Unsaid), "a result from before adapters said doesn't");
+    assert!(matches!(closes(&m, 12, "x"), Closes::Unsaid), "nor does another call's");
+    let cancelled = Around::read(&log, &m, 15, &closed("z", ApprovalOutcome::Cancelled, None)).closes;
+    assert_eq!(cancelled, Closes::Unsaid, "nor a cancelled one's, which says only what a denial would");
+    let for_a = |subagent: &str| Closes::ForASubagent { tool: "Bash".into(), subagent: subagent.into() };
+    assert_eq!(closes(&m, 10, "s"), for_a("Subagent"), "its call is in the subagent's work");
+    let checking = Subagent { description: Some("Check the build".into()), ..record("agent", SubagentStatus::Working) };
+    m.subagents.insert("agent".into(), Arc::new(checking));
+    assert_eq!(closes(&m, 10, "s"), for_a("Check the build"));
 }
 
 /// What's loaded can't say whether an approval's answer is in a page that isn't, and the session's record can.

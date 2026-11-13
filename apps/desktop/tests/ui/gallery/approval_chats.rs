@@ -4,14 +4,14 @@
 
 #![cfg(test)]
 
-use protocol::event::{Asking, CallKind, EventBody};
+use protocol::event::{ApprovalOutcome, Asking, CallKind, EventBody};
 use protocol::fixtures::{ApprovalRequest, approval_request};
 use protocol::model::SessionStatus;
 use serde_json::json;
 
 use super::chats::{self, looked_around};
-use super::events::{subagent_started, subagents_listed, text, tool_result, tool_use, within};
-use super::frame::QUESTION;
+use super::events::{replied, subagent_started, subagents_listed, text, tool_denied, tool_result, tool_use, within};
+use super::frame::{CHAT, QUESTION};
 use super::screens::FOCUS;
 use super::steps::{Screen, Step};
 use super::worlds::{chat_world, in_plan_mode};
@@ -24,6 +24,13 @@ pub(crate) const SCREENS: &[Screen] = &[
         world: Some(|| in_plan_mode(chat_world(SessionStatus::WaitingApproval, chats::approval()))),
         frame: QUESTION,
         steps: &[Step::Select(FOCUS), Step::Click("question-answer-0")],
+    },
+    Screen {
+        name: "approval-denied",
+        spec: "chats.md",
+        world: Some(|| in_plan_mode(chat_world(SessionStatus::Idle, denied()))),
+        frame: CHAT,
+        steps: &[Step::Select(FOCUS)],
     },
     Screen {
         name: "approval-full-access",
@@ -70,6 +77,23 @@ fn edit() -> Vec<EventBody> {
         ..approval_request("approval-1", "Edit")
     };
     events.push(request.into());
+    events
+}
+
+/// The command a chat that's planning asked to run, denied with what to do instead, and what the agent did then.
+fn denied() -> Vec<EventBody> {
+    let reply = "I'll leave the tests, then, and go by what the code says.";
+    let instead = "Not yet. Read how the sidebar gets its records first";
+    let mut events = chats::approval();
+    events.push(EventBody::ApprovalResolved {
+        approval_id: "approval-1".into(),
+        outcome: ApprovalOutcome::Denied,
+        answers_by_text: None,
+        answers_by_position: None,
+    });
+    events.push(tool_denied("toolu-3", instead, Some(instead)));
+    events.push(text("msg-5", reply));
+    events.push(replied(reply, 41, 0.12));
     events
 }
 

@@ -57,7 +57,7 @@ pub(crate) use shown::{Found, of_row as found_in_row, rows_drawing, rows_to_coun
 pub(crate) use tools::ChangeAsked;
 
 pub(crate) use around::SubagentCalls;
-use around::{Around, BlockAround, asks_questions, drawn_in_its_call, drawn_in_row};
+use around::{Around, BlockAround, Closes, asks_questions, drawn_in_its_call, drawn_in_row};
 use column::column;
 use notices::{agent_exited, exit_output, notice};
 use plan_card::plan_card;
@@ -296,10 +296,13 @@ fn render_event(
         // A plan's card. A tool's use is asked in the composer's place too, and its call's own line is what the
         // transcript keeps of it, with what became of it after.
         EventBody::ApprovalRequested { .. } => plan_card(seq, body, around.approval_open, shared, cx),
-        // A question's line says what became of it.
-        EventBody::ApprovalResolved { .. } if around.closes_a_question => empty(),
+        // A question's line says what became of it, and so does a denied call's, as `Closes` says.
+        EventBody::ApprovalResolved { .. } if matches!(around.closes, Closes::SaidElsewhere) => empty(),
         EventBody::ApprovalResolved { outcome: ApprovalOutcome::Cancelled, .. } => muted_line("Approval cancelled"),
-        EventBody::ApprovalResolved { outcome: ApprovalOutcome::Denied, .. } => muted_line("Denied"),
+        EventBody::ApprovalResolved { outcome: ApprovalOutcome::Denied, .. } => match &around.closes {
+            Closes::ForASubagent { tool, subagent } => muted_line(format!("Denied {tool} for {subagent}")),
+            Closes::Unsaid | Closes::SaidElsewhere => muted_line("Denied"),
+        },
         EventBody::AgentMode { permission_mode } => muted_line(mode::mode_change(around.mode_before, *permission_mode)),
         EventBody::AgentExited { reason, stderr_tail, .. } => agent_exited(seq, *reason, stderr_tail, find, cx),
         EventBody::Notice { level, message, .. } => notice(seq, *level, message, shared, find, cx),

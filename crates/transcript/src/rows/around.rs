@@ -1,12 +1,12 @@
 //! What drawing one event needs from the rest of the log and the model, read while they're held, so nothing is held
 //! while it's drawn.
 
-use client_core::Approval;
 use client_core::calls::Recorded;
 use client_core::session_log::{PromptAt, PromptState, SessionLog};
+use client_core::{Approval, ToolUseAsked};
 use gpui_kit::SharedString;
-use protocol::event::{ContentBlock, EventBody, Question, SessionEvent};
-use protocol::model::{PermissionMode, Seq, ToolUseId};
+use protocol::event::{ApprovalOutcome, ContentBlock, EventBody, Question, SessionEvent};
+use protocol::model::{ApprovalId, PermissionMode, Seq, ToolUseId};
 
 use crate::attachments::{self, Carried};
 use crate::folds::Fold;
@@ -18,7 +18,7 @@ mod reply;
 mod settled;
 mod subagent;
 
-pub(super) use reply::{Answer, Reply};
+pub(super) use reply::{Answer, Outcome, Reply};
 pub(super) use settled::{AnswerTo, Settled};
 pub(super) use subagent::Subagent;
 pub(crate) use subagent::{REACH, SubagentCalls, drawn_in_its_call, its_call};
@@ -27,10 +27,6 @@ pub(crate) use subagent::{REACH, SubagentCalls, drawn_in_its_call, its_call};
 /// within a few events. One further away is drawn where it is.
 pub(crate) const NEAR: usize = 64;
 
-#[expect(
-    clippy::struct_excessive_bools,
-    reason = "each is a fact about one kind of event, which only that kind's row reads, not a state the row is in"
-)]
 pub(super) struct Around {
     /// What each of the event's blocks needs, by position.
     pub(super) blocks: Vec<BlockAround>,
@@ -38,9 +34,8 @@ pub(super) struct Around {
     pub(super) approval_open: bool,
     /// For a question that's no longer waiting, which is drawn as a call's line.
     pub(super) asked: Option<Asked>,
-    /// For the record that closes an approval: whether it closes a question, whose line already says what became of
-    /// it.
-    pub(super) closes_a_question: bool,
+    /// For the record that closes an approval: what else says what became of it.
+    pub(super) closes: Closes,
     /// For a prompt: the files it carries.
     pub(super) carried: Vec<Carried>,
     /// For a prompt: whether the agent has it.
@@ -56,6 +51,49 @@ pub(super) struct Around {
     pub(super) open: bool,
     /// For a failed request: whether its card offers Retry, as [`retry_at`] says.
     pub(super) retry: bool,
+}
+
+/// What says what became of an approval, besides the record that closes it.
+#[derive(Debug, PartialEq, Eq)]
+pub(super) enum Closes {
+    /// Nothing else does, or the request isn't loaded.
+    Unsaid,
+    /// Something drawn already does: a question's line, or, for a denial, the call it asked to make, whose result says
+    /// it was denied.
+    SaidElsewhere,
+    /// Nothing in the chat does, since it asked to use a tool for a subagent, whose call is in the subagent's work: the
+    /// tool, and what the subagent is called.
+    ForASubagent { tool: String, subagent: String },
+}
+
+impl Closes {
+    /// For the record at `seq` that closes the approval `id` with `outcome`.
+    fn read(log: &SessionLog, m: &Model, seq: Seq, id: &ApprovalId, outcome: ApprovalOutcome) -> Self {
+        let asked = |event: &&SessionEvent| {
+            let EventBody::ApprovalRequested { approval_id, .. } = &event.body else { return false };
+            approval_id == id
+        };
+        let Some(request) = nearby::events_before(log, seq, NEAR).find(asked) else { return Closes::Unsaid };
+        if asks_questions(&request.body) {
+            return Closes::SaidElsewhere;
+        }
+        let Some(asked) = ToolUseAsked::of(&request.body) else { return Closes::Unsaid };
+        if let Some(subagent) = asked.asked_by {
+            return Closes::ForASubagent { tool: asked.tool, subagent: m.subagent_called(subagent) };
+        }
+        // A call's line says only that it was denied, so a request cancelled or allowed says so itself, whatever its
+        // call's result says, as one from a log an adapter wrote wrongly might.
+        let EventBody::ApprovalRequested { tool_use_id: Some(call), .. } = &request.body else { return Closes::Unsaid };
+        if outcome != ApprovalOutcome::Denied {
+            return Closes::Unsaid;
+        }
+        let denied = |block: &ContentBlock| {
+            let ContentBlock::ToolResult { tool_use_id, denied, .. } = block else { return false };
+            tool_use_id == call && denied.is_some()
+        };
+        let said = nearby::events_after(log, seq, NEAR).any(|event| blocks_of(&event.body).iter().any(denied));
+        if said { Closes::SaidElsewhere } else { Closes::Unsaid }
+    }
 }
 
 /// What drawing a question that's no longer waiting needs.
@@ -116,7 +154,7 @@ impl Around {
             blocks,
             approval_open: false,
             asked: None,
-            closes_a_question: false,
+            closes: Closes::Unsaid,
             carried: Vec::new(),
             prompt: PromptState::Taken,
             agent: m.agent.clone(),
@@ -147,11 +185,8 @@ impl Around {
                 around.asked = Some(Asked { questions, key, open, settled: Settled::read(log, seq, approval_id) });
             }
         }
-        if let EventBody::ApprovalResolved { approval_id, .. } = body {
-            around.closes_a_question = nearby::events_before(log, seq, NEAR).any(|event| {
-                matches!(&event.body, EventBody::ApprovalRequested { approval_id: id, .. } if id == approval_id)
-                    && asks_questions(&event.body)
-            });
+        if let EventBody::ApprovalResolved { approval_id, outcome, .. } = body {
+            around.closes = Closes::read(log, m, seq, approval_id, *outcome);
         }
         around
     }

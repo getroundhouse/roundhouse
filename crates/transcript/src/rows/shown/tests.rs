@@ -153,6 +153,21 @@ fn a_call_s_result_is_found_in_the_call_s_row_which_draws_it() {
     assert_eq!(rows_drawing(&log, &Model::default(), 2), [0, 1], "but its call's row is counted again");
 }
 
+/// A call the person denied never ran, so what the agent was told is found once, as what the person said, and not as
+/// what it printed.
+#[test]
+fn a_denied_calls_words_are_found_as_what_the_person_said() {
+    let denied = protocol::fixtures::tool_denied("run", "Use the full path", Some("Use the full path"));
+    let log = log([event(1, call("run", "Bash", json!({ "command": "rm -rf build" }))), event(2, came_back(denied))]);
+
+    assert_eq!(
+        parts(&log, "full path", 0),
+        [Part::Said],
+        "what the person said, under the call, and not as its output"
+    );
+    assert_eq!(parts(&log, "rm -rf", 0), [Part::Command], "the command");
+}
+
 #[test]
 fn what_the_app_writes_itself_isn_t_found() {
     let log = log([

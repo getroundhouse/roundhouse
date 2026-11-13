@@ -13,6 +13,7 @@ use gpui_kit::{
     SharedString, Stateful, StatefulInteractiveElement, Styled, TestSupportExt as _, Window, div, px, relative,
 };
 use look::{Hand as _, LineText};
+use protocol::event::Denied;
 
 use super::shown::Gather;
 use super::tools::{Toggle, block};
@@ -20,7 +21,7 @@ use crate::calls::lines::Counts;
 use crate::find::{self, Marks, Part as Text};
 use crate::folds::Fold;
 use crate::item_key::ItemKey;
-use crate::rows::around::Answer;
+use crate::rows::around::{Answer, Outcome};
 
 const ICON: f32 = look::LINE_ICON;
 /// As tall as a line of body text and a little room, so calls in a row read as a list.
@@ -255,7 +256,8 @@ fn pill(text: SharedString, marks: &Marks, color: Hsla, background: Hsla, cx: &A
         .into_any_element()
 }
 
-/// A call's line, then a line saying it failed if its result says so, then what it opens to while it's open.
+/// A call's line, then a line saying it failed if its result says so, or that the person denied it, then what it opens
+/// to while it's open.
 pub(super) fn drawn(
     line: Line,
     answer: Option<&Answer>,
@@ -270,6 +272,7 @@ pub(super) fn drawn(
     v_flex()
         .child(line.render(toggle, cx))
         .when_some(failed, |d, failed| d.child(failure(&failed, cx)))
+        .when_some(answer.and_then(denied), |d, denied| d.child(denial(denied, toggle, cx)))
         .when_some(whole, |d, text| {
             let output = block::output(toggle, Text::Error, text, cx.theme().muted_foreground, cx);
             d.child(block::frame(cx).child(output))
@@ -300,6 +303,45 @@ fn failure(failure: &Failure, cx: &App) -> AnyElement {
         .when(!failure.message.is_empty(), |d| {
             d.child(pill(failure.message.to_string().into(), &Marks::default(), danger, danger.opacity(0.09), cx))
         })
+        .into_any_element()
+}
+
+fn denied(answer: &Answer) -> Option<&Denied> {
+    if let Outcome::Denied(denied) = answer.outcome() { Some(denied) } else { None }
+}
+
+/// What the person said as they denied the call, on the line under it, which shows closed or open.
+fn said(denied: &Denied) -> Option<&str> {
+    denied.said.as_deref().map(str::trim).filter(|said| !said.is_empty()).map(first_line)
+}
+
+/// What [`drawn`] shows of a denial, for finding: what the person said, whether the call is open or not.
+pub(super) fn shown_denial(answer: Option<&Answer>, key: &ItemKey, gather: &mut Gather) {
+    if let Some(said) = answer.and_then(denied).and_then(said) {
+        gather.plain(key, Text::Said, said);
+    }
+}
+
+/// The line under a call the person denied, quiet, since it's what they chose: `Denied`, then what they told the agent,
+/// cut off where the line ends.
+fn denial(denied: &Denied, toggle: &Toggle, cx: &App) -> AnyElement {
+    let muted = cx.theme().muted_foreground;
+    let said = said(denied);
+    h_flex()
+        .id("call-denied")
+        .h(px(HEIGHT))
+        .gap_2()
+        .overflow_hidden()
+        .whitespace_nowrap()
+        .role(Role::Label)
+        .aria_label(said.map_or_else(|| "Denied".to_string(), |said| format!("Denied: {said}")))
+        .child(Icon::new(IconName::CircleX).flex_none().size(px(ICON)).text_color(look::faint()))
+        .child(div().flex_none().text_color(muted).child("Denied"))
+        .when_some(said, |d, said| {
+            let words = find::marked(said.to_string().into(), &toggle.marks(Text::Said, said), &[], None);
+            d.child(div().min_w_0().overflow_hidden().text_ellipsis().text_color(muted).child(words))
+        })
+        .test_support()
         .into_any_element()
 }
 

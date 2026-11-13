@@ -9,7 +9,7 @@ use gpui_kit::{AnyElement, App, Div, IntoElement, ParentElement};
 use serde_json::Value;
 
 use super::line::{Line, Part};
-use super::{Answer, Toggle, block, line};
+use super::{Answer, Outcome, Toggle, block, line};
 use crate::find::Part as Text;
 use crate::folds::Fold;
 use crate::item_key::ItemKey;
@@ -36,10 +36,15 @@ pub(super) fn shown(other: &Other, input: &Value, answer: Option<&Answer>, key: 
     }
     gather.inside(key, Fold::Output, |gather| {
         gather.plain(key, Text::Input, block::code_text(&json(input)));
-        if let Some(text) = answer.and_then(Answer::text_beside_images) {
+        if let Some(text) = came_back(answer).and_then(Answer::text_beside_images) {
             gather.plain(key, Text::Output, &block::output_text(text));
         }
     });
+}
+
+/// What came back, unless the person denied the call, which sent nothing back of its own, and whose line says so.
+fn came_back(answer: Option<&Answer>) -> Option<&Answer> {
+    answer.filter(|answer| !matches!(answer.outcome(), Outcome::Denied(_)))
 }
 
 /// Its input, as it's shown.
@@ -51,8 +56,8 @@ fn opened(input: &Value, answer: Option<&Answer>, toggle: &Toggle, cx: &App) -> 
     block::frame(cx)
         .child(block::label("Input", cx))
         .child(block::code(toggle, Text::Input, "json", "", &json(input), cx))
-        .when_some(answer, |d, answer| {
-            let color = if answer.is_error { cx.theme().danger } else { cx.theme().foreground };
+        .when_some(came_back(answer), |d, answer| {
+            let color = if answer.failure().is_some() { cx.theme().danger } else { cx.theme().foreground };
             let images = answer.images();
             d.child(block::separator(cx))
                 .child(block::label("Output", cx))
