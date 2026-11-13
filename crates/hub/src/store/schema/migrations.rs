@@ -382,4 +382,6 @@ pub(super) const MIGRATIONS: &[&str] = &[
     waiting::WAITING_ON,
     // Which build each workspace's worker is, while it's another than the hub's, in `workspaces`.
     workspaces::WORKER_BUILD,
+    // The new-workspace dialog's tables, named for it.
+    drafts::NEW_WORKSPACE_DRAFT,
 ];

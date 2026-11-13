@@ -29,10 +29,10 @@ fn an_answer_and_a_comment_are_each_kept_apart_from_the_chats_draft() {
     let dir = tempfile::tempdir().unwrap();
     let (client, heard) = hub(&dir.path().join("hub.sock"), Answer::Answered);
     let drafts = Drafts::start(&client);
-    drafts.set(&chat("a"), NewDraft::new("first"));
+    drafts.set(&chat("a"), DraftToKeep::new("first"));
     kept(&drafts, &heard);
 
-    drafts.typed(&chat("a"), NewDraft::new("typed"));
+    drafts.typed(&chat("a"), DraftToKeep::new("typed"));
     drafts.typed_answer(&chat("a"), Some(answer("half")));
     drafts.typed_answer(&chat("a"), Some(answer("half an answer")));
     drafts.typed_comment(&workspace("w"), Some(comment("why?")));
@@ -55,7 +55,7 @@ fn what_a_hub_that_keeps_only_chats_drafts_refuses_waits_for_the_next_connection
     let refused = kept(&drafts, &heard);
     assert_eq!(refused, pairs(&[("a", "refused answer half"), ("w", "refused comment why?")]));
 
-    drafts.set(&chat("a"), NewDraft::new("typed"));
+    drafts.set(&chat("a"), DraftToKeep::new("typed"));
 
     assert_eq!(kept(&drafts, &heard), pairs(&[("a", "typed")]), "the rest goes on, and the hub isn't asked again");
     assert!(drafts.unkept_in(&Where::Answer(chat("a"))), "it would be lost if the app stopped now");

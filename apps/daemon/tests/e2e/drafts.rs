@@ -6,8 +6,8 @@
 use client_core::{Drafts, FileToSend, RecordsFeed};
 use protocol::attachment::MediaType;
 use protocol::model::{
-    AnswerDraft, AnswerSoFar, CommentDraft, DiffSide, Draft, NewDraft, SessionId, SessionStatus, WorkspaceDraftToKeep,
-    WorkspaceId,
+    AnswerDraft, AnswerSoFar, CommentDraft, DiffSide, Draft, DraftToKeep, NewWorkspaceDraftToKeep, SessionId,
+    SessionStatus, WorkspaceId,
 };
 
 use crate::support::{Stack, wait_for_setup, wait_until};
@@ -24,7 +24,7 @@ fn a_draft_is_kept_across_a_restart_and_every_client_hears_of_it() {
     let feed = RecordsFeed::start(&client);
     let (_, session) = stack.workspace(&client);
 
-    let kept = client.session_draft(&session.id, &NewDraft::new("half a thought")).unwrap();
+    let kept = client.session_draft(&session.id, &DraftToKeep::new("half a thought")).unwrap();
 
     assert_eq!(kept.draft.text, "half a thought");
     assert_eq!(kept.status, SessionStatus::Idle, "keeping a draft doesn't start the agent");
@@ -33,7 +33,7 @@ fn a_draft_is_kept_across_a_restart_and_every_client_hears_of_it() {
     stack.start_hub();
     let client = stack.client();
     assert_eq!(client.session_get(&session.id).unwrap().draft.text, "half a thought");
-    assert_eq!(client.session_draft(&session.id, &NewDraft::default()).unwrap().draft, Draft::default());
+    assert_eq!(client.session_draft(&session.id, &DraftToKeep::default()).unwrap().draft, Draft::default());
 }
 
 #[test]
@@ -44,7 +44,7 @@ fn what_a_client_types_is_kept_once_it_quits() {
     let drafts = Drafts::start(&client);
 
     for text in ["h", "ha", "half", "half a", "half a thought"] {
-        drafts.typed(&session.id, NewDraft::new(text));
+        drafts.typed(&session.id, DraftToKeep::new(text));
     }
     drafts.flushed().recv().unwrap();
 
@@ -62,7 +62,7 @@ fn a_drafts_files_are_kept_across_a_restart_until_its_let_go_of_them() {
 
     drafts.attach(&session.id, log.clone());
     let files = vec![log.attachment.id.clone(), never_given.attachment.id.clone()];
-    drafts.set(&session.id, NewDraft { text: "look".to_string(), files });
+    drafts.set(&session.id, DraftToKeep { text: "look".to_string(), files });
     drafts.flushed().recv().unwrap();
 
     stack.kill_hub();
@@ -74,7 +74,7 @@ fn a_drafts_files_are_kept_across_a_restart_until_its_let_go_of_them() {
     assert_eq!(client.attachment_read(id, file).unwrap(), log.data);
     client.attachment_remove(id, file).unwrap();
     assert!(client.attachment_read(id, file).is_ok(), "the hub keeps a file the draft names");
-    client.session_draft(id, &NewDraft::new("look")).unwrap();
+    client.session_draft(id, &DraftToKeep::new("look")).unwrap();
     client.attachment_remove(id, file).unwrap();
     assert!(client.attachment_read(id, file).is_err());
 }
@@ -125,31 +125,31 @@ fn whats_in_the_new_workspace_dialog_is_kept_with_its_files_across_a_restart_and
     let mut stack = Stack::start();
     let client = stack.client();
     let feed = RecordsFeed::start(&client);
-    let dialog_in = || feed.snapshot().workspace_draft().map(|draft| draft.text.clone());
+    let dialog_in = || feed.snapshot().new_workspace_draft().map(|draft| draft.text.clone());
     // So only the notice of what's kept can bring it, rather than the feed's first list.
     wait_until("client-core's first list", || dialog_in().is_some());
     let notes = FileToSend::checked("notes.txt", MediaType::Text, b"one\n".to_vec()).unwrap();
     let file = &notes.attachment.id;
-    let added = client.workspace_draft_file_add(file, "notes.txt", MediaType::Text, notes.data.clone()).unwrap();
-    let draft = WorkspaceDraftToKeep {
+    let added = client.new_workspace_draft_file_add(file, "notes.txt", MediaType::Text, notes.data.clone()).unwrap();
+    let draft = NewWorkspaceDraftToKeep {
         text: "fix the login".into(),
         files: vec![file.clone()],
         plan: true,
-        ..WorkspaceDraftToKeep::default()
+        ..NewWorkspaceDraftToKeep::default()
     };
 
-    let kept = client.workspace_draft_keep(&draft).unwrap();
+    let kept = client.new_workspace_draft_keep(&draft).unwrap();
 
     assert_eq!((kept.text.as_str(), kept.files.as_slice(), kept.plan), ("fix the login", [added].as_slice(), true));
     wait_until("the feed to say what's in the dialog", || dialog_in().as_deref() == Some("fix the login"));
     stack.kill_hub();
     stack.start_hub();
     let client = stack.client();
-    assert_eq!(client.records_list().unwrap().workspace_draft, Some(kept));
-    assert_eq!(client.workspace_draft_file_read(file).unwrap(), notes.data);
-    client.workspace_draft_file_remove(file).unwrap();
-    assert!(client.workspace_draft_file_read(file).is_ok(), "the hub keeps a file the draft names");
-    client.workspace_draft_keep(&WorkspaceDraftToKeep::default()).unwrap();
-    client.workspace_draft_file_remove(file).unwrap();
-    assert!(client.workspace_draft_file_read(file).is_err());
+    assert_eq!(client.records_list().unwrap().new_workspace_draft, Some(kept));
+    assert_eq!(client.new_workspace_draft_file_read(file).unwrap(), notes.data);
+    client.new_workspace_draft_file_remove(file).unwrap();
+    assert!(client.new_workspace_draft_file_read(file).is_ok(), "the hub keeps a file the draft names");
+    client.new_workspace_draft_keep(&NewWorkspaceDraftToKeep::default()).unwrap();
+    client.new_workspace_draft_file_remove(file).unwrap();
+    assert!(client.new_workspace_draft_file_read(file).is_err());
 }

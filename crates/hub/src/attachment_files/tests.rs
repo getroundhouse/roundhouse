@@ -30,7 +30,7 @@ async fn the_new_workspace_dialogs_files_are_kept_apart_from_every_sessions() {
 
     assert_eq!(files.read(&FileFor::NewWorkspace, &id).await.unwrap().as_deref(), Some(&b"dialog"[..]));
     assert_eq!(files.read(&session, &id).await.unwrap().as_deref(), Some(&b"chat"[..]));
-    assert!(dir.path().join(WORKSPACE_DRAFT_DIR).join("a1").exists());
+    assert!(dir.path().join(NEW_WORKSPACE_DRAFT_DIR).join("a1").exists());
 }
 
 #[tokio::test]

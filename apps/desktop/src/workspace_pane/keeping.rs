@@ -8,7 +8,7 @@ use std::collections::{HashMap, HashSet};
 use client_core::Where;
 use gpui_kit::{App, Context, Entity};
 use protocol::attachment::Attachment;
-use protocol::model::{AttachmentId, Draft, NewDraft, Session, SessionId};
+use protocol::model::{AttachmentId, Draft, DraftToKeep, Session, SessionId};
 use protocol::prompt::says_or_carries;
 use transcript::QuestionPanel;
 
@@ -95,7 +95,7 @@ impl WorkspacePane {
         for file in files.not_yet_given(&Where::Composer(id.clone())) {
             self.keeper.attach(id, file);
         }
-        let draft = NewDraft { text, files: coming_back.into_iter().chain(files.ids()).collect() };
+        let draft = DraftToKeep { text, files: coming_back.into_iter().chain(files.ids()).collect() };
         if at_once {
             self.keeper.set(id, draft);
         } else {

@@ -7,8 +7,8 @@ use crate::event::SessionEvent;
 use crate::find::Found;
 use crate::model::{
     Account, AgentDescription, CompactionLine, DiffComment, FileContents, FileOpened, FilePages, GitDiff, GitStatus,
-    HubSettings, Place, PromptLine, PullRequest, Records, Repo, Rev, Seq, Session, SessionAccount, Subagent,
-    TitleError, Workspace, WorkspaceDraft, WorktreeFiles,
+    HubSettings, NewWorkspaceDraft, Place, PromptLine, PullRequest, Records, Repo, Rev, Seq, Session, SessionAccount,
+    Subagent, TitleError, Workspace, WorktreeFiles,
 };
 use crate::tail::{StreamDelta, Tail};
 
@@ -45,7 +45,7 @@ pub enum ClientResponse {
     Ok,
     HubStatus(HubStatus),
     HubSettings(HubSettings),
-    WorkspaceDraft(WorkspaceDraft),
+    NewWorkspaceDraft(NewWorkspaceDraft),
     Repo(Repo),
     Repos {
         repos: Vec<Repo>,

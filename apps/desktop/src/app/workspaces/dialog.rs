@@ -37,7 +37,7 @@ impl AppView {
         let client = self.client().or_else(|| self.joining.clone());
         let (offer, keeping) = (self.offer(), Keeping::new(self.drafts.clone(), client));
         let dialog = cx.new(|cx| NewWorkspaceDialog::new(repo, offer, keeping, window, cx));
-        if let Some(kept) = self.feed.as_ref().and_then(|feed| feed.snapshot().workspace_draft().cloned()) {
+        if let Some(kept) = self.feed.as_ref().and_then(|feed| feed.snapshot().new_workspace_draft().cloned()) {
             dialog.update(cx, |dialog, cx| dialog.take_kept(kept, window, cx));
         }
         cx.subscribe_in(&dialog, window, |t, dialog, event: &DialogEvent, window, cx| match event {
@@ -79,7 +79,7 @@ impl AppView {
         };
         let offer = self.offer();
         cx.defer(move |cx| {
-            let Some(kept) = feed.snapshot().workspace_draft().cloned() else { return };
+            let Some(kept) = feed.snapshot().new_workspace_draft().cloned() else { return };
             let _ = handle.update(cx, |_, window, cx| {
                 dialog.update(cx, |dialog, cx| {
                     dialog.set_offer(offer, cx);

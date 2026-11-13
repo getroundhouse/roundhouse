@@ -17,8 +17,8 @@ use std::time::Duration;
 use parking_lot::Mutex;
 
 use protocol::model::{
-    AnswerDraft, AttachmentId, CommentDraft, Draft, NewDraft, Rev, Session, SessionId, Workspace, WorkspaceDraft,
-    WorkspaceDraftToKeep, WorkspaceId,
+    AnswerDraft, AttachmentId, CommentDraft, Draft, DraftToKeep, NewWorkspaceDraft, NewWorkspaceDraftToKeep, Rev,
+    Session, SessionId, Workspace, WorkspaceId,
 };
 
 use crate::{Client, FileToSend};
@@ -61,10 +61,10 @@ impl FilesFor {
 /// What's typed in one place now, for the hub to keep in place of what was.
 #[derive(Clone, Debug, PartialEq)]
 enum Change {
-    Composer(SessionId, NewDraft),
+    Composer(SessionId, DraftToKeep),
     Answer(SessionId, Option<AnswerDraft>),
     Comment(WorkspaceId, Option<CommentDraft>),
-    NewWorkspace(WorkspaceDraftToKeep),
+    NewWorkspace(NewWorkspaceDraftToKeep),
 }
 
 impl Change {
@@ -112,12 +112,12 @@ enum Said {
     Answer(Option<AnswerDraft>),
     Comment(Option<CommentDraft>),
     /// With no revision, which is the record's rather than what it says.
-    NewWorkspace(WorkspaceDraft),
+    NewWorkspace(NewWorkspaceDraft),
 }
 
 impl Said {
-    fn new_workspace(draft: &WorkspaceDraft) -> Self {
-        Self::NewWorkspace(WorkspaceDraft { rev: Rev::default(), ..draft.clone() })
+    fn new_workspace(draft: &NewWorkspaceDraft) -> Self {
+        Self::NewWorkspace(NewWorkspaceDraft { rev: Rev::default(), ..draft.clone() })
     }
 
     /// What a record says of a place where nothing's typed.
@@ -126,7 +126,7 @@ impl Said {
             Where::Composer(_) => Self::Composer(Draft::default()),
             Where::Answer(_) => Self::Answer(None),
             Where::Comment(_) => Self::Comment(None),
-            Where::NewWorkspace => Self::NewWorkspace(WorkspaceDraft::default()),
+            Where::NewWorkspace => Self::NewWorkspace(NewWorkspaceDraft::default()),
         }
     }
 }
@@ -159,12 +159,12 @@ impl Drafts {
     }
 
     /// What's typed in the chat's composer now, kept within [`PAUSE`].
-    pub fn typed(&self, id: &SessionId, draft: NewDraft) {
+    pub fn typed(&self, id: &SessionId, draft: DraftToKeep) {
         self.change(Change::Composer(id.clone(), draft), false);
     }
 
     /// The same, kept at once, for a change nobody's still typing, such as the composer emptied by sending.
-    pub fn set(&self, id: &SessionId, draft: NewDraft) {
+    pub fn set(&self, id: &SessionId, draft: DraftToKeep) {
         self.change(Change::Composer(id.clone(), draft), true);
     }
 
@@ -189,12 +189,12 @@ impl Drafts {
     }
 
     /// What's in the new-workspace dialog now, kept within [`PAUSE`].
-    pub fn typed_new_workspace(&self, draft: WorkspaceDraftToKeep) {
+    pub fn typed_new_workspace(&self, draft: NewWorkspaceDraftToKeep) {
         self.change(Change::NewWorkspace(draft), false);
     }
 
     /// The same, kept at once, such as one emptied as the workspace is made, or something picked rather than typed.
-    pub fn set_new_workspace(&self, draft: WorkspaceDraftToKeep) {
+    pub fn set_new_workspace(&self, draft: NewWorkspaceDraftToKeep) {
         self.change(Change::NewWorkspace(draft), true);
     }
 
@@ -267,7 +267,7 @@ impl Drafts {
     }
 
     /// The same, for what's in the new-workspace dialog, which is a record of its own.
-    pub fn new_workspace_from_elsewhere(&self, draft: &WorkspaceDraft) -> bool {
+    pub fn new_workspace_from_elsewhere(&self, draft: &NewWorkspaceDraft) -> bool {
         self.elsewhere(&Where::NewWorkspace, draft.rev, &Said::new_workspace(draft))
     }
 
@@ -291,7 +291,7 @@ impl Drafts {
     }
 
     /// The same, for what's in the new-workspace dialog.
-    pub fn took_new_workspace(&self, draft: &WorkspaceDraft) {
+    pub fn took_new_workspace(&self, draft: &NewWorkspaceDraft) {
         self.agree(Where::NewWorkspace, Agreed { rev: draft.rev, said: Said::new_workspace(draft) });
     }
 

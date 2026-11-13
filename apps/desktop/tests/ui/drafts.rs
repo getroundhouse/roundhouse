@@ -8,7 +8,7 @@ use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{AppContext as _, Context, TestAppContext, Window};
 use protocol::attachment::{Attachment, MediaType};
 use protocol::event::EventBody;
-use protocol::model::{NewDraft, SessionId};
+use protocol::model::{DraftToKeep, SessionId};
 use protocol::prompt::Prompt;
 
 use crate::support::{Frozen, Stack, Ui, pencil, sidebar_row, wait_until};
@@ -135,7 +135,7 @@ fn showing_a_chat_doesnt_undo_a_change_made_to_its_draft_elsewhere(cx: &mut Test
     ui.new_chat();
     ui.view().drafts().unwrap().flushed().recv().unwrap();
     assert_eq!(kept(&stack, &first), "typed here");
-    stack.client().session_draft(&first, &NewDraft::new("typed elsewhere")).unwrap();
+    stack.client().session_draft(&first, &DraftToKeep::new("typed elsewhere")).unwrap();
 
     ui.show_chat(&first);
     ui.frame();
@@ -155,13 +155,13 @@ fn a_change_made_elsewhere_shows_in_the_chat_thats_showing(cx: &mut TestAppConte
     ui.input("typed here");
     ui.view().drafts().unwrap().flushed().recv().unwrap();
 
-    stack.client().session_draft(&chat, &NewDraft::new("typed elsewhere")).unwrap();
+    stack.client().session_draft(&chat, &DraftToKeep::new("typed elsewhere")).unwrap();
 
     ui.wait("what was typed elsewhere", |ui| ui.composer_text() == "typed elsewhere");
     ui.input(" and here");
     ui.view().drafts().unwrap().flushed().recv().unwrap();
     assert_eq!(kept(&stack, &chat), "typed elsewhere and here", "typing here carries on from it");
-    stack.client().session_draft(&chat, &NewDraft::default()).unwrap();
+    stack.client().session_draft(&chat, &DraftToKeep::default()).unwrap();
     ui.wait("the composer to empty, as sending it elsewhere does", |ui| ui.composer_text().is_empty());
 }
 
@@ -176,12 +176,12 @@ fn a_file_attached_elsewhere_shows_here_until_its_taken_out_there(cx: &mut TestA
     let id = file.attachment.id.clone();
     elsewhere.attachment_add(&chat, &id, &file.attachment.name, file.attachment.media_type, file.data).unwrap();
 
-    elsewhere.session_draft(&chat, &NewDraft { text: "look".to_string(), files: vec![id] }).unwrap();
+    elsewhere.session_draft(&chat, &DraftToKeep { text: "look".to_string(), files: vec![id] }).unwrap();
 
     ui.wait("the file", |ui| ui.composer_text() == "look" && ui.attached() == ["build.log"]);
     let pane = ui.pane().unwrap();
     ui.cx.update_entity(&pane, |p, cx| p.composer.update(cx, |c, cx| c.set_selected_range(0..0, cx)));
-    elsewhere.session_draft(&chat, &NewDraft::new("look")).unwrap();
+    elsewhere.session_draft(&chat, &DraftToKeep::new("look")).unwrap();
     ui.wait("the file to go", |ui| ui.attached().is_empty());
     assert_eq!(ui.composer_text(), "look");
     let cursor = ui.cx.read_entity(&pane, |p, cx| p.composer.read(cx).cursor());
@@ -231,7 +231,7 @@ fn a_draft_changed_elsewhere_as_the_chat_showing_closes_brings_each_file_once(cx
     let files = kept_files(&stack, &next).into_iter().map(|file| file.id).collect();
     let records = ui.view().feed().unwrap();
 
-    stack.client().session_draft(&next, &NewDraft { text: "look at this".to_string(), files }).unwrap();
+    stack.client().session_draft(&next, &DraftToKeep { text: "look at this".to_string(), files }).unwrap();
     stack.client().session_close(&showing).unwrap();
     // Both in client-core before the pane hears of either.
     wait_until("client-core to hear of both", || {
@@ -307,7 +307,7 @@ fn a_change_made_elsewhere_while_something_from_here_is_on_its_way_shows_once_it
     let drafts = ui.view().drafts().unwrap();
     drafts.flushed().recv().unwrap();
     let pid = stack.client().hub_status().unwrap().pid;
-    stack.client().session_draft(&chat, &NewDraft::new("typed elsewhere")).unwrap();
+    stack.client().session_draft(&chat, &DraftToKeep::new("typed elsewhere")).unwrap();
     // Arrived in client-core, but nothing has run on the main thread since, so the pane hasn't seen it.
     let records = ui.view().feed().unwrap();
     let draft_in = |records: &client_core::RecordsFeed| {

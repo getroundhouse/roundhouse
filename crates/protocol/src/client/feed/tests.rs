@@ -1,4 +1,4 @@
-use crate::model::{DiffComment, DiffSide, HubSettings, Record, RecordKey, Repo, Rev, Subagent, WorkspaceDraft};
+use crate::model::{DiffComment, DiffSide, HubSettings, NewWorkspaceDraft, Record, RecordKey, Repo, Rev, Subagent};
 
 use super::{HubNotice, RecordNotice};
 
@@ -19,7 +19,7 @@ fn of_a_record() -> Vec<(HubNotice, RecordKey, Rev)> {
         created_at_ms: 0,
         rev: Rev::new(3),
     };
-    let draft = WorkspaceDraft { rev: Rev::new(5), ..WorkspaceDraft::default() };
+    let draft = NewWorkspaceDraft { rev: Rev::new(5), ..NewWorkspaceDraft::default() };
     let gone = RecordKey::Session { id: "s".into() };
     vec![
         (HubNotice::Repo(repo), RecordKey::Repo { id: "r".into() }, Rev::new(2)),
@@ -29,7 +29,7 @@ fn of_a_record() -> Vec<(HubNotice, RecordKey, Rev)> {
             RecordKey::HubSettings,
             Rev::new(4),
         ),
-        (HubNotice::WorkspaceDraft(draft), RecordKey::WorkspaceDraft, Rev::new(5)),
+        (HubNotice::NewWorkspaceDraft(draft), RecordKey::NewWorkspaceDraft, Rev::new(5)),
         (
             HubNotice::Subagent(subagent(6)),
             RecordKey::Subagent { session_id: "s".into(), call: "c".into() },

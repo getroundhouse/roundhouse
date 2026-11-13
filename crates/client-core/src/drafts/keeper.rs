@@ -201,7 +201,7 @@ impl Keeper {
                 .map(|workspace| Agreed { rev: workspace.rev, said: Said::Comment(workspace.comment_draft) }),
             Change::NewWorkspace(draft) => self
                 .client
-                .workspace_draft_keep(draft)
+                .new_workspace_draft_keep(draft)
                 .map(|kept| Agreed { rev: kept.rev, said: Said::new_workspace(&kept) }),
         }
     }
@@ -245,7 +245,7 @@ impl Keeper {
             FilesFor::Chat(chat) if self.client.has_given(chat, id) => return Ok(()),
             FilesFor::Chat(chat) => file.give(|kind| self.client.attachment_add(chat, id, name, kind, data.clone())),
             FilesFor::NewWorkspace => {
-                file.give(|kind| self.client.workspace_draft_file_add(id, name, kind, data.clone()))
+                file.give(|kind| self.client.new_workspace_draft_file_add(id, name, kind, data.clone()))
             }
         };
         added.map(drop)
@@ -261,7 +261,7 @@ impl Keeper {
             }
             let removed = match &from {
                 FilesFor::Chat(chat) => self.client.attachment_remove(chat, &file),
-                FilesFor::NewWorkspace => self.client.workspace_draft_file_remove(&file),
+                FilesFor::NewWorkspace => self.client.new_workspace_draft_file_remove(&file),
             };
             match removed {
                 // A hub that doesn't keep the dialog, such as an older one reached since, which the file waits for.

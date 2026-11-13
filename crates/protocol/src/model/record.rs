@@ -5,8 +5,8 @@
 use serde::{Deserialize, Serialize};
 
 use super::{
-    Account, AccountId, CommentId, DiffComment, HubSettings, Repo, RepoId, Rev, Session, SessionId, Subagent,
-    ToolUseId, Workspace, WorkspaceDraft, WorkspaceId,
+    Account, AccountId, CommentId, DiffComment, HubSettings, NewWorkspaceDraft, Repo, RepoId, Rev, Session, SessionId,
+    Subagent, ToolUseId, Workspace, WorkspaceId,
 };
 
 /// Which record, of which kind. A kind this build doesn't know reads as `Unknown`.
@@ -27,8 +27,8 @@ pub enum RecordKey {
     },
     /// A hub has one record of its settings.
     HubSettings,
-    /// And one of what's in the new-workspace dialog, as [`WorkspaceDraft`] says.
-    WorkspaceDraft,
+    /// And one of what's in the new-workspace dialog, as [`NewWorkspaceDraft`] says.
+    NewWorkspaceDraft,
     Account {
         id: AccountId,
     },
@@ -51,7 +51,7 @@ pub enum Record {
     Comment(DiffComment),
     HubSettings(HubSettings),
     Account(Account),
-    WorkspaceDraft(WorkspaceDraft),
+    NewWorkspaceDraft(NewWorkspaceDraft),
     /// Listed by session, apart from [`Records`], since a session can have many.
     Subagent(Subagent),
 }
@@ -65,7 +65,7 @@ impl Record {
             Record::Comment(comment) => RecordKey::Comment { id: comment.id.clone() },
             Record::HubSettings(_) => RecordKey::HubSettings,
             Record::Account(account) => RecordKey::Account { id: account.id.clone() },
-            Record::WorkspaceDraft(_) => RecordKey::WorkspaceDraft,
+            Record::NewWorkspaceDraft(_) => RecordKey::NewWorkspaceDraft,
             Record::Subagent(subagent) => {
                 RecordKey::Subagent { session_id: subagent.session_id.clone(), call: subagent.call.clone() }
             }
@@ -81,7 +81,7 @@ impl Record {
             Record::Comment(comment) => comment.rev,
             Record::HubSettings(settings) => settings.rev,
             Record::Account(account) => account.rev,
-            Record::WorkspaceDraft(draft) => draft.rev,
+            Record::NewWorkspaceDraft(draft) => draft.rev,
             Record::Subagent(subagent) => subagent.rev,
         }
     }
@@ -102,7 +102,7 @@ pub struct Records {
     pub accounts: Vec<Account>,
     /// `None` from a hub from before it kept one.
     #[serde(default)]
-    pub workspace_draft: Option<WorkspaceDraft>,
+    pub new_workspace_draft: Option<NewWorkspaceDraft>,
     /// The hub's newest revision when this was read. A record missing from the list is gone, unless
     /// a client holds a copy newer than this.
     pub rev: Rev,
@@ -111,13 +111,14 @@ pub struct Records {
 impl Records {
     /// Each record in the list, of every kind. The list's own revision is `rev`, which this leaves out.
     pub fn into_records(self) -> impl Iterator<Item = Record> {
-        let Records { repos, workspaces, sessions, comments, hub_settings, accounts, workspace_draft, rev: _ } = self;
+        let Records { repos, workspaces, sessions, comments, hub_settings, accounts, new_workspace_draft, rev: _ } =
+            self;
         let records = repos.into_iter().map(Record::Repo);
         let records = records.chain(workspaces.into_iter().map(Record::Workspace));
         let records = records.chain(sessions.into_iter().map(Record::Session));
         let records = records.chain(comments.into_iter().map(Record::Comment));
         let records = records.chain(hub_settings.into_iter().map(Record::HubSettings));
         let records = records.chain(accounts.into_iter().map(Record::Account));
-        records.chain(workspace_draft.into_iter().map(Record::WorkspaceDraft))
+        records.chain(new_workspace_draft.into_iter().map(Record::NewWorkspaceDraft))
     }
 }

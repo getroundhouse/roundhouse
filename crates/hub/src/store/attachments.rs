@@ -7,7 +7,7 @@ use protocol::attachment::{Attachment, MAX_PER_PROMPT};
 use protocol::model::{AttachmentId, SessionId, WorkspaceId};
 use rusqlite::{Connection, OptionalExtension, params};
 
-use super::workspace_draft::read_draft_file;
+use super::new_workspace_draft::read_draft_file;
 use super::{Store, StoreError, from_text, lock, now_ms, text_of};
 use crate::attachment_files::FileFor;
 
@@ -131,7 +131,7 @@ impl Store {
     ) -> Result<Attachment, StoreError> {
         match kept_for {
             FileFor::Session(session_id) => self.add_attachment(session_id, file, by),
-            FileFor::NewWorkspace => self.add_workspace_draft_file(file),
+            FileFor::NewWorkspace => self.add_new_workspace_draft_file(file),
         }
     }
 
@@ -140,7 +140,7 @@ impl Store {
     pub(crate) fn let_go_of_file(&self, kept_for: &FileFor, id: &AttachmentId) -> Result<bool, StoreError> {
         match kept_for {
             FileFor::Session(session_id) => self.let_go_of_attachment(session_id, id),
-            FileFor::NewWorkspace => self.let_go_of_workspace_draft_file(id),
+            FileFor::NewWorkspace => self.let_go_of_new_workspace_draft_file(id),
         }
     }
 }

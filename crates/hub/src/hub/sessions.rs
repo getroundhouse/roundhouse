@@ -8,7 +8,7 @@ use protocol::event::{ApprovalDecision, SessionEvent};
 use protocol::find::{Found, Needle};
 use protocol::model::{
     AgentKind, AnswerDraft, ApprovalId, AttachmentId, ClientMessageId, ClientRequestId, CompactionLine, Draft,
-    NewDraft, Place, PromptLine, RecordKey, Rev, Seq, Session, SessionId, SessionSettings, SessionSettingsChange,
+    DraftToKeep, Place, PromptLine, RecordKey, Rev, Seq, Session, SessionId, SessionSettings, SessionSettingsChange,
     SessionStatus, TitleSource, ToolUseId, WorkspaceId,
 };
 use protocol::prompt::Prompt;
@@ -318,7 +318,7 @@ impl Hub {
         self.change_session(move |store| store.mark_unread(&id)).await
     }
 
-    pub(crate) async fn session_draft(&self, id: SessionId, draft: NewDraft) -> Result<Session, ApiError> {
+    pub(crate) async fn session_draft(&self, id: SessionId, draft: DraftToKeep) -> Result<Session, ApiError> {
         self.change_session(move |store| store.set_draft(&id, &draft)).await
     }
 
