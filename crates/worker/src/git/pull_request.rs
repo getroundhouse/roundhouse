@@ -21,9 +21,15 @@ mod local;
 #[cfg(test)]
 mod tests;
 
-/// `commits` is the first hundred, oldest first, which [`link`] goes by, with `headRefOid`.
-const FIELDS: &str = "number,url,title,state,isDraft,baseRefName,headRefName,headRefOid,commits,mergeStateStatus,\
+/// What `gh pr view` is asked for. Not the commits, which [`commits_of`] asks for apart, by the pull request's URL. By
+/// the branch's name, `gh` 2.103 asks GitHub for up to thirty pull requests, so a field that's a list is asked for
+/// thirty times, and GitHub's limit counts points, by how many items a query could bring. Its `commits` asks for a
+/// hundred authors of each of their first hundred commits, which GitHub prices at 31 points, where these cost 1. So a
+/// field is priced with GraphQL's `rateLimit { cost }` before it's added here.
+const FIELDS: &str = "number,url,title,state,isDraft,baseRefName,headRefName,headRefOid,mergeStateStatus,\
     reviewDecision,statusCheckRollup";
+/// The first hundred commits, oldest first, and the newest, which [`link`] goes by.
+const COMMITS: &str = "headRefOid,commits";
 /// What `gh pr view` can't say, asked for by the pull request's URL: where it is in the merge queue, when it last left
 /// it, and when a review last asked for changes. Its state comes too, since it can merge between the two calls, and
 /// would otherwise read as having left the queue without merging. GitHub records a removal from the queue as the queue
@@ -50,9 +56,10 @@ pub async fn pull_request(path: &str, branch: Option<&BranchName>) -> Result<Opt
 }
 
 /// The one `gh` finds by the branch's name, where it's the branch's, as [`link`] says, or else the one the branch is
-/// linked to, read by its URL. `gh` asks GitHub again for that only when it finds another by the name, or none, as
-/// for a branch renamed since it was pushed, which the hub's count of a read's calls leaves out, and GitHub's own
-/// count of what's left, which the hub asks for, takes in.
+/// linked to, read by its URL. GitHub is asked again for the found one's commits only when it isn't the one linked,
+/// as when it's found for the first time, and for the linked one only when `gh` finds another by the name, or none, as
+/// for a branch renamed since it was pushed. The hub's count of a read's calls leaves both out, and GitHub's own count
+/// of what's left, which the hub asks for, takes them in.
 async fn of_branch(path: &str, branch: Option<&BranchName>) -> Result<Option<Viewed>, ApiError> {
     let worktree = Path::new(path);
     let by_name = view(path, None).await?;
@@ -65,7 +72,8 @@ async fn of_branch(path: &str, branch: Option<&BranchName>) -> Result<Option<Vie
     let linked = link::linked(worktree, branch).await?;
     let has_been_at = match &by_name {
         Some(found) if linked.as_deref() != Some(found.pull_request.url.as_str()) => {
-            link::has_been_at(worktree, branch, &found.commits(), found.from.as_ref()).await?
+            let commits = commits_of(path, &found.pull_request.url).await?;
+            link::has_been_at(worktree, branch, &commits, found.from.as_ref()).await?
         }
         _ => false,
     };
@@ -86,31 +94,35 @@ async fn of_branch(path: &str, branch: Option<&BranchName>) -> Result<Option<Vie
     }
 }
 
-/// A pull request as `gh pr view` prints it, with nothing yet about the queue or the worktree, and the commits of the
-/// branch it's from, as GitHub has them.
+/// A pull request as `gh pr view` prints it, with nothing yet about the queue or the worktree, and the branch it's
+/// from, as GitHub has it.
 #[derive(Debug, PartialEq)]
 struct Viewed {
     pull_request: PullRequest,
     /// The branch it's from, by its name there.
     from: Option<BranchName>,
-    /// The newest.
+    /// Its newest commit.
     head: Option<CommitId>,
-    /// The first hundred, oldest first.
-    first: Vec<CommitId>,
-}
-
-impl Viewed {
-    /// Every one it says, the newest included, which a pull request of more than a hundred has after the first.
-    fn commits(&self) -> Vec<CommitId> {
-        let newest = self.head.iter().filter(|head| !self.first.contains(head));
-        self.first.iter().chain(newest).cloned().collect()
-    }
 }
 
 /// The pull request at `url`, or the one `gh` finds for the branch checked out, by its name. `None` when `gh` says
 /// there's none.
 async fn view(path: &str, url: Option<&str>) -> Result<Option<Viewed>, ApiError> {
-    let args: Vec<&str> = ["pr", "view"].into_iter().chain(url).chain(["--json", FIELDS]).collect();
+    let Some(printed) = run_view(path, url, FIELDS).await? else { return Ok(None) };
+    parse_pull_request(&printed).map(Some).ok_or_else(|| couldnt_say("gh printed something other than one"))
+}
+
+/// The commits of the pull request at `url`, as [`parse_commits`] says them. It was found a moment ago, so `gh` saying
+/// there's none now says nothing of whether it's the branch's.
+async fn commits_of(path: &str, url: &str) -> Result<Vec<CommitId>, ApiError> {
+    let printed = run_view(path, Some(url), COMMITS).await?;
+    printed.as_deref().and_then(parse_commits).ok_or_else(|| couldnt_say("its commits couldn't be read"))
+}
+
+/// Runs `gh pr view` for `fields` of the pull request at `url`, or else the one it finds by the branch's name, and
+/// returns what it printed. `None` when it says there's none.
+async fn run_view(path: &str, url: Option<&str>, fields: &str) -> Result<Option<Vec<u8>>, ApiError> {
+    let args: Vec<&str> = ["pr", "view"].into_iter().chain(url).chain(["--json", fields]).collect();
     let viewed = match run_gh(path, &args).await {
         Ok(viewed) => viewed,
         Err(Unran::Missing) => return Err(cant_work_here("gh isn't installed")),
@@ -124,7 +136,7 @@ async fn view(path: &str, url: Option<&str>) -> Result<Option<Viewed>, ApiError>
             Failing::CouldntSay => Err(couldnt_say(said.trim())),
         };
     }
-    parse_pull_request(&viewed.stdout).map(Some).ok_or_else(|| couldnt_say("gh printed something other than one"))
+    Ok(Some(viewed.stdout))
 }
 
 /// What a failed `gh pr view` means.
@@ -224,10 +236,23 @@ fn parse_pull_request(json: &[u8]) -> Option<Viewed> {
         changes_requested_at_ms: None,
         local: Local::default(),
     };
-    let first = value["commits"].as_array().into_iter().flatten();
-    let first = first.filter_map(|commit| commit["oid"].as_str()).map(CommitId::from).collect();
     let from = value["headRefName"].as_str().map(BranchName::from);
-    Some(Viewed { pull_request, from, head: value["headRefOid"].as_str().map(CommitId::from), first })
+    Some(Viewed { pull_request, from, head: value["headRefOid"].as_str().map(CommitId::from) })
+}
+
+/// Every commit `gh` says a pull request has: its first hundred, oldest first, and its newest, which one of more than
+/// a hundred has after them. Only the newest when it doesn't list them. `None` when it printed something other than a
+/// pull request.
+fn parse_commits(json: &[u8]) -> Option<Vec<CommitId>> {
+    let value: Value = serde_json::from_slice(json).ok()?;
+    let listed = value.as_object()?.get("commits").and_then(Value::as_array).into_iter().flatten();
+    let mut commits: Vec<CommitId> = listed.filter_map(|commit| commit["oid"].as_str()).map(CommitId::from).collect();
+    if let Some(head) = value["headRefOid"].as_str().map(CommitId::from)
+        && !commits.contains(&head)
+    {
+        commits.push(head);
+    }
+    Some(commits)
 }
 
 enum Outcome {

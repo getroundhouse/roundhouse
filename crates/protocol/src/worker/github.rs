@@ -49,7 +49,8 @@ impl Request for GithubRateLimit {
     }
 }
 
-/// GitHub's hourly limit on the GraphQL calls `gh pr view` makes, as GitHub counted them when asked.
+/// GitHub's hourly limit on GraphQL, which `gh pr view` and the worker's own queries spend, as GitHub counted it when
+/// asked. It counts points, not calls: a call costs one, or more when it asks for lists within lists.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct RateLimit {
     pub limit: u32,

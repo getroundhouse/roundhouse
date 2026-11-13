@@ -21,6 +21,9 @@ pub(crate) const MOVED_ON: &str = r#"{"isDraft":false,"number":7,"state":"OPEN",
 pub(crate) const SOMEONE_ELSES: &str = r#"{"isDraft":false,"number":9,"state":"OPEN","title":"U",
     "url":"https://example.com/9","headRefOid":"fedcba9876543210fedcba9876543210fedcba98",
     "commits":[{"oid":"fedcba9876543210fedcba9876543210fedcba98"}]}"#;
+/// What it prints for another of the branch's own, opened from it after the first.
+pub(crate) const NEWER: &str =
+    r#"{"isDraft":false,"number":8,"state":"OPEN","title":"V","url":"https://example.com/8"}"#;
 /// What it says for a branch with none, in its own words, as against failing.
 pub(crate) const NONE: &str = "none";
 /// What it says when it can't reach GitHub.
@@ -29,9 +32,12 @@ pub(crate) const OFFLINE: &str = "offline";
 pub(crate) const LOGGED_OUT: &str = "logged-out";
 
 /// A `gh` at the front of the hub's `PATH`, which says what a test tells it to for `gh pr view` and `gh api rate_limit`,
-/// that the pull request isn't in a merge queue, and fails anything else. A pull request that doesn't say its newest
-/// commit, or its commits, gets the one checked out for them, as one pushed from the worktree has, so it's the
-/// branch's own. It writes down each time it's run.
+/// that the pull request isn't in a merge queue, and fails anything else. By URL, `gh pr view` says what it was told
+/// of the pull request at that URL, but for the exception [`StandInGh::script`] names. It prints the commits only when
+/// they're asked for, as `gh` does, and fails when they're asked for by the branch's name, which GitHub charges 31
+/// points of its hourly limit for, where by URL they cost 1. A pull request that doesn't say its newest commit, or its
+/// commits, gets the one checked out for them, as one pushed from the worktree has, so it's the branch's own. It
+/// writes down each time it's run.
 pub(crate) struct StandInGh {
     bin: PathBuf,
     says: PathBuf,
@@ -61,37 +67,8 @@ impl StandInGh {
             ran: stack.path("gh-ran"),
             held: stack.path("gh-held"),
         };
-        let script = format!(
-            r#"#!/bin/sh
-echo "$1 $2" >> '{ran}'
-[ "$1 $2" = 'api rate_limit' ] && exec cat '{rate_limit}'
-[ "$1 $2" = 'api graphql' ] && exec echo '{{"data":{{"resource":{{"mergeQueueEntry":null}}}}}}'
-[ "$1 $2" = 'pr view' ] || exit 1
-while [ -f '{held}' ]; do sleep 0.02; done
-says='{says}'
-if [ -f '{said_of}' ] && [ "${{3#http}}" != "$3" ]; then
-  [ "$3" = "$(cat '{said_of}')" ] || {{ echo 'no pull requests found for branch "x"' >&2; exit 1; }}
-  says='{says_of}'
-fi
-case "$(cat "$says")" in
-  {NONE}) echo 'no pull requests found for branch "x"' >&2; exit 1 ;;
-  {OFFLINE}) echo 'error connecting to api.github.com' >&2; exit 1 ;;
-  {LOGGED_OUT}) echo 'To get started with GitHub CLI, please run:  gh auth login' >&2; exit 4 ;;
-esac
-answer=$(cat "$says") head=$(git rev-parse HEAD)
-case "$answer" in *headRefOid*) ;; *) answer="{{\"headRefOid\":\"$head\",${{answer#\{{}}" ;; esac
-case "$answer" in *'"commits"'*) ;; *) answer="{{\"commits\":[{{\"oid\":\"$head\"}}],${{answer#\{{}}" ;; esac
-printf '%s\n' "$answer"
-"#,
-            ran = gh.ran.display(),
-            rate_limit = gh.rate_limit.display(),
-            held = gh.held.display(),
-            says = gh.says.display(),
-            says_of = gh.says_of.display(),
-            said_of = gh.said_of.display()
-        );
         let source = stack.path("gh.source");
-        std::fs::write(&source, script).unwrap();
+        std::fs::write(&source, gh.script()).unwrap();
         install_executable(&source, &gh.bin.join("gh"));
         gh.say(NONE);
         gh.limit_left(5000);
@@ -102,12 +79,63 @@ printf '%s\n' "$answer"
         gh
     }
 
+    /// The stand-in itself, as a shell script. By URL, as `gh` does, it fails for one with no pull request rather than
+    /// saying there's none, except while it's told to say [`NONE`] for the branch, when it says none by any URL too,
+    /// which `gh` never does.
+    fn script(&self) -> String {
+        format!(
+            r#"#!/bin/sh
+echo "$1 $2" >> '{ran}'
+[ "$1 $2" = 'api rate_limit' ] && exec cat '{rate_limit}'
+[ "$1 $2" = 'api graphql' ] && exec echo '{{"data":{{"resource":{{"mergeQueueEntry":null}}}}}}'
+[ "$1 $2" = 'pr view' ] || exit 1
+while [ -f '{held}' ]; do sleep 0.02; done
+says='{says}' url=
+if [ "${{3#http}}" != "$3" ]; then
+  url=$3 fields=$5
+  [ -f '{said_of}' ] && [ "$url" = "$(cat '{said_of}')" ] && says='{says_of}'
+else
+  fields=$4
+  case ",$fields," in
+    *,commits,*) echo 'commits asked for by the branch name, which costs 31 points' >&2; exit 1 ;;
+  esac
+fi
+case "$(cat "$says")" in
+  {NONE}) echo 'no pull requests found for branch "x"' >&2; exit 1 ;;
+  {OFFLINE}) echo 'error connecting to api.github.com' >&2; exit 1 ;;
+  {LOGGED_OUT}) echo 'To get started with GitHub CLI, please run:  gh auth login' >&2; exit 4 ;;
+esac
+answer=$(tr -d '\n' < "$says") head=$(git rev-parse HEAD)
+if [ -n "$url" ]; then
+  case "$answer" in
+    *"\"url\":\"$url\""*) ;;
+    *) echo "GraphQL: Could not resolve to a PullRequest with the number of ${{url##*/}}." >&2; exit 1 ;;
+  esac
+fi
+case "$answer" in *headRefOid*) ;; *) answer="{{\"headRefOid\":\"$head\",${{answer#\{{}}" ;; esac
+case ",$fields," in
+  *,commits,*)
+    case "$answer" in *'"commits"'*) ;; *) answer="{{\"commits\":[{{\"oid\":\"$head\"}}],${{answer#\{{}}" ;; esac ;;
+  *) answer=$(printf '%s' "$answer" | sed 's/,[[:space:]]*"commits":\[[^]]*\]//') ;;
+esac
+printf '%s\n' "$answer"
+"#,
+            ran = self.ran.display(),
+            rate_limit = self.rate_limit.display(),
+            held = self.held.display(),
+            says = self.says.display(),
+            says_of = self.says_of.display(),
+            said_of = self.said_of.display()
+        )
+    }
+
     pub(crate) fn say(&self, what: &str) {
         write_whole(&self.says, what);
     }
 
-    /// What it says of the pull request at `url`, read by it as a branch's linked one is. Once told, it says there's
-    /// none at any other URL, and until then, what it says of the branch's.
+    /// What it says of the pull request at `url`, read by it as a branch's linked one is. By any other URL, it says
+    /// what it says of the branch's, where that one is at that URL, and fails anywhere else, but for the exception
+    /// [`StandInGh::script`] names.
     pub(crate) fn say_of(&self, url: &str, what: &str) {
         write_whole(&self.says_of, what);
         write_whole(&self.said_of, url);

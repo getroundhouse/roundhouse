@@ -8,7 +8,9 @@ use client_core::{Client, ClientError};
 use protocol::client::ErrorCode;
 use protocol::model::{BranchName, Head, PrState, PullRequestFound, WorkspaceId};
 
-use crate::support::gh::{LOGGED_OUT, MERGED, MOVED_ON, NONE, OFFLINE, OPEN, OPEN_URL, SOMEONE_ELSES, StandInGh};
+use crate::support::gh::{
+    LOGGED_OUT, MERGED, MOVED_ON, NEWER, NONE, OFFLINE, OPEN, OPEN_URL, SOMEONE_ELSES, StandInGh,
+};
 use crate::support::{self, Stack, is_alive, started_pid, wait_for_turn_end, wait_until};
 
 /// The number of the pull request on the workspace's record, as every client gets it.
@@ -90,7 +92,68 @@ fn a_pull_request_someone_else_has_pushed_to_is_the_branchs_from_its_first_read(
     let views = gh.views() - views;
 
     assert_eq!((read.number, read.local.behind), (7, 1), "with a commit to pull");
-    assert_eq!(views, 1, "GitHub is asked once");
+    assert_eq!(views, 2, "GitHub is asked by the branch's name, and then for its commits by its URL");
+}
+
+/// The worker asks for a pull request's commits only to tell whether it's the branch's, so once the branch is linked
+/// to it, a read views it once. They cost GitHub a point by its URL, and 31 by the branch's name.
+#[test]
+fn once_the_branch_is_linked_to_its_pull_request_a_read_views_it_once() {
+    let mut stack = Stack::start();
+    let gh = StandInGh::start(&mut stack);
+    let client = stack.client();
+    let (workspace, _) = stack.workspace(&client);
+    gh.say(OPEN);
+    let views = gh.views();
+    client.workspace_pull_request(&workspace.id).unwrap();
+    let linking = gh.views() - views;
+
+    let views = gh.views();
+    client.workspace_pull_request(&workspace.id).unwrap();
+    let linked = gh.views() - views;
+
+    assert_eq!((linking, linked), (2, 1), "its commits are asked for only until the branch is linked to it");
+}
+
+/// A branch linked to one pull request can have a newer one of its own, as when the first has merged and another is
+/// opened from it. That one is found by the branch's name, and its commits say it's the branch's, so it takes the
+/// link.
+#[test]
+fn a_newer_pull_request_from_the_branch_takes_the_link_from_the_one_before() {
+    let mut stack = Stack::start();
+    let gh = StandInGh::start(&mut stack);
+    let client = stack.client();
+    let (workspace, _) = stack.workspace(&client);
+    gh.say(OPEN);
+    client.workspace_pull_request(&workspace.id).unwrap();
+
+    gh.say(NEWER);
+    let views = gh.views();
+    let read = client.workspace_pull_request(&workspace.id).unwrap().unwrap();
+    let relinking = gh.views() - views;
+    let views = gh.views();
+    client.workspace_pull_request(&workspace.id).unwrap();
+    let relinked = gh.views() - views;
+
+    assert_eq!(read.number, 8);
+    assert_eq!((relinking, relinked), (2, 1), "its commits are asked for until the branch is linked to it");
+}
+
+/// Whether the one found by the branch's name is the branch's is for its commits to say, so a read that can't get
+/// them can't say either, and records nothing.
+#[test]
+fn a_read_that_cant_get_the_found_ones_commits_fails_and_records_nothing() {
+    let mut stack = Stack::start();
+    let gh = StandInGh::start(&mut stack);
+    let client = stack.client();
+    let (workspace, _) = stack.workspace(&client);
+    gh.say(OPEN);
+    gh.say_of(OPEN_URL, OFFLINE);
+
+    let failed = client.workspace_pull_request(&workspace.id);
+
+    assert!(matches!(failed, Err(ClientError::Api(e)) if e.code == ErrorCode::Worker));
+    assert_eq!(support::workspace(&client, &workspace.id).pull_request, None, "still not looked at");
 }
 
 /// A branch's pull request stays its own once it's been found, by a link the worker keeps with the branch. So when
@@ -223,11 +286,12 @@ fn a_worker_started_only_to_read_stays_once_a_prompt_wants_it() {
     gh.say(OPEN);
     // Known to be open, so it's read before the second once the hub starts again.
     client.workspace_pull_request(&first.id).unwrap();
+    let views = gh.views();
     gh.hold();
 
     stack.restart_hub();
     let client = stack.client();
-    wait_until("the first to be read again", || gh.views() == 2);
+    wait_until("the first to be read again", || gh.views() == views + 1);
     client.session_prompt(&session.id, "hang:60000", None).unwrap();
     let mut agent = None;
     wait_until("the prompt's agent to start", || {
@@ -290,6 +354,9 @@ fn a_read_asked_for_while_another_waits_shares_its_answer() {
     let client = stack.client();
     let (workspace, _) = stack.workspace(&client);
     gh.say(OPEN);
+    // Linked to it first, so each read views it once.
+    client.workspace_pull_request(&workspace.id).unwrap();
+    let views = gh.views();
     gh.hold();
     let socket = stack.socket();
     let ask = |id: WorkspaceId| {
@@ -297,7 +364,7 @@ fn a_read_asked_for_while_another_waits_shares_its_answer() {
         std::thread::spawn(move || Client::connect(&socket, "test").unwrap().workspace_pull_request(&id).unwrap())
     };
     let first = ask(workspace.id.clone());
-    wait_until("the first to reach GitHub", || gh.views() == 1);
+    wait_until("the first to reach GitHub", || gh.views() == views + 1);
     let (second, third) = (ask(workspace.id.clone()), ask(workspace.id.clone()));
     // Each waiting, and the status asked for here.
     wait_until("both to wait", || client.hub_status().unwrap().requests == 4);
@@ -306,5 +373,5 @@ fn a_read_asked_for_while_another_waits_shares_its_answer() {
     let answers: Vec<_> = [first, second, third].into_iter().map(|asked| asked.join().unwrap()).collect();
 
     assert!(answers.iter().all(|pr| pr.as_ref().map(|pr| pr.number) == Some(7)), "{answers:?}");
-    assert_eq!(gh.views(), 2, "the third shared the second's read");
+    assert_eq!(gh.views(), views + 2, "the third shared the second's read");
 }
