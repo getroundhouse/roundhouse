@@ -1,6 +1,5 @@
 //! The connection to a hub.
 
-#[cfg(feature = "testing")]
 mod account;
 mod admin;
 mod agent_list;

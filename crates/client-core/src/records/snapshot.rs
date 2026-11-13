@@ -194,6 +194,11 @@ impl Snapshot {
         self.records.accounts.get(id)
     }
 
+    /// Every account's record, in no order. Empty until they've arrived, and from a hub from before it kept them.
+    pub fn accounts(&self) -> impl Iterator<Item = &Account> {
+        self.records.accounts.values()
+    }
+
     /// The hub's own settings. `None` until they've arrived, and for good from a hub from before it kept any.
     pub fn hub_settings(&self) -> Option<&HubSettings> {
         self.records.hub_settings.as_ref()
