@@ -11,7 +11,7 @@ use protocol::model::QueuedPrompt;
 use protocol::prompt::Prompt;
 
 use crate::steering::working;
-use crate::support::{Stack, Ui};
+use crate::support::{Frozen, Stack, Ui};
 
 pub(crate) fn queued(ui: &Ui) -> Vec<QueuedPrompt> {
     let pane = ui.pane().unwrap();
@@ -220,16 +220,18 @@ fn a_prompt_shows_in_the_queue_while_its_files_are_added(cx: &mut TestAppContext
     let mut ui = Ui::open(cx, &stack);
     working(&mut ui, 20000);
     let dir = tempfile::tempdir().unwrap();
-    // Big enough to take a while to add, so the hub doesn't have the prompt yet when the queue's looked at.
-    let big = dir.path().join("big.log");
-    std::fs::write(&big, vec![b'a'; 40 << 20]).unwrap();
-    ui.paste(ClipboardItem::from(ClipboardEntry::ExternalPaths(ExternalPaths(vec![big].into()))));
-    ui.wait("the file to be attached", |ui| ui.attached() == ["big.log"]);
-    ui.input("say:with a big file");
+    let file = dir.path().join("queued.log");
+    std::fs::write(&file, b"queued attachment").unwrap();
+    // Hold the upload until the pending row is checked, independently of file size or machine load.
+    let frozen = Frozen::stop(stack.client().hub_status().unwrap().pid);
+    ui.paste(ClipboardItem::from(ClipboardEntry::ExternalPaths(ExternalPaths(vec![file].into()))));
+    ui.wait("the file to be attached", |ui| ui.attached() == ["queued.log"]);
+    ui.input("say:with a file");
 
     ui.press("secondary-enter");
 
     assert!(ui.visible("queue") && queued(&ui).is_empty(), "it shows before the hub has it");
+    drop(frozen);
     ui.wait("the hub to have it", |ui| queued(ui).len() == 1);
     let prompt = queued(&ui)[0].clone();
     assert!(ui.visible(id("queued-files", &prompt)));
