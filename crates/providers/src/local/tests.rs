@@ -34,14 +34,18 @@ async fn reading_the_path_does_not_wait_for_a_stream_something_else_is_holding_o
     assert_eq!(out.as_deref().and_then(parse_marked_path).as_deref(), Some("/a:/b"));
 }
 
+/// What a killed worker left gets to stop by itself here: long enough for a test's own processes, which stop as soon
+/// as they're asked, and short enough that a test of one that won't doesn't wait out the product's.
+const GRACE: Duration = Duration::from_millis(500);
+
 fn orphan(dir: &Path) -> std::process::Child {
     use std::os::unix::process::CommandExt;
     std::process::Command::new("sleep").arg("100").process_group(0).current_dir(dir).spawn().unwrap()
 }
 
-fn record_agent(dir: &Path, pid: u32, started: &str) -> PathBuf {
+fn record_agent(dir: &Path, name: &str, pid: u32, started: &str) -> PathBuf {
     std::fs::create_dir_all(dir.join("agents")).unwrap();
-    let path = dir.join("agents/s.pid");
+    let path = dir.join("agents").join(name);
     std::fs::write(&path, format!("{pid}\n{started}\n")).unwrap();
     path
 }
@@ -51,21 +55,89 @@ async fn a_recorded_orphan_is_stopped() {
     let dir = tempfile::tempdir().unwrap();
     let mut child = orphan(dir.path());
     let started = process::start_time(child.id()).unwrap();
-    let path = record_agent(dir.path(), child.id(), &started);
+    let path = record_agent(dir.path(), "s.pid", child.id(), &started);
     // It's this test's own child, so it stays a zombie until reaped, and `ps` still lists it.
     // Reap it from another thread so the wait below sees it go.
     let reaper = std::thread::spawn(move || child.wait().unwrap());
-    stop_orphaned_agents(dir.path()).await;
+    stop_orphans(dir.path(), GRACE).await;
     assert!(reaper.join().unwrap().signal().is_some(), "it should have been signalled");
     assert!(!path.exists());
+}
+
+/// Starts `script` as the leader of a group of its own, recorded as `name` in the instance's records, with a thread
+/// that reaps it, so it doesn't stay a zombie, which a group counts as running.
+fn recorded_group(dir: &Path, name: &str, script: &str) -> (u32, std::thread::JoinHandle<std::process::ExitStatus>) {
+    use std::os::unix::process::CommandExt;
+    let mut leader = std::process::Command::new("sh").args(["-c", script]).process_group(0).spawn().unwrap();
+    let pid = leader.id();
+    record_agent(dir, name, pid, &process::start_time(pid).unwrap());
+    (pid, std::thread::spawn(move || leader.wait().unwrap()))
+}
+
+/// Waits for `path`, which a test's script makes once it has got as far as the test needs, saying `never` if it doesn't.
+async fn until_there(path: &Path, never: &str) {
+    waiting::task::until(Duration::from_secs(10), never, || path.exists()).await;
+}
+
+/// Whether anything is left of the group `leader` leads, which is killed if so, so a test that fails doesn't leave it
+/// running for good. Its ID is its own while anything in it runs.
+fn killed_if_left(leader: u32) -> bool {
+    let left = process::group_running(leader);
+    if left {
+        process::signal_group(leader, process::Signal::Kill);
+    }
+    left
+}
+
+/// A group can outlast its leader, as a server a script started does when the script exits on SIGTERM, so what's left
+/// of it is made to stop too.
+#[tokio::test]
+async fn what_a_recorded_group_leaves_once_its_leader_exits_is_stopped() {
+    let dir = tempfile::tempdir().unwrap();
+    let left = dir.path().join("left");
+    // The leader exits on SIGTERM, and what it started ignores it, which what that starts inherits.
+    let script = format!("sh -c 'trap \"\" TERM; : > {}; while :; do sleep 0.05; done' & wait", left.display());
+    let (leader, reaped) = recorded_group(dir.path(), "s.pid", &script);
+    until_there(&left, "what the leader started never ran").await;
+
+    stop_orphans(dir.path(), GRACE).await;
+    let left_running = killed_if_left(leader);
+
+    assert_eq!(reaped.join().unwrap().signal(), Some(libc::SIGTERM), "the leader stopped when asked");
+    assert!(!left_running, "what it left was stopped too");
+}
+
+/// Each is asked at once, so they share one grace, rather than each waiting for the one before.
+#[tokio::test]
+async fn recorded_groups_that_ignore_being_asked_are_stopped_together() {
+    let dir = tempfile::tempdir().unwrap();
+    let stubborn = |ready: &Path| format!("trap '' TERM; : > {}; while :; do sleep 0.05; done", ready.display());
+    let ready = [dir.path().join("a.ready"), dir.path().join("b.ready")];
+    let (first, first_reaped) = recorded_group(dir.path(), "a.pid", &stubborn(&ready[0]));
+    let (second, second_reaped) = recorded_group(dir.path(), "b.pid", &stubborn(&ready[1]));
+    // A shell asked before it gets to its `trap` would stop when asked, as these mustn't.
+    for ready in &ready {
+        until_there(ready, "a group never got to ignoring being asked").await;
+    }
+    let started = std::time::Instant::now();
+
+    stop_orphans(dir.path(), GRACE).await;
+    let took = started.elapsed();
+    let left = [first, second].map(killed_if_left);
+
+    assert!(took < GRACE * 2, "took {took:?}");
+    assert_eq!(left, [false, false], "each was stopped");
+    for reaped in [first_reaped, second_reaped] {
+        assert_eq!(reaped.join().unwrap().signal(), Some(libc::SIGKILL));
+    }
 }
 
 #[tokio::test]
 async fn a_pid_now_used_by_something_else_is_left_alone() {
     let dir = tempfile::tempdir().unwrap();
     let mut child = orphan(dir.path());
-    let path = record_agent(dir.path(), child.id(), "Thu Jan  1 00:00:00 1970");
-    stop_orphaned_agents(dir.path()).await;
+    let path = record_agent(dir.path(), "s.pid", child.id(), "Thu Jan  1 00:00:00 1970");
+    stop_orphans(dir.path(), GRACE).await;
     assert!(child.try_wait().unwrap().is_none(), "this isn't the process that was recorded");
     assert!(!path.exists(), "the stale record still goes");
     child.kill().unwrap();
@@ -79,7 +151,7 @@ async fn a_runs_other_files_go_too() {
     let tools = dir.path().join("agents/s-1.mcp.json");
     std::fs::write(&tools, r#"{"mcpServers":{}}"#).unwrap();
 
-    stop_orphaned_agents(dir.path()).await;
+    stop_orphans(dir.path(), GRACE).await;
 
     assert!(!tools.exists(), "it holds the agent's token");
 }
@@ -187,7 +259,7 @@ async fn starting_leaves_a_running_instance_alone() {
     let mut worker = orphan(dir.path());
     record_worker(&instance, &worker);
     let mut agent = orphan(dir.path());
-    let agent_record = record_agent(&instance, agent.id(), &process::start_time(agent.id()).unwrap());
+    let agent_record = record_agent(&instance, "s.pid", agent.id(), &process::start_time(agent.id()).unwrap());
 
     provider.start(&id, &[]).await.unwrap();
 
@@ -208,7 +280,7 @@ async fn starting_clears_what_a_killed_worker_left() {
     provider.create(&id, None, None, "a").await.unwrap();
     let instance = dir.path().join("instances/a");
     let mut agent = orphan(dir.path());
-    let agent_record = record_agent(&instance, agent.id(), &process::start_time(agent.id()).unwrap());
+    let agent_record = record_agent(&instance, "s.pid", agent.id(), &process::start_time(agent.id()).unwrap());
     // Reaped as it goes, as in `a_recorded_orphan_is_stopped`, since a child of this test that nobody reaps is still
     // listed, and the start would wait out the agent's grace for it.
     let reaper = std::thread::spawn(move || agent.wait().unwrap());
