@@ -234,7 +234,6 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         | R::HubShutdownIfIdle
         | R::HubConfigure(_)
         | R::RepoAdd(_)
-        | R::WorkspaceCreate(_)
         | R::WorkspaceArchive(_)
         | R::WorkspaceRestore(_)
         | R::WorkspaceRename(_)
@@ -262,8 +261,9 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         | R::SessionRename(_)
         | R::AccountConnect(_)
         | R::AccountDisconnect(_) => Err(read_only("change anything")),
-        // So a screen can show a workspace waiting for its new title. One on its way out is the world's to say.
-        R::WorkspaceRegenerateTitle(_) => Ok(Outcome::Never),
+        // So a screen can show the app waiting on a workspace it asked for, or on a new title. The workspace's record
+        // saying it's being made, or on its way out, is the world's to say.
+        R::WorkspaceCreate(_) | R::WorkspaceRegenerateTitle(_) => Ok(Outcome::Never),
         // The app reads whose account it is from the records, so a screen that asks some other way is wrong.
         R::SessionAccount(_) | R::Unknown => {
             Err(ApiError::new(ErrorCode::Unsupported, "the gallery's hub doesn't know that request"))
