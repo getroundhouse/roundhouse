@@ -239,7 +239,7 @@ def capture_controls(cwd):
 
 
 class TaskServer:
-    """A stand-in for the worker's tools, on MCP's protocol 2026-07-28 over HTTP, as `crates/worker/src/tools/mcp.rs`
+    """A stand-in for the worker's tools, on MCP's protocol 2026-07-28 over HTTP, as `crates/worker/src/tools/mcp/mod.rs`
     answers it: `wait_for_pull_request` answers each call with a task, which is working until `end` is called, then
     completed, or until `call_off` is, then cancelled, as the hub calls a wait off for the person. It writes down each
     method it's asked, with the task it names."""

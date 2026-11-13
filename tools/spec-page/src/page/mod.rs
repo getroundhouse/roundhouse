@@ -16,7 +16,7 @@ use crate::index::{Area, Block, Confirmation, Index, NOT_BUILT, Screen, Section,
 #[cfg(test)]
 mod tests;
 
-const STYLE: &str = include_str!("page.css");
+const STYLE: &str = include_str!("../page.css");
 
 /// From the page to the spec's files, which it links to.
 const TO_THE_SPEC: &str = "../../docs/spec/";

@@ -19,7 +19,7 @@ mod full_access;
 mod mcp_task;
 mod modes;
 
-const FIXTURE: &str = include_str!("../fixtures/claude.jsonl");
+const FIXTURE: &str = include_str!("../../fixtures/claude.jsonl");
 
 fn parsed() -> Vec<Parsed> {
     let mut normalizer = Normalizer::default();
@@ -370,7 +370,7 @@ fn each_of_the_agents_requests_says_how_it_met_the_cache_and_how_long_before_the
     }
 }
 
-/// What the hub tells a cache that had expired by, in `crates/hub/src/session/cache.rs`: a warm one is read as far as
+/// What the hub tells a cache that had expired by, in `crates/hub/src/session/cache/mod.rs`: a warm one is read as far as
 /// the request before to the same model left it, however much was written since, by requests to another model too.
 #[test]
 fn a_warm_cache_is_read_as_far_as_the_request_before_to_the_same_model_left_it() {

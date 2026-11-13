@@ -1,6 +1,6 @@
 //! Stands in for the `claude` CLI in tests, so they're fast, free and deterministic. It speaks the
 //! same stream-json protocol, shaped on output captured from the real CLI, and has the behaviors the
-//! worker relies on. `crates/agents/tests/claude/contract.rs` holds the real captures, and
+//! worker relies on. `crates/agents/tests/claude/contract/mod.rs` holds the real captures, and
 //! `tools/smoke/real-claude.sh` runs the whole stack against the real thing.
 //!
 //! A prompt is a script: `;`-separated commands, each run in order.

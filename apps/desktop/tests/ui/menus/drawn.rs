@@ -1,5 +1,5 @@
 //! The menus as the app draws them off the Mac: from a button in the strip's top left corner, or F10, as one of the
-//! kit's popup menus with each menu a submenu of it. What each menu holds is in `menus.rs`, read from what GPUI keeps,
+//! kit's popup menus with each menu a submenu of it. What each menu holds is in `mod.rs`, read from what GPUI keeps,
 //! which is what's drawn.
 
 use gpui_kit::test::TestWindowExt as _;

@@ -1,4 +1,4 @@
-//! The screens the gallery draws: what the hub holds for each, from `worlds.rs`, and what to do in the app before
+//! The screens the gallery draws: what the hub holds for each, from `worlds/mod.rs`, and what to do in the app before
 //! taking it, in the steps `steps.rs` has.
 
 #![cfg(test)]
