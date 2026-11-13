@@ -67,7 +67,7 @@ pub enum ChildStatus {
 pub const CHILDREN: &str = ".children";
 
 /// What an agent calls a piece of work, such as `try-the-parser`, which names its branch in the workspace's folder,
-/// as `holly/try-the-parser`, and the directory of a worktree made for it. Lowercase letters, digits and single
+/// as `euston/try-the-parser`, and the directory of a worktree made for it. Lowercase letters, digits and single
 /// hyphens, since it names a directory on file systems that don't tell case apart as well as a branch, and at most
 /// [`WorkName::MOST_CHARS`] of them.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Hash)]

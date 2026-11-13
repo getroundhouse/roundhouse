@@ -11,6 +11,7 @@ testing = []
 
 [dependencies]
 async-trait.workspace = true
+fastrand.workspace = true
 parking_lot.workspace = true
 process.workspace = true
 protocol.workspace = true

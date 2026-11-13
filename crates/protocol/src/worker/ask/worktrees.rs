@@ -28,7 +28,7 @@ impl Ask for CreateWorktree {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum NewWorktreeOn {
-    /// A new branch in the workspace's folder, named for the work, as `holly/try-the-parser`, from `base`, a branch,
+    /// A new branch in the workspace's folder, named for the work, as `euston/try-the-parser`, from `base`, a branch,
     /// tag or commit, or from the commit the workspace's worktree has checked out.
     NewBranch {
         name: WorkName,

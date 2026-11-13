@@ -54,7 +54,7 @@ pub struct Branch {
 pub struct Upstream {
     /// `.` for a branch of the same repository.
     pub remote: RemoteName,
-    /// Its name there, which needn't be the local branch's, as with `git push -u origin aspen:aspen/fix-the-header`.
+    /// Its name there, which needn't be the local branch's, as with `git push -u origin euston:euston/fix-the-header`.
     pub name: BranchName,
     /// The newest commit of it the worktree knows of, from the last push or fetch. `None` before the first, and once
     /// a fetch finds it deleted.

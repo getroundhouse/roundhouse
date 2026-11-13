@@ -20,9 +20,9 @@ pub(super) struct Try {
 
 /// What a workspace's branches start with.
 struct Starts {
-    /// What a new branch starts with: the workspace's folder, `holly/`. But one made before its branches went in a
-    /// folder, which still has its branch `holly`, names them beside it, as `holly--try-the-parser`, since git can't
-    /// have `holly/…` beside `holly`.
+    /// What a new branch starts with: the workspace's folder, `euston/`. But one made before its branches went in a
+    /// folder, which still has its branch `euston`, names them beside it, as `euston--try-the-parser`, since git can't
+    /// have `euston/…` beside `euston`.
     new: String,
     /// What any of its branches may start with, which for that older workspace is either.
     any: Vec<String>,
@@ -86,7 +86,7 @@ pub(super) fn places_of_its(
     if !theirs {
         return None;
     }
-    // One name, so a worktree is never made inside another, as `holly/x/y`'s would be inside `holly/x`'s.
+    // One name, so a worktree is never made inside another, as `euston/x/y`'s would be inside `euston/x`'s.
     let work = after.unwrap_or(branch.as_str()).replace('/', "-");
     Some(numbered(&work, |work| Try { branch: branch.clone(), path: child_path(own, &workspace.name, work) }))
 }

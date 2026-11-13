@@ -45,7 +45,7 @@ Its chats are as you left them, and the next prompt in one resumes the agent's c
 ## From a terminal
 
 ```sh
-roundhouse workspace archive holly
+roundhouse workspace archive euston
 roundhouse workspace list --all
-roundhouse workspace restore holly
+roundhouse workspace restore euston
 ```

@@ -1,21 +1,23 @@
 //! Choosing a new workspace's name: one no other workspace in its repository has, and git has no branch, folder of
 //! branches or directory by.
 
-use std::sync::atomic::Ordering;
-
 use protocol::client::{ApiError, ErrorCode, HubNotice};
 use protocol::model::{Repo, RepoId, Workspace};
 use protocol::worker::{NamesGitHas, NamesGitHasReply};
 
 use crate::hub::Hub;
+use crate::names::Picked;
 use crate::worker_link::WorkerLink;
 
-/// The names a new workspace tries, in turn. One the person chose gets one try. One the hub picks gets a few: the first
-/// can be one git has, which the hub learns only once the workspace's worker is up, and one picked after that can
-/// still be taken by the time its worktree is made.
+/// The names a new workspace tries, in turn. One the person chose gets one try. One the hub picks gets a few: a station
+/// nobody in the repository has, then the same station with the next number each time. The first can be one git has,
+/// which the hub learns only once the workspace's worker is up, and one picked after that can still be taken by the
+/// time its worktree is made, or by a workspace made at the same moment.
 pub(super) struct Names {
     chosen: Option<String>,
     left: usize,
+    /// The name the hub picked last.
+    last: Option<Picked>,
     /// The names git has in the repository, as the workspace's worker last said, lowercased here, since git's names
     /// count whatever their case. A name the hub picks skips them, so finding the first taken costs one more try
     /// rather than one for each.
@@ -25,17 +27,19 @@ pub(super) struct Names {
 impl Names {
     pub(super) fn new(chosen: Option<String>) -> Self {
         let left = if chosen.is_some() { 1 } else { 8 };
-        Self { chosen, left, git_has: Vec::new() }
+        Self { chosen, left, last: None, git_has: Vec::new() }
     }
 
     /// The next name to try in the repository, or `None` once there are no tries left.
     pub(super) async fn next(&mut self, hub: &Hub, repo_id: &RepoId) -> Result<Option<String>, ApiError> {
         let Some(left) = self.left.checked_sub(1) else { return Ok(None) };
         self.left = left;
-        match &self.chosen {
-            Some(name) => Ok(Some(name.clone())),
-            None => hub.next_name(repo_id, &self.git_has).await.map(Some),
+        if let Some(name) = &self.chosen {
+            return Ok(Some(name.clone()));
         }
+        let picked = hub.next_name(repo_id, &self.git_has, self.last).await?;
+        self.last = Some(picked);
+        Ok(Some(picked.to_string()))
     }
 }
 
@@ -44,12 +48,16 @@ pub(super) fn name_taken(name: &str, repo: &Repo) -> ApiError {
 }
 
 impl Hub {
-    async fn next_name(&self, repo_id: &RepoId, git_has: &[String]) -> Result<String, ApiError> {
+    /// A station nobody in the repository has, neither its workspaces nor git, or after `last`, the same station with
+    /// the next number nobody has.
+    async fn next_name(&self, repo_id: &RepoId, git_has: &[String], last: Option<Picked>) -> Result<Picked, ApiError> {
         let owned = repo_id.clone();
         let mut taken = self.blocking(move |store| store.names_in_repo(&owned)).await?;
         taken.extend_from_slice(git_has);
-        let salt = self.name_salt.fetch_add(1, Ordering::Relaxed);
-        Ok(crate::names::pick(&taken, salt))
+        Ok(match last {
+            None => Picked::new(&taken, fastrand::usize(..)),
+            Some(last) => last.next(&taken),
+        })
     }
 
     /// Learns from the workspace's worker which names git has in the repository, so the next name picked skips them

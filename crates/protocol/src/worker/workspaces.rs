@@ -10,7 +10,7 @@ use crate::model::{BranchName, Branches};
 /// its name, which is its own: the first part of each local branch's name, and of each of `origin`'s as last fetched,
 /// each remote's name, `HEAD` where there's a remote, and each directory where the repository's workspaces go. As git
 /// and the file system spell them, for the hub to compare whatever their case, since git keeps a branch as a file, and
-/// a file system that doesn't tell case apart takes `Holly` for `holly`.
+/// a file system that doesn't tell case apart takes `Euston` for `euston`.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct NamesGitHas {
     pub repo_name: String,

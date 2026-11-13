@@ -41,8 +41,8 @@ pub async fn names_git_has(root: &Path, repo_name: &str, repo_path: &str) -> Res
 }
 
 /// Refuses, as `NameTaken`, a new branch git has one in the way of: one of its name, or one it would be a folder of or
-/// in, as `holly` is for `holly/start`. Whatever their case, since git keeps a branch as a file, and a file system that
-/// doesn't tell case apart takes `Holly/start` for `holly/start`.
+/// in, as `euston` is for `euston/start`. Whatever their case, since git keeps a branch as a file, and a file system that
+/// doesn't tell case apart takes `Euston/start` for `euston/start`.
 pub(super) async fn no_branch_in_the_way(repo: &Path, branch: &BranchName) -> Result<(), ApiError> {
     let wanted = branch.as_str().to_ascii_lowercase();
     let clashes = |had: &&str| {

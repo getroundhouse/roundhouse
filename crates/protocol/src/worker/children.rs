@@ -18,7 +18,7 @@ pub struct AddChildWorktree {
     pub own: String,
     /// Where the hub has recorded it, which is its to choose, as a workspace's own worktree's isn't: in
     /// [`CHILDREN`](crate::model::CHILDREN) beside `own`, in the workspace's folder there, as
-    /// `.children/holly/try-the-parser`. A worker refuses one anywhere else.
+    /// `.children/euston/try-the-parser`. A worker refuses one anywhere else.
     pub path: String,
     pub on: ChildBranch,
 }

@@ -55,7 +55,7 @@ use providers::Provider;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::time::Duration;
 use tokio::sync::{Mutex as AsyncMutex, Notify, broadcast};
 use tracing::warn;
@@ -119,7 +119,6 @@ pub(crate) struct Hub {
     restarting: AtomicBool,
     /// Asked to stop, which stops its workers and their agents, even once it was asked to restart.
     stopping: AtomicBool,
-    name_salt: AtomicU64,
     pub(crate) clients: AtomicU32,
     pub(crate) requests: AtomicU32,
 }
@@ -172,7 +171,6 @@ impl Hub {
             shutting_down: AtomicBool::new(false),
             restarting: AtomicBool::new(false),
             stopping: AtomicBool::new(false),
-            name_salt: AtomicU64::new(now_ms().cast_unsigned()),
             clients: AtomicU32::new(0),
             requests: AtomicU32::new(0),
         }

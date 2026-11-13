@@ -260,16 +260,16 @@ fn workspace_names_are_checked_and_collisions_are_handled() {
     assert_eq!(client.workspace_list(true).unwrap()[0].id, first.id);
 
     let generated = client.workspace_create(&repo.id, None, None, None).unwrap();
-    assert_ne!(generated.name, first.name);
+    assert!(hub::workspace_names().contains(&generated.name.as_str()), "{}", generated.name);
 }
 
 /// A name git has a branch by, or a folder of branches, is refused before anything is made, so the workspace takes
 /// another name in place, and a client following the feed sees one workspace on its way throughout, rather than one
-/// going and another coming. The worker says every name git has, so the next try skips them all, whatever their case,
-/// and here, where git has every name the hub picks from, takes one with a number. Its instance is made again under
-/// it, since a provider's own tools call it by the name it was made with.
+/// going and another coming. That's the same station with a number, which the worker's list of every name git has,
+/// whatever their case, shows is free, though here git has every station. Its instance is made again under it, since a
+/// provider's own tools call it by the name it was made with, and recorded as made, like any other.
 #[test]
-fn a_workspace_whose_name_git_has_takes_one_git_doesnt_at_its_next_try_keeping_its_id() {
+fn a_workspace_whose_name_git_has_takes_its_station_with_a_number_keeping_its_id() {
     let mut stack = Stack::start();
     stack.make_through_an_adapter();
     let client = stack.client();
@@ -287,38 +287,15 @@ fn a_workspace_whose_name_git_has_takes_one_git_doesnt_at_its_next_try_keeping_i
     assert_eq!((renamed.id.as_str(), renamed.status), (first.id.as_str(), WorkspaceStatus::Creating));
     assert_eq!((made.id, made.status), (first.id, WorkspaceStatus::Ready));
     assert_eq!(made.name, renamed.name);
-    assert!(made.name.ends_with("-2"), "{}", made.name);
+    assert_eq!(made.name, format!("{}-2", first.name));
     assert_eq!(made.branch.as_str(), format!("{}/start", made.name));
     let made_as: Vec<String> = [&first.name, &made.name].iter().map(|name| format!("roundhouse-{name}")).collect();
-    assert_eq!(stack.instances_made(), made_as);
-}
-
-/// The instance of a workspace that took another name is made again under it, and recorded as made, like any other.
-/// The hub tries names in the order they're listed, from the one after the last it tried, so a branch by the name after
-/// the first workspace's has the hub refuse the second workspace's first name, which git has, and not its next.
-#[test]
-fn a_workspace_made_under_its_next_name_has_its_instance_made_again_and_recorded() {
-    let mut stack = Stack::start();
-    stack.make_through_an_adapter();
-    let client = stack.client();
-    let repo = client.repo_add(stack.repo().to_str().unwrap()).unwrap();
-    let first = client.workspace_create(&repo.id, None, None, None).unwrap();
-    let names = hub::workspace_names();
-    let at = names.iter().position(|name| *name == first.name).unwrap();
-    let (refused, next) = (names[(at + 1) % names.len()], names[(at + 2) % names.len()]);
-    git(&stack.repo(), &["branch", refused]);
-
-    let made = client.workspace_create(&repo.id, None, None, None).unwrap();
-
-    assert_eq!((made.name.as_str(), made.status), (next, WorkspaceStatus::Ready));
-    let made_as = [first.name.as_str(), refused, next].map(|name| format!("roundhouse-{name}"));
     assert_eq!(stack.instances_made(), made_as);
     stack.kill_hub();
     let paths = stack.paths();
     let store = hub::store::Store::open(&paths.database, &paths.backups_dir).unwrap();
     let recorded: Vec<_> = store.recorded_instances().unwrap().into_iter().map(|i| (i.id, i.stage)).collect();
-    let ready = hub::store::InstanceStage::Ready;
-    assert_eq!(recorded, [(first.instance_id, ready), (made.instance_id, ready)]);
+    assert_eq!(recorded, [(made.instance_id, hub::store::InstanceStage::Ready)]);
 }
 
 #[test]

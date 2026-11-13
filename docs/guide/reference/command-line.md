@@ -17,9 +17,9 @@ The hub starts by itself when a command needs it.
 
 ```sh
 roundhouse repo add ~/code/my-project
-roundhouse workspace create my-project      # Prints the new workspace's name, such as holly
-roundhouse session new holly
-roundhouse send holly "Fix the login redirect"
+roundhouse workspace create my-project      # Prints the new workspace's name, such as euston
+roundhouse session new euston
+roundhouse send euston "Fix the login redirect"
 ```
 
 `send` follows the chat until the agent stops working. `--no-follow` returns as soon as the prompt is recorded.
