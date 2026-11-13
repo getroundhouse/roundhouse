@@ -18,8 +18,24 @@ use crate::hub::Hub;
 const RETRIES: [Duration; 4] =
     [Duration::from_secs(1), Duration::from_secs(2), Duration::from_secs(4), Duration::from_secs(8)];
 
-/// What the agent heard of its limits while its account was being learnt: only the newest, with when it was heard.
-type Waiting = Option<(Vec<UsageLimit>, i64)>;
+/// What the agent heard of its limits while its account was being learnt: only the newest, with whether it's every
+/// model's own week the account has and when it was heard.
+type Waiting = Option<Heard>;
+
+/// What the agent heard of its account's limits, as the hub keeps it.
+pub(super) struct Heard {
+    limits: Vec<UsageLimit>,
+    /// Whether `limits` holds every model's own week the account has, so any other the hub knows of has gone.
+    every_models_week: bool,
+    at_ms: i64,
+}
+
+impl Heard {
+    /// Keeps it under `account`.
+    async fn keep(self, hub: &Hub, account: AccountId) {
+        hub.hear_limits(account, self.limits, self.every_models_week, self.at_ms).await;
+    }
+}
 
 /// Which account the agent going runs under, as far as the session knows.
 pub(super) enum Hearing {
@@ -49,7 +65,14 @@ impl LiveSession {
     /// session. Once the account is known they're filed under it. While it's being learnt they wait, and if the
     /// worker couldn't say, it's asked again now, off this task, since the answer takes a call to the agent's CLI and
     /// the agent's events mustn't wait on it.
-    pub(super) fn heard_limits(self: &Arc<Self>, run: RunId, limits: Vec<UsageLimit>, heard_at_ms: i64) {
+    pub(super) fn heard_limits(
+        self: &Arc<Self>,
+        run: RunId,
+        limits: Vec<UsageLimit>,
+        every_models_week: bool,
+        heard_at_ms: i64,
+    ) {
+        let heard = Heard { limits, every_models_week, at_ms: heard_at_ms };
         let account = {
             let mut state = self.state.lock();
             if state.agent.is_none_or(|agent| agent.run != run) {
@@ -58,19 +81,19 @@ impl LiveSession {
             match &mut state.hearing {
                 Some((of, Hearing::Known(account))) if *of == run => account.clone(),
                 Some((of, Hearing::Asking(waiting))) if *of == run => {
-                    *waiting = Some((limits, heard_at_ms));
+                    *waiting = Some(heard);
                     return;
                 }
                 // Nothing is known of this launch's account, whatever was of the last one's.
                 Some(_) | None => {
-                    state.hearing = Some((run, Hearing::Asking(Some((limits, heard_at_ms)))));
+                    state.hearing = Some((run, Hearing::Asking(Some(heard))));
                     tokio::spawn(self.clone().learn_account(run));
                     return;
                 }
             }
         };
         let (Some(account), Ok(hub)) = (account, self.hub()) else { return };
-        tokio::spawn(async move { hub.hear_limits(account, limits, heard_at_ms).await });
+        tokio::spawn(async move { heard.keep(&hub, account).await });
     }
 
     /// Learns which account the agent of `run` runs under, files it on the account's record and the session's, and
@@ -105,8 +128,8 @@ impl LiveSession {
             self.file_account(&hub, account).await;
             waiting
         };
-        if let (Some(id), Some((limits, heard_at_ms))) = (id, waiting) {
-            hub.hear_limits(id, limits, heard_at_ms).await;
+        if let (Some(id), Some(heard)) = (id, waiting) {
+            heard.keep(&hub, id).await;
         }
     }
 
@@ -138,8 +161,8 @@ impl LiveSession {
             let Some(waiting) = self.known(run, Some(account.clone())) else { return Filing::Done };
             (account, waiting)
         };
-        if let Some((limits, heard_at_ms)) = waiting {
-            hub.hear_limits(account, limits, heard_at_ms).await;
+        if let Some(heard) = waiting {
+            heard.keep(hub, account).await;
         }
         Filing::Done
     }

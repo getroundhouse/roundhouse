@@ -57,11 +57,18 @@ impl Hub {
         Ok(Some(SessionAccount { account, limits }))
     }
 
-    /// Keeps what an agent under `account` heard of its limits at `heard_at_ms`, and tells every client when it
-    /// changed the account's record, since every session under the account shows it.
-    pub(crate) async fn hear_limits(&self, account: AccountId, limits: Vec<UsageLimit>, heard_at_ms: i64) {
+    /// Keeps what an agent under `account` heard of its limits at `heard_at_ms`, which holds every model's own week the
+    /// account has when `every_models_week` says so, and tells every client when it changed the account's record,
+    /// since every session under the account shows it.
+    pub(crate) async fn hear_limits(
+        &self,
+        account: AccountId,
+        limits: Vec<UsageLimit>,
+        every_models_week: bool,
+        heard_at_ms: i64,
+    ) {
         let kept = account.clone();
-        match self.blocking(move |store| store.hear_limits(&kept, &limits, heard_at_ms)).await {
+        match self.blocking(move |store| store.hear_limits(&kept, &limits, every_models_week, heard_at_ms)).await {
             Ok(Some(record)) => self.notify(HubNotice::Account(record)),
             Ok(None) => {}
             Err(e) => error!(%account, "could not keep what an agent heard of its account's limits: {e}"),

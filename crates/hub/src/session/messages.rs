@@ -53,6 +53,8 @@ pub(crate) enum Item {
     Limits {
         run: RunId,
         limits: Vec<UsageLimit>,
+        /// Whether `limits` holds every model's own week the account has.
+        every_models_week: bool,
         /// Its number among what the agent's worker sent, for a hub that asked the worker to keep running without it.
         seq: Option<u64>,
     },

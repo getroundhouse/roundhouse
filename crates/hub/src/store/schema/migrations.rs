@@ -8,6 +8,7 @@ mod comments;
 mod drafts;
 mod first;
 mod hub_settings;
+mod limits;
 mod logins;
 mod providers;
 mod replies;
@@ -346,4 +347,6 @@ pub(super) const MIGRATIONS: &[&str] = &[
     logins::RUNS,
     // Whether the hub allows a tool's use itself when an agent with full access asks anyway, in `hub_settings`.
     hub_settings::ALLOW_ASKED_IN_FULL_ACCESS,
+    // Each model's own week of an account's limits, kept apart by the model, in `limits`.
+    limits::BY_MODEL,
 ];

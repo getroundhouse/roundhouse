@@ -2,7 +2,7 @@
 //! heard of its limits. A limit is the account's rather than a session's, so it's kept by account, whichever session's
 //! agent heard it.
 
-use protocol::model::{Account, AccountId, AgentAccount, LimitWindow, Rev, SessionId, UsageLimit};
+use protocol::model::{Account, AccountId, AgentAccount, LimitWindow, ModelLabel, Rev, SessionId, UsageLimit};
 use rusqlite::{Connection, OptionalExtension as _, params};
 
 use super::logins::{IdFrom, LOGIN_COLUMNS, login_at};
@@ -65,36 +65,55 @@ pub(super) fn account(conn: &Connection, id: &AccountId) -> rusqlite::Result<Opt
     Ok(Some(account))
 }
 
-/// What's been heard of `account`'s limits, shortest window first, each with when it was heard.
+/// What's been heard of `account`'s limits, shortest window first, and models' weeks by their models, each with when
+/// it was heard.
 fn limits_of(conn: &Connection, account: &AccountId) -> rusqlite::Result<Vec<UsageLimit>> {
     let mut statement = conn.prepare_cached(
-        "SELECT window, used_percent, resets_at_ms, heard_at_ms FROM account_limits WHERE account_id = ?",
+        "SELECT window, model, used_percent, resets_at_ms, heard_at_ms FROM account_limits WHERE account_id = ?",
     )?;
     let rows = statement.query_map([account.as_str()], |row| {
+        let model: String = row.get(1)?;
         Ok(UsageLimit {
             window: from_text(row.get(0)?)?,
-            model: None,
-            used_percent: row.get(1)?,
-            resets_at_ms: row.get(2)?,
-            heard_at_ms: Some(row.get(3)?),
+            // Empty for a window of no model's, as the table says.
+            model: (!model.is_empty()).then(|| ModelLabel::new(model)),
+            used_percent: row.get(2)?,
+            resets_at_ms: row.get(3)?,
+            heard_at_ms: Some(row.get(4)?),
         })
     })?;
     let mut limits = rows.collect::<rusqlite::Result<Vec<_>>>()?;
-    limits.sort_by_key(|limit| limit.window);
+    limits.sort_by(|a, b| (a.window, &a.model).cmp(&(b.window, &b.model)));
     Ok(limits)
+}
+
+/// What `limit` is kept by besides its window: its model, without spaces around it, for a model's own week, and an
+/// empty one for any other window, whatever it says. `None` for a limit that isn't kept, since it couldn't be told from another: one over a
+/// window this build has no name for, or a model's week that doesn't say whose.
+fn kept_by(limit: &UsageLimit) -> Option<&str> {
+    match limit.window {
+        LimitWindow::ModelSevenDays => {
+            limit.model.as_ref().map(|model| model.as_str().trim()).filter(|model| !model.is_empty())
+        }
+        LimitWindow::FiveHours | LimitWindow::SevenDays => Some(""),
+        LimitWindow::Unknown => None,
+    }
 }
 
 impl Store {
     /// Keeps what an agent under `account` heard at `heard_at_ms`, and returns the account's record when that changed
-    /// it, with a newer revision, in the same transaction. Each window is kept by itself, so hearing of one leaves
-    /// what's known of another, and something heard earlier never replaces something heard later. Hearing the same
-    /// again changes only when it was heard, which isn't on the record. A window this build has no name for isn't
-    /// kept, since there'd be nothing to tell it from another by. An account nobody has launched an agent under since
-    /// this build gets a record of its limits alone.
+    /// it, with a newer revision, in the same transaction. Each window is kept by itself, and each model's week by its
+    /// model, so hearing of one leaves what's known of another, and something heard earlier never replaces something
+    /// heard later. When the limits are `every_models_week` the account has, as an answer that lists them all is, a
+    /// model's week heard earlier that isn't among them has gone, such as one whose label changed, and is forgotten. Hearing the same again changes only when it was heard, which isn't on the record. A window this
+    /// build has no name for isn't kept, nor a model's week that doesn't say whose, since there'd be nothing to tell
+    /// either from another by. An account nobody has launched an agent under since this build gets a record of its
+    /// limits alone.
     pub fn hear_limits(
         &self,
         account: &AccountId,
         limits: &[UsageLimit],
+        every_models_week: bool,
         heard_at_ms: i64,
     ) -> Result<Option<Account>, StoreError> {
         let mut conn = lock(&self.writer);
@@ -103,17 +122,29 @@ impl Store {
             .query_row("SELECT rev FROM accounts WHERE id = ?", [account.as_str()], |row| rev_of(row, 0))
             .optional()?;
         tx.execute("INSERT INTO accounts (id) VALUES (?) ON CONFLICT DO NOTHING", [account.as_str()])?;
-        // A model's week is kept by its window alone here, so it couldn't be told from another model's.
-        let named = |limit: &&UsageLimit| !matches!(limit.window, LimitWindow::Unknown | LimitWindow::ModelSevenDays);
-        for limit in limits.iter().filter(named) {
+        for (limit, model) in limits.iter().filter_map(|limit| Some((limit, kept_by(limit)?))) {
             tx.execute(
-                "INSERT INTO account_limits (account_id, window, used_percent, resets_at_ms, heard_at_ms)
-                     VALUES (?, ?, ?, ?, ?)
-                     ON CONFLICT (account_id, window) DO UPDATE
+                "INSERT INTO account_limits (account_id, window, model, used_percent, resets_at_ms, heard_at_ms)
+                     VALUES (?, ?, ?, ?, ?, ?)
+                     ON CONFLICT (account_id, window, model) DO UPDATE
                      SET used_percent = excluded.used_percent, resets_at_ms = excluded.resets_at_ms,
                          heard_at_ms = excluded.heard_at_ms
                      WHERE excluded.heard_at_ms >= heard_at_ms",
-                params![account.as_str(), text_of(&limit.window), limit.used_percent, limit.resets_at_ms, heard_at_ms],
+                params![
+                    account.as_str(),
+                    text_of(&limit.window),
+                    model,
+                    limit.used_percent,
+                    limit.resets_at_ms,
+                    heard_at_ms
+                ],
+            )?;
+        }
+        // Those it names were kept as heard just now, and one another agent heard later stays.
+        if every_models_week {
+            tx.execute(
+                "DELETE FROM account_limits WHERE account_id = ? AND window = ? AND heard_at_ms < ?",
+                params![account.as_str(), text_of(&LimitWindow::ModelSevenDays), heard_at_ms],
             )?;
         }
         let record = account_or_missing(&tx, account)?;

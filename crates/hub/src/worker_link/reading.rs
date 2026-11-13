@@ -125,9 +125,8 @@ pub(super) async fn route(hub: &Arc<Hub>, link: &WorkerLink, frame: WorkerFrame)
         WorkerFrame::AgentCache { session_id, run, request, seq } => {
             (session_id, Item::Cache { run, request, seq }, seq)
         }
-        // Whether it holds every model's week says nothing until the hub keeps models' weeks.
-        WorkerFrame::AgentLimits { session_id, run, limits, seq, .. } => {
-            (session_id, Item::Limits { run, limits, seq }, seq)
+        WorkerFrame::AgentLimits { session_id, run, limits, every_models_week, seq } => {
+            (session_id, Item::Limits { run, limits, every_models_week, seq }, seq)
         }
         WorkerFrame::AgentTail { session_id, run, tail } => (session_id, Item::Tail { run, tail }, None),
     };
