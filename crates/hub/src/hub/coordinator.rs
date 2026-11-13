@@ -1,3 +1,4 @@
+use super::terminals::Terminals;
 use super::{awake, feed, found_github_logins, pull_requests, sessions, setup};
 use crate::attachment_files::AttachmentFiles;
 use crate::error::internal;
@@ -84,6 +85,7 @@ pub(crate) struct Hub {
     pub(super) sessions: Mutex<Sessions>,
     /// Workspaces whose setup is running. Removed as it finishes, which also wakes anyone waiting.
     pub(super) setup_gates: Mutex<HashMap<WorkspaceId, SetupGate>>,
+    pub(super) terminals: Terminals,
     pub(super) pull_requests: pull_requests::Reading,
     /// The work the hub does on its own that's running now, by the workspace each job is about.
     pub(super) jobs: Jobs<WorkspaceId>,
@@ -185,6 +187,7 @@ impl Hub {
             ensuring_session: AsyncMutex::new(()),
             sessions: Mutex::new(Sessions::default()),
             setup_gates: Mutex::new(HashMap::new()),
+            terminals: Terminals::default(),
             pull_requests: pull_requests::Reading::new(),
             jobs: Jobs::new(),
             sign_ins: Jobs::new(),
@@ -255,7 +258,8 @@ impl Hub {
 
     /// Every record, as of one revision, for a client starting to follow the feed.
     pub(crate) async fn records_list(&self) -> Result<Records, ApiError> {
-        self.blocking(Store::list_records).await
+        let (listed, terminals) = self.terminals.listed_with(self.blocking(Store::list_records)).await;
+        Ok(Records { terminals, ..listed? })
     }
 
     pub(crate) async fn workspace(&self, id: &WorkspaceId) -> Result<Workspace, ApiError> {
@@ -310,8 +314,7 @@ impl Hub {
             keeps_workers: KEEPS_WORKERS,
             oldest_protocol_version: Some(versions::CLIENTS.oldest),
             oldest_running_worker_protocol: Some(oldest_running_worker_protocol),
-            // It refuses to open one.
-            open_terminals: 0,
+            open_terminals: u32::try_from(self.terminals.count()).unwrap_or(u32::MAX),
         }
     }
 

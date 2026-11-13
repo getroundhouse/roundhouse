@@ -1,6 +1,7 @@
 use super::Connection;
 use super::pump::Following;
 use super::subscribing::{follow_feed, follow_log, unsubscribe};
+use super::terminals;
 use crate::attachment_files::FileFor;
 use crate::hub::Hub;
 use crate::store::AddedBy;
@@ -20,13 +21,11 @@ pub(super) async fn handle(
     use ClientResponse as C;
     Ok(match request {
         R::Hello(_) => return Err(ApiError::new(ErrorCode::InvalidRequest, "already said hello")),
-        // And those about terminals, which it refuses as a hub from before them does, until it runs them.
-        R::Unknown
-        | R::TerminalOpen(_)
-        | R::TerminalAttach(_)
-        | R::TerminalInput(_)
-        | R::TerminalResize(_)
-        | R::TerminalClose(_) => return Err(hub.unsupported(None)),
+        R::Unknown => return Err(hub.unsupported(None)),
+        R::TerminalOpen(open) => C::Terminal(hub.terminal_open(open).await?),
+        R::TerminalAttach(attach) => terminals::attach(hub, connection, attach)?,
+        R::TerminalInput(_) | R::TerminalResize(_) => unreachable!("sent on as they're read, by terminals::in_order"),
+        R::TerminalClose(close) => C::Terminal(hub.terminal_close(close).await?),
 
         R::PairingStart => C::Pairing(hub.pairing_start().await?),
         R::PairingWait(protocol::client::devices::PairingWait { code }) => {

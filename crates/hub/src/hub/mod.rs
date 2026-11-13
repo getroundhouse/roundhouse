@@ -1,6 +1,9 @@
 //! The hub's state, and what the rest of it shares: its workers, live sessions and feed.
 
 pub(crate) use carrying_on::LeftAtWork;
+#[cfg(test)]
+pub(crate) use terminals::QUEUED_UPDATES;
+pub(crate) use terminals::{Numbered, Queued};
 pub(crate) use workspaces::workspace_env;
 
 mod accounts;
@@ -34,6 +37,7 @@ mod setup;
 #[cfg(test)]
 mod stand_in_workers;
 mod stopping;
+mod terminals;
 #[cfg(test)]
 pub(crate) mod tests;
 mod titles;

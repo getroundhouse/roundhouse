@@ -43,7 +43,7 @@ pub(super) fn unsubscribe(connection: &Connection, subscription_id: u64) {
 }
 
 /// Holds the lock while `start` runs, so two requests can't both take one subscription ID.
-fn add_subscription(
+pub(super) fn add_subscription(
     connection: &Connection,
     subscription_id: u64,
     start: impl FnOnce() -> AbortHandle,
