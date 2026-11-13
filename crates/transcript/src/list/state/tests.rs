@@ -28,7 +28,7 @@ pub(super) fn session(rows: usize, height: f32) -> State {
 pub(super) fn scrolled_to(rows: usize, height: f32, row: usize, offset: f32) -> State {
     let mut state = session(rows, height);
     state.go_to_row(row);
-    state.laid_out(at(row, offset), None, End::OutOfSight);
+    state.laid_out(at(row, offset), None, false);
     state
 }
 
@@ -63,7 +63,7 @@ fn the_wheel_moves_the_top_without_knowing_how_tall_the_rows_it_passes_are() {
     assert_eq!(lay_from(&state), Start::Top { at: at(10, 5.), moved: px(-20.) });
     assert_eq!(state.scrolled(), px(485.));
 
-    state.laid_out(at(9, 35.), None, End::OutOfSight);
+    state.laid_out(at(9, 35.), None, false);
 
     assert_eq!(lay_from(&state), Start::Top { at: at(9, 35.), moved: px(0.) });
     assert_eq!(state.scrolled(), px(485.));
@@ -73,7 +73,7 @@ fn the_wheel_moves_the_top_without_knowing_how_tall_the_rows_it_passes_are() {
 fn a_frame_lays_the_rows_out_from_the_one_the_last_left_to_keep_still() {
     let mut state = scrolled_to(100, 50., 10, 20.);
     let anchor = Anchor { row: 11, top: px(30.) };
-    state.laid_out(at(10, 20.), Some(anchor), End::OutOfSight);
+    state.laid_out(at(10, 20.), Some(anchor), false);
     assert_eq!(lay_from(&state), Start::Anchored { at: anchor, moved: px(0.) });
 
     state.scroll_by(px(20.));
@@ -87,7 +87,7 @@ fn a_frame_lays_the_rows_out_from_the_one_the_last_left_to_keep_still() {
 pub(super) fn kept_at_the_bottom() -> State {
     let mut state = scrolled_to(100, 50., 10, 0.);
     state.go_to_row_at_bottom(40);
-    state.laid_out(at(35, 0.), Some(Anchor { row: 35, top: px(0.) }), End::OutOfSight);
+    state.laid_out(at(35, 0.), Some(Anchor { row: 35, top: px(0.) }), false);
     state
 }
 
@@ -111,7 +111,7 @@ type Move = (&'static str, fn(&mut State));
 fn anything_else_that_moves_the_list_lets_the_row_at_the_bottom_go() {
     let moves: [Move; 6] = [
         ("the wheel", |state| state.scroll_by(px(20.))),
-        ("opening something in sight", |state| state.keep_still(38)),
+        ("opening something in sight", |state| state.keep_still(38, true)),
         ("a drag of the scrollbar's thumb", State::start_drag),
         ("a click on the scrollbar's track", |state| state.bar_scroll_to(px(100.))),
         ("the button back down", |state| state.head_to_latest(Scrolling::since(Instant::now()))),
@@ -145,7 +145,7 @@ fn a_row_at_the_bottom_stays_as_rows_arrive_and_goes_once_the_end_is_in_sight() 
     let mut at_the_end = kept_at_the_bottom();
 
     arriving.set_rows(120, std::iter::once(0..120).collect());
-    at_the_end.laid_out(at(94, 0.), None, End::InSight);
+    at_the_end.laid_out(at(94, 0.), None, true);
 
     assert_eq!(lay_from(&arriving), Start::AtBottom { row: 40 });
     assert_eq!(lay_from(&at_the_end), Start::Latest);
@@ -189,13 +189,13 @@ fn laying_the_rows_out_with_the_end_in_sight_keeps_to_the_latest_row_again() {
     let mut state = scrolled_to(100, 50., 90, 0.);
     assert!(state.is_scrolled_up());
 
-    state.laid_out(at(94, 0.), None, End::InSight);
+    state.laid_out(at(94, 0.), None, true);
 
     assert!(!state.is_scrolled_up());
     assert_eq!(lay_from(&state), Start::Latest);
 
     // And goes on doing so however the next frame comes out, until someone scrolls away.
-    state.laid_out(at(94, 0.), None, End::OutOfSight);
+    state.laid_out(at(94, 0.), None, false);
     assert_eq!(lay_from(&state), Start::Latest);
 }
 

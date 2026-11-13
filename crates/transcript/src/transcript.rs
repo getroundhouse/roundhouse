@@ -256,20 +256,20 @@ impl Transcript {
     }
 
     /// Opens or closes a fold drawn in the row of the event at `seq`, which changes that row's height. The row stays
-    /// where it is in the window, with the fold where it was clicked.
+    /// where it is in the window, with the fold where it was clicked, as far as the chat's end lets it.
     pub(crate) fn set_open(&mut self, seq: Seq, key: ItemKey, fold: Fold, open: bool, cx: &mut Context<Self>) {
         self.model.borrow_mut().folds.choose(key, fold, open);
         if let Some(row) = self.session.read(|log| log.row_of(seq)) {
-            self.list.keep_still(row);
+            self.list.keep_still(row, open);
         }
         self.remeasure(seq, cx);
     }
 
     /// Opens or closes a fold drawn at the chat's end, such as the line for several background tasks, which changes
-    /// the last row's height. The row stays where it is in the window, unless the chat is keeping to its latest row.
+    /// the last row's height. The row stays where it is in the window, as far as the chat's end lets it.
     pub(crate) fn set_open_at_end(&mut self, key: ItemKey, fold: Fold, open: bool, cx: &mut Context<Self>) {
         self.model.borrow_mut().folds.choose(key, fold, open);
-        self.list.keep_still(self.list.row_count().saturating_sub(1));
+        self.list.keep_still(self.list.row_count().saturating_sub(1), open);
         self.redraw_end();
         cx.notify();
     }

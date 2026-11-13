@@ -10,14 +10,12 @@ const NO_MOVE: Pixels = px(0.01);
 
 impl State {
     /// A drag of the scrollbar's thumb begins, which stops the list on its way down to the latest row, or keeping a
-    /// row at the bottom or still.
+    /// row at the bottom.
     pub(in crate::list) fn start_drag(&mut self) {
         self.dragging = Some(self.heights.clone());
         match self.keeping {
-            Keeping::ToLatest(_) | Keeping::AtBottom(_) | Keeping::Still { follows: false } => {
-                self.keeping = Keeping::Place;
-            }
-            Keeping::Latest | Keeping::Place | Keeping::Still { follows: true } => {}
+            Keeping::ToLatest(_) | Keeping::AtBottom(_) => self.keeping = Keeping::Place,
+            Keeping::Latest | Keeping::Place => {}
         }
     }
 

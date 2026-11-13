@@ -1,7 +1,5 @@
 use super::*;
 
-mod still;
-
 /// A window 300 tall.
 const TALL: Pixels = px(300.);
 
@@ -94,7 +92,7 @@ fn keeping_to_the_latest_row_puts_its_end_at_the_windows_bottom() {
 
 #[test]
 fn a_session_shorter_than_the_window_sits_at_its_top() {
-    for start in [Start::Latest, top(2, 30.), moved(0, -80.)] {
+    for start in [Start::Latest, top(2, 30.), moved(0, -80.), anchored(1, 200., 0.)] {
         let (layout, _) = Session::of(&[50., 60., 70.]).from(start);
 
         assert_eq!(tops(&layout), [(0, px(0.)), (1, px(50.)), (2, px(110.))], "{start:?}");
@@ -165,6 +163,32 @@ fn a_row_kept_still_too_short_to_reach_the_window_from_where_it_was_ends_at_the_
 
     assert_eq!(layout.top, at(11, 0.));
     assert_eq!(layout.anchor, Some(Anchor { row: 11, top: px(0.) }), "the row it ends at is kept still next");
+}
+
+/// Ten rows of 100 keep to the latest with row 9 at 200, and something opened in it leaves it 400 tall.
+#[test]
+fn a_row_kept_still_that_grows_stays_where_it_was_though_it_then_ends_below_the_bottom() {
+    let mut heights = [100.; 10];
+    heights[9] = 400.;
+
+    let (layout, _) = Session::of(&heights).from(anchored(9, 200., 0.));
+
+    assert_eq!(tops(&layout).last(), Some(&(9, px(200.))), "rather than going up 300 to end at the bottom");
+    assert!(!layout.end_in_sight);
+    assert_eq!(layout.anchor, Some(Anchor { row: 9, top: px(200.) }), "and it's the row to keep still next");
+}
+
+/// The same row, with something closed in it that leaves it 40 tall.
+#[test]
+fn a_row_kept_still_that_shrinks_comes_down_with_the_rows_above_it_to_end_at_the_bottom() {
+    let mut heights = [100.; 10];
+    heights[9] = 40.;
+
+    let (layout, _) = Session::of(&heights).from(anchored(9, 200., 0.));
+
+    assert_eq!(tops(&layout).last(), Some(&(9, px(260.))), "rather than leaving 60 under the end");
+    assert_eq!(layout.top, at(6, 40.), "with what's above it brought down into the window");
+    assert!(layout.end_in_sight);
 }
 
 #[test]
