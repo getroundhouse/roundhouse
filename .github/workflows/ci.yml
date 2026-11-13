@@ -89,7 +89,7 @@ jobs:
           fi
           { echo "run=$run"; echo "guide=$guide"; echo "tree=$tree"; } >> "$GITHUB_OUTPUT"
 
-  # The free arm64 runner, with the tests' image so the cache fits. It still finishes before them.
+  # The free arm64 runner, on Ubuntu 26.04 as the tests are. It still finishes before them.
   lint:
     needs: changes
     if: needs.changes.outputs.run == 'true'
@@ -137,14 +137,17 @@ jobs:
             target/
           key: ${{ steps.cache.outputs.cache-primary-key }}
 
-  # The billed 16-core runner, since PRs and the queue wait for the tests, and nextest runs one per core. A cold run took
-  # over 20 minutes on 2 cores.
+  # 16 cores, since PRs and the queue wait for the tests, and nextest runs one per core. A cold run took over 20 minutes
+  # on 2. On RunsOn in our AWS account, since GitHub bills its 16-core runners even on a public repository. A Spot
+  # instance AWS reclaims during a queue run drops the PR from the queue, before RunsOn reruns the job.
   test:
     needs: changes
     if: needs.changes.outputs.run == 'true'
-    runs-on: ubuntu-latest-arm64-16cores
+    runs-on: runs-on=${{ github.run_id }}/runner=arm64-16
     timeout-minutes: 60
     steps:
+      # Sends the cache steps below to the stack's S3 bucket, beside the runner, rather than to GitHub's.
+      - uses: runs-on/action@4a3bfc79f21a9b97e972e2ba75a2b0b1e9688670 # v2.7.1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: .github/install-linux-packages.sh
       # The Zig that builds Ghostty's terminal core, which its build script runs. Its own cache is off, since it would
@@ -167,9 +170,10 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          # As in lint. Our test binaries each link GPUI, so they're over half the build.
-          key: linux-test-deps-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', '**/Cargo.toml') }}
-          restore-keys: ${{ github.ref != 'refs/heads/main' && 'linux-test-deps-' || '' }}
+          # As in lint. Our test binaries each link GPUI, so they're over half the build. Named for the runner, since a
+          # target/ fits only the image and path it was built on.
+          key: runs-on-arm64-16-test-deps-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', '**/Cargo.toml') }}
+          restore-keys: ${{ github.ref != 'refs/heads/main' && 'runs-on-arm64-16-test-deps-' || '' }}
       # One pool for every binary's tests. It skips doc tests, so they run after.
       - run: cargo nextest run --profile ci --workspace --locked
       - run: cargo test --workspace --doc --locked
