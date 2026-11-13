@@ -4,6 +4,7 @@
 use std::time::Duration;
 
 use super::*;
+use crate::stand_in_hub::{self, Does};
 
 /// Answers a hello, then answers the next request with a reply no build of this client can read.
 fn start_hub_with_an_unreadable_reply(socket: &Path) {
@@ -12,9 +13,7 @@ fn start_hub_with_an_unreadable_reply(socket: &Path) {
         let (mut stream, _) = listener.accept().unwrap();
         let mut requests = BufReader::new(stream.try_clone().unwrap()).lines();
         requests.next();
-        let hello =
-            ClientResponse::Hello { protocol_version: CLIENT_PROTOCOL_VERSION, hub_version: "older".to_string() };
-        let outcome = ReplyOutcome::Response(hello);
+        let outcome = ReplyOutcome::Response(stand_in_hub::hello_reply("older"));
         stream.write_all(&frame::encode(&HubFrame::Reply { id: 1, outcome }).unwrap()).unwrap();
         requests.next();
         stream.write_all(b"{\"frame\":\"reply\",\"id\":2,\"response\":{\"result\":\"from_a_newer_hub\"}}\n").unwrap();
@@ -37,6 +36,20 @@ fn a_reply_this_client_cannot_read_fails_the_call_rather_than_hanging() {
     assert!(matches!(outcome, Err(ClientError::Unexpected(_))), "{outcome:?}");
 }
 
+/// As only a hub with a bug would answer. The connection goes on, and so does a call whose reply is that kind.
+#[test]
+fn a_reply_of_another_kind_than_its_request_names_fails_the_call() {
+    let dir = tempfile::tempdir().unwrap();
+    let client = stand_in_hub::connect(&dir.path().join("hub.sock"), |_| {
+        Does::Answers(Box::new(ReplyOutcome::Response(ClientResponse::Ok)))
+    });
+
+    let got = client.session_get(&"s".into());
+
+    assert!(matches!(got, Err(ClientError::Unexpected(_))), "{got:?}");
+    client.session_cancel(&"s".into()).unwrap();
+}
+
 /// Answers a hello and a feed subscription, then sends more notices than a subscription holds before
 /// anyone reads them, and reports what the client asks next.
 fn start_hub_that_floods_a_subscription(socket: &Path) -> flume::Receiver<ClientRequest> {
@@ -51,9 +64,11 @@ fn start_hub_that_floods_a_subscription(socket: &Path) -> flume::Receiver<Client
         };
         let mut read = || frame::decode::<ClientFrame>(requests.next().unwrap().unwrap().as_bytes()).unwrap();
         let hello = read();
-        reply(hello.id, ClientResponse::Hello { protocol_version: CLIENT_PROTOCOL_VERSION, hub_version: "a".into() });
+        reply(hello.id, stand_in_hub::hello_reply("a"));
         let subscribe = read();
-        let ClientRequest::FeedSubscribe { subscription_id } = subscribe.request else { panic!() };
+        let ClientRequest::FeedSubscribe(subscriptions::FeedSubscribe { subscription_id }) = subscribe.request else {
+            panic!()
+        };
         reply(subscribe.id, ClientResponse::Ok);
         for _ in 0..SUBSCRIPTION_CAPACITY + 10 {
             let notice = HubFrame::Notice { subscription_id, notice: HubNotice::Resync };
@@ -74,7 +89,10 @@ fn a_subscription_whose_reader_falls_behind_ends_rather_than_queueing_without_li
 
     let next = asked.recv_timeout(Duration::from_secs(10)).unwrap();
 
-    assert_eq!(next, ClientRequest::SessionUnsubscribe { subscription_id: subscription.id });
+    assert_eq!(
+        next,
+        ClientRequest::SessionUnsubscribe(subscriptions::SessionUnsubscribe { subscription_id: subscription.id })
+    );
     assert_eq!(subscription.items.drain().count(), SUBSCRIPTION_CAPACITY);
     assert!(subscription.items.recv().is_err(), "it ended");
     assert_eq!(subscription.ended(), Some(Ended::FellBehind));
@@ -90,8 +108,11 @@ fn a_hub_that_chose_another_version_is_refused() {
         let (mut stream, _) = listener.accept().unwrap();
         let mut requests = BufReader::new(stream.try_clone().unwrap()).lines();
         requests.next();
-        let hello = ClientResponse::Hello { protocol_version: CLIENT_PROTOCOL_VERSION + 1, hub_version: "a".into() };
-        let outcome = ReplyOutcome::Response(hello);
+        let newer = ClientResponse::Hello(HelloReply {
+            protocol_version: CLIENT_PROTOCOL_VERSION + 1,
+            hub_version: "a".into(),
+        });
+        let outcome = ReplyOutcome::Response(newer);
         stream.write_all(&frame::encode(&HubFrame::Reply { id: 1, outcome }).unwrap()).unwrap();
         requests.next();
     });

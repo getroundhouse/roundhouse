@@ -3,7 +3,7 @@
 //! a peer from before reads and writes it.
 
 use protocol::attachment::{Attachment, AttachmentFile, MediaType};
-use protocol::client::{ClientFrame, ClientRequest, queue::SessionQueue};
+use protocol::client::{ClientFrame, ClientRequest, agent, queue::SessionQueue};
 use protocol::event::EventBody;
 use protocol::frame;
 use protocol::model::{AttachmentId, QueuedPrompt};
@@ -14,7 +14,7 @@ use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 
 /// `form` reads as `value`, and `value` writes as `form`.
-fn keeps_its_form<T: Serialize + DeserializeOwned + PartialEq + std::fmt::Debug>(form: &Value, value: &T) {
+fn keeps_its_json_form<T: Serialize + DeserializeOwned + PartialEq + std::fmt::Debug>(form: &Value, value: &T) {
     assert_eq!(&serde_json::from_value::<T>(form.clone()).unwrap(), value, "{form} reads as it did");
     assert_eq!(&serde_json::to_value(value).unwrap(), form, "{value:?} writes as it did");
 }
@@ -33,12 +33,17 @@ fn a_prompt_sent_keeps_its_form() {
         "method": "session_prompt", "id": "s", "client_msg_id": "m", "text": "why?", "attachments": ["a1"],
     }});
     let prompt = Prompt::carrying("why?", vec![AttachmentId::from("a1")]);
-    let request = ClientRequest::SessionPrompt { id: "s".into(), client_msg_id: Some("m".into()), prompt };
-    keeps_its_form(&sent, &ClientFrame { id: 1, request });
+    let request =
+        ClientRequest::SessionPrompt(agent::SessionPrompt { id: "s".into(), client_msg_id: Some("m".into()), prompt });
+    keeps_its_json_form(&sent, &ClientFrame { id: 1, request });
 
     // As a client from before attachments, or one that sends no ID, writes it.
     let older = br#"{"id":2,"request":{"method":"session_prompt","id":"s","text":"hi","client_msg_id":null}}"#;
-    let request = ClientRequest::SessionPrompt { id: "s".into(), client_msg_id: None, prompt: Prompt::new("hi") };
+    let request = ClientRequest::SessionPrompt(agent::SessionPrompt {
+        id: "s".into(),
+        client_msg_id: None,
+        prompt: Prompt::new("hi"),
+    });
     assert_eq!(frame::decode::<ClientFrame>(older).unwrap(), ClientFrame { id: 2, request });
 }
 
@@ -49,25 +54,25 @@ fn a_prompt_queued_keeps_its_form() {
     }});
     let prompt = Prompt::carrying("", vec![AttachmentId::from("a1")]);
     let request = ClientRequest::SessionQueue(SessionQueue { id: "s".into(), client_msg_id: "m".into(), prompt });
-    keeps_its_form(&queued, &ClientFrame { id: 1, request });
+    keeps_its_json_form(&queued, &ClientFrame { id: 1, request });
 
     let bare = json!({"id": 1, "request": {"method": "session_queue", "id": "s", "client_msg_id": "m", "text": "go"}});
     let prompt = Prompt::new("go");
     let request = ClientRequest::SessionQueue(SessionQueue { id: "s".into(), client_msg_id: "m".into(), prompt });
-    keeps_its_form(&bare, &ClientFrame { id: 1, request });
+    keeps_its_json_form(&bare, &ClientFrame { id: 1, request });
 }
 
 /// Spelled out, since a session's stored row holds its queue in this form.
 #[test]
 fn a_queued_prompt_on_its_session_s_record_keeps_its_form() {
     let with_files = json!({"client_msg_id": "m", "text": "why?", "attachments": [log_form()]});
-    keeps_its_form(
+    keeps_its_json_form(
         &with_files,
         &QueuedPrompt { client_msg_id: "m".into(), prompt: Prompt::carrying("why?", vec![log()]) },
     );
 
     let bare = json!({"client_msg_id": "m", "text": "go"});
-    keeps_its_form(&bare, &QueuedPrompt { client_msg_id: "m".into(), prompt: Prompt::new("go") });
+    keeps_its_json_form(&bare, &QueuedPrompt { client_msg_id: "m".into(), prompt: Prompt::new("go") });
 }
 
 /// Spelled out, since the log holds this form for good.
@@ -75,10 +80,10 @@ fn a_queued_prompt_on_its_session_s_record_keeps_its_form() {
 fn a_recorded_prompt_keeps_its_form() {
     let recorded = json!({"type": "user_prompt", "client_msg_id": "m", "text": "", "attachments": [log_form()]});
     let body = EventBody::UserPrompt { client_msg_id: Some("m".into()), prompt: Prompt::carrying("", vec![log()]) };
-    keeps_its_form(&recorded, &body);
+    keeps_its_json_form(&recorded, &body);
 
     let bare = json!({"type": "user_prompt", "client_msg_id": null, "text": "hi"});
-    keeps_its_form(&bare, &EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("hi") });
+    keeps_its_json_form(&bare, &EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("hi") });
 
     // As a hub from before `client_msg_id` recorded it.
     let oldest: EventBody = frame::decode(br#"{"type":"user_prompt","text":"hi"}"#).unwrap();
@@ -97,9 +102,9 @@ fn a_prompt_for_the_agent_keeps_its_form() {
         seq: 3,
         prompt: Prompt::carrying("why?", vec![file]),
     });
-    keeps_its_form(&call, &WorkerCall { id: 4, request });
+    keeps_its_json_form(&call, &WorkerCall { id: 4, request });
 
     let bare = json!({"id": 5, "request": {"method": "agent_prompt", "session_id": "s", "prompt": 3, "text": "go"}});
     let request = WorkerRequest::AgentPrompt(AgentPrompt { session_id: "s".into(), seq: 3, prompt: Prompt::new("go") });
-    keeps_its_form(&bare, &WorkerCall { id: 5, request });
+    keeps_its_json_form(&bare, &WorkerCall { id: 5, request });
 }

@@ -5,7 +5,7 @@ use std::collections::VecDeque;
 use std::path::Path;
 
 use parking_lot::Mutex;
-use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, ReplyOutcome};
+use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, ReplyOutcome, log};
 use protocol::event::CompactedBy;
 use protocol::model::{CompactionLine, Place, Seq};
 
@@ -18,12 +18,12 @@ use crate::{Client, ClientError};
 fn start_hub(socket: &Path, lists: Vec<ReplyOutcome>) -> flume::Receiver<ClientRequest> {
     let lists = Mutex::new(VecDeque::from(lists));
     start_hub_answering(socket, move |request| {
-        if matches!(request, ClientRequest::SessionCompactionList { .. }) {
+        if matches!(request, ClientRequest::SessionCompactionList(_)) {
             Some(lists.lock().pop_front().unwrap_or_else(|| {
                 ReplyOutcome::Error(ApiError::new(ErrorCode::Internal, "asked for more lists than the test expects"))
             }))
-        } else if matches!(request, ClientRequest::SessionPromptList { .. }) {
-            Some(ReplyOutcome::Response(ClientResponse::Prompts { prompts: Vec::new() }))
+        } else if matches!(request, ClientRequest::SessionPromptList(_)) {
+            Some(ReplyOutcome::Response(ClientResponse::Prompts(log::Prompts { prompts: Vec::new() })))
         } else {
             answered_simply(request)
         }
@@ -31,7 +31,7 @@ fn start_hub(socket: &Path, lists: Vec<ReplyOutcome>) -> flume::Receiver<ClientR
 }
 
 fn listed(lines: Vec<CompactionLine>) -> ReplyOutcome {
-    ReplyOutcome::Response(ClientResponse::Compactions { compactions: lines })
+    ReplyOutcome::Response(ClientResponse::Compactions(log::Compactions { compactions: lines }))
 }
 
 fn far_back(seq: Seq) -> CompactionLine {
@@ -49,7 +49,7 @@ fn seqs(open: &OpenSession) -> Vec<Seq> {
 }
 
 fn lists_asked(requests: &[ClientRequest]) -> usize {
-    requests.iter().filter(|r| matches!(r, ClientRequest::SessionCompactionList { .. })).count()
+    requests.iter().filter(|r| matches!(r, ClientRequest::SessionCompactionList(_))).count()
 }
 
 #[test]
@@ -67,8 +67,8 @@ fn the_hubs_compactions_are_listed_once_its_subscription_has_started() {
     assert!(errors.is_empty(), "{errors:?}");
     let requests = requests_until_unsubscribed(&heard, 1);
     assert_eq!(lists_asked(&requests), 1, "{requests:?}");
-    let subscribed = requests.iter().position(|r| matches!(r, ClientRequest::SessionSubscribe { .. }));
-    let listed = requests.iter().position(|r| matches!(r, ClientRequest::SessionCompactionList { .. }));
+    let subscribed = requests.iter().position(|r| matches!(r, ClientRequest::SessionSubscribe(_)));
+    let listed = requests.iter().position(|r| matches!(r, ClientRequest::SessionCompactionList(_)));
     assert!(subscribed < listed, "it subscribes before it lists, so the list misses nothing: {requests:?}");
 }
 

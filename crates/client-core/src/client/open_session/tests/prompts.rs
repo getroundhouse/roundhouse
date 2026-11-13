@@ -6,7 +6,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use parking_lot::Mutex;
-use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, ReplyOutcome};
+use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, ReplyOutcome, log, subscriptions};
 use protocol::model::{PromptLine, Seq, Session};
 
 use super::super::{FollowError, OpenSession};
@@ -21,11 +21,12 @@ const GONE: &str = "gone";
 fn start_hub(socket: &Path, lists: Vec<ReplyOutcome>) -> flume::Receiver<ClientRequest> {
     let lists = Mutex::new(VecDeque::from(lists));
     start_hub_answering(socket, move |request| {
-        if matches!(request, ClientRequest::SessionPromptList { .. }) {
+        if matches!(request, ClientRequest::SessionPromptList(_)) {
             Some(lists.lock().pop_front().unwrap_or_else(|| {
                 ReplyOutcome::Error(ApiError::new(ErrorCode::Internal, "asked for more lists than the test expects"))
             }))
-        } else if matches!(request, ClientRequest::SessionSubscribe { id, .. } if id.as_str() == GONE) {
+        } else if matches!(request, ClientRequest::SessionSubscribe(subscriptions::SessionSubscribe { id, .. }) if id.as_str() == GONE)
+        {
             Some(refused(ErrorCode::NotFound, "no such session"))
         } else {
             answered_simply(request)
@@ -34,7 +35,7 @@ fn start_hub(socket: &Path, lists: Vec<ReplyOutcome>) -> flume::Receiver<ClientR
 }
 
 fn listed(lines: Vec<PromptLine>) -> ReplyOutcome {
-    ReplyOutcome::Response(ClientResponse::Prompts { prompts: lines })
+    ReplyOutcome::Response(ClientResponse::Prompts(log::Prompts { prompts: lines }))
 }
 
 fn seqs(open: &OpenSession) -> Vec<Seq> {
@@ -42,7 +43,7 @@ fn seqs(open: &OpenSession) -> Vec<Seq> {
 }
 
 fn lists_asked(requests: &[ClientRequest]) -> usize {
-    requests.iter().filter(|r| matches!(r, ClientRequest::SessionPromptList { .. })).count()
+    requests.iter().filter(|r| matches!(r, ClientRequest::SessionPromptList(_))).count()
 }
 
 #[test]
@@ -63,8 +64,8 @@ fn a_hub_too_old_to_list_prompts_is_followed_without_them_and_not_asked_again() 
     assert!(connected);
     let requests = requests_until_unsubscribed(&heard, 1);
     assert_eq!(lists_asked(&requests), 1, "{requests:?}");
-    let subscribed = requests.iter().position(|r| matches!(r, ClientRequest::SessionSubscribe { .. }));
-    let listed = requests.iter().position(|r| matches!(r, ClientRequest::SessionPromptList { .. }));
+    let subscribed = requests.iter().position(|r| matches!(r, ClientRequest::SessionSubscribe(_)));
+    let listed = requests.iter().position(|r| matches!(r, ClientRequest::SessionPromptList(_)));
     assert!(subscribed < listed, "it subscribes before it lists, so the list misses nothing: {requests:?}");
 }
 
@@ -113,7 +114,7 @@ fn a_session_thats_been_deleted_is_let_go_of_rather_than_reported() {
 
     open.follow.changed.recv_timeout(Duration::from_secs(10)).expect("never heard back");
     let mut requests = std::iter::from_fn(|| heard.recv_timeout(Duration::from_secs(10)).ok());
-    assert!(requests.any(|r| matches!(r, ClientRequest::SessionSubscribe { .. })), "it never asked");
+    assert!(requests.any(|r| matches!(r, ClientRequest::SessionSubscribe(_))), "it never asked");
     let errors = open.take_errors();
     assert!(errors.is_empty(), "{errors:?}");
     assert!(!open.follow.connected());

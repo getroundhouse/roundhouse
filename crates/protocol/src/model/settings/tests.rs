@@ -1,5 +1,5 @@
 use super::*;
-use crate::client::ClientRequest;
+use crate::client::{ClientRequest, sessions};
 use crate::model::Session;
 use crate::worker::{AgentConfigure, WorkerRequest};
 
@@ -25,7 +25,8 @@ fn from_a_client(line: &str) -> bool {
 
 fn change_of(line: &str) -> SessionSettingsChange {
     if from_a_client(line) {
-        let (ClientRequest::SessionCreate { options, .. } | ClientRequest::SessionConfigure { options, .. }) =
+        let (ClientRequest::SessionCreate(sessions::SessionCreate { options, .. })
+        | ClientRequest::SessionConfigure(sessions::SessionConfigure { options, .. })) =
             serde_json::from_str::<ClientRequest>(line).unwrap()
         else {
             panic!("not a request with options: {line}");

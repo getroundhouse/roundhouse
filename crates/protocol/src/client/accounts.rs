@@ -1,10 +1,10 @@
 //! The requests about the logins a hub holds for agents' accounts, which it hands to the workers it launches agents on.
-//! Each is the body of the `ClientRequest` of its name, which has the same form on the wire as if its fields were the
-//! request's own. A hub older than one refuses it, as `is_unsupported` says.
+//! A hub older than one refuses it, as `is_unsupported` says.
 
 use serde::{Deserialize, Serialize};
 
-use crate::model::{AccountId, AgentKind, LoginToken};
+use super::{ClientRequest, ClientResponse, Reply, Request};
+use crate::model::{Account, AccountId, AgentKind, LoginToken};
 
 /// Gives the hub a login for agents of `agent`'s kind to run under, which it keeps and hands to the workers it launches
 /// them on, and answers with the account's record, named `name`. The token is one the agent's own CLI made to last,
@@ -24,6 +24,22 @@ pub struct AccountConnect {
     pub account: Option<AccountId>,
 }
 
+impl Request for AccountConnect {
+    type Reply = Account;
+
+    fn into_request(self) -> ClientRequest {
+        ClientRequest::AccountConnect(self)
+    }
+}
+
+/// What a request about an account's login is answered with: the account's record, as it is then.
+impl Reply for Account {
+    fn read(response: ClientResponse) -> Result<Self, ClientResponse> {
+        let ClientResponse::Account(account) = response else { return Err(response) };
+        Ok(account)
+    }
+}
+
 /// Has the hub forget the login it holds for the account, so no agent launched after this runs under it, and answers
 /// with the account's record, which stays, as the sessions that ran under it name it. An agent already running under
 /// it keeps it until it exits. It doesn't revoke the token, which works wherever else it's kept until it ends.
@@ -33,12 +49,19 @@ pub struct AccountDisconnect {
     pub id: AccountId,
 }
 
+impl Request for AccountDisconnect {
+    type Reply = Account;
+
+    fn into_request(self) -> ClientRequest {
+        ClientRequest::AccountDisconnect(self)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use serde_json::json;
 
     use super::*;
-    use crate::client::ClientRequest;
 
     /// The same as if its fields were the request's own.
     #[test]
@@ -54,14 +77,5 @@ mod tests {
         assert_eq!(serde_json::to_value(&request).unwrap(), wire);
         assert_eq!(serde_json::from_value::<ClientRequest>(wire).unwrap(), request);
         assert!(!format!("{request:?}").contains("made-up"));
-    }
-
-    #[test]
-    fn disconnecting_names_the_account_beside_its_method() {
-        let request = ClientRequest::AccountDisconnect(AccountDisconnect { id: "claude-1".into() });
-        let wire = json!({"method": "account_disconnect", "id": "claude-1"});
-
-        assert_eq!(serde_json::to_value(&request).unwrap(), wire);
-        assert_eq!(serde_json::from_value::<ClientRequest>(wire).unwrap(), request);
     }
 }

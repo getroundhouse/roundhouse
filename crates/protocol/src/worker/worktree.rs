@@ -96,7 +96,7 @@ impl Reply for AttachmentWritten {
     }
 }
 
-/// The files in the worktree at `path`, as [`crate::client::ClientRequest::WorkspaceFiles`] says.
+/// The files in the worktree at `path`, as [`crate::client::files::WorkspaceFiles`] says.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct ListFiles {
     pub path: String,

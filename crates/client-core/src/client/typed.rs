@@ -3,43 +3,34 @@
 //! a thread of its own. And the one that makes a workspace from what's kept of the dialog.
 
 use protocol::attachment::{Attachment, AttachmentBytes, MediaType};
+use protocol::client::drafts;
 use protocol::client::new_workspace::{NewWorkspaceCreate, NewWorkspaceMade};
-use protocol::client::{ClientRequest, ClientResponse, drafts};
 use protocol::model::{
     AnswerDraft, AttachmentId, ClientRequestId, CommentDraft, DraftToKeep, NewWorkspaceDraft, NewWorkspaceDraftToKeep,
     Session, SessionId, Workspace, WorkspaceId,
 };
 
-use super::{Client, Result, unexpected};
+use super::{Client, Result};
 
 impl Client {
     /// See [`drafts::SessionDraft`]. A hub older than this refuses it, as `is_unsupported` says.
     pub fn session_draft(&self, id: &SessionId, draft: &DraftToKeep) -> Result<Session> {
-        self.expect_session(ClientRequest::SessionDraft(drafts::SessionDraft { id: id.clone(), draft: draft.clone() }))
+        self.call(drafts::SessionDraft { id: id.clone(), draft: draft.clone() })
     }
 
     /// See [`drafts::SessionAnswerDraft`]. A hub older than this refuses it, as `is_unsupported` says.
     pub fn session_answer_draft(&self, id: &SessionId, draft: Option<&AnswerDraft>) -> Result<Session> {
-        self.expect_session(ClientRequest::SessionAnswerDraft(drafts::SessionAnswerDraft {
-            id: id.clone(),
-            draft: draft.cloned(),
-        }))
+        self.call(drafts::SessionAnswerDraft { id: id.clone(), draft: draft.cloned() })
     }
 
     /// See [`drafts::WorkspaceCommentDraft`]. A hub older than this refuses it, as `is_unsupported` says.
     pub fn workspace_comment_draft(&self, id: &WorkspaceId, draft: Option<&CommentDraft>) -> Result<Workspace> {
-        self.expect_workspace(ClientRequest::WorkspaceCommentDraft(drafts::WorkspaceCommentDraft {
-            id: id.clone(),
-            draft: draft.cloned(),
-        }))
+        self.call(drafts::WorkspaceCommentDraft { id: id.clone(), draft: draft.cloned() })
     }
 
     /// See [`drafts::NewWorkspaceDraftKeep`]. A hub older than this refuses it, as `is_unsupported` says.
     pub fn new_workspace_draft_keep(&self, draft: &NewWorkspaceDraftToKeep) -> Result<NewWorkspaceDraft> {
-        let reply =
-            self.call(ClientRequest::NewWorkspaceDraftKeep(drafts::NewWorkspaceDraftKeep { draft: draft.clone() }))?;
-        let ClientResponse::NewWorkspaceDraft(kept) = reply else { return unexpected(&reply) };
-        Ok(kept)
+        self.call(drafts::NewWorkspaceDraftKeep { draft: draft.clone() })
     }
 
     /// See [`drafts::NewWorkspaceDraftFileAdd`]. A hub older than this refuses it, as `is_unsupported` says.
@@ -51,30 +42,17 @@ impl Client {
         data: Vec<u8>,
     ) -> Result<Attachment> {
         let data = AttachmentBytes::new(data);
-        let request = ClientRequest::NewWorkspaceDraftFileAdd(drafts::NewWorkspaceDraftFileAdd {
-            id: id.clone(),
-            name: name.to_string(),
-            media_type,
-            data,
-        });
-        let reply = self.call(request)?;
-        let ClientResponse::Attachment(file) = reply else { return unexpected(&reply) };
-        Ok(file)
+        self.call(drafts::NewWorkspaceDraftFileAdd { id: id.clone(), name: name.to_string(), media_type, data })
     }
 
     /// See [`drafts::NewWorkspaceDraftFileRead`]. A hub older than this refuses it, as `is_unsupported` says.
     pub fn new_workspace_draft_file_read(&self, id: &AttachmentId) -> Result<Vec<u8>> {
-        let reply =
-            self.call(ClientRequest::NewWorkspaceDraftFileRead(drafts::NewWorkspaceDraftFileRead { id: id.clone() }))?;
-        let ClientResponse::AttachmentData { data } = reply else { return unexpected(&reply) };
-        Ok(data.into_vec())
+        Ok(self.call(drafts::NewWorkspaceDraftFileRead { id: id.clone() })?.data.into_vec())
     }
 
     /// See [`drafts::NewWorkspaceDraftFileRemove`]. A hub older than this refuses it, as `is_unsupported` says.
     pub fn new_workspace_draft_file_remove(&self, id: &AttachmentId) -> Result<()> {
-        self.expect_ok(ClientRequest::NewWorkspaceDraftFileRemove(drafts::NewWorkspaceDraftFileRemove {
-            id: id.clone(),
-        }))
+        self.call(drafts::NewWorkspaceDraftFileRemove { id: id.clone() })
     }
 
     /// See [`NewWorkspaceCreate`]. A hub older than this refuses it, as `is_unsupported` says, and a client then makes
@@ -84,9 +62,6 @@ impl Client {
         made_of: &NewWorkspaceDraftToKeep,
         client_request_id: ClientRequestId,
     ) -> Result<NewWorkspaceMade> {
-        let request = NewWorkspaceCreate { made_of: made_of.clone(), client_request_id };
-        let reply = self.call(ClientRequest::NewWorkspaceCreate(request))?;
-        let ClientResponse::NewWorkspaceMade(made) = reply else { return unexpected(&reply) };
-        Ok(*made)
+        self.call(NewWorkspaceCreate { made_of: made_of.clone(), client_request_id })
     }
 }

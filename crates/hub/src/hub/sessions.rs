@@ -3,7 +3,7 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use protocol::client::{ApiError, ClientResponse, ErrorCode, HubNotice};
+use protocol::client::{ApiError, ErrorCode, HubNotice, log, records};
 use protocol::event::{ApprovalDecision, SessionEvent};
 use protocol::find::{Found, Needle};
 use protocol::model::{
@@ -142,13 +142,13 @@ impl Hub {
         limit: u32,
         max_bytes: Option<u64>,
         include_raw: bool,
-    ) -> Result<ClientResponse, ApiError> {
+    ) -> Result<log::Events, ApiError> {
         let max_bytes = max_bytes.unwrap_or(crate::server::DEFAULT_READ_BYTES);
         let limit = limit.clamp(1, crate::server::MAX_READ_EVENTS);
         self.blocking(move |store| {
             let last_seq = store.get_session(&id)?.session.last_seq;
             let events = store.read_events(&id, from_seq, limit, max_bytes, include_raw)?;
-            Ok(ClientResponse::Events { events, last_seq })
+            Ok(log::Events { events, last_seq })
         })
         .await
     }
@@ -211,14 +211,14 @@ impl Hub {
         limit: u32,
         max_bytes: Option<u64>,
         include_raw: bool,
-    ) -> Result<ClientResponse, ApiError> {
+    ) -> Result<log::PlacedEvents, ApiError> {
         let max_bytes = max_bytes.unwrap_or(crate::server::DEFAULT_READ_BYTES);
         let limit = limit.clamp(1, crate::server::MAX_READ_EVENTS);
         self.blocking(move |store| {
             store.get_session(&id)?;
             let places = Places { subagent: subagent.as_ref(), from: from_place, through: None };
             let (events, last_place) = store.read_places(&id, places, limit, max_bytes, include_raw)?;
-            Ok(ClientResponse::PlacedEvents { events, last_place })
+            Ok(log::PlacedEvents { events, last_place })
         })
         .await
     }
@@ -240,11 +240,11 @@ impl Hub {
     }
 
     /// The session's subagents, oldest first, with the revision they're as of.
-    pub(crate) async fn session_subagents(&self, id: SessionId) -> Result<ClientResponse, ApiError> {
+    pub(crate) async fn session_subagents(&self, id: SessionId) -> Result<records::Subagents, ApiError> {
         self.blocking(move |store| {
             store.get_session(&id)?;
             let (subagents, rev) = store.list_subagents(&id)?;
-            Ok(ClientResponse::Subagents { subagents, rev })
+            Ok(records::Subagents { subagents, rev })
         })
         .await
     }

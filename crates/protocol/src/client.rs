@@ -1,32 +1,73 @@
 //! The platform API: what a desktop app, CLI or phone says to a hub.
+//!
+//! Each request is a type of its own, which says what the hub answers it with, as [`Request`] does, so a client reads
+//! each reply as that, and one of any other kind fails in one place. They're grouped by what they're about, each group
+//! a module of its own. On the wire, a request's fields sit beside its `method`, and a reply's beside its `result`.
 
 use serde::{Deserialize, Serialize};
 
-use crate::attachment::{Attachment, AttachmentBytes};
+use crate::attachment::Attachment;
 use crate::event::SessionEvent;
 use crate::find::Found;
 use crate::model::{
-    Account, AgentDescription, CompactionLine, DiffComment, FileContents, FileOpened, FilePages, GitDiff, GitStatus,
-    HubSettings, NewWorkspaceDraft, Place, PromptLine, PullRequest, Records, Repo, Rev, Seq, Session, SessionAccount,
-    Subagent, TitleError, Workspace, WorktreeFiles,
+    Account, DiffComment, FileContents, FileOpened, FilePages, GitDiff, GitStatus, HubSettings, NewWorkspaceDraft,
+    Records, Repo, Session, SessionAccount, TitleError, Workspace, WorktreeFiles,
 };
 use crate::tail::{StreamDelta, Tail};
 
 pub mod accounts;
+pub mod admin;
+pub mod agent;
+pub mod attachments;
+pub mod comments;
 pub mod drafts;
 mod feed;
 pub mod files;
+mod hello;
+pub mod log;
 pub mod new_workspace;
 pub mod queue;
+pub mod records;
 mod request;
+pub mod sessions;
+pub mod subscriptions;
 pub mod waits;
+pub mod workspaces;
 
 /// The client protocol's version, apart from the worker protocol's, so a break in one doesn't break the other. It
 /// changes only for a real break, as "Changing the protocol" in `docs/architecture.md` says.
 pub const CLIENT_PROTOCOL_VERSION: u32 = 3;
 
 pub use feed::{HubNotice, RecordNotice};
+pub use hello::{Hello, HelloReply};
 pub use request::ClientRequest;
+
+/// A request to a hub, which names what the hub answers it with.
+pub trait Request {
+    type Reply: Reply;
+
+    /// It among every other request, as it goes on the wire.
+    fn into_request(self) -> ClientRequest;
+}
+
+/// What a hub answers a request with, read from the response it came as. One type can answer many requests.
+pub trait Reply: Sized {
+    /// Gives the response back when it's of another kind, for whoever asked to say so.
+    #[expect(
+        clippy::result_large_err,
+        reason = "a reply is moved once, as it's read, so boxing one of another kind would only add an allocation"
+    )]
+    fn read(response: ClientResponse) -> Result<Self, ClientResponse>;
+}
+
+/// What a request that only does something is answered with: `Ok`, once the hub has done it, or, for one whose work goes
+/// on, such as stopping the hub or following a log, once it has begun.
+impl Reply for () {
+    fn read(response: ClientResponse) -> Result<Self, ClientResponse> {
+        let ClientResponse::Ok = response else { return Err(response) };
+        Ok(())
+    }
+}
 
 /// Replies to a [`ClientFrame`] carry its `id`, and can arrive in any order.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -35,14 +76,11 @@ pub struct ClientFrame {
     pub request: ClientRequest,
 }
 
+/// Every reply, each read as the type of its own that a request names.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(tag = "result", rename_all = "snake_case")]
 pub enum ClientResponse {
-    Hello {
-        /// The one chosen: the newest both sides speak.
-        protocol_version: u32,
-        hub_version: String,
-    },
+    Hello(HelloReply),
     Ok,
     HubStatus(HubStatus),
     HubSettings(HubSettings),
@@ -50,66 +88,28 @@ pub enum ClientResponse {
     /// Boxed, since it holds a workspace and a session, so every other response isn't as large.
     NewWorkspaceMade(Box<new_workspace::NewWorkspaceMade>),
     Repo(Repo),
-    Repos {
-        repos: Vec<Repo>,
-    },
+    Repos(records::Repos),
     Records(Records),
-    /// Each kind of agent the hub runs, in the order a client offers them.
-    Agents {
-        agents: Vec<AgentDescription>,
-    },
+    Agents(admin::Agents),
     Workspace(Workspace),
-    Workspaces {
-        workspaces: Vec<Workspace>,
-    },
+    Workspaces(workspaces::Workspaces),
     GitStatus(GitStatus),
     GitDiff(GitDiff),
-    SetupLog {
-        text: String,
-    },
-    PullRequest {
-        pull_request: Option<PullRequest>,
-    },
+    SetupLog(workspaces::SetupLog),
+    PullRequest(workspaces::PullRequestReply),
     Comment(DiffComment),
-    Comments {
-        comments: Vec<DiffComment>,
-    },
+    Comments(comments::Comments),
     Session(Session),
-    Sessions {
-        sessions: Vec<Session>,
-    },
-    Events {
-        events: Vec<SessionEvent>,
-        /// The session's newest event, so a reader knows how far the log goes.
-        last_seq: Seq,
-    },
-    /// A session's subagents, oldest first.
-    Subagents {
-        subagents: Vec<Subagent>,
-        /// The hub's newest revision when they were read, as a list of every record carries.
-        rev: Rev,
-    },
-    /// The agent's own events, or one subagent's.
-    PlacedEvents {
-        events: Vec<SessionEvent>,
-        /// The place of the newest of them, so a reader knows how far they go. 0 when there are none.
-        last_place: Place,
-    },
-    Prompts {
-        prompts: Vec<PromptLine>,
-    },
-    Compactions {
-        compactions: Vec<CompactionLine>,
-    },
+    Sessions(sessions::Sessions),
+    Events(log::Events),
+    Subagents(records::Subagents),
+    PlacedEvents(log::PlacedEvents),
+    Prompts(log::Prompts),
+    Compactions(log::Compactions),
     Found(Found),
-    PromptRecorded {
-        seq: Seq,
-        duplicate: bool,
-    },
+    PromptRecorded(agent::PromptRecorded),
     Attachment(Attachment),
-    AttachmentData {
-        data: AttachmentBytes,
-    },
+    AttachmentData(attachments::AttachmentData),
     SessionAccount(SessionAccount),
     Account(Account),
     WorktreeFiles(WorktreeFiles),
@@ -323,5 +323,30 @@ mod tests {
         let error = Outer(std::io::Error::other("disk full"));
 
         assert_eq!(error_chain(&error), "opening the log: disk full");
+    }
+
+    /// The rest are each the variant that holds them, which the compiler checks.
+    #[test]
+    fn a_request_with_no_fields_is_sent_as_its_own_method() {
+        let sent = |request: ClientRequest| serde_json::to_string(&request).unwrap();
+
+        assert_eq!(sent(admin::HubStatus.into_request()), r#"{"method":"hub_status"}"#);
+        assert_eq!(sent(admin::HubShutdown.into_request()), r#"{"method":"hub_shutdown"}"#);
+        assert_eq!(sent(admin::HubShutdownIfIdle.into_request()), r#"{"method":"hub_shutdown_if_idle"}"#);
+        assert_eq!(sent(admin::HubRestart.into_request()), r#"{"method":"hub_restart"}"#);
+        assert_eq!(sent(admin::AgentList.into_request()), r#"{"method":"agent_list"}"#);
+        assert_eq!(sent(records::RepoList.into_request()), r#"{"method":"repo_list"}"#);
+        assert_eq!(sent(records::RecordsList.into_request()), r#"{"method":"records_list"}"#);
+    }
+
+    /// The rest each read the variant that holds them, which the compiler checks.
+    #[test]
+    fn a_reply_with_no_fields_reads_as_what_it_says_and_any_other_is_given_back() {
+        let log = ClientResponse::SetupLog(workspaces::SetupLog { text: "Running the setup script".into() });
+
+        assert_eq!(<()>::read(ClientResponse::Ok), Ok(()));
+        assert_eq!(<()>::read(log.clone()), Err(log.clone()));
+        assert_eq!(GitStatus::read(ClientResponse::Ok), Err(ClientResponse::Ok));
+        assert_eq!(Session::read(log.clone()), Err(log));
     }
 }

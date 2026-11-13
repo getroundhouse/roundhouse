@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use client_core::stand_in_hub::{self, Does};
 use protocol::attachment::{Attachment, AttachmentBytes, MediaType};
-use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, ReplyOutcome, drafts};
+use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, ReplyOutcome, agent, attachments, drafts};
 use protocol::fixtures;
 use protocol::model::{AgentKind, AttachmentId, Draft, Effort, ModelName, RepoId};
 
@@ -32,10 +32,10 @@ fn asked(request: &ClientRequest) -> String {
     match request {
         ClientRequest::NewWorkspaceCreate(_) => "create from the dialog".to_string(),
         ClientRequest::NewWorkspaceDraftFileRead(drafts::NewWorkspaceDraftFileRead { id }) => format!("read {id}"),
-        ClientRequest::WorkspaceCreate { .. } => "workspace".to_string(),
-        ClientRequest::SessionEnsure { .. } => "chat".to_string(),
-        ClientRequest::AttachmentAdd { id, .. } => format!("add {id}"),
-        ClientRequest::SessionPrompt { prompt, .. } => {
+        ClientRequest::WorkspaceCreate(_) => "workspace".to_string(),
+        ClientRequest::SessionEnsure(_) => "chat".to_string(),
+        ClientRequest::AttachmentAdd(attachments::AttachmentAdd { id, .. }) => format!("add {id}"),
+        ClientRequest::SessionPrompt(agent::SessionPrompt { prompt, .. }) => {
             let carrying: Vec<&str> = prompt.files.iter().map(AttachmentId::as_str).collect();
             format!("prompt carrying {}", carrying.join(", "))
         }
@@ -51,9 +51,9 @@ fn too_old(request: &ClientRequest, read: &impl Fn(&AttachmentId) -> ReplyOutcom
             return Some(ReplyOutcome::Error(ApiError::new(ErrorCode::Unsupported, "unknown request")));
         }
         ClientRequest::NewWorkspaceDraftFileRead(drafts::NewWorkspaceDraftFileRead { id }) => return Some(read(id)),
-        ClientRequest::WorkspaceCreate { .. } => ClientResponse::Workspace(fixtures::workspace("w")),
-        ClientRequest::SessionEnsure { .. } => ClientResponse::Session(fixtures::session("s")),
-        ClientRequest::AttachmentAdd { id, name, media_type, data, .. } => {
+        ClientRequest::WorkspaceCreate(_) => ClientResponse::Workspace(fixtures::workspace("w")),
+        ClientRequest::SessionEnsure(_) => ClientResponse::Session(fixtures::session("s")),
+        ClientRequest::AttachmentAdd(attachments::AttachmentAdd { id, name, media_type, data, .. }) => {
             let size_bytes = data.len() as u64;
             ClientResponse::Attachment(Attachment {
                 id: id.clone(),
@@ -62,7 +62,9 @@ fn too_old(request: &ClientRequest, read: &impl Fn(&AttachmentId) -> ReplyOutcom
                 size_bytes,
             })
         }
-        ClientRequest::SessionPrompt { .. } => ClientResponse::PromptRecorded { seq: 1, duplicate: false },
+        ClientRequest::SessionPrompt(_) => {
+            ClientResponse::PromptRecorded(agent::PromptRecorded { seq: 1, duplicate: false })
+        }
         _ => return None,
     };
     Some(ReplyOutcome::Response(answer))
@@ -94,7 +96,8 @@ fn request() -> Request {
 fn a_hub_too_old_to_make_it_is_sent_it_a_step_at_a_time_with_the_files_it_keeps_first() {
     let dir = tempfile::tempdir().unwrap();
     let read = |_: &AttachmentId| {
-        ReplyOutcome::Response(ClientResponse::AttachmentData { data: AttachmentBytes::new(b"kept".to_vec()) })
+        let data = AttachmentBytes::new(b"kept".to_vec());
+        ReplyOutcome::Response(ClientResponse::AttachmentData(attachments::AttachmentData { data }))
     };
     let (client, heard) = hub_that_says(&dir, move |request| too_old(request, &read));
     let request = request();
@@ -205,7 +208,8 @@ fn a_hub_that_goes_away_while_making_it_isnt_taken_for_one_that_refused() {
 fn the_hub_is_asked_to_make_it_only_once_it_keeps_what_was_asked_for() {
     let dir = tempfile::tempdir().unwrap();
     let read = |_: &AttachmentId| {
-        ReplyOutcome::Response(ClientResponse::AttachmentData { data: AttachmentBytes::new(b"kept".to_vec()) })
+        let data = AttachmentBytes::new(b"kept".to_vec());
+        ReplyOutcome::Response(ClientResponse::AttachmentData(attachments::AttachmentData { data }))
     };
     let (client, heard) = hub_that_says(&dir, move |request| too_old(request, &read));
     let (kept, keeping) = flume::bounded(1);

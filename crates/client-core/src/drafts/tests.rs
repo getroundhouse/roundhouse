@@ -2,7 +2,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use protocol::attachment::{Attachment, MediaType};
-use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, ReplyOutcome, drafts};
+use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, ReplyOutcome, attachments, drafts};
 use protocol::model::{AnswerDraft, CommentDraft, NewWorkspaceDraft, Workspace, WorkspaceId};
 
 use super::*;
@@ -45,9 +45,7 @@ fn hub(socket: &Path, answer: Answer) -> (Client, Heard) {
         let added = added(&request);
         let not_a_chats = !matches!(
             request,
-            ClientRequest::SessionDraft(_)
-                | ClientRequest::AttachmentAdd { .. }
-                | ClientRequest::AttachmentRemove { .. }
+            ClientRequest::SessionDraft(_) | ClientRequest::AttachmentAdd(_) | ClientRequest::AttachmentRemove(_)
         );
         let Some((id, what)) = heard_of(request) else { return Does::Nothing };
         let code = match answer {
@@ -72,7 +70,7 @@ fn hub(socket: &Path, answer: Answer) -> (Client, Heard) {
 
 /// The file a request adds, as a hub that takes it answers.
 fn added(request: &ClientRequest) -> Option<Attachment> {
-    let (ClientRequest::AttachmentAdd { id, name, media_type, data, .. }
+    let (ClientRequest::AttachmentAdd(attachments::AttachmentAdd { id, name, media_type, data, .. })
     | ClientRequest::NewWorkspaceDraftFileAdd(drafts::NewWorkspaceDraftFileAdd { id, name, media_type, data })) =
         request
     else {
@@ -88,10 +86,10 @@ fn heard_of(request: ClientRequest) -> Option<(String, String)> {
         let named = draft.files.iter().map(|file| format!(" {file}"));
         return Some((id.to_string(), named.fold(draft.text, |text, file| text + &file)));
     }
-    if let ClientRequest::AttachmentAdd { session_id, id, .. } = request {
+    if let ClientRequest::AttachmentAdd(attachments::AttachmentAdd { session_id, id, .. }) = request {
         return Some((session_id.to_string(), format!("+{id}")));
     }
-    if let ClientRequest::AttachmentRemove { session_id, id } = request {
+    if let ClientRequest::AttachmentRemove(attachments::AttachmentRemove { session_id, id }) = request {
         return Some((session_id.to_string(), format!("-{id}")));
     }
     if let ClientRequest::SessionAnswerDraft(drafts::SessionAnswerDraft { id, draft }) = request {

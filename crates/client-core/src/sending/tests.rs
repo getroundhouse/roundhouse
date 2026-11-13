@@ -5,8 +5,9 @@ use std::io::{BufRead as _, BufReader, Write as _};
 use std::path::Path;
 
 use protocol::attachment::{Attachment, MediaType};
-use protocol::client::CLIENT_PROTOCOL_VERSION;
-use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, HubFrame, ReplyOutcome, queue};
+use protocol::client::{
+    ApiError, ClientRequest, ClientResponse, ErrorCode, HubFrame, ReplyOutcome, agent, attachments, queue,
+};
 use protocol::frame;
 use protocol::model::QueuedPrompt;
 use protocol::prompt::Prompt;
@@ -20,8 +21,7 @@ fn connected_to_a_hub_that_goes_away(socket: &Path) -> Client {
     std::thread::spawn(move || {
         let (mut stream, _) = listener.accept().unwrap();
         BufReader::new(stream.try_clone().unwrap()).lines().next();
-        let hello = ClientResponse::Hello { protocol_version: CLIENT_PROTOCOL_VERSION, hub_version: "a".to_string() };
-        let outcome = ReplyOutcome::Response(hello);
+        let outcome = ReplyOutcome::Response(crate::stand_in_hub::hello_reply("a"));
         stream.write_all(&frame::encode(&HubFrame::Reply { id: 1, outcome }).unwrap()).unwrap();
     });
     Client::connect(socket, "test").unwrap()
@@ -85,11 +85,14 @@ fn a_prompt_being_sent_shows_in_its_chat_and_stays_once_the_hub_has_recorded_it(
     let dir = tempfile::tempdir().unwrap();
     let (answer, answered) = flume::bounded::<()>(0);
     let client = stand_in_hub::connect(&dir.path().join("hub.sock"), move |request| {
-        if !matches!(request, ClientRequest::SessionPrompt { .. }) {
+        if !matches!(request, ClientRequest::SessionPrompt(_)) {
             return Does::Nothing;
         }
         let _ = answered.recv();
-        Does::Answers(Box::new(ReplyOutcome::Response(ClientResponse::PromptRecorded { seq: 1, duplicate: false })))
+        Does::Answers(Box::new(ReplyOutcome::Response(ClientResponse::PromptRecorded(agent::PromptRecorded {
+            seq: 1,
+            duplicate: false,
+        }))))
     });
     let open = OpenSession::start(&client, &protocol::fixtures::session("s"));
     let written = Written::new(Prompt::new("next"));
@@ -110,7 +113,7 @@ fn a_prompt_the_hub_refuses_stops_showing_though_nothing_waits_to_hear() {
     let dir = tempfile::tempdir().unwrap();
     let (answer, answered) = flume::bounded::<()>(0);
     let client = stand_in_hub::connect(&dir.path().join("hub.sock"), move |request| {
-        if !matches!(request, ClientRequest::SessionPrompt { .. }) {
+        if !matches!(request, ClientRequest::SessionPrompt(_)) {
             return Does::Nothing;
         }
         let _ = answered.recv();
@@ -132,11 +135,13 @@ fn hub_that_says(socket: &Path, mut missing: usize) -> (Client, flume::Receiver<
     let (said, heard) = flume::unbounded();
     let client = stand_in_hub::connect(socket, move |request| {
         // Only what these tests send is answered.
-        let (prompt, taken) = if matches!(request, ClientRequest::SessionPrompt { .. }) {
-            ("prompt", ClientResponse::PromptRecorded { seq: 1, duplicate: false })
+        let (prompt, taken) = if matches!(request, ClientRequest::SessionPrompt(_)) {
+            ("prompt", ClientResponse::PromptRecorded(agent::PromptRecorded { seq: 1, duplicate: false }))
         } else if let ClientRequest::SessionQueue(queue::SessionQueue { id, .. }) = &request {
             ("queued", ClientResponse::Session(protocol::fixtures::session(id.as_str())))
-        } else if let ClientRequest::AttachmentAdd { id, name, media_type, data, .. } = request {
+        } else if let ClientRequest::AttachmentAdd(attachments::AttachmentAdd { id, name, media_type, data, .. }) =
+            request
+        {
             let _ = said.send(format!("add {id}"));
             let size_bytes = data.into_vec().len() as u64;
             let added = ClientResponse::Attachment(Attachment { id, name, media_type, size_bytes });
@@ -179,10 +184,12 @@ fn a_file_of_a_kind_the_hub_doesnt_know_goes_with_the_prompt_as_one_that_goes_as
     let dir = tempfile::tempdir().unwrap();
     let (said, heard) = flume::unbounded();
     let client = stand_in_hub::connect(&dir.path().join("hub.sock"), move |request| {
-        let outcome = if matches!(request, ClientRequest::SessionPrompt { .. }) {
+        let outcome = if matches!(request, ClientRequest::SessionPrompt(_)) {
             let _ = said.send("prompt".to_string());
-            ReplyOutcome::Response(ClientResponse::PromptRecorded { seq: 1, duplicate: false })
-        } else if let ClientRequest::AttachmentAdd { id, name, media_type, data, .. } = request {
+            ReplyOutcome::Response(ClientResponse::PromptRecorded(agent::PromptRecorded { seq: 1, duplicate: false }))
+        } else if let ClientRequest::AttachmentAdd(attachments::AttachmentAdd { id, name, media_type, data, .. }) =
+            request
+        {
             if media_type != MediaType::Other {
                 let _ = said.send(format!("refused {}", media_type.mime()));
                 return Does::Answers(Box::new(ReplyOutcome::Error(ApiError::new(ErrorCode::Unsupported, "no kind"))));

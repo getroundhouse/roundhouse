@@ -20,7 +20,8 @@ use std::time::Duration;
 use clap::Parser;
 use parking_lot::Mutex;
 use protocol::client::{
-    ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HubFrame, HubNotice, HubStatus, ReplyOutcome,
+    ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HelloReply, HubFrame, HubNotice, HubStatus,
+    ReplyOutcome, subscriptions,
 };
 use protocol::model::{Records, Repo, RepoId, Rev};
 use protocol::paths::Paths;
@@ -155,14 +156,16 @@ fn serve(stream: UnixStream, args: &Arc<Args>, paths: &Arc<Paths>) {
         let Ok(line) = line else { return };
         let request: ClientFrame = protocol::frame::decode(line.as_bytes()).unwrap();
         match request.request {
-            ClientRequest::Hello { .. } if args.speaks_this_protocol => {
-                let hello = ClientResponse::Hello {
+            ClientRequest::Hello(_) if args.speaks_this_protocol => {
+                let answer = ClientResponse::Hello(HelloReply {
                     protocol_version: protocol::client::CLIENT_PROTOCOL_VERSION,
                     hub_version: "stand-in".to_string(),
-                };
-                reply(&writer, request.id, ReplyOutcome::Response(hello));
+                });
+                reply(&writer, request.id, ReplyOutcome::Response(answer));
             }
-            ClientRequest::FeedSubscribe { subscription_id } if args.speaks_this_protocol => {
+            ClientRequest::FeedSubscribe(subscriptions::FeedSubscribe { subscription_id })
+                if args.speaks_this_protocol =>
+            {
                 reply(&writer, request.id, ReplyOutcome::Response(ClientResponse::Ok));
                 let (writer, args, paths) = (writer.clone(), args.clone(), paths.clone());
                 std::thread::spawn(move || notice_agents(&writer, subscription_id, &args, &paths));

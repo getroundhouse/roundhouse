@@ -2,7 +2,7 @@
 #![cfg(unix)]
 
 use protocol::attachment::{Attachment, AttachmentBytes, MediaType};
-use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, ReplyOutcome, drafts};
+use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, ReplyOutcome, attachments, drafts};
 
 use super::*;
 use crate::stand_in_hub::{self, Does};
@@ -15,7 +15,7 @@ fn kept(id: &str) -> Attachment {
 fn hub_that_keeps(dir: &tempfile::TempDir) -> Client {
     stand_in_hub::connect(&dir.path().join("hub.sock"), |request| {
         // What each file it keeps is, by the request that reads it.
-        let read = if let ClientRequest::AttachmentRead { id, .. } = &request {
+        let read = if let ClientRequest::AttachmentRead(attachments::AttachmentRead { id, .. }) = &request {
             (id.as_str() == "chat").then_some("the chat's")
         } else if let ClientRequest::NewWorkspaceDraftFileRead(drafts::NewWorkspaceDraftFileRead { id }) = &request {
             (id.as_str() == "dialog").then_some("the dialog's")
@@ -26,7 +26,8 @@ fn hub_that_keeps(dir: &tempfile::TempDir) -> Client {
             let missing = ApiError::new(ErrorCode::NotFound, "no such attachment");
             return Does::Answers(Box::new(ReplyOutcome::Error(missing)));
         };
-        let data = ClientResponse::AttachmentData { data: AttachmentBytes::new(bytes.as_bytes().to_vec()) };
+        let data = AttachmentBytes::new(bytes.as_bytes().to_vec());
+        let data = ClientResponse::AttachmentData(attachments::AttachmentData { data });
         Does::Answers(Box::new(ReplyOutcome::Response(data)))
     })
 }

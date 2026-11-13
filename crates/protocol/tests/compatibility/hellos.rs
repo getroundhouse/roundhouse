@@ -1,25 +1,29 @@
 //! The hellos, which are how two versions find one they both speak, so they keep their form even across a real
 //! break. A hello from before ranges names only its version, and still has to be answered.
 
-use protocol::client::{ClientRequest, ClientResponse};
+use protocol::client::{self, ClientRequest, ClientResponse};
 use protocol::frame;
 use protocol::worker::{Hello, HelloReply, WorkerRequest, WorkerResponse};
 
 #[test]
 fn a_clients_hello_keeps_its_form_with_its_range_and_without() {
-    let hello = ClientRequest::Hello { protocol_version: 4, client: "c".into(), oldest_protocol_version: Some(3) };
+    let ranges = ClientRequest::Hello(client::Hello {
+        protocol_version: 4,
+        client: "c".into(),
+        oldest_protocol_version: Some(3),
+    });
     let line = br#"{"method":"hello","protocol_version":4,"client":"c","oldest_protocol_version":3}"#;
-    assert_eq!(frame::encode(&hello).unwrap(), [&line[..], b"\n"].concat());
+    assert_eq!(frame::encode(&ranges).unwrap(), [&line[..], b"\n"].concat());
 
     let before_ranges: ClientRequest =
         frame::decode(br#"{"method":"hello","protocol_version":3,"client":"c"}"#).unwrap();
     assert_eq!(
         before_ranges,
-        ClientRequest::Hello { protocol_version: 3, client: "c".into(), oldest_protocol_version: None }
+        ClientRequest::Hello(client::Hello { protocol_version: 3, client: "c".into(), oldest_protocol_version: None })
     );
 
     let reply: ClientResponse = frame::decode(br#"{"result":"hello","protocol_version":3,"hub_version":"a"}"#).unwrap();
-    assert_eq!(reply, ClientResponse::Hello { protocol_version: 3, hub_version: "a".into() });
+    assert_eq!(reply, ClientResponse::Hello(client::HelloReply { protocol_version: 3, hub_version: "a".into() }));
 }
 
 #[test]

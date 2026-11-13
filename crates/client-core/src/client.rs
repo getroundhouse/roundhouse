@@ -30,7 +30,8 @@ use std::sync::{Arc, OnceLock};
 use parking_lot::Mutex;
 use protocol::client::CLIENT_PROTOCOL_VERSION;
 use protocol::client::{
-    ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HubFrame, HubNotice, ReplyOutcome,
+    ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, Hello, HelloReply, HubFrame, HubNotice,
+    Reply as _, ReplyOutcome, Request, subscriptions,
 };
 use protocol::event::SessionEvent;
 use protocol::frame;
@@ -133,7 +134,7 @@ impl Drop for Subscription {
         self.connection.subscriptions.lock().remove(&self.id);
         self.connection.lagged.lock().remove(&self.id);
         // Not waiting for the reply: this can run on any thread, and the reply doesn't matter.
-        let _ = self.connection.send_only(ClientRequest::SessionUnsubscribe { subscription_id: self.id });
+        let _ = self.connection.unsubscribe(self.id);
     }
 }
 
@@ -161,8 +162,10 @@ struct Inner {
 }
 
 impl Inner {
-    fn send_only(&self, request: ClientRequest) -> Result<()> {
+    /// Asks the hub to stop following `subscription_id`, without waiting for its reply, which is dropped when it comes.
+    fn unsubscribe(&self, subscription_id: u64) -> Result<()> {
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
+        let request = subscriptions::SessionUnsubscribe { subscription_id }.into_request();
         let line = frame::encode(&ClientFrame { id, request }).map_err(|e| ClientError::Unexpected(e.to_string()))?;
         self.writer.lock().write_all(&line)?;
         Ok(())
@@ -190,15 +193,12 @@ impl Client {
     /// Connects and checks the protocol version.
     pub fn connect(socket: &Path, client_name: &str) -> Result<Client> {
         let client = Client::open(socket)?;
-        let reply = client.call(ClientRequest::Hello {
+        let HelloReply { protocol_version, hub_version } = client.call(Hello {
             protocol_version: CLIENT_PROTOCOL_VERSION,
             client: client_name.to_string(),
             // A client speaks only its own version, and a hub the one before its own as well after a break.
             oldest_protocol_version: Some(CLIENT_PROTOCOL_VERSION),
         })?;
-        let ClientResponse::Hello { protocol_version, hub_version } = reply else {
-            return unexpected(&reply);
-        };
         // A client speaks only its own version, so it can't follow a hub that chose another.
         if protocol_version != CLIENT_PROTOCOL_VERSION {
             let message =
@@ -245,7 +245,16 @@ impl Client {
         *self.inner.disconnected.lock()
     }
 
-    pub fn call(&self, request: ClientRequest) -> Result<ClientResponse> {
+    /// Sends `request` and waits for its reply, read as what the request names. A reply of any other kind fails it, with
+    /// [`ClientError::Unexpected`].
+    pub fn call<R: Request>(&self, request: R) -> Result<R::Reply> {
+        let response = self.exchange(request.into_request())?;
+        R::Reply::read(response).map_err(|response| ClientError::Unexpected(format!("{response:?}")))
+    }
+
+    /// Sends `request` and waits for whatever the hub answers it with, which only [`Client::call`] reads, so it's read
+    /// in one place.
+    fn exchange(&self, request: ClientRequest) -> Result<ClientResponse> {
         let id = self.inner.next_id.fetch_add(1, Ordering::Relaxed);
         let line = frame::encode(&ClientFrame { id, request }).map_err(|e| ClientError::Unexpected(e.to_string()))?;
         let (reply_tx, reply_rx) = flume::bounded(1);
@@ -262,10 +271,6 @@ impl Client {
         }
         reply_rx.recv().map_err(|_| ClientError::Disconnected)?
     }
-}
-
-fn unexpected<T>(response: &ClientResponse) -> Result<T> {
-    Err(ClientError::Unexpected(format!("{response:?}")))
 }
 
 fn read_frames(inner: &Arc<Inner>, stream: Stream) {
@@ -332,7 +337,7 @@ fn deliver(inner: &Inner, subscription_id: u64, item: SubscriptionItem) {
         inner.lagged.lock().insert(subscription_id);
         subscriptions.remove(&subscription_id);
         drop(subscriptions);
-        let _ = inner.send_only(ClientRequest::SessionUnsubscribe { subscription_id });
+        let _ = inner.unsubscribe(subscription_id);
     }
 }
 
