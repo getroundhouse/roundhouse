@@ -3,7 +3,7 @@
 
 #![cfg(test)]
 
-use super::frame::{CHANGES, FILE, Frame};
+use super::frame::{CHANGES, FILE, Frame, TABS};
 use super::image_files::{CHANGED, changed_images};
 use super::screens::FOCUS;
 use super::steps::{Screen, Step};
@@ -39,6 +39,20 @@ pub(crate) const DIFF_SCREENS: &[Screen] = &[
         world: Some(diff),
         frame: FILE,
         steps: &[Step::Select(FOCUS), Step::OpenFile("crates/protocol/src/model.rs"), Step::Click("diff-split")],
+    },
+    Screen {
+        name: "diff-whole-file",
+        spec: "diff.md",
+        world: Some(diff),
+        frame: FILE,
+        steps: &[Step::Select(FOCUS), Step::OpenFile("crates/protocol/src/model.rs"), Step::Click("diff-whole-file")],
+    },
+    Screen {
+        name: "file-tab",
+        spec: "diff.md",
+        world: Some(diff),
+        frame: TABS,
+        steps: &[Step::Select(FOCUS), Step::OpenFile("crates/protocol/src/model.rs"), Step::MoveAway],
     },
     Screen {
         name: "writing-a-comment",
