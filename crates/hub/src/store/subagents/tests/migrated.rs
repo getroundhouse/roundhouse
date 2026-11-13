@@ -181,3 +181,48 @@ fn a_migrated_record_names_the_model_of_its_newest_reply() {
     assert_eq!(model(&store, "quiet"), None);
     assert!(subagent(&store, "quiet").rev < subagent(&store, "haiku").rev, "only one with a model changed");
 }
+
+/// A record from before takes its count from the CLI's word that it ended, where that's a line the adapter would have
+/// read a count from, and one without keeps its revision.
+#[test]
+fn a_migrated_record_counts_what_its_end_said_its_conversation_held() {
+    let dir = tempfile::tempdir().unwrap();
+    let end = |ts, call: &str, raw: &str| Line {
+        raw: Some(raw.to_owned()),
+        ..at(ts, ended(call, SubagentOutcome::Finished, None))
+    };
+    let said = |usage: Value| json!({"type":"system","subtype":"task_notification","usage":usage}).to_string();
+    let lines = [
+        end(1, "counted", &said(json!({"total_tokens":197_384,"tool_uses":35}))),
+        end(2, "uncounted", &said(json!({"tool_uses":35}))),
+        end(3, "worded", &said(json!({"total_tokens":"many"}))),
+        end(4, "below", &said(json!({"total_tokens":-1}))),
+        end(5, "cut", r#"{"usage":{"total_tokens":12"#),
+        at(6, ended("unsaid", SubagentOutcome::Finished, None)),
+        end(7, "another", &said(json!({"total_tokens":5}))),
+        // More than SQLite's integers hold, which it reads out of the line as a real.
+        end(8, "huge", &said(json!({"total_tokens":u64::MAX}))),
+        // Which SQLite reads out of the line as 1.
+        end(9, "true", &said(json!({"total_tokens":true}))),
+    ];
+    // The counted one first, so a migration that changed the others too would leave them the newer.
+    let records: String = ["counted", "uncounted", "worded", "below", "cut", "unsaid", "huge", "true"]
+        .map(|call| {
+            format!(
+                "INSERT INTO subagents (session_id, call, status, started_at_ms) VALUES ('s', '{call}', 'finished', 1);"
+            )
+        })
+        .concat();
+
+    let store = older::store_from_before(
+        dir.path(),
+        schema::BEFORE_SUBAGENT_CONTEXT_TOKENS,
+        &format!("{}{records}", rows(&lines)),
+    );
+
+    assert_eq!(subagent(&store, "counted").context_tokens, Some(197_384));
+    for call in ["uncounted", "worded", "below", "cut", "unsaid", "huge", "true"] {
+        assert_eq!(subagent(&store, call).context_tokens, None, "{call}");
+        assert!(subagent(&store, call).rev < subagent(&store, "counted").rev, "only one with a count changed: {call}");
+    }
+}

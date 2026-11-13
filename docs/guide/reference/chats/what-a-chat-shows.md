@@ -52,6 +52,7 @@ An agent can hand part of its work to a subagent. Its call says what the subagen
 
 - **Opened, the call shows what the subagent was asked,** what it's done lately while it works, and its report once it's done.
 - **`Open`, at the end of the line, opens the subagent tab,** with everything the subagent did, in order.
+- **The band at the top of the tab says where the subagent stands,** such as `Working · Opus 5.5 · 3 calls · 24.6k context`. Its context is how many tokens its conversation holds, not what it has used in all, so it can fall when the subagent compacts.
 - **A workspace has one subagent tab.** Opening another subagent shows that one in the same tab. `Cmd-W` closes it.
 
 ![Two subagents' calls, opened](../../../spec/screens/tool-subagent.png)

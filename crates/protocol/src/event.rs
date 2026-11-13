@@ -138,6 +138,13 @@ pub enum EventBody {
         #[serde(default)]
         in_background: bool,
     },
+    /// How much the conversation of the subagent that `call` started holds, as the agent says while it works. It's the
+    /// agent's own event, about the subagent.
+    SubagentContext {
+        call: ToolUseId,
+        /// As [`Subagent::context_tokens`](crate::model::Subagent::context_tokens) counts them.
+        tokens: u64,
+    },
     /// The subagent that `call` started has stopped working.
     SubagentEnded {
         call: ToolUseId,
@@ -145,6 +152,10 @@ pub enum EventBody {
         /// What it reported, once it finished.
         #[serde(default)]
         report: Option<String>,
+        /// How much its conversation held as it ended, as [`EventBody::SubagentContext`] counts it. `None` from an
+        /// agent that doesn't say, and in one recorded before it was kept.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        context_tokens: Option<u64>,
     },
     /// Claude sends one of these per content block, sharing `message_id`.
     Assistant {
@@ -311,6 +322,7 @@ impl EventBody {
             EventBody::AgentTasks { .. } => "agent_tasks",
             EventBody::AgentLimits { .. } => "agent_limits",
             EventBody::SubagentStarted { .. } => "subagent_started",
+            EventBody::SubagentContext { .. } => "subagent_context",
             EventBody::SubagentEnded { .. } => "subagent_ended",
             EventBody::Assistant { .. } => "assistant",
             EventBody::AgentUser { .. } => "agent_user",
@@ -348,6 +360,7 @@ impl EventBody {
             | EventBody::AgentLimits { .. }
             | EventBody::ToolCallDropped { .. }
             | EventBody::SubagentStarted { .. }
+            | EventBody::SubagentContext { .. }
             | EventBody::SubagentEnded { .. }
             | EventBody::TurnEnded { .. }
             | EventBody::ApprovalRequested { .. }

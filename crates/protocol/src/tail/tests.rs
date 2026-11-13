@@ -133,11 +133,13 @@ fn a_subagents_end_clears_what_it_was_writing_and_the_agents_end_clears_the_rest
     writes(&mut tail, "toolu_a", "a", "Cut off");
     writes(&mut tail, "toolu_b", "b", "Going on");
 
-    tail.on_event(
-        1,
-        run,
-        &EventBody::SubagentEnded { call: "toolu_a".into(), outcome: SubagentOutcome::Stopped, report: None },
-    );
+    let ended = EventBody::SubagentEnded {
+        call: "toolu_a".into(),
+        outcome: SubagentOutcome::Stopped,
+        report: None,
+        context_tokens: None,
+    };
+    tail.on_event(1, run, &ended);
     assert_eq!(text(&tail), "Going on");
     writes(&mut tail, "toolu_a", "a2", "Late");
     tail.on_event(1, run, &turn_ended());

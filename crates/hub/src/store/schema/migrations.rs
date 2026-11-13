@@ -384,4 +384,6 @@ pub(super) const MIGRATIONS: &[&str] = &[
     workspaces::WORKER_BUILD,
     // The new-workspace dialog's tables, named for it.
     drafts::NEW_WORKSPACE_DRAFT,
+    // About how many tokens each subagent's conversation holds, which its record shows.
+    subagents::CONTEXT_TOKENS,
 ];

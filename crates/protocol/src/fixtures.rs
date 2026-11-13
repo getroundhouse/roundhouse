@@ -105,6 +105,7 @@ pub fn subagent(call: &str) -> Subagent {
         status: SubagentStatus::Working,
         started_at_ms: 0,
         ended_at_ms: None,
+        context_tokens: None,
         calls: 0,
         latest_call: None,
         recent: RecentWork::default(),

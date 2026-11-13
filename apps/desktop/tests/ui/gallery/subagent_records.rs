@@ -1,5 +1,6 @@
 //! Each subagent's record, made from its chat's events as the hub keeps it as it records them, so a screen's records
-//! and events always agree. Its model is the one its newest reply came from.
+//! and events always agree. Its model is the one its newest reply came from, and its tokens the agent's newest count
+//! of what its conversation holds.
 
 #![cfg(test)]
 
@@ -28,10 +29,18 @@ pub(crate) fn records_of(log: &[SessionEvent]) -> Vec<Subagent> {
                     ..protocol::fixtures::subagent(call.as_str())
                 });
             }
-            EventBody::SubagentEnded { call, outcome, report } => {
+            EventBody::SubagentContext { call, tokens } => {
+                let working = held.get_mut(call).filter(|s| s.status == SubagentStatus::Working);
+                if let Some(subagent) = working.filter(|s| s.context_tokens != Some(*tokens)) {
+                    subagent.context_tokens = Some(*tokens);
+                    subagent.rev = rev;
+                }
+            }
+            EventBody::SubagentEnded { call, outcome, report, context_tokens } => {
                 if let Some(subagent) = held.get_mut(call).filter(|s| s.status == SubagentStatus::Working) {
                     subagent.status = SubagentStatus::ended(*outcome);
                     subagent.report.clone_from(report);
+                    subagent.context_tokens = context_tokens.or(subagent.context_tokens);
                     subagent.recent = RecentWork::default();
                     subagent.ended_at_ms = Some(event.ts_ms);
                     subagent.rev = rev;

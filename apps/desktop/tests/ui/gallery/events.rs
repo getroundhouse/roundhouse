@@ -184,7 +184,13 @@ pub(crate) fn subagents_listed(subagents: &[(&str, &str)]) -> EventBody {
     EventBody::AgentTasks { tasks: tasks.collect(), stopped: Vec::new() }
 }
 
-/// The agent's word that a subagent finished, with its report.
-pub(crate) fn subagent_ended(call: &str, report: &str) -> EventBody {
-    EventBody::SubagentEnded { call: call.into(), outcome: SubagentOutcome::Finished, report: Some(report.into()) }
+/// The agent's word on how many tokens the conversation of a subagent at work holds.
+pub(crate) fn subagent_context(call: &str, tokens: u64) -> EventBody {
+    EventBody::SubagentContext { call: call.into(), tokens }
+}
+
+/// The agent's word that a subagent finished, with its report and how many tokens its conversation held.
+pub(crate) fn subagent_ended(call: &str, report: &str, tokens: u64) -> EventBody {
+    let (outcome, report) = (SubagentOutcome::Finished, Some(report.into()));
+    EventBody::SubagentEnded { call: call.into(), outcome, report, context_tokens: Some(tokens) }
 }

@@ -16,7 +16,7 @@ fn started(call: &str) -> EventBody {
 }
 
 fn ended(call: &str, outcome: SubagentOutcome, report: Option<&str>) -> EventBody {
-    EventBody::SubagentEnded { call: call.into(), outcome, report: report.map(Into::into) }
+    EventBody::SubagentEnded { call: call.into(), outcome, report: report.map(Into::into), context_tokens: None }
 }
 
 fn tool_use(id: &str) -> ContentBlock {
@@ -126,6 +126,44 @@ fn a_subagents_record_names_the_model_of_its_newest_reply_and_changes_only_when_
     let on_sonnet = subagent(&store, "agent");
     assert_eq!((on_sonnet.model.map(String::from).as_deref(), on_sonnet.calls), (Some("claude-sonnet-5-5"), 1));
     assert!(on_sonnet.rev > on_haiku.rev);
+}
+
+#[test]
+fn a_subagents_record_counts_what_its_conversation_holds_and_changes_only_when_the_count_does() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_session(dir.path());
+    record(&store, &started("agent"));
+    let holds = |call: &str, tokens| EventBody::SubagentContext { call: call.into(), tokens };
+    let unchanged = Vec::<String>::new();
+
+    assert_eq!(subagent(&store, "agent").context_tokens, None, "before the agent says");
+    assert_eq!(record(&store, &holds("agent", 1_200)).1, ["agent"]);
+    let counted = subagent(&store, "agent");
+    assert_eq!(counted.context_tokens, Some(1_200));
+
+    assert_eq!(record(&store, &holds("agent", 1_200)).1, unchanged, "the same count");
+    assert_eq!(record(&store, &holds("nobody", 7)).1, unchanged, "one the agent never said it started");
+    assert_eq!(subagent(&store, "agent"), counted, "it keeps its revision, so it isn't sent again");
+    assert_eq!(record(&store, &holds("agent", 900)).1, ["agent"]);
+    assert_eq!(subagent(&store, "agent").context_tokens, Some(900), "the newest count, which can be less");
+    record(&store, &holds("agent", u64::MAX));
+    assert_eq!(subagent(&store, "agent").context_tokens, Some(u64::MAX), "however large the agent says");
+
+    record(&store, &holds("agent", 900));
+    assert_eq!(record(&store, &ended("agent", SubagentOutcome::Stopped, None)).1, ["agent"]);
+    assert_eq!(subagent(&store, "agent").context_tokens, Some(900), "an end that counts none leaves its count");
+    assert_eq!(record(&store, &holds("agent", 5_000)).1, unchanged, "it's ended, and its end has the last word");
+
+    record(&store, &started("other"));
+    record(&store, &holds("other", 10));
+    let end = EventBody::SubagentEnded {
+        call: "other".into(),
+        outcome: SubagentOutcome::Finished,
+        report: None,
+        context_tokens: Some(2_000),
+    };
+    record(&store, &end);
+    assert_eq!(subagent(&store, "other").context_tokens, Some(2_000), "the count as it ended");
 }
 
 fn said(text: &str) -> ContentBlock {

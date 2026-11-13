@@ -21,7 +21,8 @@ use crate::model_names::model_name;
 use crate::prose::{Of, TextAt, Written};
 use crate::transcript::Model;
 
-/// Where a subagent stands, for the top of its tab, such as `Finished · Haiku 5.5 · 3 calls · 12s`.
+/// Where a subagent stands, for the top of its tab, such as `Finished · Haiku 5.5 · 3 calls · 18.2k context · 12s`.
+/// Its tokens are called its context, since they're what its conversation holds, where its calls are a total.
 pub fn subagent_standing(subagent: &Subagent) -> String {
     // One this build doesn't know isn't given a word, as the call's line gives it none.
     let status = match subagent.status {
@@ -36,7 +37,12 @@ pub fn subagent_standing(subagent: &Subagent) -> String {
         turn_times::took(Duration::from_millis(u64::try_from(ended - subagent.started_at_ms).unwrap_or(0)))
     });
     let model = subagent.model.as_ref().map(model_name);
-    [status.map(str::to_string), model, Some(calls), took].into_iter().flatten().collect::<Vec<_>>().join(" · ")
+    let context = subagent.context_tokens.map(|tokens| format!("{} context", look::tokens(tokens)));
+    [status.map(str::to_string), model, Some(calls), context, took]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>()
+        .join(" · ")
 }
 
 /// The subagent the tab shows, once its record has come.
@@ -200,12 +206,16 @@ mod tests {
     }
 
     #[test]
-    fn where_a_subagent_stands_says_how_it_ended_its_model_its_calls_and_how_long_it_took() {
+    fn where_a_subagent_stands_says_how_it_ended_its_model_its_calls_its_context_and_how_long_it_took() {
         let finished = subagent(SubagentStatus::Finished, Some("Done."));
         let working = Subagent { calls: 1, ..subagent(SubagentStatus::Working, None) };
         let on_haiku = Subagent { model: Some(ModelName::named("claude-haiku-5-5")), ..finished.clone() };
+        let counted = Subagent { context_tokens: Some(18_240), ..on_haiku.clone() };
+        let counting = Subagent { context_tokens: Some(950), ..working.clone() };
 
-        assert_eq!(subagent_standing(&on_haiku), "Finished · Haiku 5.5 · 3 calls · 12s");
+        assert_eq!(subagent_standing(&counted), "Finished · Haiku 5.5 · 3 calls · 18.2k context · 12s");
+        assert_eq!(subagent_standing(&counting), "Working · 1 call · 950 context");
+        assert_eq!(subagent_standing(&on_haiku), "Finished · Haiku 5.5 · 3 calls · 12s", "before the agent counts");
         assert_eq!(subagent_standing(&finished), "Finished · 3 calls · 12s", "before it's replied");
         assert_eq!(subagent_standing(&working), "Working · 1 call", "how long it took is for once it's done");
         assert_eq!(subagent_standing(&subagent(SubagentStatus::Stopped, None)), "Stopped · 3 calls · 12s");

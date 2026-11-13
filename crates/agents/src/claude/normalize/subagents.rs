@@ -1,5 +1,6 @@
 //! The CLI's word on its subagents. Each runs as one of its tasks: `task_started` says one started, with what it was
-//! asked, and `task_notification` says how it ended, with its report.
+//! asked, `task_progress` how many tokens its conversation holds as it works, and `task_notification` how it ended,
+//! with its report and the count as it ended.
 
 use std::collections::{HashMap, HashSet};
 
@@ -26,7 +27,7 @@ impl Subagents {
         self.in_background.contains(call)
     }
 
-    /// The event this line makes, if it says a subagent started or ended.
+    /// The event this line makes, if it says a subagent started or ended, or how much its conversation holds.
     pub(super) fn read(&mut self, value: &Value) -> Option<EventBody> {
         if str_of(value, "type") != Some("system") {
             return None;
@@ -50,6 +51,12 @@ impl Subagents {
                     in_background,
                 })
             }
+            // Only a subagent's task is in `by_task`, so another's progress, such as a tool's, stays as it was, and so
+            // does a line with no count.
+            "task_progress" => {
+                let call = self.by_task.get(&id_of::<TaskId>(value, "task_id")?)?.clone();
+                Some(EventBody::SubagentContext { call, tokens: context_tokens(value)? })
+            }
             "task_notification" => {
                 let call = self.by_task.remove(&id_of::<TaskId>(value, "task_id")?)?;
                 self.in_background.remove(&call);
@@ -61,11 +68,17 @@ impl Subagents {
                 };
                 // Stopped, it only says so.
                 let report = string_of(value, "summary").filter(|_| outcome == SubagentOutcome::Finished);
-                Some(EventBody::SubagentEnded { call, outcome, report })
+                Some(EventBody::SubagentEnded { call, outcome, report, context_tokens: context_tokens(value) })
             }
             _ => None,
         }
     }
+}
+
+/// The CLI's count of tokens for the task this line is about, if it has one, which for a subagent's is about what its
+/// conversation holds, as `docs/claude-cli.md` says.
+fn context_tokens(value: &Value) -> Option<u64> {
+    value.get("usage")?.get("total_tokens")?.as_u64()
 }
 
 #[cfg(test)]

@@ -43,6 +43,7 @@ pub(super) fn work(body: &EventBody) -> Work {
         | EventBody::Notice { .. }
         | EventBody::AgentMode { .. }
         | EventBody::SubagentStarted { .. }
+        | EventBody::SubagentContext { .. }
         | EventBody::SubagentEnded { .. }
         | EventBody::AgentOther { .. }
         | EventBody::AgentCompacting { .. }

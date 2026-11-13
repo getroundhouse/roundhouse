@@ -2,10 +2,11 @@
 //! the subagent's own calls and report come later, naming the call as their parent. It makes one call, or as many as
 //! it's asked for, for a subagent tab long enough to scroll. Its report streams in a few pieces, so a test can see
 //! what it's writing, and cut it off. The CLI's word on the task it runs as comes around that, as the real CLI's does:
-//! that it started, after the calls, and that it finished, after its report. In the background, its task is listed
-//! the line before it starts, and left out after it finishes. Its work is part of the turn here, so stopping the turn
-//! ends it, and the list leaves it out then too, though the real CLI's would carry on. One in the foreground is the
-//! same, but for the call's result, which comes last, with the report, and it isn't listed.
+//! that it started, after the calls, how many tokens it's using, after each of its own calls, and that it finished,
+//! after its report, with the count then. In the background, its task is listed the line before it starts, and left
+//! out after it finishes. Its work is part of the turn here, so stopping the turn ends it, and the list leaves it out
+//! then too, though the real CLI's would carry on. One in the foreground is the same, but for the call's result, which
+//! comes last, with the report, and it isn't listed.
 
 use std::collections::VecDeque;
 use std::path::Path;
@@ -22,6 +23,10 @@ const WORKS_FOR: Duration = Duration::from_millis(1000);
 
 /// Between the pieces of its report, so a test can catch it part way.
 const WRITES_EVERY: Duration = Duration::from_millis(200);
+
+/// How many tokens each of its calls adds to what the CLI says it's using, and its report on top of them.
+const TOKENS_A_CALL: usize = 1_200;
+const TOKENS_TO_REPORT: usize = 300;
 
 /// How often one that works until a file exists looks for it.
 const POLL: Duration = Duration::from_millis(20);
@@ -88,9 +93,17 @@ pub(crate) fn start(
         return stopped(turn);
     }
     let mut within = Turn { parent: Some(&agent), ..*turn };
-    for _ in 0..calls {
+    for made in 1..=calls {
         let call = within.named_tool_use("Bash", json!({"command":"ls","description":"List what's here"}));
         within.tool_result(&call, "README.md", false);
+        // As the real CLI says how far each of its tasks has got, a subagent's with how many tokens it's using.
+        emit(
+            turn.out,
+            json!({"type":"system","subtype":"task_progress","task_id":task,"tool_use_id":agent,
+            "description":"Running List what's here","subagent_type":"Explore",
+            "usage":{"total_tokens":TOKENS_A_CALL * made,"tool_uses":made,"duration_ms":1},"last_tool_name":"Bash",
+            "session_id":session_id}),
+        );
     }
     let report = ["There's ", "a README ", "here."].map(String::from).to_vec();
     if within.say(Block::Text, report, WRITES_EVERY, rx, queued, eof) {
@@ -99,7 +112,9 @@ pub(crate) fn start(
     emit(
         turn.out,
         json!({"type":"system","subtype":"task_notification","task_id":task,"tool_use_id":agent,"status":"completed",
-        "summary":"There's a README here.","session_id":session_id}),
+        "summary":"There's a README here.",
+        "usage":{"total_tokens":TOKENS_A_CALL * calls + TOKENS_TO_REPORT,"tool_uses":calls,"duration_ms":1},
+        "session_id":session_id}),
     );
     if in_background {
         background::unlisted(turn.config, turn.out, &task);
