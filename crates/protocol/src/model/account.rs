@@ -80,6 +80,11 @@ pub struct Account {
     /// login was disconnected.
     #[serde(default)]
     pub held_login: Option<HeldLogin>,
+    /// When the person last sent something in a session that names the account, by the hub's clock, so a client can
+    /// say when the account was last used. What they sent before the session's first launch counts once that launch
+    /// names it. `None` until they have, and from a hub from before it kept it.
+    #[serde(default)]
+    pub used_at_ms: Option<i64>,
     #[serde(default)]
     pub rev: Rev,
 }

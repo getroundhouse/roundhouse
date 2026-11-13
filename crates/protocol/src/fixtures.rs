@@ -7,9 +7,9 @@ use serde_json::Value;
 
 use crate::event::{Asking, CallKind, ContentBlock, Denied, EventBody, SessionEvent, TurnOutcome};
 use crate::model::{
-    AgentKind, ApprovalId, BranchName, Call, CallResult, ChildStatus, ChildWorktree, Draft, Effort, MadeBy, ModelName,
-    PermissionMode, Place, RecentWork, Rev, Seq, Session, SessionStatus, SetupStatus, Subagent, SubagentStatus,
-    TitleSource, ToolUseId, Workspace, WorkspaceStatus,
+    Account, AgentKind, ApprovalId, BranchName, Call, CallResult, ChildStatus, ChildWorktree, Draft, Effort, MadeBy,
+    ModelName, PermissionMode, Place, RecentWork, Rev, Seq, Session, SessionStatus, SetupStatus, Subagent,
+    SubagentStatus, TitleSource, ToolUseId, Workspace, WorkspaceStatus,
 };
 
 /// The session `id`, in the workspace `w`, idle with nothing in its log. Its agent is Claude, running Opus with full
@@ -94,6 +94,24 @@ pub fn child_worktree(id: &str) -> ChildWorktree {
         created_at_ms: 0,
         status: ChildStatus::Ready,
         branches: None,
+        rev: Rev::default(),
+    }
+}
+
+/// The account `id`, as the hub found it on a worker's machine before its agent said anything of it: no model
+/// provider, plan, login or email, no limits heard of, and never used. Its login isn't one the hub holds.
+pub fn account(id: &str) -> Account {
+    Account {
+        id: id.into(),
+        model_provider: None,
+        plan: None,
+        login: None,
+        email: None,
+        name: None,
+        login_agent: None,
+        limits: Vec::new(),
+        held_login: None,
+        used_at_ms: None,
         rev: Rev::default(),
     }
 }

@@ -119,6 +119,7 @@ pub(super) fn context() -> World {
         login_agent: None,
         limits: vec![hours, week],
         held_login: None,
+        used_at_ms: None,
         rev: Rev::default(),
     };
     world.sessions.last_mut().unwrap().account = Some(account.id.clone());
