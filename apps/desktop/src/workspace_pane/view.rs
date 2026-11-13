@@ -98,7 +98,7 @@ impl WorkspacePane {
         unread: bool,
         cx: &mut Context<Self>,
     ) -> impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static {
-        let marking = if unread { Some(Mark::Read) } else { (session.reply_seq > 0).then_some(Mark::Unread) };
+        let marking = if unread { Some(Mark::Read) } else { session.has_reply().then_some(Mark::Unread) };
         // Renaming a chat with no title starts from nothing, so pressing Return doesn't make "Untitled" a title typed
         // by hand, which no generated one would ever replace.
         let title = session.title.as_deref().unwrap_or_default().to_string();

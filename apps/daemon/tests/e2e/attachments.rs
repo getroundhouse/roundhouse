@@ -9,7 +9,7 @@ use client_core::{Client, ClientError};
 use protocol::attachment::{Attachment, AttachmentBytes, MediaType};
 use protocol::client::ErrorCode;
 use protocol::event::{ContentBlock, EventBody, LinkedImage};
-use protocol::model::{AgentKind, AttachmentId, SessionId, SessionSettingsChange};
+use protocol::model::{AgentKind, AttachmentId, Seq, SessionId, SessionSettingsChange};
 use protocol::prompt::Prompt;
 
 use crate::support::{Stack, assistant_text, git, read_all, wait_for_turn_end};
@@ -228,7 +228,7 @@ fn an_image_a_tool_sends_back_is_kept_as_a_prompt_s_is_and_left_out_of_the_log()
     client.session_prompt(&session.id, "read:shot.png", None).unwrap();
 
     wait_for_turn_end(&client, &session.id, 1);
-    let (events, _) = client.session_read(&session.id, 1, 100, true).unwrap();
+    let (events, _) = client.session_read(&session.id, Seq::new(1), 100, true).unwrap();
     let result = events.iter().find_map(|e| match &e.body {
         EventBody::AgentUser { blocks, .. } => match blocks.as_slice() {
             [ContentBlock::ToolResult { images, .. }] => Some((images.clone(), e.raw.clone().unwrap())),

@@ -37,7 +37,7 @@ fn listed(lines: Vec<CompactionLine>) -> ReplyOutcome {
 fn far_back(seq: Seq) -> CompactionLine {
     CompactionLine {
         seq,
-        place: Place::new(seq),
+        place: Place::new(seq.get()),
         by: CompactedBy::Agent,
         before_tokens: Some(467_499),
         after_tokens: Some(15_694),
@@ -56,11 +56,11 @@ fn lists_asked(requests: &[ClientRequest]) -> usize {
 fn the_hubs_compactions_are_listed_once_its_subscription_has_started() {
     let dir = tempfile::tempdir().unwrap();
     let socket = dir.path().join("hub.sock");
-    let heard = start_hub(&socket, vec![listed(vec![far_back(3)])]);
+    let heard = start_hub(&socket, vec![listed(vec![far_back(Seq::new(3))])]);
     let client = Client::connect(&socket, "test").unwrap();
 
     let open = OpenSession::start(&client, &session());
-    until("listed", || seqs(&open) == [3]);
+    until("listed", || seqs(&open) == [Seq::new(3)]);
     let errors = open.take_errors();
     drop(open);
 
@@ -96,7 +96,7 @@ fn a_hub_too_old_to_list_compactions_is_followed_without_them_and_not_asked_agai
 fn a_hub_that_fails_to_list_compactions_goes_on_being_followed_and_is_asked_again_on_a_new_connection() {
     let dir = tempfile::tempdir().unwrap();
     let socket = dir.path().join("hub.sock");
-    let lists = vec![refused(ErrorCode::Internal, "the disk is full"), listed(vec![far_back(3)])];
+    let lists = vec![refused(ErrorCode::Internal, "the disk is full"), listed(vec![far_back(Seq::new(3))])];
     let heard = start_hub(&socket, lists);
     let client = Client::connect(&socket, "test").unwrap();
     let open = OpenSession::start(&client, &session());
@@ -117,7 +117,7 @@ fn a_hub_that_fails_to_list_compactions_goes_on_being_followed_and_is_asked_agai
     // Kept here too, so the connection is still open for the follower to let go of its subscription on.
     let again = Client::connect(&socket, "test").unwrap();
     open.reconnect(&again);
-    until("listed on the new connection", || seqs(&open) == [3]);
+    until("listed on the new connection", || seqs(&open) == [Seq::new(3)]);
 
     assert!(open.take_errors().is_empty());
     drop(open);

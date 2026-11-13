@@ -37,7 +37,7 @@ fn printed(id: &str, text: &str) -> EventBody {
 /// `body` at `place` among the agent's own events, with a `seq` far from it, as the agent's are once a subagent has
 /// worked.
 fn placed(place: u64, body: EventBody) -> SessionEvent {
-    SessionEvent { place: Place::new(place), ..event(place * 3, body) }
+    SessionEvent { place: Place::new(place), ..event(Seq::new(place * 3), body) }
 }
 
 /// The agent's own events, by place, as a chat follows them.
@@ -62,8 +62,8 @@ fn reported(call: &str, report: &str) -> Records {
 }
 
 /// Whatever else happened, so the events that matter are on pages of their own.
-fn filler(seqs: std::ops::Range<Seq>) -> impl Iterator<Item = SessionEvent> {
-    seqs.map(|seq| event(seq, agent_says("nothing to see")))
+fn filler(seqs: std::ops::Range<u64>) -> impl Iterator<Item = SessionEvent> {
+    seqs.map(|seq| event(Seq::new(seq), agent_says("nothing to see")))
 }
 
 /// Counts `rows` of `log` into `counts`, as the transcript does.
@@ -107,11 +107,14 @@ fn a_result_that_comes_after_its_call_is_counted_in_the_call_s_row() {
     let needle = needle("failed");
     let m = Model::default();
     let (mut candidates, mut counts) = (BTreeSet::new(), Counts::default());
-    let before = log([event(1, runs("run", "cargo test"))]);
+    let before = log([event(Seq::new(1), runs("run", "cargo test"))]);
     follow(&before, &m, &needle, &mut candidates, &mut counts, 0..1);
     assert_eq!(counts.total(), 0);
 
-    let after = log([event(1, runs("run", "cargo test")), event(2, printed("run", "test parser ... FAILED"))]);
+    let after = log([
+        event(Seq::new(1), runs("run", "cargo test")),
+        event(Seq::new(2), printed("run", "test parser ... FAILED")),
+    ]);
     follow(&after, &m, &needle, &mut candidates, &mut counts, 1..2);
 
     assert_eq!(counts.of(0), 1, "the call draws what came back");
@@ -122,14 +125,15 @@ fn a_result_that_comes_after_its_call_is_counted_in_the_call_s_row() {
 fn a_subagent_s_work_held_before_its_call_moves_into_the_call_once_it_loads() {
     let needle = needle("parser");
     let m = Model::default();
-    let work = || event(300, within("helper", agent_says("Looking at the parser")));
+    let work = || event(Seq::new(300), within("helper", agent_says("Looking at the parser")));
     let (mut candidates, mut counts) = (BTreeSet::new(), Counts::default());
     // Its page loads first, without the call, so it's drawn in its own row.
     follow(&log([work()]), &m, &needle, &mut candidates, &mut counts, 299..300);
     assert_eq!(counts.of(299), 1);
 
     // Then the call's page, which draws it, far from where its page changed.
-    let both = log(std::iter::once(event(1, calls_to("Agent", &["helper"]))).chain(filler(2..300)).chain([work()]));
+    let both =
+        log(std::iter::once(event(Seq::new(1), calls_to("Agent", &["helper"]))).chain(filler(2..300)).chain([work()]));
     follow(&both, &m, &needle, &mut candidates, &mut counts, 0..250);
 
     assert_eq!((counts.of(0), counts.of(299)), (1, 0), "in the call now, and not where it was");
@@ -159,7 +163,7 @@ fn a_row_the_log_lets_go_of_keeps_what_it_was_counted_as() {
     let needle = needle("parser");
     let mut counts = Counts::default();
     counts.set(4, 2);
-    let held = log([event(1, agent_says("the parser"))]);
+    let held = log([event(Seq::new(1), agent_says("the parser"))]);
 
     follow(&held, &Model::default(), &needle, &mut BTreeSet::new(), &mut counts, 0..10);
 
@@ -184,7 +188,7 @@ fn a_stretch_counts_a_prompt_where_the_chat_draws_it() {
         placed(place, body)
     };
     // A prompt's `seq` is three times its place.
-    let taken = |place, prompt_place: u64| placed(place, EventBody::PromptTaken { prompt: prompt_place * 3 });
+    let taken = |place, prompt_place: u64| placed(place, EventBody::PromptTaken { prompt: Seq::new(prompt_place * 3) });
     let says = |place, text| placed(place, agent_says(text));
     let chat = own([prompt(1), taken(2, 1), says(3, "first"), prompt(4), says(5, "second"), taken(6, 4)]);
     let known = || Known { settled: chat.settled_prompts(), ..Known::default() };
@@ -202,8 +206,8 @@ fn the_first_match_is_shown_once_nothing_above_it_can_hold_another() {
     let mut counts = Counts::default();
     counts.set(10, 1);
     counts.set(50, 1);
-    let around_it = log((6..=11).map(|seq| event(seq, agent_says("nothing to see"))));
-    let only_it = log([event(11, agent_says("nothing to see"))]);
+    let around_it = log((6..=11).map(|seq| event(Seq::new(seq), agent_says("nothing to see"))));
+    let only_it = log([event(Seq::new(11), agent_says("nothing to see"))]);
 
     assert_eq!(first_match(&counts, 5, false, &around_it), Some(At { row: 10, nth: 0 }), "every row above it is held");
     assert_eq!(first_match(&counts, 5, false, &only_it), None, "one above it may hold another");

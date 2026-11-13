@@ -67,7 +67,7 @@ fn title(kind: FailureKind) -> &'static str {
 /// Asks the agent to carry on from where its request failed, with whatever model the chat runs now.
 fn retry_button(seq: Seq, shared: &Shared) -> Button {
     let this = shared.this.clone();
-    Button::new(ElementId::NamedInteger("retry".into(), seq)).hand().label("Retry").on_click(
+    Button::new(ElementId::NamedInteger("retry".into(), seq.get())).hand().label("Retry").on_click(
         move |_: &ClickEvent, _: &mut Window, cx: &mut App| {
             let _ = this.update(cx, Transcript::retry);
         },

@@ -8,6 +8,7 @@ mod branches;
 mod cache;
 mod compaction_line;
 mod context;
+mod counters;
 mod draft;
 mod effort;
 mod files;
@@ -34,6 +35,7 @@ pub use branches::{Branch, Branches, Head, Upstream};
 pub use cache::{CACHE_WORTH_TELLING_TOKENS, CacheRequest, CacheState, CacheTtl, PromptCache};
 pub use compaction_line::CompactionLine;
 pub use context::{ContextPart, ContextPartKind, ContextUsage, MaxSetBy};
+pub use counters::{Place, Rev, RunId, Seq};
 pub use draft::{
     AnswerDraft, AnswerSoFar, CommentDraft, Draft, DraftToKeep, NewWorkspaceDraft, NewWorkspaceDraftToKeep,
 };
@@ -143,61 +145,6 @@ ids!(
     /// Unique within the session that asked, as a tool use's ID is.
     AskKey,
 );
-
-/// Position in a session's event log. The first event is 1, and there are no gaps.
-pub type Seq = u64;
-
-/// Declares counters a hub hands out: numbers that only go up, with a type each so that one can't be
-/// passed as another. They're plain numbers on the wire and in storage.
-macro_rules! counters {
-    ($($(#[$meta:meta])* $name:ident),+ $(,)?) => {$(
-        $(#[$meta])*
-        #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-        #[serde(transparent)]
-        pub struct $name(u64);
-
-        impl $name {
-            pub const fn new(value: u64) -> Self {
-                Self(value)
-            }
-
-            pub const fn get(self) -> u64 {
-                self.0
-            }
-        }
-
-        impl std::fmt::Display for $name {
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                self.0.fmt(f)
-            }
-        }
-    )+};
-}
-
-counters!(
-    /// When a record last changed, from one counter per hub, so a client can tell which of two copies is
-    /// newer. A hub that doesn't keep revisions sends none, which reads as 0, and one that does never
-    /// uses 0.
-    #[derive(Default)]
-    Rev,
-    /// One launch of an agent. The hub picks it before the launch, and it never repeats, even across
-    /// hub restarts, so whatever a run produced can always be told apart from its replacement's. A
-    /// later launch has a higher one.
-    RunId,
-    /// An event's place among the events from the same agent or subagent in its session, so a client can follow one of
-    /// them apart from the rest. The first is 1, and there are no gaps. A hub that doesn't record it sends none, which
-    /// reads as 0.
-    #[derive(Default)]
-    Place,
-);
-
-impl Rev {
-    /// Whether a copy at this revision replaces one at `held`: it's newer, or it has none, and then copies replace each
-    /// other in the order they arrive.
-    pub fn supersedes(self, held: Rev) -> bool {
-        self == Rev::default() || self > held
-    }
-}
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Repo {

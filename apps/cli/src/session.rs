@@ -128,19 +128,19 @@ pub(crate) fn follow(
     json: bool,
 ) -> anyhow::Result<()> {
     let mut printer = render::Printer::default();
-    let mut last_seq = from.saturating_sub(1);
+    let mut following = Following::starting_at(from);
     // Nothing is left to wait for if the agent is done and everything recorded has been seen. A status from a newer
     // hub doesn't say it's done, so following goes on.
-    let finished = |seen: Seq| -> anyhow::Result<bool> {
+    let finished = |following: Following| -> anyhow::Result<bool> {
         let session = client.session_get(session_id)?;
-        Ok(session.last_seq <= seen && session.status.is_done())
+        Ok(following.has_all(session.last_seq) && session.status.is_done())
     };
     loop {
-        let subscription = client.session_subscribe(session_id, last_seq + 1)?;
+        let subscription = client.session_subscribe(session_id, following.next())?;
         for item in &subscription.items {
             let check = match item {
                 SubscriptionItem::Event(event) => {
-                    last_seq = event.seq;
+                    following.saw(event.seq);
                     if json {
                         println!("{}", serde_json::to_string(&event)?);
                     } else {
@@ -166,15 +166,46 @@ pub(crate) fn follow(
                 }
                 SubscriptionItem::Notice(_) => false,
             };
-            if until_idle && check && finished(last_seq)? {
+            if until_idle && check && finished(following)? {
                 return Ok(());
             }
         }
         // Printing fell behind the agent, so it carries on from the last event printed.
         if subscription.ended() != Some(Ended::FellBehind) {
             std::io::stdout().flush().ok();
-            bail!("lost the hub after event {last_seq}. Resume with `attach --from {}`", last_seq + 1);
+            let next = following.next();
+            bail!("lost the hub before event {next}. Resume with `attach --from {next}`");
         }
+    }
+}
+
+/// Where following a session's log has got to: the event to print next, as the hub's own subscription keeps it.
+#[derive(Clone, Copy)]
+struct Following {
+    next: Seq,
+}
+
+impl Following {
+    /// From `from`, or from the first event for 0, which is before it, as the hub reads it. From 0, nothing would have
+    /// every event until one was printed, since no `last_seq` is before 0, so `--until-idle` on a chat with none would
+    /// wait for good.
+    fn starting_at(from: Seq) -> Self {
+        Self { next: from.max(Seq::FIRST) }
+    }
+
+    /// The event at `seq` has been printed.
+    fn saw(&mut self, seq: Seq) {
+        self.next = seq.next();
+    }
+
+    /// The event to print next, which is where to follow from, and to say to resume from.
+    fn next(self) -> Seq {
+        self.next
+    }
+
+    /// Whether every event of a session whose newest is `last_seq` has been printed.
+    fn has_all(self, last_seq: Seq) -> bool {
+        last_seq < self.next
     }
 }
 
@@ -194,5 +225,33 @@ mod tests {
         let shown = [PermissionMode::Plan, PermissionMode::Unknown].map(mode_name);
 
         assert_eq!(shown, ["plan", "unknown"]);
+    }
+
+    #[test]
+    fn following_from_0_has_every_event_of_a_chat_with_none() {
+        let following = Following::starting_at(Seq::default());
+
+        assert!(following.has_all(Seq::default()));
+        assert_eq!(following.next(), Seq::FIRST, "and asks from the first");
+    }
+
+    #[test]
+    fn following_has_every_event_once_it_has_printed_the_newest() {
+        let mut following = Following::starting_at(Seq::FIRST);
+
+        following.saw(Seq::new(7));
+
+        assert!(following.has_all(Seq::new(7)));
+        assert!(!following.has_all(Seq::new(8)), "not once another is recorded");
+        assert_eq!(following.next(), Seq::new(8));
+    }
+
+    #[test]
+    fn following_again_from_where_it_stopped_asks_for_that_event_first() {
+        let following = Following::starting_at(Seq::new(8));
+
+        assert_eq!(following.next(), Seq::new(8));
+        assert!(following.has_all(Seq::new(7)), "having printed everything before it last time");
+        assert!(!following.has_all(Seq::new(8)));
     }
 }

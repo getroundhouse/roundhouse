@@ -6,7 +6,7 @@
 use desktop::updates::{Kind, Refusal};
 use look::Region;
 use protocol::event::EventBody;
-use protocol::model::SessionStatus;
+use protocol::model::{Seq, SessionStatus};
 
 use super::events::{replied, taken, text, user_prompt};
 use super::fake_hub::BUILD;
@@ -149,12 +149,12 @@ fn updated() -> World {
     let events = vec![
         user_prompt("Does the sidebar show each workspace's pull request?"),
         started(4100, false, "0.9.0", None),
-        taken(1),
+        taken(Seq::new(1)),
         text("msg-1", answer),
         replied(answer, 14, 0.09),
         user_prompt("Does the badge update when the PR merges?"),
         started(4242, true, BUILD, Some("0.9.0")),
-        taken(6),
+        taken(Seq::new(6)),
         text("msg-2", reply),
         replied(reply, 9, 0.12),
     ];

@@ -39,8 +39,8 @@ impl Following {
 
     fn sent(&mut self, event: &SessionEvent) {
         match self {
-            Following::Log { next } => *next = event.seq + 1,
-            Following::Places { next, .. } => *next = Place::new(event.place.get() + 1),
+            Following::Log { next } => *next = event.seq.next(),
+            Following::Places { next, .. } => *next = event.place.next(),
         }
     }
 }

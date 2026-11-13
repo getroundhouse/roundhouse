@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 use client_core::ClientError;
 use protocol::client::ErrorCode;
 use protocol::event::{ContentBlock, EventBody};
-use protocol::model::PORTS_PER_WORKSPACE;
+use protocol::model::{PORTS_PER_WORKSPACE, Seq};
 
 use crate::support::{
     Stack, assistant_text, commit_settings, git, parent_of, read_all, signal, wait_for_setup, wait_for_turn_end,
@@ -52,7 +52,7 @@ fn a_prompt_sent_during_setup_is_recorded_at_once_and_delivered_when_it_finishes
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
     let (seq, _) = client.session_prompt(&session.id, "tool:test -f ready.txt && echo was-ready", None).unwrap();
-    assert_eq!(seq, 1);
+    assert_eq!(seq, Seq::new(1));
     assert!(!read_all(&client, &session.id).iter().any(|e| matches!(e.body, EventBody::AgentStarted { .. })));
     let events = wait_for_turn_end(&client, &session.id, 1);
     let saw_it = events.iter().any(|e| match &e.body {

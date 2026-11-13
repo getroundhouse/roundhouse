@@ -69,7 +69,7 @@ pub(crate) const FOURTEENTH_PROMPT: &str = "outline-prompt/53";
 pub(crate) fn many_turns() -> Vec<EventBody> {
     let mut events = Vec::new();
     for (turn, (asked, said)) in (1..).zip(TURNS) {
-        let prompt: Seq = (EVENTS_A_TURN * (turn - 1) + 1).try_into().unwrap();
+        let prompt = Seq::new((EVENTS_A_TURN * (turn - 1) + 1).try_into().unwrap());
         events.extend([user_prompt(asked), taken(prompt), text(&format!("msg-{turn}"), said), replied(said, 12, 0.04)]);
     }
     events
@@ -80,7 +80,8 @@ fn the_fourteenth_prompt_is_in_the_row_named() {
     let mut world = World::default();
     let chat = world.chat(&"w".into(), SessionStatus::Idle, many_turns());
 
-    let mut prompts = world.events_from(&chat, 1).filter(|event| matches!(event.body, EventBody::UserPrompt { .. }));
+    let mut prompts =
+        world.events_from(&chat, Seq::new(1)).filter(|event| matches!(event.body, EventBody::UserPrompt { .. }));
     let fourteenth = PromptLine::of(prompts.nth(13).unwrap()).unwrap();
     // The agent's own events, as the chat follows them.
     let mut log = SessionLog::by_place(Place::default());

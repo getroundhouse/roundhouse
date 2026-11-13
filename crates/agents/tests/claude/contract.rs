@@ -10,7 +10,7 @@ use agents::claude::{Normalizer, Parsed};
 use protocol::event::{
     AgentRunState, ApprovalOutcome, Asking, CallKind, ContentBlock, EventBody, FileChange, TurnOutcome,
 };
-use protocol::model::{ApprovalId, CacheRequest, CacheTtl, PermissionMode, ToolUseId};
+use protocol::model::{ApprovalId, CacheRequest, CacheTtl, PermissionMode, Seq, ToolUseId};
 use protocol::tail::{BlockKind, Tail};
 use serde_json::Value;
 
@@ -337,7 +337,7 @@ fn deltas_rebuild_exactly_what_each_finished_block_says() {
                         other => panic!("unexpected block {other:?}"),
                     }
                 }
-                tail.on_event(seq, None, &body);
+                tail.on_event(Seq::new(seq), None, &body);
             }
             _ => {}
         }

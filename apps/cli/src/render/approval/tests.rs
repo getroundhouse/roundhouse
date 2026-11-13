@@ -1,13 +1,14 @@
 use client_core::{Answered, Approval};
 use protocol::event::{ApprovalOutcome, Asking, CallKind, Question, QuestionAnswer, QuestionOption, SessionEvent};
 use protocol::fixtures::{ApprovalRequest, approval_request};
+use protocol::model::Seq;
 use serde_json::{Value, json};
 
 use super::{requested, resolved};
 
 fn event(tool: &str, input: Value, asking: Option<Asking>) -> SessionEvent {
     let body = ApprovalRequest { input, asking, ..approval_request("req_1", tool) };
-    protocol::fixtures::event(7, body.into())
+    protocol::fixtures::event(Seq::new(7), body.into())
 }
 
 fn lines(event: &SessionEvent) -> Vec<String> {
@@ -63,7 +64,7 @@ fn a_tools_use_prints_its_command_whole_under_what_its_for_with_why_and_who_asks
         ..approval_request("req_1", "Bash")
     };
 
-    let printed = lines(&protocol::fixtures::event(7, asked.into()));
+    let printed = lines(&protocol::fixtures::event(Seq::new(7), asked.into()));
 
     assert_eq!(
         printed,
@@ -89,8 +90,8 @@ fn an_edit_prints_its_file_and_what_it_takes_out_and_puts_in() {
     };
     let plain = ApprovalRequest { description: None, ..described.clone() };
 
-    let described = lines(&protocol::fixtures::event(7, described.into()));
-    let plain = lines(&protocol::fixtures::event(7, plain.into()));
+    let described = lines(&protocol::fixtures::event(Seq::new(7), described.into()));
+    let plain = lines(&protocol::fixtures::event(Seq::new(7), plain.into()));
 
     let change = ["  - let a = 1;", "  + let a = 2;", "  + let b = 3;", "  roundhouse approve s req_1"];
     assert_eq!(described[..2], ["APPROVAL NEEDED: Edit: Fix the numbers", "  file: src/lib.rs"]);

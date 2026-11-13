@@ -118,7 +118,7 @@ fn turn_ended() -> EventBody {
 
 /// What the hub recorded of its own accord that the agent's state is.
 fn states_from_the_hub(hub: &Hub) -> usize {
-    let events = hub.store.read_events(&"s".into(), 0, 1000, u64::MAX, false).unwrap();
+    let events = hub.store.read_events(&"s".into(), Seq::default(), 1000, u64::MAX, false).unwrap();
     events.iter().filter(|event| event.run.is_none() && matches!(event.body, EventBody::AgentState { .. })).count()
 }
 

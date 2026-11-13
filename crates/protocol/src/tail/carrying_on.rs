@@ -58,7 +58,7 @@ fn replacing_a_run_takes_its_subagents_in_the_background_so_its_turn_s_end_leave
     let mut hub = Tail::default();
 
     hub.replace_run(RunId::new(1), worker.of_run(RunId::new(1)));
-    hub.on_event(9, Some(RunId::new(1)), &turn_ended());
+    hub.on_event(Seq::new(9), Some(RunId::new(1)), &turn_ended());
 
     assert_eq!(hub.messages.iter().map(|m| m.message_id.as_str()).collect::<Vec<_>>(), ["sub"]);
 }
@@ -66,13 +66,17 @@ fn replacing_a_run_takes_its_subagents_in_the_background_so_its_turn_s_end_leave
 #[test]
 fn a_compaction_only_asked_for_stays_unless_the_run_says_it_s_compacting() {
     let mut asked = Tail::default();
-    asked.on_event(5, None, &EventBody::CompactionAsked { keeping: None });
+    asked.on_event(Seq::new(5), None, &EventBody::CompactionAsked { keeping: None });
     let mut compacting = asked.clone();
 
     asked.replace_run(RunId::new(1), Tail::default());
     compacting.replace_run(RunId::new(1), two_runs().of_run(RunId::new(2)));
 
-    assert_eq!(asked.compacting.and_then(|c| c.asked), Some(5), "asked of this hub, which the worker can't know");
+    assert_eq!(
+        asked.compacting.and_then(|c| c.asked),
+        Some(Seq::new(5)),
+        "asked of this hub, which the worker can't know"
+    );
     let said = compacting.compacting.unwrap();
     assert_eq!((said.run, said.asked, said.written_chars), (Some(RunId::new(1)), None, Some(40)));
 }

@@ -7,7 +7,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use parking_lot::{Mutex, MutexGuard};
 use protocol::event::SessionEvent;
-use protocol::model::{AgentSessionId, OpenApproval, Rev, Seq, Session, ToolUseId};
+use protocol::model::{AgentSessionId, OpenApproval, Place, Rev, Seq, Session, ToolUseId};
 use rusqlite::{Connection, Row, Transaction};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -118,6 +118,32 @@ fn text_of<T: Serialize>(value: &T) -> String {
 
 fn rev_of(row: &Row<'_>, column: usize) -> rusqlite::Result<Rev> {
     Ok(Rev::new(row.get::<_, i64>(column)?.cast_unsigned()))
+}
+
+/// The seq in `column`, as [`seq_column`] writes one.
+fn seq_of(row: &Row<'_>, column: usize) -> rusqlite::Result<Seq> {
+    Ok(Seq::new(row.get::<_, i64>(column)?.cast_unsigned()))
+}
+
+/// The place in `column`, as [`place_column`] writes one.
+fn place_of(row: &Row<'_>, column: usize) -> rusqlite::Result<Place> {
+    Ok(Place::new(row.get::<_, i64>(column)?.cast_unsigned()))
+}
+
+/// `seq` as a column holds it, and as a query compares it, as [`column_number`] says.
+fn seq_column(seq: Seq) -> i64 {
+    column_number(seq.get())
+}
+
+/// `place` as a column holds it, and as a query compares it, as [`column_number`] says.
+fn place_column(place: Place) -> i64 {
+    column_number(place.get())
+}
+
+/// A seq's or a place's number as a column holds it. One a client sends can be past the furthest a column holds, which
+/// is past every event, so it's that rather than wrapping round to before the first.
+fn column_number(number: u64) -> i64 {
+    i64::try_from(number).unwrap_or(i64::MAX)
 }
 
 impl Store {

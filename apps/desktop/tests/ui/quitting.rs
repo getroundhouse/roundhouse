@@ -10,6 +10,7 @@ use desktop::app::Quitting;
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{AppContext as _, TestAppContext, VisualTestContext};
 use protocol::event::EventBody;
+use protocol::model::Seq;
 use protocol::prompt::Prompt;
 
 use crate::menus::{QUIT, choose};
@@ -32,7 +33,7 @@ fn a_prompt_sent_just_before_quitting_reaches_the_hub(cx: &mut TestAppContext) {
 
     // The app's threads end once it has quit, so nothing it started may still be under way. The test's carry on.
     assert!(client.commands().finished().try_recv().is_ok(), "quitting didn't wait for the prompt");
-    let (events, _) = stack.client().session_read(&chat, 0, 1000, false).unwrap();
+    let (events, _) = stack.client().session_read(&chat, Seq::default(), 1000, false).unwrap();
     let prompts: Vec<_> = events
         .iter()
         .filter_map(|e| match &e.body {
@@ -180,7 +181,7 @@ fn quitting_waits_for_a_prompt_on_its_way_to_the_hub(cx: &mut TestAppContext) {
 
     ui.wait("quitting", |ui| ui.view().quitting == Quitting::Quit);
     assert!(!ui.cx.has_pending_prompt());
-    let (events, _) = stack.client().session_read(&chat, 0, 1000, false).unwrap();
+    let (events, _) = stack.client().session_read(&chat, Seq::default(), 1000, false).unwrap();
     assert!(
         events.iter().any(
             |e| matches!(&e.body, EventBody::UserPrompt { prompt: Prompt { text, .. }, .. } if text == "say:look")

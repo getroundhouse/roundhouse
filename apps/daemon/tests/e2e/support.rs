@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 use client_core::{Client, Subscription, SubscriptionItem};
 use protocol::event::{ContentBlock, EventBody, SessionEvent};
 use protocol::model::{
-    AgentKind, ApprovalId, PermissionMode, Session, SessionId, SessionSettingsChange, SessionStatus, Workspace,
+    AgentKind, ApprovalId, PermissionMode, Seq, Session, SessionId, SessionSettingsChange, SessionStatus, Workspace,
     WorkspaceId,
 };
 use protocol::paths::Paths;
@@ -194,7 +194,7 @@ pub(crate) fn wait_while_progressing<P: PartialEq>(
 
 pub(crate) fn read_all(client: &Client, session_id: &SessionId) -> Vec<SessionEvent> {
     let mut events = Vec::new();
-    let mut from = 1;
+    let mut from = Seq::FIRST;
     loop {
         let (page, last) = client.session_read(session_id, from, 500, false).unwrap();
         let Some(end) = page.last().map(|e| e.seq) else { return events };
@@ -202,7 +202,7 @@ pub(crate) fn read_all(client: &Client, session_id: &SessionId) -> Vec<SessionEv
         if end >= last {
             return events;
         }
-        from = end + 1;
+        from = end.next();
     }
 }
 
@@ -248,7 +248,7 @@ pub(crate) fn latest_started_pid(events: &[SessionEvent]) -> Option<u32> {
 
 pub(crate) fn assert_gapless(events: &[SessionEvent]) {
     for (i, event) in events.iter().enumerate() {
-        assert_eq!(event.seq, i as u64 + 1, "gap or duplicate at index {i}");
+        assert_eq!(event.seq.get(), i as u64 + 1, "gap or duplicate at index {i}");
     }
 }
 

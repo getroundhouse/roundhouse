@@ -170,27 +170,32 @@ mod tests {
     #[test]
     fn a_subagent_s_event_out_of_its_call_s_reach_is_drawn_where_it_is() {
         let report = |seq| event(seq, within("agent", calls(&["report"])));
-        let log = log([event(1, calls_to("Agent", &["agent"])), report(2), report(2001), report(2002)]);
+        let log = log([
+            event(Seq::new(1), calls_to("Agent", &["agent"])),
+            report(Seq::new(2)),
+            report(Seq::new(2001)),
+            report(Seq::new(2002)),
+        ]);
         let m = Model::default();
 
-        assert!(drawn_in_its_call(&log, &m, &report(2)));
-        assert!(drawn_in_its_call(&log, &m, &report(2001)), "the last event the call gathers");
-        assert!(!drawn_in_its_call(&log, &m, &report(2002)), "too far for the call to gather");
-        let orphan = event(3, within("a call that isn't here", calls(&["x"])));
+        assert!(drawn_in_its_call(&log, &m, &report(Seq::new(2))));
+        assert!(drawn_in_its_call(&log, &m, &report(Seq::new(2001))), "the last event the call gathers");
+        assert!(!drawn_in_its_call(&log, &m, &report(Seq::new(2002))), "too far for the call to gather");
+        let orphan = event(Seq::new(3), within("a call that isn't here", calls(&["x"])));
         assert!(!drawn_in_its_call(&log, &m, &orphan), "with no call to draw it");
-        let gathered = Subagent::read(&log, &m, 1, &"agent".into(), true, Opening::AsChosen).events.unwrap();
-        let seqs: Vec<Seq> = gathered.iter().map(|(event, _)| event.seq).collect();
+        let gathered = Subagent::read(&log, &m, Seq::new(1), &"agent".into(), true, Opening::AsChosen).events.unwrap();
+        let seqs: Vec<u64> = gathered.iter().map(|(event, _)| event.seq.get()).collect();
         assert_eq!(seqs, [2, 2001], "the call gathers exactly what's drawn in it");
     }
 
     #[test]
     fn a_call_not_found_is_looked_for_again_once_the_log_has_more() {
-        let work = event(5, within("agent", calls(&["a"])));
+        let work = event(Seq::new(5), within("agent", calls(&["a"])));
         let mut log = log([work.clone()]);
         let m = Model::default();
         assert!(!drawn_in_its_call(&log, &m, &work), "its call isn't loaded");
 
-        log.apply_event(event(1, calls_to("Agent", &["agent"])));
+        log.apply_event(event(Seq::new(1), calls_to("Agent", &["agent"])));
 
         assert!(drawn_in_its_call(&log, &m, &work));
     }
@@ -198,25 +203,25 @@ mod tests {
     #[test]
     fn a_call_the_log_lets_go_of_no_longer_draws_its_subagent_s_work() {
         let work = |seq| event(seq, within("agent", calls(&["work"])));
-        let mut log = log((1..=1500).map(|seq| event(seq, result("x"))));
-        log.apply_event(event(1501, calls_to("Agent", &["agent"])));
-        log.apply_event(work(1502));
+        let mut log = log((1..=1500).map(|seq| event(Seq::new(seq), result("x"))));
+        log.apply_event(event(Seq::new(1501), calls_to("Agent", &["agent"])));
+        log.apply_event(work(Seq::new(1502)));
         let m = Model::default();
-        assert!(drawn_in_its_call(&log, &m, &work(1502)), "found, and remembered");
+        assert!(drawn_in_its_call(&log, &m, &work(Seq::new(1502))), "found, and remembered");
 
         for seq in 1503..=2500 {
-            log.apply_event(event(seq, result("x")));
+            log.apply_event(event(Seq::new(seq), result("x")));
         }
-        log.apply_event(work(2501));
+        log.apply_event(work(Seq::new(2501)));
 
-        assert!(!is_loaded(&log, 1501), "the log has let go of the call's page");
-        assert!(!drawn_in_its_call(&log, &m, &work(2501)), "drawn where it is, since its call isn't");
+        assert!(!is_loaded(&log, Seq::new(1501)), "the log has let go of the call's page");
+        assert!(!drawn_in_its_call(&log, &m, &work(Seq::new(2501))), "drawn where it is, since its call isn't");
     }
 
     #[test]
     fn only_a_call_that_hands_off_draws_a_subagent_s_work() {
-        let work = event(2, within("not-an-agent", calls(&["a"])));
-        let log = log([event(1, calls(&["not-an-agent"])), work.clone()]);
+        let work = event(Seq::new(2), within("not-an-agent", calls(&["a"])));
+        let log = log([event(Seq::new(1), calls(&["not-an-agent"])), work.clone()]);
 
         assert!(!drawn_in_its_call(&log, &Model::default(), &work));
     }
@@ -230,14 +235,14 @@ mod tests {
             within("another", calls(&["b"])),
             within("agent", calls(&["c"])),
         ];
-        let log = log((1..).zip(events).map(|(seq, body)| event(seq, body)));
+        let log = log((1..).zip(events).map(|(seq, body)| event(Seq::new(seq), body)));
         let m = Model::default();
 
-        let open = Subagent::read(&log, &m, 1, &"agent".into(), true, Opening::AsChosen);
-        let closed = Subagent::read(&log, &m, 1, &"agent".into(), false, Opening::AsChosen);
+        let open = Subagent::read(&log, &m, Seq::new(1), &"agent".into(), true, Opening::AsChosen);
+        let closed = Subagent::read(&log, &m, Seq::new(1), &"agent".into(), false, Opening::AsChosen);
 
         assert_eq!(open.calls, 2);
-        let seqs: Vec<Seq> = open.events.unwrap().iter().map(|(event, _)| event.seq).collect();
+        let seqs: Vec<u64> = open.events.unwrap().iter().map(|(event, _)| event.seq.get()).collect();
         assert_eq!(seqs, [2, 5], "only its own events, in order");
         assert_eq!(closed.calls, 2);
         assert!(closed.events.is_none(), "a closed call only counts");

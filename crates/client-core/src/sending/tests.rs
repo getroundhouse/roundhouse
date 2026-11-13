@@ -90,7 +90,7 @@ fn a_prompt_being_sent_shows_in_its_chat_and_stays_once_the_hub_has_recorded_it(
         }
         let _ = answered.recv();
         Does::Answers(Box::new(ReplyOutcome::Response(ClientResponse::PromptRecorded(agent::PromptRecorded {
-            seq: 1,
+            seq: Seq::new(1),
             duplicate: false,
         }))))
     });
@@ -102,7 +102,7 @@ fn a_prompt_being_sent_shows_in_its_chat_and_stays_once_the_hub_has_recorded_it(
 
     assert_eq!(on_its_way_in(&open), std::slice::from_ref(&shown));
     answer.send(()).unwrap();
-    assert_eq!(sending.wait().unwrap(), (1, false));
+    assert_eq!(sending.wait().unwrap(), (Seq::new(1), false));
     assert_eq!(on_its_way_in(&open), [shown], "its event takes it out, which this hub never sends");
 }
 
@@ -136,7 +136,7 @@ fn hub_that_says(socket: &Path, mut missing: usize) -> (Client, flume::Receiver<
     let client = stand_in_hub::connect(socket, move |request| {
         // Only what these tests send is answered.
         let (prompt, taken) = if matches!(request, ClientRequest::SessionPrompt(_)) {
-            ("prompt", ClientResponse::PromptRecorded(agent::PromptRecorded { seq: 1, duplicate: false }))
+            ("prompt", ClientResponse::PromptRecorded(agent::PromptRecorded { seq: Seq::new(1), duplicate: false }))
         } else if let ClientRequest::SessionQueue(queue::SessionQueue { id, .. }) = &request {
             ("queued", ClientResponse::Session(protocol::fixtures::session(id.as_str())))
         } else if let ClientRequest::AttachmentAdd(attachments::AttachmentAdd { id, name, media_type, data, .. }) =
@@ -186,7 +186,10 @@ fn a_file_of_a_kind_the_hub_doesnt_know_goes_with_the_prompt_as_one_that_goes_as
     let client = stand_in_hub::connect(&dir.path().join("hub.sock"), move |request| {
         let outcome = if matches!(request, ClientRequest::SessionPrompt(_)) {
             let _ = said.send("prompt".to_string());
-            ReplyOutcome::Response(ClientResponse::PromptRecorded(agent::PromptRecorded { seq: 1, duplicate: false }))
+            ReplyOutcome::Response(ClientResponse::PromptRecorded(agent::PromptRecorded {
+                seq: Seq::new(1),
+                duplicate: false,
+            }))
         } else if let ClientRequest::AttachmentAdd(attachments::AttachmentAdd { id, name, media_type, data, .. }) =
             request
         {

@@ -6,7 +6,7 @@
 use protocol::attachment::Attachment;
 use protocol::event::{AgentRunState, AgentTask, EventBody, TaskKind, TurnOutcome};
 use protocol::fixtures::{ApprovalRequest, approval_request};
-use protocol::model::{MessageId, PermissionMode, TaskId, ToolUseId};
+use protocol::model::{MessageId, PermissionMode, Seq, TaskId, ToolUseId};
 use protocol::prompt::Prompt;
 use protocol::tail::{BlockKind, Tail, TailBlock, TailMessage};
 use serde_json::json;
@@ -86,7 +86,7 @@ pub(crate) fn waiting() -> Vec<EventBody> {
     };
     vec![
         user_prompt("Open a PR for this, and queue it once its checks pass."),
-        taken(1),
+        taken(Seq::new(1)),
         tool_use("msg-1", "toolu-1", "mcp__roundhouse__wait_for_pull_request", json!({ "until": "checks" })),
         EventBody::AgentTasks { tasks: vec![wait], stopped: Vec::new() },
         tool_result("toolu-1", "The task w1 was moved to the background."),
@@ -97,7 +97,7 @@ pub(crate) fn waiting() -> Vec<EventBody> {
 
 /// A short turn that's over: a prompt and a reply, and nothing else.
 pub(crate) fn answered(prompt: &str, reply: &str) -> Vec<EventBody> {
-    vec![user_prompt(prompt), taken(1), text("msg-1", reply), replied(reply, 9, 0.04)]
+    vec![user_prompt(prompt), taken(Seq::new(1)), text("msg-1", reply), replied(reply, 9, 0.04)]
 }
 
 /// The reply that ends [`attached`].
@@ -117,7 +117,7 @@ pub(crate) fn attached(attachments: Vec<Attachment>) -> Vec<EventBody> {
                 attachments,
             ),
         },
-        taken(1),
+        taken(Seq::new(1)),
         text("msg-1", ATTACHED_REPLY),
         replied(ATTACHED_REPLY, 21, 0.08),
     ]
@@ -262,7 +262,7 @@ pub(crate) fn thinking_tail() -> Tail {
 fn thought_then_read() -> Vec<EventBody> {
     vec![
         user_prompt("Why does the train stop at a caution signal in the depot test?"),
-        taken(1),
+        taken(Seq::new(1)),
         thought("msg-1", FIRST_THOUGHT),
         tool_use("msg-2", "toolu-1", "Read", json!({ "file_path": "/workspaces/aspen/crates/signals/src/train.rs" })),
         tool_result(
@@ -276,7 +276,7 @@ fn thought_then_read() -> Vec<EventBody> {
 pub(crate) fn looked_around() -> Vec<EventBody> {
     let mut events = vec![
         user_prompt(ASK),
-        taken(1),
+        taken(Seq::new(1)),
         EventBody::AgentInit {
             agent_session_id: None,
             model: Some("claude-opus".to_string()),

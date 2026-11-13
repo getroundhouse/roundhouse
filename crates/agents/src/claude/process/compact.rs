@@ -82,7 +82,7 @@ impl AskedToCompact {
 mod tests {
     use protocol::event::{CompactedBy, CompactionOutcome, EventBody, TurnOutcome};
 
-    use super::{AskedToCompact, ToCompact};
+    use super::{AskedToCompact, Seq, ToCompact};
 
     fn compacted(by: CompactedBy) -> EventBody {
         let outcome =
@@ -109,7 +109,7 @@ mod tests {
     fn asked_and_taken(keeping: Option<&str>) -> AskedToCompact {
         let mut asked = AskedToCompact::default();
         asked.sent("u1", ToCompact { keeping: keeping.map(str::to_string) });
-        asked.taken("u1", 7);
+        asked.taken("u1", Seq::new(7));
         asked
     }
 
@@ -126,7 +126,7 @@ mod tests {
         asked.answer(&mut end);
 
         let EventBody::AgentCompacted { asked: named, keeping, outcome } = body else { unreachable!() };
-        assert_eq!((named, keeping.as_deref()), (Some(7), Some("Keep the API design")));
+        assert_eq!((named, keeping.as_deref()), (Some(Seq::new(7)), Some("Keep the API design")));
         assert!(matches!(outcome, CompactionOutcome::Compacted { by: CompactedBy::Asked, .. }));
         assert!(only_compacted(&end));
     }
@@ -151,7 +151,7 @@ mod tests {
             asked.answer(end);
         }
 
-        assert!(matches!(first, EventBody::AgentCompacted { asked: Some(7), .. }));
+        assert!(matches!(first, EventBody::AgentCompacted { asked: Some(asked), .. } if asked == Seq::new(7)));
         assert!(only_compacted(&ended), "its failure says it all");
         assert!(!only_compacted(&errored), "the turn's end says what went wrong");
     }
@@ -190,7 +190,7 @@ mod tests {
         let mut dropped = AskedToCompact::default();
         dropped.sent("u2", ToCompact { keeping: None });
         dropped.dropped("u2");
-        dropped.taken("u2", 4);
+        dropped.taken("u2", Seq::new(4));
         let mut never = compacted(CompactedBy::Asked);
 
         dropped.answer(&mut never);

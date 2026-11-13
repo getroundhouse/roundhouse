@@ -6,7 +6,7 @@ use protocol::event::{
 };
 pub(crate) use protocol::fixtures::event;
 use protocol::fixtures::{self, ApprovalRequest};
-use protocol::model::{Rev, Subagent, SubagentStatus};
+use protocol::model::{Rev, Seq, Subagent, SubagentStatus};
 use protocol::prompt::Prompt;
 use serde_json::json;
 
@@ -17,7 +17,7 @@ pub(crate) fn record(call: &str, status: SubagentStatus) -> Subagent {
 }
 
 pub(crate) fn log(events: impl IntoIterator<Item = SessionEvent>) -> SessionLog {
-    let mut log = SessionLog::new(0);
+    let mut log = SessionLog::new(Seq::default());
     for event in events {
         log.apply_event(event);
     }

@@ -5,6 +5,7 @@ use serde_json::json;
 use super::*;
 use crate::event::{Hunk, HunkLine, LineMark};
 use crate::fixtures;
+use crate::model::Seq;
 
 fn needle(query: &str) -> Needle {
     Needle::new(query).unwrap()
@@ -67,7 +68,7 @@ fn an_event_holds_what_it_records_of_a_call_and_its_result() {
     assert!(needle("\"timeout\": 600").is_in_event(&call), "and the JSON itself");
     assert!(needle("slow_down").is_in_event(&result), "a change's lines");
     assert!(!needle("Bash").is_in_event(&call), "the tool's name is the app's to show");
-    assert!(!needle("granted").is_in_event(&EventBody::PromptTaken { prompt: 1 }));
+    assert!(!needle("granted").is_in_event(&EventBody::PromptTaken { prompt: Seq::new(1) }));
 }
 
 #[test]

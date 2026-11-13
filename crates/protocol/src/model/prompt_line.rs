@@ -152,7 +152,7 @@ mod tests {
     use crate::prompt::Prompt;
 
     fn line(text: &str) -> String {
-        PromptLine::new(4, text, 0).text
+        PromptLine::new(Seq::new(4), text, 0).text
     }
 
     #[test]
@@ -185,8 +185,11 @@ mod tests {
         let event = |seq, place, body| SessionEvent { place: Place::new(place), ..crate::fixtures::event(seq, body) };
         let body = EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("Fix\nit") };
 
-        assert_eq!(PromptLine::of(&event(4, 3, body)), Some(PromptLine::new(4, "Fix it", 0).placed(Place::new(3))));
-        assert_eq!(PromptLine::of(&event(2, 2, EventBody::PromptTaken { prompt: 1 })), None);
+        assert_eq!(
+            PromptLine::of(&event(Seq::new(4), 3, body)),
+            Some(PromptLine::new(Seq::new(4), "Fix it", 0).placed(Place::new(3)))
+        );
+        assert_eq!(PromptLine::of(&event(Seq::new(2), 2, EventBody::PromptTaken { prompt: Seq::new(1) })), None);
     }
 
     #[test]
@@ -196,14 +199,14 @@ mod tests {
 
         let line: PromptLine = serde_json::from_value(sent).unwrap();
 
-        assert_eq!(line, PromptLine::new(7, &format!("Fix {long}"), 2));
+        assert_eq!(line, PromptLine::new(Seq::new(7), &format!("Fix {long}"), 2));
         assert!(line.text().starts_with("Fix x"), "{line:?}");
         assert_eq!(line.text().chars().count(), PromptLine::MOST_CHARS);
     }
 
     #[test]
     fn a_line_goes_to_a_client_with_the_fields_it_reads() {
-        let line = PromptLine::new(7, "Fix it", 2);
+        let line = PromptLine::new(Seq::new(7), "Fix it", 2);
 
         assert_eq!(
             serde_json::to_value(line.placed(Place::new(3))).unwrap(),
@@ -213,8 +216,8 @@ mod tests {
 
     #[test]
     fn a_line_says_where_it_was_settled_and_one_from_a_hub_that_doesnt_say_has_nowhere() {
-        let at = SettledAt { seq: 9, place: Place::new(6), how: None };
-        let line = PromptLine::new(7, "Fix it", 2).placed(Place::new(3)).settled_at(at);
+        let at = SettledAt { seq: Seq::new(9), place: Place::new(6), how: None };
+        let line = PromptLine::new(Seq::new(7), "Fix it", 2).placed(Place::new(3)).settled_at(at);
 
         let sent = serde_json::to_value(&line).unwrap();
 

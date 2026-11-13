@@ -6,8 +6,8 @@ use protocol::event::ApprovalDecision;
 use protocol::frame;
 use protocol::model::{
     AgentAccount, AgentKind, AgentLogin, Branches, Effort, FileContents, FileOpened, FilePage, FilePages, GitDiff,
-    GitStatus, Head, LoginToken, ModelName, PageLine, PermissionMode, RunId, SessionSettings, SessionSettingsChange,
-    WorktreeFiles,
+    GitStatus, Head, LoginToken, ModelName, PageLine, PermissionMode, RunId, Seq, SessionSettings,
+    SessionSettingsChange, WorktreeFiles,
 };
 use protocol::prompt::Prompt;
 use protocol::worker::{
@@ -161,8 +161,11 @@ fn every_request_about_an_agent_keeps_its_form() {
         WorkerRequest::AgentStart(spec),
         r#"{"method":"agent_start","session_id":"s","run":4,"agent":"claude","cwd":"/w","agent_session_id":"a","resume":true,"model":"opus","permission_mode":"bypassPermissions","effort":"high","env":[],"tools_token":"t"}"#,
     );
-    let prompt =
-        WorkerRequest::AgentPrompt(worker::AgentPrompt { session_id: "s".into(), seq: 3, prompt: Prompt::new("go") });
+    let prompt = WorkerRequest::AgentPrompt(worker::AgentPrompt {
+        session_id: "s".into(),
+        seq: Seq::new(3),
+        prompt: Prompt::new("go"),
+    });
     asked(prompt, r#"{"method":"agent_prompt","session_id":"s","prompt":3,"text":"go"}"#);
     let decision = ApprovalDecision::Deny { message: None, interrupt: true };
     let approval = WorkerRequest::AgentApproval(worker::AgentApproval {
@@ -180,7 +183,7 @@ fn every_request_about_an_agent_keeps_its_form() {
     );
     let compact = WorkerRequest::AgentCompact(worker::AgentCompact {
         session_id: "s".into(),
-        asked: 9,
+        asked: Seq::new(9),
         keeping: Some("The API".into()),
     });
     asked(compact, r#"{"method":"agent_compact","session_id":"s","asked":9,"keeping":"The API"}"#);

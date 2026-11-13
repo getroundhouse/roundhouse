@@ -295,5 +295,5 @@ fn asked_for(mut compacted: EventBody, asked: Seq, keeping: Option<&str>) -> Eve
 
 /// The seq the next event pushed onto `events` gets.
 fn next(events: &[EventBody]) -> Seq {
-    Seq::try_from(events.len()).unwrap() + 1
+    Seq::new(u64::try_from(events.len()).unwrap() + 1)
 }

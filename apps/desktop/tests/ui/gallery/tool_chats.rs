@@ -4,6 +4,7 @@
 #![cfg(test)]
 
 use protocol::event::EventBody;
+use protocol::model::Seq;
 use serde_json::json;
 
 use super::events::{
@@ -56,7 +57,7 @@ pub(crate) fn commands() -> Vec<EventBody> {
     let reply = "The tests pass, and the formatting passes once `cargo fmt` has run.";
     vec![
         user_prompt(ASK),
-        taken(1),
+        taken(Seq::new(1)),
         text("msg-1", "I'll run the tests and check the formatting before changing anything."),
         tool_use(
             "msg-2",
@@ -98,7 +99,7 @@ pub(crate) fn any_tool() -> Vec<EventBody> {
     let reply = "Filed as #271.";
     vec![
         user_prompt("File the idea about saying why a train stopped."),
-        taken(1),
+        taken(Seq::new(1)),
         text("msg-1", "I'll look for an existing issue first, then file one."),
         tool_use(
             "msg-2",
@@ -137,7 +138,7 @@ pub(crate) fn advisor() -> Vec<EventBody> {
     let advice = "Every aspect is covered now. Run `cargo test -p signals` before **finishing**.";
     vec![
         user_prompt(ASK),
-        taken(1),
+        taken(Seq::new(1)),
         text("msg-1", "Before I change `Aspect`, I'll ask the advisor whether the plan holds up."),
         tool_use("msg-2", "srvtoolu-1", "advisor", json!({})),
         advised_encrypted("msg-2", "srvtoolu-1"),
@@ -173,7 +174,7 @@ pub(crate) fn web() -> Vec<EventBody> {
                   medium speed approach.";
     vec![
         user_prompt("What does a flashing yellow signal mean on a railway?"),
-        taken(1),
+        taken(Seq::new(1)),
         tool_use("msg-1", "toolu-1", "WebSearch", json!({ "query": query })),
         tool_result("toolu-1", &results),
         tool_use(

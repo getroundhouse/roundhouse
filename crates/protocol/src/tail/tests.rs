@@ -28,7 +28,7 @@ fn deltas_build_up_text_even_without_a_block_start() {
 fn a_finished_block_leaves_the_tail_and_the_next_block_starts_clean() {
     let mut tail = Tail::default();
     tail.apply(&delta(DeltaChange::Text { index: 0, text: "first".into() }));
-    tail.on_event(1, None, &assistant("m1"));
+    tail.on_event(Seq::new(1), None, &assistant("m1"));
     assert!(tail.is_empty());
     tail.apply(&delta(DeltaChange::BlockStart { index: 1, kind: BlockKind::ToolUse, tool_name: Some("Bash".into()) }));
     tail.apply(&delta(DeltaChange::ToolInput { index: 1, json: "{\"c".into() }));
@@ -47,7 +47,7 @@ fn messages_stay_separate_and_only_the_named_one_is_cleared() {
         change: DeltaChange::Text { index: 0, text: "sub".into() },
     });
     assert_eq!(tail.messages.len(), 2);
-    tail.on_event(1, None, &assistant("sub"));
+    tail.on_event(Seq::new(1), None, &assistant("sub"));
     assert_eq!(tail.messages.len(), 1);
     assert_eq!(tail.messages[0].message_id, "m1".into());
 }
@@ -107,19 +107,19 @@ fn text(tail: &Tail) -> String {
 fn the_end_of_a_turn_clears_what_the_agent_was_writing() {
     let mut tail = Tail::default();
     tail.apply(&delta(DeltaChange::Text { index: 0, text: "cut off".into() }));
-    tail.on_event(1, None, &turn_ended());
+    tail.on_event(Seq::new(1), None, &turn_ended());
     assert!(tail.is_empty());
 }
 
 #[test]
 fn the_end_of_a_turn_leaves_what_a_subagent_in_the_background_writes_and_clears_one_in_the_foreground() {
     let (mut tail, run) = (Tail::default(), Some(RunId::new(1)));
-    tail.on_event(1, run, &started("toolu_bg", true));
-    tail.on_event(1, run, &started("toolu_fg", false));
+    tail.on_event(Seq::new(1), run, &started("toolu_bg", true));
+    tail.on_event(Seq::new(1), run, &started("toolu_fg", false));
     writes(&mut tail, "toolu_bg", "bg", "There's ");
     writes(&mut tail, "toolu_fg", "fg", "Half");
 
-    tail.on_event(1, run, &turn_ended());
+    tail.on_event(Seq::new(1), run, &turn_ended());
     writes(&mut tail, "toolu_bg", "bg", "a README ");
 
     assert_eq!(text(&tail.of(Some(&"toolu_bg".into()))), "There's a README ");
@@ -129,8 +129,8 @@ fn the_end_of_a_turn_leaves_what_a_subagent_in_the_background_writes_and_clears_
 #[test]
 fn a_subagents_end_clears_what_it_was_writing_and_the_agents_end_clears_the_rest() {
     let (mut tail, run) = (Tail::default(), Some(RunId::new(1)));
-    tail.on_event(1, run, &started("toolu_a", true));
-    tail.on_event(1, run, &started("toolu_b", true));
+    tail.on_event(Seq::new(1), run, &started("toolu_a", true));
+    tail.on_event(Seq::new(1), run, &started("toolu_b", true));
     writes(&mut tail, "toolu_a", "a", "Cut off");
     writes(&mut tail, "toolu_b", "b", "Going on");
 
@@ -140,14 +140,14 @@ fn a_subagents_end_clears_what_it_was_writing_and_the_agents_end_clears_the_rest
         report: None,
         context_tokens: None,
     };
-    tail.on_event(1, run, &ended);
+    tail.on_event(Seq::new(1), run, &ended);
     assert_eq!(text(&tail), "Going on");
     writes(&mut tail, "toolu_a", "a2", "Late");
-    tail.on_event(1, run, &turn_ended());
+    tail.on_event(Seq::new(1), run, &turn_ended());
     assert_eq!(text(&tail), "Going on", "an ended subagent is no longer in the background");
 
     let exited =
         EventBody::AgentExited { reason: ExitReason::Requested, code: Some(0), signal: None, stderr_tail: vec![] };
-    tail.on_event(1, run, &exited);
+    tail.on_event(Seq::new(1), run, &exited);
     assert_eq!(tail, Tail::default(), "nothing is left, nor which subagents were in the background");
 }

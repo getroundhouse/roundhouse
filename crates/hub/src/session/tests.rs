@@ -221,7 +221,7 @@ fn a_turn_the_agent_starts_by_itself_once_its_work_finishes_is_running() {
 #[test]
 fn taking_a_prompt_after_the_turn_ended_is_running_again() {
     // A prompt sent while the agent writes its last reply becomes a turn of its own, with no state event to say so.
-    let taken = EventBody::PromptTaken { prompt: 7 };
+    let taken = EventBody::PromptTaken { prompt: Seq::new(7) };
 
     assert_eq!(next_status(Idle, &taken, NOTHING, false), Running);
     assert_eq!(next_status(Background, &taken, ONE_TASK, false), Running);
@@ -246,7 +246,7 @@ fn a_turn_starts_when_the_agent_starts_working_and_ends_when_it_comes_to_rest() 
         assert_eq!(turn_edge(from, Running), Starts, "from {from:?}");
     }
     assert_eq!(turn_edge(Background, Running), Starts, "picking up again after work in the background is a new turn");
-    let taken = EventBody::PromptTaken { prompt: 3 };
+    let taken = EventBody::PromptTaken { prompt: Seq::new(3) };
     assert_eq!(
         turn_edge(Idle, next_status(Idle, &taken, NOTHING, false)),
         Starts,

@@ -326,10 +326,12 @@ pub(crate) fn behind(
 
 #[cfg(test)]
 mod tests {
+    use protocol::model::Seq;
+
     use super::*;
 
     fn look(query: &str, here: Option<usize>) -> (FindLook, TextId) {
-        let id = (ItemKey::Event(1, 0), Part::Output);
+        let id = (ItemKey::Event(Seq::new(1), 0), Part::Output);
         let here = here.map(|nth| Spot { text: id.clone(), nth });
         (FindLook::new(Some(Needle::new(query).unwrap()), here, Reveal::default()), id)
     }
@@ -342,7 +344,11 @@ mod tests {
 
         assert_eq!(&*marks.ranges, [0..2, 4..6, 7..9]);
         assert_eq!(marks.here(), Some(4..6));
-        assert_eq!(look.marks(&(ItemKey::Event(2, 0), Part::Output), "ab").here(), None, "another text's isn't");
+        assert_eq!(
+            look.marks(&(ItemKey::Event(Seq::new(2), 0), Part::Output), "ab").here(),
+            None,
+            "another text's isn't"
+        );
     }
 
     #[test]

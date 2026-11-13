@@ -1,5 +1,5 @@
 use protocol::event::{CompactedBy, CompactionOutcome, ContentBlock, EventBody};
-use protocol::model::{SettledAt, Settlement, Workspace};
+use protocol::model::{Place, SettledAt, Settlement, Workspace};
 use rusqlite::params;
 
 use super::*;
@@ -24,19 +24,19 @@ fn every_prompt_is_listed_in_order_as_a_line_and_nothing_else_is() {
     let append = |body: &EventBody| store.append(&"s".into(), None, body, None, None, None).unwrap();
 
     append(&prompt("Fix\n  this", 0));
-    append(&EventBody::PromptTaken { prompt: 1 });
+    append(&EventBody::PromptTaken { prompt: Seq::new(1) });
     append(&notice("x"));
     // A subagent's, which isn't among the agent's own, so the next prompt's place isn't its `seq`.
     append(&subagents_message());
     append(&prompt("", 2));
 
     let placed = |seq, text, files, place| PromptLine::new(seq, text, files).placed(Place::new(place));
-    let taken = placed(1, "Fix this", 0, 1).settled_at(SettledAt {
-        seq: 2,
+    let taken = placed(Seq::new(1), "Fix this", 0, 1).settled_at(SettledAt {
+        seq: Seq::new(2),
         place: Place::new(2),
         how: Some(Settlement::Taken),
     });
-    assert_eq!(store.prompt_lines(&"s".into()).unwrap(), [taken, placed(5, "", 2, 4)]);
+    assert_eq!(store.prompt_lines(&"s".into()).unwrap(), [taken, placed(Seq::new(5), "", 2, 4)]);
     assert!(store.prompt_lines(&"other".into()).unwrap().is_empty());
 }
 
@@ -50,18 +50,18 @@ fn each_prompt_is_listed_with_the_last_event_that_settled_it() {
 
     append(&prompt("taken", 0));
     append(&subagents_message());
-    let taken = append(&EventBody::PromptTaken { prompt: 1 });
+    let taken = append(&EventBody::PromptTaken { prompt: Seq::new(1) });
     append(&prompt("dropped, then taken by the agent after", 0));
-    append(&EventBody::PromptDropped { prompt: 4 });
-    let taken_after = append(&EventBody::PromptTaken { prompt: 4 });
+    append(&EventBody::PromptDropped { prompt: Seq::new(4) });
+    let taken_after = append(&EventBody::PromptTaken { prompt: Seq::new(4) });
     append(&prompt("dropped", 0));
-    let dropped = append(&EventBody::PromptDropped { prompt: 7 });
+    let dropped = append(&EventBody::PromptDropped { prompt: Seq::new(7) });
     append(&prompt("waiting", 0));
 
     let at = |event: &protocol::event::SessionEvent| SettledAt::of(event).unwrap().1;
     let settled: Vec<_> = store.prompt_lines(&"s".into()).unwrap().iter().map(PromptLine::settled).collect();
     assert_eq!(settled, [Some(at(&taken)), Some(at(&taken_after)), Some(at(&dropped)), None]);
-    assert_ne!(at(&taken).place.get(), taken.seq, "at its place among the agent's own, as well as its seq");
+    assert_ne!(at(&taken).place.get(), taken.seq.get(), "at its place among the agent's own, as well as its seq");
 }
 
 fn compaction(by: CompactedBy, tokens: Option<(u64, u64)>) -> EventBody {
@@ -89,13 +89,13 @@ fn every_compaction_that_compacted_is_listed_in_order_as_its_event_makes_it() {
     let by_itself = append(&compaction(CompactedBy::Agent, Some((467_499, 15_694))));
     append(&EventBody::CompactionAsked { keeping: None });
     let failed = CompactionOutcome::Failed { error: Some("Not enough messages to compact.".to_string()) };
-    append(&EventBody::AgentCompacted { asked: Some(4), keeping: None, outcome: failed });
+    append(&EventBody::AgentCompacted { asked: Some(Seq::new(4)), keeping: None, outcome: failed });
     let asked = append(&compaction(CompactedBy::Asked, None));
     append(&EventBody::AgentCompacting { written_chars: Some(16_464) });
 
     let made: Vec<CompactionLine> = [by_itself, asked].iter().map(|event| CompactionLine::of(event).unwrap()).collect();
     assert_eq!(store.compaction_lines(&"s".into()).unwrap(), made);
-    assert_ne!(made[0].place.get(), made[0].seq, "it's at its place among the agent's own");
+    assert_ne!(made[0].place.get(), made[0].seq.get(), "it's at its place among the agent's own");
     assert!(store.compaction_lines(&"other".into()).unwrap().is_empty());
 }
 
@@ -124,7 +124,7 @@ fn a_workspaces_prompts_are_listed_oldest_first_across_its_chats() {
     let sent = |chat: &str, at_ms: i64, text: &str| {
         let seq = store.append(&chat.into(), None, &prompt(text, 0), None, None, None).unwrap().event.seq;
         let when = "UPDATE events SET ts_ms = ?1 WHERE session_id = ?2 AND seq = ?3";
-        lock(&store.writer).execute(when, params![at_ms, chat, seq.cast_signed()]).unwrap();
+        lock(&store.writer).execute(when, params![at_ms, chat, seq.get().cast_signed()]).unwrap();
     };
 
     sent("s", 10, "Fix the login");

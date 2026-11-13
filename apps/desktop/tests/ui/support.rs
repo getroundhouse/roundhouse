@@ -36,7 +36,7 @@ use gpui_kit::{
     AnyWindowHandle, AppContext as _, Bounds, ElementId, Entity, InputEvent as _, MouseMoveEvent, Pixels, ScrollDelta,
     ScrollEvent, SharedString, TestAppContext,
 };
-use protocol::model::{Effort, ModelName, PermissionMode};
+use protocol::model::{Effort, ModelName, PermissionMode, Seq};
 use tempfile::TempDir;
 use transcript::Transcript;
 
@@ -152,7 +152,7 @@ pub(crate) struct Ui<'a> {
     pub(crate) handle: AnyWindowHandle,
     pub(crate) view: Entity<AppView>,
     /// The approval [`Ui::next_open_approval`] last returned.
-    pub(crate) seen_approval: u64,
+    pub(crate) seen_approval: Seq,
 }
 
 impl<'a> Ui<'a> {
@@ -172,7 +172,7 @@ impl<'a> Ui<'a> {
         let (hub, checkout) = (stack.hub.clone(), stack.checkout.clone());
         let (handle, view) =
             cx.update(|cx| desktop::open_main_window(hub, checkout, desktop::Opens::WhereItWasLeft, cx)).unwrap();
-        Self { cx, handle, view, seen_approval: 0 }
+        Self { cx, handle, view, seen_approval: Seq::default() }
     }
 
     /// What the line at the bottom of the sidebar says.
@@ -206,7 +206,7 @@ impl<'a> Ui<'a> {
     /// The newest open approval, once the transcript has it. A session's status comes over the hub's
     /// feed, and the transcript's events over their own subscription, so either can arrive first, and
     /// the transcript can still be showing the previous approval.
-    pub(crate) fn next_open_approval(&mut self) -> u64 {
+    pub(crate) fn next_open_approval(&mut self) -> Seq {
         let seen = self.seen_approval;
         let newest = |ui: &Self| {
             let approvals = ui.transcript().map(|t| ui.cx.read_entity(&t, |t, _| t.open_approvals()));

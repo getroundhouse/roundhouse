@@ -9,7 +9,7 @@ use client_core::session_log::{Row, SessionLog};
 use client_core::{OpenSession, SubscriptionItem};
 use protocol::client::{ClientRequest, Hello, subscriptions};
 use protocol::event::{EventBody, SessionEvent};
-use protocol::model::SessionStatus;
+use protocol::model::{Seq, SessionStatus};
 use protocol::tail::Tail;
 
 use crate::support::{
@@ -24,7 +24,7 @@ fn work_continues_with_no_client_and_a_new_client_catches_up_with_no_gaps() {
         let client = stack.client();
         let (_, session) = stack.workspace(&client);
         client.session_prompt(&session.id, "slow:30:chunk", None).unwrap();
-        let subscription = client.session_subscribe(&session.id, 1).unwrap();
+        let subscription = client.session_subscribe(&session.id, Seq::new(1)).unwrap();
         let mut follower = Follower::default();
         follower.drain_until(&subscription, "streaming text", |f| f.tail_text().contains("chunk3"));
         let agent_pid = follower
@@ -49,13 +49,13 @@ fn work_continues_with_no_client_and_a_new_client_catches_up_with_no_gaps() {
     assert!(assistant_text(&events).contains("chunk29"), "the turn finished with nobody attached");
 
     // Subscribing from the last seq seen delivers exactly the rest.
-    let subscription = client.session_subscribe(&session_id, seen + 1).unwrap();
+    let subscription = client.session_subscribe(&session_id, Seq::new(seen + 1)).unwrap();
     let mut follower = Follower::default();
     let total = events.len();
     follower.drain_until(&subscription, "the rest of the log", |f| f.events.len() as u64 + seen >= total as u64);
-    assert_eq!(follower.events.first().unwrap().seq, seen + 1);
+    assert_eq!(follower.events.first().unwrap().seq, Seq::new(seen + 1));
     let mut stitched: Vec<u64> = (1..=seen).collect();
-    stitched.extend(follower.events.iter().map(|e| e.seq));
+    stitched.extend(follower.events.iter().map(|e| e.seq.get()));
     assert_eq!(stitched, (1..=total as u64).collect::<Vec<_>>());
 
     // The session is still usable, on the same agent process.
@@ -71,12 +71,12 @@ fn a_client_attaching_mid_message_sees_the_partial_text_at_once() {
     let first = stack.client();
     let (_, session) = stack.workspace(&first);
     first.session_prompt(&session.id, "slow:40:part", None).unwrap();
-    let live = first.session_subscribe(&session.id, 1).unwrap();
+    let live = first.session_subscribe(&session.id, Seq::new(1)).unwrap();
     let mut watcher = Follower::default();
     watcher.drain_until(&live, "some streaming", |f| f.tail_text().contains("part5"));
 
     let second = stack.client();
-    let subscription = second.session_subscribe(&session.id, 1).unwrap();
+    let subscription = second.session_subscribe(&session.id, Seq::new(1)).unwrap();
     let mut late = Follower::default();
     // Its first tail should already hold what was streamed, without waiting for more.
     late.drain_until(&subscription, "the tail snapshot", |f| f.tail_text().contains("part5"));
@@ -101,7 +101,7 @@ fn every_chunk_reaches_the_tail_exactly_once_while_streaming() {
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
     client.session_prompt(&session.id, "slow:8:x", None).unwrap();
-    let subscription = client.session_subscribe(&session.id, 1).unwrap();
+    let subscription = client.session_subscribe(&session.id, Seq::new(1)).unwrap();
     let mut follower = Follower::default();
     follower.drain_until(&subscription, "the last chunk", |f| f.tail_text().contains("x7"));
     assert_eq!(follower.tail_text(), "x0 x1 x2 x3 x4 x5 x6 x7 ");
@@ -142,7 +142,7 @@ fn clients_attaching_during_a_burst_never_see_a_chunk_twice_or_miss_one() {
                     let mut attaches = 0u32;
                     while !done.load(Ordering::Relaxed) {
                         let client = stack.client();
-                        let subscription = client.session_subscribe(&session.id, 1).unwrap();
+                        let subscription = client.session_subscribe(&session.id, Seq::new(1)).unwrap();
                         attaches += 1;
                         let mut tail = Tail::default();
                         for _ in 0..50 {
@@ -211,7 +211,7 @@ fn a_client_that_stalled_during_a_message_ends_with_nothing_left_in_its_tail() {
         }),
         ClientRequest::SessionSubscribe(subscriptions::SessionSubscribe {
             id: session.id.clone(),
-            from_seq: 1,
+            from_seq: Seq::new(1),
             subscription_id: 7,
         }),
     ];
@@ -258,7 +258,7 @@ fn status_is_already_current_when_an_event_is_delivered() {
     let stack = Stack::start();
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
-    let subscription = client.session_subscribe(&session.id, 1).unwrap();
+    let subscription = client.session_subscribe(&session.id, Seq::new(1)).unwrap();
     let mut idles = 0;
     client.session_prompt(&session.id, "say:0", None).unwrap();
     let deadline = Instant::now() + TIMEOUT;
@@ -303,7 +303,7 @@ fn an_open_session_carries_on_from_where_it_got_to_on_a_new_connection() {
     client.session_prompt(&session.id, "say:after", None).unwrap();
 
     // Everything the hub has, with nothing missing.
-    let hub_has = || client.session_read(&session.id, 1, 1000, false).unwrap().0;
+    let hub_has = || client.session_read(&session.id, Seq::new(1), 1000, false).unwrap().0;
     wait_until("the second turn", || {
         open.read(held).is_some_and(|events| assistant_text(&events).contains("after") && events == hub_has())
     });

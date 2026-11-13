@@ -9,7 +9,9 @@ use rusqlite::{OptionalExtension, Row, TransactionBehavior, params};
 
 use super::drafts::forget_drafts;
 use super::made::{Made, inserted, made_by};
-use super::{Store, StoreError, StoredSession, current_rev, from_text, json_at, lock, rev_of, text_of};
+use super::{
+    Store, StoreError, StoredSession, current_rev, from_text, json_at, lock, rev_of, seq_column, seq_of, text_of,
+};
 
 /// What a session's row holds, as it's written.
 macro_rules! session_row_columns {
@@ -53,15 +55,15 @@ pub(super) fn session_from_row(row: &Row) -> rusqlite::Result<StoredSession> {
             model: from_text(row.get(3)?)?,
             permission_mode: from_text(row.get(4)?)?,
             status: from_text(row.get(5)?)?,
-            last_seq: row.get::<_, i64>(6)?.cast_unsigned(),
+            last_seq: seq_of(row, 6)?,
             created_at_ms: row.get(7)?,
             updated_at_ms: row.get(8)?,
             title: row.get::<_, Option<String>>(11)?.as_deref().and_then(Title::tidied),
             closed_at_ms: row.get(12)?,
-            reply_seq: row.get::<_, i64>(13)?.cast_unsigned(),
+            reply_seq: seq_of(row, 13)?,
             // An outcome this build doesn't know is `Unknown`, as any is.
             reply_outcome: row.get::<_, Option<String>>(29)?.map(from_text).transpose()?,
-            read_seq: row.get::<_, i64>(14)?.cast_unsigned(),
+            read_seq: seq_of(row, 14)?,
             // Written only by this hub, as JSON. Anything it can't read is nothing it knows to be running.
             background_tasks: json_at(row, 15)?.unwrap_or_default(),
             title_source: from_text(row.get(16)?)?,
@@ -121,15 +123,15 @@ impl Store {
                 session.model.as_str(),
                 text_of(&session.permission_mode),
                 text_of(&session.status),
-                session.last_seq.cast_signed(),
+                seq_column(session.last_seq),
                 session.created_at_ms,
                 session.updated_at_ms,
                 stored.agent_session_id.as_str(),
                 stored.agent_opened,
                 session.title.as_deref(),
                 session.closed_at_ms,
-                session.reply_seq.cast_signed(),
-                session.read_seq.cast_signed(),
+                seq_column(session.reply_seq),
+                seq_column(session.read_seq),
                 serde_json::to_string(&session.background_tasks)?,
                 text_of(&session.title_source),
                 serde_json::to_string(&session.queued)?,

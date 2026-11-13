@@ -31,7 +31,7 @@ pub(super) fn plan_card(seq: Seq, body: &EventBody, open: bool, shared: &Shared,
     };
     let allow = approval.allowed();
     let answer_button = |name: &'static str, label: &'static str, decision: ApprovalDecision| {
-        Button::new(ElementId::NamedInteger(name.into(), seq)).hand().label(label).on_click(answer(decision))
+        Button::new(ElementId::NamedInteger(name.into(), seq.get())).hand().label(label).on_click(answer(decision))
     };
     // Nothing's found in what asks the person something.
     let content = shared.texts.draw(

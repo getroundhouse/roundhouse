@@ -1,10 +1,10 @@
 use protocol::event::TurnOutcome;
-use protocol::model::{Session, SessionId, SessionStatus};
+use protocol::model::{Seq, Session, SessionId, SessionStatus};
 
 use super::{Changes, Watch, Why};
 
 fn chat(id: &str, status: SessionStatus, reply_seq: u64, read_seq: u64) -> Session {
-    Session { status, reply_seq, read_seq, ..protocol::fixtures::session(id) }
+    Session { status, reply_seq: Seq::new(reply_seq), read_seq: Seq::new(read_seq), ..protocol::fixtures::session(id) }
 }
 
 fn working(id: &str) -> Session {

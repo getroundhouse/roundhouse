@@ -1,12 +1,13 @@
 use gpui_kit::TestAppContext;
 use protocol::event::{ContentBlock, EventBody};
+use protocol::model::Seq;
 
 use super::{Among, Of, Place, TextAt, TextKey, Texts, Written};
 use crate::fixtures::{event, log};
 use crate::selection::Selection;
 
 fn at(seq: u64) -> TextAt {
-    TextAt::only(seq, 0)
+    TextAt::only(Seq::new(seq), 0)
 }
 
 /// A reply, for a log whose row is loaded.
@@ -18,7 +19,7 @@ fn words() -> EventBody {
 #[test]
 fn the_subagent_tab_s_head_comes_before_every_row_s_texts_and_the_end_of_the_chat_and_its_foot_after() {
     let (head, foot) = (TextAt::first_of(Of::Head), TextAt::first_of(Of::Foot));
-    let rows = [TextAt::only(0, 0), TextAt::only(u64::MAX, usize::MAX)];
+    let rows = [TextAt::only(Seq::default(), 0), TextAt::only(Seq::new(u64::MAX), usize::MAX)];
     let end = [TextAt::at_the_end(0), TextAt::at_the_end(usize::MAX)];
 
     assert!(rows.iter().all(|row| head < *row && end.iter().all(|end| row < end)), "{head:?} {rows:?} {end:?}");
@@ -31,7 +32,7 @@ fn a_text_whose_event_is_let_go_of_is_kept_while_any_of_it_is_selected() {
     for seq in 1..=3 {
         texts.drawn_at(at(seq), "words");
     }
-    let held = log([event(3, words())]);
+    let held = log([event(Seq::new(3), words())]);
 
     texts.let_go(&held, Some(&(at(2)..=at(3))));
     let kept = [1, 2, 3].map(|seq| texts.keeps(&TextKey::of(at(seq))));
@@ -57,9 +58,9 @@ fn the_subagent_tab_s_head_and_foot_are_kept_whatever_the_log_lets_go_of() {
 /// a frame of its own.
 fn nests(texts: &Texts, selection: &Selection, block: usize, names: &[&'static str]) {
     texts.new_frame();
-    texts.drawing(Of::Event(1), || {
+    texts.drawing(Of::Event(Seq::new(1)), || {
         for name in names {
-            let place = Place::NextNested { seq: 1, block };
+            let place = Place::NextNested { seq: Seq::new(1), block };
             texts.draw(selection, &Written { at: place, ..Written::unfound(at(1), named(name).0, "words") }, None);
         }
     });
@@ -70,7 +71,7 @@ fn named(name: &'static str) -> TextKey {
 }
 
 fn nested(block: usize, n: usize) -> TextAt {
-    TextAt { of: Of::Event(1), block, among: Among::Nested(n) }
+    TextAt { of: Of::Event(Seq::new(1)), block, among: Among::Nested(n) }
 }
 
 /// A nested text is placed after those its block has drawn so far in this drawing of the row, block by block, and from
@@ -81,9 +82,9 @@ fn a_nested_text_is_placed_after_those_its_block_has_drawn_so_far(cx: &mut TestA
     let selection = Selection::new(texts.clone(), cx.update(|cx| cx.focus_handle()));
 
     texts.new_frame();
-    texts.drawing(Of::Event(1), || {
+    texts.drawing(Of::Event(Seq::new(1)), || {
         for (block, name) in [(2, "first"), (2, "second"), (3, "other block's")] {
-            let place = Place::NextNested { seq: 1, block };
+            let place = Place::NextNested { seq: Seq::new(1), block };
             texts.draw(&selection, &Written { at: place, ..Written::unfound(at(1), named(name).0, "words") }, None);
         }
     });
@@ -105,7 +106,7 @@ fn a_nested_text_that_is_no_longer_drawn_has_no_place(cx: &mut TestAppContext) {
 
     nests(&texts, &selection, 0, &["words"]);
     let closed = ["a thought", "another", "words"].map(|name| texts.place_of(&named(name)));
-    texts.let_go(&log([event(1, words())]), None);
+    texts.let_go(&log([event(Seq::new(1), words())]), None);
     let kept = texts.keeps(&named("another"));
     nests(&texts, &selection, 0, &["a thought", "another", "words"]);
     let opened = ["a thought", "another", "words"].map(|name| texts.place_of(&named(name)));

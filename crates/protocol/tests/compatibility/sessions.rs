@@ -4,7 +4,7 @@
 use protocol::client::HubNotice;
 use protocol::event::TurnOutcome;
 use protocol::frame;
-use protocol::model::{MaxSetBy, OpenApproval, PromptLine, Session, SessionStatus, Settlement};
+use protocol::model::{MaxSetBy, OpenApproval, PromptLine, Seq, Session, SessionStatus, Settlement};
 
 fn session(more: &str) -> Session {
     let notice = format!(
@@ -19,8 +19,8 @@ fn session(more: &str) -> Session {
 #[test]
 fn what_a_sessions_agent_is_waiting_on_keeps_its_form() {
     let says = session(r#","open_approvals":[{"seq":3,"approval_id":"a"}],"untaken":[4],"agent_opened":true"#);
-    assert_eq!(says.open_approvals, Some(vec![OpenApproval { seq: 3, approval_id: "a".into() }]));
-    assert_eq!((says.untaken, says.agent_opened), (Some(vec![4]), Some(true)));
+    assert_eq!(says.open_approvals, Some(vec![OpenApproval { seq: Seq::new(3), approval_id: "a".into() }]));
+    assert_eq!((says.untaken, says.agent_opened), (Some(vec![Seq::new(4)]), Some(true)));
     let nothing_waits = session(r#","open_approvals":[],"untaken":[],"agent_opened":false"#);
     assert_eq!((nothing_waits.open_approvals, nothing_waits.untaken), (Some(vec![]), Some(vec![])));
     assert_eq!(nothing_waits.agent_opened, Some(false));
@@ -29,7 +29,7 @@ fn what_a_sessions_agent_is_waiting_on_keeps_its_form() {
     assert!(!older.compaction_waits(), "an older hub is asked, and has the last word");
     assert_eq!((older.open_approvals, older.untaken, older.agent_opened), (None, None, None));
     assert_eq!(
-        serde_json::to_value(OpenApproval { seq: 3, approval_id: "a".into() }).unwrap(),
+        serde_json::to_value(OpenApproval { seq: Seq::new(3), approval_id: "a".into() }).unwrap(),
         serde_json::json!({ "seq": 3, "approval_id": "a" })
     );
 }
@@ -55,7 +55,7 @@ fn a_session_from_a_hub_that_doesnt_keep_replies_reads_as_read() {
     let notice: HubNotice = frame::decode(line).unwrap();
 
     let HubNotice::Session(session) = notice else { panic!("{notice:?}") };
-    assert_eq!((session.reply_seq, session.read_seq), (0, 0));
+    assert_eq!((session.reply_seq, session.read_seq), (Seq::default(), Seq::default()));
     assert!(!session.unread());
 }
 

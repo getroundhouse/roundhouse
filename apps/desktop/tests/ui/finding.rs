@@ -8,7 +8,7 @@ use std::time::Duration;
 use gpui_kit::AppContext as _;
 use gpui_kit::test::ElementSnapshot;
 use gpui_kit::{ScrollDelta, TestAppContext, point, px};
-use protocol::model::SettledAt;
+use protocol::model::{Seq, SettledAt};
 
 use crate::support::{Stack, Ui};
 
@@ -43,7 +43,7 @@ fn cmd_f_finds_in_the_whole_chat_and_opens_what_a_match_is_in(cx: &mut TestAppCo
     let mut ui = Ui::open(cx, &stack);
     ui.wait("the chat", |ui| ui.transcript().is_some());
     let transcript = ui.transcript().unwrap();
-    let (events, _) = stack.client().session_read(&session, 1, 50, false).unwrap();
+    let (events, _) = stack.client().session_read(&session, Seq::new(1), 50, false).unwrap();
     let call = events.iter().find(|e| matches!(&e.body, protocol::event::EventBody::Assistant { .. })).unwrap();
     let call_row = ui.row_of(call);
     // The first prompt is drawn where the agent took it, once it had started.

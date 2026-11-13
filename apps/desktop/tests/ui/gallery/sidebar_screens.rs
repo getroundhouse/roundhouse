@@ -4,6 +4,7 @@
 #![cfg(test)]
 
 use gpui_kit::px;
+use protocol::model::Seq;
 
 use super::frame::{SIDEBAR, SIDEBAR_MENU};
 use super::screens::FOCUS;
@@ -67,7 +68,7 @@ pub(crate) const SCREENS: &[Screen] = &[
 /// The conversation, whose chat's cache is about to expire, nine minutes from now.
 fn expiring() -> World {
     let mut world = conversation();
-    let chat = world.sessions.iter().rfind(|session| session.last_seq > 0).unwrap().id.clone();
+    let chat = world.sessions.iter().rfind(|session| session.last_seq > Seq::default()).unwrap().id.clone();
     world.cached(&chat, 51);
     world
 }

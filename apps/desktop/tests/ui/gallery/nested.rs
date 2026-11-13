@@ -5,7 +5,7 @@
 use std::sync::Arc;
 
 use gpui_kit::PlatformTextSystem;
-use protocol::model::SessionStatus;
+use protocol::model::{Seq, SessionStatus};
 use serde_json::json;
 
 use super::capture;
@@ -32,7 +32,7 @@ fn a_subagent_s_work_with_another_s_in_it() -> World {
     };
     let events = vec![
         user_prompt("Have the signals looked at."),
-        taken(1),
+        taken(Seq::new(1)),
         tool_use("msg-1", "outer", "Agent", agent("Look at the signals", "Ask of the outer one.")),
         within("outer", text("sub-1", "The outer one starts.")),
         within("outer", tool_use("sub-c", "check", "Bash", json!({"command": "echo checked", "description": CHECK}))),
@@ -87,7 +87,7 @@ fn what_a_call_s_row_nests_is_found_as_it_s_drawn() {
 
     // The outer one's first words are the chat's fourth event, and the inner one's its eighth, after the command.
     let nested = |event: &str| found.counted.get(event).copied();
-    let words = (nested("(Event(4, 0), Text)"), nested("(Event(8, 0), Text)"));
+    let words = (nested("(Event(Seq(4), 0), Text)"), nested("(Event(Seq(8), 0), Text)"));
     assert_eq!(words, (Some(1), Some(1)), "the outer one's words and the inner one's: {:?}", found.counted);
     assert_eq!(found.drawn, found.counted);
 }

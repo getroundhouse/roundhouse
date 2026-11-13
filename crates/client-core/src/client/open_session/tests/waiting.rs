@@ -10,7 +10,7 @@ use crate::Client;
 use crate::session_log::RecordedApprovals;
 
 /// Pages before the newest two, which a view opened at the end doesn't load.
-const ASKED_AT: Seq = 9;
+const ASKED_AT: Seq = Seq::new(9);
 
 #[test]
 fn a_chat_opened_while_a_request_from_long_before_waits_fetches_that_request() {

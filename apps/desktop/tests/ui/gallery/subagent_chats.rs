@@ -4,7 +4,7 @@
 #![cfg(test)]
 
 use protocol::event::EventBody;
-use protocol::model::SessionStatus;
+use protocol::model::{Seq, SessionStatus};
 use serde_json::json;
 
 use super::events::{
@@ -175,7 +175,7 @@ pub(crate) fn subagents(working: bool) -> Vec<EventBody> {
         json!({ "description": "Review the change", "subagent_type": "general-purpose", "prompt": REVIEW_PROMPT });
     let mut events = vec![
         user_prompt("Find every place that treats a stop signal specially, and make them use `may_pass`."),
-        taken(1),
+        taken(Seq::new(1)),
         text("msg-1", "I'll have an agent find them while I read the signal."),
         tool_use("msg-2", "toolu-1", "Agent", find),
         subagent_started("toolu-1", "Explore", "Find checks for a stop signal", FIND_PROMPT),

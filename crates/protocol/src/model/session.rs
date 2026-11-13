@@ -265,6 +265,11 @@ impl Session {
         self.reply_outcome == Some(TurnOutcome::Error) && self.status.between_turns()
     }
 
+    /// A turn has ended, so the agent has a reply, read or not.
+    pub fn has_reply(&self) -> bool {
+        self.reply_seq != Seq::default()
+    }
+
     /// Whether the chat is open, in its workspace's tabs, rather than closed, which stopped its agent. Nothing can be
     /// sent to a closed one until it's reopened.
     pub fn is_open(&self) -> bool {

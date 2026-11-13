@@ -18,7 +18,7 @@ pub struct Position(u64);
 impl Position {
     /// The position at `seq`, in a log by `seq`.
     pub(crate) const fn of_seq(seq: Seq) -> Self {
-        Self(seq)
+        Self(seq.get())
     }
 
     /// The position at `place`, in a log by place.
@@ -28,7 +28,7 @@ impl Position {
 
     /// The `seq` it is, in a log by `seq`, for asking the hub for what's there.
     pub(crate) const fn seq(self) -> Seq {
-        self.0
+        Seq::new(self.0)
     }
 
     /// The place it is, in a log by place, for asking the hub for what's there.
@@ -70,7 +70,7 @@ mod tests {
 
     #[test]
     fn nothing_is_at_0_and_the_first_event_is_in_the_first_row() {
-        let first = Position::of_seq(1);
+        let first = Position::of_seq(Seq::FIRST);
 
         assert_eq!(Position::default().row(), None);
         assert_eq!(first.row(), Some(0));
@@ -80,9 +80,9 @@ mod tests {
 
     #[test]
     fn a_seq_and_a_place_turn_back_into_what_they_were() {
-        let (seq, place) = (Position::of_seq(7), Position::of_place(Place::new(7)));
+        let (seq, place) = (Position::of_seq(Seq::new(7)), Position::of_place(Place::new(7)));
 
-        assert_eq!((seq.seq(), place.place()), (7, Place::new(7)));
+        assert_eq!((seq.seq(), place.place()), (Seq::new(7), Place::new(7)));
         assert_eq!(seq, place, "the same number is the same position, which only the log can tell apart");
     }
 

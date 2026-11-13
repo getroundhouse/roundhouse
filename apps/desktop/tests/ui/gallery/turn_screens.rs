@@ -93,7 +93,7 @@ fn endings() -> Vec<EventBody> {
 /// Running the UI tests, with a prompt sent meanwhile, then stopped before the agent read it.
 fn dropped() -> Vec<EventBody> {
     let mut events = chats::steered();
-    let steer = Seq::try_from(events.len()).unwrap();
+    let steer = Seq::new(u64::try_from(events.len()).unwrap());
     events.extend([EventBody::PromptDropped { prompt: steer }, ended(TurnOutcome::Cancelled, Vec::new(), 31_600)]);
     events
 }
@@ -108,7 +108,7 @@ fn untitled() -> World {
 
 /// The seq the next event pushed onto `events` will have, as [`World::chat`] numbers them.
 fn next_seq(events: &[EventBody]) -> Seq {
-    Seq::try_from(events.len() + 1).unwrap()
+    Seq::new(u64::try_from(events.len() + 1).unwrap())
 }
 
 /// The end of a turn that went no further than `outcome` says, with what went wrong, after `took_ms`.

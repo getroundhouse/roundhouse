@@ -56,7 +56,7 @@ impl AppView {
     /// The workspace's open chat last worked in that has a reply.
     fn last_replied(&self, id: &WorkspaceId) -> Option<&Session> {
         let sessions = self.records.sessions(id).iter();
-        let replied = sessions.filter(|s| s.is_open() && s.reply_seq > 0);
+        let replied = sessions.filter(|s| s.is_open() && s.has_reply());
         replied.max_by_key(|s| (s.last_active_at_ms(), s.created_at_ms))
     }
 

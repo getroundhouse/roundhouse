@@ -2,7 +2,7 @@
 //! request as each test says.
 
 use protocol::event::{AgentTask, EventBody, ExitReason, NoticeLevel, TaskKind};
-use protocol::model::{Checks, Local, MergeState, PrState, PullRequest, QueueState, SessionStatus, Workspace};
+use protocol::model::{Checks, Local, MergeState, PrState, PullRequest, QueueState, Seq, SessionStatus, Workspace};
 use protocol::worker::{
     Answer as _, CancelWait, PullRequestReply, RateLimit, ReadWait, StartWait, WaitAnswer, WorkerAsk, WorkerRequest,
     WorkerResponse,
@@ -329,7 +329,7 @@ async fn a_wait_ending_starts_the_agent_of_a_chat_waiting_on_nothing_else() {
         let _ = hub.session_cancel("s".into()).await;
 
         assert_eq!(*starts.lock(), usize::from(woken), "{status:?}, held: {queue_held}");
-        let events = hub.store.read_events(&"s".into(), 1, 100, u64::MAX, false).unwrap();
+        let events = hub.store.read_events(&"s".into(), Seq::new(1), 100, u64::MAX, false).unwrap();
         let told = events
             .iter()
             .any(|event| matches!(event.body, EventBody::AgentExited { reason: ExitReason::StartFailed, .. }));

@@ -73,7 +73,7 @@ impl AtWork {
             turn_started_at_ms: Some(subagent.started_at_ms),
             background: Vec::new(),
             wait: None,
-            reply_seq: 0,
+            reply_seq: Seq::default(),
             failed: false,
             cache: None,
         }

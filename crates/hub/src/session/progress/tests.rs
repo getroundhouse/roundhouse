@@ -59,7 +59,7 @@ fn a_turn_starts_when_its_event_is_recorded_and_its_end_says_so_whatever_the_age
     let prompt = EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("x") };
 
     let Step { change, next, .. } = progress.step(Origin::Hub, prompt, true);
-    progress.take(next, 42, Some(vec![1]));
+    progress.take(next, 42, Some(vec![Seq::new(1)]));
 
     assert_eq!(
         change.status.map(|status| (status.status, status.turn)),

@@ -7,7 +7,7 @@ use client_core::stand_in_hub::{self, Does};
 use protocol::attachment::{Attachment, AttachmentBytes, MediaType};
 use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, ReplyOutcome, agent, attachments, drafts};
 use protocol::fixtures;
-use protocol::model::{AgentKind, AttachmentId, Draft, Effort, ModelName, RepoId};
+use protocol::model::{AgentKind, AttachmentId, Draft, Effort, ModelName, RepoId, Seq};
 
 use super::*;
 
@@ -63,7 +63,7 @@ fn too_old(request: &ClientRequest, read: &impl Fn(&AttachmentId) -> ReplyOutcom
             })
         }
         ClientRequest::SessionPrompt(_) => {
-            ClientResponse::PromptRecorded(agent::PromptRecorded { seq: 1, duplicate: false })
+            ClientResponse::PromptRecorded(agent::PromptRecorded { seq: Seq::new(1), duplicate: false })
         }
         _ => return None,
     };
