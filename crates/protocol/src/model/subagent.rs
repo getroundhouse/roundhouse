@@ -6,7 +6,7 @@ use serde_json::Value;
 
 use super::{ModelName, Rev, SessionId, ToolUseId};
 use crate::attachment::Attachment;
-use crate::event::{CallKind, ContentBlock, SubagentOutcome};
+use crate::event::{CallKind, ContentBlock, Denied, SubagentOutcome};
 
 /// One subagent, named by its session and the call that started it, which its events name as their parent.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -152,6 +152,9 @@ pub struct CallResult {
     /// How the command exited, as its result block said.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub exit_code: Option<i32>,
+    /// The person wouldn't let the call be made, as its result block said.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub denied: Option<Denied>,
 }
 
 #[cfg(test)]

@@ -14,6 +14,8 @@ use protocol::model::{ApprovalId, CacheRequest, CacheTtl, PermissionMode, ToolUs
 use protocol::tail::{BlockKind, Tail};
 use serde_json::Value;
 
+mod denials;
+mod full_access;
 mod mcp_task;
 mod modes;
 

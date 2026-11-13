@@ -41,7 +41,7 @@ pub(crate) fn ask_questions(
                 state_event(turn.config, turn.out, "running");
                 if response["response"]["behavior"] == "deny" {
                     let message = response["response"]["message"].as_str().unwrap_or("denied");
-                    turn.tool_result(&tool_use_id, message, true);
+                    turn.denied_result(&tool_use_id, message);
                     return false;
                 }
                 let answers = response["response"]["updatedInput"]["answers"].as_object();
@@ -93,7 +93,7 @@ pub(crate) fn present_plan(
                 state_event(turn.config, turn.out, "running");
                 if response["response"]["behavior"] == "deny" {
                     let message = response["response"]["message"].as_str().unwrap_or("denied");
-                    turn.tool_result(&tool_use_id, message, true);
+                    turn.denied_result(&tool_use_id, message);
                     return false;
                 }
                 let back_to = BEFORE_PLAN.lock().clone().unwrap_or_else(|| "default".to_string());
@@ -115,6 +115,39 @@ pub(crate) fn present_plan(
     }
 }
 
+/// What a command holds that removes whatever another command prints, which the real CLI can't check before it runs.
+const UNCHECKED_REMOVAL: &str = "rm -rf \"$(";
+
+/// The real CLI's words for why it asks about one, on 2.1.322.
+const UNCHECKED_REMOVAL_REASON: &str =
+    "Dangerous rm operation on statically-unresolvable target: command substitution output";
+
+/// What the request for any command says it's for, which isn't the command, as the real CLI's is the agent's own line
+/// about it.
+const SAYS_ITS_FOR: &str = "Run a command the test asked for";
+
+/// Whether the agent asks before running `command`: in any mode but full access, and in every mode for a removal
+/// whose target is only known once it runs, as the real CLI does.
+pub(crate) fn asks_before(command: &str) -> bool {
+    command.contains(UNCHECKED_REMOVAL) || current_mode() != "bypassPermissions"
+}
+
+/// The request to run `command` as the call `tool_use_id`, and its ID. One from a subagent names the task the
+/// subagent runs as, and one for an unchecked removal says why it's asked, as the real CLI's do.
+pub(crate) fn request_to_run(tool_use_id: &str, command: &str, task: Option<&str>) -> (String, Value) {
+    let mut request = json!({"subtype":"can_use_tool","tool_name":"Bash","display_name":"Bash",
+        "input":{"command":command,"description":SAYS_ITS_FOR},"description":SAYS_ITS_FOR,"tool_use_id":tool_use_id,
+        "permission_suggestions":[]});
+    if command.contains(UNCHECKED_REMOVAL) {
+        request["decision_reason"] = json!(UNCHECKED_REMOVAL_REASON);
+        request["decision_reason_type"] = json!("safetyCheck");
+    }
+    if let Some(task) = task {
+        request["agent_id"] = json!(task);
+    }
+    (format!("req_{tool_use_id}"), request)
+}
+
 pub(crate) fn run_tool(
     turn: &mut Turn,
     command: &str,
@@ -123,14 +156,9 @@ pub(crate) fn run_tool(
     eof: &mut bool,
 ) -> bool {
     let tool_use_id = turn.tool_use(command);
-    if current_mode() != "bypassPermissions" {
-        let request_id = format!("req_{tool_use_id}");
-        emit(
-            turn.out,
-            json!({"type":"control_request","request_id":request_id,"request":{"subtype":"can_use_tool",
-            "tool_name":"Bash","input":{"command":command},"description":command,"tool_use_id":tool_use_id,
-            "permission_suggestions":[]}}),
-        );
+    if asks_before(command) {
+        let (request_id, request) = request_to_run(&tool_use_id, command, None);
+        emit(turn.out, json!({"type":"control_request","request_id":request_id,"request":request}));
         state_event(turn.config, turn.out, "requires_action");
         loop {
             match rx.recv() {
@@ -139,7 +167,7 @@ pub(crate) fn run_tool(
                     assert_eq!(response["request_id"], request_id.as_str());
                     if response["response"]["behavior"] == "deny" {
                         let message = response["response"]["message"].as_str().unwrap_or("denied");
-                        turn.tool_result(&tool_use_id, message, true);
+                        turn.denied_result(&tool_use_id, message);
                         return false;
                     }
                     // The CLI runs what it's given back, which is the input as approved.

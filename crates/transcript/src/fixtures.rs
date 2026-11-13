@@ -5,9 +5,10 @@ use protocol::event::{
     ApprovalOutcome, Asking, EventBody, FailureKind, QuestionAnswer, RequestFailure, SessionEvent, TurnOutcome,
 };
 pub(crate) use protocol::fixtures::event;
+use protocol::fixtures::{self, ApprovalRequest};
 use protocol::model::{Rev, Subagent, SubagentStatus};
 use protocol::prompt::Prompt;
-use serde_json::{Value, json};
+use serde_json::json;
 
 /// The record of the subagent the call `call` started, in the background, at `status`, with nothing else known about
 /// it yet. A test sets what it's about.
@@ -58,28 +59,12 @@ pub(crate) fn result(id: &str) -> EventBody {
 /// The agent asking to use the tool `tool`, under the approval `id`, as a request recorded before adapters said what
 /// each asks, which is read from its tool.
 pub(crate) fn asked(id: &str, tool: &str) -> EventBody {
-    EventBody::ApprovalRequested {
-        approval_id: id.into(),
-        tool_name: tool.into(),
-        tool_use_id: None,
-        input: Value::Null,
-        description: None,
-        suggestions: Value::Null,
-        asking: None,
-    }
+    fixtures::approval_request(id, tool).into()
 }
 
 /// The agent asking `asking` under the approval `id`, as its adapter says, with a tool no client knows.
 pub(crate) fn asking(id: &str, asking: Asking) -> EventBody {
-    EventBody::ApprovalRequested {
-        approval_id: id.into(),
-        tool_name: "Ask".into(),
-        tool_use_id: None,
-        input: Value::Null,
-        description: None,
-        suggestions: Value::Null,
-        asking: Some(Box::new(asking)),
-    }
+    ApprovalRequest { asking: Some(asking), ..fixtures::approval_request(id, "Ask") }.into()
 }
 
 /// The approval `id` closed with `outcome`, and with `answers` by the question's text, if any were recorded.

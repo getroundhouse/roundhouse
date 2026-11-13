@@ -1,9 +1,9 @@
 use client_core::calls::{Failure, Recorded};
-use protocol::event::{AgentTask, CallKind, ContentBlock, SubagentOutcome, TaskKind};
+use protocol::event::{AgentTask, CallKind, ContentBlock, Denied, SubagentOutcome, TaskKind};
 use protocol::fixtures;
 use serde_json::{Value, json};
 
-use super::{Printer, called, came_back, started};
+use super::{Printer, called, came_back, denial, started};
 
 fn task(id: &str, kind: TaskKind) -> AgentTask {
     AgentTask { id: id.into(), description: Some(format!("Do {id}")), kind, call: None }
@@ -81,4 +81,12 @@ fn a_subagents_end_says_which_it_was() {
         "a subagent failed: toolu_c",
         "one it didn't see start"
     );
+}
+
+#[test]
+fn a_denied_call_says_so_with_what_the_person_said_rather_than_failing() {
+    let said = Denied { said: Some("Use the full path\nand say so".into()) };
+
+    assert_eq!(denial(&said), "tool denied: Use the full path");
+    assert_eq!(denial(&Denied::default()), "tool denied");
 }

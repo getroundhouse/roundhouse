@@ -35,5 +35,6 @@ pub(super) fn result(value: &Value) -> ContentBlock {
         encrypted,
         call: None,
         exit_code: None,
+        denied: None,
     }
 }

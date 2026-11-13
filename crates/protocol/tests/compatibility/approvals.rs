@@ -48,6 +48,25 @@ fn an_approval_asking_for_a_plan_or_a_tools_use_keeps_its_form() {
     assert_eq!(asking(tool), Some(Asking::ToolUse { call: None }));
 }
 
+/// Why the agent asks, and which subagent does, by the call that started it. One from before says neither.
+#[test]
+fn an_approval_that_says_why_and_which_subagent_asks_keeps_its_form() {
+    let stored = br#"{"session_id":"s","seq":1,"ts_ms":1,"place":0,"body":{"type":"approval_requested","approval_id":"a","tool_name":"Bash","tool_use_id":"toolu_2","input":{"command":"ls"},"description":null,"suggestions":null,"asking":{"kind":"tool_use"},"reason":"It can't be checked","asked_by":"toolu_1"}}"#;
+    let before = br#"{"session_id":"s","seq":1,"ts_ms":1,"place":0,"body":{"type":"approval_requested","approval_id":"a","tool_name":"Bash","tool_use_id":"toolu_2","input":{"command":"ls"},"description":null,"suggestions":null,"asking":{"kind":"tool_use"}}}"#;
+    let said = |stored: &[u8]| {
+        let event: SessionEvent = frame::decode(stored).unwrap();
+        assert_eq!(serde_json::to_vec(&event).unwrap(), stored, "and it's written the way it's read");
+        assert_eq!(event.body.subagent(), None, "among the agent's own events, where a chat reads it, whoever asks");
+        match event.body {
+            EventBody::ApprovalRequested { reason, asked_by, .. } => (reason, asked_by),
+            other => panic!("{other:?}"),
+        }
+    };
+
+    assert_eq!(said(stored), (Some("It can't be checked".to_string()), Some("toolu_1".into())));
+    assert_eq!(said(before), (None, None));
+}
+
 /// A newer adapter's kind mustn't cost the event, which a client then asks about as a tool's use.
 #[test]
 fn an_approval_asking_something_this_build_doesnt_know_still_reads() {

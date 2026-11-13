@@ -121,10 +121,10 @@ impl<'a> ToolCall<'a> {
         known.unwrap_or_else(|| ToolCall::Other(Other::read(&kind, call.name, input)))
     }
 
-    /// One line saying what the call is about, the same wherever it's shown, such as on a card asking to run it or in
-    /// a terminal: the input that matters most for its kind, or for a subagent what it's for. A tool without a kind of
-    /// its own has what [`Other`] says. `None` for a call with nothing to say, such as the advisor, which takes no
-    /// input.
+    /// One line saying what the call is about, the same wherever it's shown, such as where a client asks whether to
+    /// run it or in a terminal: the input that matters most for its kind, or for a subagent what it's for. A tool
+    /// without a kind of its own has what [`Other`] says. `None` for a call with nothing to say, such as the advisor,
+    /// which takes no input.
     pub fn summary(&self) -> Option<String> {
         let about = match self {
             ToolCall::Command(command) => command.summary(),

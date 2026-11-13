@@ -4,7 +4,8 @@
 #![cfg(test)]
 
 use protocol::event::{ApprovalOutcome, EventBody};
-use protocol::model::{ApprovalId, ToolUseId};
+use protocol::fixtures::{ApprovalRequest, approval_request};
+use protocol::model::ToolUseId;
 use serde_json::{Value, json};
 
 use super::chats::looked_around;
@@ -85,15 +86,12 @@ fn refresh() -> Value {
 fn asking(message: &str, call: &str, approval: &str, input: Value) -> Vec<EventBody> {
     vec![
         tool_use(message, call, "AskUserQuestion", input.clone()),
-        EventBody::ApprovalRequested {
-            approval_id: ApprovalId::from(approval),
-            tool_name: "AskUserQuestion".to_string(),
+        ApprovalRequest {
             tool_use_id: Some(ToolUseId::from(call)),
             input,
-            description: None,
-            suggestions: Value::Null,
-            asking: None,
-        },
+            ..approval_request(approval, "AskUserQuestion")
+        }
+        .into(),
     ]
 }
 

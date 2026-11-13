@@ -6,7 +6,7 @@ use std::io::Write;
 use client_core::calls::{Failure, Recorded, first_line};
 use protocol::attachment::Attachment;
 use protocol::event::{
-    AgentTask, CompactionOutcome, ContentBlock, EventBody, Question, SessionEvent, SubagentOutcome, TurnOutcome,
+    AgentTask, CompactionOutcome, ContentBlock, Denied, EventBody, Question, SessionEvent, SubagentOutcome, TurnOutcome,
 };
 use protocol::model::{ApprovalId, MessageId, PermissionMode, Seq, TaskId, ToolUseId};
 use protocol::tail::{DeltaChange, StreamDelta, Tail};
@@ -187,6 +187,7 @@ impl Printer {
             ContentBlock::ToolResult { encrypted: true, .. } => {
                 self.line(seq, "tool result: encrypted, for the model alone");
             }
+            ContentBlock::ToolResult { denied: Some(denied), .. } => self.line(seq, &denial(denied)),
             ContentBlock::ToolResult { text, images, .. } => {
                 let (label, text) = came_back(text, Failure::of(block));
                 let lines: Vec<&str> = text.lines().collect();
@@ -261,6 +262,14 @@ impl Printer {
         self.end_line();
         println!("[{seq}] {text}");
     }
+}
+
+/// A call the person denied, which never ran, so there's nothing it printed: only what they said, if anything.
+fn denial(denied: &Denied) -> String {
+    denied
+        .said
+        .as_deref()
+        .map_or_else(|| "tool denied".to_string(), |said| format!("tool denied: {}", first_line(said)))
 }
 
 /// A call, by the agent's name for its tool, with what it's about, as every client says it, if it says anything.

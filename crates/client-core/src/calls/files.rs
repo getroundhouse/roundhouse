@@ -8,6 +8,7 @@ pub struct ReadFile<'a> {
     pub path: &'a str,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct WriteFile<'a> {
     pub path: &'a str,
     /// All of what the file holds afterwards.
@@ -15,6 +16,7 @@ pub struct WriteFile<'a> {
 }
 
 /// One edit or several, to one file.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EditFile<'a> {
     pub path: &'a str,
     /// What each edit replaced, and with what, in order.

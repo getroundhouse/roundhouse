@@ -28,6 +28,22 @@ fn a_lone_surrogate_does_not_hide_an_approval() {
 }
 
 #[test]
+fn a_request_says_why_its_made_unless_what_it_says_is_blank() {
+    let request = |reason: &str| {
+        let line = format!(
+            r#"{{"type":"control_request","request_id":"r1","request":{{"subtype":"can_use_tool","tool_name":"Bash","input":{{}},"decision_reason":"{reason}"}}}}"#
+        );
+        let Parsed::Event(EventBody::ApprovalRequested { reason, .. }) = parse_line(&line) else {
+            panic!("{:?}", parse_line(&line));
+        };
+        reason
+    };
+
+    assert_eq!(request("It can't be checked").as_deref(), Some("It can't be checked"));
+    assert_eq!(request("  "), None);
+}
+
+#[test]
 fn surrogate_repair_only_touches_what_is_broken() {
     let text = |line: &str| {
         let parsed = parse_line(line);

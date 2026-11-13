@@ -6,7 +6,7 @@ use std::path::PathBuf;
 
 use client_core::ClientError;
 use protocol::client::ErrorCode;
-use protocol::event::{ApprovalDecision, ApprovalOutcome, Asking, CallKind, ContentBlock, EventBody};
+use protocol::event::{ApprovalDecision, ApprovalOutcome, Asking, CallKind, ContentBlock, Denied, EventBody};
 use protocol::model::SessionStatus;
 
 use crate::support::{Stack, wait_for_approval, wait_for_status, wait_for_turn_end};
@@ -50,28 +50,40 @@ fn an_approval_can_be_answered_by_a_different_client_after_a_restart() {
 }
 
 #[test]
-fn a_denied_tool_does_not_run_and_the_agent_hears_why() {
+fn a_denied_tool_does_not_run_and_the_agent_hears_why_and_its_result_says_it_was_denied() {
     let stack = Stack::start();
     let client = stack.client();
     let (workspace, session) = stack.workspace_planning(&client);
+    let worktree = PathBuf::from(workspace.path.unwrap());
+    let deny = |said: Option<&str>| ApprovalDecision::Deny { message: said.map(str::to_string), interrupt: false };
+    // Each result to a call, by what it told the agent, with what it says of a denial.
+    let results = |events: &[protocol::event::SessionEvent]| -> Vec<(String, Option<Denied>)> {
+        let blocks = events.iter().flat_map(|e| match &e.body {
+            EventBody::AgentUser { blocks, .. } => blocks.as_slice(),
+            _ => &[],
+        });
+        let result = |block: &ContentBlock| match block {
+            ContentBlock::ToolResult { text, is_error: true, denied, .. } => Some((text.clone(), denied.clone())),
+            _ => None,
+        };
+        blocks.filter_map(result).collect()
+    };
+
     client.session_prompt(&session.id, "tool:echo nope > nope.txt", None).unwrap();
     let approval_id = wait_for_approval(&client, &session.id);
-    client
-        .session_approve(
-            &session.id,
-            &approval_id,
-            ApprovalDecision::Deny { message: Some("not that".into()), interrupt: false },
-        )
-        .unwrap();
+    client.session_approve(&session.id, &approval_id, deny(Some("not that"))).unwrap();
     let events = wait_for_turn_end(&client, &session.id, 1);
-    assert!(!PathBuf::from(workspace.path.unwrap()).join("nope.txt").exists());
-    let told = events.iter().any(|e| match &e.body {
-        EventBody::AgentUser { blocks, .. } => blocks
-            .iter()
-            .any(|b| matches!(b, ContentBlock::ToolResult { text, is_error: true, .. } if text == "not that")),
-        _ => false,
-    });
-    assert!(told);
+    assert!(!worktree.join("nope.txt").exists());
+    let said = Denied { said: Some("not that".into()) };
+    assert_eq!(results(&events), [("not that".to_string(), Some(said))], "the agent is told, and it says who said");
+
+    // With nothing said, the agent is told in the adapter's words, which aren't the person's.
+    client.session_prompt(&session.id, "tool:echo nope > nope.txt", None).unwrap();
+    let approval_id = wait_for_approval(&client, &session.id);
+    client.session_approve(&session.id, &approval_id, deny(None)).unwrap();
+    let events = wait_for_turn_end(&client, &session.id, 2);
+    let (_, denied) = results(&events).pop().unwrap();
+    assert_eq!(denied, Some(Denied { said: None }));
 }
 
 #[test]

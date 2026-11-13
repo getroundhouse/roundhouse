@@ -1,10 +1,9 @@
 use super::*;
 use protocol::event::{ApprovalOutcome, NoticeLevel};
-use protocol::fixtures::event;
+use protocol::fixtures::{approval_request, event};
 use protocol::model::Place;
 use protocol::prompt::Prompt;
 use protocol::tail::DeltaChange;
-use serde_json::Value;
 
 fn notice(seq: Seq) -> SessionEvent {
     event(seq, EventBody::Notice { level: NoticeLevel::Info, message: format!("{seq}"), parent_tool_use_id: None })
@@ -130,15 +129,7 @@ fn live_events_grow_the_log_and_replays_do_not() {
 
 #[test]
 fn open_approvals_are_those_not_yet_answered() {
-    let requested = |id: &str| EventBody::ApprovalRequested {
-        approval_id: id.into(),
-        tool_name: "Bash".into(),
-        tool_use_id: None,
-        input: Value::Null,
-        description: None,
-        suggestions: Value::Null,
-        asking: None,
-    };
+    let requested = |id: &str| EventBody::from(approval_request(id, "Bash"));
     let mut log = SessionLog::new(0);
     log.apply_event(event(1, requested("a")));
     log.apply_event(event(2, requested("b")));
@@ -158,15 +149,7 @@ fn open_approvals_are_those_not_yet_answered() {
 
 #[test]
 fn a_request_with_events_after_it_that_arent_loaded_isnt_open() {
-    let requested = EventBody::ApprovalRequested {
-        approval_id: "a".into(),
-        tool_name: "AskUserQuestion".into(),
-        tool_use_id: None,
-        input: Value::Null,
-        description: None,
-        suggestions: Value::Null,
-        asking: None,
-    };
+    let requested = EventBody::from(approval_request("a", "AskUserQuestion"));
     let mut log = SessionLog::new(0);
     log.apply_event(event(1, requested));
 

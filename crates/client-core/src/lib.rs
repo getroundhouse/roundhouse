@@ -25,7 +25,7 @@ mod sending;
 pub mod stand_in_hub;
 
 pub use agents::Agents;
-pub use approval::{Answered, Approval};
+pub use approval::{Answered, Approval, Given, ToolUseAnswer, ToolUseAsked};
 pub use attachments::{FileToSend, NotAttached};
 pub use drafts::{CameBack, DraftChange, DraftKey, Drafts, FilesFor, KeptDraft, NotReadBack, ReadBack};
 pub use sending::{NotTaken, Taking, Written};

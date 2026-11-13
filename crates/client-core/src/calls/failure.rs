@@ -20,9 +20,10 @@ pub struct Failure<'a> {
 }
 
 impl<'a> Failure<'a> {
-    /// What the result `block` says went wrong, or `None` if it isn't a result, or didn't fail.
+    /// What the result `block` says went wrong, or `None` if it isn't a result, or didn't fail. A call the person
+    /// denied didn't fail: it never ran, and its result says what they said rather than what went wrong.
     pub fn of(block: &'a ContentBlock) -> Option<Self> {
-        let ContentBlock::ToolResult { is_error: true, text, .. } = block else { return None };
+        let ContentBlock::ToolResult { is_error: true, text, denied: None, .. } = block else { return None };
         Some(Self::read(text, ResultForm::of(block)?))
     }
 
@@ -128,6 +129,7 @@ mod tests {
         assert_eq!((before.exit_code, before.output), (Some(2), "no such file"));
         assert_eq!((since.exit_code, since.output), (Some(2), "no such file"));
         assert!(Failure::of(&fixtures::tool_result("c", "a.rs", false)).is_none(), "it didn't fail");
+        assert!(Failure::of(&fixtures::tool_denied("c", "Not that", Some("Not that"))).is_none(), "it was denied");
         assert!(Failure::of(&fixtures::tool_use("c", "Bash", serde_json::json!({}))).is_none(), "not a result");
     }
 }

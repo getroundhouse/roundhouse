@@ -1,4 +1,4 @@
-use protocol::event::{CallKind, ContentBlock};
+use protocol::event::{CallKind, ContentBlock, Denied};
 use protocol::fixtures;
 use protocol::model::RecentWork;
 use serde_json::json;
@@ -94,4 +94,16 @@ fn a_call_keeps_the_kind_its_adapter_said_and_its_result_how_the_command_exited(
     assert_eq!((&work.calls[0].call.kind, &work.calls[1].call.kind), (&said, &None));
     let result = work.calls[0].result.as_ref().unwrap();
     assert_eq!((result.exit_code, result.text.as_str()), (Some(2), "ls: x: No such file"));
+}
+
+/// So a client says a subagent's denied call was denied, with what the person said, from its record.
+#[test]
+fn a_denied_calls_result_says_so() {
+    let mut work = RecentWork::default();
+    let made = fixtures::tool_use("c", "Bash", json!({ "command": "rm -rf x" }));
+
+    add(&mut work, &[made], true);
+    add(&mut work, &[fixtures::tool_denied("c", "Not that", Some("Not that"))], true);
+
+    assert_eq!(work.calls[0].result.as_ref().unwrap().denied, Some(Denied { said: Some("Not that".into()) }));
 }

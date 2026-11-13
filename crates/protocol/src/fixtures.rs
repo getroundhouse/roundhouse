@@ -5,11 +5,11 @@
 
 use serde_json::Value;
 
-use crate::event::{CallKind, ContentBlock, EventBody, SessionEvent, TurnOutcome};
+use crate::event::{Asking, CallKind, ContentBlock, Denied, EventBody, SessionEvent, TurnOutcome};
 use crate::model::{
-    AgentKind, BranchName, Call, CallResult, ChildStatus, ChildWorktree, Draft, Effort, MadeBy, ModelName,
+    AgentKind, ApprovalId, BranchName, Call, CallResult, ChildStatus, ChildWorktree, Draft, Effort, MadeBy, ModelName,
     PermissionMode, Place, RecentWork, Rev, Seq, Session, SessionStatus, SetupStatus, Subagent, SubagentStatus,
-    TitleSource, Workspace, WorkspaceStatus,
+    TitleSource, ToolUseId, Workspace, WorkspaceStatus,
 };
 
 /// The session `id`, in the workspace `w`, idle with nothing in its log. Its agent is Claude, running Opus with full
@@ -161,7 +161,8 @@ pub fn tool_use(id: &str, name: &str, input: Value) -> ContentBlock {
 }
 
 /// What came back for the call `id`, as the block it comes in: its text, and whether it failed. It has no images,
-/// changed no file, isn't encrypted, and says no kind, as one recorded before adapters said has none.
+/// changed no file, isn't encrypted, isn't said to be denied, and says no kind, as one recorded before adapters said
+/// has none.
 pub fn tool_result(id: &str, text: &str, is_error: bool) -> ContentBlock {
     ContentBlock::ToolResult {
         tool_use_id: id.into(),
@@ -172,6 +173,7 @@ pub fn tool_result(id: &str, text: &str, is_error: bool) -> ContentBlock {
         encrypted: false,
         call: None,
         exit_code: None,
+        denied: None,
     }
 }
 
@@ -202,6 +204,16 @@ pub fn command_failed(id: &str, printed: &str, code: i32) -> ContentBlock {
     block
 }
 
+/// What came back for the call `id` the person denied, as recorded since adapters said: what the agent was told,
+/// `text`, as a failure, and what the person said, if anything.
+pub fn tool_denied(id: &str, text: &str, said: Option<&str>) -> ContentBlock {
+    let mut block = tool_result(id, text, true);
+    if let ContentBlock::ToolResult { denied, .. } = &mut block {
+        *denied = Some(Denied { said: said.map(str::to_string) });
+    }
+    block
+}
+
 /// A call to the tool `name`, as a subagent's record has it, saying no kind.
 pub fn call(id: &str, name: &str, input: Value) -> Call {
     Call { id: id.into(), name: name.into(), input, kind: None }
@@ -209,5 +221,71 @@ pub fn call(id: &str, name: &str, input: Value) -> Call {
 
 /// What came back for a call, as a subagent's record has it: all of `text`, from a call that didn't fail.
 pub fn call_result(text: &str) -> CallResult {
-    CallResult { is_error: false, text: text.into(), cut: false, images: Vec::new(), encrypted: false, exit_code: None }
+    CallResult {
+        is_error: false,
+        text: text.into(),
+        cut: false,
+        images: Vec::new(),
+        encrypted: false,
+        exit_code: None,
+        denied: None,
+    }
+}
+
+/// A request for approval, as [`EventBody::ApprovalRequested`] holds one, for a test to set what it's about and turn
+/// into the event's body with `into`.
+#[derive(Clone)]
+pub struct ApprovalRequest {
+    pub approval_id: ApprovalId,
+    pub tool_name: String,
+    pub tool_use_id: Option<ToolUseId>,
+    pub input: Value,
+    pub description: Option<String>,
+    pub suggestions: Value,
+    pub asking: Option<Asking>,
+    pub reason: Option<String>,
+    pub asked_by: Option<ToolUseId>,
+}
+
+/// The agent itself asking to use `tool`, under the approval `id`, with no input. Like a request recorded before
+/// adapters said, it says nothing of what it asks, of why, or of the call it's for.
+pub fn approval_request(id: &str, tool: &str) -> ApprovalRequest {
+    ApprovalRequest {
+        approval_id: id.into(),
+        tool_name: tool.into(),
+        tool_use_id: None,
+        input: Value::Null,
+        description: None,
+        suggestions: Value::Null,
+        asking: None,
+        reason: None,
+        asked_by: None,
+    }
+}
+
+impl From<ApprovalRequest> for EventBody {
+    fn from(request: ApprovalRequest) -> Self {
+        let ApprovalRequest {
+            approval_id,
+            tool_name,
+            tool_use_id,
+            input,
+            description,
+            suggestions,
+            asking,
+            reason,
+            asked_by,
+        } = request;
+        EventBody::ApprovalRequested {
+            approval_id,
+            tool_name,
+            tool_use_id,
+            input,
+            description,
+            suggestions: Box::new(suggestions),
+            asking: asking.map(Box::new),
+            reason,
+            asked_by,
+        }
+    }
 }

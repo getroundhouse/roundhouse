@@ -1,8 +1,9 @@
-//! How a request for approval prints: a tool's use by its input, questions with their options numbered, and a plan
-//! whole, each with the command that answers it, and once it's closed, what became of it and what was answered.
+//! How a request for approval prints: a tool's use by what it's for and what the tool was given, with why the agent
+//! asks and which subagent does, questions with their options numbered, and a plan whole, each with the command that
+//! answers it, and once it's closed, what became of it and what was answered.
 
-use client_core::calls;
-use client_core::{Answered, Approval};
+use client_core::calls::first_line;
+use client_core::{Answered, Approval, Given, ToolUseAsked};
 use protocol::event::{ApprovalOutcome, Asking, EventBody, Question, SessionEvent};
 
 use super::{Printer, about};
@@ -32,9 +33,7 @@ impl Printer {
 
 /// The lines for the request `event`, which asks what `approval` says.
 fn requested(event: &SessionEvent, approval: &Approval) -> Vec<String> {
-    let EventBody::ApprovalRequested { approval_id, tool_name, .. } = &event.body else {
-        return Vec::new();
-    };
+    let EventBody::ApprovalRequested { approval_id, .. } = &event.body else { return Vec::new() };
     let session = &event.session_id;
     match approval.asking() {
         Asking::Questions { questions } => {
@@ -49,13 +48,50 @@ fn requested(event: &SessionEvent, approval: &Approval) -> Vec<String> {
             lines.push(format!("  roundhouse approve {session} {approval_id}, or with --deny <what to change>"));
             lines
         }
-        Asking::ToolUse { .. } | Asking::Unknown => {
-            vec![
-                format!("APPROVAL NEEDED: {}", about(tool_name, calls::asked_about(&event.body))),
-                format!("  roundhouse approve {session} {approval_id}"),
-            ]
+        Asking::ToolUse { .. } | Asking::Unknown => tool_use(event),
+    }
+}
+
+/// The lines for a request to use a tool: the tool and what the use is for, then what the tool was given where the
+/// first line doesn't already say all of it, why the agent asks, and the subagent that asks, by the call that started
+/// it. An edit or a write is given by its file, then what it takes out and puts in.
+fn tool_use(event: &SessionEvent) -> Vec<String> {
+    let (EventBody::ApprovalRequested { approval_id, .. }, Some(asked)) = (&event.body, ToolUseAsked::of(&event.body))
+    else {
+        return Vec::new();
+    };
+    let said = match &asked.given {
+        Some(Given::Command(command)) => Some(*command),
+        Some(Given::MainInput(input)) => Some(input.as_str()),
+        Some(given @ (Given::Edit(_) | Given::Write(_))) => given.path(),
+        None => None,
+    };
+    let first = asked.about.or(said.map(first_line)).map(str::to_string);
+    let mut lines = vec![format!("APPROVAL NEEDED: {}", about(&asked.tool, first.clone()))];
+    let marked = |mark: &str, text: &str| -> Vec<String> {
+        text.lines().map(|line| format!("  {mark} {line}").trim_end().to_string()).collect()
+    };
+    match &asked.given {
+        Some(Given::Edit(edit)) => {
+            lines.extend(asked.about.map(|_| format!("  file: {}", edit.path)));
+            for (old, new) in &edit.edits {
+                lines.extend(marked("-", old).into_iter().chain(marked("+", new)));
+            }
+        }
+        Some(Given::Write(write)) => {
+            lines.extend(asked.about.map(|_| format!("  file: {}", write.path)));
+            lines.extend(marked("+", write.content));
+        }
+        Some(Given::Command(_) | Given::MainInput(_)) | None => {
+            if let Some(said) = said.filter(|said| first.as_deref() != Some(*said)) {
+                lines.extend(marked("$", said));
+            }
         }
     }
+    lines.extend(asked.reason.iter().map(|reason| format!("  why: {reason}")));
+    lines.extend(asked.asked_by.iter().map(|call| format!("  asked by the subagent {call} started")));
+    lines.push(format!("  roundhouse approve {} {approval_id}", event.session_id));
+    lines
 }
 
 /// A question, under its header, and its options numbered, with what each means.

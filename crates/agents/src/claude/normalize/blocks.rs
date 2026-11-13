@@ -35,6 +35,7 @@ fn block(value: &Value) -> ContentBlock {
             encrypted: false,
             call: None,
             exit_code: None,
+            denied: None,
         },
         Some("advisor_tool_result") => advisor::result(value),
         Some("image") => {
