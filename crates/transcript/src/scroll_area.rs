@@ -63,7 +63,7 @@ impl ScrollArea {
     }
 
     /// Scrolls on under a drag of `selection` that started in a text in here, held past its top or bottom. The text
-    /// says it's in here with `crate::prose::Written::in_area`.
+    /// says it's in here with `crate::texts::Written::in_area`.
     pub(crate) fn follows_drags(mut self, selection: &Selection) -> Self {
         self.drags = Some(selection.clone());
         self

@@ -21,10 +21,10 @@ use crate::folds::{Fold, Folds};
 use crate::item_key::ItemKey;
 use crate::linked_images::LinkedImages;
 use crate::list::TranscriptList;
-use crate::prose::{Of, Prose};
 use crate::questions::QuestionPanel;
 use crate::rows::SubagentCalls;
 use crate::selection::Selection;
+use crate::texts::{Of, Texts};
 pub use events::TranscriptEvent;
 use find::Finding;
 
@@ -113,7 +113,7 @@ pub struct Transcript {
     /// The images the agent's text points to.
     linked: LinkedImages,
     /// The texts the transcript draws from the kit's blocks, parsed.
-    prose: Prose,
+    texts: Texts,
     /// What's selected of them.
     selection: Selection,
     list: TranscriptList,
@@ -155,10 +155,10 @@ impl Transcript {
         let open = OpenSession::start_view(&client, session, view);
         let (rows, loaded) = open.read(rows_and_loaded);
         let this = cx.weak_entity();
-        let prose = Prose::new(move |of, cx| {
+        let texts = Texts::new(move |of, cx| {
             let _ = this.update(cx, |transcript, cx| transcript.redrawn(of, cx));
         });
-        let selection = Selection::new(prose.clone(), cx.focus_handle());
+        let selection = Selection::new(texts.clone(), cx.focus_handle());
         let list = TranscriptList::new(selection.clone(), cx);
         list.set_rows(rows, loaded);
         let linked = LinkedImages::new(client.clone(), session.id.clone(), cx.weak_entity());
@@ -180,7 +180,7 @@ impl Transcript {
             session: open,
             model,
             linked,
-            prose,
+            texts,
             selection,
             list,
             _changes: following,
@@ -235,7 +235,7 @@ impl Transcript {
         let events_changed = changes.rows.as_ref().is_some_and(|changed| changed.start < events);
         self.list.set_rows(rows, loaded);
         self.follow_retry();
-        self.session.read(|log| self.prose.let_go(log, self.selection.held().as_ref()));
+        self.session.read(|log| self.texts.let_go(log, self.selection.held().as_ref()));
         if let Some(changed) = changes.rows {
             self.list.out_of_date(changed.clone());
             self.find_in_changes(changed, cx);
@@ -350,7 +350,7 @@ impl Render for Transcript {
             this: cx.weak_entity(),
             linked: self.linked.clone(),
             line_text: line_text.clone(),
-            prose: self.prose.clone(),
+            texts: self.texts.clone(),
             selection: self.selection.clone(),
         };
         // The list's last row is the tail, even while the log has rows it hasn't been told of, such as a log by place

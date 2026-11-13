@@ -1,12 +1,12 @@
 //! When and where a text is parsed: where it's drawn, when what's to be parsed of it is short, and otherwise on another
-//! thread, as [`Prose::parsed`] says.
+//! thread, as [`Texts::parsed`] says.
 
 use std::rc::Rc;
 
 use gpui_kit::App;
 
 use super::parse::{self, Again};
-use super::{AT_ONCE, ImagesAre, Of, Parsed, Prose, ProseId, Text};
+use super::{AT_ONCE, ImagesAre, Of, Parsed, Text, TextKey, Texts};
 
 /// How a text is to be parsed on another thread: `source` whole, with its images `images` to draw, or again from where
 /// `again` says, as it goes on from `was`, which is what it was parsed as before, if it was, and what it's drawn as
@@ -18,7 +18,7 @@ pub(super) struct Apart {
     again: Option<Again>,
 }
 
-impl Prose {
+impl Texts {
     /// What the text known as `id` is drawn as now that it says `source`, if it has a parse to draw, and how it's to be
     /// parsed on another thread, if it is. A text is parsed where it's drawn when what's to be parsed of it is short:
     /// all of it, or for one that goes on from what it was parsed as, what's parsed again from near its end. A longer
@@ -35,14 +35,14 @@ impl Prose {
     /// where they weren't, as a reply's are in the row of its record, and not while it's written.
     pub(super) fn parsed(
         &self,
-        id: &ProseId,
+        id: &TextKey,
         source: &str,
         of: Of,
         images: ImagesAre,
     ) -> (Option<Rc<Parsed>>, Option<Apart>) {
         let can_go_on = of.can_go_on();
-        let mut texts = self.0.borrow_mut();
-        let was = match texts.texts.get(id) {
+        let mut store = self.0.borrow_mut();
+        let was = match store.texts.get(id) {
             Some(Text::Parsed { parsed })
                 if parsed.source == source && parsed.images == images && (can_go_on || parsed.whole) =>
             {
@@ -63,22 +63,21 @@ impl Prose {
             (Some(was), Some(again)) => parse::gone_on(&was, again, source.to_owned()),
             _ => parse::parse(source.to_owned(), images),
         });
-        texts.texts.insert(id.clone(), Text::Parsed { parsed: parsed.clone() });
-        texts.parsed_one();
+        store.texts.insert(id.clone(), Text::Parsed { parsed: parsed.clone() });
+        store.parsed_one();
         (Some(parsed), None)
     }
 
     /// Parses the text known as `id` on another thread, as `apart` says, unless what it says goes on from what's being
     /// parsed of it, and measures the row it's in then again once it's in. It says what it said, so there's nothing
     /// new to find in it.
-    pub(super) fn parse_apart(&self, id: ProseId, apart: Apart, cx: &mut App) {
+    pub(super) fn parse_apart(&self, id: TextKey, apart: Apart, cx: &mut App) {
         let Apart { source, images, was, again } = apart;
-        let mut texts = self.0.borrow_mut();
-        if texts.texts.get(&id).is_some_and(|text| text.parsing().is_some_and(|parsing| source.starts_with(parsing))) {
+        let mut store = self.0.borrow_mut();
+        if store.texts.get(&id).is_some_and(|text| text.parsing().is_some_and(|parsing| source.starts_with(parsing))) {
             return;
         }
-        let (prose, redrawn, given, known) =
-            (Rc::downgrade(&self.0), texts.redrawn.clone(), source.clone(), id.clone());
+        let (weak, redrawn, given, known) = (Rc::downgrade(&self.0), store.redrawn.clone(), source.clone(), id.clone());
         let from = was.clone().zip(again);
         let parsing = cx.spawn(async move |cx| {
             let background = cx.background_executor().clone();
@@ -93,21 +92,21 @@ impl Prose {
                 (Some((was, again)), Some(rest)) => parse::joined(&was, again, given, rest),
                 _ => background.spawn(async move { parse::parse(given, images) }).await,
             };
-            let Some(prose) = prose.upgrade() else { return };
+            let Some(cell) = weak.upgrade() else { return };
             // What it replaces holds this task, which goes once it's done.
             let (_was, place) = {
-                let mut texts = prose.borrow_mut();
-                if texts.texts.get(&known).and_then(Text::parsing) != Some(parsed.source.as_str()) {
+                let mut store = cell.borrow_mut();
+                if store.texts.get(&known).and_then(Text::parsing) != Some(parsed.source.as_str()) {
                     return;
                 }
-                let place = texts.places.of(&known);
-                (texts.texts.insert(known, Text::Parsed { parsed: Rc::new(parsed) }), place)
+                let place = store.places.of(&known);
+                (store.texts.insert(known, Text::Parsed { parsed: Rc::new(parsed) }), place)
             };
             if let Some(at) = place {
                 cx.update(|cx| redrawn(at.of, cx));
             }
         });
-        texts.texts.insert(id, Text::Parsing { source, was, _task: parsing });
+        store.texts.insert(id, Text::Parsing { source, was, _task: parsing });
     }
 }
 

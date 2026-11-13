@@ -13,7 +13,7 @@ use protocol::model::Seq;
 
 use super::{Shared, card, empty, row};
 use crate::item_key::ItemKey;
-use crate::prose::{TextAt, Written};
+use crate::texts::{TextAt, Written};
 
 /// The card for the request `body`, recorded at `seq`, where it asks to approve a plan, with its buttons while it's
 /// `open`. Nothing for any other request, which isn't drawn where it was asked.
@@ -34,7 +34,7 @@ pub(super) fn plan_card(seq: Seq, body: &EventBody, open: bool, shared: &Shared,
         Button::new(ElementId::NamedInteger(name.into(), seq)).hand().label(label).on_click(answer(decision))
     };
     // Nothing's found in what asks the person something.
-    let content = shared.prose.draw(
+    let content = shared.texts.draw(
         &shared.selection,
         &Written::unfound(TextAt::only(seq, 0), ItemKey::Event(seq, 0).element("plan"), plan),
         None,

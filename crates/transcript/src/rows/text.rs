@@ -1,7 +1,7 @@
 //! How a row draws a text written in the chat, by the person or the agent, from the kit's blocks, through
-//! `crate::prose`: in a row of its own, at the end of the chat, or nested in a call's row. Wherever it is, it's
+//! `crate::texts`: in a row of its own, at the end of the chat, or nested in a call's row. Wherever it is, it's
 //! known by [`crate::find::view_id`], from its first word to its record, so what it was parsed as while it was written or
-//! sent carries over to its record, where `crate::prose` parses a reply whole if it was parsed from near its end.
+//! sent carries over to its record, where `crate::texts` parses a reply whole if it was parsed from near its end.
 
 use gpui_kit::{AnyElement, ElementId};
 use protocol::event::LinkedImage;
@@ -9,7 +9,7 @@ use protocol::event::LinkedImage;
 use super::tools::Toggle;
 use super::{InRow, Shared};
 use crate::find::Part;
-use crate::prose::{Among, Of, Place, TextAt, Written};
+use crate::texts::{Among, Of, Place, TextAt, Written};
 
 /// A recorded text, the `part` of the item the block `toggle` draws, with the images the hub kept of those it points
 /// to, if it can point to any, and with its matches, in the area `area` if one scrolls it. In a row of its own, its
@@ -47,7 +47,7 @@ fn among(part: Part) -> Among {
 /// event's row and can point to any, which a click opens over the window.
 pub(super) fn from_blocks(written: &Written<'_>, images: Option<&[LinkedImage]>, shared: &Shared) -> AnyElement {
     let images = (written.at.seq()).zip(images).map(|(seq, images)| shared.linked.images(seq, images));
-    shared.prose.draw(&shared.selection, written, images)
+    shared.texts.draw(&shared.selection, written, images)
 }
 
 #[cfg(test)]

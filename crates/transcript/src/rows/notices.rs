@@ -9,7 +9,7 @@ use protocol::model::Seq;
 use super::{Shared, empty, from_blocks, marked_line, muted_line, row};
 use crate::find::{FindLook, Part};
 use crate::item_key::ItemKey;
-use crate::prose::{TextAt, Written};
+use crate::texts::{TextAt, Written};
 
 /// What the app says when the agent stopped, and why, with what it last printed, if it stopped unexpectedly.
 pub(super) fn agent_exited(

@@ -12,8 +12,8 @@ use protocol::event::AgentTask;
 use protocol::model::{AgentDescription, PromptCache, Seq, Session, Subagent, SubagentStatus, Wait};
 
 use super::Transcript;
-use crate::prose::Of;
 use crate::task_lines;
+use crate::texts::Of;
 
 /// How often the time a turn has taken is drawn again while the agent works, for its tenths.
 const TICK: Duration = Duration::from_millis(100);

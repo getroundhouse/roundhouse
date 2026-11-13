@@ -47,7 +47,7 @@ impl Transcript {
             this: cx.weak_entity(),
             linked: self.linked.clone(),
             line_text,
-            prose: self.prose.clone(),
+            texts: self.texts.clone(),
             selection: self.selection.clone(),
         };
         let tail = self.list.row_count().saturating_sub(1);

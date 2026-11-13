@@ -79,7 +79,7 @@ pub(crate) enum Among {
     Only,
     /// One of a call's own texts that it shows before what it nests: what a subagent was asked.
     Before(Part),
-    /// The `n`th text of what a call nests, such as a subagent's words in its call's row, as `Prose::draw` counts them
+    /// The `n`th text of what a call nests, such as a subagent's words in its call's row, as `Texts::draw` counts them
     /// for a text at [`Place::NextNested`]. A row makes its nested texts in the order it shows them, which a debug
     /// build checks where they're painted, in `crate::selection`. One that isn't drawn has no place.
     Nested(usize),

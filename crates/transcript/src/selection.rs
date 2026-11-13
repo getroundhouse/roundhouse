@@ -1,17 +1,17 @@
-//! What's selected of the chat's texts that `crate::prose` draws, which the transcript holds rather than the window,
+//! What's selected of the chat's texts that `crate::texts` draws, which the transcript holds rather than the window,
 //! so it outlasts the rows it's in being drawn. The kit's selection is the window's, over the texts painted in a frame,
 //! and lets go of what's selected once a text holding either end of it isn't painted, which in a list that draws only
 //! what's in sight is as soon as that text's row leaves the window.
 //!
 //! Each end is a place in a text: which text, which of its leaves, and a byte in that leaf. The text is named by what
 //! its element is known by, which stays the same as it moves, as a reply does from being written to its record, so an
-//! end stays in it, and `crate::prose` says where it is now, which orders the ends. Each frame, every text that's drawn
+//! end stays in it, and `crate::texts` says where it is now, which orders the ends. Each frame, every text that's drawn
 //! says what it's known by and where its leaves are, so a point in the window can be turned into a place in it. A
 //! press on a text starts a selection, a drag moves its far end, and with the pointer past the top or bottom of the
 //! list, the list scrolls on, faster the further past it is, for as long as the button is held. A copy reads the texts
 //! between the ends as they were parsed, drawn or not, which is each the chat has loaded, and each it loaded as the
 //! selection was made, since the texts from one end to the other are kept, as is the one a press was on, for a
-//! shift-click to extend from. `crate::prose` draws them.
+//! shift-click to extend from. `crate::texts` draws them.
 //!
 //! It's the mouse's: a press, a drag and a release. The kit's selection also takes a touch screen's long press and
 //! handles, which a transcript on a phone will need here.
@@ -32,7 +32,7 @@ use gpui_kit::{
 };
 use look::motion::ScrollingOn;
 
-use crate::prose::{Prose, ProseId, TextAt};
+use crate::texts::{TextAt, TextKey, Texts};
 
 mod places;
 mod pointer;
@@ -56,14 +56,14 @@ struct Spot {
 /// An end of what's selected: a place in the text known as `text`, wherever that is now.
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct End {
-    text: ProseId,
+    text: TextKey,
     leaf: u64,
     byte: usize,
 }
 
 impl End {
     /// The place `spot` names, in the text known as `text`, which is there now.
-    fn at(text: ProseId, spot: Spot) -> Self {
+    fn at(text: TextKey, spot: Spot) -> Self {
         Self { text, leaf: spot.leaf, byte: spot.byte }
     }
 }
@@ -81,7 +81,7 @@ enum Unit {
 #[derive(Clone)]
 pub(crate) struct Selection {
     inner: Rc<RefCell<Selecting>>,
-    prose: Prose,
+    texts: Texts,
     /// The transcript's, which a press on its text takes, so a copy and a select all come to it.
     focus: FocusHandle,
 }
@@ -113,7 +113,7 @@ struct Drag {
 /// A text drawn in this frame, what it's known by and where it is, what shows of it, the area that scrolls it, if it's
 /// in one, and where each of its leaves is, by key.
 struct Drawn {
-    text: ProseId,
+    text: TextKey,
     at: TextAt,
     bounds: Bounds<Pixels>,
     area: Option<ElementId>,
@@ -128,8 +128,8 @@ impl Selecting {
 }
 
 impl Selection {
-    pub(crate) fn new(prose: Prose, focus: FocusHandle) -> Self {
-        Self { inner: Rc::default(), prose, focus }
+    pub(crate) fn new(texts: Texts, focus: FocusHandle) -> Self {
+        Self { inner: Rc::default(), texts, focus }
     }
 
     /// `chat`, the transcript's, with its focus, and the keys that copy what's selected and select everything. GPUI
@@ -146,7 +146,7 @@ impl Selection {
     /// texts, which keep the blocks of those drawn lately.
     pub(crate) fn new_frame(&self) {
         self.inner.borrow_mut().drawn.clear();
-        self.prose.new_frame();
+        self.texts.new_frame();
     }
 
     /// Notes that the text known as `text`, at `at`, shows in `bounds`, in `area` if one scrolls it, with its leaves
@@ -154,7 +154,7 @@ impl Selection {
     /// can't be pressed on or dragged to.
     pub(crate) fn drawn(
         &self,
-        text: ProseId,
+        text: TextKey,
         at: TextAt,
         bounds: Bounds<Pixels>,
         area: Option<ElementId>,
@@ -185,7 +185,7 @@ impl Selection {
     pub(crate) fn held(&self) -> Option<RangeInclusive<TextAt>> {
         let selecting = self.inner.borrow();
         let (a, b) = selecting.ends.as_ref()?;
-        let (a, b) = (self.prose.last_drawn_at(&a.text)?, self.prose.last_drawn_at(&b.text)?);
+        let (a, b) = (self.texts.last_drawn_at(&a.text)?, self.texts.last_drawn_at(&b.text)?);
         Some(a.min(b)..=a.max(b))
     }
 
@@ -262,7 +262,7 @@ impl Selection {
         };
         // Extending from where what's selected starts, if its text still has a place, and otherwise starting afresh.
         let anchor = (selecting.ends.as_ref().map(|(anchor, _)| anchor.clone()))
-            .filter(|anchor| extend && unit == Unit::Character && self.prose.place_of(&anchor.text).is_some());
+            .filter(|anchor| extend && unit == Unit::Character && self.texts.place_of(&anchor.text).is_some());
         let chosen = if let Some(anchor) = anchor {
             selecting.set(Some((anchor.clone(), End::at(text, spot))));
             (anchor.clone(), anchor)
@@ -285,7 +285,7 @@ impl Selection {
         self.follow(bounds);
     }
 
-    /// Selects all of the texts the chat holds that `crate::prose` draws, from the start of the first to the end of the
+    /// Selects all of the texts the chat holds that `crate::texts` draws, from the start of the first to the end of the
     /// last, and lets go of what the kit has selected, so a copy is of this. With none, it's for whatever else would
     /// take it.
     fn select_all(&self, window: &mut Window, cx: &mut App) {
@@ -311,13 +311,13 @@ impl Selection {
 
     /// The ends of everything: the start of the first text that's shown and the end of the last, if there are any.
     fn whole(&self) -> Option<(End, End)> {
-        let (first, last) = self.prose.ends()?;
+        let (first, last) = self.texts.ends()?;
         Some((End { text: first, leaf: 0, byte: 0 }, End { text: last, leaf: u64::MAX, byte: usize::MAX }))
     }
 
     /// What a copy holds of the texts from `start` to `end`.
     fn between(&self, start: Spot, end: Spot) -> String {
-        copied(start, end, &self.prose.between(start.at, end.at))
+        copied(start, end, &self.texts.between(start.at, end.at))
     }
 
     /// Copies what's selected, drawn or not. With nothing selected, a copy is the kit's, of what it has selected.
@@ -343,13 +343,13 @@ impl Selection {
 
     /// Where `ends` are now, if their texts are kept.
     fn spots(&self, (a, b): &(End, End)) -> Option<(Spot, Spot)> {
-        let spot = |end: &End| Some(Spot { at: self.prose.place_of(&end.text)?, leaf: end.leaf, byte: end.byte });
+        let spot = |end: &End| Some(Spot { at: self.texts.place_of(&end.text)?, leaf: end.leaf, byte: end.byte });
         Some((spot(a)?, spot(b)?))
     }
 
     /// The `unit` that `spot`, in the text known as `text`, is in, as two places.
-    fn around(&self, spot: Spot, text: &ProseId, unit: Unit) -> (Spot, Spot) {
-        let leaves = self.prose.leaves_of(text);
+    fn around(&self, spot: Spot, text: &TextKey, unit: Unit) -> (Spot, Spot) {
+        let leaves = self.texts.leaves_of(text);
         let text = leaves.as_deref().and_then(|leaves| leaf_text(leaves, spot.leaf));
         let range = match (unit, text) {
             (Unit::Character, _) | (Unit::Word | Unit::Leaf, None) => spot.byte..spot.byte,

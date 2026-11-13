@@ -15,7 +15,7 @@ use super::reveal::Reveal;
 use crate::item_key::ItemKey;
 
 /// Which of an item's texts one is, such as a call's output, or the third link a search found. Ordered as declared,
-/// which orders the texts a call draws of its own after what it nests, in `crate::prose`, if it draws more than one
+/// which orders the texts a call draws of its own after what it nests, in `crate::texts`, if it draws more than one
 /// there, so those are declared in the order it draws them.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) enum Part {
@@ -116,7 +116,7 @@ impl Part {
 /// A text a row draws, by the item it's part of and which of its texts it is.
 pub(crate) type TextId = (ItemKey, Part);
 
-/// The ID of the element the Markdown text `id` is drawn in, which `crate::prose` knows it by, from its first word to
+/// The ID of the element the Markdown text `id` is drawn in, which `crate::texts` knows it by, from its first word to
 /// its record. A prompt, the agent's words and its thinking are only their element, and a report is drawn as the
 /// agent's words are. Prose in a block is an element inside the part.
 pub(crate) fn view_id((key, part): &TextId) -> ElementId {

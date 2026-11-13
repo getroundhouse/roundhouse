@@ -13,7 +13,7 @@ use protocol::model::Seq;
 use super::{Shared, card, from_blocks, row};
 use crate::find::{FindLook, Part};
 use crate::item_key::ItemKey;
-use crate::prose::{TextAt, Written};
+use crate::texts::{TextAt, Written};
 use crate::transcript::Transcript;
 
 /// How big the card's icon is, beside its title.
