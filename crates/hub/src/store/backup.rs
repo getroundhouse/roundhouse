@@ -3,7 +3,7 @@
 
 use std::cmp::Reverse;
 use std::fmt;
-use std::fs;
+use std::fs::{self, OpenOptions};
 use std::io;
 use std::path::{Path, PathBuf};
 
@@ -61,8 +61,54 @@ fn write(conn: &Connection, dir: &Path, name: Name) -> Result<(), BackupError> {
     private::sync_dir(dir).map_err(|e| BackupError::io("syncing the directory", e))
 }
 
-/// Copies through `conn`, so the copy has what's still in the WAL, which copying `hub.db` wouldn't.
+/// Copies the database, with what's still in its WAL, which a copy of `hub.db` alone wouldn't have. Once the WAL is
+/// all in `hub.db`, the file is the whole database, and nothing else writes it before the migration does, since the
+/// hub's lock keeps other hubs out, and a hub stops writing before it lets go of it. So a copy of the file is enough.
+/// Otherwise SQLite copies it, which reads and writes every row: seconds for a database of 2 GB, which someone waits
+/// through as the app connects after an update.
 fn copy_into(conn: &Connection, unfinished: &Path) -> Result<(), BackupError> {
+    match whole_file(conn)? {
+        Some(file) => copy_file(file, unfinished),
+        None => vacuum_into(conn, unfinished),
+    }
+}
+
+/// The database's file, once everything in the WAL has been moved into it. `None` when it couldn't all be moved
+/// without waiting, as while another program reads an older state of the database, which the WAL keeps for it, or
+/// moves it itself, or when the database has no file.
+fn whole_file(conn: &Connection) -> Result<Option<&Path>, BackupError> {
+    // rusqlite's path is optional, and empty for a database in memory, which still gets a copy.
+    let Some(file) = conn.path().filter(|path| !path.is_empty()) else {
+        return Ok(None);
+    };
+    // A passive checkpoint never waits, where the others wait out the connection's busy timeout for a reader holding
+    // the WAL back, before the copy could go through SQLite. Blocked, as by another checkpoint, both counts are -1,
+    // and they're -1 for a database not in WAL mode, whose file is the whole of it.
+    let (blocked, in_wal, moved): (bool, i64, i64) = conn
+        .query_row("PRAGMA wal_checkpoint(PASSIVE)", [], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+        .map_err(BackupError::Checkpoint)?;
+    Ok((!blocked && in_wal == moved).then_some(Path::new(file)))
+}
+
+/// Copies `file`, which `fs::copy` does with a clone where the file system can make one, as APFS and btrfs can: at
+/// once, with the two sharing what's on disk until either changes. Windows copies a file SQLite has open and locked,
+/// as the hub's connection has `hub.db`, with the locks past 1 GiB inside it.
+fn copy_file(file: &Path, unfinished: &Path) -> Result<(), BackupError> {
+    fs::copy(file, unfinished)
+        .map_err(|e| BackupError::io(format!("copying {} to {UNFINISHED}", file.display()), e))?;
+    // A copy takes the mode of the file it copies, and a backup is only this user's, whatever that is.
+    private::restrict(unfinished).map_err(|e| BackupError::io(format!("making {UNFINISHED} private"), e))?;
+    // `sync_all` is `F_FULLFSYNC` on macOS, so the copy is on disk before anything migrates. Windows only flushes a
+    // file through a handle that can write it.
+    OpenOptions::new()
+        .write(true)
+        .open(unfinished)
+        .and_then(|copy| copy.sync_all())
+        .map_err(|e| BackupError::io(format!("syncing {UNFINISHED}"), e))
+}
+
+/// Copies through `conn`, which reads the whole database, what's in the WAL included, and writes every row again.
+fn vacuum_into(conn: &Connection, unfinished: &Path) -> Result<(), BackupError> {
     // Only this user can read it, like the database. SQLite would make a file others can read, but
     // `VACUUM INTO` writes into an empty one as it finds it.
     let file = private::file_options()
@@ -73,7 +119,7 @@ fn copy_into(conn: &Connection, unfinished: &Path) -> Result<(), BackupError> {
     let target = unfinished.to_str().ok_or_else(|| {
         BackupError::io("giving SQLite the path", io::Error::new(io::ErrorKind::InvalidFilename, "it isn't UTF-8"))
     })?;
-    conn.execute("VACUUM INTO ?1", [target]).map_err(BackupError::Database)?;
+    conn.execute("VACUUM INTO ?1", [target]).map_err(BackupError::Vacuum)?;
     // SQLite syncs the copy as `synchronous` says, which on macOS is an `fsync` that can leave it in the
     // drive's cache. `sync_all` is `F_FULLFSYNC` there, so the copy is on disk before anything migrates.
     file.sync_all().map_err(|e| BackupError::io(format!("syncing {UNFINISHED}"), e))
@@ -144,91 +190,4 @@ pub(crate) fn files_in(dir: &Path) -> Vec<String> {
 }
 
 #[cfg(test)]
-mod tests {
-    use std::os::unix::fs::PermissionsExt;
-
-    use proptest::prelude::*;
-    use proptest::test_runner::{Config, RngSeed};
-
-    use super::*;
-
-    proptest! {
-        #![proptest_config(Config {
-            rng_seed: RngSeed::Fixed(1),
-            failure_persistence: None,
-            ..Config::default()
-        })]
-
-        #[test]
-        fn a_name_reads_back_as_itself(version: usize, number: u64) {
-            let name = Name { version, number };
-
-            prop_assert_eq!(Name::parse(&name.to_string()), Some(name));
-        }
-    }
-
-    #[test]
-    fn a_name_it_wouldnt_write_isnt_a_backup() {
-        for other in ["notes.txt", UNFINISHED, "hub-v03-1.db", "hub-v3-+1.db", "hub-v3.db", "hub-v3-1.db-wal"] {
-            assert_eq!(Name::parse(other), None, "{other}");
-        }
-    }
-
-    #[test]
-    fn each_of_the_newest_few_versions_keeps_its_newest_copy_and_other_files_are_left_alone() {
-        let dir = tempfile::tempdir().unwrap();
-        let conn = Connection::open(dir.path().join("hub.db")).unwrap();
-        let backups = dir.path().join("backups");
-        fs::create_dir(&backups).unwrap();
-        fs::write(backups.join("notes.txt"), "someone's own file").unwrap();
-
-        for version in 1..=KEPT + 1 {
-            back_up(&conn, version, &backups).unwrap();
-            back_up(&conn, version, &backups).unwrap();
-        }
-
-        // Each version's second copy, numbered twice its version, for all but the oldest version.
-        let mut expected: Vec<String> =
-            (2..=KEPT + 1).map(|version| format!("hub-v{version}-{}.db", 2 * version)).collect();
-        expected.push("notes.txt".to_string());
-        expected.sort();
-        assert_eq!(files_in(&backups), expected);
-    }
-
-    #[test]
-    fn a_backup_cut_off_part_way_doesnt_stop_the_next() {
-        let dir = tempfile::tempdir().unwrap();
-        let conn = Connection::open(dir.path().join("hub.db")).unwrap();
-        let backups = dir.path().join("backups");
-        fs::create_dir(&backups).unwrap();
-        fs::write(backups.join(UNFINISHED), "half a database").unwrap();
-
-        back_up(&conn, 1, &backups).unwrap();
-
-        assert_eq!(files_in(&backups), ["hub-v1-1.db"]);
-    }
-
-    #[test]
-    fn a_copy_that_fails_leaves_nothing_behind() {
-        let dir = tempfile::tempdir().unwrap();
-        let conn = Connection::open(dir.path().join("hub.db")).unwrap();
-        let backups = dir.path().join("backups");
-        // SQLite won't vacuum inside a transaction, so the copy fails once its file exists.
-        conn.execute_batch("BEGIN").unwrap();
-
-        let result = back_up(&conn, 1, &backups);
-
-        assert!(matches!(result, Err(BackupError::Database(_))), "got {result:?}");
-        assert_eq!(files_in(&backups), Vec::<String>::new());
-    }
-
-    #[test]
-    fn only_its_owner_can_read_a_backup() {
-        let dir = tempfile::tempdir().unwrap();
-        let conn = Connection::open(dir.path().join("hub.db")).unwrap();
-
-        let path = back_up(&conn, 1, &dir.path().join("backups")).unwrap();
-
-        assert_eq!(fs::metadata(path).unwrap().permissions().mode() & 0o777, 0o600);
-    }
-}
+mod tests;
