@@ -6,7 +6,7 @@
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use client_core::{Agents, FileToSend, Where};
+use client_core::{Agents, FileToSend, FilesFor};
 use gpui_kit::component::input::{InputEvent, TextareaState};
 use gpui_kit::component::{ActiveTheme as _, WindowExt as _};
 use gpui_kit::{
@@ -278,7 +278,7 @@ impl NewWorkspaceDialog {
     fn remove_attached(&mut self, id: &AttachmentId, cx: &mut Context<Self>) {
         let kept_in = self.attached.remove(id);
         self.keep(true, cx);
-        if kept_in == Some(Where::NewWorkspace) {
+        if kept_in == Some(FilesFor::NewWorkspace) {
             self.let_go_of(std::slice::from_ref(id));
         }
         cx.notify();

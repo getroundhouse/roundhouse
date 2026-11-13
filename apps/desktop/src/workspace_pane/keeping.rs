@@ -5,7 +5,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use client_core::Where;
+use client_core::{DraftChange, DraftKey, FilesFor, KeptDraft};
 use gpui_kit::{App, Context, Entity};
 use protocol::attachment::Attachment;
 use protocol::model::{AttachmentId, Draft, DraftToKeep, Session, SessionId};
@@ -33,7 +33,8 @@ pub(crate) fn drafted(sessions: &[Session]) -> bool {
     sessions.iter().any(|s| s.is_open() && says_or_carries(&s.draft.text, s.draft.files.len()))
 }
 
-/// Whether something's typed in one place, which the hub keeps once it has it, and whether it hasn't had all of it yet.
+/// Whether something's typed in one draft, such as a chat's composer, which the hub keeps once it has it, and whether it
+/// hasn't had all of it yet.
 #[derive(Clone, Copy, Default)]
 struct Typed {
     any: bool,
@@ -92,22 +93,25 @@ impl WorkspacePane {
             Some(draft) => (draft.text.clone(), &mut draft.files),
             None => (String::new(), &mut none),
         };
-        for file in files.not_yet_given(&Where::Composer(id.clone())) {
-            self.keeper.attach(id, file);
+        let kept_for = FilesFor::Chat(id.clone());
+        for file in files.not_yet_given(&kept_for) {
+            self.keeper.attach(kept_for.clone(), file);
         }
-        let draft = DraftToKeep { text, files: coming_back.into_iter().chain(files.ids()).collect() };
+        let files = coming_back.into_iter().chain(files.ids()).collect();
+        let draft = DraftChange::Composer(id.clone(), DraftToKeep { text, files });
         if at_once {
-            self.keeper.set(id, draft);
+            self.keeper.set(draft);
         } else {
-            self.keeper.typed(id, draft);
+            self.keeper.typed(draft);
         }
     }
 
     /// Has the hub let go of the files it was given for a chat that has closed. Closing takes the draft and the files
     /// it named, and this catches one that reached the hub after, such as one still being added as the chat closed.
     pub(super) fn let_go_of_files(&self, id: &SessionId, files: &Attachments) {
-        for file in files.given_for(&Where::Composer(id.clone())) {
-            self.keeper.detach(id, &file);
+        let kept_for = FilesFor::Chat(id.clone());
+        for file in files.given_for(&kept_for) {
+            self.keeper.detach(kept_for.clone(), &file);
         }
     }
 
@@ -115,7 +119,7 @@ impl WorkspacePane {
     /// the same draft isn't taken for one made elsewhere.
     pub(super) fn took_drafts(&self) {
         for session in self.open_sessions() {
-            self.keeper.took(session);
+            self.keeper.took(KeptDraft::composer(session));
         }
     }
 
@@ -124,15 +128,16 @@ impl WorkspacePane {
     /// what's typed here is never undone as it's typed. Whatever comes in its place is the hub's already, so none of it
     /// is kept again.
     pub(crate) fn take_drafts_from_elsewhere(&mut self, cx: &mut Context<Self>) {
-        let elsewhere: Vec<Session> = self.open_sessions().filter(|s| self.keeper.from_elsewhere(s)).cloned().collect();
-        for session in elsewhere {
-            self.keeper.took(&session);
+        let elsewhere = self.open_sessions().filter(|s| self.keeper.from_elsewhere(&KeptDraft::composer(s)));
+        for session in elsewhere.cloned().collect::<Vec<Session>>() {
+            self.keeper.took(KeptDraft::composer(&session));
             self.take_draft(&session.id, session.draft, cx);
         }
-        if self.keeper.comment_from_elsewhere(self.workspace()) {
+        if self.keeper.from_elsewhere(&KeptDraft::comment(self.workspace())) {
             self.take_writing(cx);
         }
-        let asked = self.open_sessions().filter(|s| self.keeper.answer_from_elsewhere(s)).map(|s| s.id.clone());
+        let asked = self.open_sessions().filter(|s| self.keeper.from_elsewhere(&KeptDraft::answer(s)));
+        let asked = asked.map(|s| s.id.clone());
         for chat in asked.collect::<Vec<_>>() {
             self.take_answer(&chat, cx);
         }
@@ -143,7 +148,7 @@ impl WorkspacePane {
     /// before it is.
     pub(super) fn take_writing(&self, cx: &mut Context<Self>) {
         let Some(diff) = &self.diff else { return };
-        self.keeper.took_comment(self.workspace());
+        self.keeper.took(KeptDraft::comment(self.workspace()));
         let (file, kept) = (diff.file.clone(), self.workspace().comment_draft.clone());
         self.with_window(cx, move |_, window, cx| file.update(cx, |f, cx| f.take_writing(kept.as_ref(), window, cx)));
     }
@@ -154,7 +159,7 @@ impl WorkspacePane {
         let (Some(panel), Some(session)) = (self.question(chat, cx), self.shown.session(chat)) else {
             return;
         };
-        self.keeper.took_answer(session);
+        self.keeper.took(KeptDraft::answer(session));
         let question = panel.read(cx).approval_id().clone();
         let kept = session.answer_draft.clone().filter(|kept| kept.approval_id == question && kept.says_anything());
         self.with_window(cx, move |_, window, cx| panel.update(cx, |p, cx| p.take_so_far(kept.as_ref(), window, cx)));
@@ -169,21 +174,22 @@ impl WorkspacePane {
     /// Has the hub keep the comment being written on the diff, as the file tab asks.
     pub(super) fn keep_writing(&self, at_once: bool, cx: &App) {
         let writing = self.diff.as_ref().and_then(|diff| diff.file.read(cx).writing(cx));
-        let id = &self.workspace().id;
+        let writing = DraftChange::Comment(self.workspace().id.clone(), writing);
         if at_once {
-            self.keeper.set_comment(id, writing);
+            self.keeper.set(writing);
         } else {
-            self.keeper.typed_comment(id, writing);
+            self.keeper.typed(writing);
         }
     }
 
     /// Has the hub keep what's chosen and typed in answer to the chat's question, as its transcript asks.
     pub(super) fn keep_answer(&self, chat: &SessionId, at_once: bool, cx: &App) {
         let so_far = self.question(chat, cx).and_then(|panel| panel.read(cx).so_far(cx));
+        let so_far = DraftChange::Answer(chat.clone(), so_far);
         if at_once {
-            self.keeper.set_answer(chat, so_far);
+            self.keeper.set(so_far);
         } else {
-            self.keeper.typed_answer(chat, so_far);
+            self.keeper.typed(so_far);
         }
     }
 
@@ -251,7 +257,7 @@ impl WorkspacePane {
         let waiting = self.chats.get(chat).and_then(|held| held.restoring.as_deref()).unwrap_or_default();
         let Some((files, mut problems)) = came_back(waiting, read) else { return };
         self.held(chat).restoring = None;
-        problems.extend(self.files_for(Some(chat)).bring_back(files, &Where::Composer(chat.clone())));
+        problems.extend(self.files_for(Some(chat)).bring_back(files, &FilesFor::Chat(chat.clone())));
         for problem in problems {
             cx.emit(PaneEvent::Error(problem));
         }
@@ -265,7 +271,7 @@ impl WorkspacePane {
         let chats = self.unsent_chats(cx).filter(|unsent| unsent.lost()).count();
         let writing = self.diff.as_ref().and_then(|diff| diff.file.read(cx).writing(cx));
         let comment = writing.is_some_and(|writing| says_or_carries(&writing.text, 0));
-        let unkept = self.keeper.unkept_in(&Where::Comment(self.workspace().id.clone()));
+        let unkept = self.keeper.unkept(&DraftKey::Comment(self.workspace().id.clone()));
         (chats, usize::from(comment && unkept))
     }
 
@@ -279,7 +285,7 @@ impl WorkspacePane {
     fn unsent_chats<'a>(&'a self, cx: &'a App) -> impl Iterator<Item = Unsent> + 'a {
         let answering = move |id: &SessionId| {
             let any = self.question(id, cx).is_some_and(|question| question.read(cx).has_typed(cx));
-            Typed { any, unkept: self.keeper.unkept_in(&Where::Answer(id.clone())) }
+            Typed { any, unkept: self.keeper.unkept(&DraftKey::Answer(id.clone())) }
         };
         let only_here = move |id: &SessionId| self.client.is_sending(id);
         let showing = std::iter::once_with(move || {
@@ -288,7 +294,7 @@ impl WorkspacePane {
             let composed = text || !self.attached.is_empty();
             match &self.active {
                 Some(id) => Unsent {
-                    composed: Typed { any: composed, unkept: self.keeper.unkept(id) },
+                    composed: Typed { any: composed, unkept: self.keeper.unkept(&DraftKey::Composer(id.clone())) },
                     answering: answering(id),
                     only_here: only_here(id),
                 },
@@ -300,7 +306,7 @@ impl WorkspacePane {
             composed: Typed {
                 // A chat whose files are on their way back has them on the hub.
                 any: chat.draft.as_ref().is_some_and(Composed::has_anything) || chat.restoring.is_some(),
-                unkept: self.keeper.unkept(id),
+                unkept: self.keeper.unkept(&DraftKey::Composer(id.clone())),
             },
             answering: answering(id),
             only_here: only_here(id),

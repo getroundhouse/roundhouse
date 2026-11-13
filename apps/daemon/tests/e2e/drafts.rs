@@ -3,7 +3,7 @@
 
 #![cfg(test)]
 
-use client_core::{Drafts, FileToSend, RecordsFeed};
+use client_core::{DraftChange, Drafts, FileToSend, FilesFor, RecordsFeed};
 use protocol::attachment::MediaType;
 use protocol::model::{
     AnswerDraft, AnswerSoFar, CommentDraft, DiffSide, Draft, DraftToKeep, NewWorkspaceDraftToKeep, SessionId,
@@ -44,7 +44,7 @@ fn what_a_client_types_is_kept_once_it_quits() {
     let drafts = Drafts::start(&client);
 
     for text in ["h", "ha", "half", "half a", "half a thought"] {
-        drafts.typed(&session.id, DraftToKeep::new(text));
+        drafts.typed(DraftChange::Composer(session.id.clone(), DraftToKeep::new(text)));
     }
     drafts.flushed().recv().unwrap();
 
@@ -60,9 +60,9 @@ fn a_drafts_files_are_kept_across_a_restart_until_its_let_go_of_them() {
     let log = FileToSend::checked("build.log", MediaType::Text, b"error at line 42\n".to_vec()).unwrap();
     let never_given = FileToSend::checked("other.log", MediaType::Text, b"a line\n".to_vec()).unwrap();
 
-    drafts.attach(&session.id, log.clone());
+    drafts.attach(FilesFor::Chat(session.id.clone()), log.clone());
     let files = vec![log.attachment.id.clone(), never_given.attachment.id.clone()];
-    drafts.set(&session.id, DraftToKeep { text: "look".to_string(), files });
+    drafts.set(DraftChange::Composer(session.id.clone(), DraftToKeep { text: "look".to_string(), files }));
     drafts.flushed().recv().unwrap();
 
     stack.kill_hub();

@@ -1,7 +1,7 @@
 //! What's in the dialog, which the hub keeps until the workspace is made, files and all, so it's there when the app
 //! opens again, and in any other client.
 
-use client_core::FileToSend;
+use client_core::{FileToSend, FilesFor};
 use gpui_kit::{AppContext as _, ClipboardEntry, ClipboardItem, ExternalPaths, TestAppContext};
 use protocol::attachment::MediaType;
 use protocol::event::EventBody;
@@ -118,7 +118,7 @@ fn a_change_made_to_the_dialog_elsewhere_while_something_from_here_is_on_its_way
 
     let frozen = Frozen::stop(pid);
     let file = FileToSend::checked("notes.txt", MediaType::Text, b"a line".to_vec()).unwrap();
-    drafts.attach_to_new_workspace(file);
+    drafts.attach(FilesFor::NewWorkspace, file);
     let heard = |ui: &Ui<'_>| ui.cx.read_entity(&ui.dialog(), |d, _| d.kept().text.clone());
     ui.wait("the dialog to hear of it", |ui| heard(ui) == "typed elsewhere");
     assert_eq!(ui.dialog_text(), "typed here", "held back while the file is on its way");

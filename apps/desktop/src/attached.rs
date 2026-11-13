@@ -7,7 +7,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use client_core::{FileToSend, Where};
+use client_core::{FileToSend, FilesFor};
 use gpui_kit::component::attachment::{Attachment as Card, AttachmentGroup, AttachmentMedia};
 use gpui_kit::component::{ActiveTheme as _, Sizable as _};
 use gpui_kit::{Axis, Context, ElementId, ExternalPaths, Image, InteractiveElement, ParentElement, Styled};
@@ -26,8 +26,8 @@ pub(crate) struct Attached {
     file: FileToSend,
     /// What its tile shows, for an image.
     preview: Option<Arc<Image>>,
-    /// Where the hub was given it for, a chat or the new-workspace dialog, to keep with what's typed there.
-    kept_in: Option<Where>,
+    /// Which draft the hub was given it for, a chat's or the new-workspace dialog's, to keep with what's typed there.
+    kept_for: Option<FilesFor>,
 }
 
 impl Attached {
@@ -35,7 +35,7 @@ impl Attached {
     pub(crate) fn new(file: FileToSend) -> Self {
         let preview = transcript::image_format(file.attachment.media_type)
             .map(|format| Arc::new(Image::from_bytes(format, file.data.clone())));
-        Self { file, preview, kept_in: None }
+        Self { file, preview, kept_for: None }
     }
 
     fn name(&self) -> &str {
@@ -64,9 +64,9 @@ impl Attachments {
         self.put_first(files.into_iter().map(Attached::new).collect())
     }
 
-    /// Puts back the files the hub kept with what's typed `at` a place, as [`Attachments::put_back`] does.
-    pub(crate) fn bring_back(&mut self, files: Vec<FileToSend>, at: &Where) -> Vec<String> {
-        let kept = |file| Attached { kept_in: Some(at.clone()), ..Attached::new(file) };
+    /// Puts back the files the hub kept for a draft, as [`Attachments::put_back`] does.
+    pub(crate) fn bring_back(&mut self, files: Vec<FileToSend>, kept_for: &FilesFor) -> Vec<String> {
+        let kept = |file| Attached { kept_for: Some(kept_for.clone()), ..Attached::new(file) };
         self.put_first(files.into_iter().map(kept).collect())
     }
 
@@ -80,10 +80,10 @@ impl Attachments {
         other.0.into_iter().filter_map(|file| self.push(file).err()).collect()
     }
 
-    /// Takes a file out, and says where the hub was given it for, if anywhere.
-    pub(crate) fn remove(&mut self, id: &AttachmentId) -> Option<Where> {
+    /// Takes a file out, and says which draft the hub was given it for, if any.
+    pub(crate) fn remove(&mut self, id: &AttachmentId) -> Option<FilesFor> {
         let at = self.0.iter().position(|file| &file.file.attachment.id == id)?;
-        self.0.remove(at).kept_in
+        self.0.remove(at).kept_for
     }
 
     /// Keeps only the files `keep` picks, in their order, such as those a draft made elsewhere still names.
@@ -91,19 +91,19 @@ impl Attachments {
         self.0.retain(|file| keep(&file.file.attachment.id));
     }
 
-    /// The files the hub hasn't been given for `at`, to give it, and which from now on it's taken to have.
-    pub(crate) fn not_yet_given(&mut self, at: &Where) -> Vec<FileToSend> {
-        let new = self.0.iter_mut().filter(|file| file.kept_in.as_ref() != Some(at));
+    /// The files the hub hasn't been given for a draft, to give it, and which from now on it's taken to have.
+    pub(crate) fn not_yet_given(&mut self, kept_for: &FilesFor) -> Vec<FileToSend> {
+        let new = self.0.iter_mut().filter(|file| file.kept_for.as_ref() != Some(kept_for));
         new.map(|file| {
-            file.kept_in = Some(at.clone());
+            file.kept_for = Some(kept_for.clone());
             file.file.clone()
         })
         .collect()
     }
 
-    /// The IDs of the files the hub was given for `at`.
-    pub(crate) fn given_for<'a>(&'a self, at: &'a Where) -> impl Iterator<Item = AttachmentId> + 'a {
-        let given = self.0.iter().filter(move |file| file.kept_in.as_ref() == Some(at));
+    /// The IDs of the files the hub was given for a draft.
+    pub(crate) fn given_for<'a>(&'a self, kept_for: &'a FilesFor) -> impl Iterator<Item = AttachmentId> + 'a {
+        let given = self.0.iter().filter(move |file| file.kept_for.as_ref() == Some(kept_for));
         given.map(|file| file.file.attachment.id.clone())
     }
 

@@ -4,7 +4,7 @@
 
 use std::collections::HashSet;
 
-use client_core::{Client, Drafts, Where};
+use client_core::{Client, DraftChange, DraftKey, Drafts, FilesFor, KeptDraft};
 use gpui_kit::{App, Context, Window};
 use protocol::attachment::Attachment;
 use protocol::model::{AttachmentId, NewWorkspaceDraft, NewWorkspaceDraftToKeep, PermissionMode};
@@ -35,14 +35,14 @@ impl NewWorkspaceDialog {
     /// as something picked, or the dialog emptied by Create. Each file the hub hasn't been given goes first.
     pub(super) fn keep(&mut self, at_once: bool, cx: &App) {
         let Some(keeper) = self.keeping.keeper.clone() else { return };
-        for file in self.attached.not_yet_given(&Where::NewWorkspace) {
-            keeper.attach_to_new_workspace(file);
+        for file in self.attached.not_yet_given(&FilesFor::NewWorkspace) {
+            keeper.attach(FilesFor::NewWorkspace, file);
         }
-        let draft = self.to_keep(cx);
+        let draft = DraftChange::NewWorkspace(self.to_keep(cx));
         if at_once {
-            keeper.set_new_workspace(draft);
+            keeper.set(draft);
         } else {
-            keeper.typed_new_workspace(draft);
+            keeper.typed(draft);
         }
     }
 
@@ -52,7 +52,7 @@ impl NewWorkspaceDialog {
     pub(super) fn let_go_of(&self, files: &[AttachmentId]) {
         let Some(keeper) = &self.keeping.keeper else { return };
         for file in files {
-            keeper.detach_from_new_workspace(file);
+            keeper.detach(FilesFor::NewWorkspace, file);
         }
     }
 
@@ -90,14 +90,14 @@ impl NewWorkspaceDialog {
     }
 
     /// Shows what the hub keeps of the dialog in place of what's here, when it was changed elsewhere since, or before
-    /// the app last started, as [`Drafts::new_workspace_from_elsewhere`] says. What's on its way to the hub from here
+    /// the app last started, as [`Drafts::from_elsewhere`] says. What's on its way to the hub from here
     /// goes on and replaces it, so what's typed here is never undone as it's typed. Whatever comes in its place is the
     /// hub's already, so none of it is kept again, and this client says it shows it, as taking a chat's draft does.
     pub(crate) fn take_kept(&mut self, kept: NewWorkspaceDraft, window: &mut Window, cx: &mut Context<Self>) {
         let keeper = self.keeping.keeper.as_ref();
-        let elsewhere = keeper.is_some_and(|keeper| keeper.new_workspace_from_elsewhere(&kept));
+        let elsewhere = keeper.is_some_and(|keeper| keeper.from_elsewhere(&KeptDraft::new_workspace(&kept)));
         if let Some(keeper) = keeper.filter(|_| elsewhere) {
-            keeper.took_new_workspace(&kept);
+            keeper.took(KeptDraft::new_workspace(&kept));
         }
         let taken = elsewhere && !self.has_kept(&kept, cx);
         self.keeping.kept = kept;
@@ -154,7 +154,7 @@ impl NewWorkspaceDialog {
     fn brought_back(&mut self, read: Vec<ReadBack>, cx: &mut Context<Self>) {
         let Some((files, mut problems)) = came_back(&self.keeping.restoring, read) else { return };
         self.keeping.restoring.clear();
-        problems.extend(self.attached.bring_back(files, &Where::NewWorkspace));
+        problems.extend(self.attached.bring_back(files, &FilesFor::NewWorkspace));
         for problem in problems {
             cx.emit(DialogEvent::Error(problem));
         }
@@ -203,7 +203,7 @@ impl NewWorkspaceDialog {
 
     /// Whether anything is typed or attached that quitting or restarting would lose, because the hub hasn't had it.
     pub(crate) fn would_lose(&self, cx: &App) -> bool {
-        let unkept = self.keeping.keeper.as_ref().is_none_or(|keeper| keeper.unkept_in(&Where::NewWorkspace));
+        let unkept = self.keeping.keeper.as_ref().is_none_or(|keeper| keeper.unkept(&DraftKey::NewWorkspace));
         unkept && says_or_carries(&self.prompt.read(cx).text().to_string(), self.attached.len())
     }
 }

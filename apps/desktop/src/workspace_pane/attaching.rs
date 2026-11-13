@@ -4,7 +4,7 @@
 
 use std::path::PathBuf;
 
-use client_core::{FileToSend, Where};
+use client_core::{FileToSend, FilesFor};
 use gpui_kit::{AnyElement, ClipboardItem, Context, IntoElement as _, Styled as _};
 use protocol::model::{AttachmentId, SessionId};
 use protocol::prompt::{Prompt, says_or_carries};
@@ -99,8 +99,8 @@ impl WorkspacePane {
     fn remove_attached(&mut self, id: &AttachmentId, cx: &mut Context<Self>) {
         let kept_in = self.attached.remove(id);
         self.keep_typed(true, cx);
-        if let Some(Where::Composer(chat)) = kept_in {
-            self.keeper.detach(&chat, id);
+        if let Some(given @ FilesFor::Chat(_)) = kept_in {
+            self.keeper.detach(given, id);
         }
         cx.notify();
     }
