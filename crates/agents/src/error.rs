@@ -59,6 +59,10 @@ pub enum NoAccount {
     /// It answered, but not with whether anyone is logged in, so nothing it said can be taken as an account.
     #[error("it didn't say whether anyone is logged in")]
     Unreadable,
+    /// It was given a login its hub holds, and runs under something else, which its own settings can put before a
+    /// token, such as an `env` that sets an API key. So what it says isn't the account the hub chose.
+    #[error("it runs under `{under}` rather than the login it was given, which its settings must put first")]
+    Outranked { under: String },
 }
 
 /// Why a one-off call to the CLI came back with nothing to read.

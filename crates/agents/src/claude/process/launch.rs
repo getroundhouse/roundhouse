@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::process::Stdio;
 
 use process::ProcessRecord;
-use protocol::model::SessionSettings;
+use protocol::model::{AgentLogin, SessionSettings};
 use protocol::worker::AgentSpec;
 use tokio::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command};
 use tracing::warn;
@@ -13,7 +13,8 @@ use crate::{AgentError, AgentOptions, BinaryLookup};
 
 /// Set by a parent Claude session. If the hub was started from inside one, these would make a new
 /// agent think it's part of that session. Login and provider settings such as `ANTHROPIC_API_KEY`
-/// are the user's own choice, so they pass through.
+/// are the user's own choice, so they pass through, unless the agent's hub hands it a login to run under, as
+/// `claude::login` says.
 pub const SCRUBBED_ENV: &[&str] = &[
     "CLAUDECODE",
     "CLAUDE_AGENT_SDK_VERSION",
@@ -124,7 +125,7 @@ pub(super) fn launch(
     if let Some(tools) = options.tools.as_ref().and_then(super::tools::args) {
         command.args(tools).env(super::tools::TAKES_TASKS, "1");
     }
-    let mut child = start(&mut command, bin, cwd)?;
+    let mut child = start(&mut command, bin, cwd, options.login.as_ref())?;
     let pid = child.id().unwrap_or_default();
     record(options.pid_file.as_deref(), pid);
     let (Some(stdin), Some(stdout), Some(stderr)) = (child.stdin.take(), child.stdout.take(), child.stderr.take())
@@ -147,8 +148,15 @@ pub(in crate::claude) fn command(bin: &Path, cwd: &Path) -> Command {
     command
 }
 
-/// Starts `command`, which runs `bin` in `cwd`, and says which if it can't.
-pub(in crate::claude) fn start(command: &mut Command, bin: &Path, cwd: &Path) -> Result<Child, AgentError> {
+/// Starts `command`, which runs `bin` in `cwd`, under `login` if its hub sent one, and says which if it can't. The
+/// login goes on here, last, so every start of the CLI has it and nothing a caller set can undo it.
+pub(in crate::claude) fn start(
+    command: &mut Command,
+    bin: &Path,
+    cwd: &Path,
+    login: Option<&AgentLogin>,
+) -> Result<Child, AgentError> {
+    crate::claude::login::run_under(command, login);
     command.spawn().map_err(|source| AgentError::Start {
         bin: bin.display().to_string(),
         cwd: cwd.display().to_string(),

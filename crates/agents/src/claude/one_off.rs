@@ -8,6 +8,8 @@ use std::time::Duration;
 use process::{Signal, signal_group};
 use tokio::io::AsyncWriteExt as _;
 
+use protocol::model::AgentLogin;
+
 use super::process::{command, record, start};
 use crate::{AgentError, CallFailed};
 
@@ -23,6 +25,8 @@ pub(super) struct OneOff<'a> {
     pub(super) timeout: Duration,
     /// Where to record it while it runs, so the provider can stop it if the worker is killed.
     pub(super) pid_file: Option<PathBuf>,
+    /// The login to run it under, rather than this machine's own.
+    pub(super) login: Option<&'a AgentLogin>,
 }
 
 /// Runs the call and answers with what it printed and how it exited, which is for the caller to judge. Dropping the
@@ -30,7 +34,7 @@ pub(super) struct OneOff<'a> {
 pub(super) async fn run(call: OneOff<'_>) -> Result<Output, AgentError> {
     let mut command = command(call.bin, call.cwd);
     command.args(call.args);
-    let mut child = start(&mut command, call.bin, call.cwd)?;
+    let mut child = start(&mut command, call.bin, call.cwd, call.login)?;
     let running = Running::new(child.id().unwrap_or_default(), call.pid_file);
     let mut stdin = child.stdin.take().ok_or_else(|| AgentError::NoPipes { bin: call.bin.display().to_string() })?;
     // Written while what it prints is read, so neither waits on the other, however much there is of each.
@@ -93,7 +97,8 @@ mod tests {
     async fn shell(script: &str, stdin: &[u8]) -> Result<Output, AgentError> {
         let args = vec!["-c".to_string(), script.to_string()];
         let timeout = Duration::from_secs(20);
-        run(OneOff { bin: Path::new("/bin/sh"), cwd: Path::new("/"), args, stdin, timeout, pid_file: None }).await
+        let bin = Path::new("/bin/sh");
+        run(OneOff { bin, cwd: Path::new("/"), args, stdin, timeout, pid_file: None, login: None }).await
     }
 
     /// Such as a CLI that prints its first lines before it has read all of a prompt with a big image in it.

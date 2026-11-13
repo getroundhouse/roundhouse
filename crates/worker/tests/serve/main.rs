@@ -3,6 +3,7 @@
 #![cfg(test)]
 
 mod hellos;
+mod logins;
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;

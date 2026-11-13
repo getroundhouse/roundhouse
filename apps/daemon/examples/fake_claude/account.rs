@@ -5,6 +5,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use serde_json::{Value, json};
 
+/// Where the real CLI reads a token `claude setup-token` made.
+const TOKEN_ENV: &str = "CLAUDE_CODE_OAUTH_TOKEN";
 /// What the system prompt and tools take before anything is said, and what each line a conversation has seen adds.
 const BASE_TOKENS: u64 = 15_000;
 const TOKENS_A_LINE: u64 = 1_000;
@@ -97,14 +99,21 @@ fn in_state(conversation: &Path, file: &str) -> bool {
 }
 
 /// What `claude auth status --json` prints: whatever `$FAKE_CLAUDE_STATE/auth-status` holds, so a test can log in as
-/// someone else, log out or make the answer unreadable, or else someone logged in with a subscription. Each call adds
-/// a line to `$FAKE_CLAUDE_STATE/auth-status-calls` once it has read what to say, so a test knows what it was told.
+/// someone else, log out or make the answer unreadable, or else someone logged in with a subscription. Given a token
+/// in `CLAUDE_CODE_OAUTH_TOKEN`, it says only that it's logged in with one, as the real CLI does, since a token doesn't
+/// say whose it is. Each call adds a line to `$FAKE_CLAUDE_STATE/auth-status-calls` once it has read what to say, so a
+/// test knows what it was told, and the line ends with the token it was given, if any.
 pub(crate) fn auth_status(state: Option<&Path>) -> String {
     let set = state.and_then(|state| std::fs::read_to_string(state.join("auth-status")).ok());
+    let token = std::env::var(TOKEN_ENV).ok();
     if let Some(state) = state {
         std::fs::create_dir_all(state).unwrap();
         let calls = std::fs::OpenOptions::new().create(true).append(true).open(state.join("auth-status-calls"));
-        calls.and_then(|mut calls| std::io::Write::write_all(&mut calls, b"asked\n")).unwrap();
+        let asked = token.as_ref().map_or_else(|| "asked\n".to_string(), |token| format!("asked under {token}\n"));
+        calls.and_then(|mut calls| std::io::Write::write_all(&mut calls, asked.as_bytes())).unwrap();
+    }
+    if set.is_none() && token.is_some() {
+        return json!({"loggedIn": true, "authMethod": "oauth_token", "apiProvider": "firstParty"}).to_string();
     }
     set.unwrap_or_else(|| {
         json!({

@@ -9,7 +9,7 @@ use agents::{AgentOptions, AgentOutput, BinaryLookup, ToolServer};
 use protocol::attachment::NewAttachment;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::event::{EventBody, ExitReason};
-use protocol::model::{AgentKind, RunId, SessionId, SessionSettingsChange};
+use protocol::model::{AgentKind, AgentLogin, RunId, SessionId, SessionSettingsChange};
 use protocol::paths::AGENTS_DIR;
 use protocol::prompt::Prompt;
 use protocol::worker::{AgentSpec, AgentStarted, TitleReply, WorkerFrame, WorkerResponse};
@@ -26,16 +26,17 @@ pub(crate) async fn title_for(
     state: &State,
     agent: AgentKind,
     prompt: &Prompt<NewAttachment>,
+    login: Option<AgentLogin>,
 ) -> Result<WorkerResponse, ApiError> {
-    let options = one_off(state, "title");
+    let options = one_off(state, "title", login);
     let title = agents::title_for(agent, prompt, &options, &state.config.scratch_dir);
     let title = until_stopping(state, title).await?;
     Ok(WorkerResponse::Title(TitleReply { title: title?.to_string() }))
 }
 
 /// What a one-off call to an agent's CLI runs with: a record of its own, numbered, so the provider can stop the call
-/// if this worker is killed.
-fn one_off(state: &State, what: &str) -> AgentOptions {
+/// if this worker is killed, and the login its hub sent with it, which goes with the call.
+fn one_off(state: &State, what: &str, login: Option<AgentLogin>) -> AgentOptions {
     let call = state.calls.fetch_add(1, Ordering::Relaxed);
     let record = |dir: &std::path::PathBuf| dir.join(AGENTS_DIR).join(format!("{what}-{call}.pid"));
     AgentOptions {
@@ -43,6 +44,7 @@ fn one_off(state: &State, what: &str) -> AgentOptions {
         pid_file: state.config.state_dir.as_ref().map(record),
         tools: None,
         instructions: None,
+        login,
     }
 }
 
@@ -58,9 +60,13 @@ async fn until_stopping<T>(state: &State, call: impl Future<Output = T>) -> Resu
     }
 }
 
-/// The account the agent's CLI is logged in to here.
-pub(crate) async fn account_for(state: &State, agent: AgentKind) -> Result<WorkerResponse, ApiError> {
-    let options = one_off(state, "account");
+/// The account the agent's CLI runs under here, with `login` or with this machine's own.
+pub(crate) async fn account_for(
+    state: &State,
+    agent: AgentKind,
+    login: Option<AgentLogin>,
+) -> Result<WorkerResponse, ApiError> {
+    let options = one_off(state, "account", login);
     let account = agents::account(agent, &options, &state.config.scratch_dir);
     Ok(WorkerResponse::Account(until_stopping(state, account).await??))
 }
@@ -97,6 +103,9 @@ pub(crate) async fn start_agent(
         pid_file: agent_file("pid"),
         tools: tools_for(state, &mut spec, agent_file("mcp.json")).await,
         instructions: Some(INSTRUCTIONS.to_string()),
+        // Taken out of the launch, as the tools' token is, so it's in one place: what the agent is started with, and
+        // started again with, which goes when the agent does.
+        login: spec.login.take(),
     };
     let process = agents::spawn(spec, tx, options).await?;
     let pid = process.pid();

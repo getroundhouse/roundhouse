@@ -44,6 +44,7 @@ pub async fn title_for(
         stdin: asked.as_bytes(),
         timeout: TITLE_TIMEOUT,
         pid_file: options.pid_file.clone(),
+        login: options.login.as_ref(),
     };
     let output = one_off::run(call).await?;
     if !output.status.success() {
