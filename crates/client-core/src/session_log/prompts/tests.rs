@@ -12,7 +12,7 @@ fn prompt() -> EventBody {
 }
 
 fn notice() -> EventBody {
-    EventBody::Notice { level: NoticeLevel::Info, message: "meanwhile".into() }
+    EventBody::Notice { level: NoticeLevel::Info, message: "meanwhile".into(), parent_tool_use_id: None }
 }
 
 /// A log of these bodies, from seq 1, all loaded.
@@ -51,6 +51,7 @@ fn only_what_the_log_says_about_the_prompt_settles_it() {
         models: Vec::new(),
         tokens: None,
         only_compacted: false,
+        request_failed: false,
     };
     let exited =
         EventBody::AgentExited { reason: ExitReason::Unexpected, code: None, signal: None, stderr_tail: vec![] };
@@ -97,6 +98,7 @@ fn turn_ended() -> EventBody {
         models: Vec::new(),
         tokens: None,
         only_compacted: false,
+        request_failed: false,
     }
 }
 

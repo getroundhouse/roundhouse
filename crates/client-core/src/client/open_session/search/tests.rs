@@ -35,7 +35,8 @@ fn read(request: &ClientRequest) -> Option<ReplyOutcome> {
     let from = from_place.get();
     let events = (from..(from + u64::from(*limit)).min(LAST_SEQ + 1))
         .map(|place| {
-            let body = EventBody::Notice { level: NoticeLevel::Info, message: format!("{place}") };
+            let body =
+                EventBody::Notice { level: NoticeLevel::Info, message: format!("{place}"), parent_tool_use_id: None };
             SessionEvent {
                 subagent: subagent.clone(),
                 place: Place::new(place),
@@ -253,7 +254,7 @@ fn a_log_that_holds_every_event_needs_no_hub_once_it_knows_how_far_they_go() {
     });
     let client = connect(&socket);
     let open = own(&client);
-    let parser = EventBody::Notice { level: NoticeLevel::Info, message: "parser".into() };
+    let parser = EventBody::Notice { level: NoticeLevel::Info, message: "parser".into(), parent_tool_use_id: None };
     let only = SessionEvent { place: Place::new(1), ..protocol::fixtures::event(1, parser) };
 
     let before = open.search(&client, needle("parser"), 64);

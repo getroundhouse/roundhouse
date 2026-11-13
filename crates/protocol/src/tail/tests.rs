@@ -84,6 +84,7 @@ pub(super) fn turn_ended() -> EventBody {
         models: vec![],
         tokens: None,
         only_compacted: false,
+        request_failed: false,
     }
 }
 

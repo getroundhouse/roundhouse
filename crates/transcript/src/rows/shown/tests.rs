@@ -213,6 +213,7 @@ fn what_went_wrong_is_found_but_not_what_the_app_says_of_it() {
         models: Vec::new(),
         tokens: None,
         only_compacted: false,
+        request_failed: false,
     };
     let stopped = |reason| EventBody::AgentExited {
         reason,

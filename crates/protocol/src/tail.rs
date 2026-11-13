@@ -209,6 +209,7 @@ impl Tail {
             | EventBody::ApprovalRequested { .. }
             | EventBody::ApprovalResolved { .. }
             | EventBody::Notice { .. }
+            | EventBody::RequestFailed { .. }
             | EventBody::AgentMode { .. }
             | EventBody::SubagentStarted { in_background: false, .. }
             | EventBody::SubagentContext { .. }

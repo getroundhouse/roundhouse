@@ -7,7 +7,7 @@ use protocol::tail::DeltaChange;
 use serde_json::Value;
 
 fn notice(seq: Seq) -> SessionEvent {
-    event(seq, EventBody::Notice { level: NoticeLevel::Info, message: format!("{seq}") })
+    event(seq, EventBody::Notice { level: NoticeLevel::Info, message: format!("{seq}"), parent_tool_use_id: None })
 }
 
 pub(super) fn page(range: Range<Seq>) -> Vec<SessionEvent> {
@@ -171,7 +171,10 @@ fn a_request_with_events_after_it_that_arent_loaded_isnt_open() {
     log.apply_event(event(1, requested));
 
     // Its answer could be the event that isn't here.
-    log.apply_event(event(3, EventBody::Notice { level: NoticeLevel::Info, message: "later".into() }));
+    log.apply_event(event(
+        3,
+        EventBody::Notice { level: NoticeLevel::Info, message: "later".into(), parent_tool_use_id: None },
+    ));
 
     assert!(log.open_approvals(None).is_empty());
 }
@@ -217,6 +220,7 @@ fn changes_gather_into_one_range_until_a_view_looks() {
             models: Vec::new(),
             tokens: None,
             only_compacted: false,
+            request_failed: false,
         },
     ));
 

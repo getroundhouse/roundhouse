@@ -124,5 +124,6 @@ fn ended(outcome: TurnOutcome, errors: Vec<String>, took_ms: u64) -> EventBody {
         models: Vec::new(),
         tokens: None,
         only_compacted: false,
+        request_failed: false,
     }
 }

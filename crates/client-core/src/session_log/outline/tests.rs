@@ -238,7 +238,8 @@ fn only_prompts_are_listed() {
     log.apply_event(SessionEvent { body: EventBody::PromptTaken { prompt: 1 }, ..prompt(2, "") });
 
     assert_eq!(log.prompt_lines().len(), 0);
-    let notice = EventBody::Notice { level: protocol::event::NoticeLevel::Info, message: "x".into() };
+    let notice =
+        EventBody::Notice { level: protocol::event::NoticeLevel::Info, message: "x".into(), parent_tool_use_id: None };
     let changes = log.outline_changes();
     log.apply_event(SessionEvent { body: notice, ..prompt(3, "") });
     assert_eq!(log.outline_changes(), changes, "nothing else changes the outline");

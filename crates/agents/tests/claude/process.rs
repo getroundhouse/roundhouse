@@ -310,7 +310,7 @@ exec sleep 100"#;
 
     let seen = until_exit(&mut rx).await;
     let said = seen.iter().any(|item| {
-        matches!(item, AgentOutput::Event { body: EventBody::Notice { level: NoticeLevel::Error, message }, .. }
+        matches!(item, AgentOutput::Event { body: EventBody::Notice { level: NoticeLevel::Error, message, .. }, .. }
             if message.contains("no plans here"))
     });
     assert!(said, "{seen:?}");
@@ -332,7 +332,7 @@ exec sleep 100"#;
 
     let seen = until_exit(&mut rx).await;
     let said = seen.iter().any(|item| {
-        matches!(item, AgentOutput::Event { body: EventBody::Notice { level: NoticeLevel::Error, message }, .. }
+        matches!(item, AgentOutput::Event { body: EventBody::Notice { level: NoticeLevel::Error, message, .. }, .. }
             if message.contains("plan mode"))
     });
     assert!(said, "{seen:?}");

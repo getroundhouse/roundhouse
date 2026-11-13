@@ -52,7 +52,7 @@ pub(crate) fn workspace_w(now: i64) -> Workspace {
 }
 
 pub(super) fn notice(text: &str) -> EventBody {
-    EventBody::Notice { level: NoticeLevel::Info, message: text.into() }
+    EventBody::Notice { level: NoticeLevel::Info, message: text.into(), parent_tool_use_id: None }
 }
 
 #[test]

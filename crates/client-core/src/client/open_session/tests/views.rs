@@ -30,7 +30,7 @@ fn recorded(seq: u64, era: Era) -> SessionEvent {
         Era::Now if seq.is_multiple_of(2) => (Some("call".into()), Place::new(seq / 2)),
         Era::Now => (None, Place::new(seq.div_ceil(2))),
     };
-    let body = EventBody::Notice { level: NoticeLevel::Info, message: format!("{seq}") };
+    let body = EventBody::Notice { level: NoticeLevel::Info, message: format!("{seq}"), parent_tool_use_id: None };
     SessionEvent { subagent, place, ..protocol::fixtures::event(seq, body) }
 }
 

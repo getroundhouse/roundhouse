@@ -45,6 +45,7 @@ fn ended(started_at_ms: Option<i64>) -> EventBody {
         models: Vec::new(),
         tokens: None,
         only_compacted: false,
+        request_failed: false,
     }
 }
 
@@ -143,7 +144,7 @@ fn an_approval_is_open_from_its_asking_until_its_answer() {
 #[test]
 fn an_event_that_changes_nothing_has_nothing_to_commit() {
     let progress = progress(SessionStatus::Running, 1);
-    let notice = EventBody::Notice { level: NoticeLevel::Info, message: "x".into() };
+    let notice = EventBody::Notice { level: NoticeLevel::Info, message: "x".into(), parent_tool_use_id: None };
 
     let Step { change, .. } = progress.step(current(1), notice, true);
 

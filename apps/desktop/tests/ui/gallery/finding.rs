@@ -69,6 +69,7 @@ fn what_went_wrong() -> Vec<EventBody> {
         models: Vec::new(),
         tokens: None,
         only_compacted: false,
+        request_failed: false,
     };
     let stopped = EventBody::AgentExited {
         reason: ExitReason::Unexpected,
@@ -76,7 +77,10 @@ fn what_went_wrong() -> Vec<EventBody> {
         signal: None,
         stderr_tail: vec!["Error: the session file at /tmp/claude/session.json is locked".into()],
     };
-    let notice =
-        EventBody::Notice { level: NoticeLevel::Warning, message: "The agent's CLI is 2 versions behind".into() };
+    let notice = EventBody::Notice {
+        level: NoticeLevel::Warning,
+        message: "The agent's CLI is 2 versions behind".into(),
+        parent_tool_use_id: None,
+    };
     vec![notice, failed, stopped]
 }

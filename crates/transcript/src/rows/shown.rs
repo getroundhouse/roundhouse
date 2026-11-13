@@ -188,6 +188,7 @@ fn of_event(event: &SessionEvent, around: &Around, gather: &mut Gather) {
         | EventBody::TurnEnded { .. }
         | EventBody::ApprovalResolved { .. }
         | EventBody::AgentMode { .. }
+        | EventBody::RequestFailed { .. }
         | EventBody::PromptTaken { .. }
         | EventBody::PromptDropped { .. }
         | EventBody::ToolCallDropped { .. }

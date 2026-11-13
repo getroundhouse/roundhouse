@@ -68,6 +68,7 @@ impl Hub {
         let stored = StoredSession {
             session: Session {
                 account: None,
+                reply_outcome: None,
                 id: id.clone().into(),
                 workspace_id,
                 agent,

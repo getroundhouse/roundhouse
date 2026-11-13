@@ -218,6 +218,7 @@ fn track_approval(shared: &Shared, body: &EventBody) {
         | EventBody::TurnEnded { .. }
         | EventBody::AgentExited { .. }
         | EventBody::Notice { .. }
+        | EventBody::RequestFailed { .. }
         | EventBody::AgentMode { .. }
         | EventBody::SubagentStarted { .. }
         | EventBody::SubagentContext { .. }

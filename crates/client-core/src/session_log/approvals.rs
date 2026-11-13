@@ -88,6 +88,7 @@ fn follow<'a>(open: &mut Vec<&'a SessionEvent>, event: &'a SessionEvent) {
         | EventBody::TurnEnded { .. }
         | EventBody::AgentExited { .. }
         | EventBody::Notice { .. }
+        | EventBody::RequestFailed { .. }
         | EventBody::AgentMode { .. }
         | EventBody::SubagentStarted { .. }
         | EventBody::SubagentContext { .. }

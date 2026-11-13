@@ -105,8 +105,9 @@ impl Needle {
 
     /// Whether the event holds the needle in any text it records, as [`Needle::may_be_in_markdown`] looks: what was
     /// typed or written, every value, key and number in a call's input, also as the JSON a chat shows it as, what came
-    /// back, the lines of a change, and what a subagent was for, was asked and reported. That's everything a chat shows
-    /// of it, and more, so a client that finds where it shows can start from these.
+    /// back, the lines of a change, what a subagent was for, was asked and reported, and what went wrong, such as why a
+    /// request to the model failed. That's everything a chat shows of it, and more, so a client that finds where it
+    /// shows can start from these.
     pub fn is_in_event(&self, body: &EventBody) -> bool {
         any_text(body, &mut |text| self.may_be_in_markdown(text))
     }
@@ -171,6 +172,7 @@ fn any_text(body: &EventBody, found: &mut impl FnMut(&str) -> bool) -> bool {
             found(tool_name) || any_text_in_input(input, found) || description.as_deref().is_some_and(&mut *found)
         }
         EventBody::Notice { message, .. } => found(message),
+        EventBody::RequestFailed { failure, .. } => found(&failure.message),
         EventBody::SubagentStarted { kind, description, prompt, .. } => {
             [kind, description, prompt].into_iter().flatten().any(|text| found(text))
         }

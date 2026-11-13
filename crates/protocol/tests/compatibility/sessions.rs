@@ -2,8 +2,9 @@
 //! was settled. A hub keeps the approvals in its database in the form it sends.
 
 use protocol::client::HubNotice;
+use protocol::event::TurnOutcome;
 use protocol::frame;
-use protocol::model::{MaxSetBy, OpenApproval, PromptLine, Session, Settlement};
+use protocol::model::{MaxSetBy, OpenApproval, PromptLine, Session, SessionStatus, Settlement};
 
 fn session(more: &str) -> Session {
     let notice = format!(
@@ -80,4 +81,24 @@ fn a_session_from_a_hub_that_doesnt_keep_how_full_the_context_is_has_none_and_it
     let context = session.context.unwrap();
     assert_eq!((context.used_tokens, context.max_tokens, context.parts.len()), (5, 10, 1));
     assert_eq!((context.model_tokens, context.max_set_by), (Some(20), Some(MaxSetBy::Settings)));
+}
+
+/// A hub that doesn't keep how the newest turn ended says nothing of it, so no chat of its turns red for a turn that
+/// failed. One that says a turn failed is stopped short until a turn starts, and an outcome a later hub names isn't a
+/// failure.
+#[test]
+fn a_session_from_a_hub_that_doesnt_keep_how_its_turn_ended_didnt_fail() {
+    let older = session("");
+    let failed = session(r#","reply_seq":4,"reply_outcome":"error""#);
+    let later = session(r#","reply_seq":4,"reply_outcome":"something_newer""#);
+
+    assert_eq!(older.reply_outcome, None);
+    assert!(!older.stopped_short());
+    assert_eq!(failed.reply_outcome, Some(TurnOutcome::Error));
+    assert!(failed.turn_failed() && failed.stopped_short());
+    let running = Session { status: SessionStatus::Running, ..failed.clone() };
+    assert!(!running.stopped_short(), "a turn has started again");
+    assert!(!later.turn_failed());
+    assert!(serde_json::to_string(&failed).unwrap().contains(r#""reply_outcome":"error""#));
+    assert!(!serde_json::to_string(&older).unwrap().contains("reply_outcome"));
 }

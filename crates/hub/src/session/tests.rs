@@ -22,6 +22,7 @@ fn turn_ended() -> EventBody {
         models: Vec::new(),
         tokens: None,
         only_compacted: false,
+        request_failed: false,
     }
 }
 

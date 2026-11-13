@@ -59,6 +59,8 @@ pub(super) fn session_from_row(row: &Row) -> rusqlite::Result<StoredSession> {
             title: row.get::<_, Option<String>>(11)?.as_deref().and_then(Title::tidied),
             closed_at_ms: row.get(12)?,
             reply_seq: row.get::<_, i64>(13)?.cast_unsigned(),
+            // Nothing, as a hub that doesn't keep how the newest turn ended says.
+            reply_outcome: None,
             read_seq: row.get::<_, i64>(14)?.cast_unsigned(),
             // Written only by this hub, as JSON. Anything it can't read is nothing it knows to be running.
             background_tasks: json_at(row, 15)?.unwrap_or_default(),

@@ -90,7 +90,10 @@ impl Printer {
             EventBody::ApprovalRequested { .. } => self.approval_requested(event),
             EventBody::ApprovalResolved { .. } => self.approval_resolved(event),
             EventBody::AgentExited { .. } => self.exited(event),
-            EventBody::Notice { level, message } => self.line(event.seq, &format!("{level:?}: {message}")),
+            EventBody::Notice { level, message, .. } => self.line(event.seq, &format!("{level:?}: {message}")),
+            EventBody::RequestFailed { failure, .. } => {
+                self.line(event.seq, &format!("request failed: {}", failure.message));
+            }
             EventBody::AgentMode { permission_mode } => {
                 self.line(event.seq, &format!("approval mode: {}", crate::session::mode_name(*permission_mode)));
             }

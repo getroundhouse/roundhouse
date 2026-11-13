@@ -24,6 +24,7 @@ fn ended(outcome: TurnOutcome) -> EventBody {
         models: Vec::new(),
         tokens: None,
         only_compacted: false,
+        request_failed: false,
     }
 }
 

@@ -5,7 +5,7 @@
 
 use serde_json::Value;
 
-use crate::event::{CallKind, ContentBlock, EventBody, SessionEvent};
+use crate::event::{CallKind, ContentBlock, EventBody, SessionEvent, TurnOutcome};
 use crate::model::{
     AgentKind, BranchName, Call, CallResult, ChildStatus, ChildWorktree, Draft, Effort, MadeBy, ModelName,
     PermissionMode, Place, RecentWork, Rev, Seq, Session, SessionStatus, SetupStatus, Subagent, SubagentStatus,
@@ -31,6 +31,7 @@ pub fn session(id: &str) -> Session {
         title: None,
         closed_at_ms: None,
         reply_seq: 0,
+        reply_outcome: None,
         turn_started_at_ms: None,
         user_active_at_ms: None,
         read_seq: 0,
@@ -109,6 +110,24 @@ pub fn event(seq: Seq, body: EventBody) -> SessionEvent {
         place: Place::default(),
         body,
         raw: None,
+    }
+}
+
+/// The end of a turn that came out as `outcome`, saying nothing else of it, as an agent that says only that ends one.
+/// A test about another of its fields sets that on what this returns, since an event can't take struct update syntax.
+pub fn turn_ended(outcome: TurnOutcome) -> EventBody {
+    EventBody::TurnEnded {
+        outcome,
+        result: None,
+        errors: Vec::new(),
+        duration_ms: None,
+        cost_usd: None,
+        num_turns: None,
+        started_at_ms: None,
+        models: Vec::new(),
+        tokens: None,
+        only_compacted: false,
+        request_failed: false,
     }
 }
 

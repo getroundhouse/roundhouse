@@ -71,6 +71,7 @@ async fn stop(shared: &Shared, output: &mpsc::Sender<AgentOutput>, why: &str) {
     warn!("the CLI didn't go into plan mode, so it's being stopped: {why}");
     let message = format!("Claude didn't go into plan mode, so it was stopped: {why}");
     // Before it's stopped, so this comes before its exit.
-    deliver(shared, output, AgentOutput::event(EventBody::Notice { level: NoticeLevel::Error, message }, None)).await;
+    let notice = EventBody::Notice { level: NoticeLevel::Error, message, parent_tool_use_id: None };
+    deliver(shared, output, AgentOutput::event(notice, None)).await;
     signal_group(shared.pid.load(Ordering::SeqCst), Signal::Terminate);
 }

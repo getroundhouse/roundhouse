@@ -111,6 +111,7 @@ async fn follow(session: &Arc<LiveSession>, run: RunId, current: bool, body: &Ev
         | EventBody::ApprovalRequested { .. }
         | EventBody::ApprovalResolved { .. }
         | EventBody::Notice { .. }
+        | EventBody::RequestFailed { .. }
         | EventBody::AgentMode { .. }
         | EventBody::SubagentStarted { .. }
         | EventBody::SubagentContext { .. }
