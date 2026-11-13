@@ -268,14 +268,14 @@ fn open_on_a_long_session<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> Ui<'
 
 /// Waits for `row` to be loaded and for the list to settle with it. A page changes the session's height in three
 /// goes: as its rows in the window are measured, over the frames after as the rest of them are, a few to a frame,
-/// and as each long text in it is read on another thread and its row measured again. So the list has settled once
-/// every long text is read and no frame is asked for. Nothing is drawn after that, since that could bring another
+/// and as each long text in it is parsed on another thread and its row measured again. So the list has settled once
+/// every long text is parsed and no frame is asked for. Nothing is drawn after that, since that could bring another
 /// page.
 fn wait_for_the_list_to_settle(ui: &mut Ui<'_>, row: usize) {
     let transcript = ui.transcript().unwrap();
     ui.wait("the rows there to load and the list to settle", |ui| {
         ui.settle(A_FRAME);
-        ui.cx.read_entity(&transcript, |t, cx| t.event_at(row).is_some() && t.long_texts_read(cx))
+        ui.cx.read_entity(&transcript, |t, _| t.event_at(row).is_some() && t.long_texts_parsed())
     });
 }
 

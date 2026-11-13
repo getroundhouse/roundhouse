@@ -17,7 +17,7 @@ use protocol::model::{Seq, seq_index};
 use super::around::{
     Around, BlockAround, Opening, blocks_of, drawn_in_its_call, drawn_in_row, drawn_with_its_call, its_call,
 };
-use super::{InRow, tools};
+use super::tools;
 use crate::find::{self, Part, TextId};
 use crate::folds::Fold;
 use crate::images_apart::images_apart;
@@ -29,9 +29,6 @@ use crate::transcript::Model;
 pub(crate) struct Found {
     pub(crate) id: TextId,
     pub(crate) matches: usize,
-    /// Whether the kit's text view draws it, as Markdown, rendered. The view the transcript keeps of it draws its
-    /// matches, and brings the one being shown into view itself.
-    pub(crate) kit_view: bool,
     /// The folds to open to show it, outermost first.
     pub(crate) opens: Vec<(ItemKey, Fold)>,
 }
@@ -40,8 +37,7 @@ pub(crate) struct Found {
 /// drawn in another's, such as a call's result, draws none of its own, and one that settled a prompt draws the
 /// prompt.
 pub(crate) fn of_row(log: &SessionLog, m: &Model, needle: &Needle, ix: usize) -> Vec<Found> {
-    // A row's own, until a block it gathers says otherwise, as the prompt's text is the only one its row draws.
-    let mut gather = Gather { needle, found: Vec::new(), opens: Vec::new(), in_row: InRow::Own(0) };
+    let mut gather = Gather { needle, found: Vec::new(), opens: Vec::new() };
     if ix >= log.row_count() {
         return gather.found;
     }
@@ -102,36 +98,23 @@ pub(crate) fn count(log: &SessionLog, needle: &str, ix: usize) -> usize {
 #[cfg(test)]
 mod tests;
 
-/// Where a row's texts with matches are gathered, what has to be opened to show the ones being gathered now, and the
-/// row the block they're in is drawn in, its own or a call's, as a subagent's are.
+/// Where a row's texts with matches are gathered, and what has to be opened to show the ones being gathered now.
 pub(in crate::rows) struct Gather<'n> {
     needle: &'n Needle,
     found: Vec<Found>,
     opens: Vec<(ItemKey, Fold)>,
-    in_row: InRow,
 }
 
 impl Gather<'_> {
     /// `text`, as it's drawn, if it has matches.
     pub(in crate::rows) fn plain(&mut self, key: &ItemKey, part: Part, text: &str) {
-        self.add(key, part, text, Drawn::Plain);
+        self.add(key, part, self.needle.ranges(text).count());
     }
 
     /// `text`, which is recorded Markdown, as it was written, if what it renders has matches, as `super::written`
-    /// draws it: from the kit's blocks in a row of its own, and with the kit's text view in a call's row.
+    /// draws it, from the kit's blocks.
     pub(in crate::rows) fn written(&mut self, key: &ItemKey, part: Part, text: &str) {
-        let drawn = match self.in_row.own_block() {
-            Some(_) => Drawn::Prose,
-            None => Drawn::KitView,
-        };
-        self.add(key, part, text, drawn);
-    }
-
-    /// Gathers with `gather` what a block drawn in the row `in_row` says shows, and then goes back to the row it was in.
-    fn in_row(&mut self, in_row: InRow, gather: impl FnOnce(&mut Self)) {
-        let was = std::mem::replace(&mut self.in_row, in_row);
-        gather(self);
-        self.in_row = was;
+        self.add(key, part, find::markdown::count(self.needle, &images_apart(text)));
     }
 
     /// Gathers what the block `key` shows once its `fold` is open.
@@ -141,24 +124,11 @@ impl Gather<'_> {
         self.opens.pop();
     }
 
-    fn add(&mut self, key: &ItemKey, part: Part, text: &str, drawn: Drawn) {
-        let matches = match drawn {
-            Drawn::Plain => self.needle.ranges(text).count(),
-            Drawn::KitView | Drawn::Prose => find::markdown::count(self.needle, &images_apart(text)),
-        };
+    fn add(&mut self, key: &ItemKey, part: Part, matches: usize) {
         if matches > 0 {
-            let (id, opens, kit_view) = ((key.clone(), part), self.opens.clone(), drawn == Drawn::KitView);
-            self.found.push(Found { id, matches, kit_view, opens });
+            self.found.push(Found { id: (key.clone(), part), matches, opens: self.opens.clone() });
         }
     }
-}
-
-/// How a text is drawn, which is how its matches are counted.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Drawn {
-    Plain,
-    KitView,
-    Prose,
 }
 
 fn of_event(event: &SessionEvent, around: &Around, gather: &mut Gather) {
@@ -168,8 +138,8 @@ fn of_event(event: &SessionEvent, around: &Around, gather: &mut Gather) {
             gather.written(&ItemKey::prompt(seq, client_msg_id.as_ref()), Part::Prompt, &prompt.text);
         }
         EventBody::Assistant { blocks, .. } | EventBody::AgentUser { blocks, .. } => {
-            for (ix, (block, drawing)) in blocks.iter().zip(&around.blocks).enumerate() {
-                of_block(block, drawing, InRow::Own(ix), gather);
+            for (block, drawing) in blocks.iter().zip(&around.blocks) {
+                of_block(block, drawing, gather);
             }
         }
         EventBody::Notice { message, .. } => gather.written(&ItemKey::Event(seq, 0), Part::Notice, message),
@@ -213,10 +183,10 @@ fn of_event(event: &SessionEvent, around: &Around, gather: &mut Gather) {
     }
 }
 
-/// What a block shows, as [`super::render_block`] draws it in the row `in_row` says.
-pub(in crate::rows) fn of_block(block: &ContentBlock, drawing: &BlockAround, in_row: InRow, gather: &mut Gather) {
+/// What a block shows, as [`super::render_block`] draws it.
+pub(in crate::rows) fn of_block(block: &ContentBlock, drawing: &BlockAround, gather: &mut Gather) {
     let key = &drawing.key;
-    gather.in_row(in_row, |gather| match block {
+    match block {
         ContentBlock::Text { text, .. } => gather.written(key, Part::Text, text),
         ContentBlock::Thinking { text } if text.is_empty() => {}
         ContentBlock::Thinking { text } => gather.inside(key, Fold::Thinking, |gather| {
@@ -235,5 +205,5 @@ pub(in crate::rows) fn of_block(block: &ContentBlock, drawing: &BlockAround, in_
             }
         }
         ContentBlock::Image { .. } | ContentBlock::Unknown => {}
-    });
+    }
 }

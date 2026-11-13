@@ -28,7 +28,7 @@ mod finding;
 mod opening;
 mod scrollbar;
 
-pub(crate) use finding::{FoundBothWays, found_both_ways};
+pub(crate) use finding::{FoundBothWays, copied_whole, found_both_ways};
 use opening::open;
 use scrollbar::ChatScroll;
 

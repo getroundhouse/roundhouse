@@ -16,7 +16,7 @@ use client_core::{Client, Search, Searched};
 use gpui_kit::{Context, Task, Window};
 use protocol::find::Needle;
 
-use super::{FoundMarkdown, Model, Transcript, TranscriptEvent};
+use super::{Model, Transcript, TranscriptEvent};
 use crate::find::FindLook;
 use crate::find::reveal::Reveal;
 use crate::rows::{NEAR, REACH, found_in_row, rows_drawing, rows_to_count};
@@ -161,11 +161,7 @@ impl Transcript {
         if self.finding.take().is_none() {
             return;
         }
-        let mut m = self.model.borrow_mut();
-        m.find = Rc::default();
-        m.found_markdown.clear();
-        drop(m);
-        self.texts.forget_found(cx);
+        self.model.borrow_mut().find = Rc::default();
         cx.emit(TranscriptEvent::FindClosed);
         cx.notify();
     }
@@ -176,12 +172,7 @@ impl Transcript {
         let needle = Needle::new(&finding.bar.query(cx)).ok();
         finding.reveal.done();
         finding.query = needle.clone().map(|needle| Query::new(needle, &self.client, &self.session));
-        {
-            self.texts.forget_found(cx);
-            let mut m = self.model.borrow_mut();
-            m.found_markdown.clear();
-            m.find = Rc::new(FindLook::new(needle.clone(), None, finding.reveal.clone()));
-        }
+        self.model.borrow_mut().find = Rc::new(FindLook::new(needle.clone(), None, finding.reveal.clone()));
         if let Some(needle) = needle {
             let (found, rows) = {
                 let m = self.model.borrow();
@@ -205,24 +196,16 @@ impl Transcript {
         }
     }
 
-    /// Counts again what each of `rows` the log holds draws, as it draws it, and notes the Markdown with matches in
-    /// each, for the row to keep views of once it's drawn. A row the log doesn't hold keeps what it was counted as.
+    /// Counts again what each of `rows` the log holds draws, as it draws it. A row the log doesn't hold keeps what it
+    /// was counted as.
     fn count_rows(&mut self, rows: BTreeSet<usize>, cx: &mut Context<Self>) {
         let Some(needle) = self.query().map(|query| query.needle.clone()) else { return };
         let counted = {
-            let mut m = self.model.borrow_mut();
-            let counted = self.session.read(|log| count_held(log, &m, &needle, rows));
-            for (row, _, texts) in &counted {
-                if texts.is_empty() {
-                    m.found_markdown.remove(row);
-                } else {
-                    m.found_markdown.insert(*row, texts.clone());
-                }
-            }
-            counted
+            let m = self.model.borrow();
+            self.session.read(|log| count_held(log, &m, &needle, rows))
         };
         if let Some(query) = self.query_mut() {
-            for (row, count, _) in counted {
+            for (row, count) in counted {
                 query.counts.set(row, count);
             }
         }
@@ -340,22 +323,12 @@ fn row_at(position: u64) -> usize {
     usize::try_from(position.saturating_sub(1)).unwrap_or(usize::MAX)
 }
 
-/// What each of `rows` the log holds counts to, as it's drawn, with the Markdown in it that has matches. A row the log
-/// doesn't hold isn't counted here, and keeps what it was counted as.
-fn count_held(
-    log: &SessionLog,
-    m: &Model,
-    needle: &Needle,
-    rows: BTreeSet<usize>,
-) -> Vec<(usize, usize, FoundMarkdown)> {
+/// What each of `rows` the log holds counts to, as it's drawn. A row the log doesn't hold isn't counted here, and keeps
+/// what it was counted as.
+fn count_held(log: &SessionLog, m: &Model, needle: &Needle, rows: BTreeSet<usize>) -> Vec<(usize, usize)> {
     rows.into_iter()
         .filter(|row| is_loaded(log, *row))
-        .map(|row| {
-            let found = found_in_row(log, m, needle, row);
-            let count = found.iter().map(|found| found.matches).sum();
-            let markdown = found.into_iter().filter(|found| found.kit_view).map(|found| found.id).collect();
-            (row, count, markdown)
-        })
+        .map(|row| (row, found_in_row(log, m, needle, row).iter().map(|found| found.matches).sum()))
         .collect()
 }
 

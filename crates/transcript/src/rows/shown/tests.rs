@@ -191,11 +191,10 @@ fn a_subagent_s_work_is_found_in_the_call_that_started_it() {
     assert_eq!(rows_drawing(&log, &Model::default(), 2), [0]);
 }
 
-/// A call's own prose is counted as the row it's in draws it: from the kit's blocks in a row of its own, and by the
-/// kit's text view in a call's row, as a call in a subagent's work is, while what its call draws after it, such as the
-/// subagent's report, is its call's row's own again.
+/// A call's own prose is found in the row that draws it, in the order that row shows it: a call in a subagent's work
+/// in the row of the call that started the subagent, between what it was asked and its report.
 #[test]
-fn a_call_s_prose_is_counted_as_the_row_it_s_in_draws_it() {
+fn a_call_s_prose_is_found_in_the_row_that_draws_it_in_the_order_it_shows() {
     let asked = json!({ "description": "Look", "prompt": "Ask about the parser" });
     let log = log([
         event(1, call("helper", "Agent", asked)),
@@ -207,13 +206,12 @@ fn a_call_s_prose_is_counted_as_the_row_it_s_in_draws_it() {
         event(6, from_the_agent(sent_back("own", "The parser is fine."))),
     ]);
     let needle = Needle::new("parser").unwrap();
-    let by_the_kit = |ix| -> Vec<(Part, bool)> {
-        of_row(&log, &Model::default(), &needle, ix).into_iter().map(|found| (found.id.1, found.kit_view)).collect()
+    let parts = |ix| -> Vec<Part> {
+        of_row(&log, &Model::default(), &needle, ix).into_iter().map(|found| found.id.1).collect()
     };
 
-    let in_the_agent_s = [(Part::Asked, false), (Part::Advice, true), (Part::Report, false)];
-    assert_eq!(by_the_kit(0), in_the_agent_s, "a subagent's call is in its call's row");
-    assert_eq!(by_the_kit(4), [(Part::Advice, false)], "and this one in a row of its own");
+    assert_eq!(parts(0), [Part::Asked, Part::Advice, Part::Report], "a subagent's call is in its call's row");
+    assert_eq!(parts(4), [Part::Advice], "and this one in a row of its own");
 }
 
 #[test]

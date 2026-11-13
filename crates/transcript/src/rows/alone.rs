@@ -60,7 +60,7 @@ pub(super) fn head(m: &Model, shared: &Shared, cx: &App) -> Option<AnyElement> {
     let element = find::view_id(&(key.clone(), Part::Asked));
     let text =
         |area| from_blocks(&Written::unfound(TextAt::first_of(Of::Head), element, prompt).in_area(area), None, shared);
-    let asked = agent::prompt_block(&key, text, &find, Some(&shared.selection), cx);
+    let asked = agent::prompt_block(&key, text, &find, &shared.selection, cx);
     Some(row().child(asked).into_any_element())
 }
 

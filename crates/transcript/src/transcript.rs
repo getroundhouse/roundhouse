@@ -16,12 +16,11 @@ use protocol::event::SessionEvent;
 use protocol::model::{AttachmentId, Seq, Session, SessionId, Subagent, ToolUseId};
 
 use crate::attachments::Picture;
-use crate::find::{FindLook, TextId};
+use crate::find::FindLook;
 use crate::folds::{Fold, Folds};
 use crate::item_key::ItemKey;
 use crate::linked_images::LinkedImages;
 use crate::list::TranscriptList;
-use crate::long_texts::LongTexts;
 use crate::prose::{Of, Prose};
 use crate::questions::QuestionPanel;
 use crate::rows::SubagentCalls;
@@ -73,9 +72,6 @@ pub(crate) struct Model {
     pub alone: Option<ToolUseId>,
     /// What's being found in the chat, for rows to draw.
     pub find: Rc<FindLook>,
-    /// The Markdown the kit's text view draws with matches in each row the log holds, as counting found it, which a
-    /// row keeps views of once it's drawn, so they draw them.
-    pub found_markdown: HashMap<usize, FoundMarkdown>,
 }
 
 impl Model {
@@ -94,7 +90,6 @@ impl Model {
             subagent_rows: RefCell::default(),
             alone: None,
             find: Rc::default(),
-            found_markdown: HashMap::new(),
         }
     }
 }
@@ -107,9 +102,6 @@ impl Default for Model {
     }
 }
 
-/// The Markdown texts in a row with matches.
-pub(crate) type FoundMarkdown = Rc<[TextId]>;
-
 pub struct Transcript {
     client: Client,
     session_id: SessionId,
@@ -120,8 +112,6 @@ pub struct Transcript {
     model: Rc<RefCell<Model>>,
     /// The images the agent's text points to.
     linked: LinkedImages,
-    /// Where the rows' text views are made, which keeps each long one.
-    texts: LongTexts,
     /// The texts the transcript draws from the kit's blocks, parsed.
     prose: Prose,
     /// What's selected of them.
@@ -190,7 +180,6 @@ impl Transcript {
             session: open,
             model,
             linked,
-            texts: LongTexts::default(),
             prose,
             selection,
             list,
@@ -246,7 +235,6 @@ impl Transcript {
         let events_changed = changes.rows.as_ref().is_some_and(|changed| changed.start < events);
         self.list.set_rows(rows, loaded);
         self.follow_retry();
-        self.session.read(|log| self.texts.let_go(log));
         self.session.read(|log| self.prose.let_go(log, self.selection.held().as_ref()));
         if let Some(changed) = changes.rows {
             self.list.out_of_date(changed.clone());
@@ -362,7 +350,6 @@ impl Render for Transcript {
             this: cx.weak_entity(),
             linked: self.linked.clone(),
             line_text: line_text.clone(),
-            texts: self.texts.clone(),
             prose: self.prose.clone(),
             selection: self.selection.clone(),
         };
@@ -374,9 +361,7 @@ impl Render for Transcript {
             ElementId::Name(self.list_id.clone().into()),
             move |ix, _, cx| {
                 let item = crate::rows::Item { ix, tail };
-                shared
-                    .texts
-                    .draw_row(ix, &shared.this, cx, |cx| crate::rows::render_row(&model, &session, &shared, item, cx))
+                crate::rows::render_row(&model, &session, &shared, item, cx)
             },
             move |row| wanted.want(row),
             room_under,

@@ -1,4 +1,4 @@
-//! Where the images a text points to are. They're found the way the transcript's text view finds them, with the same
+//! Where the images a text points to are. They're found the way the transcript's drawing of a text finds them, with the same
 //! Markdown parser, so the address the worker keeps an image by is the one a client asks for.
 
 use std::borrow::Cow;
@@ -14,13 +14,13 @@ pub(super) fn might_have(text: &str) -> bool {
 }
 
 /// The address of each image `text` points to, in the order they come, each once. An image that refers to an address
-/// given elsewhere, as `![The board][board]` does, is at every address given under that name, since the text view takes
+/// given elsewhere, as `![The board][board]` does, is at every address given under that name, since what draws the text takes
 /// one of them.
 pub(super) fn of(text: &str) -> Vec<String> {
     if !might_have(text) {
         return Vec::new();
     }
-    // The text view also parses `$` as math, but draws math nobody claims as Markdown again, so an image inside it is
+    // What draws the text also parses `$` as math, but draws math nobody claims as Markdown again, so an image inside it is
     // still an image, as it is here.
     //
     // The parser panics on some texts, such as `"a\n===\n---\nb\n==="`, which the agent can write. `super::keep_in`

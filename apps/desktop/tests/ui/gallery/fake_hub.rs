@@ -173,6 +173,9 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         R::SessionSubscribe(subscriptions::SessionSubscribe { id, from_seq, subscription_id }) => {
             subscribe(world, &id, from_seq, subscription_id)
         }
+        R::SessionReadPlaces(_) | R::SessionSubscribePlaces(_) if world.reads_every_event_together => {
+            Err(ApiError::new(ErrorCode::Unsupported, "an older hub doesn't read the agent's own events apart"))
+        }
         R::SessionReadPlaces(log::SessionReadPlaces { id, subagent, from_place, limit, .. }) => {
             world.session(&id)?;
             let last_place =

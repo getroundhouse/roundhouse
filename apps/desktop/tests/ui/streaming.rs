@@ -7,7 +7,6 @@ use std::time::Duration;
 use gpui_kit::{AppContext as _, TestAppContext};
 use protocol::event::EventBody;
 use protocol::model::{SessionStatus, seq_index};
-use transcript::Transcript;
 
 use crate::support::{Stack, Ui, wait_until};
 
@@ -40,7 +39,7 @@ fn a_reply_shows_all_of_itself_once_it_is_recorded_however_its_end_arrived(cx: &
     stack.client().session_prompt(&session, "slow:6:word", None).unwrap();
     // Drawn, rather than only in the session's log, which a thread of its own fills ahead of what the app has drawn.
     ui.wait("the start of the reply to be drawn", |ui| {
-        ui.cx.read_entity(&transcript, Transcript::kept_texts).iter().any(|kept| kept.contains("word0"))
+        ui.cx.read_entity(&transcript, |t, _| t.kept_texts()).iter().any(|kept| kept.contains("word0"))
     });
 
     // The app doesn't run while this waits, so it takes in the rest of the reply and its record in one go. The hub
@@ -53,7 +52,7 @@ fn a_reply_shows_all_of_itself_once_it_is_recorded_however_its_end_arrived(cx: &
     ui.settle(Duration::from_millis(16));
 
     let reply = ui.assistant_text();
-    let shown = ui.cx.read_entity(&transcript, Transcript::kept_texts);
+    let shown = ui.cx.read_entity(&transcript, |t, _| t.kept_texts());
     assert!(shown.contains(&reply), "{reply:?} shows as {shown:?}");
 }
 
@@ -189,7 +188,6 @@ fn a_reply_the_markdown_parser_panics_on_is_drawn_as_it_is_written(cx: &mut Test
     let mut ui = Ui::open(cx, &stack);
 
     ui.wait("the reply to be drawn", |ui| {
-        ui.transcript()
-            .is_some_and(|t| ui.cx.read_entity(&t, |t, cx| t.kept_texts(cx).iter().any(|text| text == reply)))
+        ui.transcript().is_some_and(|t| ui.cx.read_entity(&t, |t, _| t.kept_texts().iter().any(|text| text == reply)))
     });
 }

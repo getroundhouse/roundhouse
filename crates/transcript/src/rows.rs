@@ -21,7 +21,6 @@ use crate::attachments;
 use crate::find::{self, FindLook, Marks, Part};
 use crate::item_key::ItemKey;
 use crate::linked_images::LinkedImages;
-use crate::long_texts::LongTexts;
 use crate::prose::{Of, Prose, TextAt};
 use crate::selection::Selection;
 use crate::transcript::{Model, Transcript};
@@ -79,8 +78,6 @@ pub(crate) struct Shared {
     pub(crate) this: WeakEntity<Transcript>,
     pub(crate) linked: LinkedImages,
     pub(crate) line_text: LineText,
-    /// Where every text view the rows draw is made.
-    pub(crate) texts: LongTexts,
     /// The texts the rows draw from the kit's blocks, and what's selected of them.
     pub(crate) prose: Prose,
     pub(crate) selection: Selection,
@@ -141,7 +138,6 @@ fn render_row_inner(
 ) -> Option<AnyElement> {
     let Item { ix, tail } = item;
     let find = model.borrow().find.clone();
-    mark_found(model, ix, &find, &shared.texts, cx);
     let shown = {
         let m = model.borrow();
         session.read(|log| {
@@ -184,18 +180,6 @@ fn render_row_inner(
         Shown::InCall(seq) => shared.prose.drawing(Of::Event(seq), empty),
         Shown::Unloaded => return None,
     })
-}
-
-/// Has the views of the Markdown with matches in the row at `ix`, as counting found it, draw them. Each is kept from
-/// the end of the row's drawing, rather than every row's when they're counted.
-fn mark_found(model: &Rc<RefCell<Model>>, ix: usize, find: &FindLook, texts: &LongTexts, cx: &mut App) {
-    if find.needle().is_none() {
-        return;
-    }
-    let Some(found) = model.borrow().found_markdown.get(&ix).cloned() else { return };
-    for id in found.iter() {
-        texts.mark(id, find, cx);
-    }
 }
 
 fn row() -> Div {
@@ -342,20 +326,18 @@ fn marked_line(text: String, marks: &Marks, color: Hsla) -> AnyElement {
 }
 
 /// Which row a block is drawn in: its event's own, as the `n`th of the event's blocks, or a call's, as a subagent's
-/// words are.
+/// words are, nested in the `n`th block of that row's event. Either way, `n` is the block its texts are placed in.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(in crate::rows) enum InRow {
     Own(usize),
-    Call,
+    Nested(usize),
 }
 
 impl InRow {
-    /// Which of its event's blocks it is, in a row of its own, where the transcript draws the recorded texts it shows
-    /// from the kit's blocks, and selects them itself. None in a call's row, where they're the kit's text views.
-    pub(in crate::rows) fn own_block(self) -> Option<usize> {
+    /// The row what this block nests is drawn in: the same row, nested in the same block of its event, however deep.
+    pub(in crate::rows) fn nesting(self) -> Self {
         match self {
-            InRow::Own(block) => Some(block),
-            InRow::Call => None,
+            InRow::Own(block) | InRow::Nested(block) => InRow::Nested(block),
         }
     }
 }

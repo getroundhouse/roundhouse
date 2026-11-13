@@ -68,7 +68,7 @@ fn filler(seqs: std::ops::Range<Seq>) -> impl Iterator<Item = SessionEvent> {
 
 /// Counts `rows` of `log` into `counts`, as the transcript does.
 fn count(log: &SessionLog, m: &Model, needle: &Needle, rows: BTreeSet<usize>, counts: &mut Counts) {
-    for (row, count, _) in count_held(log, m, needle, rows) {
+    for (row, count) in count_held(log, m, needle, rows) {
         counts.set(row, count);
     }
 }

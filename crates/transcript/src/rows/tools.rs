@@ -15,7 +15,6 @@ use super::{InRow, Shared};
 use crate::find::{FindLook, Marks, Part as Text};
 use crate::folds::Fold;
 use crate::item_key::ItemKey;
-use crate::selection::Selection;
 
 mod advisor;
 pub(super) mod agent;
@@ -42,18 +41,11 @@ pub(super) struct Toggle<'a> {
     pub(super) shared: &'a Shared,
     /// What's being found, which the call draws the matches of.
     pub(super) find: &'a FindLook,
-    /// The row it's drawn in, which says whether its prose is drawn from the kit's blocks and selected by the
-    /// transcript, as it is in a row of its own.
+    /// The row it's drawn in, which says where its prose is placed among the texts that row draws.
     pub(super) in_row: InRow,
 }
 
 impl Toggle<'_> {
-    /// The selection a drag in the call's prose is, which the area that scrolls it follows: the transcript's, in a row
-    /// of its own, where the transcript draws and selects it, and none in a call's row, where it's the kit's view.
-    pub(in crate::rows) fn drags(&self) -> Option<&Selection> {
-        self.in_row.own_block().map(|_| &self.shared.selection)
-    }
-
     /// Where the matches are in `text`, which is the call's `part` as it's drawn.
     pub(super) fn marks(&self, part: Text, text: &str) -> Marks {
         self.find.marks(&(self.key.clone(), part), text)

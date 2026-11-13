@@ -1,4 +1,4 @@
-//! Scrolling through rows whose height comes late, such as a long text the kit reads on another thread, which moves
+//! Scrolling through rows whose height comes late, such as a long text parsed on another thread, which moves
 //! nothing in the window when it does.
 
 use gpui_kit::test::{ElementSnapshot, TestWindowExt as _};
@@ -14,8 +14,8 @@ use crate::support::{Stack, Ui};
 const STEP: Pixels = px(40.);
 
 /// A long thought, shown open as "Always expand thinking" has it, just above a long reply at the end of a session.
-/// The kit reads a text over 4 KB on another thread and gives it no height until that's done. A thought was only
-/// read once it scrolled in at the top of the window, as a line with nothing under it, and then it grew there by all
+/// A text over 4 KB is parsed on another thread and has no height until that's done. A thought was only
+/// parsed once it scrolled in at the top of the window, as a line with nothing under it, and then it grew there by all
 /// of its length, which took the window up to the thought's start, past the reply being scrolled up through.
 #[gpui_kit::test]
 fn scrolling_up_into_a_long_open_thought_moves_as_far_as_the_wheel_turns(cx: &mut TestAppContext) {
@@ -34,7 +34,7 @@ fn scrolling_up_into_a_long_open_thought_moves_as_far_as_the_wheel_turns(cx: &mu
     each_went_as_far_as_the_wheel(&steps);
 }
 
-/// A long thought that's been closed has its height at once when it's opened again, rather than being read again on
+/// A long thought that's been closed has its height at once when it's opened again, rather than being parsed again on
 /// another thread, and drawn as a line with nothing under it meanwhile.
 #[gpui_kit::test]
 fn a_long_thought_opened_again_has_its_height_at_once(cx: &mut TestAppContext) {
@@ -54,11 +54,11 @@ fn a_long_thought_opened_again_has_its_height_at_once(cx: &mut TestAppContext) {
     wait_for_the_list_to_settle(&mut ui, last_row(&stack, &session));
 
     ui.cx.update_entity(&transcript, |t, cx| t.set_thinking_open(true, cx));
-    // One frame, with nothing else let run, so a text read on another thread wouldn't be in yet.
+    // One frame, with nothing else let run, so a text parsed on another thread wouldn't be in yet.
     ui.cx.update_window(ui.handle, |_, window, cx| window.render_frame(cx)).unwrap();
 
     assert_eq!(height(&ui), opened, "it's as tall as it was");
-    assert!(ui.cx.read_entity(&transcript, Transcript::long_texts_read), "with nothing read again");
+    assert!(ui.cx.read_entity(&transcript, |t, _| t.long_texts_parsed()), "with nothing parsed again");
 }
 
 /// A long plan, approved, just above a long reply. A plan is drawn in an approval's card, a row unlike a reply's, so
@@ -69,7 +69,7 @@ fn scrolling_up_into_a_long_plan_moves_as_far_as_the_wheel_turns(cx: &mut TestAp
     let session = stack.chat_in_a_new_workspace();
     stack.run(&session, "say:a short reply first");
     let plan = vec!["the signal box keeps a ledger of every train that passes. ".repeat(12); 12].join("\n\n");
-    assert!(plan.len() > 4 * 1024, "a plan the kit reads on another thread");
+    assert!(plan.len() > 4 * 1024, "a plan parsed on another thread");
     stack.client().session_prompt(&session, &format!("plan:{plan}"), None).unwrap();
     let mut ui = Ui::open(cx, &stack);
     ui.wait("the workspace", |ui| ui.transcript().is_some());
@@ -85,12 +85,12 @@ fn scrolling_up_into_a_long_plan_moves_as_far_as_the_wheel_turns(cx: &mut TestAp
     each_went_as_far_as_the_wheel(&steps);
 }
 
-/// A long thought whose reading lands once it's at the top of the window, as when it takes longer to read than
+/// A long thought whose parse lands once it's at the top of the window, as when it takes longer to parse than
 /// someone takes to scroll to it, or a fling or a drag of the scrollbar's thumb takes the window to it before its row
-/// has been drawn. It's drawn then as a line with nothing under it, and when it's read it grows by all of its length.
+/// has been drawn. It's drawn then as a line with nothing under it, and when it's parsed it grows by all of its length.
 /// What's on screen stays where it is.
 #[gpui_kit::test]
-fn a_long_text_read_once_it_is_at_the_top_of_the_window_moves_nothing_on_screen(cx: &mut TestAppContext) {
+fn a_long_text_parsed_once_it_is_at_the_top_of_the_window_moves_nothing_on_screen(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let session = stack.chat_in_a_new_workspace();
     stack.run(&session, "say:a short reply first");
@@ -98,29 +98,29 @@ fn a_long_text_read_once_it_is_at_the_top_of_the_window_moves_nothing_on_screen(
     let mut ui = Ui::open(cx, &stack);
     ui.wait("the workspace", |ui| ui.transcript().is_some());
     let transcript = ui.transcript().unwrap();
-    // Closed, so the thought's text isn't drawn, and nothing has read it.
+    // Closed, so the thought's text isn't drawn, and nothing has parsed it.
     wait_for_the_list_to_settle(&mut ui, last_row(&stack, &session));
     let thought = thought_row(&ui, &transcript);
     ui.cx.update_entity(&transcript, |t, cx| t.set_thinking_open(true, cx));
     let top = |ui: &Ui<'_>| ui.cx.read_entity(&transcript, |t, _| t.list().top());
 
-    // Up through the reply a little at a time, each frame drawn with nothing else let run, so the thought's reading
+    // Up through the reply a little at a time, each frame drawn with nothing else let run, so the thought's parse
     // is still under way when it comes to the top of the window.
     while top(&ui).row > thought {
         let up = ScrollDelta::Pixels(point(px(0.), px(10.)));
         ui.cx.update_window(ui.handle, |_, window, cx| window.scroll("transcript", up, cx)).unwrap();
     }
     assert_eq!(top(&ui).row, thought, "the thought is at the top, as a line");
-    assert!(!ui.cx.read_entity(&transcript, Transcript::long_texts_read), "and not read yet");
+    assert!(!ui.cx.read_entity(&transcript, |t, _| t.long_texts_parsed()), "and not parsed yet");
     let before = to_the_end(&ui, &transcript);
     ui.settle(A_FRAME);
 
     let after = to_the_end(&ui, &transcript);
-    assert!((after - before).abs() < px(0.5), "what's on screen moved {:?} as the thought was read", after - before);
+    assert!((after - before).abs() < px(0.5), "what's on screen moved {:?} as the thought was parsed", after - before);
 }
 
 /// A long thought, closed, opened from its line while the line is cut off at the top of the window. The line stays
-/// where it was clicked, and the thought opens under it, as it does once it's read, rather than growing up past the
+/// where it was clicked, and the thought opens under it, as it does once it's parsed, rather than growing up past the
 /// window's top and taking the line with it.
 #[gpui_kit::test]
 fn a_long_thought_opened_from_its_line_at_the_top_of_the_window_opens_under_it(cx: &mut TestAppContext) {
@@ -151,7 +151,7 @@ fn a_long_thought_opened_from_its_line_at_the_top_of_the_window_opens_under_it(c
     ui.settle(A_FRAME);
 
     assert_eq!(line(&mut ui).expanded(), Some(true), "the thought is open");
-    assert!(ui.cx.read_entity(&transcript, Transcript::long_texts_read), "and read");
+    assert!(ui.cx.read_entity(&transcript, |t, _| t.long_texts_parsed()), "and parsed");
     let moved = line(&mut ui).bounds().top() - before;
     assert!(moved.abs() < px(0.5), "the line moved {moved:?} as the thought opened under it");
 }

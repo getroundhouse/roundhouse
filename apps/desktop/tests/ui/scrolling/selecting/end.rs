@@ -86,5 +86,5 @@ fn still_writing(ui: &Ui<'_>, transcript: &Entity<Transcript>) -> bool {
 
 /// Whether the transcript has drawn a text that says `text` from the kit's blocks.
 fn drawn(ui: &Ui<'_>, transcript: &Entity<Transcript>, text: &str) -> bool {
-    ui.cx.read_entity(transcript, Transcript::kept_texts).iter().any(|kept| kept.contains(text))
+    ui.cx.read_entity(transcript, |t, _| t.kept_texts()).iter().any(|kept| kept.contains(text))
 }

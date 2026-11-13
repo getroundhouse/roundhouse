@@ -55,6 +55,9 @@ pub(crate) struct World {
     pub(crate) worktree_files: HashMap<String, FileContents>,
     /// What the files the screen's diff changes held in the commit it was taken from, by path.
     pub(crate) base_files: HashMap<String, FileContents>,
+    /// Whether the hub is from before it read the agent's own events apart from its subagents', so a chat holds every
+    /// event, and a subagent's work is gathered into its call.
+    pub(crate) reads_every_event_together: bool,
     /// The hub's build, for a screen about a hub that isn't the app's build.
     pub(crate) hub: Option<HubBuild>,
     /// The records of the accounts the screen's chats run under.
