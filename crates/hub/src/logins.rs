@@ -46,6 +46,11 @@ pub(crate) struct Handed {
     pub(crate) login: AgentLogin,
 }
 
+/// Whether `held` still works at `now_ms`: it ends later, or nothing says when it ends.
+fn not_ended(held: &Held, now_ms: i64) -> bool {
+    held.login.ends_at_ms.is_none_or(|ends_at_ms| ends_at_ms > now_ms)
+}
+
 /// A login to connect, as a client asked: checked, trimmed and given the ID a new account would get.
 pub(crate) struct Connect {
     agent: AgentKind,
@@ -155,16 +160,24 @@ impl Logins {
         Ok(AccountChange { account: self.record(id)?, changed: false })
     }
 
-    /// The login to launch an agent of `agent`'s kind under at `now_ms`: of those the hub holds for that kind, the one
-    /// connected most recently that hasn't ended, or `None` when it holds none such. One whose token is gone fails,
-    /// rather than the agent running under an older login or its machine's own. A disconnect whose row couldn't be
-    /// cleared leaves one, until it's tried again or the hub next starts and tidies, as does a file something else
-    /// removed.
+    /// Whether the hub holds a login for agents of `agent`'s kind that hasn't ended at `now_ms`, as the accounts' rows
+    /// say, without reading any token. So whether a launch would be handed one is known before its machine is asked
+    /// whether it has its own, and a token that's gone fails only a launch that would be handed it.
+    pub(crate) fn holds(&self, agent: AgentKind, now_ms: i64) -> Result<bool, ApiError> {
+        Ok(self.store.held_logins(agent)?.iter().any(|held| not_ended(held, now_ms)))
+    }
+
+    /// The login to hand an agent of `agent`'s kind launched at `now_ms` on a machine with none of its own: of those
+    /// the hub holds for that kind, the one connected most recently that hasn't ended, or `None` when it holds none
+    /// such. One whose token is gone fails, rather than the agent running under an older login or none. A disconnect
+    /// whose row couldn't be cleared leaves one, until it's tried again or the hub next starts and tidies, as does a
+    /// file something else removed.
     pub(crate) fn to_hand(&self, agent: AgentKind, now_ms: i64) -> Result<Option<Handed>, ApiError> {
         let _one_at_a_time = self.one_at_a_time.lock();
         let held = self.store.held_logins(agent)?;
-        let not_ended = |held: &Held| held.login.ends_at_ms.is_none_or(|ends_at_ms| ends_at_ms > now_ms);
-        let Some(Held { account, name, file, .. }) = held.into_iter().find(not_ended) else { return Ok(None) };
+        let Some(Held { account, name, file, .. }) = held.into_iter().find(|held| not_ended(held, now_ms)) else {
+            return Ok(None);
+        };
         let called = name.unwrap_or_else(|| account.to_string());
         match self.files.read(&file) {
             Ok(Some(token)) => Ok(Some(Handed { account, login: AgentLogin { token } })),

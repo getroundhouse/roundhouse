@@ -75,8 +75,9 @@ pub struct Account {
     /// None says when it was heard, since hearing the same again isn't a change to the record.
     #[serde(default)]
     pub limits: Vec<UsageLimit>,
-    /// The login the hub holds for the account and hands to workers, if it holds one. `None` for an account that
-    /// agents run under through the login on their worker's machine, and for one whose login was disconnected.
+    /// The login the hub holds for the account and hands to workers whose machine has none of its own, if it holds one.
+    /// `None` for an account that agents run under through the login on their worker's machine, and for one whose
+    /// login was disconnected.
     #[serde(default)]
     pub held_login: Option<HeldLogin>,
     #[serde(default)]
