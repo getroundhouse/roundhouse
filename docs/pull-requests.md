@@ -13,7 +13,7 @@ A PR is read twice. The owner reads it to decide whether it's right, and someone
 
 ## Description
 
-The description says what the PR does as it stands now. When the PR changes, rewrite the description rather than adding to it, so a reader doesn't need the PR's pushes, its review rounds, or the chat that led to it.
+The description says what the PR does as it stands now. When the PR changes, rewrite the description rather than adding to it, so a reader doesn't need the PR's pushes, its reviews, or the chat that led to it.
 
 The parts come in this order. The last four start with their label in bold, written exactly as here, so the owner finds each in the same place every time. Leave out a part with nothing in it, except **Checked:**.
 
@@ -27,7 +27,7 @@ The parts come in this order. The last four start with their label in bold, writ
    - each new test, and what it covers;
    - what was broken on purpose, and which test failed;
    - anything checked by hand, with the machine, the OS, what was done and what was seen;
-   - the reviews `docs/reviews.md` asks for: which lanes ran, what they found that changed the PR, and any finding rated must fix or should fix that wasn't fixed, with why. The fixes themselves go in part 3, with the rest of the change, rather than as a list of review findings.
+   - the reviews `docs/reviews.md` asks for: which lanes the review took, whether the fixes were checked, what was found that changed the PR, and any finding rated must fix or should fix that wasn't fixed, with why. The fixes themselves go in part 3, with the rest of the change, rather than as a list of review findings.
 7. **Not checked:** what wasn't verified, and why, so nothing unverified reads as checked. Leave this out only when everything was checked.
 8. **Left open:** anything a reader might expect the PR to do that it doesn't, each with its issue, since `docs/documentation.md` gives everything left open an issue.
 

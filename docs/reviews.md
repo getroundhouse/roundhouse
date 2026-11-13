@@ -4,48 +4,68 @@ How agents review a change before it becomes a pull request. What the PR then sa
 
 Agents write this codebase, and each one copies what it finds. A workaround that gets in becomes the pattern for the next change, so a review asks whether a change is built the way it should be, not only whether it works. An agent that didn't build a change sees what its builder can't, because it isn't anchored on the builder's reasoning.
 
-A review is split into lanes. Each lane is one kind of question, asked by an agent of its own.
+A review is split into lanes. Each lane is one kind of question. A reviewer is a fresh agent that takes one lane or several, since each reviewer has to learn the change before it can judge it, and lanes that share a reviewer share that cost.
 
 ## When
 
-The agent that builds a change has it reviewed without being asked to, once the change is built, its tests pass and its PR's description is drafted, and before the full checks and the PR. How much review a change gets follows what it changes:
+The agent the owner gave a change to has it reviewed without being asked to, once the change is built, its tests pass and its PR's description is drafted, and before the full checks and the PR. How much review a change gets follows what it changes:
 
-| Change | Lanes |
+| Change | Reviewers |
 |---|---|
-| Only Markdown | Docs |
-| A small fix in one place, such as a flaky test | Correctness and tests |
-| Anything else | Correctness, tests, architecture, cleanliness and docs |
+| Only Markdown | One, for docs |
+| A small fix in one place, such as a flaky test | One, for correctness and tests |
+| Anything else | Two: one for correctness and tests, and one for architecture, cleanliness and docs |
 
-A change that adds or moves state, changes the protocol or what a hub stores, or adds a crate also has its design reviewed, before any code is written.
+- **A change whose docs are much of it gets a third reviewer, for docs alone.** One that adds a doc, or rewrites a section of one, is such a change. One that adds rules to the spec beside the code they describe isn't. The reviewer for architecture and cleanliness then leaves docs to the third.
+- **Each PR of a stack is a change of its own,** and gets the reviewers its own diff calls for.
+- **An agent that another agent starts doesn't have its work reviewed,** whether it builds a change or part of one, and its brief says so. The agent that started it has the work reviewed once it comes back.
+
+A change that adds or moves state, changes the protocol or what a hub stores, or adds a crate also has its design reviewed, by one reviewer, before any code is written.
 
 ## How
 
-- **Each lane is a fresh agent,** and the lanes run in parallel.
-- **A reviewer gets the task, the diff, the checkout and the PR's description as drafted,** which holds the design, and the reason for any choice a reviewer might question. The diff is from the commit the change is built on, or from the PR below it in a stack, and the brief names that commit and any new file the diff doesn't show. A reviewer doesn't get the builder's chat, so it judges the change by what the change and its description say. Its brief names its lane and points it to this doc, rather than retyping it.
+- **The reviewers run in parallel.**
+- **A reviewer gets the task, the diff, the checkout and the PR's description as drafted,** which holds the design, and the reason for any choice a reviewer might question. The diff is from the commit the change is built on, or from the PR below it in a stack, and the brief names that commit and any new file the diff doesn't show. A reviewer doesn't get the builder's chat, so it judges the change by what the change and its description say. Its brief names its lanes and points it to this doc, rather than retyping it.
+- **Only the reviewer with the docs lane checks the description's claims,** or the only reviewer, when none has docs. The others read it to learn the change. Where the description and the code disagree, a reviewer says which is wrong: code that doesn't do what the description promises is a finding against the code.
 - **A reviewer changes nothing in the builder's checkout.** One that breaks code to see whether a test notices does it in a checkout of its own, with the change in it.
-- **A reviewer stays in its lane.** Something it sees outside it gets one line.
-- **Findings go back to the builder,** and nothing is filed, as `docs/documentation.md` says of any local review.
+- **A reviewer stays in its lanes.** Something it sees outside them gets one line.
+- **Findings go back to the builder,** and nothing is filed, as `docs/documentation.md` says of any local review. The builder tells the owner what came of them, as "What the owner hears" says.
 
 ## Findings
 
 Each finding says:
 
 - **How much it matters:**
-  - *Must fix:* the change is wrong. A bug, a state it can leave inconsistent, a test that can't fail, or a claim in a doc or the PR that isn't true.
-  - *Should fix:* it breaks a rule in a doc, or it costs more to fix later than now, such as state with the wrong owner, logic repeated, or a workaround.
+  - *Must fix:* the change is wrong. A bug, a state it can leave inconsistent, a test that can't fail, or a doc in `docs/`, `AGENTS.md` or a README that says what isn't true.
+  - *Should fix:* it breaks a rule in a doc, or it costs more to fix later than now, such as state with the wrong owner, logic repeated, or a workaround. A comment, an item's doc or a sentence of the PR's description that isn't true is one of these when the code is right: the words are corrected, and nothing else is wrong.
   - *Consider:* a judgment call.
 - **Where:** the file, and the item or lines.
 - **What's wrong,** and why it matters, in a sentence or two.
 - **The fix,** concrete enough to act on.
 
-A review that finds nothing worth raising says so. That's a result, and a reviewer doesn't make findings up to look thorough. The bar for *should fix* stays where it is for the same reason: if every round finds something that should be fixed, reviewing never ends.
+A review that finds nothing worth raising says so. That's a result, and a reviewer doesn't make findings up to look thorough. The bar for *should fix* stays where it is for the same reason: a fresh reviewer can always find one more thing that could be better.
+
+After its findings, each reviewer's report has a part headed **For the owner:**, which holds what the owner would want to know or decide that isn't a finding against this change: a choice in the design that's worth a second look, a problem in the code nearby that the change didn't cause, or a way to make this part of the product or its code better. A reviewer with nothing to put there says so.
 
 ## Until it's done
 
-1. The builder fixes every finding that must or should be fixed, or says in the PR's description why not, with an issue for anything left open. It takes one to consider when that's cheap and clearly better.
-2. Fixes can be wrong too, so the lanes whose findings they fix review again, with fresh agents, on the new diff and description. A finding the description answers isn't raised again unless the answer is wrong.
-3. The review is done when every finding that must or should be fixed is fixed or answered, and the last round of fixes was reviewed and raised nothing new that must or should be.
-4. After three rounds that still raise some, the builder stops and asks the owner. Findings that keep coming usually mean the design is wrong, not its details.
+1. The builder keeps the diff its reviewers saw, and checks each finding against the code, since a reviewer can be wrong. It fixes every one that must or should be fixed, or says in the PR's description why not, with an issue for anything left open. It takes one to consider when that's cheap and clearly better. A finding whose fix would take the change in another direction is the owner's to decide, so the builder leaves it, and its report asks.
+2. Fixes can be wrong too. When the builder fixed anything rated *must fix*, or a fix did more than correct a comment, an item's doc or the description, or delete code, one fresh agent checks the fixes. It gets the findings, the checkout, the diff the reviewers saw and the description as rewritten, and asks three things: whether each finding is fixed, or answered in the description, whether a fix broke anything, and whether the description is still true. It doesn't review the change again, and something it sees outside the fixes is raised only when it must be fixed.
+3. The builder fixes what the check finds, and the review is done, as it is when no check was needed. Nothing is checked again unless the owner asks for it.
+4. When the check raised something that must be fixed, the builder's report says so and asks whether to have that fix checked, and the builder waits for the answer before the PR. Findings that keep coming usually mean the design is wrong, not its details.
+
+A second review of the whole change, by fresh reviewers, is the owner's to ask for. Fresh reviewers find new things each time, so a review that waits for them to find nothing doesn't end.
+
+## What the owner hears
+
+The owner hears about a review once, when it's done, in one report from the builder, rather than in a note as each reviewer finishes. The builder goes on to the full checks and the PR without waiting for an answer, but for the two things "Until it's done" has it ask: a finding that would take the change in another direction, and whether to check a fix again. The report says:
+
+- **What was found and fixed,** the findings that must be fixed first, in a line or two each.
+- **What wasn't fixed,** and why.
+- **What's the owner's to confirm or decide:** a fix that changed an owner doc, the protocol or what a hub stores, and either thing the builder is waiting on, each with what the builder recommends.
+- **What the reviewers put under For the owner,** passed on whole, with what the builder thinks of each.
+- **What was filed,** as issues, which is where anything from the review that's worth keeping goes, since nothing lives only in a chat.
+- **How much review it took:** how many reviewers ran, and whether the fixes were checked.
 
 ## Workarounds
 
@@ -88,7 +108,7 @@ Whether the change does what it should, taking for granted that it builds and it
 - Failures: whether each one is surfaced, and whether one partway through leaves state consistent.
 - What's never let go of: processes, workers, subscriptions, records and tasks kept after nothing needs them.
 - In the app, more than the mouse: the keyboard, assistive apps, a narrow window, full screen, and what shows while something loads.
-- Comments, docs and the PR's description that say what the code doesn't do.
+- Comments and docs that say what the code doesn't do.
 
 It leaves style and structure to other lanes, unless they cause a bug.
 
