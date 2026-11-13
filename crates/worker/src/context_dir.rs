@@ -1,8 +1,11 @@
 //! A worktree's `.context/` folder, where what isn't the repository's goes, as opposed to an agent's context, which is
-//! what its model holds. Each folder of it that the worker makes holds a `.gitignore` that ignores everything in it,
-//! itself included, so nothing there shows as a change, whatever the repository ignores, and nothing about the
-//! repository has to change. They're deleted with the worktree when it's archived. The rest of `.context/` is left
-//! alone, since a repository can keep things of its own there.
+//! what its model holds. The worker gives it, and each folder of it that the worker writes to, a `.gitignore` that
+//! ignores everything in it, itself included, so nothing there shows as a change and nothing about the repository has
+//! to change. A `.gitignore` the repository keeps in `.context/` is kept instead, and decides what's ignored there. So
+//! `.context/attachments/` has one of its own, which also covers a prompt's files put there before any agent has
+//! started in the worktree, and so before `.context/` has its `.gitignore`. Files the repository tracks there stay
+//! tracked, though a new one needs `git add -f`. They're deleted with the worktree when it's archived. Nothing else in
+//! `.context/` is touched, since agents and the repository keep things of their own there.
 
 use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
@@ -10,26 +13,27 @@ use std::path::{Path, PathBuf};
 #[cfg(test)]
 mod tests;
 
-/// A folder of `.context/` that the worker makes.
+/// `.context/`, or a folder of it, that the worker makes.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum Folder {
+    /// `.context/` itself, where an agent keeps what it makes for its own use, such as notes, logs and screenshots, in
+    /// folders it names for what they hold, rather than in the system's temporary directory, where the person can't
+    /// see it and an image can't show in what the agent writes. Its instructions send it here, so the worker makes it
+    /// before each agent starts.
+    Context,
     /// The files a prompt carries, for the agent to open, as `crate::attachments` puts them there.
     Attachments,
-    /// What an agent makes for its own use, such as notes, logs and screenshots, rather than in the system's temporary
-    /// directory, where the person can't see it and an image can't show in what the agent writes. Its instructions
-    /// send it here, so the worker makes it before each agent starts.
-    Tmp,
 }
 
 impl Folder {
     #[cfg(test)]
-    pub(crate) const ALL: [Folder; 2] = [Folder::Attachments, Folder::Tmp];
+    pub(crate) const ALL: [Folder; 2] = [Folder::Context, Folder::Attachments];
 
     /// Where it is, from the worktree's root.
     pub(crate) const fn path(self) -> &'static str {
         match self {
+            Folder::Context => ".context",
             Folder::Attachments => ".context/attachments",
-            Folder::Tmp => ".context/tmp",
         }
     }
 

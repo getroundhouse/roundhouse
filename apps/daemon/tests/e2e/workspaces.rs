@@ -149,7 +149,7 @@ fn a_client_browses_the_worktree_s_files_through_the_hub() {
 
     assert!(files.paths.iter().any(|path| path == "a.txt"), "a tracked file: {:?}", files.paths);
     assert!(files.paths.iter().any(|path| path == "src/main.rs"), "a new one: {:?}", files.paths);
-    assert_eq!(files.folders, [".context", "build"], "ignored ones, by their folders, the agent's tmp folder's too");
+    assert_eq!(files.folders, [".context", "build"], "ignored ones, by their folders, the worktree's .context too");
     assert_eq!(folder.paths, ["build/out/app.txt"]);
     assert_eq!(read, FileContents::Text { text: "fn main() {}\n".to_string() });
     assert_eq!(before, FileContents::Text { text: "one\n".to_string() }, "as the diff's base has it");

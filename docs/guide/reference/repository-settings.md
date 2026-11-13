@@ -65,7 +65,7 @@ Set for both scripts, and for every agent in the workspace.
 
 | Folder | What's in it |
 |---|---|
+| `.context/` | Where agents are told to keep what they make for their own use, such as screenshots, in folders named for what they hold |
 | `.context/attachments/` | The files prompts carried |
-| `.context/tmp/` | Where agents are told to keep what they make for their own use, such as screenshots |
 
-Git is told to ignore them, so nothing in them shows as a change.
+Git is told to ignore what's in them, so nothing there shows as a change, unless your repository keeps a `.gitignore` of its own in `.context/`. Files your repository tracks in `.context/` still show as changes, though a new one there needs `git add -f`.

@@ -97,7 +97,7 @@ pub(crate) async fn start_agent(
     let agent_file = |extension: &str| {
         state.config.state_dir.as_ref().map(|dir| dir.join(AGENTS_DIR).join(format!("{session_id}-{run}.{extension}")))
     };
-    make_tmp_folder(&session_id, &worktree).await;
+    make_context_folder(&session_id, &worktree).await;
     let options = AgentOptions {
         binary: binary(state),
         pid_file: agent_file("pid"),
@@ -119,13 +119,13 @@ pub(crate) async fn start_agent(
 /// Makes the folder the agent's instructions send it to for what it makes for its own use. An agent can work without
 /// it, though what it keeps there may then show as changes, or go elsewhere, so failing is logged rather than stopping
 /// the start.
-async fn make_tmp_folder(session_id: &SessionId, worktree: &Path) {
+async fn make_context_folder(session_id: &SessionId, worktree: &Path) {
     let at = worktree.to_path_buf();
-    let made = tokio::task::spawn_blocking(move || Folder::Tmp.make(&at).map(drop))
+    let made = tokio::task::spawn_blocking(move || Folder::Context.make(&at).map(drop))
         .await
         .unwrap_or_else(|e| Err(std::io::Error::other(e)));
     if let Err(e) = made {
-        warn!(%session_id, worktree = %worktree.display(), "couldn't make the agent's tmp folder: {e}");
+        warn!(%session_id, worktree = %worktree.display(), "couldn't make the worktree's .context folder: {e}");
     }
 }
 
