@@ -161,7 +161,7 @@ impl Transcript {
         // once its report says them, from whichever row they're in.
         if shown {
             let tail = self.list.row_count().saturating_sub(1);
-            for row in [Of::Head, Of::Foot].into_iter().filter_map(|of| crate::rows::tab_row_of(of, tail)) {
+            for row in [Of::Head, Of::Foot].into_iter().filter_map(|of| crate::rows::list_row_of(of, tail)) {
                 self.list.out_of_date(row..row + 1);
             }
             let repeated = {

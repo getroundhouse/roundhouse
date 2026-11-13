@@ -110,9 +110,10 @@ impl Part {
 /// A text a row draws, by the item it's part of and which of its texts it is.
 pub(crate) type TextId = (ItemKey, Part);
 
-/// The ID of the text view the Markdown text `id` is drawn in, which `crate::long_texts` keeps it under. A prompt, the
-/// agent's words and its thinking are only their view, and a report is drawn as the agent's words are. Prose in a block
-/// is a view inside the part.
+/// The ID of the element the Markdown text `id` is drawn in, which `crate::prose` knows it by, from its first word to
+/// its record, and `crate::long_texts` keeps the kit's text view of it under. A prompt, the agent's words and its
+/// thinking are only their element, and a report is drawn as the agent's words are. Prose in a block is an element
+/// inside the part.
 pub(crate) fn view_id((key, part): &TextId) -> ElementId {
     if matches!(part, Part::Prompt | Part::Text | Part::Thinking) {
         part.element(key)

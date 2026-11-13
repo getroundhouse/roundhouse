@@ -28,9 +28,8 @@ fn text_streams_in_as_it_is_written(cx: &mut TestAppContext) {
     assert!(ui.transcript().is_some_and(|t| ui.cx.read_entity(&t, |t, _| t.streaming_text().is_empty())));
 }
 
-/// The reply streams into a text view the transcript keeps, which its row goes on drawing once it's recorded. The
-/// rest of it can arrive with the recorded reply, after the stream is gone from the tail, and the text view the row
-/// drew then went on showing only what had streamed into it.
+/// Once a reply's recorded, it's parsed whole. The rest of it can arrive with the record, after the stream is gone
+/// from the tail, and it shows all of that too, rather than only what streamed.
 #[gpui_kit::test]
 fn a_reply_shows_all_of_itself_once_it_is_recorded_however_its_end_arrived(cx: &mut TestAppContext) {
     let stack = Stack::new();
@@ -58,8 +57,8 @@ fn a_reply_shows_all_of_itself_once_it_is_recorded_however_its_end_arrived(cx: &
     assert!(shown.contains(&reply), "{reply:?} shows as {shown:?}");
 }
 
-/// A long reply, which the transcript parses on another thread once it's recorded, goes on showing the text view it
-/// streamed into while that's done, rather than going blank between.
+/// A long reply, which the transcript parses on another thread once it's recorded, goes on showing what it was parsed
+/// as while it streamed while that's done, rather than going blank between.
 #[gpui_kit::test]
 fn a_long_reply_never_goes_blank_as_it_is_recorded(cx: &mut TestAppContext) {
     let stack = Stack::new();

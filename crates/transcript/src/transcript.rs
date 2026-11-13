@@ -117,7 +117,7 @@ pub struct Transcript {
     model: Rc<RefCell<Model>>,
     /// The images the agent's text points to.
     linked: LinkedImages,
-    /// Where the rows' text views are made, which keeps each long one and each the agent is still writing.
+    /// Where the rows' text views are made, which keeps each long one.
     texts: LongTexts,
     /// The texts the transcript draws from the kit's blocks, parsed.
     prose: Prose,
@@ -296,8 +296,8 @@ impl Transcript {
     pub(crate) fn redrawn(&mut self, of: Of, cx: &mut Context<Self>) {
         let row = match of {
             Of::Event(seq) => self.session.read(|log| log.row_of(seq)),
-            Of::Head | Of::Foot => {
-                self.list.row_count().checked_sub(1).and_then(|tail| crate::rows::tab_row_of(of, tail))
+            Of::Head | Of::Tail | Of::Foot => {
+                self.list.row_count().checked_sub(1).and_then(|tail| crate::rows::list_row_of(of, tail))
             }
         };
         if let Some(row) = row {
@@ -369,9 +369,9 @@ impl Render for Transcript {
             ElementId::Name(self.list_id.clone().into()),
             move |ix, _, cx| {
                 let item = crate::rows::Item { ix, tail };
-                shared.texts.draw_row(ix, ix == tail, &shared.this, cx, |cx| {
-                    crate::rows::render_row(&model, &session, &shared, item, cx)
-                })
+                shared
+                    .texts
+                    .draw_row(ix, &shared.this, cx, |cx| crate::rows::render_row(&model, &session, &shared, item, cx))
             },
             move |row| wanted.want(row),
             room_under,

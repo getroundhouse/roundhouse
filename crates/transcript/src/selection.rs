@@ -1,7 +1,7 @@
-//! What's selected of the chat's recorded texts, which the transcript holds rather than the window, so it outlasts
-//! the rows it's in being drawn. The kit's selection is the window's, over the texts painted in a frame, and lets go
-//! of what's selected once a text holding either end of it isn't painted, which in a list that draws only what's in
-//! sight is as soon as that text's row leaves the window.
+//! What's selected of the chat's texts that `crate::prose` draws, which the transcript holds rather than the window,
+//! so it outlasts the rows it's in being drawn. The kit's selection is the window's, over the texts painted in a frame,
+//! and lets go of what's selected once a text holding either end of it isn't painted, which in a list that draws only
+//! what's in sight is as soon as that text's row leaves the window.
 //!
 //! Each end is a place in a text: which text, which of its leaves, and a byte in that leaf. The text is named by what
 //! its element is known by, which stays the same as it moves, as a reply does from being written to its record, so an

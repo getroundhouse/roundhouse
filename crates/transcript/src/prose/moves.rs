@@ -2,17 +2,29 @@
 //! reply does from being written to its record, or a prompt from waiting at the end of the chat to the row where the
 //! agent took it. So a text drawn somewhere new is drawn at once from what it was parsed as, a parse on another thread
 //! lands wherever the text is when it's in, and a selection that names it, as `crate::selection` does, stays in it.
-//! Where it is orders it among the others.
+//! Where it is orders it among the others. One joined as it went on is parsed whole the first time it's drawn away
+//! from the end of the chat, as `parsing` says.
 //!
 //! A text drawn where another was takes its place, as a prompt waiting at the end of the chat does when the one before
 //! it is taken, since the list draws the end before the row where the agent took that one. The other has no place
 //! until it's drawn again, but keeps where it was last drawn, which says whether it's still loaded, so it's kept, with
 //! what it was parsed as, as long as it would have been there.
+//!
+//! The end of the chat is always there. It keeps what it drew and doesn't draw now, such as a reply the agent has
+//! finished writing, until it's drawn in the row of its record, which can come after, since the hub sends the end of
+//! what's written as soon as it comes, and the record once it's stored. A reply the agent was stopped from writing
+//! before it was recorded never is, so the end keeps only the few of those it drew most recently. It can't let go of
+//! them once the turn's over instead, since the turn's end can come with the record, before the record's row is drawn,
+//! and the reply would be parsed again from nothing there.
 
-use std::collections::{BTreeMap, HashMap};
+use std::cmp::Reverse;
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::ops::RangeBounds;
 
-use super::{Prose, ProseId, Store, TextAt};
+use super::{Of, Prose, ProseId, Store, TextAt};
+
+/// How many texts the end of the chat drew, and doesn't draw now, it keeps for their records.
+const LEFT_AT_THE_END: usize = 8;
 
 /// Where each text was last drawn, and in which frame, and which text is at each place now, in the chat's order. Each
 /// place has one text, which was last drawn there, and a text drawn in one place a frame, as a debug build checks.
@@ -86,6 +98,25 @@ impl Places {
         // The text at each place was last drawn there, so it goes with the place.
         self.now.retain(|at, _| keep(at));
     }
+
+    /// Lets go of the texts the end of the chat drew longest ago, and doesn't draw now, since it's moved on past them
+    /// or another has taken their place, but for the [`LEFT_AT_THE_END`] it drew most recently, and those `held`.
+    pub(super) fn keep_few_left_at_the_end(&mut self, hidden: &HashSet<ProseId>, held: impl Fn(&TextAt) -> bool) {
+        let left_there = |(id, drawn): &(&ProseId, &Drawn)| {
+            drawn.at.of == Of::Tail && !held(&drawn.at) && (hidden.contains(*id) || self.of(id).is_none())
+        };
+        let mut left: Vec<(u64, TextAt, ProseId)> =
+            self.last.iter().filter(left_there).map(|(id, drawn)| (drawn.frame, drawn.at, id.clone())).collect();
+        // Those left in one frame by where they were, so which go doesn't hang on the order a map holds them in.
+        left.sort_unstable_by_key(|(frame, at, _)| Reverse((*frame, *at)));
+        for (_, _, id) in left.into_iter().skip(LEFT_AT_THE_END) {
+            if let Some(drawn) = self.last.remove(&id)
+                && self.now.get(&drawn.at) == Some(&id)
+            {
+                self.now.remove(&drawn.at);
+            }
+        }
+    }
 }
 
 impl Store {
@@ -127,7 +158,7 @@ impl Prose {
     /// As if the text known as `id`, saying `text`, were drawn at `at`.
     pub(crate) fn drawn_as(&self, id: &ProseId, at: TextAt, text: &str) {
         self.0.borrow_mut().placed(id, at);
-        self.parsed(id, text);
+        self.parsed(id, text, at.of);
     }
 
     /// As if the text known by `at`, saying `text`, were drawn there.

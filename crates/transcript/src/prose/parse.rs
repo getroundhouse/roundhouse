@@ -26,6 +26,9 @@ pub(crate) struct Parsed {
     /// Where each block starts, to parse a text that goes on from it again from there, or `None` when it's to be
     /// parsed whole, as one that may define a link is, or one with a block the kit's parser didn't say the place of.
     starts: Option<Vec<Start>>,
+    /// Whether it was parsed whole, from its start, rather than joined from what it was parsed as before and what it
+    /// went on to, which can differ, as [`again`] says.
+    pub(super) whole: bool,
 }
 
 /// Where a block starts: its byte in the text, and its first leaf's key.
@@ -50,7 +53,7 @@ pub(super) fn parse(source: String) -> Parsed {
     if may_define(&source) {
         starts = None;
     }
-    made(source, blocks, leaves, starts)
+    made(source, blocks, leaves, starts, true)
 }
 
 /// Where a text that goes on from one parsed is parsed again from: the byte its block starts at, which block that is,
@@ -99,7 +102,8 @@ pub(super) fn joined(parsed: &Parsed, again: Again, source: String, rest: Vec<Bl
     let (mut blocks, mut leaves) = (parsed.blocks[..block].to_vec(), parsed.leaves[..leaf].to_vec());
     let mut starts = parsed.starts.as_ref().map(|starts| starts[..block].to_vec());
     more(rest, byte, &mut blocks, &mut leaves, &mut starts);
-    made(source, blocks, leaves, starts)
+    // Parsed again from its start, it's parsed whole.
+    made(source, blocks, leaves, starts, byte == 0)
 }
 
 /// Whether the block that starts at `byte` of `source` has a blank line before it, or nothing, so no block before it
@@ -144,10 +148,16 @@ fn more(
     }
 }
 
-fn made(source: String, blocks: Vec<BlockNode>, leaves: Vec<String>, starts: Option<Vec<Start>>) -> Parsed {
+fn made(
+    source: String,
+    blocks: Vec<BlockNode>,
+    leaves: Vec<String>,
+    starts: Option<Vec<Start>>,
+    whole: bool,
+) -> Parsed {
     let mut links = BTreeMap::new();
     defined(&blocks, &mut links);
-    Parsed { source, blocks, leaves: leaves.into(), links, starts }
+    Parsed { source, blocks, leaves: leaves.into(), links, starts, whole }
 }
 
 /// `source`'s blocks, as the kit's parser reads them, if it can, on any thread. The `markdown` crate it parses with

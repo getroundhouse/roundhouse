@@ -1,5 +1,6 @@
-//! One of the chat's recorded texts, drawn from its parsed blocks, with what's selected and what's found painted
-//! behind it. Once it's laid out, it tells the selection where its leaves are, and the match being shown where it is.
+//! One of the chat's texts that `crate::prose` draws, from its parsed blocks, with what's selected and what's found
+//! painted behind it. Once it's laid out, it tells the selection where its leaves are, and the match being shown where
+//! it is.
 
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -16,19 +17,14 @@ use super::{Images, Parsed, Prose, ProseId, TextAt};
 use crate::find::Marks;
 use crate::selection::Selection;
 
-/// What a text draws: its blocks, or until it's parsed on another thread, `meanwhile`, or nothing if that's `None`.
-pub(super) enum Drawing {
-    Parsed(Rc<Parsed>),
-    Meanwhile(Option<AnyElement>),
-}
-
 pub(super) struct ProseElement {
     /// What the text is known by, which its element is too.
     pub(super) known: ProseId,
     pub(super) at: TextAt,
     /// The area that scrolls it, if it's in one.
     pub(super) area: Option<ElementId>,
-    pub(super) text: Drawing,
+    /// What it was parsed as, whose blocks it draws, or nothing until it's parsed on another thread.
+    pub(super) text: Option<Rc<Parsed>>,
     /// How it's to be parsed on another thread, if it is, which it's drawn as `text` until it's in.
     pub(super) apart: Option<Apart>,
     /// What's found in each leaf, by key.
@@ -80,20 +76,20 @@ impl Element for ProseElement {
             let style = context.style().clone().with_foreground(color);
             context = context.with_style(style);
         }
-        if let Drawing::Parsed(parsed) = &self.text {
+        if let Some(parsed) = &self.text {
             for (identifier, link) in &parsed.links {
                 context = context.with_link_reference(identifier.clone(), link.clone());
             }
         }
         let style = context.style();
-        let mut element = match &mut self.text {
-            // As the kit's text view lays its blocks out, in its text's colour.
-            Drawing::Parsed(parsed) => div()
+        // As the kit's text view lays its blocks out, in its text's colour.
+        let mut element = match &self.text {
+            Some(parsed) => div()
                 .w_full()
                 .text_color(style.foreground())
                 .child(div().children(blocks(&parsed.blocks, &context, window, cx)))
                 .into_any_element(),
-            Drawing::Meanwhile(meanwhile) => meanwhile.take().unwrap_or_else(|| div().into_any_element()),
+            None => div().into_any_element(),
         };
         if let Some(apart) = self.apart.take() {
             self.prose.parse_apart(self.known.clone(), apart, cx);
@@ -111,7 +107,7 @@ impl Element for ProseElement {
         cx: &mut App,
     ) -> Hitbox {
         let hitbox = window.insert_hitbox(bounds, HitboxBehavior::Normal);
-        let Drawing::Parsed(parsed) = &self.text else {
+        let Some(parsed) = &self.text else {
             element.prepaint(window, cx);
             return hitbox;
         };
