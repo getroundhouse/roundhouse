@@ -1,7 +1,7 @@
 //! How a request for approval prints: a tool's use by its input, questions with their options numbered, and a plan
 //! whole, each with the command that answers it, and once it's closed, what became of it and what was answered.
 
-use client_core::calls::ToolCall;
+use client_core::calls;
 use client_core::{Answered, Approval};
 use protocol::event::{ApprovalOutcome, Asking, EventBody, Question, SessionEvent};
 
@@ -32,7 +32,7 @@ impl Printer {
 
 /// The lines for the request `event`, which asks what `approval` says.
 fn requested(event: &SessionEvent, approval: &Approval) -> Vec<String> {
-    let EventBody::ApprovalRequested { approval_id, tool_name, input, description, .. } = &event.body else {
+    let EventBody::ApprovalRequested { approval_id, tool_name, .. } = &event.body else {
         return Vec::new();
     };
     let session = &event.session_id;
@@ -50,10 +50,8 @@ fn requested(event: &SessionEvent, approval: &Approval) -> Vec<String> {
             lines
         }
         Asking::ToolUse { .. } | Asking::Unknown => {
-            let summary =
-                description.clone().or_else(|| ToolCall::read(approval.asking().call(), tool_name, input).summary());
             vec![
-                format!("APPROVAL NEEDED: {}", about(tool_name, summary)),
+                format!("APPROVAL NEEDED: {}", about(tool_name, calls::asked_about(&event.body))),
                 format!("  roundhouse approve {session} {approval_id}"),
             ]
         }

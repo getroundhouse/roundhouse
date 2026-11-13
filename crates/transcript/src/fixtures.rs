@@ -1,7 +1,7 @@
 //! Made-up events and logs, for tests that read the log the way drawing does.
 
 use client_core::session_log::SessionLog;
-use protocol::event::{ApprovalOutcome, Asking, ContentBlock, EventBody, QuestionAnswer, SessionEvent};
+use protocol::event::{ApprovalOutcome, Asking, EventBody, QuestionAnswer, SessionEvent};
 pub(crate) use protocol::fixtures::event;
 use protocol::model::{Rev, Subagent, SubagentStatus};
 use serde_json::{Value, json};
@@ -27,10 +27,7 @@ pub(crate) fn calls(ids: &[&str]) -> EventBody {
 
 /// The agent calling the tool `name` once for each of `ids`, at once.
 pub(crate) fn calls_to(name: &str, ids: &[&str]) -> EventBody {
-    let blocks = ids
-        .iter()
-        .map(|id| ContentBlock::ToolUse { id: (*id).into(), name: name.to_string(), input: json!({}), call: None })
-        .collect();
+    let blocks = ids.iter().map(|id| protocol::fixtures::tool_use(id, name, json!({}))).collect();
     EventBody::Assistant { message_id: None, parent_tool_use_id: None, model: None, blocks, first_index: None }
 }
 
@@ -51,16 +48,7 @@ pub(crate) fn from_the_agent(body: EventBody) -> EventBody {
 
 /// The result of the call `id`.
 pub(crate) fn result(id: &str) -> EventBody {
-    let block = ContentBlock::ToolResult {
-        tool_use_id: id.into(),
-        is_error: false,
-        text: format!("from {id}"),
-        images: Vec::new(),
-        change: None,
-        encrypted: false,
-        call: None,
-        exit_code: None,
-    };
+    let block = protocol::fixtures::tool_result(id, &format!("from {id}"), false);
     EventBody::AgentUser { parent_tool_use_id: None, blocks: vec![block] }
 }
 

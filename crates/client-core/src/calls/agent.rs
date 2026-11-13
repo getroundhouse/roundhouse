@@ -6,8 +6,8 @@ use serde_json::Value;
 
 use super::{description, str_field};
 
-/// A call that hands work to a subagent. Every input is optional, so the call is always drawn as one, and the subagent's work,
-/// which is left out of its own rows, always shows in it.
+/// A call that hands work to a subagent. Every input is optional, so the call is always drawn as one, and the
+/// subagent's work, which is left out of its own rows, always shows in it.
 pub struct Agent<'a> {
     /// What the agent said the subagent is for.
     description: Option<&'a str>,
@@ -60,7 +60,7 @@ mod tests {
     use serde_json::json;
 
     use super::{Agent, only_launched, shown_kind};
-    use crate::calls::ToolCall;
+    use crate::calls::{Recorded, ToolCall};
 
     #[test]
     fn a_subagent_is_known_by_what_it_is_for() {
@@ -90,7 +90,10 @@ mod tests {
     #[test]
     fn a_hand_off_is_drawn_as_one_whatever_its_input() {
         for input in [json!({}), json!({ "description": "Look" }), json!({ "prompt": 3 })] {
-            assert!(matches!(ToolCall::read(None, "Agent", &input), ToolCall::Agent(_)), "{input}");
+            assert!(
+                matches!(ToolCall::read(Recorded { kind: None, name: "Agent", input: &input }), ToolCall::Agent(_)),
+                "{input}"
+            );
         }
     }
 

@@ -257,8 +257,9 @@ fn every_call_says_what_kind_it_is_and_every_result_the_kind_of_the_call_it_answ
                 kinds.insert(id, kind);
             }
             ContentBlock::ToolResult { tool_use_id, call, .. } => {
-                assert_eq!(call.as_ref(), kinds.get(&tool_use_id), "the result of {tool_use_id}");
-                answered += usize::from(call.is_some());
+                let made = kinds.get(&tool_use_id).unwrap_or_else(|| panic!("{tool_use_id} answers no call"));
+                assert_eq!(call.as_ref(), Some(made), "the result of {tool_use_id}");
+                answered += 1;
             }
             ContentBlock::Text { .. }
             | ContentBlock::Thinking { .. }

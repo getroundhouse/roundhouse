@@ -2,14 +2,12 @@
 //! in between when the agent runs several at once, so each call's result is found in the log by [`super::around`].
 //! What each kind of call looks like is in the modules below, all on the same [`super::line`].
 
-use client_core::calls::{ToolCall, count};
+use client_core::calls::{Recorded, ToolCall, count};
 use gpui_kit::assets::IconName;
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{AnyElement, App, IntoElement, ParentElement};
-use protocol::event::CallKind;
 use protocol::model::Seq;
-use serde_json::Value;
 
 use super::around::{Answer, Reply, Subagent};
 use super::shown::Gather;
@@ -64,23 +62,15 @@ impl Toggle<'_> {
 /// A call's line, with its result under it once it's back, as its kind draws it. Only a tool the API runs itself is
 /// ever recorded as dropped, and the advisor is the one such tool drawn in a way of its own, so only it says so. Any
 /// other draws as it does while it waits.
-/// A call as it's recorded: what its adapter said it is, if it said, and the agent's own tool and what it gave it.
-#[derive(Clone, Copy)]
-pub(super) struct Made<'a> {
-    pub(super) said: Option<&'a CallKind>,
-    pub(super) name: &'a str,
-    pub(super) input: &'a Value,
-}
-
 pub(super) fn call(
     toggle: &Toggle,
-    made: Made<'_>,
+    recorded: Recorded<'_>,
     reply: &Reply,
     subagent: Option<&Subagent>,
     cx: &App,
 ) -> AnyElement {
-    let (answer, input) = (reply.result(), made.input);
-    match ToolCall::read(made.said, made.name, input) {
+    let (answer, input) = (reply.result(), recorded.input);
+    match ToolCall::read(recorded) {
         ToolCall::Command(command) => command::draw(&command, answer, toggle, cx),
         ToolCall::Read(file) => files::read(&file, answer, toggle, cx),
         ToolCall::Write(file) => files::write(&file, answer, toggle, cx),
@@ -95,9 +85,15 @@ pub(super) fn call(
 }
 
 /// What a call shows, as [`call`] draws it open, for finding.
-pub(super) fn shown(key: &ItemKey, made: Made<'_>, reply: &Reply, subagent: Option<&Subagent>, gather: &mut Gather) {
-    let (answer, input) = (reply.result(), made.input);
-    match ToolCall::read(made.said, made.name, input) {
+pub(super) fn shown(
+    key: &ItemKey,
+    recorded: Recorded<'_>,
+    reply: &Reply,
+    subagent: Option<&Subagent>,
+    gather: &mut Gather,
+) {
+    let (answer, input) = (reply.result(), recorded.input);
+    match ToolCall::read(recorded) {
         ToolCall::Command(command) => command::shown(&command, answer, key, gather),
         ToolCall::Read(file) => files::shown_read(&file, answer, key, gather),
         ToolCall::Write(file) => files::shown_write(&file, answer, key, gather),

@@ -4,7 +4,7 @@
 
 use std::rc::Rc;
 
-use client_core::calls::{Failure, failure, first_line};
+use client_core::calls::{Failure, first_line};
 use gpui_kit::assets::IconName;
 use gpui_kit::component::{ActiveTheme as _, Icon, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
@@ -265,10 +265,11 @@ pub(super) fn drawn(
 ) -> AnyElement {
     let failed = answer.and_then(Answer::failure);
     // The line under a failed call has room for the start of what went wrong, so opened, the call shows all of it.
-    let whole = failed.map(failure::output).filter(|text| toggle.open && !line.shows_output && !text.trim().is_empty());
+    let whole =
+        failed.map(|failed| failed.output).filter(|text| toggle.open && !line.shows_output && !text.trim().is_empty());
     v_flex()
         .child(line.render(toggle, cx))
-        .when_some(failed, |d, failed| d.child(failure(&Failure::read(failed), cx)))
+        .when_some(failed, |d, failed| d.child(failure(&failed, cx)))
         .when_some(whole, |d, text| {
             let output = block::output(toggle, Text::Error, text, cx.theme().muted_foreground, cx);
             d.child(block::frame(cx).child(output))
@@ -280,7 +281,7 @@ pub(super) fn drawn(
 /// What [`drawn`] shows open of what went wrong, for finding: all of it, under the line, when what the call opens
 /// to doesn't show it already.
 pub(super) fn shown_failure(answer: Option<&Answer>, shows_output: bool, key: &ItemKey, gather: &mut Gather) {
-    let failed = answer.and_then(Answer::failure).map(failure::output).filter(|text| !text.trim().is_empty());
+    let failed = answer.and_then(Answer::failure).map(|failed| failed.output).filter(|text| !text.trim().is_empty());
     if let Some(text) = failed.filter(|_| !shows_output) {
         gather.inside(key, Fold::Output, |gather| gather.plain(key, Text::Error, &block::output_text(text)));
     }

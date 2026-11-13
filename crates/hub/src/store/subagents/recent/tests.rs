@@ -1,4 +1,5 @@
 use protocol::event::{CallKind, ContentBlock};
+use protocol::fixtures;
 use protocol::model::RecentWork;
 use serde_json::json;
 
@@ -9,20 +10,11 @@ fn text(text: &str) -> ContentBlock {
 }
 
 fn call(id: &str) -> ContentBlock {
-    ContentBlock::ToolUse { id: id.into(), name: "Read".into(), input: json!({ "file_path": id }), call: None }
+    fixtures::tool_use(id, "Read", json!({ "file_path": id }))
 }
 
 fn result(id: &str, text: &str) -> ContentBlock {
-    ContentBlock::ToolResult {
-        tool_use_id: id.into(),
-        is_error: false,
-        text: text.into(),
-        images: Vec::new(),
-        change: None,
-        encrypted: false,
-        call: None,
-        exit_code: None,
-    }
+    fixtures::tool_result(id, text, false)
 }
 
 /// Each call's id, and the text kept just before it.
@@ -92,19 +84,9 @@ fn only_what_came_back_is_taken_from_a_user_line() {
 #[test]
 fn a_call_keeps_the_kind_its_adapter_said_and_its_result_how_the_command_exited() {
     let mut work = RecentWork::default();
-    let input = json!({ "command": "ls x" });
     let said = Some(CallKind::Command);
-    let made = ContentBlock::ToolUse { id: "c".into(), name: "Bash".into(), input, call: said.clone() };
-    let failed = ContentBlock::ToolResult {
-        tool_use_id: "c".into(),
-        is_error: true,
-        text: "ls: x: No such file".into(),
-        images: Vec::new(),
-        change: None,
-        encrypted: false,
-        call: said.clone(),
-        exit_code: Some(2),
-    };
+    let made = fixtures::of_kind(fixtures::tool_use("c", "shell", json!({ "command": "ls x" })), CallKind::Command);
+    let failed = fixtures::command_failed("c", "ls: x: No such file", 2);
 
     add(&mut work, &[made, call("older")], true);
     add(&mut work, &[failed], true);

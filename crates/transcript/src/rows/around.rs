@@ -2,7 +2,7 @@
 //! while it's drawn.
 
 use client_core::Approval;
-use client_core::calls;
+use client_core::calls::Recorded;
 use client_core::session_log::{PromptAt, PromptState, SessionLog};
 use gpui_kit::SharedString;
 use protocol::event::{ContentBlock, EventBody, Question, SessionEvent};
@@ -172,8 +172,8 @@ impl BlockAround {
         let with_call = matches!(block, ContentBlock::ToolResult { tool_use_id, .. }
             if nearby::call_before(log, seq, tool_use_id, NEAR).is_some());
         let (reply, subagent) = match block {
-            ContentBlock::ToolUse { id, name, call, .. } => {
-                let hands_off = calls::hands_off(call.as_ref(), name);
+            ContentBlock::ToolUse { id, .. } => {
+                let hands_off = Recorded::of(block).is_some_and(|call| call.hands_off());
                 let subagent = hands_off.then(|| Subagent::read(log, m, seq, id, open, opening));
                 (Reply::to(log, m, seq, id), subagent)
             }

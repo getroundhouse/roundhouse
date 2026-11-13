@@ -1,5 +1,5 @@
 use client_core::session_log::SessionLog;
-use protocol::event::{ApprovalOutcome, ContentBlock, EventBody, ExitReason, TurnOutcome};
+use protocol::event::{ApprovalOutcome, CallKind, ContentBlock, EventBody, ExitReason, TurnOutcome};
 use serde_json::json;
 
 use protocol::find::Needle;
@@ -24,21 +24,84 @@ fn says(text: &str) -> EventBody {
 }
 
 fn call(id: &str, name: &str, input: serde_json::Value) -> EventBody {
-    agent(vec![ContentBlock::ToolUse { id: id.into(), name: name.into(), input, call: None }])
+    agent(vec![protocol::fixtures::tool_use(id, name, input)])
+}
+
+/// `block` as what a call sent back to the agent.
+fn came_back(block: ContentBlock) -> EventBody {
+    EventBody::AgentUser { parent_tool_use_id: None, blocks: vec![block] }
 }
 
 fn sent_back(id: &str, text: &str) -> EventBody {
-    let block = ContentBlock::ToolResult {
-        tool_use_id: id.into(),
-        is_error: false,
-        text: text.into(),
-        images: Vec::new(),
-        change: None,
-        encrypted: false,
-        call: None,
-        exit_code: None,
-    };
-    EventBody::AgentUser { parent_tool_use_id: None, blocks: vec![block] }
+    came_back(protocol::fixtures::tool_result(id, text, false))
+}
+
+/// A call to the tool `name`, recorded with the kind its adapter said it is.
+fn call_of(id: &str, name: &str, kind: CallKind, input: serde_json::Value) -> EventBody {
+    agent(vec![protocol::fixtures::of_kind(protocol::fixtures::tool_use(id, name, input), kind)])
+}
+
+/// What's found of `needle` in the row `ix`, by the part each is in.
+fn parts(log: &SessionLog, needle: &str, ix: usize) -> Vec<Part> {
+    let needle = Needle::new(needle).unwrap();
+    of_row(log, &Model::default(), &needle, ix).into_iter().map(|found| found.id.1).collect()
+}
+
+/// The tools here have names no agent's adapter has, so only the kind each call says can be what draws it.
+#[test]
+fn a_call_is_drawn_as_the_kind_its_adapter_said_whatever_its_tool_is_called() {
+    let input = json!({ "command": "cargo test parser" });
+    let unsaid = log([event(1, call("c", "shell", input.clone()))]);
+    let said = log([event(1, call_of("c", "shell", CallKind::Command, input))]);
+
+    assert_eq!(parts(&unsaid, "parser", 0), [Part::Input], "any tool, by its input");
+    assert_eq!(parts(&said, "parser", 0), [Part::Command]);
+}
+
+#[test]
+fn a_call_its_adapter_said_hands_work_off_gathers_its_subagent_s_work() {
+    let work = || event(2, within("helper", says("Looking at the parser")));
+    let unsaid = log([event(1, call("helper", "delegate", json!({}))), work()]);
+    let said = log([event(1, call_of("helper", "delegate", CallKind::Subagent, json!({}))), work()]);
+
+    assert_eq!((count(&unsaid, "parser", 0), count(&unsaid, "parser", 1)), (0, 1), "in a row of its own");
+    assert_eq!((count(&said, "parser", 0), count(&said, "parser", 1)), (1, 0), "in the call's row");
+    assert_eq!(rows_drawing(&said, &Model::default(), 2), [0]);
+}
+
+#[test]
+fn a_call_its_adapter_said_asks_the_person_something_is_left_to_its_approval() {
+    let input = json!({ "about": "Which parser?" });
+    let unsaid = log([event(1, call("ask", "inquire", input.clone()))]);
+    let said = log([event(1, call_of("ask", "inquire", CallKind::Questions, input))]);
+
+    assert_eq!(count(&unsaid, "parser", 0), 1, "any tool, by its input");
+    assert_eq!(count(&said, "parser", 0), 0);
+}
+
+/// A failed result that says what kind of call it answers holds what came back alone, so a line in it that reads like
+/// how Claude said a command exited is something the command printed, and is found.
+#[test]
+fn what_a_failed_command_printed_is_found_as_it_came_when_its_result_says_its_kind() {
+    let printed = "Exit code 9\nthe parser broke";
+    let before = came_back(protocol::fixtures::tool_result("c", printed, true));
+    let since = came_back(protocol::fixtures::command_failed("c", printed, 1));
+    let made = || event(1, call_of("c", "shell", CallKind::Command, json!({ "command": "make" })));
+    let (before, since) = (log([made(), event(2, before)]), log([made(), event(2, since)]));
+
+    assert_eq!(count(&before, "Exit code 9", 0), 0, "from before adapters said, it's how the command exited");
+    assert_eq!(count(&since, "Exit code 9", 0), 1);
+    assert_eq!((count(&before, "parser", 0), count(&since, "parser", 0)), (1, 1));
+}
+
+/// What went wrong is shown the same way under any call: without what its agent put around it to say it failed.
+#[test]
+fn what_went_wrong_for_any_tool_is_found_without_the_tags_claude_put_around_it() {
+    let refused = protocol::fixtures::tool_result("c", "<tool_use_error>no such parser</tool_use_error>", true);
+    let log = log([event(1, call("c", "inquire", json!({}))), event(2, came_back(refused))]);
+
+    assert_eq!(count(&log, "tool_use_error", 0), 0);
+    assert_eq!(count(&log, "parser", 0), 1);
 }
 
 #[test]

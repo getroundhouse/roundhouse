@@ -1,7 +1,7 @@
 //! Finding events near another in the log, for what drawing it needs from other rows, such as a call's result. An
 //! event's row is the log's to say, since a log of the agent's own events or one subagent's holds only some `seq`s.
 
-use client_core::calls;
+use client_core::calls::Recorded;
 use client_core::session_log::{Row, SessionLog};
 use protocol::event::{ContentBlock, EventBody, SessionEvent};
 use protocol::model::{PermissionMode, Seq, ToolUseId};
@@ -24,8 +24,8 @@ pub(super) fn call_before(log: &SessionLog, seq: Seq, id: &ToolUseId, reach: usi
     events_before(log, seq, reach).find_map(|event| {
         let EventBody::Assistant { blocks, .. } = &event.body else { return None };
         blocks.iter().find_map(|block| {
-            let ContentBlock::ToolUse { id: made, name, call, .. } = block else { return None };
-            (made == id).then(|| (event.seq, calls::hands_off(call.as_ref(), name)))
+            let ContentBlock::ToolUse { id: made, .. } = block else { return None };
+            (made == id).then(|| (event.seq, Recorded::of(block).is_some_and(|call| call.hands_off())))
         })
     })
 }

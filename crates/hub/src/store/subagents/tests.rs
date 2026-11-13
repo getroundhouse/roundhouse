@@ -1,4 +1,5 @@
 use protocol::event::{ExitReason, SubagentOutcome};
+use protocol::fixtures;
 use protocol::model::SubagentStatus::{Finished, Stopped, Working};
 use serde_json::json;
 
@@ -20,7 +21,7 @@ fn ended(call: &str, outcome: SubagentOutcome, report: Option<&str>) -> EventBod
 }
 
 fn tool_use(id: &str) -> ContentBlock {
-    ContentBlock::ToolUse { id: id.into(), name: "Read".into(), input: json!({"file_path": id}), call: None }
+    fixtures::tool_use(id, "Read", json!({"file_path": id}))
 }
 
 /// A message from the agent, or from the subagent `from` started.
@@ -172,16 +173,7 @@ fn said(text: &str) -> ContentBlock {
 
 /// What came back for the call `id`, to the agent, or to the subagent `to` started.
 fn answer(to: Option<&str>, id: &str, text: &str) -> EventBody {
-    let result = ContentBlock::ToolResult {
-        tool_use_id: id.into(),
-        is_error: false,
-        text: text.into(),
-        images: Vec::new(),
-        change: None,
-        encrypted: false,
-        call: None,
-        exit_code: None,
-    };
+    let result = fixtures::tool_result(id, text, false);
     EventBody::AgentUser { parent_tool_use_id: to.map(Into::into), blocks: vec![result] }
 }
 

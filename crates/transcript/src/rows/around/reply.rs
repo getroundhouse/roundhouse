@@ -1,7 +1,7 @@
 //! What's come back for a call: its result, found in the log near after it, or the log saying the agent went on
 //! without one.
 
-use client_core::calls::Failed;
+use client_core::calls::{Failure, ResultForm};
 use client_core::session_log::SessionLog;
 use protocol::event::{ContentBlock, EventBody, FileChange, Hunk, SessionEvent};
 use protocol::model::{Seq, ToolUseId};
@@ -48,24 +48,28 @@ impl Reply {
 /// A call's result, found in the log, to draw under the call.
 pub(in crate::rows) struct Answer {
     pub(in crate::rows) is_error: bool,
-    pub(in crate::rows) text: String,
+    /// What it sent back, as recorded, which [`Answer::shown`] reads for showing.
+    text: String,
     /// What it changed in a file, when its agent said.
     pub(in crate::rows) change: Option<FileChange>,
     /// The images it sent back, such as a screenshot the agent read.
     pub(in crate::rows) images: Vec<Carried>,
     /// Whether what it sent back is encrypted, for the model alone, so `text` holds none of it.
     pub(in crate::rows) encrypted: bool,
-    /// How the command exited, as the result says.
-    exit_code: Option<i32>,
-    /// Whether the result says what kind of call it answers, as one from an adapter that says how it failed does.
-    kind_said: bool,
+    /// The form it was recorded in, which says how its text is read if it failed.
+    form: ResultForm,
 }
 
 impl Answer {
-    /// What it says went wrong, if it failed, for `client_core::calls::failure` to read.
-    pub(in crate::rows) fn failure(&self) -> Option<Failed<'_>> {
-        let (text, exit_code, kind_said) = (self.text.as_str(), self.exit_code, self.kind_said);
-        self.is_error.then_some(Failed { text, exit_code, kind_said })
+    /// What it says went wrong, if it failed.
+    pub(in crate::rows) fn failure(&self) -> Option<Failure<'_>> {
+        self.is_error.then(|| Failure::read(&self.text, self.form))
+    }
+
+    /// What it sent back, as it's shown. For one that failed, that's what went wrong without what says how, which the
+    /// line under its call says, so a result reads the same whichever form it was recorded in.
+    pub(in crate::rows) fn shown(&self) -> &str {
+        self.failure().map_or(self.text.as_str(), |failure| failure.output)
     }
 
     /// What it sent back, if it didn't fail.
@@ -80,7 +84,8 @@ impl Answer {
 
     /// The text it sent back, unless that's blank and it sent back images too, which are then all there is to show.
     pub(in crate::rows) fn text_beside_images(&self) -> Option<&str> {
-        (!self.text.trim().is_empty() || self.images().is_empty()).then_some(self.text.as_str())
+        let text = self.shown();
+        (!text.trim().is_empty() || self.images().is_empty()).then_some(text)
     }
 
     /// The parts of a file it changed, when its agent said which they were.
@@ -91,17 +96,14 @@ impl Answer {
 
     /// What `block` says, if it's a result.
     fn of(block: &ContentBlock, m: &Model) -> Option<Answer> {
-        let ContentBlock::ToolResult { is_error, text, change, images, encrypted, call, exit_code, .. } = block else {
-            return None;
-        };
+        let ContentBlock::ToolResult { is_error, text, change, images, encrypted, .. } = block else { return None };
         Some(Answer {
             is_error: *is_error,
             text: text.clone(),
             change: change.clone(),
             images: attachments::carried(m, images),
             encrypted: *encrypted,
-            exit_code: *exit_code,
-            kind_said: call.is_some(),
+            form: ResultForm::of(block)?,
         })
     }
 }

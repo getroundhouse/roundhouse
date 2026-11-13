@@ -1,11 +1,14 @@
 //! Made-up records and events, for the tests of every crate. Each is valid from the fewest arguments, and a test sets
 //! what it's about with struct update syntax, so a field added to a record changes its builder here rather than every
-//! test that makes one.
+//! test that makes one. A block is an enum's variant, which that syntax can't set, so a block has a builder for each
+//! shape tests make, such as [`of_kind`].
 
-use crate::event::{EventBody, SessionEvent};
+use serde_json::Value;
+
+use crate::event::{CallKind, ContentBlock, EventBody, SessionEvent};
 use crate::model::{
-    AgentKind, Draft, Effort, ModelName, PermissionMode, Place, RecentWork, Rev, Seq, Session, SessionStatus,
-    SetupStatus, Subagent, SubagentStatus, TitleSource, Workspace, WorkspaceStatus,
+    AgentKind, Call, CallResult, Draft, Effort, ModelName, PermissionMode, Place, RecentWork, Rev, Seq, Session,
+    SessionStatus, SetupStatus, Subagent, SubagentStatus, TitleSource, Workspace, WorkspaceStatus,
 };
 
 /// The session `id`, in the workspace `w`, idle with nothing in its log. Its agent is Claude, running Opus with full
@@ -112,4 +115,62 @@ pub fn subagent(call: &str) -> Subagent {
         report: None,
         rev: Rev::default(),
     }
+}
+
+/// A call to the tool `name`, as the block an agent makes it in, saying no kind, as one recorded before adapters said
+/// has none.
+pub fn tool_use(id: &str, name: &str, input: Value) -> ContentBlock {
+    ContentBlock::ToolUse { id: id.into(), name: name.into(), input, call: None }
+}
+
+/// What came back for the call `id`, as the block it comes in: its text, and whether it failed. It has no images,
+/// changed no file, isn't encrypted, and says no kind, as one recorded before adapters said has none.
+pub fn tool_result(id: &str, text: &str, is_error: bool) -> ContentBlock {
+    ContentBlock::ToolResult {
+        tool_use_id: id.into(),
+        is_error,
+        text: text.into(),
+        images: Vec::new(),
+        change: None,
+        encrypted: false,
+        call: None,
+        exit_code: None,
+    }
+}
+
+/// `block`, a call or a result, saying it's of `kind`, as one recorded since adapters said does.
+///
+/// # Panics
+///
+/// If `block` is neither, since only those say a kind, and a test that handed it another would otherwise go on with a
+/// block that says none.
+pub fn of_kind(mut block: ContentBlock, kind: CallKind) -> ContentBlock {
+    match &mut block {
+        ContentBlock::ToolUse { call, .. } | ContentBlock::ToolResult { call, .. } => *call = Some(kind),
+        ContentBlock::Text { .. }
+        | ContentBlock::Thinking { .. }
+        | ContentBlock::Image { .. }
+        | ContentBlock::Unknown => panic!("only a call or a result says a kind: {block:?}"),
+    }
+    block
+}
+
+/// What came back for the command `id` that exited with `code` having printed `printed`, as recorded since adapters
+/// said: a failed result that says it answers a command, with how it exited beside what it printed.
+pub fn command_failed(id: &str, printed: &str, code: i32) -> ContentBlock {
+    let mut block = of_kind(tool_result(id, printed, true), CallKind::Command);
+    if let ContentBlock::ToolResult { exit_code, .. } = &mut block {
+        *exit_code = Some(code);
+    }
+    block
+}
+
+/// A call to the tool `name`, as a subagent's record has it, saying no kind.
+pub fn call(id: &str, name: &str, input: Value) -> Call {
+    Call { id: id.into(), name: name.into(), input, kind: None }
+}
+
+/// What came back for a call, as a subagent's record has it: all of `text`, from a call that didn't fail.
+pub fn call_result(text: &str) -> CallResult {
+    CallResult { is_error: false, text: text.into(), cut: false, images: Vec::new(), encrypted: false, exit_code: None }
 }

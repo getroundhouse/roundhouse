@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 
 use protocol::event::{ApprovalDecision, Asking, EventBody, Question, QuestionAnswer};
 
-mod older;
+pub(crate) mod older;
 #[cfg(test)]
 mod tests;
 

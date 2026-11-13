@@ -1,7 +1,7 @@
 //! The card that asks for a tool's approval, or a plan's.
 
 use client_core::Approval;
-use client_core::calls::ToolCall;
+use client_core::calls;
 use gpui_kit::component::{ActiveTheme as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
@@ -19,8 +19,7 @@ use crate::prose::{TextAt, Written};
 /// anything else is asked about as a tool's use, by its tool and input.
 pub(super) fn approval_card(seq: Seq, body: &EventBody, open: bool, shared: &Shared, cx: &App) -> AnyElement {
     use gpui_kit::component::button::{Button, ButtonVariants as _};
-    let (EventBody::ApprovalRequested { approval_id, tool_name, input, description, .. }, Some(approval)) =
-        (body, Approval::of(body))
+    let (EventBody::ApprovalRequested { approval_id, tool_name, .. }, Some(approval)) = (body, Approval::of(body))
     else {
         return empty();
     };
@@ -51,8 +50,7 @@ pub(super) fn approval_card(seq: Seq, body: &EventBody, open: bool, shared: &Sha
         ),
         Asking::ToolUse { .. } | Asking::Questions { .. } | Asking::Unknown => {
             let deny = answer_button("deny", "Deny", approval.refused());
-            let summary =
-                description.clone().or_else(|| ToolCall::read(approval.asking().call(), tool_name, input).summary());
+            let summary = calls::asked_about(body);
             (
                 format!("{tool_name} needs approval"),
                 div()

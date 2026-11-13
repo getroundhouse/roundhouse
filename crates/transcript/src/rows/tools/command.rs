@@ -3,7 +3,7 @@
 //! what's read, and whole, since opening the call is what shows it. It's text to select, and a button at its top right
 //! copies all of it, to run elsewhere.
 
-use client_core::calls::{Command, failure};
+use client_core::calls::Command;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::prelude::FluentBuilder as _;
@@ -53,7 +53,7 @@ pub(super) fn shown(command: &Command, answer: Option<&Answer>, key: &ItemKey, g
 
 /// What the command printed, or what went wrong, once it's back.
 fn output(answer: Option<&Answer>) -> Option<&str> {
-    answer.map(|a| a.failure().map_or(a.text.as_str(), failure::output))
+    answer.map(Answer::shown)
 }
 
 /// The command, and under it what it printed, or a faint line saying it printed nothing, so a command that's done

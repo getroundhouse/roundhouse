@@ -1,9 +1,12 @@
 //! Calls recorded before adapters said what kind each is, which carry only the agent's name for the tool, as the one
 //! adapter of then, Claude's, sent it. This reads the kind from that name, and how a failed result says it failed from
-//! its text, as Claude wrote both then. It's only for a call or a result with no kind, and it stays as Claude's tools
-//! were then, whatever they become.
+//! its text, as Claude wrote both then. It's only for a call or a result with no kind, which an adapter that says
+//! kinds never records, so it stays as Claude's tools were then, whatever they become. `agents::claude::kinds` has the
+//! same names today, for what's recorded now, and follows the CLI where this doesn't.
 
 use protocol::event::CallKind;
+
+use crate::approval::older as approval;
 
 /// How Claude named a tool from an MCP server: `mcp__<server>__<tool>`.
 const MCP_PREFIX: &str = "mcp__";
@@ -28,8 +31,8 @@ pub(super) fn kind_of(name: &str) -> CallKind {
         "Agent" | "Task" => CallKind::Subagent,
         // The API runs it rather than the agent.
         "advisor" => CallKind::Advisor,
-        "AskUserQuestion" => CallKind::Questions,
-        "ExitPlanMode" => CallKind::Plan,
+        approval::QUESTIONS => CallKind::Questions,
+        approval::PLAN => CallKind::Plan,
         _ => match name.strip_prefix(MCP_PREFIX).and_then(|rest| rest.split_once(MCP_SEPARATOR)) {
             Some((server, tool)) => CallKind::Other { server: Some(server.to_string()), tool: tool.to_string() },
             None => CallKind::Other { server: None, tool: name.to_string() },

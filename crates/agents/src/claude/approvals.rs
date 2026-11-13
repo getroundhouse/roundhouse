@@ -6,16 +6,11 @@
 use protocol::event::{Asking, Question, QuestionOption};
 use serde_json::Value;
 
-use super::kinds;
+use super::kinds::{self, PLAN, QUESTIONS};
 
 mod answer;
 
 pub(super) use answer::{Waiting, response};
-
-/// The tool that asks the person questions.
-pub(super) const QUESTIONS: &str = "AskUserQuestion";
-/// The tool that asks to leave plan mode, with the plan.
-pub(super) const PLAN: &str = "ExitPlanMode";
 
 /// What a request to use `tool` with `input` asks. Whatever the CLI sent is taken: a question without its text is left
 /// out, as is an option without its label, and a plan without its text is an empty one.
