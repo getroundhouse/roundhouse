@@ -8,9 +8,15 @@ use super::{Store, StoreError, lock, rev_of};
 #[cfg(test)]
 mod tests;
 
+/// *Not built:* keeping GitHub accounts, so the settings say nothing of GitHub, as a hub's from before them do.
 pub(super) fn hub_settings(conn: &Connection) -> rusqlite::Result<HubSettings> {
     conn.query_row("SELECT keep_awake, allow_asked_in_full_access, rev FROM hub_settings", [], |row| {
-        Ok(HubSettings { keep_awake: row.get(0)?, allow_asked_in_full_access: Some(row.get(1)?), rev: rev_of(row, 2)? })
+        Ok(HubSettings {
+            keep_awake: row.get(0)?,
+            allow_asked_in_full_access: Some(row.get(1)?),
+            github: None,
+            rev: rev_of(row, 2)?,
+        })
     })
 }
 
@@ -26,7 +32,8 @@ impl Store {
     }
 
     /// Changes the settings `change` names. Only a setting that ends up different gives the record a newer revision,
-    /// so setting the same again says nothing new.
+    /// so setting the same again says nothing new. *Not built:* which GitHub account is the default, which it leaves,
+    /// as `HubSettingsChange` says a hub that keeps no GitHub accounts does.
     pub fn change_hub_settings(&self, change: &HubSettingsChange) -> Result<HubSettings, StoreError> {
         let conn = lock(&self.writer);
         if let Some(keep_awake) = change.keep_awake {

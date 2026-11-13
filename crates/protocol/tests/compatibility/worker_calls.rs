@@ -6,8 +6,8 @@ use protocol::event::ApprovalDecision;
 use protocol::frame;
 use protocol::model::{
     AgentAccount, AgentKind, AgentLogin, Branches, Effort, FileContents, FileOpened, FilePage, FilePages, GitDiff,
-    GitStatus, Head, LoginToken, ModelName, PageLine, PermissionMode, RunId, Seq, SessionSettings,
-    SessionSettingsChange, WorktreeFiles,
+    GitStatus, GithubLogin, GithubToken, Head, LoginToken, ModelName, PageLine, PermissionMode, RunId, Seq,
+    SessionSettings, SessionSettingsChange, WorktreeFiles,
 };
 use protocol::prompt::Prompt;
 use protocol::worker::{
@@ -231,6 +231,29 @@ fn a_request_with_no_fields_reads_with_fields_it_doesnt_know() {
     assert_eq!(read(r#"{"method":"stop","newer":1}"#), WorkerRequest::Stop);
     assert_eq!(read(r#"{"method":"running_agents","newer":1}"#), WorkerRequest::RunningAgents);
     assert_eq!(read(r#"{"method":"cancel_setup","newer":1}"#), WorkerRequest::CancelSetup);
+    assert_eq!(read(r#"{"method":"find_github_login","newer":1}"#), WorkerRequest::FindGithubLogin);
+}
+
+#[test]
+fn every_request_and_reply_about_github_accounts_keeps_its_form() {
+    let set = |credential| WorkerRequest::GitCredentialSet(worker::GitCredentialSet { credential });
+    let credential =
+        |author| worker::GitCredential { username: "ada".into(), token: GithubToken::new("made-up"), author };
+    let bot = worker::GitAuthor { name: "app[bot]".into(), email: "9+app[bot]@users.noreply.github.com".into() };
+    asked(
+        set(Some(credential(None))),
+        r#"{"method":"git_credential_set","credential":{"username":"ada","token":"made-up"}}"#,
+    );
+    asked(
+        set(Some(credential(Some(bot)))),
+        r#"{"method":"git_credential_set","credential":{"username":"ada","token":"made-up","author":{"name":"app[bot]","email":"9+app[bot]@users.noreply.github.com"}}}"#,
+    );
+    asked(set(None), r#"{"method":"git_credential_set","credential":null}"#);
+    asked(WorkerRequest::FindGithubLogin, r#"{"method":"find_github_login"}"#);
+    let found = |login| WorkerResponse::GithubLogin(worker::GithubLoginReply { login });
+    let ada = GithubLogin { username: "ada".into() };
+    answered(found(Some(ada)), r#"{"result":"github_login","login":{"username":"ada"}}"#);
+    answered(found(None), r#"{"result":"github_login","login":null}"#);
 }
 
 #[test]

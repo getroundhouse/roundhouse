@@ -13,6 +13,7 @@ mod draft;
 mod effort;
 mod files;
 mod git;
+mod github_account;
 mod hub_settings;
 mod model_name;
 mod permission_mode;
@@ -42,7 +43,11 @@ pub use draft::{
 pub use effort::Effort;
 pub use files::{FileContents, FileOpened, FilePage, FilePages, OpenedText, PageLine, WorktreeFiles};
 pub use git::{GitDiff, GitFile, GitStatus};
-pub use hub_settings::{HubSettings, HubSettingsChange};
+pub use github_account::{
+    FoundGithubLogin, GithubAccount, GithubLogin, GithubLoginKind, GithubToken, GithubUser, GithubUserId,
+    HeldGithubLogin,
+};
+pub use hub_settings::{GithubDefault, GithubSettings, HubSettings, HubSettingsChange};
 pub use model_name::{ModelName, ModelNameError};
 pub use permission_mode::PermissionMode;
 pub use prompt_line::{PromptLine, SettledAt, Settlement};
@@ -92,6 +97,37 @@ macro_rules! ids {
         }
     )+};
 }
+
+/// Declares token types: text that's all it takes to act as whoever it's for, so it's kept out of logs. Its `Debug`
+/// says only that it's there, it has no `Display`, and a request or a reply that carries one can be logged whole. It's
+/// a plain string on the wire and in storage. A module that owns one declares it with `crate::model::tokens!`.
+macro_rules! tokens {
+    ($($(#[$doc:meta])* $name:ident),+ $(,)?) => {$(
+        $(#[$doc])*
+        #[derive(::serde::Serialize, ::serde::Deserialize, Clone, PartialEq, Eq, Hash)]
+        #[serde(transparent)]
+        pub struct $name(String);
+
+        impl $name {
+            pub fn new(token: impl Into<String>) -> Self {
+                Self(token.into())
+            }
+
+            /// The token itself, for handing on or keeping, and nothing else.
+            pub fn as_str(&self) -> &str {
+                &self.0
+            }
+        }
+
+        impl ::std::fmt::Debug for $name {
+            fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+                f.write_str(concat!(stringify!($name), "(..)"))
+            }
+        }
+    )+};
+}
+
+pub(crate) use tokens;
 
 ids!(
     /// An account an agent runs under, as its adapter names it. It's opaque, says which kind of agent it's for, and
@@ -144,6 +180,13 @@ ids!(
     /// asked, so a hub that hears the ask again, as each new hub does what the last didn't answer, makes it once.
     /// Unique within the session that asked, as a tool use's ID is.
     AskKey,
+    /// A GitHub account the hub holds, as a UUID the hub chose, since one GitHub user can be connected more than once,
+    /// as with a token beside a sign-in.
+    GithubAccountId,
+    /// A GitHub user's name, such as `ada`, as GitHub spells it. GitHub's API calls it the user's `login`, a word that
+    /// here means a credential. The user can change it, and GitHub compares it without case, so a user is told apart
+    /// by its [`GithubUserId`].
+    GithubUsername,
 );
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]

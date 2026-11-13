@@ -1,7 +1,5 @@
 //! What reaches the worker's tools, and the hub asking the worker to serve them.
 
-use std::fmt;
-
 use serde::{Deserialize, Serialize};
 
 use super::{Reply, Request, WorkerRequest, WorkerResponse};
@@ -41,27 +39,12 @@ impl Reply for ToolsServing {
     }
 }
 
-/// What an agent's calls to the worker's tools carry, as a bearer token, which tells the worker whose they are. It's
-/// only as secret as the agent's own files, since the agent's config holds it, but it's kept out of logs all the same.
-#[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
-#[serde(transparent)]
-pub struct ToolsToken(String);
-
-impl ToolsToken {
-    pub fn new(token: impl Into<String>) -> Self {
-        Self(token.into())
-    }
-
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl fmt::Debug for ToolsToken {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("ToolsToken(..)")
-    }
-}
+crate::model::tokens!(
+    /// What an agent's calls to the worker's tools carry, as a bearer token, which tells the worker whose they are.
+    /// It's only as secret as the agent's own files, since the agent's config holds it, but it's kept out of logs all
+    /// the same.
+    ToolsToken,
+);
 
 #[cfg(test)]
 mod tests {

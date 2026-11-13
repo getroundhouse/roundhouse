@@ -37,6 +37,9 @@ impl Store {
             hub_settings: Some(hub_settings(&tx)?),
             accounts: accounts(&tx)?,
             new_workspace_draft: Some(new_workspace_draft(&tx)?),
+            // *Not built:* keeping GitHub accounts, which the settings say this hub doesn't.
+            github_accounts: Vec::new(),
+            found_github_logins: Vec::new(),
             rev: current_rev(&tx)?,
         };
         tx.commit()?;

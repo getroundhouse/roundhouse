@@ -124,11 +124,15 @@ impl World {
             hub_settings: (!self.keeps_no_settings).then(|| protocol::model::HubSettings {
                 keep_awake: true,
                 allow_asked_in_full_access: Some(false),
+                github: None,
                 rev: Rev::default(),
             }),
             accounts: self.accounts.clone(),
             // As from a hub that doesn't keep one, since its hub refuses to.
             new_workspace_draft: None,
+            // As from a hub that doesn't keep GitHub accounts, which its settings say.
+            github_accounts: Vec::new(),
+            found_github_logins: Vec::new(),
             rev: Rev::default(),
         }
     }

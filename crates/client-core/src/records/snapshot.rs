@@ -100,8 +100,10 @@ impl Listed {
                     listed.accounts.insert(account.id.clone(), account.clone());
                 }
                 Record::NewWorkspaceDraft(draft) => listed.new_workspace_draft = Some(draft.clone()),
-                // Held apart, as `HubRecords::apply_record` says.
-                Record::Subagent(_) => {}
+                // A subagent's held apart, as `HubRecords::apply_record` says. GitHub's are held, but not listed for
+                // views. *Not built:* showing them, as "GitHub accounts" in "State ownership" in `docs/architecture.md`
+                // says.
+                Record::Subagent(_) | Record::GithubAccount(_) | Record::FoundGithubLogin(_) => {}
             }
         }
         listed.repos.sort_by(|a, b| (&a.name, &a.id).cmp(&(&b.name, &b.id)));

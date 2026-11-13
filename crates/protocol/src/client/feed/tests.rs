@@ -1,4 +1,7 @@
-use crate::model::{DiffComment, DiffSide, HubSettings, NewWorkspaceDraft, Record, RecordKey, Repo, Rev, Subagent};
+use crate::model::{
+    DiffComment, DiffSide, FoundGithubLogin, GithubAccount, HubSettings, NewWorkspaceDraft, Record, RecordKey, Repo,
+    Rev, Subagent,
+};
 
 use super::{HubNotice, RecordNotice};
 
@@ -21,6 +24,7 @@ fn of_a_record() -> Vec<(HubNotice, RecordKey, Rev)> {
     };
     let draft = NewWorkspaceDraft { rev: Rev::new(5), ..NewWorkspaceDraft::default() };
     let gone = RecordKey::Session { id: "s".into() };
+    let disconnected = RecordKey::GithubAccount { id: "g".into() };
     vec![
         (HubNotice::Repo(repo), RecordKey::Repo { id: "r".into() }, Rev::new(2)),
         (HubNotice::Comment(comment), RecordKey::Comment { id: "c".into() }, Rev::new(3)),
@@ -28,6 +32,7 @@ fn of_a_record() -> Vec<(HubNotice, RecordKey, Rev)> {
             HubNotice::HubSettings(HubSettings {
                 keep_awake: true,
                 allow_asked_in_full_access: Some(true),
+                github: None,
                 rev: Rev::new(4),
             }),
             RecordKey::HubSettings,
@@ -40,6 +45,20 @@ fn of_a_record() -> Vec<(HubNotice, RecordKey, Rev)> {
             Rev::new(6),
         ),
         (HubNotice::Removed { record: gone.clone(), rev: Rev::new(7) }, gone, Rev::new(7)),
+        (
+            HubNotice::GithubAccount(GithubAccount { rev: Rev::new(8), ..crate::fixtures::github_account("g") }),
+            RecordKey::GithubAccount { id: "g".into() },
+            Rev::new(8),
+        ),
+        (
+            HubNotice::FoundGithubLogin(FoundGithubLogin {
+                rev: Rev::new(9),
+                ..crate::fixtures::found_github_login("local")
+            }),
+            RecordKey::FoundGithubLogin { provider: "local".into() },
+            Rev::new(9),
+        ),
+        (HubNotice::Removed { record: disconnected.clone(), rev: Rev::new(10) }, disconnected, Rev::new(10)),
     ]
 }
 
