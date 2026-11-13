@@ -6,7 +6,9 @@ use std::time::Duration;
 
 use protocol::client::{ApiError, ErrorCode, error_chain};
 use protocol::model::{SessionId, WorkspaceId};
-use protocol::worker::{AskReply, ServeTools, ToolsServing, ToolsToken, WorkerAsk};
+use protocol::worker::{
+    AskReply, CancelWait, PullRequestAnswer, ReadWait, ServeTools, StartWait, ToolsServing, ToolsToken, WorkerAsk,
+};
 use tracing::warn;
 
 use super::{Hub, new_id};
@@ -77,16 +79,16 @@ impl Hub {
         if self.session_get(session_id.clone()).await?.workspace_id != *workspace_id {
             return Err(ApiError::new(ErrorCode::NotFound, "that chat isn't in this workspace"));
         }
-        let waited = |(wait, pull_request)| AskReply::Wait { wait, pull_request };
         match ask {
             WorkerAsk::PullRequest => {
-                Ok(AskReply::PullRequest { pull_request: self.pull_request_for_agent(workspace_id, link).await? })
+                let pull_request = self.pull_request_for_agent(workspace_id, link).await?;
+                Ok(AskReply::PullRequest(PullRequestAnswer { pull_request }))
             }
-            WorkerAsk::StartWait { until, call } => {
-                self.start_wait(workspace_id, link, session_id, until, call).await.map(waited)
+            WorkerAsk::StartWait(StartWait { until, call }) => {
+                self.start_wait(workspace_id, link, session_id, until, call).await.map(AskReply::Wait)
             }
-            WorkerAsk::Wait { wait } => self.wait_of(&session_id, wait).await.map(waited),
-            WorkerAsk::CancelWait { wait } => self.cancel_wait(&session_id, wait).await.map(waited),
+            WorkerAsk::Wait(ReadWait { wait }) => self.wait_of(&session_id, wait).await.map(AskReply::Wait),
+            WorkerAsk::CancelWait(CancelWait { wait }) => self.cancel_wait(&session_id, wait).await.map(AskReply::Wait),
             WorkerAsk::Unknown => Err(self.unsupported(None)),
         }
     }

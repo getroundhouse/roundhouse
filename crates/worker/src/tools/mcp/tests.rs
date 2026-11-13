@@ -1,6 +1,9 @@
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{WaitEnd, WaitUntil};
-use protocol::worker::{AskAnswer, AskOutcome, AskReply, WorkerAsk, WorkerFrame};
+use protocol::worker::{
+    AskAnswer, AskOutcome, AskReply, CancelWait, PullRequestAnswer, ReadWait, StartWait, WaitAnswer, WorkerAsk,
+    WorkerFrame,
+};
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
 
@@ -204,7 +207,7 @@ async fn a_call_asks_the_hub_for_the_chat_that_called_and_answers_with_what_it_s
         let asked = tokio::time::timeout(std::time::Duration::from_secs(5), sent.recv()).await;
         let Ok(Some(WorkerFrame::Ask { id, session_id, ask })) = asked else { panic!("the hub wasn't asked") };
         assert_eq!((session_id.as_str(), ask), ("s", WorkerAsk::PullRequest));
-        let outcome = AskOutcome::Response(AskReply::PullRequest { pull_request: None });
+        let outcome = AskOutcome::Response(AskReply::PullRequest(PullRequestAnswer { pull_request: None }));
         asks.answer(AskAnswer { answer: id, outcome });
     };
 
@@ -234,11 +237,11 @@ async fn a_wait_is_started_for_the_call_that_asked_and_answered_as_a_task_whose_
     let call = offering_tasks("tools/call", &json!({ "name": wait::NAME, "arguments": { "until": "checks" } }));
     let said = headers("tools/call", Some(wait::NAME));
     let calling = answered(&asks, &said, &call);
-    let hub = hub_answers(&asks, &mut sent, Ok(AskReply::Wait { wait: waiting(), pull_request: None }));
+    let hub = hub_answers(&asks, &mut sent, Ok(AskReply::Wait(WaitAnswer { wait: waiting(), pull_request: None })));
 
     let (answer, asked) = tokio::join!(calling, hub);
 
-    assert_eq!(asked, WorkerAsk::StartWait { until: WaitUntil::Checks, call: Some("toolu_1".into()) });
+    assert_eq!(asked, WorkerAsk::StartWait(StartWait { until: WaitUntil::Checks, call: Some("toolu_1".into()) }));
     let result = &answer.to_json()["result"];
     assert_eq!((&result["resultType"], &result["taskId"]), (&json!("task"), &json!("w1")));
     assert_eq!(result["status"], "working");
@@ -251,7 +254,7 @@ async fn a_wait_that_ended_as_it_started_or_couldnt_start_is_answered_at_once() 
     let said = headers("tools/call", Some(wait::NAME));
     let no_pr = ApiError::new(ErrorCode::NotFound, "this workspace's branch has no pull request to wait on");
 
-    let merged = Ok(AskReply::Wait { wait: ended(WaitEnd::Merged), pull_request: None });
+    let merged = Ok(AskReply::Wait(WaitAnswer { wait: ended(WaitEnd::Merged), pull_request: None }));
     let (done, _) = tokio::join!(answered(&asks, &said, &call), hub_answers(&asks, &mut sent, merged));
     let (refused, _) = tokio::join!(answered(&asks, &said, &call), hub_answers(&asks, &mut sent, Err(no_pr)));
 
@@ -288,16 +291,16 @@ async fn asking_after_a_task_or_cancelling_it_asks_the_hub_about_the_wait_both_h
         offering_tasks("tasks/cancel", &json!({ "taskId": "w1" })),
     );
     let (getting, cancelling) = (headers("tasks/get", Some("w1")), headers("tasks/cancel", Some("w1")));
-    let merged = Ok(AskReply::Wait { wait: ended(WaitEnd::Merged), pull_request: None });
-    let cancelled = Ok(AskReply::Wait { wait: ended(WaitEnd::Cancelled), pull_request: None });
+    let merged = Ok(AskReply::Wait(WaitAnswer { wait: ended(WaitEnd::Merged), pull_request: None }));
+    let cancelled = Ok(AskReply::Wait(WaitAnswer { wait: ended(WaitEnd::Cancelled), pull_request: None }));
 
     let (got, get_asked) = tokio::join!(answered(&asks, &getting, &get), hub_answers(&asks, &mut sent, merged));
     let (ended, cancel_asked) =
         tokio::join!(answered(&asks, &cancelling, &cancel), hub_answers(&asks, &mut sent, cancelled));
     let elsewhere = answered(&asks, &headers("tasks/get", Some("w2")), &get).await;
 
-    assert_eq!(get_asked, WorkerAsk::Wait { wait: "w1".into() });
-    assert_eq!(cancel_asked, WorkerAsk::CancelWait { wait: "w1".into() });
+    assert_eq!(get_asked, WorkerAsk::Wait(ReadWait { wait: "w1".into() }));
+    assert_eq!(cancel_asked, WorkerAsk::CancelWait(CancelWait { wait: "w1".into() }));
     let got = &got.to_json()["result"];
     assert_eq!((&got["resultType"], &got["status"]), (&json!("complete"), &json!("completed")));
     assert_eq!(ended.to_json()["result"], json!({ "resultType": "complete" }));
@@ -325,11 +328,11 @@ async fn a_task_cancelled_without_its_name_in_a_header_is_still_cancelled() {
     let (asks, mut sent) = asks();
     let cancel = offering_tasks("tasks/cancel", &json!({ "taskId": "w1" }));
     let unnamed = headers("tasks/cancel", None);
-    let cancelled = Ok(AskReply::Wait { wait: ended(WaitEnd::Cancelled), pull_request: None });
+    let cancelled = Ok(AskReply::Wait(WaitAnswer { wait: ended(WaitEnd::Cancelled), pull_request: None }));
 
     let (answer, asked) = tokio::join!(answered(&asks, &unnamed, &cancel), hub_answers(&asks, &mut sent, cancelled));
 
-    assert_eq!(asked, WorkerAsk::CancelWait { wait: "w1".into() });
+    assert_eq!(asked, WorkerAsk::CancelWait(CancelWait { wait: "w1".into() }));
     assert_eq!(answer.to_json()["result"], json!({ "resultType": "complete" }));
 }
 
@@ -339,14 +342,14 @@ async fn an_update_to_a_task_is_taken_and_an_offer_of_nothing_is_no_offer() {
     let (asks, mut sent) = asks();
     let update = offering_tasks("tasks/update", &json!({ "taskId": "w1", "inputResponses": {} }));
     let said = headers("tasks/update", Some("w1"));
-    let waits = Ok(AskReply::Wait { wait: waiting(), pull_request: None });
+    let waits = Ok(AskReply::Wait(WaitAnswer { wait: waiting(), pull_request: None }));
     let mut no_offer: Value = serde_json::from_slice(&offering_tasks("tasks/get", &json!({ "taskId": "w1" }))).unwrap();
     no_offer["params"]["_meta"][CAPABILITIES_KEY]["extensions"][TASKS] = Value::Null;
 
     let (updated, asked) = tokio::join!(answered(&asks, &said, &update), hub_answers(&asks, &mut sent, waits));
     let refused = answered(&asks, &headers("tasks/get", Some("w1")), &serde_json::to_vec(&no_offer).unwrap()).await;
 
-    assert_eq!(asked, WorkerAsk::Wait { wait: "w1".into() });
+    assert_eq!(asked, WorkerAsk::Wait(ReadWait { wait: "w1".into() }));
     assert_eq!(updated.to_json()["result"], json!({ "resultType": "complete" }));
     assert_eq!(code(&refused), Code::MissingCapability);
 }

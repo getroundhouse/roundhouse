@@ -7,7 +7,7 @@ use process::ProcessRecord;
 use protocol::frame;
 use protocol::paths::WORKER_RECORD_FILE;
 use protocol::worker::{
-    AskId, AskOutcome, AskReply, CancelSetup, GitStatus, PullRequestReply, WorkerAsk, WorkerOutcome,
+    AskId, AskOutcome, AskReply, CancelSetup, GitStatus, PullRequestAnswer, PullRequestReply, WorkerAsk, WorkerOutcome,
 };
 use providers::local::{LocalConfig, LocalProvider};
 
@@ -155,7 +155,7 @@ async fn a_worker_asking_for_its_pull_request_is_answered_once_it_has_answered_t
             .unwrap();
 
     let answer = answered(dir.path()).await;
-    let outcome = AskOutcome::Response(AskReply::PullRequest { pull_request: None });
+    let outcome = AskOutcome::Response(AskReply::PullRequest(PullRequestAnswer { pull_request: None }));
     assert_eq!(answer, AskAnswer { answer: AskId::new(9), outcome });
     link.kill();
 }

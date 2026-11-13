@@ -32,7 +32,7 @@ async fn the_feed_announces_the_chat_with_its_open_wait_as_one_starts_and_with_n
 
     let (first, _) = ask(&hub, &link, start("toolu_1")).await.unwrap();
     let started = announced(&mut feed);
-    ask(&hub, &link, WorkerAsk::CancelWait { wait: first.id.clone() }).await.unwrap();
+    ask(&hub, &link, WorkerAsk::CancelWait(CancelWait { wait: first.id.clone() })).await.unwrap();
     let cancelled = announced(&mut feed);
     let (second, _) = ask(&hub, &link, start("toolu_2")).await.unwrap();
     announced(&mut feed);

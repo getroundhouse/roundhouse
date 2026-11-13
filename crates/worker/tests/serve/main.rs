@@ -12,9 +12,9 @@ use protocol::Build;
 use protocol::frame;
 use protocol::model::{AgentKind, RunId};
 use protocol::worker::{
-    AgentSpec, AskAnswer, AskOutcome, AskReply, Hello, RunningAgentsReply, ServeTools, SetupDone, SetupWorkspace,
-    ToolsServing, ToolsToken, WORKER_PROTOCOL_VERSION, WorkerAsk, WorkerCall, WorkerFrame, WorkerOutcome,
-    WorkerRequest, WorkerResponse,
+    AgentSpec, AskAnswer, AskOutcome, AskReply, Hello, PullRequestAnswer, RunningAgentsReply, ServeTools, SetupDone,
+    SetupWorkspace, ToolsServing, ToolsToken, WORKER_PROTOCOL_VERSION, WorkerAsk, WorkerCall, WorkerFrame,
+    WorkerOutcome, WorkerRequest, WorkerResponse,
 };
 use tokio::io::{
     AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWriteExt, BufReader, DuplexStream, Lines, ReadHalf, WriteHalf,
@@ -139,7 +139,10 @@ async fn an_agents_call_to_the_tools_is_asked_of_the_hub_and_answered_with_its_a
     })
     .await
     .expect("the hub was never asked");
-    let answer = AskAnswer { answer: id, outcome: AskOutcome::Response(AskReply::PullRequest { pull_request: None }) };
+    let answer = AskAnswer {
+        answer: id,
+        outcome: AskOutcome::Response(AskReply::PullRequest(PullRequestAnswer { pull_request: None })),
+    };
     hub_write.write_all(&frame::encode(&answer).unwrap()).await.unwrap();
     let response = timeout(Duration::from_secs(10), calling).await.expect("the call was never answered").unwrap();
 

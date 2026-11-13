@@ -29,7 +29,10 @@ mod worktree;
 pub use agents::{
     AgentApproval, AgentCancel, AgentCompact, AgentConfigure, AgentPrompt, AgentSpec, AgentStarted, AgentStop, Delivery,
 };
-pub use ask::{AskAnswer, AskId, AskOutcome, AskReply, ToWorker, WorkerAsk};
+pub use ask::{
+    Answer, Ask, AskAnswer, AskId, AskOutcome, AskReply, CancelWait, PullRequestAnswer, ReadPullRequest, ReadWait,
+    StartWait, ToWorker, WaitAnswer, WorkerAsk,
+};
 pub use connection::{Hello, HelloReply, Received, RunningAgent, RunningAgents, RunningAgentsReply, Stop};
 pub use frames::WorkerFrame;
 pub use github::{GithubRateLimit, PullRequest, PullRequestReply, RateLimit};

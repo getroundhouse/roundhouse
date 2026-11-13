@@ -5,7 +5,7 @@
 use chrono::{DateTime, SecondsFormat};
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{PullRequest, SessionId, Standing, ToolUseId, Wait, WaitEnd, WaitUntil};
-use protocol::worker::{AskReply, WorkerAsk};
+use protocol::worker::{CancelWait, ReadWait, StartWait, WaitAnswer};
 use serde_json::{Map, Value, json};
 
 use super::mcp::{Called, Code, RpcError};
@@ -62,8 +62,8 @@ pub(super) async fn call(asks: &Asks, session_id: &SessionId, params: &Map<Strin
         Err(wrong) => return Called::failed(wrong).to_json(),
     };
     let call = params.get("_meta").and_then(|meta| meta.get(CALL_KEY)).and_then(Value::as_str).map(ToolUseId::from);
-    match a_wait(asks.ask(session_id.clone(), WorkerAsk::StartWait { until, call }).await) {
-        Ok((wait, pull_request)) => match wait.ended {
+    match asks.ask(session_id.clone(), StartWait { until, call }).await {
+        Ok(WaitAnswer { wait, pull_request }) => match wait.ended {
             None => {
                 let mut started = task(&wait, pull_request.as_ref());
                 started["resultType"] = "task".into();
@@ -77,13 +77,14 @@ pub(super) async fn call(asks: &Asks, session_id: &SessionId, params: &Map<Strin
 
 /// `tasks/get`: how the wait stands, with how it ended once it has.
 pub(super) async fn get(asks: &Asks, session_id: &SessionId, task_id: &str) -> Result<Value, RpcError> {
-    let (wait, pull_request) = waited(asks.ask(session_id.clone(), WorkerAsk::Wait { wait: task_id.into() }).await)?;
+    let asked = asks.ask(session_id.clone(), ReadWait { wait: task_id.into() }).await;
+    let WaitAnswer { wait, pull_request } = asked.map_err(|e| not_said(&e))?;
     Ok(task(&wait, pull_request.as_ref()))
 }
 
 /// `tasks/cancel`: ends the wait, unless it has ended already.
 pub(super) async fn cancel(asks: &Asks, session_id: &SessionId, task_id: &str) -> Result<Value, RpcError> {
-    waited(asks.ask(session_id.clone(), WorkerAsk::CancelWait { wait: task_id.into() }).await)?;
+    asks.ask(session_id.clone(), CancelWait { wait: task_id.into() }).await.map_err(|e| not_said(&e))?;
     Ok(json!({ "resultType": "complete" }))
 }
 
@@ -97,27 +98,13 @@ fn until(params: &Map<String, Value>) -> Result<WaitUntil, String> {
     }
 }
 
-/// The wait the hub answered with, and the pull request as it last read it.
-fn a_wait(reply: Result<AskReply, ApiError>) -> Result<(Wait, Option<PullRequest>), ApiError> {
-    match reply? {
-        AskReply::Wait { wait, pull_request } => Ok((wait, pull_request)),
-        AskReply::PullRequest { .. } => {
-            Err(ApiError::new(ErrorCode::Internal, "Roundhouse answered with the pull request, not the wait"))
-        }
-    }
-}
-
-/// [`a_wait`], or the error MCP has for a task that isn't the agent's or doesn't exist, or for the hub not saying,
+/// The error MCP has for a task that isn't the agent's or doesn't exist, or for the hub not saying how a wait stands,
 /// which the CLI asks again after.
-fn waited(reply: Result<AskReply, ApiError>) -> Result<(Wait, Option<PullRequest>), RpcError> {
-    match a_wait(reply) {
-        Ok(waited) => Ok(waited),
-        Err(e) if e.code == ErrorCode::NotFound => {
-            Err(RpcError::new(Code::InvalidParams, format!("Failed to retrieve task: {}", e.message)))
-        }
-        Err(e) => {
-            Err(RpcError::new(Code::Internal, format!("Roundhouse couldn't say how the wait stands: {}", e.message)))
-        }
+fn not_said(e: &ApiError) -> RpcError {
+    if e.code == ErrorCode::NotFound {
+        RpcError::new(Code::InvalidParams, format!("Failed to retrieve task: {}", e.message))
+    } else {
+        RpcError::new(Code::Internal, format!("Roundhouse couldn't say how the wait stands: {}", e.message))
     }
 }
 

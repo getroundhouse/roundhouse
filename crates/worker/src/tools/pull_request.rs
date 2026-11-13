@@ -3,7 +3,7 @@
 //! says the things an agent gets wrong, such as a queued pull request not being merged yet.
 
 use protocol::model::{Checks, MergeState, PullRequest, QueueState, Review, SessionId, Standing};
-use protocol::worker::{AskReply, WorkerAsk};
+use protocol::worker::{PullRequestAnswer, ReadPullRequest};
 use serde_json::{Value, json};
 
 use super::mcp::Called;
@@ -32,9 +32,8 @@ pub(super) fn definition() -> Value {
 }
 
 pub(super) async fn call(asks: &Asks, session_id: &SessionId) -> Called {
-    match asks.ask(session_id.clone(), WorkerAsk::PullRequest).await {
-        Ok(AskReply::PullRequest { pull_request }) => Called::text(describe(pull_request.as_ref())),
-        Ok(AskReply::Wait { .. }) => Called::failed("Roundhouse answered with a wait, not the pull request.".into()),
+    match asks.ask(session_id.clone(), ReadPullRequest).await {
+        Ok(PullRequestAnswer { pull_request }) => Called::text(describe(pull_request.as_ref())),
         Err(e) => Called::failed(format!("Roundhouse couldn't say where the pull request stands: {}", e.message)),
     }
 }
