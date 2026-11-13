@@ -20,7 +20,7 @@ pub use approval::{ApprovalDecision, ApprovalOutcome};
 pub use asking::{Asking, Question, QuestionAnswer, QuestionOption};
 pub use call::CallKind;
 pub use compaction::{CompactedBy, CompactionOutcome};
-pub use content::{ContentBlock, LinkedImage};
+pub use content::{ContentBlock, Denied, LinkedImage};
 pub use ending::{ExitReason, SubagentOutcome, TurnOutcome};
 pub use failure::{FailureKind, RequestFailure};
 pub use file_change::{FileChange, Hunk, HunkLine, LineMark};
@@ -234,14 +234,25 @@ pub enum EventBody {
         tool_use_id: Option<ToolUseId>,
         input: Value,
         description: Option<String>,
-        /// Agent-defined options for remembering the decision. Passed back unchanged.
+        /// Agent-defined options for remembering the decision. Passed back unchanged. Boxed, as `asking` is, since a
+        /// request says more than any other event, and every event takes the room of the largest.
         #[serde(default)]
-        suggestions: Value,
+        suggestions: Box<Value>,
         /// What it asks of the person, as the agent's adapter read it from the tool and its input. `None` in one
         /// recorded before adapters said, which a client reads from the tool and input as Claude's adapter sent them.
         /// Boxed, since few events are approvals, and every event takes the room of the largest.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         asking: Option<Box<Asking>>,
+        /// Why the agent asks, in its own words, when it says: a check it makes whatever the approval mode, such as
+        /// Claude's for a removal it can't rule out, says so here. `None` from an agent that doesn't say, and in one
+        /// recorded before it was kept.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        reason: Option<String>,
+        /// The subagent that asks, as the call that started it, or `None` for the agent itself, and in one recorded
+        /// before adapters said. The request is among the agent's own events whichever asks, as
+        /// [`EventBody::subagent`] says, since it waits on the person, and a chat reads the agent's own.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        asked_by: Option<ToolUseId>,
     },
     ApprovalResolved {
         approval_id: ApprovalId,

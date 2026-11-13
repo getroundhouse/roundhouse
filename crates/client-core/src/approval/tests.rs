@@ -2,20 +2,13 @@ use proptest::collection::vec;
 use proptest::prelude::*;
 use proptest::test_runner::{Config, RngSeed};
 use protocol::event::{ApprovalDecision, Asking, EventBody, Question, QuestionAnswer, QuestionOption};
+use protocol::fixtures::{ApprovalRequest, approval_request};
 use serde_json::{Value, json};
 
 use super::{Answered, Approval};
 
 fn requested(tool: &str, input: Value, asking: Option<Asking>) -> EventBody {
-    EventBody::ApprovalRequested {
-        approval_id: "a".into(),
-        tool_name: tool.into(),
-        tool_use_id: None,
-        input,
-        description: None,
-        suggestions: Value::Null,
-        asking: asking.map(Box::new),
-    }
+    ApprovalRequest { input, asking, ..approval_request("a", tool) }.into()
 }
 
 fn question(text: &str, labels: &[&str], multiple: bool) -> Question {

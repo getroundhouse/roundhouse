@@ -10,7 +10,7 @@ use super::kinds::{self, PLAN, QUESTIONS};
 
 mod answer;
 
-pub(super) use answer::{Waiting, response};
+pub(super) use answer::{Waiting, denied_in_its_own_words, response};
 
 /// What a request to use `tool` with `input` asks. Whatever the CLI sent is taken: a question without its text is left
 /// out, as is an option without its label, and a plan without its text is an empty one.

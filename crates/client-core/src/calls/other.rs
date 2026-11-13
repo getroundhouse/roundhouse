@@ -23,6 +23,11 @@ pub struct Other {
 }
 
 impl Other {
+    /// The tool's name made readable, whichever of the title and `tool` holds it.
+    pub fn name(&self) -> &str {
+        self.tool.as_deref().unwrap_or(&self.title)
+    }
+
     /// A call of `kind`, to the tool the agent calls `name`. One whose kind says the tool, and the server it's from,
     /// is named by those. Any other, such as a known kind given input it doesn't expect, is named as the agent names
     /// it.

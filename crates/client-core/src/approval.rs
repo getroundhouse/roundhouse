@@ -1,5 +1,6 @@
 //! What an approval asks of the person, for a client to draw, the decisions that answer it, in the forms the adapter
-//! that asked takes, and what was answered, for a client to say. A request says what it asks, as its adapter read it.
+//! that asked takes, and what was answered, for a client to say. A request says what it asks, as its adapter read it,
+//! and [`ToolUseAsked`] says what one that asks to use a tool says of the use.
 //! One recorded before adapters said is read from its tool and its input by [`older`], which holds the forms an
 //! adapter from before takes as well, so nothing else in a client reads an agent's tools.
 
@@ -11,6 +12,9 @@ use protocol::event::{ApprovalDecision, Asking, EventBody, Question, QuestionAns
 pub(crate) mod older;
 #[cfg(test)]
 mod tests;
+mod tool_use;
+
+pub use tool_use::{Given, ToolUseAnswer, ToolUseAsked};
 
 /// What an approval asks, and how to answer it.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -41,6 +45,16 @@ impl<'a> Approval<'a> {
             Asking::Questions { questions } => Some(questions),
             Asking::ToolUse { .. } | Asking::Plan { .. } | Asking::Unknown => None,
         }
+    }
+
+    /// Yes, as it was asked: the tool is used with the input the agent gave it, or the plan is carried out.
+    pub fn allowed(&self) -> ApprovalDecision {
+        ApprovalDecision::Allow { updated_input: None, updated_permissions: None }
+    }
+
+    /// No, in the person's own `words`, which the agent is told.
+    pub fn refused_saying(&self, words: String) -> ApprovalDecision {
+        ApprovalDecision::Deny { message: Some(words), interrupt: false }
     }
 
     /// No, with no words of the person's: the tool isn't to be used, the plan wants more work, or the questions are

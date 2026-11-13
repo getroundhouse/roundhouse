@@ -27,6 +27,7 @@ mod advisor;
 mod blocks;
 mod calls;
 mod compaction;
+mod denied;
 mod file_change;
 mod images;
 mod limits;
@@ -123,6 +124,10 @@ impl Normalizer {
         }
         if let Parsed::Event(body) | Parsed::EventWithImages { body, .. } = &mut parsed {
             kinds::say(body, &answered);
+            denied::say(body, &value);
+        }
+        if let Parsed::Event(EventBody::ApprovalRequested { asked_by, .. }) = &mut parsed {
+            *asked_by = self.subagents.asked_by(&value);
         }
         if let Parsed::Delta(delta) = &parsed {
             match delta.change {
@@ -315,7 +320,10 @@ fn control_request(value: &Value) -> Parsed {
         tool_use_id: id_of(request, "tool_use_id"),
         input,
         description: string_of(request, "description"),
-        suggestions: request.get("permission_suggestions").cloned().unwrap_or(Value::Null),
+        suggestions: Box::new(request.get("permission_suggestions").cloned().unwrap_or(Value::Null)),
+        reason: string_of(request, "decision_reason").filter(|reason| !reason.trim().is_empty()),
+        // A Normalizer knows it from the subagents it's heard start.
+        asked_by: None,
     })
 }
 

@@ -10,7 +10,7 @@ use serde_json::{Value, json};
 
 use crate::tools::{ask_questions, edit_file, present_plan, run_tool};
 use crate::{Config, Input, Out, Prompt, current_mode, current_model, emit, lifecycle, pause};
-use crate::{advisor, background, cache, fail, mcp, read, subagent};
+use crate::{advisor, asking_subagents, background, cache, fail, mcp, read, subagent};
 
 mod prose;
 
@@ -114,6 +114,15 @@ impl Turn<'_> {
 
     pub(crate) fn tool_result(&self, tool_use_id: &str, content: &str, is_error: bool) {
         emit(self.out, self.result_line(tool_use_id, content, is_error));
+    }
+
+    /// The result of a call the person denied, which tells the agent `message`, with the mark the real CLI puts beside
+    /// it, as `claude_full_access.jsonl` has it.
+    pub(crate) fn denied_result(&self, tool_use_id: &str, message: &str) {
+        let mut line = self.result_line(tool_use_id, message, true);
+        let rejected = json!({"decision":"reject","source":"user_reject"});
+        line["tool_result_meta"] = json!([{"id":tool_use_id,"permission_decision":rejected}]);
+        emit(self.out, line);
     }
 
     /// The line a tool's result comes in.
@@ -311,15 +320,6 @@ pub(crate) fn run_command(
         );
         return false;
     }
-    if command == "recall" {
-        let seen = std::fs::read_to_string(&turn.config.conversation).unwrap_or_default();
-        let text = format!("I have seen: {}", seen.trim().replace('\n', " | "));
-        return turn.say(Block::Text, vec![text], Duration::ZERO, rx, queued, eof);
-    }
-    if let Some(name) = command.strip_prefix("env:") {
-        let text = format!("{name}={}", std::env::var(name).unwrap_or_else(|_| "<unset>".to_string()));
-        return turn.say(Block::Text, vec![text], Duration::ZERO, rx, queued, eof);
-    }
     act(turn, command, rx, queued, eof)
 }
 
@@ -346,6 +346,9 @@ fn act(turn: &mut Turn, command: &str, rx: &Receiver<Input>, queued: &mut VecDeq
     }
     if let Some(questions) = command.strip_prefix("ask:") {
         return ask_questions(turn, questions, rx, queued, eof);
+    }
+    if let Some(spec) = command.strip_prefix("agents-ask:") {
+        return asking_subagents::start(turn, spec, rx, queued, eof);
     }
     if let Some(asked) = subagent::Asked::read(command) {
         return subagent::start(turn, &asked, rx, queued, eof);

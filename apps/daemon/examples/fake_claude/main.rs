@@ -11,7 +11,8 @@
 //!   think:N:TEXT    Think, the way `slow` speaks, as the real CLI does with `--thinking-display summarized`.
 //!   ponder:N:SEED   Think N paragraphs of the same made-up prose, as fast as possible.
 //!   tool:COMMAND    Ask for approval unless in full access, as the real CLI does in plan mode for a call that
-//!                   writes, then run COMMAND with `sh -c`.
+//!                   writes, then run COMMAND with `sh -c`. A COMMAND that removes whatever another prints, with
+//!                   `rm -rf "$(`, is asked about in every mode, with why, as the real CLI asks.
 //!   edit:N          Edit `notes.txt`, changing each of N lines, without asking or touching the disk. The result
 //!                   comes back without a patch, so the edit is drawn from what it replaced.
 //!   edit:N:WIDTH    Same, with each line at least WIDTH characters long.
@@ -37,6 +38,8 @@
 //!                   picks up again by itself to say `finished FILE`, in a turn that starts with `init` alone,
 //!                   after as many milliseconds as FILE says, if it says any. SIGTERM stops it, and lists none left.
 //!   monitor:FILE    The same, started by a `Monitor` call, so it's a monitor.
+//!   agents-ask:N:COMMAND  Start N subagents in the background, `Check 1` to `Check N`, each of which asks to run
+//!                   COMMAND before any is answered, as `tool:` would ask, and runs it if it's allowed.
 //!   agent:TEXT      Start a subagent for TEXT in the background, asked TEXT with a full stop, which makes a call
 //!                   and reports a second later.
 //!   agent-foreground:TEXT  The same in the foreground, so the call's result waits for its report.
@@ -86,6 +89,7 @@ use serde_json::{Value, json};
 
 mod account;
 mod advisor;
+mod asking_subagents;
 mod background;
 mod cache;
 mod compact;

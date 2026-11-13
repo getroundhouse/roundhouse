@@ -20,6 +20,12 @@ pub(in crate::claude) struct Waiting {
     pub(in crate::claude) asking: Asking,
 }
 
+/// Whether `text`, what a call the person denied told the agent, is this adapter's own words for a denial, which it
+/// sends when the person said nothing, rather than theirs.
+pub(in crate::claude) fn denied_in_its_own_words(text: &str) -> bool {
+    text == DENIED
+}
+
 /// What the CLI is told for `decision`, as the `response` of its `control_response`, on the request `waiting` was, or
 /// on one this process doesn't know, which it allows as asked.
 pub(in crate::claude) fn response(decision: &ApprovalDecision, waiting: Option<Waiting>) -> Value {

@@ -5,7 +5,8 @@
 
 use look::Region;
 use protocol::event::{Asking, EventBody};
-use protocol::model::{ApprovalId, PermissionMode, SessionStatus, ToolUseId};
+use protocol::fixtures::{ApprovalRequest, approval_request};
+use protocol::model::{PermissionMode, SessionStatus, ToolUseId};
 use serde_json::json;
 
 use super::events::{replied, taken, text, tool_result, tool_use, user_prompt};
@@ -107,15 +108,15 @@ fn planned() -> Vec<EventBody> {
     }
     events.push(text("msg-3", "That's all it needs. Here's the plan."));
     events.push(tool_use("msg-4", "toolu-3", "ExitPlanMode", json!({ "plan": PLAN })));
-    events.push(EventBody::ApprovalRequested {
-        approval_id: ApprovalId::from("approval-1"),
-        tool_name: "ExitPlanMode".to_string(),
-        tool_use_id: Some(ToolUseId::from("toolu-3")),
-        input: json!({ "plan": PLAN }),
-        description: None,
-        suggestions: serde_json::Value::Null,
-        asking: Some(Box::new(Asking::Plan { plan: PLAN.to_string() })),
-    });
+    events.push(
+        ApprovalRequest {
+            tool_use_id: Some(ToolUseId::from("toolu-3")),
+            input: json!({ "plan": PLAN }),
+            asking: Some(Asking::Plan { plan: PLAN.to_string() }),
+            ..approval_request("approval-1", "ExitPlanMode")
+        }
+        .into(),
+    );
     events
 }
 

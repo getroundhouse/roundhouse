@@ -1,7 +1,7 @@
 //! What has to stay readable of a tool call and its result, which the log holds for good.
 
-use protocol::event::{Asking, CallKind, ContentBlock, EventBody};
-use protocol::model::Call;
+use protocol::event::{Asking, CallKind, ContentBlock, Denied, EventBody};
+use protocol::model::{Call, CallResult};
 
 /// Spelled out, since the log holds this form for good. A call's ID is a plain string, as its result's is.
 #[test]
@@ -148,4 +148,34 @@ fn a_build_from_before_kinds_reads_a_request_that_says_its_kind() {
     let newer = r#"{"kind":"tool_use","call":{"kind":"command"}}"#;
 
     assert_eq!(serde_json::from_str::<AskingBefore>(newer).unwrap(), AskingBefore::ToolUse);
+}
+
+/// A denied call's result, with and without the person's words, as the log and a subagent's recent work hold it for
+/// good. A build from before reads it as the failure it reads it as now, since it ignores what it doesn't know.
+#[test]
+fn a_denied_calls_result_keeps_its_form_and_one_from_before_says_nothing_of_it() {
+    let said: &[u8] = br#"{"type":"tool_result","tool_use_id":"toolu_1","is_error":true,"text":"Not that","call":{"kind":"command"},"denied":{"said":"Not that"}}"#;
+    let unsaid: &[u8] = br#"{"type":"tool_result","tool_use_id":"toolu_1","is_error":true,"text":"The user denied this.","call":{"kind":"command"},"denied":{}}"#;
+    let before: &[u8] = br#"{"type":"tool_result","tool_use_id":"toolu_1","is_error":true,"text":"Not that"}"#;
+    let read = |block: &[u8]| -> ContentBlock { serde_json::from_slice(block).unwrap() };
+    let denied = |block: &[u8]| match read(block) {
+        ContentBlock::ToolResult { denied, .. } => denied,
+        other => panic!("{other:?}"),
+    };
+
+    assert_eq!(denied(said), Some(Denied { said: Some("Not that".into()) }));
+    assert_eq!(denied(unsaid), Some(Denied { said: None }));
+    assert_eq!(denied(before), None);
+    for block in [said, unsaid, before] {
+        assert_eq!(serde_json::to_vec(&read(block)).unwrap(), block, "it's written the way it's read");
+    }
+
+    let recent: &[u8] = br#"{"is_error":true,"text":"Not that","cut":false,"images":[],"encrypted":false,"denied":{"said":"Not that"}}"#;
+    let older: &[u8] = br#"{"is_error":true,"text":"Not that","cut":false,"images":[],"encrypted":false}"#;
+    let kept: CallResult = serde_json::from_slice(recent).unwrap();
+    assert_eq!(kept.denied, Some(Denied { said: Some("Not that".into()) }));
+    assert_eq!(serde_json::to_vec(&kept).unwrap(), recent);
+    let kept: CallResult = serde_json::from_slice(older).unwrap();
+    assert_eq!(kept.denied, None);
+    assert_eq!(serde_json::to_vec(&kept).unwrap(), older);
 }

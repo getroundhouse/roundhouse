@@ -55,6 +55,7 @@ fn called(call: &Call, result: Option<&CallResult>) -> Lately {
         // when its call does, and with the call's it's read as it was recorded.
         call: call.kind.clone(),
         exit_code: result.exit_code,
+        denied: result.denied.clone(),
     });
     Lately { block, key: ItemKey::Call(call.id.clone()), result }
 }

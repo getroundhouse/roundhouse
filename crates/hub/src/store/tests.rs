@@ -1,4 +1,5 @@
 use protocol::event::{EventBody, NoticeLevel};
+use protocol::fixtures::approval_request;
 use protocol::model::{
     ApprovalId, ClientRequestId, DiffComment, ModelName, Repo, Rev, SessionSettingsChange, SessionStatus, SetupStatus,
     Title, Workspace,
@@ -121,15 +122,7 @@ fn raw_lines_are_kept_and_only_returned_when_asked_for() {
 fn open_approvals_are_those_requested_and_not_resolved() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
-    let requested = |id: &str| EventBody::ApprovalRequested {
-        approval_id: id.into(),
-        tool_name: "Bash".into(),
-        tool_use_id: None,
-        input: Value::Null,
-        description: None,
-        suggestions: Value::Null,
-        asking: None,
-    };
+    let requested = |id: &str| EventBody::from(approval_request(id, "Bash"));
     store.append(&"s".into(), None, &requested("a"), None, None, None).unwrap();
     store.append(&"s".into(), None, &requested("b"), None, None, None).unwrap();
     store.append(&"s".into(), None, &cancelled_approval("a".into()), None, None, None).unwrap();

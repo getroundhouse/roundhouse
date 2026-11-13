@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Regenerates crates/agents/tests/fixtures/claude.jsonl, claude_controls.jsonl, claude_background.jsonl,
-claude_mcp_task.jsonl and claude_mcp_task_resumed.jsonl from the real `claude` CLI.
+claude_mcp_task.jsonl, claude_mcp_task_resumed.jsonl and claude_full_access.jsonl from the real `claude` CLI.
 
 Run this after upgrading the CLI, then run `cargo test -p agents`. A failure there means the CLI's
 output changed in a way the adapter depends on.
@@ -16,7 +16,8 @@ only regenerates the two claude_mcp_task files: a call to a tool that's answered
 `wait_for_pull_request` is, from a stand-in for the worker's tools, the task ending and the CLI picking up by itself,
 then another, and the CLI stopped with SIGTERM as a worker stops it. Then, in the second file, the same conversation
 resumed, which lists the task again, until it ends. It prints what the CLI asked of the stand-in, so a CLI that calls
-off its task as it stops shows.
+off its task as it stops shows. With --full-access, it only regenerates claude_full_access.jsonl: what the CLI asks
+about even under full access, as every chat is launched, from the agent and from a subagent.
 """
 import http.server
 import json
@@ -37,6 +38,7 @@ CONTROLS = ROOT / "crates/agents/tests/fixtures/claude_controls.jsonl"
 BACKGROUND = ROOT / "crates/agents/tests/fixtures/claude_background.jsonl"
 MCP_TASK = ROOT / "crates/agents/tests/fixtures/claude_mcp_task.jsonl"
 MCP_TASK_RESUMED = ROOT / "crates/agents/tests/fixtures/claude_mcp_task_resumed.jsonl"
+FULL_ACCESS = ROOT / "crates/agents/tests/fixtures/claude_full_access.jsonl"
 FLAGS = """-p --input-format stream-json --output-format stream-json --verbose --include-partial-messages
 --thinking-display summarized --permission-prompt-tool stdio --allow-dangerously-skip-permissions --permission-mode manual --model haiku --effort high""".split()
 # Keeps the fixture small. Order is preserved, so the protocol's sequencing is still real.
@@ -173,6 +175,41 @@ def capture_background(cwd):
     cli.proc.wait(timeout=30)
     time.sleep(0.3)
     return cli.lines
+
+
+def capture_full_access(cwd):
+    """A removal the CLI can't rule out as dangerous, since what it removes is only known once it runs, under full
+    access. The CLI asks about it whatever the mode, and says why: once for the agent's own command, and once, in a
+    conversation of its own, for a subagent's, whose request names the task the subagent runs as. Each is denied, so
+    nothing is removed, and what it would remove is an empty directory in the scratch repo. An agent that's been
+    denied won't have a subagent try the same, which is why there are two conversations. A mode named after the
+    launch's own replaces it. The streamed deltas are left out, since this is about what's asked."""
+    scratch = pathlib.Path(cwd) / "scratch"
+    scratch.mkdir()
+    (pathlib.Path(cwd) / "scratch-path").write_text(f"{scratch}\n")
+    command = 'rm -rf "$(cat ./scratch-path)"'
+
+    def denied(prompt, by_subagent):
+        cli = Cli(cwd, ["--permission-mode", "bypassPermissions"])
+        cli.send(user(prompt))
+        request = cli.wait_for(lambda v: is_approval(v) and "rm -rf" in v["request"]["input"].get("command", ""),
+                               timeout=180)
+        if ("agent_id" in request["request"]) != by_subagent:
+            sys.exit("the wrong one of the agent and its subagent ran the command, so nothing was written")
+        respond(cli, request, {"behavior": "deny", "message": "Not allowed"})
+        if by_subagent:
+            # Its end, then the end of the turn that takes its report in, whichever turn that is.
+            cli.wait_for(lambda v: v.get("type") == "system" and v.get("subtype") == "task_notification")
+        cli.wait_for(is_result)
+        time.sleep(0.3)
+        cli.proc.kill()
+        return [value for value in cli.lines if value.get("type") != "stream_event"]
+
+    own = denied(f"Use the Bash tool to run exactly: {command}   Then reply with the single word DONE.", False)
+    return own + denied("Use the Agent tool once to start a general-purpose subagent described as 'Scratch check', "
+                        "with a prompt that says only this: 'Use the Bash tool to run exactly this one command, with "
+                        f"no other command before it, and report what happened: {command}'   Wait for its report, "
+                        "then reply with the single word DONE.", True)
 
 
 def capture_controls(cwd):
@@ -416,7 +453,9 @@ def scrub(text, cwd):
     if hasattr(os, "getuid"):
         text = text.replace(f"/claude-{os.getuid()}/", "/claude-uid/")
     text = text.replace(os.path.realpath(cwd), "/tmp/fixture").replace(str(cwd), "/tmp/fixture")
-    return text.replace(str(pathlib.Path.home()), "/home/user")
+    text = text.replace(str(pathlib.Path.home()), "/home/user")
+    # Who owns a file, as an `ls -l` the agent ran says.
+    return re.sub(rf"\b{re.escape(pathlib.Path.home().name)}\b", "user", text)
 
 
 def scrub_streamed_text(lines, cwd):
@@ -475,7 +514,8 @@ def write(path, lines):
 
 
 def main():
-    only = sys.argv[1] if sys.argv[1:] in (["--controls"], ["--background"], ["--mcp-task"]) else None
+    modes = (["--controls"], ["--background"], ["--mcp-task"], ["--full-access"])
+    only = sys.argv[1] if sys.argv[1:] in modes else None
     with tempfile.TemporaryDirectory(dir="/tmp") as cwd:
         subprocess.run(["git", "init", "-q", "-b", "main"], cwd=cwd, check=True)
         if only == "--mcp-task":
@@ -488,12 +528,13 @@ def main():
             return
         kept = kept_of(capture(cwd), cwd) if only is None else []
         background = kept_of(capture_background(cwd), cwd) if only in (None, "--background") else []
+        full_access = kept_of(capture_full_access(cwd), cwd) if only in (None, "--full-access") else []
         controls = []
         if only in (None, "--controls"):
             controls = [sanitize(made_up_usage(keep_only_what_the_context_holds(keep_only_whats_applied(value))), cwd)
                         for value in capture_controls(cwd)]
         forget_the_conversations(cwd)
-    for path, lines in ((FIXTURE, kept), (BACKGROUND, background), (CONTROLS, controls)):
+    for path, lines in ((FIXTURE, kept), (BACKGROUND, background), (CONTROLS, controls), (FULL_ACCESS, full_access)):
         if lines:
             write(path, lines)
             print(f"wrote {len(lines)} lines from claude {version()} to {path}")

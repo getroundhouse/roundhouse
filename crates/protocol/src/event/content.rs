@@ -58,12 +58,26 @@ pub enum ContentBlock {
         /// How the command exited, when the call was one and the agent said.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         exit_code: Option<i32>,
+        /// The person wouldn't let the tool be used, as the agent's CLI says beside the result and its adapter
+        /// reads, so `text` is what the agent was told of it. Only a tool's use is marked: what became of questions or
+        /// a plan is their approval's to say. `None` for any other result, and in one recorded before adapters said.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        denied: Option<Denied>,
     },
     Image {
         media_type: Option<String>,
     },
     #[serde(other)]
     Unknown,
+}
+
+/// A tool's use the person wouldn't allow.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq, Eq)]
+pub struct Denied {
+    /// What the person said as they denied it, which the agent was told. `None` where they said nothing, and the
+    /// agent was told in its adapter's words.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub said: Option<String>,
 }
 
 /// An image a text points to, and the attachment that keeps it.

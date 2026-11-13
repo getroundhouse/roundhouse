@@ -3,6 +3,7 @@ use protocol::event::{ApprovalOutcome, CallKind, ContentBlock, EventBody, ExitRe
 use serde_json::json;
 
 use protocol::find::Needle;
+use protocol::fixtures::{ApprovalRequest, approval_request};
 use protocol::prompt::Prompt;
 
 use super::{count, of_row, rows_drawing};
@@ -246,15 +247,12 @@ fn a_match_in_a_command_opens_its_call() {
 #[test]
 fn a_question_the_agent_asked_isn_t_found_once_it_s_answered_on_its_line() {
     let input = json!({ "questions": [{ "question": "Which parser?", "header": "Parser" }] });
-    let question = EventBody::ApprovalRequested {
-        approval_id: "q".into(),
-        tool_name: "AskUserQuestion".into(),
+    let question: EventBody = ApprovalRequest {
         tool_use_id: Some("ask".into()),
         input: input.clone(),
-        description: None,
-        suggestions: serde_json::Value::Null,
-        asking: None,
-    };
+        ..approval_request("q", "AskUserQuestion")
+    }
+    .into();
     let answered = EventBody::ApprovalResolved {
         approval_id: "q".into(),
         outcome: ApprovalOutcome::Allowed,

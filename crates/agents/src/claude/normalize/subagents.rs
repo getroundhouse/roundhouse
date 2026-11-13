@@ -27,6 +27,13 @@ impl Subagents {
         self.in_background.contains(call)
     }
 
+    /// The call that started the subagent whose request for approval this line is, or `None` for the agent's own. A
+    /// request names the task its subagent runs as, as `agent_id`, and nothing else of it.
+    pub(super) fn asked_by(&self, value: &Value) -> Option<ToolUseId> {
+        let task: TaskId = id_of(value.get("request")?, "agent_id")?;
+        self.by_task.get(&task).cloned()
+    }
+
     /// The event this line makes, if it says a subagent started or ended, or how much its conversation holds.
     pub(super) fn read(&mut self, value: &Value) -> Option<EventBody> {
         if str_of(value, "type") != Some("system") {

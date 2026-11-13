@@ -5,7 +5,8 @@
 
 use protocol::attachment::Attachment;
 use protocol::event::{AgentRunState, AgentTask, EventBody, TaskKind, TurnOutcome};
-use protocol::model::{ApprovalId, MessageId, PermissionMode, TaskId, ToolUseId};
+use protocol::fixtures::{ApprovalRequest, approval_request};
+use protocol::model::{MessageId, PermissionMode, TaskId, ToolUseId};
 use protocol::prompt::Prompt;
 use protocol::tail::{BlockKind, Tail, TailBlock, TailMessage};
 use serde_json::json;
@@ -163,7 +164,7 @@ fn writing(message: &str, kind: BlockKind, text: &str) -> Tail {
     }
 }
 
-/// Waiting for someone to allow a command, which only an agent that's planning asks for.
+/// Waiting for someone to allow a command, as an agent that's planning asks before it runs one.
 pub(crate) fn approval() -> Vec<EventBody> {
     let mut events = looked_around();
     for event in &mut events {
@@ -174,15 +175,15 @@ pub(crate) fn approval() -> Vec<EventBody> {
     events
         .push(text("msg-3", "I'll run the desktop app's UI tests before changing anything, to see where they stand."));
     events.push(tool_use("msg-4", "toolu-3", "Bash", json!({ "command": "cargo test -p desktop --test ui" })));
-    events.push(EventBody::ApprovalRequested {
-        approval_id: ApprovalId::from("approval-1"),
-        tool_name: "Bash".to_string(),
-        tool_use_id: Some(ToolUseId::from("toolu-3")),
-        input: json!({ "command": "cargo test -p desktop --test ui", "description": "Run the desktop UI tests" }),
-        description: None,
-        suggestions: serde_json::Value::Null,
-        asking: None,
-    });
+    let input = json!({ "command": "cargo test -p desktop --test ui", "description": "Run the desktop UI tests" });
+    events.push(
+        ApprovalRequest {
+            tool_use_id: Some(ToolUseId::from("toolu-3")),
+            input,
+            ..approval_request("approval-1", "Bash")
+        }
+        .into(),
+    );
     events
 }
 

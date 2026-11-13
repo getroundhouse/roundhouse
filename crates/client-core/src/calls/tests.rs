@@ -1,5 +1,5 @@
 use protocol::event::{Asking, CallKind, EventBody};
-use protocol::fixtures;
+use protocol::fixtures::{self, ApprovalRequest, approval_request};
 use serde_json::{Value, json};
 
 use super::{Recorded, ToolCall, asked_about, count};
@@ -12,15 +12,7 @@ fn recorded<'a>(kind: Option<&'a CallKind>, name: &'a str, input: &'a Value) -> 
 /// A request to use the tool `tool` with `input`, which says what it asks if `asking` does, and nothing of what it's
 /// for.
 fn request(tool: &str, input: Value, asking: Option<Asking>) -> EventBody {
-    EventBody::ApprovalRequested {
-        approval_id: "a".into(),
-        tool_name: tool.into(),
-        tool_use_id: None,
-        input,
-        description: None,
-        suggestions: Value::Null,
-        asking: asking.map(Box::new),
-    }
+    ApprovalRequest { input, asking, ..approval_request("a", tool) }.into()
 }
 
 /// The summary of a call recorded before adapters said its kind, which is read from its tool's name.
@@ -174,15 +166,12 @@ fn a_request_that_says_its_kind_is_never_read_by_its_tool_s_name() {
 
 #[test]
 fn a_request_is_about_what_the_agent_said_it_s_for_when_it_said() {
-    let request = EventBody::ApprovalRequested {
-        approval_id: "a".into(),
-        tool_name: "Bash".into(),
-        tool_use_id: None,
+    let request: EventBody = ApprovalRequest {
         input: json!({ "command": "rm -rf target" }),
         description: Some("Clear the build".into()),
-        suggestions: Value::Null,
-        asking: None,
-    };
+        ..approval_request("a", "Bash")
+    }
+    .into();
 
     assert_eq!(asked_about(&request).as_deref(), Some("Clear the build"));
 }

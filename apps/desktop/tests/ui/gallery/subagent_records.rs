@@ -101,11 +101,11 @@ fn note(subagent: &mut Subagent, block: &ContentBlock) {
                 work.calls.remove(0);
             }
         }
-        ContentBlock::ToolResult { tool_use_id, is_error, text, images, encrypted, exit_code, .. } => {
+        ContentBlock::ToolResult { tool_use_id, is_error, text, images, encrypted, exit_code, denied, .. } => {
             if let Some(made) = work.calls.iter_mut().find(|made| made.call.id == *tool_use_id) {
                 let (is_error, text, images, encrypted) = (*is_error, text.clone(), images.clone(), *encrypted);
-                let exit_code = *exit_code;
-                made.result = Some(CallResult { is_error, text, cut: false, images, encrypted, exit_code });
+                let (cut, exit_code, denied) = (false, *exit_code, denied.clone());
+                made.result = Some(CallResult { is_error, text, cut, images, encrypted, exit_code, denied });
             }
         }
         ContentBlock::Thinking { .. } | ContentBlock::Image { .. } | ContentBlock::Unknown => {}

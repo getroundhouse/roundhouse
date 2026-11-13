@@ -1,20 +1,10 @@
 use protocol::event::{ApprovalOutcome, NoticeLevel};
-use protocol::fixtures::event;
-use serde_json::Value;
+use protocol::fixtures::{self, event};
 
 use super::*;
 
 fn asked(seq: Seq, id: &str) -> SessionEvent {
-    let body = EventBody::ApprovalRequested {
-        approval_id: id.into(),
-        tool_name: "Bash".into(),
-        tool_use_id: None,
-        input: Value::Null,
-        description: None,
-        suggestions: Value::Null,
-        asking: None,
-    };
-    event(seq, body)
+    event(seq, fixtures::approval_request(id, "Bash").into())
 }
 
 fn answered(seq: Seq, id: &str) -> SessionEvent {
