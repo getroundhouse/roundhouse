@@ -37,7 +37,7 @@ fn fables_week() -> UsageLimit {
 }
 
 /// The account the fake agent's CLI says it's logged in to, until a test says otherwise.
-fn ada() -> AgentAccount {
+pub(crate) fn ada() -> AgentAccount {
     AgentAccount {
         // What the adapter makes of the fake's organization and email, the same in every build.
         id: Some("claude-f5d9122be47487b6".into()),
@@ -50,9 +50,15 @@ fn ada() -> AgentAccount {
 }
 
 /// Has the fake agent's CLI say this of who's logged in, from here on.
-fn log_in_as(stack: &Stack, status: &serde_json::Value) {
+pub(crate) fn log_in_as(stack: &Stack, status: &serde_json::Value) {
     std::fs::create_dir_all(stack.agent_state()).unwrap();
     std::fs::write(stack.agent_state().join("auth-status"), status.to_string()).unwrap();
+}
+
+/// Has the fake agent's CLI say nobody is logged in on its machine, from here on. How the real CLI says so hasn't been
+/// seen, as `docs/claude-cli.md` says, so this is the adapter's reading of it: `loggedIn` false.
+pub(crate) fn log_out(stack: &Stack) {
+    log_in_as(stack, &json!({"loggedIn": false, "authMethod": "none", "apiProvider": "firstParty"}));
 }
 
 /// What a client from before accounts were records asks of a chat's account, which the hub still answers.
@@ -204,7 +210,7 @@ fn a_chat_whose_agent_launched_with_nobody_logged_in_names_no_account() {
     let stack = Stack::start();
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
-    log_in_as(&stack, &json!({"loggedIn": false, "authMethod": "none", "apiProvider": "firstParty"}));
+    log_out(&stack);
 
     client.session_prompt(&session.id, "say:hello", None).unwrap();
     wait_for_turn_end(&client, &session.id, 1);

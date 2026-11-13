@@ -1,13 +1,13 @@
-//! The logins a hub holds for agents' accounts, through a real hub, and the agents it launches under them on another
-//! provider's machine.
+//! The logins a hub holds for agents' accounts, through a real hub, and the agents it launches under them on a machine
+//! with no login of its own, on any provider.
 
 #![cfg(test)]
 
 use client_core::Client;
-use protocol::client::accounts::{AccountConnect, AccountDisconnect};
 use protocol::event::EventBody;
 use protocol::model::{Account, AccountId, AgentKind, LoginToken};
 
+use crate::accounts::{ada, log_out};
 use crate::carrying_on::restart;
 use crate::support::{Stack, assistant_text, wait_for_turn_end, wait_until};
 
@@ -26,9 +26,7 @@ fn tokens_kept(stack: &Stack) -> Vec<String> {
 #[test]
 fn a_login_a_client_connects_is_kept_through_a_restart_until_its_disconnected() {
     let mut stack = Stack::start();
-    let token = LoginToken::new("a-made-up-token");
-    let connect = AccountConnect { agent: AgentKind::Claude, name: "Work".to_string(), token, account: None };
-    let connected = stack.client().call(connect).unwrap();
+    let connected = connect_work(&stack.client());
     // As a hub that stopped part way through connecting another would leave one.
     std::fs::write(stack.paths().logins_dir.join("00000000-0000-4000-8000-000000000000"), "a-half-kept-token").unwrap();
 
@@ -36,7 +34,7 @@ fn a_login_a_client_connects_is_kept_through_a_restart_until_its_disconnected() 
     let client = stack.client();
     let after_restart = listed(&client, &connected.id);
     let kept_after_restart = tokens_kept(&stack);
-    let disconnected = client.call(AccountDisconnect { id: connected.id }).unwrap();
+    let disconnected = client.account_disconnect(&connected.id).unwrap();
 
     assert_eq!(connected.login_agent, Some(AgentKind::Claude));
     assert!(connected.held_login.is_some());
@@ -48,15 +46,23 @@ fn a_login_a_client_connects_is_kept_through_a_restart_until_its_disconnected() 
 
 /// Connects a made-up Claude login, named Work.
 fn connect_work(client: &Client) -> Account {
-    let token = LoginToken::new("a-made-up-token");
-    client.call(AccountConnect { agent: AgentKind::Claude, name: "Work".to_string(), token, account: None }).unwrap()
+    client.account_connect(AgentKind::Claude, "Work", LoginToken::new("a-made-up-token"), None).unwrap()
 }
 
-/// Through an adapter, as on another provider's machine, whose own login isn't the person's.
+/// Whether anything asked the fake agent's CLI who's logged in while it was given a token, which only the hub's record
+/// can say whose it is. Asking with none, as the hub does before a launch to learn whether the machine has a login of
+/// its own, is another matter.
+fn asked_under_a_token(stack: &Stack) -> bool {
+    let calls = std::fs::read_to_string(stack.agent_state().join("auth-status-calls")).unwrap_or_default();
+    calls.lines().any(|call| call.starts_with("asked under"))
+}
+
+/// Through an adapter, as on another provider's machine, which has no login of its own.
 #[test]
 fn an_agent_on_another_machine_runs_under_the_login_the_hub_holds_and_its_chat_names_that_account() {
     let mut stack = Stack::start();
     stack.make_through_an_adapter();
+    log_out(&stack);
     let client = stack.client();
     let connected = connect_work(&client);
     let (_, session) = stack.workspace(&client);
@@ -74,7 +80,7 @@ fn an_agent_on_another_machine_runs_under_the_login_the_hub_holds_and_its_chat_n
     assert_eq!(client.records_list().unwrap().accounts.len(), 1, "no account but the login's");
     assert_eq!(as_older_clients_ask.account.logged_in_as(), Some(&connected.id));
     assert_eq!(as_older_clients_ask.limits, listed(&client, &connected.id).limits);
-    assert!(!stack.agent_state().join("auth-status-calls").exists(), "nothing asked the CLI whose the token is");
+    assert!(!asked_under_a_token(&stack), "nothing asked the CLI whose the token is");
 }
 
 /// The case the hub's record of each run's login is for: the next hub carries the agent on, and nothing can say whose
@@ -83,6 +89,7 @@ fn an_agent_on_another_machine_runs_under_the_login_the_hub_holds_and_its_chat_n
 fn an_agent_left_running_under_a_held_login_is_still_filed_under_it_once_the_hub_has_restarted() {
     let mut stack = Stack::start();
     stack.make_through_an_adapter();
+    log_out(&stack);
     let client = stack.client();
     let connected = connect_work(&client);
     let (_, session) = stack.workspace(&client);
@@ -99,5 +106,43 @@ fn an_agent_left_running_under_a_held_login_is_still_filed_under_it_once_the_hub
     assert_eq!(launches, 1, "the agent the last hub launched carried on");
     assert_eq!(client.session_get(&session.id).unwrap().account, Some(connected.id));
     assert_eq!(client.records_list().unwrap().accounts.len(), 1, "no account but the login's");
-    assert!(!stack.agent_state().join("auth-status-calls").exists(), "nothing asked the CLI whose the token is");
+    assert!(!asked_under_a_token(&stack), "nothing asked the CLI whose the token is");
+}
+
+/// On this machine, through the local provider, as for a hub on a server the person never logged in on, which hands
+/// the login they gave it to every workspace.
+#[test]
+fn an_agent_on_this_machine_runs_under_the_login_the_hub_holds_when_the_machine_has_none_of_its_own() {
+    let stack = Stack::start();
+    log_out(&stack);
+    let client = stack.client();
+    let connected = connect_work(&client);
+    let (_, session) = stack.workspace(&client);
+
+    client.session_prompt(&session.id, "env:CLAUDE_CODE_OAUTH_TOKEN", None).unwrap();
+    let text = assistant_text(&wait_for_turn_end(&client, &session.id, 1));
+
+    assert!(text.contains("CLAUDE_CODE_OAUTH_TOKEN=a-made-up-token"), "{text}");
+    assert_eq!(client.session_get(&session.id).unwrap().account, Some(connected.id));
+    assert_eq!(client.records_list().unwrap().accounts.len(), 1, "no account but the login's");
+}
+
+/// Through an adapter, as on another provider's machine the person logged in on, which keeps its own login whatever
+/// the hub holds.
+#[test]
+fn an_agent_on_a_machine_with_its_own_login_runs_under_that_though_the_hub_holds_one() {
+    let mut stack = Stack::start();
+    stack.make_through_an_adapter();
+    let client = stack.client();
+    connect_work(&client);
+    let (_, session) = stack.workspace(&client);
+
+    client.session_prompt(&session.id, "env:CLAUDE_CODE_OAUTH_TOKEN", None).unwrap();
+    let text = assistant_text(&wait_for_turn_end(&client, &session.id, 1));
+    let adas = ada().id;
+    wait_until("the chat to name the machine's own account", || {
+        client.session_get(&session.id).unwrap().account == adas
+    });
+
+    assert!(text.contains("CLAUDE_CODE_OAUTH_TOKEN=<unset>"), "{text}");
 }
