@@ -1,7 +1,4 @@
-//! A workspace's terminals in the app, with a real shell: one opened from the `+` after the tabs takes the keys, and
-//! its tab goes once it's closed or its shell ends, with the chat back in front.
-
-#![cfg(test)]
+//! Opening a terminal, typing and pasting into it, selecting what it shows and copying it, and closing it.
 
 use desktop::app::Connection;
 use desktop::workspace_pane::Showing;
@@ -15,7 +12,7 @@ use crate::support::{Cells, Stack, Ui, hub_environment, in_window};
 /// A stack whose hubs start each terminal's shell as `/bin/sh`, so it's the same shell for everyone, with the prompt
 /// these tests wait for, rather than whichever one whoever runs the tests uses, or the login shell that says nothing,
 /// which [`hub_environment`] gives every other test.
-fn stack() -> Stack {
+pub(super) fn stack() -> Stack {
     let mut environment = hub_environment();
     #[cfg(unix)]
     environment.set("SHELL", "/bin/sh");
@@ -23,7 +20,7 @@ fn stack() -> Stack {
 }
 
 /// The app on a new workspace, with a terminal opened in it from the `+`, once its shell is ready.
-fn with_a_terminal<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> Ui<'a> {
+pub(super) fn with_a_terminal<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> Ui<'a> {
     let mut ui = Ui::open_with_a_repository(cx, stack);
     ui.new_workspace();
     ui.pick_item("new-tab", "New terminal");
@@ -44,13 +41,13 @@ fn wait_for_the_prompt(ui: &mut Ui<'_>) {
 const CLOSE: &str = if cfg!(target_os = "macos") { "cmd-w" } else { "ctrl-shift-w" };
 
 /// Each key, pressed as a hand presses it, into what has focus.
-fn type_keys(ui: &mut Ui<'_>, keys: &[&str]) {
+pub(super) fn type_keys(ui: &mut Ui<'_>, keys: &[&str]) {
     for key in keys {
         ui.press(key);
     }
 }
 
-fn rows(ui: &Ui<'_>) -> Vec<String> {
+pub(super) fn rows(ui: &Ui<'_>) -> Vec<String> {
     let Some(terminal) = ui.cx.read_entity(&ui.pane().unwrap(), |p, _| p.terminal()) else { return Vec::new() };
     ui.cx.read_entity(&terminal, |t, _| t.rows())
 }
@@ -85,7 +82,7 @@ fn clipboard(ui: &Ui<'_>) -> Option<String> {
     ui.cx.read_from_clipboard().and_then(|item| item.text())
 }
 
-fn showing(ui: &Ui<'_>) -> Showing {
+pub(super) fn showing(ui: &Ui<'_>) -> Showing {
     ui.cx.read_entity(&ui.pane().unwrap(), |p, _| p.showing())
 }
 
@@ -95,7 +92,7 @@ fn view(ui: &Ui<'_>) -> WeakEntity<TerminalView> {
     ui.cx.read_entity(&ui.pane().unwrap(), |p, _| p.terminal()).unwrap().downgrade()
 }
 
-fn type_echo_hi(ui: &mut Ui<'_>) {
+pub(super) fn type_echo_hi(ui: &mut Ui<'_>) {
     type_keys(ui, &["e", "c", "h", "o", "space", "h", "i", "enter"]);
     ui.wait("what the shell printed", |ui| rows(ui).iter().any(|row| row.trim_end() == "hi"));
 }
@@ -151,37 +148,6 @@ fn shift_command_t_opens_a_terminal_that_takes_the_keys(cx: &mut TestAppContext)
     type_echo_hi(&mut ui);
 }
 
-/// Tab and Shift-Tab are the program's, as in terminal apps, rather than moving the keys to what's next on screen, as
-/// the kit has them do everywhere else. `cat` gives back each line it reads, so a tab shows where it took the cursor.
-#[gpui_kit::test]
-fn tab_and_shift_tab_reach_the_program(cx: &mut TestAppContext) {
-    let stack = stack();
-    let mut ui = with_a_terminal(cx, &stack);
-    let tabbed = |ui: &Ui<'_>, text: &str| rows(ui).iter().filter(|row| row.trim_end() == text).count() == 2;
-
-    type_keys(&mut ui, &["c", "a", "t", "enter", "tab", "x", "enter"]);
-    ui.wait("the tabbed line, as typed and as given back", |ui| tabbed(ui, "        x"));
-    type_keys(&mut ui, &["shift-tab", "enter", "y", "enter"]);
-
-    ui.wait("the line after Shift-Tab, as typed and as given back", |ui| tabbed(ui, "y"));
-}
-
-/// As it moves between chats, coming to the terminals after them, and wrapping round.
-#[gpui_kit::test]
-fn ctrl_tab_moves_between_the_chat_and_a_terminal(cx: &mut TestAppContext) {
-    let stack = stack();
-    let mut ui = with_a_terminal(cx, &stack);
-
-    ui.press("ctrl-tab");
-    ui.wait("the chat in front", |ui| showing(ui) == Showing::Chat);
-    ui.input("next");
-    assert_eq!(ui.composer_text(), "next", "the chat's composer has the keys");
-    ui.press("ctrl-tab");
-
-    ui.wait("the terminal in front", |ui| showing(ui) == Showing::Terminal);
-    type_echo_hi(&mut ui);
-}
-
 /// The worker carries on with its shell, so the terminal is still there, and the view takes it up on the new hub.
 #[gpui_kit::test]
 fn a_terminal_carries_on_after_the_hub_restarts(cx: &mut TestAppContext) {
@@ -194,7 +160,7 @@ fn a_terminal_carries_on_after_the_hub_restarts(cx: &mut TestAppContext) {
     ui.wait_for_new_hub(&stack, pid);
     ui.wait("the terminal to be open on the new hub", |_| stack.client().records_list().unwrap().terminals.len() == 1);
     assert_eq!(showing(&ui), Showing::Terminal);
-    assert!(crate::terminals::view(&ui) == view, "the same view, taken up again");
+    assert!(self::view(&ui) == view, "the same view, taken up again");
     // What's typed before the view's copy follows the terminal on the new hub is dropped, as over a lost connection.
     ui.wait("the view to follow the terminal on the new hub", |ui| {
         ui.cx.read_entity(&view.upgrade().unwrap(), |view, _| view.open_terminal().connected())
@@ -342,19 +308,6 @@ fn closing_a_terminal_ends_it_and_brings_back_the_chat(cx: &mut TestAppContext) 
     ui.input("next");
     assert_eq!(ui.composer_text(), "next", "the chat's composer has the keys again");
     ui.wait("the view to be let go", |_| view.upgrade().is_none());
-}
-
-/// Off the Mac, where the app's shortcuts are on Ctrl, as Ctrl-W closes a chat, in a terminal it deletes the word
-/// before it, as a shell has it. On a Mac, where Ctrl-W was never the app's, the same holds.
-#[gpui_kit::test]
-fn ctrl_w_in_a_terminal_reaches_its_shell(cx: &mut TestAppContext) {
-    let stack = stack();
-    let mut ui = with_a_terminal(cx, &stack);
-
-    type_keys(&mut ui, &["e", "c", "h", "o", "space", "h", "i", "space", "t", "h", "e", "r", "e", "ctrl-w", "enter"]);
-
-    ui.wait("what the shell printed", |ui| rows(ui).iter().any(|row| row.trim_end() == "hi"));
-    assert_eq!(showing(&ui), Showing::Terminal, "the terminal is still open");
 }
 
 /// Its pane isn't drawn, so the keys stay with the workspace that is.

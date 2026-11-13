@@ -4,7 +4,8 @@ use gpui_kit::{KeyDownEvent, OperatingSystem};
 use terminal_state::keys::{Key, KeyPress, Mods};
 
 /// The key for the terminal, or none for one that isn't the terminal's: Command with anything on a Mac, which is the
-/// app's, as in other Mac terminal apps, a modifier pressed alone, and a key the terminal has no use for.
+/// app's, as in other Mac terminal apps, but for the keys `bind_keys` gives the meaning Ghostty does, which never come
+/// here, a modifier pressed alone, and a key the terminal has no use for.
 pub(crate) fn key_press(event: &KeyDownEvent, os: OperatingSystem) -> Option<KeyPress> {
     let (keystroke, mac) = (&event.keystroke, os == OperatingSystem::Mac);
     let held = &keystroke.modifiers;

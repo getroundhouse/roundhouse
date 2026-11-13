@@ -74,6 +74,7 @@ fn off_the_mac_the_menus_are_arranged_as_windows_arranges_them() {
             "Add Project…",
             "-",
             "Close Chat",
+            "Archive Workspace",
             "-",
             "Settings…",
             "-",
@@ -111,7 +112,8 @@ fn a_mac_has_its_app_menu_and_its_window_menu() {
         "Quit Roundhouse",
     ];
     assert_eq!(menus[0].1, app_menu);
-    assert_eq!(menus[1].1, ["New Workspace", "New Chat", "New Terminal", "Add Project…", "-", "Close Chat"]);
+    let file = ["New Workspace", "New Chat", "New Terminal", "Add Project…", "-", "Close Chat", "Archive Workspace"];
+    assert_eq!(menus[1].1, file);
     assert_eq!(menus[3].1, ["Show Diff", "-", "Previous Workspace", "Next Workspace", "-"], "for Enter Full Screen");
     assert_eq!(menus[4].1, ["-", "Minimize", "Zoom"]);
 }

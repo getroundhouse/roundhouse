@@ -104,7 +104,7 @@ Roundhouse keeps its data in `~/Library/Application Support/roundhouse`, and put
 | `Shift-Tab` | Turn plan mode on or off, in the composer and the new-workspace dialog |
 | `Cmd-,` | Open Settings |
 
-On Windows and Linux, `Ctrl` takes the place of `Cmd`.
+On Windows and Linux, `Ctrl` takes the place of `Cmd`. In a terminal, every key goes to its program but the app's on `Cmd` on a Mac and on `Ctrl-Shift` on Windows and Linux, and `Ctrl-Tab` on both, so `Ctrl-Shift-W` closes a terminal there.
 
 ### From a terminal
 
