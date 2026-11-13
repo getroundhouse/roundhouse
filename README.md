@@ -176,7 +176,7 @@ Anything recorded since the copy is lost.
 
 ## Contributing
 
-Issues are welcome: a bug, with the build shown at the bottom of the sidebar, or something that's missing. Before a pull request that's more than a small fix, open an issue, since what the product does and how it looks are settled there first, as [`docs/documentation.md`](docs/documentation.md) says. [`docs/pull-requests.md`](docs/pull-requests.md) says how a pull request is written.
+Issues are welcome: a bug, with the build shown at the bottom of the sidebar or in About Roundhouse, or something that's missing. Before a pull request that's more than a small fix, open an issue, since what the product does and how it looks are settled there first, as [`docs/documentation.md`](docs/documentation.md) says. [`docs/pull-requests.md`](docs/pull-requests.md) says how a pull request is written.
 
 ## License
 

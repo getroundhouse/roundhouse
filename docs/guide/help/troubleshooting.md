@@ -65,4 +65,4 @@ A prompt sent after a long chat's prompt cache has expired writes the whole conv
 
 ## Report a bug
 
-Open an [issue on GitHub](https://github.com/getroundhouse/roundhouse/issues), with the build shown at the bottom of the sidebar, and what you did.
+Open an [issue on GitHub](https://github.com/getroundhouse/roundhouse/issues), with the build shown at the bottom of the sidebar, or in About Roundhouse, and what you did.

@@ -31,7 +31,7 @@ If something hasn't reached the hub yet, such as a prompt still on its way, the 
 
 ## Checking by hand
 
-Check for Updates…, in the app menu, or in Help on Windows and Linux, looks right away. Otherwise the app looks when it opens, and every hour. The answer shows at the bottom of the sidebar, under the build.
+Check for Updates looks right away: in the question mark's menu at the bottom of the sidebar, or as Check for Updates… in the app menu, or in Help on Windows and Linux. Otherwise the app looks when it opens, and every hour. If nothing is newer, `Up to date` shows at the bottom of the sidebar, in the build's place, for a few seconds. A newer version shows as its card, and a problem as [below](#problems).
 
 ## When the card says Finishing update
 
@@ -44,7 +44,7 @@ A hub from before agents could outlive a restart still has to wait for its agent
 
 ## Problems
 
-A problem updating shows under the build at the bottom of the sidebar, with the detail when you point at it.
+A problem updating shows in the build's place at the bottom of the sidebar. Point at it for all of what it says, and the detail.
 
 | It says | What happened |
 |---|---|
@@ -54,6 +54,8 @@ A problem updating shows under the build at the bottom of the sidebar, with the 
 
 ## The build line
 
-The bottom of the sidebar shows which build is running. Give it when you [report a bug](../help/troubleshooting.md#report-a-bug).
+The bottom of the sidebar shows which build is running, except while a check, or a problem updating, is in its place, and About Roundhouse always says it. Give it when you [report a bug](../help/troubleshooting.md#report-a-bug).
+
+At its end are two buttons. The question mark's menu has Check for Updates, and Changelog, which opens what each version changed, on GitHub. The gear opens Settings, as `Cmd-,` does.
 
 A hub you run yourself is left alone. The build line shows its version beside the app's, as `1.0.0 · hub 0.9.0`.

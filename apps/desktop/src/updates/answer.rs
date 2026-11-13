@@ -3,8 +3,8 @@
 
 use std::time::Duration;
 
-/// How long an answer stays under the build. Long enough to read after looking down from the menu, and short enough
-/// that it doesn't become something else to read in the sidebar.
+/// How long an answer stays in the version's place. Long enough to read after looking down from the menu, and short
+/// enough that it doesn't become something else to read in the sidebar.
 pub(super) const SHOWN_FOR: Duration = Duration::from_secs(5);
 
 /// What a check found, when it isn't an update or a problem.

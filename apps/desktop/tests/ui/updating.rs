@@ -5,7 +5,7 @@
 
 use desktop::app::UpdateQuestion;
 use desktop::updates::{Kind, Problem};
-use gpui_kit::TestAppContext;
+use gpui_kit::{App, Bounds, Pixels, TestAppContext};
 
 use crate::menus::{CHECK_FOR_UPDATES, choose};
 use crate::support::{Frozen, Stack, Ui};
@@ -33,17 +33,97 @@ fn a_check_under_way_shows_in_the_sidebar(cx: &mut TestAppContext) {
     assert!(ui.has("checking-for-updates"));
 }
 
+/// Over the build line, which stays, so its buttons are where they always are.
 #[gpui_kit::test]
-fn a_downloaded_update_shows_as_a_card_in_the_versions_place(cx: &mut TestAppContext) {
+fn a_downloaded_update_shows_as_a_card_over_the_version(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = Ui::open(cx, &stack);
-    assert!(ui.has("build-line"));
+    assert!(ui.has("version"));
     assert!(!ui.has("update-card"));
 
     ui.cx.update(|cx| desktop::updates::show_ready("9.9.9", cx));
 
-    assert!(ui.has("update-card"));
-    assert!(!ui.has("build-line"));
+    assert!(ui.has("version"));
+    assert!(ui.bounds("update-card").bottom() <= ui.bounds("build-line").top());
+}
+
+/// Each takes the version's place, in a line that stays as tall, so nothing in the sidebar moves as a check starts
+/// and finishes. A long problem is cut short before the buttons, rather than pushing them along, which the gallery's
+/// pictures of one show.
+#[gpui_kit::test]
+fn what_a_check_says_takes_the_versions_place_without_moving_the_sidebar(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = Ui::open(cx, &stack);
+    let at_rest = Places::of(&mut ui);
+
+    in_the_versions_place(&mut ui, &at_rest, "checking-for-updates", desktop::updates::show_checking);
+    in_the_versions_place(&mut ui, &at_rest, "update-answer", desktop::updates::show_up_to_date);
+    in_the_versions_place(&mut ui, &at_rest, "update-problem", |cx| {
+        let problem = Problem { kind: Kind::Translocated, detail: "/private/var/folders/AppTranslocation".to_string() };
+        desktop::updates::show_problem(problem, cx);
+    });
+}
+
+/// Where the sidebar's list, the build line and its gear are.
+#[derive(Debug, PartialEq)]
+struct Places {
+    list: Bounds<Pixels>,
+    line: Bounds<Pixels>,
+    gear: Bounds<Pixels>,
+}
+
+impl Places {
+    fn of(ui: &mut Ui<'_>) -> Self {
+        Self { list: ui.bounds("workspaces-list"), line: ui.bounds("build-line"), gear: ui.bounds("open-settings") }
+    }
+}
+
+/// Has the app show something about updating, then checks that `id` says it, in the version's place, and that
+/// everything is where it was `at_rest`.
+fn in_the_versions_place(ui: &mut Ui<'_>, at_rest: &Places, id: &'static str, show: impl FnOnce(&mut App)) {
+    ui.cx.update(show);
+
+    assert!(ui.has(id), "{id} shows");
+    assert!(!ui.has("version"), "{id} is in the version's place");
+    assert_eq!(&Places::of(ui), at_rest, "everything is where it was while {id} shows");
+}
+
+/// As `Cmd-,` does. An assistive app finds it by its name, since it shows only a gear.
+#[gpui_kit::test]
+fn the_gear_opens_settings(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = Ui::open(cx, &stack);
+    assert!(ui.shows_label("open-settings", "Settings"));
+
+    ui.click("open-settings");
+
+    ui.wait("Settings", |ui| ui.has("settings-back"));
+}
+
+/// As Check for Updates… in the menus does, here in a build that doesn't update, which says so.
+#[gpui_kit::test]
+fn check_for_updates_in_the_question_marks_menu_looks_now(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = Ui::open(cx, &stack);
+    assert!(ui.shows_label("help", "Help"));
+    assert!(!ui.has("update-answer"));
+
+    ui.click("help");
+    ui.click_menu_item("Check for Updates");
+
+    assert!(ui.has("update-answer"));
+}
+
+/// Each merge to `main` is the next version, so its history is the changelog until there's a page of one.
+#[gpui_kit::test]
+fn changelog_in_the_question_marks_menu_opens_the_history_of_main(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = Ui::open(cx, &stack);
+
+    ui.click("help");
+    ui.click_menu_item("Changelog");
+
+    assert_eq!(ui.cx.opened_url().as_deref(), Some("https://github.com/getroundhouse/roundhouse/commits/main"));
 }
 
 /// Opens a workspace with something typed in its chat, and an update downloaded.
@@ -225,7 +305,7 @@ fn restarting_to_update_with_nothing_typed_asks_nothing(cx: &mut TestAppContext)
     assert!(ui.has("update-problem"));
 }
 
-/// Under the build, for a few seconds, rather than in an alert.
+/// In the version's place, for a few seconds, rather than in an alert.
 #[gpui_kit::test]
 fn checking_for_updates_in_a_build_that_doesnt_update_says_so_in_the_sidebar(cx: &mut TestAppContext) {
     let stack = Stack::new();

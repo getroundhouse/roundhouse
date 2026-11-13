@@ -15,7 +15,7 @@ On the left. It lists your projects, each with its workspaces under it.
 | Add project | Adds a repository |
 | A project's row | Its name, with a `+` for a new workspace in it. Click it to put its workspaces away under it, and again to bring them back. Drag it to move the project, with its workspaces, among the others |
 | A workspace's row | Its mark and its title. Click it to show the workspace |
-| The build line | At the bottom: which build is running, and an update's card when there's one |
+| The build line | At the bottom: which build is running, a question mark whose menu has Check for Updates and Changelog, and a gear for Settings. An update's card shows over it when there's one |
 
 A button at the window's top left hides the sidebar and shows it again. On Windows and Linux, the button before it opens the menus. Drag the sidebar's inner edge to change its width.
 

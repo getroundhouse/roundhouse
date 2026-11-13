@@ -3,7 +3,7 @@
 
 #![cfg(test)]
 
-use desktop::app::{Agents, BuildLine, Connection, UpdateQuestion};
+use desktop::app::{Agents, BuildLine, Connection, UpdateQuestion, Updating};
 use gpui_kit::TestAppContext;
 
 use crate::support::{Stack, StandInHub, Ui};
@@ -50,7 +50,7 @@ fn an_older_hub_with_an_agent_running_is_kept(cx: &mut TestAppContext) {
     ui.wait_out_a_look();
 
     assert!(older.0.try_wait().unwrap().is_none());
-    assert!(matches!(ui.build_line(), BuildLine::Finishing { .. }));
+    assert!(matches!(ui.build_line().update, Some(Updating::Finishing { .. })));
 }
 
 /// A restart stops none of its agents, so the app doesn't wait for them.
@@ -77,7 +77,7 @@ fn an_older_hub_that_keeps_its_workers_restarts_once_its_setup_script_is_done(cx
     let mut ui = Ui::open(cx, &stack);
     ui.wait_out_a_look();
     assert!(older.0.try_wait().unwrap().is_none());
-    assert!(matches!(ui.build_line(), BuildLine::Finishing { .. }));
+    assert!(matches!(ui.build_line().update, Some(Updating::Finishing { .. })));
 
     older.set_setups(0);
 
@@ -126,7 +126,10 @@ fn an_update_finishes_by_itself_once_nothing_else_is_using_the_older_hub(cx: &mu
     let mut older = stack.start_stand_in_hub(&["--speaks-this-protocol", "--build", "1", "--clients", "2"]);
     let mut ui = Ui::open(cx, &stack);
     ui.bring_to_front();
-    assert!(matches!(ui.build_line(), BuildLine::Finishing { agents: Agents { working: 0, waiting_on_you: 0 }, .. }));
+    assert!(matches!(
+        ui.build_line().update,
+        Some(Updating::Finishing { agents: Agents { working: 0, waiting_on_you: 0 }, .. })
+    ));
 
     older.set_clients(1);
     ui.wait_out_a_look();
@@ -219,13 +222,16 @@ fn an_older_hub_that_is_busy_once_asked_to_stop_is_kept(cx: &mut TestAppContext)
         refused && matches!(ui.view().connection, Connection::Ready(_))
     });
     assert!(older.0.try_wait().unwrap().is_none());
-    assert!(matches!(ui.build_line(), BuildLine::Finishing { .. }));
+    assert!(matches!(ui.build_line().update, Some(Updating::Finishing { .. })));
+}
+
+/// The app and its hub are the same build, with no update to say anything about.
+fn on_its_own_build(line: &BuildLine) -> bool {
+    line.other_hub.is_none() && line.update.is_none()
 }
 
 fn wait_for_the_apps_own_hub(ui: &mut Ui<'_>, older: &mut StandInHub) {
-    ui.wait("the app's own hub", |ui| {
-        older.0.try_wait().unwrap().is_some() && matches!(ui.build_line(), BuildLine::Current { .. })
-    });
+    ui.wait("the app's own hub", |ui| older.0.try_wait().unwrap().is_some() && on_its_own_build(&ui.build_line()));
 }
 
 /// Rather than wait for it to be idle, which a busy hub may not be for a long time. The app says what's running then,
@@ -288,7 +294,7 @@ fn finishing_after_the_older_hub_has_gone_leaves_the_new_one_alone(cx: &mut Test
 
     client_core::stop_hub(&stack.hub.paths.socket).unwrap();
     ui.wait("the app's own hub", |ui| {
-        matches!(ui.view().connection, Connection::Ready(_)) && matches!(ui.build_line(), BuildLine::Current { .. })
+        matches!(ui.view().connection, Connection::Ready(_)) && on_its_own_build(&ui.build_line())
     });
     let pid = stack.client().hub_status().unwrap().pid;
     assert!(!ui.has_dialog(), "the dialog went with the hub it asked about");
@@ -327,7 +333,7 @@ fn an_older_hub_started_by_hand_is_not_offered_to_finish(cx: &mut TestAppContext
     let _by_hand = stack.start_stand_in_hub(&["--speaks-this-protocol", "--build", "1", "--not-on-demand"]);
     let mut ui = Ui::open(cx, &stack);
 
-    assert!(matches!(ui.build_line(), BuildLine::OtherHub { .. }));
+    assert!(ui.build_line().other_hub.is_some());
     assert!(!ui.has("finish-update"));
 }
 

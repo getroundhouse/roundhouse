@@ -21,6 +21,7 @@ use gpui_kit::{App, BorrowAppContext as _, Context, Global, Subscription};
 use velopack::{UpdateCheck, UpdateInfo, UpdateManager, UpdateOptions, VelopackApp};
 
 pub(crate) use answer::Answer;
+pub(crate) use problem::Said;
 pub use problem::{Kind, Problem, Refusal, Step};
 use problem::{OutOfReach, Shown, problem};
 use source::{SignedSource, UpdateFeedKey};
@@ -146,8 +147,14 @@ pub(crate) fn problem_shown(cx: &App) -> Option<&Problem> {
 }
 
 /// Whether someone checked for updates and the look that answers them hasn't finished.
+#[cfg(test)]
 pub(crate) fn checking(cx: &App) -> bool {
     cx.try_global::<Shown>().is_some_and(|shown| shown.checking)
+}
+
+/// What the sidebar says about updating in the version's place, if anything, as [`Said`] says.
+pub(crate) fn said(cx: &App) -> Option<Said<'_>> {
+    cx.try_global::<Shown>().and_then(Shown::said)
 }
 
 /// The version of the update that's downloaded, if there is one.
@@ -156,6 +163,7 @@ pub(crate) fn ready(cx: &App) -> Option<&str> {
 }
 
 /// What a check someone asked for found, while it's shown, when it isn't an update or a problem.
+#[cfg(test)]
 pub(crate) fn answered(cx: &App) -> Option<Answer> {
     cx.try_global::<Shown>().and_then(|shown| shown.answer)
 }
@@ -187,6 +195,12 @@ pub fn show_problem(problem: Problem, cx: &mut App) {
 #[cfg(feature = "testing")]
 pub fn show_checking(cx: &mut App) {
     cx.set_global(Shown { checking: true, ..Shown::default() });
+}
+
+/// Shows a check as having found nothing newer, which only an installed app can do for real.
+#[cfg(feature = "testing")]
+pub fn show_up_to_date(cx: &mut App) {
+    cx.set_global(Shown { answer: Some(Answer::UpToDate), ..Shown::default() });
 }
 
 /// Shows an update as downloaded, which only an installed app can do for real.

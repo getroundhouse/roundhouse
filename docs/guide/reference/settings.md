@@ -2,7 +2,7 @@
 
 The app's own settings. A repository's are in [Repository settings](repository-settings.md).
 
-`Cmd-,`, or Settings… in the app menu, or in File on Windows and Linux, shows Settings in place of the sidebar and the workspace. `Back`, Escape or `Cmd-W` goes back to where you were.
+`Cmd-,`, the gear at the bottom of the sidebar, or Settings… in the app menu, or in File on Windows and Linux, shows Settings in place of the sidebar and the workspace. `Back`, Escape or `Cmd-W` goes back to where you were.
 
 ![General, the first page of Settings](../../spec/screens/settings.png)
 

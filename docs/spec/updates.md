@@ -11,26 +11,36 @@ What someone using the desktop app sees when it or its hub updates, or when ther
 - **A workspace stays on screen while the app connects to a hub again,** whether the app is restarting the hub or the hub went away. What's typed meanwhile is kept, since that's often the moment someone starts their next prompt. Send and Enter wait until the hub is back, and what's typed stays in the composer, because a hub that's being stopped would take the prompt and then cut its agent off. The app only says "Connecting…" when there's nothing to show yet. *Unconfirmed:* that Enter waits, rather than sending once the hub is back.
 - **An older hub keeps working.** The app hides or disables what it doesn't support, and only a real protocol break stops it.
 - **A hub someone runs themselves is left alone,** even on the same Mac. The app says when it's older, and only its admins stop it.
-- **A problem updating says so under the build in the sidebar,** with the detail on hover, until a later check works. A feed or package that isn't the one the release workflow signed says "Update refused" at once. Not reaching the update server only shows once it has lasted a day, since being offline for a while is ordinary, unless you check for updates yourself. An app that can't replace itself where it is says so when it opens, and one that macOS runs from where it was downloaded asks to be moved to Applications. *Unconfirmed.*
+- **A problem updating says so in the version's place at the bottom of the sidebar,** with all of what it says and the detail on hover, since a long one is cut short before the buttons, until a later check works. A feed or package that isn't the one the release workflow signed says "Update refused" at once. Not reaching the update server only shows once it has lasted a day, since being offline for a while is ordinary, unless you check for updates yourself. An app that can't replace itself where it is says so when it opens, and one that macOS runs from where it was downloaded asks to be moved to Applications. *Unconfirmed.*
 
-  **An app that macOS runs from where it was downloaded, asking to be moved to Applications. Its words are cut off at the sidebar's edge, as the app draws them now.** *Unconfirmed.*
+  **An app that macOS runs from where it was downloaded, asking to be moved to Applications. Its words are cut short before the buttons, and all of them show on hover.** *Unconfirmed.*
 
   ![Asking to be moved to Applications](screens/update-translocated.png)
 
-  **An update refused, in red, since it isn't what the release workflow signed. Its words are cut off at the sidebar's edge, as the app draws them now.** *Unconfirmed.*
+  **An update refused, in red, since it isn't what the release workflow signed. Its words are cut short too.** *Unconfirmed.*
 
   ![An update refused](screens/update-refused.png)
 
 - **Nothing about updating is a native dialog.** Checking for updates answers in the sidebar, and an update you asked for shows as the same card as one that downloaded by itself. Before restarting the app would lose what's typed, the update's card asks, in its own place. Before restarting now would stop agents, a dialog of the app's own asks, over the window.
-- **Check for Updates… in the app menu looks right away,** rather than waiting for the next look, which comes when the app opens and every hour. The sidebar says it's checking, under the build, until the look finishes. A newer version shows as its card. What went wrong shows as a problem at once, even not reaching the update server, because you asked. Otherwise "Up to date" shows under the build for a few seconds. A build that doesn't update itself says so the same way, and one that can't update where it is already says why. *Unconfirmed.*
+- **Check for Updates… in the app menu, and Check for Updates in the question mark's menu at the bottom of the sidebar, look right away,** rather than waiting for the next look, which comes when the app opens and every hour. The sidebar says it's checking, in the version's place, beside a ring whose light goes round as a running task's does, until the look finishes, and that's said over a problem already showing, since whoever checked is waiting on it. A newer version shows as its card. What went wrong shows as a problem at once, even not reaching the update server, because you asked. Otherwise "Up to date" shows in the version's place for a few seconds, with a tick. A build that doesn't update itself says so the same way, and one that can't update where it is already says why. Whatever's in the version's place, the line stays as tall, so nothing in the sidebar moves as a check starts and ends, and words too long for it are cut short before the buttons, with all of them on hover. *Unconfirmed.*
 
-  **The sidebar saying it's checking, under the build.** *Unconfirmed.*
+  **The sidebar saying it's checking, in the version's place.** *Unconfirmed.*
 
   ![Checking for updates](screens/checking-for-updates.png)
 
+  **What a check that found nothing newer says, for a few seconds.** *Unconfirmed.*
+
+  ![Up to date](screens/up-to-date.png)
+
 ## The build line
 
-The bottom of the sidebar shows which build is running, faint, and only brings up the hub when it isn't the app's build. While an update has something to say, a card with the app's icon takes the version's place, saying where it's got to and what to do next. An info mark in its corner says more on hover, in a box just above the card and as wide as it: which version it's updating from and to, as its heading, then what that means for what's running. Nothing about an update arriving or finishing by itself is a modal or a notification, since every merge publishes one. The one dialog is the one you ask for, before `Restart now` stops something. *Unconfirmed:* all of this section, and each screen in it.
+The bottom of the sidebar shows which build is running, faint, and only brings up the hub when it isn't the app's build. While an update has something to say, a card with the app's icon sits over that line, saying where it's got to and what to do next, and the line stays, so its buttons are where they always are. An info mark in its corner says more on hover, in a box just above the card and as wide as it: which version it's updating from and to, as its heading, then what that means for what's running. Nothing about an update arriving or finishing by itself is a modal or a notification, since every merge publishes one. The one dialog is the one you ask for, before `Restart now` stops something. *Unconfirmed:* all of this section, and each screen in it.
+
+- **The build line ends with two buttons, a question mark and then a gear,** faint until the pointer is on one. The question mark's menu has Check for Updates, then Changelog, and is where help goes as there's more of it. It opens upward, with its right edge at the button's, so it stays over the sidebar. Changelog opens the history of `main` on GitHub, newest first, since every merge is published as the next version. *Not built:* a page of the changelog, and one that starts at the version that's running. The gear opens Settings, as `Cmd-,` does, which its tooltip says. *Unconfirmed.*
+
+  **The question mark's menu, open over the sidebar.** *Unconfirmed.*
+
+  ![The question mark's menu](screens/help-menu.png)
 
 - **An update is downloaded.** The card says "Update ready" with the version, and `What's new` beside it, a link to a page of what the version changes. It's only on this card, since that's when someone is deciding to take the update. *Not built:* the page, so the link opens nothing. `Restart to update` is the card's main action. That installs it and opens the app again, and agents keep running, since the hub outlives the app. Quitting installs it too. What's typed and attached in a composer isn't lost, since the hub keeps it, as `chats.md` says, and nor is an answer being typed to a question, or a comment being written, as `diff.md` says, or what's in the new-workspace dialog, as `workspaces.md` says. So restarting first waits up to two seconds for what's still on its way there, such as a file just attached, as quitting does. Anything else not sent would be lost, such as what the hub didn't take in time, like a prompt still on its way, so the card asks first when there is: its title becomes "Restart to update?", it says how many chats and comments have something it would lose, and `Keep working` and `Restart` take its button's place. The question holds nothing else up, so more can be typed while it asks, and `Restart` asks again if more would be lost than it said.
 
@@ -64,9 +74,9 @@ The bottom of the sidebar shows which build is running, faint, and only brings u
 
   ![A hub someone runs themselves](screens/own-hub.png)
 
-- **A problem updating** shows under the version, muted, as the rule above says. A download that isn't what the release workflow signed is red, since it may be someone tampering with the update.
+- **A problem updating** shows in the version's place, muted, as the rule above says. A download that isn't what the release workflow signed is red, since it may be someone tampering with the update.
 
-  **Not reaching the update server, under the version.** *Unconfirmed.*
+  **Not reaching the update server, in the version's place.** *Unconfirmed.*
 
   ![A problem updating](screens/update-problem.png)
 

@@ -16,7 +16,7 @@ fn a_build_from_a_checkout_names_it_and_says_why_it_is_open(cx: &mut TestAppCont
 
     assert!(ui.has("checkout-card"));
     assert!(ui.has("checkout-note"));
-    assert!(ui.has("build-line"), "the version still shows");
+    assert!(ui.has("version"), "the version still shows");
 }
 
 #[gpui_kit::test]

@@ -33,7 +33,7 @@ mod view;
 mod window_buttons;
 mod workspaces;
 
-pub use build_line::{Agents, BuildLine};
+pub use build_line::{Agents, BuildLine, Updating};
 pub use hub_source::HubSource;
 pub use quitting::Quitting;
 pub(crate) use quitting::quit;
