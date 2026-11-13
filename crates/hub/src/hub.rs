@@ -27,6 +27,7 @@ mod repos;
 mod sessions;
 mod setup;
 mod stopping;
+mod terminals;
 #[cfg(test)]
 pub(crate) mod tests;
 mod titles;
@@ -38,6 +39,10 @@ mod worktree;
 
 use feed::Feed;
 use sessions::Sessions;
+#[cfg(test)]
+pub(crate) use terminals::QUEUED_UPDATES;
+use terminals::Terminals;
+pub(crate) use terminals::{Numbered, Queued};
 
 use crate::attachment_files::AttachmentFiles;
 use crate::error::internal;
@@ -106,6 +111,7 @@ pub(crate) struct Hub {
     sessions: Mutex<Sessions>,
     /// Workspaces whose setup is running. Removed as it finishes, which also wakes anyone waiting.
     setup_gates: Mutex<HashMap<WorkspaceId, SetupGate>>,
+    terminals: Terminals,
     pull_requests: pull_requests::Reading,
     awake: Arc<Awake>,
     /// Whether the hub allows what an agent with full access still asks about, as its settings say.
@@ -164,6 +170,7 @@ impl Hub {
             ensuring_session: AsyncMutex::new(()),
             sessions: Mutex::new(Sessions::default()),
             setup_gates: Mutex::new(HashMap::new()),
+            terminals: Terminals::default(),
             pull_requests: pull_requests::Reading::new(),
             awake: Arc::default(),
             allows_asked_in_full_access: AtomicBool::new(false),
@@ -224,7 +231,8 @@ impl Hub {
 
     /// Every record, as of one revision, for a client starting to follow the feed.
     pub(crate) async fn records_list(&self) -> Result<Records, ApiError> {
-        self.blocking(Store::list_records).await
+        let (listed, terminals) = self.terminals.listed_with(self.blocking(Store::list_records)).await;
+        Ok(Records { terminals, ..listed? })
     }
 
     pub(crate) async fn workspace(&self, id: &WorkspaceId) -> Result<Workspace, ApiError> {
@@ -283,8 +291,7 @@ impl Hub {
             keeping_awake: self.awake.holding(),
             keeps_workers: KEEPS_WORKERS,
             oldest_protocol_version: Some(versions::CLIENTS.oldest),
-            // It refuses to open one.
-            open_terminals: 0,
+            open_terminals: u32::try_from(self.terminals.count()).unwrap_or(u32::MAX),
         }
     }
 

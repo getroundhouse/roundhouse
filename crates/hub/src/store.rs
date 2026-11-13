@@ -179,6 +179,22 @@ impl Store {
         let deleted = conn.execute(&format!("DELETE FROM {table} WHERE id = ?"), [id])?;
         Ok(if deleted == 0 { None } else { Some(current_rev(&conn)?) })
     }
+
+    /// A revision for a change to a record the hub keeps only in memory, such as a terminal's, from the counter every
+    /// record's comes from, so clients order it among the rest.
+    pub fn next_rev(&self) -> Result<Rev, StoreError> {
+        self.bump("rev").map(Rev::new)
+    }
+
+    /// Adds one to counter `name`, and returns what it is now.
+    fn bump(&self, name: &str) -> Result<u64, StoreError> {
+        let conn = lock(&self.writer);
+        let value: i64 =
+            conn.query_row("UPDATE counters SET value = value + 1 WHERE name = ? RETURNING value", [name], |row| {
+                row.get(0)
+            })?;
+        Ok(value.cast_unsigned())
+    }
 }
 
 /// The newest revision, which on the writer is the one its last change made.

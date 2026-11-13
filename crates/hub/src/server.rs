@@ -27,9 +27,11 @@ use crate::store::AddedBy;
 use crate::versions;
 use pump::Following;
 use subscribing::{follow_feed, follow_log, unsubscribe};
+use terminals::Answering;
 
 mod pump;
 mod subscribing;
+mod terminals;
 
 pub(crate) const DEFAULT_READ_BYTES: u64 = 4 * 1024 * 1024;
 pub(crate) const MAX_READ_EVENTS: u32 = 2000;
@@ -109,10 +111,12 @@ async fn serve_connection(
         // Counted as it's read, rather than once its task starts, so a request to stop if idle sees every request this
         // connection sent before it, even one whose task hasn't started.
         hub.requests.fetch_add(1, Ordering::Relaxed);
+        let answering = terminals::in_order(&hub, request).await;
         tokio::spawn(async move {
-            let answered = match request {
-                Ok(request) => handle(&hub, &connection, request).await,
-                Err(e) => Err(hub.unsupported(Some(&e))),
+            let answered = match answering {
+                Answering::Queued(queued) => queued.await,
+                Answering::OnATask(Ok(request)) => handle(&hub, &connection, request).await,
+                Answering::OnATask(Err(e)) => Err(hub.unsupported(Some(&e))),
             };
             let outcome = match answered {
                 Ok(response) => ReplyOutcome::Response(response),
@@ -168,13 +172,11 @@ async fn handle(
     use ClientResponse as C;
     Ok(match request {
         R::Hello(_) => return Err(ApiError::new(ErrorCode::InvalidRequest, "already said hello")),
-        // And those about terminals, which it refuses as a hub from before them does, until it runs them.
-        R::Unknown
-        | R::TerminalOpen(_)
-        | R::TerminalAttach(_)
-        | R::TerminalInput(_)
-        | R::TerminalResize(_)
-        | R::TerminalClose(_) => return Err(hub.unsupported(None)),
+        R::Unknown => return Err(hub.unsupported(None)),
+        R::TerminalOpen(open) => C::Terminal(hub.terminal_open(open).await?),
+        R::TerminalAttach(attach) => terminals::attach(hub, connection, attach)?,
+        R::TerminalInput(_) | R::TerminalResize(_) => unreachable!("sent on as they're read, by terminals::in_order"),
+        R::TerminalClose(close) => C::Terminal(hub.terminal_close(close).await?),
         R::HubStatus => C::HubStatus(hub.status()),
         R::HubShutdown => {
             hub.request_stop();
