@@ -5,6 +5,10 @@ use std::fs::{DirBuilder, File, OpenOptions};
 use std::io;
 use std::path::Path;
 
+/// The mode of a file only this user can open.
+#[cfg(unix)]
+const FILE_MODE: u32 = 0o600;
+
 /// Creates `path` and whatever is missing above it. It only sets the mode on directories it creates, because
 /// `ROUNDHOUSE_HOME` can point anywhere, and changing the permissions of an existing directory could break something
 /// unrelated.
@@ -21,11 +25,26 @@ pub(crate) fn file_options() -> OpenOptions {
     #[cfg(unix)]
     {
         let mut options = OpenOptions::new();
-        std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
+        std::os::unix::fs::OpenOptionsExt::mode(&mut options, FILE_MODE);
         options
     }
     #[cfg(windows)]
     OpenOptions::new()
+}
+
+/// Gives what's at `path` the mode [`file_options`] gives a file it creates, for one made another way, such as a
+/// socket or a copy.
+#[cfg(unix)]
+pub(crate) fn restrict(path: &Path) -> io::Result<()> {
+    std::fs::set_permissions(path, std::os::unix::fs::PermissionsExt::from_mode(FILE_MODE))
+}
+
+/// Nothing on Windows, where what's at `path` has only the permissions it takes from its directory, since a copy there
+/// doesn't take its file's.
+#[cfg(windows)]
+#[expect(clippy::unnecessary_wraps, reason = "it takes the place of Unix's, which can fail")]
+pub(crate) fn restrict(_path: &Path) -> io::Result<()> {
+    Ok(())
 }
 
 /// Makes a name given or taken in `dir` last through a power cut. Not on Windows, which has no way to ask for that

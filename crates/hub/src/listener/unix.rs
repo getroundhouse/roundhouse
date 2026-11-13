@@ -1,5 +1,4 @@
 use std::io;
-use std::os::unix::fs::PermissionsExt as _;
 use std::path::Path;
 
 use tokio::net::UnixListener;
@@ -13,7 +12,7 @@ impl Listener {
     pub(crate) fn bind(path: &Path) -> io::Result<Self> {
         let _ = std::fs::remove_file(path);
         let listener = UnixListener::bind(path)?;
-        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))?;
+        crate::private::restrict(path)?;
         Ok(Self(listener))
     }
 

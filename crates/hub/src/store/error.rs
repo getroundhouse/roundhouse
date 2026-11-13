@@ -26,7 +26,9 @@ pub enum BackupError {
     #[error("{what}")]
     Io { what: String, source: io::Error },
     #[error("copying the database with VACUUM INTO")]
-    Database(#[source] rusqlite::Error),
+    Vacuum(#[source] rusqlite::Error),
+    #[error("moving what's in the WAL into the database before copying it")]
+    Checkpoint(#[source] rusqlite::Error),
 }
 
 impl BackupError {
