@@ -24,7 +24,7 @@ A job names a runner in its label, as in `runs-on: runs-on=${{ github.run_id }}/
 
 RunsOn reads `.github/runs-on.yml` only from `main`, since the repository is public, so a change to a runner reaches every job that names it once it merges, without a PR having run on it. To change a runner jobs use, add one under a new name, merge it, and move the jobs to it in a PR of its own, whose CI runs on it.
 
-While the stack can't start a runner, such as while the account is at its EC2 quota, a job waits for one, for up to the 24 hours GitHub lets a job wait for a self-hosted runner. To run CI without the stack, point the job's `runs-on` back at one of GitHub's runners, such as `ubuntu-26.04-arm`.
+A runner that can't get a Spot instance starts on-demand, at several times the price. When it's the account's Spot quota that stops it, RunsOn emails `alert_email`, and for the next 5 minutes starts every runner that quota covers on-demand. So a Spot quota that's too low makes CI cost more, not wait. A job waits for a runner while its runner has to start on-demand and the on-demand quota is full, or while the stack can't start one at all, for up to the 24 hours GitHub lets a job wait for a self-hosted runner. To run CI without the stack, point the job's `runs-on` back at one of GitHub's runners, such as `ubuntu-26.04-arm`.
 
 ## Planning and applying
 
@@ -45,7 +45,7 @@ terraform providers lock -platform=darwin_arm64 -platform=linux_amd64
 
 ## Setting it up
 
-A new account can run only 5 vCPUs of Spot instances and 5 of on-demand ones, which is less than one `arm64-16` runner. Quotas are raised by hand, and `quotas.tf` emails when one passes 80% or 95%. Ask for room for 8 runners on Spot and 4 on-demand, which covers Spot when it has no capacity, and the jobs RunsOn reruns when AWS reclaims an instance:
+A new account can run only 5 vCPUs of Spot instances and 5 of on-demand ones, which is less than one `arm64-16` runner. Quotas are raised by hand, and `quotas.tf` emails when one passes 80% or 95%. Ask for room for 8 runners on Spot and 4 on-demand, which covers Spot when it has no capacity or its quota is full, and the jobs RunsOn reruns when AWS reclaims an instance:
 
 ```sh
 aws service-quotas request-service-quota-increase --region us-east-2 --service-code ec2 --quota-code L-34B43A08 --desired-value 128
