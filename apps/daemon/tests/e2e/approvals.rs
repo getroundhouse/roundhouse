@@ -6,7 +6,7 @@ use std::path::PathBuf;
 
 use client_core::ClientError;
 use protocol::client::ErrorCode;
-use protocol::event::{ApprovalDecision, ApprovalOutcome, ContentBlock, EventBody};
+use protocol::event::{ApprovalDecision, ApprovalOutcome, Asking, CallKind, ContentBlock, EventBody};
 use protocol::model::SessionStatus;
 
 use crate::support::{Stack, wait_for_approval, wait_for_status, wait_for_turn_end};
@@ -89,4 +89,40 @@ fn an_approved_edit_to_a_tools_input_is_what_runs() {
     wait_for_turn_end(&client, &session.id, 1);
     let out = std::fs::read_to_string(PathBuf::from(workspace.path.unwrap()).join("out.txt")).unwrap();
     assert_eq!(out, "edited\n");
+}
+
+/// So a client draws each from what's recorded, with none of the agent's names for its tools: the request to run a
+/// command, the call, and what came back all say it's a command.
+#[test]
+fn a_call_its_request_for_approval_and_its_result_are_recorded_with_what_kind_of_call_it_is() {
+    let stack = Stack::start();
+    let client = stack.client();
+    let (_, session) = stack.workspace_planning(&client);
+    client.session_prompt(&session.id, "tool:echo kinds", None).unwrap();
+    let approval_id = wait_for_approval(&client, &session.id);
+    let allow = ApprovalDecision::Allow { updated_input: None, updated_permissions: None };
+    client.session_approve(&session.id, &approval_id, allow).unwrap();
+
+    let events = wait_for_turn_end(&client, &session.id, 1);
+
+    let command = Some(CallKind::Command);
+    let asked: Vec<_> = events
+        .iter()
+        .filter_map(|event| match &event.body {
+            EventBody::ApprovalRequested { asking, .. } => Some(asking.as_deref().and_then(Asking::call).cloned()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(asked, std::slice::from_ref(&command));
+    let blocks = events.iter().flat_map(|event| match &event.body {
+        EventBody::Assistant { blocks, .. } | EventBody::AgentUser { blocks, .. } => blocks.as_slice(),
+        _ => &[],
+    });
+    let said: Vec<_> = blocks
+        .filter_map(|block| match block {
+            ContentBlock::ToolUse { call, .. } | ContentBlock::ToolResult { call, .. } => Some(call.clone()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(said, [command.clone(), command], "the call, then its result");
 }

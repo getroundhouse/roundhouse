@@ -6,6 +6,7 @@ mod approvals;
 mod context;
 mod description;
 mod effort;
+mod kinds;
 mod mode;
 mod normalize;
 mod one_off;

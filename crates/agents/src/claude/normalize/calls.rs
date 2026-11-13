@@ -21,8 +21,10 @@ struct Call {
 }
 
 impl OpenCalls {
-    /// Opens the calls this line makes, and closes those it answers.
-    pub(super) fn note(&mut self, value: &Value) {
+    /// Opens the calls this line makes, and closes those it answers. Returns the tool of each call it answers, by the
+    /// call, since once closed nothing else says what the call was for.
+    pub(super) fn note(&mut self, value: &Value) -> Vec<(ToolUseId, String)> {
+        let mut answered = Vec::new();
         let by_a_subagent = str_of(value, "parent_tool_use_id").is_some();
         let blocks = value.get("message").and_then(|message| message.get("content")).and_then(Value::as_array);
         for block in blocks.into_iter().flatten() {
@@ -34,13 +36,16 @@ impl OpenCalls {
                 }
                 // A tool the API runs itself answers with a kind of result of its own, such as the advisor's.
                 Some(kind) if kind.ends_with("tool_result") => {
-                    if let Some(id) = id_of::<ToolUseId>(block, "tool_use_id") {
-                        self.0.remove(&id);
+                    if let Some(id) = id_of::<ToolUseId>(block, "tool_use_id")
+                        && let Some(call) = self.0.remove(&id)
+                    {
+                        answered.push((id, call.tool));
                     }
                 }
                 _ => {}
             }
         }
+        answered
     }
 
     /// The tool an open call is for. `None` once it's answered, and for a call that was never made.
