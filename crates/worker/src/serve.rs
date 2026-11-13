@@ -241,7 +241,8 @@ async fn handle(
         WorkerRequest::PullRequest(PullRequest { path }) => {
             // `gh` finds the pull request by the branch checked out.
             let branch = git::branches::checked_out(Path::new(&path)).await;
-            Ok(WorkerResponse::PullRequest(PullRequestReply { pull_request: git::pull_request(&path).await?, branch }))
+            let pull_request = git::pull_request(&path, branch.as_ref()).await?;
+            Ok(WorkerResponse::PullRequest(PullRequestReply { pull_request, branch }))
         }
         WorkerRequest::WatchBranches(asked) => worktrees::watch_branches(state, asked.path, Whose::Own).await,
         WorkerRequest::WatchChildBranches(asked) => worktrees::watch_branches(state, asked.path, Whose::Child).await,

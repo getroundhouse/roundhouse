@@ -1,4 +1,4 @@
-//! The pull request for a worktree's branch, from `gh`, and how the worktree stands against it.
+//! The pull request of the branch a worktree has checked out, from `gh`, and how the worktree stands against it.
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -6,18 +6,24 @@ use std::process::{Output, Stdio};
 
 use chrono::DateTime;
 use protocol::client::{ApiError, ErrorCode};
-use protocol::model::{BranchName, Checks, LeftQueue, Local, PrState, PullRequest, QueueState};
+use protocol::model::{BranchName, Checks, CommitId, LeftQueue, Local, PrState, PullRequest, QueueState};
 use protocol::worker::RateLimit;
 use serde_json::Value;
 use tokio::process::Command;
 
-use super::{GH_TIMEOUT, git, ref_exists, status};
+use self::link::Choice;
+use self::local::local;
+use super::GH_TIMEOUT;
+use super::branches::checked_out;
 
+mod link;
+mod local;
 #[cfg(test)]
 mod tests;
 
-const FIELDS: &str =
-    "number,url,title,state,isDraft,baseRefName,headRefOid,mergeStateStatus,reviewDecision,statusCheckRollup";
+/// `commits` is the first hundred, oldest first, which [`link`] goes by, with `headRefOid`.
+const FIELDS: &str = "number,url,title,state,isDraft,baseRefName,headRefName,headRefOid,commits,mergeStateStatus,\
+    reviewDecision,statusCheckRollup";
 /// What `gh pr view` can't say, asked for by the pull request's URL: where it is in the merge queue, when it last left
 /// it, and when a review last asked for changes. Its state comes too, since it can merge between the two calls, and
 /// would otherwise read as having left the queue without merging. GitHub records a removal from the queue as the queue
@@ -26,13 +32,86 @@ const BY_URL: &str = "query($url: URI!) { resource(url: $url) { ... on PullReque
     timelineItems(itemTypes: [REMOVED_FROM_MERGE_QUEUE_EVENT], last: 1) { nodes { ... on RemovedFromMergeQueueEvent { \
     createdAt reason } } } reviews(states: [CHANGES_REQUESTED], last: 1) { nodes { submittedAt } } } } }";
 
-/// The pull request for the current branch, or `None` when `gh` says it has none. An error means `gh` didn't say, so
+/// The pull request of the branch checked out, or `None` when it has none. An error means `gh` or git didn't say, so
 /// whoever asked can keep what it knew rather than take it as none: [`ErrorCode::Unavailable`] when `gh` can't work
 /// here at all, such as when it isn't installed or logged in, and [`ErrorCode::Worker`] when it couldn't this time,
 /// such as while GitHub can't be reached. Where it is in the merge queue counts as part of the answer, since a failure
 /// there would read as being in none. What the worktree can't say of itself is left at nothing to report.
-pub async fn pull_request(path: &str) -> Result<Option<PullRequest>, ApiError> {
-    let viewed = match run_gh(path, &["pr", "view", "--json", FIELDS]).await {
+pub async fn pull_request(path: &str, branch: Option<&BranchName>) -> Result<Option<PullRequest>, ApiError> {
+    let Some(Viewed { mut pull_request, head, .. }) = of_branch(path, branch).await? else { return Ok(None) };
+    // Only an open pull request can still change, so only what the second call says and its worktree matter.
+    if pull_request.state == PrState::Open {
+        let head = head.as_ref().map(CommitId::as_str);
+        let (by_url, local) = tokio::join!(by_url(path, &pull_request.url), local(path, head));
+        by_url?.fill(&mut pull_request);
+        pull_request.local = local;
+    }
+    Ok(Some(pull_request))
+}
+
+/// The one `gh` finds by the branch's name, where it's the branch's, as [`link`] says, or else the one the branch is
+/// linked to, read by its URL. `gh` asks GitHub again for that only when it finds another by the name, or none, as
+/// for a branch renamed since it was pushed, which the hub's count of a read's calls leaves out, and GitHub's own
+/// count of what's left, which the hub asks for, takes in.
+async fn of_branch(path: &str, branch: Option<&BranchName>) -> Result<Option<Viewed>, ApiError> {
+    let worktree = Path::new(path);
+    let by_name = view(path, None).await?;
+    // `gh` looks for the one checked out as it runs, so another checked out since `branch` was read would be judged
+    // by that one's history and linked to it. The next read, which switching branch brings, says.
+    if checked_out(worktree).await.as_ref() != branch {
+        return Err(couldnt_say("another branch was checked out while it was read"));
+    }
+    let Some(branch) = branch else { return Ok(None) };
+    let linked = link::linked(worktree, branch).await?;
+    let has_been_at = match &by_name {
+        Some(found) if linked.as_deref() != Some(found.pull_request.url.as_str()) => {
+            link::has_been_at(worktree, branch, &found.commits(), found.from.as_ref()).await?
+        }
+        _ => false,
+    };
+    let found_url = by_name.as_ref().map(|found| found.pull_request.url.as_str());
+    match link::choose(found_url, linked.as_deref(), has_been_at) {
+        Choice::Found => Ok(by_name),
+        Choice::FoundAndLink => {
+            if let Some(url) = found_url {
+                link::link(worktree, branch, url).await;
+            }
+            Ok(by_name)
+        }
+        Choice::ReadLinked => match linked {
+            Some(url) => view(path, Some(&url)).await,
+            None => Ok(None),
+        },
+        Choice::None => Ok(None),
+    }
+}
+
+/// A pull request as `gh pr view` prints it, with nothing yet about the queue or the worktree, and the commits of the
+/// branch it's from, as GitHub has them.
+#[derive(Debug, PartialEq)]
+struct Viewed {
+    pull_request: PullRequest,
+    /// The branch it's from, by its name there.
+    from: Option<BranchName>,
+    /// The newest.
+    head: Option<CommitId>,
+    /// The first hundred, oldest first.
+    first: Vec<CommitId>,
+}
+
+impl Viewed {
+    /// Every one it says, the newest included, which a pull request of more than a hundred has after the first.
+    fn commits(&self) -> Vec<CommitId> {
+        let newest = self.head.iter().filter(|head| !self.first.contains(head));
+        self.first.iter().chain(newest).cloned().collect()
+    }
+}
+
+/// The pull request at `url`, or the one `gh` finds for the branch checked out, by its name. `None` when `gh` says
+/// there's none.
+async fn view(path: &str, url: Option<&str>) -> Result<Option<Viewed>, ApiError> {
+    let args: Vec<&str> = ["pr", "view"].into_iter().chain(url).chain(["--json", FIELDS]).collect();
+    let viewed = match run_gh(path, &args).await {
         Ok(viewed) => viewed,
         Err(Unran::Missing) => return Err(cant_work_here("gh isn't installed")),
         Err(Unran::Failed(why)) => return Err(couldnt_say(&why)),
@@ -45,15 +124,7 @@ pub async fn pull_request(path: &str) -> Result<Option<PullRequest>, ApiError> {
             Failing::CouldntSay => Err(couldnt_say(said.trim())),
         };
     }
-    let (mut pr, head) =
-        parse_pull_request(&viewed.stdout).ok_or_else(|| couldnt_say("gh printed something other than one"))?;
-    // Only an open pull request can still change, so only what the second call says and its worktree matter.
-    if pr.state == PrState::Open {
-        let (by_url, local) = tokio::join!(by_url(path, &pr.url), local(path, head.as_deref()));
-        by_url?.fill(&mut pr);
-        pr.local = local;
-    }
-    Ok(Some(pr))
+    parse_pull_request(&viewed.stdout).map(Some).ok_or_else(|| couldnt_say("gh printed something other than one"))
 }
 
 /// What a failed `gh pr view` means.
@@ -135,11 +206,10 @@ async fn run_gh(path: &str, args: &[&str]) -> Result<Output, Unran> {
     }
 }
 
-/// The pull request, with nothing yet about the queue or the worktree, and the commit at its head on GitHub.
-fn parse_pull_request(json: &[u8]) -> Option<(PullRequest, Option<String>)> {
+fn parse_pull_request(json: &[u8]) -> Option<Viewed> {
     let value: Value = serde_json::from_slice(json).ok()?;
     // GitHub's own words, which the protocol's types are named for. Anything else is unknown.
-    let pr = PullRequest {
+    let pull_request = PullRequest {
         number: value["number"].as_u64()?,
         url: value["url"].as_str()?.to_string(),
         title: value["title"].as_str().unwrap_or_default().to_string(),
@@ -154,7 +224,10 @@ fn parse_pull_request(json: &[u8]) -> Option<(PullRequest, Option<String>)> {
         changes_requested_at_ms: None,
         local: Local::default(),
     };
-    Some((pr, value["headRefOid"].as_str().map(str::to_string)))
+    let first = value["commits"].as_array().into_iter().flatten();
+    let first = first.filter_map(|commit| commit["oid"].as_str()).map(CommitId::from).collect();
+    let from = value["headRefName"].as_str().map(BranchName::from);
+    Some(Viewed { pull_request, from, head: value["headRefOid"].as_str().map(CommitId::from), first })
 }
 
 enum Outcome {
@@ -267,43 +340,4 @@ fn parse_by_url(json: &[u8]) -> Option<ByUrl> {
 /// One of GitHub's times, in milliseconds since the epoch.
 fn at_ms(at: &Value) -> Option<i64> {
     DateTime::parse_from_rfc3339(at.as_str()?).ok().map(|at| at.timestamp_millis())
-}
-
-/// Against the pull request's head where the worktree has that commit, which it does once it's pushed from here or
-/// fetched. Otherwise against the branch's upstream, as of the last fetch.
-async fn local(path: &str, head: Option<&str>) -> Local {
-    let Ok(status) = status(path).await else { return Local::default() };
-    let (worktree, upstream) = (Path::new(path), (status.ahead, status.behind));
-    let (ahead, behind) = match head {
-        // A head that isn't here is at least one commit that isn't, such as one GitHub's Update branch or someone else
-        // pushed. How many can't be told without fetching, so the upstream says, if it's been fetched since.
-        Some(head) if !ref_exists(worktree, head).await.unwrap_or(true) => (upstream.0, upstream.1.max(1)),
-        Some(head) => match apart(worktree, head).await.unwrap_or(upstream) {
-            (0, behind) => (0, behind),
-            (ahead, behind) => (not_pushed(worktree, head).await.unwrap_or(ahead), behind),
-        },
-        None => upstream,
-    };
-    Local { uncommitted: u32::try_from(status.files.len()).unwrap_or(u32::MAX), ahead, behind }
-}
-
-/// How many commits `HEAD` has that neither `head` nor any remote branch does. A push moves the remote branch here at
-/// once, and GitHub's pull request a moment later.
-async fn not_pushed(worktree: &Path, head: &str) -> Option<u32> {
-    let output = git(worktree, &["rev-list", "--count", "HEAD", "--not", head, "--remotes"]).await.ok()?;
-    if !output.success {
-        return None;
-    }
-    output.stdout.trim().parse().ok()
-}
-
-/// How many commits `HEAD` has that `head` doesn't, and the other way.
-async fn apart(worktree: &Path, head: &str) -> Option<(u32, u32)> {
-    let range = format!("HEAD...{head}");
-    let output = git(worktree, &["rev-list", "--left-right", "--count", &range]).await.ok()?;
-    if !output.success {
-        return None;
-    }
-    let mut counts = output.stdout.split_whitespace().map(str::parse);
-    Some((counts.next()?.ok()?, counts.next()?.ok()?))
 }
