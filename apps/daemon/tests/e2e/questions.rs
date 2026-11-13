@@ -29,6 +29,7 @@ fn recorded(events: &[SessionEvent], approval: &ApprovalId) -> Option<Recorded> 
             outcome: ApprovalOutcome::Allowed,
             answers_by_text,
             answers_by_position,
+            by_setting: false,
         } if approval_id == approval => Some((answers_by_text.clone(), answers_by_position.clone())),
         _ => None,
     })

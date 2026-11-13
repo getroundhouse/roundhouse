@@ -96,6 +96,7 @@ fn what_was_answered_is_read_from_the_record_in_whichever_form_it_came() {
         outcome: protocol::event::ApprovalOutcome::Allowed,
         answers_by_text: by_text,
         answers_by_position: by_position,
+        by_setting: false,
     };
     let days = question("Which days?", &["Monday", "Friday"], true);
 

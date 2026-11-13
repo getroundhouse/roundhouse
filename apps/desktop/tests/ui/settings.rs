@@ -241,13 +241,13 @@ fn the_switch_for_keeping_the_computer_awake_changes_the_hubs_own_setting(cx: &m
 #[gpui_kit::test]
 fn the_switch_shows_what_the_hub_says_whoever_chose_it(cx: &mut TestAppContext) {
     let stack = Stack::new();
-    let change = protocol::model::HubSettingsChange { keep_awake: Some(false) };
+    let change = protocol::model::HubSettingsChange { keep_awake: Some(false), ..Default::default() };
     stack.client().hub_configure(change).unwrap();
     let mut ui = typing(cx, &stack, "");
     open_settings(&mut ui);
     ui.wait("the switch to show what was chosen before the app opened", |ui| keep_awake_switch(ui) == (false, true));
 
-    let change = protocol::model::HubSettingsChange { keep_awake: Some(true) };
+    let change = protocol::model::HubSettingsChange { keep_awake: Some(true), ..Default::default() };
     stack.client().hub_configure(change).unwrap();
 
     ui.wait("the switch to show what another client chose", |ui| keep_awake_switch(ui) == (true, true));

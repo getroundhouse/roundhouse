@@ -114,8 +114,10 @@ pub async fn run(config: HubConfig) -> Result<(), HubError> {
     let hub = Arc::new(Hub::new(config.build, store, dirs, providers, config.agents, config.on_demand));
     // Before clients are served, so none is told the hub holds a login whose token is gone.
     hub.tidy_logins().await;
-    hub.carry_on(left_at_work).await;
+    // Before carrying on with the agents an earlier hub left, since what they asked meanwhile comes in as soon as
+    // their workers are connected again, and is answered as the settings say.
     hub.carry_out(&settings);
+    hub.carry_on(left_at_work).await;
     hub.tidy_draft_files().await;
     let awake = hub.keep_awake();
     hub.start_queues().await;

@@ -213,7 +213,7 @@ fn general(hub: Option<OfHub>) -> Page {
             is_on: Box::new(move |_| hub_says),
             set: Rc::new(move |on, _| {
                 let Some(hub) = &hub else { return };
-                let change = HubSettingsChange { keep_awake: Some(on) };
+                let change = HubSettingsChange { keep_awake: Some(on), ..HubSettingsChange::default() };
                 // Nothing waits for the reply: the switch shows what the hub says, which it says to every client once
                 // it has changed, and a hub that couldn't change it leaves the switch as it was.
                 drop(hub.client.start(move |client| client.hub_configure(change)));

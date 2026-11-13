@@ -9,8 +9,8 @@ use super::{Store, StoreError, lock, rev_of};
 mod tests;
 
 pub(super) fn hub_settings(conn: &Connection) -> rusqlite::Result<HubSettings> {
-    conn.query_row("SELECT keep_awake, rev FROM hub_settings", [], |row| {
-        Ok(HubSettings { keep_awake: row.get(0)?, rev: rev_of(row, 1)? })
+    conn.query_row("SELECT keep_awake, allow_asked_in_full_access, rev FROM hub_settings", [], |row| {
+        Ok(HubSettings { keep_awake: row.get(0)?, allow_asked_in_full_access: Some(row.get(1)?), rev: rev_of(row, 2)? })
     })
 }
 
@@ -31,6 +31,10 @@ impl Store {
         let conn = lock(&self.writer);
         if let Some(keep_awake) = change.keep_awake {
             conn.execute("UPDATE hub_settings SET keep_awake = ?1 WHERE keep_awake != ?1", params![keep_awake])?;
+        }
+        if let Some(allow) = change.allow_asked_in_full_access {
+            let sql = "UPDATE hub_settings SET allow_asked_in_full_access = ?1 WHERE allow_asked_in_full_access != ?1";
+            conn.execute(sql, params![allow])?;
         }
         Ok(hub_settings(&conn)?)
     }

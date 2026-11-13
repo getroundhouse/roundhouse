@@ -108,6 +108,8 @@ pub(crate) struct Hub {
     setup_gates: Mutex<HashMap<WorkspaceId, SetupGate>>,
     pull_requests: pull_requests::Reading,
     awake: Arc<Awake>,
+    /// Whether the hub allows what an agent with full access still asks about, as its settings say.
+    allows_asked_in_full_access: AtomicBool,
     /// Held while the hub's settings change.
     configuring: AsyncMutex<()>,
     feed: Feed,
@@ -164,6 +166,7 @@ impl Hub {
             setup_gates: Mutex::new(HashMap::new()),
             pull_requests: pull_requests::Reading::new(),
             awake: Arc::default(),
+            allows_asked_in_full_access: AtomicBool::new(false),
             configuring: AsyncMutex::new(()),
             feed: Feed::new(),
             started_at_ms: now_ms(),

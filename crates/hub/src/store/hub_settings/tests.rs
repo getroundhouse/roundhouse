@@ -4,7 +4,11 @@ use crate::store::tests::store_with_session;
 use crate::store::{older, schema};
 
 fn keep_awake(on: bool) -> HubSettingsChange {
-    HubSettingsChange { keep_awake: Some(on) }
+    HubSettingsChange { keep_awake: Some(on), ..HubSettingsChange::default() }
+}
+
+fn allow_asked(on: bool) -> HubSettingsChange {
+    HubSettingsChange { allow_asked_in_full_access: Some(on), ..HubSettingsChange::default() }
 }
 
 #[test]
@@ -47,6 +51,36 @@ fn a_hub_from_before_it_kept_settings_keeps_its_machine_awake() {
     let settings = store.hub_settings().unwrap();
     assert!(settings.keep_awake);
     assert!(settings.rev > protocol::model::Rev::default(), "it has a revision, as every record does");
+}
+
+#[test]
+fn a_hub_asks_the_person_about_a_tool_until_someone_chooses_otherwise_and_then_remembers() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_session(dir.path());
+    let at_first = store.hub_settings().unwrap();
+    assert_eq!(at_first.allow_asked_in_full_access, Some(false));
+
+    let on = store.change_hub_settings(&allow_asked(true)).unwrap();
+
+    assert_eq!(on.allow_asked_in_full_access, Some(true));
+    assert!(on.keep_awake, "the other setting is left as it was");
+    assert!(on.rev > at_first.rev, "{} isn't past {}", on.rev, at_first.rev);
+    assert_eq!(store.change_hub_settings(&allow_asked(true)).unwrap(), on, "the same again says nothing new");
+    drop(store);
+    let (path, backups) = (dir.path().join("hub.db"), dir.path().join("backups"));
+    assert_eq!(crate::store::Store::open(&path, &backups).unwrap().hub_settings().unwrap(), on);
+}
+
+#[test]
+fn a_hub_from_before_it_could_allow_a_tool_itself_asks_and_keeps_what_it_had() {
+    let dir = tempfile::tempdir().unwrap();
+    let before = "UPDATE hub_settings SET keep_awake = 0;";
+
+    let store = older::store_from_before(dir.path(), schema::BEFORE_ALLOWING_ASKED, before);
+
+    let settings = store.hub_settings().unwrap();
+    assert_eq!(settings.allow_asked_in_full_access, Some(false));
+    assert!(!settings.keep_awake);
 }
 
 #[test]

@@ -209,6 +209,7 @@ fn parse_value(value: &Value) -> Parsed {
                 outcome: ApprovalOutcome::Cancelled,
                 answers_by_text: None,
                 answers_by_position: None,
+                by_setting: false,
             }),
             None => other(kind),
         },

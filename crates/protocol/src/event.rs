@@ -264,6 +264,10 @@ pub enum EventBody {
         answers_by_text: Option<BTreeMap<String, String>>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         answers_by_position: Option<Vec<QuestionAnswer>>,
+        /// The hub allowed it itself, as its settings have it allow what an agent with full access still asks about,
+        /// rather than the person deciding. False for everything else, and in a record from before the hub could.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        by_setting: bool,
     },
     AgentExited {
         reason: ExitReason,

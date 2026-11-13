@@ -10,13 +10,17 @@ use super::StoreError;
 use super::queue::take_out_recorded;
 
 /// Whether the person sent this, rather than the agent or the hub: a prompt, or an answer to a question or an
-/// approval. Only the hub records them, as its own, so one with a run is the agent's, and a prompt taken out of the
-/// queue as it's recorded was counted when it was queued.
+/// approval that they decided, rather than the hub's settings. Only the hub records them, as its own, so one with a run
+/// is the agent's, and a prompt taken out of the queue as it's recorded was counted when it was queued.
 fn sent_by_the_person(body: &EventBody) -> bool {
     matches!(
         body,
         EventBody::UserPrompt { .. }
-            | EventBody::ApprovalResolved { outcome: ApprovalOutcome::Allowed | ApprovalOutcome::Denied, .. }
+            | EventBody::ApprovalResolved {
+                outcome: ApprovalOutcome::Allowed | ApprovalOutcome::Denied,
+                by_setting: false,
+                ..
+            }
     )
 }
 

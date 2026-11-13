@@ -70,7 +70,13 @@ pub(crate) fn asking(id: &str, asking: Asking) -> EventBody {
 /// The approval `id` closed with `outcome`, and with `answers` by the question's text, if any were recorded.
 pub(crate) fn closed(id: &str, outcome: ApprovalOutcome, answers: Option<&[(&str, &str)]>) -> EventBody {
     let answers = answers.map(|pairs| pairs.iter().map(|(q, a)| ((*q).to_string(), (*a).to_string())).collect());
-    EventBody::ApprovalResolved { approval_id: id.into(), outcome, answers_by_text: answers, answers_by_position: None }
+    EventBody::ApprovalResolved {
+        approval_id: id.into(),
+        outcome,
+        answers_by_text: answers,
+        answers_by_position: None,
+        by_setting: false,
+    }
 }
 
 /// The approval `id` allowed with `answers` by position.
@@ -81,6 +87,7 @@ pub(crate) fn closed_by_position(id: &str, answers: Vec<QuestionAnswer>) -> Even
         outcome,
         answers_by_text: None,
         answers_by_position: Some(answers),
+        by_setting: false,
     }
 }
 

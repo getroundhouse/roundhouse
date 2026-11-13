@@ -18,3 +18,10 @@ pub(super) const HUB_SETTINGS: &str = r"
     END;
     INSERT INTO hub_settings (id) VALUES (1);
 ";
+
+/// Whether the hub allows a tool's use itself when an agent with full access asks anyway. It doesn't unless someone
+/// has chosen it, since what's asked is what the agent's CLI couldn't rule out doing harm. The row's revision moves,
+/// as any change to it moves it.
+pub(super) const ALLOW_ASKED_IN_FULL_ACCESS: &str = r"
+    ALTER TABLE hub_settings ADD COLUMN allow_asked_in_full_access INTEGER NOT NULL DEFAULT 0;
+";

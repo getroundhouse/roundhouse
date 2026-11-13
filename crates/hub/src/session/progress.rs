@@ -13,7 +13,8 @@ mod tests;
 
 /// Where the session's agent has got to, as its record says: everything that recording an event changes together.
 /// [`Progress::step`] is the only thing that works out a change to any of it, whether the session is live or the hub is
-/// writing straight to the store before it serves, so a new kind of event, or a new piece of this, goes there.
+/// writing straight to the store before it serves, so a new kind of event, or a new piece of this, goes there. A request
+/// the hub answers as it's recorded is the one exception, which [`Progress::step_answered`] says changes nothing.
 #[derive(Debug)]
 pub(crate) struct Progress {
     pub(super) status: SessionStatus,
@@ -105,6 +106,26 @@ impl Progress {
         };
         let waits = after_background(self.status, status, self.background_tasks.len(), background_tasks.len());
         Step { body, change, next: Next { status, turn, approvals, background_tasks, held }, waits }
+    }
+
+    /// What recording `request`, from the current agent, does when the hub records its `answer` in the same commit,
+    /// and what recording that answer does: nothing but the log, since nobody waited on it. The agent is where it was,
+    /// with the same approvals open and the same work in the background. Taken one at a time by [`Progress::step`],
+    /// the answer would end a wait that never began, and have an agent at work in the background running.
+    pub(super) fn step_answered(&self, request: EventBody, answer: EventBody) -> [Step; 2] {
+        let unmoved = |body| Step {
+            body,
+            change: SessionChange::default(),
+            next: Next {
+                status: self.status,
+                turn: TurnEdge::Neither,
+                approvals: self.approvals.clone(),
+                background_tasks: self.background_tasks.clone(),
+                held: None,
+            },
+            waits: false,
+        };
+        [unmoved(request), unmoved(answer)]
     }
 
     /// Takes the step an event made, once it's committed at `ts_ms`, and the prompts the agent hasn't taken, if it

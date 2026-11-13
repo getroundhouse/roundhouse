@@ -13,6 +13,7 @@ fn answered(seq: Seq, id: &str) -> SessionEvent {
         outcome: ApprovalOutcome::Allowed,
         answers_by_text: None,
         answers_by_position: None,
+        by_setting: false,
     };
     event(seq, body)
 }

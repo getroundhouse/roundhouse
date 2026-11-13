@@ -140,6 +140,7 @@ fn open_approvals_are_those_not_yet_answered() {
             outcome: ApprovalOutcome::Allowed,
             answers_by_text: None,
             answers_by_position: None,
+            by_setting: false,
         },
     ));
     let open = log.open_approvals(None);

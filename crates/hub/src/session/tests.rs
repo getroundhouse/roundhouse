@@ -1,7 +1,7 @@
 use protocol::event::{AgentRunState, AgentTask, ApprovalOutcome, ExitReason, TaskKind, TurnOutcome};
 use protocol::prompt::Prompt;
 
-use super::ingest::{heard_before, says_something_new};
+use super::ingest::{heard_before, says_something_new, the_hub_allows};
 use super::status::{Open, after_background, next_status, turn_edge, works_unattended};
 use super::*;
 use crate::store::TurnEdge;
@@ -65,6 +65,7 @@ fn resolved() -> EventBody {
         outcome: ApprovalOutcome::Allowed,
         answers_by_text: None,
         answers_by_position: None,
+        by_setting: false,
     }
 }
 
@@ -89,8 +90,14 @@ fn asking_to_compact_sets_running_as_a_prompt_does() {
 #[test]
 fn the_agents_own_state_decides_idle() {
     assert_eq!(next_status(Running, &state(AgentRunState::Idle), NOTHING, false), Idle);
-    assert_eq!(next_status(Running, &state(AgentRunState::RequiresAction), NOTHING, false), WaitingApproval);
     assert_eq!(next_status(Idle, &state(AgentRunState::Running), NOTHING, false), Running);
+}
+
+#[test]
+fn an_agent_that_needs_something_waits_on_the_person_only_while_a_request_is_open() {
+    assert_eq!(next_status(Running, &state(AgentRunState::RequiresAction), ONE_APPROVAL, false), WaitingApproval);
+    assert_eq!(next_status(Running, &state(AgentRunState::RequiresAction), NOTHING, false), Running);
+    assert_eq!(next_status(Background, &state(AgentRunState::RequiresAction), NOTHING, false), Background);
 }
 
 #[test]
@@ -314,4 +321,23 @@ fn what_a_worker_sends_again_is_taken_in_once() {
     assert_eq!(recorded, Some((next, 2)));
     let mut never = None;
     assert!(!heard_before(&mut never, first, 1), "nothing is before the first");
+}
+
+#[test]
+fn the_hub_allows_only_a_tools_use_asked_about_with_full_access_and_only_when_set_to() {
+    use protocol::event::{Asking, CallKind};
+    use protocol::model::PermissionMode::{FullAccess, Plan, Unknown};
+
+    let tool = Asking::ToolUse { call: Some(CallKind::Command) };
+    let questions = Asking::Questions { questions: Vec::new() };
+    let plan = Asking::Plan { plan: "Do it".into() };
+    assert!(the_hub_allows(FullAccess, Some(&tool), true));
+    assert!(the_hub_allows(FullAccess, Some(&Asking::ToolUse { call: None }), true), "whatever kind of call");
+    assert!(!the_hub_allows(FullAccess, Some(&tool), false), "only when set to");
+    for mode in [Plan, Unknown] {
+        assert!(!the_hub_allows(mode, Some(&tool), true), "{mode:?} asks the person");
+    }
+    for asking in [Some(&questions), Some(&plan), Some(&Asking::Unknown), None] {
+        assert!(!the_hub_allows(FullAccess, asking, true), "{asking:?} is the person's to answer");
+    }
 }

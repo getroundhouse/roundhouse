@@ -3,11 +3,13 @@
 use std::sync::Arc;
 
 use protocol::attachment::NewAttachment;
-use protocol::event::{CompactionOutcome, EventBody, ExitReason, SessionEvent};
+use protocol::event::{
+    ApprovalDecision, ApprovalOutcome, Asking, CompactionOutcome, EventBody, ExitReason, SessionEvent,
+};
 use protocol::model::{ApprovalId, ContextUsage, PermissionMode, RunId, SessionSettingsChange};
 use protocol::tail::{StreamDelta, Tail};
 use tokio::sync::mpsc;
-use tracing::error;
+use tracing::{error, warn};
 
 use super::{Item, LiveItem, LiveSession, Origin, publish};
 use crate::store::cancelled_approval;
@@ -55,6 +57,11 @@ async fn ingest_event(
     }
     let current = session.state.lock().agent.is_some_and(|agent| agent.run == run);
     follow(session, run, current, &body).await;
+    let origin = Origin::Run { run, current, numbered };
+    if current && let Some(approval_id) = allowed_by_the_hub(session, &body) {
+        allow(session, origin, (body, raw), approval_id).await;
+        return;
+    }
     let stale_approval = if let EventBody::ApprovalRequested { approval_id, .. } = &body
         && !current
     {
@@ -62,7 +69,7 @@ async fn ingest_event(
     } else {
         None
     };
-    match session.record(Origin::Run { run, current, numbered }, body, raw).await {
+    match session.record(origin, body, raw).await {
         // Heard when the hub recorded it, by the hub's clock, as everything else in the log is timed.
         Ok((SessionEvent { body: EventBody::AgentLimits { limits }, ts_ms, .. }, _)) => {
             session.heard_limits(run, limits, ts_ms);
@@ -73,6 +80,51 @@ async fn ingest_event(
     if let Some(approval_id) = stale_approval {
         session.record_or_log(Origin::Hub, cancelled_approval(approval_id)).await;
     }
+}
+
+/// The request in `body`, if the hub allows it itself, as [`the_hub_allows`] says.
+fn allowed_by_the_hub(session: &LiveSession, body: &EventBody) -> Option<ApprovalId> {
+    let EventBody::ApprovalRequested { approval_id, asking, .. } = body else { return None };
+    let mode = session.state.lock().settings.permission_mode;
+    let set_to = session.hub().is_ok_and(|hub| hub.allows_asked_in_full_access());
+    the_hub_allows(mode, asking.as_deref(), set_to).then(|| approval_id.clone())
+}
+
+/// Whether the hub allows a request that `asking` says what it asks, in a session in `mode`, itself, when its settings
+/// are `set_to`: a tool's use asked about with full access, as Claude's CLI asks before a command it can't check.
+/// Questions and a plan are the person's to answer whatever the settings say, and so is anything asked in plan mode,
+/// and a request from an adapter from before requests said what they ask, since the hub can't tell what it asks.
+pub(super) fn the_hub_allows(mode: PermissionMode, asking: Option<&Asking>, set_to: bool) -> bool {
+    set_to && mode == PermissionMode::FullAccess && matches!(asking, Some(Asking::ToolUse { .. }))
+}
+
+/// Records the request `asked`, with the hub's answer allowing it, and passes that on to the agent. It's passed on
+/// from a task of its own, since the agent's worker replies on the connection whose events this task takes in, and
+/// waits for this task when there are many, so waiting for the reply here could leave each waiting on the other.
+async fn allow(
+    session: &Arc<LiveSession>,
+    origin: Origin,
+    asked: (EventBody, Option<String>),
+    approval_id: ApprovalId,
+) {
+    let answer = EventBody::ApprovalResolved {
+        approval_id: approval_id.clone(),
+        outcome: ApprovalOutcome::Allowed,
+        answers_by_text: None,
+        answers_by_position: None,
+        by_setting: true,
+    };
+    if let Err(e) = session.record_answered(origin, asked, answer).await {
+        error!(session = %session.id, "could not record a tool's use the hub allowed: {e}");
+        return;
+    }
+    let session = session.clone();
+    tokio::spawn(async move {
+        let allowed = ApprovalDecision::Allow { updated_input: None, updated_permissions: None };
+        if let Err(e) = session.pass_on(approval_id, allowed).await {
+            warn!(session = %session.id, "could not pass on a tool's use the hub allowed: {e}");
+        }
+    });
 }
 
 /// What the session does about an event from the agent of `run` before it's recorded, `current` if that's the agent

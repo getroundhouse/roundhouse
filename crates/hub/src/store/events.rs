@@ -140,7 +140,72 @@ pub fn cancelled_approval(approval_id: ApprovalId) -> EventBody {
         outcome: ApprovalOutcome::Cancelled,
         answers_by_text: None,
         answers_by_position: None,
+        by_setting: false,
     }
+}
+
+/// An event to record, from the agent of `run` or from the hub, with what it changes on its session's record.
+struct Recording<'a> {
+    run: Option<RunId>,
+    body: &'a EventBody,
+    raw: Option<&'a str>,
+    client_msg_id: Option<&'a ClientMessageId>,
+    change: Option<SessionChange>,
+}
+
+/// Records `recording` as part of `tx`, as [`Store::append`] says.
+fn append_in(tx: &Connection, session_id: &SessionId, recording: Recording<'_>) -> Result<Appended, StoreError> {
+    let Recording { run, body, raw, client_msg_id, change } = recording;
+    let last_seq: Option<i64> = tx
+        .query_row("SELECT last_seq FROM sessions WHERE id = ?", [session_id.as_str()], |row| row.get(0))
+        .optional()?;
+    let last_seq = last_seq.ok_or_else(|| StoreError::NotFound { kind: "session", id: session_id.to_string() })?;
+    let seq = last_seq + 1;
+    let ts_ms = now_ms();
+    let encoded = serde_json::to_string(body)?;
+    let subagent = body.subagent();
+    let place: i64 = tx.query_row(
+        "SELECT ifnull(max(place), 0) + 1 FROM events WHERE session_id = ? AND subagent IS ?",
+        params![session_id.as_str(), subagent.map(ToolUseId::as_str)],
+        |row| row.get(0),
+    )?;
+    tx.execute(
+        "INSERT INTO events (session_id, seq, ts_ms, kind, client_msg_id, run, subagent, place, body, raw)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        params![
+            session_id.as_str(),
+            seq,
+            ts_ms,
+            body.kind(),
+            client_msg_id.map(ClientMessageId::as_str),
+            run.map(|run| run.get().cast_signed()),
+            subagent.map(ToolUseId::as_str),
+            place,
+            encoded,
+            raw
+        ],
+    )?;
+    tx.execute(
+        "UPDATE sessions SET last_seq = ?, updated_at_ms = ? WHERE id = ?",
+        params![seq, ts_ms, session_id.as_str()],
+    )?;
+    change_session(tx, session_id, seq, ts_ms, change.unwrap_or_default())?;
+    let (dequeued, by_the_person) = note_sent(tx, session_id, ts_ms, run, body, client_msg_id)?;
+    let untaken = note_prompts(tx, session_id, seq.cast_unsigned(), body)?;
+    let approvals = note_approvals(tx, session_id, seq.cast_unsigned(), body)?;
+    let event = SessionEvent {
+        session_id: session_id.clone(),
+        seq: seq.cast_unsigned(),
+        ts_ms,
+        run,
+        subagent: subagent.cloned(),
+        place: Place::new(place.cast_unsigned()),
+        body: body.clone(),
+        raw: None,
+    };
+    let subagents = note_subagents(tx, &event)?;
+    clear_answer(tx, session_id, body)?;
+    Ok(Appended { event, duplicate: false, dequeued, by_the_person, untaken, approvals, subagents })
 }
 
 impl Store {
@@ -164,57 +229,29 @@ impl Store {
         {
             return Ok(Appended::already_recorded(event));
         }
-        let last_seq: Option<i64> = tx
-            .query_row("SELECT last_seq FROM sessions WHERE id = ?", [session_id.as_str()], |row| row.get(0))
-            .optional()?;
-        let last_seq = last_seq.ok_or_else(|| StoreError::NotFound { kind: "session", id: session_id.to_string() })?;
-        let seq = last_seq + 1;
-        let ts_ms = now_ms();
-        let encoded = serde_json::to_string(body)?;
-        let subagent = body.subagent();
-        let place: i64 = tx.query_row(
-            "SELECT ifnull(max(place), 0) + 1 FROM events WHERE session_id = ? AND subagent IS ?",
-            params![session_id.as_str(), subagent.map(ToolUseId::as_str)],
-            |row| row.get(0),
-        )?;
-        tx.execute(
-            "INSERT INTO events (session_id, seq, ts_ms, kind, client_msg_id, run, subagent, place, body, raw)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            params![
-                session_id.as_str(),
-                seq,
-                ts_ms,
-                body.kind(),
-                client_msg_id.map(ClientMessageId::as_str),
-                run.map(|run| run.get().cast_signed()),
-                subagent.map(ToolUseId::as_str),
-                place,
-                encoded,
-                raw
-            ],
-        )?;
-        tx.execute(
-            "UPDATE sessions SET last_seq = ?, updated_at_ms = ? WHERE id = ?",
-            params![seq, ts_ms, session_id.as_str()],
-        )?;
-        change_session(&tx, session_id, seq, ts_ms, change.unwrap_or_default())?;
-        let (dequeued, by_the_person) = note_sent(&tx, session_id, ts_ms, run, body, client_msg_id)?;
-        let untaken = note_prompts(&tx, session_id, seq.cast_unsigned(), body)?;
-        let approvals = note_approvals(&tx, session_id, seq.cast_unsigned(), body)?;
-        let event = SessionEvent {
-            session_id: session_id.clone(),
-            seq: seq.cast_unsigned(),
-            ts_ms,
-            run,
-            subagent: subagent.cloned(),
-            place: Place::new(place.cast_unsigned()),
-            body: body.clone(),
-            raw: None,
-        };
-        let subagents = note_subagents(&tx, &event)?;
-        clear_answer(&tx, session_id, body)?;
+        let appended = append_in(&tx, session_id, Recording { run, body, raw, client_msg_id, change })?;
         tx.commit()?;
-        Ok(Appended { event, duplicate: false, dequeued, by_the_person, untaken, approvals, subagents })
+        Ok(appended)
+    }
+
+    /// A request from the agent of `run`, with `change`, and the hub's `answer` to it, in one commit, so nobody can
+    /// see the request waiting, as [`Store::append`] records each.
+    pub fn append_answered(
+        &self,
+        session_id: &SessionId,
+        run: Option<RunId>,
+        (request, raw): (&EventBody, Option<&str>),
+        answer: &EventBody,
+        change: SessionChange,
+    ) -> Result<[Appended; 2], StoreError> {
+        let mut conn = lock(&self.writer);
+        let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let asked = Recording { run, body: request, raw, client_msg_id: None, change: Some(change) };
+        let asked = append_in(&tx, session_id, asked)?;
+        let answered = Recording { run: None, body: answer, raw: None, client_msg_id: None, change: None };
+        let answered = append_in(&tx, session_id, answered)?;
+        tx.commit()?;
+        Ok([asked, answered])
     }
 
     /// Always returns at least one event if any exist at or after `from_seq`, however large.

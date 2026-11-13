@@ -25,7 +25,11 @@ fn of_a_record() -> Vec<(HubNotice, RecordKey, Rev)> {
         (HubNotice::Repo(repo), RecordKey::Repo { id: "r".into() }, Rev::new(2)),
         (HubNotice::Comment(comment), RecordKey::Comment { id: "c".into() }, Rev::new(3)),
         (
-            HubNotice::HubSettings(HubSettings { keep_awake: true, rev: Rev::new(4) }),
+            HubNotice::HubSettings(HubSettings {
+                keep_awake: true,
+                allow_asked_in_full_access: Some(true),
+                rev: Rev::new(4),
+            }),
             RecordKey::HubSettings,
             Rev::new(4),
         ),
