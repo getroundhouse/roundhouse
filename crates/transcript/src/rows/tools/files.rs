@@ -223,7 +223,7 @@ impl Render for DiffPreview {
             .rounded(px(10.))
             .border_1()
             .border_color(colors.control_edge)
-            .bg(colors.popover)
+            .bg(colors.raised)
             .font_family(theme.mono_font_family.clone())
             .text_size(theme.mono_font_size)
             // It has nothing to hand the wheel on to, so GPUI scrolls it, holding a gesture to the way it started until

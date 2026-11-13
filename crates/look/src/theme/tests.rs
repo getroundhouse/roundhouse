@@ -39,7 +39,7 @@ fn the_kits_theme_draws_with_the_apps_colours(cx: &mut TestAppContext) {
         let (theme, colors) = (cx.theme(), colors(cx));
         assert_eq!(theme.background, colors.pane);
         assert_eq!(theme.muted_foreground, colors.text_muted);
-        assert_eq!(theme.popover, colors.popover);
+        assert_eq!(theme.popover, colors.raised);
         assert_eq!(theme.list_hover, colors.row_hover);
         assert_eq!(theme.ring, colors.brand);
         assert_eq!(theme.selection, colors.selection());

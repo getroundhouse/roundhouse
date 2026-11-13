@@ -11,5 +11,5 @@ const CORNER: f32 = 10.;
 /// fills it says how wide it is and how much room its content has.
 pub fn raised(cx: &App) -> Div {
     let colors = colors(cx);
-    div().rounded(px(CORNER)).border_1().border_color(colors.edge).bg(colors.popover).text_color(colors.text)
+    div().rounded(px(CORNER)).border_1().border_color(colors.edge).bg(colors.raised).text_color(colors.text)
 }

@@ -125,7 +125,7 @@ pub(super) fn draw(
         .rounded(px(10.))
         .border(EDGE)
         .border_color(colors.edge)
-        .bg(colors.popover)
+        .bg(colors.raised)
         .shadow_lg()
         .on_hover(on_hover)
         .child(rows)
