@@ -49,8 +49,9 @@ fn requested(event: &SessionEvent, approval: &Approval) -> Vec<String> {
             lines.push(format!("  roundhouse approve {session} {approval_id}, or with --deny <what to change>"));
             lines
         }
-        Asking::ToolUse | Asking::Unknown => {
-            let summary = description.clone().or_else(|| ToolCall::read(tool_name, input).summary());
+        Asking::ToolUse { .. } | Asking::Unknown => {
+            let summary =
+                description.clone().or_else(|| ToolCall::read(approval.asking().call(), tool_name, input).summary());
             vec![
                 format!("APPROVAL NEEDED: {}", about(tool_name, summary)),
                 format!("  roundhouse approve {session} {approval_id}"),

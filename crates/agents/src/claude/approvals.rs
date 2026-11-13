@@ -21,7 +21,7 @@ pub(super) fn asking(tool: &str, input: &Value) -> Asking {
     match tool {
         QUESTIONS => Asking::Questions { questions: questions(input) },
         PLAN => Asking::Plan { plan: text_of(input, "plan").unwrap_or_default() },
-        _ => Asking::ToolUse,
+        _ => Asking::ToolUse { call: None },
     }
 }
 
@@ -93,7 +93,11 @@ mod tests {
 
         assert_eq!(asking("ExitPlanMode", &plan), Asking::Plan { plan: "1. Read\n2. Change".into() });
         assert_eq!(asking("ExitPlanMode", &json!({})), Asking::Plan { plan: String::new() });
-        assert_eq!(asking("Bash", &json!({"command": "ls"})), Asking::ToolUse);
-        assert_eq!(asking("mcp__team__AskUserQuestion", &json!({})), Asking::ToolUse, "only the CLI's own");
+        assert_eq!(asking("Bash", &json!({"command": "ls"})), Asking::ToolUse { call: None });
+        assert_eq!(
+            asking("mcp__team__AskUserQuestion", &json!({})),
+            Asking::ToolUse { call: None },
+            "only the CLI's own"
+        );
     }
 }

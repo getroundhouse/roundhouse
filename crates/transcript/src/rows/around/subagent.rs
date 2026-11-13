@@ -9,7 +9,6 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use client_core::calls::agent;
 use client_core::session_log::{By, MAX_LOADED_EVENTS, SessionLog};
 use protocol::event::{ContentBlock, EventBody, SessionEvent};
 use protocol::model::{Seq, Subagent as Record, SubagentStatus, ToolUseId, seq_index};
@@ -136,7 +135,7 @@ impl SubagentCalls {
             return None;
         }
         let found = nearby::call_before(log, seq, id, REACH);
-        let found = found.filter(|(_, name)| agent::hands_off(name)).map(|(call, _)| call);
+        let found = found.filter(|(_, hands_off)| *hands_off).map(|(call, _)| call);
         match found {
             Some(call) => {
                 self.found.insert(id.clone(), call);

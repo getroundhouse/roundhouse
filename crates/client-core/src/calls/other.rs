@@ -1,13 +1,11 @@
 //! A tool with no kind of its own, such as one from an MCP server. Its line is the agent's description of the call if
 //! it gave one, or the tool's name made readable, then the server it's from and the input that matters most.
 
+use protocol::event::CallKind;
 use serde_json::Value;
 
 use super::{description, first_line, main_input};
 
-/// How Claude names a tool from an MCP server: `mcp__<server>__<tool>`.
-const MCP_PREFIX: &str = "mcp__";
-const MCP_SEPARATOR: &str = "__";
 /// More than a line has room for, so a huge input isn't copied to be cut off.
 const DETAIL_CHARS: usize = 200;
 
@@ -25,10 +23,26 @@ pub struct Other {
 }
 
 impl Other {
-    pub(super) fn read(name: &str, input: &Value) -> Self {
-        let (server, tool) = match name.strip_prefix(MCP_PREFIX).and_then(|rest| rest.split_once(MCP_SEPARATOR)) {
-            Some((server, tool)) => (Some(server.to_string()), readable(tool)),
-            None => (None, readable(name)),
+    /// A call of `kind`, to the tool the agent calls `name`. One whose kind says the tool, and the server it's from,
+    /// is named by those. Any other, such as a known kind given input it doesn't expect, is named as the agent names
+    /// it.
+    pub(super) fn read(kind: &CallKind, name: &str, input: &Value) -> Self {
+        let (server, tool) = match kind {
+            CallKind::Other { server, tool } if !tool.is_empty() => (server.clone(), readable(tool)),
+            CallKind::Other { .. }
+            | CallKind::Command
+            | CallKind::Read
+            | CallKind::Write
+            | CallKind::Edit
+            | CallKind::Search
+            | CallKind::FindFiles
+            | CallKind::Fetch
+            | CallKind::WebSearch
+            | CallKind::Subagent
+            | CallKind::Advisor
+            | CallKind::Questions
+            | CallKind::Plan
+            | CallKind::Unknown => (None, readable(name)),
         };
         let described = description(input);
         let (title, tool) = match described {
@@ -104,18 +118,25 @@ fn first_input(input: &Value) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use serde_json::json;
+    use protocol::event::CallKind;
+    use serde_json::{Value, json};
 
     use super::{Other, readable};
 
+    /// A call to `tool`, which its kind says is a tool with no kind of its own, and from no server.
+    fn read(tool: &str, input: &Value) -> Other {
+        Other::read(&CallKind::Other { server: None, tool: tool.to_string() }, tool, input)
+    }
+
     #[test]
     fn a_tool_from_an_mcp_server_says_which_server() {
-        let other = Other::read("mcp__github__create_issue", &json!({ "title": "Signals" }));
+        let kind = CallKind::Other { server: Some("github".into()), tool: "create_issue".into() };
+        let other = Other::read(&kind, "mcp__github__create_issue", &json!({ "title": "Signals" }));
 
         assert_eq!(other.title, "Create issue");
         assert_eq!(other.server.as_deref(), Some("github"));
         assert_eq!(other.detail.as_deref(), Some("title: \"Signals\""));
-        let other = Other::read("mcp__github__list", &json!({ "labels": ["bug"] }));
+        let other = read("list", &json!({ "labels": ["bug"] }));
         assert_eq!(other.detail.as_deref(), Some("labels: [\"bug\"]"));
     }
 
@@ -130,7 +151,7 @@ mod tests {
 
     #[test]
     fn the_agent_s_description_comes_first_with_the_tool_after_it() {
-        let other = Other::read("NotebookEdit", &json!({ "description": "Fix the plot", "notebook_path": "a.ipynb" }));
+        let other = read("NotebookEdit", &json!({ "description": "Fix the plot", "notebook_path": "a.ipynb" }));
 
         assert_eq!(other.title, "Fix the plot");
         assert_eq!(other.tool.as_deref(), Some("Notebook edit"));
@@ -139,9 +160,18 @@ mod tests {
 
     #[test]
     fn the_usual_input_is_shown_on_its_own() {
-        let other = Other::read("ToolSearch", &json!({ "max_results": 2, "query": "select:Read\nmore" }));
+        let other = read("ToolSearch", &json!({ "max_results": 2, "query": "select:Read\nmore" }));
 
         assert_eq!(other.detail.as_deref(), Some("select:Read"));
-        assert_eq!(Other::read("Ping", &json!({})).detail, None);
+        assert_eq!(read("Ping", &json!({})).detail, None);
+    }
+
+    /// As a command given no command is, or a call of a kind this build doesn't know.
+    #[test]
+    fn a_call_whose_kind_names_no_tool_is_named_as_the_agent_names_it() {
+        for kind in [CallKind::Command, CallKind::Unknown, CallKind::Other { server: None, tool: String::new() }] {
+            let other = Other::read(&kind, "run_script", &json!({ "script": "ls" }));
+            assert_eq!((other.title.as_str(), other.server), ("Run script", None), "{kind:?}");
+        }
     }
 }

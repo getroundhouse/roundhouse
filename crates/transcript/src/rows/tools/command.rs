@@ -53,7 +53,7 @@ pub(super) fn shown(command: &Command, answer: Option<&Answer>, key: &ItemKey, g
 
 /// What the command printed, or what went wrong, once it's back.
 fn output(answer: Option<&Answer>) -> Option<&str> {
-    answer.map(|a| if a.is_error { failure::output(&a.text) } else { a.text.as_str() })
+    answer.map(|a| a.failure().map_or(a.text.as_str(), failure::output))
 }
 
 /// The command, and under it what it printed, or a faint line saying it printed nothing, so a command that's done

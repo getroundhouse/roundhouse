@@ -26,8 +26,12 @@ fn agent_says(text: &str) -> EventBody {
 }
 
 fn runs(id: &str, command: &str) -> EventBody {
-    let blocks =
-        vec![ContentBlock::ToolUse { id: id.into(), name: "Bash".into(), input: json!({ "command": command }) }];
+    let blocks = vec![ContentBlock::ToolUse {
+        id: id.into(),
+        name: "Bash".into(),
+        input: json!({ "command": command }),
+        call: None,
+    }];
     EventBody::Assistant { message_id: None, parent_tool_use_id: None, model: None, blocks, first_index: None }
 }
 
@@ -39,6 +43,8 @@ fn printed(id: &str, text: &str) -> EventBody {
         images: Vec::new(),
         change: None,
         encrypted: false,
+        call: None,
+        exit_code: None,
     };
     EventBody::AgentUser { parent_tool_use_id: None, blocks: vec![block] }
 }

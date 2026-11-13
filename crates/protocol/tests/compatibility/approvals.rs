@@ -45,7 +45,7 @@ fn an_approval_asking_for_a_plan_or_a_tools_use_keeps_its_form() {
     let tool = br#"{"session_id":"s","seq":1,"ts_ms":1,"place":0,"body":{"type":"approval_requested","approval_id":"a","tool_name":"Bash","tool_use_id":null,"input":{"command":"ls"},"description":null,"suggestions":null,"asking":{"kind":"tool_use"}}}"#;
 
     assert_eq!(asking(plan), Some(Asking::Plan { plan: "1. Read".into() }));
-    assert_eq!(asking(tool), Some(Asking::ToolUse));
+    assert_eq!(asking(tool), Some(Asking::ToolUse { call: None }));
 }
 
 /// A newer adapter's kind mustn't cost the event, which a client then asks about as a tool's use.

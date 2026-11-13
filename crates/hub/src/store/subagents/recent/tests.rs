@@ -1,4 +1,4 @@
-use protocol::event::ContentBlock;
+use protocol::event::{CallKind, ContentBlock};
 use protocol::model::RecentWork;
 use serde_json::json;
 
@@ -9,7 +9,7 @@ fn text(text: &str) -> ContentBlock {
 }
 
 fn call(id: &str) -> ContentBlock {
-    ContentBlock::ToolUse { id: id.into(), name: "Read".into(), input: json!({ "file_path": id }) }
+    ContentBlock::ToolUse { id: id.into(), name: "Read".into(), input: json!({ "file_path": id }), call: None }
 }
 
 fn result(id: &str, text: &str) -> ContentBlock {
@@ -20,6 +20,8 @@ fn result(id: &str, text: &str) -> ContentBlock {
         images: Vec::new(),
         change: None,
         encrypted: false,
+        call: None,
+        exit_code: None,
     }
 }
 
@@ -83,4 +85,31 @@ fn only_what_came_back_is_taken_from_a_user_line() {
 
     assert_eq!(work.since, None);
     assert_eq!(work.calls[0].result.as_ref().map(|result| result.text.as_str()), Some("one"));
+}
+
+/// So a client draws a subagent's call from its record as it would from its events, by the kind its adapter said, and
+/// says how a failed command exited without that being in the text.
+#[test]
+fn a_call_keeps_the_kind_its_adapter_said_and_its_result_how_the_command_exited() {
+    let mut work = RecentWork::default();
+    let input = json!({ "command": "ls x" });
+    let said = Some(CallKind::Command);
+    let made = ContentBlock::ToolUse { id: "c".into(), name: "Bash".into(), input, call: said.clone() };
+    let failed = ContentBlock::ToolResult {
+        tool_use_id: "c".into(),
+        is_error: true,
+        text: "ls: x: No such file".into(),
+        images: Vec::new(),
+        change: None,
+        encrypted: false,
+        call: said.clone(),
+        exit_code: Some(2),
+    };
+
+    add(&mut work, &[made, call("older")], true);
+    add(&mut work, &[failed], true);
+
+    assert_eq!((&work.calls[0].call.kind, &work.calls[1].call.kind), (&said, &None));
+    let result = work.calls[0].result.as_ref().unwrap();
+    assert_eq!((result.exit_code, result.text.as_str()), (Some(2), "ls: x: No such file"));
 }

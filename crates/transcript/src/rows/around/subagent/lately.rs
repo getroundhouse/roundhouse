@@ -41,7 +41,8 @@ fn wrote(said: &Said, key: ItemKey) -> Lately {
 /// such as a read's lines, so the start of a long one would say it read fewer than it did, and the call is drawn as
 /// one still waiting instead.
 fn called(call: &Call, result: Option<&CallResult>) -> Lately {
-    let block = ContentBlock::ToolUse { id: call.id.clone(), name: call.name.clone(), input: call.input.clone() };
+    let (id, name, input) = (call.id.clone(), call.name.clone(), call.input.clone());
+    let block = ContentBlock::ToolUse { id, name, input, call: call.kind.clone() };
     let result = result.filter(|result| !result.cut || result.is_error).map(|result| ContentBlock::ToolResult {
         tool_use_id: call.id.clone(),
         is_error: result.is_error,
@@ -50,6 +51,9 @@ fn called(call: &Call, result: Option<&CallResult>) -> Lately {
         images: result.images.clone(),
         change: None,
         encrypted: result.encrypted,
+        // A subagent's result is read by the adapter that read its call, so it says its kind whenever the call does.
+        call: call.kind.clone(),
+        exit_code: result.exit_code,
     });
     Lately { block, key: ItemKey::Call(call.id.clone()), result }
 }
@@ -64,7 +68,7 @@ mod tests {
     use crate::item_key::ItemKey;
 
     fn call(id: &str) -> Call {
-        Call { id: id.into(), name: "Read".into(), input: json!({ "file_path": format!("{id}.rs") }) }
+        Call { id: id.into(), name: "Read".into(), input: json!({ "file_path": format!("{id}.rs") }), kind: None }
     }
 
     fn said(text: &str, cut: bool) -> Said {
@@ -72,7 +76,7 @@ mod tests {
     }
 
     fn came_back(text: &str, cut: bool, is_error: bool) -> CallResult {
-        CallResult { is_error, text: text.into(), cut, images: Vec::new(), encrypted: false }
+        CallResult { is_error, text: text.into(), cut, images: Vec::new(), encrypted: false, exit_code: None }
     }
 
     fn record(recent: RecentWork, latest: Option<Call>) -> Subagent {

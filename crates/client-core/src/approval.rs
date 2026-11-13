@@ -39,7 +39,7 @@ impl<'a> Approval<'a> {
     pub fn questions(&self) -> Option<&[Question]> {
         match &*self.asking {
             Asking::Questions { questions } => Some(questions),
-            Asking::ToolUse | Asking::Plan { .. } | Asking::Unknown => None,
+            Asking::ToolUse { .. } | Asking::Plan { .. } | Asking::Unknown => None,
         }
     }
 

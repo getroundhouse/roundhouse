@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::FileChange;
+use super::{CallKind, FileChange};
 use crate::attachment::Attachment;
 use crate::model::ToolUseId;
 
@@ -24,8 +24,13 @@ pub enum ContentBlock {
     },
     ToolUse {
         id: ToolUseId,
+        /// The agent's own name for the tool, and what it gave it.
         name: String,
         input: Value,
+        /// What kind of call it is, as the agent's adapter read it from the tool. `None` in one recorded before
+        /// adapters said, which a client reads from the tool's name as Claude's were then.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        call: Option<CallKind>,
     },
     /// What a call sent back. It comes in an `AgentUser` event, except for a tool the API runs itself, such as Claude's
     /// advisor, whose result comes in an `Assistant` event.
@@ -44,6 +49,15 @@ pub enum ContentBlock {
         /// What came back is encrypted, for the model alone, as the advisor's reply can be, so `text` holds none of it.
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         encrypted: bool,
+        /// What kind of call it answers, as the agent's adapter read it. With it, `text` is what came back alone, and
+        /// how a command exited is `exit_code`. `None` in one recorded before adapters said, and in one whose call
+        /// the adapter no longer knows, whose `text` is as the agent sent it, with whatever the agent put in it to
+        /// say how it failed.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        call: Option<CallKind>,
+        /// How the command exited, when the call was one and the agent said.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        exit_code: Option<i32>,
     },
     Image {
         media_type: Option<String>,

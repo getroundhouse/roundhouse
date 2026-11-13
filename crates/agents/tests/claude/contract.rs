@@ -84,6 +84,7 @@ fn approvals_carry_what_a_client_must_show_and_the_cli_must_get_back() {
                 description,
                 suggestions,
                 asking,
+                ..
             } => Some((approval_id, tool_name, tool_use_id, input, description, suggestions, asking)),
             _ => None,
         })
@@ -96,7 +97,7 @@ fn approvals_carry_what_a_client_must_show_and_the_cli_must_get_back() {
         assert!(input["command"].as_str().is_some_and(|c| c.contains("echo")));
         assert!(description.is_some());
         assert!(suggestions.is_array());
-        assert_eq!(asking.as_deref(), Some(&Asking::ToolUse));
+        assert_eq!(asking.as_deref(), Some(&Asking::ToolUse { call: None }));
     }
 }
 
@@ -227,7 +228,7 @@ fn thinking_tools_and_results_all_normalize() {
     assert!(blocks.iter().any(|b| matches!(b, ContentBlock::Text { text, .. } if text.contains("DONE"))));
     assert!(blocks.iter().any(|b| matches!(
         b,
-        ContentBlock::ToolUse { name, input, id } if name == "Bash" && input["command"].is_string() && id.as_str().starts_with("toolu_")
+        ContentBlock::ToolUse { name, input, id, .. } if name == "Bash" && input["command"].is_string() && id.as_str().starts_with("toolu_")
     )));
     assert!(blocks.iter().any(|b| matches!(b, ContentBlock::ToolResult { is_error: false, .. })));
     // A denial reaches the agent as a tool error carrying our message.

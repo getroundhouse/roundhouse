@@ -1,21 +1,26 @@
-//! What a tool call is, read from its name and input, and what its result says, for every client alike. Every tool a
-//! client draws as a kind of call is named here, so a client draws kinds of call rather than tools. A tool it doesn't
-//! know, such as one from an MCP server, is `Other`, and still gets a readable line. [`ToolCall::summary`] is the one
-//! line every client gives a call to say what it's about.
+//! What a tool call is, and what its result says, for every client alike. The agent's adapter says what kind of call
+//! each is, and a client reads the call's input knowing its kind, so a client draws kinds of call rather than tools. A
+//! call recorded before adapters said is read from its tool's name, as [`older`] has Claude's of then. A tool with no
+//! kind of its own, such as one from an MCP server, is `Other`, and still gets a readable line. [`ToolCall::summary`]
+//! is the one line every client gives a call to say what it's about.
 
+use std::borrow::Cow;
+
+use protocol::event::CallKind;
 use serde_json::Value;
 
 pub mod agent;
 mod command;
 pub mod failure;
 pub mod files;
+mod older;
 mod other;
 mod search;
 pub mod web;
 
 pub use agent::Agent;
 pub use command::Command;
-pub use failure::Failure;
+pub use failure::{Failed, Failure};
 pub use files::{EditFile, ReadFile, WriteFile};
 pub use other::Other;
 pub use search::{FileLines, Found, Looks, Search};
@@ -37,24 +42,46 @@ pub enum ToolCall<'a> {
     Other(Other),
 }
 
+/// What kind of call one to the tool `name` is: `said`, which is what its adapter said it is, or for one recorded
+/// before adapters said, what Claude's tool of that name was.
+pub fn kind<'a>(said: Option<&'a CallKind>, name: &str) -> Cow<'a, CallKind> {
+    said.map_or_else(|| Cow::Owned(older::kind_of(name)), Cow::Borrowed)
+}
+
+/// Whether the call hands work to a subagent.
+pub fn hands_off(said: Option<&CallKind>, name: &str) -> bool {
+    *kind(said, name) == CallKind::Subagent
+}
+
+/// Whether the call asks the person something, questions or to approve a plan, which its request for approval carries
+/// in full.
+pub fn asks_the_person(said: Option<&CallKind>, name: &str) -> bool {
+    matches!(*kind(said, name), CallKind::Questions | CallKind::Plan)
+}
+
 impl<'a> ToolCall<'a> {
-    pub fn read(name: &'a str, input: &'a Value) -> Self {
-        let known = match name {
-            "Bash" => Command::read(input).map(ToolCall::Command),
-            "Read" => ReadFile::read(input).map(ToolCall::Read),
-            "Write" => WriteFile::read(input).map(ToolCall::Write),
-            "Edit" | "MultiEdit" => EditFile::read(input).map(ToolCall::Edit),
-            "Grep" => Search::read(input, Looks::InFiles).map(ToolCall::Search),
-            "Glob" => Search::read(input, Looks::ForNames).map(ToolCall::Search),
-            "WebFetch" => Fetch::read(input).map(ToolCall::Fetch),
-            "WebSearch" => WebSearch::read(input).map(ToolCall::WebSearch),
-            ADVISOR => Some(ToolCall::Advisor),
+    /// The call as it's recorded: what its adapter `said` it is, if it said, the agent's own `name` for the tool, and
+    /// what it gave it.
+    pub fn read(said: Option<&CallKind>, name: &'a str, input: &'a Value) -> Self {
+        let kind = kind(said, name);
+        let known = match &*kind {
+            CallKind::Command => Command::read(input).map(ToolCall::Command),
+            CallKind::Read => ReadFile::read(input).map(ToolCall::Read),
+            CallKind::Write => WriteFile::read(input).map(ToolCall::Write),
+            CallKind::Edit => EditFile::read(input).map(ToolCall::Edit),
+            CallKind::Search => Search::read(input, Looks::InFiles).map(ToolCall::Search),
+            CallKind::FindFiles => Search::read(input, Looks::ForNames).map(ToolCall::Search),
+            CallKind::Fetch => Fetch::read(input).map(ToolCall::Fetch),
+            CallKind::WebSearch => WebSearch::read(input).map(ToolCall::WebSearch),
+            CallKind::Advisor => Some(ToolCall::Advisor),
             // Always drawn as one, so the subagent's work, which its rows leave to the call, shows somewhere.
-            name if agent::hands_off(name) => Some(ToolCall::Agent(Agent::read(input))),
-            _ => None,
+            CallKind::Subagent => Some(ToolCall::Agent(Agent::read(input))),
+            // What these ask is drawn from their requests for approval. A client that draws the call too draws it as
+            // any tool.
+            CallKind::Questions | CallKind::Plan | CallKind::Other { .. } | CallKind::Unknown => None,
         };
-        // A known tool whose input isn't what it should be is still drawn, as any tool would be.
-        known.unwrap_or_else(|| ToolCall::Other(Other::read(name, input)))
+        // A known kind whose input isn't what it should be is still drawn, as any tool would be.
+        known.unwrap_or_else(|| ToolCall::Other(Other::read(&kind, name, input)))
     }
 
     /// One line saying what the call is about, the same wherever it's shown, such as on a card asking to run it or in
@@ -78,8 +105,6 @@ impl<'a> ToolCall<'a> {
     }
 }
 
-/// The advisor, which the API runs rather than the agent.
-const ADVISOR: &str = "advisor";
 /// Inputs that usually say what a call is about, in the order they're looked for.
 const MAIN_INPUTS: &[&str] = &["command", "file_path", "path", "pattern", "url", "query", "prompt"];
 

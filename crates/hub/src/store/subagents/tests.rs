@@ -20,7 +20,7 @@ fn ended(call: &str, outcome: SubagentOutcome, report: Option<&str>) -> EventBod
 }
 
 fn tool_use(id: &str) -> ContentBlock {
-    ContentBlock::ToolUse { id: id.into(), name: "Read".into(), input: json!({"file_path": id}) }
+    ContentBlock::ToolUse { id: id.into(), name: "Read".into(), input: json!({"file_path": id}), call: None }
 }
 
 /// A message from the agent, or from the subagent `from` started.
@@ -141,6 +141,8 @@ fn answer(to: Option<&str>, id: &str, text: &str) -> EventBody {
         images: Vec::new(),
         change: None,
         encrypted: false,
+        call: None,
+        exit_code: None,
     };
     EventBody::AgentUser { parent_tool_use_id: to.map(Into::into), blocks: vec![result] }
 }

@@ -6,7 +6,8 @@ use std::io::Write;
 use client_core::calls::{ToolCall, first_line};
 use protocol::attachment::Attachment;
 use protocol::event::{
-    AgentTask, CompactionOutcome, ContentBlock, EventBody, Question, SessionEvent, SubagentOutcome, TurnOutcome,
+    AgentTask, CallKind, CompactionOutcome, ContentBlock, EventBody, Question, SessionEvent, SubagentOutcome,
+    TurnOutcome,
 };
 use protocol::model::{ApprovalId, MessageId, PermissionMode, Seq, TaskId, ToolUseId};
 use protocol::tail::{DeltaChange, StreamDelta, Tail};
@@ -177,12 +178,19 @@ impl Printer {
             ContentBlock::Thinking { text } if !text.is_empty() => {
                 self.line(seq, &format!("(thinking) {}", first_line(text)));
             }
-            ContentBlock::ToolUse { name, input, .. } => self.line(seq, &format!("tool {}", called(name, input))),
+            ContentBlock::ToolUse { name, input, call, .. } => {
+                self.line(seq, &format!("tool {}", called(call.as_ref(), name, input)));
+            }
             ContentBlock::ToolResult { encrypted: true, .. } => {
                 self.line(seq, "tool result: encrypted, for the model alone");
             }
-            ContentBlock::ToolResult { is_error, text, images, .. } => {
-                let label = if *is_error { "tool error" } else { "tool result" };
+            ContentBlock::ToolResult { is_error, text, images, exit_code, .. } => {
+                // One from before adapters said how a command exited says so in its text.
+                let label = match (is_error, exit_code) {
+                    (true, Some(code)) => format!("tool error, exit {code}"),
+                    (true, None) => "tool error".to_string(),
+                    (false, _) => "tool result".to_string(),
+                };
                 let lines: Vec<&str> = text.lines().collect();
                 let first = lines.first().copied().unwrap_or("");
                 let shown = match images.len() {
@@ -257,9 +265,10 @@ impl Printer {
     }
 }
 
-/// A call to the tool `name`, with what it's about, as every client says it, if it says anything.
-fn called(name: &str, input: &Value) -> String {
-    about(name, ToolCall::read(name, input).summary())
+/// A call to the tool `name`, with what it's about, as every client says it, if it says anything. `said` is the kind
+/// its adapter said it is, if it said.
+fn called(said: Option<&CallKind>, name: &str, input: &Value) -> String {
+    about(name, ToolCall::read(said, name, input).summary())
 }
 
 /// The tool `name`, then `summary` after a colon, if there's one. Such as the advisor, which takes no input, a call can
@@ -323,10 +332,13 @@ mod tests {
 
     #[test]
     fn a_call_says_what_it_s_about_as_every_client_does() {
-        assert_eq!(called("Bash", &json!({ "command": "\ncargo test\n--workspace" })), "Bash: cargo test");
-        assert_eq!(called("Read", &json!({ "file_path": "src/a.rs" })), "Read: src/a.rs");
-        assert_eq!(called("mcp__github__list", &json!({ "labels": ["bug"] })), "mcp__github__list: labels: [\"bug\"]");
-        assert_eq!(called("advisor", &json!({})), "advisor", "it takes no input");
+        assert_eq!(called(None, "Bash", &json!({ "command": "\ncargo test\n--workspace" })), "Bash: cargo test");
+        assert_eq!(called(None, "Read", &json!({ "file_path": "src/a.rs" })), "Read: src/a.rs");
+        assert_eq!(
+            called(None, "mcp__github__list", &json!({ "labels": ["bug"] })),
+            "mcp__github__list: labels: [\"bug\"]"
+        );
+        assert_eq!(called(None, "advisor", &json!({})), "advisor", "it takes no input");
     }
 
     #[test]

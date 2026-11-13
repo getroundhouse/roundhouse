@@ -26,7 +26,7 @@ pub(super) fn asking(tool: &str, input: &Value) -> Asking {
     match tool {
         QUESTIONS => Asking::Questions { questions: questions(input) },
         PLAN => Asking::Plan { plan: text_of(input, "plan").unwrap_or_default() },
-        _ => Asking::ToolUse,
+        _ => Asking::ToolUse { call: None },
     }
 }
 
@@ -73,6 +73,6 @@ pub(super) fn refusal(asking: &Asking) -> &'static str {
     match asking {
         Asking::Questions { .. } => SKIPPED,
         Asking::Plan { .. } => KEEP_PLANNING,
-        Asking::ToolUse | Asking::Unknown => DENIED,
+        Asking::ToolUse { .. } | Asking::Unknown => DENIED,
     }
 }

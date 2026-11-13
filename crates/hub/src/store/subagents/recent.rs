@@ -50,11 +50,12 @@ pub(super) fn add(work: &mut RecentWork, blocks: &[ContentBlock], wrote: bool) -
             }
             // A tool the API runs itself, such as the advisor, sends its result in the subagent's own message, and
             // every other tool's comes in the next one from the user's side.
-            ContentBlock::ToolResult { tool_use_id, is_error, text, images, encrypted, .. } => {
+            ContentBlock::ToolResult { tool_use_id, is_error, text, images, encrypted, exit_code, .. } => {
                 let Some(made) = work.calls.iter_mut().find(|made| made.call.id == *tool_use_id) else { continue };
                 let (kept, cut) = start_of(text, RESULT_KEPT);
                 let (text, images, encrypted) = (kept.to_owned(), images.clone(), *encrypted);
-                made.result = Some(CallResult { is_error: *is_error, text, cut, images, encrypted });
+                let (is_error, exit_code) = (*is_error, *exit_code);
+                made.result = Some(CallResult { is_error, text, cut, images, encrypted, exit_code });
                 changed = true;
             }
             ContentBlock::Text { .. }

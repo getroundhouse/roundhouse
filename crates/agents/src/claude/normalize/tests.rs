@@ -1,5 +1,5 @@
 use protocol::attachment::{AttachmentBytes, MediaType};
-use protocol::event::{FileChange, TurnOutcome};
+use protocol::event::{ContentBlock, FileChange, TurnOutcome};
 use protocol::model::{PermissionMode, ToolUseId};
 use serde_json::json;
 
@@ -287,7 +287,10 @@ fn a_call_to_the_advisor_is_a_call_like_any_other() {
     let streamed = parse_line(&start.to_string());
 
     let Parsed::Event(EventBody::Assistant { blocks, .. }) = recorded else { panic!("{recorded:?}") };
-    assert_eq!(blocks, [ContentBlock::ToolUse { id: "srvtoolu_1".into(), name: "advisor".into(), input: json!({}) }]);
+    assert_eq!(
+        blocks,
+        [ContentBlock::ToolUse { id: "srvtoolu_1".into(), name: "advisor".into(), input: json!({}), call: None }]
+    );
     let Parsed::Delta(StreamDelta { change: DeltaChange::BlockStart { kind, .. }, .. }) = streamed else {
         panic!("{streamed:?}")
     };

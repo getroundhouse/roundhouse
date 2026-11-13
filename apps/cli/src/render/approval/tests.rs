@@ -50,7 +50,7 @@ fn a_plan_prints_whole_and_a_tool_by_its_input() {
     let plan = Asking::Plan { plan: "# Plan\n\n1. Read".into() };
 
     let planned = lines(&event("ExitPlanMode", json!({}), Some(plan)));
-    let tool = lines(&event("Bash", json!({"command": "ls -la"}), Some(Asking::ToolUse)));
+    let tool = lines(&event("Bash", json!({"command": "ls -la"}), Some(Asking::ToolUse { call: None })));
 
     assert_eq!(
         planned,

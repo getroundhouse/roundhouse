@@ -1,6 +1,7 @@
 //! What's come back for a call: its result, found in the log near after it, or the log saying the agent went on
 //! without one.
 
+use client_core::calls::Failed;
 use client_core::session_log::SessionLog;
 use protocol::event::{ContentBlock, EventBody, FileChange, Hunk, SessionEvent};
 use protocol::model::{Seq, ToolUseId};
@@ -54,12 +55,17 @@ pub(in crate::rows) struct Answer {
     pub(in crate::rows) images: Vec<Carried>,
     /// Whether what it sent back is encrypted, for the model alone, so `text` holds none of it.
     pub(in crate::rows) encrypted: bool,
+    /// How the command exited, as the result says.
+    exit_code: Option<i32>,
+    /// Whether the result says what kind of call it answers, as one from an adapter that says how it failed does.
+    kind_said: bool,
 }
 
 impl Answer {
-    /// What it says went wrong, if it failed.
-    pub(in crate::rows) fn failure(&self) -> Option<&str> {
-        self.is_error.then_some(self.text.as_str())
+    /// What it says went wrong, if it failed, for `client_core::calls::failure` to read.
+    pub(in crate::rows) fn failure(&self) -> Option<Failed<'_>> {
+        let (text, exit_code, kind_said) = (self.text.as_str(), self.exit_code, self.kind_said);
+        self.is_error.then_some(Failed { text, exit_code, kind_said })
     }
 
     /// What it sent back, if it didn't fail.
@@ -85,9 +91,18 @@ impl Answer {
 
     /// What `block` says, if it's a result.
     fn of(block: &ContentBlock, m: &Model) -> Option<Answer> {
-        let ContentBlock::ToolResult { is_error, text, change, images, encrypted, .. } = block else { return None };
-        let images = attachments::carried(m, images);
-        Some(Answer { is_error: *is_error, text: text.clone(), change: change.clone(), images, encrypted: *encrypted })
+        let ContentBlock::ToolResult { is_error, text, change, images, encrypted, call, exit_code, .. } = block else {
+            return None;
+        };
+        Some(Answer {
+            is_error: *is_error,
+            text: text.clone(),
+            change: change.clone(),
+            images: attachments::carried(m, images),
+            encrypted: *encrypted,
+            exit_code: *exit_code,
+            kind_said: call.is_some(),
+        })
     }
 }
 

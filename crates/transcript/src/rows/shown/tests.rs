@@ -24,7 +24,7 @@ fn says(text: &str) -> EventBody {
 }
 
 fn call(id: &str, name: &str, input: serde_json::Value) -> EventBody {
-    agent(vec![ContentBlock::ToolUse { id: id.into(), name: name.into(), input }])
+    agent(vec![ContentBlock::ToolUse { id: id.into(), name: name.into(), input, call: None }])
 }
 
 fn sent_back(id: &str, text: &str) -> EventBody {
@@ -35,6 +35,8 @@ fn sent_back(id: &str, text: &str) -> EventBody {
         images: Vec::new(),
         change: None,
         encrypted: false,
+        call: None,
+        exit_code: None,
     };
     EventBody::AgentUser { parent_tool_use_id: None, blocks: vec![block] }
 }

@@ -37,7 +37,7 @@ fn a_needle_is_something_to_look_for_and_not_too_much() {
 }
 
 fn call(input: Value) -> EventBody {
-    let block = ContentBlock::ToolUse { id: "t".into(), name: "Bash".into(), input };
+    let block = ContentBlock::ToolUse { id: "t".into(), name: "Bash".into(), input, call: None };
     EventBody::Assistant {
         message_id: None,
         parent_tool_use_id: None,
@@ -56,6 +56,8 @@ fn changed(text: &str, line: &str) -> EventBody {
         images: Vec::new(),
         change: Some(FileChange::Changed { hunks: vec![hunk] }),
         encrypted: false,
+        call: None,
+        exit_code: None,
     };
     EventBody::AgentUser { parent_tool_use_id: None, blocks: vec![block] }
 }
@@ -188,7 +190,7 @@ proptest! {
         let Ok(needle) = Needle::new(&query) else { return Ok(()) };
         let said = ContentBlock::Text { text: texts[0].clone(), images: Vec::new() };
         let input = json!({ "command": texts[1], "timeout": 600, "list": [texts[2]] });
-        let used = ContentBlock::ToolUse { id: "t".into(), name: "Bash".into(), input };
+        let used = ContentBlock::ToolUse { id: "t".into(), name: "Bash".into(), input, call: None };
         let blocks = vec![said, used];
         let bodies = [
             EventBody::UserPrompt { client_msg_id: None, prompt: crate::prompt::Prompt::new(texts[3].clone()) },

@@ -6,7 +6,7 @@ use serde_json::Value;
 
 use super::{ModelName, Rev, SessionId, ToolUseId};
 use crate::attachment::Attachment;
-use crate::event::SubagentOutcome;
+use crate::event::{CallKind, SubagentOutcome};
 
 /// One subagent, named by its session and the call that started it, which its events name as their parent.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -80,6 +80,9 @@ pub struct Call {
     pub id: ToolUseId,
     pub name: String,
     pub input: Value,
+    /// What kind of call it is, as its `ToolUse` said. `None` for one recorded before adapters said.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<CallKind>,
 }
 
 /// What a subagent has done lately: its newest calls, each with the text it wrote just before it and what came back
@@ -133,6 +136,9 @@ pub struct CallResult {
     /// What came back is encrypted, for the model alone, so `text` holds none of it.
     #[serde(default)]
     pub encrypted: bool,
+    /// How the command exited, as its result block said.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exit_code: Option<i32>,
 }
 
 #[cfg(test)]
@@ -158,9 +164,15 @@ mod tests {
     /// Its form on the wire and in the hub's column, which a change of shape would fail.
     #[test]
     fn what_a_subagent_has_done_lately_has_one_form() {
-        let call = Call { id: "read".into(), name: "Read".into(), input: json!({ "file_path": "a.rs" }) };
-        let result =
-            CallResult { is_error: false, text: "1→fn main".into(), cut: true, images: Vec::new(), encrypted: false };
+        let call = Call { id: "read".into(), name: "Read".into(), input: json!({ "file_path": "a.rs" }), kind: None };
+        let result = CallResult {
+            is_error: false,
+            text: "1→fn main".into(),
+            cut: true,
+            images: Vec::new(),
+            encrypted: false,
+            exit_code: None,
+        };
         let before = Some(Said { text: "I'll read it.".into(), cut: false });
         let since = Some(Said { text: "It's there.".into(), cut: false });
         let work = RecentWork { calls: vec![RecentCall { before, call, result: Some(result) }], since };

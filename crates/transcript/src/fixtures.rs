@@ -29,7 +29,7 @@ pub(crate) fn calls(ids: &[&str]) -> EventBody {
 pub(crate) fn calls_to(name: &str, ids: &[&str]) -> EventBody {
     let blocks = ids
         .iter()
-        .map(|id| ContentBlock::ToolUse { id: (*id).into(), name: name.to_string(), input: json!({}) })
+        .map(|id| ContentBlock::ToolUse { id: (*id).into(), name: name.to_string(), input: json!({}), call: None })
         .collect();
     EventBody::Assistant { message_id: None, parent_tool_use_id: None, model: None, blocks, first_index: None }
 }
@@ -58,6 +58,8 @@ pub(crate) fn result(id: &str) -> EventBody {
         images: Vec::new(),
         change: None,
         encrypted: false,
+        call: None,
+        exit_code: None,
     };
     EventBody::AgentUser { parent_tool_use_id: None, blocks: vec![block] }
 }

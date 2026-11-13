@@ -91,7 +91,7 @@ fn a_plan_from_before_is_its_text_and_any_other_tool_asks_to_be_used() {
     let bash = requested("Bash", json!({"command": "ls"}), None);
 
     assert_eq!(Approval::of(&plan).unwrap().asking(), &Asking::Plan { plan: "1. Read".into() });
-    assert_eq!(Approval::of(&bash).unwrap().asking(), &Asking::ToolUse);
+    assert_eq!(Approval::of(&bash).unwrap().asking(), &Asking::ToolUse { call: None });
     assert_eq!(Approval::of(&bash).unwrap().questions(), None);
     assert_eq!(Approval::of(&EventBody::Unknown), None, "only a request asks");
 }
