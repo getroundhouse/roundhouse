@@ -114,7 +114,9 @@ pub(super) fn context() -> World {
         plan: Some("Max".to_string()),
         login: Some("Claude account".to_string()),
         email: Some("ada@example.com".to_string()),
+        name: None,
         limits: vec![hours, week],
+        held_login: None,
         rev: Rev::default(),
     };
     world.sessions.last_mut().unwrap().account = Some(account.id.clone());
