@@ -57,6 +57,23 @@ fn recover(store: &Store) -> Result<LeftHalfDone, StoreError> {
     Ok(LeftHalfDone { instances: store.take_unfinished_instances()?, moves })
 }
 
+/// The hub's lock, once the store it keeps to this hub is open. Letting go of it stops the store writing first, for the
+/// rest of this process: what this hub started can still be running until the daemon's runtime lets it go, and a new
+/// hub can take the lock as soon as it's free, so a write from then on would land under the new hub as it copies the
+/// database and migrates it. Letting go waits for a write under way, on whatever thread drops this, which in `run` is
+/// the one `block_on` runs it on, not one of the runtime's.
+struct HubLock {
+    store: Arc<Store>,
+    /// Let go of once [`Drop::drop`] has run, as a field is.
+    _lock: std::fs::File,
+}
+
+impl Drop for HubLock {
+    fn drop(&mut self) {
+        self.store.stop_writing();
+    }
+}
+
 /// One hub at a time per data directory. It holds what's returned for as long as it runs.
 fn take_lock(paths: &Paths) -> Result<std::fs::File, HubError> {
     let lock_file = std::fs::File::create(&paths.lock).map_err(|e| HubError::io("opening the hub lock", e))?;
@@ -101,6 +118,7 @@ pub async fn run(config: HubConfig) -> Result<(), HubError> {
         .open(&paths.database)
         .map_err(|e| HubError::io(format!("creating {}", paths.database.display()), e))?;
     let store = Arc::new(Store::open(&paths.database, &paths.backups_dir).map_err(HubError::OpenDatabase)?);
+    let lock = HubLock { store: store.clone(), _lock: lock_file };
     let unfinished = recover(&store).map_err(HubError::Recover)?;
     let left_at_work = LeftAtWork::read(&store).map_err(HubError::Recover)?;
     let settings = store.hub_settings().map_err(HubError::OpenDatabase)?;
@@ -148,7 +166,7 @@ pub async fn run(config: HubConfig) -> Result<(), HubError> {
     if let Some(awake) = awake {
         awake.abort();
     }
-    drop(lock_file);
+    drop(lock);
     info!("hub stopped");
     Ok(())
 }

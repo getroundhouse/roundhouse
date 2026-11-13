@@ -214,6 +214,22 @@ impl Store {
         Ok(Self { writer: Mutex::new(writer), reader: Mutex::new(reader), finder: Mutex::new(finder) })
     }
 
+    /// Waits for the write under way, then keeps the writer from making another for as long as this process runs.
+    /// Every write goes through the writer, so one asked for after this waits for good, and is never made. The one
+    /// change to `hub.db` left is SQLite's own: the last of a database's connections to close moves the WAL into it,
+    /// which SQLite only does while no other connection has read it, since one in WAL mode keeps a lock on it from its
+    /// first read until it closes. So another hub's first read waits until that's done.
+    pub(crate) fn stop_writing(&self) {
+        MutexGuard::leak(lock(&self.writer));
+    }
+
+    /// Whether the writer is held, as it is for good once [`Store::stop_writing`] has run, and while a write is under
+    /// way.
+    #[cfg(test)]
+    pub(crate) fn writer_is_held(&self) -> bool {
+        self.writer.is_locked()
+    }
+
     // Repos ---------------------------------------------------------------------------------------
 
     // Workspaces ----------------------------------------------------------------------------------

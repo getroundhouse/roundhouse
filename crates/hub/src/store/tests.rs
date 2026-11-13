@@ -354,3 +354,14 @@ fn adding_a_repo_twice_returns_the_same_record() {
         .unwrap();
     assert_eq!(again.id, "r".into());
 }
+
+/// Every write goes through the writer, so a store that keeps it for good makes no more.
+#[test]
+fn a_store_that_stops_writing_keeps_its_writer_for_good() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = open_in(dir.path());
+
+    store.stop_writing();
+
+    assert!(store.writer_is_held());
+}
