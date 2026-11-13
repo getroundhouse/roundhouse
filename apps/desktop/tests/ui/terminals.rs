@@ -12,6 +12,8 @@ use terminal_view::TerminalView;
 
 use crate::support::{Cells, Stack, Ui, in_window};
 
+mod keys;
+
 /// The app on a new workspace, with a terminal opened in it from the `+`, once its shell is ready.
 fn with_a_terminal<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> Ui<'a> {
     let mut ui = Ui::open_with_a_repository(cx, stack);
@@ -138,37 +140,6 @@ fn shift_command_t_opens_a_terminal_that_takes_the_keys(cx: &mut TestAppContext)
     ui.press("secondary-shift-t");
 
     wait_for_the_prompt(&mut ui);
-    type_echo_hi(&mut ui);
-}
-
-/// Tab and Shift-Tab are the program's, as in terminal apps, rather than moving the keys to what's next on screen, as
-/// the kit has them do everywhere else. `cat` gives back each line it reads, so a tab shows where it took the cursor.
-#[gpui_kit::test]
-fn tab_and_shift_tab_reach_the_program(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = with_a_terminal(cx, &stack);
-    let tabbed = |ui: &Ui<'_>, text: &str| rows(ui).iter().filter(|row| row.trim_end() == text).count() == 2;
-
-    type_keys(&mut ui, &["c", "a", "t", "enter", "tab", "x", "enter"]);
-    ui.wait("the tabbed line, as typed and as given back", |ui| tabbed(ui, "        x"));
-    type_keys(&mut ui, &["shift-tab", "enter", "y", "enter"]);
-
-    ui.wait("the line after Shift-Tab, as typed and as given back", |ui| tabbed(ui, "y"));
-}
-
-/// As it moves between chats, coming to the terminals after them, and wrapping round.
-#[gpui_kit::test]
-fn ctrl_tab_moves_between_the_chat_and_a_terminal(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = with_a_terminal(cx, &stack);
-
-    ui.press("ctrl-tab");
-    ui.wait("the chat in front", |ui| showing(ui) == Showing::Chat);
-    ui.input("next");
-    assert_eq!(ui.composer_text(), "next", "the chat's composer has the keys");
-    ui.press("ctrl-tab");
-
-    ui.wait("the terminal in front", |ui| showing(ui) == Showing::Terminal);
     type_echo_hi(&mut ui);
 }
 
@@ -316,19 +287,6 @@ fn closing_a_terminal_ends_it_and_brings_back_the_chat(cx: &mut TestAppContext) 
     ui.input("next");
     assert_eq!(ui.composer_text(), "next", "the chat's composer has the keys again");
     ui.wait("the view to be let go", |_| view.upgrade().is_none());
-}
-
-/// Off the Mac, where the app's shortcuts are on Ctrl, as Ctrl-W closes a chat, in a terminal it deletes the word
-/// before it, as a shell has it. On a Mac, where Ctrl-W was never the app's, the same holds.
-#[gpui_kit::test]
-fn ctrl_w_in_a_terminal_reaches_its_shell(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = with_a_terminal(cx, &stack);
-
-    type_keys(&mut ui, &["e", "c", "h", "o", "space", "h", "i", "space", "t", "h", "e", "r", "e", "ctrl-w", "enter"]);
-
-    ui.wait("what the shell printed", |ui| rows(ui).iter().any(|row| row.trim_end() == "hi"));
-    assert_eq!(showing(&ui), Showing::Terminal, "the terminal is still open");
 }
 
 /// Its pane isn't drawn, so the keys stay with the workspace that is.

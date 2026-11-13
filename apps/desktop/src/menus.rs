@@ -9,9 +9,9 @@ use gpui_kit::{App, Menu, MenuItem, OsAction, PromptLevel, SystemMenuType, Windo
 use crate::workspace_pane::Showing;
 
 use crate::{
-    About, AddRepository, CheckForUpdates, CloseChat, FindInChat, FindNext, FindPrevious, Hide, HideOthers, Minimize,
-    NewChat, NewTerminal, NewWorkspace, NextWorkspace, OpenSettings, PreviousWorkspace, Quit, ShowAll, ToggleDiff,
-    Zoom,
+    About, AddRepository, ArchiveWorkspace, CheckForUpdates, CloseChat, FindInChat, FindNext, FindPrevious, Hide,
+    HideOthers, Minimize, NewChat, NewTerminal, NewWorkspace, NextWorkspace, OpenSettings, PreviousWorkspace, Quit,
+    ShowAll, ToggleDiff, Zoom,
 };
 
 mod drawn;
@@ -108,9 +108,10 @@ fn app_menu() -> Menu {
     ])
 }
 
-/// Making things, and closing a chat, as a File menu makes and closes documents. The window handles these. ⌘W closes
-/// the file tab or the subagent tab while it shows, so the item says so then. Off the Mac, Settings… and quitting end
-/// it, as they do a Windows or Linux app's File menu.
+/// Making things, and closing a chat or archiving the workspace, as a File menu makes and closes documents. The window
+/// handles these. ⌘W closes the file tab or the subagent tab while it shows, so the item says so then. Archiving is here
+/// for a terminal off the Mac, where its key is the terminal's Select All. Off the Mac, Settings… and quitting end it,
+/// as they do a Windows or Linux app's File menu.
 fn file_menu(system: System, says: Says) -> Menu {
     let close = match says.showing {
         Showing::Chat => "Close Chat",
@@ -125,6 +126,7 @@ fn file_menu(system: System, says: Says) -> Menu {
         MenuItem::action("Add Project…", AddRepository),
         MenuItem::separator(),
         MenuItem::action(close, CloseChat),
+        MenuItem::action("Archive Workspace", ArchiveWorkspace),
     ];
     match system {
         System::Mac => {}

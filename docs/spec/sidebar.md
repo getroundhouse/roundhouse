@@ -128,7 +128,7 @@
   ![The menu of another workspace](screens/other-workspace-menu.png)
 
 - **While the app is making, archiving or restoring a workspace, it starts none of those,** so a button or key pressed twice does it once, and its buttons that archive are greyed out. A workspace being archived or restored from elsewhere, such as the command line, can't be archived or restored again meanwhile, and the others can. *Unconfirmed.*
-- **The workspace being archived says Archiving… at its row's right end, in place of its button,** from the press until it has gone, wherever the pointer is and whether its button, its menu or `Cmd-Shift-A` started it, so it's clear the press took. Its pull request's Archive, if it offers one, says it too. Every window says it, wherever it was asked for, such as from the command line, since the workspace's record says it's being archived. *Unconfirmed.*
+- **The workspace being archived says Archiving… at its row's right end, in place of its button,** from the press until it has gone, wherever the pointer is and whether its button, its menu, `Cmd-Shift-A` or the File menu started it, so it's clear the press took. Its pull request's Archive, if it offers one, says it too. Every window says it, wherever it was asked for, such as from the command line, since the workspace's record says it's being archived. *Unconfirmed.*
 
   **Archiving a row that isn't showing, from its button, once the pointer has left it.** *Unconfirmed.*
 

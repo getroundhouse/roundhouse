@@ -46,6 +46,7 @@ struct Held {
 enum Given {
     Key(KeyPress),
     Paste(String),
+    Text(String),
     /// Turns the wheel by this many lines, up for fewer than none.
     Wheel(isize),
     /// The view has room for this size.
@@ -107,6 +108,12 @@ impl OpenTerminal {
     /// early swapped for spaces, as [`terminal_state::Mirror::paste`] says.
     pub fn paste(&self, text: String) {
         self.give(Given::Paste(text));
+    }
+
+    /// Sends `text` as it is, whatever modes the program set, as a key a client gives a meaning of its own sends what it
+    /// means, such as Command-Left on a Mac, which goes to the start of the line. Otherwise it's sent as a key is.
+    pub fn send_text(&self, text: String) {
+        self.give(Given::Text(text));
     }
 
     /// Turns the wheel by `lines`, up for fewer than none, which scrolls through the history, or is sent to a
@@ -245,6 +252,7 @@ impl TerminalSource {
         let to_hub = match given {
             Given::Key(press) => self.copy.key(&press),
             Given::Paste(text) => self.copy.paste(&text),
+            Given::Text(text) => self.copy.text(&text),
             Given::Wheel(lines) => self.copy.wheel(lines),
             Given::Fit(fit) => self.copy.fit(fit),
             Given::Colors(foreground, background) => {

@@ -9,13 +9,17 @@
 //! takes from them on a Mac too, with Cmd. A view that needs one of these for itself, as a terminal does Ctrl+W, has
 //! to be left out of where it's bound.
 //!
-//! So off the Mac, the app's shortcuts on Ctrl with a letter, or with `[` or `]`, and on F3, are left out of a
-//! terminal, since they're what its program reads, as Ctrl+W deletes a word in a shell, and Ctrl+[ is Escape. In a
-//! terminal there, Close, New Workspace and Quit take Shift as well, as terminal apps have them, and New Chat and the
-//! workspace before and after are in the menus. Find is a chat's, so it does nothing in a terminal anyway.
+//! In a terminal, every key is its program's but the app's on Command on a Mac and on Ctrl and Shift elsewhere, and
+//! Ctrl+Tab and Ctrl+Shift+Tab on both, which terminal apps keep for themselves, as Ghostty does. So off the Mac, the
+//! app's other shortcuts, on Ctrl with a letter, `[`, `]`, `,` or `.`, and on F3 and F10, are left out of a terminal,
+//! as Ctrl+W deletes a word in a shell, Ctrl+[ is Escape, and F10 is a key full-screen programs take. In a terminal
+//! there, Close, New Workspace and Quit take Shift as well, as terminal apps have them, and New Chat, Settings and the
+//! workspace before and after are in the menus, which the button in the corner opens. Find and Stop Agent are a
+//! chat's, so they act only while one shows, as `app::shortcuts` has them, which on a Mac too keeps their keys from
+//! acting on a chat out of sight.
 //!
 //! Archive is left out of a terminal too, since Ctrl+Shift+A is a terminal's Select All there, as
-//! `terminal_view::bind_keys` has it, so Archive has no key in a terminal.
+//! `terminal_view::bind_keys` has it, so in a terminal Archive is the File menu's.
 
 use std::rc::Rc;
 
@@ -39,12 +43,12 @@ pub(crate) fn set(cx: &mut App) {
             key("secondary-m", Minimize, None, cx),
         ]);
     }
+    let outside_a_terminal = (!cx.platform_info().is_mac()).then(|| format!("!{}", terminal_view::KEY_CONTEXT));
     if crate::menus::System::THIS.draws_the_menus() {
         // GPUI can bind Alt pressed alone, but sends it for any press of Alt let go with no key between, even over a
         // click, or as Alt-Tab comes back to the window, which would open the menus by surprise.
-        cx.bind_keys([key("f10", ToggleMenus, None, cx)]);
+        cx.bind_keys([key("f10", ToggleMenus, outside_a_terminal.as_deref(), cx)]);
     }
-    let outside_a_terminal = (!cx.platform_info().is_mac()).then(|| format!("!{}", terminal_view::KEY_CONTEXT));
     if let Some(outside_a_terminal) = outside_a_terminal.as_deref() {
         let in_a_terminal = Some(terminal_view::KEY_CONTEXT);
         cx.bind_keys([
@@ -62,7 +66,7 @@ pub(crate) fn set(cx: &mut App) {
     let in_a_prompt = format!("{} > Input", composing::KEY_CONTEXT);
     let bindings = [
         key("secondary-q", Quit, outside_a_terminal, cx),
-        key("secondary-,", OpenSettings, None, cx),
+        key("secondary-,", OpenSettings, outside_a_terminal, cx),
         // Only while Settings shows. Otherwise the same key closes a chat.
         key("escape", CloseSettings, in_settings, cx),
         key("secondary-w", CloseSettings, in_settings, cx),
@@ -78,7 +82,7 @@ pub(crate) fn set(cx: &mut App) {
         // so it would win anyway, but this keeps that from hanging on the order they're bound in.
         key("secondary-shift-a", ArchiveWorkspace, outside_a_terminal, cx),
         key("secondary-shift-u", MarkWorkspace, None, cx),
-        key("secondary-.", StopAgent, None, cx),
+        key("secondary-.", StopAgent, outside_a_terminal, cx),
         key("secondary-]", NextWorkspace, outside_a_terminal, cx),
         key("secondary-[", PreviousWorkspace, outside_a_terminal, cx),
         key("secondary-t", NewChat, outside_a_terminal, cx),

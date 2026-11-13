@@ -11,7 +11,7 @@ fn the_file_menu_makes_things_and_closes_a_chat(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let ui = Ui::open(cx, &stack);
 
-    let made = ["New Workspace", "New Chat", "New Terminal", "Add Project…", "-", "Close Chat"];
+    let made = ["New Workspace", "New Chat", "New Terminal", "Add Project…", "-", "Close Chat", "Archive Workspace"];
     // Off the Mac, what a Mac has in its app menu ends it, as `menus::tests` checks for each system.
     assert_eq!(items(&ui, "File")[..made.len()], made);
     assert!(action(&ui, "File", "New Workspace").partial_eq(&desktop::NewWorkspace));
@@ -19,11 +19,13 @@ fn the_file_menu_makes_things_and_closes_a_chat(cx: &mut TestAppContext) {
     assert!(action(&ui, "File", "New Terminal").partial_eq(&desktop::NewTerminal));
     assert!(action(&ui, "File", "Add Project…").partial_eq(&desktop::AddRepository));
     assert!(action(&ui, "File", "Close Chat").partial_eq(&desktop::CloseChat));
+    assert!(action(&ui, "File", "Archive Workspace").partial_eq(&desktop::ArchiveWorkspace));
     assert_eq!(key(&ui, "File", "New Workspace"), Some(keyed(&ui, "secondary-n")));
     assert_eq!(key(&ui, "File", "New Chat"), Some(keyed(&ui, "secondary-t")));
     assert_eq!(key(&ui, "File", "New Terminal"), Some(keyed(&ui, "secondary-shift-t")));
     assert_eq!(key(&ui, "File", "Add Project…"), None);
     assert_eq!(key(&ui, "File", "Close Chat"), Some(keyed(&ui, "secondary-w")));
+    assert_eq!(key(&ui, "File", "Archive Workspace"), Some(keyed(&ui, "secondary-shift-a")));
 }
 
 #[gpui_kit::test]
@@ -89,6 +91,7 @@ fn file_and_view_items_are_greyed_out_until_they_can_act(cx: &mut TestAppContext
         ("File", "New Chat"),
         ("File", "New Terminal"),
         ("File", "Close Chat"),
+        ("File", "Archive Workspace"),
         ("View", "Show Diff"),
         ("View", "Next Workspace"),
     ];
