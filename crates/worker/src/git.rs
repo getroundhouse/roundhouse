@@ -70,7 +70,7 @@ async fn git(cwd: &Path, args: &[&str]) -> Result<GitOutput, ApiError> {
     Ok(GitOutput {
         success: output.status.success(),
         code: output.status.code(),
-        stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+        stdout: String::from_utf8_lossy_owned(output.stdout),
         stderr: String::from_utf8_lossy(&output.stderr).trim().to_string(),
     })
 }

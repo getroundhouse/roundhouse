@@ -85,7 +85,7 @@ impl Said {
     /// For a panel connecting a login to `to`, of the kind of agent `called`, whose token lasts as long as `lasting`
     /// says, where the hub says.
     fn of(to: &To, called: Option<&str>, lasting: Option<&str>) -> Said {
-        let lasting = lasting.map(|lasting| format!(", which lasts {lasting}")).unwrap_or_default();
+        let lasting = lasting.map_or_default(|lasting| format!(", which lasts {lasting}"));
         let run = "Run this in a terminal of your own, and sign in";
         match to {
             To::New { .. } => Said {

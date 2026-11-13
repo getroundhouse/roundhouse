@@ -139,7 +139,7 @@ pub(crate) fn load(data_dir: &Path, cx: &mut App) {
 
 /// The settings in force. Every setting is as nobody has chosen until they're loaded.
 pub(crate) fn get(cx: &App) -> Settings {
-    cx.try_global::<Current>().map(|current| current.settings.clone()).unwrap_or_default()
+    cx.try_global::<Current>().map_or_default(|current| current.settings.clone())
 }
 
 /// Changes the settings, and saves them in the background. Whatever shows them draws again.

@@ -45,7 +45,7 @@ fn several_tasks_ending_together_leave_the_chat_idle_with_none_listed() {
     let stack = Stack::start();
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
-    let files: Vec<_> = (0..5).map(|at| stack.path(&format!("done-{at}"))).collect();
+    let files = Vec::from_fn(5, |at| stack.path(&format!("done-{at}")));
     let each: Vec<_> = files.iter().map(|file| format!("background:{}", file.display())).collect();
     let now = || client.session_get(&session.id).unwrap();
     client.session_prompt(&session.id, &each.join("; "), None).unwrap();

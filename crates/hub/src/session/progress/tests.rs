@@ -17,7 +17,7 @@ fn progress(status: SessionStatus, tasks: usize) -> Progress {
     Progress {
         status,
         approvals: HashMap::new(),
-        background_tasks: (0..tasks).map(task).collect(),
+        background_tasks: Vec::from_fn(tasks, task),
         turn_started_at_ms: Some(1_000),
         queue: QueueWatch::default(),
         outlives_this_hub: false,

@@ -135,46 +135,43 @@ fn clients_attaching_during_a_burst_never_see_a_chunk_twice_or_miss_one() {
     // The most text any attacher has held, so the wait for the turn goes on for as long as it grows.
     let furthest = AtomicUsize::new(0);
     let (snapshots_mid_stream, attaches) = std::thread::scope(|scope| {
-        let attachers: Vec<_> = (0..4)
-            .map(|_| {
-                scope.spawn(|| {
-                    let mut snapshots_mid_stream = 0u32;
-                    let mut attaches = 0u32;
-                    while !done.load(Ordering::Relaxed) {
-                        let client = stack.client();
-                        let subscription = client.session_subscribe(&session.id, Seq::new(1)).unwrap();
-                        attaches += 1;
-                        let mut tail = Tail::default();
-                        for _ in 0..50 {
-                            let item = match subscription.items.recv_timeout(Duration::from_millis(50)) {
-                                Ok(item) => item,
-                                Err(flume::RecvTimeoutError::Timeout) => break,
-                                Err(flume::RecvTimeoutError::Disconnected) => panic!("lost the hub"),
-                            };
-                            match item {
-                                SubscriptionItem::Delta(delta) => tail.apply(&delta),
-                                SubscriptionItem::Tail(snapshot) => {
-                                    snapshots_mid_stream += u32::from(!snapshot.is_empty());
-                                    tail = snapshot;
-                                }
-                                SubscriptionItem::Event(event) => tail.on_event(event.seq, event.run, &event.body),
-                                SubscriptionItem::Notice(_) => {}
+        let attachers = Vec::from_fn(4, |_| {
+            scope.spawn(|| {
+                let mut snapshots_mid_stream = 0u32;
+                let mut attaches = 0u32;
+                while !done.load(Ordering::Relaxed) {
+                    let client = stack.client();
+                    let subscription = client.session_subscribe(&session.id, Seq::new(1)).unwrap();
+                    attaches += 1;
+                    let mut tail = Tail::default();
+                    for _ in 0..50 {
+                        let item = match subscription.items.recv_timeout(Duration::from_millis(50)) {
+                            Ok(item) => item,
+                            Err(flume::RecvTimeoutError::Timeout) => break,
+                            Err(flume::RecvTimeoutError::Disconnected) => panic!("lost the hub"),
+                        };
+                        match item {
+                            SubscriptionItem::Delta(delta) => tail.apply(&delta),
+                            SubscriptionItem::Tail(snapshot) => {
+                                snapshots_mid_stream += u32::from(!snapshot.is_empty());
+                                tail = snapshot;
                             }
+                            SubscriptionItem::Event(event) => tail.on_event(event.seq, event.run, &event.body),
+                            SubscriptionItem::Notice(_) => {}
                         }
-                        let held: String =
-                            tail.messages.iter().flat_map(|m| &m.blocks).map(|b| b.text.as_str()).collect();
-                        assert!(
-                            expected.starts_with(&held),
-                            "tail diverged after {} of {} bytes",
-                            common_prefix(&expected, &held),
-                            held.len()
-                        );
-                        furthest.fetch_max(held.len(), Ordering::Relaxed);
                     }
-                    (snapshots_mid_stream, attaches)
-                })
+                    let held: String = tail.messages.iter().flat_map(|m| &m.blocks).map(|b| b.text.as_str()).collect();
+                    assert!(
+                        expected.starts_with(&held),
+                        "tail diverged after {} of {} bytes",
+                        common_prefix(&expected, &held),
+                        held.len()
+                    );
+                    furthest.fetch_max(held.len(), Ordering::Relaxed);
+                }
+                (snapshots_mid_stream, attaches)
             })
-            .collect();
+        });
         let finish = SetOnDrop(&done);
         client.session_prompt(&session.id, &format!("burst:{CHUNKS}"), None).unwrap();
         let events = wait_for_turn_end_while_progressing(&client, &session.id, 1, || furthest.load(Ordering::Relaxed));
@@ -222,7 +219,7 @@ fn a_client_that_stalled_during_a_message_ends_with_nothing_left_in_its_tail() {
     // dies mid-message. An event read ahead of the deltas before it would let them land after the
     // agent's exit, and nothing would ever clear them. Sized to overflow the connection's queue, so
     // the hub falls behind, without overflowing the live buffer, which would resync instead.
-    let mut script: Vec<String> = (0..500).map(|i| format!("say:message {i}")).collect();
+    let mut script = Vec::from_fn(500, |i| format!("say:message {i}"));
     script.extend(["partial:cut off".to_string(), "crash:3".to_string()]);
     client.session_prompt(&session.id, &script.join("; "), None).unwrap();
     wait_for_status(&client, &session.id, SessionStatus::Interrupted);

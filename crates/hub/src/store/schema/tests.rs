@@ -82,8 +82,7 @@ fn retrying_an_update_that_stops_part_way_keeps_the_copy_from_before_it() {
     let _current = older_database(&path, &backups, MIGRATIONS.len());
     let update = [MIGRATIONS, &["CREATE TABLE fifth (a)", "NOT SQL"]].concat();
 
-    let attempts: Vec<_> =
-        (0..4).map(|_| migrate_through(&mut open_connection(&path).unwrap(), &backups, &update)).collect();
+    let attempts = Vec::from_fn(4, |_| migrate_through(&mut open_connection(&path).unwrap(), &backups, &update));
 
     assert!(attempts.iter().all(|attempt| matches!(attempt, Err(StoreError::Database(_)))), "got {attempts:?}");
     let mut versions: Vec<usize> = files_in(&backups)

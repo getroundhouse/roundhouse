@@ -10,8 +10,9 @@ Two ideas sit behind the rules:
 ## Toolchain and workspace
 
 - `rust-toolchain.toml` pins Rust's version and components, and rustup installs them on first use. There's no `rust-version`: nothing is published, so the pin is the only version to keep.
-- Every crate inherits `[workspace.package]`, sets `[lints] workspace = true`, and takes each dependency from `[workspace.dependencies]`, turning on only the features it uses.
+- Every crate inherits `[workspace.package]`, sets `[lints] workspace = true`, and takes each dependency from `[workspace.dependencies]`, turning on only the features it uses. A dependency only one platform's code calls goes in that platform's `[target.'cfg(…)'.dependencies]`, since Cargo's `unused_dependencies` fails the build on the others.
 - `[workspace.dependencies]` gives each crate its full version, such as `serde = "1.0.229"` rather than `"1"`, so `Cargo.toml` says which version each is on. Renovate raises them as new ones come out, as `.github/renovate.json5` says. The crates under ours are only in `Cargo.lock`.
+- A crate's version is three days old before Cargo takes it, as `.cargo/config.toml` has it, and before Renovate proposes it: time for scanners to find malware, and, for a new crate, the 72 hours in which crates.io lets its owner delete it. Renovate proposes a security fix at once, but Cargo still waits for it, unless it's taken by hand, as `.cargo/config.toml` says.
 - `Cargo.lock` is committed, and commands that check something use `--locked`.
 - Tests run under `cargo test`, and CI runs them with nextest, which runs every test binary's tests in one pool where `cargo test` runs one binary after another. nextest skips doc tests, so CI runs those with `cargo test --doc`. nextest gives each test a process of its own, and `cargo test` runs a binary's tests in one process, so a test has to pass both ways. So a `OnceLock` in a test runs once per test under nextest. Work that should happen once per run, such as building a helper, needs a file lock in `CARGO_TARGET_TMPDIR`, keyed by `NEXTEST_RUN_ID`.
 - Code is formatted with `rustfmt`, and `rustfmt.toml` stays at 120 columns.
@@ -22,7 +23,8 @@ Two ideas sit behind the rules:
 
 | Rule | Lint |
 |---|---|
-| Clippy's pedantic group, except three that mostly ask for noise | `pedantic`, minus `missing_errors_doc`, `missing_panics_doc` and `must_use_candidate` |
+| Clippy's pedantic group, except four that mostly ask for noise | `pedantic`, minus `missing_errors_doc`, `missing_panics_doc`, `must_use_candidate` and `assert_is_empty`, which would have `assert!(ids.is_empty())` spelled `assert_eq!(ids, [] as [SessionId; 0])` |
+| Cargo's own lints, such as `unused_dependencies`, which checks `[dependencies]` and `[build-dependencies]` but not dev-dependencies. *Unconfirmed.* | Its `style` and `suspicious` groups, at `deny`, since the checks' `-D warnings` reaches only the compiler's lints |
 | No `#[allow]` | `allow_attributes`, `allow_attributes_without_reason` |
 | No `unwrap`, `expect` or `dbg!` outside tests | `unwrap_used`, `expect_used`, `dbg_macro`, with `allow-*-in-tests` in `clippy.toml` |
 | No `mod.rs` | `mod_module_files` |

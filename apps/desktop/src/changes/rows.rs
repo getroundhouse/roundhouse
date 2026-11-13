@@ -32,7 +32,7 @@ mod tests {
     fn a_list_is_every_path_in_order() {
         let rows = rows(Layout::List, PATHS, &HashSet::new());
 
-        assert_eq!(rows, (0..PATHS.len()).map(|index| Row::File { index, depth: 0 }).collect::<Vec<_>>());
+        assert_eq!(rows, Vec::from_fn(PATHS.len(), |index| Row::File { index, depth: 0 }));
     }
 
     #[test]

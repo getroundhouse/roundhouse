@@ -152,7 +152,7 @@ async fn read_until_second_marker<R: AsyncRead + Unpin>(mut reader: R) -> Option
     loop {
         let read = reader.read(&mut chunk).await.ok()?;
         if read == 0 {
-            return Some(String::from_utf8_lossy(&seen).into_owned());
+            return Some(String::from_utf8_lossy_owned(seen));
         }
         seen.extend_from_slice(&chunk[..read]);
         let text = String::from_utf8_lossy(&seen);

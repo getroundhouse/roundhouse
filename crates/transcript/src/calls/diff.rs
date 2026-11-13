@@ -153,7 +153,7 @@ mod tests {
 
     #[test]
     fn a_long_change_still_shows_only_what_changed() {
-        let old: Vec<String> = (0..900).map(|i| format!("line {i}")).collect();
+        let old = Vec::from_fn(900, |i| format!("line {i}"));
         let mut new = old.clone();
         new[450] = "a new line".to_string();
 

@@ -131,7 +131,7 @@ fn a_prompt_is_found_where_its_drawn() {
         event(Seq::new(3), prompt("Only the sidebar")),
         event(Seq::new(4), agent(vec![ContentBlock::Thinking { text: "The sidebar first".into() }])),
     ]);
-    let needle = |log: &SessionLog| (0..5).map(|row| count(log, "sidebar", row)).collect::<Vec<_>>();
+    let needle = |log: &SessionLog| Vec::from_fn(5, |row| count(log, "sidebar", row));
 
     assert_eq!(needle(&log), [0, 0, 0, 1, 0], "the thought, and not the prompt waiting at the end");
     assert_eq!(rows_drawing(&log, &Model::default(), Position::of_row(2)), Vec::<usize>::new());

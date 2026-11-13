@@ -13,8 +13,8 @@
     "config:best-practices",
     // An action's comment names its exact version, as the workflows already do, rather than a major such as v7.
     "helpers:pinGitHubActionDigestsToSemver",
-    // A crate is three days old before Renovate proposes it: crates.io's window for deleting one, and time for
-    // scanners to find malware.
+    // A crate is three days old before Renovate proposes it: time for scanners to find malware, and, for a new crate,
+    // the 72 hours in which crates.io lets its owner delete it.
     "security:minimumReleaseAgeCrate",
   ],
   // docs/pull-requests.md: a title starts with a verb, with no prefix.
@@ -25,15 +25,16 @@
   ignorePaths: ["**/node_modules/**"],
   // docs/documentation.md gives every issue one kind and an area.
   dependencyDashboardLabels: ["kind/task", "area/dev"],
-  // Vulnerable direct dependencies, from OSV. Their PRs skip the schedule and approval.
+  // Vulnerable direct dependencies, from OSV. Their PRs skip the schedule and approval, but Cargo still waits three
+  // days for a crate's fix, as .cargo/config.toml says, which also says how to take one sooner.
   osvVulnerabilityAlerts: true,
   // Cargo.toml names the full version of each crate we use, so it says what's built. docs/rust.md
   cargo: {
     rangeStrategy: "bump",
   },
-  // The crates under ours, which only Cargo.lock names, on the same days as the crates we use. It moves ours in
-  // Cargo.lock too, if a compatible release came out in the three days the bump waits, so the next bump catches
-  // Cargo.toml up.
+  // The crates under ours, which only Cargo.lock names, on the same days as the crates we use. Cargo takes only
+  // versions three days old, as .cargo/config.toml says, so these wait as long as a bump does. It can move ours in
+  // Cargo.lock ahead of a bump that hasn't merged, and the next bump catches Cargo.toml up.
   lockFileMaintenance: {
     schedule: ["* * */3 * *"],
     commitMessageAction: "Update",

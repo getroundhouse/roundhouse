@@ -27,7 +27,7 @@ pub fn context_usage(reply: &Value, windows: &ModelWindows) -> Option<ContextUsa
         _ => MaxSetBy::Unknown,
     });
     let categories = reply.get("categories").and_then(Value::as_array);
-    let parts = categories.map(|all| all.iter().filter_map(part).take(MAX_PARTS).collect()).unwrap_or_default();
+    let parts = categories.map_or_default(|all| all.iter().filter_map(part).take(MAX_PARTS).collect());
     Some(ContextUsage { used_tokens, max_tokens, model_tokens, max_set_by, parts })
 }
 

@@ -65,7 +65,7 @@ impl Global for Chosen {}
 
 /// The view chosen last, or the first, before any has been.
 pub(super) fn chosen(cx: &App) -> DiffView {
-    cx.try_global::<Chosen>().map(|chosen| chosen.0).unwrap_or_default()
+    cx.try_global::<Chosen>().map_or_default(|chosen| chosen.0)
 }
 
 /// The three views, as one switch, with the one showing pressed in.

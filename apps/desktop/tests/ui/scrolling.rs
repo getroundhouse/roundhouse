@@ -356,7 +356,7 @@ fn long_session(stack: &Stack) -> SessionEvent {
 fn session_saying(stack: &Stack, count: usize, say: impl Fn(usize) -> String) -> SessionEvent {
     let session = stack.chat_in_a_new_workspace();
     // A few to a prompt, as a person would ask, so no prompt is itself most of the session.
-    let script: Vec<String> = (0..count).map(|i| format!("say:{}", say(i))).collect();
+    let script = Vec::from_fn(count, |i| format!("say:{}", say(i)));
     for prompt in script.chunks(25) {
         stack.run(&session, &prompt.join("; "));
     }

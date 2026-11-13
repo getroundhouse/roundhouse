@@ -286,16 +286,16 @@ pub(crate) fn run_command(
     }
     if let Some(rest) = command.strip_prefix("slow:") {
         let (count, text) = rest.split_once(':').unwrap();
-        let chunks: Vec<String> = (0..count.parse().unwrap()).map(|i| format!("{text}{i} ")).collect();
+        let chunks = Vec::from_fn(count.parse().unwrap(), |i| format!("{text}{i} "));
         return turn.say(Block::Text, chunks, Duration::from_millis(100), rx, queued, eof);
     }
     if let Some(rest) = command.strip_prefix("think:") {
         let (count, text) = rest.split_once(':').unwrap();
-        let chunks: Vec<String> = (0..count.parse().unwrap()).map(|i| format!("{text}{i} ")).collect();
+        let chunks = Vec::from_fn(count.parse().unwrap(), |i| format!("{text}{i} "));
         return turn.say(Block::Thinking, chunks, Duration::from_millis(100), rx, queued, eof);
     }
     if let Some(count) = command.strip_prefix("burst:") {
-        let chunks: Vec<String> = (0..count.parse::<u32>().unwrap()).map(|i| format!("{i} ")).collect();
+        let chunks = Vec::from_fn(count.parse().unwrap(), |i| format!("{i} "));
         return turn.say(Block::Text, chunks, Duration::ZERO, rx, queued, eof);
     }
     if let Some(rest) = command.strip_prefix("prose:") {

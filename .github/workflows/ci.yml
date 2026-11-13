@@ -24,7 +24,6 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
-  CARGO_INCREMENTAL: "0"
   # Smaller caches and faster links. A panic still gets line numbers.
   CARGO_PROFILE_DEV_DEBUG: line-tables-only
   # The test runner, which Renovate raises.

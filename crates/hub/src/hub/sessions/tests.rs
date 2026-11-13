@@ -86,7 +86,7 @@ async fn a_question_answered_takes_what_was_typed_in_answer_and_the_feed_tells_o
 fn listed(count: usize) -> EventBody {
     let task =
         |i: usize| AgentTask { id: format!("t{i}").into(), description: None, kind: TaskKind::Command, call: None };
-    EventBody::AgentTasks { tasks: (0..count).map(task).collect(), stopped: Vec::new() }
+    EventBody::AgentTasks { tasks: Vec::from_fn(count, task), stopped: Vec::new() }
 }
 
 /// The last of its work in the background has gone, between turns.

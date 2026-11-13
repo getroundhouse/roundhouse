@@ -35,7 +35,7 @@ fn dragging_a_selection_past_the_windows_edge_scrolls_on_either_way_and_keeps_it
     let session = stack.chat_in_a_new_workspace();
     // Short prompts, each answered by a run of replies of a few paragraphs.
     for prompt in 0..8 {
-        let replies: Vec<String> = (0..25).map(|reply| format!("prose:3:{}", prompt * 25 + reply)).collect();
+        let replies = Vec::from_fn(25, |reply| format!("prose:3:{}", prompt * 25 + reply));
         stack.run(&session, &replies.join("; "));
     }
     let mut ui = open(cx, &stack);
@@ -87,7 +87,7 @@ fn dragging_a_selection_past_the_windows_edge_scrolls_on_either_way_and_keeps_it
 fn a_drag_is_over_once_its_chat_has_not_shown(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let session = stack.chat_in_a_new_workspace();
-    let replies: Vec<String> = (0..25).map(|reply| format!("prose:3:{reply}")).collect();
+    let replies = Vec::from_fn(25, |reply| format!("prose:3:{reply}"));
     stack.run(&session, &replies.join("; "));
     let mut ui = open(cx, &stack);
     let other = ui.new_chat();

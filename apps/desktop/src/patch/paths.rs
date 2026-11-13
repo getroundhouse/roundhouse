@@ -90,7 +90,7 @@ pub(super) fn decode(value: &str) -> String {
             other => other,
         });
     }
-    String::from_utf8_lossy(&bytes).into_owned()
+    String::from_utf8_lossy_owned(bytes)
 }
 
 /// Where the quoted string that `value` starts with ends, just after its closing quote.
@@ -108,5 +108,5 @@ fn quoted_end(value: &str) -> Option<usize> {
 }
 
 fn strip(path: &str, prefix: &str) -> String {
-    path.strip_prefix(prefix).filter(|_| !prefix.is_empty()).unwrap_or(path).to_string()
+    path.trim_prefix(prefix).to_string()
 }

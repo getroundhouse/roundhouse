@@ -148,7 +148,7 @@ impl Transcript {
     pub fn find_says(&self) -> Option<String> {
         let finding = self.finding.as_ref()?;
         let everything_held = self.session.read(SessionLog::holds_every_event);
-        Some(finding.query.as_ref().map(|query| query.says(everything_held)).unwrap_or_default())
+        Some(finding.query.as_ref().map_or_default(|query| query.says(everything_held)))
     }
 
     /// The row the match being shown is in.

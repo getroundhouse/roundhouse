@@ -66,7 +66,7 @@ struct Asked {
 
 impl Asked {
     fn typed(&self, cx: &App) -> String {
-        self.other.as_ref().map(|other| other.input.read(cx).text().to_string()).unwrap_or_default()
+        self.other.as_ref().map_or_default(|other| other.input.read(cx).text().to_string())
     }
 
     fn answer(&self, cx: &App) -> Option<QuestionAnswer> {

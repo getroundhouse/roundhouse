@@ -105,7 +105,7 @@ impl Building {
     fn from_git(header: &str) -> Self {
         let paths = git_paths(header);
         let prefixes = paths.as_ref().map(|(_, _, prefixes)| *prefixes);
-        let (old, new) = paths.map(|(old, new, _)| (Some(old), Some(new))).unwrap_or_default();
+        let (old, new) = paths.map_or_default(|(old, new, _)| (Some(old), Some(new)));
         Self { old, new, prefixes, ..Self::default() }
     }
 
@@ -196,7 +196,7 @@ fn hunk(lines: &[&str], at: usize) -> Result<(Hunk, usize), PatchError> {
         if kind != LineKind::Removed {
             new_left = new_left.checked_sub(1).ok_or(short)?;
         }
-        let text = text.strip_suffix('\r').unwrap_or(text);
+        let text = text.trim_suffix('\r');
         taken.push(PatchLine { kind, text: text.to_string().into(), no_newline: false });
     }
     // A last line without a line ending says so on the line after it.

@@ -115,7 +115,7 @@ pub(super) fn made_from(subject: &str) -> Option<&str> {
 /// The name of the remote's branch `start` is, of one of `remotes`, or `None` when it's no remote's, as `main` or
 /// `HEAD` isn't. A remote's name can have a slash in it, as a branch's can, so the longest that fits is the one.
 pub(super) fn remote_branch<'a>(start: &'a str, remotes: &[String]) -> Option<&'a str> {
-    let start = start.strip_prefix("refs/remotes/").unwrap_or(start);
+    let start = start.trim_prefix("refs/remotes/");
     let names = remotes.iter().filter_map(|remote| start.strip_prefix(remote.as_str())?.strip_prefix('/'));
     names.min_by_key(|name| name.len())
 }

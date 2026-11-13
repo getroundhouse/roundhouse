@@ -37,7 +37,7 @@ fn cmd_f_finds_in_the_whole_chat_and_opens_what_a_match_is_in(cx: &mut TestAppCo
     let session = stack.chat_in_a_new_workspace();
     stack.run(&session, "tool:echo a-needle-printed");
     // Far more events than the transcript loads to start with, so the call isn't among them.
-    let script: Vec<String> = (0..700).map(|i| format!("say:message {i}")).collect();
+    let script = Vec::from_fn(700, |i| format!("say:message {i}"));
     stack.run(&session, &script.join("; "));
     stack.run(&session, "say:the last needle");
     let mut ui = Ui::open(cx, &stack);
@@ -94,7 +94,7 @@ fn a_match_in_a_reply_far_up_the_chat_is_brought_into_view_below_the_bar(cx: &mu
     let stack = Stack::new();
     let session = stack.chat_in_a_new_workspace();
     stack.run(&session, "say:The **needle** is in [this reply](https://example.com/needle), once");
-    let replies: Vec<String> = (0..30).map(|reply| format!("prose:3:{reply}")).collect();
+    let replies = Vec::from_fn(30, |reply| format!("prose:3:{reply}"));
     stack.run(&session, &replies.join("; "));
     let mut ui = Ui::open(cx, &stack);
     ui.wait("the chat", |ui| ui.transcript().is_some());
@@ -167,7 +167,7 @@ fn one_letter_is_found_only_in_what_s_loaded_and_the_count_says_so(cx: &mut Test
     let stack = Stack::new();
     let session = stack.chat_in_a_new_workspace();
     stack.run(&session, "say:the zebra crossing, which isn't loaded");
-    let script: Vec<String> = (0..700).map(|i| format!("say:message {i}")).collect();
+    let script = Vec::from_fn(700, |i| format!("say:message {i}"));
     stack.run(&session, &script.join("; "));
     let mut ui = Ui::open(cx, &stack);
     ui.wait("the chat", |ui| ui.transcript().is_some());
@@ -215,7 +215,7 @@ fn a_match_in_what_a_subagent_was_asked_opens_its_call_and_is_drawn_with_its_mar
 fn the_wheel_over_the_bar_scrolls_the_chat(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let session = stack.chat_in_a_new_workspace();
-    let script: Vec<String> = (0..100).map(|i| format!("say:message {i}")).collect();
+    let script = Vec::from_fn(100, |i| format!("say:message {i}"));
     stack.run(&session, &script.join("; "));
     let mut ui = Ui::open(cx, &stack);
     ui.wait("the chat", |ui| ui.transcript().is_some());

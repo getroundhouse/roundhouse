@@ -6,3 +6,11 @@ ROUNDHOUSE_WORKSPACES = { value = ".context/dev/workspaces", relative = true }
 # Ghostty's build script builds it unoptimized whenever there's debug info, as in the dev profile, and unoptimized it
 # parses under 0.1 MB/s, so a burst of output would take minutes. Optimized, it parses hundreds of MB/s.
 LIBGHOSTTY_VT_SYS_OPTIMIZE = "ReleaseFast"
+
+# A crate version is three days old before `cargo add` or `cargo update` takes it, as before Renovate proposes it: time
+# for scanners to find malware, and, for a new crate, the 72 hours in which crates.io lets its owner delete it. One
+# already in Cargo.lock stays. Renovate runs Cargo too, so a security fix it proposes at once can't go in Cargo.lock
+# until it's that old, unless `CARGO_RESOLVER_INCOMPATIBLE_PUBLISH_AGE=allow cargo update -p <crate> --precise
+# <version>` puts it there on the PR's branch.
+[registry]
+global-min-publish-age = "3 days"

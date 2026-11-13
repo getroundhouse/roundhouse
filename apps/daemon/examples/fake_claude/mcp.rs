@@ -262,7 +262,7 @@ impl Server {
             meta["io.modelcontextprotocol/clientCapabilities"] = json!({ "extensions": { TASKS: {} } });
         }
         let body = json!({ "jsonrpc": "2.0", "id": 1, "method": method, "params": params }).to_string();
-        let name = name.map(|name| format!("Mcp-Name: {name}\r\n")).unwrap_or_default();
+        let name = name.map_or_default(|name| format!("Mcp-Name: {name}\r\n"));
         let request = format!(
             "POST {} HTTP/1.1\r\nHost: {}\r\nAuthorization: {}\r\nContent-Type: application/json\r\n\
              Accept: application/json, text/event-stream\r\nMCP-Protocol-Version: {VERSION}\r\nMcp-Method: {method}\r\n\

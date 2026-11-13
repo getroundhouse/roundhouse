@@ -100,7 +100,7 @@ impl Page {
         if let Some(what) = not_drawn {
             return Err(Error::Unsupported { page: path, what });
         }
-        let summary = blocks.iter().find(|block| matches!(block, Node::Paragraph(_))).map(plain).unwrap_or_default();
+        let summary = blocks.iter().find(|block| matches!(block, Node::Paragraph(_))).map_or_default(plain);
         Ok(Self { path, title, summary, root, headings })
     }
 
@@ -134,7 +134,7 @@ pub(crate) fn plain(node: &Node) -> String {
     if let Node::Break(_) = node {
         return " ".to_string();
     }
-    node.children().map(|children| plain_all(children)).unwrap_or_default()
+    node.children().map_or_default(|children| plain_all(children))
 }
 
 /// What these nodes say, one after another.

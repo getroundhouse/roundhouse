@@ -284,7 +284,7 @@ fn several_background_tasks_of_a_kind_share_a_line_that_opens_to_theirs(cx: &mut
     let going = || stack.client().session_get(&chat).unwrap().background_tasks;
     // Starts five commands that each run until its file is there, and gives their lines once the turn has left them.
     let start = |ui: &mut Ui<'_>, lot: &str| {
-        let files: Vec<_> = (0..5).map(|at| stack.dir.path().join(format!("{lot}-{at}"))).collect();
+        let files = Vec::from_fn(5, |at| stack.dir.path().join(format!("{lot}-{at}")));
         let each: Vec<String> = files.iter().map(|file| format!("background:{}", file.display())).collect();
         // A click in the chat gives it the focus, for copying what's selected there.
         ui.click("composer");

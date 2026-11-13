@@ -218,7 +218,7 @@ mod tests {
     fn a_name_picked_is_a_station_nobody_has_and_any_can_be() {
         let all_but_one = taken(&NAMES[..NAMES.len() - 1]);
 
-        let picked: Vec<String> = (0..NAMES.len()).map(|random| Picked::new(&[], random).to_string()).collect();
+        let picked = Vec::from_fn(NAMES.len(), |random| Picked::new(&[], random).to_string());
 
         assert_eq!(picked, NAMES);
         assert!((0..10).all(|random| Picked::new(&all_but_one, random).to_string() == NAMES[NAMES.len() - 1]));

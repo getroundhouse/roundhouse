@@ -276,15 +276,13 @@ fn clients_copying_at_once_each_get_a_whole_copy() {
     let daemon = stamped(&install(dir.path(), "app", &script), 1);
     let barrier = std::sync::Arc::new(std::sync::Barrier::new(8));
 
-    let copies: Vec<_> = (0..8)
-        .map(|_| {
-            let (daemon, paths, barrier) = (daemon.clone(), paths.clone(), barrier.clone());
-            std::thread::spawn(move || {
-                barrier.wait();
-                std::fs::read_to_string(daemon.to_start(&paths).unwrap()).unwrap()
-            })
+    let copies = Vec::from_fn(8, |_| {
+        let (daemon, paths, barrier) = (daemon.clone(), paths.clone(), barrier.clone());
+        std::thread::spawn(move || {
+            barrier.wait();
+            std::fs::read_to_string(daemon.to_start(&paths).unwrap()).unwrap()
         })
-        .collect();
+    });
 
     for copy in copies {
         assert!(copy.join().unwrap() == script, "a copy that wasn't whole");

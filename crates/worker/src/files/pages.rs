@@ -296,7 +296,7 @@ fn page_line(mut kept: Vec<u8>, length: u64) -> PageLine {
     if cut.is_some() {
         kept.truncate(whole_characters(&kept));
     }
-    PageLine { text: String::from_utf8_lossy(&kept).into_owned(), cut }
+    PageLine { text: String::from_utf8_lossy_owned(kept), cut }
 }
 
 /// How far into `bytes` the last character that's there whole ends, leaving out one that was cut, however the bytes

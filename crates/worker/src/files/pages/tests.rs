@@ -110,8 +110,8 @@ fn a_file_with_a_nul_near_its_start_isn_t_text() {
 /// `text`'s lines, without their endings, and cut to `line` bytes.
 fn lines_of(text: &str, line: usize) -> Vec<(String, bool)> {
     text.split_inclusive('\n')
-        .map(|whole| whole.strip_suffix('\n').unwrap_or(whole))
-        .map(|whole| whole.strip_suffix('\r').unwrap_or(whole))
+        .map(|whole| whole.trim_suffix('\n'))
+        .map(|whole| whole.trim_suffix('\r'))
         .map(|whole| (whole[..whole.len().min(line)].to_string(), whole.len() > line))
         .collect()
 }

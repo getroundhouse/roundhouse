@@ -86,8 +86,7 @@ mod tests {
 
     #[test]
     fn the_light_goes_round_with_a_tail_behind_it() {
-        let lit =
-            |turned: f32| -> Vec<f32> { (0..DOTS).map(|dot| light_on(as_f32(dot) / as_f32(DOTS), turned)).collect() };
+        let lit = |turned: f32| Vec::from_fn(DOTS, |dot| light_on(as_f32(dot) / as_f32(DOTS), turned));
 
         let at_the_third = lit(0.3);
         assert!((at_the_third[3] - 1.0).abs() < 1e-5, "{at_the_third:?}");

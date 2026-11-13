@@ -310,9 +310,8 @@ fn a_change_made_elsewhere_while_something_from_here_is_on_its_way_shows_once_it
     stack.client().session_draft(&chat, &DraftToKeep::new("typed elsewhere")).unwrap();
     // Arrived in client-core, but nothing has run on the main thread since, so the pane hasn't seen it.
     let records = ui.view().feed().unwrap();
-    let draft_in = |records: &client_core::RecordsFeed| {
-        records.snapshot().session(&chat).map(|s| s.draft.text.clone()).unwrap_or_default()
-    };
+    let draft_in =
+        |records: &client_core::RecordsFeed| records.snapshot().session(&chat).map_or_default(|s| s.draft.text.clone());
     wait_until("client-core to hear of the change", || draft_in(&records) == "typed elsewhere");
 
     let frozen = Frozen::stop(pid);

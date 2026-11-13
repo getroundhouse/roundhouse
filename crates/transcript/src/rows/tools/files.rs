@@ -83,8 +83,8 @@ struct Read<'a> {
 
 impl<'a> Read<'a> {
     fn of(answer: Option<&'a Answer>) -> Self {
-        let lines = answer.and_then(Answer::success).map(numbered_lines).unwrap_or_default();
-        let images = answer.map(Answer::images).unwrap_or_default();
+        let lines = answer.and_then(Answer::success).map_or_default(numbered_lines);
+        let images = answer.map_or_default(Answer::images);
         let text = answer.and_then(Answer::success).filter(|text| lines.is_empty() && !text.trim().is_empty());
         Self { lines, images, text }
     }

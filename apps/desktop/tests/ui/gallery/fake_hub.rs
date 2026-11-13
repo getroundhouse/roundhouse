@@ -299,7 +299,7 @@ fn subscribe_places(
     world.session(id)?;
     let events =
         world.placed_from(id, subagent, from).map(|event| HubFrame::Event { subscription_id, event: event.clone() });
-    let tail = world.tails.get(id).map(|tail| tail.of(subagent)).unwrap_or_default();
+    let tail = world.tails.get(id).map_or_default(|tail| tail.of(subagent));
     let tail = HubFrame::Tail { subscription_id, tail };
     Ok(Outcome::Reply(ClientResponse::Ok, events.chain(std::iter::once(tail)).collect()))
 }

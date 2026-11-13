@@ -11,7 +11,7 @@ fn the_file_as_it_was_and_the_hunks_make_both_sides_whole() {
 
     let sides = Sides::with_base(&changed, "a\nb\nc\nd\ne\n", None);
 
-    let text = |side: &Side, number| side.line(number).map(|line| line.text.to_string()).unwrap_or_default();
+    let text = |side: &Side, number| side.line(number).map_or_default(|line| line.text.to_string());
     assert_eq!(sides.extent, Extent::Whole(5));
     assert_eq!([text(&sides.old, 1), text(&sides.new, 3), text(&sides.new, 5)], ["a", "C", "e"]);
 }
@@ -66,7 +66,7 @@ fn a_line_cut_short_in_a_page_ends_in_an_ellipsis() {
 
 /// The text marked on each of lines `numbers` of `side`.
 fn marked(side: &Side, numbers: Range<u32>) -> Vec<Vec<String>> {
-    let line = |number| side.line(number).map(|line| line.text.to_string()).unwrap_or_default();
+    let line = |number| side.line(number).map_or_default(|line| line.text.to_string());
     numbers.map(|n| side.changed(n).iter().map(|range| line(n)[range.clone()].to_string()).collect()).collect()
 }
 

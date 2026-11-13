@@ -66,7 +66,7 @@ struct Chosen(Comparison);
 impl Global for Chosen {}
 
 pub fn comparison(cx: &App) -> Comparison {
-    cx.try_global::<Chosen>().map(|chosen| chosen.0).unwrap_or_default()
+    cx.try_global::<Chosen>().map_or_default(|chosen| chosen.0)
 }
 
 fn choose(comparison: Comparison, cx: &mut App) {
@@ -212,7 +212,7 @@ impl ImageDiff {
     #[cfg(feature = "testing")]
     pub fn difference(&self) -> Option<String> {
         let compared = self.compared.as_ref()?;
-        Some(compared.difference.as_ref().map_or_else(String::new, |difference| difference.describe()))
+        Some(compared.difference.as_ref().map_or_default(|difference| difference.describe()))
     }
 
     /// The pictures it has to draw: each side's image, and what changed, once that's known.

@@ -218,8 +218,7 @@ fn what_comes_after_a_long_project_slides_out_of_sight_as_it_opens_rather_than_g
     let stack = Stack::new();
     let (mut ui, [first, second], _) = two_projects(cx, &stack);
     let client = stack.client();
-    let made: Vec<WorkspaceId> =
-        (0..MORE_THAN_FIT).map(|_| client.workspace_create(&first, None, None, None).unwrap().id).collect();
+    let made = Vec::from_fn(MORE_THAN_FIT, |_| client.workspace_create(&first, None, None, None).unwrap().id);
     // The newest, which is the first project's first row.
     let upper = made.last().unwrap();
     ui.wait("every workspace", |ui| ui.view().visible_workspaces().len() == MORE_THAN_FIT + 4);

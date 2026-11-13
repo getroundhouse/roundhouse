@@ -51,7 +51,7 @@ fn an_image_may_follow_another(text: &str) -> bool {
     text.match_indices("![").any(|(at, _)| {
         let before = &text[..at];
         // A link around an image starts at the `[` before it.
-        let before = before.strip_suffix('[').unwrap_or(before);
+        let before = before.trim_suffix('[');
         // A backslash at the end of a line breaks it.
         let before = before.trim_end_matches([' ', '\t', '\r', '\n', '>', '\\']);
         // An image, or a link around one, ends in `)`, or in `]` when it's a reference.

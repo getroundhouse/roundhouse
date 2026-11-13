@@ -75,7 +75,7 @@ fn the_kits(paragraph: &str) -> Option<Vec<InlineNode>> {
 /// What the images in `nodes` that aren't in a link say, in order.
 fn bare(nodes: &[InlineNode]) -> Vec<String> {
     let images = nodes.iter().filter_map(InlineNode::as_image).filter(|image| image.link.is_none());
-    images.map(|image| image.alt.as_ref().map(ToString::to_string).unwrap_or_default()).collect()
+    images.map(|image| image.alt.as_ref().map_or_default(ToString::to_string)).collect()
 }
 
 proptest! {

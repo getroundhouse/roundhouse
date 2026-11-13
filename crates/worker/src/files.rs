@@ -185,7 +185,7 @@ fn contents(data: Vec<u8>) -> FileContents {
     if start.contains(&0) {
         return FileContents::Binary;
     }
-    FileContents::Text { text: String::from_utf8_lossy(&data).into_owned() }
+    FileContents::Text { text: String::from_utf8_lossy_owned(data) }
 }
 
 fn length(bytes: usize) -> u64 {

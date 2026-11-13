@@ -22,8 +22,7 @@ pub(super) fn turn_ended(result: &Value) -> EventBody {
     let errors = result
         .get("errors")
         .and_then(Value::as_array)
-        .map(|items| items.iter().filter_map(|e| e.as_str().map(str::to_string)).collect())
-        .unwrap_or_default();
+        .map_or_default(|items| items.iter().filter_map(|e| e.as_str().map(str::to_string)).collect());
     EventBody::TurnEnded {
         outcome,
         result: string_of(result, "result"),

@@ -86,7 +86,7 @@ impl Transcript {
         let colors = look::colors(cx);
         let muted = colors.text_muted;
         let everything_held = self.session.read(SessionLog::holds_every_event);
-        let says = finding.query.as_ref().map(|query| query.says(everything_held)).unwrap_or_default();
+        let says = finding.query.as_ref().map_or_default(|query| query.says(everything_held));
         let none = finding.query.as_ref().is_none_or(|query| query.counts.total() == 0);
         let step = |id: &'static str, icon: IconName, what: &'static str, forward: bool| {
             Button::new(id)

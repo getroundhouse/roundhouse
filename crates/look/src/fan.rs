@@ -203,7 +203,7 @@ mod tests {
     fn outer_rows_have_more_dots_and_every_row_reaches_both_ends() {
         let fan = fan(60.);
         let dots: Vec<_> = fan.dots().collect();
-        let per_row: Vec<usize> = (0..fan.rows).map(|r| row(&dots, r).len()).collect();
+        let per_row = Vec::from_fn(fan.rows, |r| row(&dots, r).len());
 
         assert!(per_row.windows(2).all(|pair| pair[0] < pair[1]), "{per_row:?}");
         for r in 0..fan.rows {
@@ -218,13 +218,13 @@ mod tests {
             [(2, &[5, 9]), (3, &[7, 11, 15]), (4, &[9, 13, 17, 21]), (5, &[13, 17, 21, 25, 29])];
         for (rows, counts) in expected {
             let dots: Vec<_> = with_rows(rows).dots().collect();
-            let per_row: Vec<usize> = (0..rows).map(|r| row(&dots, r).len()).collect();
+            let per_row = Vec::from_fn(rows, |r| row(&dots, r).len());
 
             assert_eq!(per_row, counts, "{rows} rows");
         }
         for rows in 2..=9 {
             let dots: Vec<_> = with_rows(rows).dots().collect();
-            let per_row: Vec<usize> = (0..rows).map(|r| row(&dots, r).len()).collect();
+            let per_row = Vec::from_fn(rows, |r| row(&dots, r).len());
             assert!(per_row.windows(2).all(|pair| pair[1] == pair[0] + 4), "{rows} rows: {per_row:?}");
         }
     }
@@ -234,12 +234,10 @@ mod tests {
         for rows in 2..=9 {
             let fan = with_rows(rows);
             let dots: Vec<_> = fan.dots().collect();
-            let spacing: Vec<f32> = (0..rows)
-                .map(|r| {
-                    let row = row(&dots, r);
-                    radius(&fan, row[0]) * std::f32::consts::PI / as_f32(row.len() - 1)
-                })
-                .collect();
+            let spacing = Vec::from_fn(rows, |r| {
+                let row = row(&dots, r);
+                radius(&fan, row[0]) * std::f32::consts::PI / as_f32(row.len() - 1)
+            });
 
             let (least, most) = spacing.iter().fold((f32::MAX, f32::MIN), |(a, b), s| (a.min(*s), b.max(*s)));
             assert!((most - least) / least < 1e-4, "{rows} rows: {spacing:?}");

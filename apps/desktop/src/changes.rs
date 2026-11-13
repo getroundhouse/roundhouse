@@ -36,7 +36,7 @@ struct Chosen(Layout);
 impl Global for Chosen {}
 
 fn layout(cx: &App) -> Layout {
-    cx.try_global::<Chosen>().map(|chosen| chosen.0).unwrap_or_default()
+    cx.try_global::<Chosen>().map_or_default(|chosen| chosen.0)
 }
 
 fn toggle_layout(cx: &mut App) {
@@ -96,7 +96,7 @@ impl Changes {
     fn draw_rows(&mut self, range: Range<usize>, window: &Window, cx: &mut Context<Self>) -> Vec<AnyElement> {
         let (open, layout) = (self.showing.clone(), layout(cx));
         let line_text = LineText::new(window, cx);
-        let rows: Vec<Row> = self.rows.get(range).map(<[Row]>::to_vec).unwrap_or_default();
+        let rows: Vec<Row> = self.rows.get(range).map_or_default(<[Row]>::to_vec);
         // Only the files in view, rather than every file the branch changes.
         let files: Vec<Option<FilePatch>> = {
             let files = self.review.read(cx).files.as_deref().unwrap_or_default();

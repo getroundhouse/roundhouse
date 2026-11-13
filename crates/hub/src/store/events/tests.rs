@@ -131,7 +131,7 @@ pub(crate) fn prompt(text: &str, files: usize) -> EventBody {
         media_type: MediaType::Png,
         size_bytes: 4,
     };
-    EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::carrying(text, (0..files).map(shot).collect()) }
+    EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::carrying(text, Vec::from_fn(files, shot)) }
 }
 
 /// An event someone sent: the hub, the agent, or one of a few subagents, by the number of the call that started it.

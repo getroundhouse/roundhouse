@@ -34,7 +34,7 @@ impl WorkspacePane {
             return base.as_str();
         }
         let from = self.workspace().base_ref.as_deref().unwrap_or("the default branch");
-        from.strip_prefix("origin/").unwrap_or(from)
+        from.trim_prefix("origin/")
     }
 
     /// Asks the hub to read it now. The hub records what it finds on the workspace's record, which brings it here in
