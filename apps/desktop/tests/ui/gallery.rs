@@ -30,6 +30,7 @@ mod icon;
 mod image_chats;
 mod image_files;
 mod long_chats;
+mod look_screens;
 mod mark_states;
 mod patch;
 mod pictures;
@@ -154,6 +155,7 @@ fn screens() -> impl Iterator<Item = &'static steps::Screen> {
         .chain(sidebar_screens::SCREENS)
         .chain(home_screens::SCREENS)
         .chain(settings_screens::SCREENS)
+        .chain(look_screens::SCREENS)
 }
 
 /// What's wrong with a picture: its spec doesn't show it, it keeps changing, or it isn't as approved. With
