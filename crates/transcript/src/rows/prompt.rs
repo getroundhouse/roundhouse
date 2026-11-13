@@ -39,6 +39,7 @@ pub(super) fn prompt_bubble(
     shared: &Shared,
     cx: &App,
 ) -> AnyElement {
+    let colors = look::colors(cx);
     let Prompt { text, find, at } = text;
     let typed = !text.trim().is_empty();
     let faint = state != Some(PromptState::Taken);
@@ -53,7 +54,7 @@ pub(super) fn prompt_bubble(
                 .px_4()
                 .py_3()
                 .rounded(px(6.))
-                .bg(look::prompt())
+                .bg(colors.prompt)
                 .when(faint, |d| d.opacity(0.6))
                 .children(attachments::view(carried, cx))
                 .when(typed, |d| {
@@ -67,7 +68,7 @@ pub(super) fn prompt_bubble(
             d.child(
                 div()
                     .text_xs()
-                    .text_color(look::faint())
+                    .text_color(colors.text_faint)
                     .child("The agent stopped before it read this, so it never got it."),
             )
         })

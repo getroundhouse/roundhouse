@@ -3,7 +3,6 @@
 //! never came, or was empty. So an open call always shows something.
 
 use gpui_kit::assets::IconName;
-use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::{
     AnyElement, App, InteractiveElement as _, IntoElement, ParentElement, Styled, TestSupportExt as _, div,
 };
@@ -65,6 +64,6 @@ fn said(reply: &Reply, advice: Option<&str>, toggle: &Toggle, cx: &App) -> Optio
         Reply::Result(answer) if answer.encrypted => ("encrypted", ENCRYPTED),
         Reply::Result(_) => ("empty-reply", EMPTY),
     };
-    let (id, muted) = (toggle.key.element(name), cx.theme().muted_foreground);
+    let (id, muted) = (toggle.key.element(name), look::colors(cx).text_muted);
     Some(div().id(id).px_3().py_2().text_sm().text_color(muted).child(why).test_support().into_any_element())
 }

@@ -172,7 +172,8 @@ impl Transcript {
         let needle = Needle::new(&finding.bar.query(cx)).ok();
         finding.reveal.done();
         finding.query = needle.clone().map(|needle| Query::new(needle, &self.client, &self.session));
-        self.model.borrow_mut().find = Rc::new(FindLook::new(needle.clone(), None, finding.reveal.clone()));
+        self.model.borrow_mut().find =
+            Rc::new(FindLook::new(needle.clone(), None, finding.reveal.clone(), look::colors(cx)));
         if let Some(needle) = needle {
             let (found, rows) = {
                 let m = self.model.borrow();

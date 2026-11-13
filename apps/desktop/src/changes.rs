@@ -6,7 +6,7 @@ use std::ops::Range;
 
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::{ActiveTheme as _, Icon, IconName, Selectable as _, Sizable as _, h_flex, v_flex};
+use gpui_kit::component::{Icon, IconName, Selectable as _, Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, Context, Entity, EventEmitter, FontWeight, Global, IntoElement, ParentElement, Pixels, Render,
@@ -143,7 +143,7 @@ impl Changes {
             .gap_2()
             .justify_between()
             .border_b_1()
-            .border_color(cx.theme().border)
+            .border_color(look::colors(cx).edge)
             .child(
                 div()
                     .text_sm()
@@ -170,7 +170,7 @@ impl Render for Changes {
             }
             files.len()
         });
-        let muted = cx.theme().muted_foreground;
+        let muted = look::colors(cx).text_muted;
         let body = match changed {
             None => placeholder("Loading…", muted),
             Some(0) => placeholder("No changes yet", muted),
@@ -233,25 +233,25 @@ pub(crate) fn controls(changes: &Entity<Changes>, code: &Placed, cx: &App) -> An
 
 /// Lines added and removed, leaving out whichever is none.
 fn counts(added: usize, removed: usize, cx: &App) -> Vec<AnyElement> {
-    let theme = cx.theme();
+    let colors = look::colors(cx);
     let mut out = Vec::new();
     if added > 0 {
-        out.push(div().text_color(theme.success).child(format!("+{added}")).into_any_element());
+        out.push(div().text_color(colors.added).child(format!("+{added}")).into_any_element());
     }
     if removed > 0 {
-        out.push(div().text_color(theme.danger).child(format!("-{removed}")).into_any_element());
+        out.push(div().text_color(colors.removed).child(format!("-{removed}")).into_any_element());
     }
     out
 }
 
 /// How a file changed. A modified file's is yellow, as review tools show it, and the rest are muted.
 fn status_icon(status: FileStatus, cx: &App) -> Icon {
-    let theme = cx.theme();
+    let colors = look::colors(cx);
     let (icon, color) = match status {
-        FileStatus::Added => (Lucide::SquarePlus, theme.muted_foreground),
-        FileStatus::Removed => (Lucide::SquareMinus, theme.muted_foreground),
-        FileStatus::Renamed | FileStatus::Copied => (Lucide::SquareArrowRight, theme.muted_foreground),
-        FileStatus::Modified => (Lucide::SquareDot, theme.yellow),
+        FileStatus::Added => (Lucide::SquarePlus, colors.text_muted),
+        FileStatus::Removed => (Lucide::SquareMinus, colors.text_muted),
+        FileStatus::Renamed | FileStatus::Copied => (Lucide::SquareArrowRight, colors.text_muted),
+        FileStatus::Modified => (Lucide::SquareDot, colors.modified),
     };
     Icon::new(icon).xsmall().text_color(color)
 }
@@ -266,7 +266,7 @@ fn file_row(
     line_text: &LineText,
     cx: &mut Context<Changes>,
 ) -> AnyElement {
-    let muted = cx.theme().muted_foreground;
+    let muted = look::colors(cx).text_muted;
     let path = file.path().clone();
     let (folders, name) = split(&path);
     let (folders, name) = (folders.to_string(), name.to_string());
@@ -298,7 +298,7 @@ fn file_row(
 /// how it changed.
 fn plain_folder(open: bool, cx: &App) -> Icon {
     let folder = if open { IconName::FolderOpen } else { IconName::FolderClosed };
-    Icon::new(folder).xsmall().text_color(cx.theme().muted_foreground)
+    Icon::new(folder).xsmall().text_color(look::colors(cx).text_muted)
 }
 
 fn placeholder(text: &'static str, color: gpui_kit::Hsla) -> AnyElement {

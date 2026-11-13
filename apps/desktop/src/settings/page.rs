@@ -8,7 +8,7 @@ use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::InputState;
 use gpui_kit::component::menu::PopupMenu;
 use gpui_kit::component::scroll::ScrollableElement as _;
-use gpui_kit::component::{ActiveTheme as _, IconName, Sizable as _, v_flex};
+use gpui_kit::component::{IconName, Sizable as _, v_flex};
 use gpui_kit::{
     App, ClickEvent, Context, FocusHandle, FontWeight, InteractiveElement as _, IntoElement, ParentElement as _,
     Pixels, RenderOnce, SharedString, Styled as _, TestSupportExt as _, Window, div, px,
@@ -258,7 +258,7 @@ fn way_back(width: Pixels, back: Back, cx: &App) -> impl IntoElement {
             .small()
             .icon(IconName::ArrowLeft)
             .label("Back")
-            .text_color(cx.theme().muted_foreground)
+            .text_color(look::colors(cx).text_muted)
             .on_click(move |event, window, cx| back(event, window, cx)),
     )
 }
@@ -273,7 +273,7 @@ fn settings_page(page: &Page, cx: &App) -> impl IntoElement {
         .pb_2()
         .text_size(TITLE_SIZE)
         .font_weight(FontWeight::MEDIUM)
-        .text_color(cx.theme().foreground)
+        .text_color(look::colors(cx).text)
         .child(page.name);
     let rows = page.settings.iter().map(|setting| rows::row(setting, cx));
     let rows =
@@ -289,7 +289,7 @@ fn nothing_found(cx: &App) -> impl IntoElement {
         .flex()
         .items_center()
         .justify_center()
-        .text_color(cx.theme().muted_foreground)
+        .text_color(look::colors(cx).text_muted)
         .child("No settings match")
         .test_support()
 }

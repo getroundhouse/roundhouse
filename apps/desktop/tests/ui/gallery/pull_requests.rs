@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use desktop::busy::{self, Busy};
 use desktop::pull_request::{self, Lookup};
-use gpui_kit::component::{ActiveTheme as _, h_flex, v_flex};
+use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::{
     Context, ElementId, InteractiveElement as _, IntoElement, ParentElement as _, PlatformTextSystem, Render,
     Styled as _, Window, div, px, size,
@@ -140,8 +140,8 @@ struct Sheet {
 
 impl Render for Sheet {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = cx.theme();
-        let (pane, sidebar) = (theme.background, theme.sidebar);
+        let colors = look::colors(cx);
+        let (pane, sidebar) = (colors.pane, colors.sidebar);
         let rows = self.states.iter().enumerate().map(|(index, (lookup, busy, status))| {
             let doing = busy::doing(*status);
             let bar = pull_request::bar(lookup, busy, doing, |_, _, _| {}, cx);

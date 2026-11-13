@@ -1,7 +1,7 @@
 //! The sidebar of changes on the right: the pull request's bar, then the workspace's changes or all its files, as the
 //! tabs under the bar choose. Clicking a file in either shows it in the workspace's file tab.
 
-use gpui_kit::component::{ActiveTheme as _, v_flex};
+use gpui_kit::component::v_flex;
 use gpui_kit::{AnyElement, App, AppContext as _, Context, IntoElement as _, ParentElement as _, Styled as _, div};
 use look::LineText;
 use protocol::model::WorkspaceStatus;
@@ -201,8 +201,8 @@ impl WorkspacePane {
         };
         let on_pick = cx.listener(|t, tab: &SidebarTab, _, cx| t.show_sidebar_tab(*tab, cx));
         let tabs = sidebar_tabs::bar(chosen, changed, controls, on_pick, line_text, cx);
-        let theme = cx.theme();
-        let column = v_flex().size_full().border_l_1().border_color(theme.border).bg(theme.sidebar);
+        let colors = look::colors(cx);
+        let column = v_flex().size_full().border_l_1().border_color(colors.edge).bg(colors.sidebar);
         let column = column.child(bar).child(tabs).child(div().flex_1().min_h_0().children(list));
         Some(sides::frame(Side::Right, shown, column, cx).into_any_element())
     }

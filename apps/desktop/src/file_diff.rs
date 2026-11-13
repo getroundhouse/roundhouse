@@ -245,7 +245,7 @@ impl FileDiff {
         self.drawn.borrow_mut().clear();
         let Some(shown) = &self.shown else { return div().into_any_element() };
         if rows.is_empty() {
-            return placeholder("Nothing in this file's lines changed", cx.theme().muted_foreground);
+            return placeholder("Nothing in this file's lines changed", look::colors(cx).text_muted);
         }
         let theme = cx.theme();
         let (mono, size) = (theme.mono_font_family.clone(), theme.mono_font_size);
@@ -335,7 +335,7 @@ fn count(characters: usize) -> f32 {
 
 impl Render for FileDiff {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let muted = cx.theme().muted_foreground;
+        let muted = look::colors(cx).text_muted;
         let loaded = self.review.read(cx).files.is_some();
         let file = self.file(cx).cloned();
         let binary = file.as_ref().is_some_and(FilePatch::is_binary);

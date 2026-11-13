@@ -6,7 +6,7 @@ use std::cmp::Reverse;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::button::{Button, ButtonCustomVariant, ButtonVariants as _};
 use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
-use gpui_kit::component::{ActiveTheme as _, Icon, Sizable as _, h_flex};
+use gpui_kit::component::{Icon, Sizable as _, h_flex};
 use gpui_kit::{
     Anchor, AnyElement, App, Context, InteractiveElement as _, IntoElement, ParentElement, Pixels, SharedString,
     Styled, Window, div, px,
@@ -54,8 +54,8 @@ impl WorkspacePane {
             return None;
         }
         closed.sort_by_key(|chat| Reverse(chat.closed_at_ms));
-        let theme = cx.theme();
-        let (lit, muted) = (theme.foreground, theme.muted_foreground);
+        let colors = look::colors(cx);
+        let (lit, muted) = (colors.text, colors.text_muted);
         let resting = match self.closed_menu {
             Menu::Open => lit,
             Menu::Shut => muted,
@@ -100,7 +100,7 @@ impl WorkspacePane {
 /// mark, because a mark says what a chat's agent is doing, and closing a chat stops its agent.
 fn row(title: SharedString, ago: SharedString) -> impl Fn(&mut Window, &mut App) -> AnyElement {
     move |_, cx| {
-        let muted = cx.theme().muted_foreground;
+        let muted = look::colors(cx).text_muted;
         h_flex()
             .w(ROW_WIDTH)
             .h(ROW_HEIGHT)

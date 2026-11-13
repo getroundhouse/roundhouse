@@ -5,7 +5,6 @@ use std::ops::Range;
 use std::rc::Rc;
 
 use gpui_kit::assets::IconName;
-use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::Icon;
 use gpui_kit::component::v_flex;
 use gpui_kit::prelude::FluentBuilder as _;
@@ -95,7 +94,7 @@ pub(super) fn draw(
     line_text: LineText,
     cx: &App,
 ) -> AnyElement {
-    let theme = cx.theme();
+    let colors = look::colors(cx);
     let count = lines.len();
     let rows = list(rows.state.clone(), move |ix, _, cx| {
         div()
@@ -125,8 +124,8 @@ pub(super) fn draw(
         .occlude()
         .rounded(px(10.))
         .border(EDGE)
-        .border_color(theme.border)
-        .bg(theme.popover)
+        .border_color(colors.edge)
+        .bg(colors.popover)
         .shadow_lg()
         .on_hover(on_hover)
         .child(rows)
@@ -145,17 +144,17 @@ fn row(
     line_text: &LineText,
     cx: &App,
 ) -> AnyElement {
-    let theme = cx.theme();
-    let fill = theme.secondary_hover;
+    let colors = look::colors(cx);
+    let fill = colors.raised_hover;
     let label = label(prompt);
-    let number = div().w(NUMBER_WIDTH).flex_none().text_right().text_color(look::faint()).child(number.to_string());
+    let number = div().w(NUMBER_WIDTH).flex_none().text_right().text_color(colors.text_faint).child(number.to_string());
     let number = line_text.small.set(number);
     let text = div()
         .flex_1()
         .min_w_0()
         .line_clamp(2)
         .text_ellipsis()
-        .text_color(if lit { theme.foreground } else { theme.muted_foreground })
+        .text_color(if lit { colors.text } else { colors.text_muted })
         .child(label.clone());
     let text = line_text.body.set(text);
     div()
@@ -190,7 +189,8 @@ fn compaction_row(
     line_text: &LineText,
     cx: &App,
 ) -> AnyElement {
-    let fill = cx.theme().secondary_hover;
+    let colors = look::colors(cx);
+    let fill = colors.raised_hover;
     let said = |to, between| -> SharedString {
         let freed = compaction::freed(compaction.before_tokens, compaction.after_tokens, to);
         let who = compaction::who(compaction.by);
@@ -199,9 +199,9 @@ fn compaction_row(
     // In words, since a screen reader would read the arrow out as one.
     let (label, said) = (said("to", ", "), said("→", " · "));
     // The compaction's icon, as its rule in the chat has it.
-    let icon = Icon::new(IconName::FoldVertical).size(px(RULE_ICON)).text_color(look::faint());
+    let icon = Icon::new(IconName::FoldVertical).size(px(RULE_ICON)).text_color(colors.text_faint);
     let icon = div().w(NUMBER_WIDTH).flex_none().flex().justify_end().items_center().child(icon);
-    let text = div().flex_1().min_w_0().truncate().text_color(look::faint()).child(said);
+    let text = div().flex_1().min_w_0().truncate().text_color(colors.text_faint).child(said);
     let text = line_text.small.set(text);
     div()
         .id(ElementId::Name(format!("outline-compaction/{row}").into()))

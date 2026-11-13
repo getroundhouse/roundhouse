@@ -10,7 +10,7 @@ use std::sync::Arc;
 use gpui_kit::component::attachment::{
     Attachment as Card, AttachmentContent, AttachmentDescription, AttachmentMedia, AttachmentTitle,
 };
-use gpui_kit::component::{ActiveTheme as _, Icon, IconName, Sizable as _, h_flex};
+use gpui_kit::component::{Icon, IconName, Sizable as _, h_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, Div, ElementId, Image, ImageFormat, InteractiveElement, IntoElement, ObjectFit, ParentElement,
@@ -150,15 +150,15 @@ fn thumbnail(file: &Carried, cx: &App) -> AnyElement {
 }
 
 fn frame(file: &Carried, cx: &App) -> Stateful<Div> {
-    let theme = cx.theme();
+    let colors = look::colors(cx);
     div()
         .id(file.key.element("picture"))
         .flex_none()
         .rounded(px(6.))
         .overflow_hidden()
         .border_1()
-        .border_color(theme.border)
-        .bg(theme.muted)
+        .border_color(colors.edge)
+        .bg(colors.inset)
 }
 
 fn ready(file: &Carried) -> Option<(Arc<Image>, u32, u32)> {
@@ -178,7 +178,7 @@ fn not_ready(file: &Carried, cx: &App) -> AnyElement {
         .items_center()
         .justify_center()
         .text_xs()
-        .text_color(look::faint())
+        .text_color(look::colors(cx).text_faint)
         .when(unreadable, |d| d.child(format!("Couldn't show {}", file.attachment.name)))
         .into_any_element()
 }

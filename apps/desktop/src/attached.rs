@@ -8,8 +8,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use client_core::{FileToSend, FilesFor};
+use gpui_kit::component::Sizable as _;
 use gpui_kit::component::attachment::{Attachment as Card, AttachmentGroup, AttachmentMedia};
-use gpui_kit::component::{ActiveTheme as _, Sizable as _};
 use gpui_kit::{Axis, Context, ElementId, ExternalPaths, Image, InteractiveElement, ParentElement, Styled};
 use protocol::attachment::MAX_PER_PROMPT;
 use protocol::model::AttachmentId;
@@ -168,7 +168,7 @@ pub(crate) fn takes_drops<T: 'static, E: InteractiveElement>(
     cx: &mut Context<T>,
     then: impl Fn(&mut T, Vec<PathBuf>, &mut Context<T>) + 'static,
 ) -> E {
-    let ring = cx.theme().ring;
+    let ring = look::colors(cx).brand;
     target
         .drag_over::<ExternalPaths>(move |style, _, _, _| style.border_color(ring))
         .on_drop(cx.listener(move |t, dropped: &ExternalPaths, _, cx| then(t, dropped.paths().to_vec(), cx)))

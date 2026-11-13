@@ -5,7 +5,7 @@ use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::base::{Tab, Tabs};
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::menu::{ContextMenuExt as _, PopupMenu};
-use gpui_kit::component::{ActiveTheme as _, IconName, Sizable as _, h_flex, v_flex};
+use gpui_kit::component::{IconName, Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, Context, ElementId, FontWeight, InteractiveElement, IntoElement, ParentElement, Pixels, Render,
@@ -34,8 +34,9 @@ pub(super) fn chat_title(session: &Session) -> &str {
 
 impl WorkspacePane {
     fn chat_tab(&self, session: &Session, cx: &mut Context<Self>) -> AnyElement {
+        let colors = look::colors(cx);
+        let (muted, current) = (colors.text_muted, colors.current);
         let title = chat_title(session).to_string();
-        let muted = cx.theme().muted_foreground;
         let selected = self.active.as_ref() == Some(&session.id) && self.showing() == Showing::Chat;
         let unread = self.shows_unread(session);
         let needs_a_look = unread || crate::sidebar::signal::waiting_on_you([session]);
@@ -86,9 +87,7 @@ impl WorkspacePane {
                     // Hidden rather than left out, so the title doesn't move when it shows.
                     .child(div().flex_none().invisible().group_hover(TAB_GROUP, Styled::visible).child(close)),
             )
-            .when(selected, |d| {
-                d.child(div().absolute().left_0().right_0().bottom_0().h(px(2.)).bg(look::tab_underline()))
-            });
+            .when(selected, |d| d.child(div().absolute().left_0().right_0().bottom_0().h(px(2.)).bg(current)));
         tab.context_menu(menu).into_any_element()
     }
 
@@ -120,7 +119,7 @@ impl WorkspacePane {
     /// to usually are, then one tab for each open chat, and a way to start another chat. At the far end are any closed
     /// ones to go back to.
     fn chat_tabs(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let border = cx.theme().border;
+        let border = look::colors(cx).edge;
         let mut tabs: Vec<AnyElement> = self.file_tab_element(cx).into_iter().collect();
         tabs.extend(self.subagent_tab_element(cx));
         for session in self.open_sessions() {
@@ -161,7 +160,7 @@ impl WorkspacePane {
     /// Over the chat, beside the sidebar of changes. While the sidebar is hidden, it shows the pull request's number and
     /// its bar's action instead. It's in the strip along the window's top, clear of the window's buttons at both ends.
     fn header(&self, sidebar: Sidebar, line_text: &LineText, cx: &mut Context<Self>) -> impl IntoElement {
-        let border = cx.theme().border;
+        let border = look::colors(cx).edge;
         let clear = sides::clearance(AtTheTop::Header, cx);
         let controls = match sidebar {
             Sidebar::Open => None,
@@ -203,7 +202,8 @@ impl WorkspacePane {
     /// words on one line are, rather than centred, which would leave them sitting higher. Resting the pointer on the
     /// title shows where the workspace is, as `workspace_card.rs` says.
     fn heading(&self, line_text: &LineText, cx: &mut Context<Self>) -> impl IntoElement {
-        let muted = cx.theme().muted_foreground;
+        let colors = look::colors(cx);
+        let (muted, faint) = (colors.text_muted, colors.text_faint);
         let LineText { body, small, code } = line_text;
         let words = || div().min_w_0().overflow_hidden().text_ellipsis();
         let title = self.workspace().label().to_string();
@@ -211,7 +211,7 @@ impl WorkspacePane {
         let title = body.set(title).font_weight(FontWeight::MEDIUM).test_support();
         let title = workspace_card::card(title, self.workspace(), self.client.hub_version());
         let branch = words().text_color(muted).child(self.workspace().branch.to_string());
-        let base = words().text_color(look::faint());
+        let base = words().text_color(faint);
         let base = base.child(format!("from {}", self.workspace().base_ref.as_deref().unwrap_or("?")));
         h_flex()
             .flex_1()
@@ -221,7 +221,7 @@ impl WorkspacePane {
             .whitespace_nowrap()
             .child(title)
             .child(div().flex_none().child(self.regenerate_title_button(cx)))
-            .child(body.set(div().flex_none().text_color(look::faint()).child("/")))
+            .child(body.set(div().flex_none().text_color(faint).child("/")))
             .child(code.set(branch))
             .child(small.set(base))
     }
@@ -235,7 +235,7 @@ impl WorkspacePane {
             .ghost()
             .xsmall()
             .icon(Lucide::PencilSparkles)
-            .text_color(cx.theme().muted_foreground)
+            .text_color(look::colors(cx).text_muted)
             .tooltip("Regenerate title")
             .loading(self.retitling)
             // Under the arrow while it waits, as it is while it's greyed out.
@@ -275,7 +275,8 @@ impl Render for WorkspacePane {
 impl WorkspacePane {
     /// The active chat, under the tabs: its transcript, how setup is going, and the composer.
     fn chat(&self, cx: &mut Context<Self>) -> AnyElement {
-        let muted = cx.theme().muted_foreground;
+        let colors = look::colors(cx);
+        let (muted, faint) = (colors.text_muted, colors.text_faint);
         let interrupted = self.session().is_some_and(|s| s.status == SessionStatus::Interrupted);
         let cache_expired = self.session().and_then(|s| prompt_cache::expired_line(s, look::now_ms(cx)));
         let setup_line = self.setup_line(cx);
@@ -303,7 +304,7 @@ impl WorkspacePane {
             })
             // What the next prompt costs, with a clock as the newest turn's line has.
             .when_some(cache_expired, |d, said| {
-                let clock = look::cache_mark(look::CacheMark::Clock, look::faint());
+                let clock = look::cache_mark(look::CacheMark::Clock, faint);
                 let line = h_flex().gap_1p5().child(clock).child(said);
                 d.child(transcript::in_column(line).flex_none().py_1().text_xs().text_color(muted))
             })

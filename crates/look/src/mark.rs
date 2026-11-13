@@ -5,7 +5,6 @@
 //! running. And the turntable is about you: red when the agent stopped short. A chat waiting on you, or with a reply
 //! you haven't read, isn't on the mark, since the name beside it says to look.
 
-use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::{App, Bounds, Hsla, IntoElement, Pixels, Styled, Window, canvas, px};
 
 /// The two sizes a mark comes in.
@@ -28,6 +27,7 @@ impl Size {
 }
 
 use crate::clock;
+use crate::colors::colors;
 use crate::fan::{self, ASPECT, Dot, Fan, as_f32};
 use crate::work::Work;
 
@@ -62,13 +62,13 @@ pub(crate) const LIGHT: f32 = 0.92;
 
 /// A workspace's mark, whose fan is in its pull request's colour.
 pub fn mark(signal: Signal, work: Work, size: Size, cx: &App) -> impl IntoElement {
-    let theme = cx.theme();
+    let colors = colors(cx);
     // Only the pull request colours the fan, so its colour means one thing. A reply nobody has read, or a question
     // waiting on an answer, isn't on the mark at all: the name beside it says to look.
-    let color = work.fan();
+    let color = work.fan(colors);
     let hub = match signal {
-        Signal::Failed => theme.danger,
-        Signal::Background => theme.foreground.opacity(LIGHT),
+        Signal::Failed => colors.stopped,
+        Signal::Background => colors.text.opacity(LIGHT),
         Signal::Idle | Signal::SettingUp | Signal::Working => unlit(color),
     };
     let moves = matches!(signal, Signal::Working | Signal::Background | Signal::SettingUp) && clock::moving(cx);
@@ -85,7 +85,7 @@ pub fn chat_mark(signal: Signal, size: Size, cx: &App) -> impl IntoElement {
 /// The mark in copper with nothing on it: the brand, for empty states. Copper is the theme's focus ring, because
 /// focus is the one other place the brand colour shows. The app icon is the same fan, drawn for each of its sizes.
 pub fn brand(width: Pixels, cx: &App) -> impl IntoElement {
-    let copper = cx.theme().ring;
+    let copper = colors(cx).brand;
     drawn(Signal::Idle, copper, unlit(copper), width, STILL_S, false, cx)
 }
 
@@ -95,7 +95,7 @@ pub(crate) fn unlit(fan: Hsla) -> Hsla {
 }
 
 fn drawn(signal: Signal, color: Hsla, hub: Hsla, width: Pixels, t: f64, moves: bool, cx: &App) -> impl IntoElement {
-    let light = cx.theme().foreground;
+    let light = colors(cx).text;
     canvas(
         |_, _, _| {},
         move |bounds, (), window, _| {

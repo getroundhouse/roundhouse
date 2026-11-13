@@ -7,8 +7,8 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 use client_core::{Agents, FileToSend, FilesFor};
+use gpui_kit::component::WindowExt as _;
 use gpui_kit::component::input::{InputEvent, TextareaState};
-use gpui_kit::component::{ActiveTheme as _, WindowExt as _};
 use gpui_kit::{
     App, AppContext as _, ClipboardItem, Context, Entity, EventEmitter, Hsla, ParentElement as _, Pixels, Styled as _,
     Subscription, Window, px,
@@ -310,7 +310,7 @@ impl NewWorkspaceDialog {
     /// Its surface, and its edge, which the line under the repository is too: the composer's surface and a dialog's
     /// edge, or in plan mode the composer's copper, on which a dialog's own line would hardly show.
     fn colors(&self, cx: &App) -> (Hsla, Hsla) {
-        composing::colors(self.planning(), cx.theme().border, cx)
+        composing::colors(self.planning(), look::colors(cx).edge, cx)
     }
 
     /// Plan mode on or off for the first chat, as `Shift-Tab` and the `+` menu do.

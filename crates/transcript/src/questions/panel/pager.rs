@@ -3,7 +3,7 @@
 //! it.
 
 use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::{ActiveTheme as _, IconName, Sizable as _, h_flex};
+use gpui_kit::component::{IconName, Sizable as _, h_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, Context, ElementId, InteractiveElement as _, IntoElement, ParentElement,
@@ -18,7 +18,7 @@ use super::heading::said;
 /// How many more requests wait to be asked once this one is answered, as a small detail, or nothing with none. It
 /// starts where the rows' numbers do.
 pub(super) fn more_waiting(more: usize, cx: &mut Context<QuestionPanel>) -> Option<AnyElement> {
-    let muted = cx.theme().muted_foreground;
+    let muted = look::colors(cx).text_muted;
     let waiting =
         |more| said("question-more-waiting", format!("{more} more waiting")).pl_2().text_xs().text_color(muted);
     (more > 0).then(|| waiting(more).test_support().into_any_element())
@@ -35,8 +35,8 @@ pub(super) fn pager(
         return None;
     }
     let showing = panel.showing;
-    let theme = cx.theme();
-    let (foreground, muted) = (theme.foreground, theme.muted_foreground);
+    let colors = look::colors(cx);
+    let (foreground, muted) = (colors.text, colors.text_muted);
     let dots: Vec<AnyElement> = answered
         .iter()
         .enumerate()

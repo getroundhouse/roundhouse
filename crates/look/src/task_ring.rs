@@ -1,13 +1,12 @@
 //! A background task's ring: a small circle of dots around a hub, beside what the agent said it's for. It's the
 //! fan's turntable on its own, so the fan stays the agent's, one to a chat.
 
-use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::{App, Bounds, Hsla, IntoElement, Pixels, Styled, Window, canvas, point};
 
 use crate::clock;
+use crate::colors::colors;
 use crate::fan::{self, as_f32};
 use crate::mark::{BACKGROUND_S, LIGHT, STILL_S, Size, phase, unlit};
-use crate::palette::faint;
 
 /// Whether a background task is doing something.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -30,14 +29,15 @@ const WATCHING: f32 = 0.75;
 
 /// The ring for one background task, as wide as a mark beside text, so what follows lines up with the working line's.
 pub fn task_ring(ring: TaskRing, cx: &App) -> impl IntoElement {
-    let light = cx.theme().foreground;
+    let colors = colors(cx);
+    let (light, faint) = (colors.text, colors.text_faint);
     let moves = ring == TaskRing::Running && clock::moving(cx);
     let t = if moves { clock::elapsed() } else { STILL_S };
     let width = Size::Inline.width();
     canvas(
         |_, _, _| {},
         move |bounds, (), window, _| {
-            paint(bounds, ring, faint(), light, phase(t, BACKGROUND_S), window);
+            paint(bounds, ring, faint, light, phase(t, BACKGROUND_S), window);
             // Drawn again on the display's next frame, for as long as it's on screen and moving.
             if moves {
                 window.request_animation_frame();

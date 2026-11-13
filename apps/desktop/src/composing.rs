@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
-use gpui_kit::component::{ActiveTheme as _, Icon, IconName, Sizable as _};
+use gpui_kit::component::{Icon, IconName, Sizable as _};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AbsoluteLength, Anchor, App, Context, FocusHandle, Hsla, InteractiveElement, IntoElement, ParentElement, Role,
@@ -68,7 +68,7 @@ pub(crate) fn place<T: 'static, E: InteractiveElement + IntoElement + ParentElem
 /// The surface and edge of a place where a prompt is written, whose edge is `edge` otherwise: the composer's surface,
 /// or in plan mode, both in its copper.
 pub(crate) fn colors(planning: bool, edge: Hsla, cx: &App) -> (Hsla, Hsla) {
-    let surface = cx.theme().muted;
+    let surface = look::colors(cx).inset;
     if planning { look::plan_colors(surface, cx) } else { (surface, edge) }
 }
 

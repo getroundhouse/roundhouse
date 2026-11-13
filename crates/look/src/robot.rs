@@ -3,16 +3,16 @@
 //! and says plainly that it's at work.
 
 use gpui_kit::assets::IconName;
-use gpui_kit::component::{ActiveTheme as _, Icon};
+use gpui_kit::component::Icon;
 use gpui_kit::{
     App, Bounds, ContentMask, Hsla, IntoElement, ParentElement as _, Pixels, Styled as _, TransformationMatrix, Window,
     canvas, div, point, px, size,
 };
 
 use crate::clock;
+use crate::colors::colors;
 use crate::fan::as_f32;
 use crate::mark::{BACKGROUND_S, LIGHT, STILL_S, Size, light_on, phase};
-use crate::palette::faint;
 
 /// How big a call's icon is on its line in the chat, which the robot is too, since it's the icon a subagent's call has.
 pub const LINE_ICON: f32 = 15.0;
@@ -22,7 +22,8 @@ const STRIPS: usize = 15;
 
 /// The robot, as wide as a task's ring, so what follows it lines up with the other lines'.
 pub fn robot_at_work(cx: &App) -> impl IntoElement {
-    let light = cx.theme().foreground;
+    let colors = colors(cx);
+    let (light, faint) = (colors.text, colors.text_faint);
     let moves = clock::moving(cx);
     let t = if moves { clock::elapsed() } else { STILL_S };
     let width = Size::Inline.width();
@@ -36,7 +37,7 @@ pub fn robot_at_work(cx: &App) -> impl IntoElement {
                 .absolute()
                 .top(inset)
                 .left(inset)
-                .child(Icon::new(IconName::Bot).size(px(LINE_ICON)).text_color(faint())),
+                .child(Icon::new(IconName::Bot).size(px(LINE_ICON)).text_color(faint)),
         )
         .child(
             canvas(

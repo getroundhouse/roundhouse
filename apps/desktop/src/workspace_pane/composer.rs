@@ -4,7 +4,7 @@
 
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::{InputEvent, Textarea, TextareaState};
-use gpui_kit::component::{ActiveTheme as _, IconName, Sizable as _, h_flex, v_flex};
+use gpui_kit::component::{IconName, Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, AppContext as _, Context, Div, Entity, Focusable as _, IntoElement, ParentElement, Pixels, Rems,
@@ -214,7 +214,7 @@ impl WorkspacePane {
         let planning = self.planning();
         let attached = self.attached_tiles(cx);
         let bar = self.bar(cx).into_any_element();
-        let (surface, border) = composing::colors(planning, cx.theme().input, cx);
+        let (surface, border) = composing::colors(planning, look::colors(cx).control_edge, cx);
         let this = cx.weak_entity();
         let textarea = Textarea::new(&self.composer)
             .appearance(false)
@@ -257,7 +257,7 @@ impl WorkspacePane {
     fn main_action(&self, cx: &mut Context<Self>) -> AnyElement {
         let working = self.session().is_some_and(|s| s.status.in_turn());
         if working {
-            let stop_mark = cx.theme().button_primary_foreground;
+            let stop_mark = look::colors(cx).on_main;
             // The same square as Send, with a filled square rather than an icon, which would only be outlined.
             Button::new("stop")
                 .hand()

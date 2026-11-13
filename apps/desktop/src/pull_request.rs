@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::button::{Button, ButtonCustomVariant, ButtonVariants as _};
-use gpui_kit::component::{ActiveTheme as _, Icon, Sizable as _, h_flex};
+use gpui_kit::component::{Icon, Sizable as _, h_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, Div, FontWeight, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Styled as _,
@@ -109,7 +109,7 @@ pub fn bar(
     cx: &App,
 ) -> AnyElement {
     let work = lookup.work();
-    let theme = cx.theme();
+    let colors = look::colors(cx);
     let row = h_flex()
         .id("pull-request-bar")
         .flex_none()
@@ -118,17 +118,17 @@ pub fn bar(
         .pl_3()
         .pr(px(12.) + sides::clearance(AtTheTop::RightSidebar, cx).end)
         .gap_2()
-        .bg(work.tint(cx))
+        .bg(work.tint(colors))
         .border_b_1()
-        .border_color(theme.border);
+        .border_color(colors.edge);
     let Some(standing) = lookup.standing() else {
         return row
-            .child(div().text_sm().text_color(look::faint()).child("Looking for its pull request…"))
+            .child(div().text_sm().text_color(colors.text_faint).child("Looking for its pull request…"))
             .into_any_element();
     };
     let pr = lookup.pull_request();
     let title = words::title(standing, pr.and_then(|pr| pr.base.as_ref()).map(BranchName::as_str));
-    let text = if pr.is_some() { work.text(cx) } else { theme.muted_foreground };
+    let text = if pr.is_some() { work.text(colors) } else { colors.text_muted };
     let title = div()
         .flex_1()
         .min_w_0()
@@ -187,13 +187,13 @@ pub fn controls(
 
 /// The pull request's number, outlined as a button that opens something is, which opens it on GitHub.
 fn number(pr: &PullRequest, work: Work, cx: &App) -> AnyElement {
-    let url = pr.url.clone();
+    let (url, colors) = (pr.url.clone(), look::colors(cx));
     Button::new("pull-request")
         .hand()
         .small()
         .outline()
-        .border_color(work.edge(cx))
-        .text_color(work.text(cx))
+        .border_color(work.edge(colors))
+        .text_color(work.text(colors))
         .tooltip(pr.title.clone())
         .label(format!("#{}", pr.number))
         .child(Icon::new(Lucide::ArrowUpRight).xsmall())
@@ -210,20 +210,21 @@ fn action_button(
     on_action: impl Fn(&Action, &mut Window, &mut App) + 'static,
     cx: &App,
 ) -> AnyElement {
+    let colors = look::colors(cx);
     // Greyed out while the app is making, archiving or restoring a workspace, as every button that archives is, so it
     // can't be pressed twice, and while this one is on its way out, whoever asked. The other actions only ask the agent.
     let doing = doing.filter(|_| action == Action::Archive);
     let disabled = action == Action::Archive && (!busy.is_free() || doing.is_some());
     let label = doing.unwrap_or(action.label());
     let button = Button::new("pull-request-action").small().label(label).off_while(disabled);
-    let button = match work.hue() {
+    let button = match work.hue(colors) {
         // The kit draws a custom button's colour faintly, so the fill is set on the button itself, which hover and
         // press still change. Not while it's disabled, since the kit lays the button's own style over its disabled
         // one, which would keep the fill.
         Some(fill) => {
             let style = ButtonCustomVariant::new(cx)
                 .color(fill)
-                .foreground(cx.theme().primary_foreground)
+                .foreground(colors.on_main)
                 .hover(fill.opacity(0.85))
                 .active(fill.opacity(0.7));
             button.custom(style).when(!disabled, |button| button.bg(fill))

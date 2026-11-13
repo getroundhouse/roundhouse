@@ -4,7 +4,6 @@
 
 use client_core::calls::{Recorded, ToolCall, count};
 use gpui_kit::assets::IconName;
-use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{AnyElement, App, IntoElement, ParentElement};
 use protocol::model::Seq;
@@ -118,7 +117,7 @@ pub(super) fn result(toggle: &Toggle, answer: &Answer, cx: &App) -> AnyElement {
     let size = amount(lines, images.len()).unwrap_or_else(|| count(0, "line", "lines"));
     let line = Line::new(IconName::CornerDownRight, "Output").part(Part::Note(size.into())).shows_output(true);
     let opened = || {
-        let color = cx.theme().muted_foreground;
+        let color = look::colors(cx).text_muted;
         let shown = block::frame(cx)
             .when_some(text, |d, text| d.child(block::output(toggle, Text::Output, text, color, cx)))
             .when(!images.is_empty(), |d| d.child(block::images(images, cx)));

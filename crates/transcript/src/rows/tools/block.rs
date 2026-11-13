@@ -32,7 +32,7 @@ const SPACED_UP_TO: usize = 200;
 
 /// The block itself, on the column's left edge with the call's icon, as everything in the transcript is.
 pub(in crate::rows) fn frame(cx: &App) -> Div {
-    let theme = cx.theme();
+    let colors = look::colors(cx);
     div()
         .mt_1()
         .mb_2()
@@ -40,14 +40,14 @@ pub(in crate::rows) fn frame(cx: &App) -> Div {
         .flex_col()
         .rounded(px(8.))
         .border_1()
-        .border_color(theme.border)
-        .bg(theme.muted)
+        .border_color(colors.edge)
+        .bg(colors.inset)
         .overflow_hidden()
 }
 
 /// A line between the parts of a block, such as a command and its output.
 pub(in crate::rows) fn separator(cx: &App) -> Div {
-    div().h(px(1.)).bg(cx.theme().border)
+    div().h(px(1.)).bg(look::colors(cx).edge)
 }
 
 /// A faint name for the part of a block below it, such as "Input".
@@ -62,7 +62,12 @@ pub(super) fn found_label(toggle: &Toggle, part: Part, text: &str, cx: &App) -> 
 }
 
 fn faint(cx: &App) -> Div {
-    div().px_3().pt_2().font_family(cx.theme().mono_font_family.clone()).text_xs().text_color(look::faint())
+    div()
+        .px_3()
+        .pt_2()
+        .font_family(cx.theme().mono_font_family.clone())
+        .text_xs()
+        .text_color(look::colors(cx).text_faint)
 }
 
 /// What [`output`] and [`lines`] draw of `text`: a short output without the blank lines at its end, and a long one
@@ -93,7 +98,7 @@ pub(in crate::rows) fn output(toggle: &Toggle, part: Part, text: &str, color: Hs
 /// too long for the block reads as one where it wraps. Each line is laid out with any blank lines after it, so a blank
 /// line takes no more room than it did. Past [`SPACED_UP_TO`] lines, it's drawn as any output is.
 pub(super) fn lines(toggle: &Toggle, part: Part, text: &str, cx: &App) -> AnyElement {
-    let color = cx.theme().foreground;
+    let color = look::colors(cx).text;
     let Some(runs) = spaced(text) else { return output(toggle, part, text, color, cx) };
     let id = part.element(toggle.key);
     // Its runs a line apart are what [`output_text`] draws of it, which its matches are found in. Nothing found has a
@@ -178,12 +183,13 @@ pub(in crate::rows) fn images(images: &[Carried], cx: &App) -> AnyElement {
 /// in the code, not the prompt.
 pub(super) fn code(toggle: &Toggle, part: Part, language: &str, prompt: &str, text: &str, cx: &App) -> AnyElement {
     let theme = cx.theme();
+    let colors = look::colors(cx);
     let id = part.element(toggle.key);
     let body: SharedString = code_text(text).to_string().into();
     let spans = spans(language, &body);
     let marks = toggle.marks(part, &body);
     let shown: SharedString = format!("{prompt}{body}").into();
-    let faint = HighlightStyle { color: Some(look::faint()), ..HighlightStyle::default() };
+    let faint = HighlightStyle { color: Some(colors.text_faint), ..HighlightStyle::default() };
     let at = prompt.len();
     let styles: Vec<(std::ops::Range<usize>, HighlightStyle)> = (!prompt.is_empty())
         .then_some((0..at, faint))
@@ -196,7 +202,7 @@ pub(super) fn code(toggle: &Toggle, part: Part, language: &str, prompt: &str, te
         .py_2()
         .font_family(theme.mono_font_family.clone())
         .text_size(theme.mono_font_size)
-        .text_color(theme.foreground)
+        .text_color(colors.text)
         .child(marked(shown, &marks.moved(at), &styles, Some(scroll_id(&id))))
         .test_support();
     scrolling(toggle.find, &toggle.shared.selection, &id, part).into_any_element()

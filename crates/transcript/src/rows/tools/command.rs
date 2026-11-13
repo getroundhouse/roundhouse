@@ -82,7 +82,7 @@ fn nothing_printed(toggle: &Toggle, cx: &App) -> AnyElement {
         .py_2()
         .font_family(theme.mono_font_family.clone())
         .text_size(theme.mono_font_size)
-        .text_color(look::faint())
+        .text_color(look::colors(cx).text_faint)
         .child("No output")
         .test_support()
         .into_any_element()
@@ -92,6 +92,7 @@ fn nothing_printed(toggle: &Toggle, cx: &App) -> AnyElement {
 /// button pinned at its top right, shown while it's hovered, copies all of it. It draws the matches in it.
 fn command_part(command: &Command, toggle: &Toggle, cx: &App) -> AnyElement {
     let theme = cx.theme();
+    let colors = look::colors(cx);
     let full: SharedString = command.command.trim().to_string().into();
     let marks = toggle.marks(Text::Command, &full);
     let id = toggle.key.element("command");
@@ -110,8 +111,8 @@ fn command_part(command: &Command, toggle: &Toggle, cx: &App) -> AnyElement {
         .flex()
         .px_3()
         .py_2()
-        .text_color(theme.foreground)
-        .child(div().flex_none().text_color(look::faint()).child("$\u{a0}"))
+        .text_color(colors.text)
+        .child(div().flex_none().text_color(colors.text_faint).child("$\u{a0}"))
         .child(div().flex_1().min_w_0().child(text))
         // Room for the button, which is pinned over it, so the text never runs under the button. As wide as the
         // kit's copy button, an extra-small icon button, which is `size_5`.

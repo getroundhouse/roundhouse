@@ -5,7 +5,7 @@
 use client_core::calls::web::{Link, Results, site};
 use client_core::calls::{Fetch, WebSearch};
 use gpui_kit::assets::IconName;
-use gpui_kit::component::{ActiveTheme as _, h_flex};
+use gpui_kit::component::h_flex;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, Div, ElementId, InteractiveElement as _, IntoElement, ParentElement, Role, SharedString,
@@ -33,7 +33,7 @@ fn fetched(fetch: &Fetch, answer: Option<&Answer>, toggle: &Toggle, cx: &App) ->
     let answer = answer.and_then(Answer::success).filter(|text| !text.trim().is_empty());
     let asked = fetch.prompt.map(|prompt| {
         let marked = find::marked(prompt.to_string().into(), &toggle.marks(Text::Ask, prompt), &[], None);
-        div().px_3().pt_1().pb_2().text_sm().text_color(cx.theme().muted_foreground).child(marked)
+        div().px_3().pt_1().pb_2().text_sm().text_color(look::colors(cx).text_muted).child(marked)
     });
     block::frame(cx)
         .child(block::found_label(toggle, Text::Label, fetch.url, cx))
@@ -110,9 +110,9 @@ pub(super) fn search(search: &WebSearch, answer: Option<&Answer>, toggle: &Toggl
 /// A page it found: its title, with its matches, then its site, faint and smaller, on the title's baseline. Clicking
 /// it opens the page.
 fn link_row(id: ElementId, link: &Link, marks: &Marks, area: &ElementId, line_text: &LineText, cx: &App) -> AnyElement {
-    let theme = cx.theme();
+    let colors = look::colors(cx);
     let (url, title): (SharedString, SharedString) = (link.url.clone().into(), link.title.clone().into());
-    let hover = theme.muted_foreground.opacity(0.12);
+    let hover = colors.text_muted.opacity(0.12);
     h_flex()
         .id(id)
         .role(Role::Link)
@@ -131,6 +131,6 @@ fn link_row(id: ElementId, link: &Link, marks: &Marks, area: &ElementId, line_te
                 Some(area.clone()),
             )),
         ))
-        .child(line_text.small.set(div().flex_none().text_color(look::faint()).child(site(&link.url).to_string())))
+        .child(line_text.small.set(div().flex_none().text_color(colors.text_faint).child(site(&link.url).to_string())))
         .into_any_element()
 }

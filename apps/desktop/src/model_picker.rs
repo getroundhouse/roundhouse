@@ -3,10 +3,10 @@
 
 use std::rc::Rc;
 
+use gpui_kit::component::Sizable as _;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::menu::{DropdownMenu as _, PopupMenu, PopupMenuItem};
 use gpui_kit::component::tooltip::Tooltip;
-use gpui_kit::component::{ActiveTheme as _, Sizable as _};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     Anchor, App, InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce, SharedString,
@@ -103,7 +103,7 @@ impl RenderOnce for ModelPicker {
     /// the model.
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let effort = effort_label(self.effort);
-        let muted = cx.theme().muted_foreground;
+        let muted = look::colors(cx).text_muted;
         let (offered, model, chosen, switching, on_pick) =
             (self.offered, self.model, self.effort, self.switching, self.on_pick);
         Button::new(self.id)

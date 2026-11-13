@@ -151,6 +151,14 @@ pub(crate) struct FindLook {
     found: RefCell<Seen>,
     /// The transcript's, which the match being shown says where it was drawn in.
     reveal: Reveal,
+    colors: MatchColors,
+}
+
+/// The colours behind what's found: each match, and the one being shown.
+#[derive(Clone, Copy, Debug, Default)]
+struct MatchColors {
+    found: Hsla,
+    here: Hsla,
 }
 
 /// Where the needle is in each text drawn since a [`FindLook`] was made, with how long the text was, since a text such
@@ -158,8 +166,10 @@ pub(crate) struct FindLook {
 type Seen = HashMap<TextId, (usize, Rc<[Range<usize>]>)>;
 
 impl FindLook {
-    pub(crate) fn new(needle: Option<Needle>, here: Option<Spot>, reveal: Reveal) -> Self {
-        Self { needle, here, found: RefCell::default(), reveal }
+    /// Draws what's found in the colours of `colors`.
+    pub(crate) fn new(needle: Option<Needle>, here: Option<Spot>, reveal: Reveal, colors: &look::Colors) -> Self {
+        let colors = MatchColors { found: colors.found(), here: colors.found_here() };
+        Self { needle, here, found: RefCell::default(), reveal, colors }
     }
 
     pub(crate) fn reveal(&self) -> &Reveal {
@@ -224,7 +234,7 @@ impl FindLook {
             }
         };
         let here = self.nth_here(id).filter(|nth| *nth < ranges.len());
-        Marks { ranges, here, reveal: here.map(|_| self.reveal.clone()) }
+        Marks { ranges, here, reveal: here.map(|_| self.reveal.clone()), colors: self.colors }
     }
 }
 
@@ -235,6 +245,7 @@ pub(crate) struct Marks {
     here: Option<usize>,
     /// Where the match being shown says it was drawn, if it's here.
     reveal: Option<Reveal>,
+    colors: MatchColors,
 }
 
 impl Marks {
@@ -255,14 +266,14 @@ impl Marks {
     /// Each match, with the colour behind it.
     pub(crate) fn backgrounds(&self) -> impl Iterator<Item = (Range<usize>, Hsla)> + '_ {
         self.ranges.iter().enumerate().map(|(nth, range)| {
-            (range.clone(), if Some(nth) == self.here { look::found_here() } else { look::found() })
+            (range.clone(), if Some(nth) == self.here { self.colors.here } else { self.colors.found })
         })
     }
 
     /// These marks for the text drawn after `by` bytes of something else, such as a prompt.
     pub(crate) fn moved(&self, by: usize) -> Marks {
         let ranges = self.ranges.iter().map(|range| range.start + by..range.end + by).collect();
-        Marks { ranges, here: self.here, reveal: self.reveal.clone() }
+        Marks { ranges, here: self.here, reveal: self.reveal.clone(), colors: self.colors }
     }
 
     /// These marks for the part of the text from `start` to `end`, moved to start there, so a line of a text can be
@@ -277,7 +288,7 @@ impl Marks {
             .map(|range| range.start.max(start) - start..range.end.min(end) - start)
             .collect();
         let here = self.here.filter(|nth| self.ranges.get(*nth).is_some_and(inside)).map(|nth| nth - first);
-        Marks { ranges, here, reveal: self.reveal.clone() }
+        Marks { ranges, here, reveal: self.reveal.clone(), colors: self.colors }
     }
 
     /// `styles`, such as code's colours, with each match's background laid over them.
@@ -331,7 +342,8 @@ mod tests {
     fn look(query: &str, here: Option<usize>) -> (FindLook, TextId) {
         let id = (ItemKey::Event(1, 0), Part::Output);
         let here = here.map(|nth| Spot { text: id.clone(), nth });
-        (FindLook::new(Some(Needle::new(query).unwrap()), here, Reveal::default()), id)
+        let colors = look::Colors::dark();
+        (FindLook::new(Some(Needle::new(query).unwrap()), here, Reveal::default(), &colors), id)
     }
 
     #[test]

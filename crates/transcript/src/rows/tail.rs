@@ -7,7 +7,7 @@
 use std::time::Duration;
 
 use client_core::session_log::{By, SessionLog};
-use gpui_kit::component::{ActiveTheme as _, v_flex};
+use gpui_kit::component::v_flex;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, Div, InteractiveElement as _, IntoElement, ParentElement, Styled, TestSupportExt as _, div, px,
@@ -142,13 +142,13 @@ fn waiting_prompt(prompt: &Waiting, at: TextAt, shared: &Shared, cx: &App) -> An
 
 /// A line as tall as a call's, at body size, so nothing jumps when what's above it is recorded.
 fn tail_line(cx: &App) -> Div {
-    div().flex().items_center().gap_2().h(px(HEIGHT)).text_color(cx.theme().muted_foreground)
+    div().flex().items_center().gap_2().h(px(HEIGHT)).text_color(look::colors(cx).text_muted)
 }
 
 /// What a thought the agent is still writing says, after the icon its line will have once it's recorded. The working
 /// line under it has the mark that says the agent is at work.
 fn thought(text: String, cx: &App) -> Div {
-    tail_line(cx).child(still_icon(thinking::ICON)).child(clipped(text))
+    tail_line(cx).child(still_icon(thinking::ICON, cx)).child(clipped(text))
 }
 
 fn clipped(text: String) -> Div {

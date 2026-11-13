@@ -3,7 +3,7 @@
 
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::{ActiveTheme as _, Selectable as _, Sizable as _, h_flex};
+use gpui_kit::component::{Selectable as _, Sizable as _, h_flex};
 use gpui_kit::{AnyElement, App, Global, IntoElement as _, ParentElement as _, Styled as _, px};
 use look::Hand as _;
 
@@ -76,7 +76,7 @@ pub(super) fn switch(cx: &App) -> AnyElement {
         .p(px(2.))
         .gap(px(2.))
         .rounded(px(6.))
-        .bg(cx.theme().secondary)
+        .bg(look::colors(cx).raised)
         .children(DiffView::ALL.map(|view| {
             Button::new(view.id())
                 .hand()

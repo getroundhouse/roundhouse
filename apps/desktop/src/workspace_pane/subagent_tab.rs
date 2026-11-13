@@ -12,7 +12,7 @@ use client_core::records::{Changes, Snapshot};
 use gpui_kit::base::Tab;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::tooltip::Tooltip;
-use gpui_kit::component::{ActiveTheme as _, Icon, IconName, Sizable as _, h_flex, v_flex};
+use gpui_kit::component::{Icon, IconName, Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, AppContext as _, Context, Entity, FocusHandle, FontWeight, InteractiveElement as _, IntoElement as _,
@@ -168,9 +168,10 @@ impl WorkspacePane {
     /// The subagent tab, built as the file tab is. It has the call's icon, and what the subagent is for, in italics,
     /// since it's replaced rather than added to.
     pub(super) fn subagent_tab_element(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let colors = look::colors(cx);
         let title = self.subagents.title(self.shown.all())?;
         let selected = self.showing() == Showing::Subagent;
-        let muted = cx.theme().muted_foreground;
+        let muted = colors.text_muted;
         let close = Button::new("close-subagent-tab")
             .ghost()
             .xsmall()
@@ -208,9 +209,7 @@ impl WorkspacePane {
                     .child(name.child(title))
                     .child(div().flex_none().invisible().group_hover(TAB_GROUP, Styled::visible).child(close)),
             )
-            .when(selected, |d| {
-                d.child(div().absolute().left_0().right_0().bottom_0().h(px(2.)).bg(look::tab_underline()))
-            });
+            .when(selected, |d| d.child(div().absolute().left_0().right_0().bottom_0().h(px(2.)).bg(colors.current)));
         Some(tab.into_any_element())
     }
 
@@ -241,7 +240,7 @@ fn band(
     subagent: Option<&Subagent>,
     cx: &Context<WorkspacePane>,
 ) -> AnyElement {
-    let theme = cx.theme();
+    let colors = look::colors(cx);
     let from = from.map(|(chat, name)| {
         let link = div()
             .id("subagent-band-chat")
@@ -251,16 +250,16 @@ fn band(
             .whitespace_nowrap()
             .text_ellipsis()
             .text_sm()
-            .text_color(look::faint())
+            .text_color(colors.text_faint)
             .hand()
-            .hover(|d| d.text_color(theme.foreground))
+            .hover(|d| d.text_color(colors.text))
             .role(Role::Link)
             .aria_label(name.clone())
             .on_click(cx.listener(move |t, _, _, cx| t.activate(chat.clone(), cx)))
             .child(name)
             .test_support();
         // It gives way well before what the subagent is for does, which is what the page is about.
-        let slash = div().flex_none().text_sm().text_color(look::faint()).child("/");
+        let slash = div().flex_none().text_sm().text_color(colors.text_faint).child("/");
         h_flex().flex_shrink(100.).min_w(px(56.)).gap_2().child(link).child(slash)
     });
     let chip = subagent.and_then(|s| shown_kind(s.kind.as_deref())).map(|kind| {
@@ -269,9 +268,9 @@ fn band(
             .px_2()
             .rounded(px(6.))
             .border_1()
-            .border_color(theme.input)
+            .border_color(colors.control_edge)
             .text_sm()
-            .text_color(theme.muted_foreground)
+            .text_color(colors.text_muted)
             .child(kind.to_string())
     });
     let standing = subagent.map(subagent_standing);
@@ -282,8 +281,8 @@ fn band(
         .px_4()
         .gap_2()
         .border_b_1()
-        .border_color(theme.border)
-        .child(Icon::new(IconName::Bot).xsmall().text_color(look::faint()))
+        .border_color(colors.edge)
+        .child(Icon::new(IconName::Bot).xsmall().text_color(colors.text_faint))
         .children(from)
         .child(
             div()
@@ -297,6 +296,6 @@ fn band(
         )
         .children(chip)
         .child(div().flex_1())
-        .children(standing.map(|standing| div().flex_none().text_xs().text_color(look::faint()).child(standing)))
+        .children(standing.map(|standing| div().flex_none().text_xs().text_color(colors.text_faint).child(standing)))
         .into_any_element()
 }

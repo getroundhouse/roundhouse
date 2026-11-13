@@ -5,7 +5,7 @@
 use gpui_kit::base::Tab;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::tooltip::Tooltip;
-use gpui_kit::component::{ActiveTheme as _, Icon, IconName, Sizable as _};
+use gpui_kit::component::{Icon, IconName, Sizable as _};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, Context, InteractiveElement as _, IntoElement as _, ParentElement as _, SharedString,
@@ -119,10 +119,11 @@ impl WorkspacePane {
     /// name is in italics, because it's replaced rather than added to. It's built as a chat's tab is, with the same
     /// width, underline and close button, so the row reads as one row of tabs.
     pub(super) fn file_tab_element(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let colors = look::colors(cx);
         let (path, opened) = (self.file_tab()?, self.file_tab_opened()?);
         let name = path.rsplit('/').next().unwrap_or_default().to_string();
         let selected = self.showing() == Showing::File;
-        let muted = cx.theme().muted_foreground;
+        let muted = colors.text_muted;
         let label = match opened {
             Opened::Diff => format!("Diff of {path}"),
             Opened::File => path.to_string(),
@@ -176,9 +177,7 @@ impl WorkspacePane {
                     // Hidden rather than left out, so the name doesn't move when it shows.
                     .child(div().flex_none().invisible().group_hover(TAB_GROUP, Styled::visible).child(close)),
             )
-            .when(selected, |d| {
-                d.child(div().absolute().left_0().right_0().bottom_0().h(px(2.)).bg(look::tab_underline()))
-            });
+            .when(selected, |d| d.child(div().absolute().left_0().right_0().bottom_0().h(px(2.)).bg(colors.current)));
         Some(tab.into_any_element())
     }
 }

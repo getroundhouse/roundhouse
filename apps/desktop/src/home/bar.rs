@@ -4,7 +4,7 @@ use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::Input;
 use gpui_kit::component::menu::{DropdownMenu as _, PopupMenu, PopupMenuItem};
-use gpui_kit::component::{ActiveTheme as _, Icon, IconName, Sizable as _, h_flex};
+use gpui_kit::component::{Icon, IconName, Sizable as _, h_flex};
 use gpui_kit::{
     Context, InteractiveElement as _, IntoElement, ParentElement, Styled, TestSupportExt as _, WeakEntity, Window, div,
     px,
@@ -18,8 +18,8 @@ use crate::workspace_pane::HEADER_HEIGHT;
 
 /// In the strip, clear of the window's buttons at both ends as the workspace's header is.
 pub(super) fn bar(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
-    let theme = cx.theme();
-    let (border, muted) = (theme.border, theme.muted_foreground);
+    let colors = look::colors(cx);
+    let (border, muted) = (colors.edge, colors.text_muted);
     let clear = sides::clearance(AtTheTop::Header, cx);
     h_flex()
         .flex_none()
@@ -71,7 +71,7 @@ fn filter(id: &'static str, icon: impl Into<Icon>, label: String, cx: &Context<A
         .icon(icon)
         .label(label)
         .dropdown_caret(true)
-        .text_color(cx.theme().muted_foreground)
+        .text_color(look::colors(cx).text_muted)
 }
 
 fn repos(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {

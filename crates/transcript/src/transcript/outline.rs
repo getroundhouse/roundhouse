@@ -7,7 +7,6 @@ use std::ops::Range;
 use std::rc::Rc;
 
 use client_core::OpenSession;
-use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, ClickEvent, Context, DispatchPhase, Div, ElementId, Entity, EntityId, InteractiveElement,
@@ -240,7 +239,8 @@ fn look(ix: usize, at: usize, shown: &Range<usize>, count: usize) -> Tick {
 
 /// A prompt's tick, or a compaction's dot, of the chat's `prompts`.
 fn tick(line: &Line, prompts: usize, look: Tick, cx: &App) -> AnyElement {
-    let color = if look == Tick::BeingRead { cx.theme().foreground } else { look::faint() };
+    let colors = look::colors(cx);
+    let color = if look == Tick::BeingRead { colors.text } else { colors.text_faint };
     let (id, label, mark) = match &line.kind {
         Kind::Prompt { number, .. } => {
             let tick = div().w_full().h(TICK_HEIGHT);

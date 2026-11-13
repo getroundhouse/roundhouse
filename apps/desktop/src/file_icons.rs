@@ -6,7 +6,7 @@
 //! picture, in its own colours, and the plain file, for a file with no kind of its own, and every folder's, whatever
 //! folder it is, as an icon in the muted text colour.
 
-use gpui_kit::component::{ActiveTheme as _, Icon};
+use gpui_kit::component::Icon;
 use gpui_kit::{AnyElement, App, IntoElement as _, Styled as _, img, px};
 
 include!(concat!(env!("OUT_DIR"), "/file_icons.rs"));
@@ -35,7 +35,7 @@ pub(crate) fn folder_icon(open: bool, cx: &App) -> Icon {
 /// An icon that stands for no kind in particular, the plain file or a folder, in the muted text colour, so it gives way
 /// to those that say what a file is. It's drawn as the kit's icons are, which keeps only its shape.
 fn plain(name: &str, cx: &App) -> Icon {
-    Icon::empty().path(asset(name)).size(px(ICON_SIZE)).flex_none().text_color(cx.theme().muted_foreground)
+    Icon::empty().path(asset(name)).size(px(ICON_SIZE)).flex_none().text_color(look::colors(cx).text_muted)
 }
 
 fn asset(name: &str) -> String {

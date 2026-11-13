@@ -64,7 +64,7 @@ pub(super) fn row(ix: usize, row: &Row, drawing: &Drawing, cx: &App) -> AnyEleme
             .w_full()
             .h(LINE_HEIGHT)
             .child(half(ix, true, *old, *new, *same, drawing, cx))
-            .child(half(ix, false, *new, *new, *same, drawing, cx).border_l_1().border_color(cx.theme().border))
+            .child(half(ix, false, *new, *new, *same, drawing, cx).border_l_1().border_color(look::colors(cx).edge))
             .into_any_element(),
         Row::Fold(fold) => fold_row(fold, drawing, cx),
         Row::Comment(id) => match drawing.comments.iter().find(|comment| &comment.id == id) {
@@ -99,8 +99,8 @@ fn line(ix: usize, kind: LineKind, old: Option<u32>, new: Option<u32>, drawing: 
         .w_full()
         .h(LINE_HEIGHT)
         .when_some(background(kind, at, drawing, cx), Styled::bg)
-        .child(number(old, drawing.numbers))
-        .child(number(new, drawing.numbers))
+        .child(number(old, drawing.numbers, cx))
+        .child(number(new, drawing.numbers, cx))
         .child(changes(kind, &code, drawing, at, cx))
         .into_any_element()
 }
@@ -117,7 +117,7 @@ fn half(
     cx: &App,
 ) -> Div {
     let half = div().w_1_2().h_full().min_w_0();
-    let Some(number_) = line else { return half.bg(cx.theme().muted.opacity(0.3)) };
+    let Some(number_) = line else { return half.bg(look::colors(cx).inset.opacity(0.3)) };
     let side = if old_side { &drawing.sides.old } else { &drawing.sides.new };
     let kind = match (same, old_side) {
         (true, _) => LineKind::Same,
@@ -136,32 +136,32 @@ fn half(
             .group(LINE)
             .size_full()
             .when_some(background(kind, at, drawing, cx), Styled::bg)
-            .child(number(line, drawing.numbers))
+            .child(number(line, drawing.numbers, cx))
             .child(changes(kind, &code, drawing, at, cx)),
     )
 }
 
 /// A line's tint: green for one added, red for one removed, and the selection's colour for the one being commented on.
 fn background(kind: LineKind, at: Option<(DiffSide, u32)>, drawing: &Drawing, cx: &App) -> Option<Hsla> {
-    let theme = cx.theme();
+    let colors = look::colors(cx);
     if at.is_some() && at == drawing.marked {
-        return Some(theme.selection);
+        return Some(colors.selection());
     }
     match kind {
         LineKind::Same => None,
-        LineKind::Removed => Some(theme.danger.opacity(0.12)),
-        LineKind::Added => Some(theme.success.opacity(0.12)),
+        LineKind::Removed => Some(colors.removed.opacity(0.12)),
+        LineKind::Added => Some(colors.added.opacity(0.12)),
     }
 }
 
 /// What a line is drawn as after its numbers: how it changed, its code, and its button to add a comment, over the
 /// start of its code.
 fn changes(kind: LineKind, code: &Code<'_>, drawing: &Drawing, at: Option<(DiffSide, u32)>, cx: &App) -> AnyElement {
-    let theme = cx.theme();
+    let colors = look::colors(cx);
     let (sign, tint) = match kind {
         LineKind::Same => (" ", None),
-        LineKind::Removed => ("−", Some(theme.danger)),
-        LineKind::Added => ("+", Some(theme.success)),
+        LineKind::Removed => ("−", Some(colors.removed)),
+        LineKind::Added => ("+", Some(colors.added)),
     };
     let marked = at.is_some() && at == drawing.marked;
     // Placed from the start of what it's in, which is where the sign is.
@@ -169,21 +169,22 @@ fn changes(kind: LineKind, code: &Code<'_>, drawing: &Drawing, at: Option<(DiffS
         .flex_1()
         .min_w_0()
         .h_full()
-        .child(div().flex_none().w(SIGN).text_color(tint.unwrap_or(theme.muted_foreground)).child(sign))
+        .child(div().flex_none().w(SIGN).text_color(tint.unwrap_or(colors.text_muted)).child(sign))
         .child(self::code(code, tint.map(|tint| tint.opacity(0.3)), drawing, cx))
         .children(at.map(|at| add_button(at, marked, drawing, cx)))
         .into_any_element()
 }
 
-fn number(line: Option<u32>, width: Pixels) -> Div {
+fn number(line: Option<u32>, width: Pixels, cx: &App) -> Div {
     let text = line.map(|line| SharedString::from(line.to_string()));
-    div().flex_none().w(width).pr_2().text_right().text_color(look::faint()).children(text)
+    div().flex_none().w(width).pr_2().text_right().text_color(look::colors(cx).text_faint).children(text)
 }
 
 /// The button that starts a comment on a line, which shows while the line is hovered, and while it's `marked` as the
 /// one being commented on.
 fn add_button((side, line): (DiffSide, u32), marked: bool, drawing: &Drawing, cx: &App) -> AnyElement {
     let theme = cx.theme();
+    let colors = look::colors(cx);
     let (view, at) = (drawing.view.clone(), LineAt { path: drawing.path.clone(), side, line });
     let name = match side {
         DiffSide::Old => "old",
@@ -200,8 +201,8 @@ fn add_button((side, line): (DiffSide, u32), marked: bool, drawing: &Drawing, cx
         .items_center()
         .justify_center()
         .rounded(theme.radius)
-        .bg(theme.primary)
-        .text_color(theme.primary_foreground)
+        .bg(colors.main)
+        .text_color(colors.on_main)
         .hand()
         .when(!marked, |button| button.opacity(0.).group_hover(LINE, |button| button.opacity(1.)))
         .child(Icon::new(IconName::Plus).xsmall())
@@ -217,6 +218,7 @@ fn add_button((side, line): (DiffSide, u32), marked: bool, drawing: &Drawing, cx
 /// at a time, or all of them at once when there are no more than that between two changes.
 fn fold_row(fold: &Fold, drawing: &Drawing, cx: &App) -> AnyElement {
     let theme = cx.theme();
+    let colors = look::colors(cx);
     let lines = fold.old.end - fold.old.start;
     let (start, end) = (fold.old.start, fold.old.end);
     let mut arrows = Vec::new();
@@ -249,8 +251,8 @@ fn fold_row(fold: &Fold, drawing: &Drawing, cx: &App) -> AnyElement {
     h_flex()
         .w_full()
         .h(FOLD_HEIGHT)
-        .bg(theme.muted)
-        .text_color(theme.muted_foreground)
+        .bg(colors.inset)
+        .text_color(colors.text_muted)
         .child(h_flex().flex_none().w(drawing.gutter).justify_center().gap_1().children(arrows))
         .child(div().pl(SIGN).font_family(theme.font_family.clone()).text_xs().child(said))
         .into_any_element()

@@ -4,7 +4,7 @@
 
 use gpui_kit::base::ObservedElement;
 use gpui_kit::component::button::Button;
-use gpui_kit::component::{ActiveTheme as _, Sizable as _, h_flex, v_flex};
+use gpui_kit::component::{Sizable as _, h_flex, v_flex};
 use gpui_kit::{
     AnyElement, App, Div, FontWeight, InteractiveElement as _, IntoElement, ParentElement, Pixels, SharedString,
     Stateful, Styled, TestSupportExt as _, WeakEntity, div, px, relative,
@@ -43,15 +43,16 @@ pub(super) fn context_card(
 
 /// Under a rule, what compacting does, and a button that asks the agent to now rather than when the room runs out.
 fn compact(pane: &WeakEntity<WorkspacePane>, off: bool, cx: &App) -> Div {
+    let colors = look::colors(cx);
     let pane = pane.clone();
     let button = Button::new("context-compact").off_while(off).outline().xsmall().label("Compact now").on_click(
         move |_, _, cx| {
             let _ = pane.update(cx, WorkspacePane::compact);
         },
     );
-    let said = div().min_w_0().truncate().text_xs().text_color(look::faint()).child("Summarize to make room");
+    let said = div().min_w_0().truncate().text_xs().text_color(colors.text_faint).child("Summarize to make room");
     let under = h_flex().justify_between().items_center().gap_3().child(said).child(button);
-    v_flex().child(div().my_2().h(px(1.)).bg(cx.theme().border)).child(under)
+    v_flex().child(div().my_2().h(px(1.)).bg(colors.edge)).child(under)
 }
 
 /// The bars' card: the plan beside its heading, which is what it's `called`, how much of each limit shown is left, as a
@@ -68,7 +69,7 @@ pub(super) fn usage_card(usage: &Usage, called: SharedString, cx: &App) -> AnyEl
 /// still take before the agent shrinks the conversation, and what made it smaller than its model's if anything did,
 /// then what's in it, in tokens, largest first.
 fn room(context: &ContextUsage, cx: &App) -> Div {
-    let theme = cx.theme();
+    let colors = look::colors(cx);
     let kept_back = context.tokens_of(ContextPartKind::Buffer);
     let left = words::room_left(room_left(context), kept_back > 0);
     let used = format!("{} used", words::whole_percent(context.used_fraction()));
@@ -77,8 +78,8 @@ fn room(context: &ContextUsage, cx: &App) -> Div {
         .justify_between()
         .gap_3()
         .text_xs()
-        .child(div().min_w_0().truncate().text_color(theme.muted_foreground).child(left))
-        .child(div().flex_none().text_color(look::faint()).child(of));
+        .child(div().min_w_0().truncate().text_color(colors.text_muted).child(left))
+        .child(div().flex_none().text_color(colors.text_faint).child(of));
     let parts: Vec<Div> =
         in_it(context).into_iter().map(|part| share(part.name.clone(), look::tokens(part.tokens), cx)).collect();
     v_flex()
@@ -87,8 +88,9 @@ fn room(context: &ContextUsage, cx: &App) -> Div {
         .child(bar_with_room_kept_back(context.used_fraction(), context.fraction(kept_back), cx))
         .child(under)
         .children(
-            words::capped(context)
-                .map(|said| div().id("context-capped").text_xs().text_color(look::faint()).child(said).test_support()),
+            words::capped(context).map(|said| {
+                div().id("context-capped").text_xs().text_color(colors.text_faint).child(said).test_support()
+            }),
         )
         // Left out when the agent named no parts, so the card doesn't end in the room above them.
         .children((!parts.is_empty()).then(|| v_flex().mt_2().gap_1().children(parts)))
@@ -116,15 +118,15 @@ fn in_it(context: &ContextUsage) -> Vec<&ContextPart> {
 /// A limit called `name`. A model's week is named by its provider's label for the model, which could be long, so the
 /// name is cut off before how much is left is.
 fn limit(name: SharedString, limit: &UsageLimit, cx: &App) -> AnyElement {
-    let theme = cx.theme();
+    let colors = look::colors(cx);
     let left = limit.left_percent();
     let resets = limit.resets_at_ms.and_then(|at_ms| look::day_and_time(at_ms, cx));
     let said = h_flex()
         .justify_between()
         .gap_3()
-        .child(div().min_w_0().truncate().text_color(theme.muted_foreground).child(name))
+        .child(div().min_w_0().truncate().text_color(colors.text_muted).child(name))
         .child(div().flex_none().font_weight(FontWeight::MEDIUM).child(format!("{left}% left")));
-    let resets = resets.map(|when| div().text_xs().text_color(look::faint()).child(format!("Resets {when}")));
+    let resets = resets.map(|when| div().text_xs().text_color(colors.text_faint).child(format!("Resets {when}")));
     v_flex().gap_1().child(said).child(bar(f32::from(left) / 100., cx)).children(resets).into_any_element()
 }
 
@@ -138,7 +140,7 @@ enum Plan {
 /// Whose account it is, under a rule: the email, then more quietly how it's logged in and who serves the model,
 /// after the plan unless it's beside a heading. `None` when the worker said none of them.
 fn whose(account: &Account, plan: Plan, cx: &App) -> Option<AnyElement> {
-    let theme = cx.theme();
+    let colors = look::colors(cx);
     let who = account.email.clone();
     let plan = account.plan.clone().filter(|_| plan == Plan::WithWhose);
     let how: Vec<String> =
@@ -147,15 +149,16 @@ fn whose(account: &Account, plan: Plan, cx: &App) -> Option<AnyElement> {
         return None;
     }
     // Either can be long, such as an email, so each is cut off with an ellipsis rather than wrapped.
-    let who = who.map(|who| div().truncate().text_color(theme.muted_foreground).child(who));
-    let how = (!how.is_empty()).then(|| div().truncate().text_xs().text_color(look::faint()).child(how.join(" · ")));
+    let who = who.map(|who| div().truncate().text_color(colors.text_muted).child(who));
+    let how =
+        (!how.is_empty()).then(|| div().truncate().text_xs().text_color(colors.text_faint).child(how.join(" · ")));
     let said = v_flex().id("account").gap_0p5().children(who).children(how).test_support();
-    Some(v_flex().child(div().my_2().h(px(1.)).bg(theme.border)).child(said).into_any_element())
+    Some(v_flex().child(div().my_2().h(px(1.)).bg(colors.edge)).child(said).into_any_element())
 }
 
 /// A section's name, in medium weight, and what it comes to, if anything, at the far end.
 fn heading(name: impl Into<SharedString>, comes_to: Option<SharedString>, cx: &App) -> Div {
-    let muted = cx.theme().muted_foreground;
+    let muted = look::colors(cx).text_muted;
     h_flex()
         .justify_between()
         .child(div().font_weight(FontWeight::MEDIUM).child(name.into()))
@@ -165,18 +168,19 @@ fn heading(name: impl Into<SharedString>, comes_to: Option<SharedString>, cx: &A
 /// A part of the context and how big it is, at either end of a line. The name is the agent's, so it's the one cut
 /// off if they don't both fit, and how big it is always shows.
 fn share(name: impl Into<SharedString>, share: String, cx: &App) -> Div {
-    let muted = cx.theme().muted_foreground;
+    let colors = look::colors(cx);
+    let muted = colors.text_muted;
     h_flex()
         .justify_between()
         .gap_3()
         .child(div().min_w_0().truncate().text_color(muted).child(name.into()))
-        .child(div().flex_none().text_color(look::faint()).child(share))
+        .child(div().flex_none().text_color(colors.text_faint).child(share))
 }
 
 /// A bar filled from the left by `used`, with `kept_back` of it split off its far end by a gap, so the gap is where
 /// the agent shrinks the conversation. Both are shares of the whole, from 0 to 1.
 fn bar_with_room_kept_back(used: f32, kept_back: f32, cx: &App) -> Div {
-    let color = cx.theme().foreground;
+    let color = look::colors(cx).text;
     let usable = (1. - kept_back).clamp(0.01, 1.);
     let filled = div().h_full().rounded_full().bg(color).w(relative((used / usable).clamp(0., 1.)));
     let track = || div().h_full().rounded_full().bg(color.opacity(0.12));
@@ -191,7 +195,7 @@ fn bar_with_room_kept_back(used: f32, kept_back: f32, cx: &App) -> Div {
 /// A bar filled from the left by `share`, from 0 to 1. Like every bar here it's drawn at once, with nothing moving,
 /// which the kit's own bar and ring don't do: they glide to a new value.
 fn bar(share: f32, cx: &App) -> Div {
-    let color = cx.theme().foreground;
+    let color = look::colors(cx).text;
     div()
         .w_full()
         .h(BAR)

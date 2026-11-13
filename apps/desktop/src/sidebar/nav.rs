@@ -2,7 +2,7 @@
 
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::{ActiveTheme as _, IconName, IconNamed, Selectable as _, h_flex, v_flex};
+use gpui_kit::component::{IconName, IconNamed, Selectable as _, h_flex, v_flex};
 use gpui_kit::{Context, IntoElement, ParentElement, Pixels, Styled, px};
 use look::{Hand as _, Off as _};
 
@@ -14,7 +14,7 @@ const ITEM_HEIGHT: Pixels = px(32.);
 
 /// The block of items, with a line under it before the workspaces.
 pub(super) fn nav(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
-    let border = cx.theme().sidebar_border;
+    let border = look::colors(cx).edge;
     // The dialog opens while another workspace is being made, and its Create waits.
     let can_create = app.current_repo().is_some();
     v_flex()
@@ -41,7 +41,7 @@ pub(super) fn nav(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement 
 
 /// An item: a muted icon and label, filled while what it opens is showing.
 fn item(id: &'static str, icon: impl IconNamed, label: &'static str, cx: &mut Context<AppView>) -> Button {
-    let muted = cx.theme().muted_foreground;
+    let muted = look::colors(cx).text_muted;
     let content = h_flex().w_full().gap_2().text_sm().text_color(muted).child(icon_box(icon, muted)).child(label);
     Button::new(id).accessibility_label(label).ghost().w_full().h(ITEM_HEIGHT).px_1p5().child(content)
 }

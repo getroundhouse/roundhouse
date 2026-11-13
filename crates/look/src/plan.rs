@@ -6,9 +6,9 @@
 
 use std::f32::consts::PI;
 
-use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::{AbsoluteLength, App, Bounds, Hsla, IntoElement, Pixels, Point, Styled, canvas, point, px};
 
+use crate::colors::colors;
 use crate::fan::{self, as_f32};
 
 /// Between neighbouring dots along a row, about. Much closer than the rows are, so each row reads as a dotted line. At
@@ -30,7 +30,7 @@ const EDGE: f32 = 0.55;
 
 /// The surface and edge of the composer while it's planning, when its own surface is `surface`.
 pub fn plan_colors(surface: Hsla, cx: &App) -> (Hsla, Hsla) {
-    let copper = cx.theme().ring;
+    let copper = colors(cx).brand;
     let planning = surface.blend(copper.opacity(WASH));
     (planning, planning.blend(copper.opacity(EDGE)))
 }
@@ -38,7 +38,7 @@ pub fn plan_colors(surface: Hsla, cx: &App) -> (Hsla, Hsla) {
 /// Fills its parent, which it lies under, on the surface [`plan_colors`] gives. `corner` is the radius of the parent's
 /// corners, which the dots stay inside.
 pub fn plan_texture(cx: &App, corner: AbsoluteLength) -> impl IntoElement + use<> {
-    let copper = cx.theme().ring;
+    let copper = colors(cx).brand;
     canvas(
         |_, _, _| {},
         move |bounds, (), window, _| {

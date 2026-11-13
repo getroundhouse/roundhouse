@@ -1,4 +1,4 @@
-/* The app's own palette, from crates/look/src/theme.json and docs/spec/look.md. */
+/* The app's own palette, from the table of colours in docs/spec/look.md. */
 :root {
   --pane: #151312;
   --sidebar: #1a1715;

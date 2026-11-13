@@ -67,7 +67,7 @@ fn opened(found: &Found, toggle: &Toggle, cx: &App) -> Option<AnyElement> {
             numbered::scrolling(toggle, &id, div().id(id.clone()).pb_2().children(rows)).into_any_element()
         }
         Found::Files(_) | Found::Raw(_) => {
-            block::output(toggle, Text::Found, &listed(found)?, cx.theme().foreground, cx)
+            block::output(toggle, Text::Found, &listed(found)?, look::colors(cx).text, cx)
         }
         Found::Nothing => return None,
     };

@@ -1,7 +1,7 @@
 //! How the app looks.
 
 use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::{ActiveTheme as _, h_flex, v_flex};
+use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, Context, Div, Entity, Hsla, InteractiveElement, IntoElement, MouseButton, ParentElement, Render,
@@ -44,7 +44,7 @@ impl Render for AppView {
                 .children(corner::menus(self, cx))
                 .children(window_buttons::of_windows(window, cx));
         }
-        let danger = cx.theme().danger;
+        let error_colour = look::colors(cx).error;
         let main = self.beside_the_sidebar(home, cx);
         // Built only while some of it shows.
         let sidebar = Side::Left.shown(cx).map(|shown| {
@@ -59,7 +59,7 @@ impl Render for AppView {
                     .flex_1()
                     .min_w_0()
                     .h_full()
-                    .when_some(self.error.clone(), |d, error| d.child(error_bar(error, danger, cx)))
+                    .when_some(self.error.clone(), |d, error| d.child(error_bar(error, error_colour, cx)))
                     .child(div().flex_1().min_h_0().child(main)),
             )
             .children(corner::menus(self, cx))
@@ -72,13 +72,14 @@ impl AppView {
     /// What shows beside the sidebar: the selected workspace, Home, with its `home` rows while it's drawn, or what
     /// there is to say with neither.
     fn beside_the_sidebar(&self, home: Option<crate::home::Rows>, cx: &mut Context<Self>) -> AnyElement {
+        let colors = look::colors(cx);
         if let Some(rows) = home {
             return crate::home::page(self, rows, cx).into_any_element();
         }
-        let (muted, danger) = (cx.theme().muted_foreground, cx.theme().danger);
+        let (muted, error_colour) = (colors.text_muted, colors.error);
         match &self.connection {
             Connection::Connecting if self.pane_to_draw().is_none() => centered("Connecting…", muted),
-            Connection::Failed(reason) => failed(reason, danger, cx),
+            Connection::Failed(reason) => failed(reason, error_colour, cx),
             Connection::AcrossABreak(status) => {
                 let may_restart = hub_source::may_restart(status, self.hub.build_number);
                 across_a_break(status, self.hub.build_version, may_restart, muted, cx)
@@ -120,8 +121,8 @@ impl AppView {
 
     /// The whole window, whatever it shows, and what it answers whatever it shows.
     fn root(&self, root: Div, cx: &mut Context<Self>) -> Stateful<Div> {
-        let theme = cx.theme();
-        let (background, foreground) = (theme.background, theme.foreground);
+        let colors = look::colors(cx);
+        let (background, foreground) = (colors.pane, colors.text);
         // Body text is the kit's small size, 14px, a step under the 16px its sizes are measured from, so its other
         // sizes and its spacing come out as the web's do.
         let root = root
@@ -143,7 +144,7 @@ impl AppView {
 }
 
 /// Above the header, in the strip along the window's top, and clear of the window's buttons at both ends.
-fn error_bar(error: String, danger: Hsla, cx: &mut Context<AppView>) -> impl IntoElement {
+fn error_bar(error: String, error_colour: Hsla, cx: &mut Context<AppView>) -> impl IntoElement {
     let clear = sides::clearance(AtTheTop::AboveTheHeader, cx);
     h_flex()
         .id("error-bar")
@@ -152,9 +153,9 @@ fn error_bar(error: String, danger: Hsla, cx: &mut Context<AppView>) -> impl Int
         .pr(px(12.) + clear.end)
         .py_2()
         .gap_2()
-        .bg(danger.opacity(0.15))
+        .bg(error_colour.opacity(0.15))
         .text_sm()
-        .text_color(danger)
+        .text_color(error_colour)
         .hand()
         // It can sit in the strip that moves the window, and it's a button, so a press here is its own.
         .on_mouse_down(MouseButton::Left, |_, window, _| window.prevent_default())
@@ -231,14 +232,18 @@ fn try_again(cx: &mut Context<AppView>) -> Button {
     Button::new("try-hub-again").hand().label("Try again").on_click(cx.listener(|t, _, _, cx| t.connect(cx)))
 }
 
-fn failed(reason: &str, danger: Hsla, cx: &mut Context<AppView>) -> AnyElement {
+fn failed(reason: &str, error_colour: Hsla, cx: &mut Context<AppView>) -> AnyElement {
     v_flex()
         .size_full()
         .items_center()
         .justify_center()
         .gap_3()
         .child(
-            div().max_w(px(560.0)).text_center().text_color(danger).child(format!("Couldn't reach the hub. {reason}")),
+            div()
+                .max_w(px(560.0))
+                .text_center()
+                .text_color(error_colour)
+                .child(format!("Couldn't reach the hub. {reason}")),
         )
         .child(try_again(cx))
         .into_any_element()
@@ -286,7 +291,7 @@ fn across_a_break(
 
 /// What an empty pane shows: the mark, what's missing and why, and the one thing to do about it.
 fn empty_state(title: &str, body: &str, action: Button, cx: &mut Context<AppView>) -> AnyElement {
-    let muted = cx.theme().muted_foreground;
+    let muted = look::colors(cx).text_muted;
     v_flex()
         .size_full()
         .items_center()

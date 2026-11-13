@@ -35,7 +35,7 @@ pub(super) fn sidebar(
     window: &Window,
     cx: &App,
 ) -> impl IntoElement {
-    let theme = cx.theme();
+    let colors = look::colors(cx);
     let headed = sections.iter().map(|section| {
         let heading = div()
             .h(HEADING_HEIGHT)
@@ -43,7 +43,7 @@ pub(super) fn sidebar(
             .flex()
             .items_center()
             .text_xs()
-            .text_color(theme.muted_foreground)
+            .text_color(colors.text_muted)
             .child(section.heading);
         let rows = section.pages.iter().map(|page| page_row(page, shown == Some(page.id), chosen, cx));
         v_flex().mt_3().child(heading).child(v_flex().gap_0p5().children(rows))
@@ -56,9 +56,9 @@ pub(super) fn sidebar(
         .pt(HEADER_HEIGHT)
         .pl_1p5()
         .pr_2()
-        .bg(theme.sidebar)
+        .bg(colors.sidebar)
         .border_r_1()
-        .border_color(theme.sidebar_border)
+        .border_color(colors.edge)
         .child(div().flex_none().pl_0p5().child(search_field(search, window, cx)))
         .child(v_flex().id("settings-pages").flex_1().min_h_0().children(headed).overflow_y_scrollbar())
 }
@@ -68,10 +68,11 @@ pub(super) fn sidebar(
 /// and say what it's for in muted text.
 fn search_field(search: &Entity<InputState>, window: &Window, cx: &App) -> impl IntoElement {
     let theme = cx.theme();
+    let colors = look::colors(cx);
     let focused = search.read(cx).focus_handle(cx).is_focused(window);
     let empty = search.read(cx).value().is_empty();
     // Laid under the text, so the caret is drawn over it, and a press on it reaches the text.
-    let says = div().absolute().inset_0().flex().items_center().line_height(rems(1.25)).text_color(look::faint());
+    let says = div().absolute().inset_0().flex().items_center().line_height(rems(1.25)).text_color(colors.text_faint);
     let text = div()
         .relative()
         .flex_1()
@@ -92,20 +93,20 @@ fn search_field(search: &Entity<InputState>, window: &Window, cx: &App) -> impl 
         .gap(px(9.))
         .rounded(theme.radius)
         .border_1()
-        .border_color(look::field_edge())
-        .bg(theme.background)
+        .border_color(colors.field_edge)
+        .bg(colors.pane)
         .when(focused, |field| field.focus_ring_style(window, cx))
         .on_mouse_down(MouseButton::Left, move |_, window, cx| {
             to_focus.update(cx, |search, cx| search.focus(window, cx));
         })
-        .child(Icon::new(IconName::Search).size_3p5().text_color(theme.muted_foreground))
+        .child(Icon::new(IconName::Search).size_3p5().text_color(colors.text_muted))
         .child(text)
         .child(find_key(cx))
 }
 
 /// The key that finds a setting, on a small raised key, with what's held apart from the key pressed.
 fn find_key(cx: &App) -> impl IntoElement {
-    let theme = cx.theme();
+    let colors = look::colors(cx);
     let parts = find_key_says(cx.platform_info().os);
     let pressed = parts.len().saturating_sub(1);
     let parts = parts
@@ -119,11 +120,11 @@ fn find_key(cx: &App) -> impl IntoElement {
         .gap_1()
         .rounded(px(4.))
         .border_1()
-        .border_color(theme.input)
-        .bg(theme.secondary)
+        .border_color(colors.control_edge)
+        .bg(colors.raised)
         .text_size(px(10.))
         .line_height(px(10.))
-        .text_color(theme.muted_foreground)
+        .text_color(colors.text_muted)
         .children(parts)
 }
 
@@ -141,7 +142,8 @@ pub(super) fn find_key_says(os: OperatingSystem) -> Vec<String> {
 /// the pointer is on it. It tells assistive apps which page is showing, as a list's selected item.
 fn page_row(page: &Page, showing: bool, chosen: &Entity<Option<PageId>>, cx: &App) -> impl IntoElement {
     let theme = cx.theme();
-    let fill = theme.accent;
+    let colors = look::colors(cx);
+    let fill = colors.menu_hover;
     let (id, chosen) = (page.id, chosen.clone());
     h_flex()
         .id(id.row_id())
@@ -154,7 +156,7 @@ fn page_row(page: &Page, showing: bool, chosen: &Entity<Option<PageId>>, cx: &Ap
         .gap_3()
         .rounded(theme.radius)
         .text_sm()
-        .text_color(theme.foreground)
+        .text_color(colors.text)
         .hand()
         .when(showing, |row| row.bg(fill))
         .hover(move |row| row.bg(fill))
