@@ -14,6 +14,7 @@
   &nbsp;·&nbsp; <a href="#where-it-stands">Windows and Linux previews</a>
   &nbsp;·&nbsp; <a href="https://getroundhouse.dev">Website</a>
   &nbsp;·&nbsp; <a href="#get-started">Get started</a>
+  &nbsp;·&nbsp; <a href="docs/guide/README.md">Guide</a>
   &nbsp;·&nbsp; <a href="docs/spec/README.md">Spec</a>
   &nbsp;·&nbsp; <a href="docs/architecture.md">Architecture</a>
 </p>
@@ -61,7 +62,7 @@ A web client isn't a target, since nothing depends on one, but nothing rules one
   </tr>
 </table>
 
-What the app does, and why, is written down rule by rule in [`docs/spec/`](docs/spec/README.md), beside a picture of every screen.
+How to use it is in the [guide](docs/guide/README.md), a page for each task. What the app does, and why, is written down rule by rule in [`docs/spec/`](docs/spec/README.md), beside a picture of every screen.
 
 ## Get started
 

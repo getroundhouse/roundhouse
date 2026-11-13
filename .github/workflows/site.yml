@@ -1,4 +1,5 @@
-# Publishes site/ to GitHub Pages when it changes on main. See site/README.md.
+# Publishes the site to GitHub Pages when it changes on main: site/, and the guide in docs/guide as its /docs/ pages.
+# See site/README.md and tools/guide/README.md.
 #
 # The address is the Pages custom domain and this masked secret, so the site can move without editing this file:
 #   SITE_URL   The site's address, for the link-preview tags, which are left out without it.
@@ -10,6 +11,10 @@ on:
     paths:
       - site/**
       - tools/site/**
+      - docs/guide/**
+      # The guide's pictures are the app's own screens.
+      - docs/spec/screens/**
+      - tools/guide/**
       - .github/workflows/site.yml
   workflow_dispatch:
 
@@ -24,7 +29,7 @@ concurrency:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     permissions:
       contents: read
       pages: write
@@ -41,6 +46,9 @@ jobs:
         run: |
           set -euo pipefail
           tools/site/assemble.py "$RUNNER_TEMP/site" ${SITE_URL:+"$SITE_URL"}
+          # The guide, which builds with nothing but Rust, as rust-toolchain.toml pins it. CI's `guide` job has built
+          # it for every change that could break it, so this fails only if what's on main does.
+          cargo run --locked -p guide -- "$RUNNER_TEMP/site/docs"
           # The github-pages artifact, by hand, since actions/upload-pages-artifact calls an action the repo can't pin.
           tar --dereference --hard-dereference -cf "$RUNNER_TEMP/artifact.tar" -C "$RUNNER_TEMP/site" .
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

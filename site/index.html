@@ -34,6 +34,8 @@
     <script src="copper.js" defer></script>
   </head>
   <body>
+    <!-- The guide's pages have this header and the footer too, written again in tools/guide/src/page.html, since
+         this page has no build step to share them through. A change to either goes in both. -->
     <header class="nav">
       <div class="nav-inner">
         <a class="brand" href="#top" aria-label="Roundhouse">
@@ -41,7 +43,8 @@
           <span>Roundhouse</span>
         </a>
         <nav class="nav-links">
-          <a href="https://github.com/getroundhouse/roundhouse">GitHub</a>
+          <a href="docs/">Docs</a>
+          <a class="on-github" href="https://github.com/getroundhouse/roundhouse">GitHub</a>
           <a class="button outline small for-mac" href="https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-osx-Portable.zip">Download</a>
           <a class="button outline small for-win" href="https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-win-amd64-Setup.exe">Download</a>
           <a class="button outline small for-win-arm64" href="https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-win-arm64-Setup.exe">Download</a>

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Puts the marketing site together as it's published: what's in site/, without its README, and with the
-link-preview tags that need the site's address, which the deploy passes in.
+link-preview tags that need the site's address, which the deploy passes in. The guide's pages aren't its to make:
+tools/guide builds them into OUT/docs afterwards.
 
     tools/site/assemble.py OUT [ADDRESS]
 

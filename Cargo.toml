@@ -15,6 +15,7 @@ members = [
     "crates/look",
     "crates/terminal-state",
     "tools/policy",
+    "tools/guide",
 ]
 # Everything that builds without GPUI, so `cargo test` stays fast and works on a Linux server. Use
 # `--workspace` for the window too.
@@ -30,6 +31,7 @@ default-members = [
     "apps/cli",
     "crates/terminal-state",
     "tools/policy",
+    "tools/guide",
 ]
 # The mobile proof of concept is a standalone project with its own lockfiles and pinned GPUI snapshots.
 exclude = ["mobile-poc"]
@@ -80,9 +82,10 @@ libc = "0.2.191"
 # Its build script builds Ghostty with Zig 0.17, which has to be on the PATH, and fetches Ghostty's source as it builds.
 libghostty-vt = { git = "https://github.com/Uzaaft/libghostty-rs", rev = "cd4d497e8c698b27054a677ce19d1bd1a1a4d8bf" }
 # Already under gpui-kit, whose text view parses Markdown with it. Finds the images the agent's text points to as the
-# text view does. 1.0.0 panics on some texts, as wooorm/markdown-rs#275 says, so each call the repo makes into it,
-# directly or through the kit's `parse_markdown`, catches a panic. The kit's text view doesn't. 1.0.0 is its latest
-# release, of April 2025, and nothing has been pushed to it since, so the guards stay until a release fixes the panic.
+# text view does, and reads the guide's pages as GitHub does. 1.0.0 panics on some texts, as wooorm/markdown-rs#275
+# says, so each call the repo makes into it, directly or through the kit's `parse_markdown`, catches a panic. The kit's
+# text view doesn't. 1.0.0 is its latest release, of April 2025, and nothing has been pushed to it since, so the guards
+# stay until a release fixes the panic.
 markdown = "1.0.0"
 # Already under serde_json. Finds and counts the line endings in a file the worker reads a few lines of at a time.
 memchr = "2.8.3"

@@ -1,9 +1,9 @@
 # Site
 
-The marketing site: one static page, with no build step and nothing loaded from anywhere else.
+The marketing site: one static page, with no build step and nothing loaded from anywhere else. The guide's pages, under `/docs/`, are built into it from `docs/guide` as it's published, and `tools/guide/README.md` says how.
 
 ```sh
-python3 -m http.server 8000 --directory site   # Then open http://127.0.0.1:8000
+python3 -m http.server 8000 --directory site   # Then open http://127.0.0.1:8000. Its Docs link goes nowhere, since the guide isn't built into site/
 ```
 
 That server doesn't say how long a file may be kept, so a browser can go on using a script or the stylesheet for hours after it changes. Reload with `Cmd-Shift-R` after a change.
@@ -16,7 +16,8 @@ That server doesn't say how long a file may be kept, so a browser can go on usin
 - **Why this exists is in the owner's voice,** so the owner checks what it claims.
 - **It names Conductor as the README does:** as what showed how good this can feel, and as what a repository may already be set up for. It doesn't call Roundhouse a clone of it or a replacement for it.
 - **The small things are ones a person feels,** such as a prompt that waits for setup, rather than what every tool of this kind has, such as worktrees.
-- **It says it's open source once, in a statement of its own, and links to the repo from four places:** the nav, that statement, beside the last Download, and the footer. The link is the word GitHub rather than GitHub's mark, so the page shows nobody else's logo. On a phone under 350 pixels wide the nav has no room for it, and leaves it to the other three.
+- **It says it's open source once, in a statement of its own, and links to the repo from four places:** the nav, that statement, beside the last Download, and the footer. The link is the word GitHub rather than GitHub's mark, so the page shows nobody else's logo. On a phone under 440 pixels wide the nav has no room for it beside Docs, and leaves it to the other three.
+- **The nav links to the guide, as Docs,** before GitHub, since how to use the app is what someone who's read the page wants next. It's the page's only link to the guide.
 - **The hero has one download, the visitor's own:** the Mac's, or on Windows the installer for amd64, or for ARM64 where the browser says the processor is ARM. Anyone else, such as someone on a phone or on Linux, is offered the Mac's. The nav's Download is the same one. Each is the newest build, by the name `tools/package/publish.py` gives the one people download, beside its update feed.
 - **Every download is in one place, the closing section,** a card for each platform with the visitor's own in copper, so the hero keeps one action. The line beside the hero's button ends in All downloads, which goes there.
 - **The Mac is the platform, and Windows is a first preview, and the page says so wherever Windows is offered:** each Windows card says Preview, the line under the cards says what that means, that it's unsigned, so Windows asks before it runs, and the hero says it to someone on Windows. The headline, the closing section and the footer still say Mac. The Mac's is for Apple silicon, and the page says that too.
@@ -31,8 +32,18 @@ That server doesn't say how long a file may be kept, so a browser can go on usin
 - **Only an agent with something running moves a mark,** as in the app, and a workspace that needs a look has a brighter name rather than a different mark. The system's Reduce Motion setting holds every mark and the headline still, with the hero's light where the app icon has it.
 - **Nothing sharp slides.** The headline's second line is centred for its first word, and the other words run on from where that one starts, so the words before them stay put. On a phone the changing word has a line of its own.
 
+## The guide's pages
+
+- **The guide's pages have the site's header and footer, and its palette,** from `style.css`, which they load before `docs.css`, so the guide and this page are one site. Their header always has its edge, since there's no hero for it to sit over, and its Download goes to this page's downloads, so it needn't know the visitor's platform.
+- **A page is three columns: every page, this page, and this page's headings.** The headings go under 1180 pixels, and under 860 every page is behind one row above the page, which opens without a script.
+- **They're set to be read,** in a column no wider than 760 pixels, with a page's first paragraph larger and muted, as what it's for. Words are a step quieter than headings, and a link among them is underlined in copper, as here.
+- **The page showing is the one row that's filled,** as the row showing is in the app's Settings, and the pages that are parts of a page sit a step in from it, under a line.
+- **A block of code is on the surface the app's code blocks have, `#1e1b19`,** and a note that warns is amber, the app's colour for what needs you. Copper is the brand's, so a plain note has it.
+- **A picture is one of the app's own screens,** inside a thin edge, at its own size or smaller to fit, and it opens whole when clicked.
+- **The only script is `fan.js`, for the mark beside the name.**
+
 ## How it's published
 
-- **GitHub Pages serves it from `main`.** `.github/workflows/site.yml` publishes `site/` whenever it changes, put together by `tools/site/assemble.py`, which leaves this file out.
-- **Its address is `https://getroundhouse.dev`,** the custom domain in the repo's Pages settings. The page and the scripts don't name it: the deploy reads it from the `SITE_URL` secret, to add the link-preview tags that need it, so the site can move without a change here. `tools/site/assemble.py OUT https://example.com` shows the page as it's published.
+- **GitHub Pages serves it from `main`.** `.github/workflows/site.yml` publishes `site/` whenever it changes, put together by `tools/site/assemble.py`, which leaves this file out, with the guide built into its `docs/` by `tools/guide`. It publishes again when the guide, the screens its pages show, or the tool change.
+- **Its address is `https://getroundhouse.dev`,** the custom domain in the repo's Pages settings. The page and the scripts don't name it: the deploy reads it from the `SITE_URL` secret, to add the link-preview tags that need it, so the site can move without a change here. `tools/site/assemble.py OUT https://example.com` shows the page as it's published, without the guide, which `tools/guide` builds into `OUT/docs`.
 - **The link preview's picture, `assets/card.png`, is the hero held still,** without the nav and the button, at 1200 by 630. Take it again when the hero changes.

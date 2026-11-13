@@ -1,0 +1,18 @@
+[package]
+name = "guide"
+description = "Builds docs/guide as the pages the site serves under /docs/, and refuses a link, a heading or a picture that isn't there."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+markdown.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

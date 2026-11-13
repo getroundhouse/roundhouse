@@ -18,6 +18,8 @@
   --sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   --mono: ui-monospace, Menlo, SFMono-Regular, Consolas, monospace;
   --page: 1120px;
+  /* How tall the header is, which the guide's pages keep clear of as they scroll. */
+  --bar: 60px;
 
   /* Copper as a material: polished where light catches it, darker where it turns away. */
   --copper-ink: linear-gradient(100deg, #a4653f 0%, #cf8a5c 26%, #f0c4a0 44%, #d4946a 58%, #a96a43 80%, #c98a61 100%);
@@ -150,7 +152,7 @@ canvas.fan {
   max-width: var(--page);
   margin: 0 auto;
   padding: 0 var(--gutter);
-  height: 60px;
+  height: var(--bar);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1240,10 +1242,14 @@ kbd {
   }
 }
 
-/* The narrowest phones have no room for a link between the name and Download, and the page links to GitHub three
-   more times. */
-@media (max-width: 350px) {
-  .nav-links a:not(.button) {
+/* A phone has no room for two links between the name and Download, so it keeps Docs, and leaves GitHub to the three
+   other places the page links to it. */
+@media (max-width: 440px) {
+  .nav-links {
+    gap: 18px;
+  }
+
+  .nav-links .on-github {
     display: none;
   }
 }
