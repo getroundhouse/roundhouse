@@ -51,7 +51,7 @@ pub(crate) use labels::labelled;
 /// For the gallery, which only a Mac draws.
 #[cfg(target_os = "macos")]
 pub(crate) use labels::{first_labelled, menu_item};
-pub(crate) use order::{order, three_workspaces, top, worked_in};
+pub(crate) use order::{MORE_THAN_FIT, more_than_fit, order, three_workspaces, top, worked_in};
 pub(crate) use stand_in::StandInHub;
 pub(crate) use stand_in_gh::pull_request;
 pub(crate) use workspaces::{home_row, pencil, sidebar_row};

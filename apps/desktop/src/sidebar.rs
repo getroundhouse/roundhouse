@@ -4,16 +4,17 @@ use std::rc::Rc;
 use std::time::Instant;
 
 use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::{ActiveTheme as _, Icon, IconName, IconNamed, Sizable as _, h_flex, v_flex, v_virtual_list};
+use gpui_kit::component::{ActiveTheme as _, Icon, IconName, IconNamed, Sizable as _, h_flex, v_flex};
 use gpui_kit::{
     AnyElement, App, Context, Div, ElementId, FontWeight, Hsla, InteractiveElement as _, IntoElement, ParentElement,
-    Pixels, Size, Styled, TestSupportExt as _, Window, div, px, size,
+    Pixels, Styled, TestSupportExt as _, Window, div, px,
 };
 use look::{Hand as _, LineText};
 use look::{Signal, Work};
 use protocol::model::{Repo, RepoId, SetupStatus, Workspace, WorkspaceId, WorkspaceStatus};
 
 use crate::app::{AppView, Connection};
+use crate::reorder::{self, Arrangement, Drawn};
 use crate::workspace_order::Sort;
 use crate::workspace_pane::HEADER_HEIGHT;
 
@@ -127,11 +128,11 @@ fn lines(app: &AppView, sort: Sort, now: Instant) -> Vec<Line> {
     lines
 }
 
-/// The lines in this frame, how far each is from its place on its way there, and the space each takes.
+/// The lines in this frame, where each is drawn on its way to its place, and how far down the list ends.
 pub(crate) struct Arranged {
     lines: Rc<[Line]>,
-    offsets: Rc<[Pixels]>,
-    sizes: Rc<Vec<Size<Pixels>>>,
+    drawn: Rc<[Drawn]>,
+    end: Pixels,
 }
 
 /// Works out the lines in the order the sidebar is in, and sends each to its place, so one that has moved slides
@@ -143,11 +144,12 @@ pub(crate) fn arrange(app: &mut AppView, window: &mut Window, cx: &App) -> Arran
     let lines: Rc<[Line]> = lines(app, sort, cx.background_executor().now()).into();
     let sizes = sizes(&lines);
     let ids: Vec<LineId> = lines.iter().map(|line| line.id(app)).collect();
-    let drawn =
+    let shown =
         ids.iter().filter_map(|id| if let LineId::Workspace(id) = id { Some(id.clone()) } else { None }).collect();
-    let offsets = app.sidebar.places.arrange(ids.into_iter().zip(sizes.iter().map(|s| s.height)), window, cx);
-    app.sidebar.hold.showed(sort, drawn);
-    Arranged { lines, offsets, sizes: Rc::new(sizes) }
+    let Arrangement { drawn: tops, end } = app.sidebar.places.arrange(ids.into_iter().zip(sizes), window, cx);
+    app.sidebar.hold.showed(sort, shown);
+    let drawn = lines.iter().zip(tops.iter()).map(|(line, &top)| Drawn { top, height: line.height() }).collect();
+    Arranged { lines, drawn, end }
 }
 
 /// The workspaces the sidebar lists, in its order, which is the order the keys that move between them go in.
@@ -165,33 +167,23 @@ pub(crate) fn lists(workspace: &Workspace) -> bool {
     matches!(workspace.status, WorkspaceStatus::Ready | WorkspaceStatus::Archiving)
 }
 
-/// The space each line takes: its height and the gap below it. Only the height is used, since the list is as wide as
-/// the sidebar.
-fn sizes(lines: &[Line]) -> Vec<Size<Pixels>> {
+/// The room each line takes down the list: its height and the gap below it.
+fn sizes(lines: &[Line]) -> Vec<Pixels> {
     let gaps = lines.windows(2).map(|pair| pair[0].gap_before(pair[1]));
-    lines.iter().zip(gaps.chain([px(0.)])).map(|(line, gap)| size(px(0.), line.height() + gap)).collect()
+    lines.iter().zip(gaps.chain([px(0.)])).map(|(line, gap)| line.height() + gap).collect()
 }
 
 fn connected(app: &AppView) -> bool {
     matches!(app.connection, Connection::Ready(_))
 }
 
-/// The line, drawn `offset` from its place, which the list lays it out in, as it slides there.
-fn line(
-    app: &AppView,
-    line: Line,
-    offset: Pixels,
-    line_text: &LineText,
-    window: &mut Window,
-    cx: &mut Context<AppView>,
-) -> AnyElement {
-    let drawn = match line {
+fn line(app: &AppView, line: Line, line_text: &LineText, window: &mut Window, cx: &mut Context<AppView>) -> AnyElement {
+    match line {
         Line::Heading => heading::heading(app, connected(app), cx),
         Line::Repo(r) => repo_header(app, &app.records().repos()[r], cx),
         Line::Workspace(w) => row::workspace_row(app, &app.records().workspaces()[w], line_text, window, cx),
         Line::Creating(w) => creating(&app.records().workspaces()[w], cx),
-    };
-    crate::reorder::offset_by(drawn, offset)
+    }
 }
 
 /// Where a workspace stands, as its row shows it, in the sidebar or in Home.
@@ -285,11 +277,12 @@ pub(crate) fn render(app: &AppView, arranged: Arranged, cx: &mut Context<AppView
     let (background, border) = (theme.sidebar, theme.sidebar_border);
     // A moving mark builds this view again on every frame, so only the lines on screen are built, and a long list
     // costs no more than a short one.
-    let Arranged { lines, offsets, sizes } = arranged;
-    let list = v_virtual_list(cx.entity(), "workspaces", sizes, move |app, range, window, cx| {
-        let line_text = LineText::new(window, cx);
-        range.map(|ix| line(app, lines[ix], offsets[ix], &line_text, window, cx)).collect::<Vec<_>>()
-    });
+    let Arranged { lines, drawn, end } = arranged;
+    let list =
+        reorder::list(cx.entity(), "workspaces", &app.sidebar_scroll, drawn, end, move |app, in_sight, window, cx| {
+            let line_text = LineText::new(window, cx);
+            in_sight.iter().map(|&ix| line(app, lines[ix], &line_text, window, cx)).collect()
+        });
     v_flex()
         .size_full()
         .bg(background)
@@ -300,12 +293,12 @@ pub(crate) fn render(app: &AppView, arranged: Arranged, cx: &mut Context<AppView
         .child(div().flex_none().h(HEADER_HEIGHT))
         .child(nav::nav(app, cx))
         .child(
-            crate::reorder::hears_the_pointer(
+            reorder::hears_the_pointer(
                 div().id("workspaces-list").flex_1().min_h_0().flex().flex_col(),
                 |t| &mut t.sidebar.hold,
                 cx,
             )
-            .child(list.track_scroll(&app.sidebar_scroll).flex_1().min_h_0().px_1p5().pt_1p5()),
+            .child(list.flex_1().min_h_0().px_1p5().pt_1p5()),
         )
         .child(footer::footer(app, cx))
 }
@@ -328,8 +321,6 @@ mod tests {
             Line::Workspace(3),
         ];
 
-        let heights: Vec<_> = sizes(&lines).iter().map(|s| s.height).collect();
-
-        assert_eq!(heights, [px(32.), px(38.), px(40.), px(40.), px(44.), px(40.), px(38.), px(36.)]);
+        assert_eq!(sizes(&lines), [px(32.), px(38.), px(40.), px(40.), px(44.), px(40.), px(38.), px(36.)]);
     }
 }

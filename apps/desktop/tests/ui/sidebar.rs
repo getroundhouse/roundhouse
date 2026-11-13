@@ -7,10 +7,9 @@ use gpui_kit::test::{TestEventExt as _, TestWindowExt as _};
 use gpui_kit::{AppContext as _, ElementId, MouseButton, ScrollDelta, SharedString, TestAppContext, point, px};
 use protocol::model::{WorkspaceId, WorkspaceStatus};
 
-use crate::support::{Held, Stack, Ui, home_row, pencil, pull_request, sidebar_row as row};
-
-/// More than the sidebar has room for in the window.
-const WORKSPACES: usize = 40;
+use crate::support::{
+    Held, MORE_THAN_FIT, Stack, Ui, home_row, more_than_fit, pencil, pull_request, sidebar_row as row,
+};
 
 /// Off every row, for the pointer to wait on.
 const ELSEWHERE: &str = "workspace-title";
@@ -35,16 +34,9 @@ fn wait_for_every_call(ui: &mut Ui) {
 #[gpui_kit::test]
 fn a_long_list_draws_only_the_workspaces_on_screen_and_scrolls_to_the_rest(cx: &mut TestAppContext) {
     let stack = Stack::new();
-    let client = stack.client();
-    let repo = client.repo_add(stack.repo().to_str().unwrap()).unwrap();
-    for _ in 0..WORKSPACES {
-        client.workspace_create(&repo.id, None, None, None).unwrap();
-    }
-    let mut ui = Ui::open(cx, &stack);
-    ui.wait("every workspace", |ui| ui.view().visible_workspaces().len() == WORKSPACES);
-    let listed: Vec<WorkspaceId> = ui.view().visible_workspaces().iter().map(|w| w.id.clone()).collect();
+    let (mut ui, made) = more_than_fit(cx, &stack);
     // Nobody has worked in any of them, so the sidebar lists the newest first.
-    let (first, last) = (row(&listed[WORKSPACES - 1]), row(&listed[0]));
+    let (first, last) = (row(&made[MORE_THAN_FIT - 1]), row(&made[0]));
 
     assert!(ui.has(first.clone()));
     assert!(!ui.has(last.clone()), "a row below the bottom isn't drawn");
