@@ -1,6 +1,6 @@
 //! Where the window was left: its place and size, the display it was on, and whether it filled the screen, so the app
-//! opens as it was last used. It belongs to this Mac, as a setting does, but nobody chooses it in Settings, so it has a
-//! file of its own in the app's data directory.
+//! opens as it was last used. It belongs to this computer, as a setting does, but nobody chooses it in Settings, so it
+//! has a file of its own in the app's data directory.
 
 use std::path::Path;
 use std::time::Duration;
@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::saving::{Saver, write_json};
 
+mod system;
 #[cfg(test)]
 mod tests;
 
@@ -111,8 +112,8 @@ enum Mode {
 struct Place {
     /// `None` when the display has no ID to keep, which counts as the main display.
     display: Option<DisplayUuid>,
-    /// Its corner and size as GPUI gives them, in points. In any other mode than `Windowed`, where it goes back to
-    /// on leaving that mode.
+    /// Its corner and size in GPUI's terms, in points, which is what GPUI is given to open it there. In any other mode
+    /// than `Windowed`, where it goes back to on leaving that mode.
     x: f32,
     y: f32,
     width: f32,
@@ -137,10 +138,12 @@ struct Opening {
 }
 
 impl Place {
-    /// `None` while the window is on no display, as it can be while it closes, when GPUI makes up its bounds.
+    /// `None` while the window is on no display, as it can be while it closes, when GPUI makes up its bounds, and on
+    /// Windows while it's minimized, or once Windows has destroyed it, when it still goes back to where it was last
+    /// seen.
     fn of(window: &Window, cx: &App) -> Option<Self> {
         let display = window.display(cx)?;
-        let (bounds, mode) = match window.window_bounds() {
+        let (bounds, mode) = match system::window_bounds(window)? {
             WindowBounds::Windowed(bounds) => (bounds, Mode::Windowed),
             WindowBounds::Maximized(bounds) => (bounds, Mode::Maximized),
             WindowBounds::Fullscreen(bounds) => (bounds, Mode::FullScreen),

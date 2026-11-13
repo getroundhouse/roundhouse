@@ -43,6 +43,8 @@ mod sides;
 mod sounds;
 pub mod updates;
 pub mod why_quit;
+#[cfg(target_os = "windows")]
+mod window_handle;
 mod window_place;
 mod workspace_order;
 pub mod workspace_pane;
