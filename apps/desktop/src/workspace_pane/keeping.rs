@@ -185,8 +185,9 @@ impl WorkspacePane {
         }
     }
 
-    /// Puts a draft made elsewhere in its chat here: its text, the files here that it still names, and the rest once
-    /// they're read back. A file it stopped naming is let go of by whoever took it out.
+    /// Puts a draft the hub keeps in its chat here, as the pane starts or as one made elsewhere arrives: its text, the
+    /// files here that it still names, and the rest once they're read back. A file it stopped naming is let go of by
+    /// whoever took it out.
     fn take_draft(&mut self, id: &SessionId, draft: Draft, cx: &mut Context<Self>) {
         let named: HashSet<AttachmentId> = draft.files.iter().map(|file| file.id.clone()).collect();
         let files = self.files_for(Some(id));
@@ -291,11 +292,16 @@ impl WorkspacePane {
             let text = self.composer.read(cx).text().chars().any(|c| !c.is_whitespace());
             let composed = text || !self.attached.is_empty();
             match &self.active {
-                Some(id) => Unsent {
-                    composed: Typed { any: composed, unkept: self.keeper.unkept(&DraftKey::Composer(id.clone())) },
-                    answering: answering(id),
-                    only_here: only_here(id),
-                },
+                Some(id) => {
+                    // As for a chat not showing, one whose files are on their way back has them on the hub.
+                    let restoring = self.chats.get(id).is_some_and(|chat| chat.restoring.is_some());
+                    let unkept = self.keeper.unkept(&DraftKey::Composer(id.clone()));
+                    Unsent {
+                        composed: Typed { any: composed || restoring, unkept },
+                        answering: answering(id),
+                        only_here: only_here(id),
+                    }
+                }
                 // While the workspace's first chat is being made.
                 None => Unsent { only_here: composed, ..Unsent::default() },
             }
