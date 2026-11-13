@@ -15,13 +15,12 @@ use protocol::event::{CompactedBy, CompactionOutcome, EventBody};
 use protocol::model::Seq;
 
 use super::around::Around;
-use super::{Shared, colored_line, row, rule_across, rule_middle, turn_times};
+use super::{RULE_ICON, Shared, colored_line, row, rule_across, rule_middle, turn_times};
 use crate::folds::Fold;
 use crate::item_key::ItemKey;
 use crate::prose::{TextAt, Written};
 use crate::scroll_area::ScrollArea;
 
-const ICON: f32 = 13.0;
 /// How tall an open summary gets before it scrolls: about fifteen of its lines, a little more than a tool's output, so
 /// a long one doesn't push the rest of the chat out of sight.
 const SUMMARY_HEIGHT: f32 = 320.0;
@@ -77,13 +76,13 @@ fn line(compacted: &Compacted, shared: &Shared, cx: &App) -> AnyElement {
         // In words, since a screen reader would read the arrow out as one.
         .aria_label(compacted.said("to", ", "))
         .rounded(px(6.))
-        .child(Icon::new(IconName::FoldVertical).size(px(ICON)))
+        .child(Icon::new(IconName::FoldVertical).size(px(RULE_ICON)))
         .child(compacted.said("→", " · "))
         .when(opens, |d| {
             let (this, key) = (shared.this.clone(), key.clone());
             let hover = theme.muted;
             let d = d.aria_expanded(open).hand().hover(move |d| d.bg(hover));
-            d.child(Icon::new(chevron).size(px(ICON))).on_click(move |_, _, cx| {
+            d.child(Icon::new(chevron).size(px(RULE_ICON))).on_click(move |_, _, cx| {
                 let _ = this.update(cx, |t, cx| t.set_open(seq, key.clone(), Fold::Output, !open, cx));
             })
         })

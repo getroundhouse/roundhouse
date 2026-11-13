@@ -2,13 +2,11 @@
 //! before what the agent wrote, saying how long the chat had been idle and how much its request wrote again. Only in a
 //! chat big enough for that to cost something, as the rest of what's said of the cache is.
 
-use gpui_kit::{
-    AnyElement, App, IntoElement, ParentElement, Role, StatefulInteractiveElement as _, Styled, TestSupportExt as _,
-};
+use gpui_kit::{AnyElement, App, ParentElement, Role, StatefulInteractiveElement as _, TestSupportExt as _};
 use look::CacheMark;
 use protocol::model::{CACHE_WORTH_TELLING_TOKENS, Seq};
 
-use super::{empty, row, rule_across, rule_middle};
+use super::{empty, rule_middle, rule_row};
 use crate::item_key::ItemKey;
 
 const MINUTE_MS: u64 = 60_000;
@@ -30,7 +28,7 @@ pub(super) fn line(seq: Seq, idle_ms: u64, read_tokens: u64, written_tokens: u64
         .child(look::cache_mark(CacheMark::Clock, look::faint()))
         .child(said(" · "))
         .test_support();
-    row().pt_2().child(rule_across(middle, cx)).into_any_element()
+    rule_row(middle, cx)
 }
 
 /// How long the chat was idle, in its two largest units: "12m", "1h 20m", "2d 3h".

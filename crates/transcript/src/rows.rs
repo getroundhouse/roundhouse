@@ -43,6 +43,7 @@ mod thinking;
 mod tools;
 mod turn_end;
 mod turn_times;
+mod update_rule;
 
 pub use alone::subagent_standing;
 pub(crate) use alone::{row_of as tab_row_of, rows_repeating_report};
@@ -188,7 +189,16 @@ fn empty() -> AnyElement {
     div().into_any_element()
 }
 
-/// A rule across the chat with `middle` in its middle, as a compaction and a cache that had expired are drawn.
+/// How big an icon in the middle of a rule across the chat is.
+pub(crate) const RULE_ICON: f32 = 13.0;
+
+/// The row of a rule across the chat, with `middle` in its middle and nothing under it.
+fn rule_row(middle: impl IntoElement, cx: &App) -> AnyElement {
+    row().pt_2().child(rule_across(middle, cx)).into_any_element()
+}
+
+/// A rule across the chat with `middle` in its middle, as a compaction, a cache that had expired and an update are
+/// drawn.
 fn rule_across(middle: impl IntoElement, cx: &App) -> Div {
     let border = cx.theme().border;
     let rule = || div().flex_1().h(px(1.)).bg(border);
@@ -264,6 +274,9 @@ fn render_event(
         EventBody::CacheExpired { idle_ms, read_tokens, written_tokens } => {
             cache_rule::line(seq, *idle_ms, *read_tokens, *written_tokens, cx)
         }
+        EventBody::AgentStarted { build: Some(build), previous_build: Some(from), .. } => {
+            update_rule::line(seq, from, build, cx)
+        }
         EventBody::UserPrompt { client_msg_id, prompt, .. } => {
             let (key, progress) =
                 (ItemKey::prompt(seq, client_msg_id.as_ref()), Progress::recorded(place, around.prompt));
@@ -295,7 +308,8 @@ fn render_event(
         EventBody::AgentMode { permission_mode } => muted_line(mode::mode_change(around.mode_before, *permission_mode)),
         EventBody::AgentExited { reason, stderr_tail, .. } => agent_exited(seq, *reason, stderr_tail, find, cx),
         EventBody::Notice { level, message } => notice(seq, *level, message, find, cx),
-        // These tell the hub things, and there's nothing here for a person.
+        // These tell the hub things, and there's nothing here for a person. An agent's start says something only when
+        // it's on another build than the chat's agent last was, above.
         EventBody::PromptTaken { .. }
         | EventBody::PromptDropped { .. }
         | EventBody::ToolCallDropped { .. }

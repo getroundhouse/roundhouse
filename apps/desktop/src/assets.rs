@@ -14,6 +14,7 @@ gpui_kit::assets::icon_assets!(
         ArrowUpRight,
         Bell,
         Brain,
+        CircleFadingArrowUp,
         Columns2,
         CornerDownRight,
         FilePen,
