@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Installs the packages in $LINUX_PACKAGES on one of GitHub's Ubuntu runners, for ci.yml.
+# Installs the packages in $LINUX_PACKAGES on one of ci.yml's Ubuntu runners, GitHub's or RunsOn's.
 #
 # The runners fetch packages from Canonical's mirrors. When those can't be reached, every job that builds fails before
 # it starts, as on 2026-11-11, when the runners couldn't resolve *.ubuntu.com for hours
