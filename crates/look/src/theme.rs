@@ -73,7 +73,7 @@ fn surfaces(c: &Colors) -> Vec<(&'static str, String)> {
         ("accent.background", hex(c.menu_hover)),
         ("accent.foreground", hex(c.text)),
         ("overlay", hex(c.dim)),
-        ("popover.background", hex(c.popover)),
+        ("popover.background", hex(c.raised)),
         ("popover.foreground", hex(c.text)),
         ("sidebar.background", hex(c.sidebar)),
         ("sidebar.foreground", hex(c.text)),

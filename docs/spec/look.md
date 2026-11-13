@@ -31,14 +31,13 @@ Each colour means one thing.
 | `pane` | `#151312` | The workspace's pane, Home's and Settings' pages, and the window's ground |
 | `sidebar` | `#1a1715` | The sidebars |
 | `inset` | `#1e1b19` | What's set into a surface: the composer, a prompt waiting in the queue, a call's output, a code block |
-| `raised` | `#24201e` | Something raised in place: a pill, a file's header, the update card, an open pull request's bar with something to do |
-| `popover` | `#221f1d` | Something that opens over the rest: a card, a menu, a tooltip, what a hover shows |
+| `raised` | `#24201e` | Anything raised, whether it opens over the rest, such as a card, a menu, a tooltip or what a hover shows, or sits in place, such as a pill, a file's header, the update card or an open pull request's bar with something to do |
 | `prompt` | `#37281f` | A prompt's bubble |
 | `icon_tile_top` | `#211d1b` | The top of the app icon's tile |
 | **Under the pointer, pressed or chosen** | | |
 | `row_hover` | `#211e1c` | A row in a list under the pointer, such as Home's or a file's |
 | `line_hover` | `#1e1b19` | A call's line under the pointer, and the compaction's |
-| `menu_hover` | `#262220` | A menu's row under the pointer, a page in Settings' sidebar, under the pointer or open, and behind code within a line of text, which the kit draws in the grey of its menus' rows |
+| `menu_hover` | `#282321` | A menu's row under the pointer, a step above the menu, a page in Settings' sidebar, under the pointer or open, and behind code within a line of text, which the kit draws in the grey of its menus' rows |
 | `raised_hover` | `#2b2724` | Something raised, under the pointer |
 | `raised_pressed` | `#322d2a` | Something raised, pressed, and the sidebar's selected row |
 | **Edges** | | |

@@ -56,11 +56,10 @@ colors! {
         /// What's set into a surface: the composer, a prompt waiting in the queue above it, and what a call shows, such
         /// as its output or a code block.
         inset = 0x1e1b_19ff,
-        /// Something raised over the pane in place: a pill, a file's header, the update card, and an open pull
-        /// request's bar while there's something to do first.
+        /// Anything raised over the pane, whether it opens over the rest, such as a card, a menu, a tooltip or what a
+        /// hover shows, or sits in place, such as a pill, a file's header, the update card, or an open pull request's
+        /// bar while there's something to do first.
         raised = 0x2420_1eff,
-        /// Something that opens over the rest: a card, a menu, a tooltip or what a hover shows.
-        popover = 0x221f_1dff,
         /// A prompt's bubble: a wash of the brand's copper over the pane, so what was asked is easy to find when
         /// scrolling past the agent's work.
         prompt = 0x3728_1fff,
@@ -72,9 +71,9 @@ colors! {
         row_hover = 0x211e_1cff,
         /// A call's line under the pointer, and the compaction's.
         line_hover = 0x1e1b_19ff,
-        /// A menu's row under the pointer, a page in Settings' sidebar, under the pointer or open, and behind code
-        /// within a line of text, which the kit draws in the grey of its menus' rows.
-        menu_hover = 0x2622_20ff,
+        /// A menu's row under the pointer, a step above the menu, a page in Settings' sidebar, under the pointer or
+        /// open, and behind code within a line of text, which the kit draws in the grey of its menus' rows.
+        menu_hover = 0x2823_21ff,
         /// Something raised, under the pointer.
         raised_hover = 0x2b27_24ff,
         /// Something raised, pressed, and a row of the sidebar that's selected.
