@@ -1,13 +1,13 @@
 [package]
 name = "terminal-view"
-description = "A workspace's terminal in a GPUI view: client-core's copy of what it shows, painted as a grid of glyphs, and the keys typed into it."
+description = "A workspace's terminal in a GPUI view: client-core's copy of what it shows, painted as a grid of glyphs, the keys typed into it, and what's selected in it with the pointer."
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
 license.workspace = true
 
 [features]
-# What only tests read: the text of each row the view last drew.
+# What only tests read: the text of each row the view last drew, whether it shows a selection, and the size of a cell.
 testing = []
 
 [dependencies]

@@ -20,6 +20,7 @@ mod order;
 mod projects;
 mod stand_in;
 mod stand_in_gh;
+mod terminal;
 mod workspaces;
 
 use std::path::{Path, PathBuf};
@@ -58,6 +59,7 @@ pub(crate) use order::{MORE_THAN_FIT, more_than_fit, order, three_workspaces, to
 pub(crate) use projects::{project_row, two_projects};
 pub(crate) use stand_in::StandInHub;
 pub(crate) use stand_in_gh::pull_request;
+pub(crate) use terminal::{Cells, in_window};
 pub(crate) use workspaces::{home_row, pencil, sidebar_row};
 
 pub(crate) const TIMEOUT: Duration = Duration::from_secs(20);
