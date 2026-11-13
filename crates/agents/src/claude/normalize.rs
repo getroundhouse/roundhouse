@@ -11,6 +11,7 @@ use protocol::model::{CacheRequest, MessageId, ToolUseId};
 use protocol::tail::{BlockKind, DeltaChange, StreamDelta};
 use serde_json::Value;
 
+use super::kinds;
 use calls::OpenCalls;
 use compaction::Compactions;
 pub(super) use limits::{whole_percent, window_named};
@@ -100,7 +101,7 @@ impl Normalizer {
         let Some(value) = value_of(line) else {
             return Normalized { dropped: Vec::new(), parsed: unparsed(), relisted: None };
         };
-        self.calls.note(&value);
+        let answered = self.calls.note(&value);
         let dropped = self.pending_calls.note(&value);
         let noted = self.tasks.note(&value, &self.calls);
         if let Some(body) = self.subagents.read(&value) {
@@ -116,6 +117,9 @@ impl Normalizer {
         let mut parsed = noted.map_or_else(|| parse_value(&value), Parsed::Event);
         if let Parsed::Event(body) = &mut parsed {
             self.list(body);
+        }
+        if let Parsed::Event(body) | Parsed::EventWithImages { body, .. } = &mut parsed {
+            kinds::say(body, &answered);
         }
         if let Parsed::Delta(delta) = &parsed {
             match delta.change {

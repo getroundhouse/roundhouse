@@ -4,9 +4,13 @@
 
 #![cfg(test)]
 
+use std::collections::HashMap;
+
 use agents::claude::{Normalizer, Parsed};
-use protocol::event::{AgentRunState, ApprovalOutcome, Asking, ContentBlock, EventBody, FileChange, TurnOutcome};
-use protocol::model::{ApprovalId, CacheRequest, CacheTtl, PermissionMode};
+use protocol::event::{
+    AgentRunState, ApprovalOutcome, Asking, CallKind, ContentBlock, EventBody, FileChange, TurnOutcome,
+};
+use protocol::model::{ApprovalId, CacheRequest, CacheTtl, PermissionMode, ToolUseId};
 use protocol::tail::{BlockKind, Tail};
 use serde_json::Value;
 
@@ -97,7 +101,7 @@ fn approvals_carry_what_a_client_must_show_and_the_cli_must_get_back() {
         assert!(input["command"].as_str().is_some_and(|c| c.contains("echo")));
         assert!(description.is_some());
         assert!(suggestions.is_array());
-        assert_eq!(asking.as_deref(), Some(&Asking::ToolUse { call: None }));
+        assert_eq!(asking.as_deref(), Some(&Asking::ToolUse { call: Some(CallKind::Command) }));
     }
 }
 
@@ -237,6 +241,34 @@ fn thinking_tools_and_results_all_normalize() {
         ContentBlock::ToolResult { is_error: true, text, .. } if text.contains("Not allowed")
     )));
     assert!(!blocks.iter().any(|b| matches!(b, ContentBlock::Unknown)));
+}
+
+/// So a client reads each call by its kind, and needs none of the CLI's names for its tools.
+#[test]
+fn every_call_says_what_kind_it_is_and_every_result_the_kind_of_the_call_it_answers() {
+    let mut kinds: HashMap<ToolUseId, CallKind> = HashMap::new();
+    let mut answered = 0;
+    for block in blocks() {
+        match block {
+            ContentBlock::ToolUse { id, name, call, .. } => {
+                let kind = call.unwrap_or_else(|| panic!("{name} says no kind"));
+                assert_ne!(kind, CallKind::Unknown, "{name}");
+                assert_eq!(kind == CallKind::Command, name == "Bash", "{name}");
+                kinds.insert(id, kind);
+            }
+            ContentBlock::ToolResult { tool_use_id, call, .. } => {
+                assert_eq!(call.as_ref(), kinds.get(&tool_use_id), "the result of {tool_use_id}");
+                answered += usize::from(call.is_some());
+            }
+            ContentBlock::Text { .. }
+            | ContentBlock::Thinking { .. }
+            | ContentBlock::Image { .. }
+            | ContentBlock::Unknown => {}
+        }
+    }
+    assert!(kinds.values().any(|kind| *kind == CallKind::Command), "the fixture runs a command");
+    assert!(kinds.values().any(|kind| *kind == CallKind::Plan), "and asks to leave plan mode");
+    assert!(answered > 0, "and its calls are answered");
 }
 
 /// The fixture's plan is written to a new file, and the CLI says so beside the write's result.

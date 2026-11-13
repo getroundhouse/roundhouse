@@ -6,14 +6,16 @@
 use protocol::event::{Asking, Question, QuestionOption};
 use serde_json::Value;
 
+use super::kinds;
+
 mod answer;
 
 pub(super) use answer::{Waiting, response};
 
 /// The tool that asks the person questions.
-const QUESTIONS: &str = "AskUserQuestion";
+pub(super) const QUESTIONS: &str = "AskUserQuestion";
 /// The tool that asks to leave plan mode, with the plan.
-const PLAN: &str = "ExitPlanMode";
+pub(super) const PLAN: &str = "ExitPlanMode";
 
 /// What a request to use `tool` with `input` asks. Whatever the CLI sent is taken: a question without its text is left
 /// out, as is an option without its label, and a plan without its text is an empty one.
@@ -21,7 +23,7 @@ pub(super) fn asking(tool: &str, input: &Value) -> Asking {
     match tool {
         QUESTIONS => Asking::Questions { questions: questions(input) },
         PLAN => Asking::Plan { plan: text_of(input, "plan").unwrap_or_default() },
-        _ => Asking::ToolUse { call: None },
+        _ => Asking::ToolUse { call: Some(kinds::of(tool)) },
     }
 }
 
@@ -55,7 +57,7 @@ fn text_of(value: &Value, key: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use protocol::event::{Asking, Question, QuestionOption};
+    use protocol::event::{Asking, CallKind, Question, QuestionOption};
     use serde_json::json;
 
     use super::asking;
@@ -93,10 +95,12 @@ mod tests {
 
         assert_eq!(asking("ExitPlanMode", &plan), Asking::Plan { plan: "1. Read\n2. Change".into() });
         assert_eq!(asking("ExitPlanMode", &json!({})), Asking::Plan { plan: String::new() });
-        assert_eq!(asking("Bash", &json!({"command": "ls"})), Asking::ToolUse { call: None });
+        let command = Asking::ToolUse { call: Some(CallKind::Command) };
+        assert_eq!(asking("Bash", &json!({"command": "ls"})), command, "and says what kind of call that is");
+        let theirs = CallKind::Other { server: Some("team".into()), tool: "AskUserQuestion".into() };
         assert_eq!(
             asking("mcp__team__AskUserQuestion", &json!({})),
-            Asking::ToolUse { call: None },
+            Asking::ToolUse { call: Some(theirs) },
             "only the CLI's own"
         );
     }
