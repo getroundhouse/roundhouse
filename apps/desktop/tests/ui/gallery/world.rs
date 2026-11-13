@@ -11,10 +11,11 @@ use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{
     Account, AttachmentId, CacheTtl, ContextUsage, DiffComment, FileContents, GitDiff, InstanceId, ModelName,
     PORTS_PER_WORKSPACE, Place, PromptCache, PullRequest, Records, Repo, RepoId, Rev, Seq, Session, SessionId,
-    SessionStatus, Subagent, Title, ToolUseId, Workspace, WorkspaceId, WorktreeFiles,
+    SessionStatus, Subagent, Terminal, TerminalId, Title, ToolUseId, Workspace, WorkspaceId, WorktreeFiles,
 };
 use protocol::prompt::Prompt;
 use protocol::tail::Tail;
+use protocol::terminal::{TerminalScreen, TerminalSize};
 
 use super::subagent_records::records_of;
 
@@ -64,6 +65,8 @@ pub(crate) struct World {
     pub(crate) accounts: Vec<Account>,
     /// The hub is from before hubs kept settings, so it sends none.
     pub(crate) keeps_no_settings: bool,
+    /// Each open terminal, and what it shows, as the bytes that draw it in a fresh terminal of its size.
+    pub(crate) terminals: Vec<(Terminal, TerminalScreen)>,
     records: i64,
 }
 
@@ -126,10 +129,18 @@ impl World {
             accounts: self.accounts.clone(),
             // As from a hub that doesn't keep one, since its hub refuses to.
             new_workspace_draft: None,
-            // No screen shows a terminal yet.
-            terminals: Vec::new(),
+            terminals: self.terminals.iter().map(|(terminal, _)| terminal.clone()).collect(),
             rev: Rev::default(),
         }
+    }
+
+    /// A terminal open in `workspace`, showing `shows`, at `size`.
+    pub(crate) fn terminal(&mut self, workspace: &WorkspaceId, size: TerminalSize, shows: &[u8]) -> TerminalId {
+        let id = TerminalId::from(format!("term-{}", self.terminals.len() + 1));
+        let opened_at_ms = self.next_time();
+        let terminal = Terminal { id: id.clone(), workspace_id: workspace.clone(), opened_at_ms, rev: Rev::default() };
+        self.terminals.push((terminal, TerminalScreen { size, bytes: shows.into() }));
+        id
     }
 
     pub(crate) fn workspace_mut(&mut self, id: &WorkspaceId) -> &mut Workspace {

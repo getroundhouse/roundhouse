@@ -2,31 +2,28 @@
 //! `composer.rs`.
 
 use gpui_kit::assets::IconName as Lucide;
-use gpui_kit::base::{Tab, Tabs};
+use gpui_kit::base::Tabs;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::menu::{ContextMenuExt as _, PopupMenu};
+use gpui_kit::component::menu::{ContextMenuExt as _, DropdownMenu as _, PopupMenu, PopupMenuItem};
 use gpui_kit::component::{ActiveTheme as _, IconName, Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, Context, ElementId, FontWeight, InteractiveElement, IntoElement, ParentElement, Pixels, Render,
-    StatefulInteractiveElement, Styled, TestSupportExt as _, Window, div, px, relative,
+    Anchor, AnyElement, App, Context, ElementId, FontWeight, InteractiveElement, IntoElement, ParentElement, Render,
+    StatefulInteractiveElement, Styled, TestSupportExt as _, Window, div, px,
 };
 use look::{Hand as _, InRegion as _, LineText, Off as _, Region};
 use protocol::model::{Session, SessionStatus};
 
 use super::setup::setup_log_view;
 use super::workspace_card;
-use super::{HEADER_HEIGHT, Mark, Opened, PaneEvent, Showing, WorkspacePane};
+use super::{HEADER_HEIGHT, Mark, Opened, PaneEvent, Showing, WorkspacePane, tab};
 use crate::sides::{self, AtTheTop, Side, Sidebar};
-use crate::{prompt_cache, right_click};
-
-/// Every tab is the same width, so the row doesn't shift when a chat gets its title.
-pub(super) const TAB_WIDTH: Pixels = px(200.);
-/// Each tab's, so a tab's close button shows only while the pointer is over that tab.
-pub(super) const TAB_GROUP: &str = "chat-tab";
+use crate::{NewChat, NewTerminal, prompt_cache, right_click};
 
 /// What a chat is called until it has a title.
 const UNTITLED: &str = "Untitled";
+/// What the `+` after the tabs is called, for whoever can't see it, and in its tooltip.
+const NEW_TAB_LABEL: &str = "New chat or terminal";
 
 pub(super) fn chat_title(session: &Session) -> &str {
     session.title.as_deref().unwrap_or(UNTITLED)
@@ -43,53 +40,23 @@ impl WorkspacePane {
         let expiring = prompt_cache::expiring_in_ms(session, look::now_ms(cx))
             .map(|left_ms| prompt_cache::clock(format!("tab-cache-{}", session.id), left_ms, muted));
         let (to_show, to_close) = (session.id.clone(), session.id.clone());
-        let close = Button::new(ElementId::Name(format!("close-chat-{}", session.id).into()))
-            .hand()
-            .ghost()
-            .xsmall()
-            .icon(IconName::Close)
-            .tooltip("Close chat")
-            .on_click(cx.listener(move |t, _, window, cx| {
-                // The tab under it would take the click too, and show the chat that's closing.
-                cx.stop_propagation();
-                t.close_chat(to_close.clone(), window, cx);
-            }));
+        let close_id = ElementId::Name(format!("close-chat-{}", session.id).into());
+        let close = tab::close_button(close_id, "Close chat", cx, move |t, window, cx| {
+            t.close_chat(to_close.clone(), window, cx);
+        });
         let menu = Self::tab_menu(session, unread, cx);
-        let tab = div()
-            .id(ElementId::Name(format!("tab-{}", session.id).into()))
-            .group(TAB_GROUP)
-            .relative()
-            .flex_none()
-            .w(TAB_WIDTH)
-            .h_full()
-            .child(
-                Tab::new(ElementId::Name(format!("chat-{}", session.id).into()))
-                    .hand()
-                    .selected(selected)
-                    .accessibility_label(title.clone())
-                    .size_full()
-                    .justify_start()
-                    .gap_2()
-                    .pl_3()
-                    .pr_1p5()
-                    .text_sm()
-                    .line_height(relative(1.25))
-                    // Only a chat that needs a look stands out: one with a reply that hasn't been read, or a question
-                    // waiting on an answer. The open chat shows in its underline, so moving between chats doesn't
-                    // change how their titles look.
-                    .when(!needs_a_look, |d| d.text_color(muted))
-                    .when(needs_a_look, |d| d.font_weight(FontWeight::MEDIUM))
-                    .on_click(cx.listener(move |t, _, _, cx| t.activate(to_show.clone(), cx)))
-                    .child(look::chat_mark(mark, look::Size::Inline, cx))
-                    .child(div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(title))
-                    .children(expiring)
-                    // Hidden rather than left out, so the title doesn't move when it shows.
-                    .child(div().flex_none().invisible().group_hover(TAB_GROUP, Styled::visible).child(close)),
-            )
-            .when(selected, |d| {
-                d.child(div().absolute().left_0().right_0().bottom_0().h(px(2.)).bg(look::tab_underline()))
-            });
-        tab.context_menu(menu).into_any_element()
+        let face = tab::face(ElementId::Name(format!("chat-{}", session.id).into()), selected, title.clone())
+            // Only a chat that needs a look stands out: one with a reply that hasn't been read, or a question waiting
+            // on an answer. The open chat shows in its underline, so moving between chats doesn't change how their
+            // titles look.
+            .when(!needs_a_look, |d| d.text_color(muted))
+            .when(needs_a_look, |d| d.font_weight(FontWeight::MEDIUM))
+            .on_click(cx.listener(move |t, _, _, cx| t.activate(to_show.clone(), cx)))
+            .child(look::chat_mark(mark, look::Size::Inline, cx))
+            .child(tab::name().child(title))
+            .children(expiring);
+        let id = ElementId::Name(format!("tab-{}", session.id).into());
+        tab::tab(id, face, close, selected).context_menu(menu).into_any_element()
     }
 
     /// What a right-click on a chat's tab offers. Marking it needs a reply.
@@ -117,15 +84,16 @@ impl WorkspacePane {
     }
 
     /// The file tab and the subagent tab if they're open, at the far left as tabs that are replaced rather than added
-    /// to usually are, then one tab for each open chat, and a way to start another chat. At the far end are any closed
-    /// ones to go back to.
-    fn chat_tabs(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    /// to usually are, then one tab for each open chat and each open terminal, and a menu that starts another of
+    /// either. At the far end are any closed chats to go back to.
+    fn tab_row(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let border = cx.theme().border;
         let mut tabs: Vec<AnyElement> = self.file_tab_element(cx).into_iter().collect();
         tabs.extend(self.subagent_tab_element(cx));
         for session in self.open_sessions() {
             tabs.push(self.chat_tab(session, cx));
         }
+        tabs.extend(self.terminal_tabs(cx));
         let closed = self.closed_chats(cx);
         div()
             .region(Region::TabBar)
@@ -143,19 +111,28 @@ impl WorkspacePane {
                     .pr_3()
                     .gap_1()
                     .child(Tabs::new("chat-tabs").flex().h_full().min_w_0().overflow_x_scroll().children(tabs))
-                    .child(
-                        Button::new("new-chat")
-                            .hand()
-                            .ghost()
-                            .xsmall()
-                            .icon(IconName::Plus)
-                            .tooltip("New chat")
-                            .on_click(cx.listener(|t, _, _, cx| t.new_chat(cx))),
-                    )
+                    .child(Self::new_tab_menu())
                     // Kept to the end of the row, so it stays put as chats open and close.
                     .child(div().flex_1())
                     .children(closed),
             )
+    }
+
+    /// The `+` after the tabs, and its menu of a new chat or a new terminal, which are the app's actions, so each shows
+    /// its key and does what its key does.
+    fn new_tab_menu() -> impl IntoElement {
+        Button::new("new-tab")
+            .hand()
+            .ghost()
+            .xsmall()
+            .icon(IconName::Plus)
+            .accessibility_label(NEW_TAB_LABEL)
+            .tooltip(NEW_TAB_LABEL)
+            .dropdown_menu_with_anchor(Anchor::TopLeft, |menu, _, _| {
+                let chat = PopupMenuItem::new("New chat").icon(Lucide::MessageSquarePlus).action(Box::new(NewChat));
+                let terminal = PopupMenuItem::new("New terminal").icon(Lucide::Terminal).action(Box::new(NewTerminal));
+                menu.item(chat).item(terminal)
+            })
     }
 
     /// Over the chat, beside the sidebar of changes. While the sidebar is hidden, it shows the pull request's number and
@@ -254,7 +231,7 @@ impl Render for WorkspacePane {
         // slid. Hidden too while there's no diff to show in it yet, so the header shows the pull request meanwhile.
         let sidebar = if self.diff.is_some() { Side::Right.chosen(cx).sidebar } else { Sidebar::Hidden };
         let header = self.header(sidebar, &line_text, cx).into_any_element();
-        let tabs = self.chat_tabs(cx).into_any_element();
+        let tabs = self.tab_row(cx).into_any_element();
         let tab =
             self.diff.as_ref().filter(|_| self.showing() == Showing::File).map(|diff| match self.file_tab_opened() {
                 Some(Opened::File) => diff.viewer.clone().into_any_element(),
@@ -263,7 +240,10 @@ impl Render for WorkspacePane {
         let showing = match tab {
             Some(tab) => div().region(Region::OpenFile).flex_1().min_h_0().w_full().child(tab).into_any_element(),
             None if self.showing() == Showing::Subagent => self.subagent_view(cx),
-            None => self.chat(cx),
+            None => match self.terminal_view() {
+                Some(terminal) => terminal,
+                None => self.chat(cx),
+            },
         };
         h_flex()
             .size_full()

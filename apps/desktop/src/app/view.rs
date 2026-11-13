@@ -187,14 +187,20 @@ pub(super) fn unsent_note(chats: usize, comments: usize, going: &str) -> Option<
     Some(format!("Something in {unsent} hasn't been sent, and {going} loses it."))
 }
 
-/// What's running on a hub, as "the 2 agents and 1 setup script", or `None` for nothing.
+/// What's running on a hub, as "the 2 agents, 1 setup script and 1 terminal", or `None` for nothing. A terminal's
+/// shell runs in its workspace's worker, as an agent does, so stopping one stops the other.
 fn running(status: &HubStatus) -> Option<String> {
     let count = |n: u32| usize::try_from(n).unwrap_or(usize::MAX);
-    let agents = counted(count(status.running_sessions), "agent");
-    match (agents, counted(count(status.running_setups), "setup script")) {
-        (None, None) => None,
-        (Some(both), None) | (None, Some(both)) => Some(format!("the {both}")),
-        (Some(agents), Some(setups)) => Some(format!("the {agents} and {setups}")),
+    let running = [
+        (status.running_sessions, "agent"),
+        (status.running_setups, "setup script"),
+        (status.open_terminals, "terminal"),
+    ];
+    let running: Vec<String> = running.into_iter().filter_map(|(n, what)| counted(count(n), what)).collect();
+    match running.as_slice() {
+        [] => None,
+        [one] => Some(format!("the {one}")),
+        [rest @ .., last] => Some(format!("the {} and {last}", rest.join(", "))),
     }
 }
 
@@ -336,7 +342,7 @@ mod tests {
         );
     }
 
-    /// What a hub reports with these running on it.
+    /// What a hub reports with these running on it, and no terminal open.
     fn running_on(agents: u32, setups: u32) -> HubStatus {
         HubStatus {
             pid: 1,
@@ -364,6 +370,10 @@ mod tests {
         assert!(restart_note(&running_on(2, 0)).contains("stops the 2 agents running on it. Each agent picks up"));
         assert!(restart_note(&running_on(0, 2)).ends_with("stops the 2 setup scripts running on it."));
         assert!(restart_note(&running_on(2, 1)).contains("stops the 2 agents and 1 setup script running on it. Each"));
+        let terminal = HubStatus { open_terminals: 1, ..running_on(0, 0) };
+        assert!(restart_note(&terminal).ends_with("stops the 1 terminal running on it."));
+        let all = HubStatus { open_terminals: 2, ..running_on(2, 1) };
+        assert!(restart_note(&all).contains("stops the 2 agents, 1 setup script and 2 terminals running on it. Each"));
     }
 
     #[test]

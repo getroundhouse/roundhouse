@@ -18,13 +18,25 @@ The app's keyboard shortcuts. They're written as a Mac's. On Windows and Linux, 
 | Key | Action |
 |---|---|
 | `Cmd-T` | New chat |
-| `Cmd-W` | Close the chat, or the file tab or subagent tab while it shows |
+| `Cmd-Shift-T` | New terminal, in a tab after the chats |
+| `Cmd-W` | Close the chat, or the file tab, subagent tab or terminal while it shows |
 | `Ctrl-Tab`, `Ctrl-Shift-Tab` | The tab after, and before |
 | `Cmd-F` | Find in the chat |
 | `Cmd-G`, `Cmd-Shift-G` | The next match, and the one before |
 | `F3`, `Shift-F3` | On Windows and Linux, the next match, and the one before, too |
 | `Enter`, `Shift-Enter` | In Find's bar, the next match, and the one before |
 | Escape | Close Find's bar, or an image opened from the chat |
+
+## A terminal
+
+What's typed in a terminal goes to its shell, apart from the app's shortcuts.
+
+| Key | Action |
+|---|---|
+| `Cmd-V` | Paste. `Ctrl-Shift-V` on Windows and Linux |
+| `Cmd-Shift-T` | Another terminal |
+
+On Windows and Linux, `Ctrl` with a letter goes to the shell, as `Ctrl-W` deletes a word there, so in a terminal the app's own keys take `Shift` too: `Ctrl-Shift-W` closes the terminal, `Ctrl-Shift-N` makes a new workspace and `Ctrl-Shift-Q` quits. New chat and the workspace before and after are in the menus there, and Find, which is for a chat, does nothing in a terminal.
 
 ## The composer
 

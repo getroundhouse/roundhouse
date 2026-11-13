@@ -36,6 +36,14 @@ pub(super) fn should_replace(hub: &HubStatus, app_build: Option<u64>) -> bool {
     may_restart(hub, app_build) && hub.is_idle()
 }
 
+/// Whether more is running on the hub `now` than when it `said` what restarting it would stop, so restarting it would
+/// stop what nobody was asked about: more agents at work, setup scripts or terminals.
+pub(super) fn runs_more_than(now: &HubStatus, said: &HubStatus) -> bool {
+    now.running_sessions > said.running_sessions
+        || now.running_setups > said.running_setups
+        || now.open_terminals > said.open_terminals
+}
+
 /// Whether to restart this hub at once, whatever is running on it: one the app may restart that keeps its workers
 /// running for the next hub, so a restart stops none of its agents. It goes once no setup script is running.
 pub(super) fn restarts_at_once(hub: &HubStatus, app_build: Option<u64>) -> bool {
@@ -104,6 +112,18 @@ mod tests {
             oldest_protocol_version: None,
             open_terminals: 0,
         }
+    }
+
+    /// Each of what restarting it stops counts, and less of any doesn't.
+    #[test]
+    fn more_agents_setups_or_terminals_than_were_said_is_more_running() {
+        let said = HubStatus { running_sessions: 1, running_setups: 1, open_terminals: 1, ..older_idle_hub() };
+
+        assert!(runs_more_than(&HubStatus { running_sessions: 2, ..said.clone() }, &said));
+        assert!(runs_more_than(&HubStatus { running_setups: 2, ..said.clone() }, &said));
+        assert!(runs_more_than(&HubStatus { open_terminals: 2, ..said.clone() }, &said));
+        assert!(!runs_more_than(&said, &said));
+        assert!(!runs_more_than(&HubStatus { running_sessions: 0, open_terminals: 0, ..said.clone() }, &said));
     }
 
     #[test]
@@ -179,6 +199,10 @@ mod tests {
     fn a_hub_with_anything_running_or_another_client_is_left_alone() {
         assert!(!should_replace(&HubStatus { running_sessions: 1, ..older_idle_hub() }, Some(2)));
         assert!(!should_replace(&HubStatus { running_setups: 1, ..older_idle_hub() }, Some(2)));
+        assert!(
+            !should_replace(&HubStatus { open_terminals: 1, ..older_idle_hub() }, Some(2)),
+            "it would end its shell"
+        );
         assert!(!should_replace(&HubStatus { clients: 2, ..older_idle_hub() }, Some(2)));
         assert!(!should_replace(&HubStatus { requests: 2, ..older_idle_hub() }, Some(2)));
     }

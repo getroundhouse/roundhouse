@@ -61,7 +61,7 @@ fn the_card_shows_once_the_pointer_has_rested_on_the_ring_and_goes_once_it_could
     assert!(ui.visible("context-card"), "resting on it does");
 
     // It holds a button, so it waits for the pointer to cross to it.
-    ui.hover("new-chat");
+    ui.hover("new-tab");
     assert!(ui.visible("context-card"), "the pointer could still be on its way");
     ui.wait_out_a_tooltip();
     ui.wait("the card to go", |ui| !ui.has("context-card"));

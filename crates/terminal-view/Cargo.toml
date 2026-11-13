@@ -6,6 +6,10 @@ edition.workspace = true
 publish.workspace = true
 license.workspace = true
 
+[features]
+# What only tests read: the text of each row the view last drew.
+testing = []
+
 [dependencies]
 client-core.workspace = true
 gpui-kit.workspace = true

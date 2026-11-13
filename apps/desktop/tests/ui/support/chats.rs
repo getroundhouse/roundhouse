@@ -56,10 +56,10 @@ impl Ui<'_> {
         })
     }
 
-    /// Presses the new chat button and waits until that chat is showing.
+    /// Picks New chat in the `+` after the tabs, and waits until that chat is showing.
     pub(crate) fn new_chat(&mut self) -> SessionId {
         let before = self.open_chats().len();
-        self.click("new-chat");
+        self.pick_item("new-tab", "New chat");
         self.wait("the new chat", |ui| ui.open_chats().len() > before && ui.transcript().is_some());
         let newest = self.open_chats().last().unwrap().clone();
         self.wait("the new chat to show", |ui| ui.active_chat() == newest);

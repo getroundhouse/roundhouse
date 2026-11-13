@@ -10,7 +10,7 @@ use protocol::find::Found;
 use protocol::model::{
     AgentKind, ApprovalId, AttachmentId, ClientMessageId, ClientRequestId, CommentId, DiffComment, DiffSide, GitDiff,
     GitStatus, HubSettings, HubSettingsChange, PullRequest, Records, Repo, RepoId, Rev, Seq, Session, SessionId,
-    Subagent, ToolUseId, WaitId, Workspace, WorkspaceId,
+    Subagent, TerminalId, ToolUseId, WaitId, Workspace, WorkspaceId,
 };
 
 use super::{Client, Result, Subscription, hub_is_missing, subscription_channel};
@@ -264,4 +264,9 @@ pub fn new_message_id() -> ClientMessageId {
 /// A new ID for a file to attach, chosen before it's added, so a view can show it at once and a retry adds it once.
 pub fn new_attachment_id() -> AttachmentId {
     AttachmentId::from(uuid::Uuid::new_v4().to_string())
+}
+
+/// An ID for a terminal about to be opened, new to every hub.
+pub fn new_terminal_id() -> TerminalId {
+    TerminalId::from(uuid::Uuid::new_v4().to_string())
 }

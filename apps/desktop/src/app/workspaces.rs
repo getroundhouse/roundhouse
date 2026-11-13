@@ -37,11 +37,19 @@ impl AppView {
                 pane.set_busy(busy, cx);
                 pane.set_retitling(retitling, cx);
             });
-            cx.subscribe(&pane, |t, _, event: &PaneEvent, cx| match event.clone() {
+            let shown_id = id.clone();
+            cx.subscribe_in(&pane, window, move |t, pane, event: &PaneEvent, window, cx| match event.clone() {
                 PaneEvent::Error(message) => t.show_error(message, cx),
                 PaneEvent::Archive(id, force) => t.archive(id, force, cx),
                 PaneEvent::RegenerateTitle(id) => t.regenerate_title(id, cx),
-                PaneEvent::Showing => t.tell_of_needs(cx),
+                PaneEvent::Showing => {
+                    t.tell_of_needs(cx);
+                    // Only the pane on screen moves focus, since what's in a pane behind it isn't drawn. It's on screen
+                    // while the app reconnects too.
+                    if t.pane_to_draw().as_ref() == Some(pane) {
+                        t.focus_pane(shown_id.clone(), window, cx);
+                    }
+                }
             })
             .detach();
             self.panes.insert(id.clone(), pane);

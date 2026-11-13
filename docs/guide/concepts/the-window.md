@@ -26,7 +26,7 @@ In the middle, the workspace that's selected.
 | Part | What it is |
 |---|---|
 | The header | The workspace's title, with its branch and its base |
-| The tabs | A tab for each chat, after the file tab and the subagent tab when they're open |
+| The tabs | A tab for each chat, after the file tab and the subagent tab when they're open, then one for each terminal, and the `+` that opens a new chat or a new terminal |
 | The chat | The conversation: your prompts, and what the agent said and did |
 | The outline | Short ticks at the chat's right, one for each prompt |
 | The composer | Where you type a prompt |

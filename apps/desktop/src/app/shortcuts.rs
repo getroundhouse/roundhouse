@@ -10,7 +10,8 @@ use crate::menus;
 use crate::workspace_pane::{Showing, WorkspacePane};
 use crate::{
     AddRepository, ArchiveWorkspace, CloseChat, CreatePullRequest, FindInChat, FindNext, FindPrevious, MarkWorkspace,
-    NewChat, NewWorkspace, NextChat, NextWorkspace, PreviousChat, PreviousWorkspace, StopAgent, ToggleDiff,
+    NewChat, NewTerminal, NewWorkspace, NextChat, NextWorkspace, PreviousChat, PreviousWorkspace, StopAgent,
+    ToggleDiff,
 };
 
 impl AppView {
@@ -83,6 +84,7 @@ fn with_workspace_shortcuts(root: Div, cx: &mut Context<AppView>) -> Div {
             t.update_selected_pane(cx, WorkspacePane::create_pull_request);
         }))
         .on_action(cx.listener(|t, _: &NewChat, _, cx| t.update_selected_pane(cx, WorkspacePane::new_chat)))
+        .on_action(cx.listener(|t, _: &NewTerminal, _, cx| t.update_selected_pane(cx, WorkspacePane::new_terminal)))
         .on_action(cx.listener(|t, _: &CloseChat, window, cx| {
             t.update_selected_pane(cx, |pane, cx| pane.close_tab(window, cx));
         }))

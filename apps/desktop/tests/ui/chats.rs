@@ -347,7 +347,7 @@ fn a_tabs_close_button_shows_under_the_pointer_and_closes_only_that_chat(cx: &mu
     ui.wait("it to be working", |ui| ui.session_status() == Some(SessionStatus::Running));
     let showing = ui.new_chat();
     let close = |chat: &SessionId| SharedString::from(format!("close-chat-{chat}"));
-    // The new tab came where the new chat button was, under the pointer.
+    ui.hover(SharedString::from(format!("chat-{showing}")));
     assert!(ui.visible(close(&showing)), "the pointer is over the new tab");
     ui.hover("send");
     assert!(!ui.visible(close(&working)) && !ui.visible(close(&showing)), "not even the chat showing has one");
