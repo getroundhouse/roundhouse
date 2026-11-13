@@ -26,8 +26,9 @@ pub(crate) fn session_command(client: &Client, command: SessionCmd) -> anyhow::R
             for session in client.session_list(&workspace.id)? {
                 let closed = if session.is_open() { "" } else { "  closed" };
                 let unread = if session.unread() { "  unread" } else { "" };
+                let failed = if session.turn_failed() { "  turn failed" } else { "" };
                 println!(
-                    "{}  {:?}{closed}{unread}  {} events  {}  {}",
+                    "{}  {:?}{closed}{unread}{failed}  {} events  {}  {}",
                     short(session.id.as_str()),
                     session.status,
                     session.last_seq,

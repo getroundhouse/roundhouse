@@ -60,7 +60,7 @@ A prompt sent with `Enter` while the agent works is read at the agent's next cha
 `Cmd-.` and the Stop button stop the agent's turn. The agent itself stays, and takes the next prompt.
 
 - **A steered prompt the agent hasn't read is dropped,** and says so in the chat.
-- **The queue holds,** and says it's waiting. It also holds when the agent goes away mid-turn.
+- **The queue holds,** and says it's waiting. It also holds when the agent goes away mid-turn, or its turn fails, as on a usage limit.
 - **Sending any prompt lets the queue go on,** once that turn ends. So does the arrow on a queued prompt, which sends it as a turn of its own.
 
 The hold lasts through a restart of the hub.

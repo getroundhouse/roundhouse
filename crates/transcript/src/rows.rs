@@ -31,8 +31,10 @@ mod approval;
 mod around;
 mod asked;
 mod cache_rule;
+mod card;
 mod column;
 pub(crate) mod compaction;
+mod failed_request;
 mod line;
 mod mode;
 mod notices;
@@ -48,7 +50,7 @@ mod update_rule;
 
 pub(crate) use alone::rows_repeating_report;
 pub use alone::subagent_standing;
-pub(crate) use around::{NEAR, REACH};
+pub(crate) use around::{NEAR, REACH, retry_at};
 pub(crate) use column::room_under;
 pub use column::{ABOVE_THE_COMPOSER, around_column, in_column};
 pub(crate) use shown::{Found, of_row as found_in_row, rows_drawing, rows_to_count};
@@ -228,6 +230,29 @@ fn muted_line(text: impl Into<SharedString>) -> AnyElement {
     row().child(div().text_xs().text_color(look::faint()).child(text.into())).into_any_element()
 }
 
+/// A message of the agent's, or what came back to it, recorded at `seq`: each of its `blocks` as `around` says.
+fn message(
+    seq: Seq,
+    blocks: &[ContentBlock],
+    around: &Around,
+    shared: &Shared,
+    find: &FindLook,
+    cx: &App,
+) -> AnyElement {
+    let rendered: Vec<AnyElement> = blocks
+        .iter()
+        .enumerate()
+        .zip(&around.blocks)
+        .filter_map(|((ix, block), drawing)| render_block(seq, InRow::Own(ix), block, drawing, shared, find, cx))
+        .collect();
+    if rendered.is_empty() {
+        return empty();
+    }
+    // Calls and thinking in a row read as one list, so they sit closer together than paragraphs do.
+    let only_lines = blocks.iter().all(is_a_line);
+    row().when(only_lines, |d| d.pb_2().gap_2()).children(rendered).into_any_element()
+}
+
 /// `event`, drawn in the row of an event, which is its own but for a prompt drawn where the agent took it, or at the
 /// end of the chat. A prompt's text goes at `prompt_at`, and the texts of any other event by its place in the log.
 fn render_event(
@@ -245,8 +270,12 @@ fn render_event(
             Some(asked) => asked::draw(seq, asked, shared, cx),
             None => empty(),
         },
-        // The compaction says all there is of what asked for it, and of a turn that was only it.
-        EventBody::CompactionAsked { .. } | EventBody::TurnEnded { only_compacted: true, .. } => empty(),
+        // The compaction says all there is of what asked for it, and of a turn that was only it, and a failed
+        // request's card all there is of the turn that failed on it.
+        EventBody::CompactionAsked { .. }
+        | EventBody::TurnEnded { only_compacted: true, .. }
+        | EventBody::TurnEnded { request_failed: true, .. } => empty(),
+        EventBody::RequestFailed { failure, .. } => failed_request::card(seq, failure, around.retry, shared, find, cx),
         EventBody::AgentCompacted { .. } => compaction::of(seq, body, around, shared, cx),
         EventBody::CacheExpired { idle_ms, read_tokens, written_tokens } => {
             cache_rule::line(seq, *idle_ms, *read_tokens, *written_tokens, cx)
@@ -260,20 +289,7 @@ fn render_event(
             prompt_bubble(&key, text, &around.carried, Some(around.prompt), shared, cx)
         }
         EventBody::Assistant { blocks, .. } | EventBody::AgentUser { blocks, .. } => {
-            let rendered: Vec<AnyElement> = blocks
-                .iter()
-                .enumerate()
-                .zip(&around.blocks)
-                .filter_map(|((ix, block), drawing)| {
-                    render_block(seq, InRow::Own(ix), block, drawing, shared, find, cx)
-                })
-                .collect();
-            if rendered.is_empty() {
-                return empty();
-            }
-            // Calls and thinking in a row read as one list, so they sit closer together than paragraphs do.
-            let only_lines = blocks.iter().all(is_a_line);
-            row().when(only_lines, |d| d.pb_2().gap_2()).children(rendered).into_any_element()
+            message(seq, blocks, around, shared, find, cx)
         }
         EventBody::TurnEnded { .. } => turn_end::line(event, around.agent.clone(), around.cache.as_ref(), find, cx),
         EventBody::ApprovalRequested { .. } => approval_card(seq, body, around.approval_open, shared, cx),
@@ -283,11 +299,10 @@ fn render_event(
         EventBody::ApprovalResolved { outcome: ApprovalOutcome::Denied, .. } => muted_line("Denied"),
         EventBody::AgentMode { permission_mode } => muted_line(mode::mode_change(around.mode_before, *permission_mode)),
         EventBody::AgentExited { reason, stderr_tail, .. } => agent_exited(seq, *reason, stderr_tail, find, cx),
-        EventBody::Notice { level, message, .. } => notice(seq, *level, message, find, cx),
+        EventBody::Notice { level, message, .. } => notice(seq, *level, message, shared, find, cx),
         // These tell the hub things, and there's nothing here for a person. An agent's start says something only when
         // it's on another build than the chat's agent last was, above.
-        EventBody::RequestFailed { .. }
-        | EventBody::PromptTaken { .. }
+        EventBody::PromptTaken { .. }
         | EventBody::PromptDropped { .. }
         | EventBody::ToolCallDropped { .. }
         | EventBody::AgentStarted { .. }

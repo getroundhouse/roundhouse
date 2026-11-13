@@ -172,8 +172,12 @@ fn of_event(event: &SessionEvent, around: &Around, gather: &mut Gather) {
                 of_block(block, drawing, InRow::Own(ix), gather);
             }
         }
-        EventBody::Notice { message, .. } => gather.plain(&ItemKey::Event(seq, 0), Part::Notice, message),
-        EventBody::TurnEnded { outcome: TurnOutcome::Error, errors, .. } => {
+        EventBody::Notice { message, .. } => gather.written(&ItemKey::Event(seq, 0), Part::Notice, message),
+        EventBody::RequestFailed { failure, .. } => {
+            gather.written(&ItemKey::Event(seq, 0), Part::FailedRequest, &failure.message);
+        }
+        // A turn that ended on a failed request draws nothing, since the request's card says why.
+        EventBody::TurnEnded { outcome: TurnOutcome::Error, errors, request_failed: false, .. } => {
             if let Some(error) = errors.first() {
                 gather.plain(&ItemKey::Event(seq, 0), Part::TurnError, error);
             }
@@ -188,7 +192,6 @@ fn of_event(event: &SessionEvent, around: &Around, gather: &mut Gather) {
         | EventBody::TurnEnded { .. }
         | EventBody::ApprovalResolved { .. }
         | EventBody::AgentMode { .. }
-        | EventBody::RequestFailed { .. }
         | EventBody::PromptTaken { .. }
         | EventBody::PromptDropped { .. }
         | EventBody::ToolCallDropped { .. }

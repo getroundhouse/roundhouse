@@ -40,7 +40,7 @@ Only the pull request changes a workspace's colour, so the colour always means o
 
 ## The turntable
 
-The centre turns red when the agent stopped short: it went away partway through a turn. It goes back once that's dealt with.
+The centre turns red when the agent stopped short: it went away partway through a turn, or its turn failed, as when it reached a usage limit. It goes back once the chat's next turn starts.
 
 ## What isn't on the mark
 

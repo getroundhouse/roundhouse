@@ -11,7 +11,7 @@ Every workspace has a mark before its title: a half circle of dots, like a round
 | A light sweeping the whole fan | The agent is working |
 | A slower light on the inner row | Its turn ended with something still running, such as a test run |
 | The fan filling in | The workspace is being set up |
-| A red centre | The agent stopped short |
+| A red centre | The agent stopped short: it went away mid-turn, or its turn failed |
 | The fan's colour | Where the pull request stands: grey for none, green open, yellow in the merge queue, purple merged |
 
 Only an agent with something running moves a mark. While an agent waits on you, its mark holds still.

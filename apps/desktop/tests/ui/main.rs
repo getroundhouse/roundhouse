@@ -36,6 +36,7 @@ mod queue;
 mod quitting;
 mod reconnecting;
 mod reply_images;
+mod retrying;
 mod scrolling;
 mod settings;
 mod setup;

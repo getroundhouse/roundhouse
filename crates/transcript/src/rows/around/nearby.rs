@@ -6,6 +6,8 @@ use client_core::session_log::{Row, SessionLog};
 use protocol::event::{ContentBlock, EventBody, SessionEvent};
 use protocol::model::{PermissionMode, Seq, ToolUseId};
 
+use super::NEAR;
+
 /// The events after the one at `seq`, in order, as far as `reach` rows on. A row that isn't loaded is skipped.
 pub(super) fn events_after(log: &SessionLog, seq: Seq, reach: usize) -> impl Iterator<Item = &SessionEvent> {
     let after = log.row_of(seq).map_or(log.row_count(), |row| row + 1);
@@ -60,14 +62,27 @@ fn event_in(log: &SessionLog, ix: usize) -> Option<&SessionEvent> {
     }
 }
 
+/// The agent's own failed request that the turn ending at `end` ended on, if that turn's end says it did and both are
+/// loaded: the newest since the turn before it ended, or a prompt was recorded.
+pub(super) fn failed_request_ending(log: &SessionLog, end: Seq) -> Option<Seq> {
+    let ended = log.row_of(end).and_then(|row| event_in(log, row))?;
+    if !matches!(ended.body, EventBody::TurnEnded { request_failed: true, .. }) {
+        return None;
+    }
+    events_before(log, end, NEAR)
+        .take_while(|event| !matches!(event.body, EventBody::TurnEnded { .. } | EventBody::UserPrompt { .. }))
+        .find(|event| matches!(event.body, EventBody::RequestFailed { parent_tool_use_id: None, .. }))
+        .map(|event| event.seq)
+}
+
 #[cfg(test)]
 mod tests {
-    use protocol::event::EventBody;
+    use protocol::event::{EventBody, TurnOutcome};
     use protocol::model::PermissionMode::{FullAccess, Plan};
     use protocol::model::{PermissionMode, Seq};
 
-    use super::{call_before, events_after, events_before, mode_before};
-    use crate::fixtures::{calls, event, log, result};
+    use super::{call_before, events_after, events_before, failed_request_ending, mode_before};
+    use crate::fixtures::{calls, event, failed_request, log, prompt, result, turn_ended};
 
     fn changed_to(mode: PermissionMode) -> EventBody {
         EventBody::AgentMode { permission_mode: mode }
@@ -122,5 +137,30 @@ mod tests {
         let log = log([event(1, changed_to(Plan)), event(3, changed_to(FullAccess))]);
 
         assert_eq!(mode_before(&log, 3), None);
+    }
+
+    #[test]
+    fn the_failed_request_a_turn_ended_on_is_the_agents_own_newest_in_that_turn() {
+        let ended = log([
+            event(1, prompt("Go on")),
+            event(2, failed_request(None)),
+            event(3, failed_request(Some("call-1"))),
+            event(4, turn_ended()),
+        ]);
+        let a_subagents =
+            log([event(1, prompt("Go on")), event(2, failed_request(Some("call-1"))), event(3, turn_ended())]);
+        let earlier = log([
+            event(1, failed_request(None)),
+            event(2, turn_ended()),
+            event(3, prompt("Go on")),
+            event(4, turn_ended()),
+        ]);
+        let went_past =
+            log([event(1, failed_request(None)), event(2, protocol::fixtures::turn_ended(TurnOutcome::Error))]);
+
+        assert_eq!(failed_request_ending(&ended, 4), Some(2), "not the subagent's after it");
+        assert_eq!(failed_request_ending(&a_subagents, 3), None, "a subagent's leaves the agent going");
+        assert_eq!(failed_request_ending(&earlier, 4), None, "an earlier turn's");
+        assert_eq!(failed_request_ending(&went_past, 2), None, "a turn whose end says why it failed itself");
     }
 }

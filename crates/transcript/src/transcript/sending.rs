@@ -8,6 +8,9 @@ use protocol::prompt::Prompt;
 use super::{Transcript, TranscriptEvent};
 use crate::attachments::Picture;
 
+/// What Retry sends, which has the agent pick up where its request failed, as a message does for its CLI.
+const RETRY: &str = "Continue";
+
 impl Transcript {
     /// Shows the prompt at once, and takes it back if it can't be sent. Returns false if it's empty.
     pub fn send_prompt(&mut self, text: String, cx: &mut Context<Self>) -> bool {
@@ -18,6 +21,17 @@ impl Transcript {
     /// [`client_core::OpenSession::start_sending`] says. If it isn't taken, it stops showing and is handed back with
     /// [`TranscriptEvent::NotSent`]. Returns false if there's nothing to send.
     pub fn send_prompt_with(&mut self, prompt: Prompt<FileToSend>, cx: &mut Context<Self>) -> bool {
+        self.send(prompt, |message, prompt| TranscriptEvent::NotSent { message, prompt }, cx)
+    }
+
+    /// Sends the prompt, as [`Transcript::send_prompt_with`] says, and emits what `refused` makes of a refusal's words
+    /// and the prompt it refused.
+    fn send(
+        &mut self,
+        prompt: Prompt<FileToSend>,
+        refused: fn(String, Prompt<FileToSend>) -> TranscriptEvent,
+        cx: &mut Context<Self>,
+    ) -> bool {
         if !prompt.says_or_carries() {
             return false;
         }
@@ -38,12 +52,24 @@ impl Transcript {
             let Err(NotTaken { error, prompt }) = sending.recv().await else { return };
             let _ = this.update(cx, |t, cx| {
                 t.catch_up(cx);
-                cx.emit(TranscriptEvent::NotSent { message: not_sent(&error), prompt });
+                cx.emit(refused(not_sent(&error), prompt));
                 cx.notify();
             });
         })
         .detach();
         true
+    }
+
+    /// Asks the agent to carry on from the request it failed on, whose card's Retry goes once this is on its way. The
+    /// agent already has the prompt it was working on, and what it did before the failure, so sending that again would
+    /// ask it twice. A second press before the card is drawn again sends nothing more. A refusal is an error, since
+    /// nobody typed what was refused, so there's nothing to give back.
+    pub(crate) fn retry(&mut self, cx: &mut Context<Self>) {
+        if self.model.borrow().retry_at.is_none() {
+            return;
+        }
+        let refused = |message, _| TranscriptEvent::Error(message);
+        self.send(Prompt::new(RETRY.to_string()), refused, cx);
     }
 
     /// Asks the agent to compact its conversation, keeping what `keeping` says. `typed` is what was typed to ask, if it

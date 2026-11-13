@@ -11,7 +11,7 @@ use protocol::model::{PermissionMode, Seq, ToolUseId};
 use crate::attachments::{self, Carried};
 use crate::folds::Fold;
 use crate::item_key::ItemKey;
-use crate::transcript::{IdleCache, Model};
+use crate::transcript::{AtWork, IdleCache, Model};
 
 mod nearby;
 mod reply;
@@ -27,6 +27,10 @@ pub(crate) use subagent::{REACH, SubagentCalls, drawn_in_its_call, its_call};
 /// within a few events. One further away is drawn where it is.
 pub(crate) const NEAR: usize = 64;
 
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "each is a fact about one kind of event, which only that kind's row reads, not a state the row is in"
+)]
 pub(super) struct Around {
     /// What each of the event's blocks needs, by position.
     pub(super) blocks: Vec<BlockAround>,
@@ -50,6 +54,8 @@ pub(super) struct Around {
     pub(super) mode_before: Option<PermissionMode>,
     /// For a compaction: whether it's open to its summary.
     pub(super) open: bool,
+    /// For a failed request: whether its card offers Retry, as [`retry_at`] says.
+    pub(super) retry: bool,
 }
 
 /// What drawing a question that's no longer waiting needs.
@@ -86,6 +92,15 @@ pub(super) enum Opening {
     All,
 }
 
+/// The failed request whose card offers Retry, if one does: the one the newest turn ended on, while the record says
+/// that turn failed and no turn has started since, and while nothing has been sent, which Retry would only repeat.
+pub(crate) fn retry_at(log: &SessionLog, at_work: &AtWork) -> Option<Seq> {
+    if !at_work.failed || log.has_prompts_waiting() {
+        return None;
+    }
+    nearby::failed_request_ending(log, at_work.reply_seq)
+}
+
 impl Around {
     pub(super) fn read(log: &SessionLog, m: &Model, seq: Seq, body: &EventBody) -> Self {
         Self::read_as(log, m, seq, body, Opening::AsChosen)
@@ -108,6 +123,7 @@ impl Around {
             cache: (seq == m.at_work.reply_seq).then(|| m.at_work.cache.clone()).flatten(),
             mode_before: None,
             open: false,
+            retry: m.retry_at == Some(seq),
         };
         if let EventBody::AgentMode { .. } = body {
             around.mode_before = nearby::mode_before(log, seq);

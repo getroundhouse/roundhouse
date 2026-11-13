@@ -21,6 +21,12 @@ A turn runs from a prompt until the agent finishes responding. While it lasts, t
 
 A finished turn ends with how long it took and when it ended, such as `1m, 48s · 2:15 PM`, and a button that copies the agent's final message. A stopped turn says `Stopped`, and one that failed says why, in red.
 
+A turn that failed because the agent's request to its model did, as when you reach your usage limit, ends on a red card instead. It says what went wrong, when a limit resets, and the CLI's own words on what to do. `Retry` asks the agent to carry on, with whatever model the chat runs now, so choosing another model, then `Retry`, gets past one model's limit. It goes once you send anything.
+
+![A turn that failed on a usage limit, with Retry](../../spec/screens/request-failed.png)
+
+What the agent's CLI says itself, such as `Set model to opus (claude-opus-5-5)`, is a muted line of its own, so it isn't taken for the agent's words.
+
 A turn can end with work still going in the background, such as a test run the agent said it would come back to. When that finishes, the agent picks up again by itself, in a new turn.
 
 ## The composer

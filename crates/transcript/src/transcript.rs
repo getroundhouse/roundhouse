@@ -54,6 +54,8 @@ pub(crate) struct Model {
     pub subagent_calls: RefCell<SubagentCalls>,
     /// What the agent is at, as the session's record says, which the transcript's last row draws.
     pub at_work: AtWork,
+    /// The failed request whose card offers Retry, as [`crate::rows::retry_at`] says, as of the last look.
+    pub retry_at: Option<Seq>,
     /// Where the workspace's pull request stands on GitHub, which a line for a wait on it says. `None` until it's
     /// known, and while there's none or nothing to say of it.
     pub pull_request: Option<PullRequestStanding>,
@@ -85,6 +87,7 @@ impl Model {
             pictures: HashMap::new(),
             subagent_calls: RefCell::default(),
             at_work,
+            retry_at: None,
             pull_request: None,
             approvals: None,
             subagents: HashMap::new(),
@@ -241,6 +244,7 @@ impl Transcript {
         let events = self.session.read(SessionLog::row_count);
         let events_changed = changes.rows.as_ref().is_some_and(|changed| changed.start < events);
         self.list.set_rows(rows, loaded);
+        self.follow_retry();
         self.session.read(|log| self.texts.let_go(log));
         self.session.read(|log| self.prose.let_go(log, self.selection.held().as_ref()));
         if let Some(changed) = changes.rows {

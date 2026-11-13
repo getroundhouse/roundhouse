@@ -1,3 +1,4 @@
+use protocol::event::TurnOutcome;
 use protocol::model::{Session, SessionId, SessionStatus};
 
 use super::{Changes, Watch, Why};
@@ -144,4 +145,21 @@ fn a_reply_nobody_has_read_stays_told_of_while_its_agent_works_again() {
 
     assert_eq!(working_again, Changes::default(), "it's still unread, as the sidebar shows it");
     assert_eq!(read.went, [SessionId::from("a")]);
+}
+
+/// A turn that failed is a reply, but one the agent stopped short on, so that's what's told of. Failing again, with
+/// the turn between unseen, as across a reconnect, is told of again.
+#[test]
+fn a_turn_that_failed_is_told_of_as_stopping_short_each_time() {
+    let failed =
+        |reply_seq| Session { reply_outcome: Some(TurnOutcome::Error), ..chat("a", SessionStatus::Idle, reply_seq, 0) };
+    let mut watch = having_seen(&[working("a")]);
+
+    let first = watch.look(&[failed(4)], None);
+    let again = watch.look(&[failed(4)], None);
+    let failed_again = watch.look(&[failed(9)], None);
+
+    assert_eq!(came(&first), [("a", Why::StoppedShort)]);
+    assert_eq!(again, Changes::default());
+    assert_eq!(came(&failed_again), [("a", Why::StoppedShort)]);
 }

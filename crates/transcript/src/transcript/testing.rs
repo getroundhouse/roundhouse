@@ -2,6 +2,7 @@
 
 use client_core::session_log::{PromptState, Row};
 use protocol::event::{EventBody, SessionEvent};
+use protocol::model::Seq;
 
 use super::{Transcript, rows_and_loaded};
 
@@ -22,6 +23,11 @@ impl Transcript {
             }
             Row::Event(_) | Row::Unloaded => None,
         })
+    }
+
+    /// The failed request whose card offers Retry, if one does, as the transcript worked it out last.
+    pub fn retry_offered_at(&self) -> Option<Seq> {
+        self.model.borrow().retry_at
     }
 
     /// What the agent is writing, as far as it's got.

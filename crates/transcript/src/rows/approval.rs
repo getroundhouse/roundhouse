@@ -2,7 +2,7 @@
 
 use client_core::Approval;
 use client_core::calls;
-use gpui_kit::component::{ActiveTheme as _, h_flex, v_flex};
+use gpui_kit::component::{ActiveTheme as _, h_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, ClickEvent, Div, ElementId, FontWeight, IntoElement, ParentElement, Styled, Window, div,
@@ -11,7 +11,7 @@ use look::Hand as _;
 use protocol::event::{ApprovalDecision, Asking, EventBody};
 use protocol::model::Seq;
 
-use super::{Shared, empty, row};
+use super::{Shared, card, empty, row};
 use crate::item_key::ItemKey;
 use crate::prose::{TextAt, Written};
 
@@ -76,12 +76,5 @@ pub(super) fn approval_card(seq: Seq, body: &EventBody, open: bool, shared: &Sha
 
 /// A card that waits on the person. While it waits, it has an amber edge and a faint amber wash.
 fn waiting_card(open: bool, cx: &App) -> Div {
-    let theme = cx.theme();
-    v_flex()
-        .w_full()
-        .p_3()
-        .rounded_lg()
-        .border_1()
-        .border_color(if open { theme.warning.opacity(0.45) } else { theme.border })
-        .when(open, |d| d.bg(theme.warning.opacity(0.05)))
+    card::tinted(open.then(|| cx.theme().warning), cx)
 }

@@ -20,6 +20,7 @@ mod compaction_chats;
 mod context_screens;
 mod diff_screens;
 mod events;
+mod failure_chats;
 mod fake_hub;
 mod file_chats;
 mod finding;
@@ -147,6 +148,7 @@ fn screens() -> impl Iterator<Item = &'static steps::Screen> {
         .chain(subagent_chats::SCREENS)
         .chain(background_chats::SCREENS)
         .chain(compaction_chats::SCREENS)
+        .chain(failure_chats::SCREENS)
         .chain(cache_screens::SCREENS)
         .chain(UPDATE_SCREENS)
         .chain(workspace_screens::SCREENS)
