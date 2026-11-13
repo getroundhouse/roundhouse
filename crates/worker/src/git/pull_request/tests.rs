@@ -2,12 +2,12 @@ use protocol::model::{Checks, LeftQueue, Local, MergeState, PrState, PullRequest
 
 use super::super::tests::{new_repo, run};
 use super::local::local;
-use super::{ByUrl, Failing, Viewed, failing, parse_by_url, parse_pull_request, parse_rate_limit};
+use super::{ByUrl, Failing, Viewed, failing, parse_by_url, parse_commits, parse_pull_request, parse_rate_limit};
 
 #[test]
 fn a_pull_request_parses_from_what_gh_prints() {
     let json = br#"{"isDraft":false,"number":12,"state":"OPEN","title":"Fix login","url":"https://example.com/12",
-        "baseRefName":"main","headRefName":"aspen","headRefOid":"abc123","commits":[{"oid":"abc122"},{"oid":"abc123"}],
+        "baseRefName":"main","headRefName":"aspen","headRefOid":"abc123",
         "mergeStateStatus":"BLOCKED","reviewDecision":"",
         "statusCheckRollup":[
             {"__typename":"CheckRun","name":"test","status":"COMPLETED","conclusion":"SUCCESS"},
@@ -26,7 +26,21 @@ fn a_pull_request_parses_from_what_gh_prints() {
     assert_eq!((pr.merge_state, pr.review), (MergeState::Blocked, Review::NotRequired));
     assert_eq!(pr.checks, Checks { passed: 2, failed: 3, pending: 2 });
     assert_eq!((&viewed.from, &viewed.head), (&Some("aspen".into()), &Some("abc123".into())));
-    assert_eq!(viewed.commits(), ["abc122".into(), "abc123".into()]);
+}
+
+/// As `gh pr view <url> --json headRefOid,commits` prints them. It lists the first hundred, so the newest of a pull
+/// request with more comes after them.
+#[test]
+fn a_pull_requests_commits_are_its_first_hundred_and_its_newest() {
+    let few = br#"{"headRefOid":"abc123","commits":[{"oid":"abc122"},{"oid":"abc123"}]}"#;
+    let many = br#"{"headRefOid":"abc999","commits":[{"oid":"abc122"},{"oid":"abc123"}]}"#;
+    let unlisted = br#"{"headRefOid":"abc123"}"#;
+
+    assert_eq!(parse_commits(few), Some(vec!["abc122".into(), "abc123".into()]));
+    assert_eq!(parse_commits(many), Some(vec!["abc122".into(), "abc123".into(), "abc999".into()]));
+    assert_eq!(parse_commits(unlisted), Some(vec!["abc123".into()]));
+    assert_eq!(parse_commits(b"not json"), None);
+    assert_eq!(parse_commits(b"[]"), None, "not a pull request");
 }
 
 #[test]
@@ -56,10 +70,10 @@ fn each_check_counts_once_as_its_latest_run() {
 fn what_gh_leaves_out_is_unknown_but_a_pull_request_needs_its_number_and_url() {
     let json = br#"{"number":12,"state":"MERGED","url":"https://example.com/12"}"#;
 
-    let Viewed { pull_request: pr, from, head, first } = parse_pull_request(json).unwrap();
+    let Viewed { pull_request: pr, from, head } = parse_pull_request(json).unwrap();
 
     assert_eq!((pr.state, pr.merge_state, pr.checks), (PrState::Merged, MergeState::Unknown, Checks::default()));
-    assert_eq!((from, head, first), (None, None, vec![]));
+    assert_eq!((from, head), (None, None));
     assert_eq!(parse_pull_request(b"not json"), None);
     assert_eq!(parse_pull_request(br#"{"state":"OPEN"}"#), None);
 }
