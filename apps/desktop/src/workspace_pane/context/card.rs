@@ -57,7 +57,7 @@ fn compact(pane: &WeakEntity<WorkspacePane>, off: bool, cx: &App) -> Div {
 /// The bars' card: the plan beside its heading, which is what it's `called`, how much of each limit shown is left, as a
 /// bar that empties, and when it starts again, then whose account it is.
 pub(super) fn usage_card(usage: &Usage, called: SharedString, cx: &App) -> AnyElement {
-    let limits = usage.limits.iter().map(|(name, limit)| self::limit(name, limit, cx));
+    let limits = usage.limits.iter().map(|(name, limit)| self::limit(name.clone(), limit, cx));
     let plan = usage.account.plan.clone().map(SharedString::from);
     let limits = v_flex().gap_2p5().child(heading(called, plan, cx)).children(limits);
     let whose = whose(&usage.account, Plan::BesideHeading, cx);
@@ -113,15 +113,17 @@ fn in_it(context: &ContextUsage) -> Vec<&ContextPart> {
     parts
 }
 
-/// A limit called `name`.
-fn limit(name: &'static str, limit: &UsageLimit, cx: &App) -> AnyElement {
+/// A limit called `name`. A model's week is named by its provider's label for the model, which could be long, so the
+/// name is cut off before how much is left is.
+fn limit(name: SharedString, limit: &UsageLimit, cx: &App) -> AnyElement {
     let theme = cx.theme();
     let left = limit.left_percent();
     let resets = limit.resets_at_ms.and_then(|at_ms| look::day_and_time(at_ms, cx));
     let said = h_flex()
         .justify_between()
-        .child(div().text_color(theme.muted_foreground).child(name))
-        .child(div().font_weight(FontWeight::MEDIUM).child(format!("{left}% left")));
+        .gap_3()
+        .child(div().min_w_0().truncate().text_color(theme.muted_foreground).child(name))
+        .child(div().flex_none().font_weight(FontWeight::MEDIUM).child(format!("{left}% left")));
     let resets = resets.map(|when| div().text_xs().text_color(look::faint()).child(format!("Resets {when}")));
     v_flex().gap_1().child(said).child(bar(f32::from(left) / 100., cx)).children(resets).into_any_element()
 }

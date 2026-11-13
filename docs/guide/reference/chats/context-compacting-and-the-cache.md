@@ -35,12 +35,13 @@ It's refused while the agent is on a turn, and before it has had one, when there
 
 ## The account's limits
 
-A bar for each of your account's limits sits left of the ring, shortest window first. Each empties as the limit is used.
+A bar for each of your account's limits sits left of the ring, shortest window first. Each empties as the limit is used. With more than five limits, the bars show the five with the least left, and the card lists them all.
 
 Their card says how much of each is left, such as `96% left` of the `7d limit`, when it starts again, and your plan. Under the limits, it says whose account it is: the email, how it's logged in, and the model provider.
 
 ![The limits' card, open above their bars](../../../spec/screens/usage.png)
 
+- **A model's own weekly limit has a line of its own on the card,** and a bar while there's room, such as the `7d Fable limit`. Using it up stops that model, unless your account has usage credits to spend on it, while the others go on, so choose another model to carry on meanwhile.
 - **A limit is the account's, not the chat's,** so every chat under the same login shows the same.
 - **The bars follow what working agents report,** and are never more than about five minutes behind.
 - **Nothing shows for an account with no limits,** or until an agent under the account has heard of one. Then the ring's card says whose account it is instead.
