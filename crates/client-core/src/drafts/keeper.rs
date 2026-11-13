@@ -64,7 +64,7 @@ struct Pending {
 impl Keeper {
     fn run(mut self, requests: &flume::Receiver<Request>) {
         loop {
-            let waiting = self.pending.iter().filter(|(at, _)| !self.refuses(at));
+            let waiting = self.pending.iter().filter(|(key, _)| !self.refuses(key));
             let next = waiting.map(|(_, p)| p.due).min().filter(|_| !self.stalled);
             let request = match next {
                 Some(due) => requests.recv_deadline(due),
@@ -81,7 +81,7 @@ impl Keeper {
             self.keep(|pending| pending.due <= now);
             // Everything left waits for another connection.
             let mut files = self.adding.iter().map(|(to, _)| to).chain(self.removing.iter().map(|(from, _)| from));
-            let held = self.pending.keys().all(|at| self.refuses(at)) && files.all(|f| self.refuses(&f.key()));
+            let held = self.pending.keys().all(|key| self.refuses(key)) && files.all(|f| self.refuses(&f.key()));
             if self.stalled || held {
                 for done in self.flushing.drain(..) {
                     let _ = done.send(());
@@ -90,21 +90,21 @@ impl Keeper {
         }
     }
 
-    fn refuses(&self, at: &DraftKey) -> bool {
-        self.refused.contains(&std::mem::discriminant(at))
+    fn refuses(&self, key: &DraftKey) -> bool {
+        self.refused.contains(&std::mem::discriminant(key))
     }
 
     fn take(&mut self, request: Request) {
         let now = Instant::now();
         match request {
             Request::Changed { change, now: at_once } => {
-                let at = change.key();
+                let key = change.key();
                 // A change while one waits keeps its time, so typing that goes on is still kept every so often.
-                let waiting = self.pending.get(&at).map_or(now + PAUSE, |p| p.due);
+                let waiting = self.pending.get(&key).map_or(now + PAUSE, |p| p.due);
                 let due = if at_once || !self.answered { now } else { waiting };
-                if self.pending.insert(at.clone(), Pending { change, due }).is_some() {
+                if self.pending.insert(key.clone(), Pending { change, due }).is_some() {
                     // The one it replaces never needs to reach the hub.
-                    self.reached(&at, None);
+                    self.reached(&key, None);
                 }
             }
             Request::Attach { to, file } => self.adding.push_back((to, file)),
@@ -152,34 +152,34 @@ impl Keeper {
     }
 
     fn keep_changes(&mut self, due: impl Fn(&Pending) -> bool) {
-        let picked = self.pending.iter().filter(|(at, p)| due(p) && !self.refuses(at));
-        let picked: Vec<DraftKey> = picked.map(|(at, _)| at.clone()).collect();
-        for at in picked {
+        let picked = self.pending.iter().filter(|(key, p)| due(p) && !self.refuses(key));
+        let picked: Vec<DraftKey> = picked.map(|(key, _)| key.clone()).collect();
+        for key in picked {
             if self.stalled {
                 return;
             }
             // Refused earlier in this pass, by a change to another draft of the same kind.
-            if self.refuses(&at) {
+            if self.refuses(&key) {
                 continue;
             }
-            let Some(pending) = self.pending.remove(&at) else { continue };
+            let Some(pending) = self.pending.remove(&key) else { continue };
             let answer = self.send(&pending.change);
             let gone = matches!(answer, Err(ClientError::Io(_) | ClientError::Disconnected));
             let unsupported = answer.as_ref().is_err_and(ClientError::is_unsupported);
             // For the next connection, which may be to a hub that keeps it, such as this one once it's restarted as
             // the build that does. A hub that doesn't keep chats' drafts can't keep their files either, so everything
             // waits, but one that only doesn't keep answers or comments keeps the rest meanwhile.
-            if gone || (unsupported && matches!(at, DraftKey::Composer(_))) {
-                self.pending.insert(at, pending);
+            if gone || (unsupported && matches!(key, DraftKey::Composer(_))) {
+                self.pending.insert(key, pending);
                 self.stalled = true;
             } else if unsupported {
-                self.refused.insert(std::mem::discriminant(&at));
-                self.pending.insert(at, pending);
+                self.refused.insert(std::mem::discriminant(&key));
+                self.pending.insert(key, pending);
             } else {
                 // Kept, or the hub answered and won't keep this one however often it's asked, such as for a chat
                 // that's closed or gone.
                 self.answered = true;
-                self.reached(&at, answer.ok());
+                self.reached(&key, answer.ok());
             }
         }
     }
@@ -212,19 +212,19 @@ impl Keeper {
         while !self.stalled
             && let Some((to, file)) = self.adding.pop_front()
         {
-            let at = to.key();
-            if self.refuses(&at) {
+            let key = to.key();
+            if self.refuses(&key) {
                 held.push_back((to, file));
                 continue;
             }
             match self.add(&to, &file) {
                 // A hub that keeps chats' drafts but not the dialog's keeps neither its drafts nor its files.
                 Err(e) if e.is_unsupported() && to == FilesFor::NewWorkspace => {
-                    self.refused.insert(std::mem::discriminant(&at));
+                    self.refused.insert(std::mem::discriminant(&key));
                     held.push_back((to, file));
                 }
                 // Added, or the hub won't take it however often it's asked, and then a draft goes without it.
-                Ok(()) | Err(ClientError::Api(_) | ClientError::Unexpected(_)) => self.reached(&at, None),
+                Ok(()) | Err(ClientError::Api(_) | ClientError::Unexpected(_)) => self.reached(&key, None),
                 Err(ClientError::Io(_) | ClientError::Disconnected) => {
                     self.adding.push_front((to, file));
                     self.stalled = true;
@@ -254,8 +254,8 @@ impl Keeper {
     fn remove_files(&mut self) {
         let mut left = Vec::new();
         for (from, file) in std::mem::take(&mut self.removing) {
-            let at = from.key();
-            if self.stalled || self.refuses(&at) || self.pending.contains_key(&at) {
+            let key = from.key();
+            if self.stalled || self.refuses(&key) || self.pending.contains_key(&key) {
                 left.push((from, file));
                 continue;
             }
@@ -266,7 +266,7 @@ impl Keeper {
             match removed {
                 // A hub that doesn't keep the dialog, such as an older one reached since, which the file waits for.
                 Err(e) if e.is_unsupported() && from == FilesFor::NewWorkspace => {
-                    self.refused.insert(std::mem::discriminant(&at));
+                    self.refused.insert(std::mem::discriminant(&key));
                     left.push((from, file));
                 }
                 // Let go of, or the hub keeps it, such as for a prompt that carries it.
@@ -282,15 +282,15 @@ impl Keeper {
 
     /// Counts down one of the changes or files for a draft, which has reached the hub, or never needs to, along with
     /// the copy the hub gave back if it kept a change.
-    fn reached(&self, at: &DraftKey, kept: Option<Agreed>) {
+    fn reached(&self, key: &DraftKey, kept: Option<Agreed>) {
         let mut counts = self.counts.lock();
         if let Some(kept) = kept {
-            agree(&mut counts, at.clone(), kept);
+            agree(&mut counts, key.clone(), kept);
         }
-        if let Some(count) = counts.unkept.get_mut(at) {
+        if let Some(count) = counts.unkept.get_mut(key) {
             *count -= 1;
             if *count == 0 {
-                counts.unkept.remove(at);
+                counts.unkept.remove(key);
                 // Full only while a signal is waiting, which says the same.
                 let _ = self.catching_up.try_send(());
             }

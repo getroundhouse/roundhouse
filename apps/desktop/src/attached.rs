@@ -27,7 +27,7 @@ pub(crate) struct Attached {
     /// What its tile shows, for an image.
     preview: Option<Arc<Image>>,
     /// Which draft the hub was given it for, a chat's or the new-workspace dialog's, to keep with what's typed there.
-    kept_in: Option<FilesFor>,
+    kept_for: Option<FilesFor>,
 }
 
 impl Attached {
@@ -35,7 +35,7 @@ impl Attached {
     pub(crate) fn new(file: FileToSend) -> Self {
         let preview = transcript::image_format(file.attachment.media_type)
             .map(|format| Arc::new(Image::from_bytes(format, file.data.clone())));
-        Self { file, preview, kept_in: None }
+        Self { file, preview, kept_for: None }
     }
 
     fn name(&self) -> &str {
@@ -66,7 +66,7 @@ impl Attachments {
 
     /// Puts back the files the hub kept for a draft, as [`Attachments::put_back`] does.
     pub(crate) fn bring_back(&mut self, files: Vec<FileToSend>, kept_for: &FilesFor) -> Vec<String> {
-        let kept = |file| Attached { kept_in: Some(kept_for.clone()), ..Attached::new(file) };
+        let kept = |file| Attached { kept_for: Some(kept_for.clone()), ..Attached::new(file) };
         self.put_first(files.into_iter().map(kept).collect())
     }
 
@@ -83,7 +83,7 @@ impl Attachments {
     /// Takes a file out, and says which draft the hub was given it for, if any.
     pub(crate) fn remove(&mut self, id: &AttachmentId) -> Option<FilesFor> {
         let at = self.0.iter().position(|file| &file.file.attachment.id == id)?;
-        self.0.remove(at).kept_in
+        self.0.remove(at).kept_for
     }
 
     /// Keeps only the files `keep` picks, in their order, such as those a draft made elsewhere still names.
@@ -93,9 +93,9 @@ impl Attachments {
 
     /// The files the hub hasn't been given for a draft, to give it, and which from now on it's taken to have.
     pub(crate) fn not_yet_given(&mut self, kept_for: &FilesFor) -> Vec<FileToSend> {
-        let new = self.0.iter_mut().filter(|file| file.kept_in.as_ref() != Some(kept_for));
+        let new = self.0.iter_mut().filter(|file| file.kept_for.as_ref() != Some(kept_for));
         new.map(|file| {
-            file.kept_in = Some(kept_for.clone());
+            file.kept_for = Some(kept_for.clone());
             file.file.clone()
         })
         .collect()
@@ -103,7 +103,7 @@ impl Attachments {
 
     /// The IDs of the files the hub was given for a draft.
     pub(crate) fn given_for<'a>(&'a self, kept_for: &'a FilesFor) -> impl Iterator<Item = AttachmentId> + 'a {
-        let given = self.0.iter().filter(move |file| file.kept_in.as_ref() == Some(kept_for));
+        let given = self.0.iter().filter(move |file| file.kept_for.as_ref() == Some(kept_for));
         given.map(|file| file.file.attachment.id.clone())
     }
 

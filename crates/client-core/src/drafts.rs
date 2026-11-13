@@ -51,7 +51,7 @@ pub enum FilesFor {
 
 impl FilesFor {
     /// The draft that names them.
-    pub fn key(&self) -> DraftKey {
+    pub(crate) fn key(&self) -> DraftKey {
         match self {
             Self::Chat(id) => DraftKey::Composer(id.clone()),
             Self::NewWorkspace => DraftKey::NewWorkspace,
@@ -70,7 +70,7 @@ pub enum DraftChange {
 }
 
 impl DraftChange {
-    pub fn key(&self) -> DraftKey {
+    pub(crate) fn key(&self) -> DraftKey {
         match self {
             Self::Composer(id, _) => DraftKey::Composer(id.clone()),
             Self::Answer(id, _) => DraftKey::Answer(id.clone()),
@@ -156,8 +156,8 @@ impl Said {
     }
 
     /// What a record says of a draft with nothing in it.
-    fn nothing(at: &DraftKey) -> Self {
-        match at {
+    fn nothing(key: &DraftKey) -> Self {
+        match key {
             DraftKey::Composer(_) => Self::Composer(Draft::default()),
             DraftKey::Answer(_) => Self::Answer(None),
             DraftKey::Comment(_) => Self::Comment(None),
@@ -273,9 +273,9 @@ impl Drafts {
     }
 }
 
-/// Takes `copy` as the one the client and the hub agree on at `at`, unless the one it has is newer.
-fn agree(counts: &mut Counted, at: DraftKey, copy: Agreed) {
-    if counts.agreed.get(&at).is_none_or(|agreed| copy.rev > agreed.rev) {
-        counts.agreed.insert(at, copy);
+/// Takes `copy` as the one the client and the hub agree on for `key`, unless the one it has is newer.
+fn agree(counts: &mut Counted, key: DraftKey, copy: Agreed) {
+    if counts.agreed.get(&key).is_none_or(|agreed| copy.rev > agreed.rev) {
+        counts.agreed.insert(key, copy);
     }
 }

@@ -18,7 +18,7 @@ fn workspace(id: &str) -> WorkspaceId {
     id.into()
 }
 
-/// In the order of the places, since the keeper keeps different places in no particular order.
+/// In the order of the drafts, since the keeper keeps different drafts in no particular order.
 fn sorted(mut said: Vec<(String, String)>) -> Vec<(String, String)> {
     said.sort();
     said
@@ -41,8 +41,8 @@ fn an_answer_and_a_comment_are_each_kept_apart_from_the_chats_draft() {
     assert!(drafts.unkept(&DraftKey::Comment(workspace("w"))));
     let said = pairs(&[("a", "answer half an answer"), ("a", "typed"), ("w", "comment why?")]);
     assert_eq!(sorted(kept(&drafts, &heard)), said, "only the newest of each");
-    let places = [DraftKey::Composer(chat("a")), DraftKey::Answer(chat("a")), DraftKey::Comment(workspace("w"))];
-    assert!(places.iter().all(|at| !drafts.unkept(at)));
+    let keys = [DraftKey::Composer(chat("a")), DraftKey::Answer(chat("a")), DraftKey::Comment(workspace("w"))];
+    assert!(keys.iter().all(|key| !drafts.unkept(key)));
 }
 
 #[test]
@@ -66,10 +66,10 @@ fn what_a_hub_that_keeps_only_chats_drafts_refuses_waits_for_the_next_connection
     assert!(!drafts.unkept(&DraftKey::Answer(chat("a"))));
 }
 
-/// What's held for the next connection is kept all at once on it, so a hub that refuses one kind of place is asked
-/// about it once, rather than for each place of that kind.
+/// What's held for the next connection is kept all at once on it, so a hub that refuses one kind of draft is asked
+/// about it once, rather than for each draft of that kind.
 #[test]
-fn a_hub_that_refuses_a_kind_of_place_is_asked_about_it_once_a_connection() {
+fn a_hub_that_refuses_a_kind_of_draft_is_asked_about_it_once_a_connection() {
     let dir = tempfile::tempdir().unwrap();
     let (gone, _) = hub(&dir.path().join("gone.sock"), Answer::HangsUp);
     let drafts = Drafts::start(&gone);
@@ -93,7 +93,7 @@ fn answered(rev: u64, typed: &str) -> Session {
 }
 
 #[test]
-fn each_place_tells_what_was_made_elsewhere_by_its_own_copy() {
+fn each_draft_tells_what_was_made_elsewhere_by_its_own_copy() {
     let dir = tempfile::tempdir().unwrap();
     let drafts = Drafts::start(&keeping_hub(&dir.path().join("hub.sock"), 5));
 

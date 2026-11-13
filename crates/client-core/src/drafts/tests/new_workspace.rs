@@ -131,7 +131,7 @@ fn the_dialog_tells_what_was_made_elsewhere_by_its_own_copy() {
     assert!(!drafts.from_elsewhere(&KeptDraft::new_workspace(&told(7, "fix the login"))), "once it's taken");
 }
 
-/// Each hub counts its revisions from its own, and the dialog is the same place on every hub.
+/// Each hub counts its revisions from its own, and the dialog is the same draft on every hub.
 #[test]
 fn another_connection_forgets_the_dialogs_copy_agreed_on() {
     let dir = tempfile::tempdir().unwrap();

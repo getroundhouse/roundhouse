@@ -33,7 +33,8 @@ pub(crate) fn drafted(sessions: &[Session]) -> bool {
     sessions.iter().any(|s| s.is_open() && says_or_carries(&s.draft.text, s.draft.files.len()))
 }
 
-/// Whether something's typed in one place, which the hub keeps once it has it, and whether it hasn't had all of it yet.
+/// Whether something's typed in one draft, such as a chat's composer, which the hub keeps once it has it, and whether it
+/// hasn't had all of it yet.
 #[derive(Clone, Copy, Default)]
 struct Typed {
     any: bool,
