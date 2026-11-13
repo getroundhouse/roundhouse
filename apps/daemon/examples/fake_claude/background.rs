@@ -100,19 +100,24 @@ pub(crate) fn finished(config: &Config, out: &Out, id: &str, status: &str, told:
 
 /// Adds a task to the list, and lists them all.
 pub(crate) fn listed(config: &Config, out: &Out, id: &str, kind: &'static str, description: &str) {
-    TASKS.lock().push(Task { id: id.to_string(), kind, description: description.to_string() });
-    list(config, out);
+    let mut tasks = TASKS.lock();
+    tasks.push(Task { id: id.to_string(), kind, description: description.to_string() });
+    list(config, out, &tasks);
 }
 
 /// Takes a task out of the list, and lists the rest.
 pub(crate) fn unlisted(config: &Config, out: &Out, id: &str) {
-    TASKS.lock().retain(|task| task.id != id);
-    list(config, out);
+    let mut tasks = TASKS.lock();
+    tasks.retain(|task| task.id != id);
+    list(config, out, &tasks);
 }
 
-fn list(config: &Config, out: &Out) {
-    let tasks: Vec<_> = TASKS
-        .lock()
+/// Writes the list as it stands. Whoever changed it still holds it, so the lists are written in the order the list
+/// changed, and the last one written is the list as it is. A command, a monitor and a tool's task each end on a thread
+/// of their own here, and several can end at once. The real CLI's lists are taken not to cross, since it's one thread
+/// that changes its list, though no capture shows it ending several at once.
+fn list(config: &Config, out: &Out, tasks: &[Task]) {
+    let tasks: Vec<_> = tasks
         .iter()
         .map(|task| json!({"task_id":task.id,"task_type":task.kind,"description":task.description}))
         .collect();
@@ -147,14 +152,15 @@ pub(crate) fn watch_for_sigterm(config: &Config, out: &Out) {
         while !TERMINATED.load(Ordering::SeqCst) {
             std::thread::sleep(POLL);
         }
-        let stopped: Vec<_> = TASKS.lock().drain(..).collect();
+        let mut tasks = TASKS.lock();
+        let stopped: Vec<_> = tasks.drain(..).collect();
         // A tool's task goes with no word of it, and with only those listed, the real CLI writes nothing at all.
         let others: Vec<_> = stopped.iter().filter(|task| task.kind != "mcp_task").collect();
         for task in &others {
             notify(&config, &out, &task.id, "stopped");
         }
         if !others.is_empty() {
-            list(&config, &out);
+            list(&config, &out, &tasks);
         }
         std::process::exit(143);
     });
