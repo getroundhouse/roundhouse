@@ -86,7 +86,7 @@ pub(crate) fn own_group(command: &mut Command) {
 /// has to `SIGTERM`.
 pub(crate) fn signal_group(leader: u32, signal: Signal) {
     match signal {
-        Signal::Interrupt | Signal::Terminate | Signal::Kill => end_tree(leader),
+        Signal::Hangup | Signal::Interrupt | Signal::Terminate | Signal::Kill => end_tree(leader),
     }
 }
 
