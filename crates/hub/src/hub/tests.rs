@@ -37,6 +37,7 @@ pub(super) fn described() -> AgentDescription {
             effort: Effort::High,
         },
         features: vec![AgentFeature::Compacts],
+        login: None,
     }
 }
 

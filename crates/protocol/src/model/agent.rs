@@ -5,8 +5,9 @@ use serde::{Deserialize, Serialize};
 use super::{AgentKind, Effort, ModelName, PermissionMode, SessionSettings, SessionSettingsChange};
 
 /// A kind of agent, as its adapter describes it: what the interface calls it, the models, efforts and approval modes a
-/// chat can be given, what a chat runs with until another is chosen, and what it does that not every agent does. The
-/// hub serves one for each kind it runs, so a client offers what the agent takes rather than holding a list of its own.
+/// chat can be given, what a chat runs with until another is chosen, what it does that not every agent does, and what
+/// login a hub can hold for it. The hub serves one for each kind it runs, so a client offers what the agent takes rather
+/// than holding a list of its own.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct AgentDescription {
     pub kind: AgentKind,
@@ -28,6 +29,27 @@ pub struct AgentDescription {
     /// What it does that not every agent does. Whatever a hub leaves out, the agent doesn't do.
     #[serde(default)]
     pub features: Vec<AgentFeature>,
+    /// The login a hub can hold for an account of this kind and hand to the workers it launches agents on. `None` for a
+    /// kind a hub can hold none for, whose agents run under the login on their worker's machine, and from a hub older
+    /// than this. It describes the kind's login, and doesn't say this hub keeps logins: one that doesn't refuses
+    /// `account_connect` as `Unsupported`, which a client still has to expect. Nothing reads it yet: "Agent accounts"
+    /// in `docs/architecture.md` plans the hub that does.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub login: Option<LoginDescription>,
+}
+
+/// What the login a hub can hold for a kind of agent is: a token the agent's own CLI makes to last, which the person
+/// makes themselves and gives the hub.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct LoginDescription {
+    /// The command the person runs to make the token, as they'd type it, such as `claude setup-token`.
+    pub made_with: String,
+    /// How long a token the command makes works for, if the CLI says, which is what [`HeldLogin::ends_at_ms`] is worked out
+    /// from, since the CLI doesn't say when a given token ends.
+    ///
+    /// [`HeldLogin::ends_at_ms`]: super::HeldLogin::ends_at_ms
+    #[serde(default)]
+    pub lasts_ms: Option<i64>,
 }
 
 /// A model a chat is offered, by the name the agent's CLI takes, such as an alias, and what the interface calls it.

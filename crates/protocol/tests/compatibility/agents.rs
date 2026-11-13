@@ -3,11 +3,11 @@
 
 use protocol::client::{ClientResponse, HubFrame, ReplyOutcome, admin};
 use protocol::frame;
-use protocol::model::{AgentFeature, AgentKind, Effort, ModelName, PermissionMode};
+use protocol::model::{AgentFeature, AgentKind, Effort, LoginDescription, ModelName, PermissionMode};
 
 #[test]
 fn what_each_kind_offers_reads_and_what_a_newer_hub_adds_reads_as_unknown() {
-    let reply = br#"{"frame":"reply","id":5,"response":{"result":"agents","agents":[{"kind":"claude","name":"Claude Code","usage_heading":"Claude usage","models":[{"model":"opus","label":"Opus"},{"model":"haiku","label":"Haiku"}],"efforts":["low","xhigh","ultra"],"modes":["bypassPermissions","plan"],"defaults":{"model":"opus","permission_mode":"bypassPermissions","effort":"xhigh"},"features":["compacts","flies"],"from_a_newer_hub":true},{"kind":"from_a_newer_hub","name":"Other","usage_heading":"Other usage","models":[],"efforts":[],"modes":[],"defaults":{"model":"other","permission_mode":"bypassPermissions","effort":"low"}}]}}"#;
+    let reply = br#"{"frame":"reply","id":5,"response":{"result":"agents","agents":[{"kind":"claude","name":"Claude Code","usage_heading":"Claude usage","models":[{"model":"opus","label":"Opus"},{"model":"haiku","label":"Haiku"}],"efforts":["low","xhigh","ultra"],"modes":["bypassPermissions","plan"],"defaults":{"model":"opus","permission_mode":"bypassPermissions","effort":"xhigh"},"features":["compacts","flies"],"login":{"made_with":"claude setup-token","lasts_ms":31536000000,"from_a_newer_hub":true},"from_a_newer_hub":true},{"kind":"from_a_newer_hub","name":"Other","usage_heading":"Other usage","models":[],"efforts":[],"modes":[],"defaults":{"model":"other","permission_mode":"bypassPermissions","effort":"low"}}]}}"#;
 
     let HubFrame::Reply { outcome: ReplyOutcome::Response(ClientResponse::Agents(admin::Agents { agents })), .. } =
         frame::decode(reply).unwrap()
@@ -27,4 +27,7 @@ fn what_each_kind_offers_reads_and_what_a_newer_hub_adds_reads_as_unknown() {
     assert_eq!(claude.features, [AgentFeature::Compacts, AgentFeature::Unknown]);
     assert_eq!(other.kind, AgentKind::Unknown);
     assert!(other.features.is_empty(), "one left out does nothing it might not");
+    let login = LoginDescription { made_with: "claude setup-token".to_string(), lasts_ms: Some(31_536_000_000) };
+    assert_eq!(claude.login, Some(login));
+    assert_eq!(other.login, None, "one left out is a kind the hub can hold no login for");
 }

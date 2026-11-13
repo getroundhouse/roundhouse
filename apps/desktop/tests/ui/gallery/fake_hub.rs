@@ -317,6 +317,7 @@ fn claude() -> AgentDescription {
             effort: Effort::Xhigh,
         },
         features: vec![AgentFeature::Compacts],
+        login: None,
     }
 }
 

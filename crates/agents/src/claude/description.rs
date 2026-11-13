@@ -1,7 +1,8 @@
 //! What Claude is called and offers, for the hub to tell clients.
 
 use protocol::model::{
-    AgentDescription, AgentFeature, AgentKind, Effort, ModelChoice, ModelName, PermissionMode, SessionSettings,
+    AgentDescription, AgentFeature, AgentKind, Effort, LoginDescription, ModelChoice, ModelName, PermissionMode,
+    SessionSettings,
 };
 
 /// Aliases, so these stay the newest of each without a release here. There's no `default`, since a chat always says
@@ -21,6 +22,14 @@ const DEFAULTS: SessionSettings = SessionSettings {
     effort: Effort::Xhigh,
 };
 
+/// The command that makes a token for a hub to hold, which `login` gives the CLI. An interactive terminal app, as
+/// `docs/claude-cli.md` says, so the person runs it themselves.
+const MAKES_A_TOKEN: &str = "claude setup-token";
+
+/// How long a token `claude setup-token` makes works for, as the CLI says where it shows the token: "valid for 1
+/// year".
+const A_TOKEN_LASTS_MS: i64 = 365 * 24 * 60 * 60 * 1000;
+
 pub fn description() -> AgentDescription {
     AgentDescription {
         kind: AgentKind::Claude,
@@ -33,6 +42,7 @@ pub fn description() -> AgentDescription {
         defaults: DEFAULTS,
         // It's asked with `/compact`, as `process` sends it.
         features: vec![AgentFeature::Compacts],
+        login: Some(LoginDescription { made_with: MAKES_A_TOKEN.to_string(), lasts_ms: Some(A_TOKEN_LASTS_MS) }),
     }
 }
 
@@ -47,6 +57,14 @@ mod tests {
         assert!(claude.label(&claude.defaults.model).is_some());
         assert!(claude.efforts.contains(&claude.defaults.effort));
         assert!(claude.modes.contains(&claude.defaults.permission_mode));
+    }
+
+    #[test]
+    fn a_hub_can_hold_a_token_that_setup_token_makes_which_lasts_a_year() {
+        let login = description().login.unwrap();
+
+        assert_eq!(login.made_with, "claude setup-token");
+        assert_eq!(login.lasts_ms, Some(31_536_000_000));
     }
 
     #[test]

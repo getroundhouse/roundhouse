@@ -26,6 +26,7 @@ fn claude() -> AgentDescription {
             effort: Effort::High,
         },
         features: Vec::new(),
+        login: None,
     }
 }
 
