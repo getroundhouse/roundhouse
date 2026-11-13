@@ -49,8 +49,8 @@ pub(crate) use daemons::{binaries, point_daemons_at_the_fake_agent};
 pub(crate) use diff::Diff;
 pub(crate) use frozen::Frozen;
 pub(crate) use held::Held;
-pub(crate) use labels::MENU;
 pub(crate) use labels::labelled;
+pub(crate) use labels::{MENU, click_menu_item};
 /// For the gallery, which only a Mac draws.
 #[cfg(target_os = "macos")]
 pub(crate) use labels::{first_labelled, menu_item};
@@ -222,6 +222,15 @@ impl<'a> Ui<'a> {
             self.frame();
             done(self)
         });
+    }
+
+    /// Waits until no call the app started is under way, then for the app to take their replies, so whatever a call
+    /// started by mistake would have done has been done.
+    pub(crate) fn wait_for_every_call(&mut self) {
+        self.frame();
+        let finished = self.view().client().unwrap().commands().finished();
+        self.wait("every call to end", |_| finished.try_recv().is_ok());
+        self.frame();
     }
 
     /// Lets the app catch up. In a test, GPUI draws a window as soon as something in it has changed, so what's checked

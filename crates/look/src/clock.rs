@@ -5,7 +5,7 @@
 use std::sync::OnceLock;
 use std::time::Instant;
 
-use chrono::{DateTime, Datelike as _, FixedOffset, Local, Utc};
+use chrono::{DateTime, Datelike as _, FixedOffset, Local, NaiveDate, NaiveTime, TimeDelta, TimeZone, Utc};
 use gpui_kit::{App, Global};
 
 static START: OnceLock<Instant> = OnceLock::new();
@@ -40,6 +40,52 @@ pub fn local_time(at_ms: i64, cx: &App) -> Option<DateTime<FixedOffset>> {
     let at = DateTime::from_timestamp_millis(at_ms)?;
     Some(if cx.has_global::<Still>() { at.fixed_offset() } else { at.with_timezone(&Local).fixed_offset() })
 }
+
+/// How many days `to_ms`'s day is after `from_ms`'s, by the calendar in the local time zone as it was at each, so late
+/// one evening and early the next morning are a day apart. Less than nothing when `to_ms` is the earlier. `None` for a
+/// time too far off to say.
+pub fn days_apart(from_ms: i64, to_ms: i64, cx: &App) -> Option<i64> {
+    let (from, to) = (local_time(from_ms, cx)?.date_naive(), local_time(to_ms, cx)?.date_naive());
+    Some((to - from).num_days())
+}
+
+/// How many whole months `to_ms`'s day is after `from_ms`'s, by the calendar in the local time zone, as
+/// [`days_apart`] counts days: a month from the 15th to the 15th of the next, and none from the 1st to the 31st. Less
+/// than nothing when `to_ms` is the earlier. `None` for a time too far off to say.
+pub fn months_apart(from_ms: i64, to_ms: i64, cx: &App) -> Option<i64> {
+    Some(months_between(local_time(from_ms, cx)?.date_naive(), local_time(to_ms, cx)?.date_naive()))
+}
+
+/// When the day after `at_ms`'s starts, by the calendar in the local time zone: at midnight, or where a change to
+/// daylight saving skips midnight, at the first moment after it. In pictures it's midnight in UTC. `None` for a time
+/// too far off to say.
+pub fn next_day_at_ms(at_ms: i64, cx: &App) -> Option<i64> {
+    let next = local_time(at_ms, cx)?.date_naive().succ_opt()?;
+    if cx.has_global::<Still>() { start_of(next, &Utc) } else { start_of(next, &Local) }
+}
+
+/// How many whole months `to` is after `from`. A month ends on the same day of the month as it started, or on the
+/// last of a month too short to have that day, so from Jan 31 it's a month on Feb 28.
+fn months_between(from: NaiveDate, to: NaiveDate) -> i64 {
+    if to < from {
+        return -months_between(to, from);
+    }
+    let months = i64::from(to.year() - from.year()) * 12 + i64::from(to.month()) - i64::from(from.month());
+    let short = to.day() < from.day() && to.succ_opt().is_some_and(|next| next.month() == to.month());
+    if short { months - 1 } else { months }
+}
+
+/// When `day` starts in `zone`: at midnight, the first of the two where the clock goes back over midnight, and where it
+/// skips midnight, the first moment after the gap. A clock changes on a whole minute, so that's the first whole minute
+/// the day has, within a day of midnight, as there was once a zone that skipped a whole day.
+fn start_of<Tz: TimeZone>(day: NaiveDate, zone: &Tz) -> Option<i64> {
+    let midnight = day.and_time(NaiveTime::MIN);
+    (0..=MINUTES_IN_A_DAY)
+        .find_map(|minute| zone.from_local_datetime(&(midnight + TimeDelta::minutes(minute))).earliest())
+        .map(|starts| starts.timestamp_millis())
+}
+
+const MINUTES_IN_A_DAY: i64 = 24 * 60;
 
 /// When something happened, or will, with only as much of the day as it takes to tell: none today, the day of the week
 /// within a week either way, and the date beyond that, with the year if it's another one, as [`date_and_time`] says
@@ -100,55 +146,4 @@ pub fn hold_still(at_ms: i64, cx: &mut App) {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn at(text: &str) -> DateTime<FixedOffset> {
-        DateTime::parse_from_rfc3339(text).unwrap()
-    }
-
-    #[test]
-    fn a_time_past_says_only_as_much_of_its_day_as_it_takes_to_tell() {
-        let now = at("2026-11-02T09:00:00Z");
-
-        assert_eq!(day_and_time_from(at("2026-11-02T08:05:00Z"), now), "8:05 AM", "today");
-        assert_eq!(day_and_time_from(at("2026-11-01T23:42:00Z"), now), "Sun 11:42 PM", "yesterday, a few hours ago");
-        assert_eq!(day_and_time_from(at("2026-10-27T12:00:00Z"), now), "Tue 12:00 PM", "six days ago");
-        assert_eq!(
-            day_and_time_from(at("2026-10-26T23:42:00Z"), now),
-            "Oct 26 11:42 PM",
-            "a Monday a week ago isn't today"
-        );
-        assert_eq!(day_and_time_from(at("2025-12-30T23:42:00Z"), now), "Dec 30, 2025, 11:42 PM");
-    }
-
-    #[test]
-    fn a_day_has_its_year_and_a_time_of_day_the_clock_it_had_then() {
-        assert_eq!(date_of(at("2026-11-06T12:13:00Z")), "Nov 6, 2026");
-        assert_eq!(time_of(at("2026-11-06T12:13:00Z")), "12:13 PM");
-        assert_eq!(date_and_time_of(at("2026-11-06T12:13:00Z")), "Nov 6, 2026, 12:13 PM");
-        assert_eq!(date_of(at("2025-12-30T23:42:00-08:00")), "Dec 30, 2025", "not the next day, by UTC");
-        assert_eq!(time_of(at("2025-12-30T23:42:00-08:00")), "11:42 PM");
-    }
-
-    #[test]
-    fn a_time_to_come_is_said_the_same_way() {
-        let now = at("2026-11-10T14:00:00-08:00");
-
-        assert_eq!(day_and_time_from(at("2026-11-10T19:05:00-08:00"), now), "7:05 PM", "later today");
-        assert_eq!(day_and_time_from(at("2026-11-16T20:59:00-08:00"), now), "Mon 8:59 PM", "in six days");
-        assert_eq!(day_and_time_from(at("2026-11-17T20:59:00-08:00"), now), "Nov 17 8:59 PM", "a week on isn't today");
-        assert_eq!(day_and_time_from(at("2027-01-02T09:00:00-08:00"), now), "Jan 2, 2027, 9:00 AM");
-    }
-
-    #[test]
-    fn a_time_keeps_the_clock_it_had_then_across_a_change_to_daylight_saving() {
-        let winter = at("2026-11-02T09:00:00-08:00");
-
-        assert_eq!(
-            day_and_time_from(at("2026-11-01T00:30:00-07:00"), winter),
-            "Sun 12:30 AM",
-            "not Sat 11:30 PM by today's clock"
-        );
-    }
-}
+mod tests;

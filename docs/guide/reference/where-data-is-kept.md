@@ -17,6 +17,7 @@ In it:
 | `hub.db` | Every project, workspace and chat, and each chat's history |
 | `backups/` | Copies of the database from before each migration |
 | `attachments/` | The files prompts carried |
+| `logins/` | The tokens of the logins you've added in [Settings](settings.md#accounts), a file each, which only you can open. Disconnecting one removes its file |
 | `hub.log` | The hub's log |
 | `worker-logs/` | Each workspace's worker's log |
 

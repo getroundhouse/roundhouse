@@ -2,7 +2,7 @@
 
 use gpui_kit::{Context, FocusHandle, Window};
 
-use crate::settings::OfHub;
+use crate::settings::{Asking, OfHub};
 
 use super::AppView;
 
@@ -13,12 +13,10 @@ pub(super) struct Shown {
 }
 
 impl AppView {
-    /// The hub's own settings, for Settings to show and change. `None` while there's no hub to ask, and with a hub from
-    /// before it kept any.
-    pub(super) fn settings_of_hub(&self) -> Option<OfHub> {
-        let client = self.client()?;
-        let settings = self.feed.as_ref()?.snapshot().hub_settings()?.clone();
-        Some(OfHub { settings, client })
+    /// What Settings shows of the hub, and the hub it asks for a change.
+    pub(super) fn settings_of_hub(&self) -> OfHub {
+        let asking = self.client().zip(self.feed.clone()).map(|(client, feed)| Asking { client, feed });
+        OfHub { records: self.records.clone(), asking }
     }
 
     pub(super) fn settings_open(&self) -> bool {

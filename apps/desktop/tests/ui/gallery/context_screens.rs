@@ -1,6 +1,6 @@
 //! The screens about the context and the account, beside Send: the ring's card, as it usually is, when a setting caps
-//! the context and when it's the one card to say whose account it is, then the limits' card, and with a model's own
-//! weekly limit too.
+//! the context and when it's the one card to say whose account it is, for a login on the machine and for one the hub
+//! holds, then the limits' card, and with a model's own weekly limit too.
 
 #![cfg(test)]
 
@@ -9,7 +9,7 @@ use look::Region;
 use super::frame::{CONTEXT, Frame, Part};
 use super::screens::FOCUS;
 use super::steps::{Screen, Step, Target};
-use super::worlds::{context, context_capped, context_with_a_models_limit, context_without_limits};
+use super::worlds::{context, context_capped, context_held_login, context_with_a_models_limit, context_without_limits};
 
 /// The screens about the context and the account.
 pub(crate) const SCREENS: &[Screen] = &[
@@ -41,6 +41,13 @@ pub(crate) const SCREENS: &[Screen] = &[
         spec: "chats.md",
         world: Some(context_without_limits),
         // What the hover waits for is the bottom of the context card, so the frame names the whole card.
+        frame: CONTEXT,
+        steps: &[Step::Select(FOCUS), Step::Hover { on: Target::Id("context"), shows: "account" }],
+    },
+    Screen {
+        name: "context-held-login",
+        spec: "chats.md",
+        world: Some(context_held_login),
         frame: CONTEXT,
         steps: &[Step::Select(FOCUS), Step::Hover { on: Target::Id("context"), shows: "account" }],
     },

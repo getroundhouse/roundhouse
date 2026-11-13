@@ -1,10 +1,11 @@
 //! Finding what the window drew by the label it gives assistive apps, rather than by element ID, or by the start of
 //! its ID, for what a test can't know the ID of, such as a tool call's line.
 
-use gpui_kit::test::{ElementSnapshot, TestQueryExt as _};
-use gpui_kit::{AppContext as _, ElementId, SharedString, Window};
+use gpui_kit::test::{ElementSnapshot, TestQueryExt as _, TestWindowExt as _};
+use gpui_kit::{App, AppContext as _, ElementId, SharedString, Window};
 
 use super::Ui;
+use super::click::click_at;
 
 /// The ID the kit gives the menu that's open.
 pub(crate) const MENU: &str = "popup-menu";
@@ -20,6 +21,16 @@ pub(crate) fn first_labelled(window: &Window, label: &str) -> Option<ElementSnap
 /// The ID of the one element labelled `label`, to act on it.
 pub(crate) fn labelled(window: &Window, label: &str) -> ElementId {
     window.find_by_label(label).path().last().unwrap().clone()
+}
+
+/// Clicks the item labelled `label` in the menus that are open, rather than anything else with that label, such as the
+/// pull request's button of the same name, where it's drawn, as [`open_menu_item`] finds it. Like
+/// [`click`](super::click), it draws a frame to find it and none after, for a test that counts the frames that follow.
+pub(crate) fn click_menu_item(window: &mut Window, label: &str, cx: &mut App) {
+    window.render_frame(cx);
+    let item = open_menu_item(window, label);
+    assert!(item.visible(), "{label} can't be seen, so it can't be clicked");
+    click_at(window, item.bounds().center(), cx);
 }
 
 /// The one item labelled `label` in the menus that are open, even if something outside them has the same label, such
@@ -54,13 +65,11 @@ impl Ui<'_> {
         self.click(id);
     }
 
-    /// Clicks the item labelled `label` in the menus that are open, rather than anything else with that label, such as
-    /// the pull request's button of the same name. It's clicked where it's drawn, as [`open_menu_item`] finds it.
+    /// Clicks the item labelled `label` in the menus that are open, with [`click_menu_item`], and draws what it changed.
     pub(crate) fn click_menu_item(&mut self, label: &str) {
         self.frame();
-        let item = self.cx.update_window(self.handle, |_, window, _| open_menu_item(window, label)).unwrap();
-        assert!(item.visible(), "{label} can't be seen, so it can't be clicked");
-        self.click_at(item.bounds().center());
+        self.cx.update_window(self.handle, |_, window, cx| click_menu_item(window, label, cx)).unwrap();
+        self.frame();
     }
 
     /// Whether the last frame labelled the element with ID `id`, or something inside it, `label`.

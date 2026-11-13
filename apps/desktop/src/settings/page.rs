@@ -1,26 +1,31 @@
 //! Settings as it fills the window: a sidebar with a search at its top and a page for each part of the app under a
-//! heading, with a way back at its top right, and the settings on the chosen page beside it.
+//! heading, with a way back at its top right, and the chosen page beside it. Most pages are a list of settings, and a
+//! page with more to show than a setting's row, such as Accounts, draws what's on it itself.
 
 use std::rc::Rc;
 
 use gpui_kit::assets::IconName as Lucide;
+use gpui_kit::base::ScrollBounce;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::InputState;
 use gpui_kit::component::menu::PopupMenu;
 use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::component::{IconName, Sizable as _, v_flex};
 use gpui_kit::{
-    App, ClickEvent, Context, FocusHandle, InteractiveElement as _, IntoElement, ParentElement as _, Pixels,
-    RenderOnce, SharedString, Styled as _, TestSupportExt as _, Window, div, px,
+    AnyElement, App, ClickEvent, Context, FocusHandle, InteractiveElement as _, IntoElement, ParentElement as _,
+    Pixels, RenderOnce, ScrollHandle, SharedString, StatefulInteractiveElement as _, Styled as _, TestSupportExt as _,
+    Window, div, px,
 };
 use look::{Hand as _, Typeset as _};
 
-use client_core::Client;
-use protocol::model::{HubSettings, HubSettingsChange};
+use client_core::records::Snapshot;
+use client_core::{Client, RecordsFeed};
 
 use crate::FindSetting;
 use crate::workspace_pane::HEADER_HEIGHT;
 
+mod accounts;
+mod general;
 mod notifications;
 mod rows;
 mod sidebar;
@@ -33,23 +38,33 @@ pub(crate) const KEY_CONTEXT: &str = "Settings";
 /// The key that puts the cursor in the search, which the search shows at its right end.
 pub(crate) const FIND_KEY: &str = "secondary-f";
 
-/// A hub's own settings as they are now, and the hub to ask to change them.
+/// What Settings shows of the hub, and the hub to ask for a change.
 pub(crate) struct OfHub {
-    pub(crate) settings: HubSettings,
+    /// What's shown of the hub's records, as of the last change to them: its own settings, its accounts, and what it
+    /// says of its agents. Kept while the hub is out of reach, and empty until they've arrived.
+    pub(crate) records: Snapshot,
+    /// `None` while there's no hub to ask.
+    pub(crate) asking: Option<Asking>,
+}
+
+/// The hub to ask, and client-core's copy of its records, which takes in a record a reply carries, so what's shown
+/// needn't wait for the hub to say the same.
+#[derive(Clone)]
+pub(crate) struct Asking {
     pub(crate) client: Client,
+    pub(crate) feed: RecordsFeed,
 }
 
 /// What goes back from Settings to where the person was.
 type Back = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
 
 /// Settings, with `back` going back to where the person was. Keys reach it through `focus`. `width` is how wide the
-/// sidebar it stands in for is, whether or not that's showing. `hub` is the settings the hub keeps, or `None` while
-/// they can't be read or changed.
+/// sidebar it stands in for is, whether or not that's showing. `hub` is what it shows of the hub.
 pub(crate) fn page(
     focus: &FocusHandle,
     width: Pixels,
     back: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
-    hub: Option<OfHub>,
+    hub: OfHub,
 ) -> SettingsView {
     SettingsView { focus: focus.clone(), width, back: Rc::new(back), hub }
 }
@@ -59,7 +74,7 @@ pub(crate) struct SettingsView {
     focus: FocusHandle,
     width: Pixels,
     back: Back,
-    hub: Option<OfHub>,
+    hub: OfHub,
 }
 
 impl RenderOnce for SettingsView {
@@ -67,10 +82,12 @@ impl RenderOnce for SettingsView {
         // Kept only while Settings shows, so it opens with nothing typed, on its first page.
         let search = window.use_keyed_state("settings-search", cx, InputState::new);
         let chosen = window.use_keyed_state("settings-chosen", cx, |_, _| None::<PageId>);
-        let sections = found(sections(self.hub.as_ref()), &search.read(cx).value());
+        let scroll = window.use_keyed_state("settings-scroll", cx, |_, _| ScrollHandle::new()).read(cx).clone();
+        let sections = found(sections(&self.hub), &search.read(cx).value());
         let shown = shown(&sections, *chosen.read(cx));
+        let within = Within { focus: self.focus.clone(), scroll };
         let shown_page = match shown {
-            Some(page) => settings_page(page, cx).into_any_element(),
+            Some(page) => settings_page(page, &within, cx).into_any_element(),
             None => nothing_found(cx).into_any_element(),
         };
         let shown_id = shown.map(|page| page.id);
@@ -130,11 +147,16 @@ enum Control {
 }
 
 impl Setting {
-    /// Whether the search is in what it's called or what it does, in any case.
+    /// Whether the search is in what it's called or what it does.
     fn matches(&self, search: &str) -> bool {
-        let search = search.trim().to_lowercase();
-        [self.name, self.does].iter().any(|said| said.to_lowercase().contains(&search))
+        matches(search, &[self.name, self.does])
     }
+}
+
+/// Whether `search` is in any of what's `said`, in any case. A search of nothing is in everything.
+fn matches(search: &str, said: &[&str]) -> bool {
+    let search = search.trim().to_lowercase();
+    said.iter().any(|said| said.to_lowercase().contains(&search))
 }
 
 /// Which page, so a page is known by what it's for rather than by what it says.
@@ -142,6 +164,7 @@ impl Setting {
 enum PageId {
     General,
     Notifications,
+    Accounts,
 }
 
 impl PageId {
@@ -150,6 +173,7 @@ impl PageId {
         match self {
             PageId::General => "settings-page-general",
             PageId::Notifications => "settings-page-notifications",
+            PageId::Accounts => "settings-page-accounts",
         }
     }
 }
@@ -158,7 +182,40 @@ struct Page {
     id: PageId,
     name: &'static str,
     icon: Lucide,
-    settings: Vec<Setting>,
+    body: Body,
+}
+
+/// What a page shows under its name.
+enum Body {
+    /// Settings, a row each, which a search narrows to those that match it.
+    Settings(Vec<Setting>),
+    /// What the page draws itself, which a search finds whole, by the page's name or by what it's `about`, since a
+    /// setting's row can't show it.
+    Own { about: &'static str, draw: Draw },
+}
+
+/// Draws what's on a page of its own, each time it's the page showing.
+type Draw = Box<dyn Fn(&Within) -> AnyElement>;
+
+/// What a page is drawn within: Settings' focus, where keys reach it, for something on the page that goes while it
+/// has the focus to give it back to, and the scroll of the page under its name, to bring something on it into sight.
+#[derive(Clone)]
+struct Within {
+    focus: FocusHandle,
+    scroll: ScrollHandle,
+}
+
+impl Page {
+    /// Leaves on the page what `search` finds there, and says whether that's anything.
+    fn narrow(&mut self, search: &str) -> bool {
+        match &mut self.body {
+            Body::Settings(settings) => {
+                settings.retain(|setting| setting.matches(search));
+                !settings.is_empty()
+            }
+            Body::Own { about, .. } => matches(search, &[self.name, about]),
+        }
+    }
 }
 
 /// Pages under a heading.
@@ -168,18 +225,15 @@ struct Section {
 }
 
 /// Every page, under its heading.
-fn sections(hub: Option<&OfHub>) -> Vec<Section> {
-    vec![Section { heading: "Personal", pages: vec![general(hub), notifications::page()] }]
+fn sections(hub: &OfHub) -> Vec<Section> {
+    vec![Section { heading: "Personal", pages: vec![general::page(hub), notifications::page(), accounts::page(hub)] }]
 }
 
-/// What a search leaves: the settings that match it, on their pages, under their headings. A page with nothing left on
-/// it goes, and so does a heading with no page left under it.
+/// What a search leaves: the settings that match it, on their pages, and the pages of their own it finds, under their
+/// headings. A page with nothing left on it goes, and so does a heading with no page left under it.
 fn found(mut sections: Vec<Section>, search: &str) -> Vec<Section> {
     for section in &mut sections {
-        for page in &mut section.pages {
-            page.settings.retain(|setting| setting.matches(search));
-        }
-        section.pages.retain(|page| !page.settings.is_empty());
+        section.pages.retain_mut(|page| page.narrow(search));
     }
     sections.retain(|section| !section.pages.is_empty());
     sections
@@ -190,59 +244,6 @@ fn found(mut sections: Vec<Section>, search: &str) -> Vec<Section> {
 fn shown(sections: &[Section], chosen: Option<PageId>) -> Option<&Page> {
     let pages = || sections.iter().flat_map(|section| &section.pages);
     chosen.and_then(|id| pages().find(|page| page.id == id)).or_else(|| pages().next())
-}
-
-/// How the app behaves wherever it is, and what its hub does whether or not the app is open.
-fn general(hub: Option<&OfHub>) -> Page {
-    let always_expand_thinking = Setting {
-        name: "Always expand thinking",
-        does: "Show what the agent thinks in full, rather than as a line to open.",
-        control: Control::Switch {
-            is_on: Box::new(|cx| Some(super::get(cx).always_expand_thinking)),
-            set: Rc::new(|on, cx| super::change(cx, |settings| settings.always_expand_thinking = on)),
-        },
-    };
-    let keep_awake = Setting {
-        name: "Keep computer awake while agents are working",
-        does: "The display still sleeps, and closing the lid still puts the computer to sleep.",
-        control: hub_switch(
-            hub,
-            |settings| Some(settings.keep_awake),
-            |on| HubSettingsChange { keep_awake: Some(on), ..HubSettingsChange::default() },
-        ),
-    };
-    let allow_asked = Setting {
-        name: "Skip Claude's safety checks",
-        does: "With full access, Claude only stops to ask about commands it flags as possibly destructive, like rm -rf on a path it can't see. This lets those run without asking.",
-        control: hub_switch(
-            hub,
-            |settings| settings.allow_asked_in_full_access,
-            |on| HubSettingsChange { allow_asked_in_full_access: Some(on), ..HubSettingsChange::default() },
-        ),
-    };
-    let settings = vec![always_expand_thinking, keep_awake, allow_asked];
-    Page { id: PageId::General, name: "General", icon: Lucide::Settings2, settings }
-}
-
-/// A switch for one of the hub's own settings: on as `says` reads them, and flipped by asking the hub for the change
-/// `to` makes. It shows off and can't be flipped while there's no hub to ask, or with a hub that doesn't say.
-fn hub_switch(
-    hub: Option<&OfHub>,
-    says: fn(&HubSettings) -> Option<bool>,
-    to: fn(bool) -> HubSettingsChange,
-) -> Control {
-    let is_on = hub.and_then(|hub| says(&hub.settings));
-    let client = hub.map(|hub| hub.client.clone());
-    Control::Switch {
-        is_on: Box::new(move |_| is_on),
-        set: Rc::new(move |on, _| {
-            let Some(client) = &client else { return };
-            let change = to(on);
-            // Nothing waits for the reply: the switch shows what the hub says, which it says to every client once it
-            // has changed, and a hub that couldn't change it leaves the switch as it was.
-            drop(client.start(move |client| client.hub_configure(change)));
-        }),
-    }
 }
 
 /// In the strip along the top, level with the window's buttons at the other end, and muted, since it's not what
@@ -260,9 +261,11 @@ fn way_back(width: Pixels, back: Back, cx: &App) -> impl IntoElement {
     )
 }
 
-/// The page's name, large, below the strip along the top, which stays clear for moving the window, and its settings
-/// under it, which scroll once there are more than fit.
-fn settings_page(page: &Page, cx: &App) -> impl IntoElement {
+/// The page's name, large, below the strip along the top, which stays clear for moving the window, and what's on it
+/// under that, which scrolls once there's more than fits. It scrolls by `within`'s handle, which a page of its own can
+/// bring something into sight by, so it's made of the parts of the kit's own way, which keeps its handle to itself:
+/// the kit's scrollbar over it, and its bounce at the ends, on a Mac.
+fn settings_page(page: &Page, within: &Within, cx: &App) -> impl IntoElement {
     let title = div()
         .flex_none()
         .px_8()
@@ -271,10 +274,21 @@ fn settings_page(page: &Page, cx: &App) -> impl IntoElement {
         .typeset(look::Type::PageTitle)
         .text_color(look::colors(cx).text)
         .child(page.name);
-    let rows = page.settings.iter().map(|setting| rows::row(setting, cx));
-    let rows =
-        v_flex().id("settings-rows").flex_1().min_h_0().px_8().py_4().gap_4().children(rows).overflow_y_scrollbar();
-    v_flex().size_full().child(title).child(rows)
+    let on_it = v_flex().flex_none().w_full().px_8().py_4();
+    let on_it = match &page.body {
+        Body::Settings(settings) => on_it.gap_4().children(settings.iter().map(|setting| rows::row(setting, cx))),
+        Body::Own { draw, .. } => on_it.child(draw(within)),
+    };
+    let scrolled = div()
+        .id("settings-body")
+        .size_full()
+        .overflow_y_scroll()
+        .track_scroll(&within.scroll)
+        .child(on_it)
+        .test_support();
+    let bounce = ScrollBounce::new("settings-bounce", &within.scroll, scrolled);
+    let body = div().relative().flex_1().min_h_0().overflow_hidden().child(bounce).vertical_scrollbar(&within.scroll);
+    v_flex().size_full().child(title).child(body)
 }
 
 /// What shows in place of a page when the search matches no setting.

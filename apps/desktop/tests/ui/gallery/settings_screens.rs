@@ -7,10 +7,16 @@ use super::frame::Frame;
 use super::screens::FOCUS;
 use super::steps::{Screen, Step};
 use super::world::World;
-use super::worlds::{conversation, own_hub};
+use super::worlds::{accounts, conversation, logins_unkept, none_found, own_hub};
 
 /// What puts the cursor in Settings' search.
 const FIND: &str = "secondary-f";
+
+/// Shows Accounts, once Settings is open.
+const ACCOUNTS: Step = Step::Click("settings-page-accounts");
+
+/// A token pasted into the panel, which is plainly made up.
+const TOKEN: &str = "a-made-up-token";
 
 pub(crate) const SCREENS: &[Screen] = &[
     Screen {
@@ -26,6 +32,56 @@ pub(crate) const SCREENS: &[Screen] = &[
         world: Some(conversation),
         frame: Frame::Layout,
         steps: &[Step::Select(FOCUS), Step::OpenSettings, Step::Press(FIND), Step::Type("zebra")],
+    },
+    Screen {
+        name: "settings-accounts",
+        spec: "settings.md",
+        world: Some(accounts),
+        frame: Frame::Layout,
+        steps: &[Step::Select(FOCUS), Step::OpenSettings, ACCOUNTS],
+    },
+    Screen {
+        name: "settings-accounts-none-found",
+        spec: "settings.md",
+        world: Some(none_found),
+        frame: Frame::Layout,
+        steps: &[Step::Select(FOCUS), Step::OpenSettings, ACCOUNTS],
+    },
+    Screen {
+        name: "settings-accounts-connecting",
+        spec: "settings.md",
+        world: Some(none_found),
+        frame: Frame::Layout,
+        steps: &[
+            Step::Select(FOCUS),
+            Step::OpenSettings,
+            ACCOUNTS,
+            Step::Click("accounts-connect"),
+            Step::Type(TOKEN),
+            Step::Click("accounts-name"),
+            Step::Type("Build machines"),
+        ],
+    },
+    Screen {
+        name: "settings-accounts-renewing",
+        spec: "settings.md",
+        world: Some(accounts),
+        frame: Frame::Layout,
+        steps: &[
+            Step::Select(FOCUS),
+            Step::OpenSettings,
+            ACCOUNTS,
+            Step::Click("account-more-claude-login-0002"),
+            Step::ClickItem("Renew"),
+            Step::Type(TOKEN),
+        ],
+    },
+    Screen {
+        name: "settings-accounts-older-hub",
+        spec: "settings.md",
+        world: Some(logins_unkept),
+        frame: Frame::Layout,
+        steps: &[Step::Select(FOCUS), Step::OpenSettings, ACCOUNTS, Step::WaitFor("accounts-older-hub")],
     },
     Screen {
         name: "settings-older-hub",

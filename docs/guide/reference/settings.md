@@ -40,6 +40,37 @@ A chat needs you when it has a reply you haven't read, when it's waiting on you 
 
 On Windows and Linux no sound plays.
 
+## Accounts
+
+The logins your agents run under: those Claude Code already had where agents ran, and those you've given the hub.
+
+![Accounts, with Claude Code's own login and four you've added](../../spec/screens/settings-accounts.png)
+
+- **Found** has Claude Code's own login on a machine, such as this Mac's, once an agent has run under it. Roundhouse reads who it is, and never copies it, so there's nothing to do with it here.
+- **Added** has the logins you've given the hub. The hub hands the newest that hasn't ended to agents on any machine without a login of its own, this Mac included. Newest means connected or renewed most recently, so renewing an older login makes it the one handed out. A machine that has a login of its own keeps using it, so a Mac that's logged in to Claude Code goes on using that. Logins you've disconnected are listed last.
+- **Each row** says the day you last sent something in a chat under the account, such as yesterday or 3 days ago, once you have, and what's left of its limits, as the chat's limits' card does.
+
+### Connect an account
+
+1. Click **Connect account**.
+2. Copy the command it shows, `claude setup-token`, and run it in a terminal of your own. It signs you in through Claude's own page, and prints a token that lasts a year.
+3. Paste the token, give the account a name, and click **Connect**.
+
+![Connecting an account, with its token pasted](../../spec/screens/settings-accounts-connecting.png)
+
+The app hands the token to the hub, which keeps it in its own data, as [Where data is kept](where-data-is-kept.md) says. The app writes it nowhere. Roundhouse never runs the command or sees you sign in.
+
+A chat under the account names it by the name you gave it, where a login of the machine's own shows its email: on the card of its limits, beside Send, or on the context's card when there are no limits.
+
+### Renew and disconnect
+
+- **A login warns a month before it ends,** in amber, and in red once it has. Choose **Renew** in the row's **…** menu, run `claude setup-token` again for the same account, and paste the new token in the panel that opens under it. The account keeps its name, its limits and its chats.
+- **Disconnect,** in the same menu, has the hub forget the token, and asks first. The account stays, with **Connect again**, which takes pasting a token again. It doesn't revoke the token, which still works wherever else you've kept it.
+
+![Renewing a login that ends in nine days](../../spec/screens/settings-accounts-renewing.png)
+
+A hub from before hubs kept logins can't connect one, and says so. Updating it is the fix.
+
 ## Whose setting it is
 
 A setting belongs to whatever carries it out:

@@ -70,7 +70,7 @@ You need:
 
 - A Mac with Apple silicon.
 - Git, and a repository to work in.
-- The Claude CLI, `claude`, installed and logged in.
+- The Claude CLI, `claude`, installed, and logged in unless you add a login in Settings, which agents run under where the machine has none of its own.
 - GitHub's CLI, `gh`, logged in, for pull requests. Everything else works without it.
 
 Then:

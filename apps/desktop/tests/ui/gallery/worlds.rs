@@ -4,8 +4,8 @@
 
 use protocol::attachment::{Attachment, MediaType};
 use protocol::model::{
-    Account, AttachmentId, Checks, CommentId, CommitId, ContextPart, ContextPartKind, ContextUsage, DiffComment,
-    DiffSide, FileContents, GitDiff, LimitWindow, MaxSetBy, MergeState, ModelLabel, PermissionMode, PullRequest, Rev,
+    AttachmentId, Checks, CommentId, CommitId, ContextPart, ContextPartKind, ContextUsage, DiffComment, DiffSide,
+    FileContents, GitDiff, LimitWindow, MaxSetBy, MergeState, ModelLabel, PermissionMode, PullRequest, Rev,
     SessionStatus, SetupStatus, Title, UsageLimit, WorkspaceId, WorkspaceStatus,
 };
 
@@ -13,8 +13,10 @@ use super::screens::FOCUS;
 use super::world::{HOUR_MS, HubBuild, NOW_MS, World};
 use super::{chats, file_chats, patch, pictures, pull_requests, worktree};
 
+mod accounts;
 mod working;
 
+pub(super) use accounts::{accounts, context_held_login, logins_unkept, none_found};
 pub(super) use working::{
     queue_held, queued, steered, steered_thinking, streaming, thinking_streaming, waiting_on_checks, working_background,
 };
@@ -94,34 +96,7 @@ pub(super) fn context() -> World {
             part("Free space", 153_500, ContextPartKind::Free),
         ],
     });
-    let week = UsageLimit {
-        window: LimitWindow::SevenDays,
-        model: None,
-        used_percent: 4,
-        resets_at_ms: Some(NOW_MS + 150 * HOUR_MS),
-        // As an account's record has it, which doesn't say when.
-        heard_at_ms: None,
-    };
-    let hours = UsageLimit {
-        window: LimitWindow::FiveHours,
-        model: None,
-        used_percent: 29,
-        resets_at_ms: Some(NOW_MS + 3 * HOUR_MS),
-        heard_at_ms: None,
-    };
-    let account = Account {
-        id: "claude-0000000000000000".into(),
-        model_provider: Some("Anthropic API".to_string()),
-        plan: Some("Max".to_string()),
-        login: Some("Claude account".to_string()),
-        email: Some("ada@example.com".to_string()),
-        name: None,
-        login_agent: None,
-        limits: vec![hours, week],
-        held_login: None,
-        used_at_ms: None,
-        rev: Rev::default(),
-    };
+    let account = accounts::found();
     world.sessions.last_mut().unwrap().account = Some(account.id.clone());
     world.accounts.push(account);
     world

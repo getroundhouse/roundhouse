@@ -8,7 +8,7 @@ Claude, through the Claude CLI you already have. Other agents are designed for a
 
 ## Do I need an account?
 
-No. There's no Roundhouse account. You need the Claude CLI logged in, and `gh` logged in for pull requests.
+No. There's no Roundhouse account. You need the Claude CLI installed, and logged in unless you add a login in [Settings](../reference/settings.md#accounts), which agents run under where the machine has none of its own. You need `gh` logged in for pull requests.
 
 ## What does it cost?
 

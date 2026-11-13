@@ -2,7 +2,7 @@
 #![cfg(unix)]
 
 use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, ReplyOutcome, admin};
-use protocol::model::{Effort, ModelName, PermissionMode, SessionSettings};
+use protocol::model::{Effort, LoginDescription, ModelName, PermissionMode, SessionSettings};
 
 use super::*;
 use crate::stand_in_hub::{self, Does};
@@ -73,4 +73,16 @@ fn only_losing_the_connection_fails_asking() {
     let client = stand_in_hub::connect(&dir.path().join("hub.sock"), |_| Does::HangsUp);
 
     assert!(Agents::read(&client).is_err());
+}
+
+#[test]
+fn a_kind_has_a_login_the_hub_can_be_given_when_its_description_says_what_makes_one() {
+    let login = Some(LoginDescription { made_with: "claude setup-token".to_string(), lasts_ms: None });
+    let claude = AgentDescription { login: login.clone(), ..described(AgentKind::Claude) };
+    let newer = AgentDescription { login, ..described(AgentKind::Unknown) };
+
+    let agents = Agents { described: vec![newer, described(AgentKind::Claude), claude.clone()] };
+
+    assert_eq!(agents.with_logins().collect::<Vec<_>>(), [&claude], "not one this build can't name, nor one without");
+    assert_eq!(agents.named().count(), 2);
 }

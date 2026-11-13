@@ -136,7 +136,8 @@ fn limit(name: SharedString, limit: &UsageLimit, cx: &App) -> AnyElement {
         .child(div().flex_none().emphasis().child(format!("{left}% left")));
     let resets = resets
         .map(|when| div().typeset(look::Type::Detail).text_color(colors.text_faint).child(format!("Resets {when}")));
-    v_flex().gap_1().child(said).child(bar(f32::from(left) / 100., cx)).children(resets).into_any_element()
+    let bar = crate::limits::bar(left, BAR, cx);
+    v_flex().gap_1().child(said).child(bar).children(resets).into_any_element()
 }
 
 /// Whether the plan is said with whose account it is, or is already beside a heading above it.
@@ -146,11 +147,12 @@ enum Plan {
     BesideHeading,
 }
 
-/// Whose account it is, under a rule: the email, then more quietly how it's logged in and who serves the model,
-/// after the plan unless it's beside a heading. `None` when the worker said none of them.
+/// Whose account it is, under a rule: who it is, as [`crate::names::account`] says, the email, or the name the person
+/// gave an account whose login they added, then more quietly how it's logged in and who serves the model, after
+/// the plan unless it's beside a heading. `None` when nothing says any of them.
 fn whose(account: &Account, plan: Plan, cx: &App) -> Option<AnyElement> {
     let colors = look::colors(cx);
-    let who = account.email.clone();
+    let who = crate::names::account(account);
     let plan = account.plan.clone().filter(|_| plan == Plan::WithWhose);
     let how: Vec<String> =
         [plan, account.login.clone(), account.model_provider.clone()].into_iter().flatten().collect();
@@ -199,18 +201,6 @@ fn bar_with_room_kept_back(used: f32, kept_back: f32, cx: &App) -> Div {
         .gap(px(3.))
         .child(track().w(relative(usable)).flex_shrink(1.).child(filled))
         .children((kept_back > 0.).then(|| track().flex_1()))
-}
-
-/// A bar filled from the left by `share`, from 0 to 1. Like every bar here it's drawn at once, with nothing moving,
-/// which the kit's own bar and ring don't do: they glide to a new value.
-fn bar(share: f32, cx: &App) -> Div {
-    let color = look::colors(cx).text;
-    div()
-        .w_full()
-        .h(BAR)
-        .rounded_full()
-        .bg(color.opacity(0.12))
-        .child(div().h_full().rounded_full().bg(color).w(relative(share.clamp(0., 1.))))
 }
 
 #[cfg(test)]

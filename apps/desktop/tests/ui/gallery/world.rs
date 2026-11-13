@@ -65,6 +65,8 @@ pub(crate) struct World {
     pub(crate) accounts: Vec<Account>,
     /// The hub is from before hubs kept settings, so it sends none.
     pub(crate) keeps_no_settings: bool,
+    /// The hub is from before hubs kept logins, so it says nothing of what makes one, and refuses to connect one.
+    pub(crate) keeps_no_logins: bool,
     records: i64,
 }
 

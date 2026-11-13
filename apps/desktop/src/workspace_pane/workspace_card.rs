@@ -106,7 +106,7 @@ fn runs_on(workspace: &Workspace) -> SharedString {
     if !workspace.provider.is_local() {
         return workspace.provider.to_string().into();
     }
-    if cfg!(target_os = "macos") { "This Mac".into() } else { "This computer".into() }
+    format!("This {}", crate::names::MACHINE).into()
 }
 
 #[cfg(test)]
