@@ -430,7 +430,7 @@ Every call is drawn the same way, as `look.md` says, and each kind fills in what
 
 ## The model and plan mode
 
-- **Every agent has full access, and never asks before using a tool, except in plan mode.** Agents run side by side, and one that stopped to ask before each step would hold up its work until someone came back to it. An agent still asks about what its own CLI won't do unasked in any mode, such as Claude's check for a removal it can't rule out as dangerous, and says why. *Unconfirmed:* what it still asks about.
+- **Every agent has full access, and never asks before using a tool, except in plan mode.** Agents run side by side, and one that stopped to ask before each step would hold up its work until someone came back to it. An agent still asks about what its own CLI won't do unasked in any mode, such as Claude's check for a removal it can't rule out as dangerous, and says why, unless Skip Claude's safety checks, in `settings.md`, has the hub allow it for you. *Unconfirmed:* what it still asks about, and the setting.
 - **`Shift-Tab` in the composer turns plan mode on and off, and so does Plan mode in the menu the composer's `+` opens,** with no menu of modes. In plan mode the agent works out a plan and asks before changing anything, and approving its plan goes back to full access.
 
   **A plan waiting to be approved.** *Unconfirmed.*

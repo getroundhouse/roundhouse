@@ -70,7 +70,7 @@ impl RenderOnce for SettingsView {
         // Kept only while Settings shows, so it opens with nothing typed, on its first page.
         let search = window.use_keyed_state("settings-search", cx, InputState::new);
         let chosen = window.use_keyed_state("settings-chosen", cx, |_, _| None::<PageId>);
-        let sections = found(sections(self.hub), &search.read(cx).value());
+        let sections = found(sections(self.hub.as_ref()), &search.read(cx).value());
         let shown = shown(&sections, *chosen.read(cx));
         let shown_page = match shown {
             Some(page) => settings_page(page, cx).into_any_element(),
@@ -171,7 +171,7 @@ struct Section {
 }
 
 /// Every page, under its heading.
-fn sections(hub: Option<OfHub>) -> Vec<Section> {
+fn sections(hub: Option<&OfHub>) -> Vec<Section> {
     vec![Section { heading: "Personal", pages: vec![general(hub), notifications::page()] }]
 }
 
@@ -196,7 +196,7 @@ fn shown(sections: &[Section], chosen: Option<PageId>) -> Option<&Page> {
 }
 
 /// How the app behaves wherever it is, and what its hub does whether or not the app is open.
-fn general(hub: Option<OfHub>) -> Page {
+fn general(hub: Option<&OfHub>) -> Page {
     let always_expand_thinking = Setting {
         name: "Always expand thinking",
         does: "Show what the agent thinks in full, rather than as a line to open.",
@@ -205,23 +205,47 @@ fn general(hub: Option<OfHub>) -> Page {
             set: Rc::new(|on, cx| super::change(cx, |settings| settings.always_expand_thinking = on)),
         },
     };
-    let hub_says = hub.as_ref().map(|hub| hub.settings.keep_awake);
     let keep_awake = Setting {
         name: "Keep computer awake while agents are working",
         does: "The display still sleeps, and closing the lid still puts the computer to sleep.",
-        control: Control::Switch {
-            is_on: Box::new(move |_| hub_says),
-            set: Rc::new(move |on, _| {
-                let Some(hub) = &hub else { return };
-                let change = HubSettingsChange { keep_awake: Some(on), ..HubSettingsChange::default() };
-                // Nothing waits for the reply: the switch shows what the hub says, which it says to every client once
-                // it has changed, and a hub that couldn't change it leaves the switch as it was.
-                drop(hub.client.start(move |client| client.hub_configure(change)));
-            }),
-        },
+        control: hub_switch(
+            hub,
+            |settings| Some(settings.keep_awake),
+            |on| HubSettingsChange { keep_awake: Some(on), ..HubSettingsChange::default() },
+        ),
     };
-    let settings = vec![always_expand_thinking, keep_awake];
+    let allow_asked = Setting {
+        name: "Skip Claude's safety checks",
+        does: "With full access, Claude only stops to ask about commands it flags as possibly destructive, like rm -rf on a path it can't see. This lets those run without asking.",
+        control: hub_switch(
+            hub,
+            |settings| settings.allow_asked_in_full_access,
+            |on| HubSettingsChange { allow_asked_in_full_access: Some(on), ..HubSettingsChange::default() },
+        ),
+    };
+    let settings = vec![always_expand_thinking, keep_awake, allow_asked];
     Page { id: PageId::General, name: "General", icon: Lucide::Settings2, settings }
+}
+
+/// A switch for one of the hub's own settings: on as `says` reads them, and flipped by asking the hub for the change
+/// `to` makes. It shows off and can't be flipped while there's no hub to ask, or with a hub that doesn't say.
+fn hub_switch(
+    hub: Option<&OfHub>,
+    says: fn(&HubSettings) -> Option<bool>,
+    to: fn(bool) -> HubSettingsChange,
+) -> Control {
+    let is_on = hub.and_then(|hub| says(&hub.settings));
+    let client = hub.map(|hub| hub.client.clone());
+    Control::Switch {
+        is_on: Box::new(move |_| is_on),
+        set: Rc::new(move |on, _| {
+            let Some(client) = &client else { return };
+            let change = to(on);
+            // Nothing waits for the reply: the switch shows what the hub says, which it says to every client once it
+            // has changed, and a hub that couldn't change it leaves the switch as it was.
+            drop(client.start(move |client| client.hub_configure(change)));
+        }),
+    }
 }
 
 /// In the strip along the top, level with the window's buttons at the other end, and muted, since it's not what

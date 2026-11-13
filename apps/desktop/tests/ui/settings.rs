@@ -215,10 +215,39 @@ fn hub_keeps_awake(stack: &Stack) -> bool {
     stack.client().records_list().unwrap().hub_settings.unwrap().keep_awake
 }
 
+/// What the switch for the hub allowing what Claude's safety checks ask about is called.
+const SKIP_SAFETY_CHECKS: &str = "Skip Claude's safety checks";
+
+/// Whether the switch called `name` shows on, and whether it can be flipped.
+fn switch(ui: &mut Ui<'_>, name: &str) -> (bool, bool) {
+    let switch = &ui.labelled(name)[0];
+    (switch.checked() == Some(true), switch.disabled() != Some(true))
+}
+
 /// Whether the switch for keeping the computer awake shows on, and whether it can be flipped.
 fn keep_awake_switch(ui: &mut Ui<'_>) -> (bool, bool) {
-    let switch = &ui.labelled(KEEP_AWAKE)[0];
-    (switch.checked() == Some(true), switch.disabled() != Some(true))
+    switch(ui, KEEP_AWAKE)
+}
+
+/// What the hub's own settings say about allowing a tool's use itself, asked by a second client.
+fn hub_allows_what_full_access_asks(stack: &Stack) -> Option<bool> {
+    stack.client().records_list().unwrap().hub_settings.unwrap().allow_asked_in_full_access
+}
+
+#[gpui_kit::test]
+fn the_switch_for_skipping_claudes_safety_checks_changes_the_hubs_own_setting(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = typing(cx, &stack, "");
+    open_settings(&mut ui);
+    ui.wait("the switch to show the hub asks the person", |ui| switch(ui, SKIP_SAFETY_CHECKS) == (false, true));
+
+    ui.click_label(SKIP_SAFETY_CHECKS);
+
+    ui.wait("the hub to be told", |_| hub_allows_what_full_access_asks(&stack) == Some(true));
+    ui.wait("the switch to show on", |ui| switch(ui, SKIP_SAFETY_CHECKS) == (true, true));
+    assert_eq!(keep_awake_switch(&mut ui), (true, true), "the other is left as it was");
+    ui.click_label(SKIP_SAFETY_CHECKS);
+    ui.wait("the hub to be told again", |_| hub_allows_what_full_access_asks(&stack) == Some(false));
 }
 
 #[gpui_kit::test]
@@ -262,4 +291,5 @@ fn the_switch_cant_be_flipped_with_a_hub_from_before_it_kept_settings(cx: &mut T
     open_settings(&mut ui);
 
     assert_eq!(keep_awake_switch(&mut ui), (false, false), "an older hub doesn't keep the computer awake at all");
+    assert_eq!(switch(&mut ui, SKIP_SAFETY_CHECKS), (false, false), "nor allow a tool's use itself");
 }

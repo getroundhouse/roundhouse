@@ -40,7 +40,7 @@ An answered question is a line in the chat where the agent asked it: `Asked`, ea
 
 ## Approvals
 
-An agent in plan mode asks before using a tool. An agent with full access asks only about what its own CLI won't do unasked in any mode, such as a command that removes something it can't check.
+An agent in plan mode asks before using a tool. An agent with full access asks only about what its own CLI won't do unasked in any mode, such as a command that removes something it can't check, and not even that with **Skip Claude's safety checks** on in [Settings](../settings.md).
 
 Either way, the request takes the composer's place, as a question does, and is answered by the same keys.
 

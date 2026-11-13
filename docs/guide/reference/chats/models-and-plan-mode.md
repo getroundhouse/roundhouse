@@ -26,7 +26,7 @@ A chat is in one of two:
 
 | Mode | What the agent does |
 |---|---|
-| **Full access** | Uses any tool without asking, but for the few things its own CLI asks about in any mode. A chat starts here, unless plan mode was on in the new-workspace dialog |
+| **Full access** | Uses any tool without asking, but for the few things its own CLI asks about in any mode, which a setting can allow for you. A chat starts here, unless plan mode was on in the new-workspace dialog |
 | **Plan mode** | Works out a plan, and asks before changing anything |
 
 [Full access and plan mode](../../concepts/full-access-and-plan-mode.md) says why full access is where a chat starts.

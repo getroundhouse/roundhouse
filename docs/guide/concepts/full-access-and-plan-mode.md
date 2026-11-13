@@ -30,4 +30,6 @@ An agent with full access can still ask you something, when it needs a decision 
 
 It also asks about what its own CLI won't do unasked in any mode. Claude asks before a command that removes something it can't check, such as an `rm -rf` whose target is only known once the command runs, and says why. One of its subagents' commands is asked about the same way.
 
+To have these run without asking, turn on **Skip Claude's safety checks** in [Settings](../reference/settings.md). The hub then allows each one as it's asked, so the chat never waits, whether or not the app is open. It's off to start with, since what Claude asks about is what it couldn't rule out doing harm. Plan mode still asks, and so do questions.
+
 [Answer its questions](../guides/answer-its-questions.md) says how to answer each.
