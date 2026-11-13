@@ -11,12 +11,14 @@
 //!
 //! A text is parsed the first time its row is drawn, which is soon after the row loads, since the list measures
 //! loaded rows out of sight. What it shows is kept while its row is loaded, or it's selected, for a copy, and the
-//! subagent tab's head and foot while the tab is open. The blocks
-//! it's drawn from are kept for a long one, and for a short one only while it's among those drawn most recently, as
-//! `budget` says, and a short one is parsed again when it's next drawn. One over [`AT_ONCE`] is parsed on
-//! another thread, and draws nothing until it's in, when its row is measured again. The text the agent is still
-//! writing, and a prompt being sent, are drawn by the kit's text view, which `crate::long_texts` keeps. Once it's
-//! recorded, its row goes on drawing that view until the record's own parse is in, so it doesn't go blank between.
+//! subagent tab's head and foot while the tab is open. The blocks it's drawn from are kept for a long one, and for a
+//! short one only while it's among those drawn most recently, as `budget` says, and a short one is parsed again when
+//! it's next drawn. A text that goes on from what it was parsed as is parsed again from near its end, keeping the
+//! blocks before. When more than [`AT_ONCE`] is to be parsed, it's parsed on another thread, as `parsing` says, and
+//! draws what it was parsed as before until it's in, if it goes on from that, or nothing, and then its row is measured
+//! again. The text the agent is still writing, and a prompt being sent, are drawn by the kit's text view, which
+//! `crate::long_texts` keeps. Once it's recorded, its row goes on drawing that view until the record's own parse is
+//! in, so it doesn't go blank between.
 //!
 //! A row draws its event's texts through [`Prose::drawing`], as the subagent tab draws its head and foot, which hides
 //! each text it no longer draws, such as a thought that's been closed, so a copy has only what's shown. A hidden text
@@ -29,7 +31,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use client_core::session_log::{Row, SessionLog};
-use gpui_kit::{AnyElement, App, ElementId, ImageSource, IntoElement, SharedUri, Task, WeakEntity};
+use gpui_kit::{AnyElement, ElementId, ImageSource, IntoElement, SharedUri, Task, WeakEntity};
 use protocol::model::Seq;
 
 use crate::find::{FindLook, Part, TextId, view_id};
@@ -42,9 +44,11 @@ pub(crate) use parse::{ATOM, Parsed, leaves};
 mod budget;
 mod element;
 mod parse;
+mod parsing;
 
-/// The longest text that's parsed where it's drawn. Parsing takes about 0.2 ms a KB on the main thread, so this
-/// takes under a millisecond, and a longer one is parsed on another thread.
+/// The most of a text that's parsed where it's drawn: all of it, or what's parsed again of one that goes on. Parsing
+/// takes about 0.1 ms a KB of prose on the main thread, and 0.35 ms a KB of a list, so this takes under 1.5 ms, and
+/// more is parsed on another thread. `docs/performance.md` has how that was measured.
 const AT_ONCE: usize = 4 * 1024;
 
 /// Where a text is in the chat: what draws it, which of its blocks it's drawn in, and where it is among the texts that
@@ -123,21 +127,35 @@ enum Text {
     /// A short text not drawn lately, with what it shows, for a copy, and not its blocks, which it's parsed for again
     /// when it's next drawn.
     Read { leaves: Arc<[String]> },
-    /// Being parsed on another thread, by a task that's dropped, and stops, with this.
-    Parsing { source: String, _task: Task<()> },
+    /// Being parsed from `source` on another thread, by a task that's dropped, and stops, with this. One that goes on
+    /// from what it was parsed as is drawn as that, `was`, until it's in.
+    Parsing { source: String, was: Option<Rc<Parsed>>, _task: Task<()> },
 }
 
 impl Text {
-    /// Whether it's being parsed from `source` on another thread.
-    fn is_parsing(&self, source: &str) -> bool {
-        matches!(self, Text::Parsing { source: parsing, .. } if parsing == source)
+    /// What it's being parsed from on another thread, if it is.
+    fn parsing(&self) -> Option<&str> {
+        match self {
+            Text::Parsing { source, .. } => Some(source),
+            Text::Parsed { .. } | Text::Read { .. } => None,
+        }
     }
 
+    /// What it shows, as far as it's been parsed.
     fn leaves(&self) -> Option<Arc<[String]>> {
         match self {
-            Text::Parsed { parsed, .. } => Some(parsed.leaves.clone()),
+            Text::Parsed { parsed, .. } | Text::Parsing { was: Some(parsed), .. } => Some(parsed.leaves.clone()),
             Text::Read { leaves } => Some(leaves.clone()),
-            Text::Parsing { .. } => None,
+            Text::Parsing { was: None, .. } => None,
+        }
+    }
+
+    /// What it was last parsed as, which a text that goes on from it is parsed again from the end of.
+    fn was(&self) -> Option<Rc<Parsed>> {
+        match self {
+            Text::Parsed { parsed, .. } => Some(parsed.clone()),
+            Text::Parsing { was, .. } => was.clone(),
+            Text::Read { .. } => None,
         }
     }
 }
@@ -211,8 +229,8 @@ impl Prose {
         drawn
     }
 
-    /// Draws `written`, with its images found by `images`. Until a long text is parsed, it's what `until_parsed`
-    /// draws, or nothing.
+    /// Draws `written`, with its images found by `images`. Until a long text is parsed, it's what it was parsed as
+    /// before, if it goes on from that, or what `until_parsed` draws, or nothing.
     pub(crate) fn draw(
         &self,
         selection: &Selection,
@@ -230,62 +248,17 @@ impl Prose {
             "a text drawn outside what draws it is never hidden once it isn't"
         );
         let source = images_apart(written.text);
-        let (text, marks) = match self.parsed(written.at, &source) {
+        let (parsed, apart) = self.parsed(written.at, &source);
+        let (text, marks) = match parsed {
             Some(parsed) => {
                 let marks = written.found.map_or_else(Vec::new, |(id, find)| find.marks_in_leaves(id, &parsed.leaves));
                 (Drawing::Parsed(parsed), marks)
             }
-            None => (Drawing::Unparsed { source: source.into_owned(), meanwhile: until_parsed() }, Vec::new()),
+            None => (Drawing::Meanwhile(until_parsed()), Vec::new()),
         };
         let (prose, selection) = (self.clone(), selection.clone());
         let (id, at, area) = (written.element.clone(), written.at, written.area.clone());
-        ProseElement { id, at, area, text, marks, images, prose, selection }.into_any_element()
-    }
-
-    /// `source`, parsed, as the text at `at`, to draw, if it has been, or it's short enough to parse now.
-    fn parsed(&self, at: TextAt, source: &str) -> Option<Rc<Parsed>> {
-        let mut texts = self.0.borrow_mut();
-        let now = texts.frame;
-        match texts.texts.get_mut(&at) {
-            Some(Text::Parsed { parsed, drawn }) if parsed.source == source => {
-                *drawn = now;
-                return Some(parsed.clone());
-            }
-            Some(Text::Parsing { source: parsing, .. }) if parsing == source => return None,
-            Some(_) | None => {}
-        }
-        if source.len() > AT_ONCE {
-            return None;
-        }
-        let parsed = Rc::new(parse::parse(source.to_owned()));
-        texts.texts.insert(at, Text::Parsed { parsed: parsed.clone(), drawn: now });
-        texts.parsed_one();
-        Some(parsed)
-    }
-
-    /// Parses `source` on another thread as the text at `at`, unless it's already being parsed, and measures its row
-    /// again once it's in. It says what it said, so there's nothing new to find in it.
-    fn parse_apart(&self, at: TextAt, source: &str, cx: &mut App) {
-        let mut texts = self.0.borrow_mut();
-        if texts.texts.get(&at).is_some_and(|text| text.is_parsing(source)) {
-            return;
-        }
-        let (prose, transcript, given) = (Rc::downgrade(&self.0), texts.transcript.clone(), source.to_owned());
-        let parsing = cx.spawn(async move |cx| {
-            let parsed = cx.background_executor().spawn(async move { parse::parse(given) }).await;
-            let Some(prose) = prose.upgrade() else { return };
-            // What it replaces holds this task, which goes once it's done.
-            let _was = {
-                let mut texts = prose.borrow_mut();
-                if !texts.texts.get(&at).is_some_and(|text| text.is_parsing(&parsed.source)) {
-                    return;
-                }
-                let drawn = texts.frame;
-                texts.texts.insert(at, Text::Parsed { parsed: Rc::new(parsed), drawn })
-            };
-            let _ = transcript.update(cx, |transcript, cx| transcript.redrawn(at.of, cx));
-        });
-        texts.texts.insert(at, Text::Parsing { source: source.to_owned(), _task: parsing });
+        ProseElement { id, at, area, text, apart, marks, images, prose, selection }.into_any_element()
     }
 
     /// What the texts from `from` to `to`, both in, show, leaf by leaf, in order, as far as they've been parsed, but
@@ -326,7 +299,7 @@ impl Prose {
     /// Whether every text drawn has been parsed, so each row has the height it will keep.
     #[cfg(feature = "testing")]
     pub(crate) fn all_parsed(&self) -> bool {
-        self.0.borrow().texts.values().all(|text| text.leaves().is_some())
+        self.0.borrow().texts.values().all(|text| !matches!(text, Text::Parsing { .. }))
     }
 
     /// What each text that keeps its blocks was parsed from.
