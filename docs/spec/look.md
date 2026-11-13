@@ -9,8 +9,7 @@ It's meant to feel familiar to the people Roundhouse is for, and it sets itself 
 Each colour means one thing.
 
 - **Three warm near-black surfaces,** so the app reads as one calm field with a few raised things on it. The pane is `#151312`, the sidebar `#1a1715`, and anything raised, such as a card or a popover, is `#24201e`. The composer and code blocks are `#1e1b19`. A prompt is a wash of the brand's copper, `#37281f`, so what was asked is easy to find when scrolling.
-- **One thin edge colour, `#2a2624`, and no shadows.** Edges separate, and nothing floats.
-- **A field on the sidebar, such as Settings' search, has a lighter edge, `#434140`,** since it's something to type in rather than something that separates. *Unconfirmed.* So does the button back down to a chat's end, which sits over the chat's text, as `chats.md` says.
+- **Two edge colours, and no shadows.** The thin edge that separates, around a card, along a header or between rows, is `#2a2624`. Something to use, such as the composer, a chip, a key, a field or a button that opens something, has a lighter edge, `#353130`, so it reads as something to use rather than as a line between two things. So does the button back down to a chat's end, which sits over the chat's text, as `chats.md` says. Nothing floats.
 - **A dialog dims everything behind it to 40% of its brightness,** under 60% black, so it's plainly the one thing to deal with, and what's behind it reads as out of reach. *Unconfirmed.*
 - **Three text colours:** foreground `#ebe7e3`, muted `#a39d97`, and faint `#6f6964` for meta, line numbers and hints.
 - **Copper, `#d08a5c`, is the brand.** It's for empty states, the app icon, keyboard focus, the edge of a comment being written, the wash behind a prompt and, quieter, a composer that's planning, and never a status.
@@ -42,8 +41,7 @@ Each colour means one thing.
 | `raised_pressed` | `#322d2a` | Something raised, pressed, and the sidebar's selected row |
 | **Edges** | | |
 | `edge` | `#2a2624` | The thin edge that separates: around a card, along a header, between rows |
-| `control_edge` | `#353130` | Something to use: the composer, a chip, a key, a button that opens something |
-| `field_edge` | `#434140` | A field on the sidebar, and the button back down to a chat's end |
+| `control_edge` | `#353130` | Something to use: the composer, a chip, a key, a field, a button that opens something, the button back down to a chat's end |
 | **Text** | | |
 | `text` | `#ebe7e3` | What to read |
 | `text_muted` | `#a39d97` | What's secondary, and a name that needs nothing from you |
