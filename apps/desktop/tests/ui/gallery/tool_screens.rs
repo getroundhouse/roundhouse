@@ -7,9 +7,10 @@ use look::Region;
 use protocol::model::SessionStatus;
 
 use super::frame::{CHAT, Frame, Part};
+use super::image_chats::{AFTER_DRAWN, pointed, pointed_among_words, pointed_on_lines};
 use super::screens::FOCUS;
 use super::steps::{Screen, Step, Target};
-use super::worlds::{chat_world, pointed, read_image, steered_thinking, thinking_streaming};
+use super::worlds::{chat_world, read_image, steered_thinking, thinking_streaming};
 use super::{chats, file_chats, question_chats, tool_chats};
 
 pub(crate) const TOOL_SCREENS: &[Screen] = &[
@@ -92,6 +93,27 @@ pub(crate) const TOOL_SCREENS: &[Screen] = &[
         steps: &[Step::Select(FOCUS), Step::Open("Edit"), Step::Open("Search")],
     },
     Screen { name: "reply-image", spec: "chats.md", world: Some(pointed), frame: CHAT, steps: &[Step::Select(FOCUS)] },
+    Screen {
+        name: "reply-image-opened",
+        spec: "chats.md",
+        world: Some(pointed),
+        frame: Frame::Dialog,
+        steps: &[Step::Select(FOCUS), Step::WaitFor(AFTER_DRAWN), Step::Click(AFTER_DRAWN)],
+    },
+    Screen {
+        name: "reply-image-among-words",
+        spec: "chats.md",
+        world: Some(pointed_among_words),
+        frame: CHAT,
+        steps: &[Step::Select(FOCUS)],
+    },
+    Screen {
+        name: "reply-images",
+        spec: "chats.md",
+        world: Some(pointed_on_lines),
+        frame: CHAT,
+        steps: &[Step::Select(FOCUS)],
+    },
     Screen {
         name: "thinking",
         spec: "chats.md",

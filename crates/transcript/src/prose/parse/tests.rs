@@ -3,7 +3,11 @@ use proptest::prelude::*;
 use proptest::sample::select;
 use proptest::test_runner::{Config, RngSeed};
 
+use gpui_kit::base::text::editor_host::BlockNode;
+
+use super::ImagesAre::{self, TheKits, TheTranscripts};
 use super::{ATOM, Parsed, again, gone_on, leaves, parse};
+use crate::linked_images;
 
 /// Bits of Markdown whose blocks a text that goes on can change: a paragraph a line of `=` makes a heading, lists,
 /// fences that are open, some of them indented, a definition before its use, a footnote and words beyond ASCII. With
@@ -45,6 +49,10 @@ const TABLES: &[&str] = &["| a | b |\n", "|---|---|\n", "| c | d |\n"];
 
 const QUOTES: &[&str] = &["> quoted\n", ">\n", "> > nested\n"];
 
+/// Images the transcript draws when it can, and some it leaves to the kit, beside what a paragraph can hold.
+const IMAGES: &[&str] =
+    &["**![b](b.png)**", "[![e](e.png)](https://example.com)", "\n\n![alone](a.png)\n\n", "_![c](c.png)_ ", "<br>"];
+
 /// `bits` and `more`, each as likely as the other.
 fn with(more: &'static [&'static str]) -> Vec<&'static str> {
     BITS.iter().chain(more).copied().collect()
@@ -68,12 +76,12 @@ fn drawn(parsed: &Parsed) -> String {
 
 /// What `was` parsed and then gone on to `source` is drawn as, and what `source` parsed whole is.
 fn going_on(was: &str, source: &str) -> (String, String) {
-    let was = parse(was.to_owned());
+    let was = parse(was.to_owned(), TheKits);
     let gone = match again(&was, source) {
         Some(again) => gone_on(&was, again, source.to_owned()),
-        None => parse(source.to_owned()),
+        None => parse(source.to_owned(), TheKits),
     };
-    (drawn(&gone), drawn(&parse(source.to_owned())))
+    (drawn(&gone), drawn(&parse(source.to_owned(), TheKits)))
 }
 
 #[test]
@@ -151,6 +159,14 @@ proptest! {
         let (gone, whole, text) = in_pieces(&bits, &cuts);
         prop_assert_eq!(gone, whole, "{:?}", text);
     }
+
+    /// Find counts what a text shows from its leaves as parsed for the kit to draw its images, and the selection
+    /// keeps them, whoever draws them.
+    #[test]
+    fn a_text_has_the_same_leaves_whoever_draws_its_images(bits in vec(select(with(IMAGES)), 1..24)) {
+        let text = bits.concat();
+        prop_assert_eq!(parse(text.clone(), TheTranscripts).leaves, parse(text.clone(), TheKits).leaves, "{:?}", text);
+    }
 }
 
 /// What `bits`, together, are drawn as when they come in cut where `cuts` say, parsed again from near the end each time
@@ -161,15 +177,15 @@ fn in_pieces(bits: &[&str], cuts: &[usize]) -> (String, String, String) {
     let mut cuts: Vec<usize> = cuts.collect();
     cuts.sort_unstable();
     cuts.push(text.len());
-    let mut parsed = parse(String::new());
+    let mut parsed = parse(String::new(), TheKits);
     for cut in cuts {
         let source = text[..cut].to_owned();
         parsed = match again(&parsed, &source) {
             Some(again) => gone_on(&parsed, again, source),
-            None => parse(source),
+            None => parse(source, TheKits),
         };
     }
-    (drawn(&parsed), drawn(&parse(text.clone())), text)
+    (drawn(&parsed), drawn(&parse(text.clone(), TheKits)), text)
 }
 
 #[test]
@@ -187,10 +203,48 @@ fn an_image_in_text_is_one_character_of_its_leaf_and_one_alone_is_no_leaf() {
 }
 
 #[test]
+fn a_texts_images_are_the_transcripts_to_draw_only_if_it_has_any_and_they_can_be_looked_up() {
+    assert_eq!(ImagesAre::of("The board, after: ![The board](board.png)", true), TheTranscripts);
+    assert_eq!(ImagesAre::of("The board, after: ![The board][board]", true), TheTranscripts, "by reference too");
+    assert_eq!(ImagesAre::of("The board is red at stop now.", true), TheKits, "none to draw");
+    assert_eq!(ImagesAre::of("![The board](board.png)", false), TheKits, "none to look up");
+}
+
+/// A text that goes on is parsed again from near its end, and the images taken from what's parsed again are known by
+/// where they start in all of it, as a whole parse knows them, so no two share a name.
+#[test]
+fn a_text_parsed_again_from_near_its_end_knows_its_images_by_where_they_start_in_all_of_it() {
+    let was = "The board, before the fix.\n\nAnd";
+    let source = format!("{was} after it, ![among words](a.png) and on a line of its own:\n\n![alone](b.png)");
+    let was = parse(was.to_owned(), TheTranscripts);
+    let again = again(&was, &source).expect("parsed again from its last block");
+
+    let gone = gone_on(&was, again, source.clone());
+
+    assert!(again.byte > 0, "from part of the way in");
+    assert_eq!(taken(&gone), [source.find("![among"), source.find("![alone")]);
+    assert_eq!(taken(&gone), taken(&parse(source, TheTranscripts)), "as a whole parse has them");
+}
+
+/// Where each image the transcript took from `parsed` starts in its text, in order.
+fn taken(parsed: &Parsed) -> Vec<Option<usize>> {
+    let mut taken = Vec::new();
+    for block in &parsed.blocks {
+        if let BlockNode::Custom { node, .. } = block {
+            taken.push(linked_images::taken_at(node));
+        } else if let BlockNode::Paragraph(line) = block {
+            let among_words = line.children().iter().filter_map(|node| node.as_custom());
+            taken.extend(among_words.map(linked_images::taken_at));
+        }
+    }
+    taken
+}
+
+#[test]
 fn a_reference_link_goes_where_its_first_definition_says_even_inside_a_quote() {
     let source = "See [the docs][docs].\n\n> [docs]: https://example.com/first\n\n[docs]: https://example.com/second";
 
-    let links = parse(source.to_owned()).links;
+    let links = parse(source.to_owned(), TheKits).links;
 
     assert_eq!(links.get("docs").map(|link| link.url.as_ref()), Some("https://example.com/first"));
     assert_eq!(*leaves(source), ["See the docs."], "and a definition is no leaf");

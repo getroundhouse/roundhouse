@@ -7,6 +7,9 @@ use std::sync::Arc;
 
 use gpui_kit::SharedString;
 use gpui_kit::base::text::editor_host::{BlockNode, InlineNode, LinkMark, Paragraph, Table, parse_markdown};
+use gpui_kit::component::text::MarkdownExtensions;
+
+use crate::linked_images;
 
 /// What an image, or anything else drawn inline that isn't text, is in a leaf's text: one character, as the kit counts
 /// it.
@@ -29,6 +32,35 @@ pub(crate) struct Parsed {
     /// Whether it was parsed whole, from its start, rather than joined from what it was parsed as before and what it
     /// went on to, which can differ, as [`again`] says.
     pub(super) whole: bool,
+    /// Whose its images are to draw, which it was parsed by.
+    pub(super) images: ImagesAre,
+}
+
+/// Whose a text's images are to draw, which is part of how it's parsed, so a text parsed for one isn't drawn as the
+/// other. The transcript's own are those a reply points to, which `crate::linked_images` takes out of the kit's blocks
+/// as the text is parsed, and draws so a click opens them. Either way a text has the same leaves.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum ImagesAre {
+    TheKits,
+    TheTranscripts,
+}
+
+impl ImagesAre {
+    /// Whose the images of `source` are to draw, where it's drawn with the images its row's event kept to look up, if
+    /// `looked_up`: the transcript's, unless it's one `linked_images` would take nothing from, which is parsed the
+    /// same either way. So a reply with no images keeps the parse it was written into, rather than being parsed again
+    /// in the row of its record.
+    pub(super) fn of(source: &str, looked_up: bool) -> Self {
+        if looked_up && linked_images::may_take(source) { Self::TheTranscripts } else { Self::TheKits }
+    }
+
+    /// What the kit parses a text with, from byte `from` of it on.
+    fn read_with(self, from: usize) -> Arc<MarkdownExtensions> {
+        match self {
+            Self::TheKits => Arc::default(),
+            Self::TheTranscripts => linked_images::to_read(from),
+        }
+    }
 }
 
 /// Where a block starts: its byte in the text, and its first leaf's key.
@@ -38,11 +70,11 @@ struct Start {
     leaf: usize,
 }
 
-/// Parses `source`, and keys each of its leaves by its place in it. One the kit's parser can't read is a paragraph, as
-/// it's written.
-pub(super) fn parse(source: String) -> Parsed {
+/// Parses `source`, whose images are `images` to draw, and keys each of its leaves by its place in it. One the kit's
+/// parser can't read is a paragraph, as it's written.
+pub(super) fn parse(source: String, images: ImagesAre) -> Parsed {
     let (mut blocks, mut leaves, mut starts) = (Vec::new(), Vec::new(), Some(Vec::new()));
-    if let Some(read) = read(&source) {
+    if let Some(read) = read(&source, 0, images) {
         more(read, 0, &mut blocks, &mut leaves, &mut starts);
     } else {
         let mut paragraph = Paragraph::default();
@@ -53,7 +85,7 @@ pub(super) fn parse(source: String) -> Parsed {
     if may_define(&source) {
         starts = None;
     }
-    made(source, blocks, leaves, starts, true)
+    made(source, blocks, leaves, starts, true, images)
 }
 
 /// Where a text that goes on from one parsed is parsed again from: the byte its block starts at, which block that is,
@@ -90,20 +122,26 @@ pub(super) fn again(parsed: &Parsed, source: &str) -> Option<Again> {
 
 /// `source`, which goes on from `parsed` as `again` says, parsed again from there.
 pub(super) fn gone_on(parsed: &Parsed, again: Again, source: String) -> Parsed {
-    match read(&source[again.byte..]) {
+    match rest(&source, again, parsed.images) {
         Some(rest) => joined(parsed, again, source, rest),
-        None => parse(source),
+        None => parse(source, parsed.images),
     }
 }
 
-/// `source`, which goes on from `parsed` as `again` says, with `rest`, its blocks from there on, as [`read`] read them.
+/// The blocks of `source` from where `again` says it's parsed again from on, whose images are `images` to draw, as
+/// [`read`] reads them, if it can.
+pub(super) fn rest(source: &str, again: Again, images: ImagesAre) -> Option<Vec<BlockNode>> {
+    read(&source[again.byte..], again.byte, images)
+}
+
+/// `source`, which goes on from `parsed` as `again` says, with `rest`, its blocks from there on, as [`rest`] read them.
 pub(super) fn joined(parsed: &Parsed, again: Again, source: String, rest: Vec<BlockNode>) -> Parsed {
     let Again { byte, block, leaf } = again;
     let (mut blocks, mut leaves) = (parsed.blocks[..block].to_vec(), parsed.leaves[..leaf].to_vec());
     let mut starts = parsed.starts.as_ref().map(|starts| starts[..block].to_vec());
     more(rest, byte, &mut blocks, &mut leaves, &mut starts);
     // Parsed again from its start, it's parsed whole.
-    made(source, blocks, leaves, starts, byte == 0)
+    made(source, blocks, leaves, starts, byte == 0, parsed.images)
 }
 
 /// Whether the block that starts at `byte` of `source` has a blank line before it, or nothing, so no block before it
@@ -154,18 +192,20 @@ fn made(
     leaves: Vec<String>,
     starts: Option<Vec<Start>>,
     whole: bool,
+    images: ImagesAre,
 ) -> Parsed {
     let mut links = BTreeMap::new();
     defined(&blocks, &mut links);
-    Parsed { source, blocks, leaves: leaves.into(), links, starts, whole }
+    Parsed { source, blocks, leaves: leaves.into(), links, starts, whole, images }
 }
 
-/// `source`'s blocks, as the kit's parser reads them, if it can, on any thread. The `markdown` crate it parses with
+/// `source`'s blocks, as the kit's parser reads them, if it can, on any thread, where `source` starts at byte `from` of
+/// the text it's the end of, and its images are `images` to draw. The `markdown` crate it parses with
 /// panics on some texts, such as `"a\n===\n---\nb\n==="`, which the agent can write, and which would end the app, so a
 /// text it panics on is one it can't read. Rust's default hook still says so on stderr each time, which a short text
 /// drawn again after its blocks were put away, or counted by find, is.
-pub(super) fn read(source: &str) -> Option<Vec<BlockNode>> {
-    std::panic::catch_unwind(|| parse_markdown(source, Arc::default())).ok()?.ok()
+pub(super) fn read(source: &str, from: usize, images: ImagesAre) -> Option<Vec<BlockNode>> {
+    std::panic::catch_unwind(|| parse_markdown(source, images.read_with(from))).ok()?.ok()
 }
 
 /// Adds where each reference link defined in `blocks` goes to `links`, unless it's there. As the Markdown standard has
@@ -197,7 +237,7 @@ fn defined(blocks: &[BlockNode], links: &mut BTreeMap<SharedString, LinkMark>) {
 
 /// What each leaf of `source` shows, in order, as it's drawn.
 pub(crate) fn leaves(source: &str) -> Arc<[String]> {
-    parse(source.to_owned()).leaves
+    parse(source.to_owned(), ImagesAre::TheKits).leaves
 }
 
 fn keyed(block: BlockNode, leaves: &mut Vec<String>) -> BlockNode {

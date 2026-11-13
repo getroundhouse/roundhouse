@@ -33,14 +33,16 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use client_core::session_log::{Row, SessionLog};
-use gpui_kit::{AnyElement, App, ElementId, ImageSource, IntoElement, SharedUri, Task};
+use gpui_kit::{AnyElement, App, ElementId, IntoElement, Task};
 use protocol::model::Seq;
 
 use crate::find::{FindLook, Part, TextId, view_id};
 use crate::images_apart::images_apart;
+use crate::linked_images::Images;
 use crate::selection::Selection;
 use element::ProseElement;
 use moves::Places;
+use parse::ImagesAre;
 pub(crate) use parse::{ATOM, Parsed, leaves};
 
 mod budget;
@@ -220,9 +222,6 @@ impl<'a> Written<'a> {
     }
 }
 
-/// Where the images a text points to are found, which the kit's own way does if there's none.
-pub(crate) type Images = Box<dyn Fn(&SharedUri) -> ImageSource + Send + Sync>;
-
 impl Prose {
     /// The texts of a transcript, which `redrawn` tells when one parsed on another thread is in, so the row drawing
     /// what it says is measured again.
@@ -262,8 +261,8 @@ impl Prose {
         drawn
     }
 
-    /// Draws `written`, with its images found by `images`. Until a long text is parsed, it's what it was parsed as
-    /// before, or nothing if it wasn't.
+    /// Draws `written`, with its images drawn as `images` says, or as the kit draws them if there's none. Until a long
+    /// text is parsed, it's what it was parsed as before, or nothing if it wasn't.
     pub(crate) fn draw(&self, selection: &Selection, written: &Written<'_>, images: Option<Images>) -> AnyElement {
         let drawing = self.0.borrow_mut().in_row.as_mut().map(|(of, these)| {
             these.push(written.at);
@@ -277,7 +276,8 @@ impl Prose {
         let known = ProseId(written.element.clone());
         self.0.borrow_mut().placed(&known, written.at);
         let source = images_apart(written.text);
-        let (parsed, apart) = self.parsed(&known, &source, written.at.of);
+        let whose = ImagesAre::of(&source, images.is_some());
+        let (parsed, apart) = self.parsed(&known, &source, written.at.of, whose);
         let marks = (parsed.as_ref().zip(written.found))
             .map_or_else(Vec::new, |(parsed, (id, find))| find.marks_in_leaves(id, &parsed.leaves));
         let (prose, selection) = (self.clone(), selection.clone());

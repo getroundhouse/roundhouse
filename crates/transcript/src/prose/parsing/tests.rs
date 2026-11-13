@@ -1,8 +1,10 @@
 use std::rc::Rc;
 use std::sync::Arc;
 
+use gpui_kit::base::text::editor_host::BlockNode;
 use gpui_kit::{Task, TestAppContext};
 
+use super::super::ImagesAre::{TheKits, TheTranscripts};
 use super::super::{AT_ONCE, Of, Parsed, Prose, ProseId, Text, TextAt, parse};
 
 /// The end of the chat, where a text can go on.
@@ -42,7 +44,7 @@ fn with(parsed: Parsed) -> Prose {
 
 /// `prose` with `was` parsed as the text known as [`id`], but with its first leaf saying [`KEPT`].
 fn with_kept(was: &str) -> Prose {
-    let mut kept = parse::parse(was.to_owned());
+    let mut kept = parse::parse(was.to_owned(), TheKits);
     let mut leaves = kept.leaves.to_vec();
     leaves[0] = KEPT.to_owned();
     kept.leaves = Arc::from(leaves);
@@ -54,7 +56,7 @@ fn with_kept(was: &str) -> Prose {
 fn gone_on_at_the_end(was: &str) -> (Prose, String) {
     let prose = with_kept(was);
     let source = format!("{was}And a last few words.");
-    prose.parsed(&id(), &source, END);
+    prose.parsed(&id(), &source, END, TheKits);
     (prose, source)
 }
 
@@ -70,9 +72,9 @@ fn first_leaf(parsed: Option<Rc<Parsed>>) -> Option<String> {
 fn a_long_text_that_goes_on_a_little_is_parsed_at_once_from_near_its_end() {
     let was = paragraphs(3 * AT_ONCE);
     let source = format!("{was}And a last few words.");
-    let prose = with(parse::parse(was));
+    let prose = with(parse::parse(was, TheKits));
 
-    let (parsed, apart) = prose.parsed(&id(), &source, END);
+    let (parsed, apart) = prose.parsed(&id(), &source, END, TheKits);
 
     let parsed = parsed.expect("drawn at once");
     assert!(apart.is_none(), "with nothing to parse on another thread");
@@ -83,9 +85,9 @@ fn a_long_text_that_goes_on_a_little_is_parsed_at_once_from_near_its_end() {
 #[test]
 fn a_text_that_goes_on_by_more_than_is_parsed_at_once_is_drawn_as_it_was_meanwhile() {
     let was = paragraphs(AT_ONCE / 2);
-    let prose = with(parse::parse(was.clone()));
+    let prose = with(parse::parse(was.clone(), TheKits));
 
-    let (parsed, apart) = prose.parsed(&id(), &format!("{was}{}", list(2 * AT_ONCE)), END);
+    let (parsed, apart) = prose.parsed(&id(), &format!("{was}{}", list(2 * AT_ONCE)), END, TheKits);
 
     assert_eq!(source_of(parsed), Some(was), "what it was parsed as");
     assert!(apart.is_some(), "while what it went on to is parsed on another thread");
@@ -96,9 +98,9 @@ fn a_text_that_goes_on_by_more_than_is_parsed_at_once_is_drawn_as_it_was_meanwhi
 #[test]
 fn a_long_text_that_goes_on_to_be_parsed_whole_is_drawn_as_it_was_meanwhile() {
     let was = paragraphs(2 * AT_ONCE);
-    let prose = with(parse::parse(was.clone()));
+    let prose = with(parse::parse(was.clone(), TheKits));
 
-    let (parsed, apart) = prose.parsed(&id(), &format!("{was}[docs]: https://example.com\n"), END);
+    let (parsed, apart) = prose.parsed(&id(), &format!("{was}[docs]: https://example.com\n"), END, TheKits);
 
     assert_eq!(source_of(parsed), Some(was));
     assert!(apart.is_some());
@@ -107,9 +109,9 @@ fn a_long_text_that_goes_on_to_be_parsed_whole_is_drawn_as_it_was_meanwhile() {
 #[test]
 fn a_long_text_that_changes_other_than_by_going_on_is_drawn_as_it_was_meanwhile_and_parsed_whole() {
     let was = paragraphs(2 * AT_ONCE);
-    let prose = with(parse::parse(was.clone()));
+    let prose = with(parse::parse(was.clone(), TheKits));
 
-    let (parsed, apart) = prose.parsed(&id(), &list(2 * AT_ONCE), END);
+    let (parsed, apart) = prose.parsed(&id(), &list(2 * AT_ONCE), END, TheKits);
 
     assert_eq!(source_of(parsed), Some(was), "drawn as it was until it's in");
     assert!(apart.is_some_and(|apart| apart.again.is_none()), "and not parsed again from near its end");
@@ -119,12 +121,12 @@ fn a_long_text_that_changes_other_than_by_going_on_is_drawn_as_it_was_meanwhile_
 fn a_text_that_goes_on_from_what_s_being_parsed_apart_waits_for_it() {
     let was = paragraphs(AT_ONCE / 2);
     let parsing = format!("{was}{}", list(2 * AT_ONCE));
-    let prose = with(parse::parse(was.clone()));
-    let old = prose.parsed(&id(), &was, END).0;
+    let prose = with(parse::parse(was.clone(), TheKits));
+    let old = prose.parsed(&id(), &was, END, TheKits).0;
     let task = Task::ready(());
     prose.0.borrow_mut().texts.insert(id(), Text::Parsing { source: parsing.clone(), was: old, _task: task });
 
-    let (parsed, apart) = prose.parsed(&id(), &format!("{parsing}- One more\n"), END);
+    let (parsed, apart) = prose.parsed(&id(), &format!("{parsing}- One more\n"), END, TheKits);
 
     assert_eq!(source_of(parsed), Some(was), "drawn as it was");
     assert!(apart.is_none(), "and no other parse started");
@@ -137,12 +139,12 @@ fn a_text_parsed_apart_from_near_its_end_keeps_what_was_before(cx: &mut TestAppC
     let was = paragraphs(AT_ONCE / 2);
     let source = format!("{was}{}", list(2 * AT_ONCE));
     let prose = with_kept(&was);
-    let (_, apart) = prose.parsed(&id(), &source, END);
+    let (_, apart) = prose.parsed(&id(), &source, END, TheKits);
 
     cx.update(|cx| prose.parse_apart(id(), apart.expect("parsed apart"), cx));
     cx.run_until_parked();
 
-    let (parsed, _) = prose.parsed(&id(), &source, END);
+    let (parsed, _) = prose.parsed(&id(), &source, END, TheKits);
     let parsed = parsed.expect("parsed");
     assert_eq!(parsed.leaves[0], KEPT);
     assert_eq!(parsed.leaves[1..], parse::leaves(&source)[1..], "and the rest as a whole parse would have it");
@@ -153,14 +155,14 @@ fn a_text_parsed_apart_from_near_its_end_keeps_what_was_before(cx: &mut TestAppC
 fn a_text_that_went_on_while_parsed_apart_goes_on_from_that_parse(cx: &mut TestAppContext) {
     let was = paragraphs(AT_ONCE / 2);
     let parsing = format!("{was}{}", list(2 * AT_ONCE));
-    let prose = with(parse::parse(was.clone()));
-    let (_, apart) = prose.parsed(&id(), &parsing, END);
+    let prose = with(parse::parse(was.clone(), TheKits));
+    let (_, apart) = prose.parsed(&id(), &parsing, END, TheKits);
     cx.update(|cx| prose.parse_apart(id(), apart.expect("parsed apart"), cx));
     let more = format!("{parsing}- One more\n");
 
-    let waiting = source_of(prose.parsed(&id(), &more, END).0);
+    let waiting = source_of(prose.parsed(&id(), &more, END, TheKits).0);
     cx.run_until_parked();
-    let (parsed, apart) = prose.parsed(&id(), &more, END);
+    let (parsed, apart) = prose.parsed(&id(), &more, END, TheKits);
 
     assert_eq!(waiting, Some(was), "drawn as it was while the parse is apart");
     assert_eq!(source_of(parsed), Some(parsing), "and as that parse once it's in");
@@ -173,8 +175,8 @@ fn a_text_that_went_on_while_parsed_apart_goes_on_from_that_parse(cx: &mut TestA
 fn a_text_joined_as_it_went_on_is_parsed_whole_once_away_from_the_end_of_the_chat() {
     let (prose, source) = gone_on_at_the_end(&paragraphs(AT_ONCE / 2));
 
-    let (parsed, apart) = prose.parsed(&id(), &source, ROW);
-    let (again, _) = prose.parsed(&id(), &source, ROW);
+    let (parsed, apart) = prose.parsed(&id(), &source, ROW, TheKits);
+    let (again, _) = prose.parsed(&id(), &source, ROW, TheKits);
 
     let (parsed, again) = (parsed.expect("drawn at once"), again.expect("drawn"));
     assert!(apart.is_none(), "a short one where it's drawn");
@@ -186,7 +188,7 @@ fn a_text_joined_as_it_went_on_is_parsed_whole_once_away_from_the_end_of_the_cha
 fn a_text_still_at_the_end_of_the_chat_is_left_as_it_was_joined() {
     let (prose, source) = gone_on_at_the_end(&paragraphs(AT_ONCE / 2));
 
-    let (parsed, apart) = prose.parsed(&id(), &source, END);
+    let (parsed, apart) = prose.parsed(&id(), &source, END, TheKits);
 
     assert!(apart.is_none());
     assert_eq!(first_leaf(parsed).as_deref(), Some(KEPT), "since it can go on from there");
@@ -198,23 +200,41 @@ fn a_text_still_at_the_end_of_the_chat_is_left_as_it_was_joined() {
 fn a_text_parsed_again_from_its_start_as_it_went_on_is_whole_already() {
     let was = "One paragraph of a reply";
     let source = format!("{was}, and a few more words of it.");
-    let prose = with(parse::parse(was.to_owned()));
-    let (at_the_end, _) = prose.parsed(&id(), &source, END);
+    let prose = with(parse::parse(was.to_owned(), TheKits));
+    let (at_the_end, _) = prose.parsed(&id(), &source, END, TheKits);
 
-    let (in_its_row, apart) = prose.parsed(&id(), &source, ROW);
+    let (in_its_row, apart) = prose.parsed(&id(), &source, ROW, TheKits);
 
     assert!(apart.is_none());
     assert!(Rc::ptr_eq(&at_the_end.expect("drawn"), &in_its_row.expect("drawn")), "the same parse, not another");
+}
+
+/// A reply is parsed for the kit to draw its images while it's written, when the hub has kept none, and for the
+/// transcript to draw them in the row of its record, so the parse it was written into isn't its record's.
+#[test]
+fn a_text_parsed_for_the_kit_to_draw_its_images_is_parsed_again_for_the_transcript_to() {
+    let source = "The board, after:\n\n![The board](board.png)";
+    let prose = with(parse::parse(source.to_owned(), TheKits));
+    let (at_the_end, _) = prose.parsed(&id(), source, END, TheKits);
+
+    let (in_its_row, apart) = prose.parsed(&id(), source, ROW, TheTranscripts);
+    let (again, _) = prose.parsed(&id(), source, ROW, TheTranscripts);
+
+    let (at_the_end, in_its_row) = (at_the_end.expect("drawn"), in_its_row.expect("drawn at once"));
+    let its_image = |parsed: &Parsed| matches!(parsed.blocks.last(), Some(BlockNode::Custom { .. }));
+    assert!(apart.is_none(), "a short one where it's drawn");
+    assert!(!its_image(&at_the_end) && its_image(&in_its_row), "its image is the transcript's only in its row");
+    assert!(Rc::ptr_eq(&in_its_row, &again.expect("drawn")), "and it's not parsed again after");
 }
 
 #[gpui_kit::test]
 fn a_long_text_joined_as_it_went_on_is_drawn_as_it_was_while_it_s_parsed_whole(cx: &mut TestAppContext) {
     let (prose, source) = gone_on_at_the_end(&paragraphs(3 * AT_ONCE));
 
-    let (meanwhile, apart) = prose.parsed(&id(), &source, ROW);
+    let (meanwhile, apart) = prose.parsed(&id(), &source, ROW, TheKits);
     cx.update(|cx| prose.parse_apart(id(), apart.expect("parsed on another thread"), cx));
     cx.run_until_parked();
-    let (parsed, apart) = prose.parsed(&id(), &source, ROW);
+    let (parsed, apart) = prose.parsed(&id(), &source, ROW, TheKits);
 
     assert_eq!(first_leaf(meanwhile).as_deref(), Some(KEPT), "drawn as it was meanwhile");
     assert!(apart.is_none(), "once");
@@ -228,15 +248,15 @@ fn a_text_recorded_while_it_s_parsed_apart_from_near_its_end_is_parsed_whole_aft
     let was = paragraphs(AT_ONCE / 2);
     let source = format!("{was}{}", list(2 * AT_ONCE));
     let prose = with_kept(&was);
-    let (_, apart) = prose.parsed(&id(), &source, END);
+    let (_, apart) = prose.parsed(&id(), &source, END, TheKits);
     cx.update(|cx| prose.parse_apart(id(), apart.expect("parsed apart"), cx));
 
-    let (waiting, started) = prose.parsed(&id(), &source, ROW);
+    let (waiting, started) = prose.parsed(&id(), &source, ROW, TheKits);
     cx.run_until_parked();
-    let (joined, apart) = prose.parsed(&id(), &source, ROW);
+    let (joined, apart) = prose.parsed(&id(), &source, ROW, TheKits);
     cx.update(|cx| prose.parse_apart(id(), apart.expect("parsed whole on another thread"), cx));
     cx.run_until_parked();
-    let (parsed, apart) = prose.parsed(&id(), &source, ROW);
+    let (parsed, apart) = prose.parsed(&id(), &source, ROW, TheKits);
 
     assert_eq!(source_of(waiting), Some(was), "drawn as it was while the parse is apart");
     assert!(started.is_none(), "with no other parse started");
@@ -251,7 +271,7 @@ fn a_text_that_says_more_away_from_the_end_of_the_chat_is_parsed_whole() {
     let (prose, source) = gone_on_at_the_end(&paragraphs(AT_ONCE / 2));
     let more = format!("{source} And then some.");
 
-    let (parsed, _) = prose.parsed(&id(), &more, ROW);
+    let (parsed, _) = prose.parsed(&id(), &more, ROW, TheKits);
 
     assert_eq!(parsed.expect("drawn at once").leaves, parse::leaves(&more));
 }

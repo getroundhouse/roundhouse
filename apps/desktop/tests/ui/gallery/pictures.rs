@@ -67,6 +67,18 @@ pub(crate) fn signal_board() -> Vec<u8> {
     encode(&image)
 }
 
+/// A row of a settings page, with its name and description at the left and its switch at the right, on or off, as the
+/// agent's screenshot of one state of it would show it. Short and wide, as a screenshot of one row is.
+pub(crate) fn setting(on: bool) -> Vec<u8> {
+    let mut image = RgbaImage::from_pixel(460, 76, PANE);
+    fill(&mut image, (20, 22), (150, 9), TEXT);
+    fill(&mut image, (20, 44), (240, 7), FAINT);
+    let (track, knob) = if on { (GREEN, 404) } else { (EDGE, 386) };
+    fill(&mut image, (384, 26), (42, 24), track);
+    fill(&mut image, (knob, 29), (18, 18), TEXT);
+    encode(&image)
+}
+
 fn fill(image: &mut RgbaImage, (x, y): (u32, u32), (width, height): (u32, u32), color: Rgba<u8>) {
     for py in y..(y + height).min(image.height()) {
         for px in x..(x + width).min(image.width()) {

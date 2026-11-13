@@ -6,12 +6,15 @@
 //! each row's height, and the image is only its own height once it's decoded.
 //!
 //! These are kept apart from the pictures a prompt carries, which the transcript keeps by attachment, because the text
-//! view asks for an image from any thread, by its address, so what answers has to be shared across threads.
+//! view asks for an image from any thread, by its address, so what answers has to be shared across threads. `drawn`
+//! has how a text drawn from the kit's blocks draws them, so a click on one opens it over the window. The kit's text
+//! view draws them itself, from the resolver.
 
 use std::collections::HashMap;
 use std::sync::Arc;
 
 use client_core::Client;
+use gpui_kit::component::text::MarkdownExtensions;
 use gpui_kit::{App, AppContext as _, Image, ImageCacheError, ImageSource, RenderImage, SharedUri, WeakEntity, Window};
 use parking_lot::Mutex;
 use protocol::attachment::{AttachmentBytes, MediaType};
@@ -20,6 +23,19 @@ use protocol::model::{AttachmentId, Seq, SessionId};
 
 use crate::attachments::image_format;
 use crate::transcript::Transcript;
+
+mod drawn;
+
+#[cfg(test)]
+pub(crate) use drawn::taken_at;
+pub(crate) use drawn::{may_take, to_read};
+
+/// How a text drawn from the kit's blocks draws the images it points to: what the kit draws each image [`to_read`]
+/// took with, and the resolver the kit finds the rest with, which is all of them in a text parsed without it.
+pub(crate) struct Images {
+    pub(crate) plugins: Arc<MarkdownExtensions>,
+    pub(crate) resolver: Box<dyn Fn(&SharedUri) -> ImageSource + Send + Sync>,
+}
 
 /// The images one transcript's text points to, by where each comes from. Cheap to clone.
 #[derive(Clone)]
@@ -62,7 +78,19 @@ impl LinkedImages {
         self.0.images.lock().retain(|_, linked| !matches!(linked, Linked::Unreadable));
     }
 
-    /// What a text that names `kept`, in the row of the event at `seq`, draws for the image at an address.
+    /// How a text drawn from the kit's blocks, which names `kept`, in the row of the event at `seq`, draws the images
+    /// it points to.
+    pub(crate) fn images(&self, seq: Seq, kept: &[LinkedImage]) -> Images {
+        Images { plugins: Arc::new(drawn::to_draw(self, seq, kept)), resolver: Box::new(self.resolver(seq, kept)) }
+    }
+
+    /// The image at `uri` in a text that names `kept`, in the row of the event at `seq`, once it's here, or `None`
+    /// while it loads, if it can't be shown, or if it isn't one that's drawn.
+    fn ready(&self, uri: &str, kept: &[LinkedImage], seq: Seq, cx: &mut App) -> Option<Arc<RenderImage>> {
+        self.image(&source(uri, kept)?, seq, cx)?.ok()
+    }
+
+    /// What the kit draws for the image at an address in a text that names `kept`, in the row of the event at `seq`.
     pub(crate) fn resolver(
         &self,
         seq: Seq,
