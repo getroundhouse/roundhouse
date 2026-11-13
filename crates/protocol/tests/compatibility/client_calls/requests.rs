@@ -1,9 +1,11 @@
 //! Every request of the hub itself, for its records or its agents' logins, or about a workspace, as a client writes it
 //! and a hub reads it.
 
-use protocol::client::{ClientRequest, Hello, accounts, admin, comments, drafts, files, records, workspaces};
+use protocol::client::{
+    ClientRequest, Hello, accounts, admin, comments, drafts, files, github_accounts, records, workspaces,
+};
 use protocol::frame;
-use protocol::model::{AgentKind, CommentDraft, DiffSide, HubSettingsChange, LoginToken};
+use protocol::model::{AgentKind, CommentDraft, DiffSide, GithubDefault, GithubToken, HubSettingsChange, LoginToken};
 
 use super::asked;
 
@@ -16,15 +18,27 @@ fn every_request_of_the_hub_itself_or_for_its_records_keeps_its_form() {
     asked(ClientRequest::HubShutdown, r#"{"method":"hub_shutdown"}"#);
     asked(ClientRequest::HubShutdownIfIdle, r#"{"method":"hub_shutdown_if_idle"}"#);
     asked(ClientRequest::HubRestart, r#"{"method":"hub_restart"}"#);
-    let settings = HubSettingsChange { keep_awake: Some(false), allow_asked_in_full_access: None };
+    let settings = HubSettingsChange { keep_awake: Some(false), ..HubSettingsChange::default() };
     asked(
         ClientRequest::HubConfigure(admin::HubConfigure { settings }),
         r#"{"method":"hub_configure","keep_awake":false}"#,
     );
-    let settings = HubSettingsChange { keep_awake: None, allow_asked_in_full_access: Some(true) };
+    let settings = HubSettingsChange { allow_asked_in_full_access: Some(true), ..HubSettingsChange::default() };
     asked(
         ClientRequest::HubConfigure(admin::HubConfigure { settings }),
         r#"{"method":"hub_configure","allow_asked_in_full_access":true}"#,
+    );
+    let default = |account: Option<&str>| HubSettingsChange {
+        github_default: Some(GithubDefault { account: account.map(Into::into) }),
+        ..HubSettingsChange::default()
+    };
+    asked(
+        ClientRequest::HubConfigure(admin::HubConfigure { settings: default(Some("g")) }),
+        r#"{"method":"hub_configure","github_default":{"account":"g"}}"#,
+    );
+    asked(
+        ClientRequest::HubConfigure(admin::HubConfigure { settings: default(None) }),
+        r#"{"method":"hub_configure","github_default":{"account":null}}"#,
     );
     let settings = HubSettingsChange::default();
     asked(ClientRequest::HubConfigure(admin::HubConfigure { settings }), r#"{"method":"hub_configure"}"#);
@@ -56,6 +70,22 @@ fn every_request_about_an_agents_login_keeps_its_form() {
     asked(
         ClientRequest::AccountDisconnect(accounts::AccountDisconnect { id: "claude-1".into() }),
         r#"{"method":"account_disconnect","id":"claude-1"}"#,
+    );
+}
+
+#[test]
+fn every_request_about_a_github_account_keeps_its_form() {
+    let connect = |id: Option<&str>| {
+        ClientRequest::GithubAccountConnect(github_accounts::GithubAccountConnect {
+            token: GithubToken::new("a-made-up-token"),
+            id: id.map(Into::into),
+        })
+    };
+    asked(connect(None), r#"{"method":"github_account_connect","token":"a-made-up-token"}"#);
+    asked(connect(Some("g")), r#"{"method":"github_account_connect","token":"a-made-up-token","id":"g"}"#);
+    asked(
+        ClientRequest::GithubAccountDisconnect(github_accounts::GithubAccountDisconnect { id: "g".into() }),
+        r#"{"method":"github_account_disconnect","id":"g"}"#,
     );
 }
 

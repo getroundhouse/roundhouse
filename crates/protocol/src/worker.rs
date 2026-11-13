@@ -21,6 +21,7 @@ mod ask;
 mod children;
 mod connection;
 mod frames;
+mod git_credential;
 mod github;
 mod one_off;
 mod tools;
@@ -38,7 +39,8 @@ pub use ask::{
 pub use children::{AddChildWorktree, ChildBranch, ChildWorktreeAdded, WatchChildBranches};
 pub use connection::{Hello, HelloReply, Received, RunningAgent, RunningAgents, RunningAgentsReply, Stop};
 pub use frames::WorkerFrame;
-pub use github::{GithubRateLimit, PullRequest, PullRequestReply, RateLimit};
+pub use git_credential::{GitAuthor, GitCredential, GitCredentialSet};
+pub use github::{FindGithubLogin, GithubLoginReply, GithubRateLimit, PullRequest, PullRequestReply, RateLimit};
 pub use one_off::{AccountFor, TitleFor, TitleReply};
 pub use tools::{ServeTools, ToolsServing, ToolsToken, WAIT_TOOL};
 pub use workspaces::{
@@ -106,6 +108,9 @@ pub enum WorkerRequest {
     WatchBranches(WatchBranches),
     WatchChildBranches(WatchChildBranches),
     GithubRateLimit(GithubRateLimit),
+    GitCredentialSet(GitCredentialSet),
+    /// See [`FindGithubLogin`].
+    FindGithubLogin,
     SetupWorkspace(SetupWorkspace),
     /// See [`CancelSetup`].
     CancelSetup,
@@ -149,6 +154,7 @@ pub enum WorkerResponse {
     GitDiff(model::GitDiff),
     PullRequest(PullRequestReply),
     GithubRateLimit(RateLimit),
+    GithubLogin(GithubLoginReply),
     SetupDone(SetupDone),
     SetupLog(SetupLogReply),
     AttachmentWritten(AttachmentWritten),
@@ -178,6 +184,7 @@ mod tests {
         assert_eq!(sent(Stop.into_request()), r#"{"method":"stop"}"#);
         assert_eq!(sent(RunningAgents.into_request()), r#"{"method":"running_agents"}"#);
         assert_eq!(sent(CancelSetup.into_request()), r#"{"method":"cancel_setup"}"#);
+        assert_eq!(sent(FindGithubLogin.into_request()), r#"{"method":"find_github_login"}"#);
     }
 
     /// The rest each read the variant that holds them, which the compiler checks.

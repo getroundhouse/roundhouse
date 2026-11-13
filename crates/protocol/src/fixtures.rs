@@ -7,7 +7,8 @@ use serde_json::Value;
 
 use crate::event::{Asking, CallKind, ContentBlock, Denied, EventBody, SessionEvent, TurnOutcome};
 use crate::model::{
-    Account, AgentKind, ApprovalId, BranchName, Call, CallResult, ChildStatus, ChildWorktree, Draft, Effort, MadeBy,
+    Account, AgentKind, ApprovalId, BranchName, Call, CallResult, ChildStatus, ChildWorktree, Draft, Effort,
+    FoundGithubLogin, GithubAccount, GithubLogin, GithubLoginKind, GithubUser, GithubUserId, HeldGithubLogin, MadeBy,
     ModelName, PermissionMode, Place, RecentWork, Rev, Seq, Session, SessionStatus, SetupStatus, Subagent,
     SubagentStatus, TitleSource, ToolUseId, Workspace, WorkspaceStatus,
 };
@@ -112,6 +113,30 @@ pub fn account(id: &str) -> Account {
         limits: Vec::new(),
         held_login: None,
         used_at_ms: None,
+        rev: Rev::default(),
+    }
+}
+
+/// The GitHub account `id`, the user `ada`, whose number is 1, connected at 0 with a token that doesn't end.
+pub fn github_account(id: &str) -> GithubAccount {
+    GithubAccount {
+        id: id.into(),
+        user: GithubUser { id: GithubUserId::new(1), name: "ada".into() },
+        held_login: HeldGithubLogin {
+            how: GithubLoginKind::Token,
+            connected_at_ms: 0,
+            ends_at_ms: None,
+            needs_sign_in: false,
+        },
+        rev: Rev::default(),
+    }
+}
+
+/// That `gh` on the provider `provider`'s machines is logged in as `ada`.
+pub fn found_github_login(provider: &str) -> FoundGithubLogin {
+    FoundGithubLogin {
+        provider: provider.into(),
+        login: Some(GithubLogin { username: "ada".into() }),
         rev: Rev::default(),
     }
 }

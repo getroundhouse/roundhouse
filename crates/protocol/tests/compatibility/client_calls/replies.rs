@@ -13,7 +13,8 @@ use protocol::find::Found;
 use protocol::fixtures;
 use protocol::model::{
     Account, CompactionLine, DiffComment, DiffSide, FileContents, FileOpened, FilePages, GitDiff, GitStatus,
-    HubSettings, NewWorkspaceDraft, Place, PromptLine, Records, Repo, Rev, Seq, SessionAccount, WorktreeFiles,
+    GithubAccount, GithubLoginKind, GithubSettings, GithubUser, GithubUserId, HeldGithubLogin, HubSettings,
+    NewWorkspaceDraft, Place, PromptLine, Records, Repo, Rev, Seq, SessionAccount, WorktreeFiles,
 };
 
 use super::answered;
@@ -27,15 +28,22 @@ fn event() -> SessionEvent {
 }
 
 #[test]
-fn a_hubs_settings_keep_their_form_and_one_from_a_hub_from_before_says_nothing_of_allowing_tools() {
-    let settings = HubSettings { keep_awake: false, allow_asked_in_full_access: Some(true), rev: Rev::new(3) };
+fn a_hubs_settings_keep_their_form_and_one_from_a_hub_from_before_says_nothing_of_allowing_tools_or_github() {
+    let settings =
+        HubSettings { keep_awake: false, allow_asked_in_full_access: Some(true), github: None, rev: Rev::new(3) };
     answered(
         ClientResponse::HubSettings(settings),
         r#"{"result":"hub_settings","keep_awake":false,"allow_asked_in_full_access":true,"rev":3}"#,
     );
-    // From a hub from before it could allow a tool's use itself, which says nothing of it.
+    let github = Some(GithubSettings { account: Some("g".into()) });
+    let settings = HubSettings { keep_awake: false, allow_asked_in_full_access: Some(true), github, rev: Rev::new(3) };
+    answered(
+        ClientResponse::HubSettings(settings),
+        r#"{"result":"hub_settings","keep_awake":false,"allow_asked_in_full_access":true,"github":{"account":"g"},"rev":3}"#,
+    );
+    // From a hub from before it could allow a tool's use itself, which says nothing of it, nor of GitHub.
     let older: ClientResponse = serde_json::from_str(r#"{"result":"hub_settings","keep_awake":true,"rev":3}"#).unwrap();
-    let settings = HubSettings { keep_awake: true, allow_asked_in_full_access: None, rev: Rev::new(3) };
+    let settings = HubSettings { keep_awake: true, allow_asked_in_full_access: None, github: None, rev: Rev::new(3) };
     assert_eq!(older, ClientResponse::HubSettings(settings));
 }
 
@@ -100,6 +108,25 @@ fn every_reply_of_the_hub_itself_or_listing_its_records_keeps_its_form() {
     answered(
         ClientResponse::Subagents(records::Subagents { subagents: vec![], rev: Rev::new(9) }),
         r#"{"result":"subagents","subagents":[],"rev":9}"#,
+    );
+}
+
+#[test]
+fn a_github_accounts_record_keeps_its_form() {
+    let github = GithubAccount {
+        id: "g".into(),
+        user: GithubUser { id: GithubUserId::new(7), name: "ada".into() },
+        held_login: HeldGithubLogin {
+            how: GithubLoginKind::Token,
+            connected_at_ms: 1,
+            ends_at_ms: Some(9),
+            needs_sign_in: false,
+        },
+        rev: Rev::new(2),
+    };
+    answered(
+        ClientResponse::GithubAccount(github),
+        r#"{"result":"github_account","id":"g","user":{"id":7,"name":"ada"},"held_login":{"how":"token","connected_at_ms":1,"ends_at_ms":9,"needs_sign_in":false},"rev":2}"#,
     );
 }
 
@@ -226,6 +253,7 @@ fn every_reply_that_holds_a_model_type_keeps_its_result() {
             ClientResponse::HubSettings(HubSettings {
                 keep_awake: true,
                 allow_asked_in_full_access: Some(false),
+                github: None,
                 rev: Rev::new(1),
             }),
             "hub_settings",

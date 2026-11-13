@@ -10,8 +10,8 @@ use crate::attachment::Attachment;
 use crate::event::SessionEvent;
 use crate::find::Found;
 use crate::model::{
-    Account, DiffComment, FileContents, FileOpened, FilePages, GitDiff, GitStatus, HubSettings, NewWorkspaceDraft,
-    Records, Repo, Session, SessionAccount, TitleError, Workspace, WorktreeFiles,
+    Account, DiffComment, FileContents, FileOpened, FilePages, GitDiff, GitStatus, GithubAccount, HubSettings,
+    NewWorkspaceDraft, Records, Repo, Session, SessionAccount, TitleError, Workspace, WorktreeFiles,
 };
 use crate::tail::{StreamDelta, Tail};
 
@@ -23,6 +23,7 @@ pub mod comments;
 pub mod drafts;
 mod feed;
 pub mod files;
+pub mod github_accounts;
 mod hello;
 pub mod log;
 pub mod new_workspace;
@@ -112,6 +113,7 @@ pub enum ClientResponse {
     AttachmentData(attachments::AttachmentData),
     SessionAccount(SessionAccount),
     Account(Account),
+    GithubAccount(GithubAccount),
     WorktreeFiles(WorktreeFiles),
     FileContents(FileContents),
     FileOpened(FileOpened),

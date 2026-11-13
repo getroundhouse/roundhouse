@@ -21,6 +21,7 @@ mod approvals;
 mod calls;
 mod client_calls;
 mod events;
+mod github_accounts;
 mod hellos;
 mod prompts;
 mod refusals;

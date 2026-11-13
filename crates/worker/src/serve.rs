@@ -227,7 +227,12 @@ async fn handle(
             Ok(WorkerResponse::Ok)
         }
         WorkerRequest::RunningAgents => Ok(running_agents(state)),
-        WorkerRequest::Unknown => Err(unsupported(None)),
+        // One this worker doesn't know, and the git credential and the machine's own `gh` login, which it refuses as a
+        // worker from before them does, so the hub goes on with the machine's own login. *Not built:* both, as "GitHub
+        // accounts" in "State ownership" in `docs/architecture.md` says.
+        WorkerRequest::Unknown | WorkerRequest::GitCredentialSet(_) | WorkerRequest::FindGithubLogin => {
+            Err(unsupported(None))
+        }
         WorkerRequest::NamesGitHas(asked) => worktrees::names_git_has(state, asked).await,
         WorkerRequest::PrepareWorkspace(asked) => worktrees::prepare(state, asked).await,
         WorkerRequest::RestoreWorkspace(asked) => worktrees::restore(state, asked).await,

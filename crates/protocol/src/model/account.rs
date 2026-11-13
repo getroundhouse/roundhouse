@@ -114,29 +114,11 @@ pub struct AgentLogin {
     pub token: LoginToken,
 }
 
-/// The token of a login the hub holds, which is all it takes to use the account, so it's kept out of logs: its `Debug`
-/// says only that it's there, and a request or a reply that carries one can be logged whole. On the wire it's a
-/// string.
-#[derive(Serialize, Deserialize, Clone, PartialEq, Eq)]
-#[serde(transparent)]
-pub struct LoginToken(String);
-
-impl LoginToken {
-    pub fn new(token: impl Into<String>) -> Self {
-        Self(token.into())
-    }
-
-    /// The token itself, for handing to the agent's CLI or keeping, and nothing else.
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl fmt::Debug for LoginToken {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("LoginToken(..)")
-    }
-}
+super::tokens!(
+    /// The token of a login the hub holds for an agent's account, which is all it takes to use the account, and which
+    /// the hub hands to the agent's CLI.
+    LoginToken,
+);
 
 /// What a session's agent runs under: the account, and what the hub has heard of that account's limits, from any
 /// agent under it. Kept for clients from before accounts were records, which ask for it. A client now reads

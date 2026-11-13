@@ -168,7 +168,10 @@ async fn handle(
     use ClientResponse as C;
     Ok(match request {
         R::Hello(_) => return Err(ApiError::new(ErrorCode::InvalidRequest, "already said hello")),
-        R::Unknown => return Err(hub.unsupported(None)),
+        // One this hub doesn't know, and those about GitHub accounts, which it refuses as a hub from before them does.
+        // *Not built:* holding GitHub accounts, as "GitHub accounts" in "State ownership" in `docs/architecture.md`
+        // says.
+        R::Unknown | R::GithubAccountConnect(_) | R::GithubAccountDisconnect(_) => return Err(hub.unsupported(None)),
         R::HubStatus => C::HubStatus(hub.status()),
         R::HubShutdown => {
             hub.request_stop();
