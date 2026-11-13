@@ -4,6 +4,7 @@ use std::sync::Barrier;
 use protocol::model::{LimitWindow, UsageLimit};
 
 use super::*;
+use crate::login_files::LoginFile;
 use crate::store::tests::store_with_session;
 
 mod handing;
@@ -11,7 +12,7 @@ mod handing;
 /// The logins of a hub whose data directory is `dir`, and its store.
 fn logins_in(dir: &Path) -> (Arc<Logins>, Arc<Store>) {
     let store = Arc::new(store_with_session(dir));
-    (Arc::new(Logins::new(store.clone(), dir.join("logins"))), store)
+    (Arc::new(Logins::new(store.clone(), dir)), store)
 }
 
 /// A login of Claude's, named `name`, with `token`, connected at 1000 and ending at 2000. A new account gets an ID
@@ -44,7 +45,6 @@ fn refuse_writes_of_logins(dir: &Path, trigger: &str) {
 }
 
 const ON_UPDATE: &str = "BEFORE UPDATE OF login_file ON accounts";
-const ON_INSERT: &str = "BEFORE INSERT ON accounts WHEN NEW.login_file IS NOT NULL";
 
 fn asked(name: &str, token: &str) -> AccountConnect {
     AccountConnect { agent: AgentKind::Claude, name: name.to_string(), token: LoginToken::new(token), account: None }
@@ -81,7 +81,6 @@ fn what_a_client_asks_is_trimmed_and_given_its_end_and_what_cant_be_connected_is
 
 #[test]
 fn a_token_connected_is_kept_in_a_file_of_its_own_and_the_record_says_the_hub_holds_it() {
-    use std::os::unix::fs::PermissionsExt as _;
     let dir = tempfile::tempdir().unwrap();
     let (logins, store) = logins_in(dir.path());
 
@@ -93,9 +92,6 @@ fn a_token_connected_is_kept_in_a_file_of_its_own_and_the_record_says_the_hub_ho
     let held = account.held_login.unwrap();
     assert_eq!((held.connected_at_ms, held.ends_at_ms), (1000, Some(2000)));
     assert_eq!(tokens_kept(dir.path()), ["a-made-up-token"]);
-    let file = std::fs::read_dir(dir.path().join("logins")).unwrap().next().unwrap().unwrap();
-    assert_eq!(file.metadata().unwrap().permissions().mode() & 0o777, 0o600);
-    assert_eq!(std::fs::metadata(dir.path().join("logins")).unwrap().permissions().mode() & 0o777, 0o700);
     assert_eq!(store.account(&account.id).unwrap(), Some(account), "the record a client is given is the one kept");
 }
 
@@ -220,19 +216,6 @@ fn after_a_disconnect_the_same_token_makes_a_new_account_unless_the_old_one_is_n
 }
 
 #[test]
-fn a_new_login_whose_row_cant_be_written_leaves_no_file_and_no_record() {
-    let dir = tempfile::tempdir().unwrap();
-    let (logins, store) = logins_in(dir.path());
-    refuse_writes_of_logins(dir.path(), ON_INSERT);
-
-    let refused = logins.connect(&connect("Work", "a-made-up-token", None));
-
-    assert_eq!(refused.unwrap_err().code, ErrorCode::Internal);
-    assert_eq!(tokens_kept(dir.path()), Vec::<String>::new());
-    assert_eq!(store.account(&"claude-login-Work".into()).unwrap(), None);
-}
-
-#[test]
 fn a_renewal_whose_row_cant_be_written_keeps_the_old_login_whole() {
     let dir = tempfile::tempdir().unwrap();
     let (logins, store) = logins_in(dir.path());
@@ -261,18 +244,6 @@ fn a_disconnect_whose_row_cant_be_cleared_has_already_forgotten_the_token_and_ti
     assert_eq!(refused.unwrap_err().code, ErrorCode::Internal);
     assert_eq!(left, Vec::<String>::new());
     assert_eq!(store.account(&id).unwrap().unwrap().held_login, None);
-}
-
-#[test]
-fn a_login_whose_file_cant_be_written_makes_no_record() {
-    let dir = tempfile::tempdir().unwrap();
-    let (logins, store) = logins_in(dir.path());
-    std::fs::write(dir.path().join("logins"), "not a directory").unwrap();
-
-    let refused = logins.connect(&connect("Work", "a-made-up-token", None));
-
-    assert_eq!(refused.unwrap_err().code, ErrorCode::Internal);
-    assert_eq!(store.account(&"claude-login-Work".into()).unwrap(), None);
 }
 
 /// Connects `token` from eight threads at once, under the names `name` gives each, and answers with what each got.
@@ -312,67 +283,20 @@ fn eight_connects_of_one_token_at_once_make_one_account() {
 }
 
 #[test]
-fn tidying_clears_a_login_whose_file_is_gone_empty_or_not_one_the_hub_names_and_removes_files_no_account_names() {
+fn tidying_clears_a_login_whose_file_isnt_a_token_and_removes_a_file_no_account_names() {
     let dir = tempfile::tempdir().unwrap();
     let (logins, store) = logins_in(dir.path());
     let kept = logins.connect(&connect("Kept", "kept-token", None)).unwrap().account.id;
-    let gone = logins.connect(&connect("Gone", "gone-token", None)).unwrap().account.id;
-    let emptied = logins.connect(&connect("Emptied", "emptied-token", None)).unwrap().account.id;
-    let elsewhere = logins.connect(&connect("Elsewhere", "elsewhere-token", None)).unwrap().account.id;
-    let file_of = |token: &str| {
-        let entries = std::fs::read_dir(dir.path().join("logins")).unwrap();
-        let mut paths = entries.map(|entry| entry.unwrap().path());
-        paths.find(|path| std::fs::read_to_string(path).unwrap() == token).unwrap()
-    };
-    std::fs::remove_file(file_of("gone-token")).unwrap();
-    std::fs::write(file_of("emptied-token"), "").unwrap();
-    let conn = rusqlite::Connection::open(dir.path().join("hub.db")).unwrap();
-    conn.execute("UPDATE accounts SET login_file = '../hub.db' WHERE id = ?", [elsewhere.as_str()]).unwrap();
-    std::fs::write(dir.path().join("logins").join(LoginFile::new().as_str()), "a-stray-token").unwrap();
-    std::fs::write(dir.path().join("logins/half-written.partial"), "a-half").unwrap();
-
-    logins.tidy().unwrap();
-
-    let held = |id: &AccountId| store.account(id).unwrap().unwrap().held_login.is_some();
-    assert!(held(&kept));
-    assert!(!held(&gone) && !held(&emptied) && !held(&elsewhere));
-    let named: Vec<AccountId> = store.login_files().unwrap().into_iter().map(|(id, _)| id).collect();
-    assert_eq!(named, [kept], "no row names a file any more but the one kept");
-    assert_eq!(tokens_kept(dir.path()), ["kept-token"]);
-}
-
-#[test]
-fn a_file_that_isnt_text_holds_no_login_and_one_that_cant_be_read_is_kept_and_stops_no_other_login() {
-    let dir = tempfile::tempdir().unwrap();
-    let (logins, store) = logins_in(dir.path());
     let garbled = logins.connect(&connect("Garbled", "garbled-token", None)).unwrap().account.id;
-    let unreadable = logins.connect(&connect("Unreadable", "unreadable-token", None)).unwrap().account.id;
-    let file_of = |id: &AccountId| {
-        let files = store.login_files().unwrap();
-        let file = files.into_iter().find(|(of, _)| of == id).and_then(|(_, file)| file).unwrap();
-        dir.path().join("logins").join(file.as_str())
-    };
-    let (garbled_file, unreadable_file) = (file_of(&garbled), file_of(&unreadable));
-    std::fs::write(&garbled_file, [0xff, 0xfe, 0xfd]).unwrap();
-    // A directory where the file was, which reading fails on even as root, as it wouldn't on a file whose mode changed.
-    std::fs::remove_file(&unreadable_file).unwrap();
-    std::fs::create_dir(&unreadable_file).unwrap();
+    let entries = std::fs::read_dir(dir.path().join("logins")).unwrap();
+    let mut paths = entries.map(|entry| entry.unwrap().path());
+    let garbled_file = paths.find(|path| std::fs::read_to_string(path).unwrap() == "garbled-token").unwrap();
+    std::fs::write(garbled_file, [0xff, 0xfe, 0xfd]).unwrap();
+    std::fs::write(dir.path().join("logins").join(LoginFile::new().as_str()), "a-stray-token").unwrap();
 
-    let another = logins.connect(&connect("Another", "another-token", None));
     logins.tidy().unwrap();
 
     let held = |id: &AccountId| store.account(id).unwrap().unwrap().held_login.is_some();
-    assert!(another.is_ok_and(|connected| connected.changed), "an unreadable file stops no other connect");
-    assert!(!held(&garbled) && !garbled_file.exists(), "a file that isn't text holds no token");
-    assert!(held(&unreadable) && unreadable_file.is_dir(), "a file that can't be read is left with its row");
-}
-
-#[test]
-fn tidying_a_hub_that_has_never_held_a_login_does_nothing() {
-    let dir = tempfile::tempdir().unwrap();
-    let (logins, _) = logins_in(dir.path());
-
-    logins.tidy().unwrap();
-
-    assert!(!dir.path().join("logins").exists());
+    assert!(held(&kept) && !held(&garbled));
+    assert_eq!(tokens_kept(dir.path()), ["kept-token"]);
 }

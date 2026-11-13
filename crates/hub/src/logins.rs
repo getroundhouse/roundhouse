@@ -1,23 +1,16 @@
 //! The logins the hub holds for agents' accounts. Each token is a file of its own, which `crate::login_files` keeps,
-//! and everything else about the login is on its account's row in the database. The token stays out of the database
-//! since the copies of it from before each migration would keep a token once it was disconnected.
-//!
-//! The writes are in an order chosen so that whatever stops the hub, or the machine, leaves either a file no row names
-//! or a row naming a file that's gone. As the hub starts, [`Logins::tidy`] mends both. So a login the hub has said it
-//! holds is never lost, and a token it was told to forget never comes back.
+//! in the order it says, and everything else about the login is on its account's row in the database. The token stays
+//! out of the database since the copies of it from before each migration would keep a token once it was disconnected.
 
-use std::collections::HashSet;
-use std::path::PathBuf;
+use std::path::Path;
 use std::sync::Arc;
 
-use parking_lot::Mutex;
 use protocol::client::accounts::AccountConnect;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{Account, AccountId, AgentKind, AgentLogin, LoginDescription, LoginToken};
-use tracing::{info, warn};
 
 use crate::error::internal;
-use crate::login_files::{LoginFile, LoginFiles};
+use crate::login_files::{LoginFiles, LoginSecret};
 use crate::store::{Connecting, Held, IdFrom, Store, StoreError};
 
 #[cfg(test)]
@@ -29,14 +22,24 @@ const MAX_NAME_BYTES: usize = 200;
 /// Longer than any token an agent's CLI makes, which `claude setup-token`'s is about a hundred characters.
 const MAX_TOKEN_BYTES: usize = 4096;
 
-/// Connects, disconnects, tidies and hands out a login one at a time, so none finds another half done. Synchronous, and
-/// only called off the async threads.
+/// Connects, disconnects, tidies and hands out a login one at a time, under its files' lock, so none finds another half
+/// done. Synchronous, and only called off the async threads.
 pub(crate) struct Logins {
     store: Arc<Store>,
-    files: LoginFiles,
-    /// A `parking_lot` lock held through file syncs and a synced commit, which is right only because it's only taken
-    /// off the async threads, as the store's own are, and guards nothing in memory.
-    one_at_a_time: Mutex<()>,
+    files: LoginFiles<LoginToken>,
+}
+
+/// A token is kept as its text, and a file that isn't text holds none, since no token the hub wrote is.
+impl LoginSecret for LoginToken {
+    const DIR: &'static str = protocol::paths::LOGINS_DIR;
+
+    fn to_bytes(&self) -> Vec<u8> {
+        self.as_str().as_bytes().to_vec()
+    }
+
+    fn from_bytes(bytes: Vec<u8>) -> Option<Self> {
+        String::from_utf8(bytes).ok().map(LoginToken::new)
+    }
 }
 
 /// A login the hub gives an agent it launches, or a one-off call, with the account it holds it for.
@@ -102,18 +105,19 @@ pub(crate) struct AccountChange {
 }
 
 impl Logins {
-    pub(crate) fn new(store: Arc<Store>, dir: PathBuf) -> Self {
-        Self { store, files: LoginFiles::new(dir), one_at_a_time: Mutex::new(()) }
+    /// The logins of a hub whose data directory is `data_dir`.
+    pub(crate) fn new(store: Arc<Store>, data_dir: &Path) -> Self {
+        Self { store, files: LoginFiles::new(data_dir) }
     }
 
     /// Has the hub hold `connect`'s login, as `AccountConnect` says. A token it already holds changes only the name of
     /// the account that holds it, when that's the account named, and without one finds that account under its own name
-    /// and is refused under another. Otherwise the token's file is written, and then the row, so a hub that stops
-    /// between the two leaves a file no row names.
+    /// and is refused under another. Otherwise the token is kept, and then the row written, as
+    /// [`Locked::connect`](crate::login_files::Locked::connect) says.
     pub(crate) fn connect(&self, connect: &Connect) -> Result<AccountChange, ApiError> {
-        let _one_at_a_time = self.one_at_a_time.lock();
-        let holding = self.holding(connect.agent, &connect.token)?;
-        let id = match (&connect.account, holding) {
+        let files = self.files.lock();
+        let held = self.store.held_logins(connect.agent)?.into_iter().map(|held| (held.account, held.file));
+        let id = match (&connect.account, files.holding(held, &connect.token)) {
             (None, Some(holding)) => return self.connected_already(&holding, &connect.name),
             (None, None) => &connect.new_id,
             (Some(id), holding) => {
@@ -128,35 +132,28 @@ impl Logins {
                 }
             }
         };
-        let file = LoginFile::new();
-        self.files.write(&file, &connect.token).map_err(|e| {
-            self.let_go(&file);
-            internal(format!("couldn't keep the login's token: {e}"))
+        let account = files.connect(&connect.token, |file| {
+            let connecting = Connecting {
+                account: id,
+                agent: connect.agent,
+                name: &connect.name,
+                file,
+                connected_at_ms: connect.connected_at_ms,
+                ends_at_ms: connect.ends_at_ms,
+            };
+            Ok(self.store.connect_login(&connecting)?)
         })?;
-        let connecting = Connecting {
-            account: id,
-            agent: connect.agent,
-            name: &connect.name,
-            file: &file,
-            connected_at_ms: connect.connected_at_ms,
-            ends_at_ms: connect.ends_at_ms,
-        };
-        let (account, replaced) = self.store.connect_login(&connecting).inspect_err(|_| self.let_go(&file))?;
-        if let Some(replaced) = replaced {
-            self.let_go(&replaced);
-        }
         Ok(AccountChange { account, changed: true })
     }
 
     /// Has the hub forget the login it holds for `id`, as `AccountDisconnect` says. The file goes first, and then the
-    /// row, so nothing that stops the hub or the machine between the two brings the token back.
+    /// row, as [`Locked::disconnect`](crate::login_files::Locked::disconnect) says.
     pub(crate) fn disconnect(&self, id: &AccountId) -> Result<AccountChange, ApiError> {
-        let _one_at_a_time = self.one_at_a_time.lock();
-        if let Some(file) = self.store.login_row(id)?.file {
-            self.files.remove(&file).map_err(|e| internal(format!("couldn't forget the login's token: {e}")))?;
-            if let Some(account) = self.store.clear_login(id)? {
-                return Ok(AccountChange { account, changed: true });
-            }
+        let files = self.files.lock();
+        if let Some(file) = self.store.login_row(id)?.file
+            && let Some(account) = files.disconnect(&file, || Ok(self.store.clear_login(id)?))?
+        {
+            return Ok(AccountChange { account, changed: true });
         }
         Ok(AccountChange { account: self.record(id)?, changed: false })
     }
@@ -174,13 +171,13 @@ impl Logins {
     /// whose row couldn't be cleared leaves one, until it's tried again or the hub next starts and tidies, as does a
     /// file something else removed.
     pub(crate) fn to_hand(&self, agent: AgentKind, now_ms: i64) -> Result<Option<Handed>, ApiError> {
-        let _one_at_a_time = self.one_at_a_time.lock();
+        let files = self.files.lock();
         let held = self.store.held_logins(agent)?;
         let Some(Held { account, name, file, .. }) = held.into_iter().find(|held| not_ended(held, now_ms)) else {
             return Ok(None);
         };
         let called = name.unwrap_or_else(|| account.to_string());
-        match self.files.read(&file) {
+        match files.read(&file) {
             Ok(Some(token)) => Ok(Some(Handed { account, login: AgentLogin { token } })),
             Ok(None) => Err(internal(format!(
                 "the token of the hub's login for {called} is gone, so connect it again, or disconnect it"
@@ -189,45 +186,14 @@ impl Logins {
         }
     }
 
-    /// Makes the files and the rows agree, as the hub starts: a row whose file is gone, empty or not a token holds no
-    /// login, and a file no row names is removed. A file that can't be read is left with its row, and said, so the
-    /// rest are still tidied.
+    /// Makes the logins' files and the accounts' rows agree, as the hub starts, as
+    /// [`Locked::tidy`](crate::login_files::Locked::tidy) says.
     pub(crate) fn tidy(&self) -> Result<(), ApiError> {
-        let _one_at_a_time = self.one_at_a_time.lock();
-        let mut kept = HashSet::new();
-        for (id, file) in self.store.login_files()? {
-            let held = match &file {
-                Some(file) => self.files.read(file).map(|token| token.is_some()),
-                None => Ok(false),
-            };
-            match (file, held) {
-                (Some(file), Ok(true)) => {
-                    kept.insert(file);
-                }
-                (Some(file), Err(e)) => {
-                    warn!(account = %id, "couldn't read the token of the hub's login for an account: {e}");
-                    kept.insert(file);
-                }
-                (None, _) | (Some(_), Ok(false)) => {
-                    info!(account = %id, "the token of the hub's login for an account is gone, so it holds none");
-                    self.store.clear_login(&id)?;
-                }
-            }
-        }
-        self.files.remove_all_but(&kept).map_err(|e| internal(format!("couldn't let go of the logins' files: {e}")))
-    }
-
-    /// The account whose login of `agent`'s kind has `token`, if the hub holds one. A file that can't be read is said
-    /// and passed over, so one account's file doesn't stop another's login being connected.
-    fn holding(&self, agent: AgentKind, token: &LoginToken) -> Result<Option<AccountId>, ApiError> {
-        for Held { account, file, .. } in self.store.held_logins(agent)? {
-            match self.files.read(&file) {
-                Ok(read) if read.as_ref() == Some(token) => return Ok(Some(account)),
-                Ok(_) => {}
-                Err(e) => warn!(%account, "couldn't read the token of the hub's login for an account: {e}"),
-            }
-        }
-        Ok(None)
+        let files = self.files.lock();
+        files.tidy(self.store.login_files()?, |id| {
+            self.store.clear_login(id)?;
+            Ok(())
+        })
     }
 
     /// Refuses to replace the login of an account that has no record, or whose ID the hub didn't choose for a login of
@@ -264,13 +230,5 @@ impl Logins {
     fn record(&self, id: &AccountId) -> Result<Account, ApiError> {
         let found = self.store.account(id)?;
         Ok(found.ok_or_else(|| StoreError::NotFound { kind: "account", id: id.to_string() })?)
-    }
-
-    /// Removes a file no row names, or will. One that can't be is left for [`Logins::tidy`] as the hub next starts,
-    /// since nothing reads a file no row names, so what was asked still counts.
-    fn let_go(&self, file: &LoginFile) {
-        if let Err(e) = self.files.remove(file) {
-            warn!("couldn't let go of a login's file no account names, which goes as the hub next starts: {e}");
-        }
     }
 }

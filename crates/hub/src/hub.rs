@@ -129,14 +129,16 @@ pub(crate) struct Hub {
 pub(crate) struct HubDirs {
     pub(crate) attachments: PathBuf,
     pub(crate) worker_logs: PathBuf,
-    pub(crate) logins: PathBuf,
+    /// The data directory itself, in which the files of each kind of login have a directory of their own, as
+    /// `LoginSecret::DIR` says.
+    pub(crate) data: PathBuf,
 }
 
 impl HubDirs {
     /// Each in `dir`, for a test's hub.
     #[cfg(test)]
     pub(crate) fn in_dir(dir: &std::path::Path) -> Self {
-        Self { attachments: dir.join("attachments"), worker_logs: dir.join("worker-logs"), logins: dir.join("logins") }
+        Self { attachments: dir.join("attachments"), worker_logs: dir.join("worker-logs"), data: dir.to_path_buf() }
     }
 }
 
@@ -151,7 +153,7 @@ impl Hub {
     ) -> Self {
         Self {
             build,
-            logins: Arc::new(Logins::new(store.clone(), dirs.logins)),
+            logins: Arc::new(Logins::new(store.clone(), &dirs.data)),
             store,
             attachment_files: AttachmentFiles::new(dirs.attachments),
             worker_logs_dir: dirs.worker_logs,
