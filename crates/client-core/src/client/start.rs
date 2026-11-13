@@ -136,7 +136,7 @@ fn start_hub(paths: &Paths, daemon: &Daemon) -> io::Result<()> {
         .stdin(Stdio::null())
         .stdout(Stdio::from(log.try_clone()?))
         .stderr(Stdio::from(log));
-    detach(&mut command);
+    process::detach(&mut command);
     waiting_out_busy(|| command.spawn())
         .map_err(|e| io::Error::new(e.kind(), format!("starting {}: {e}", exe.display())))?;
     Ok(())
@@ -150,25 +150,6 @@ fn whole(path: &Path) -> io::Result<PathBuf> {
     }
     std::path::absolute(path)
         .map_err(|e| io::Error::new(e.kind(), format!("finding {} from here: {e}", path.display())))
-}
-
-/// Detaches the hub from this terminal and process group, so closing the client doesn't reach it.
-#[cfg(unix)]
-fn detach(command: &mut Command) {
-    process::own_session(command);
-}
-
-/// Gives the hub a console of its own with no window, so closing the client's doesn't reach it. It needs one, or
-/// everything it starts would open a console window each, where this way they share its hidden one.
-#[cfg(windows)]
-fn detach(command: &mut Command) {
-    use std::os::windows::process::CommandExt;
-    use windows_sys::Win32::System::Threading::CREATE_NO_WINDOW;
-    command.creation_flags(CREATE_NO_WINDOW);
-    // Otherwise the hub would hold this client's own input and output for as long as it runs, so whatever reads this
-    // client's output to its end, such as the next command in a pipeline, would wait that long. The hub has the log
-    // for its own.
-    process::keep_stdio_from_children();
 }
 
 /// Runs a freshly written copy, waiting out its being busy. Linux won't run a file while anything has it open for
@@ -230,10 +211,22 @@ fn temporary_prefix() -> String {
 /// signature inside. Closes the file, which Linux needs before it will run it.
 fn write_executable(original: &Path, mut file: File) -> io::Result<()> {
     io::copy(&mut File::open(original)?, &mut file)?;
-    #[cfg(unix)]
-    file.set_permissions(std::os::unix::fs::PermissionsExt::from_mode(0o755))?;
+    let_run(&file)?;
     // Before it's linked in, so a crash can't leave a copy in place that's missing part of what was written.
     file.sync_all()
+}
+
+/// Lets anyone run `file`, as an installed program can be.
+#[cfg(unix)]
+fn let_run(file: &File) -> io::Result<()> {
+    file.set_permissions(std::os::unix::fs::PermissionsExt::from_mode(0o755))
+}
+
+/// Nothing on Windows, which runs a file by its name's extension.
+#[cfg(windows)]
+#[expect(clippy::unnecessary_wraps, reason = "it takes the place of Unix's, which can fail")]
+fn let_run(_file: &File) -> io::Result<()> {
+    Ok(())
 }
 
 /// The daemon beside a client can be another build: one still running after an update replaced its install directory

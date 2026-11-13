@@ -67,22 +67,14 @@ fn delete_tree(path: &Path) -> io::Result<()> {
     }
 }
 
-/// Gives the owner write and search permission on every directory in the tree, without following links out of it.
-/// On Windows that's clearing its read-only mark, which is all a directory's permissions hold there.
+/// Lets the owner change every directory in the tree, without following links out of it.
 fn make_writable(dir: &Path) -> io::Result<()> {
     let metadata = std::fs::symlink_metadata(dir)?;
     if !metadata.is_dir() {
         return Ok(());
     }
     let mut permissions = metadata.permissions();
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt as _;
-        permissions.set_mode(permissions.mode() | 0o700);
-    }
-    #[cfg(windows)]
-    #[expect(clippy::permissions_set_readonly_false, reason = "it only warns about Unix, where this isn't built")]
-    permissions.set_readonly(false);
+    let_owner_write(&mut permissions);
     std::fs::set_permissions(dir, permissions)?;
     for entry in std::fs::read_dir(dir)? {
         let entry = entry?;
@@ -91,4 +83,17 @@ fn make_writable(dir: &Path) -> io::Result<()> {
         }
     }
     Ok(())
+}
+
+/// Read, write and search for the owner, so what's in it can be listed and removed.
+#[cfg(unix)]
+fn let_owner_write(permissions: &mut std::fs::Permissions) {
+    use std::os::unix::fs::PermissionsExt as _;
+    permissions.set_mode(permissions.mode() | 0o700);
+}
+
+/// No read-only mark, which is all a directory's permissions hold on Windows.
+#[cfg(windows)]
+fn let_owner_write(permissions: &mut std::fs::Permissions) {
+    permissions.set_readonly(false);
 }

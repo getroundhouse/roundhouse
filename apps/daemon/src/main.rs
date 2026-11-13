@@ -2,6 +2,7 @@
 //! so on a Mac they're separate processes from day one.
 
 mod runtime;
+mod signals;
 mod worker_role;
 
 use std::path::PathBuf;
@@ -59,21 +60,6 @@ enum Role {
     },
 }
 
-/// Blocked signals carry across fork and exec, Rust's `Command` no longer resets them, and the desktop
-/// app starts a hub from a background thread that has them all blocked. This binary needs them: tokio
-/// only learns that a child exited from `SIGCHLD`, so without it the first `git` never returns, and
-/// `SIGTERM` is how it's asked to stop. Everything this starts inherits the result, agents included.
-#[cfg(unix)]
-fn unblock_signals() {
-    let mut none = std::mem::MaybeUninit::<libc::sigset_t>::uninit();
-    // SAFETY: `sigemptyset` initializes the set it's given, and this runs on the main thread before any
-    // other exists, so every thread started later inherits the empty mask.
-    unsafe {
-        libc::sigemptyset(none.as_mut_ptr());
-        libc::pthread_sigmask(libc::SIG_SETMASK, none.as_ptr(), std::ptr::null_mut());
-    }
-}
-
 /// Everything a worker starts runs the code in a workspace, which can be another build of Roundhouse, and these
 /// would point it at this hub. That includes git hooks, so it has to cover every command rather than a few.
 fn forget_hub_variables() {
@@ -84,8 +70,7 @@ fn forget_hub_variables() {
 }
 
 fn main() -> anyhow::Result<()> {
-    #[cfg(unix)]
-    unblock_signals();
+    signals::unblock();
     // Before anything is started. A worker's input and output are its hub's pipes, and the hub learns that the worker
     // has exited when its output ends.
     process::keep_stdio_from_children();

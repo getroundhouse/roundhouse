@@ -139,6 +139,27 @@ fn any_other_build_starts_the_daemon_where_it_is() {
     assert!(!paths.daemons_dir.exists());
 }
 
+/// Apart from this client, so closing its terminal doesn't reach the hub.
+#[cfg(unix)]
+#[test]
+fn a_hub_leads_a_session_of_its_own() {
+    let dir = tempfile::tempdir().unwrap();
+    let paths = paths_in(dir.path());
+    let says = "echo $$ > \"$ROUNDHOUSE_HOME/pid\"; exec sleep 30";
+    let original = install(dir.path(), "app", &daemon_script(VERSION, says));
+
+    start_hub(&paths, &Daemon::in_place(&original)).unwrap();
+
+    let file = paths.data_dir.join("pid");
+    let pid: libc::pid_t =
+        wait_for("the daemon to say its PID", || std::fs::read_to_string(&file).ok()?.trim().parse().ok());
+    // SAFETY: getsid and kill take any PID and touch no memory.
+    let session = unsafe { libc::getsid(pid) };
+    // SAFETY: as above.
+    unsafe { libc::kill(pid, libc::SIGKILL) };
+    assert_eq!(session, pid, "the hub isn't the leader of a session");
+}
+
 /// A hub outlives the client that starts it, so it runs in its data directory rather than the client's, which can be a
 /// workspace that gets archived, or on Linux the mount of an `AppImage` that an update has replaced. Each path it's
 /// handed is whole, so a relative one still names what it did where the client is.

@@ -122,15 +122,16 @@ async fn finish(
     shared.exited.send_replace(true);
 }
 
-/// The signal that ended a process, which only Unix has.
+/// The signal that ended a process.
+#[cfg(unix)]
 fn signal_of(status: ExitStatus) -> Option<i32> {
-    #[cfg(unix)]
-    return std::os::unix::process::ExitStatusExt::signal(&status);
-    #[cfg(windows)]
-    {
-        let _ = status;
-        None
-    }
+    std::os::unix::process::ExitStatusExt::signal(&status)
+}
+
+/// None on Windows, which has no signals, so a process there ends with a code.
+#[cfg(windows)]
+fn signal_of(_status: ExitStatus) -> Option<i32> {
+    None
 }
 
 #[derive(Debug, PartialEq)]

@@ -1,5 +1,6 @@
 //! What stands in for process groups and `ps` on Windows: a process's descendants, found from each process's parent,
-//! and its start time, both through the Win32 API. Also which of a process's handles its children get.
+//! and its start time, both through the Win32 API. Also which of a process's handles its children get, and a console
+//! of its own for one started apart from this process.
 //!
 //! A descendant whose own parent has exited isn't found, since nothing links it to the tree any more. A job object
 //! would hold it.
@@ -16,8 +17,8 @@ use windows_sys::Win32::System::Diagnostics::ToolHelp::{
     CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW, TH32CS_SNAPPROCESS,
 };
 use windows_sys::Win32::System::Threading::{
-    CREATE_NEW_PROCESS_GROUP, GetProcessTimes, OpenProcess, PROCESS_ACCESS_RIGHTS, PROCESS_QUERY_LIMITED_INFORMATION,
-    PROCESS_SYNCHRONIZE, PROCESS_TERMINATE, TerminateProcess, WaitForSingleObject,
+    CREATE_NEW_PROCESS_GROUP, CREATE_NO_WINDOW, GetProcessTimes, OpenProcess, PROCESS_ACCESS_RIGHTS,
+    PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE, PROCESS_TERMINATE, TerminateProcess, WaitForSingleObject,
 };
 
 use crate::Signal;
@@ -88,6 +89,12 @@ pub(crate) fn signal_group(leader: u32, signal: Signal) {
     match signal {
         Signal::Interrupt | Signal::Terminate | Signal::Kill => end_tree(leader),
     }
+}
+
+/// A console of its own with no window, without this process's own input and output.
+pub(crate) fn detach(command: &mut Command) {
+    command.creation_flags(CREATE_NO_WINDOW);
+    keep_stdio_from_children();
 }
 
 pub(crate) fn keep_stdio_from_children() {
@@ -169,6 +176,8 @@ mod tests {
     use std::process::Stdio;
     use std::time::{Duration, Instant};
 
+    use windows_sys::Win32::Foundation::GetHandleInformation;
+
     use super::*;
 
     fn children_of(pid: u32) -> Vec<u32> {
@@ -219,6 +228,25 @@ mod tests {
         signal_group(started.id(), Signal::Kill);
         started.wait().unwrap();
         assert_eq!(read, Ok(true), "what this process started still holds the pipe");
+    }
+
+    #[test]
+    fn what_this_process_starts_after_detaching_one_gets_none_of_its_output() {
+        // SAFETY: GetStdHandle takes any of the three and touches no memory.
+        let output = unsafe { GetStdHandle(STD_OUTPUT_HANDLE) };
+        assert!(!output.is_null() && output != INVALID_HANDLE_VALUE, "this test has no output of its own");
+        // Passed on to children, as a process's own output is when it was started with it.
+        // SAFETY: `output` is this process's open output, and the call touches no memory.
+        let marked = unsafe { SetHandleInformation(output, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT) };
+        assert_ne!(marked, 0, "its output couldn't be passed on");
+
+        detach(&mut Command::new("cmd"));
+
+        let mut flags = 0;
+        // SAFETY: `output` is open, and `flags` is somewhere for the answer to go.
+        let read = unsafe { GetHandleInformation(output, &raw mut flags) };
+        assert_ne!(read, 0, "its output's flags couldn't be read");
+        assert_eq!(flags & HANDLE_FLAG_INHERIT, 0, "what this process starts would still get its output");
     }
 
     #[test]
