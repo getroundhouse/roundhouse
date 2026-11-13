@@ -2,12 +2,12 @@
 //! one can be made now, and what the hub keeps of it. It makes what the dialog asks for, and gives back a prompt for a
 //! workspace that couldn't be made.
 
-use client_core::{Client, FileToSend};
+use client_core::Client;
 use gpui_kit::component::WindowExt as _;
 use gpui_kit::{App, AppContext as _, Context, Entity, WeakEntity, Window};
 use protocol::model::{PermissionMode, RepoId, WorkspaceId};
-use protocol::prompt::Prompt;
 
+use super::made::GivenBack;
 use crate::app::AppView;
 use crate::new_workspace::{self, DialogEvent, Keeping, NewWorkspaceDialog, Offer};
 
@@ -58,7 +58,8 @@ impl AppView {
                 self.dialog_closed(window, cx);
             }
             Err(request) => dialog.update(cx, |dialog, cx| {
-                dialog.give_back(request.prompt, request.permission_mode, window, cx);
+                let new_workspace::Request { prompt, coming_back, permission_mode, .. } = *request;
+                dialog.give_back(prompt, coming_back, permission_mode, window, cx);
             }),
         }
     }
@@ -106,16 +107,12 @@ impl AppView {
 
     /// Puts back a prompt for a workspace that couldn't be made, with the mode it was to start in, and opens the dialog
     /// to show where it went, unless another dialog is open.
-    pub(super) fn give_back_to_dialog(
-        &mut self,
-        prompt: Prompt<FileToSend>,
-        mode: PermissionMode,
-        cx: &mut Context<Self>,
-    ) {
+    pub(super) fn give_back_to_dialog(&mut self, given_back: GivenBack, mode: PermissionMode, cx: &mut Context<Self>) {
         let Some(dialog) = self.new_workspace.clone() else { return };
         let this = cx.weak_entity();
+        let GivenBack { prompt, coming_back, .. } = given_back;
         let _ = self.window.update(cx, |_, window, cx| {
-            dialog.update(cx, |dialog, cx| dialog.give_back(prompt, mode, window, cx));
+            dialog.update(cx, |dialog, cx| dialog.give_back(prompt, coming_back, mode, window, cx));
             if !window.has_active_dialog(cx) {
                 new_workspace::open(&dialog, closed(this), window, cx);
             }

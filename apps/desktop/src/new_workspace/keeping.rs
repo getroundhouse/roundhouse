@@ -58,7 +58,7 @@ impl NewWorkspaceDialog {
 
     /// What's here, as the hub keeps it. Files still being read back come first, where they'll be put back, so the
     /// draft goes on naming them.
-    fn to_keep(&self, cx: &App) -> NewWorkspaceDraftToKeep {
+    pub(super) fn to_keep(&self, cx: &App) -> NewWorkspaceDraftToKeep {
         let coming_back = self.keeping.restoring.iter().map(|file| file.id.clone());
         NewWorkspaceDraftToKeep {
             repo_id: Some(self.repo.clone()),
@@ -164,9 +164,41 @@ impl NewWorkspaceDialog {
         cx.notify();
     }
 
-    /// Whether files the hub keeps are still being read back, which Create waits for, so they go with the prompt.
-    pub(super) fn bringing_back(&self) -> bool {
-        !self.keeping.restoring.is_empty()
+    /// Answers once what's handed to the keeper so far is kept, or once that's as far as it can get, such as without a
+    /// connection, which Create waits for, so the hub makes the workspace from what's asked for.
+    pub(super) fn kept_once_flushed(&self) -> Option<flume::Receiver<()>> {
+        self.keeping.keeper.as_ref().map(Drafts::flushed)
+    }
+
+    /// Stops reading back the files the record names that aren't here, as Create takes them with it, and returns them.
+    /// A read already on its way is dropped once it's back, as no longer waited for.
+    pub(super) fn stop_bringing_back(&mut self) -> Vec<Attachment> {
+        std::mem::take(&mut self.keeping.restoring)
+    }
+
+    /// Reads back `files` too, such as those a workspace that couldn't be made gives back, before any still being read
+    /// back, leaving out any that's here already.
+    pub(super) fn bring_back_too(&mut self, files: Vec<Attachment>, cx: &mut Context<Self>) {
+        let here: HashSet<AttachmentId> = self.attached.ids().chain(self.restoring_ids()).collect();
+        let mut files: Vec<Attachment> = files.into_iter().filter(|file| !here.contains(&file.id)).collect();
+        if files.is_empty() {
+            return;
+        }
+        files.append(&mut self.keeping.restoring);
+        self.keeping.restoring = files;
+        self.bring_back(cx);
+    }
+
+    fn restoring_ids(&self) -> impl Iterator<Item = AttachmentId> + '_ {
+        self.keeping.restoring.iter().map(|file| file.id.clone())
+    }
+
+    /// Has the hub stop keeping what a workspace made a step at a time took from the dialog, for a hub too old to make
+    /// one from what it keeps, which would empty it itself: what's here now is kept, and the files `made_of` named are
+    /// let go of.
+    pub(crate) fn made_without_the_hub(&mut self, made_of: &NewWorkspaceDraftToKeep, cx: &App) {
+        self.keep(true, cx);
+        self.let_go_of(&made_of.files);
     }
 
     /// Whether anything is typed or attached that quitting or restarting would lose, because the hub hasn't had it.

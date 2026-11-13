@@ -45,6 +45,31 @@ fn a_workspace_that_cant_be_made_gives_the_prompt_back_to_the_dialog(cx: &mut Te
     assert!(ui.dialog_planning(), "plan mode comes back with the prompt");
 }
 
+/// The hub gives the new chat the prompt only whole. Here it has lost a file's bytes, so it can't copy it, and the
+/// prompt stays in the dialog, which opens again to show it with the file, though the workspace was made.
+#[gpui_kit::test]
+fn a_prompt_the_hub_couldnt_give_the_new_chat_whole_goes_back_to_the_dialog(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = open_with_a_repo(cx, &stack);
+    ui.open_new_workspace();
+    ui.input("say:with notes");
+    ui.paste(copied(&stack, 1));
+    ui.wait("the file to be attached", |ui| ui.dialog_attached().len() == 1);
+    ui.view().drafts().unwrap().flushed().recv().unwrap();
+    for kept in std::fs::read_dir(stack.hub.paths.attachments_dir.join("workspace-draft.files")).unwrap() {
+        std::fs::remove_file(kept.unwrap().path()).unwrap();
+    }
+    let before = ui.view().records().workspaces().len();
+
+    ui.press("enter");
+
+    ui.wait_for_a_new_workspace(before);
+    ui.wait("the dialog again", |ui| ui.has_dialog() && ui.dialog_text() == "say:with notes");
+    assert!(ui.view().error.clone().unwrap().contains("couldn't send that"));
+    assert_eq!(ui.dialog_attached(), ["file-0.txt"]);
+    assert_eq!(ui.composer_text(), "", "nothing went to the new chat's composer");
+}
+
 /// The dialog can only hold as many files as a prompt carries, so of those given back and those attached since, the
 /// last don't fit, and it says so.
 #[gpui_kit::test]
@@ -58,14 +83,9 @@ fn files_given_back_to_a_full_dialog_go_first_and_it_says_which_didnt_fit(cx: &m
     std::fs::remove_dir_all(stack.repo()).unwrap();
 
     // As if Create had been pressed before these were attached, and making the workspace then failed.
-    let request = Request {
-        repo: ui.first_repo_id(),
-        prompt: Prompt::carrying("say:one more", vec![file("earlier.txt")]),
-        agent: AgentKind::Claude,
-        model: Some(CLAUDE_STARTS_WITH.0),
-        effort: Some(CLAUDE_STARTS_WITH.1),
-        permission_mode: PermissionMode::FullAccess,
-    };
+    let prompt = Prompt::carrying("say:one more", vec![file("earlier.txt")]);
+    let chosen = (Some(CLAUDE_STARTS_WITH.0), Some(CLAUDE_STARTS_WITH.1));
+    let request = Request::new(ui.first_repo_id(), prompt, AgentKind::Claude, chosen, PermissionMode::FullAccess);
     let view = ui.view.clone();
     ui.cx.update_entity(&view, |v, cx| v.create_workspace(request, cx)).unwrap();
 
@@ -135,26 +155,28 @@ fn a_new_workspace_whose_prompt_couldnt_be_sent_shows_even_after_another_was_cho
     ui.wait("the prompt in the new chat's composer", |ui| ui.composer_text() == "say:held back");
 }
 
-/// More files than a prompt carries can't come from the dialog, but a request can hold them, and the hub refuses them.
+/// More files than a prompt carries can't come from the dialog, but a request can hold them, and the hub refuses them
+/// before making anything, so all of it goes back to the dialog, which says which didn't fit.
 #[gpui_kit::test]
-fn a_prompt_that_couldnt_be_sent_goes_to_the_new_chats_composer_with_the_files_that_fit(cx: &mut TestAppContext) {
+fn a_prompt_carrying_too_many_files_makes_nothing_and_goes_back_to_the_dialog(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = open_with_a_repo(cx, &stack);
+    ui.open_new_workspace();
+    ui.press("escape");
     let before = ui.view().records().workspaces().len();
     let files: Vec<_> = (0..=MAX_PER_PROMPT).map(|i| file(&format!("file-{i}.txt"))).collect();
-    let (agent, model, effort) = (AgentKind::Claude, Some(CLAUDE_STARTS_WITH.0), Some(CLAUDE_STARTS_WITH.1));
+    let (agent, chosen) = (AgentKind::Claude, (Some(CLAUDE_STARTS_WITH.0), Some(CLAUDE_STARTS_WITH.1)));
     let (repo, prompt, permission_mode) = (ui.first_repo_id(), "say:too many".to_string(), PermissionMode::FullAccess);
-    let request = Request { repo, prompt: Prompt::carrying(prompt, files), agent, model, effort, permission_mode };
+    let request = Request::new(repo, Prompt::carrying(prompt, files), agent, chosen, permission_mode);
 
     let view = ui.view.clone();
     ui.cx.update_entity(&view, |v, cx| v.create_workspace(request, cx)).unwrap();
 
-    ui.wait_for_a_new_workspace(before);
-    ui.wait("the prompt in the new chat's composer", |ui| ui.composer_text() == "say:too many");
-    assert_eq!(ui.attached().len(), MAX_PER_PROMPT);
-    assert!(prompts(&ui).is_empty());
+    ui.wait("the prompt back in the dialog", |ui| ui.has_dialog() && ui.dialog_text() == "say:too many");
+    assert_eq!(ui.dialog_attached().len(), MAX_PER_PROMPT);
     let last = format!("file-{MAX_PER_PROMPT}.txt");
-    assert!(ui.view().error.clone().is_some_and(|e| e.contains(&last)), "it says which file didn't fit");
+    ui.wait("what didn't fit", |ui| ui.view().error.clone().is_some_and(|e| e.contains(&last)));
+    assert_eq!(ui.view().records().workspaces().len(), before, "nothing was made");
 }
 
 /// Made elsewhere, so the app has no pane for it until it's selected, as with a workspace made while the dialog is

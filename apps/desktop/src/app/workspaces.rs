@@ -107,13 +107,15 @@ impl AppView {
     /// be made, the prompt goes back to the dialog, and if it was made and the prompt couldn't be sent, it goes to the
     /// chat's composer, which is asked into plan mode if the prompt was to be planned. Returns the request, untouched,
     /// when a workspace can't be made now.
-    pub fn create_workspace(&mut self, request: Request, cx: &mut Context<Self>) -> Result<(), Request> {
-        let Some(client) = self.client().filter(|_| self.can_create()) else { return Err(request) };
+    pub fn create_workspace(&mut self, request: Request, cx: &mut Context<Self>) -> Result<(), Box<Request>> {
+        let Some(client) = self.client().filter(|_| self.can_create()) else { return Err(Box::new(request)) };
         let asked_from = self.in_view();
         self.set_busy(Busy::Creating(request.repo.clone()), cx);
         cx.notify();
-        // Kept in case the call never finishes, which takes the files with it.
-        let (typed, permission_mode) = (request.prompt.text.clone(), request.permission_mode);
+        // Kept in case the call never finishes, which takes the files with it. Those still coming back from the hub
+        // can be read back again.
+        let (typed, coming_back) = (request.prompt.text.clone(), request.coming_back.clone());
+        let permission_mode = request.permission_mode;
         let creating = client.start(move |client| Ok(made::make(client, request)));
         cx.spawn(async move |this, cx| {
             let made = creating.recv().await;
@@ -124,7 +126,9 @@ impl AppView {
                     // Making it stopped partway, so it may have been made.
                     Err(e) => {
                         t.show_error(format!("couldn't tell whether the workspace was made: {e}"), cx);
-                        t.give_back_to_dialog(Prompt::new(typed), permission_mode, cx);
+                        let (prompt, in_the_dialog) = (Prompt::new(typed), false);
+                        let given_back = made::GivenBack { prompt, coming_back, in_the_dialog };
+                        t.give_back_to_dialog(given_back, permission_mode, cx);
                     }
                 }
                 cx.notify();
@@ -144,7 +148,10 @@ impl AppView {
     /// where they chose to be, unless the prompt couldn't be sent, which goes to the new chat's composer for them to
     /// see.
     fn made(&mut self, made: made::Made, asked_from: &InView, cx: &mut Context<Self>) {
-        let made::Made { workspace, session, unsent } = made;
+        let made::Made { workspace, session, unsent, dialog_to_empty } = made;
+        if let (Some(made_of), Some(dialog)) = (dialog_to_empty, &self.new_workspace) {
+            dialog.update(cx, |dialog, cx| dialog.made_without_the_hub(&made_of, cx));
+        }
         let made_id = workspace.as_ref().map(|workspace| workspace.id.clone());
         let chat = session.as_ref().map(|session| session.id.clone());
         if let Some(workspace) = workspace {
@@ -159,22 +166,31 @@ impl AppView {
         }
         let Some(unsent) = unsent else { return };
         self.show_error(unsent.failed.failed(&unsent.error), cx);
-        let Some(id) = made_id else {
-            self.give_back_to_dialog(unsent.prompt, unsent.permission_mode, cx);
+        let made::Unsent { given_back, permission_mode, .. } = unsent;
+        // To the dialog if nothing was made, or if the hub still keeps it there.
+        let in_the_dialog = given_back.as_ref().is_some_and(|given_back| given_back.in_the_dialog);
+        let (Some(id), false) = (made_id, in_the_dialog) else {
+            if let Some(given_back) = given_back {
+                self.give_back_to_dialog(given_back, permission_mode, cx);
+            }
             return;
         };
         // To the new chat's composer, or without one, to the first chat the pane shows, which the pane makes itself.
-        // After the pane is made, which selecting the workspace put off until just after this.
+        // After the pane is made, which selecting the workspace put off until just after this. One the hub put in the
+        // new chat's composer is there already.
         let this = cx.weak_entity();
         cx.defer(move |cx| {
-            let _ = this.update(cx, |t, cx| match t.panes.get(&id).cloned() {
-                Some(pane) => pane.update(cx, |pane, cx| {
-                    pane.give_back(chat.as_ref(), unsent.prompt, cx);
-                    if unsent.permission_mode == PermissionMode::Plan {
+            let _ = this.update(cx, |t, cx| match (t.panes.get(&id).cloned(), given_back) {
+                (Some(pane), given_back) => pane.update(cx, |pane, cx| {
+                    if let Some(made::GivenBack { prompt, .. }) = given_back {
+                        pane.give_back(chat.as_ref(), prompt, cx);
+                    }
+                    if permission_mode == PermissionMode::Plan {
                         pane.plan_given_back(chat.as_ref(), cx);
                     }
                 }),
-                None => t.give_back_to_dialog(unsent.prompt, unsent.permission_mode, cx),
+                (None, Some(given_back)) => t.give_back_to_dialog(given_back, permission_mode, cx),
+                (None, None) => {}
             });
         });
     }

@@ -21,8 +21,8 @@ mod attachments;
 mod client;
 mod drafts;
 mod sending;
-#[cfg(test)]
-mod stand_in_hub;
+#[cfg(any(test, feature = "testing"))]
+pub mod stand_in_hub;
 
 pub use agents::Agents;
 pub use approval::{Answered, Approval};
