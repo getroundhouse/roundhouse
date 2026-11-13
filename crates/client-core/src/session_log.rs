@@ -2,26 +2,28 @@
 //! it, never all of it.
 //!
 //! No IO and no UI. A view asks for rows by index, this says what to fetch, and whoever owns the
-//! connection does the fetching. Rows are indexed by each event's position less one, so an index means the same thing
-//! however much is loaded. An event's position is its `seq` in the whole log, and its place in the events from one
-//! agent or subagent. The tail comes after the rows, with the prompts the agent hasn't read yet, recorded or still on
-//! their way, as [`PromptAt`] says.
+//! connection does the fetching. Rows are indexed by each event's [`Position`], as [`Position::row`] says, so an index
+//! means the same thing however much is loaded. An event's position is its `seq` in the whole log, and its place in the
+//! events from one agent or subagent. The tail comes after the rows, with the prompts the agent hasn't read yet,
+//! recorded or still on their way, as [`PromptAt`] says.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::ops::Range;
 
 use protocol::event::{EventBody, SessionEvent};
-use protocol::model::{ClientMessageId, QueuedPrompt, Seq, SettledAt, seq_index};
+use protocol::model::{ClientMessageId, Place, QueuedPrompt, Seq, SettledAt};
 use protocol::tail::{StreamDelta, Tail};
 
 mod approvals;
 mod outline;
 mod pages;
+mod position;
 mod prompts;
 mod restart;
 
 pub use approvals::RecordedApprovals;
-use pages::first_live;
+use pages::before_live;
+pub use position::Position;
 pub use prompts::{PromptAt, PromptState, Settled};
 
 /// Far more than fits on screen, and small enough that a 50 MB session stays cheap to hold.
@@ -60,19 +62,20 @@ pub enum By {
 #[derive(Debug, Default)]
 pub struct SessionLog {
     by: By,
-    /// The position of the newest event.
-    last: u64,
-    /// The newest event the subscription has delivered. It delivers every page after this, so those aren't
-    /// fetched.
-    received: u64,
+    /// The position of the newest event, or 0 when it has none.
+    last: Position,
+    /// The newest event the subscription has delivered, or 0 for none. It delivers every page after this, so those
+    /// aren't fetched.
+    received: Position,
     /// What's loaded, by position.
-    events: BTreeMap<u64, SessionEvent>,
+    events: BTreeMap<Position, SessionEvent>,
     /// The position of each event loaded, by its `seq`, when that isn't its position.
-    positions: HashMap<Seq, u64>,
-    pages: BTreeSet<u64>,
-    in_flight: BTreeSet<u64>,
+    positions: HashMap<Seq, Position>,
+    /// The pages loaded, as `pages::page_of` numbers them.
+    pages: BTreeSet<usize>,
+    in_flight: BTreeSet<usize>,
     /// Pages whose fetch failed, which aren't asked for again until [`SessionLog::retry_failed`].
-    failed: BTreeSet<u64>,
+    failed: BTreeSet<usize>,
     /// The row a view last wanted, which decides what stays loaded. It starts at the last row, where a view opens a
     /// chat, so a log no view has asked of yet fetches nothing, since its end comes live.
     focus: usize,
@@ -89,34 +92,39 @@ pub struct SessionLog {
 }
 
 impl SessionLog {
-    /// The whole log, which reaches `last_seq`, which a subscription fills from [`first_live`] on.
+    /// The whole log, which reaches `last_seq`, which a subscription fills from after [`before_live`].
     pub fn new(last_seq: Seq) -> Self {
-        let focus = seq_index(last_seq).saturating_sub(1);
-        Self { last: last_seq, received: first_live(last_seq) - 1, focus, ..Default::default() }
+        Self::reaching(By::Seq, Position::of_seq(last_seq))
     }
 
-    /// The events from one agent or subagent, which reach the place `last`, which a subscription fills from
-    /// [`first_live`] on.
-    pub fn by_place(last: u64) -> Self {
-        let focus = seq_index(last).saturating_sub(1);
-        Self { by: By::Place, last, received: first_live(last) - 1, focus, ..Default::default() }
+    /// The events from one agent or subagent, which reach the place `last`, which a subscription fills from after
+    /// [`before_live`].
+    pub fn by_place(last: Place) -> Self {
+        Self::reaching(By::Place, Position::of_place(last))
+    }
+
+    /// A log by `by` that reaches `last`, looking at its last row, or with none, at where its first will be.
+    fn reaching(by: By, last: Position) -> Self {
+        let focus = last.row().unwrap_or(0);
+        Self { by, last, received: before_live(last), focus, ..Default::default() }
     }
 
     pub fn by(&self) -> By {
         self.by
     }
 
+    /// A row for each position up to the newest event's.
     pub fn row_count(&self) -> usize {
-        seq_index(self.last)
+        self.last.row().map_or(0, |last| last + 1)
     }
 
-    /// The position of the newest event.
-    pub fn last(&self) -> u64 {
+    /// The position of the newest event, or 0 when it has none.
+    pub fn last(&self) -> Position {
         self.last
     }
 
     pub fn row(&self, index: usize) -> Row<'_> {
-        match self.events.get(&(index as u64 + 1)) {
+        match self.events.get(&Position::of_row(index)) {
             Some(event) => Row::Event(event),
             None => Row::Unloaded,
         }
@@ -125,18 +133,22 @@ impl SessionLog {
     /// The row of the event at `seq`, if this log has it there: in the whole log, its row by `seq`, and otherwise
     /// its row if it's loaded.
     pub fn row_of(&self, seq: Seq) -> Option<usize> {
-        let position = match self.by {
-            By::Seq => (seq >= 1 && seq <= self.last).then_some(seq)?,
-            By::Place => *self.positions.get(&seq)?,
-        };
-        Some(seq_index(position) - 1)
+        self.position_of(seq)?.row()
+    }
+
+    /// Where the event at `seq` is, if this log has it there, as [`SessionLog::row_of`] says.
+    fn position_of(&self, seq: Seq) -> Option<Position> {
+        match self.by {
+            By::Seq => Some(Position::of_seq(seq)).filter(|position| *position <= self.last),
+            By::Place => self.positions.get(&seq).copied(),
+        }
     }
 
     /// Where `event` goes in this log: its `seq`, or its place.
-    pub fn position(&self, event: &SessionEvent) -> u64 {
+    pub fn position(&self, event: &SessionEvent) -> Position {
         match self.by {
-            By::Seq => event.seq,
-            By::Place => event.place.get(),
+            By::Seq => Position::of_seq(event.seq),
+            By::Place => Position::of_place(event.place),
         }
     }
 
@@ -159,27 +171,29 @@ impl SessionLog {
         &self.pending
     }
 
-    /// The newest event the subscription has delivered, so a new one carries on after it.
-    pub(crate) fn received(&self) -> u64 {
+    /// The newest event the subscription has delivered, or 0 for none, so a new one carries on after it.
+    pub(crate) fn received(&self) -> Position {
         self.received
     }
 
     /// Takes an event from a live subscription.
     pub fn apply_event(&mut self, event: SessionEvent) {
+        let position = self.position(&event);
+        // One at 0 has no row: a hub numbers events from 1, and one that records no places isn't read by place.
+        let Some(row) = position.row() else { return };
         if let EventBody::UserPrompt { client_msg_id: Some(id), .. } = &event.body {
             self.pending.retain(|prompt| prompt.client_msg_id != *id);
         }
         let waited = self.at_the_end();
         self.tail.on_event(event.seq, event.run, &event.body);
         self.outline.saw(&event);
-        let position = self.position(&event);
         self.received = self.received.max(position);
         self.last = self.last.max(position);
         if matches!(event.body, EventBody::TurnEnded { .. }) {
             self.changes.turns_ended += 1;
         }
         // Its own row, and everything after it, up to the tail.
-        self.touched(seq_index(position) - 1..self.row_count() + 1);
+        self.touched(row..self.row_count() + 1);
         if let Some((prompt, at)) = SettledAt::of(&event) {
             self.settle(prompt, at);
         }
@@ -226,8 +240,8 @@ impl SessionLog {
     /// The rows that are loaded, as runs in order: each event held. Every other row is [`Row::Unloaded`].
     pub fn loaded_rows(&self) -> Vec<Range<usize>> {
         let mut runs: Vec<Range<usize>> = Vec::new();
-        let recorded = seq_index(self.last);
-        let events = self.events.keys().map(|position| seq_index(*position) - 1).filter(|row| *row < recorded);
+        let recorded = self.row_count();
+        let events = self.events.keys().filter_map(|position| position.row()).filter(|row| *row < recorded);
         for row in events {
             match runs.last_mut() {
                 Some(run) if run.end == row => run.end += 1,
@@ -249,13 +263,13 @@ impl SessionLog {
     /// Whether every event it follows is loaded, so looking through them looks through it all. One that doesn't know
     /// yet how far its events go, as one by place doesn't until the hub says, holds none.
     pub fn holds_every_event(&self) -> bool {
-        self.last > 0 && self.events.len() as u64 == self.last
+        self.row_count() > 0 && self.events.len() == self.row_count()
     }
 
-    /// Whether every event at `positions` that the log goes to is loaded.
-    pub fn holds(&self, positions: Range<u64>) -> bool {
-        let positions = positions.start..positions.end.min(self.last + 1);
-        self.events.range(positions.clone()).count() as u64 == positions.end.saturating_sub(positions.start)
+    /// Whether every one of `rows` that the log goes to is loaded.
+    pub fn holds(&self, rows: Range<usize>) -> bool {
+        let rows = rows.start..rows.end.min(self.row_count());
+        rows.is_empty() || self.events.range(Position::of_rows(rows.clone())).count() == rows.len()
     }
 
     /// How many times events have been added to what's held. It changes whenever looking through the events again

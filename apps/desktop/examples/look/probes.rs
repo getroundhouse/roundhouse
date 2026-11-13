@@ -11,7 +11,6 @@ use gpui_kit::{
     AnyWindowHandle, AsyncApp, ElementId, Entity, InputEvent, Modifiers, MouseButton, MouseDownEvent, MouseMoveEvent,
     MouseUpEvent, Pixels, Point, ScrollDelta, ScrollEvent, SharedString, point, px,
 };
-use protocol::model::seq_index;
 use transcript::Transcript;
 
 /// How often a trackpad sends an event, at 60 Hz.
@@ -110,7 +109,8 @@ async fn jump(
     let session = transcript.read_with(cx, |t, _| t.session_id().clone());
     // Off the main thread, so the window goes on drawing while the hub answers.
     let lines = cx.background_executor().spawn(async move { client.session_prompt_list(&session) }).await.unwrap();
-    let row = seq_index(lines[prompt - 1].seq()) - 1;
+    // Where the outline puts it, which is where the agent took it, among the agent's own events.
+    let row = transcript.read_with(cx, |t, _| t.prompt_row(&lines[prompt - 1]));
     eprintln!("PROBE prompt {prompt} of {} is in row {row}", lines.len());
     report(transcript, start, None, cx);
     let ticks = handle.update(cx, |_, window, _| window.find("outline").bounds()).unwrap();

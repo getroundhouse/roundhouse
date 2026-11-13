@@ -3,8 +3,9 @@
 
 #![cfg(test)]
 
+use client_core::session_log::SessionLog;
 use protocol::event::EventBody;
-use protocol::model::{Seq, SessionStatus, seq_index};
+use protocol::model::{Place, PromptLine, Seq, SessionStatus};
 
 use super::events::{replied, taken, text, user_prompt};
 use super::world::World;
@@ -80,8 +81,13 @@ fn the_fourteenth_prompt_is_in_the_row_named() {
     let chat = world.chat(&"w".into(), SessionStatus::Idle, many_turns());
 
     let mut prompts = world.events_from(&chat, 1).filter(|event| matches!(event.body, EventBody::UserPrompt { .. }));
-    let fourteenth = prompts.nth(13).unwrap();
+    let fourteenth = PromptLine::of(prompts.nth(13).unwrap()).unwrap();
+    // The agent's own events, as the chat follows them.
+    let mut log = SessionLog::by_place(Place::default());
+    for event in world.placed_from(&chat, None, Place::new(1)) {
+        log.apply_event(event.clone());
+    }
 
     // Taken straight after it's recorded, so in the row after its own.
-    assert_eq!(FOURTEENTH_PROMPT, format!("outline-prompt/{}", seq_index(fourteenth.seq)));
+    assert_eq!(FOURTEENTH_PROMPT, format!("outline-prompt/{}", log.prompt_row(&fourteenth)));
 }

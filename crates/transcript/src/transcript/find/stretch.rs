@@ -6,11 +6,11 @@ use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 
 use client_core::Stretch;
-use client_core::session_log::{SessionLog, Settled};
+use client_core::session_log::{Position, SessionLog, Settled};
 use gpui_kit::{AppContext as _, Context, Task};
 use protocol::event::SessionEvent;
 use protocol::find::Needle;
-use protocol::model::{Subagent, ToolUseId};
+use protocol::model::{Place, Subagent, ToolUseId};
 
 use super::is_loaded;
 use crate::rows::{found_in_row, rows_to_count};
@@ -36,7 +36,7 @@ impl Transcript {
         })
     }
 
-    fn counted_stretch(&mut self, holding: Vec<u64>, counted: Vec<(usize, usize)>, cx: &mut Context<Self>) {
+    fn counted_stretch(&mut self, holding: Vec<Position>, counted: Vec<(usize, usize)>, cx: &mut Context<Self>) {
         let counted: Vec<(usize, usize)> =
             self.session.read(|held| counted.into_iter().filter(|(row, _)| !is_loaded(held, *row)).collect());
         let Some(query) = self.query_mut() else { return };
@@ -57,17 +57,17 @@ pub(super) struct Known {
     pub(super) settled: Settled,
 }
 
-/// What the rows that draw each of the events at the places `holding` count to, among `events`, a stretch of the chat
-/// read for them, by place, with what's `known` of the rest. A prompt settled past the end of the stretch is drawn in a
-/// row it doesn't hold, so it counts once that row is loaded.
+/// What the rows that draw each of the events at `holding` count to, among `events`, a stretch of the chat read for
+/// them, by place, with what's `known` of the rest. A prompt settled past the end of the stretch is drawn in a row it
+/// doesn't hold, so it counts once that row is loaded.
 pub(super) fn counted_in(
     events: Vec<SessionEvent>,
-    holding: &[u64],
+    holding: &[Position],
     needle: &Needle,
     known: Known,
 ) -> Vec<(usize, usize)> {
     let Known { records, settled } = known;
-    let mut log = SessionLog::by_place(0).knowing(settled);
+    let mut log = SessionLog::by_place(Place::default()).knowing(settled);
     for event in events {
         log.apply_event(event);
     }
@@ -75,7 +75,7 @@ pub(super) fn counted_in(
     // says how a turn's card reads, which isn't found.
     let mut m = Model::with(AtWork::default());
     m.subagents = records;
-    let rows: BTreeSet<usize> = holding.iter().flat_map(|place| rows_to_count(&log, &m, *place)).collect();
+    let rows: BTreeSet<usize> = holding.iter().flat_map(|position| rows_to_count(&log, &m, *position)).collect();
     rows.into_iter()
         .map(|row| (row, found_in_row(&log, &m, needle, row).iter().map(|found| found.matches).sum()))
         .collect()

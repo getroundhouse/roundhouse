@@ -1,11 +1,11 @@
 use protocol::event::{AgentRunState, EventBody, ExitReason, NoticeLevel, SessionEvent, TurnOutcome};
 use protocol::fixtures::event;
 use protocol::model::SettledAt;
-use protocol::model::{Place, Seq, seq_index};
+use protocol::model::{Place, Seq};
 use protocol::prompt::Prompt;
 
 use super::*;
-use crate::session_log::Row;
+use crate::session_log::Position;
 
 fn prompt() -> EventBody {
     EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("steer") }
@@ -104,8 +104,7 @@ fn turn_ended() -> EventBody {
 
 /// The event recorded at `seq`, which is loaded.
 fn at(log: &SessionLog, seq: Seq) -> &SessionEvent {
-    let Row::Event(event) = log.row(seq_index(seq) - 1) else { panic!("{seq} isn't loaded") };
-    event
+    log.event_of(seq).unwrap_or_else(|| panic!("{seq} isn't loaded"))
 }
 
 fn seqs(prompts: &[&SessionEvent]) -> Vec<Seq> {
@@ -179,7 +178,7 @@ fn a_prompt_sent_during_the_last_reply_waits_at_the_end_until_its_taken() {
 fn a_prompt_is_drawn_where_it_was_taken_after_the_log_starts_again_by_place() {
     let mut log = log(vec![prompt(), taken(1)]);
     log.read_by_place();
-    log.reaches(2);
+    log.reaches(Place::new(2));
 
     for (seq, body) in [(1, prompt()), (2, taken(1))] {
         log.apply_event(SessionEvent { place: Place::new(seq), ..event(seq, body) });
@@ -247,7 +246,7 @@ fn a_prompt_that_moves_changes_the_rows_it_leaves_and_goes_to() {
     log.apply_event(event(5, taken(3)));
     assert_eq!(log.take_changes().rows, Some(2..6), "its own row, where it's drawn now, and the tail it left");
     // By place, with the prompt far enough back not to be loaded, so its own row says nothing.
-    let mut dropped = SessionLog::by_place(0);
+    let mut dropped = SessionLog::by_place(Place::default());
     let placed = |place, seq, body| SessionEvent { place: Place::new(place), ..event(seq, body) };
     for (place, body) in [(1, notice()), (2, EventBody::PromptDropped { prompt: 5 }), (3, notice())] {
         dropped.apply_event(placed(place, place + 9, body));
@@ -264,12 +263,12 @@ fn a_page_that_brings_a_prompt_or_where_it_was_taken_changes_the_other_row_too()
     let mut later = page(251..501);
     later[1] = event(252, taken(250));
     log.focus_on(260);
-    log.install_page(251, later);
+    log.install_page(Position::of_seq(251), later);
     let _ = log.take_changes();
     let mut earlier = page(1..251);
     earlier[249] = event(250, prompt());
 
-    log.install_page(1, earlier);
+    log.install_page(Position::of_seq(1), earlier);
 
     assert_eq!(log.take_changes().rows, Some(0..252), "the page, and the row that took the prompt in it");
     assert_eq!(log.prompt_at(250), PromptAt::Settled(251));

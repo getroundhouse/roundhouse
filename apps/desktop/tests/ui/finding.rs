@@ -8,7 +8,7 @@ use std::time::Duration;
 use gpui_kit::AppContext as _;
 use gpui_kit::test::ElementSnapshot;
 use gpui_kit::{ScrollDelta, TestAppContext, point, px};
-use protocol::model::{SettledAt, seq_index};
+use protocol::model::SettledAt;
 
 use crate::support::{Stack, Ui};
 
@@ -45,10 +45,10 @@ fn cmd_f_finds_in_the_whole_chat_and_opens_what_a_match_is_in(cx: &mut TestAppCo
     let transcript = ui.transcript().unwrap();
     let (events, _) = stack.client().session_read(&session, 1, 50, false).unwrap();
     let call = events.iter().find(|e| matches!(&e.body, protocol::event::EventBody::Assistant { .. })).unwrap();
-    let call_row = seq_index(call.seq) - 1;
+    let call_row = ui.row_of(call);
     // The first prompt is drawn where the agent took it, once it had started.
     let took_the_first = |e: &&protocol::event::SessionEvent| SettledAt::of(e).is_some_and(|(p, _)| p == events[0].seq);
-    let first_row = seq_index(events.iter().find(took_the_first).unwrap().seq) - 1;
+    let first_row = ui.row_of(events.iter().find(took_the_first).unwrap());
     assert!(ui.cx.read_entity(&transcript, |t, _| t.event_at(call_row).is_none()), "the call isn't loaded");
 
     // With focus in the message box, as it is when a chat opens.

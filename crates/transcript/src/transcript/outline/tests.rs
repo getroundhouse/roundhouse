@@ -5,13 +5,18 @@ fn at_rows(rows: &[usize]) -> Vec<Line> {
     rows.iter().zip(1..).map(|(row, number)| prompt_at(*row, number)).collect()
 }
 
+/// The `seq` of the event in `row`, in a chat that holds every event.
+fn seq_in(row: usize) -> u64 {
+    u64::try_from(row).unwrap() + 1
+}
+
 fn prompt_at(row: usize, number: usize) -> Line {
-    Line { kind: Kind::Prompt { line: PromptLine::new(row as u64 + 1, "", 0), number }, row }
+    Line { kind: Kind::Prompt { line: PromptLine::new(seq_in(row), "", 0), number }, row }
 }
 
 fn compaction_at(row: usize) -> Line {
     let line = CompactionLine {
-        seq: row as u64 + 1,
+        seq: seq_in(row),
         place: protocol::model::Place::default(),
         by: protocol::event::CompactedBy::Agent,
         before_tokens: None,

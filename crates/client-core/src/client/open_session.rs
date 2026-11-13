@@ -10,7 +10,7 @@ use protocol::model::{ClientMessageId, Place, QueuedPrompt, Seq, Session, Sessio
 
 use super::follow::{Follow, FollowError, Source};
 use super::{Client, Result, Subscription, SubscriptionItem};
-use crate::session_log::{By, Changes, RecordedApprovals, SessionLog};
+use crate::session_log::{By, Changes, Position, RecordedApprovals, SessionLog};
 use search::Searches;
 pub use search::{Search, Searched, Stretch};
 
@@ -60,7 +60,10 @@ impl OpenSession {
     /// session's prompts, unless it follows a subagent, whose events hold none.
     pub fn start_view(client: &Client, session: &Session, view: View) -> OpenSession {
         // One by place doesn't know how far it goes until the hub says.
-        let mut log = if view == View::Whole { SessionLog::new(session.last_seq) } else { SessionLog::by_place(0) };
+        let mut log = match view {
+            View::Whole => SessionLog::new(session.last_seq),
+            View::Own | View::Subagent(_) => SessionLog::by_place(Place::default()),
+        };
         // What waits is asked about wherever it was asked, from the start. A subagent's view asks nothing.
         if !matches!(view, View::Subagent(_)) {
             log.waiting_on(RecordedApprovals::of(session).as_ref());
@@ -131,7 +134,7 @@ impl OpenSession {
     /// count what the rows it doesn't hold draw. Events the log holds, and those it's given from now on, a view looks
     /// through itself. A log by `seq` is from a hub too old to read by place, and so to find. The search stops once it
     /// has gone, and `client` is the connection it asks on.
-    pub fn search(&self, client: &Client, needle: Needle, around: u64) -> Search {
+    pub fn search(&self, client: &Client, needle: Needle, around: usize) -> Search {
         let (every, by) = self.follow.read(|log| (log.holds_every_event(), log.by()));
         if every {
             return Search::finished(Searched::Done);
@@ -181,7 +184,7 @@ impl SessionSource {
                 if log.by() == By::Seq {
                     log.read_by_place();
                 }
-                log.reaches(last.get());
+                log.reaches(last);
             }
             Err(e) if e.is_unsupported() && self.view == View::Own => {
                 self.view = View::Whole;
@@ -210,11 +213,11 @@ impl Source for SessionSource {
         self.place(client, held)?;
         // Events arrive in order with no gaps, so carrying on from one past the last misses nothing, whatever
         // was fetched meanwhile.
-        let from = held.lock().received() + 1;
+        let from = held.lock().received().next();
         let subscription = match &self.view {
-            View::Whole => client.session_subscribe(&self.session_id, from)?,
+            View::Whole => client.session_subscribe(&self.session_id, from.seq())?,
             View::Own | View::Subagent(_) => {
-                client.session_subscribe_places(&self.session_id, self.subagent(), Place::new(from))?
+                client.session_subscribe_places(&self.session_id, self.subagent(), from.place())?
             }
         };
         held.lock().retry_failed();
@@ -321,33 +324,35 @@ impl SessionSource {
     }
 }
 
-/// The events of `view` at these positions. A size limit can cut a read short, so this keeps going until the range is
-/// complete.
+/// The events of `view` at these positions, which are its `seq`s in the whole log and its places in the rest. A size
+/// limit can cut a read short, so this keeps going until the range is complete.
 fn read_range(
     client: &Client,
     session_id: &SessionId,
     view: &View,
-    range: std::ops::Range<u64>,
+    range: std::ops::Range<Position>,
 ) -> Result<Vec<SessionEvent>> {
     let mut events = Vec::new();
     let mut from = range.start;
     while from < range.end {
-        let limit = u32::try_from(range.end - from).unwrap_or(u32::MAX);
+        // As many as there are rows from here to the end. 0, where no event is, has no row, so it adds none.
+        let rows = from.row().unwrap_or(0)..range.end.row().unwrap_or(0);
+        let limit = u32::try_from(rows.len()).unwrap_or(u32::MAX);
         let (page, last) = match view {
             View::Whole => {
-                let page = client.session_read(session_id, from, limit, false)?.0;
-                let last = page.last().map(|e| e.seq);
+                let page = client.session_read(session_id, from.seq(), limit, false)?.0;
+                let last = page.last().map(|e| Position::of_seq(e.seq));
                 (page, last)
             }
             View::Own | View::Subagent(_) => {
-                let page = client.session_read_places(session_id, view.subagent(), Place::new(from), limit)?.0;
-                let last = page.last().map(|e| e.place.get());
+                let page = client.session_read_places(session_id, view.subagent(), from.place(), limit)?.0;
+                let last = page.last().map(|e| Position::of_place(e.place));
                 (page, last)
             }
         };
         let Some(last) = last else { break };
         events.extend(page);
-        from = last + 1;
+        from = last.next();
     }
     Ok(events)
 }

@@ -5,9 +5,8 @@ use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{AppContext as _, ElementId, ScrollDelta, TestAppContext, point, px};
 use look::Region;
 use look::motion::SCROLL;
-use protocol::model::seq_index;
 
-use super::{A_FRAME, open_on_a_long_session, thumb, wait_for_the_list_to_settle};
+use super::{A_FRAME, open_on_a_long_session, settle_at_the_end, thumb};
 use crate::support::{Stack, Ui};
 use crate::tools::in_a_new_workspace;
 
@@ -171,10 +170,9 @@ fn open_on_a_session_of_commands<'a>(cx: &'a mut TestAppContext, stack: &Stack) 
     for _ in 0..3 {
         stack.run(&session, &["tool:echo signal"; 20].join("; "));
     }
-    let total = seq_index(stack.client().session_get(&session).unwrap().last_seq);
     let mut ui = Ui::open(cx, stack);
     ui.wait("the workspace", |ui| ui.transcript().is_some());
-    wait_for_the_list_to_settle(&mut ui, total - 1);
+    settle_at_the_end(&mut ui, stack, &session);
     ui
 }
 

@@ -11,7 +11,7 @@ use std::collections::BTreeSet;
 use std::ops::Range;
 use std::rc::Rc;
 
-use client_core::session_log::{Row, SessionLog};
+use client_core::session_log::{Position, Row, SessionLog};
 use client_core::{Client, Search, Searched};
 use gpui_kit::{Context, Task, Window};
 use protocol::find::Needle;
@@ -48,7 +48,7 @@ struct Query {
     counts: Counts,
     /// Where every event known to hold the needle is in the log: those the log holds that do, and those the hub
     /// named.
-    candidates: BTreeSet<u64>,
+    candidates: BTreeSet<Position>,
     /// The match being shown.
     at: Option<At>,
     /// A match whose row is loading, to show once it has.
@@ -62,7 +62,7 @@ struct Query {
 impl Query {
     fn new(needle: Needle, client: &Client, session: &client_core::OpenSession) -> Self {
         Self {
-            search: session.search(client, needle.clone(), NEAR as u64),
+            search: session.search(client, needle.clone(), NEAR),
             needle,
             counts: Counts::default(),
             candidates: BTreeSet::new(),
@@ -192,7 +192,7 @@ impl Transcript {
         let (client, session) = (&self.client, &self.session);
         let Some(query) = self.finding.as_mut().and_then(|finding| finding.query.as_mut()) else { return };
         if matches!(query.search.searched(), Searched::Failed | Searched::CantFind) {
-            query.search = session.search(client, query.needle.clone(), NEAR as u64);
+            query.search = session.search(client, query.needle.clone(), NEAR);
         }
     }
 
@@ -281,9 +281,9 @@ impl Transcript {
 
 /// Where the events the log holds that hold the needle are, and the rows that draw them, to count when something's
 /// typed.
-fn held_to_count(log: &SessionLog, m: &Model, needle: &Needle) -> (Vec<u64>, BTreeSet<usize>) {
+fn held_to_count(log: &SessionLog, m: &Model, needle: &Needle) -> (Vec<Position>, BTreeSet<usize>) {
     let holding = log.loaded().filter(|event| needle.is_in_event(&event.body));
-    let found: Vec<u64> = holding.map(|event| log.position(event)).collect();
+    let found: Vec<Position> = holding.map(|event| log.position(event)).collect();
     let rows = found.iter().flat_map(|position| rows_to_count(log, m, *position)).collect();
     (found, rows)
 }
@@ -295,32 +295,27 @@ fn held_to_count(log: &SessionLog, m: &Model, needle: &Needle) -> (Vec<u64>, BTr
 fn changed_to_count(
     log: &SessionLog,
     m: &Model,
-    (needle, candidates, counts): (&Needle, &BTreeSet<u64>, &Counts),
+    (needle, candidates, counts): (&Needle, &BTreeSet<Position>, &Counts),
     changed: Range<usize>,
-) -> (Vec<u64>, BTreeSet<usize>) {
+) -> (Vec<Position>, BTreeSet<usize>) {
     let mut rows: BTreeSet<usize> = counts.rows_in(changed.clone()).collect();
     let mut found = Vec::new();
     for ix in changed.start..changed.end.min(log.row_count()) {
         let Row::Event(event) = log.row(ix) else { continue };
-        let position = ix as u64 + 1;
+        let position = log.position(event);
         if candidates.contains(&position) || needle.is_in_event(&event.body) {
             found.push(position);
             rows.extend(rows_to_count(log, m, position));
         }
     }
-    let after = changed.end as u64 + 1..(changed.end + 1 + REACH) as u64;
+    let after = Position::of_rows(changed.end..changed.end + REACH);
     for &position in candidates.range(after) {
         let drawn_here = || rows_drawing(log, m, position).iter().any(|row| changed.contains(row));
-        if is_loaded(log, row_at(position)) && drawn_here() {
+        if position.row().is_some_and(|row| is_loaded(log, row)) && drawn_here() {
             rows.extend(rows_to_count(log, m, position));
         }
     }
     (found, rows)
-}
-
-/// The row of the event at `position` in the log.
-fn row_at(position: u64) -> usize {
-    usize::try_from(position.saturating_sub(1)).unwrap_or(usize::MAX)
 }
 
 /// What each of `rows` the log holds counts to, as it's drawn. A row the log doesn't hold isn't counted here, and keeps
@@ -336,7 +331,7 @@ fn count_held(log: &SessionLog, m: &Model, needle: &Needle, rows: BTreeSet<usize
 /// every row there is held or the count is `settled`, and with none below once it's settled, the first of all.
 fn first_match(counts: &Counts, top: usize, settled: bool, log: &SessionLog) -> Option<At> {
     match counts.rows().find(|row| *row >= top) {
-        Some(row) if settled || log.holds(top as u64 + 1..row as u64 + 1) => Some(At { row, nth: 0 }),
+        Some(row) if settled || log.holds(top..row) => Some(At { row, nth: 0 }),
         None if settled => counts.first_from(top),
         Some(_) | None => None,
     }

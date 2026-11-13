@@ -9,9 +9,9 @@ use gpui_kit::{
     MouseUpEvent, Pixels, ScrollDelta, TestAppContext, point, px,
 };
 use protocol::event::EventBody;
-use protocol::model::{SessionId, seq_index};
+use protocol::model::SessionId;
 
-use super::{A_FRAME, press, wait_for_the_list_to_settle};
+use super::{A_FRAME, press, settle_at_the_end};
 use crate::support::{Stack, Ui};
 use crate::tools::COMMAND_LINE;
 
@@ -269,7 +269,7 @@ fn open<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> Ui<'a> {
 
 /// Where the transcript is, once its list has settled at the end of `session`.
 fn settled(ui: &mut Ui<'_>, stack: &Stack, session: &SessionId) -> Bounds<Pixels> {
-    wait_for_the_list_to_settle(ui, seq_index(stack.client().session_get(session).unwrap().last_seq) - 1);
+    settle_at_the_end(ui, stack, session);
     ui.cx.update_window(ui.handle, |_, window, _| window.find("transcript").bounds()).unwrap()
 }
 

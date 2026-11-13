@@ -1,8 +1,9 @@
-//! What only tests read of a transcript: how much of it is loaded, what's at a row, and what its texts show.
+//! What only tests read of a transcript: how much of it is loaded, what's at a row and which row has what, and what its
+//! texts show.
 
-use client_core::session_log::{PromptState, Row};
+use client_core::session_log::{By, PromptState, Row};
 use protocol::event::{EventBody, SessionEvent};
-use protocol::model::Seq;
+use protocol::model::{PromptLine, Seq};
 
 use super::{Transcript, rows_and_loaded};
 
@@ -13,6 +14,22 @@ impl Transcript {
             Row::Event(event) => Some(event.clone()),
             Row::Unloaded => None,
         })
+    }
+
+    /// The row `event` is in, whether it's loaded or not, as its position in the log says, or `None` for one the
+    /// transcript doesn't follow. A log by `seq` follows every event, and one by place follows the agent's own in a
+    /// chat, and in the subagent tab, the subagent's.
+    pub fn event_row(&self, event: &SessionEvent) -> Option<usize> {
+        let followed = event.subagent == self.model.borrow().alone;
+        self.session.read(|log| match log.by() {
+            By::Place if !followed => None,
+            By::Seq | By::Place => log.position(event).row(),
+        })
+    }
+
+    /// The row the outline puts the prompt `line` in, as the log says.
+    pub fn prompt_row(&self, line: &PromptLine) -> usize {
+        self.session.read(|log| log.prompt_row(line))
     }
 
     /// Where the prompt recorded at a row stands with the agent, if that row is a recorded prompt that's loaded.

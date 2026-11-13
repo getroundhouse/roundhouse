@@ -4,7 +4,7 @@ use desktop::workspace_pane::WorkspacePane;
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{AppContext as _, ScrollDelta, TestAppContext, point, px};
 
-use super::{A_FRAME, open_on_a_long_session, session_saying};
+use super::{A_FRAME, open_on_a_long_session, session_saying, wait_for_the_tail};
 use crate::support::{Stack, Ui};
 
 /// A change of the chat's width puts every row's height out of date. Only the rows in the window, and a few to a
@@ -43,11 +43,11 @@ fn a_change_of_width_measures_what_shows_and_not_the_whole_session(cx: &mut Test
 fn a_frame_at_rest_draws_only_the_rows_that_show(cx: &mut TestAppContext) {
     let stack = Stack::new();
     // Replies of a line each, so a window holds a few dozen of them and the room past its ends holds as many again.
-    let total = session_saying(&stack, 300, |i| format!("message {i}"));
+    let newest = session_saying(&stack, 300, |i| format!("message {i}"));
     let mut ui = Ui::open(cx, &stack);
     ui.wait("the workspace", |ui| ui.transcript().is_some());
     let transcript = ui.transcript().unwrap();
-    ui.wait("the tail to load", |ui| ui.cx.read_entity(&transcript, |t, _| t.event_at(total - 1).is_some()));
+    let total = wait_for_the_tail(&mut ui, &newest);
     // Away from the end, so there are rows past both ends of the window.
     ui.scroll("transcript", ScrollDelta::Pixels(point(px(0.), px(2000.))));
     ui.settle(A_FRAME);

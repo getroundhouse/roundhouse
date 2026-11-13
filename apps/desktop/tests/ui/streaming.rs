@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use gpui_kit::{AppContext as _, TestAppContext};
 use protocol::event::EventBody;
-use protocol::model::{SessionStatus, seq_index};
+use protocol::model::SessionStatus;
 
 use crate::support::{Stack, Ui, wait_until};
 
@@ -46,8 +46,8 @@ fn a_reply_shows_all_of_itself_once_it_is_recorded_however_its_end_arrived(cx: &
     // sends the end of the stream as soon as it's written, and the record once it's stored, so the turn is over
     // only once the app's log, which a thread of its own fills, holds the record too.
     wait_until("the turn to end", || stack.client().session_get(&session).unwrap().status == SessionStatus::Idle);
-    let recorded = seq_index(stack.client().session_get(&session).unwrap().last_seq);
-    wait_until("the record to reach the app", || ui.cx.read_entity(&transcript, |t, _| t.row_count()) >= recorded);
+    let record = ui.row_of(&stack.newest_event(&session));
+    wait_until("the record to reach the app", || ui.cx.read_entity(&transcript, |t, _| t.event_at(record).is_some()));
     ui.wait_idle_with("the recorded reply", |text| text.contains("word5"));
     ui.settle(Duration::from_millis(16));
 
@@ -71,8 +71,8 @@ fn a_long_reply_never_goes_blank_as_it_is_recorded(cx: &mut TestAppContext) {
     stack.client().session_prompt(&session, &format!("slow:30:{phrase}"), None).unwrap();
     ui.wait("the reply to stream", |ui| ui.cx.read_entity(&transcript, |t, _| t.streaming_text().len() > 5 * 1024));
     wait_until("the turn to end", || stack.client().session_get(&session).unwrap().status == SessionStatus::Idle);
-    let recorded = seq_index(stack.client().session_get(&session).unwrap().last_seq);
-    wait_until("the record to reach the app", || ui.cx.read_entity(&transcript, |t, _| t.row_count()) >= recorded);
+    let record = ui.row_of(&stack.newest_event(&session));
+    wait_until("the record to reach the app", || ui.cx.read_entity(&transcript, |t, _| t.event_at(record).is_some()));
     ui.wait_idle_with("the recorded reply", |text| text.contains("part29"));
     ui.settle(Duration::from_millis(16));
 

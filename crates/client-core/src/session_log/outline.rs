@@ -12,9 +12,9 @@
 use std::collections::BTreeMap;
 
 use protocol::event::SessionEvent;
-use protocol::model::{CompactionLine, Place, PromptLine, Seq, seq_index};
+use protocol::model::{CompactionLine, Place, PromptLine, Seq};
 
-use super::{By, SessionLog};
+use super::{By, Position, SessionLog};
 
 /// The prompts and compactions the log knows of, by where they were recorded. They stay when their events are dropped,
 /// since each is small.
@@ -194,14 +194,15 @@ impl SessionLog {
     /// numbers 0 goes in the first row.
     pub(super) fn row_at(&self, seq: Seq, place: Place) -> usize {
         let position = match self.by {
-            By::Seq => seq,
-            By::Place if place != Place::default() => place.get(),
-            By::Place => {
-                let near = seq_index(seq).min(self.row_count());
-                return self.row_of(seq).unwrap_or_else(|| near.saturating_sub(1));
-            }
+            By::Seq => Position::of_seq(seq),
+            By::Place if place != Place::default() => Position::of_place(place),
+            // Its `seq` stands in for its place, which is never later, since a `seq` counts every agent's events.
+            By::Place => match self.row_of(seq) {
+                Some(row) => return row,
+                None => Position::of_seq(seq).min(self.last),
+            },
         };
-        seq_index(position).saturating_sub(1)
+        position.row().unwrap_or(0)
     }
 }
 

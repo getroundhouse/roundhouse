@@ -116,8 +116,9 @@ fn a_waiting_request_whose_page_is_let_go_of_is_kept() {
     log.waiting_on(Some(&waiting));
     for start in (1..last).step_by(250) {
         let events = (start..start + 250).map(|seq| if seq == 1 { asked(1, "a") } else { later(seq) }).collect();
-        log.focus_on(usize::try_from(start).unwrap() - 1);
-        log.install_page(start, events);
+        let position = Position::of_seq(start);
+        log.focus_on(position.row().unwrap());
+        log.install_page(position, events);
     }
 
     assert_eq!(log.row(0), crate::session_log::Row::Unloaded, "its page went");

@@ -7,7 +7,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{ApprovalId, OpenApproval, Seq, Session};
 
-use super::SessionLog;
+use super::{Position, SessionLog};
 
 #[cfg(test)]
 mod tests;
@@ -129,13 +129,10 @@ impl SessionLog {
 
     /// The loaded events with every event after them loaded too, oldest first.
     fn unbroken_from_newest(&self) -> impl Iterator<Item = &SessionEvent> {
-        let mut wanted = self.last;
-        let unbroken = |position: &&u64| {
-            let next = **position == wanted;
-            wanted = position.saturating_sub(1);
-            next
-        };
-        let first = self.events.keys().rev().take_while(unbroken).last().copied();
+        let rows = (0..self.row_count()).rev();
+        let unbroken =
+            self.events.keys().rev().zip(rows).take_while(|(position, row)| **position == Position::of_row(*row));
+        let first = unbroken.last().map(|(position, _)| *position);
         first.into_iter().flat_map(|first| self.events.range(first..).map(|(_, event)| event))
     }
 }

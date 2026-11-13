@@ -9,10 +9,10 @@
 //! desktop app's gallery draws every kind of call and checks that what each draws is what's counted here.
 
 use client_core::calls::Recorded;
-use client_core::session_log::{Row, SessionLog};
+use client_core::session_log::{Position, Row, SessionLog};
 use protocol::event::{ContentBlock, EventBody, SessionEvent, TurnOutcome};
 use protocol::find::Needle;
-use protocol::model::{Seq, seq_index};
+use protocol::model::Seq;
 
 use super::around::{
     Around, BlockAround, Opening, blocks_of, drawn_in_its_call, drawn_in_row, drawn_with_its_call, its_call,
@@ -53,9 +53,9 @@ pub(crate) fn of_row(log: &SessionLog, m: &Model, needle: &Needle, ix: usize) ->
 
 /// The rows the event at `position` in the log is drawn in: its own, unless it's a subagent's, drawn in the call that
 /// started it, or a prompt, drawn where it was settled, and the rows of the calls any of its results are drawn with. A
-/// prompt at the end is in none that's found in.
-pub(crate) fn rows_drawing(log: &SessionLog, m: &Model, position: u64) -> Vec<usize> {
-    let own = seq_index(position).saturating_sub(1);
+/// prompt at the end is in none that's found in, and so is 0, where no event is.
+pub(crate) fn rows_drawing(log: &SessionLog, m: &Model, position: Position) -> Vec<usize> {
+    let Some(own) = position.row() else { return Vec::new() };
     let Row::Event(event) = log.row(own) else { return vec![own] };
     if matches!(event.body, EventBody::UserPrompt { .. }) {
         return log.row_drawing(event.seq).filter(|row| *row < log.row_count()).into_iter().collect();
@@ -80,9 +80,9 @@ pub(crate) fn rows_drawing(log: &SessionLog, m: &Model, position: u64) -> Vec<us
 
 /// The rows to count again when the event at `position` in the log is found to hold the needle, or changes: those
 /// it's drawn in, and its own, which draws nothing of it when it's drawn in another's.
-pub(crate) fn rows_to_count(log: &SessionLog, m: &Model, position: u64) -> Vec<usize> {
+pub(crate) fn rows_to_count(log: &SessionLog, m: &Model, position: Position) -> Vec<usize> {
     let mut rows = rows_drawing(log, m, position);
-    rows.push(seq_index(position).saturating_sub(1));
+    rows.extend(position.row());
     rows.sort_unstable();
     rows.dedup();
     rows

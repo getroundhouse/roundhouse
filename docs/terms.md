@@ -102,6 +102,7 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 | Log | A session's events, in order. It's the source of truth for what happened | The `events` table |
 | Seq | An event's position in its log. The first is 1, and there are no gaps | `Seq` |
 | Place | An event's position among the events from the same agent or subagent in its log, as `seq` is among all of them. The first is 1, and there are no gaps | `Place`, `SessionEvent::place` |
+| Position | Where an event is in a session log a client holds, which gives the row it's in: its `seq` in a log of every event, and its place in a log of one agent's or subagent's events. The first is 1, in the first row, and 0 is before it, where no event is | `session_log::Position`, `SessionLog::position` |
 | Raw line | The agent's original output, stored beside the event made from it | `raw` |
 | Tail | Text the agent is still writing, which isn't in the log yet. The end of the chat draws it, with the prompts the agent hasn't read yet and the working line | `Tail` |
 | Delta | One change to the tail. Deltas aren't stored | `StreamDelta` |
@@ -147,6 +148,7 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 | Snapshot | `session::Snapshot` is what a subscriber starts from. A provider's `snapshot` saves a filesystem, and isn't built | Say which |
 | Restore | `workspace_restore` recreates an archived worktree from its branch, and the workspace's record says `WorkspaceStatus::Restoring` meanwhile. A provider's `restore` rolls back a filesystem, and isn't built | "Restore" alone means the workspace's |
 | Log | A session's log, or a log file such as `hub.log` or the setup log | A bare "log" means a session's. Name the file otherwise |
+| Position | Where an event is in a session log a client holds, as `session_log::Position`, or where a question is among those asked together, or an option among a question's, by which a client answers them, as in `ApprovalDecision::AnswerByPosition` | "Position" alone means an event's, in a client's log. Say "a question's position" or "an option's position" for the others |
 | Reply | What the agent said in a turn, or what a hub, a worker or a provider's adapter answers a request with | "The agent's reply" or "the hub's reply", unless only one can be meant. In code, the agent's is `Session.reply_seq`, and a request's is the protocol's, as in `protocol::client::Reply`, `HelloReply` and `HubFrame::Reply` |
 | Settings | The app's own, chosen in Settings and kept on this Mac, a hub's, chosen there too and kept by the hub that carries them out, or a repository's, in its `.conductor/settings.toml` files | "Settings" alone means what's chosen in Settings. Say "hub settings" for the ones a hub keeps, `HubSettings`, and "repository settings" for a repository's |
 

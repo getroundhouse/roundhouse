@@ -6,11 +6,12 @@
 
 #![cfg(test)]
 
+use client_core::session_log::SessionLog;
 use desktop::workspace_pane::Showing;
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{AppContext as _, ElementId, SharedString, TestAppContext};
 use protocol::event::{ContentBlock, EventBody};
-use protocol::model::{SessionId, SettledAt, seq_index};
+use protocol::model::{SessionId, SettledAt};
 
 use crate::menus::items;
 use crate::support::{Stack, Ui};
@@ -280,7 +281,8 @@ fn a_prompt_after_a_subagent_s_work_is_in_the_outline_at_its_row(cx: &mut TestAp
     let tick = |row: usize| SharedString::from(format!("outline-tick/{row}"));
 
     // The subagent's events are in the whole log before it, and not in the chat's rows.
-    assert!(row < seq_index(seq) - 1, "row {row}, seq {seq}");
+    let in_the_whole_log = SessionLog::new(seq).row_of(seq).unwrap();
+    assert!(row < in_the_whole_log, "row {row}, and {in_the_whole_log} in the whole log");
     ui.wait("the outline", |ui| ui.has("outline"));
     assert!(ui.has(tick(row)), "its tick is at the row it's drawn in");
 }

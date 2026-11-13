@@ -4,7 +4,6 @@
 
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{AppContext as _, ElementId, Pixels, ScrollDelta, TestAppContext, point, px};
-use protocol::model::seq_index;
 
 use super::{
     compact, open_the_list, prompt_rows, row_id, scrolled_to, scrolled_to_exactly, selected, wait_out_the_list,
@@ -28,7 +27,8 @@ fn prompts_too_far_back_to_be_loaded_are_listed_and_jumped_to(cx: &mut TestAppCo
     ui.wait("the outline", |ui| ui.has("outline"));
     let listed = stack.client().session_prompt_list(&session).unwrap();
     // Each is drawn where the agent took it, which the hub lists with it.
-    let rows: Vec<usize> = listed.iter().map(|line| seq_index(line.settled().unwrap().seq) - 1).collect();
+    let took = |line: &protocol::model::PromptLine| stack.event(&session, line.settled().unwrap().seq);
+    let rows: Vec<usize> = listed.iter().map(|line| ui.row_of(&took(line))).collect();
     let (first, second) = (rows[0], rows[1]);
     assert!(ui.cx.read_entity(&transcript, |t, _| t.event_at(second).is_none()), "the second prompt isn't loaded");
 
@@ -160,7 +160,7 @@ fn a_compaction_too_far_back_to_be_loaded_is_marked_and_jumped_to(cx: &mut TestA
     let transcript = ui.transcript().unwrap();
     let listed = stack.client().session_compaction_list(&session).unwrap();
     let [ref compaction] = listed[..] else { panic!("one compaction: {listed:?}") };
-    let row = seq_index(compaction.seq) - 1;
+    let row = ui.row_of(&stack.event(&session, compaction.seq));
     ui.wait("its dot", |ui| ui.has(row_id("outline-dot", row)));
     assert!(ui.cx.read_entity(&transcript, |t, _| t.event_at(row).is_none()), "the compaction isn't loaded");
 

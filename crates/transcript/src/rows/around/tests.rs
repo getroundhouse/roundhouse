@@ -193,7 +193,7 @@ fn a_subagent_s_images_are_fetched_with_the_call_that_started_it() {
 #[test]
 fn a_working_subagent_s_latest_images_are_fetched_once_its_call_under_working_on_is_open() {
     let agent = calls_to("Agent", &["agent"]);
-    let mut log = SessionLog::by_place(0);
+    let mut log = SessionLog::by_place(Place::default());
     log.apply_event(SessionEvent { place: Place::new(1), ..event(1, agent.clone()) });
     let image = Attachment { id: "i1".into(), name: "image".into(), media_type: MediaType::Png, size_bytes: 1 };
     let read = protocol::fixtures::call("read", "Read", json!({ "file_path": "a.png" }));
