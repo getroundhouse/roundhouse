@@ -3,9 +3,9 @@
 How the guide in `docs/guide` is organized and written, and how it's built into the site's `/docs/` pages.
 
 ```sh
-rm -rf .context/tmp/site
-tools/site/assemble.py .context/tmp/site && cargo run -p guide -- .context/tmp/site/docs
-python3 -m http.server 8000 --directory .context/tmp/site   # Then open http://127.0.0.1:8000/docs/
+rm -rf .context/site
+tools/site/assemble.py .context/site && cargo run -p guide -- .context/site/docs
+python3 -m http.server 8000 --directory .context/site   # Then open http://127.0.0.1:8000/docs/
 cargo test -p guide               # The tool, against made-up guides
 ```
 

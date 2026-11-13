@@ -115,11 +115,11 @@ fn every_launch_names_its_model_and_effort() {
 fn every_launch_adds_roundhouses_instructions_for_the_agent_and_its_subagents() {
     let spec = spec(None, PermissionMode::FullAccess);
     for resume in [false, true] {
-        let launched = build_args(&spec, resume, Some("Keep scratch in `.context/tmp/`.")).unwrap();
+        let launched = build_args(&spec, resume, Some("Keep scratch in `.context/`.")).unwrap();
 
         for flag in ["--append-system-prompt", "--append-subagent-system-prompt"] {
             let given = flag_value(&launched, flag);
-            assert_eq!(given.as_deref(), Some("Keep scratch in `.context/tmp/`."), "{flag}, resuming: {resume}");
+            assert_eq!(given.as_deref(), Some("Keep scratch in `.context/`."), "{flag}, resuming: {resume}");
         }
     }
     assert!(!args(&spec, false).iter().any(|a| a.starts_with("--append")), "a launch given none adds none");

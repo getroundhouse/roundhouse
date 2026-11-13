@@ -24,10 +24,10 @@ In it:
 
 Each workspace's worktree is in `~/roundhouse/workspaces`. It's an ordinary git worktree of your repository, so its branch is in your repository too.
 
-In a worktree, Roundhouse uses two folders, which git is told to ignore:
+In a worktree, Roundhouse uses `.context/`, which git is told to ignore:
 
-- `.context/attachments/`, for the files prompts carried.
-- `.context/tmp/`, where agents keep what they make for their own use.
+- Agents keep what they make for their own use there, in folders named for what they hold, such as `.context/screenshots/`.
+- `.context/attachments/` holds the files prompts carried.
 
 ## Choosing other places
 

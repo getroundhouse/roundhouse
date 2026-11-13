@@ -99,7 +99,7 @@
 
   ![A reply with two images in it, one under the other](screens/reply-images.png)
 
-- **Every agent is told to show the person an image this way,** and to save one it made in the workspace, rather than in the system's temporary directory, where the image wouldn't show. *Unconfirmed:* in the workspace's `.context/tmp/`, where it keeps whatever else it makes for its own use.
+- **Every agent is told to show the person an image this way,** and to save one it made in the workspace, rather than in the system's temporary directory, where the image wouldn't show. *Unconfirmed:* in the workspace's `.context/`, where it keeps whatever else it makes for its own use, in folders named for what they hold, such as `.context/screenshots/`.
 
 - **A click on an image in a reply opens it over the window, as a prompt's image opens,** so a screenshot made smaller to fit the column, or the height of the text, can be seen as big as it is. An image in a link goes where its link does instead, as a badge does. One in a heading, a table or a footnote, and one written with its address given elsewhere in the text, as `![The board][board]` is, opens nothing. Nor do images in a paragraph that holds them with no words but isn't one image alone, such as two in one bold with nothing between them, nor one beside nothing but a tag of HTML, nor one in what a subagent did shown under its call. *Unconfirmed.*
 
