@@ -68,3 +68,6 @@ pub(crate) const BEFORE_REPLY_OUTCOME: usize = 47;
 
 /// How many migrations there were before the hub could allow a tool's use itself when an agent with full access asks.
 pub(crate) const BEFORE_ALLOWING_ASKED: usize = 49;
+
+/// How many migrations there were before each model's own week of an account's limits was kept apart.
+pub(crate) const BEFORE_LIMIT_MODELS: usize = 50;

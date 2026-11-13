@@ -31,7 +31,9 @@ pub(crate) async fn run_ingest(session: Arc<LiveSession>, mut items: mpsc::Recei
             // Sent when the hub took it, by the hub's clock, less how long the model took to start answering.
             Item::Cache { run, request, .. } => session.note_cache(run, request, crate::store::now_ms()).await,
             // Heard when the hub took it, by the hub's clock, as an event the agent said it in is timed.
-            Item::Limits { run, limits, .. } => session.heard_limits(run, limits, crate::store::now_ms()),
+            Item::Limits { run, limits, every_models_week, .. } => {
+                session.heard_limits(run, limits, every_models_week, crate::store::now_ms());
+            }
             Item::AgentLost { link, reason } => session.agent_lost(link, reason).await,
             Item::PickupDue { wait } => session.no_pickup(wait).await,
             Item::Flush(done) => {
@@ -72,7 +74,8 @@ async fn ingest_event(
     match session.record(origin, body, raw).await {
         // Heard when the hub recorded it, by the hub's clock, as everything else in the log is timed.
         Ok((SessionEvent { body: EventBody::AgentLimits { limits }, ts_ms, .. }, _)) => {
-            session.heard_limits(run, limits, ts_ms);
+            // What the agent hears by itself says nothing of the limits it leaves out.
+            session.heard_limits(run, limits, false, ts_ms);
         }
         Ok(_) => {}
         Err(e) => error!(session = %session.id, "could not record agent output: {e}"),

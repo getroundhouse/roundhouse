@@ -127,7 +127,7 @@ fn renewing_replaces_the_login_and_the_name_and_keeps_what_was_heard_of_the_acco
         resets_at_ms: None,
         heard_at_ms: None,
     };
-    store.hear_limits(&id, &[week], 1200).unwrap();
+    store.hear_limits(&id, &[week], false, 1200).unwrap();
 
     let renewed =
         Connect { connected_at_ms: 3000, ends_at_ms: Some(4000), ..connect("Day job", "a-new-token", Some(&id)) };
@@ -159,7 +159,7 @@ fn renewing_is_refused_for_no_account_an_adapters_account_and_a_token_another_ho
     let work = logins.connect(&connect("Work", "work-token", None)).unwrap().account;
     logins.connect(&connect("Home", "home-token", None)).unwrap();
     let adapters = AccountId::from("claude-0123456789abcdef");
-    store.hear_limits(&adapters, &[], 0).unwrap();
+    store.hear_limits(&adapters, &[], false, 0).unwrap();
     let records = || store.list_records().unwrap().accounts;
     let before = records();
 
