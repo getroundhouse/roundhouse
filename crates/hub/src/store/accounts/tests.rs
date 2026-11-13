@@ -4,7 +4,7 @@ use super::*;
 use crate::store::tests::{open_in, store_with_session};
 
 fn limit(window: LimitWindow, used_percent: u8) -> UsageLimit {
-    UsageLimit { window, used_percent, resets_at_ms: Some(9_000), heard_at_ms: None }
+    UsageLimit { window, model: None, used_percent, resets_at_ms: Some(9_000), heard_at_ms: None }
 }
 
 /// What's kept for the account, as window, how much is used, and when that was heard.

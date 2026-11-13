@@ -228,7 +228,8 @@ fn whats_in_the_new_workspace_dialog_is_a_record_like_the_rest() {
 }
 
 fn account(id: &str, used_percent: u8, rev: u64) -> Account {
-    let limit = UsageLimit { window: LimitWindow::SevenDays, used_percent, resets_at_ms: None, heard_at_ms: None };
+    let limit =
+        UsageLimit { window: LimitWindow::SevenDays, model: None, used_percent, resets_at_ms: None, heard_at_ms: None };
     Account {
         id: id.into(),
         model_provider: None,

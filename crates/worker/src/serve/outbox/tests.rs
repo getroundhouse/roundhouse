@@ -5,7 +5,13 @@ use protocol::tail::{DeltaChange, StreamDelta};
 use super::*;
 
 fn limits() -> WorkerFrame {
-    WorkerFrame::AgentLimits { session_id: "s".into(), run: RunId::new(1), limits: Vec::new(), seq: None }
+    WorkerFrame::AgentLimits {
+        session_id: "s".into(),
+        run: RunId::new(1),
+        limits: Vec::new(),
+        every_models_week: false,
+        seq: None,
+    }
 }
 
 fn delta() -> WorkerFrame {

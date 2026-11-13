@@ -120,7 +120,13 @@ fn renewing_replaces_the_login_and_the_name_and_keeps_what_was_heard_of_the_acco
     let dir = tempfile::tempdir().unwrap();
     let (logins, store) = logins_in(dir.path());
     let id = logins.connect(&connect("Work", "an-old-token", None)).unwrap().account.id;
-    let week = UsageLimit { window: LimitWindow::SevenDays, used_percent: 40, resets_at_ms: None, heard_at_ms: None };
+    let week = UsageLimit {
+        window: LimitWindow::SevenDays,
+        model: None,
+        used_percent: 40,
+        resets_at_ms: None,
+        heard_at_ms: None,
+    };
     store.hear_limits(&id, &[week], 1200).unwrap();
 
     let renewed =

@@ -57,7 +57,7 @@ fn compact(pane: &WeakEntity<WorkspacePane>, off: bool, cx: &App) -> Div {
 /// The bars' card: the plan beside its heading, which is what it's `called`, how much of each limit shown is left, as a
 /// bar that empties, and when it starts again, then whose account it is.
 pub(super) fn usage_card(usage: &Usage, called: SharedString, cx: &App) -> AnyElement {
-    let limits = usage.limits.iter().map(|&(name, limit)| self::limit(name, &limit, cx));
+    let limits = usage.limits.iter().map(|(name, limit)| self::limit(name, limit, cx));
     let plan = usage.account.plan.clone().map(SharedString::from);
     let limits = v_flex().gap_2p5().child(heading(called, plan, cx)).children(limits);
     let whose = whose(&usage.account, Plan::BesideHeading, cx);

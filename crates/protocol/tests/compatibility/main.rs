@@ -11,7 +11,7 @@ use protocol::client::{
 };
 use protocol::event::{AgentTask, CompactedBy, CompactionOutcome, EventBody, SessionEvent, TaskKind};
 use protocol::frame;
-use protocol::model::{LimitWindow, ModelName, Place, PullRequestFound, RecordKey, Rev};
+use protocol::model::{LimitWindow, ModelLabel, ModelName, Place, PullRequestFound, RecordKey, Rev};
 use protocol::tail::{Compacting, StreamDelta, Tail};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -131,8 +131,28 @@ fn what_an_agent_heard_of_its_accounts_limits_keeps_its_form_and_a_newer_window_
     .unwrap();
 
     let EventBody::AgentLimits { limits } = event.body else { panic!("{:?}", event.body) };
-    let said: Vec<_> = limits.iter().map(|limit| (limit.window, limit.used_percent, limit.resets_at_ms)).collect();
-    assert_eq!(said, [(LimitWindow::SevenDays, 4, Some(9)), (LimitWindow::Unknown, 1, None)]);
+    let said: Vec<_> = limits
+        .iter()
+        .map(|limit| (limit.window, limit.model.clone(), limit.used_percent, limit.resets_at_ms))
+        .collect();
+    assert_eq!(said, [(LimitWindow::SevenDays, None, 4, Some(9)), (LimitWindow::Unknown, None, 1, None)]);
+}
+
+/// Spelled out, since an agent could hear one by itself, and the log would hold it for good. A client from before
+/// models' weeks reads one as a window it has no name for, and leaves it out.
+#[test]
+fn a_models_own_week_keeps_its_form_with_the_models_label() {
+    let event: SessionEvent = frame::decode(
+        br#"{"session_id":"s","seq":1,"ts_ms":1,"body":{"type":"agent_limits","limits":[{"window":"model_seven_days","model":"Fable","used_percent":88,"resets_at_ms":9}]}}"#,
+    )
+    .unwrap();
+
+    let EventBody::AgentLimits { limits } = event.body else { panic!("{:?}", event.body) };
+    let said: Vec<_> = limits
+        .iter()
+        .map(|limit| (limit.window, limit.model.clone(), limit.used_percent, limit.resets_at_ms))
+        .collect();
+    assert_eq!(said, [(LimitWindow::ModelSevenDays, Some(ModelLabel::new("Fable")), 88, Some(9))]);
 }
 
 #[test]

@@ -73,6 +73,7 @@ fn limits_of(conn: &Connection, account: &AccountId) -> rusqlite::Result<Vec<Usa
     let rows = statement.query_map([account.as_str()], |row| {
         Ok(UsageLimit {
             window: from_text(row.get(0)?)?,
+            model: None,
             used_percent: row.get(1)?,
             resets_at_ms: row.get(2)?,
             heard_at_ms: Some(row.get(3)?),
@@ -102,7 +103,9 @@ impl Store {
             .query_row("SELECT rev FROM accounts WHERE id = ?", [account.as_str()], |row| rev_of(row, 0))
             .optional()?;
         tx.execute("INSERT INTO accounts (id) VALUES (?) ON CONFLICT DO NOTHING", [account.as_str()])?;
-        for limit in limits.iter().filter(|limit| limit.window != LimitWindow::Unknown) {
+        // A model's week is kept by its window alone here, so it couldn't be told from another model's.
+        let named = |limit: &&UsageLimit| !matches!(limit.window, LimitWindow::Unknown | LimitWindow::ModelSevenDays);
+        for limit in limits.iter().filter(named) {
             tx.execute(
                 "INSERT INTO account_limits (account_id, window, used_percent, resets_at_ms, heard_at_ms)
                      VALUES (?, ?, ?, ?, ?)

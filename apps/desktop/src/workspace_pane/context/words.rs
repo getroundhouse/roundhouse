@@ -38,7 +38,8 @@ pub(super) fn window(window: LimitWindow) -> Option<&'static str> {
     match window {
         LimitWindow::FiveHours => Some("5h limit"),
         LimitWindow::SevenDays => Some("7d limit"),
-        LimitWindow::Unknown => None,
+        // Named by its model, which this has nothing of.
+        LimitWindow::ModelSevenDays | LimitWindow::Unknown => None,
     }
 }
 
