@@ -14,12 +14,12 @@ pub(super) mod tests;
 
 pub(super) const NAME: &str = "get_pull_request";
 
-const DESCRIPTION: &str = "Says where this workspace's pull request stands on GitHub: open, a draft, merged or \
-    closed; whether it's in the merge queue; its checks on its newest commit; its review; whether it conflicts; and \
-    how this worktree differs from it. Roundhouse reads it from GitHub when asked, waiting a few seconds when it read \
-    it just before, within its share of GitHub's hourly limit, and works out what's in the way of merging it, so use \
-    this rather than `gh pr view`, `gh pr checks` or a loop of your own. A pull request in the merge queue isn't \
-    merged until this says it's merged.";
+const DESCRIPTION: &str = "Says where the pull request of the branch checked out in this workspace stands on \
+    GitHub: open, a draft, merged or closed; whether it's in the merge queue; its checks on its newest commit; its \
+    review; whether it conflicts; and how this worktree differs from it. Roundhouse reads it from GitHub when asked, \
+    waiting a few seconds when it read it just before, within its share of GitHub's hourly limit, and works out \
+    what's in the way of merging it, so use this rather than `gh pr view`, `gh pr checks` or a loop of your own. A \
+    pull request in the merge queue isn't merged until this says it's merged.";
 
 pub(super) fn definition() -> Value {
     json!({
