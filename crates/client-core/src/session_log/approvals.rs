@@ -1,5 +1,8 @@
 //! The approvals still waiting on an answer: as the session's record says, with what's loaded since, or among what a
-//! log holds, from a hub too old to say.
+//! log holds, from a hub too old to say. A request the record names that no page loaded here holds is fetched on its
+//! own, so what waits is asked about wherever in the log it was asked.
+
+use std::collections::{BTreeMap, BTreeSet};
 
 use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{ApprovalId, OpenApproval, Seq, Session};
@@ -24,14 +27,49 @@ impl RecordedApprovals {
     }
 }
 
+/// The requests a record says are waiting that no page loaded here holds, each fetched on its own. An open approval
+/// is usually near the end, which is always loaded, but a subagent working in the background can have asked long
+/// before, with the agent at work since.
+#[derive(Debug, Default)]
+pub(super) struct Apart {
+    /// The requests the record last said are waiting, by their `seq`s.
+    wanted: Vec<Seq>,
+    fetched: BTreeMap<Seq, SessionEvent>,
+    in_flight: BTreeSet<Seq>,
+    /// Those whose fetch failed, which aren't asked for again until [`Apart::retry_failed`].
+    failed: BTreeSet<Seq>,
+}
+
+impl Apart {
+    pub(super) fn fetch_failed(&mut self) {
+        self.failed.append(&mut self.in_flight);
+    }
+
+    pub(super) fn retry_failed(&mut self) {
+        self.failed.clear();
+    }
+
+    /// Keeps `event`, which its page is letting go of, if it's a request that waits.
+    pub(super) fn keep_if_waiting(&mut self, event: SessionEvent) {
+        if self.wanted.contains(&event.seq) {
+            self.fetched.insert(event.seq, event);
+        }
+    }
+
+    /// The same requests waiting, with none fetched, for a log that starts again.
+    pub(super) fn again(self) -> Self {
+        Self { wanted: self.wanted, ..Self::default() }
+    }
+}
+
 impl SessionLog {
-    /// The open approvals whose requests are loaded, oldest first: those `recorded` says are open, with the requests
-    /// and answers loaded since. Without a record that says, from a hub too old to, they're found among what's loaded,
-    /// as [`SessionLog::open_approvals_loaded`] says.
+    /// The open approvals whose requests are loaded, or were fetched on their own, oldest first: those `recorded` says
+    /// are open, with the requests and answers loaded since. Without a record that says, from a hub too old to,
+    /// they're found among what's loaded, as [`SessionLog::open_approvals_loaded`] says.
     pub fn open_approvals(&self, recorded: Option<&RecordedApprovals>) -> Vec<&SessionEvent> {
         let Some(recorded) = recorded else { return self.open_approvals_loaded() };
-        let mut open: Vec<&SessionEvent> =
-            recorded.open.iter().filter_map(|approval| self.event_of(approval.seq)).collect();
+        let request = |seq: Seq| self.event_of(seq).or_else(|| self.apart.fetched.get(&seq));
+        let mut open: Vec<&SessionEvent> = recorded.open.iter().filter_map(|approval| request(approval.seq)).collect();
         let since: Vec<&SessionEvent> =
             self.events.values().rev().take_while(|event| event.seq > recorded.through).collect();
         for event in since.into_iter().rev() {
@@ -40,9 +78,47 @@ impl SessionLog {
         open
     }
 
-    /// Open approvals among what's loaded. An approval blocks its agent, so an open one is always near the tail, which
-    /// is always loaded. Only the events that run unbroken back from the newest count, since an older request's answer
-    /// can be in a page that isn't loaded, such as when a page is fetched for scrolling back.
+    /// Notes the requests `recorded` says are waiting, so [`SessionLog::requests_to_fetch`] fetches those no page
+    /// loaded here holds, and lets go of any fetched that no longer wait.
+    pub(crate) fn waiting_on(&mut self, recorded: Option<&RecordedApprovals>) {
+        let wanted: Vec<Seq> = recorded.iter().flat_map(|recorded| &recorded.open).map(|open| open.seq).collect();
+        self.apart.fetched.retain(|seq, _| wanted.contains(seq));
+        self.apart.wanted = wanted;
+    }
+
+    /// The requests to fetch on their own: those waiting that aren't loaded, fetched or on their way, and haven't
+    /// failed, which this marks as on their way.
+    pub(crate) fn requests_to_fetch(&mut self) -> Vec<Seq> {
+        let wanted = self.apart.wanted.clone();
+        let missing = |seq: &Seq| self.event_of(*seq).is_none() && !self.apart.fetched.contains_key(seq);
+        let to_fetch: Vec<Seq> = wanted
+            .into_iter()
+            .filter(missing)
+            .filter(|seq| !self.apart.in_flight.contains(seq) && !self.apart.failed.contains(seq))
+            .collect();
+        self.apart.in_flight.extend(&to_fetch);
+        to_fetch
+    }
+
+    /// Puts the request at `seq`, fetched on its own, in place, or with `None` notes that it couldn't be fetched, so it
+    /// isn't asked for again until [`SessionLog::retry_failed`]. One that no longer waits is let go of. A view is told,
+    /// so it asks what's waiting again.
+    pub(crate) fn install_request(&mut self, seq: Seq, event: Option<SessionEvent>) {
+        self.apart.in_flight.remove(&seq);
+        if !self.apart.wanted.contains(&seq) {
+            return;
+        }
+        let Some(event) = event.filter(|event| event.seq == seq) else {
+            self.apart.failed.insert(seq);
+            return;
+        };
+        self.apart.fetched.insert(seq, event);
+        self.changes.requests_fetched = true;
+    }
+
+    /// Open approvals among what's loaded, for a hub too old to say. An approval blocks its agent, so one is usually
+    /// near the tail, which is always loaded. Only the events that run unbroken back from the newest count, since an
+    /// older request's answer can be in a page that isn't loaded, such as when a page is fetched for scrolling back.
     fn open_approvals_loaded(&self) -> Vec<&SessionEvent> {
         let mut open: Vec<&SessionEvent> = Vec::new();
         for event in self.unbroken_from_newest() {

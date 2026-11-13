@@ -28,6 +28,7 @@ impl Transcript {
             transcript.session.read(|log| log.open_approvals(m.approvals.as_ref()).iter().map(|e| e.seq).collect())
         };
         let before = open(self);
+        self.session.waiting_on(recorded.as_ref());
         self.model.borrow_mut().approvals = recorded;
         let after = open(self);
         if before == after {

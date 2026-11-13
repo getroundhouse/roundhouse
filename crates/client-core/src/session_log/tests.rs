@@ -209,7 +209,7 @@ fn changes_gather_into_one_range_until_a_view_looks() {
 
     let changes = log.take_changes();
 
-    assert_eq!(changes, Changes { rows: Some(0..3), turns_ended: 1 }, "two rows and the tail");
+    assert_eq!(changes, Changes { rows: Some(0..3), turns_ended: 1, requests_fetched: false }, "two rows and the tail");
     assert_eq!(log.take_changes(), Changes::default(), "nothing since");
 }
 

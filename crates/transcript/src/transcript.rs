@@ -240,7 +240,7 @@ impl Transcript {
         let changes = self.session.take_changes();
         let errors = self.session.take_errors();
         let (rows, loaded) = self.session.read(rows_and_loaded);
-        // A question opens and closes with an event, which is a row of its own rather than the tail.
+        // A question opens and closes with an event, a row of its own rather than the tail, or is fetched alone.
         let events = self.session.read(SessionLog::row_count);
         let events_changed = changes.rows.as_ref().is_some_and(|changed| changed.start < events);
         self.list.set_rows(rows, loaded);
@@ -251,7 +251,7 @@ impl Transcript {
             self.list.out_of_date(changed.clone());
             self.find_in_changes(changed, cx);
         }
-        if events_changed {
+        if events_changed || changes.requests_fetched {
             self.follow_question(cx);
         }
         // What the search has read since, and a match whose row was loading, which may be here now.

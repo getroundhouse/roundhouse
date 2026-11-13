@@ -10,7 +10,7 @@ use protocol::model::{ClientMessageId, Place, QueuedPrompt, Seq, Session, Sessio
 
 use super::follow::{Follow, FollowError, Source};
 use super::{Client, Result, Subscription, SubscriptionItem};
-use crate::session_log::{By, Changes, SessionLog};
+use crate::session_log::{By, Changes, RecordedApprovals, SessionLog};
 use search::Searches;
 pub use search::{Search, Searched, Stretch};
 
@@ -60,7 +60,11 @@ impl OpenSession {
     /// session's prompts, unless it follows a subagent, whose events hold none.
     pub fn start_view(client: &Client, session: &Session, view: View) -> OpenSession {
         // One by place doesn't know how far it goes until the hub says.
-        let log = if view == View::Whole { SessionLog::new(session.last_seq) } else { SessionLog::by_place(0) };
+        let mut log = if view == View::Whole { SessionLog::new(session.last_seq) } else { SessionLog::by_place(0) };
+        // What waits is asked about wherever it was asked, from the start. A subagent's view asks nothing.
+        if !matches!(view, View::Subagent(_)) {
+            log.waiting_on(RecordedApprovals::of(session).as_ref());
+        }
         let source = SessionSource {
             session_id: session.id.clone(),
             wanted: view.clone(),
@@ -92,6 +96,12 @@ impl OpenSession {
     /// Fetches what a view looking at this row needs.
     pub fn want(&self, row: usize) {
         self.follow.quietly(|log| log.focus_on(row));
+        self.follow.wake();
+    }
+
+    /// Fetches each request `recorded` says is waiting that isn't loaded, as [`SessionLog::waiting_on`] says.
+    pub fn waiting_on(&self, recorded: Option<&RecordedApprovals>) {
+        self.follow.quietly(|log| log.waiting_on(recorded));
         self.follow.wake();
     }
 
@@ -230,15 +240,26 @@ impl Source for SessionSource {
         })
     }
 
-    /// Fetches the pages around where the view is looking that aren't loaded, then the session's prompts if they
-    /// haven't been listed.
+    /// Fetches the pages around where the view is looking that aren't loaded, then each request waiting on an answer
+    /// that none of them holds, then the session's prompts if they haven't been listed.
     fn asked(&mut self, client: &Client, held: &Mutex<SessionLog>) -> Result<bool> {
         let pages = held.lock().pages_to_fetch();
-        let fetched = !pages.is_empty();
+        let requests = held.lock().requests_to_fetch();
+        let fetched = !pages.is_empty() || !requests.is_empty();
         for range in pages {
             let start = range.start;
             match read_range(client, &self.session_id, &self.view, range) {
                 Ok(events) => held.lock().install_page(start, events),
+                Err(e) => {
+                    held.lock().fetch_failed();
+                    return Err(e);
+                }
+            }
+        }
+        // By its `seq`, from the whole log, whichever events this view holds.
+        for seq in requests {
+            match client.session_read(&self.session_id, seq, 1, false) {
+                Ok((events, _)) => held.lock().install_request(seq, events.into_iter().next()),
                 Err(e) => {
                     held.lock().fetch_failed();
                     return Err(e);
