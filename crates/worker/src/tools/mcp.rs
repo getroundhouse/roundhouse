@@ -24,6 +24,14 @@ const CAPABILITIES_KEY: &str = "io.modelcontextprotocol/clientCapabilities";
 /// MCP's tasks extension, which a client offers in each request it can take a task for.
 const TASKS: &str = "io.modelcontextprotocol/tasks";
 
+/// What the agent is told of these tools from its first turn: what they're for, as a whole, and what to look among
+/// them for, since the Claude CLI shows it each tool only by name until it loads that tool, as `docs/claude-cli.md`
+/// says. When to use each, and how, is in its description, so this needn't grow with each tool, as "The worker's
+/// tools" in `docs/architecture.md` says.
+const INSTRUCTIONS: &str = "Roundhouse's tools, for the pull request of the branch checked out in this workspace. For \
+    anything about it, such as where it stands, or waiting in the background until its checks pass or it's merged, \
+    look among these before you use `gh` or write a loop of your own.";
+
 /// What one of a request's HTTP headers says, which has to agree with its body.
 #[derive(Debug, PartialEq, Eq)]
 pub(super) enum Said {
@@ -277,9 +285,7 @@ fn discover(build: Build) -> Value {
         "supportedVersions": [VERSION],
         "capabilities": { "tools": {}, "extensions": { TASKS: {} } },
         "_meta": { "io.modelcontextprotocol/serverInfo": { "name": "roundhouse", "version": build.version() } },
-        "instructions": "Roundhouse's tools, for this workspace. get_pull_request says where the workspace's pull \
-            request stands, as Roundhouse reads it from GitHub, and wait_for_pull_request waits in the background \
-            until it's merged or closed, or needs you.",
+        "instructions": INSTRUCTIONS,
         "ttlMs": 0,
         "cacheScope": "public",
     })

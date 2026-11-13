@@ -25,13 +25,15 @@ const POLL_INTERVAL_MS: u64 = 5_000;
 /// Where the Claude CLI names the agent's call, in a call's `_meta`.
 const CALL_KEY: &str = "claudecode/toolUseId";
 
-const DESCRIPTION: &str = "Waits on this workspace's pull request until it's merged or closed, or needs you: a check \
-    failed, it conflicts, a reviewer asked for changes, it left the merge queue, or it's a draft. With `until` set to \
-    `checks`, it also ends once its checks have run and none failed, so you can then queue it. Roundhouse does the \
-    waiting, reading the pull request from GitHub within its share of GitHub's hourly limit, so this returns at once \
-    and waits in the background, and you hear how it ended, with where the pull request stands, when it does. You can \
-    end your turn meanwhile. Use this rather than a loop of `gh pr checks`, `sleep` or `get_pull_request`. You wait on \
-    one at a time, so starting another ends the last.";
+const DESCRIPTION: &str = "Waits on the pull request of the branch checked out in this workspace until it's merged \
+    or closed, or needs you: a check failed, it conflicts, a reviewer asked for changes, it left the merge queue, or \
+    it's a draft. With `until` set to `checks`, it also ends once its checks have run and none failed, so you can then \
+    queue it. Roundhouse does the waiting, reading the pull request from GitHub within its share of GitHub's hourly \
+    limit, so this returns at once and waits in the background, and you hear how it ended, with where the pull \
+    request stands, when it does. You can end your turn meanwhile. Use this rather than a loop of `gh pr checks`, \
+    `sleep` or `get_pull_request`. You wait on one at a time, so starting another ends the last, and checking out \
+    another branch ends it too. The checks it waits on are this pull request's own, not those of the ones below it \
+    in a stack.";
 
 pub(super) fn definition() -> Value {
     json!({
