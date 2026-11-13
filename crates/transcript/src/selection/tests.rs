@@ -1,6 +1,7 @@
-use gpui_kit::TestAppContext;
+use gpui_kit::{Bounds, TestAppContext, point, px};
 
-use super::{End, Selection};
+use super::test_layouts::in_pieces;
+use super::{End, Geometry, Selection};
 use crate::texts::{TextAt, TextKey, Texts};
 
 /// A text that's selected keeps what's selected of it as it moves, and is copied from where it is now.
@@ -36,4 +37,27 @@ fn the_text_a_press_was_on_is_kept_with_nothing_selected(cx: &mut TestAppContext
 
     assert_eq!(selection.text(), "", "nothing's selected");
     assert_eq!(selection.held(), Some(at..=at), "but the text's kept");
+}
+
+/// A plain text that shows only the space between two of its lines, where an area cuts it short or at the list's
+/// edge, shows none of its leaves, though the space is within its bounds, so nothing finds a place in a line of it
+/// that doesn't show. Once a line shows, its leaf does.
+#[gpui_kit::test]
+fn a_text_that_shows_only_the_space_between_its_lines_shows_none_of_its_leaves(cx: &mut TestAppContext) {
+    let selection = Selection::new(Texts::alone(), cx.update(|cx| cx.focus_handle()));
+    let (pieces, layouts) = in_pieces(cx.add_empty_window(), &["abc", "de"], 6.);
+    let (above, top) = (layouts[0].bounds().bottom(), layouts[1].bounds().top());
+    let space = Bounds::from_corners(point(px(0.), above + px(1.)), point(px(200.), top - px(1.)));
+    let into_the_second = Bounds::from_corners(space.origin, point(px(200.), top + px(1.)));
+    let (output, at) = (TextKey::named("output"), TextAt::only(1, 0));
+    // How many of its leaves show, drawn in a frame of their own where what shows of it is `shows`.
+    let draw = |shows| {
+        selection.new_frame();
+        selection.drawn(output.clone(), at, shows, None, [(0, Geometry::Plain(pieces.clone()))]);
+        selection.inner.borrow().drawn[0].leaves.len()
+    };
+
+    assert!(pieces.bounds().intersects(&space), "the space is within the text's bounds");
+    assert_eq!(draw(space), 0, "but none of its leaves shows there");
+    assert_eq!(draw(into_the_second), 1, "and its leaf shows once the second line does");
 }

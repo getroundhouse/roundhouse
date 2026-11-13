@@ -21,10 +21,7 @@ pub(super) const ICON: IconName = IconName::Brain;
 pub(super) fn draw(thought: &str, toggle: &Toggle, cx: &App) -> AnyElement {
     let summary = (!toggle.open).then(|| Part::start_of(thought));
     let line = Line::new(ICON, "Thinking").part(summary);
-    let opened = toggle.open.then(|| {
-        let drawn = written(toggle, Text::Thinking, thought, None, None);
-        text(toggle.key, drawn, cx).into_any_element()
-    });
+    let opened = || Some(text(toggle.key, written(toggle, Text::Thinking, thought, None, None), cx).into_any_element());
     line::drawn(line, None, opened, toggle, cx)
 }
 

@@ -18,7 +18,7 @@ mod commands;
 mod wheel;
 
 /// The fake agent's commands come with no description, so their line says they run something.
-const COMMAND_LINE: &str = "Run";
+pub(crate) const COMMAND_LINE: &str = "Run";
 /// Asking the advisor, which the API runs rather than the agent.
 const ADVISOR_LINE: &str = "Ask the advisor";
 

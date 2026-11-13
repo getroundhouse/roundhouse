@@ -9,18 +9,17 @@ use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, Div, ElementId, InteractiveElement, IntoElement, ParentElement, Role, SharedString,
-    StatefulInteractiveElement as _, Styled, StyledText, TestSupportExt as _, div, px,
+    StatefulInteractiveElement as _, Styled, TestSupportExt as _, div, px,
 };
 
 use super::highlight::spans;
 use super::line::{Line, Part};
 use super::{Answer, Outcome, Toggle, block, line};
-use crate::find::Part as Text;
-use crate::find::reveal;
+use crate::find::{self, Part as Text};
 use crate::folds::Fold;
 use crate::item_key::ItemKey;
 use crate::rows::shown::Gather;
-use crate::selectable_layout::SelectableLayout;
+use crate::selection::Pieces;
 
 /// How strongly the command is drawn, so it reads as a caption to what it printed.
 const STRENGTH: f32 = 0.7;
@@ -34,7 +33,7 @@ pub(super) fn draw(command: &Command, answer: Option<&Answer>, toggle: &Toggle, 
     });
     let line = Line::new(IconName::Terminal, command.title()).part(summary).shows_output(true);
     let line = if command.described().is_some() { line.found(toggle) } else { line };
-    let opened = toggle.open.then(|| opened(command, answer, toggle, cx).into_any_element());
+    let opened = || Some(opened(command, answer, toggle, cx).into_any_element());
     line::drawn(line, answer, opened, toggle, cx)
 }
 
@@ -64,13 +63,14 @@ fn output(answer: Option<&Answer>) -> Option<&str> {
 /// The command, and under it what it printed, or a faint line saying it printed nothing, so a command that's done
 /// doesn't look as if it's still waiting. While it runs, there's only the command.
 fn opened(command: &Command, answer: Option<&Answer>, toggle: &Toggle, cx: &App) -> Div {
+    // In the order they're shown, since a command nested in another call's row has its texts placed in the order
+    // they're made.
+    let command = command_part(command, toggle, cx);
     let printed = output(answer).map(|text| match text.trim() {
         "" => nothing_printed(toggle, cx),
         _ => block::lines(toggle, Text::Output, text, cx),
     });
-    block::frame(cx)
-        .child(command_part(command, toggle, cx))
-        .when_some(printed, |d, printed| d.child(block::separator(cx)).child(printed))
+    block::frame(cx).child(command).when_some(printed, |d, printed| d.child(block::separator(cx)).child(printed))
 }
 
 /// Where a command's output goes, saying there wasn't any. It isn't selectable, so a copy never takes it for output.
@@ -94,22 +94,16 @@ fn command_part(command: &Command, toggle: &Toggle, cx: &App) -> AnyElement {
     let theme = cx.theme();
     let full: SharedString = command.command.trim().to_string().into();
     let marks = toggle.marks(Text::Command, &full);
-    let styled = StyledText::new(full.clone()).with_highlights(marks.over(&spans("sh", &full), full.len()));
-    let layout = styled.layout().clone();
     let id = toggle.key.element("command");
-    let here = marks
-        .here()
-        .zip(marks.reveal())
-        .map(|(range, mark)| reveal::here(layout.clone(), range.start, Some(block::scroll_id(&id)), mark.clone()));
-    let text_id = ElementId::from((id.clone(), "text"));
+    let (drawn, layout) =
+        find::marked_with_layout(full.clone(), &marks, &spans("sh", &full), Some(block::scroll_id(&id)));
+    // What's selected is painted under what's faded, so it's as strong as the output's.
     let text = div()
-        .id(text_id.clone())
-        .relative()
+        .id(ElementId::from((id.clone(), "text")))
         .role(Role::Label)
         .aria_label(full.clone())
-        // First, so it's painted under the text, and outside what's faded, so it's as strong as the output's.
-        .child(SelectableLayout::new(text_id, full.clone(), layout))
-        .child(div().opacity(STRENGTH).child(styled).children(here))
+        .opacity(STRENGTH)
+        .child(drawn)
         .test_support();
     let part = div()
         .id(id.clone())
@@ -122,9 +116,13 @@ fn command_part(command: &Command, toggle: &Toggle, cx: &App) -> AnyElement {
         // Room for the button, which is pinned over it, so the text never runs under the button. As wide as the
         // kit's copy button, an extra-small icon button, which is `size_5`.
         .child(div().flex_none().ml_2().w_5())
-        .test_support();
+        .test_support()
+        .into_any_element();
+    // All of it, the `$` and the space around the command too, so a press there is on the command.
+    let selectable = block::selectable(toggle, Text::Command, &id, part, full.clone(), Pieces::whole(layout));
     // Half as tall as what it printed can be, so a long command leaves room for that.
-    let scrolling = block::scrolling(toggle.find, &id, part).max_height(px(block::MAX_HEIGHT / 2.));
+    let scrolling =
+        block::scrolling(toggle.find, &toggle.shared.selection, &id, selectable).max_height(px(block::MAX_HEIGHT / 2.));
     div()
         .id(ElementId::from((id.clone(), "area")))
         .relative()

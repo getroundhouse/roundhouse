@@ -3,12 +3,15 @@
 //! rather than by the kit's text view: the agent's replies and thoughts, from when it starts writing them, prompts,
 //! from when they're sent, a plan to approve, a compaction's summary, the prose a call shows of its own, such as a
 //! subagent's report, what a call's row nests, such as a subagent's words, and what the subagent tab says its subagent
-//! was asked and reported, above and below its rows. `docs/ui.md` has why.
+//! was asked and reported, above and below its rows. They're also the plain text a call shows, such as a command and
+//! what it printed, which `plain` draws. `docs/ui.md` has why.
 //!
 //! The kit parses the Markdown and draws each block as its text view would, through its `editor_host`. Each
 //! paragraph, heading, code block and table cell is a leaf, keyed by its place in the text. The kit says where it drew
 //! each leaf, so the transcript can find the character under the pointer, and paints the ranges it's given behind it,
-//! which is how what's selected and what's found are drawn. `crate::selection` has the rest.
+//! which is how what's selected and what's found are drawn. `crate::selection` has the rest. Plain text isn't parsed.
+//! It's one leaf, what it says as find searches it, however it's laid out, such as a line at a time, and it's kept, as
+//! what it says, as any other text is.
 //!
 //! A text is parsed the first time its row is drawn, which is soon after the row loads, since the list measures
 //! loaded rows out of sight. What it shows is kept while its row is loaded, or it's selected, for a copy, and the
@@ -33,7 +36,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use client_core::session_log::{Row, SessionLog};
-use gpui_kit::{AnyElement, App, ElementId, IntoElement, Task};
+use gpui_kit::{AnyElement, App, ElementId, IntoElement, SharedString, Task};
 
 use crate::find::{FindLook, TextId, view_id};
 use crate::images_apart::images_apart;
@@ -44,6 +47,7 @@ use element::ProseElement;
 use moves::Places;
 use parse::ImagesAre;
 pub(crate) use parse::{ATOM, Parsed, leaves};
+pub(crate) use plain::Plain;
 
 mod at;
 mod budget;
@@ -51,6 +55,7 @@ mod element;
 mod moves;
 mod parse;
 mod parsing;
+mod plain;
 
 /// The most of a text that's parsed where it's drawn: all of it, or what's parsed again of one that goes on. Parsing
 /// takes about 0.1 ms a KB of prose on the main thread, and 0.35 ms a KB of a list, so this takes under 1.5 ms, and
@@ -65,13 +70,13 @@ struct Drawing {
     nested: HashMap<usize, usize>,
 }
 
-/// What a text drawn this way is known by: what its element is known by, which stays the same as it moves, as a reply
-/// does from being written to its record, since `find::view_id` makes it the same.
+/// What a text is known by: what its element is known by, which stays the same as it moves, as a reply does from being
+/// written to its record, since `find::view_id` makes it the same, or for plain text, what the row names it by.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct TextKey(ElementId);
 
-/// The texts drawn this way, parsed, by what each is known by, and where each is in the chat now. A copy reads the
-/// texts between a selection's ends from here, drawn or not. Cheap to clone.
+/// The chat's texts, as far as each is known, by what each is known by, and where each is in the chat now. A
+/// copy reads the texts between a selection's ends from here, drawn or not. Cheap to clone.
 #[derive(Clone)]
 pub(crate) struct Texts(Rc<RefCell<Store>>);
 
@@ -102,6 +107,8 @@ enum Text {
     /// Being parsed from `source` on another thread, by a task that's dropped, and stops, with this. It's drawn as what
     /// it was parsed as before, `was`, if it was, until it's in.
     Parsing { source: String, was: Option<Rc<Parsed>>, _task: Task<()> },
+    /// Plain text, which isn't parsed: what it says, as find searches it.
+    Plain { said: SharedString },
 }
 
 impl Text {
@@ -109,15 +116,18 @@ impl Text {
     fn parsing(&self) -> Option<&str> {
         match self {
             Text::Parsing { source, .. } => Some(source),
-            Text::Parsed { .. } | Text::Read { .. } => None,
+            Text::Parsed { .. } | Text::Read { .. } | Text::Plain { .. } => None,
         }
     }
 
     /// What it shows, as far as it's been parsed.
-    fn leaves(&self) -> Option<Arc<[String]>> {
+    fn leaves(&self) -> Option<Leaves> {
         match self {
-            Text::Parsed { parsed, .. } | Text::Parsing { was: Some(parsed), .. } => Some(parsed.leaves.clone()),
-            Text::Read { leaves } => Some(leaves.clone()),
+            Text::Parsed { parsed, .. } | Text::Parsing { was: Some(parsed), .. } => {
+                Some(Leaves::Markdown(parsed.leaves.clone()))
+            }
+            Text::Read { leaves } => Some(Leaves::Markdown(leaves.clone())),
+            Text::Plain { said } => Some(Leaves::Plain(said.clone())),
             Text::Parsing { was: None, .. } => None,
         }
     }
@@ -127,12 +137,43 @@ impl Text {
         match self {
             Text::Parsed { parsed, .. } => Some(parsed.clone()),
             Text::Parsing { was, .. } => was.clone(),
-            Text::Read { .. } => None,
+            Text::Read { .. } | Text::Plain { .. } => None,
         }
     }
 }
 
-/// One of the chat's texts drawn this way, recorded or not yet: where it is in the chat, what its element is known by
+/// What a text shows, leaf by leaf, which the bytes of a place in it count in. Cheap to clone.
+#[derive(Clone)]
+pub(crate) enum Leaves {
+    /// Markdown's: each a paragraph, heading, code block or table cell, where each image the text shows is an
+    /// [`ATOM`], which a copy leaves out.
+    Markdown(Arc<[String]>),
+    /// Plain text's, which is one leaf: what it says, as find searches it, however it's laid out, so a place in it is
+    /// the same place to find and to the selection. It has no images, so an [`ATOM`] in it is a character it says.
+    Plain(SharedString),
+}
+
+impl Leaves {
+    /// What the leaf `leaf` shows, if there is one.
+    pub(crate) fn leaf(&self, leaf: u64) -> Option<&str> {
+        let leaf = usize::try_from(leaf).ok()?;
+        match self {
+            Leaves::Markdown(leaves) => leaves.get(leaf).map(String::as_str),
+            Leaves::Plain(said) => (leaf == 0).then_some(said.as_ref()),
+        }
+    }
+
+    /// What each leaf shows, in order.
+    pub(crate) fn each(&self) -> impl Iterator<Item = &str> {
+        let (markdown, plain) = match self {
+            Leaves::Markdown(leaves) => (Some(leaves.iter().map(String::as_str)), None),
+            Leaves::Plain(said) => (None, Some(said.as_ref())),
+        };
+        markdown.into_iter().flatten().chain(plain)
+    }
+}
+
+/// One of the chat's Markdown texts, recorded or not yet: where it is in the chat, what its element is known by
 /// from one frame to the next, what find knows it by and how what it finds is drawn, if find looks in it, what it says,
 /// and the area that scrolls it, if it's in one.
 pub(crate) struct Written<'a> {
@@ -252,14 +293,14 @@ impl Texts {
 
     /// What the texts from `from` to `to`, both in, show, leaf by leaf, in order, as far as they've been parsed, but
     /// for those hidden.
-    pub(crate) fn between(&self, from: TextAt, to: TextAt) -> Vec<(TextAt, Arc<[String]>)> {
+    pub(crate) fn between(&self, from: TextAt, to: TextAt) -> Vec<(TextAt, Leaves)> {
         let store = self.0.borrow();
         let shown = store.places.within(from..=to).filter(|(_, id)| !store.hidden.contains(id));
         shown.filter_map(|(at, id)| Some((*at, store.texts.get(id)?.leaves()?))).collect()
     }
 
-    /// What the text known as `id` shows, leaf by leaf, if it's been parsed.
-    pub(crate) fn leaves_of(&self, id: &TextKey) -> Option<Arc<[String]>> {
+    /// What the text known as `id` shows, leaf by leaf, if that's known: if it's plain text, or it's been parsed.
+    pub(crate) fn leaves_of(&self, id: &TextKey) -> Option<Leaves> {
         self.0.borrow().texts.get(id)?.leaves()
     }
 
@@ -302,7 +343,7 @@ impl Texts {
         (store.texts.values())
             .filter_map(|text| match text {
                 Text::Parsed { parsed, .. } => Some(parsed.source.clone()),
-                Text::Read { .. } | Text::Parsing { .. } => None,
+                Text::Read { .. } | Text::Parsing { .. } | Text::Plain { .. } => None,
             })
             .collect()
     }

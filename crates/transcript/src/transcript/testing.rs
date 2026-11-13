@@ -48,9 +48,15 @@ impl Transcript {
         self.texts.all_parsed()
     }
 
-    /// What a copy holds with everything selected: the chat's Markdown, in the order it's read.
+    /// What a copy holds with everything selected: the chat's Markdown and the plain text its calls show open, in the
+    /// order it's read.
     pub fn all_as_copied(&self) -> String {
         self.selection.all_as_copied()
+    }
+
+    /// What a copy would hold now, which a test can read while a drag is still going.
+    pub fn as_copied(&self) -> String {
+        self.selection.as_copied()
     }
 
     /// What each text the transcript keeps the kit's blocks of was parsed from, which is what it shows.

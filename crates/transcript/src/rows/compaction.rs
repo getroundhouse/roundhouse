@@ -115,7 +115,7 @@ fn opened(seq: Seq, summary: &str, shared: &Shared, cx: &App) -> Div {
         .border_1()
         .border_color(theme.border)
         .child(div().text_xs().text_color(look::faint()).child("What the agent carries on from"))
-        .child(ScrollArea::new(area, px(SUMMARY_HEIGHT), text).follows_drags(&shared.selection))
+        .child(ScrollArea::new(area, px(SUMMARY_HEIGHT), text, &shared.selection))
 }
 
 /// The rule for `body`, if it's a compaction, or a line saying why it couldn't.

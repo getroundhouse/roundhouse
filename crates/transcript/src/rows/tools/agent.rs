@@ -54,10 +54,12 @@ pub(super) fn draw(
     if call.described().is_some() {
         line = line.found(toggle);
     }
-    let opened = toggle.open.then(|| match subagent {
-        Some(subagent) if subagent.apart => page(call, answer, subagent, toggle, cx),
-        Some(_) | None => gathered(call, answer, subagent, toggle, cx),
-    });
+    let opened = || {
+        Some(match subagent {
+            Some(subagent) if subagent.apart => page(call, answer, subagent, toggle, cx),
+            Some(_) | None => gathered(call, answer, subagent, toggle, cx),
+        })
+    };
     line::drawn(line, answer, opened, toggle, cx)
 }
 
@@ -158,7 +160,7 @@ pub(in crate::rows) fn prompt_block(
         .border_l_2()
         .border_color(theme.border)
         .child(div().text_xs().text_color(look::faint()).child("Asked"))
-        .child(block::scrolling(find, &id, text.test_support()).follows_drags(drags))
+        .child(block::scrolling(find, drags, &id, text.test_support()))
         .into_any_element()
 }
 

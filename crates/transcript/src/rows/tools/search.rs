@@ -25,7 +25,7 @@ pub(super) fn draw(search: &Search, answer: Option<&Answer>, toggle: &Toggle, cx
         .part(Part::Pill(search.pattern.to_string().into(), toggle.marks(Text::Pill, search.pattern)))
         .part(search.path.map(|path| Part::Chip(file_name(path).to_string().into())))
         .part(found.as_ref().map(|found| Part::Note(found.summary().into())));
-    let opened = found.filter(|_| toggle.open).and_then(|found| opened(&found, toggle, cx));
+    let opened = || found.and_then(|found| opened(&found, toggle, cx));
     line::drawn(line, answer, opened, toggle, cx)
 }
 
@@ -64,7 +64,7 @@ fn opened(found: &Found, toggle: &Toggle, cx: &App) -> Option<AnyElement> {
                 });
                 rows.extend(numbered::rows(language(file.path), &lines, &marks, Some(&area), cx));
             }
-            numbered::scrolling(toggle.find, &id, div().id(id.clone()).pb_2().children(rows)).into_any_element()
+            numbered::scrolling(toggle, &id, div().id(id.clone()).pb_2().children(rows)).into_any_element()
         }
         Found::Files(_) | Found::Raw(_) => {
             block::output(toggle, Text::Found, &listed(found)?, cx.theme().foreground, cx)

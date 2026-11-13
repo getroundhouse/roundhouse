@@ -1,6 +1,7 @@
-//! Selecting what a call shows of its own, in a row of its own: what the advisor said, and what a subagent was asked
-//! and reported, with the rest while the call is open, in the order the chat shows it, and a long one's area scrolling
-//! on under a drag from it, for advice and for what a subagent was asked.
+//! Selecting what a call shows of its own, in a row of its own: what the advisor said, what a subagent was asked and
+//! reported, and a command and what it printed, with the rest while the call is open, in the order the chat shows it,
+//! and a long one's area scrolling on under a drag from it, for advice, for what a subagent was asked, for a command
+//! and for what it printed.
 
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{
@@ -9,7 +10,7 @@ use gpui_kit::{
 };
 
 use super::super::{A_FRAME, press, wait_for_the_list_to_settle};
-use super::{LAST, bounds, everything, on_the_reply_saying, open};
+use super::{COMMAND_LINE, LAST, PRINTED, bounds, everything, on_the_reply_saying, open};
 use crate::support::{Stack, Ui};
 
 const ADVISOR_LINE: &str = "Ask the advisor";
@@ -61,6 +62,26 @@ fn what_a_subagent_was_asked_and_reported_is_selected_with_the_rest_only_while_i
     assert!(!closed.contains(ASKED) && !closed.contains(REPORT), "closed, they aren't: {closed:?}");
 }
 
+/// A command and what it printed are copied with the rest while its call is open, after the prompt that ran it, and
+/// aren't once it's closed.
+#[gpui_kit::test]
+fn a_command_and_what_it_printed_are_selected_with_the_rest_only_while_its_call_is_open(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let session = stack.chat_in_a_new_workspace();
+    stack.run(&session, &format!("tool:echo {PRINTED}; say:{LAST}"));
+    let mut ui = open(cx, &stack);
+    settled(&mut ui);
+
+    let opened = everything_with(&mut ui, COMMAND_LINE);
+    let closed = everything_with(&mut ui, COMMAND_LINE);
+
+    assert!(
+        opened.contains(&format!("\n\necho {PRINTED}\n\n{PRINTED}\n\n{LAST}")),
+        "opened, between the rest: {opened:?}"
+    );
+    assert_eq!(closed.matches(PRINTED).count(), 1, "closed, only the prompt says it: {closed:?}");
+}
+
 /// A drag that starts in what the advisor said, held below the area that scrolls it, scrolls it on to its end, as
 /// the wheel would, and rests there.
 #[gpui_kit::test]
@@ -85,6 +106,29 @@ fn a_drag_held_past_a_long_ask_of_a_subagent_scrolls_its_area_on(cx: &mut TestAp
 
     // What it was asked, rather than the prompt that started it, is known by its call's place in the chat.
     held_past_its_area(&mut ui, &line, "prompt/event/");
+}
+
+/// So does one that starts in a long command.
+#[gpui_kit::test]
+fn a_drag_held_past_a_long_command_scrolls_its_area_on(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let session = stack.chat_in_a_new_workspace();
+    let script = (1..=30).map(|n| format!("echo signal {n}")).collect::<Vec<_>>().join("\n");
+    stack.run(&session, &format!("tool:{script}; say:{LAST}"));
+    let mut ui = open(cx, &stack);
+
+    held_past_its_area(&mut ui, COMMAND_LINE, "command/");
+}
+
+/// So does one that starts in what a command printed, at length.
+#[gpui_kit::test]
+fn a_drag_held_past_long_output_scrolls_its_area_on(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let session = stack.chat_in_a_new_workspace();
+    stack.run(&session, &format!("tool:seq 1 60; say:{LAST}"));
+    let mut ui = open(cx, &stack);
+
+    held_past_its_area(&mut ui, COMMAND_LINE, "output/");
 }
 
 /// Words enough to be scrolled far past the area they're in, that nothing else in the chat says.

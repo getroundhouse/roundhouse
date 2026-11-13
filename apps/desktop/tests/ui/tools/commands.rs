@@ -2,11 +2,10 @@
 //! that copies all of it, and a long one scrolling by itself. What it printed is drawn a line at a time, and still
 //! selects and copies as it was printed.
 
-use gpui_kit::base::TextSelection;
 use gpui_kit::test::{ClickOptions, TestWindowExt as _};
 use gpui_kit::{
-    AppContext as _, ElementId, Modifiers, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point,
-    ScrollDelta, TestAppContext, point, px,
+    AppContext as _, Bounds, ElementId, Modifiers, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels,
+    Point, ScrollDelta, TestAppContext, point, px,
 };
 
 use protocol::event::EventBody;
@@ -109,8 +108,8 @@ fn what_a_command_printed_selects_across_its_lines_and_copies_as_it_was_printed(
     let (_, output) = open_a_command(&mut ui, r"printf 'one\n\nthree\nfour\n'");
     assert!(ui.has(ElementId::from((output.clone(), "lines"))), "drawn a line at a time, rather than as one text");
     let printed = ui.bounds(output);
-    // From the start of its first line to past the end of its last, inside the space around them.
-    let (from, to) = (printed.origin + point(px(14.), px(12.)), printed.bottom_right() - point(px(14.), px(12.)));
+    // From the space the block gives it above and before its first line to the space after its last.
+    let (from, to) = (printed.origin + point(px(4.), px(4.)), printed.bottom_right() - point(px(4.), px(4.)));
 
     ui.cx.update_window(ui.handle, |_, window, cx| window.drag(from, to, cx)).unwrap();
     ui.press("secondary-c");
@@ -119,14 +118,80 @@ fn what_a_command_printed_selects_across_its_lines_and_copies_as_it_was_printed(
 }
 
 #[gpui_kit::test]
-fn what_a_command_printed_shows_what_s_selected_while_it_s_dragged_over(cx: &mut TestAppContext) {
+fn what_a_command_printed_is_selected_as_it_s_dragged_over(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = in_a_new_workspace(cx, &stack);
     let (_, output) = open_a_command(&mut ui, r"printf 'one\ntwo\nthree\n'");
-    let printed = ui.bounds(output);
-    let (from, to) = (printed.origin + point(px(14.), px(12.)), printed.bottom_right() - point(px(14.), px(12.)));
+    let (from, to) = across(ui.bounds(output));
 
     assert_eq!(selected_while_dragged(&mut ui, from, to), "one\ntwo\nthree");
+}
+
+/// What's selected of what a command printed stays selected once its row has left the window, and is copied from
+/// there.
+#[gpui_kit::test]
+fn what_a_command_printed_stays_selected_once_its_row_has_left_the_window(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = in_a_new_workspace(cx, &stack);
+    let (_, output) = open_a_command(&mut ui, r"printf 'one\ntwo\nthree\n'");
+    let (from, to) = across(ui.bounds(output.clone()));
+    ui.cx.update_window(ui.handle, |_, window, cx| window.drag(from, to, cx)).unwrap();
+
+    for _ in 0..10 {
+        ui.scroll("transcript", ScrollDelta::Pixels(point(px(0.), px(400.))));
+    }
+    assert!(!ui.visible(output), "its row has left the window");
+    ui.press("secondary-c");
+
+    assert_eq!(copied(&mut ui).as_deref(), Some("one\ntwo\nthree"));
+}
+
+/// A triple-click on what a command printed selects the line under it, as one on the agent's words selects a
+/// paragraph, however it's drawn: here as one text, since there's too much of it to draw a line at a time.
+#[gpui_kit::test]
+fn a_triple_click_on_what_a_command_printed_selects_the_line_under_it(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = in_a_new_workspace(cx, &stack);
+    let (_, output) = open_a_command(&mut ui, "seq -f 'signal %g' 1 250");
+    assert!(!ui.has(ElementId::from((output.clone(), "lines"))), "drawn as one text");
+
+    // On its first line, inside the space around it.
+    let thrice = ClickOptions::new().with_offset(inside()).with_count(3);
+    ui.cx.update_window(ui.handle, |_, window, cx| window.click_with_options(output, thrice, cx)).unwrap();
+    ui.press("secondary-c");
+
+    assert_eq!(copied(&mut ui).as_deref(), Some("signal 1"), "the line, not its first word");
+}
+
+/// A press in the space a block gives what a command printed, above its first line, is on that line, rather than at
+/// the end of the command above it.
+#[gpui_kit::test]
+fn a_double_click_above_what_a_command_printed_selects_its_first_word(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = in_a_new_workspace(cx, &stack);
+    let (_, output) = open_a_command(&mut ui, r"printf 'printed here\n'");
+
+    let twice = ClickOptions::new().with_offset(point(px(14.), px(3.))).with_count(2);
+    ui.cx.update_window(ui.handle, |_, window, cx| window.click_with_options(output, twice, cx)).unwrap();
+    ui.press("secondary-c");
+
+    assert_eq!(copied(&mut ui).as_deref(), Some("printed"));
+}
+
+/// A press on the `$` before a command, or in the space around it, is on the command, so a double-click there selects
+/// its first word.
+#[gpui_kit::test]
+fn a_double_click_on_a_command_s_dollar_selects_its_first_word(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = in_a_new_workspace(cx, &stack);
+    let (command, _) = open_a_command(&mut ui, LONG);
+    let dollar = ui.bounds(text(&command)).left_center() - ui.bounds(command.clone()).origin;
+
+    let twice = ClickOptions::new().with_offset(point(dollar.x - px(10.), px(4.))).with_count(2);
+    ui.cx.update_window(ui.handle, |_, window, cx| window.click_with_options(command, twice, cx)).unwrap();
+    ui.press("secondary-c");
+
+    assert_eq!(copied(&mut ui).as_deref(), Some("echo"));
 }
 
 #[gpui_kit::test]
@@ -159,6 +224,17 @@ fn area(command: &ElementId) -> ElementId {
     ElementId::from((command.clone(), "area"))
 }
 
+/// From the start of what a command printed, at `printed`, to past the end of its last line, inside the space the block
+/// gives it.
+fn across(printed: Bounds<Pixels>) -> (Point<Pixels>, Point<Pixels>) {
+    (printed.origin + inside(), printed.bottom_right() - inside())
+}
+
+/// How far from a corner of what a command printed its first or last line is, inside the space the block gives it.
+fn inside() -> Point<Pixels> {
+    point(px(14.), px(12.))
+}
+
 /// What was last copied.
 fn copied(ui: &mut Ui<'_>) -> Option<String> {
     ui.cx.read_from_clipboard().and_then(|item| item.text())
@@ -166,7 +242,7 @@ fn copied(ui: &mut Ui<'_>) -> Option<String> {
 
 /// What's selected with the button still down, having pressed at `from` and dragged to `to`, as the app gets a drag:
 /// nothing redraws the window between its events but what they change. The kit's own pointer helpers draw it again,
-/// and so would hide a text that doesn't draw again when what's selected of it changes.
+/// and so would hide a selection that only follows the pointer as the window's drawn.
 fn selected_while_dragged(ui: &mut Ui<'_>, from: Point<Pixels>, to: Point<Pixels>) -> String {
     let (pressed, left) = (Some(MouseButton::Left), MouseButton::Left);
     let modifiers = Modifiers::default();
@@ -174,7 +250,8 @@ fn selected_while_dragged(ui: &mut Ui<'_>, from: Point<Pixels>, to: Point<Pixels
     ui.send(MouseDownEvent { button: left, position: from, modifiers, click_count: 1, first_mouse: false });
     ui.send(MouseMoveEvent { position: (from + to) / 2., pressed_button: pressed, modifiers });
     ui.send(MouseMoveEvent { position: to, pressed_button: pressed, modifiers });
-    let selected = ui.cx.update_window(ui.handle, |_, window, cx| TextSelection::selected_text(window, cx)).unwrap();
+    let transcript = ui.transcript().expect("the chat");
+    let selected = ui.cx.read_entity(&transcript, |t, _| t.as_copied());
     ui.send(MouseUpEvent { button: left, position: to, modifiers, click_count: 1 });
     selected
 }

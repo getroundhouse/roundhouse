@@ -25,7 +25,7 @@ pub(super) fn draw(other: &Other, input: &Value, answer: Option<&Answer>, toggle
         .shows_output(true);
     // With no description, the title is the tool's name made readable, which is the app's.
     let line = if other.tool.is_some() { line.found(toggle) } else { line };
-    let opened = toggle.open.then(|| opened(input, answer, toggle, cx).into_any_element());
+    let opened = || Some(opened(input, answer, toggle, cx).into_any_element());
     line::drawn(line, answer, opened, toggle, cx)
 }
 

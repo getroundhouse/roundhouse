@@ -38,7 +38,7 @@ pub(crate) struct ScrollArea {
     /// Where the transcript's match being shown was drawn, to scroll to when it's in here.
     reveal: Option<Reveal>,
     /// The transcript's selection, to scroll on under a drag that started in here.
-    drags: Option<Selection>,
+    drags: Selection,
 }
 
 /// Which ways an area scrolls.
@@ -50,22 +50,22 @@ enum Scrolls {
 }
 
 impl ScrollArea {
-    /// `id` keeps the area's place from one frame to the next, so it's the area's alone.
-    pub(crate) fn new(id: impl Into<ElementId>, max_height: Pixels, content: impl IntoElement) -> Self {
-        let content = content.into_any_element();
-        Self { id: id.into(), max_height, scrolls: Scrolls::Down, content, reveal: None, drags: None }
+    /// `id` keeps the area's place from one frame to the next, so it's the area's alone. It scrolls on under a drag of
+    /// `drags` that started in a text in here, held past its top or bottom. The text says it's in here by its area, as
+    /// `crate::texts::Written::in_area` and `crate::texts::Plain::area` say.
+    pub(crate) fn new(
+        id: impl Into<ElementId>,
+        max_height: Pixels,
+        content: impl IntoElement,
+        drags: &Selection,
+    ) -> Self {
+        let (content, drags) = (content.into_any_element(), drags.clone());
+        Self { id: id.into(), max_height, scrolls: Scrolls::Down, content, reveal: None, drags }
     }
 
     /// Scrolls to the match being shown when it's drawn in here.
     pub(crate) fn follows(mut self, reveal: &Reveal) -> Self {
         self.reveal = Some(reveal.clone());
-        self
-    }
-
-    /// Scrolls on under a drag of `selection` that started in a text in here, held past its top or bottom. The text
-    /// says it's in here with `crate::texts::Written::in_area`.
-    pub(crate) fn follows_drags(mut self, selection: &Selection) -> Self {
-        self.drags = Some(selection.clone());
         self
     }
 
@@ -104,7 +104,7 @@ impl RenderOnce for ScrollArea {
             .children(
                 self.reveal.map(|reveal| follows_the_match(self.id.clone(), self.scrolls, handle.clone(), reveal)),
             )
-            .children(self.drags.map(|selection| follows_the_drag(self.id.clone(), handle.clone(), selection)))
+            .child(follows_the_drag(self.id.clone(), handle.clone(), self.drags))
             .child(takes_the_wheel(self.id, self.scrolls, handle))
             .child(div().absolute().inset_0().child(bar))
     }

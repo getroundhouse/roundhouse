@@ -13,6 +13,7 @@ use protocol::model::{SessionId, seq_index};
 
 use super::{A_FRAME, press, wait_for_the_list_to_settle};
 use crate::support::{Stack, Ui};
+use crate::tools::COMMAND_LINE;
 
 mod calls;
 mod end;
@@ -21,6 +22,8 @@ mod tab;
 
 /// A reply the tests find by what it says.
 const LAST: &str = "Signal boxes keep ledgers, and the lever frame holds each route clear.";
+/// What a command prints, in words nothing else in the chat says but the prompt that runs it.
+const PRINTED: &str = "the-points-are-set";
 
 /// How many frames the pointer is held past the bottom edge, and then twice that past the top, to go back past where
 /// it started.
@@ -111,18 +114,17 @@ fn a_drag_is_over_once_its_chat_has_not_shown(cx: &mut TestAppContext) {
     assert!(moved(&back).abs() < px(1.), "and once it was back, it stayed where it was: {:?}", moved(&back));
 }
 
-/// A drag across the agent's words is the transcript's selection alone. The kit's, which still selects what a call
-/// shows, starts from the nearest of its own texts to a press, and would select what of its texts a drag goes across,
-/// such as an opened call's command and what it printed.
+/// One selection runs through all of the chat's text: a drag from one reply into the next selects what the opened call
+/// between them shows, its command and what it printed, and a copy has each where it's shown, a blank line apart.
 #[gpui_kit::test]
-fn a_drag_across_the_agent_s_words_selects_nothing_of_the_kit_s(cx: &mut TestAppContext) {
+fn a_drag_from_one_reply_into_the_next_selects_the_call_between_too(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let session = stack.chat_in_a_new_workspace();
     let (first, second) = ("Signal boxes keep ledgers of every train.", "The lever frame holds each route clear.");
-    stack.run(&session, &format!("say:{first}; tool:echo the-points-are-set; say:{second}"));
+    stack.run(&session, &format!("say:{first}; tool:echo {PRINTED}; say:{second}"));
     let mut ui = open(cx, &stack);
     settled(&mut ui, &stack, &session);
-    ui.click_labelled("Run", 0);
+    ui.click_labelled(COMMAND_LINE, 0);
     let window = settled(&mut ui, &stack, &session);
     let (from, to) = (on_the_reply_saying(&ui, window, first), on_the_reply_saying(&ui, window, second));
 
@@ -142,8 +144,11 @@ fn a_drag_across_the_agent_s_words_selects_nothing_of_the_kit_s(cx: &mut TestApp
     press(&mut ui, MouseUpEvent { button, position: to, click_count: 1, ..Default::default() });
     let copied = copy(&mut ui);
 
-    assert!(copied.contains("ledgers") && copied.contains("lever"), "the drag selected from one reply into the next");
-    assert!(!kit_s, "and the kit selected nothing, of the call between them or anything else");
+    assert!(!kit_s, "the kit's own selection has none of it");
+    let between = format!("\n\necho {PRINTED}\n\n{PRINTED}\n\n");
+    let (before, after) = copied.split_once(&between).unwrap_or_else(|| panic!("the call isn't in {copied:?}"));
+    assert!(!before.is_empty() && first.ends_with(before), "from the first reply: {copied:?}");
+    assert!(!after.is_empty() && second.starts_with(after), "into the second: {copied:?}");
 }
 
 /// A press on the scrollbar scrolls, and leaves what's selected as it was, so the far end of it can be scrolled to.
