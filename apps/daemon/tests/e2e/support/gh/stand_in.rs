@@ -1,9 +1,4 @@
-//! A stand-in for `gh`, since GitHub can't be reached from a test.
-
-use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
-
-use super::{Stack, install_executable};
+use super::{Path, PathBuf, Stack, SystemTime, UNIX_EPOCH, install_executable, remote};
 
 /// What `gh pr view` prints for an open pull request.
 pub(crate) const OPEN: &str =
@@ -32,7 +27,8 @@ pub(crate) const OFFLINE: &str = "offline";
 pub(crate) const LOGGED_OUT: &str = "logged-out";
 
 /// A `gh` at the front of the hub's `PATH`, which says what a test tells it to for `gh pr view` and `gh api rate_limit`,
-/// that the pull request isn't in a merge queue, and fails anything else. By URL, `gh pr view` says what it was told
+/// and explicit GraphQL reads, and that the pull request isn't in a merge queue. Other commands fail. Explicit reads
+/// use synthetic revisions in example/project; their state follows `say`. By URL, `gh pr view` says what it was told
 /// of the pull request at that URL, but for the exception [`StandInGh::script`] names. It prints the commits only when
 /// they're asked for, as `gh` does, and fails when they're asked for by the branch's name, which GitHub charges 31
 /// points of its hourly limit for, where by URL they cost 1. A pull request that doesn't say its newest commit, or its
@@ -46,8 +42,9 @@ pub(crate) struct StandInGh {
     says_of: PathBuf,
     said_of: PathBuf,
     rate_limit: PathBuf,
+    remote: PathBuf,
     ran: PathBuf,
-    /// While this file is there, `gh pr view` waits.
+    /// While this file is there, PR reads wait.
     held: PathBuf,
 }
 
@@ -64,6 +61,7 @@ impl StandInGh {
             says_of: stack.path("gh-says-of"),
             said_of: stack.path("gh-said-of"),
             rate_limit: stack.path("gh-rate-limit"),
+            remote: stack.path("gh-remote"),
             ran: stack.path("gh-ran"),
             held: stack.path("gh-held"),
         };
@@ -88,6 +86,11 @@ impl StandInGh {
 echo "$1 $2" >> '{ran}'
 [ "$1 $2" = 'api rate_limit' ] && exec cat '{rate_limit}'
 [ "$1 $2" = 'api graphql' ] && exec echo '{{"data":{{"resource":{{"mergeQueueEntry":null}}}}}}'
+[ "$1 $2" = 'repo view' ] && exec echo '{{"url":"https://github.com/example/project","nameWithOwner":"example/project"}}'
+if [ "$1 $2" = 'api --hostname' ]; then
+  while [ -f '{held}' ]; do sleep 0.02; done
+  exec cat '{remote}'
+fi
 [ "$1 $2" = 'pr view' ] || exit 1
 while [ -f '{held}' ]; do sleep 0.02; done
 says='{says}' url=
@@ -122,6 +125,7 @@ printf '%s\n' "$answer"
 "#,
             ran = self.ran.display(),
             rate_limit = self.rate_limit.display(),
+            remote = self.remote.display(),
             held = self.held.display(),
             says = self.says.display(),
             says_of = self.says_of.display(),
@@ -131,6 +135,9 @@ printf '%s\n' "$answer"
 
     pub(crate) fn say(&self, what: &str) {
         write_whole(&self.says, what);
+        if let Ok(pr) = serde_json::from_str(what) {
+            write_whole(&self.remote, &remote::response(&pr).to_string());
+        }
     }
 
     /// What it says of the pull request at `url`, read by it as a branch's linked one is. By any other URL, it says

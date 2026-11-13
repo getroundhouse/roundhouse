@@ -17,37 +17,6 @@ pub(super) const POLL_INTERVAL_MS: u64 = 5_000;
 /// Where the Claude CLI names the agent's call, in a call's `_meta`.
 const CALL_KEY: &str = "claudecode/toolUseId";
 
-const DESCRIPTION: &str = "Waits on the pull request of the branch checked out in this workspace until it's merged \
-    or closed, or needs you: a check failed, it conflicts, a reviewer asked for changes, it left the merge queue, or \
-    it's a draft. With `until` set to `checks`, it also ends once its checks have run and none failed, so you can then \
-    queue it. Roundhouse does the waiting, reading the pull request from GitHub within its share of GitHub's hourly \
-    limit, so this returns at once and waits in the background, and you hear how it ended, with where the pull \
-    request stands, when it does. You can end your turn meanwhile. Use this rather than a loop of `gh pr checks`, \
-    `sleep` or `get_pull_request`. You wait on one at a time, so starting another ends the last, and checking out \
-    another branch ends it too. The checks it waits on are this pull request's own, not those of the ones below it \
-    in a stack.";
-
-pub(in super::super) fn definition() -> Value {
-    json!({
-        "name": NAME,
-        "title": "Wait on the pull request",
-        "description": DESCRIPTION,
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "until": {
-                    "type": "string",
-                    "enum": ["done", "checks"],
-                    "description": "`done`, the default, waits until it's merged or closed, or needs you. `checks` \
-                        also stops once its checks have run and none failed.",
-                },
-            },
-            "additionalProperties": false,
-        },
-        "annotations": { "readOnlyHint": true, "openWorldHint": true },
-    })
-}
-
 /// Starts a wait, answered as a task. One that ended as it started, such as on a pull request that's merged already,
 /// is answered at once, and so is one that couldn't start, with why.
 pub(in super::super) async fn call(asks: &Asks, session_id: &SessionId, params: &Map<String, Value>) -> Value {
@@ -103,8 +72,11 @@ fn not_said(e: &ApiError) -> RpcError {
 }
 
 /// The wait as an MCP task, as `tasks/get` reads it.
-pub(super) fn task(wait: &Wait, pull_request: Option<&PullRequest>) -> Value {
-    let updated_at_ms = wait.ended.map_or(wait.started_at_ms, |ended| ended.at_ms);
+pub(in crate::tools) fn task(wait: &Wait, pull_request: Option<&PullRequest>) -> Value {
+    let updated_at_ms = wait.ended.map_or_else(
+        || wait.watch.as_ref().map_or(wait.started_at_ms, |watch| watch.last_attempt_at_ms),
+        |ended| ended.at_ms,
+    );
     let mut task = json!({
         "resultType": "complete",
         "taskId": wait.id.as_str(),
@@ -115,15 +87,34 @@ pub(super) fn task(wait: &Wait, pull_request: Option<&PullRequest>) -> Value {
     });
     let (status, message) = match wait.ended {
         None => {
+            if let Some(watch) = &wait.watch {
+                task["status"] = "working".into();
+                task["statusMessage"] = crate::tools::pull_requests::progress(watch).into();
+                return task;
+            }
             let standing = pull_request::standing(Standing::of(pull_request));
             ("working", format!("Waiting on pull request #{}. {standing}", wait.number))
         }
         // The CLI says a task called off failed, and takes a turn to tell the agent what this says, but for one the
         // agent stopped itself. So it says who called it off, which says whether to start another.
-        Some(ended) if ended.how.called_off() => ("cancelled", called_off(ended.how).to_string()),
+        Some(ended) if ended.how.called_off() => {
+            if wait.watch.is_some() {
+                task["result"] = crate::tools::pull_requests::result(wait);
+            }
+            ("cancelled", called_off(ended.how).to_string())
+        }
         Some(ended) => {
-            task["result"] = Called::text(ended_text(wait, ended.how, pull_request)).to_json();
-            ("completed", format!("The wait ended: {}", how(ended.how)))
+            task["result"] = if wait.watch.is_some() {
+                crate::tools::pull_requests::result(wait)
+            } else {
+                Called::text(ended_text(wait, ended.how, pull_request)).to_json()
+            };
+            let reason = if wait.watch.is_some() {
+                crate::tools::pull_requests::ending(wait, ended.how)
+            } else {
+                how(ended.how)
+            };
+            ("completed", format!("The wait ended: {reason}"))
         }
     };
     task["status"] = status.into();
@@ -166,7 +157,7 @@ fn called_off(how: WaitEnd) -> &'static str {
     }
 }
 
-fn how(ended: WaitEnd) -> &'static str {
+pub(in crate::tools) fn how(ended: WaitEnd) -> &'static str {
     match ended {
         WaitEnd::Merged => "it's merged.",
         WaitEnd::Closed => "it was closed without being merged.",
@@ -189,6 +180,6 @@ fn how(ended: WaitEnd) -> &'static str {
 }
 
 /// A time as MCP's tasks give one: ISO 8601, in UTC.
-fn iso(at_ms: i64) -> String {
+pub(in crate::tools) fn iso(at_ms: i64) -> String {
     DateTime::from_timestamp_millis(at_ms).unwrap_or_default().to_rfc3339_opts(SecondsFormat::Millis, true)
 }

@@ -84,7 +84,7 @@ impl Hub {
                 user_active_at_ms: None,
                 background_tasks: Vec::new(),
                 wait: None,
-                waits: None,
+                waits: Some(Vec::new()),
                 context: None,
                 prompt_cache: None,
                 queued: Vec::new(),

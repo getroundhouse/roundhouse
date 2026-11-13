@@ -11,6 +11,8 @@ use serde_json::{Map, Value, json};
 pub(super) mod tests;
 
 mod waiting;
-pub(super) use waiting::{NAME, call, cancel, definition, get};
+pub(super) use waiting::{NAME, call, cancel, get};
 #[cfg(test)]
-use waiting::{POLL_INTERVAL_MS, task, until};
+use waiting::{POLL_INTERVAL_MS, until};
+
+pub(super) use waiting::{how, iso, task};

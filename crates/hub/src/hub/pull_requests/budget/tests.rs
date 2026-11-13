@@ -160,3 +160,14 @@ fn an_open_pull_request_or_one_never_read_takes_two_calls_and_anything_else_one(
     assert_eq!(calls_to_read(found(Some(pr(PrState::Merged, false))).as_ref()), 1);
     assert_eq!(calls_to_read(found(None).as_ref()), 1);
 }
+
+#[test]
+fn paginated_reads_are_charged_without_preventing_large_groups_from_ever_starting() {
+    let now = Instant::now();
+    let mut budget = Budget::new(now);
+    budget.take(1, Asked::InTurn, now).unwrap();
+    budget.spent(59, now);
+
+    assert!(budget.allows(1, Asked::InTurn, now).is_err());
+    assert!(budget.allows(1, Asked::InTurn, now + Duration::from_secs(31)).is_ok());
+}

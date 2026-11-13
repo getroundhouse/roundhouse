@@ -42,11 +42,13 @@ While it's waiting on GitHub or on someone else, such as checks running or a rev
 
 ## Let the agent wait for you
 
-An agent can wait on its own pull request, such as for its checks to pass before it queues the merge. The wait shows as a line at the end of its chat, saying what it waits on, with `Stop` to call it off.
+Ask the agent to wait on the PR numbers you want. It can wait for required checks, all checks currently reported, or merging. A stack's lower PRs are included automatically, so a conflict below your PR wakes the agent while CI is still running. New pushed commits are followed as they arrive.
 
-![An agent waiting in the background on its pull request's checks](../../spec/screens/waiting-on-pull-request.png)
+You can have several waits at once. The chat shows the oldest wait with a `Stop` button; ask the agent to cancel another wait. Stopping one leaves the others waiting. Closing the chat or archiving the workspace stops them all.
 
-The hub keeps the wait, so it goes on with the app closed, and through an update.
+The hub keeps the waits, so they go on with the app closed, and through an update. You can ask for a time limit; without one, a wait continues until it reaches its condition or needs attention.
+
+If GitHub temporarily cannot be read, the wait keeps its last observation and says what failed. A changed dependency stack ends the wait so the agent can reconsider what to watch.
 
 ## Watch them all
 

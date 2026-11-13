@@ -1,3 +1,4 @@
+use crate::tools::pull_requests;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{WaitEnd, WaitUntil};
 use protocol::worker::{
@@ -86,7 +87,7 @@ async fn the_tools_listed_are_the_ones_it_answers() {
 
     let tools = answer.to_json()["result"]["tools"].clone();
     assert_eq!(tools.as_array().map(Vec::len), Some(2));
-    for (tool, name) in [(&tools[0], pull_request::NAME), (&tools[1], wait::NAME)] {
+    for (tool, name) in [(&tools[0], pull_requests::READ), (&tools[1], pull_requests::WAIT)] {
         assert_eq!(tool["name"], name);
         assert!(Tool::named(name).is_some(), "{name} is answered");
         assert_eq!(tool["annotations"]["readOnlyHint"], true);

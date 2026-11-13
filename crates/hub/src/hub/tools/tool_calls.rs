@@ -77,6 +77,12 @@ impl Hub {
                 let pull_request = self.pull_request_for_agent(workspace_id, link).await?;
                 Ok(AskReply::PullRequest(PullRequestAnswer { pull_request }))
             }
+            WorkerAsk::PullRequests(asked) => {
+                self.remote_for_agent(workspace_id, link, asked).await.map(AskReply::PullRequests)
+            }
+            WorkerAsk::StartPullRequestWait(asked) => {
+                self.start_remote_wait(workspace_id, link, session_id, asked).await.map(AskReply::Wait)
+            }
             WorkerAsk::StartWait(StartWait { until, call }) => {
                 self.start_wait(workspace_id, link, session_id, until, call).await.map(AskReply::Wait)
             }
@@ -89,9 +95,7 @@ impl Hub {
                 self.remove_child(workspace_id, link, path, force).await.map(AskReply::from)
             }
             WorkerAsk::ListWorktrees => self.list_worktrees(workspace_id, link).await.map(AskReply::Worktrees),
-            WorkerAsk::PullRequests(_) | WorkerAsk::StartPullRequestWait(_) | WorkerAsk::Unknown => {
-                Err(self.unsupported(None))
-            }
+            WorkerAsk::Unknown => Err(self.unsupported(None)),
         }
     }
 }

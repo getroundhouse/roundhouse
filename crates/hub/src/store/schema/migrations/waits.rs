@@ -55,3 +55,15 @@ pub(super) const SESSIONS_SHOW_WAITS: &str = r"
         UPDATE sessions SET rev = (SELECT value FROM counters WHERE name = 'rev') WHERE id = NEW.session_id;
     END;
 ";
+
+/// Several independent waits per chat, with persisted scope, progress and a snapshot frozen by their terminal row.
+pub(super) const REMOTE_WAITS: &str = r"
+    DROP INDEX waits_open_in_session;
+    ALTER TABLE waits ADD COLUMN watch TEXT;
+    CREATE TRIGGER waits_move_session_on_observation AFTER UPDATE OF watch ON waits
+        WHEN OLD.ended_at_ms IS NULL AND NEW.watch IS NOT OLD.watch
+    BEGIN
+        UPDATE counters SET value = value + 1 WHERE name = 'rev';
+        UPDATE sessions SET rev = (SELECT value FROM counters WHERE name = 'rev') WHERE id = NEW.session_id;
+    END;
+";

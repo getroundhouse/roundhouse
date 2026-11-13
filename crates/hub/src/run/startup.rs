@@ -147,11 +147,13 @@ pub async fn run(config: HubConfig) -> Result<(), HubError> {
         let hub = hub.clone();
         tokio::spawn(crate::server::accept_loop(hub, listener))
     };
+    let watching_deadlines = tokio::spawn(hub.clone().watch_wait_deadlines());
     let watching_pull_requests = tokio::spawn(hub.clone().watch_pull_requests());
     let mut terminate = Terminate::listen().map_err(|e| HubError::io("listening for a signal to stop", e))?;
     let signalled = asked_to_go(&hub, &mut terminate).await;
     accept.abort();
     watching_pull_requests.abort();
+    watching_deadlines.abort();
     listener::unbind(&paths.socket);
     if hub.restarting() && !signalled {
         hub.leave_workers().await;

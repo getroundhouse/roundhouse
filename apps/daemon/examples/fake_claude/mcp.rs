@@ -1,6 +1,6 @@
 //! The MCP server `--mcp-config` names, reached as the real CLI reaches one over HTTP, on protocol `2026-07-28`, with
 //! every header the version asks for. As it launches, it reads the file once, and asks the server `server/discover`
-//! and `tools/list`, and a server that refuses either has failed, as the real CLI marks it. `mcp:TOOL` calls one of
+//! and `tools/list`, and a server that refuses either has failed, as the real CLI marks it. `mcp:TOOL JSON` calls one of
 //! its tools, and what the tool says comes back as the call's result. With `CLAUDE_AUTO_BACKGROUND_TASKS=1`, a call
 //! offers to take an MCP task, and one answered with a task goes on in the background, as the real CLI's does.
 //!
@@ -82,9 +82,11 @@ pub(crate) fn connect(args: &[String], state: &Path) {
 }
 
 /// Calls `tool`, which the model knows as `mcp__roundhouse__TOOL`, as the real CLI names a server's tools.
-pub(crate) fn call(turn: &mut Turn, tool: &str) {
-    let tool_use_id = turn.named_tool_use(&format!("mcp__{SERVER}__{tool}"), json!({}));
-    match ask(tool, &tool_use_id) {
+pub(crate) fn call(turn: &mut Turn, command: &str) {
+    let (tool, arguments) = command.split_once(' ').unwrap_or((command, "{}"));
+    let arguments: Value = serde_json::from_str(arguments).unwrap();
+    let tool_use_id = turn.named_tool_use(&format!("mcp__{SERVER}__{tool}"), arguments.clone());
+    match ask(tool, &tool_use_id, arguments) {
         Ok(Answered::Result(text, is_error)) => turn.tool_result(&tool_use_id, &text, is_error),
         Ok(Answered::Task(task)) => in_the_background(turn, tool, &tool_use_id, &task),
         Err(failed) => turn.tool_result(&tool_use_id, &failed, true),
@@ -107,12 +109,12 @@ fn server() -> Result<&'static Server, String> {
 
 /// How the server answered a call to `tool`, for the agent's call `tool_use_id`. `Err` with why when it can't be
 /// called, as the real CLI says when the server doesn't have the tool.
-fn ask(tool: &str, tool_use_id: &str) -> Result<Answered, String> {
+fn ask(tool: &str, tool_use_id: &str, arguments: Value) -> Result<Answered, String> {
     let server = server()?;
     if !server.tools.iter().any(|listed| listed == tool) {
         return Err(format!("{SERVER} has no tool {tool}"));
     }
-    let params = json!({ "name": tool, "arguments": {}, "_meta": { "claudecode/toolUseId": tool_use_id } });
+    let params = json!({ "name": tool, "arguments": arguments, "_meta": { "claudecode/toolUseId": tool_use_id } });
     let result = server.request("tools/call", Some(tool), params)?;
     if result["resultType"] == "task" {
         return Ok(Answered::Task(result));

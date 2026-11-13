@@ -9,4 +9,4 @@ use protocol::model::{Checks, PullRequest, QueueState, Review};
 pub(super) mod tests;
 
 mod description;
-pub(super) use description::{NAME, call, definition, describe, standing};
+pub(super) use description::{NAME, call, describe, standing};

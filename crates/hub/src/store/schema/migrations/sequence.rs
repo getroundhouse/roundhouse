@@ -335,4 +335,5 @@ pub(in super::super) const MIGRATIONS: &[&str] = &[
     limits::BY_MODEL,
     // When the person last sent something to an agent under each account, in `accounts`.
     accounts::USED_AT,
+    waits::REMOTE_WAITS,
 ];

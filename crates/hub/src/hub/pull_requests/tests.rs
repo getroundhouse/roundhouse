@@ -1,7 +1,7 @@
 //! Reading a pull request for an agent and for a client, through a stand-in for the workspace's worker, on tokio's
 //! clock, which moves on by itself while every task waits for it.
 
-use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use protocol::model::{Branches, Head};
 use protocol::worker::{RateLimit, WorkerRequest, WorkerResponse};

@@ -3,7 +3,7 @@ use super::super::{Parsed, id_of, other, str_of, string_of};
 use crate::claude::TOOLS_SERVER;
 use protocol::event::{AgentTask, EventBody, TaskKind};
 use protocol::model::{TaskId, ToolUseId};
-use protocol::worker::WAIT_TOOL;
+use protocol::worker::{WAIT_TOOL, WAITS_TOOL};
 use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -40,7 +40,9 @@ fn task(value: &Value) -> Option<AgentTask> {
 /// started it, with its server, as `roundhouse/wait_for_pull_request`. The list says so itself, so a CLI started again
 /// with `--resume`, which lists the task again before any prompt, says so too, though the call was another process's.
 fn is_a_wait(value: &Value) -> bool {
-    str_of(value, "description").and_then(|description| description.split_once('/')) == Some((TOOLS_SERVER, WAIT_TOOL))
+    str_of(value, "description")
+        .and_then(|description| description.split_once('/'))
+        .is_some_and(|(server, tool)| server == TOOLS_SERVER && matches!(tool, WAIT_TOOL | WAITS_TOOL))
 }
 
 /// What the lines before a list say about the tasks in it, which the list itself doesn't.
