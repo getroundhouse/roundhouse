@@ -30,6 +30,7 @@ pub(super) fn paths(data_dir: &Path) -> Option<VelopackLocatorConfig> {
     })
 }
 
+/// `None` on a Mac and on Windows, where Velopack chooses a folder of this user's.
 #[cfg(not(target_os = "linux"))]
 pub(super) fn paths(_data_dir: &Path) -> Option<VelopackLocatorConfig> {
     None
@@ -49,7 +50,7 @@ pub(super) fn installed(paths: Option<&VelopackLocatorConfig>) -> Option<PathBuf
 }
 
 /// Windows installs the app in this user's own directory, so there's nothing to check.
-#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+#[cfg(target_os = "windows")]
 pub(super) fn installed(_paths: Option<&VelopackLocatorConfig>) -> Option<PathBuf> {
     None
 }
