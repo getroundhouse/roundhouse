@@ -55,3 +55,21 @@ fn a_starting_hub_forgets_which_build_each_worker_was() {
 
     assert_eq!(store.get_workspace(&"w".into()).unwrap().worker_build, None);
 }
+
+/// What a hub started can still be running once it lets go of its lock, which the next hub can take at once, so its
+/// store stops writing first.
+#[test]
+fn letting_go_of_the_lock_stops_the_store_writing() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Arc::new(store_with_session(dir.path()));
+    let path = dir.path().join("hub.lock");
+    let file = std::fs::File::create(&path).unwrap();
+    file.try_lock().unwrap();
+    let lock = HubLock { store: store.clone(), _lock: file };
+    assert!(std::fs::File::open(&path).unwrap().try_lock().is_err(), "it's held");
+
+    drop(lock);
+
+    assert!(store.writer_is_held());
+    std::fs::File::open(&path).unwrap().try_lock().unwrap();
+}
