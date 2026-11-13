@@ -6,7 +6,6 @@ use std::rc::Rc;
 
 use gpui_kit::assets::IconName;
 use gpui_kit::component::Icon;
-use gpui_kit::component::v_flex;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, ElementId, InteractiveElement, IntoElement, ListAlignment, ListOffset, ListSizingBehavior,
@@ -27,10 +26,6 @@ mod tests;
 const WIDTH: Pixels = px(360.);
 /// Around the rows, inside the edge.
 const INSET: Pixels = px(4.);
-const EDGE: Pixels = px(1.);
-/// The list's width less [`INSET`] and [`EDGE`] on each side. It's set rather than left to the list, because the list
-/// measures a row before it knows how wide it is, which would count a long prompt's lines unwrapped.
-const ROW_WIDTH: Pixels = px(350.);
 /// The tallest the rows get before they scroll: about eight prompts of two lines.
 const TALLEST: Pixels = px(420.);
 const GAP: Pixels = px(2.);
@@ -40,6 +35,12 @@ const NUMBER_WIDTH: Pixels = px(28.);
 const OVERDRAW: Pixels = px(200.);
 /// How many prompts show above the one being read when the list opens, so it's seen among those before it.
 const LEAD: usize = 2;
+
+/// A row's width: the list's, less [`INSET`] and the edge on each side. It's set rather than left to the list, because
+/// the list measures a row before it knows how wide it is, which would count a long prompt's lines unwrapped.
+fn row_width() -> Pixels {
+    WIDTH - (INSET + look::RAISED_EDGE) * 2.
+}
 
 /// The list's rows, kept for as long as the chat is, so each is measured once rather than each time the list opens.
 /// They follow the chat's prompts whether or not the list is open.
@@ -94,7 +95,6 @@ pub(super) fn draw(
     line_text: LineText,
     cx: &App,
 ) -> AnyElement {
-    let colors = look::colors(cx);
     let count = lines.len();
     let rows = list(rows.state.clone(), move |ix, _, cx| {
         div()
@@ -108,25 +108,22 @@ pub(super) fn draw(
             .into_any_element()
     })
     .with_sizing_behavior(ListSizingBehavior::Infer)
-    .w(ROW_WIDTH)
+    .w(row_width())
     // The list measures as tall as all its rows, so it's the card that stops at the tallest, with the list shrinking
     // to fit inside it, rather than the card growing to the list's whole height.
     .flex_1()
     .min_h_0();
-    v_flex()
+    look::raised(cx)
+        .flex()
+        .flex_col()
         .id("outline-list")
         .role(Role::ListBox)
         .aria_label("Jump to a prompt or a compaction")
         .w(WIDTH)
-        .max_h(TALLEST + (INSET + EDGE) * 2.)
+        .max_h(TALLEST + (INSET + look::RAISED_EDGE) * 2.)
         .p(INSET)
         // The wheel scrolls the list and not the chat under it.
         .occlude()
-        .rounded(px(10.))
-        .border(EDGE)
-        .border_color(colors.edge)
-        .bg(colors.raised)
-        .shadow_lg()
         .on_hover(on_hover)
         .child(rows)
         .test_support()
@@ -162,7 +159,7 @@ fn row(
         .role(Role::ListBoxOption)
         .aria_label(label)
         .aria_selected(lit)
-        .w(ROW_WIDTH)
+        .w(row_width())
         .flex()
         .gap_3()
         .pl_1()
@@ -207,7 +204,7 @@ fn compaction_row(
         .id(ElementId::Name(format!("outline-compaction/{row}").into()))
         .role(Role::ListBoxOption)
         .aria_label(label)
-        .w(ROW_WIDTH)
+        .w(row_width())
         .flex()
         .items_center()
         .gap_3()

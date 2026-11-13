@@ -109,7 +109,7 @@ impl WorkspacePane {
 /// `card`, opening above `slot` while the pointer rests on it, with its right edge on the slot's, so it covers nothing
 /// in the bar.
 fn card_over(card: HoverCard, slot: Div) -> HoverCard {
-    card.appearance(false).anchor(Anchor::BottomRight).trigger(slot)
+    card.anchor(Anchor::BottomRight).trigger(slot)
 }
 
 /// A ring filled clockwise from the top by `used`, from 0 to 1, over a fainter whole ring. It's drawn at once, with
