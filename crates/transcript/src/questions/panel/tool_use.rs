@@ -96,7 +96,7 @@ impl ToolUse {
         if self.given.is_none() && self.reason.is_none() {
             return None;
         }
-        let theme = cx.theme();
+        let (theme, colors) = (cx.theme(), look::colors(cx));
         let block = |id: &'static str| {
             div()
                 .id(id)
@@ -104,7 +104,7 @@ impl ToolUse {
                 .max_h(px(GIVEN_MOST_HEIGHT))
                 .py_2()
                 .rounded_md()
-                .bg(theme.muted)
+                .bg(colors.inset)
                 .font_family(theme.mono_font_family.clone())
                 .text_size(theme.mono_font_size)
         };
@@ -124,7 +124,7 @@ impl ToolUse {
                 .child(
                     said("question-change-file", change.path.clone())
                         .text_xs()
-                        .text_color(theme.muted_foreground)
+                        .text_color(colors.text_muted)
                         .test_support(),
                 )
                 .child(
@@ -139,7 +139,7 @@ impl ToolUse {
         let reason = self
             .reason
             .clone()
-            .map(|reason| said("question-reason", reason).text_xs().text_color(theme.muted_foreground).test_support());
+            .map(|reason| said("question-reason", reason).text_xs().text_color(colors.text_muted).test_support());
         Some(v_flex().w_full().gap_3().children(given).children(reason).into_any_element())
     }
 }

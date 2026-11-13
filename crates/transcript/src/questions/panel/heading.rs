@@ -1,7 +1,7 @@
 //! The top of the panel: the question's header, a small detail, then its text, at body size.
 
 use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::{ActiveTheme as _, Icon, IconName, Sizable as _, h_flex, v_flex};
+use gpui_kit::component::{Icon, IconName, Sizable as _, h_flex, v_flex};
 use gpui_kit::{
     AnyElement, Context, Div, InteractiveElement as _, IntoElement, ParentElement, Role, SharedString, Stateful,
     StatefulInteractiveElement as _, Styled, TestSupportExt as _, div, px,
@@ -27,7 +27,7 @@ pub(super) fn heading(
     question: Option<&Question>,
     cx: &mut Context<QuestionPanel>,
 ) -> AnyElement {
-    let muted = cx.theme().muted_foreground;
+    let muted = look::colors(cx).text_muted;
     let named = question.and_then(|question| question.header.as_deref());
     let header = named.into_iter().chain(panel.asker.as_deref()).collect::<Vec<_>>().join(BETWEEN);
     let skips = panel.asks.skipped().is_some();
