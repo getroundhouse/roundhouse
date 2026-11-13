@@ -1,0 +1,223 @@
+use super::super::{Client, Result, hub_is_missing};
+use super::old_copies;
+use protocol::paths::{DAEMON_NAME, Paths, daemon_file};
+use protocol::{Build, StampedBuild};
+use std::fs::{File, OpenOptions};
+use std::io;
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{Duration, Instant};
+
+/// Far longer than a forked child takes to exec, which is all a busy copy waits for. See [`waiting_out_busy`].
+const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
+
+impl Client {
+    /// Connects, starting a hub first if none is running. The hub is a separate process that
+    /// outlives this client, which is why closing a client doesn't stop its agents. Once a hub this started is up, it
+    /// removes the copies of the daemon in the data directory that nothing runs from anymore.
+    pub fn connect_or_start(paths: &Paths, daemon: &Daemon, client_name: &str) -> Result<Client> {
+        match Client::connect(&paths.socket, client_name) {
+            Ok(client) => return Ok(client),
+            Err(e) if hub_is_missing(&e) => {}
+            Err(e) => return Err(e),
+        }
+        if let Err(couldnt) = start_hub(paths, daemon) {
+            // Another client may have started one meanwhile, and removed the copy this one was about to start.
+            return Client::connect(&paths.socket, client_name).map_err(|_| couldnt.into());
+        }
+        let client = connect_once_started(&paths.socket, client_name)?;
+        // A client starts a hub once the one before has gone, as for an update, which is when a copy goes out of use.
+        if let Some(build) = &daemon.build {
+            old_copies::remove_unused(paths, build);
+        }
+        Ok(client)
+    }
+}
+
+/// Connects to the hub just started at `socket`, waiting for it to listen.
+fn connect_once_started(socket: &Path, client_name: &str) -> Result<Client> {
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        match Client::connect(socket, client_name) {
+            Ok(client) => return Ok(client),
+            Err(e) if hub_is_missing(&e) && Instant::now() < deadline => {
+                std::thread::sleep(Duration::from_millis(25));
+            }
+            Err(e) => return Err(e),
+        }
+    }
+}
+
+/// The daemon a client starts a hub from.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Daemon {
+    pub path: PathBuf,
+    /// Which build it is, if it's stamped. Only the daemon beside a client is known to be the client's build, so one
+    /// named any other way has none.
+    pub build: Option<StampedBuild>,
+}
+
+impl Daemon {
+    /// The one `named` by `ROUNDHOUSE_DAEMON_BIN`, started where it is, or else the one that ships next to this
+    /// binary, which is `build`, this binary's.
+    pub fn find(named: Option<PathBuf>, build: Build) -> io::Result<Self> {
+        match named {
+            Some(path) => Ok(Self::in_place(path)),
+            None => Self::beside(&std::env::current_exe()?, build),
+        }
+    }
+
+    /// One started where it is.
+    pub fn in_place(path: impl Into<PathBuf>) -> Self {
+        Self { path: path.into(), build: None }
+    }
+
+    /// The one that ships next to `exe`, which is `exe`'s build. Follows symlinks first, so a hub started through an
+    /// install's `current` link stays on that version, whichever one the link names later.
+    pub(super) fn beside(exe: &Path, build: Build) -> io::Result<Self> {
+        Ok(Self { path: exe.canonicalize()?.with_file_name(daemon_file()), build: build.stamped() })
+    }
+
+    /// The file to start a hub from: the build's own copy, made the first time it's needed, or else the daemon itself.
+    pub(super) fn to_start(&self, paths: &Paths) -> io::Result<PathBuf> {
+        let Some(build) = &self.build else {
+            return Ok(self.path.clone());
+        };
+        let copy = paths.hub_copy(build);
+        // A copy only appears once it's whole and checked, and nothing replaces it, so one that's there is ready. Another
+        // client can still remove it before it's started, which `connect_or_start` allows for.
+        if !copy.exists() {
+            publish_copy(&self.path, build, &copy).map_err(|e| {
+                io::Error::new(e.kind(), format!("copying {} to {}: {e}", self.path.display(), copy.display()))
+            })?;
+        }
+        Ok(copy)
+    }
+}
+
+pub(super) fn start_hub(paths: &Paths, daemon: &Daemon) -> io::Result<()> {
+    private_files::create_dir_all(&paths.data_dir)?;
+    let log = private_files::file_options().create(true).append(true).open(&paths.log)?;
+    // Whole paths, since the hub doesn't run where this client does. A bare name is looked up on `PATH` instead.
+    let exe = daemon.to_start(paths)?;
+    let exe = if exe.components().count() > 1 { whole(&exe)? } else { exe };
+    let data_dir = whole(&paths.data_dir)?;
+    let mut command = Command::new(&exe);
+    command
+        .args(["hub", "--on-demand"])
+        // The hub this client will look for, whatever this process's environment says.
+        .env(protocol::paths::ENV_HOME, &data_dir)
+        .env(protocol::paths::ENV_WORKSPACES, whole(&paths.workspaces_root)?)
+        // Not in this client's directory, which the hub would hold for as long as it runs. Windows won't let a
+        // directory be moved or deleted while a process runs in it, and the client's can be a workspace. On Linux, the
+        // app that an update opens again runs in the old AppImage's mount, which goes as the app quits, so a hub
+        // started there would be left in a directory that's gone.
+        .current_dir(&data_dir)
+        .stdin(Stdio::null())
+        .stdout(Stdio::from(log.try_clone()?))
+        .stderr(Stdio::from(log));
+    process::detach(&mut command);
+    waiting_out_busy(|| command.spawn())
+        .map_err(|e| io::Error::new(e.kind(), format!("starting {}: {e}", exe.display())))?;
+    Ok(())
+}
+
+/// `path` from the root down, as this process names it. One that's whole already is left as it's spelled, since a
+/// Windows hub's pipe is named for the spelling.
+fn whole(path: &Path) -> io::Result<PathBuf> {
+    if path.is_absolute() {
+        return Ok(path.to_path_buf());
+    }
+    std::path::absolute(path)
+        .map_err(|e| io::Error::new(e.kind(), format!("finding {} from here: {e}", path.display())))
+}
+
+/// Runs a freshly written copy, waiting out its being busy. Linux won't run a file while anything has it open for
+/// writing, and a fork on another thread while the copy was being written leaves its child holding it until it execs.
+fn waiting_out_busy<T>(mut run: impl FnMut() -> io::Result<T>) -> io::Result<T> {
+    let deadline = Instant::now() + BUSY_TIMEOUT;
+    loop {
+        match run() {
+            Err(e) if e.kind() == io::ErrorKind::ExecutableFileBusy && Instant::now() < deadline => {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            ran => return ran,
+        }
+    }
+}
+
+/// Writes the copy under a temporary name beside it, checks that it's `build`, and only then links it in as `copy`,
+/// so a half-written or wrong copy never runs. A link fails rather than replace a copy that another client published
+/// first, which a hub may have just started from.
+fn publish_copy(original: &Path, build: &StampedBuild, copy: &Path) -> io::Result<()> {
+    if let Some(dir) = copy.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    let (temporary, file) = create_temporary(copy)?;
+    let published = write_executable(original, file).and_then(|()| check_build(&temporary, build)).and_then(|()| {
+        match std::fs::hard_link(&temporary, copy) {
+            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => Ok(()),
+            linked => linked,
+        }
+    });
+    let _ = std::fs::remove_file(&temporary);
+    published
+}
+
+/// Gives each copy in progress a temporary name of its own, so clients copying at once can't write into each other's.
+static NEXT_TEMPORARY: AtomicU64 = AtomicU64::new(0);
+
+/// Never opens a file that's there already. One with the same name was left by a client that was killed mid-copy, and
+/// whose process ID this one now has.
+fn create_temporary(copy: &Path) -> io::Result<(PathBuf, File)> {
+    loop {
+        let n = NEXT_TEMPORARY.fetch_add(1, Ordering::Relaxed);
+        // With the extension Windows wants on a file it runs, which `check_build` does.
+        let name = format!("{}{}.{n}{}", temporary_prefix(), std::process::id(), std::env::consts::EXE_SUFFIX);
+        let temporary = copy.with_file_name(name);
+        match OpenOptions::new().write(true).create_new(true).open(&temporary) {
+            Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {}
+            opened => return opened.map(|file| (temporary, file)),
+        }
+    }
+}
+
+/// What a temporary copy's name starts with, so it's hidden, and never the name of a copy.
+pub(super) fn temporary_prefix() -> String {
+    format!(".{DAEMON_NAME}.")
+}
+
+/// Copies only the contents, so a quarantine mark on the original doesn't follow. A Mach-O binary carries its
+/// signature inside. Closes the file, which Linux needs before it will run it.
+fn write_executable(original: &Path, mut file: File) -> io::Result<()> {
+    io::copy(&mut File::open(original)?, &mut file)?;
+    let_run(&file)?;
+    // Before it's linked in, so a crash can't leave a copy in place that's missing part of what was written.
+    file.sync_all()
+}
+
+/// Lets anyone run `file`, as an installed program can be.
+#[cfg(unix)]
+fn let_run(file: &File) -> io::Result<()> {
+    file.set_permissions(std::os::unix::fs::PermissionsExt::from_mode(0o755))
+}
+
+/// Nothing on Windows, which runs a file by its name's extension.
+#[cfg(windows)]
+#[expect(clippy::unnecessary_wraps, reason = "it takes the place of Unix's, which can fail")]
+fn let_run(_file: &File) -> io::Result<()> {
+    Ok(())
+}
+
+/// The daemon beside a client can be another build: one still running after an update replaced its install directory
+/// would find the new build's daemon there.
+fn check_build(file: &Path, build: &StampedBuild) -> io::Result<()> {
+    let output = waiting_out_busy(|| Command::new(file).arg("--version").stderr(Stdio::null()).output())?;
+    let expected = format!("{DAEMON_NAME} {}", build.version());
+    let reported = String::from_utf8_lossy(&output.stdout);
+    if output.status.success() && reported.trim_end() == expected {
+        return Ok(());
+    }
+    Err(io::Error::other(format!("it's {:?} rather than this build, {expected:?}", reported.trim_end())))
+}

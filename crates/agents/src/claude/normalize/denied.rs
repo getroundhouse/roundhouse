@@ -8,7 +8,7 @@ use crate::claude::approvals::denied_in_its_own_words;
 
 /// Has each result in `body` to a tool's use the person denied say so, from `line`, the line it was read from. A result
 /// to questions or a plan isn't one, since what became of those is their approval's to say. The kinds of the calls the
-/// results answer have to be known already, as [`super::kinds::say`] says them.
+/// results answer have to be known already, as [`crate::claude::kinds::say`] says them.
 pub(super) fn say(body: &mut EventBody, line: &Value) {
     let EventBody::AgentUser { blocks, .. } = body else { return };
     let Some(meta) = line.get("tool_result_meta").and_then(Value::as_array) else { return };
