@@ -23,10 +23,9 @@ mod words;
 const RING: Pixels = px(16.);
 /// How thick the ring's line is.
 const LINE: f32 = 2.;
-/// How tall a limit's bar is, and how far it is from the next. The same, and on the grid, so one bar or two come to a
-/// whole number of pixels either side of the slot's middle.
+/// How tall a limit's bar is, on the grid, so the bars come to a whole number of pixels either side of the slot's
+/// middle.
 const LIMIT: Pixels = px(4.);
-const BETWEEN_LIMITS: Pixels = px(4.);
 
 /// The account the chat showing runs under, as its record says, with each of its limits there's something true to
 /// say of, and what it's called, shortest window first as the hub gives them. Worked out once each time the pane is
@@ -34,15 +33,15 @@ const BETWEEN_LIMITS: Pixels = px(4.);
 #[derive(Clone)]
 pub(super) struct Usage {
     account: Account,
-    limits: Vec<(&'static str, UsageLimit)>,
+    limits: Vec<(SharedString, UsageLimit)>,
 }
 
 /// Of `limits`, those there's something true to say of at `now_ms`, each with what it's called. One whose window has
 /// ended since it was heard has started again, so how much of it was used is no longer so, and one over a window this
-/// build has no name for couldn't be told from another.
-fn shown(limits: &[UsageLimit], now_ms: i64) -> Vec<(&'static str, UsageLimit)> {
+/// build has no name for, or a model's week that doesn't say whose, couldn't be told from another.
+fn shown(limits: &[UsageLimit], now_ms: i64) -> Vec<(SharedString, UsageLimit)> {
     let current = limits.iter().filter(|limit| limit.resets_at_ms.is_none_or(|at_ms| at_ms > now_ms));
-    current.filter_map(|limit| Some((words::window(limit.window)?, limit.clone()))).collect()
+    current.filter_map(|limit| Some((words::limit_name(limit)?.into(), limit.clone()))).collect()
 }
 
 impl WorkspacePane {
@@ -90,7 +89,7 @@ impl WorkspacePane {
         let usage = usage.filter(|usage| !usage.limits.is_empty())?.clone();
         let left: Vec<f32> = usage.limits.iter().map(|(_, limit)| f32::from(limit.left_percent()) / 100.).collect();
         let least = left.iter().copied().reduce(f32::min)?;
-        let bars = middle().size(Slot::SIZE).child(bars(&left, cx));
+        let bars = middle().size(Slot::SIZE).child(bars(&drawn(&left), cx));
         // Said in words too, as the ring is. The least of them is the one that runs out first.
         let said = format!("{called} {} left", words::whole_percent(least));
         let hover = card_over(look::hover_card("usage-hover"), bars)
@@ -141,12 +140,36 @@ fn bars(left: &[f32], cx: &App) -> impl IntoElement {
         let filled = div().h_full().w(relative(left.clamp(0., 1.))).rounded_full().bg(color);
         div().w(RING).h(LIMIT).rounded_full().bg(color.opacity(0.25)).child(filled)
     };
-    div().flex().flex_col().gap(BETWEEN_LIMITS).children(left.iter().copied().map(bar))
+    div().flex().flex_col().gap(between_limits(left.len())).children(left.iter().copied().map(bar))
+}
+
+/// The most bars there's room for in the slot.
+const MOST_BARS: usize = 5;
+
+/// Of how much is left of each limit, in the card's order, what's drawn as bars: all of it while there's room, and
+/// otherwise the limits with the least left, which run out first, in the same order. An account can have a week of
+/// its own for each of several models, and the card lists every limit.
+fn drawn(left: &[f32]) -> Vec<f32> {
+    let mut least: Vec<usize> = (0..left.len()).collect();
+    least.sort_by(|&a, &b| left[a].total_cmp(&left[b]));
+    least.truncate(MOST_BARS);
+    least.sort_unstable();
+    least.into_iter().map(|at| left[at]).collect()
+}
+
+/// How far each of `bars` bars is from the next: as far as a bar is tall while they fit in the slot that way, and
+/// closer for four or five, so they fit a whole number of pixels either side of the slot's middle.
+fn between_limits(bars: usize) -> Pixels {
+    match bars {
+        0..=3 => LIMIT,
+        4 => px(2.),
+        _ => px(1.),
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use protocol::model::LimitWindow;
+    use protocol::model::{LimitWindow, ModelLabel};
 
     use super::*;
 
@@ -166,8 +189,33 @@ mod tests {
             limit(LimitWindow::Unknown, None),
         );
 
-        let all = [ended, going.clone(), open_ended.clone(), unnamed];
-        assert_eq!(shown(&all, 1_000), [("7d limit", going.clone()), ("7d limit", open_ended)]);
+        let whose = UsageLimit { model: None, ..limit(LimitWindow::ModelSevenDays, None) };
+        let fables = UsageLimit { model: Some(ModelLabel::new("Fable")), ..whose.clone() };
+        let all = [ended, going.clone(), open_ended.clone(), unnamed, whose, fables.clone()];
+        let names = |shown: Vec<(SharedString, UsageLimit)>| {
+            shown.into_iter().map(|(name, limit)| (name.to_string(), limit)).collect::<Vec<_>>()
+        };
+        assert_eq!(
+            names(shown(&all, 1_000)),
+            [
+                ("7d limit".to_string(), going.clone()),
+                ("7d limit".to_string(), open_ended),
+                ("7d Fable limit".to_string(), fables)
+            ]
+        );
         assert_eq!(shown(&[going], 1_001), [], "it starts again the moment its window ends");
+    }
+
+    #[test]
+    fn however_many_limits_there_are_the_bars_fit_in_the_slot_on_whole_pixels_and_show_those_with_least_left() {
+        for bars in 1..=u8::try_from(MOST_BARS).unwrap() {
+            let between = between_limits(usize::from(bars)).as_f32();
+            let tall = f32::from(bars) * LIMIT.as_f32() + f32::from(bars - 1) * between;
+            let either_side = (Slot::SIZE.as_f32() - tall) / 2.;
+            assert!(either_side >= 0. && either_side.fract() == 0., "{bars} bars are {tall} px tall");
+        }
+
+        assert_eq!(drawn(&[0.5, 0.9]), [0.5, 0.9]);
+        assert_eq!(drawn(&[0.3, 0.9, 0.1, 0.8, 0.5, 0.2, 0.7]), [0.3, 0.1, 0.5, 0.2, 0.7]);
     }
 }

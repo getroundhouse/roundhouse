@@ -24,6 +24,7 @@ const START_MS: i64 = 1_793_541_600_000;
 const RECORD_GAP_MS: i64 = 60_000;
 const EVENT_GAP_MS: i64 = 1_000;
 const MINUTE_MS: i64 = 60_000;
+pub(crate) const HOUR_MS: i64 = 60 * MINUTE_MS;
 /// What the app takes as the time now, in every picture: an hour after the first record, so later than any record a
 /// world makes, and on the same day, so a turn that ended says only its time.
 pub(crate) const NOW_MS: i64 = START_MS + 60 * MINUTE_MS;

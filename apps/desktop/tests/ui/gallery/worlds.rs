@@ -5,12 +5,12 @@
 use protocol::attachment::{Attachment, MediaType};
 use protocol::model::{
     Account, AttachmentId, Checks, CommentId, CommitId, ContextPart, ContextPartKind, ContextUsage, DiffComment,
-    DiffSide, FileContents, GitDiff, LimitWindow, MaxSetBy, MergeState, PermissionMode, PullRequest, Rev,
+    DiffSide, FileContents, GitDiff, LimitWindow, MaxSetBy, MergeState, ModelLabel, PermissionMode, PullRequest, Rev,
     SessionStatus, SetupStatus, Title, UsageLimit, WorkspaceId, WorkspaceStatus,
 };
 
 use super::screens::FOCUS;
-use super::world::{HubBuild, NOW_MS, World};
+use super::world::{HOUR_MS, HubBuild, NOW_MS, World};
 use super::{chats, file_chats, patch, pictures, pull_requests, worktree};
 
 mod working;
@@ -75,7 +75,6 @@ pub(super) fn archiving() -> World {
 /// The conversation, in a chat whose agent has said how full its context is, on an account with a five-hour limit
 /// that starts again in three hours and a week's limit that starts again in six days.
 pub(super) fn context() -> World {
-    const HOUR_MS: i64 = 3_600_000;
     let mut world = conversation();
     let part = |name: &str, tokens, kind| ContextPart { name: name.to_string(), tokens, kind };
     world.sessions.last_mut().unwrap().context = Some(ContextUsage {
@@ -124,6 +123,20 @@ pub(super) fn context() -> World {
     };
     world.sessions.last_mut().unwrap().account = Some(account.id.clone());
     world.accounts.push(account);
+    world
+}
+
+/// The same, on an account that also has a week's limit of Fable's own, most of it used.
+pub(super) fn context_with_a_models_limit() -> World {
+    let mut world = context();
+    let fables = UsageLimit {
+        window: LimitWindow::ModelSevenDays,
+        model: Some(ModelLabel::new("Fable")),
+        used_percent: 88,
+        resets_at_ms: Some(NOW_MS + 100 * HOUR_MS),
+        heard_at_ms: None,
+    };
+    world.accounts.last_mut().unwrap().limits.push(fables);
     world
 }
 
