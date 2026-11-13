@@ -51,7 +51,9 @@ pub(crate) struct Open {
 /// itself, which comes with no prompt and no state event. A prompt sent while the agent writes its last reply
 /// isn't folded in: the turn ends, and the agent takes the prompt as a turn of its own without saying it's running
 /// again, so taking a prompt says it. An `idle` that's `stale` comes from before a prompt the agent has yet to take,
-/// which it will, so it changes nothing.
+/// which it will, so it changes nothing. Only a request that's open waits on the person: an agent that says it needs
+/// something before it asks, as Claude's CLI does, waits on nobody yet, and on nobody at all once the hub has answered
+/// what it asked.
 pub(crate) fn next_status(current: SessionStatus, body: &EventBody, open: Open, stale: bool) -> SessionStatus {
     let between = if open.tasks > 0 { SessionStatus::Background } else { SessionStatus::Idle };
     match body {
@@ -66,7 +68,8 @@ pub(crate) fn next_status(current: SessionStatus, body: &EventBody, open: Open, 
                 SessionStatus::Running
             }
         }
-        EventBody::AgentState { state: AgentRunState::RequiresAction } | EventBody::ApprovalRequested { .. } => {
+        EventBody::ApprovalRequested { .. } => SessionStatus::WaitingApproval,
+        EventBody::AgentState { state: AgentRunState::RequiresAction } if open.approvals > 0 => {
             SessionStatus::WaitingApproval
         }
         EventBody::AgentState { state: AgentRunState::Idle } | EventBody::TurnEnded { .. } => between,
@@ -83,7 +86,7 @@ pub(crate) fn next_status(current: SessionStatus, body: &EventBody, open: Open, 
             SessionStatus::Running
         }
         EventBody::AgentExited { .. } if current.is_active() => SessionStatus::Interrupted,
-        EventBody::AgentState { state: AgentRunState::Unknown }
+        EventBody::AgentState { state: AgentRunState::Unknown | AgentRunState::RequiresAction }
         | EventBody::PromptTaken { .. }
         | EventBody::PromptDropped { .. }
         | EventBody::ToolCallDropped { .. }

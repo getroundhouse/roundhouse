@@ -16,12 +16,17 @@ fn every_request_of_the_hub_itself_or_for_its_records_keeps_its_form() {
     asked(ClientRequest::HubShutdown, r#"{"method":"hub_shutdown"}"#);
     asked(ClientRequest::HubShutdownIfIdle, r#"{"method":"hub_shutdown_if_idle"}"#);
     asked(ClientRequest::HubRestart, r#"{"method":"hub_restart"}"#);
-    let settings = HubSettingsChange { keep_awake: Some(false) };
+    let settings = HubSettingsChange { keep_awake: Some(false), allow_asked_in_full_access: None };
     asked(
         ClientRequest::HubConfigure(admin::HubConfigure { settings }),
         r#"{"method":"hub_configure","keep_awake":false}"#,
     );
-    let settings = HubSettingsChange { keep_awake: None };
+    let settings = HubSettingsChange { keep_awake: None, allow_asked_in_full_access: Some(true) };
+    asked(
+        ClientRequest::HubConfigure(admin::HubConfigure { settings }),
+        r#"{"method":"hub_configure","allow_asked_in_full_access":true}"#,
+    );
+    let settings = HubSettingsChange::default();
     asked(ClientRequest::HubConfigure(admin::HubConfigure { settings }), r#"{"method":"hub_configure"}"#);
     asked(ClientRequest::AgentList, r#"{"method":"agent_list"}"#);
     asked(ClientRequest::RepoAdd(records::RepoAdd { path: "/r".into() }), r#"{"method":"repo_add","path":"/r"}"#);

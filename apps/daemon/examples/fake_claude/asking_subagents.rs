@@ -41,7 +41,6 @@ pub(crate) fn start(
     let mut waiting: Vec<Asking> = Vec::new();
     let mut to_start = 1..=count.parse::<usize>().unwrap();
     waiting.extend(to_start.next().map(|n| ask(turn, n, command)));
-    state_event(turn.config, turn.out, "requires_action");
     while !waiting.is_empty() || !to_start.is_empty() {
         match rx.recv_timeout(ASKS_EVERY) {
             // Nothing came, so the next subagent starts, if there's one.
@@ -82,6 +81,10 @@ fn ask(turn: &mut Turn, n: usize, command: &str) -> Asking {
     turn.tool_result(&agent, "Async agent launched successfully.", false);
     let call = Turn { parent: Some(&agent), ..*turn }.tool_use(command);
     let (request_id, request) = request_to_run(&call, command, Some(&task));
+    // Only the first, since nothing says the CLI's state changes again while one already waits.
+    if n == 1 {
+        state_event(turn.config, turn.out, "requires_action");
+    }
     emit(turn.out, json!({"type":"control_request","request_id":request_id,"request":request}));
     Asking { agent, task, call, request_id }
 }

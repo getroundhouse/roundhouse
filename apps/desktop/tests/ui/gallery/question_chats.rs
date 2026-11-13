@@ -121,6 +121,7 @@ fn answer(call: &str, approval: &str, answers: &[(&str, &str)]) -> Vec<EventBody
         outcome: ApprovalOutcome::Allowed,
         answers_by_text: Some(answers),
         answers_by_position: None,
+        by_setting: false,
     };
     vec![closed, tool_result(call, &told)]
 }

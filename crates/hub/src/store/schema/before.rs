@@ -65,3 +65,6 @@ pub(crate) const BEFORE_LOGINS: usize = 45;
 
 /// How many migrations there were before sessions' records said how their newest turn ended.
 pub(crate) const BEFORE_REPLY_OUTCOME: usize = 47;
+
+/// How many migrations there were before the hub could allow a tool's use itself when an agent with full access asks.
+pub(crate) const BEFORE_ALLOWING_ASKED: usize = 49;

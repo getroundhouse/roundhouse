@@ -90,6 +90,7 @@ fn denied() -> Vec<EventBody> {
         outcome: ApprovalOutcome::Denied,
         answers_by_text: None,
         answers_by_position: None,
+        by_setting: false,
     });
     events.push(tool_denied("toolu-3", instead, Some(instead)));
     events.push(text("msg-5", reply));

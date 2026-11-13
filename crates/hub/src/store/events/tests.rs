@@ -41,18 +41,20 @@ fn a_turn_starts_when_the_event_that_starts_it_was_recorded() {
 fn a_prompt_or_an_answer_from_the_person_is_when_they_were_last_active_and_nothing_else_is() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
-    let answer = |outcome| EventBody::ApprovalResolved {
+    let answer = |outcome, by_setting| EventBody::ApprovalResolved {
         approval_id: "a".into(),
         outcome,
         answers_by_text: None,
         answers_by_position: None,
+        by_setting,
     };
     let sent = [
         (None, prompt("go", 0), true),
-        (None, answer(ApprovalOutcome::Allowed), true),
-        (None, answer(ApprovalOutcome::Denied), true),
-        (None, answer(ApprovalOutcome::Cancelled), false),
-        (Some(RunId::new(1)), answer(ApprovalOutcome::Allowed), false),
+        (None, answer(ApprovalOutcome::Allowed, false), true),
+        (None, answer(ApprovalOutcome::Denied, false), true),
+        (None, answer(ApprovalOutcome::Cancelled, false), false),
+        (None, answer(ApprovalOutcome::Allowed, true), false),
+        (Some(RunId::new(1)), answer(ApprovalOutcome::Allowed, false), false),
         (None, notice("x"), false),
     ];
     for (run, body, by_the_person) in sent {
@@ -71,6 +73,37 @@ fn a_prompt_or_an_answer_from_the_person_is_when_they_were_last_active_and_nothi
         );
         assert_eq!(appended.by_the_person, by_the_person, "{body:?}");
     }
+}
+
+/// A request the hub answers itself, recorded with its answer, as the hub's settings may have it.
+#[test]
+fn a_request_and_the_hubs_answer_are_recorded_one_after_the_other_and_leave_the_record_as_it_was() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_session(dir.path());
+    let request: EventBody = protocol::fixtures::approval_request("a", "Bash").into();
+    let answer = EventBody::ApprovalResolved {
+        approval_id: "a".into(),
+        outcome: ApprovalOutcome::Allowed,
+        answers_by_text: None,
+        answers_by_position: None,
+        by_setting: true,
+    };
+    // Earlier than any clock could say, so a change can't land on the same moment.
+    let forget = "UPDATE sessions SET user_active_at_ms = 1; UPDATE workspaces SET user_active_at_ms = 1";
+    lock(&store.writer).execute_batch(forget).unwrap();
+    let before = session(&store);
+
+    let [asked, answered] = store
+        .append_answered(&"s".into(), Some(RunId::new(1)), (&request, None), &answer, SessionChange::default())
+        .unwrap();
+
+    assert_eq!((asked.event.body, answered.event.body), (request, answer));
+    assert_eq!(answered.event.seq, asked.event.seq + 1);
+    let after = session(&store);
+    assert_eq!(after.open_approvals, Some(Vec::new()), "nothing is left waiting");
+    assert_eq!((after.status, after.user_active_at_ms), (before.status, Some(1)), "the person did nothing");
+    assert_eq!(store.get_workspace(&"w".into()).unwrap().user_active_at_ms, Some(1), "nor in its workspace");
+    assert!(!answered.by_the_person);
 }
 
 #[test]

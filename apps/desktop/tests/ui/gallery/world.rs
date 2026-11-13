@@ -118,8 +118,11 @@ impl World {
             sessions: self.sessions.clone(),
             comments: self.comments.values().flatten().cloned().collect(),
             // As a hub starts out.
-            hub_settings: (!self.keeps_no_settings)
-                .then(|| protocol::model::HubSettings { keep_awake: true, rev: Rev::default() }),
+            hub_settings: (!self.keeps_no_settings).then(|| protocol::model::HubSettings {
+                keep_awake: true,
+                allow_asked_in_full_access: Some(false),
+                rev: Rev::default(),
+            }),
             accounts: self.accounts.clone(),
             // As from a hub that doesn't keep one, since its hub refuses to.
             new_workspace_draft: None,

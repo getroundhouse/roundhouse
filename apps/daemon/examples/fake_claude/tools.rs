@@ -28,13 +28,13 @@ pub(crate) fn ask_questions(
         .collect();
     let tool_use_id = turn.named_tool_use("AskUserQuestion", json!({}));
     let request_id = format!("req_{tool_use_id}");
+    state_event(turn.config, turn.out, "requires_action");
     emit(
         turn.out,
         json!({"type":"control_request","request_id":request_id,"request":{"subtype":"can_use_tool",
         "tool_name":"AskUserQuestion","input":{"questions":questions},"tool_use_id":tool_use_id,
         "permission_suggestions":[]}}),
     );
-    state_event(turn.config, turn.out, "requires_action");
     loop {
         match rx.recv() {
             Ok(Input::Approval(response)) => {
@@ -80,13 +80,13 @@ pub(crate) fn present_plan(
 ) -> bool {
     let tool_use_id = turn.named_tool_use("ExitPlanMode", json!({}));
     let request_id = format!("req_{tool_use_id}");
+    state_event(turn.config, turn.out, "requires_action");
     emit(
         turn.out,
         json!({"type":"control_request","request_id":request_id,"request":{"subtype":"can_use_tool",
         "tool_name":"ExitPlanMode","input":{"plan":plan,"planFilePath":"/tmp/fake-plan.md"},
         "tool_use_id":tool_use_id,"permission_suggestions":[]}}),
     );
-    state_event(turn.config, turn.out, "requires_action");
     loop {
         match rx.recv() {
             Ok(Input::Approval(response)) => {
@@ -158,8 +158,8 @@ pub(crate) fn run_tool(
     let tool_use_id = turn.tool_use(command);
     if asks_before(command) {
         let (request_id, request) = request_to_run(&tool_use_id, command, None);
-        emit(turn.out, json!({"type":"control_request","request_id":request_id,"request":request}));
         state_event(turn.config, turn.out, "requires_action");
+        emit(turn.out, json!({"type":"control_request","request_id":request_id,"request":request}));
         loop {
             match rx.recv() {
                 Ok(Input::Approval(response)) => {

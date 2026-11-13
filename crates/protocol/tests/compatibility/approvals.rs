@@ -4,7 +4,9 @@
 #![cfg(test)]
 
 use protocol::client::{ClientFrame, ClientRequest, agent};
-use protocol::event::{ApprovalDecision, Asking, EventBody, Question, QuestionAnswer, QuestionOption, SessionEvent};
+use protocol::event::{
+    ApprovalDecision, ApprovalOutcome, Asking, EventBody, Question, QuestionAnswer, QuestionOption, SessionEvent,
+};
 use protocol::frame;
 
 /// What an approval's event says it asks.
@@ -122,4 +124,20 @@ fn an_approval_closed_with_answers_by_position_keeps_their_form() {
     assert_eq!(*answers, [QuestionAnswer { picked: vec![1], typed: None }, typed, QuestionAnswer::default()]);
     assert_eq!(*answers_by_text, None);
     assert_eq!(serde_json::to_vec(&event).unwrap(), stored, "and it's written the way it's read");
+}
+
+/// So the log says the hub's settings allowed it, rather than the person. One from before says neither, and reads as
+/// the person's.
+#[test]
+fn an_approval_the_hubs_setting_allowed_says_so_and_keeps_its_form() {
+    let stored = br#"{"session_id":"s","seq":1,"ts_ms":9,"place":0,"body":{"type":"approval_resolved","approval_id":"a","outcome":"allowed","by_setting":true}}"#;
+
+    let event: SessionEvent = frame::decode(stored).unwrap();
+
+    let EventBody::ApprovalResolved { outcome, by_setting, .. } = &event.body else { panic!("{event:?}") };
+    assert_eq!((*outcome, *by_setting), (ApprovalOutcome::Allowed, true));
+    assert_eq!(serde_json::to_vec(&event).unwrap(), stored, "and it's written the way it's read");
+    let before = br#"{"session_id":"s","seq":1,"ts_ms":9,"place":0,"body":{"type":"approval_resolved","approval_id":"a","outcome":"allowed"}}"#;
+    let event: SessionEvent = frame::decode(before).unwrap();
+    assert!(matches!(event.body, EventBody::ApprovalResolved { by_setting: false, .. }), "{event:?}");
 }

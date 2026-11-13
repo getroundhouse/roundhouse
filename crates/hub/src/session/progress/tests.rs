@@ -136,6 +136,7 @@ fn an_approval_is_open_from_its_asking_until_its_answer() {
         outcome: ApprovalOutcome::Allowed,
         answers_by_text: None,
         answers_by_position: None,
+        by_setting: false,
     };
     let Step { change, next, .. } = progress.step(Origin::Hub, answered, true);
     progress.take(next, 6, None);

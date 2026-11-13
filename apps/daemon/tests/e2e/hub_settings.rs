@@ -8,7 +8,7 @@ use protocol::model::{HubSettingsChange, SessionStatus};
 use crate::support::{Stack, wait_for_status, wait_until};
 
 pub(crate) fn keep_awake(on: bool) -> HubSettingsChange {
-    HubSettingsChange { keep_awake: Some(on) }
+    HubSettingsChange { keep_awake: Some(on), ..HubSettingsChange::default() }
 }
 
 #[test]

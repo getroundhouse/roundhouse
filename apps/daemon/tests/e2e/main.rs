@@ -3,6 +3,7 @@
 
 #![cfg(test)]
 
+mod allowing_tools;
 mod approvals;
 mod attaching;
 mod attachments;

@@ -344,4 +344,6 @@ pub(super) const MIGRATIONS: &[&str] = &[
     replies::REPLY_OUTCOME,
     // The account whose login the hub gave each run it launched under one, in `logins`.
     logins::RUNS,
+    // Whether the hub allows a tool's use itself when an agent with full access asks anyway, in `hub_settings`.
+    hub_settings::ALLOW_ASKED_IN_FULL_ACCESS,
 ];

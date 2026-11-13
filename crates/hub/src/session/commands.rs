@@ -211,8 +211,14 @@ impl LiveSession {
             outcome,
             answers_by_text,
             answers_by_position,
+            by_setting: false,
         };
         self.record(Origin::Hub, resolved, None).await?;
+        self.pass_on(approval_id, decision).await
+    }
+
+    /// Passes `decision` on to the agent that asked, once it's recorded, and says in the log if it had gone.
+    pub(super) async fn pass_on(&self, approval_id: ApprovalId, decision: ApprovalDecision) -> Result<(), ApiError> {
         let hub = self.hub()?;
         let link = hub
             .existing_worker(&self.workspace_id)
