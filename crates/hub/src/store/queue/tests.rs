@@ -21,8 +21,8 @@ fn session(store: &Store) -> Session {
 }
 
 fn queue(store: &Store, prompt: &QueuedPrompt) -> Reading {
-    let Queued::Done(reading) = store.queue_prompt(&"s".into(), prompt).unwrap() else { panic!("refused") };
-    *reading
+    let Queued::Done(queuing) = store.queue_prompt(&"s".into(), prompt).unwrap() else { panic!("refused") };
+    queuing.reading
 }
 
 fn change(store: &Store, id: &str, text: &str) -> Changed {
@@ -219,4 +219,25 @@ fn a_queued_prompt_is_the_persons_as_its_queued_and_not_again_as_the_hub_sends_i
     assert_eq!(workspace_at, queued_at, "its workspace moves with it");
     assert!(appended.dequeued && !appended.by_the_person);
     assert_eq!((session(&store).user_active_at_ms, workspace()), (Some(1), Some(1)));
+}
+
+/// What's queued is what the person sent, so it's when the chat's account was last used, and queuing it again isn't.
+#[test]
+fn queuing_a_prompt_is_when_the_chats_account_was_last_used() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_session(dir.path());
+    let under = protocol::model::AgentAccount {
+        id: Some("claude-0123456789abcdef".into()),
+        logged_in: true,
+        ..Default::default()
+    };
+    store.launched_under(&"s".into(), &under).unwrap();
+
+    let Queued::Done(queuing) = store.queue_prompt(&"s".into(), &queued("a", "go")).unwrap() else { panic!("refused") };
+    let Queued::Done(again) = store.queue_prompt(&"s".into(), &queued("a", "go")).unwrap() else { panic!("refused") };
+
+    let used = queuing.account.and_then(|account| account.used_at_ms);
+    assert_eq!(used, session(&store).user_active_at_ms);
+    assert!(used.is_some());
+    assert_eq!(again.account, None, "a retry changes nothing");
 }

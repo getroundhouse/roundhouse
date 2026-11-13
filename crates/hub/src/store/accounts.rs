@@ -14,7 +14,8 @@ mod tests;
 /// What filing a launch's account changed, so the hub announces only what did.
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct Launched {
-    /// The account's record, when it's new or says someone else now.
+    /// The account's record, when it's new or says someone else now, or when the session's record came to name it and
+    /// that brought when it was last used up to the session's.
     pub account: Option<Account>,
     /// The session's record names another account than it did.
     pub session: bool,
@@ -34,11 +35,12 @@ pub(super) fn account(conn: &Connection, id: &AccountId) -> rusqlite::Result<Opt
     let Some(mut account) = conn
         .query_row(
             &format!(
-                "SELECT id, model_provider, plan, login, email, rev, name, {LOGIN_COLUMNS} FROM accounts WHERE id = ?"
+                "SELECT id, model_provider, plan, login, email, rev, name, used_at_ms, {LOGIN_COLUMNS} FROM accounts
+                     WHERE id = ?"
             ),
             [id.as_str()],
             |row| {
-                let (id_from, held) = login_at(row, 7)?;
+                let (id_from, held) = login_at(row, 8)?;
                 Ok(Account {
                     id: row.get::<_, String>(0)?.into(),
                     model_provider: row.get(1)?,
@@ -52,7 +54,7 @@ pub(super) fn account(conn: &Connection, id: &AccountId) -> rusqlite::Result<Opt
                     },
                     limits: Vec::new(),
                     held_login: held.map(|(_, held)| held),
-                    used_at_ms: None,
+                    used_at_ms: row.get(7)?,
                     rev: rev_of(row, 5)?,
                 })
             },
@@ -160,9 +162,9 @@ impl Store {
         let mut conn = lock(&self.writer);
         let tx = conn.transaction()?;
         let id = under.logged_in_as();
-        let account = match id {
+        let who_changed = match id {
             Some(id) => {
-                let changed = tx.execute(
+                tx.execute(
                     "INSERT INTO accounts (id, model_provider, plan, login, email) VALUES (?1, ?2, ?3, ?4, ?5)
                          ON CONFLICT (id) DO UPDATE
                          SET model_provider = excluded.model_provider, plan = excluded.plan, login = excluded.login,
@@ -170,14 +172,18 @@ impl Store {
                          WHERE model_provider IS NOT excluded.model_provider OR plan IS NOT excluded.plan
                              OR login IS NOT excluded.login OR email IS NOT excluded.email",
                     params![id.as_str(), under.model_provider, under.plan, under.login, under.email],
-                )?;
-                (changed > 0).then(|| account_or_missing(&tx, id)).transpose()?
+                )? > 0
             }
-            None => None,
+            None => false,
         };
-        let session_changed = name_account(&tx, session, id)?;
+        let named = name_account(&tx, session, id)?;
+        let account = match (named.account, id) {
+            (Some(record), _) => Some(record),
+            (None, Some(id)) if who_changed => Some(account_or_missing(&tx, id)?),
+            (None, _) => None,
+        };
         tx.commit()?;
-        Ok(Launched { account, session: session_changed })
+        Ok(Launched { account, session: named.session })
     }
 
     /// What's been heard of `account`'s limits, shortest window first, each with when it was heard.
@@ -191,17 +197,56 @@ impl Store {
     }
 }
 
-/// Has `session`'s record name `account` as the one its agent runs under, or none, and returns whether that changed it.
+/// What naming a session's account changed.
+pub(super) struct Named {
+    /// The session's record names another account than it did, or none.
+    pub(super) session: bool,
+    /// The record of the account it names now, when naming it brought when the account was last used up to the
+    /// session's last send, as [`used_by_session`] says.
+    pub(super) account: Option<Account>,
+}
+
+/// Has `session`'s record name `account` as the one its agent runs under, or none, and says what that changed.
+///
+/// A session that named no account comes to name one once its first launch is filed, and what the person sent before
+/// then is that account's use, since it was recorded before anything said whose account the launch was under. A
+/// session that named one already had what it was sent counted for that one, so the account it moves to isn't given
+/// it too, however the move came: a send whose launch ran under another login, or a launch the hub started by itself.
+/// Each send counts for one account.
 pub(super) fn name_account(
     conn: &Connection,
     session: &SessionId,
     account: Option<&AccountId>,
-) -> rusqlite::Result<bool> {
+) -> rusqlite::Result<Named> {
+    let named_none = conn
+        .query_row("SELECT account_id IS NULL FROM sessions WHERE id = ?", [session.as_str()], |row| row.get(0))
+        .optional()?
+        .unwrap_or(false);
     let changed = conn.execute(
         "UPDATE sessions SET account_id = ?1 WHERE id = ?2 AND account_id IS NOT ?1",
         params![account.map(AccountId::as_str), session.as_str()],
+    )? > 0;
+    let account = if changed && named_none && account.is_some() { used_by_session(conn, session)? } else { None };
+    Ok(Named { session: changed, account })
+}
+
+/// Brings when the account `session`'s record names was last used up to when the person last sent the session's agent
+/// something, and gives back the account's record if that changed it. An account used later, in another session, keeps
+/// that. So what the person sends counts for the account the session names as they send it, which is the one its
+/// newest launch ran under, even when no agent is running and the next launch turns out to run under another.
+pub(super) fn used_by_session(conn: &Connection, session: &SessionId) -> rusqlite::Result<Option<Account>> {
+    let changed = conn.execute(
+        "UPDATE accounts SET used_at_ms = sessions.user_active_at_ms FROM sessions
+             WHERE sessions.id = ?1 AND accounts.id = sessions.account_id
+                 AND sessions.user_active_at_ms > coalesce(accounts.used_at_ms, -1)",
+        [session.as_str()],
     )?;
-    Ok(changed > 0)
+    if changed == 0 {
+        return Ok(None);
+    }
+    let id: String =
+        conn.query_row("SELECT account_id FROM sessions WHERE id = ?", [session.as_str()], |row| row.get(0))?;
+    account(conn, &id.into())
 }
 
 /// The record of an account that was just written in the same transaction, so it's there.

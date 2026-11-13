@@ -1,7 +1,10 @@
-use protocol::model::Rev;
+use protocol::model::{Rev, RunId};
 
 use super::*;
+use crate::store::events::tests::prompt;
 use crate::store::tests::{open_in, store_with_session};
+
+mod used;
 
 fn limit(window: LimitWindow, used_percent: u8) -> UsageLimit {
     UsageLimit { window, model: None, used_percent, resets_at_ms: Some(9_000), heard_at_ms: None }

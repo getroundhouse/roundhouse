@@ -3,13 +3,14 @@
 
 #![cfg(test)]
 
-use client_core::Client;
+use client_core::{Client, Subscription, SubscriptionItem};
+use protocol::client::HubNotice;
 use protocol::event::EventBody;
 use protocol::model::{Account, AccountId, AgentKind, LoginToken};
 
 use crate::accounts::{ada, log_out};
 use crate::carrying_on::restart;
-use crate::support::{Stack, assistant_text, wait_for_turn_end, wait_until};
+use crate::support::{Stack, TIMEOUT, assistant_text, wait_for_turn_end, wait_until};
 
 fn listed(client: &Client, id: &AccountId) -> Account {
     client.records_list().unwrap().accounts.into_iter().find(|account| account.id == *id).unwrap()
@@ -109,21 +110,42 @@ fn an_agent_left_running_under_a_held_login_is_still_filed_under_it_once_the_hub
     assert!(!asked_under_a_token(&stack), "nothing asked the CLI whose the token is");
 }
 
+/// When the feed next announces the account `id` as used after `after_ms`.
+fn announced_used_after(feed: &Subscription, id: &AccountId, after_ms: i64) -> Option<i64> {
+    std::iter::from_fn(|| feed.items.recv_timeout(TIMEOUT).ok()).find_map(|item| match item {
+        SubscriptionItem::Notice(notice) => match *notice {
+            HubNotice::Account(told) if told.id == *id => told.used_at_ms.filter(|used| *used > after_ms),
+            _ => None,
+        },
+        _ => None,
+    })
+}
+
 /// On this machine, through the local provider, as for a hub on a server the person never logged in on, which hands
-/// the login they gave it to every workspace.
+/// the login they gave it to every workspace. The feed tells every client when the account was last used: by the first
+/// prompt, once the launch it brought names the account, and then by each prompt sent. The agent hears of no limits,
+/// so the account is announced for nothing else.
 #[test]
 fn an_agent_on_this_machine_runs_under_the_login_the_hub_holds_when_the_machine_has_none_of_its_own() {
     let stack = Stack::start();
     log_out(&stack);
+    std::fs::write(stack.agent_state().join("no-limits"), "").unwrap();
     let client = stack.client();
     let connected = connect_work(&client);
     let (_, session) = stack.workspace(&client);
+    let feed = client.feed_subscribe().unwrap();
 
     client.session_prompt(&session.id, "env:CLAUDE_CODE_OAUTH_TOKEN", None).unwrap();
     let text = assistant_text(&wait_for_turn_end(&client, &session.id, 1));
+    let first = announced_used_after(&feed, &connected.id, 0);
+    client.session_prompt(&session.id, "say:again", None).unwrap();
+    wait_for_turn_end(&client, &session.id, 2);
+    let second = first.and_then(|first| announced_used_after(&feed, &connected.id, first));
 
     assert!(text.contains("CLAUDE_CODE_OAUTH_TOKEN=a-made-up-token"), "{text}");
-    assert_eq!(client.session_get(&session.id).unwrap().account, Some(connected.id));
+    assert_eq!(client.session_get(&session.id).unwrap().account, Some(connected.id.clone()));
+    assert!(first.is_some(), "the first prompt was announced as a use");
+    assert!(second.is_some(), "and so was the next");
     assert_eq!(client.records_list().unwrap().accounts.len(), 1, "no account but the login's");
 }
 
@@ -134,7 +156,7 @@ fn an_agent_on_a_machine_with_its_own_login_runs_under_that_though_the_hub_holds
     let mut stack = Stack::start();
     stack.make_through_an_adapter();
     let client = stack.client();
-    connect_work(&client);
+    let connected = connect_work(&client);
     let (_, session) = stack.workspace(&client);
 
     client.session_prompt(&session.id, "env:CLAUDE_CODE_OAUTH_TOKEN", None).unwrap();
@@ -145,4 +167,5 @@ fn an_agent_on_a_machine_with_its_own_login_runs_under_that_though_the_hub_holds
     });
 
     assert!(text.contains("CLAUDE_CODE_OAUTH_TOKEN=<unset>"), "{text}");
+    assert_eq!(listed(&client, &connected.id).used_at_ms, None, "the login the hub holds wasn't used");
 }

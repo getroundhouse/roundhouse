@@ -71,3 +71,6 @@ pub(crate) const BEFORE_ALLOWING_ASKED: usize = 49;
 
 /// How many migrations there were before each model's own week of an account's limits was kept apart.
 pub(crate) const BEFORE_LIMIT_MODELS: usize = 50;
+
+/// How many migrations there were before accounts kept when they were last used.
+pub(crate) const BEFORE_ACCOUNTS_USED: usize = 51;

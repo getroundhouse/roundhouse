@@ -7,7 +7,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use parking_lot::{Mutex, MutexGuard};
 use protocol::event::SessionEvent;
-use protocol::model::{AgentSessionId, OpenApproval, Place, Rev, Seq, Session, ToolUseId};
+use protocol::model::{Account, AgentSessionId, OpenApproval, Place, Rev, Seq, Session, ToolUseId};
 use rusqlite::{Connection, Row, Transaction};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -60,7 +60,7 @@ pub use events::{Places, SessionChange, StatusChange, TurnEdge, cancelled_approv
 pub use instances::{InstanceStage, RecordedInstance};
 pub(crate) use logins::{Connecting, Held, IdFrom};
 pub use made::{Made, MadeByRequest};
-pub use queue::{Changed, Queued};
+pub use queue::{Changed, Queued, Queuing};
 pub use reading::Reading;
 pub use titles::{Retitle, Retitled};
 pub use waits::Seen;
@@ -92,6 +92,9 @@ pub struct Appended {
     pub dequeued: bool,
     /// The person sent it, so it moved when they were last active, as `Session::user_active_at_ms` says.
     pub by_the_person: bool,
+    /// The record of the account the session names, when the person sent it and that changed when the account was last
+    /// used.
+    pub account: Option<Account>,
     /// The prompts the agent has yet to take, oldest first, if the event changed them.
     pub untaken: Option<Vec<Seq>>,
     /// The approvals the agent is waiting on, oldest first, if the event changed them.

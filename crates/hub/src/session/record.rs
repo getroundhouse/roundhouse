@@ -142,6 +142,9 @@ impl LiveSession {
         if by_the_person {
             hub.announce_workspace(&self.workspace_id).await;
         }
+        for account in appended.iter().filter_map(|appended| appended.account.clone()) {
+            hub.notify(HubNotice::Account(account));
+        }
         let subagents: Vec<ToolUseId> = appended.iter().flat_map(|appended| appended.subagents.clone()).collect();
         if !subagents.is_empty()
             && let Err(e) = self.announce_subagents(hub, subagents).await

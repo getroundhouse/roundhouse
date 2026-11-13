@@ -6,6 +6,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use protocol::client::HubNotice;
 use protocol::model::{AccountId, AgentAccount, RunId, UsageLimit};
 use tracing::{debug, error};
 
@@ -156,6 +157,9 @@ impl LiveSession {
                 && let Err(e) = self.announce(hub).await
             {
                 error!(session = %self.id, "could not announce which account the agent runs under: {e}");
+            }
+            if let Some(record) = filed.account_changed {
+                hub.notify(HubNotice::Account(record));
             }
             let Some(account) = filed.account else { return Filing::AskTheWorker };
             let Some(waiting) = self.known(run, Some(account.clone())) else { return Filing::Done };

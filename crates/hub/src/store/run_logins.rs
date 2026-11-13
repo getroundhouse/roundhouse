@@ -1,7 +1,7 @@
 //! The account whose login the hub gave each run of a session's agent it launched under one, which is how the hub
 //! knows which account such a run is under, since a token doesn't say whose it is and the worker isn't told.
 
-use protocol::model::{AccountId, RunId, SessionId};
+use protocol::model::{Account, AccountId, RunId, SessionId};
 use rusqlite::{OptionalExtension as _, params};
 
 use super::accounts::name_account;
@@ -17,6 +17,9 @@ pub(crate) struct RunLogin {
     pub(crate) account: Option<AccountId>,
     /// Whether the session's record changed: it names that account now, or no longer names an earlier launch's.
     pub(crate) session_changed: bool,
+    /// The account's record, when the session's came to name it and that brought when it was last used up to the
+    /// session's, which is a change to the account's record to announce.
+    pub(crate) account_changed: Option<Account>,
 }
 
 impl Store {
@@ -53,18 +56,19 @@ impl Store {
             )
             .optional()?
             .map(AccountId::from);
-        let session_changed = match &account {
-            Some(account) => name_account(&tx, session, Some(account))?,
-            None => {
-                tx.execute(
-                    "UPDATE sessions SET account_id = NULL
-                         WHERE id = ? AND account_id IN (SELECT id FROM accounts WHERE login_agent IS NOT NULL)",
-                    [session.as_str()],
-                )? > 0
-            }
+        let (session_changed, account_changed) = if let Some(account) = &account {
+            let named = name_account(&tx, session, Some(account))?;
+            (named.session, named.account)
+        } else {
+            let changed = tx.execute(
+                "UPDATE sessions SET account_id = NULL
+                     WHERE id = ? AND account_id IN (SELECT id FROM accounts WHERE login_agent IS NOT NULL)",
+                [session.as_str()],
+            )? > 0;
+            (changed, None)
         };
         tx.commit()?;
-        Ok(RunLogin { account, session_changed })
+        Ok(RunLogin { account, session_changed, account_changed })
     }
 
     /// Forgets the login the hub gave each run of `session` but `run`, once a worker has said `run` is the session's
