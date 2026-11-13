@@ -52,6 +52,7 @@ pub(super) fn account(conn: &Connection, id: &AccountId) -> rusqlite::Result<Opt
                     },
                     limits: Vec::new(),
                     held_login: held.map(|(_, held)| held),
+                    used_at_ms: None,
                     rev: rev_of(row, 5)?,
                 })
             },
