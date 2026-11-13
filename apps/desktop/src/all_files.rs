@@ -7,12 +7,13 @@ use std::ops::Range;
 use std::sync::Arc;
 
 use client_core::{Client, ClientError};
-use gpui_kit::component::{ActiveTheme as _, v_flex};
+use gpui_kit::component::v_flex;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, AppContext as _, Context, EventEmitter, Hsla, IntoElement, ParentElement as _, Render, SharedString,
     StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, Window, div, uniform_list,
 };
+use look::Typeset as _;
 use protocol::client::ErrorCode;
 use protocol::model::{WorkspaceId, WorktreeFiles};
 
@@ -270,7 +271,6 @@ impl AllFiles {
         let Listing::Listed(listed) = &self.listing else { return Vec::new() };
         let rows = self.rows.get(range).unwrap_or_default();
         // Every name is in the mono font, a file's as a folder's is, since the list is a tree of paths to browse.
-        let mono = cx.theme().mono_font_family.clone();
         rows.iter()
             .filter_map(|row| match row {
                 Row::Folder { path, names, depth, open } => {
@@ -299,8 +299,7 @@ impl AllFiles {
                                 .overflow_hidden()
                                 .whitespace_nowrap()
                                 .text_ellipsis()
-                                .text_xs()
-                                .font_family(mono.clone())
+                                .typeset(look::Type::Code)
                                 .child(name),
                         )
                         .on_click(cx.listener(move |_, _, _, cx| cx.emit(AllFilesEvent::Open(path.clone()))));
@@ -336,7 +335,7 @@ impl Render for AllFiles {
                         .flex_none()
                         .px_3()
                         .py_1()
-                        .text_xs()
+                        .typeset(look::Type::Detail)
                         .text_color(muted)
                         .child("There are so many files that some aren't shown"),
                 )

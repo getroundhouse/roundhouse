@@ -11,7 +11,7 @@ use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::{
     Context, Div, IntoElement, ParentElement as _, PlatformTextSystem, Render, Styled as _, Window, div, px, size,
 };
-use look::{Signal, Size, TaskRing, Work};
+use look::{Signal, Size, TaskRing, Typeset as _, Work};
 
 use super::capture::Picture;
 use super::headless;
@@ -65,10 +65,12 @@ impl Render for Sheet {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let colors = look::colors(cx);
         let muted = colors.text_muted;
-        let label = |text: &'static str| div().w(px(LABEL)).text_sm().text_color(muted).child(text);
+        let label = |text: &'static str| div().w(px(LABEL)).typeset(look::Type::Body).text_color(muted).child(text);
         let cell = || h_flex().w(px(CELL)).h(px(ROW)).gap_3();
-        let heads: Vec<Div> =
-            WORKS.iter().map(|work| cell().text_sm().text_color(muted).child(work_name(*work))).collect();
+        let heads: Vec<Div> = WORKS
+            .iter()
+            .map(|work| cell().typeset(look::Type::Body).text_color(muted).child(work_name(*work)))
+            .collect();
         let marks = SIGNALS.iter().map(|signal| {
             let across = WORKS.iter().map(|work| {
                 cell().child(look::mark(*signal, *work, Size::Row, cx)).child(look::mark(

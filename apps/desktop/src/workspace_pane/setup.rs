@@ -1,12 +1,12 @@
 //! The workspace's setup script: its status line and its log.
 
 use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::{ActiveTheme as _, Sizable as _, h_flex};
+use gpui_kit::component::{Sizable as _, h_flex};
 use gpui_kit::{
     AnyElement, App, AppContext, Context, IntoElement, ParentElement, SharedString, StatefulInteractiveElement, Styled,
     div, px,
 };
-use look::{Hand as _, InRegion as _, Region};
+use look::{Hand as _, InRegion as _, Region, Typeset as _};
 use protocol::model::{Record, SetupStatus};
 
 use super::{PaneEvent, WorkspacePane};
@@ -25,8 +25,7 @@ pub(super) fn setup_log_view(text: String, cx: &App) -> impl IntoElement {
         .py_2()
         .border_t_1()
         .border_color(colors.edge)
-        .font_family(cx.theme().mono_font_family.clone())
-        .text_size(cx.theme().mono_font_size)
+        .typeset(look::Type::Code)
         .text_color(colors.text_muted)
         .child(SharedString::from(if text.is_empty() { "Nothing yet.".to_string() } else { text }))
 }
@@ -106,7 +105,7 @@ impl WorkspacePane {
                 .gap_2()
                 .border_t_1()
                 .border_color(border)
-                .text_xs()
+                .typeset(look::Type::Detail)
                 .text_color(if running { muted } else { warning })
                 .child(div().flex_1().min_w_0().child(message))
                 .child(

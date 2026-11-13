@@ -1,7 +1,8 @@
 //! Text of different sizes or fonts along one row, on one baseline, as type is set.
 
-use gpui_kit::component::ActiveTheme as _;
-use gpui_kit::{App, Pixels, ScaledPixels, SharedString, StyleRefinement, Styled, TextRun, Window, font, phi, px};
+use gpui_kit::{App, Pixels, ScaledPixels, SharedString, Styled, TextRun, Window, font, phi, px};
+
+use crate::typography::Type;
 
 /// Each kind of text a line can mix, placed on body text's baseline. A row centres what's in it, and a line's baseline
 /// is below the middle of its box by half of how far its font reaches above the baseline less how far below, so
@@ -13,29 +14,24 @@ use gpui_kit::{App, Pixels, ScaledPixels, SharedString, StyleRefinement, Styled,
 /// text that had that spacing stays where it was.
 #[derive(Clone, Debug)]
 pub struct LineText {
-    /// The system font at the kit's small size, which body text is.
+    /// Body text, as [`Type::Body`] sets it.
     pub body: Placed,
-    /// The system font at the kit's extra-small size, for small details.
-    pub small: Placed,
-    /// The code font at its own size.
+    /// Details, as [`Type::Detail`] sets them.
+    pub detail: Placed,
+    /// Code, as [`Type::Code`] sets it.
     pub code: Placed,
 }
 
 impl LineText {
     /// Worked out from the window once for each frame, and handed to everything on it that mixes text.
     pub fn new(window: &Window, cx: &App) -> Self {
-        let theme = cx.theme();
         let rem = window.rem_size();
-        let (sans, mono) = (theme.font_family.clone(), theme.mono_font_family.clone());
-        let body_size = kit_size(Styled::text_sm, rem);
+        let body_size = Type::Body.size(rem);
         // Rounded to whole device pixels, as GPUI rounds a line's height before it lays the line out and draws it.
         let line_height = window.pixel_snap(phi().to_pixels(body_size.into(), rem));
-        let body = Placing { line_height, below_middle: below_middle(&sans, body_size, window) };
-        Self {
-            small: body.place(sans.clone(), kit_size(Styled::text_xs, rem), window),
-            code: body.place(mono, theme.mono_font_size, window),
-            body: body.place(sans, body_size, window),
-        }
+        let body = Placing { line_height, below_middle: below_middle(&Type::Body.family(cx), body_size, window) };
+        let place = |kind: Type| body.place(kind.family(cx), kind.size(rem), window);
+        Self { body: place(Type::Body), detail: place(Type::Detail), code: place(Type::Code) }
     }
 }
 
@@ -73,11 +69,6 @@ impl Placing {
         let shift = lands(self.below_middle) - lands(below_middle(&family, size, window));
         Placed { family, size, line_height: self.line_height, shift: px(shift.0 / scale) }
     }
-}
-
-/// The size one of the kit's text sizes, such as `text_sm`, sets.
-fn kit_size(size: impl FnOnce(StyleRefinement) -> StyleRefinement, rem: Pixels) -> Pixels {
-    size(StyleRefinement::default()).text.font_size.map_or(rem, |size| size.to_pixels(rem))
 }
 
 /// How far a line's baseline is below the middle of its box: half of what's left of the line once its ascent and

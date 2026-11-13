@@ -13,7 +13,7 @@ use gpui_kit::{
     ParentElement as _, Pixels, SharedString, StatefulInteractiveElement as _, Styled, TestSupportExt as _, WeakEntity,
     div, px,
 };
-use look::Hand as _;
+use look::{Hand as _, Typeset as _};
 use protocol::model::{DiffComment, DiffSide};
 
 use super::FileDiff;
@@ -63,6 +63,7 @@ pub(super) fn row(ix: usize, row: &Row, drawing: &Drawing, cx: &App) -> AnyEleme
         Row::Pair { old, new, same } => h_flex()
             .w_full()
             .h(LINE_HEIGHT)
+            .typeset(look::Type::Code)
             .child(half(ix, true, *old, *new, *same, drawing, cx))
             .child(half(ix, false, *new, *new, *same, drawing, cx).border_l_1().border_color(look::colors(cx).edge))
             .into_any_element(),
@@ -98,6 +99,7 @@ fn line(ix: usize, kind: LineKind, old: Option<u32>, new: Option<u32>, drawing: 
         .group(LINE)
         .w_full()
         .h(LINE_HEIGHT)
+        .typeset(look::Type::Code)
         .when_some(background(kind, at, drawing, cx), Styled::bg)
         .child(number(old, drawing.numbers, cx))
         .child(number(new, drawing.numbers, cx))
@@ -217,7 +219,6 @@ fn add_button((side, line): (DiffSide, u32), marked: bool, drawing: &Drawing, cx
 /// show the lines just above the change below, down to show those just below the change above, each [`STEP`] lines
 /// at a time, or all of them at once when there are no more than that between two changes.
 fn fold_row(fold: &Fold, drawing: &Drawing, cx: &App) -> AnyElement {
-    let theme = cx.theme();
     let colors = look::colors(cx);
     let lines = fold.old.end - fold.old.start;
     let (start, end) = (fold.old.start, fold.old.end);
@@ -254,6 +255,6 @@ fn fold_row(fold: &Fold, drawing: &Drawing, cx: &App) -> AnyElement {
         .bg(colors.inset)
         .text_color(colors.text_muted)
         .child(h_flex().flex_none().w(drawing.gutter).justify_center().gap_1().children(arrows))
-        .child(div().pl(SIGN).font_family(theme.font_family.clone()).text_xs().child(said))
+        .child(div().pl(SIGN).typeset(look::Type::Detail).child(said))
         .into_any_element()
 }

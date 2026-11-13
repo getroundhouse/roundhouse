@@ -9,10 +9,10 @@ use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::{Icon, IconName, Selectable as _, Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, Context, Entity, EventEmitter, FontWeight, Global, IntoElement, ParentElement, Pixels, Render,
-    SharedString, StatefulInteractiveElement, Styled, Subscription, TestSupportExt as _, Window, div, uniform_list,
+    AnyElement, App, Context, Entity, EventEmitter, Global, IntoElement, ParentElement, Pixels, Render, SharedString,
+    StatefulInteractiveElement, Styled, Subscription, TestSupportExt as _, Window, div, uniform_list,
 };
-use look::{Hand as _, LineText, Placed};
+use look::{Hand as _, LineText, Placed, Typeset as _};
 
 use crate::file_tree::{List, Row, chain, folder_row, row_frame, split};
 use crate::patch::{FilePatch, FileStatus};
@@ -146,8 +146,8 @@ impl Changes {
             .border_color(look::colors(cx).edge)
             .child(
                 div()
-                    .text_sm()
-                    .font_weight(FontWeight::MEDIUM)
+                    .typeset(look::Type::Body)
+                    .emphasis()
                     .child(format!("{count} comment{}", if count == 1 { "" } else { "s" })),
             )
             .child(Button::new("send-comments").hand().primary().small().label("Send to agent").on_click(
@@ -193,7 +193,7 @@ impl Render for Changes {
                         .flex_none()
                         .px_3()
                         .py_1()
-                        .text_xs()
+                        .typeset(look::Type::Detail)
                         .text_color(muted)
                         .child("Some untracked files aren't shown"),
                 )

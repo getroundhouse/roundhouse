@@ -5,11 +5,12 @@
 //! means, are `client_core::ToolUseAsked`'s and `client_core::ToolUseAnswer`'s.
 
 use client_core::{Approval, Given, ToolUseAnswer, ToolUseAsked};
-use gpui_kit::component::{ActiveTheme as _, v_flex};
+use gpui_kit::component::v_flex;
 use gpui_kit::{
     AnyElement, App, InteractiveElement as _, IntoElement, ParentElement, Role, StatefulInteractiveElement as _,
     Styled, TestSupportExt as _, div, px,
 };
+use look::Typeset as _;
 use protocol::event::{ApprovalDecision, EventBody, Question, QuestionAnswer, QuestionOption};
 
 use super::heading::said;
@@ -96,7 +97,7 @@ impl ToolUse {
         if self.given.is_none() && self.reason.is_none() {
             return None;
         }
-        let (theme, colors) = (cx.theme(), look::colors(cx));
+        let colors = look::colors(cx);
         let block = |id: &'static str| {
             div()
                 .id(id)
@@ -105,8 +106,7 @@ impl ToolUse {
                 .py_2()
                 .rounded_md()
                 .bg(colors.inset)
-                .font_family(theme.mono_font_family.clone())
-                .text_size(theme.mono_font_size)
+                .typeset(look::Type::Code)
         };
         let given = self.given.as_ref().map(|given| match given {
             Shown::Text(text) => block("question-given")
@@ -123,7 +123,7 @@ impl ToolUse {
                 .gap_1()
                 .child(
                     said("question-change-file", change.path.clone())
-                        .text_xs()
+                        .typeset(look::Type::Detail)
                         .text_color(colors.text_muted)
                         .test_support(),
                 )
@@ -136,10 +136,9 @@ impl ToolUse {
                 )
                 .into_any_element(),
         });
-        let reason = self
-            .reason
-            .clone()
-            .map(|reason| said("question-reason", reason).text_xs().text_color(colors.text_muted).test_support());
+        let reason = self.reason.clone().map(|reason| {
+            said("question-reason", reason).typeset(look::Type::Detail).text_color(colors.text_muted).test_support()
+        });
         Some(v_flex().w_full().gap_3().children(given).children(reason).into_any_element())
     }
 }

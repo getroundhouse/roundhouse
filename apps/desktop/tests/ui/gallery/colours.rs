@@ -9,7 +9,7 @@ use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::{
     Context, Div, IntoElement, ParentElement as _, PlatformTextSystem, Render, Styled as _, Window, div, px, size,
 };
-use look::NamedColor;
+use look::{NamedColor, Typeset as _};
 
 use super::capture::Picture;
 use super::headless;
@@ -61,12 +61,13 @@ impl Render for Sheet {
         let (edge, muted, faint) = (colors.edge, colors.text_muted, colors.text_faint);
         let swatch = |role: &NamedColor| {
             let chip = div().flex_none().size(px(SWATCH)).rounded(px(4.)).border_1().border_color(edge).bg(role.color);
-            let name = div().w(px(150.)).text_xs().child(role.name);
-            let value = div().text_xs().text_color(faint).child(role.hex());
+            let name = div().w(px(150.)).typeset(look::Type::Detail).child(role.name);
+            let value = div().typeset(look::Type::Detail).text_color(faint).child(role.hex());
             h_flex().h(px(ROW)).gap_2().child(chip).child(name).child(value)
         };
         let group = |(title, members): &(&'static str, Vec<NamedColor>)| -> Div {
-            let title = div().h(px(ROW)).flex().items_end().pb_1().text_sm().text_color(muted).child(*title);
+            let title =
+                div().h(px(ROW)).flex().items_end().pb_1().typeset(look::Type::Body).text_color(muted).child(*title);
             v_flex().child(title).children(members.iter().map(swatch))
         };
         let columns = columns(groups(&colors.roles()));

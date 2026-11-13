@@ -5,7 +5,6 @@
 use std::rc::Rc;
 
 use gpui_kit::assets::IconName;
-use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, AppContext as _, Context, InteractiveElement as _, IntoElement, ParentElement, Render,
@@ -15,7 +14,7 @@ use gpui_kit::{
 use client_core::Given;
 use client_core::calls::files::{file_name, numbered_lines};
 use client_core::calls::{EditFile, ReadFile, WriteFile, count};
-use look::{InRegion as _, Region, language};
+use look::{InRegion as _, Region, Typeset as _, language};
 
 use super::line::{Line, Part, Preview};
 use super::{Answer, Toggle, amount, block, line, marks, numbered};
@@ -207,7 +206,6 @@ struct DiffPreview {
 
 impl Render for DiffPreview {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = cx.theme();
         // It isn't in the transcript, so it has nothing to find in.
         let none = Marks::default();
         let rows = self.sections.iter().flat_map(|section| numbered::rows(&self.language, section, &none, None, cx));
@@ -219,8 +217,7 @@ impl Render for DiffPreview {
             .py_1()
             // The wheel scrolls the diff and not the transcript under it, which would carry the line away from it.
             .occlude()
-            .font_family(theme.mono_font_family.clone())
-            .text_size(theme.mono_font_size)
+            .typeset(look::Type::Code)
             // It has nothing to hand the wheel on to, so GPUI scrolls it, holding a gesture to the way it started until
             // it turns far enough. That's GPUI's own, which the kit's `lock_scroll_axis` calls, since the kit gives that
             // only to an element that isn't also marked for tests, as a region is.

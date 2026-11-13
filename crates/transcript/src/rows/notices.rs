@@ -2,6 +2,7 @@
 //! the hub or the agent's CLI wanted said.
 
 use gpui_kit::{AnyElement, App, IntoElement as _, ParentElement as _, Styled as _, div};
+use look::Typeset as _;
 use protocol::event::{ExitReason, NoticeLevel};
 use protocol::model::Seq;
 
@@ -60,5 +61,5 @@ pub(super) fn notice(
     };
     let id = (ItemKey::Event(seq, 0), Part::Notice);
     let said = from_blocks(&Written::found(TextAt::only(seq, 0), &id, find, message), None, shared);
-    row().child(div().text_sm().text_color(color).child(said)).into_any_element()
+    row().child(div().typeset(look::Type::Body).text_color(color).child(said)).into_any_element()
 }

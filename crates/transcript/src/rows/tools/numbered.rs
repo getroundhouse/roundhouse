@@ -8,12 +8,13 @@
 
 use std::ops::Range;
 
-use gpui_kit::component::{ActiveTheme as _, h_flex};
+use gpui_kit::component::h_flex;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, ElementId, HighlightStyle, Hsla, InteractiveElement as _, IntoElement, ParentElement,
     SharedString, Styled, TestSupportExt as _, div, px,
 };
+use look::Typeset as _;
 
 use super::highlight::{Spans, spans};
 use super::{Toggle, block};
@@ -53,8 +54,7 @@ pub(super) fn lines(toggle: &Toggle, part: Part, language: &str, sections: &[Sec
     let part = div()
         .id(id.clone())
         .py_1()
-        .font_family(cx.theme().mono_font_family.clone())
-        .text_size(cx.theme().mono_font_size)
+        .typeset(look::Type::Code)
         .children(drawn)
         .when_some(more, |d, more| d.child(block::label(more, cx).pb_2()))
         .test_support();

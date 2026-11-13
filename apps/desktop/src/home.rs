@@ -11,9 +11,8 @@ use gpui_kit::component::input::{InputEvent, InputState};
 use gpui_kit::component::{Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, AppContext as _, Context, ElementId, Entity, FontWeight, InteractiveElement as _, IntoElement,
-    ParentElement, Pixels, ScrollHandle, StatefulInteractiveElement as _, Styled, Subscription, TestSupportExt as _,
-    Window, div, px,
+    AnyElement, App, AppContext as _, Context, ElementId, Entity, InteractiveElement as _, IntoElement, ParentElement,
+    Pixels, ScrollHandle, StatefulInteractiveElement as _, Styled, Subscription, TestSupportExt as _, Window, div, px,
 };
 use look::{Hand as _, InRegion as _, LineText, Off as _, Placed, Region};
 use protocol::model::{RepoId, Workspace, WorkspaceId, WorkspaceStatus};
@@ -215,7 +214,7 @@ fn row(app: &AppView, workspace: &Workspace, line_text: &LineText, cx: &mut Cont
     let repo = app.repo(&workspace.repo_id).map(|r| r.name.clone()).unwrap_or_default();
     let its_chats = app.records().sessions(&workspace.id).iter().filter(|_| prompt_cache::told_of(workspace));
     let expiring = prompt_cache::soonest_expiring(its_chats, look::now_ms(cx))
-        .map(|left_ms| line_text.small.set(div().flex_none().text_color(muted).child(look::expires_in(left_ms))));
+        .map(|left_ms| line_text.detail.set(div().flex_none().text_color(muted).child(look::expires_in(left_ms))));
     let id = workspace.id.clone();
     h_flex()
         .id(ElementId::Name(format!("home-{}", workspace.id).into()))
@@ -234,13 +233,13 @@ fn row(app: &AppView, workspace: &Workspace, line_text: &LineText, cx: &mut Cont
                 .body
                 .set(div().flex_1().min_w_0().truncate())
                 // As in the sidebar, what needs a look stands out, and everything else recedes.
-                .when(needs_a_look, |d| d.font_weight(FontWeight::MEDIUM))
+                .when(needs_a_look, look::Typeset::emphasis)
                 .when(!needs_a_look, |d| d.text_color(muted))
                 .child(workspace.label().to_string()),
         )
         .children(expiring)
-        .child(line_text.small.set(div().flex_none().w(REPO_WIDTH).truncate().text_color(muted).child(repo)))
-        .child(row_button(app, workspace, &line_text.small, cx))
+        .child(line_text.detail.set(div().flex_none().w(REPO_WIDTH).truncate().text_color(muted).child(repo)))
+        .child(row_button(app, workspace, &line_text.detail, cx))
         .test_support()
         .into_any_element()
 }

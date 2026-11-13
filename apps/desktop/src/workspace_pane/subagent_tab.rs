@@ -15,11 +15,11 @@ use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::component::{Icon, IconName, Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, AppContext as _, Context, Entity, FocusHandle, FontWeight, InteractiveElement as _, IntoElement as _,
+    AnyElement, AppContext as _, Context, Entity, FocusHandle, InteractiveElement as _, IntoElement as _,
     ParentElement as _, Role, StatefulInteractiveElement as _, Styled, Subscription, TestSupportExt as _, div, px,
     relative,
 };
-use look::Hand as _;
+use look::{Hand as _, Typeset as _};
 use protocol::model::{SessionId, Subagent, ToolUseId};
 use transcript::{Transcript, TranscriptEvent, shown_kind, subagent_standing};
 
@@ -201,7 +201,7 @@ impl WorkspacePane {
                     .gap_2()
                     .pl_3()
                     .pr_1p5()
-                    .text_sm()
+                    .typeset(look::Type::Body)
                     .line_height(relative(1.25))
                     .text_color(muted)
                     .on_click(cx.listener(|t, _, _, cx| t.bring_to_front(Showing::Subagent, cx)))
@@ -249,7 +249,7 @@ fn band(
             .overflow_hidden()
             .whitespace_nowrap()
             .text_ellipsis()
-            .text_sm()
+            .typeset(look::Type::Body)
             .text_color(colors.text_faint)
             .hand()
             .hover(|d| d.text_color(colors.text))
@@ -259,7 +259,7 @@ fn band(
             .child(name)
             .test_support();
         // It gives way well before what the subagent is for does, which is what the page is about.
-        let slash = div().flex_none().text_sm().text_color(colors.text_faint).child("/");
+        let slash = div().flex_none().typeset(look::Type::Body).text_color(colors.text_faint).child("/");
         h_flex().flex_shrink(100.).min_w(px(56.)).gap_2().child(link).child(slash)
     });
     let chip = subagent.and_then(|s| shown_kind(s.kind.as_deref())).map(|kind| {
@@ -269,7 +269,7 @@ fn band(
             .rounded(px(6.))
             .border_1()
             .border_color(colors.control_edge)
-            .text_sm()
+            .typeset(look::Type::Body)
             .text_color(colors.text_muted)
             .child(kind.to_string())
     });
@@ -290,12 +290,14 @@ fn band(
                 .overflow_hidden()
                 .whitespace_nowrap()
                 .text_ellipsis()
-                .text_sm()
-                .font_weight(FontWeight::MEDIUM)
+                .typeset(look::Type::Body)
+                .emphasis()
                 .child(title),
         )
         .children(chip)
         .child(div().flex_1())
-        .children(standing.map(|standing| div().flex_none().text_xs().text_color(colors.text_faint).child(standing)))
+        .children(
+            standing.map(|s| div().flex_none().typeset(look::Type::Detail).text_color(colors.text_faint).child(s)),
+        )
         .into_any_element()
 }

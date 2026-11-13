@@ -5,8 +5,8 @@ use gpui_kit::component::button::Button;
 use gpui_kit::component::menu::DropdownMenu as _;
 use gpui_kit::component::switch::Switch;
 use gpui_kit::component::{Sizable as _, h_flex, v_flex};
-use gpui_kit::{Anchor, AnyElement, App, FontWeight, IntoElement, ParentElement as _, Styled as _, div};
-use look::{Hand as _, Off as _};
+use gpui_kit::{Anchor, AnyElement, App, IntoElement, ParentElement as _, Styled as _, div};
+use look::{Hand as _, Off as _, Typeset as _};
 
 use super::{Control, Setting};
 
@@ -17,7 +17,7 @@ pub(super) fn row(setting: &Setting, cx: &App) -> AnyElement {
         .flex_1()
         .min_w_0()
         .gap_1()
-        .child(div().font_weight(FontWeight::MEDIUM).child(setting.name))
+        .child(div().emphasis().child(setting.name))
         .child(div().text_color(colors.text_muted).child(setting.does));
     let control = match &setting.control {
         Control::Switch { is_on, set } => {
@@ -54,7 +54,7 @@ pub(super) fn row(setting: &Setting, cx: &App) -> AnyElement {
         .pb_5()
         .border_b_1()
         .border_color(colors.edge)
-        .text_sm()
+        .typeset(look::Type::Body)
         .child(said)
         // As wide as it needs, however much there is to say beside it.
         .child(div().flex_none().child(control))

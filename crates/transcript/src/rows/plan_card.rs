@@ -4,10 +4,8 @@
 use client_core::Approval;
 use gpui_kit::component::h_flex;
 use gpui_kit::prelude::FluentBuilder as _;
-use gpui_kit::{
-    AnyElement, App, ClickEvent, Div, ElementId, FontWeight, IntoElement, ParentElement, Styled, Window, div,
-};
-use look::Hand as _;
+use gpui_kit::{AnyElement, App, ClickEvent, Div, ElementId, IntoElement, ParentElement, Styled, Window, div};
+use look::{Hand as _, Typeset as _};
 use protocol::event::{ApprovalDecision, Asking, EventBody};
 use protocol::model::Seq;
 
@@ -47,7 +45,7 @@ pub(super) fn plan_card(seq: Seq, body: &EventBody, open: bool, shared: &Shared,
         .child(
             waiting_card(open, cx)
                 .gap_2()
-                .child(div().text_sm().font_weight(FontWeight::MEDIUM).child("Plan"))
+                .child(div().typeset(look::Type::Body).emphasis().child("Plan"))
                 .child(content)
                 .when(open, |d| d.child(buttons)),
         )

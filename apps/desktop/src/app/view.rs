@@ -7,7 +7,7 @@ use gpui_kit::{
     AnyElement, Context, Div, Entity, Hsla, InteractiveElement, IntoElement, MouseButton, ParentElement, Render,
     Stateful, StatefulInteractiveElement, Styled, TestSupportExt as _, Window, div, px,
 };
-use look::Hand as _;
+use look::{Hand as _, Typeset as _};
 use protocol::client::HubStatus;
 
 use super::{AppView, Connection, corner, hub_source, title_bar, window_buttons};
@@ -131,7 +131,7 @@ impl AppView {
             .size_full()
             .bg(background)
             .text_color(foreground)
-            .text_sm()
+            .typeset(look::Type::Body)
             .on_action(cx.listener(|t, _: &OpenSettings, window, cx| t.open_settings(window, cx)))
             .on_action(cx.listener(|t, _: &CloseSettings, window, cx| t.close_settings(window, cx)))
             // F10 opens the menus wherever the app draws them.
@@ -154,7 +154,7 @@ fn error_bar(error: String, error_colour: Hsla, cx: &mut Context<AppView>) -> im
         .py_2()
         .gap_2()
         .bg(error_colour.opacity(0.15))
-        .text_sm()
+        .typeset(look::Type::Body)
         .text_color(error_colour)
         .hand()
         // It can sit in the strip that moves the window, and it's a button, so a press here is its own.
@@ -266,7 +266,8 @@ fn across_a_break(
         "It was started by hand, so it's yours to update or stop. To stop it and its agents, run \"roundhouse hub stop\"."
             .to_string()
     };
-    let note = |text: String| div().max_w(px(560.0)).text_center().text_sm().text_color(muted).child(text);
+    let note =
+        |text: String| div().max_w(px(560.0)).text_center().typeset(look::Type::Body).text_color(muted).child(text);
     let action = if may_restart {
         let pid = status.pid;
         Button::new("restart-hub")
@@ -299,11 +300,9 @@ fn empty_state(title: &str, body: &str, action: Button, cx: &mut Context<AppView
         .gap_4()
         .child(look::brand(px(72.), cx))
         .child(
-            v_flex()
-                .items_center()
-                .gap_1p5()
-                .child(div().text_base().font_weight(gpui_kit::FontWeight::MEDIUM).child(title.to_string()))
-                .child(div().max_w(px(400.)).text_center().text_sm().text_color(muted).child(body.to_string())),
+            v_flex().items_center().gap_1p5().child(div().typeset(look::Type::Heading).child(title.to_string())).child(
+                div().max_w(px(400.)).text_center().typeset(look::Type::Body).text_color(muted).child(body.to_string()),
+            ),
         )
         .child(action)
         .into_any_element()

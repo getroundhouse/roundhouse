@@ -11,10 +11,10 @@ use gpui_kit::component::menu::{ContextMenuExt as _, PopupMenu, PopupMenuItem};
 use gpui_kit::component::{Selectable as _, Sizable as _, h_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    Action, AnyElement, App, Context, ElementId, FontWeight, InteractiveElement as _, IntoElement, MouseButton,
-    ParentElement, Pixels, Role, StatefulInteractiveElement as _, Styled, TestSupportExt as _, Window, div, px,
+    Action, AnyElement, App, Context, ElementId, InteractiveElement as _, IntoElement, MouseButton, ParentElement,
+    Pixels, Role, StatefulInteractiveElement as _, Styled, TestSupportExt as _, Window, div, px,
 };
-use look::{Hand as _, LineText, Off as _, Placed};
+use look::{Hand as _, LineText, Off as _, Placed, Typeset as _};
 use protocol::model::{Workspace, WorkspaceId};
 
 use super::{MARK_GAP, ROW_HEIGHT, ROW_INSET, Standing, icon_box, standing};
@@ -55,7 +55,7 @@ pub(super) fn workspace_row(
     let its_chats = app.records().sessions(&workspace.id).iter();
     let expiring = prompt_cache::soonest_expiring(its_chats, look::now_ms(cx));
     let end = End { drafted, expiring, pointing, waiting };
-    let end = right_end(app, workspace, end, &line_text.small, window, cx);
+    let end = right_end(app, workspace, end, &line_text.detail, window, cx);
     let row = Button::new(ElementId::Name(format!("workspace-{}", workspace.id).into()));
     let row = follows_the_pointer(row, &workspace.id, cx)
         .hand()
@@ -71,8 +71,8 @@ pub(super) fn workspace_row(
             h_flex()
                 .w_full()
                 .gap(MARK_GAP)
-                .text_sm()
-                .when(needs_a_look, |d| d.font_weight(FontWeight::MEDIUM))
+                .typeset(look::Type::Body)
+                .when(needs_a_look, look::Typeset::emphasis)
                 // Rows with nothing to look at recede, so those with a reply or a question stand out. Selecting a row
                 // only changes its background: font smoothing thickens brighter text, so a name that brightened would
                 // look heavier too.

@@ -169,7 +169,7 @@ fn tab_element(
                 .on_click(move |_, window, cx| on_click(window, cx))
                 // Its count is smaller, so it's set on the name's baseline.
                 .child(line_text.body.set(div().child(label)))
-                .when_some(count, |d, count| d.child(line_text.small.set(div().text_color(muted).child(count)))),
+                .when_some(count, |d, count| d.child(line_text.detail.set(div().text_color(muted).child(count)))),
         )
         .when(selected, |d| d.child(div().absolute().left_0().right_0().bottom_0().h(px(2.)).bg(colors.current)))
         .into_any_element()

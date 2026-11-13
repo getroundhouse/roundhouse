@@ -7,6 +7,7 @@ use gpui_kit::{
     Anchor, AnyElement, App, InteractiveElement as _, IntoElement, ParentElement, SharedString, Styled,
     TestSupportExt as _, div,
 };
+use look::Typeset as _;
 use protocol::event::{EventBody, SessionEvent, TurnOutcome};
 
 use super::{empty, marked_line, muted_line, row, turn_times};
@@ -101,7 +102,8 @@ fn finished(
         );
         div().flex().items_center().h_0().child(copy)
     });
-    let line = h_flex().gap_1().text_xs().text_color(look::colors(cx).text_faint).child(said).children(copy);
+    let line =
+        h_flex().gap_1().typeset(look::Type::Detail).text_color(look::colors(cx).text_faint).child(said).children(copy);
     row().child(line).into_any_element()
 }
 

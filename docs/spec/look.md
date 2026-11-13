@@ -88,11 +88,28 @@ Three strengths have names of their own, since several places draw with them: wh
 
 ## Type
 
-- **The system font, at 14px for body text,** which is the kit's small size. Secondary text is muted, at the same size or at the kit's extra-small size, 12px, for small details. The kit's sizes are measured from 16px, as the web's are, so its spacing comes out as the web's does. It's dense enough to watch many agents, and still easy to read. A tool call's line is at body size, since what it did is the main thing it says. *Unconfirmed.*
+- **The system font, at 14px for body text.** Secondary text is muted, at the same size or at 12px for details. Sizes in rems are measured from 16px, as the web's and the kit's are, so the kit's spacing comes out as the web's does. It's dense enough to watch many agents, and still easy to read. A tool call's line is at body size, since what it did is the main thing it says. *Unconfirmed.*
 - **Emphasis is medium weight, never bold,** for what should stand out from what's around it, such as the title that names what a card or section is about. Bold shouts in a dense layout. Medium is drawn as regular, since the text system gives a request for medium the system font's regular face. *Not built.*
 - **In a list of one kind of thing, such as the workspaces in the sidebar or the chat tabs, a name's colour and weight change only for state that needs you,** such as a reply you haven't read. Which one is selected or open shows in its background or underline instead, and its name looks as it does when it isn't. Names are read side by side, so any change to one reads as news, and macOS's font smoothing thickens brighter text, so a name that brightened would look heavier too.
-- **Code is Menlo at 12px,** set once in the theme.
+- **Code is Menlo at 12px,** set once, as `look::Type` has it, and given to the kit's theme from there.
+- **Every kind of text the app sets has a name for what it's for,** so a size means the same wherever it's set, and two kinds that are the same size today, such as details and code, can change apart. What's set takes one of them by its name, rather than a font or a size by its value, and text that stands out from what's around it takes emphasis rather than a weight. `look::Type` holds them, and the kit's theme is given the rem, and code's font and size, from there, so the kit's own parts agree.
 - **Text in different sizes or fonts along one line sits on one baseline,** as the words of a sentence do, such as the workspace header's title beside its branch, in the code font, and where that started, both smaller. Centred one by one, smaller text would ride higher than what's beside it. An icon stays centred, and so does text on a shape, such as a pill, a chip or a button, since it's the shape that's lined up. `look::LineText` sets them. *Unconfirmed.*
+
+**Every kind of text, by its name.** Each is a kind in `look::Type`, at the app's scale, where a rem is 16px. One with no weight of its own takes what's around it, which is regular unless it's given emphasis.
+
+| Name | Font | Size | Weight | For |
+|---|---|---|---|---|
+| `PageTitle` | System | 24px | Medium | A page's name, such as each of Settings' pages: the largest kind, since it says where you are |
+| `Heading` | System | 16px | Medium | What an empty pane says is missing, above why |
+| `Body` | System | 14px | As around it | What to read: what the agent wrote, a prompt, a call's line, a row's name, and most of the rest |
+| `Detail` | System | 12px | As around it | Details beside or under what to read, such as a time, a count, a hint or a heading over a list |
+| `Code` | Menlo | 12px | As around it | Code: a command, a path, a file, or what a call put out |
+| `Key` | System | 10px | As around it | What a key says, such as the `F` of Settings' `⌘ F` |
+| `KeyHeld` | System | 7.5px | As around it | What's held with a key, such as Settings' `⌘`, smaller than the key that's pressed, as on the keys themselves |
+
+**Every kind of text, as the app sets it.**
+
+![Every kind of text](screens/type.png)
 
 ## Space and shape
 

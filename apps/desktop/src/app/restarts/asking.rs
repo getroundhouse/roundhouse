@@ -7,7 +7,7 @@ use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::dialog::{DialogAction, DialogClose, DialogFooter};
 use gpui_kit::{App, ParentElement as _, Styled as _, Window, div};
 
-use look::Hand as _;
+use look::{Hand as _, Typeset as _};
 
 use super::UpdateQuestion;
 
@@ -25,7 +25,7 @@ pub(super) fn open(
     let (restart, closed) = (Rc::new(restart), Rc::new(closed));
     window.open_dialog(cx, move |dialog, _, cx| {
         let (restart, closed) = (restart.clone(), closed.clone());
-        let detail = div().text_sm().text_color(look::colors(cx).text_muted).child(detail.clone());
+        let detail = div().typeset(look::Type::Body).text_color(look::colors(cx).text_muted).child(detail.clone());
         dialog
             .title(title)
             // Its two buttons are the ways out of it.

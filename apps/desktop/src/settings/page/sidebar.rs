@@ -10,7 +10,7 @@ use gpui_kit::{
     ParentElement as _, Pixels, Role, StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, Window, div,
     px, rems,
 };
-use look::Hand as _;
+use look::{Hand as _, Typeset as _};
 
 use super::{FIND_KEY, Page, PageId, Section};
 use crate::sidebar::HEADING_HEIGHT;
@@ -42,7 +42,7 @@ pub(super) fn sidebar(
             .px(ROW_INSET)
             .flex()
             .items_center()
-            .text_xs()
+            .typeset(look::Type::Detail)
             .text_color(colors.text_muted)
             .child(section.heading);
         let rows = section.pages.iter().map(|page| page_row(page, shown == Some(page.id), chosen, cx));
@@ -112,7 +112,7 @@ fn find_key(cx: &App) -> impl IntoElement {
     let parts = parts
         .into_iter()
         .enumerate()
-        .map(|(ix, part)| div().when(ix < pressed, |held| held.text_size(px(7.5))).child(part));
+        .map(|(ix, part)| div().when(ix < pressed, |held| held.typeset(look::Type::KeyHeld)).child(part));
     h_flex()
         .flex_none()
         .h(px(16.))
@@ -122,7 +122,7 @@ fn find_key(cx: &App) -> impl IntoElement {
         .border_1()
         .border_color(colors.control_edge)
         .bg(colors.raised)
-        .text_size(px(10.))
+        .typeset(look::Type::Key)
         .line_height(px(10.))
         .text_color(colors.text_muted)
         .children(parts)
@@ -155,7 +155,7 @@ fn page_row(page: &Page, showing: bool, chosen: &Entity<Option<PageId>>, cx: &Ap
         .px(ROW_INSET)
         .gap_3()
         .rounded(theme.radius)
-        .text_sm()
+        .typeset(look::Type::Body)
         .text_color(colors.text)
         .hand()
         .when(showing, |row| row.bg(fill))

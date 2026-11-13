@@ -5,6 +5,7 @@
 use gpui_kit::component::h_flex;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{AnyElement, App, IntoElement, ParentElement as _, Styled as _, div, px};
+use look::Typeset as _;
 
 use crate::file_tree::split;
 use crate::file_view::HEADER_HEIGHT;
@@ -39,7 +40,7 @@ pub(crate) fn file_header(path: &str, note: Option<String>, end: Option<AnyEleme
         .gap_2()
         .border_b_1()
         .border_color(colors.edge)
-        .text_sm()
+        .typeset(look::Type::Body)
         .child(pill)
         .children(note.map(|note| {
             div()

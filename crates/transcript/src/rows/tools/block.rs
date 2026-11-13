@@ -3,11 +3,12 @@
 
 use std::borrow::Cow;
 
-use gpui_kit::component::{ActiveTheme as _, v_flex};
+use gpui_kit::component::v_flex;
 use gpui_kit::{
     AnyElement, App, Div, ElementId, HighlightStyle, Hsla, InteractiveElement, IntoElement, ParentElement,
     SharedString, Styled, TestSupportExt as _, div, px,
 };
+use look::Typeset as _;
 
 use super::Toggle;
 use super::highlight::spans;
@@ -62,12 +63,7 @@ pub(super) fn found_label(toggle: &Toggle, part: Part, text: &str, cx: &App) -> 
 }
 
 fn faint(cx: &App) -> Div {
-    div()
-        .px_3()
-        .pt_2()
-        .font_family(cx.theme().mono_font_family.clone())
-        .text_xs()
-        .text_color(look::colors(cx).text_faint)
+    div().px_3().pt_2().typeset(look::Type::Code).text_color(look::colors(cx).text_faint)
 }
 
 /// What [`output`] and [`lines`] draw of `text`: a short output without the blank lines at its end, and a long one
@@ -84,13 +80,13 @@ pub(in crate::rows) fn output(toggle: &Toggle, part: Part, text: &str, color: Hs
     let marks = toggle.marks(part, &shown);
     let drags = &toggle.shared.selection;
     if text.len() > LOG_BLOCK_ABOVE {
-        let font = cx.theme().mono_font_family.clone();
+        let font = look::Type::Code.family(cx);
         let log = LogBlock { log: LogText::new(&shown), color, font, marks, area: Some(area) };
-        return scrolling(toggle.find, drags, &id, printed(&id, log.into_any_element(), color, cx)).into_any_element();
+        return scrolling(toggle.find, drags, &id, printed(&id, log.into_any_element(), color)).into_any_element();
     }
     let said: SharedString = shown.into_owned().into();
     let (drawn, layout) = find::marked_with_layout(said.clone(), &marks, &[], Some(area));
-    let selectable = selectable(toggle, part, &id, printed(&id, drawn, color, cx), said, Pieces::whole(layout));
+    let selectable = selectable(toggle, part, &id, printed(&id, drawn, color), said, Pieces::whole(layout));
     scrolling(toggle.find, drags, &id, selectable).into_any_element()
 }
 
@@ -114,7 +110,7 @@ pub(super) fn lines(toggle: &Toggle, part: Part, text: &str, cx: &App) -> AnyEle
     });
     let lines = v_flex().id(ElementId::from((id.clone(), "lines"))).gap(px(LINE_GAP)).children(lines);
     let selectable =
-        selectable(toggle, part, &id, printed(&id, lines.test_support().into_any_element(), color, cx), said, pieces);
+        selectable(toggle, part, &id, printed(&id, lines.test_support().into_any_element(), color), said, pieces);
     scrolling(toggle.find, &toggle.shared.selection, &id, selectable).into_any_element()
 }
 
@@ -134,14 +130,12 @@ pub(super) fn selectable(
 }
 
 /// Text that came back, `body`, in `color` and the code font, in the space a block gives it.
-fn printed(id: &ElementId, body: AnyElement, color: Hsla, cx: &App) -> AnyElement {
-    let theme = cx.theme();
+fn printed(id: &ElementId, body: AnyElement, color: Hsla) -> AnyElement {
     div()
         .id(id.clone())
         .px_3()
         .py_2()
-        .font_family(theme.mono_font_family.clone())
-        .text_size(theme.mono_font_size)
+        .typeset(look::Type::Code)
         .text_color(color)
         .child(body)
         .test_support()
@@ -182,7 +176,6 @@ pub(in crate::rows) fn images(images: &[Carried], cx: &App) -> AnyElement {
 /// Code in a block, the call's `part`, highlighted as `language`, after `prompt` in faint text. Its matches are found
 /// in the code, not the prompt.
 pub(super) fn code(toggle: &Toggle, part: Part, language: &str, prompt: &str, text: &str, cx: &App) -> AnyElement {
-    let theme = cx.theme();
     let colors = look::colors(cx);
     let id = part.element(toggle.key);
     let body: SharedString = code_text(text).to_string().into();
@@ -200,8 +193,7 @@ pub(super) fn code(toggle: &Toggle, part: Part, language: &str, prompt: &str, te
         .id(id.clone())
         .px_3()
         .py_2()
-        .font_family(theme.mono_font_family.clone())
-        .text_size(theme.mono_font_size)
+        .typeset(look::Type::Code)
         .text_color(colors.text)
         .child(marked(shown, &marks.moved(at), &styles, Some(scroll_id(&id))))
         .test_support();
@@ -218,7 +210,7 @@ pub(in crate::rows) fn code_text(text: &str) -> &str {
 pub(super) fn prose(toggle: &Toggle, part: Part, text: &str) -> AnyElement {
     let id = part.element(toggle.key);
     let view = written(toggle, part, text, Some(scroll_id(&id)), None);
-    let shown = div().id(id.clone()).px_3().py_2().text_sm().child(view).test_support();
+    let shown = div().id(id.clone()).px_3().py_2().typeset(look::Type::Body).child(view).test_support();
     scrolling(toggle.find, &toggle.shared.selection, &id, shown).into_any_element()
 }
 

@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use std::ops::Range;
 use std::rc::Rc;
 
-use gpui_kit::component::{ActiveTheme as _, v_flex};
+use gpui_kit::component::v_flex;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, AppContext, Context, DispatchPhase, Entity, EventEmitter, FocusHandle, Focusable, Hsla,
@@ -247,13 +247,12 @@ impl FileDiff {
         if rows.is_empty() {
             return placeholder("Nothing in this file's lines changed", look::colors(cx).text_muted);
         }
-        let theme = cx.theme();
-        let (mono, size) = (theme.mono_font_family.clone(), theme.mono_font_size);
+        let (mono, size) = (look::Type::Code.family(cx), look::Type::Code.size(window.rem_size()));
         let split = view::chosen(cx).split();
         let numbers =
             numbers_width(usize::try_from(highest(&shown.file, shown.sides.extent.lines())).unwrap_or(usize::MAX));
         let gutter = if split { numbers } else { numbers * 2. };
-        let advance = window.text_system().advance(window.text_system().resolve_font(&font(mono.clone())), size, 'm');
+        let advance = window.text_system().advance(window.text_system().resolve_font(&font(mono)), size, 'm');
         let widest = advance.map_or(px(0.), |advance| advance.width) * count(shown.sides.widest) + SIGN;
         self.list.set_code(Code { widest, columns: if split { 2 } else { 1 }, gutter: gutter + SIGN });
         let review = self.review.read(cx);
@@ -277,8 +276,6 @@ impl FileDiff {
         div()
             .relative()
             .size_full()
-            .font_family(mono)
-            .text_size(size)
             .line_height(LINE_HEIGHT)
             .on_mouse_down(MouseButton::Left, cx.listener(Self::select_from))
             .child(list)

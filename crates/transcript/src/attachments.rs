@@ -18,7 +18,7 @@ use gpui_kit::{
 };
 use image::ImageDecoder as _;
 use image::metadata::Orientation;
-use look::pixels;
+use look::{Typeset as _, pixels};
 use protocol::attachment::{Attachment, MediaType, describe_size};
 use protocol::model::Seq;
 
@@ -177,7 +177,7 @@ fn not_ready(file: &Carried, cx: &App) -> AnyElement {
         .flex()
         .items_center()
         .justify_center()
-        .text_xs()
+        .typeset(look::Type::Detail)
         .text_color(look::colors(cx).text_faint)
         .when(unreadable, |d| d.child(format!("Couldn't show {}", file.attachment.name)))
         .into_any_element()

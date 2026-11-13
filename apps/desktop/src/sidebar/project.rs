@@ -8,11 +8,10 @@ use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::{Icon, IconName, Sizable as _, h_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, AppContext as _, Context, Div, ElementId, FontWeight, Hsla, InteractiveElement as _, IntoElement,
-    MouseButton, ParentElement, Role, SharedString, StatefulInteractiveElement as _, Styled, TestSupportExt as _, div,
-    radians,
+    AnyElement, App, AppContext as _, Context, Div, ElementId, Hsla, InteractiveElement as _, IntoElement, MouseButton,
+    ParentElement, Role, SharedString, StatefulInteractiveElement as _, Styled, TestSupportExt as _, div, radians,
 };
-use look::Hand as _;
+use look::{Hand as _, Typeset as _};
 use protocol::model::{Repo, RepoId, WorkspaceId};
 
 use super::drag::{Dragged, Dragging};
@@ -36,7 +35,7 @@ pub(super) fn row(app: &AppView, repo: &Repo, collapsed: bool, out: f32, cx: &mu
     let its = app.records().workspaces().iter().filter(|w| w.repo_id == repo.id && lists(w));
     let to_look_at = if collapsed { its.filter(|w| needs_a_look(app, w, cx)).count() } else { 0 };
     let name_color = if to_look_at > 0 { text } else { muted };
-    let name = div().min_w_0().truncate().text_sm().font_weight(FontWeight::MEDIUM).text_color(name_color);
+    let name = div().min_w_0().truncate().typeset(look::Type::Body).emphasis().text_color(name_color);
     let to_look_at = (to_look_at > 0).then(|| needing_a_look(&repo.id, to_look_at, cx));
     let (dragged, this) = (Dragged(repo.id.clone()), cx.weak_entity());
     h_flex()
@@ -97,8 +96,8 @@ fn needing_a_look(repo: &RepoId, count: usize, cx: &App) -> impl IntoElement {
         .role(Role::Status)
         .aria_label(says)
         .flex_none()
-        .text_xs()
-        .font_weight(FontWeight::MEDIUM)
+        .typeset(look::Type::Detail)
+        .emphasis()
         .text_color(look::colors(cx).text)
         .child(count.to_string())
         .test_support()
