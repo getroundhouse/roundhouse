@@ -26,6 +26,8 @@ Each image shows only what its screen is about, such as a sidebar, the composer,
 
 A screen is confirmed the same way as a rule. One an agent adds, or changes before the owner has approved it, ends with *Unconfirmed*. Changing a confirmed screen's image needs the owner's approval, in the PR that changes it, where GitHub shows the old image beside the new one.
 
+`cargo run -p spec-page` draws the spec as a page for a browser, rule by rule, each beside the screens that show it, so an area is read and confirmed at one sitting, and with only what isn't confirmed if asked. A rule shows its words in bold, and the rest of it a click away, and says when it has no picture. It shows nothing the spec doesn't. It takes a screen's caption to be the paragraph right above it that starts in bold, or above the run of images it's in, and a screen with no caption shows as having none. A screen in a rule's list item, under the rule, shows beside that rule, and one on its own shows beside its caption. *Unconfirmed.*
+
 An image is exact about everything, including what nobody chose, such as how text is smoothed. So a GPUI upgrade or a font change can change confirmed images too, and those need approving the same way.
 
 The rules every screen follows, such as spacing, type and colour, are in `look.md`, the way `speed.md` holds the bars every area meets.

@@ -18,6 +18,7 @@ cargo run -p desktop --example look -- <workspace> diff --note "What it shows"  
 cargo test -p desktop --test ui gallery   # Every screen, from made-up data, against its image in docs/spec/screens, and every size of both styles of the app icon. No hub, no window
 ROUNDHOUSE_UPDATE_SCREENS=1 cargo test -p desktop --test ui gallery   # Accepts how they look now. A confirmed screen needs the owner
 cargo run -p guide -- OUT         # Builds docs/guide as the site's /docs/ pages in OUT, which mustn't exist, and refuses a link or a picture that isn't there. Run it after changing a page, as tools/guide/README.md says, since CI does
+cargo run -p spec-page            # The spec as a page in .context/spec/, each area's screens beside its rules, and which are confirmed. Open the path it prints
 tools/install.sh                  # Installs this commit as the app to use every day, outside target/. Run it by hand
 tools/package/package.sh          # Packages this commit as Roundhouse.app, unsigned, in target/package. Needs the .NET SDK
 tools/package/package-windows.sh --prebuilt DIR   # Packages Windows binaries, built on Windows by tools/build.sh, as the installer and its updates, unsigned. On a Mac or Linux, with the .NET SDK. `--arch arm64` for ARM64 ones
