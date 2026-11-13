@@ -67,7 +67,11 @@ pub(super) async fn supervise(
             };
             let _ = output.send(AgentOutput::event(notice, None)).await;
         }
-        let launched = match launch(&bin, &spec, resume, &options) {
+        if let Some(tap) = &shared.tap {
+            let (code, signal) = status.as_ref().map_or((None, None), |s| (s.code(), signal_of(*s)));
+            tap.exited(code, signal, false);
+        }
+        let launched = match launch(&bin, &spec, resume, &options, shared.tap.as_ref()) {
             Ok(launched) => launched,
             Err(e) => {
                 warn!("relaunch failed: {e:#}");
@@ -83,7 +87,7 @@ pub(super) async fn supervise(
         plan::start_in(spec.settings.permission_mode, &shared, &mut stdin, &output).await;
         let prompts = shared.unconfirmed_prompts.lock().clone();
         for prompt in prompts {
-            if let Err(e) = write_to(&mut stdin, &prompt).await {
+            if let Err(e) = write_to(shared.tap.as_ref(), &mut stdin, &prompt).await {
                 warn!("could not replay a prompt after relaunching: {e:#}");
             }
         }
@@ -116,6 +120,9 @@ async fn finish(
     }
     let (code, signal) = status.map_or((None, None), |s| (s.code(), signal_of(s)));
     let requested = shared.stop_requested.load(Ordering::SeqCst);
+    if let Some(tap) = &shared.tap {
+        tap.exited(code, signal, requested);
+    }
     shared.context.lock().close();
     shared.usage.lock().close();
     let _ = output.send(AgentOutput::Exited { code, signal, stderr_tail, requested }).await;

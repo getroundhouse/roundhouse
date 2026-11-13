@@ -33,7 +33,7 @@ pub(super) async fn start_in(
     }
     let asked = ask(shared, &json!({"subtype": "set_permission_mode", "mode": mode::name(chat_mode)}));
     shared.entering_plan.store(true, Ordering::SeqCst);
-    if let Err(e) = write_to(stdin, &asked.line).await {
+    if let Err(e) = write_to(shared.tap.as_ref(), stdin, &asked.line).await {
         shared.pending_controls.lock().remove(&asked.request_id);
         shared.entering_plan.store(false, Ordering::SeqCst);
         debug!("could not ask the CLI into plan mode, since it has gone: {e:#}");

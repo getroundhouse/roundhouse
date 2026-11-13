@@ -40,6 +40,7 @@ The guide is the one kind written for someone using the product rather than buil
 | `docs/performance.md` | Reference | Agents | How to measure the desktop app's speed, and what helps it meet the bars |
 | `docs/inspiration.md` | Reference | Agents | What Conductor does, as a source of ideas |
 | `AGENTS.md` | Instructions | Owner | How to build and test, and the rules for working here |
+| `docs/conformance.md` | Instructions | Agents | How a version of an agent's CLI is checked against what Roundhouse needs of it, and how to play the scenarios that check it |
 | `mobile-poc/README.md` | Instructions | Agents | How to build and run the mobile proof of concept |
 | `mobile-poc/test-server/README.md` | Instructions | Agents | The simulated hub for testing clients on a phone |
 | `site/README.md` | Instructions | Agents | How to preview the marketing site, and how it follows the app's look |

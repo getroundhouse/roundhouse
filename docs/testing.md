@@ -12,6 +12,7 @@ Where each kind of test goes. How to write a test is in `docs/rust.md`, the comm
 | The repo's rules | Dependencies, licenses, file length and lint inheritance, against the real dependency graph | `tools/policy/` |
 | The guide's tool | That it publishes each page as a directory, and refuses a link, a heading or a picture that isn't there, against made-up guides. CI's `guide` job builds the real one, since a change to only its Markdown runs no test | `tools/guide/tests/` |
 | Publishing updates | That a release signs only a feed it computed, finishes after stopping partway, and reads back as apps would, against a directory standing in for the bucket | `tools/package/test_publish.py` |
+| An agent's CLI | That a version of it does what Roundhouse needs, by scenarios played through its adapter against a scripted model and the real one, whose scripted captures are replayed through the adapter. By hand against the CLI, on a Mac, and the replays in `cargo test` | `crates/agents/src/conformance/`, and `crates/agents/tests/claude/conformance.rs` |
 | The real CLI | That the fake agent is still honest. By hand, since it costs money | `tools/smoke/` |
 
 The window is tested through its real UI, by clicking and typing in the kit's headless windows, against a real hub process and real git, with only the agent faked. That keeps test code out of the product and windows off the screen, and it catches what a screenshot can't, such as a click that silently does nothing.

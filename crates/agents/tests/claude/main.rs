@@ -3,6 +3,8 @@
 #![cfg(test)]
 
 mod background;
+#[cfg(unix)]
+mod conformance;
 mod contract;
 mod controls;
 mod process;

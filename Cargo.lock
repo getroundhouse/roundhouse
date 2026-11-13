@@ -113,12 +113,17 @@ dependencies = [
 name = "agents"
 version = "0.1.0"
 dependencies = [
+ "agents",
  "async-trait",
  "chrono",
+ "http-body-util",
+ "hyper",
+ "hyper-util",
  "parking_lot",
  "private-files",
  "process",
  "protocol",
+ "serde",
  "serde_json",
  "tempfile",
  "thiserror 2.0.21",
@@ -3609,6 +3614,7 @@ dependencies = [
  "http",
  "http-body",
  "pin-project-lite",
+ "tokio",
 ]
 
 [[package]]

@@ -37,6 +37,9 @@ pub(super) async fn read_stdout(stdout: ChildStdout, shared: Arc<Shared>, output
     let mut normalizer = Normalizer::default();
     let mut answering = Answering::default();
     while let Some(line) = next_line(&mut reader, &mut buffer).await {
+        if let Some(tap) = &shared.tap {
+            tap.read(&line);
+        }
         if line.trim().is_empty() {
             continue;
         }
