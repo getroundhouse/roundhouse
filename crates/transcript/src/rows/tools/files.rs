@@ -36,7 +36,7 @@ pub(super) fn read(file: &ReadFile, answer: Option<&Answer>, toggle: &Toggle, cx
     let read = Read::of(answer);
     let title = amount(read.lines.len(), read.images.len()).map_or_else(|| "Read".to_string(), |n| format!("Read {n}"));
     let line = Line::new(IconName::FileText, title).part(chip(file.path));
-    let output = |text| block::output(toggle, Text::Output, text, cx.theme().muted_foreground, cx);
+    let output = |text| block::output(toggle, Text::Output, text, look::colors(cx).text_muted, cx);
     let opened = || {
         if read.lines.is_empty() && read.images.is_empty() {
             read.text.map(|text| block::frame(cx).child(output(text)).into_any_element())

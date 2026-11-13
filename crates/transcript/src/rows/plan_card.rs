@@ -2,7 +2,7 @@
 //! the composer's place, as `questions` says.
 
 use client_core::Approval;
-use gpui_kit::component::{ActiveTheme as _, h_flex};
+use gpui_kit::component::h_flex;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, ClickEvent, Div, ElementId, FontWeight, IntoElement, ParentElement, Styled, Window, div,
@@ -56,5 +56,5 @@ pub(super) fn plan_card(seq: Seq, body: &EventBody, open: bool, shared: &Shared,
 
 /// A card that waits on the person. While it waits, it has an amber edge and a faint amber wash.
 fn waiting_card(open: bool, cx: &App) -> Div {
-    card::tinted(open.then(|| cx.theme().warning), cx)
+    card::tinted(open.then(|| look::colors(cx).needs_you), cx)
 }

@@ -271,7 +271,7 @@ pub(super) fn drawn(
     let whole =
         failed.map(|failed| failed.output).filter(|text| toggle.open && !line.shows_output && !text.trim().is_empty());
     let whole = whole.map(|text| {
-        let output = block::output(toggle, Text::Error, text, cx.theme().muted_foreground, cx);
+        let output = block::output(toggle, Text::Error, text, look::colors(cx).text_muted, cx);
         block::frame(cx).child(output)
     });
     let opened = if toggle.open { opened() } else { None };
