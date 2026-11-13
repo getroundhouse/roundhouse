@@ -14,7 +14,7 @@ pub struct Create {
     /// Ignored by a provider without [`Feature::Sizes`](super::Feature::Sizes).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub size: Option<Size>,
-    /// What the instance is called in the provider's own tools, such as `roundhouse-holly`.
+    /// What the instance is called in the provider's own tools, such as `roundhouse-euston`.
     pub display_name: String,
 }
 

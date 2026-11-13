@@ -3626,6 +3626,7 @@ name = "hub"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "fastrand",
  "parking_lot",
  "process",
  "proptest",

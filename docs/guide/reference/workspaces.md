@@ -24,7 +24,7 @@ Making a workspace, its setup, its name and title, and archiving it. [Workspaces
 | | |
 |---|---|
 | **A worktree** | In `~/roundhouse/workspaces`, on a new branch from the repository's default branch, fetched first |
-| **A name** | Such as `holly`: its directory, and the folder its branches go in, so it starts on `holly/start` |
+| **A name** | Such as `euston`: its directory, and the folder its branches go in, so it starts on `euston/start`. One you don't choose is a railway station's, with a number, such as `euston-2`, when git or a workspace made at the same moment already has it |
 | **Ten ports** | The first is `CONDUCTOR_PORT` |
 | **A first chat** | Which takes the prompt from the dialog |
 

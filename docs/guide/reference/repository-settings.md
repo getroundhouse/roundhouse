@@ -53,7 +53,7 @@ Set for both scripts, and for every agent in the workspace.
 
 | Variable | What it holds |
 |---|---|
-| `CONDUCTOR_WORKSPACE_NAME` | The workspace's name, such as `holly` |
+| `CONDUCTOR_WORKSPACE_NAME` | The workspace's name, such as `euston` |
 | `CONDUCTOR_WORKSPACE_ID` | The workspace's ID |
 | `CONDUCTOR_WORKSPACE_PATH` | The worktree's path |
 | `CONDUCTOR_ROOT_PATH` | The repository's path |

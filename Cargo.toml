@@ -64,6 +64,8 @@ base64 = "0.22.1"
 # Already under GPUI. Says when something happened in the local time zone.
 chrono = { version = "0.4.45", default-features = false, features = ["clock"] }
 clap = { version = "4.6.7", features = ["derive"] }
+# Already under GPUI. Picks the names the hub gives workspaces at random.
+fastrand = "2.5.0"
 flume = "0.11.1"
 # Already under GPUI. Compresses what a test serves, as a web server would.
 flate2 = "1.1.11"

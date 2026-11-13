@@ -129,7 +129,7 @@ ids!(
     /// A commit, by the full object ID git gives it. It holds any string, as every ID here does, so it's the worker
     /// reading it that refuses one that isn't a full object ID.
     CommitId,
-    /// A branch, by its name without `refs/heads/`, such as `aspen`, as git spells it.
+    /// A branch, by its name without `refs/heads/`, such as `euston`, as git spells it.
     BranchName,
     /// A remote of a repository, such as `origin`, as git's config names it.
     RemoteName,
@@ -254,7 +254,7 @@ pub struct Workspace {
     /// it. While it's being made it can take another, if git already has a directory, a branch or a folder of
     /// branches by the one it has.
     pub name: String,
-    /// The branch it started on, `holly/start` for `holly`, or `holly` itself for one made before its branches went in
+    /// The branch it started on, `euston/start` for `euston`, or `euston` itself for one made before its branches went in
     /// a folder. Once it's archived, the branch it had checked out, which restoring checks out again.
     pub branch: BranchName,
     /// What the branch was created from, such as `origin/main`. Diffs are taken against this.

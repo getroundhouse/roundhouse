@@ -46,7 +46,7 @@ For work that should be its own pull request, make another workspace. You can op
 The same thing, from [the command line](../reference/command-line.md):
 
 ```sh
-roundhouse workspace create my-project   # Prints the new workspace's name, such as holly
-roundhouse session new holly
-roundhouse send holly "Fix the login redirect"
+roundhouse workspace create my-project   # Prints the new workspace's name, such as euston
+roundhouse session new euston
+roundhouse send euston "Fix the login redirect"
 ```
