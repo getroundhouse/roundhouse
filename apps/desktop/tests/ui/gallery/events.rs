@@ -29,7 +29,7 @@ pub(crate) fn text_pointing(message: &str, text: &str, images: Vec<LinkedImage>)
 }
 
 pub(crate) fn tool_use(message: &str, id: &str, name: &str, input: serde_json::Value) -> EventBody {
-    from_the_agent(message, ContentBlock::ToolUse { id: id.into(), name: name.to_string(), input })
+    from_the_agent(message, ContentBlock::ToolUse { id: id.into(), name: name.to_string(), input, call: None })
 }
 
 /// What the agent thought, as its own message.
@@ -97,7 +97,16 @@ fn tool_answer(id: &str, text: &str, is_error: bool, change: Option<FileChange>)
 
 fn answer(id: &str, text: &str, is_error: bool, change: Option<FileChange>) -> ContentBlock {
     let (tool_use_id, text, images) = (ToolUseId::from(id), text.to_string(), Vec::new());
-    ContentBlock::ToolResult { tool_use_id, is_error, text, images, change, encrypted: false }
+    ContentBlock::ToolResult {
+        tool_use_id,
+        is_error,
+        text,
+        images,
+        change,
+        encrypted: false,
+        call: None,
+        exit_code: None,
+    }
 }
 
 /// The end of a turn that went well. Opus answered, and read most of what it was sent from the cache, as a turn that

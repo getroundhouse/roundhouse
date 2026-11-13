@@ -33,5 +33,7 @@ pub(super) fn result(value: &Value) -> ContentBlock {
         images: Vec::new(),
         change: None,
         encrypted,
+        call: None,
+        exit_code: None,
     }
 }

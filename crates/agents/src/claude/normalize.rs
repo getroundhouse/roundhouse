@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 
 use protocol::attachment::NewAttachment;
-use protocol::event::{AgentRunState, ApprovalOutcome, ContentBlock, EventBody};
+use protocol::event::{AgentRunState, ApprovalOutcome, EventBody};
 use protocol::model::{CacheRequest, MessageId, ToolUseId};
 use protocol::tail::{BlockKind, DeltaChange, StreamDelta};
 use serde_json::Value;
@@ -22,6 +22,7 @@ use tasks::Tasks;
 use turn_end::{TurnModels, turn_ended};
 
 mod advisor;
+mod blocks;
 mod calls;
 mod compaction;
 mod file_change;
@@ -287,44 +288,9 @@ fn assistant(value: &Value) -> EventBody {
         message_id: id_of(message, "id"),
         parent_tool_use_id: id_of(value, "parent_tool_use_id"),
         model: str_of(message, "model").filter(|model| *model != NO_MODEL).map(str::to_string),
-        blocks: blocks(message.get("content")),
+        blocks: blocks::read(message.get("content")),
         // A Normalizer knows it from the deltas before.
         first_index: None,
-    }
-}
-
-fn blocks(content: Option<&Value>) -> Vec<ContentBlock> {
-    match content {
-        Some(Value::String(text)) => vec![ContentBlock::Text { text: text.clone(), images: Vec::new() }],
-        Some(Value::Array(items)) => items.iter().map(block).collect(),
-        _ => Vec::new(),
-    }
-}
-
-fn block(value: &Value) -> ContentBlock {
-    match str_of(value, "type") {
-        Some("text") => ContentBlock::Text { text: string_of(value, "text").unwrap_or_default(), images: Vec::new() },
-        Some("thinking") => ContentBlock::Thinking { text: string_of(value, "thinking").unwrap_or_default() },
-        // A tool the API runs itself, such as the advisor, is called the same way.
-        Some("tool_use" | "server_tool_use") => ContentBlock::ToolUse {
-            id: string_of(value, "id").unwrap_or_default().into(),
-            name: string_of(value, "name").unwrap_or_default(),
-            input: value.get("input").cloned().unwrap_or(Value::Null),
-        },
-        Some("tool_result") => ContentBlock::ToolResult {
-            tool_use_id: string_of(value, "tool_use_id").unwrap_or_default().into(),
-            is_error: value.get("is_error").and_then(Value::as_bool).unwrap_or(false),
-            text: result_text::read(value.get("content")),
-            // Only a user line's results have images, and `images` takes them from it.
-            images: Vec::new(),
-            change: None,
-            encrypted: false,
-        },
-        Some("advisor_tool_result") => advisor::result(value),
-        Some("image") => {
-            ContentBlock::Image { media_type: value.get("source").and_then(|s| string_of(s, "media_type")) }
-        }
-        _ => ContentBlock::Unknown,
     }
 }
 

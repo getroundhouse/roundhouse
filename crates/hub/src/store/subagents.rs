@@ -153,8 +153,8 @@ fn read_recent(json: Option<&str>) -> RecentWork {
 }
 
 fn call_in(block: &ContentBlock) -> Option<Call> {
-    let ContentBlock::ToolUse { id, name, input } = block else { return None };
-    Some(Call { id: id.clone(), name: name.clone(), input: input.clone() })
+    let ContentBlock::ToolUse { id, name, input, call } = block else { return None };
+    Some(Call { id: id.clone(), name: name.clone(), input: input.clone(), kind: call.clone() })
 }
 
 fn subagent_from_row(row: &Row<'_>) -> rusqlite::Result<Subagent> {

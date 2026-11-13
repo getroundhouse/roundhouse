@@ -49,7 +49,7 @@ fn a_question_is_drawn_only_once_it_s_no_longer_waiting() {
 fn a_request_its_adapter_says_asks_questions_is_drawn_as_one() {
     let question = Question { text: "Red or blue?".into(), header: None, options: Vec::new(), multiple: false };
     let questions = asking("q", Asking::Questions { questions: vec![question.clone()] });
-    let tool = asking("t", Asking::ToolUse);
+    let tool = asking("t", Asking::ToolUse { call: None });
     let answered = closed_by_position("q", vec![QuestionAnswer { picked: Vec::new(), typed: Some("Blue".into()) }]);
     let log = log([event(1, questions.clone()), event(2, answered.clone()), event(3, tool.clone())]);
     let m = Model::default();
@@ -153,9 +153,15 @@ fn a_working_subagent_s_latest_images_are_fetched_once_its_call_under_working_on
     let mut log = SessionLog::by_place(0);
     log.apply_event(SessionEvent { place: Place::new(1), ..event(1, agent.clone()) });
     let image = Attachment { id: "i1".into(), name: "image".into(), media_type: MediaType::Png, size_bytes: 1 };
-    let read = Call { id: "read".into(), name: "Read".into(), input: json!({ "file_path": "a.png" }) };
-    let came_back =
-        CallResult { is_error: false, text: String::new(), cut: false, images: vec![image], encrypted: false };
+    let read = Call { id: "read".into(), name: "Read".into(), input: json!({ "file_path": "a.png" }), kind: None };
+    let came_back = CallResult {
+        is_error: false,
+        text: String::new(),
+        cut: false,
+        images: vec![image],
+        encrypted: false,
+        exit_code: None,
+    };
     let recent =
         RecentWork { calls: vec![RecentCall { before: None, call: read, result: Some(came_back) }], since: None };
     let mut m = Model::default();

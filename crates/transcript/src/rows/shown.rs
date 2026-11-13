@@ -217,9 +217,10 @@ pub(in crate::rows) fn of_block(block: &ContentBlock, drawing: &BlockAround, in_
         ContentBlock::Thinking { text } => gather.inside(key, Fold::Thinking, |gather| {
             gather.written(key, Part::Thinking, text);
         }),
-        ContentBlock::ToolUse { name, .. } if calls::drawn_from_its_approval(name) => {}
-        ContentBlock::ToolUse { name, input, .. } => {
-            tools::shown(key, name, input, &drawing.reply, drawing.subagent.as_ref(), gather);
+        ContentBlock::ToolUse { name, call, .. } if calls::drawn_from_its_approval(call.as_ref(), name) => {}
+        ContentBlock::ToolUse { name, input, call, .. } => {
+            let made = tools::Made { said: call.as_ref(), name, input };
+            tools::shown(key, made, &drawing.reply, drawing.subagent.as_ref(), gather);
         }
         ContentBlock::ToolResult { .. } if drawing.with_call => {}
         ContentBlock::ToolResult { .. } => {

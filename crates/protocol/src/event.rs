@@ -18,6 +18,7 @@ use crate::prompt::Prompt;
 
 pub use approval::{ApprovalDecision, ApprovalOutcome};
 pub use asking::{Asking, Question, QuestionAnswer, QuestionOption};
+pub use call::CallKind;
 pub use compaction::{CompactedBy, CompactionOutcome};
 pub use content::{ContentBlock, LinkedImage};
 pub use ending::{ExitReason, SubagentOutcome, TurnOutcome};
@@ -27,6 +28,7 @@ pub use tokens::TokenUsage;
 
 mod approval;
 mod asking;
+mod call;
 mod compaction;
 mod content;
 mod ending;

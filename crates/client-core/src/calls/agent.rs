@@ -6,12 +6,7 @@ use serde_json::Value;
 
 use super::{description, str_field};
 
-/// The tools that hand work to a subagent. Claude calls it `Agent`, and called it `Task`.
-pub fn hands_off(name: &str) -> bool {
-    matches!(name, "Agent" | "Task")
-}
-
-/// A call to one of them. Every input is optional, so the call is always drawn as one, and the subagent's work,
+/// A call that hands work to a subagent. Every input is optional, so the call is always drawn as one, and the subagent's work,
 /// which is left out of its own rows, always shows in it.
 pub struct Agent<'a> {
     /// What the agent said the subagent is for.
@@ -64,7 +59,7 @@ pub fn only_launched(text: &str) -> bool {
 mod tests {
     use serde_json::json;
 
-    use super::{Agent, hands_off, only_launched, shown_kind};
+    use super::{Agent, only_launched, shown_kind};
     use crate::calls::ToolCall;
 
     #[test]
@@ -76,7 +71,6 @@ mod tests {
 
         assert_eq!(agent.title(), "Find where signals are checked");
         assert_eq!(agent.kind, Some("Explore"));
-        assert!(hands_off("Agent") && hands_off("Task"));
     }
 
     #[test]
@@ -96,7 +90,7 @@ mod tests {
     #[test]
     fn a_hand_off_is_drawn_as_one_whatever_its_input() {
         for input in [json!({}), json!({ "description": "Look" }), json!({ "prompt": 3 })] {
-            assert!(matches!(ToolCall::read("Agent", &input), ToolCall::Agent(_)), "{input}");
+            assert!(matches!(ToolCall::read(None, "Agent", &input), ToolCall::Agent(_)), "{input}");
         }
     }
 

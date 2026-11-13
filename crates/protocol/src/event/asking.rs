@@ -4,13 +4,20 @@
 
 use serde::{Deserialize, Serialize};
 
+use super::CallKind;
+
 /// What an approval asks. One this build doesn't know reads as `Unknown`, which a client asks about as it would a
 /// tool's use, by the request's tool and input.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Asking {
     /// Whether the agent may use a tool, as the request's tool and input say.
-    ToolUse,
+    ToolUse {
+        /// What kind of call that use is, as the agent's adapter read it. `None` in one recorded before adapters
+        /// said, which a client reads from the tool's name as Claude's were then.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        call: Option<CallKind>,
+    },
     /// Questions asked together, in the order they're to be answered. What's asked is an answer rather than a yes.
     Questions {
         #[serde(default)]
@@ -24,6 +31,16 @@ pub enum Asking {
     },
     #[serde(other)]
     Unknown,
+}
+
+impl Asking {
+    /// What kind of call the tool's use it asks about is, when it asks about one and the agent's adapter said.
+    pub fn call(&self) -> Option<&CallKind> {
+        match self {
+            Asking::ToolUse { call } => call.as_ref(),
+            Asking::Questions { .. } | Asking::Plan { .. } | Asking::Unknown => None,
+        }
+    }
 }
 
 /// One question the agent asks the person.

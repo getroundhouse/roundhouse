@@ -268,7 +268,7 @@ pub(super) fn drawn(
     let whole = failed.map(failure::output).filter(|text| toggle.open && !line.shows_output && !text.trim().is_empty());
     v_flex()
         .child(line.render(toggle, cx))
-        .when_some(failed, |d, text| d.child(failure(&Failure::read(text), cx)))
+        .when_some(failed, |d, failed| d.child(failure(&Failure::read(failed), cx)))
         .when_some(whole, |d, text| {
             let output = block::output(toggle, Text::Error, text, cx.theme().muted_foreground, cx);
             d.child(block::frame(cx).child(output))

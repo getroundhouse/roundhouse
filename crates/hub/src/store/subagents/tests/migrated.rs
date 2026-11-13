@@ -60,7 +60,8 @@ fn rows(lines: &[Line]) -> String {
 #[test]
 fn a_migrated_log_fills_in_each_subagents_record_as_the_hub_would_have_kept_it() {
     let dir = tempfile::tempdir().unwrap();
-    let grep = ContentBlock::ToolUse { id: "grep".into(), name: "Grep".into(), input: json!({"pattern": "test"}) };
+    let grep =
+        ContentBlock::ToolUse { id: "grep".into(), name: "Grep".into(), input: json!({"pattern": "test"}), call: None };
     let mut failed_start = task_started(14, "t2", "local_agent", &json!("failed"));
     failed_start.body = started("failed");
     let mut failed_end = task_notification(15, "t2", "failed");
@@ -110,7 +111,7 @@ fn a_migrated_log_fills_in_each_subagents_record_as_the_hub_would_have_kept_it()
     let finished = &subagents[0];
     assert_eq!((finished.kind.as_deref(), finished.description.as_deref()), (Some("Explore"), Some("Find the tests")));
     assert_eq!((finished.prompt.as_deref(), finished.in_background), (Some("Find where the tests live."), true));
-    let grep = Call { id: "grep".into(), name: "Grep".into(), input: json!({"pattern": "test"}) };
+    let grep = Call { id: "grep".into(), name: "Grep".into(), input: json!({"pattern": "test"}), kind: None };
     assert_eq!(finished.latest_call.as_ref(), Some(&grep));
     assert!(!subagents[1].in_background);
     assert!(subagents.iter().all(|s| s.rev > Rev::default() && s.rev <= rev));

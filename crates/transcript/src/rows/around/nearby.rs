@@ -1,6 +1,7 @@
 //! Finding events near another in the log, for what drawing it needs from other rows, such as a call's result. An
 //! event's row is the log's to say, since a log of the agent's own events or one subagent's holds only some `seq`s.
 
+use client_core::calls;
 use client_core::session_log::{Row, SessionLog};
 use protocol::event::{ContentBlock, EventBody, SessionEvent};
 use protocol::model::{PermissionMode, Seq, ToolUseId};
@@ -18,13 +19,13 @@ pub(super) fn events_before(log: &SessionLog, seq: Seq, reach: usize) -> impl It
 }
 
 /// The call `id`, among the events as far as `reach` rows before the one at `seq`: the seq of the event it's in,
-/// and its tool's name.
-pub(super) fn call_before<'a>(log: &'a SessionLog, seq: Seq, id: &ToolUseId, reach: usize) -> Option<(Seq, &'a str)> {
+/// and whether it hands work to a subagent.
+pub(super) fn call_before(log: &SessionLog, seq: Seq, id: &ToolUseId, reach: usize) -> Option<(Seq, bool)> {
     events_before(log, seq, reach).find_map(|event| {
         let EventBody::Assistant { blocks, .. } = &event.body else { return None };
         blocks.iter().find_map(|block| {
-            let ContentBlock::ToolUse { id: call, name, .. } = block else { return None };
-            (call == id).then_some((event.seq, name.as_str()))
+            let ContentBlock::ToolUse { id: made, name, call, .. } = block else { return None };
+            (made == id).then(|| (event.seq, calls::hands_off(call.as_ref(), name)))
         })
     })
 }
@@ -97,7 +98,7 @@ mod tests {
     fn a_call_is_found_by_its_id_among_the_events_before() {
         let log = log([event(1, calls(&["a"])), event(2, calls(&["b", "c"])), event(3, result("c"))]);
 
-        assert_eq!(call_before(&log, 3, &"c".into(), 5), Some((2, "Bash")));
+        assert_eq!(call_before(&log, 3, &"c".into(), 5), Some((2, false)), "a command, which hands nothing off");
         assert_eq!(call_before(&log, 3, &"a".into(), 1), None, "further back than it looks");
         assert_eq!(call_before(&log, 3, &"d".into(), 5), None);
     }

@@ -365,9 +365,10 @@ fn render_block(
         ContentBlock::Thinking { text } if text.is_empty() => return None,
         ContentBlock::Thinking { text } => thinking::draw(text, &toggle, cx),
         // These are drawn from their approvals, which have everything that was asked.
-        ContentBlock::ToolUse { name, .. } if calls::drawn_from_its_approval(name) => return None,
-        ContentBlock::ToolUse { name, input, .. } => {
-            tools::call(&toggle, name, input, &drawing.reply, drawing.subagent.as_ref(), cx)
+        ContentBlock::ToolUse { name, call, .. } if calls::drawn_from_its_approval(call.as_ref(), name) => return None,
+        ContentBlock::ToolUse { name, input, call, .. } => {
+            let made = tools::Made { said: call.as_ref(), name, input };
+            tools::call(&toggle, made, &drawing.reply, drawing.subagent.as_ref(), cx)
         }
         ContentBlock::ToolResult { .. } if drawing.with_call => return None,
         ContentBlock::ToolResult { .. } => tools::result(&toggle, drawing.reply.result()?, cx),

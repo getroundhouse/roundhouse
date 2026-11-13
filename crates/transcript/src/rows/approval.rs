@@ -50,9 +50,10 @@ pub(super) fn approval_card(seq: Seq, body: &EventBody, open: bool, shared: &Sha
                 .child(answer_button("approve-plan", "Approve plan", allow).primary())
                 .child(answer_button("keep-planning", "Keep planning", approval.refused())),
         ),
-        Asking::ToolUse | Asking::Questions { .. } | Asking::Unknown => {
+        Asking::ToolUse { .. } | Asking::Questions { .. } | Asking::Unknown => {
             let deny = answer_button("deny", "Deny", approval.refused());
-            let summary = description.clone().or_else(|| ToolCall::read(tool_name, input).summary());
+            let summary =
+                description.clone().or_else(|| ToolCall::read(approval.asking().call(), tool_name, input).summary());
             (
                 format!("{tool_name} needs approval"),
                 div()

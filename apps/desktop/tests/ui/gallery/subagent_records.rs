@@ -68,9 +68,10 @@ pub(crate) fn records_of(log: &[SessionEvent]) -> Vec<Subagent> {
 /// What one of a subagent's blocks adds to its record: its calls, and while it works, what it's done lately, as the hub
 /// keeps them, but for cutting a long text short, which the screens' texts never are.
 fn note(subagent: &mut Subagent, block: &ContentBlock) {
-    if let ContentBlock::ToolUse { id, name, input } = block {
+    if let ContentBlock::ToolUse { id, name, input, call } = block {
         subagent.calls += 1;
-        subagent.latest_call = Some(Call { id: id.clone(), name: name.clone(), input: input.clone() });
+        let (id, name, input) = (id.clone(), name.clone(), input.clone());
+        subagent.latest_call = Some(Call { id, name, input, kind: call.clone() });
     }
     if subagent.status != SubagentStatus::Working {
         return;
@@ -84,8 +85,8 @@ fn note(subagent: &mut Subagent, block: &ContentBlock) {
             };
             work.since = Some(Said { text, cut: false });
         }
-        ContentBlock::ToolUse { id, name, input } => {
-            let call = Call { id: id.clone(), name: name.clone(), input: input.clone() };
+        ContentBlock::ToolUse { id, name, input, call } => {
+            let call = Call { id: id.clone(), name: name.clone(), input: input.clone(), kind: call.clone() };
             work.calls.push(RecentCall { before: work.since.take(), call, result: None });
             if work.calls.len() > 3 {
                 work.calls.remove(0);
@@ -94,7 +95,7 @@ fn note(subagent: &mut Subagent, block: &ContentBlock) {
         ContentBlock::ToolResult { tool_use_id, is_error, text, images, encrypted, .. } => {
             if let Some(made) = work.calls.iter_mut().find(|made| made.call.id == *tool_use_id) {
                 let (is_error, text, images, encrypted) = (*is_error, text.clone(), images.clone(), *encrypted);
-                made.result = Some(CallResult { is_error, text, cut: false, images, encrypted });
+                made.result = Some(CallResult { is_error, text, cut: false, images, encrypted, exit_code: None });
             }
         }
         ContentBlock::Thinking { .. } | ContentBlock::Image { .. } | ContentBlock::Unknown => {}

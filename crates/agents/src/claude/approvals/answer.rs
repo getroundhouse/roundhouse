@@ -43,7 +43,7 @@ pub(in crate::claude) fn response(decision: &ApprovalDecision, waiting: Option<W
         ApprovalDecision::AnswerByPosition { answers } => {
             let questions = match &asking {
                 Some(Asking::Questions { questions }) => questions.as_slice(),
-                Some(Asking::ToolUse | Asking::Plan { .. } | Asking::Unknown) | None => &[],
+                Some(Asking::ToolUse { .. } | Asking::Plan { .. } | Asking::Unknown) | None => &[],
             };
             answered(input, &by_text(questions, answers))
         }
@@ -73,7 +73,7 @@ fn refusal(asking: Option<&Asking>) -> &'static str {
     match asking {
         Some(Asking::Questions { .. }) => NOT_ANSWERED,
         Some(Asking::Plan { .. }) => KEEP_PLANNING,
-        Some(Asking::ToolUse | Asking::Unknown) | None => DENIED,
+        Some(Asking::ToolUse { .. } | Asking::Unknown) | None => DENIED,
     }
 }
 
