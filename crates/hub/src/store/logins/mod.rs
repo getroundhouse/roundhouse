@@ -15,5 +15,5 @@ mod tests;
 mod login_rows;
 #[cfg(test)]
 pub(crate) use login_rows::LoginRow;
-pub(crate) use login_rows::{Connecting, Held, IdFrom};
+pub(crate) use login_rows::{Connected, Connecting, Held, IdFrom};
 pub(super) use login_rows::{LOGIN_COLUMNS, login_at};

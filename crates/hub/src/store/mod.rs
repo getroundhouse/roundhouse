@@ -51,7 +51,7 @@ pub use comments::Commented;
 pub use error::{BackupError, StoreError};
 pub use events::{Initialized, Places, SessionChange, StatusChange, TurnEdge, cancelled_approval};
 pub use instances::{InstanceStage, RecordedInstance};
-pub(crate) use logins::{Connecting, Held, IdFrom};
+pub(crate) use logins::{Connected, Connecting, Held, IdFrom};
 pub use made::{Made, MadeByRequest};
 pub use queue::{Changed, Queued, Queuing};
 pub use reading::Reading;

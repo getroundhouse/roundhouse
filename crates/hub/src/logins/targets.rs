@@ -3,10 +3,11 @@
 //! machine or renewal order.
 
 use protocol::client::{ApiError, ErrorCode};
-use protocol::model::{AccountId, AgentKind, AgentLogin, HubSettings};
+use protocol::model::{AccountId, AgentKind, AgentLogin, HubSettings, LoginToken};
 
 use super::{Handed, Logins};
 use crate::error::internal;
+use crate::login_files::Locked;
 use crate::store::{Held, SessionLogin};
 
 /// The account a chat's launches run under, and why, since what the person can do about one that can't be used depends
@@ -54,8 +55,8 @@ impl Logins {
         account: &AccountId,
         now_ms: i64,
     ) -> Result<HubSettings, ApiError> {
-        let _one_at_a_time = self.one_at_a_time.lock();
-        self.choosable(agent, account, now_ms)?;
+        let files = self.files.lock();
+        self.choosable(&files, agent, account, now_ms)?;
         Ok(self.store.set_account_default(agent, account)?)
     }
 
@@ -63,8 +64,8 @@ impl Logins {
     /// no record, one that isn't a login added for that kind, and one whose login can't be used now, since a move to it
     /// would leave the chat unable to launch.
     pub(crate) fn can_move_to(&self, agent: AgentKind, account: &AccountId, now_ms: i64) -> Result<(), ApiError> {
-        let _one_at_a_time = self.one_at_a_time.lock();
-        self.choosable(agent, account, now_ms).map(drop)
+        let files = self.files.lock();
+        self.choosable(&files, agent, account, now_ms).map(drop)
     }
 
     /// The login a launch of a chat of `agent`'s kind that's `on` a login is handed: the hub's for the account it's on,
@@ -72,9 +73,9 @@ impl Logins {
     /// is. A chat on the ambient login is handed none, whatever the default is, and so is one on none of a kind with no
     /// default, which goes on the ambient login once its worker says whose that is.
     pub(crate) fn to_hand(&self, agent: AgentKind, on: &SessionLogin, now_ms: i64) -> Result<Option<Handed>, ApiError> {
-        let _one_at_a_time = self.one_at_a_time.lock();
+        let files = self.files.lock();
         let Some(target) = self.target(agent, on)? else { return Ok(None) };
-        self.available(agent, target.account(), now_ms, |called| target.needs_a_login(called)).map(Some)
+        self.available(&files, agent, target.account(), now_ms, |called| target.needs_a_login(called)).map(Some)
     }
 
     /// The account whose login a chat of `agent`'s kind that's `on` a login runs under: the one it's on, or else the
@@ -92,15 +93,22 @@ impl Logins {
 
     /// Whether the person can choose `account` for `agent`'s kind, as a default or a chat's: a login added for that
     /// kind, which can be used now.
-    fn choosable(&self, agent: AgentKind, account: &AccountId, now_ms: i64) -> Result<Handed, ApiError> {
+    fn choosable(
+        &self,
+        files: &Locked<'_, LoginToken>,
+        agent: AgentKind,
+        account: &AccountId,
+        now_ms: i64,
+    ) -> Result<Handed, ApiError> {
         self.renewable(account, agent)?;
-        self.available(agent, account, now_ms, needs_a_login_first)
+        self.available(files, agent, account, now_ms, needs_a_login_first)
     }
 
     /// The login the hub holds for `account`, if it can be used now. Refused with `Conflict` and what
     /// `needs_a_login` says of the account, by what it's called, when it can't.
     fn available(
         &self,
+        files: &Locked<'_, LoginToken>,
         agent: AgentKind,
         account: &AccountId,
         now_ms: i64,
@@ -114,8 +122,7 @@ impl Logins {
         if !login.works_at(now_ms) {
             return Err(unavailable());
         }
-        let token = self
-            .files
+        let token = files
             .read(&file)
             .map_err(|e| internal(format!("couldn't read {called}'s login: {e}")))?
             .ok_or_else(unavailable)?;

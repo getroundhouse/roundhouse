@@ -27,7 +27,7 @@ fn the_first_account_is_default_and_only_an_explicit_choice_changes_it() {
     drop(logins);
     drop(store);
     let store = Store::open(&dir.path().join("hub.db"), &dir.path().join("backups")).unwrap();
-    let reopened = Logins::new(Arc::new(store), dir.path().join("logins"));
+    let reopened = Logins::new(Arc::new(store), dir.path());
     assert_eq!(handed(&reopened, 1700), Some((other, "personal-token".into())));
 }
 
