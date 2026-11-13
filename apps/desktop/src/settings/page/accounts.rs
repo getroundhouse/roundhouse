@@ -8,12 +8,12 @@ use client_core::records::Snapshot;
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::button::Button;
 use gpui_kit::component::menu::{DropdownMenu as _, PopupMenu, PopupMenuItem};
-use gpui_kit::component::{IconName, Sizable as _, h_flex, v_flex};
+use gpui_kit::component::{IconName, h_flex, v_flex};
 use gpui_kit::{
     AnyElement, App, Div, Entity, InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce, ScrollHandle,
     Styled as _, TestSupportExt as _, Window, div,
 };
-use look::{Off as _, Typeset as _};
+use look::{Off as _, Sizing as _, Typeset as _};
 use protocol::model::{Account, AgentDescription, AgentKind};
 
 use self::kept::{Kept, To};
@@ -120,7 +120,7 @@ fn added_list(drawing: &Drawing<'_>, added: &[&Account], cx: &App) -> Div {
 fn connect_button(drawing: &Drawing<'_>, kinds: &[&AgentDescription], on: bool) -> AnyElement {
     let button = Button::new("accounts-connect")
         .outline()
-        .small()
+        .sized(look::ControlSize::Regular)
         .icon(IconName::Plus)
         .label("Connect account")
         .off_while(!on || kinds.is_empty());

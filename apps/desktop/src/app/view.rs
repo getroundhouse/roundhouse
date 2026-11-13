@@ -7,7 +7,7 @@ use gpui_kit::{
     AnyElement, Context, Div, Entity, Hsla, InteractiveElement, IntoElement, MouseButton, ParentElement, Render,
     Stateful, StatefulInteractiveElement, Styled, TestSupportExt as _, Window, div, px,
 };
-use look::{Hand as _, Typeset as _};
+use look::{Hand as _, Sizing as _, Typeset as _};
 use protocol::client::HubStatus;
 
 use super::{AppView, Connection, corner, hub_source, title_bar, window_buttons};
@@ -91,6 +91,7 @@ impl AppView {
                     "Each workspace is a copy of a project on its own branch, with its own agents. Start by adding a \
                      project from a repository on this Mac.",
                     Button::new("first-add-project")
+                        .sized(look::ControlSize::Large)
                         .hand()
                         .primary()
                         .label("Add project")
@@ -101,6 +102,7 @@ impl AppView {
                     "Start a workspace",
                     "Pick a project in the sidebar and press + to give an agent a branch of its own.",
                     Button::new("first-new-workspace")
+                        .sized(look::ControlSize::Large)
                         .hand()
                         .primary()
                         .label("New workspace")
@@ -229,7 +231,11 @@ pub(super) fn finish_question(status: &HubStatus) -> String {
 }
 
 fn try_again(cx: &mut Context<AppView>) -> Button {
-    Button::new("try-hub-again").hand().label("Try again").on_click(cx.listener(|t, _, _, cx| t.connect(cx)))
+    Button::new("try-hub-again")
+        .sized(look::ControlSize::Large)
+        .hand()
+        .label("Try again")
+        .on_click(cx.listener(|t, _, _, cx| t.connect(cx)))
 }
 
 fn failed(reason: &str, error_colour: Hsla, cx: &mut Context<AppView>) -> AnyElement {
@@ -271,6 +277,7 @@ fn across_a_break(
     let action = if may_restart {
         let pid = status.pid;
         Button::new("restart-hub")
+            .sized(look::ControlSize::Large)
             .hand()
             .primary()
             .label("Restart the hub")

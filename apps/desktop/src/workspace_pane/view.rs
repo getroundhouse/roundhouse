@@ -5,13 +5,13 @@ use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::base::{Tab, Tabs};
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::menu::{ContextMenuExt as _, PopupMenu};
-use gpui_kit::component::{IconName, Sizable as _, h_flex, v_flex};
+use gpui_kit::component::{IconName, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, Context, ElementId, InteractiveElement, IntoElement, ParentElement, Pixels, Render,
     StatefulInteractiveElement, Styled, TestSupportExt as _, Window, div, px, relative,
 };
-use look::{Hand as _, InRegion as _, LineText, Off as _, Region, Typeset as _};
+use look::{Hand as _, InRegion as _, LineText, Off as _, Region, Sizing as _, Typeset as _};
 use protocol::model::{Session, SessionStatus};
 
 use super::setup::setup_log_view;
@@ -47,7 +47,7 @@ impl WorkspacePane {
         let close = Button::new(ElementId::Name(format!("close-chat-{}", session.id).into()))
             .hand()
             .ghost()
-            .xsmall()
+            .sized_square(look::ControlSize::Small)
             .icon(IconName::Close)
             .tooltip("Close chat")
             .on_click(cx.listener(move |t, _, window, cx| {
@@ -146,7 +146,7 @@ impl WorkspacePane {
                         Button::new("new-chat")
                             .hand()
                             .ghost()
-                            .xsmall()
+                            .sized_square(look::ControlSize::Regular)
                             .icon(IconName::Plus)
                             .tooltip("New chat")
                             .on_click(cx.listener(|t, _, _, cx| t.new_chat(cx))),
@@ -186,7 +186,7 @@ impl WorkspacePane {
                 Button::new("toggle-diff")
                     .hand()
                     .ghost()
-                    .small()
+                    .sized_square(look::ControlSize::Regular)
                     .icon(IconName::PanelRight)
                     .tooltip(match sidebar {
                         Sidebar::Open => "Hide diff",
@@ -233,7 +233,7 @@ impl WorkspacePane {
         let id = self.workspace().id.clone();
         Button::new("regenerate-title")
             .ghost()
-            .xsmall()
+            .sized_square(look::ControlSize::Regular)
             .icon(Lucide::PencilSparkles)
             .text_color(look::colors(cx).text_muted)
             .tooltip("Regenerate title")

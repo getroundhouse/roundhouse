@@ -12,13 +12,13 @@ use client_core::calls::agent::{self, Agent};
 use client_core::calls::count;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::button::Button;
-use gpui_kit::component::{Sizable as _, v_flex};
+use gpui_kit::component::v_flex;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, Div, ElementId, FontWeight, InteractiveElement as _, IntoElement, ParentElement, Styled,
     TestSupportExt as _, WeakEntity, div,
 };
-use look::{Hand as _, Typeset as _};
+use look::{Hand as _, Sizing as _, Typeset as _};
 use protocol::event::{ContentBlock, SessionEvent};
 use protocol::model::{SubagentStatus, ToolUseId};
 
@@ -125,7 +125,7 @@ pub(in crate::rows) fn open_tab(
     Button::new(id)
         .hand()
         .outline()
-        .xsmall()
+        .sized(look::ControlSize::Small)
         .label("Open")
         .icon(IconName::ArrowUpRight)
         .tooltip("Open in the subagent tab")

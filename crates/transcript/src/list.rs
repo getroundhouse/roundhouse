@@ -18,16 +18,16 @@ use std::rc::Rc;
 
 use gpui_kit::base::motion::transition;
 use gpui_kit::base::{ScrollBounce, ScrollbarHandle};
+use gpui_kit::component::IconName;
 use gpui_kit::component::button::{Button, ButtonCustomVariant, ButtonVariants as _};
 use gpui_kit::component::scroll::ScrollableElement as _;
-use gpui_kit::component::{IconName, Sizable as _};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, Bounds, Context, ElementId, EntityId, InteractiveElement as _, IntoElement, ParentElement as _,
     Pixels, Point, Role, Size, StatefulInteractiveElement as _, Styled as _, Window, div, point, px, size,
 };
 use look::motion::Scrolling;
-use look::{InRegion as _, Off as _, Region};
+use look::{InRegion as _, Off as _, Region, Sizing as _};
 
 use crate::around_column;
 use crate::scroll_area::hears_the_wheel;
@@ -49,8 +49,6 @@ use state::State;
 
 /// The space above the first row and below the last.
 const EDGE: Pixels = px(8.);
-/// The side of the square button back to the latest row.
-const LATEST_BUTTON_SIDE: Pixels = px(28.);
 /// How far the button back to the latest row rests above what's under the chat, such as the composer.
 const LATEST_BUTTON_ROOM: Pixels = px(8.);
 /// How far the button back to the latest row rises to where it rests as it fades in.
@@ -274,17 +272,16 @@ impl TranscriptList {
         // lights it, where a secondary one's would turn to a line's.
         let style = ButtonCustomVariant::new(cx).color(edge).hover(colors.raised_hover).active(colors.raised_pressed);
         let list = self.clone();
-        // A small button's icon, on a square a little bigger, so it's easy to hit over the chat. The kit draws a custom
+        // A regular button's square, as a button over the chat is, so it's easy to hit there. The kit draws a custom
         // button's colour faintly as its fill, so the pane's colour is set on the button itself, which hover and press
         // still change. Its edge and icon are set there too, over the kit's style for a button that's off, so it looks
         // the same as it fades out, off so it isn't pressed again.
         let button = Button::new((id, "jump-to-latest"))
             .custom(style)
-            .small()
+            .sized_square(look::ControlSize::Regular)
             .icon(IconName::ChevronDown)
             .accessibility_label("Jump to latest")
             .tooltip("Jump to latest")
-            .size(LATEST_BUTTON_SIDE)
             .border_1()
             .border_color(edge)
             .bg(colors.pane)

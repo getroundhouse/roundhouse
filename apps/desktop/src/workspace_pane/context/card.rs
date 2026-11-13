@@ -4,12 +4,12 @@
 
 use gpui_kit::base::ObservedElement;
 use gpui_kit::component::button::Button;
-use gpui_kit::component::{Sizable as _, h_flex, v_flex};
+use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::{
     AnyElement, App, Div, InteractiveElement as _, IntoElement, ParentElement, Pixels, SharedString, Stateful, Styled,
     TestSupportExt as _, WeakEntity, div, px, relative,
 };
-use look::{InRegion as _, Off as _, Region, Typeset as _};
+use look::{InRegion as _, Off as _, Region, Sizing as _, Typeset as _};
 use protocol::model::{Account, ContextPart, ContextPartKind, ContextUsage, UsageLimit};
 
 use super::{Usage, words};
@@ -45,11 +45,14 @@ pub(super) fn context_card(
 fn compact(pane: &WeakEntity<WorkspacePane>, off: bool, cx: &App) -> Div {
     let colors = look::colors(cx);
     let pane = pane.clone();
-    let button = Button::new("context-compact").off_while(off).outline().xsmall().label("Compact now").on_click(
-        move |_, _, cx| {
+    let button = Button::new("context-compact")
+        .off_while(off)
+        .outline()
+        .sized(look::ControlSize::Small)
+        .label("Compact now")
+        .on_click(move |_, _, cx| {
             let _ = pane.update(cx, WorkspacePane::compact);
-        },
-    );
+        });
     let said = div()
         .min_w_0()
         .truncate()

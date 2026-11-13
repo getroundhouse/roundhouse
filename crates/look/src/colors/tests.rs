@@ -2,10 +2,8 @@ use proptest::prelude::*;
 use proptest::test_runner::{Config, RngSeed};
 
 use super::{Colors, hsla};
+use crate::spec_table;
 use crate::theme::hex;
-
-/// The spec's file that has the table of the colours.
-const LOOK: &str = include_str!("../../../../docs/spec/look.md");
 
 proptest! {
     #![proptest_config(Config { rng_seed: RngSeed::Fixed(17), failure_persistence: None, ..Config::default() })]
@@ -26,14 +24,11 @@ proptest! {
 fn the_specs_table_has_every_colour_in_its_group_in_order_as_the_app_draws_it() {
     let mut group = String::new();
     let mut table = Vec::new();
-    for line in LOOK.lines() {
-        if let Some(title) = line.strip_prefix("| **").and_then(|rest| rest.strip_suffix("** | | |")) {
-            title.clone_into(&mut group);
-        } else if let Some(row) = line.strip_prefix("| `") {
-            let mut cells = row.split(" | ");
-            let (Some(name), Some(value)) = (cells.next(), cells.next()) else { continue };
-            let (Some(name), Some(value)) = (name.strip_suffix('`'), value.strip_prefix('`')) else { continue };
-            table.push((group.clone(), name.to_string(), value.trim_end_matches('`').to_string()));
+    // A group's row has its title in bold, and the colours under it are in it.
+    for [name, value] in spec_table::rows("**Every colour, by its name.**") {
+        match name.strip_prefix("**").and_then(|rest| rest.strip_suffix("**")) {
+            Some(title) => title.clone_into(&mut group),
+            None => table.push((group.clone(), name, value)),
         }
     }
 

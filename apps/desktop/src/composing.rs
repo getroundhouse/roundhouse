@@ -8,13 +8,13 @@ use std::path::PathBuf;
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
-use gpui_kit::component::{Icon, IconName, Sizable as _};
+use gpui_kit::component::{Icon, IconName};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     Anchor, App, Context, FocusHandle, Hsla, InteractiveElement, IntoElement, ParentElement, Role,
     StatefulInteractiveElement as _, Styled, TestSupportExt as _, div,
 };
-use look::{Hand as _, Shaped as _};
+use look::{Hand as _, Shaped as _, Sizing as _};
 
 use crate::TogglePlanMode;
 use crate::attached;
@@ -92,7 +92,7 @@ where
     Button::new(id)
         .hand()
         .ghost()
-        .xsmall()
+        .sized_square(look::ControlSize::Small)
         .icon(IconName::Plus)
         .accessibility_label(PLUS_LABEL)
         .tooltip(PLUS_LABEL)

@@ -5,13 +5,13 @@
 use std::f32::consts::FRAC_PI_2;
 
 use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::{Icon, IconName, Sizable as _, h_flex};
+use gpui_kit::component::{Icon, IconName, h_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, AppContext as _, Context, Div, ElementId, Hsla, InteractiveElement as _, IntoElement, MouseButton,
     ParentElement, Role, SharedString, StatefulInteractiveElement as _, Styled, TestSupportExt as _, div, radians,
 };
-use look::{Hand as _, Typeset as _};
+use look::{Hand as _, Sizing as _, Typeset as _};
 use protocol::model::{Repo, RepoId, WorkspaceId};
 
 use super::drag::{Dragged, Dragging};
@@ -75,7 +75,7 @@ fn new_workspace(app: &AppView, repo: &Repo, cx: &mut Context<AppView>) -> Butto
     let creating = app.busy.creating_in() == Some(&repo.id);
     Button::new(ElementId::Name(format!("new-in-{}", repo.id).into()))
         .ghost()
-        .small()
+        .sized_square(look::ControlSize::Small)
         .icon(IconName::Plus)
         .text_color(look::colors(cx).text_muted)
         .tooltip("New workspace")

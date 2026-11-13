@@ -112,8 +112,8 @@ fn command_part(command: &Command, toggle: &Toggle, cx: &App) -> AnyElement {
         .child(div().flex_none().text_color(colors.text_faint).child("$\u{a0}"))
         .child(div().flex_1().min_w_0().child(text))
         // Room for the button, which is pinned over it, so the text never runs under the button. As wide as the
-        // kit's copy button, an extra-small icon button, which is `size_5`.
-        .child(div().flex_none().ml_2().w_5())
+        // copy button, a small button's square.
+        .child(div().flex_none().ml_2().w(look::ControlSize::Small.height()))
         .test_support()
         .into_any_element();
     // All of it, the `$` and the space around the command too, so a press there is on the command.

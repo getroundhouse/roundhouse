@@ -6,12 +6,12 @@ use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::Textarea;
 use gpui_kit::component::kbd::Kbd;
 use gpui_kit::component::menu::{DropdownMenu as _, PopupMenu, PopupMenuItem};
-use gpui_kit::component::{Sizable as _, h_flex, v_flex};
+use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::{
     Anchor, Context, Focusable as _, InteractiveElement as _, IntoElement, Keystroke, ParentElement as _, Render,
     Styled as _, Window, div, px, transparent_black,
 };
-use look::{Hand as _, Off as _};
+use look::{Hand as _, Off as _, Sizing as _};
 
 use super::NewWorkspaceDialog;
 use crate::attached;
@@ -51,6 +51,7 @@ impl NewWorkspaceDialog {
         };
         h_flex().w_full().h(px(48.)).px_2().border_b_1().border_color(self.colors(cx).1).child(
             Button::new("new-workspace-repo")
+                .sized(look::ControlSize::Regular)
                 .hand()
                 .ghost()
                 .dropdown_caret(true)
@@ -86,7 +87,7 @@ impl NewWorkspaceDialog {
         let enter = Keystroke::parse("enter").ok().map(|key| Kbd::new(key).appearance(false));
         let create = Button::new("new-workspace-create")
             .primary()
-            .small()
+            .sized(look::ControlSize::Regular)
             .label("Create")
             .children(enter)
             .off_while(!self.can_create())

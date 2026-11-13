@@ -12,7 +12,7 @@ use gpui_kit::{
     AnyElement, App, Context, Entity, EventEmitter, Global, IntoElement, ParentElement, Pixels, Render, SharedString,
     StatefulInteractiveElement, Styled, Subscription, TestSupportExt as _, Window, div, uniform_list,
 };
-use look::{Hand as _, LineText, Placed, Typeset as _};
+use look::{Hand as _, LineText, Placed, Sizing as _, Typeset as _};
 
 use crate::file_tree::{List, Row, chain, folder_row, row_frame, split};
 use crate::patch::{FilePatch, FileStatus};
@@ -150,11 +150,16 @@ impl Changes {
                     .emphasis()
                     .child(format!("{count} comment{}", if count == 1 { "" } else { "s" })),
             )
-            .child(Button::new("send-comments").hand().primary().small().label("Send to agent").on_click(
-                move |_, _, cx| {
-                    let _ = review.update(cx, Review::send_comments);
-                },
-            ))
+            .child(
+                Button::new("send-comments")
+                    .hand()
+                    .primary()
+                    .sized(look::ControlSize::Regular)
+                    .label("Send to agent")
+                    .on_click(move |_, _, cx| {
+                        let _ = review.update(cx, Review::send_comments);
+                    }),
+            )
     }
 }
 
@@ -213,13 +218,15 @@ pub(crate) fn controls(changes: &Entity<Changes>, code: &Placed, cx: &App) -> An
     h_flex()
         .flex_none()
         .gap_2()
+        // Out past the bar's room by the room around the button's icon, so the icon lines up with the rows' marks.
+        .mr(-look::ControlSize::Regular.inset())
         // On the baseline of the tabs' names beside it.
         .child(code.set(h_flex().flex_none().gap_1p5().children(counts(added, removed, cx))))
         .child(
             Button::new("changes-layout")
                 .hand()
                 .ghost()
-                .xsmall()
+                .sized_square(look::ControlSize::Regular)
                 .icon(Lucide::ListTree)
                 .selected(tree)
                 .tooltip(if tree { "Show as a list" } else { "Show in folders" })

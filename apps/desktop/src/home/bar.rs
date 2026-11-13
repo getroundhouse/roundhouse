@@ -4,12 +4,12 @@ use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::Input;
 use gpui_kit::component::menu::{DropdownMenu as _, PopupMenu, PopupMenuItem};
-use gpui_kit::component::{Icon, IconName, Sizable as _, h_flex};
+use gpui_kit::component::{Icon, IconName, h_flex};
 use gpui_kit::{
     Context, InteractiveElement as _, IntoElement, ParentElement, Styled, TestSupportExt as _, WeakEntity, Window, div,
     px,
 };
-use look::{Hand as _, Off as _};
+use look::{Hand as _, Off as _, Sizing as _};
 
 use super::{ArchiveFilter, SORTS};
 use crate::app::AppView;
@@ -52,7 +52,7 @@ pub(super) fn bar(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement 
         .child(
             Button::new("home-create")
                 .primary()
-                .small()
+                .sized(look::ControlSize::Regular)
                 .icon(IconName::Plus)
                 .label("Create")
                 // In the repository the list shows, as `current_repo` says. The dialog opens while another workspace
@@ -67,7 +67,7 @@ fn filter(id: &'static str, icon: impl Into<Icon>, label: String, cx: &Context<A
     Button::new(id)
         .hand()
         .ghost()
-        .small()
+        .sized(look::ControlSize::Regular)
         .icon(icon)
         .label(label)
         .dropdown_caret(true)

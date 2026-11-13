@@ -7,7 +7,7 @@ use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::dialog::{DialogAction, DialogClose, DialogFooter};
 use gpui_kit::{App, ParentElement as _, Styled as _, Window, div};
 
-use look::{Hand as _, Typeset as _};
+use look::{Hand as _, Sizing as _, Typeset as _};
 
 use super::UpdateQuestion;
 
@@ -33,10 +33,17 @@ pub(super) fn open(
             .child(detail)
             .footer(
                 DialogFooter::new()
-                    .child(DialogClose::new().child(Button::new("restart-now-not-now").hand().label("Not now")))
+                    .child(DialogClose::new().child(
+                        Button::new("restart-now-not-now").sized(look::ControlSize::Large).hand().label("Not now"),
+                    ))
                     .child(
-                        DialogAction::new()
-                            .child(Button::new("restart-now-confirm").hand().primary().label("Restart now")),
+                        DialogAction::new().child(
+                            Button::new("restart-now-confirm")
+                                .sized(look::ControlSize::Large)
+                                .hand()
+                                .primary()
+                                .label("Restart now"),
+                        ),
                     ),
             )
             .on_ok(move |_, _, cx| {

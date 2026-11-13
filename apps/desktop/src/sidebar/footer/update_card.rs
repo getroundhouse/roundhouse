@@ -2,13 +2,13 @@
 
 use gpui_kit::base::ElementExt as _;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::{Sizable as _, h_flex, v_flex};
+use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, Context, Div, InteractiveElement as _, IntoElement, ParentElement, RenderOnce, Stateful,
-    Styled as _, TestSupportExt as _, Window, div, px,
+    Styled as _, TestSupportExt as _, Window, div,
 };
-use look::{Hand as _, Shaped as _, Typeset as _};
+use look::{Hand as _, Shaped as _, Sizing as _, Typeset as _};
 use look::{IconSize, IconStyle};
 
 use super::update_details::{Details, Shown};
@@ -113,7 +113,7 @@ fn ready_card(
         Button::new("restart-to-update")
             .hand()
             .primary()
-            .small()
+            .sized(look::ControlSize::Regular)
             .w_full()
             .label("Restart to update")
             .on_click(restart)
@@ -124,8 +124,8 @@ fn ready_card(
 
 /// The app has updated, and the older hub is still busy, so it finishes by itself once it isn't, or now if asked.
 fn finishing_card(agents: Agents, cx: &mut Context<AppView>) -> Stateful<Div> {
-    // Under the text, and in line with it, past the button's own padding.
-    let now = h_flex().pt_1().ml(px(-3.5)).child(restart_now(cx));
+    // Under the text, and in line with it, past the button's own room.
+    let now = h_flex().pt_1().ml(-look::ControlSize::Small.padding()).child(restart_now(cx));
     card_text("Finishing update", waiting_on(agents), cx).child(now)
 }
 
@@ -142,14 +142,14 @@ fn asking(
     let stay = Button::new("update-not-now")
         .hand()
         .ghost()
-        .small()
+        .sized(look::ControlSize::Regular)
         .flex_1()
         .label(stay)
         .on_click(cx.listener(|t, _, _, cx| t.dismiss_update_question(cx)));
     let go = Button::new("update-go-ahead")
         .hand()
         .primary()
-        .small()
+        .sized(look::ControlSize::Regular)
         .flex_1()
         .label(go)
         .on_click(cx.listener(move |t, _, _, cx| go_ahead(t, cx)));
@@ -183,7 +183,7 @@ fn waiting_on(agents: Agents) -> String {
 /// A quiet button, since finishing an update now stops the agents it's waiting on, which a dialog says first.
 fn restart_now(cx: &mut Context<AppView>) -> Button {
     let finish = cx.listener(|t, _, _, cx| t.offer_hub_restart(cx));
-    Button::new("finish-update").hand().ghost().xsmall().label("Restart now").on_click(finish)
+    Button::new("finish-update").hand().ghost().sized(look::ControlSize::Small).label("Restart now").on_click(finish)
 }
 
 #[cfg(test)]

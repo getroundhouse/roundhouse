@@ -1,22 +1,11 @@
 use gpui_kit::{FontWeight, SharedString, Styled as _, div};
 
 use super::{MONO, Type, Typeset as _};
-
-/// The spec's file that has the table of the kinds of text.
-const LOOK: &str = include_str!("../../../../docs/spec/look.md");
+use crate::spec_table;
 
 #[test]
 fn the_specs_table_has_every_kind_of_text_in_order_as_the_app_sets_it() {
-    let section = LOOK.split("\n## Type\n").nth(1).and_then(|rest| rest.split("\n## ").next()).unwrap_or_default();
-    let table: Vec<[String; 4]> = section
-        .lines()
-        .filter_map(|line| line.strip_prefix("| `"))
-        .map(|row| {
-            let mut cells = row.split(" | ").map(str::to_string);
-            let mut cell = || cells.next().unwrap_or_default();
-            [cell().trim_end_matches('`').to_string(), cell(), cell(), cell()]
-        })
-        .collect();
+    let table: Vec<[String; 4]> = spec_table::rows("**Every kind of text, by its name.**");
 
     let set: Vec<[String; 4]> = Type::ALL.iter().map(|kind| kind.written()).collect();
     assert_eq!(table, set, "docs/spec/look.md's table of the kinds of text, against crates/look/src/typography.rs");

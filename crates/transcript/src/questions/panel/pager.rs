@@ -3,13 +3,13 @@
 //! it.
 
 use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::{IconName, Sizable as _, h_flex};
+use gpui_kit::component::{IconName, h_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, Context, ElementId, InteractiveElement as _, IntoElement, ParentElement,
     StatefulInteractiveElement as _, Styled, TestSupportExt as _, div, px,
 };
-use look::{Hand as _, Off as _, Typeset as _};
+use look::{Hand as _, Off as _, Sizing as _, Typeset as _};
 use protocol::event::QuestionAnswer;
 
 use super::QuestionPanel;
@@ -69,7 +69,7 @@ pub(super) fn pager(
             let ends = if by < 0 { showing == 0 } else { showing + 1 == count };
             Button::new(id)
                 .ghost()
-                .xsmall()
+                .sized_square(look::ControlSize::Small)
                 .icon(icon)
                 // Only while it can be pressed, since the kit lays this over its own greyed-out colour.
                 .when(!ends, |b| b.text_color(muted))
@@ -83,7 +83,7 @@ pub(super) fn pager(
         h_flex()
             .items_center()
             // The arrows' squares stand out past the panel's edge inside, so their icons line up with it.
-            .ml(px(-4.))
+            .ml(-look::ControlSize::Small.inset())
             .child(back)
             .child(h_flex().gap_0p5().children(dots))
             .child(next)

@@ -2,10 +2,10 @@
 //! corner: the one that hides and shows the sidebar on the left, and off the Mac the one before it that opens the
 //! menus.
 
+use gpui_kit::component::IconName;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::{IconName, Sizable as _};
 use gpui_kit::{Context, Div, IntoElement, ParentElement as _, Pixels, Styled as _, Window, div};
-use look::Hand as _;
+use look::{Hand as _, Sizing as _};
 
 use super::{AppView, menu_button, title_bar};
 use crate::menus::System;
@@ -53,7 +53,7 @@ fn sidebar_toggle(cx: &mut Context<AppView>) -> Button {
     Button::new("toggle-sidebar")
         .hand()
         .ghost()
-        .small()
+        .sized_square(look::ControlSize::Small)
         .icon(IconName::PanelLeft)
         .tooltip(match Side::Left.chosen(cx).sidebar {
             Sidebar::Open => "Hide sidebar",

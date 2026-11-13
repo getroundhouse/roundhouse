@@ -9,7 +9,7 @@ use gpui_kit::{
     AnyElement, Context, ElementId, Hsla, InteractiveElement as _, IntoElement, ParentElement, SharedString,
     StatefulInteractiveElement as _, Styled, TestSupportExt as _, div, px,
 };
-use look::{Hand as _, InRegion as _, Region, Shaped as _, Typeset as _};
+use look::{Hand as _, InRegion as _, Region, Shaped as _, Sizing as _, Typeset as _};
 use protocol::model::QueuedPrompt;
 use protocol::short_text::one_line;
 
@@ -120,7 +120,7 @@ fn queued_buttons(
         Button::new(ElementId::Name(format!("{name}-queued-{id}").into()))
             .hand()
             .ghost()
-            .xsmall()
+            .sized_square(look::ControlSize::Small)
             .icon(icon)
             .text_color(muted)
             .tooltip(tooltip)

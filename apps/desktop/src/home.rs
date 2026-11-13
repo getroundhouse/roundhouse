@@ -8,13 +8,13 @@ use std::rc::Rc;
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::{InputEvent, InputState};
-use gpui_kit::component::{Sizable as _, h_flex, v_flex};
+use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, AppContext as _, Context, ElementId, Entity, InteractiveElement as _, IntoElement, ParentElement,
     Pixels, ScrollHandle, StatefulInteractiveElement as _, Styled, Subscription, TestSupportExt as _, Window, div, px,
 };
-use look::{Hand as _, InRegion as _, LineText, Off as _, Placed, Region};
+use look::{Hand as _, InRegion as _, LineText, Off as _, Placed, Region, Sizing as _};
 use protocol::model::{RepoId, Workspace, WorkspaceId, WorkspaceStatus};
 
 use crate::app::AppView;
@@ -254,7 +254,7 @@ fn row_button(app: &AppView, workspace: &Workspace, small: &Placed, cx: &mut Con
     let id = workspace.id.clone();
     Button::new(ElementId::Name(format!("home-{}-{}", what.to_lowercase(), workspace.id).into()))
         .ghost()
-        .small()
+        .sized_square(look::ControlSize::Small)
         .icon(icon)
         .text_color(look::colors(cx).text_muted)
         .tooltip(what)

@@ -3,13 +3,13 @@
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::menu::{DropdownMenu as _, PopupMenu, PopupMenuItem};
-use gpui_kit::component::{IconName, Sizable as _, h_flex};
+use gpui_kit::component::{IconName, h_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     Anchor, AnyElement, Context, Hsla, InteractiveElement as _, IntoElement, ParentElement, Styled,
     TestSupportExt as _, Window, div,
 };
-use look::{Hand as _, Off as _, Typeset as _};
+use look::{Hand as _, Off as _, Sizing as _, Typeset as _};
 
 use super::{HEADING_HEIGHT, SORTS};
 use crate::app::AppView;
@@ -33,7 +33,7 @@ pub(super) fn heading(app: &AppView, connected: bool, cx: &mut Context<AppView>)
         .child(
             Button::new("add-project")
                 .ghost()
-                .xsmall()
+                .sized(look::ControlSize::Small)
                 .icon(IconName::Plus)
                 .label("Add project")
                 .text_color(faint)
@@ -52,7 +52,7 @@ fn sort_button(app: &AppView, faint: Hsla, cx: &mut Context<AppView>) -> impl In
     Button::new("sort-workspaces")
         .hand()
         .ghost()
-        .xsmall()
+        .sized_square(look::ControlSize::Small)
         .icon(Lucide::ArrowUpDown)
         .text_color(faint)
         .tooltip("Sort workspaces")

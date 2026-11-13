@@ -4,7 +4,7 @@ use gpui_kit::component::button::Button;
 use gpui_kit::component::{Icon, IconName, h_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{AnyElement, App, ClickEvent, ElementId, IntoElement, ParentElement, Styled, Window, div, px};
-use look::{Hand as _, Typeset as _};
+use look::{Hand as _, Sizing as _, Typeset as _};
 use protocol::event::{FailureKind, RequestFailure};
 use protocol::model::Seq;
 
@@ -65,9 +65,11 @@ fn title(kind: FailureKind) -> &'static str {
 /// Asks the agent to carry on from where its request failed, with whatever model the chat runs now.
 fn retry_button(seq: Seq, shared: &Shared) -> Button {
     let this = shared.this.clone();
-    Button::new(ElementId::NamedInteger("retry".into(), seq.get())).hand().label("Retry").on_click(
-        move |_: &ClickEvent, _: &mut Window, cx: &mut App| {
+    Button::new(ElementId::NamedInteger("retry".into(), seq.get()))
+        .sized(look::ControlSize::Large)
+        .hand()
+        .label("Retry")
+        .on_click(move |_: &ClickEvent, _: &mut Window, cx: &mut App| {
             let _ = this.update(cx, Transcript::retry);
-        },
-    )
+        })
 }

@@ -19,7 +19,7 @@ use gpui_kit::{
     ParentElement as _, Role, StatefulInteractiveElement as _, Styled, Subscription, TestSupportExt as _, div, px,
     relative,
 };
-use look::{Hand as _, Shaped as _, Typeset as _};
+use look::{Hand as _, Shaped as _, Sizing as _, Typeset as _};
 use protocol::model::{SessionId, Subagent, ToolUseId};
 use transcript::{Transcript, TranscriptEvent, shown_kind, subagent_standing};
 
@@ -174,7 +174,7 @@ impl WorkspacePane {
         let muted = colors.text_muted;
         let close = Button::new("close-subagent-tab")
             .ghost()
-            .xsmall()
+            .sized_square(look::ControlSize::Small)
             .icon(IconName::Close)
             .tooltip("Close subagent tab")
             .on_click(cx.listener(|t, _, _, cx| {
