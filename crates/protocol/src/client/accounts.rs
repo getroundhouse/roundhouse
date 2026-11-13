@@ -10,10 +10,17 @@ use crate::model::{Account, AccountId, AgentKind, LoginToken};
 /// them on, and answers with the account's record, named `name`. The token is one the agent's own CLI made to last,
 /// such as `claude setup-token`'s, which the person made themselves and gave a client, and the hub never sends it back.
 ///
-/// With `account`, it replaces that account's login, as when its token is about to end, so the account keeps its
-/// limits and its sessions. Without, a token the hub already holds for that kind finds its account. Either way,
-/// sending it again does nothing more. Refused with `InvalidRequest` when the token is empty, and with `NotFound` when
-/// there's no such account.
+/// With `account`, it renews that account's login, replacing it, as when its token is about to end, so the account
+/// keeps its limits and its sessions, and one whose login was disconnected has one again. Without, a token the hub
+/// already holds for that kind finds its account, and one it held and was told to forget makes a new account, since
+/// the hub keeps nothing to know it again by. Sending the same again changes nothing more than the name. The token and
+/// the name are trimmed.
+///
+/// Refused with `InvalidRequest` when the name is empty or longer than 200 bytes, when the token is empty, very long,
+/// or has a space or a control character inside, when the hub can hold no login for that kind, as its
+/// [`AgentDescription::login`](crate::model::AgentDescription::login) says, and when `account` names one whose ID the
+/// hub didn't choose for a login of that kind, since nothing says the token is that account's. Refused with `NotFound`
+/// when there's no such account, and with `Conflict` when another account holds the same token.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct AccountConnect {
     pub agent: AgentKind,
@@ -42,7 +49,8 @@ impl Reply for Account {
 
 /// Has the hub forget the login it holds for the account, so no agent launched after this runs under it, and answers
 /// with the account's record, which stays, as the sessions that ran under it name it. An agent already running under
-/// it keeps it until it exits. It doesn't revoke the token, which works wherever else it's kept until it ends.
+/// it keeps it until it exits. It doesn't revoke the token, which works wherever else it's kept until it ends. Refused
+/// with `NotFound` when there's no such account.
 /// Disconnecting an account whose login the hub doesn't hold changes nothing, so sending it again does nothing more.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct AccountDisconnect {

@@ -60,3 +60,5 @@ pub(crate) const BEFORE_NEW_WORKSPACE_DRAFT_NAMES: usize = 43;
 
 /// How many migrations there were before subagents' records kept how many tokens each one's conversation holds.
 pub(crate) const BEFORE_SUBAGENT_CONTEXT_TOKENS: usize = 44;
+/// How many migrations there were before the hub held logins for agents' accounts.
+pub(crate) const BEFORE_LOGINS: usize = 45;

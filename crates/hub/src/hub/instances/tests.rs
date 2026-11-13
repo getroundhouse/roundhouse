@@ -10,6 +10,7 @@ use providers::{Capabilities, Instance, ProviderError, Size, WorkerBinary, Worke
 use tokio::sync::Notify;
 
 use super::*;
+use crate::hub::HubDirs;
 use crate::provider_set::ProviderSet;
 use crate::store::tests::store_with_session;
 use crate::store::{InstanceStage, Store};
@@ -93,15 +94,7 @@ fn hub_with(dir: &Path, fake: Fake) -> (Arc<Hub>, Arc<Fake>) {
     let fake = Arc::new(fake);
     let providers = ProviderSet::only(fake.clone());
     let store = Arc::new(store_with_session(dir));
-    let hub = Hub::new(
-        Build::UNSTAMPED,
-        store,
-        dir.join("attachments"),
-        dir.join("worker-logs"),
-        providers,
-        Vec::new(),
-        false,
-    );
+    let hub = Hub::new(Build::UNSTAMPED, store, HubDirs::in_dir(dir), providers, Vec::new(), false);
     (Arc::new(hub), fake)
 }
 

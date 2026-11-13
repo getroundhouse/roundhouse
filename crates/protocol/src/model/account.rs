@@ -4,7 +4,7 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-use super::{AccountId, Rev};
+use super::{AccountId, AgentKind, Rev};
 
 /// The account an agent's CLI is logged in to on its worker's machine, as the worker reads it. Every part is `None`
 /// when the agent doesn't say, such as a plan for a login with an API key. Who it is, from `model_provider` on, is
@@ -45,8 +45,9 @@ impl AgentAccount {
 /// the agents have gone. Who it is comes from the worker, read each time an agent under it launches, and for a login
 /// the hub holds, from the hub's record of that login too, since a token doesn't say whose it is. What's left of its
 /// limits is what any agent under it last heard, in whichever workspace, since a limit is the account's rather than a
-/// session's. Only a login that can be told from another has a record, so whoever it is is logged in. Who it is, from
-/// `model_provider` on, is what [`AgentAccount`] says.
+/// session's. An adapter's account has a record only for a login that can be told from another, and the hub's has one
+/// for each login it was given, which stays once the login is disconnected. Who it is, from `model_provider` to
+/// `email`, is what [`AgentAccount`] says.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Account {
     pub id: AccountId,
@@ -65,6 +66,11 @@ pub struct Account {
     /// stays once the login is disconnected, since the sessions that ran under it still name the account.
     #[serde(default)]
     pub name: Option<String>,
+    /// The kind of agent the hub was given the account's login for, which says the hub chose the account's ID for a
+    /// login it holds, or held, rather than an adapter from the login on a worker's machine. It stays once the login
+    /// is disconnected, as the name does. A client renewing the login reads which kind's command makes a token here.
+    #[serde(default)]
+    pub login_agent: Option<AgentKind>,
     /// Shortest window first. Empty until an agent under the account has heard of one, and for an account with none.
     /// None says when it was heard, since hearing the same again isn't a change to the record.
     #[serde(default)]
@@ -83,8 +89,10 @@ pub struct Account {
 pub struct HeldLogin {
     /// When the hub was given it, by the hub's clock.
     pub connected_at_ms: i64,
-    /// When it stops working at the latest, by the hub's clock, if the hub knows. The CLI doesn't say when a token
-    /// ends, so for one `claude setup-token` made, it's a year after it was connected, and sooner for one made before.
+    /// When it stops working at the latest, by the hub's clock, if the hub knows: as long after it was connected as
+    /// [`LoginDescription::lasts_ms`] says a token of its kind lasts. One made before it was connected ends sooner.
+    ///
+    /// [`LoginDescription::lasts_ms`]: super::LoginDescription::lasts_ms
     #[serde(default)]
     pub ends_at_ms: Option<i64>,
 }
@@ -200,7 +208,7 @@ mod tests {
 
         assert_eq!(account.id, AccountId::from("claude-1"));
         assert_eq!((account.email, account.limits, account.rev), (None, Vec::new(), Rev::default()));
-        assert_eq!((account.name, account.held_login), (None, None));
+        assert_eq!((account.name, account.login_agent, account.held_login), (None, None, None));
     }
 
     #[test]

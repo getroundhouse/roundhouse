@@ -11,7 +11,7 @@ use providers::local::{LocalConfig, LocalProvider};
 use tracing::{info, warn};
 
 use crate::error::HubError;
-use crate::hub::{Hub, LeftAtWork};
+use crate::hub::{Hub, HubDirs, LeftAtWork};
 use crate::listener::{self, Listener};
 use crate::private;
 use crate::provider_set::ProviderSet;
@@ -106,15 +106,14 @@ pub async fn run(config: HubConfig) -> Result<(), HubError> {
     let settings = store.hub_settings().map_err(HubError::OpenDatabase)?;
 
     let providers = load_providers(config.build, &paths, config.worker_exe, config.shell, config.path, &store)?;
-    let hub = Arc::new(Hub::new(
-        config.build,
-        store,
-        paths.attachments_dir.clone(),
-        paths.worker_logs_dir.clone(),
-        providers,
-        config.agents,
-        config.on_demand,
-    ));
+    let dirs = HubDirs {
+        attachments: paths.attachments_dir.clone(),
+        worker_logs: paths.worker_logs_dir.clone(),
+        logins: paths.logins_dir.clone(),
+    };
+    let hub = Arc::new(Hub::new(config.build, store, dirs, providers, config.agents, config.on_demand));
+    // Before clients are served, so none is told the hub holds a login whose token is gone.
+    hub.tidy_logins().await;
     hub.carry_on(left_at_work).await;
     hub.carry_out(&settings);
     hub.tidy_draft_files().await;

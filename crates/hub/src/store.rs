@@ -8,10 +8,11 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use parking_lot::{Mutex, MutexGuard};
 use protocol::event::SessionEvent;
 use protocol::model::{AgentSessionId, OpenApproval, Rev, Seq, Session, ToolUseId};
-use rusqlite::{Connection, Row};
+use rusqlite::{Connection, Row, Transaction};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
+use tracing::warn;
 
 mod accounts;
 mod approvals;
@@ -26,6 +27,7 @@ mod find;
 mod hub_settings;
 mod instances;
 mod lines;
+mod logins;
 mod made;
 mod new_workspace_draft;
 #[cfg(test)]
@@ -54,6 +56,7 @@ pub use comments::Commented;
 pub use error::{BackupError, StoreError};
 pub use events::{Places, SessionChange, StatusChange, TurnEdge, cancelled_approval};
 pub use instances::{InstanceStage, RecordedInstance};
+pub(crate) use logins::{Connecting, IdFrom};
 pub use made::{Made, MadeByRequest};
 pub use queue::{Changed, Queued};
 pub use reading::Reading;
@@ -116,6 +119,31 @@ fn rev_of(row: &Row<'_>, column: usize) -> rusqlite::Result<Rev> {
 }
 
 impl Store {
+    /// Runs `write` in a transaction whose commit is on disk before this returns, for what a power cut mustn't take
+    /// back, such as a login the hub has said it holds. Every other commit can be lost to one, as `open_connection`
+    /// says. `fullfsync` too, since without it SQLite's sync on a Mac can leave the commit in the drive's cache, as
+    /// `backup` says of its copies, and `open_connection`'s `checkpoint_fullfsync` keeps it through the checkpoints
+    /// after. SQLite won't change `synchronous` inside a transaction, so both are set around it, on the writer, which
+    /// is held throughout so no other write is made with them.
+    fn lasting<T>(&self, write: impl FnOnce(&Transaction<'_>) -> rusqlite::Result<T>) -> Result<T, StoreError> {
+        let mut conn = lock(&self.writer);
+        let set =
+            conn.pragma_update(None, "synchronous", "FULL").and_then(|()| conn.pragma_update(None, "fullfsync", true));
+        let written = set.and_then(|()| {
+            let tx = conn.transaction()?;
+            let value = write(&tx)?;
+            tx.commit()?;
+            Ok(value)
+        });
+        // Put back on every path, once either may have been set. Left as it is, the writer would only sync more than
+        // it needs to, so what was written still counts.
+        let fullfsync = conn.pragma_update(None, "fullfsync", false);
+        if let Err(e) = fullfsync.and(conn.pragma_update(None, "synchronous", "NORMAL")) {
+            warn!("couldn't have the database sync as it usually does after a write that had to last: {e}");
+        }
+        Ok(written?)
+    }
+
     /// Deletes the row with this ID from `table`. Returns the revision of the removal, or `None` if there
     /// was nothing to remove.
     fn delete(&self, table: &str, id: &str) -> Result<Option<Rev>, StoreError> {

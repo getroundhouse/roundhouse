@@ -115,6 +115,7 @@ pub(super) fn context() -> World {
         login: Some("Claude account".to_string()),
         email: Some("ada@example.com".to_string()),
         name: None,
+        login_agent: None,
         limits: vec![hours, week],
         held_login: None,
         rev: Rev::default(),

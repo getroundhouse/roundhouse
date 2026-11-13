@@ -24,6 +24,7 @@ mod hub_copies;
 mod hub_settings;
 mod instructions;
 mod launch_flags;
+mod logins;
 mod misbehaving_worker;
 mod model_and_mode;
 mod moves_cut_short;
