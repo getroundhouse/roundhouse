@@ -22,7 +22,7 @@ fn work_left_in_the_background_keeps_the_agent_at_work_until_it_finishes() {
     // An update waits on it, what it said is a reply, and its record says what's running.
     assert_eq!(client.hub_status().unwrap().running_sessions, 1);
     let waiting = client.session_get(&session.id).unwrap();
-    assert!(waiting.reply_seq > 0);
+    assert!(waiting.has_reply());
     let described: Vec<_> = waiting.background_tasks.iter().map(|t| (t.description.clone(), t.kind)).collect();
     assert_eq!(described, [(Some(format!("Wait for {}", done.display())), TaskKind::Command)]);
 

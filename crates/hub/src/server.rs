@@ -12,7 +12,7 @@ use protocol::client::{
     workspaces,
 };
 use protocol::frame::{self, Call};
-use protocol::model::Place;
+use protocol::model::{Place, Seq};
 use protocol::versions::Versions;
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use tokio::sync::mpsc;
@@ -265,7 +265,7 @@ async fn handle(
             C::Found(hub.session_find(id, subagent, &query).await?)
         }
         R::SessionSubscribe(subscriptions::SessionSubscribe { id, from_seq, subscription_id }) => {
-            follow_log(hub, connection, id, subscription_id, Following::Log { next: from_seq.max(1) }).await?;
+            follow_log(hub, connection, id, subscription_id, Following::Log { next: from_seq.max(Seq::FIRST) }).await?;
             C::Ok
         }
         R::SessionReadPlaces(log::SessionReadPlaces { id, subagent, from_place, limit, max_bytes, include_raw }) => {
@@ -278,7 +278,7 @@ async fn handle(
             from_place,
             subscription_id,
         }) => {
-            let next = from_place.max(Place::new(1));
+            let next = from_place.max(Place::FIRST);
             follow_log(hub, connection, id, subscription_id, Following::Places { subagent, next }).await?;
             C::Ok
         }

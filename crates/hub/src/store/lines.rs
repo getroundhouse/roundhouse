@@ -3,12 +3,12 @@
 
 use std::collections::HashMap;
 
-use protocol::model::{CompactionLine, Place, PromptLine, Seq, SessionId, SettledAt, Settlement, WorkspaceId};
+use protocol::model::{CompactionLine, PromptLine, Seq, SessionId, SettledAt, Settlement, WorkspaceId};
 use rusqlite::Connection;
 use rusqlite::types::ValueRef;
 use serde_json::Value;
 
-use super::{Store, StoreError, lock};
+use super::{Store, StoreError, lock, place_of, seq_of};
 
 impl Store {
     /// Every prompt recorded in the session, oldest first, each as one line, with where it was settled. It reads only
@@ -48,8 +48,8 @@ impl Store {
             let by = row.get::<_, Option<String>>(2)?.map_or(Value::Null, Value::String);
             let tokens = |ix| row.get::<_, Option<i64>>(ix).map(|tokens| tokens.and_then(|t| u64::try_from(t).ok()));
             lines.push(CompactionLine {
-                seq: row.get::<_, i64>(0)?.cast_unsigned(),
-                place: Place::new(row.get::<_, i64>(1)?.cast_unsigned()),
+                seq: seq_of(row, 0)?,
+                place: place_of(row, 1)?,
                 by: serde_json::from_value(by).unwrap_or_default(),
                 before_tokens: tokens(3)?,
                 after_tokens: tokens(4)?,
@@ -60,7 +60,7 @@ impl Store {
 
     /// Every prompt recorded in the workspace's chats, oldest first whichever chat it was in, each as one line, read as
     /// [`Store::prompt_lines`] reads one chat's but without where it was settled, which nothing that reads these needs.
-    /// A line's `seq` is its place in its own chat's log.
+    /// A line's `seq` is in its own chat's log, so two chats' lines can have the same one.
     pub fn workspace_prompt_lines(&self, workspace_id: &WorkspaceId) -> Result<Vec<PromptLine>, StoreError> {
         let conn = lock(&self.reader);
         let mut statement = conn.prepare_cached(
@@ -78,17 +78,16 @@ impl Store {
 fn settled_prompts(conn: &Connection, session_id: &SessionId) -> Result<HashMap<Seq, SettledAt>, StoreError> {
     let mut statement = conn.prepare_cached(
         "SELECT json_extract(body, '$.prompt'), seq, place, kind FROM events \
-         WHERE session_id = ? AND kind IN ('prompt_taken', 'prompt_dropped') ORDER BY seq",
+         WHERE session_id = ? AND kind IN ('prompt_taken', 'prompt_dropped') \
+         AND json_extract(body, '$.prompt') IS NOT NULL ORDER BY seq",
     )?;
     let mut rows = statement.query([session_id.as_str()])?;
     let mut settled = HashMap::new();
     while let Some(row) = rows.next()? {
-        let Some(prompt) = row.get::<_, Option<i64>>(0)? else { continue };
-        let seq = row.get::<_, i64>(1)?.cast_unsigned();
-        let place = Place::new(row.get::<_, i64>(2)?.cast_unsigned());
+        let (prompt, seq, place) = (seq_of(row, 0)?, seq_of(row, 1)?, place_of(row, 2)?);
         let how = if row.get::<_, String>(3)? == "prompt_taken" { Settlement::Taken } else { Settlement::Dropped };
         // In order, so the last to name it stays.
-        settled.insert(prompt.cast_unsigned(), SettledAt { seq, place, how: Some(how) });
+        settled.insert(prompt, SettledAt { seq, place, how: Some(how) });
     }
     Ok(settled)
 }
@@ -97,7 +96,7 @@ fn settled_prompts(conn: &Connection, session_id: &SessionId) -> Result<HashMap<
 fn lines_of(mut rows: rusqlite::Rows<'_>) -> Result<Vec<PromptLine>, StoreError> {
     let mut lines = Vec::new();
     while let Some(row) = rows.next()? {
-        let seq = row.get::<_, i64>(0)?.cast_unsigned();
+        let seq = seq_of(row, 0)?;
         // Borrowed rather than copied, since a pasted log can be long and only its start is kept. A JSON string
         // comes out as text, and a missing one as null.
         let text = match row.get_ref(1)? {
@@ -105,7 +104,7 @@ fn lines_of(mut rows: rusqlite::Rows<'_>) -> Result<Vec<PromptLine>, StoreError>
             ValueRef::Null | ValueRef::Integer(_) | ValueRef::Real(_) | ValueRef::Blob(_) => "".into(),
         };
         let files = u32::try_from(row.get::<_, Option<i64>>(2)?.unwrap_or(0)).unwrap_or(u32::MAX);
-        let place = Place::new(row.get::<_, i64>(3)?.cast_unsigned());
+        let place = place_of(row, 3)?;
         lines.push(PromptLine::new(seq, &text, files).placed(place));
     }
     Ok(lines)

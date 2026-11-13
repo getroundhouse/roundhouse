@@ -11,7 +11,7 @@ use protocol::client::{
 };
 use protocol::event::{AgentTask, CompactedBy, CompactionOutcome, EventBody, SessionEvent, TaskKind};
 use protocol::frame;
-use protocol::model::{LimitWindow, ModelLabel, ModelName, Place, PullRequestFound, RecordKey, Rev};
+use protocol::model::{LimitWindow, ModelLabel, ModelName, Place, PullRequestFound, RecordKey, Rev, Seq};
 use protocol::tail::{Compacting, StreamDelta, Tail};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -331,7 +331,7 @@ fn a_compaction_and_what_asked_for_it_keep_their_form_and_the_kinds_they_re_stor
     assert_eq!(read(compacting), EventBody::AgentCompacting { written_chars: Some(8_463) });
     assert_eq!(
         read(compacted),
-        EventBody::AgentCompacted { asked: Some(7), keeping: Some("The API design".into()), outcome }
+        EventBody::AgentCompacted { asked: Some(Seq::new(7)), keeping: Some("The API design".into()), outcome }
     );
     for (body, kind) in [(asked, "compaction_asked"), (compacting, "agent_compacting"), (compacted, "agent_compacted")]
     {

@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use client_core::{Client, Restart};
 use protocol::event::{ApprovalDecision, EventBody, SessionEvent};
-use protocol::model::{BranchName, Head, SetupStatus};
+use protocol::model::{BranchName, Head, Seq, SetupStatus};
 use protocol::worker::{WorkerOutcome, WorkerRequest, WorkerResponse};
 
 use crate::attaching::Attached;
@@ -74,7 +74,7 @@ fn a_message_the_agent_is_writing_as_the_hub_restarts_is_whole_in_the_next_hub_s
     let (_, session) = stack.workspace(&client);
     // Thinking for 30 s, so it's still writing once the next hub has started.
     client.session_prompt(&session.id, "think:300:t", None).unwrap();
-    let subscription = client.session_subscribe(&session.id, 1).unwrap();
+    let subscription = client.session_subscribe(&session.id, Seq::new(1)).unwrap();
     let mut before = Follower::default();
     before.drain_until(&subscription, "the agent to start thinking", |f| f.tail_text().contains("t2 "));
     drop((subscription, client));
@@ -85,7 +85,7 @@ fn a_message_the_agent_is_writing_as_the_hub_restarts_is_whole_in_the_next_hub_s
     stack.start_hub();
 
     let client = stack.client();
-    let subscription = client.session_subscribe(&session.id, 1).unwrap();
+    let subscription = client.session_subscribe(&session.id, Seq::new(1)).unwrap();
     let mut after = Follower::default();
     let heard = before.tail_text().len();
     after.drain_until(&subscription, "the thinking to go on", |f| f.tail_text().len() > heard + 40);

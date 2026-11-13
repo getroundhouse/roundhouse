@@ -19,7 +19,7 @@ async fn a_subscriber_is_sent_the_tail_again_once_the_hub_takes_what_a_worker_ke
     let session = carried_on(&hub, &stand_in_worker(&hub), RunId::new(1));
     let (frames, mut sent) = mpsc::channel(8);
     let live = session.subscribe();
-    let following = Following::Log { next: 1 };
+    let following = Following::Log { next: Seq::new(1) };
     tokio::spawn(pump(hub.clone(), session.clone(), "s".into(), 1, following, live, frames));
     let first = tokio::time::timeout(TIMEOUT, sent.recv()).await.unwrap();
     assert!(matches!(first, Some(HubFrame::Tail { ref tail, .. }) if tail.is_empty()), "{first:?}");

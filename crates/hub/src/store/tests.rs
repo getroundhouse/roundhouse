@@ -61,11 +61,14 @@ fn sequence_numbers_start_at_one_with_no_gaps() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
     for expected in 1..=5 {
-        assert_eq!(store.append(&"s".into(), None, &notice("x"), None, None, None).unwrap().event.seq, expected);
+        assert_eq!(
+            store.append(&"s".into(), None, &notice("x"), None, None, None).unwrap().event.seq,
+            Seq::new(expected)
+        );
     }
-    let events = store.read_events(&"s".into(), 1, 100, u64::MAX, false).unwrap();
-    assert_eq!(events.iter().map(|e| e.seq).collect::<Vec<_>>(), vec![1, 2, 3, 4, 5]);
-    assert_eq!(store.get_session(&"s".into()).unwrap().session.last_seq, 5);
+    let events = store.read_events(&"s".into(), Seq::new(1), 100, u64::MAX, false).unwrap();
+    assert_eq!(events.iter().map(|e| e.seq.get()).collect::<Vec<_>>(), vec![1, 2, 3, 4, 5]);
+    assert_eq!(store.get_session(&"s".into()).unwrap().session.last_seq, Seq::new(5));
 }
 
 #[test]
@@ -88,7 +91,7 @@ fn a_repeated_client_msg_id_returns_the_original_and_adds_nothing() {
     let again = store.append(&"s".into(), None, &notice("c"), None, Some(&"msg-1".into()), None).unwrap();
     assert!(again.duplicate);
     assert_eq!(again.event, first.event, "the same event, in the same place");
-    assert_eq!(store.get_session(&"s".into()).unwrap().session.last_seq, 2);
+    assert_eq!(store.get_session(&"s".into()).unwrap().session.last_seq, Seq::new(2));
 }
 
 #[test]
@@ -98,12 +101,12 @@ fn reads_page_by_count_and_by_size_and_always_make_progress() {
     for _ in 0..10 {
         store.append(&"s".into(), None, &notice(&"x".repeat(1000)), None, None, None).unwrap();
     }
-    assert_eq!(store.read_events(&"s".into(), 1, 3, u64::MAX, false).unwrap().len(), 3);
-    assert_eq!(store.read_events(&"s".into(), 9, 100, u64::MAX, false).unwrap().len(), 2);
-    assert_eq!(store.read_events(&"s".into(), 11, 100, u64::MAX, false).unwrap().len(), 0);
+    assert_eq!(store.read_events(&"s".into(), Seq::new(1), 3, u64::MAX, false).unwrap().len(), 3);
+    assert_eq!(store.read_events(&"s".into(), Seq::new(9), 100, u64::MAX, false).unwrap().len(), 2);
+    assert_eq!(store.read_events(&"s".into(), Seq::new(11), 100, u64::MAX, false).unwrap().len(), 0);
     // Stops at the size limit, but a single event larger than the limit still comes back.
-    assert_eq!(store.read_events(&"s".into(), 1, 100, 2500, false).unwrap().len(), 3);
-    assert_eq!(store.read_events(&"s".into(), 1, 100, 1, false).unwrap().len(), 1);
+    assert_eq!(store.read_events(&"s".into(), Seq::new(1), 100, 2500, false).unwrap().len(), 3);
+    assert_eq!(store.read_events(&"s".into(), Seq::new(1), 100, 1, false).unwrap().len(), 1);
 }
 
 #[test]
@@ -111,9 +114,9 @@ fn raw_lines_are_kept_and_only_returned_when_asked_for() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
     store.append(&"s".into(), None, &notice("x"), Some("{\"original\":true}"), None, None).unwrap();
-    assert_eq!(store.read_events(&"s".into(), 1, 1, u64::MAX, false).unwrap()[0].raw, None);
+    assert_eq!(store.read_events(&"s".into(), Seq::new(1), 1, u64::MAX, false).unwrap()[0].raw, None);
     assert_eq!(
-        store.read_events(&"s".into(), 1, 1, u64::MAX, true).unwrap()[0].raw.as_deref(),
+        store.read_events(&"s".into(), Seq::new(1), 1, u64::MAX, true).unwrap()[0].raw.as_deref(),
         Some("{\"original\":true}")
     );
 }
@@ -134,7 +137,7 @@ fn data_survives_reopening_and_migrations_do_not_rerun() {
     let dir = tempfile::tempdir().unwrap();
     store_with_session(dir.path()).append(&"s".into(), None, &notice("kept"), None, None, None).unwrap();
     let store = open_in(dir.path());
-    assert_eq!(store.read_events(&"s".into(), 1, 10, u64::MAX, false).unwrap()[0].body, notice("kept"));
+    assert_eq!(store.read_events(&"s".into(), Seq::new(1), 10, u64::MAX, false).unwrap()[0].body, notice("kept"));
 }
 
 #[test]
@@ -150,7 +153,7 @@ fn an_event_keeps_its_run_and_no_run_is_handed_out_twice() {
     let second = store.next_run().unwrap();
 
     assert!(second > first, "a reopened store handed out {second} after {first}");
-    let events = store.read_events(&"s".into(), 1, 10, u64::MAX, false).unwrap();
+    let events = store.read_events(&"s".into(), Seq::new(1), 10, u64::MAX, false).unwrap();
     assert_eq!(events.iter().map(|e| e.run).collect::<Vec<_>>(), vec![Some(first), None]);
 }
 
@@ -166,9 +169,9 @@ fn a_database_from_before_runs_and_revisions_keeps_everything_in_it() {
 
     let store = older::store_from_before(dir.path(), schema::BEFORE_RUNS, rows);
 
-    let events = store.read_events(&"s".into(), 1, 10, u64::MAX, true).unwrap();
+    let events = store.read_events(&"s".into(), Seq::new(1), 10, u64::MAX, true).unwrap();
     assert_eq!((events[0].run, &events[0].body, events[0].raw.as_deref()), (None, &notice("old"), Some("line")));
-    assert_eq!(store.append(&"s".into(), None, &notice("new"), None, None, None).unwrap().event.seq, 2);
+    assert_eq!(store.append(&"s".into(), None, &notice("new"), None, None, None).unwrap().event.seq, Seq::new(2));
     // Records from before revisions are at the first one, and anything after moves past it, as later migrations
     // naming the session's model and effort, and filling in when the person last did something in the workspace, do.
     let records = store.list_records().unwrap();

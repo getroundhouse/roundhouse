@@ -6,7 +6,7 @@ use client_core::records::{HubRecords, Snapshot};
 use client_core::{RecordsFeed, Subscription};
 use protocol::client::HubNotice;
 use protocol::model::{
-    AgentKind, DiffSide, Head, PullRequestFound, RecordKey, Rev, Session, SessionSettingsChange, SessionStatus,
+    AgentKind, DiffSide, Head, PullRequestFound, RecordKey, Rev, Seq, Session, SessionSettingsChange, SessionStatus,
     WorkspaceStatus,
 };
 
@@ -23,7 +23,7 @@ struct Sidebar {
 /// A record without what every event moves, so two copies are the same if nothing about the chat changed between
 /// them.
 fn apart_from_the_log(session: &Session) -> Session {
-    Session { rev: Rev::default(), last_seq: 0, updated_at_ms: 0, ..session.clone() }
+    Session { rev: Rev::default(), last_seq: Seq::default(), updated_at_ms: 0, ..session.clone() }
 }
 
 impl Sidebar {
@@ -192,7 +192,7 @@ fn a_client_copy_of_the_records_keeps_up_with_the_hub() {
         let workspaces = records.workspaces().to_vec();
         let mut sessions: Vec<_> = workspaces.iter().map(|w| records.sessions(&w.id).to_vec()).collect();
         for session in sessions.iter_mut().flatten() {
-            (session.last_seq, session.updated_at_ms) = (0, 0);
+            (session.last_seq, session.updated_at_ms) = (Seq::default(), 0);
         }
         let comments: Vec<_> = workspaces.iter().map(|w| records.comments(&w.id).to_vec()).collect();
         (records.repos().to_vec(), workspaces, sessions, comments)

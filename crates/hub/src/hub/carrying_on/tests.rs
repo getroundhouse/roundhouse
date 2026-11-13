@@ -34,10 +34,10 @@ fn a_session_whose_agent_has_gone_is_interrupted_as_it_is_with_the_hub_there() {
     assert!(session.background_tasks.is_empty(), "the agent took its work with it");
     assert!(session.queue_held, "it's for the person to say whether to go on");
     assert_eq!(session.turn_started_at_ms, Some(prompted.event.ts_ms));
-    assert_eq!(session.reply_seq, 0, "a turn the agent was cut off from doesn't end");
+    assert_eq!(session.reply_seq, Seq::default(), "a turn the agent was cut off from doesn't end");
     assert!(store.open_approvals(&id).unwrap().is_empty());
     assert!(store.untaken_prompts().unwrap().is_empty());
-    let after = store.read_events(&id, prompted.event.seq + 2, 10, u64::MAX, false).unwrap();
+    let after = store.read_events(&id, Seq::new(prompted.event.seq.get() + 2), 10, u64::MAX, false).unwrap();
     let kinds: Vec<_> = after.iter().map(|event| event.body.kind()).collect();
     assert_eq!(kinds, ["prompt_dropped", "approval_resolved", "agent_exited"]);
 }

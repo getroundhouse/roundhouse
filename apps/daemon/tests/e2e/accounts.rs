@@ -8,7 +8,7 @@ use client_core::{Client, ClientError, SubscriptionItem};
 use protocol::client::{ErrorCode, HubNotice};
 use protocol::event::EventBody;
 use protocol::model::{
-    Account, AccountId, AgentAccount, AgentKind, LimitWindow, ModelLabel, SessionId, SessionStatus, UsageLimit,
+    Account, AccountId, AgentAccount, AgentKind, LimitWindow, ModelLabel, Seq, SessionId, SessionStatus, UsageLimit,
 };
 use serde_json::json;
 
@@ -301,7 +301,7 @@ fn an_agent_that_doesnt_say_its_limits_by_itself_is_asked_and_the_answer_stays_o
     wait_for_adas_limits(&client, &session.id, &[the_week(), fables_week()]);
     // It answers the adapter's own question, like how full the context is, and the answer says how the account was
     // used, so none of it is in the log.
-    let (events, _) = client.session_read(&session.id, 1, 500, true).unwrap();
+    let (events, _) = client.session_read(&session.id, Seq::new(1), 500, true).unwrap();
     assert!(events.iter().all(|e| !matches!(e.body, EventBody::AgentLimits { .. })), "{events:?}");
     assert!(events.iter().all(|e| !e.raw.as_deref().unwrap_or_default().contains("get_usage")));
 }

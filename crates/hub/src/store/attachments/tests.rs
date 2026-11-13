@@ -98,7 +98,7 @@ fn a_workspaces_prompt_images_are_listed_oldest_first_across_its_chats() {
         let body = EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::carrying("look", attachments) };
         let seq = store.append(&chat.into(), None, &body, None, None, None).unwrap().event.seq;
         let when = "UPDATE events SET ts_ms = ?1 WHERE session_id = ?2 AND seq = ?3";
-        lock(&store.writer).execute(when, params![at_ms, chat, seq.cast_signed()]).unwrap();
+        lock(&store.writer).execute(when, params![at_ms, chat, seq.get().cast_signed()]).unwrap();
     };
 
     sent("s", 10, vec![image("a1"), log_file("a2", "build.log"), image("a3")]);

@@ -73,7 +73,7 @@ fn hear(hub: &mut Tail, run: RunId, heard: &[Heard]) {
     for (seq, heard) in (1..).zip(heard) {
         match heard {
             Heard::Delta(delta) => hub.apply(&StreamDelta { run: Some(run), ..delta.clone() }),
-            Heard::Event(body) => hub.on_event(seq, Some(run), body),
+            Heard::Event(body) => hub.on_event(Seq::new(seq), Some(run), body),
         }
     }
 }
@@ -200,7 +200,7 @@ proptest! {
         let before = applied(&deltas);
         let mut after = before.clone();
 
-        after.on_event(1, None, &finished(&which.as_str().into()));
+        after.on_event(Seq::new(1), None, &finished(&which.as_str().into()));
 
         let others: Vec<_> = before.messages.iter().filter(|m| m.message_id.as_str() != which).cloned().collect();
         prop_assert_eq!(after.messages, others);
@@ -213,7 +213,7 @@ proptest! {
         let before = applied(&deltas);
         let mut after = before.clone();
 
-        after.on_event(1, Some(ended), &turn_ended());
+        after.on_event(Seq::new(1), Some(ended), &turn_ended());
 
         let later: Vec<_> = before.messages.iter().filter(|m| m.run.is_some_and(|run| run > ended)).cloned().collect();
         prop_assert_eq!(after.messages, later);

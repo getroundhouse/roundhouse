@@ -12,7 +12,7 @@ use protocol::prompt::Prompt;
 /// A log as a view of an open session holds it once the subscription has delivered what it starts with.
 fn opened(last_seq: Seq) -> SessionLog {
     let mut log = SessionLog::new(last_seq);
-    for event in page(before_live(log.last()).next().seq()..last_seq + 1) {
+    for event in page(before_live(log.last()).next().seq().get()..last_seq.next().get()) {
         log.apply_event(event);
     }
     log
@@ -28,12 +28,17 @@ fn fetch(log: &mut SessionLog, focus: usize, fails: Option<usize>) {
             log.fetch_failed();
             return;
         }
-        log.install_page(range.start, page(range.start.seq()..range.end.min(after_last).seq()));
+        log.install_page(range.start, page(range.start.seq().get()..range.end.min(after_last).seq().get()));
     }
 }
 
 fn scroll_to(log: &mut SessionLog, focus: usize) {
     fetch(log, focus, None);
+}
+
+/// Any `seq` of those numbered `numbers`.
+fn seq_in(numbers: Range<u64>) -> impl Strategy<Value = Seq> {
+    numbers.prop_map(Seq::new)
 }
 
 proptest! {
@@ -45,7 +50,7 @@ proptest! {
 
     /// What's on screen is always there, and is the event its row says it is.
     #[test]
-    fn the_row_in_focus_is_loaded_and_holds_its_own_event(last_seq in 1u64..30_000, focuses in vec(0usize..30_000, 1..40)) {
+    fn the_row_in_focus_is_loaded_and_holds_its_own_event(last_seq in seq_in(1u64..30_000), focuses in vec(0usize..30_000, 1..40)) {
         let mut log = opened(last_seq);
         for focus in focuses {
             let focus = focus % log.row_count();
@@ -61,7 +66,7 @@ proptest! {
 
     /// A long session never ends up all in memory, wherever it's been scrolled.
     #[test]
-    fn it_never_holds_more_than_its_limit(last_seq in 1u64..30_000, focuses in vec(0usize..30_000, 1..80)) {
+    fn it_never_holds_more_than_its_limit(last_seq in seq_in(1u64..30_000), focuses in vec(0usize..30_000, 1..80)) {
         let mut log = opened(last_seq);
         for focus in focuses {
             let focus = focus % log.row_count();
@@ -74,7 +79,7 @@ proptest! {
 
     /// Everything it asks for exists, and starts on a page boundary, so each page has one key.
     #[test]
-    fn it_only_asks_for_whole_pages_that_exist(last_seq in 1u64..30_000, focus in 0usize..30_000) {
+    fn it_only_asks_for_whole_pages_that_exist(last_seq in seq_in(1u64..30_000), focus in 0usize..30_000) {
         let mut log = SessionLog::new(last_seq);
         log.focus_on(focus);
 
@@ -88,7 +93,7 @@ proptest! {
 
     /// A page on its way isn't asked for twice.
     #[test]
-    fn a_page_on_its_way_is_not_asked_for_again(last_seq in 1u64..30_000, focus in 0usize..30_000) {
+    fn a_page_on_its_way_is_not_asked_for_again(last_seq in seq_in(1u64..30_000), focus in 0usize..30_000) {
         let mut log = SessionLog::new(last_seq);
         log.focus_on(focus);
         log.pages_to_fetch();
@@ -99,7 +104,7 @@ proptest! {
     /// A log whose subscription started after `before_live`, and has had every event since, loads any row a
     /// view scrolls to, so a page part-delivered live is never taken for a whole one.
     #[test]
-    fn rows_from_live_events_and_from_scrolling_all_load(last_seq in 1u64..3_000, focuses in vec(0usize..3_000, 1..20)) {
+    fn rows_from_live_events_and_from_scrolling_all_load(last_seq in seq_in(1u64..3_000), focuses in vec(0usize..3_000, 1..20)) {
         let mut log = opened(last_seq);
         for focus in focuses {
             let focus = focus % log.row_count();
@@ -113,7 +118,7 @@ proptest! {
     /// However fetches fail, once retrying is allowed, as on a new connection, every row loads, so nothing
     /// asked for alongside a failed fetch is left waiting for good.
     #[test]
-    fn after_failed_fetches_every_row_still_loads(last_seq in 1u64..3_000, steps in vec((0usize..3_000, 0usize..4), 1..20)) {
+    fn after_failed_fetches_every_row_still_loads(last_seq in seq_in(1u64..3_000), steps in vec((0usize..3_000, 0usize..4), 1..20)) {
         let mut log = opened(last_seq);
         for (focus, fails) in steps {
             let focus = focus % log.row_count();
@@ -130,7 +135,7 @@ proptest! {
     /// session has been scrolled and with prompts sent that aren't recorded yet, which the tail shows.
     #[test]
     fn the_loaded_rows_are_the_ones_that_hold_something(
-        last_seq in 1u64..6_000,
+        last_seq in seq_in(1u64..6_000),
         focuses in vec(0usize..6_000, 0..12),
         sent in 0usize..3,
     ) {

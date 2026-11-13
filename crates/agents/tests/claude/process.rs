@@ -8,7 +8,7 @@ use std::time::Duration;
 use agents::claude::spawn_at;
 use agents::{AgentOptions, AgentOutput, ToolServer};
 use protocol::event::{CompactedBy, CompactionOutcome, ContentBlock, EventBody, NoticeLevel};
-use protocol::model::{AgentKind, PermissionMode, RunId};
+use protocol::model::{AgentKind, PermissionMode, RunId, Seq};
 use protocol::prompt::Prompt;
 use protocol::worker::{AgentSpec, ToolsToken};
 use tokio::sync::mpsc;
@@ -237,7 +237,7 @@ async fn an_agent_starting_in_plan_mode_is_asked_into_it_before_its_first_prompt
     let agent = spawn_at(script(dir.path(), READS_TWO_LINES), in_plan_mode(dir.path()), tx, AgentOptions::default())
         .await
         .unwrap();
-    agent.send_prompt(1, &Prompt::new("go")).await.unwrap();
+    agent.send_prompt(Seq::new(1), &Prompt::new("go")).await.unwrap();
 
     asked_into_plan_mode_then_prompted(&two_lines_read(dir.path()).await);
     agent.stop().await;
@@ -257,7 +257,7 @@ async fn an_agent_relaunched_in_plan_mode_is_asked_into_it_again() {
     resumed.resume = true;
 
     let agent = spawn_at(script(dir.path(), &body), resumed, tx, AgentOptions::default()).await.unwrap();
-    agent.send_prompt(1, &Prompt::new("go")).await.unwrap();
+    agent.send_prompt(Seq::new(1), &Prompt::new("go")).await.unwrap();
 
     asked_into_plan_mode_then_prompted(&two_lines_read(dir.path()).await);
     agent.stop().await;
@@ -360,7 +360,7 @@ printf '{"type":"result","subtype":"success","num_turns":0,"result":""}\n'
 "#;
     let agent = spawn_at(script(dir.path(), body), spec(dir.path()), tx, AgentOptions::default()).await.unwrap();
 
-    agent.compact(7, Some("Keep the API design")).await.unwrap();
+    agent.compact(Seq::new(7), Some("Keep the API design")).await.unwrap();
 
     let seen = until_exit(&mut rx).await;
     let compacted = seen.iter().find_map(|item| match item {
@@ -373,7 +373,7 @@ printf '{"type":"result","subtype":"success","num_turns":0,"result":""}\n'
         .iter()
         .any(|item| matches!(item, AgentOutput::Event { body: EventBody::TurnEnded { only_compacted: true, .. }, .. }));
     let (asked, keeping, outcome) = compacted.expect("a compaction");
-    assert_eq!((asked, keeping.as_deref()), (Some(7), Some("Keep the API design")));
+    assert_eq!((asked, keeping.as_deref()), (Some(Seq::new(7)), Some("Keep the API design")));
     let CompactionOutcome::Compacted { by, summary, .. } = outcome else { panic!("{outcome:?}") };
     assert_eq!((by, summary.as_deref()), (CompactedBy::Asked, Some("1. What was asked")));
     assert!(only, "{seen:?}");

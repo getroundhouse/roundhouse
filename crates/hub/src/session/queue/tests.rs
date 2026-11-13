@@ -39,10 +39,10 @@ fn exited(reason: ExitReason) -> EventBody {
 #[test]
 fn the_queue_waits_until_the_agent_has_taken_every_prompt_it_was_sent() {
     let mut watch = QueueWatch::default();
-    watch.set_untaken(vec![1, 2]);
+    watch.set_untaken(vec![Seq::new(1), Seq::new(2)]);
     assert!(!ready(&watch));
 
-    watch.set_untaken(vec![2]);
+    watch.set_untaken(vec![Seq::new(2)]);
     assert!(!ready(&watch), "one still waiting");
     watch.set_untaken(Vec::new());
     assert!(ready(&watch));
@@ -62,7 +62,7 @@ fn an_idle_with_a_prompt_the_agent_has_yet_to_take_is_from_before_it() {
     let mut watch = QueueWatch::default();
     assert!(!watch.idle_is_stale());
 
-    watch.set_untaken(vec![3]);
+    watch.set_untaken(vec![Seq::new(3)]);
 
     assert!(watch.idle_is_stale());
 }
@@ -86,7 +86,7 @@ fn a_stop_holds_the_queue_until_the_person_sends_a_prompt() {
     assert_eq!(watch.held_after(&compacting, Idle, Running), None, "asking to compact isn't asking to go on");
 
     record(&mut watch, &prompt(), Idle, Running);
-    record(&mut watch, &EventBody::PromptTaken { prompt: 3 }, Running, Running);
+    record(&mut watch, &EventBody::PromptTaken { prompt: Seq::new(3) }, Running, Running);
     record(&mut watch, &ended(TurnOutcome::Success), Running, Idle);
     assert!(ready(&watch));
 }
@@ -101,7 +101,7 @@ fn a_turn_that_failed_holds_the_queue_until_the_person_sends_a_prompt() {
 
     assert!(!ready(&watch));
     record(&mut watch, &prompt(), Idle, Running);
-    record(&mut watch, &EventBody::PromptTaken { prompt: 3 }, Running, Running);
+    record(&mut watch, &EventBody::PromptTaken { prompt: Seq::new(3) }, Running, Running);
     record(&mut watch, &ended(TurnOutcome::Success), Running, Idle);
     assert!(ready(&watch));
 }

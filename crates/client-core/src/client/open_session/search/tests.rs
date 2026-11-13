@@ -5,11 +5,11 @@ use std::time::Duration;
 use protocol::client::{ClientRequest, ClientResponse, ErrorCode, ReplyOutcome, log};
 use protocol::event::{EventBody, NoticeLevel};
 use protocol::find::Found;
-use protocol::model::{Place, ToolUseId};
+use protocol::model::{Place, Seq, ToolUseId};
 
 use super::super::OpenSession;
 use super::super::tests::{
-    LAST_SEQ, answered_simply, refused, requests_until_unsubscribed, session, start_hub_answering, until,
+    LAST_PLACE, answered_simply, refused, requests_until_unsubscribed, session, start_hub_answering, until,
 };
 use super::*;
 use crate::session_log::{By, SessionLog};
@@ -32,31 +32,28 @@ fn needle(query: &str) -> Needle {
 
 fn found(places: &[u64]) -> ReplyOutcome {
     let places = places.iter().copied().map(Place::new).collect();
-    ReplyOutcome::Response(ClientResponse::Found(Found { places, through: Place::new(LAST_SEQ) }))
+    ReplyOutcome::Response(ClientResponse::Found(Found { places, through: LAST_PLACE }))
 }
 
-/// The events of the agent or subagent asked for from a read by place, each a notice, to its end, with seqs far from
-/// their places, as a subagent's are.
+/// The events of the agent or subagent asked for from a read by place, each a notice, to its end, each the third event
+/// after the one before, so its `seq` is far from its place, as a subagent's is.
 fn read(request: &ClientRequest) -> Option<ReplyOutcome> {
     let ClientRequest::SessionReadPlaces(log::SessionReadPlaces { subagent, from_place, limit, .. }) = request else {
         return answered_simply(request);
     };
     let from = from_place.get();
-    let events = (from..(from + u64::from(*limit)).min(LAST_SEQ + 1))
+    let events = (from..(from + u64::from(*limit)).min(LAST_PLACE.get() + 1))
         .map(|place| {
             let body =
                 EventBody::Notice { level: NoticeLevel::Info, message: format!("{place}"), parent_tool_use_id: None };
             SessionEvent {
                 subagent: subagent.clone(),
                 place: Place::new(place),
-                ..protocol::fixtures::event(place * 3, body)
+                ..protocol::fixtures::event(Seq::new(place * 3), body)
             }
         })
         .collect();
-    Some(ReplyOutcome::Response(ClientResponse::PlacedEvents(log::PlacedEvents {
-        events,
-        last_place: Place::new(LAST_SEQ),
-    })))
+    Some(ReplyOutcome::Response(ClientResponse::PlacedEvents(log::PlacedEvents { events, last_place: LAST_PLACE })))
 }
 
 /// Where each read the hub has been sent for a stretch so far starts, and whose events it reads, gathering them
@@ -264,7 +261,7 @@ fn a_log_that_holds_every_event_needs_no_hub_once_it_knows_how_far_they_go() {
     let client = connect(&socket);
     let open = own(&client);
     let parser = EventBody::Notice { level: NoticeLevel::Info, message: "parser".into(), parent_tool_use_id: None };
-    let only = SessionEvent { place: Place::new(1), ..protocol::fixtures::event(1, parser) };
+    let only = SessionEvent { place: Place::new(1), ..protocol::fixtures::event(Seq::new(1), parser) };
 
     let before = open.search(&client, needle("parser"), 64);
     answer.send(()).unwrap();

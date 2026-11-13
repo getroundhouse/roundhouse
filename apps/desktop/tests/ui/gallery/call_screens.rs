@@ -6,7 +6,7 @@
 use look::Region;
 use protocol::event::{Asking, EventBody};
 use protocol::fixtures::{ApprovalRequest, approval_request};
-use protocol::model::{PermissionMode, SessionStatus, ToolUseId};
+use protocol::model::{PermissionMode, Seq, SessionStatus, ToolUseId};
 use serde_json::json;
 
 use super::events::{replied, taken, text, tool_result, tool_use, user_prompt};
@@ -69,7 +69,7 @@ fn output_alone() -> Vec<EventBody> {
                  this width it runs over the name.";
     vec![
         user_prompt("Did the sidebar's tests pass in the run you started?"),
-        taken(1),
+        taken(Seq::new(1)),
         tool_result("toolu-0", TEST_OUTPUT),
         text("msg-1", reply),
         replied(reply, 6, 0.02),
@@ -80,7 +80,7 @@ fn output_alone() -> Vec<EventBody> {
 fn advisor_waiting() -> World {
     let events = vec![
         user_prompt(tool_chats::ASK),
-        taken(1),
+        taken(Seq::new(1)),
         text("msg-1", "Before I change `Aspect`, I'll ask the advisor whether the plan holds up."),
         tool_use("msg-2", "srvtoolu-1", "advisor", json!({})),
     ];

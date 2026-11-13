@@ -9,7 +9,7 @@ use protocol::model::Seq;
 use crate::support::{Stack, Ui, click};
 
 fn retry(card: Seq) -> ElementId {
-    ElementId::NamedInteger("retry".into(), card)
+    ElementId::NamedInteger("retry".into(), card.get())
 }
 
 fn prompts(ui: &Ui) -> Vec<String> {

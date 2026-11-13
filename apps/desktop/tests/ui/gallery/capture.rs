@@ -30,6 +30,7 @@ mod scrollbar;
 
 pub(crate) use finding::{FoundBothWays, copied_whole, found_both_ways};
 use opening::open;
+use protocol::model::Seq;
 use scrollbar::ChatScroll;
 
 /// Long enough for the app to load a screen from a hub on the same machine, many times over.
@@ -76,7 +77,7 @@ struct Driver {
 /// Whether the chat has every row it holds. It holds only the agent's own events, so how many there are isn't the
 /// session's last `seq`.
 fn chat_loaded(pane: &WorkspacePane, cx: &App) -> bool {
-    let empty = pane.session().is_none_or(|s| s.last_seq == 0);
+    let empty = pane.session().is_none_or(|s| s.last_seq == Seq::default());
     pane.transcript().is_some_and(|t| {
         let t = t.read(cx);
         t.loaded_events() == t.row_count() && (empty || t.row_count() > 0)

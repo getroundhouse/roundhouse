@@ -98,7 +98,7 @@ fn a_request_and_the_hubs_answer_are_recorded_one_after_the_other_and_leave_the_
         .unwrap();
 
     assert_eq!((asked.event.body, answered.event.body), (request, answer));
-    assert_eq!(answered.event.seq, asked.event.seq + 1);
+    assert_eq!(answered.event.seq, asked.event.seq.next());
     let after = session(&store);
     assert_eq!(after.open_approvals, Some(Vec::new()), "nothing is left waiting");
     assert_eq!((after.status, after.user_active_at_ms), (before.status, Some(1)), "the person did nothing");
@@ -238,7 +238,7 @@ proptest! {
         let appended: Vec<_> = sent.iter().map(append).collect();
 
         assert_placed(&appended, &sent)?;
-        prop_assert_eq!(store.read_events(&"s".into(), 1, u32::MAX, u64::MAX, false).unwrap(), appended);
+        prop_assert_eq!(store.read_events(&"s".into(), Seq::new(1), u32::MAX, u64::MAX, false).unwrap(), appended);
     }
 
     #[test]
@@ -268,12 +268,12 @@ proptest! {
         let store = older::store_from_before(dir.path(), schema::BEFORE_SUBAGENTS, &rows);
 
         for (id, sent) in &sessions {
-            assert_placed(&store.read_events(&(*id).into(), 1, u32::MAX, u64::MAX, false).unwrap(), sent)?;
+            assert_placed(&store.read_events(&(*id).into(), Seq::new(1), u32::MAX, u64::MAX, false).unwrap(), sent)?;
         }
         let (_, mut sent) = sessions.into_iter().next().unwrap();
         store.append(&"s".into(), None, &next.body(), None, None, None).unwrap();
         sent.push(next);
-        assert_placed(&store.read_events(&"s".into(), 1, u32::MAX, u64::MAX, false).unwrap(), &sent)?;
+        assert_placed(&store.read_events(&"s".into(), Seq::new(1), u32::MAX, u64::MAX, false).unwrap(), &sent)?;
     }
 }
 
@@ -296,7 +296,7 @@ fn only_a_user_line_that_names_a_call_is_a_subagents_once_migrated() {
 
     let store = older::store_from_before(dir.path(), schema::BEFORE_SUBAGENTS, &rows);
 
-    let events = store.read_events(&"s".into(), 1, 10, u64::MAX, false).unwrap();
+    let events = store.read_events(&"s".into(), Seq::new(1), 10, u64::MAX, false).unwrap();
     let placed: Vec<_> =
         events.iter().map(|event| (event.subagent.as_ref().map(ToolUseId::as_str), event.place.get())).collect();
     assert_eq!(placed, [(None, 1), (None, 2), (None, 3), (None, 4), (Some("call"), 1)]);
@@ -327,7 +327,7 @@ fn a_migrated_log_keeps_each_events_time_id_run_and_line_and_its_indexes() {
 
     let store = older::store_from_before(dir.path(), schema::BEFORE_SUBAGENTS, rows);
 
-    let events = store.read_events(&"s".into(), 1, 10, u64::MAX, true).unwrap();
+    let events = store.read_events(&"s".into(), Seq::new(1), 10, u64::MAX, true).unwrap();
     let kept: Vec<_> = events.iter().map(|event| (event.ts_ms, event.run, event.raw.as_deref())).collect();
     assert_eq!(kept, [(1700, Some(RunId::new(3)), Some("line a")), (1800, None, None)]);
     let again = store.append(&"s".into(), None, &notice("c"), None, Some(&"msg-1".into()), None).unwrap();
@@ -350,13 +350,31 @@ fn a_read_by_place_takes_one_agent_or_subagents_events_up_to_a_seq_and_says_how_
     let read = |from, through, limit| {
         let places = Places { subagent: call.as_ref(), from: Place::new(from), through };
         let (events, last) = store.read_places(&"s".into(), places, limit, u64::MAX, false).unwrap();
-        (events.iter().map(|event| (event.seq, event.place.get())).collect::<Vec<_>>(), last.get())
+        (events.iter().map(|event| (event.seq.get(), event.place.get())).collect::<Vec<_>>(), last.get())
     };
 
     assert_eq!(read(1, None, 10), (vec![(1, 1), (3, 2), (5, 3)], 3));
     assert_eq!(read(2, None, 1), (vec![(3, 2)], 3));
-    assert_eq!(read(2, Some(4), 10), (vec![(3, 2)], 3), "nothing recorded after the seq it stops at");
+    assert_eq!(read(2, Some(Seq::new(4)), 10), (vec![(3, 2)], 3), "nothing recorded after the seq it stops at");
     assert_eq!(read(4, None, 10), (vec![], 3));
+}
+
+/// A client can ask to read from any number, and one past the furthest a column holds is past every event, rather than
+/// wrapping round to before the first.
+#[test]
+fn a_read_from_past_the_furthest_a_column_holds_reads_nothing() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_session(dir.path());
+    store.append(&"s".into(), None, &notice("x"), None, None, None).unwrap();
+
+    for past in [i64::MAX.unsigned_abs() + 1, u64::MAX] {
+        let by_seq = store.read_events(&"s".into(), Seq::new(past), 10, u64::MAX, false).unwrap();
+        let places = Places { subagent: None, from: Place::new(past), through: None };
+        let (by_place, last) = store.read_places(&"s".into(), places, 10, u64::MAX, false).unwrap();
+
+        assert!(by_seq.is_empty(), "from seq {past}: {by_seq:?}");
+        assert_eq!((by_place, last), (Vec::new(), Place::new(1)), "from place {past}, and it says how far they go");
+    }
 }
 
 mod replies;

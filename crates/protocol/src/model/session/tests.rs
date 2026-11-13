@@ -29,7 +29,7 @@ fn session(status: &str, used_tokens: u64) -> Session {
         ContextUsage { used_tokens, max_tokens: 1_000_000, model_tokens: None, max_set_by: None, parts: Vec::new() };
     Session {
         status: serde_json::from_value(json!(status)).unwrap(),
-        last_seq: 4,
+        last_seq: Seq::new(4),
         context: Some(context),
         prompt_cache: Some(PromptCache { used_at_ms: 0, ttl: CacheTtl::OneHour, model: None, tokens: 0 }),
         ..crate::fixtures::session("s")
@@ -97,7 +97,7 @@ fn a_compaction_waits_for_the_turn_for_every_prompt_to_be_taken_and_for_a_conver
     };
     assert!(!says("idle", &[], true).compaction_waits());
     assert!(says("running", &[], true).compaction_waits());
-    assert!(says("idle", &[5], true).compaction_waits(), "a prompt or compaction on its way");
+    assert!(says("idle", &[Seq::new(5)], true).compaction_waits(), "a prompt or compaction on its way");
     assert!(says("idle", &[], false).compaction_waits(), "nothing to compact yet");
     assert!(session("running", 9_000).compaction_waits(), "a hub that doesn't say still says when it's working");
     assert!(!session("idle", 9_000).compaction_waits(), "and is asked otherwise");
@@ -122,4 +122,14 @@ fn the_agent_stops_short_by_going_away_mid_turn_or_by_failing_a_turn() {
         assert!(!chat(Idle, ended).stopped_short(), "{ended:?}");
     }
     assert!(!chat(SessionStatus::Unknown, Some(TurnOutcome::Error)).stopped_short(), "claims nothing it can't tell");
+}
+
+#[test]
+fn a_chat_has_a_reply_once_a_turn_has_ended_whether_or_not_it_s_read() {
+    let new = crate::fixtures::session("s");
+    let replied = Session { reply_seq: Seq::FIRST, ..new.clone() };
+    let read = Session { read_seq: Seq::FIRST, ..replied.clone() };
+
+    assert_eq!([new.has_reply(), replied.has_reply(), read.has_reply()], [false, true, true]);
+    assert_eq!([replied.unread(), read.unread()], [true, false]);
 }

@@ -140,6 +140,7 @@ pub(super) fn line_around(text: &str, byte: usize) -> Range<usize> {
 #[cfg(test)]
 mod tests {
     use gpui_kit::{Bounds, TestAppContext, point, px, size};
+    use protocol::model::Seq;
 
     use super::super::test_layouts::in_pieces;
     use super::super::{Drawn, Geometry, Spot};
@@ -153,7 +154,7 @@ mod tests {
 
     #[test]
     fn a_copy_leaves_out_a_text_with_nothing_of_it_selected() {
-        let (first, second) = (TextAt::only(1, 0), TextAt::only(2, 0));
+        let (first, second) = (TextAt::only(Seq::new(1), 0), TextAt::only(Seq::new(2), 0));
         let texts = [(first, markdown(&["one"])), (second, markdown(&["two words"]))];
         // From just past the end of the first text into the second.
         let (start, end) = (Spot { at: first, leaf: 0, byte: 3 }, Spot { at: second, leaf: 0, byte: 3 });
@@ -166,7 +167,7 @@ mod tests {
     /// is three bytes.
     #[test]
     fn a_copy_of_a_leaf_that_s_changed_under_an_end_ends_at_the_character_before() {
-        let at = TextAt::only(1, 0);
+        let at = TextAt::only(Seq::new(1), 0);
         let texts = [(at, markdown(&["Use foo — bar"]))];
         let (start, end) = (Spot { at, leaf: 0, byte: 0 }, Spot { at, leaf: 0, byte: 9 });
         let (inside, after) = (Spot { at, leaf: 0, byte: 10 }, Spot { at, leaf: 0, byte: 15 });
@@ -180,7 +181,8 @@ mod tests {
     /// in plain text is a character it says.
     #[test]
     fn a_copy_has_each_leaf_a_line_apart_each_text_a_blank_line_apart_and_an_atom_only_where_it_s_said() {
-        let (reply, command, output) = (TextAt::only(1, 0), TextAt::only(2, 0), TextAt::only(2, 1));
+        let (reply, command, output) =
+            (TextAt::only(Seq::new(1), 0), TextAt::only(Seq::new(2), 0), TextAt::only(Seq::new(2), 1));
         let printed = format!("one\nfound {ATOM} in it");
         let texts = [
             (reply, markdown(&[&format!("See {ATOM}here"), "Then this"])),
@@ -196,7 +198,8 @@ mod tests {
     /// its, through every leaf between. A text between the ends is selected whole, and one outside them not at all.
     #[test]
     fn what_s_selected_of_a_text_runs_from_one_end_to_the_other() {
-        let (first, between, after) = (TextAt::only(1, 0), TextAt::only(2, 0), TextAt::only(3, 0));
+        let (first, between, after) =
+            (TextAt::only(Seq::new(1), 0), TextAt::only(Seq::new(2), 0), TextAt::only(Seq::new(3), 0));
         let leaves = ["one", "", "three"];
         let (start, end) = (Spot { at: first, leaf: 0, byte: 1 }, Spot { at: first, leaf: 2, byte: 0 });
         let (from_between, to_after) = (Spot { at: first, leaf: 2, byte: 0 }, Spot { at: after, leaf: 0, byte: 0 });
@@ -231,7 +234,7 @@ mod tests {
         let (pieces, layouts) = in_pieces(cx.add_empty_window(), &["abc", "de"], 6.);
         let cut = (layouts[0].bounds().bottom() + layouts[1].bounds().top()) / 2.;
         let shows = Bounds::from_corners(pieces.bounds().origin, point(pieces.bounds().right(), cut));
-        let (above, edge) = (TextAt::only(1, 0), TextAt::only(2, 0));
+        let (above, edge) = (TextAt::only(Seq::new(1), 0), TextAt::only(Seq::new(2), 0));
         let leaves = vec![(0, Geometry::Plain(pieces))];
         let cut_short = Drawn { text: TextKey::named("above"), at: above, bounds: shows, area: None, leaves };
         let bounds = Bounds::new(point(px(0.), cut), size(px(200.), px(8.)));

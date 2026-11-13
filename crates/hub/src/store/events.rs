@@ -8,7 +8,7 @@ use super::approvals::note_approvals;
 use super::prompts::note_prompts;
 use super::sent::note_sent;
 use super::subagents::note_subagents;
-use super::{Appended, Store, StoreError, lock, now_ms, text_of};
+use super::{Appended, Store, StoreError, lock, now_ms, place_column, place_of, seq_column, seq_of, text_of};
 
 /// What an event changes about where a session's agent has got to, which commits with the event that brings it.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -69,7 +69,7 @@ impl From<SessionStatus> for SessionChange {
 fn change_session(
     tx: &Connection,
     session_id: &SessionId,
-    seq: i64,
+    seq: Seq,
     ts_ms: i64,
     change: SessionChange,
 ) -> Result<(), StoreError> {
@@ -98,7 +98,7 @@ fn change_session(
         )?,
         TurnEdge::Ends(outcome) => tx.execute(
             "UPDATE sessions SET status = ?, reply_seq = ?, reply_outcome = ? WHERE id = ?",
-            params![status, seq, outcome.as_ref().map(text_of), id],
+            params![status, seq_column(seq), outcome.as_ref().map(text_of), id],
         )?,
         TurnEdge::Neither => tx.execute("UPDATE sessions SET status = ? WHERE id = ?", params![status, id])?,
     };
@@ -156,50 +156,46 @@ struct Recording<'a> {
 /// Records `recording` as part of `tx`, as [`Store::append`] says.
 fn append_in(tx: &Connection, session_id: &SessionId, recording: Recording<'_>) -> Result<Appended, StoreError> {
     let Recording { run, body, raw, client_msg_id, change } = recording;
-    let last_seq: Option<i64> = tx
-        .query_row("SELECT last_seq FROM sessions WHERE id = ?", [session_id.as_str()], |row| row.get(0))
+    let last_seq = tx
+        .query_row("SELECT last_seq FROM sessions WHERE id = ?", [session_id.as_str()], |row| seq_of(row, 0))
         .optional()?;
     let last_seq = last_seq.ok_or_else(|| StoreError::NotFound { kind: "session", id: session_id.to_string() })?;
-    let seq = last_seq + 1;
+    let seq = last_seq.next();
     let ts_ms = now_ms();
     let encoded = serde_json::to_string(body)?;
     let subagent = body.subagent();
-    let place: i64 = tx.query_row(
-        "SELECT ifnull(max(place), 0) + 1 FROM events WHERE session_id = ? AND subagent IS ?",
-        params![session_id.as_str(), subagent.map(ToolUseId::as_str)],
-        |row| row.get(0),
-    )?;
+    let place = last_place(tx, session_id, subagent)?.next();
     tx.execute(
         "INSERT INTO events (session_id, seq, ts_ms, kind, client_msg_id, run, subagent, place, body, raw)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         params![
             session_id.as_str(),
-            seq,
+            seq_column(seq),
             ts_ms,
             body.kind(),
             client_msg_id.map(ClientMessageId::as_str),
             run.map(|run| run.get().cast_signed()),
             subagent.map(ToolUseId::as_str),
-            place,
+            place_column(place),
             encoded,
             raw
         ],
     )?;
     tx.execute(
         "UPDATE sessions SET last_seq = ?, updated_at_ms = ? WHERE id = ?",
-        params![seq, ts_ms, session_id.as_str()],
+        params![seq_column(seq), ts_ms, session_id.as_str()],
     )?;
     change_session(tx, session_id, seq, ts_ms, change.unwrap_or_default())?;
     let (dequeued, by_the_person) = note_sent(tx, session_id, ts_ms, run, body, client_msg_id)?;
-    let untaken = note_prompts(tx, session_id, seq.cast_unsigned(), body)?;
-    let approvals = note_approvals(tx, session_id, seq.cast_unsigned(), body)?;
+    let untaken = note_prompts(tx, session_id, seq, body)?;
+    let approvals = note_approvals(tx, session_id, seq, body)?;
     let event = SessionEvent {
         session_id: session_id.clone(),
-        seq: seq.cast_unsigned(),
+        seq,
         ts_ms,
         run,
         subagent: subagent.cloned(),
-        place: Place::new(place.cast_unsigned()),
+        place,
         body: body.clone(),
         raw: None,
     };
@@ -268,7 +264,7 @@ impl Store {
         let mut statement = conn.prepare_cached(&format!(
             "SELECT {EVENT_COLUMNS}, {raw_column} FROM events WHERE session_id = ? AND seq >= ? ORDER BY seq LIMIT ?"
         ))?;
-        let rows = statement.query(params![session_id.as_str(), from_seq.cast_signed(), limit])?;
+        let rows = statement.query(params![session_id.as_str(), seq_column(from_seq), limit])?;
         events_in(session_id, rows, max_bytes)
     }
 
@@ -286,20 +282,15 @@ impl Store {
         let Places { subagent, from, through } = places;
         let conn = lock(&self.reader);
         let raw_column = if include_raw { "raw" } else { "NULL" };
-        let subagent = subagent.map(ToolUseId::as_str);
         let mut statement = conn.prepare_cached(&format!(
             "SELECT {EVENT_COLUMNS}, {raw_column} FROM events
              WHERE session_id = ? AND subagent IS ? AND place >= ? AND seq <= ? ORDER BY place LIMIT ?"
         ))?;
-        let through = through.map_or(i64::MAX, Seq::cast_signed);
-        let rows = statement.query(params![session_id.as_str(), subagent, from.get().cast_signed(), through, limit])?;
+        let (from, through) = (place_column(from), through.map_or(i64::MAX, seq_column));
+        let rows =
+            statement.query(params![session_id.as_str(), subagent.map(ToolUseId::as_str), from, through, limit])?;
         let events = events_in(session_id, rows, max_bytes)?;
-        let last: i64 = conn.query_row(
-            "SELECT ifnull(max(place), 0) FROM events WHERE session_id = ? AND subagent IS ?",
-            params![session_id.as_str(), subagent],
-            |row| row.get(0),
-        )?;
-        Ok((events, Place::new(last.cast_unsigned())))
+        Ok((events, last_place(&conn, session_id, subagent)?))
     }
 
     /// The next run's ID. It's taken before the launch and never handed out again, so a run is
@@ -312,6 +303,15 @@ impl Store {
             })?;
         Ok(RunId::new(value.cast_unsigned()))
     }
+}
+
+/// The place of the newest event from the agent itself, or from the subagent `subagent` started, or 0 if there's none.
+fn last_place(conn: &Connection, session_id: &SessionId, subagent: Option<&ToolUseId>) -> rusqlite::Result<Place> {
+    conn.query_row(
+        "SELECT ifnull(max(place), 0) FROM events WHERE session_id = ? AND subagent IS ?",
+        params![session_id.as_str(), subagent.map(ToolUseId::as_str)],
+        |row| place_of(row, 0),
+    )
 }
 
 /// The event already recorded with this `client_msg_id`, if there is one.
@@ -358,11 +358,11 @@ fn event_in(session_id: &SessionId, row: &rusqlite::Row<'_>) -> Result<(SessionE
     let size = (body.len() + raw.as_ref().map_or(0, String::len)) as u64;
     let event = SessionEvent {
         session_id: session_id.clone(),
-        seq: row.get::<_, i64>(0)?.cast_unsigned(),
+        seq: seq_of(row, 0)?,
         ts_ms: row.get(1)?,
         run: row.get::<_, Option<i64>>(2)?.map(|run| RunId::new(run.cast_unsigned())),
         subagent: row.get::<_, Option<String>>(3)?.map(ToolUseId::from),
-        place: Place::new(row.get::<_, i64>(4)?.cast_unsigned()),
+        place: place_of(row, 4)?,
         body: serde_json::from_str(&body)?,
         raw,
     };

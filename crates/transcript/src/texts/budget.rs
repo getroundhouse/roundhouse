@@ -69,7 +69,7 @@ mod tests {
     use super::{BLOCKS_KEPT, PARSES_A_LOOK};
 
     fn at(seq: u64) -> TextAt {
-        TextAt::only(seq, 0)
+        TextAt::only(protocol::model::Seq::new(seq), 0)
     }
 
     /// Has `texts` draw `count` texts of `words`, each in a frame of its own, and says which then have blocks. They're

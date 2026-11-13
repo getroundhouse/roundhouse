@@ -13,7 +13,7 @@ use protocol::find::Found;
 use protocol::fixtures;
 use protocol::model::{
     Account, CompactionLine, DiffComment, DiffSide, FileContents, FileOpened, FilePages, GitDiff, GitStatus,
-    HubSettings, NewWorkspaceDraft, Place, PromptLine, Records, Repo, Rev, SessionAccount, WorktreeFiles,
+    HubSettings, NewWorkspaceDraft, Place, PromptLine, Records, Repo, Rev, Seq, SessionAccount, WorktreeFiles,
 };
 
 use super::answered;
@@ -169,7 +169,7 @@ fn every_reply_about_a_workspace_keeps_its_form() {
 #[test]
 fn every_reply_about_a_sessions_log_keeps_its_form() {
     answered(
-        ClientResponse::Events(log::Events { events: vec![event()], last_seq: 4 }),
+        ClientResponse::Events(log::Events { events: vec![event()], last_seq: Seq::new(4) }),
         &format!(r#"{{"result":"events","events":[{EVENT}],"last_seq":4}}"#),
     );
     answered(
@@ -182,7 +182,7 @@ fn every_reply_about_a_sessions_log_keeps_its_form() {
         r#"{"result":"prompts","prompts":[{"seq":7,"place":6,"text":"Fix it","files":0}]}"#,
     );
     let compaction = CompactionLine {
-        seq: 9,
+        seq: Seq::new(9),
         place: Place::new(8),
         by: CompactedBy::Asked,
         before_tokens: Some(100),
@@ -199,7 +199,7 @@ fn every_reply_about_a_sessions_log_keeps_its_form() {
 #[test]
 fn every_reply_about_a_prompt_or_a_file_keeps_its_form() {
     answered(
-        ClientResponse::PromptRecorded(agent::PromptRecorded { seq: 3, duplicate: false }),
+        ClientResponse::PromptRecorded(agent::PromptRecorded { seq: Seq::new(3), duplicate: false }),
         r#"{"result":"prompt_recorded","seq":3,"duplicate":false}"#,
     );
     let added = Attachment { id: "a1".into(), name: "build.log".into(), media_type: MediaType::Text, size_bytes: 2 };

@@ -19,7 +19,7 @@ use protocol::find::{Found, Needle};
 use protocol::frame;
 use protocol::model::{
     AgentDescription, AgentFeature, AgentKind, CompactionLine, Effort, FileContents, FileOpened, FilePage, FilePages,
-    GitDiff, GitStatus, ModelChoice, ModelName, OpenedText, PageLine, PermissionMode, Place, PromptLine, Rev,
+    GitDiff, GitStatus, ModelChoice, ModelName, OpenedText, PageLine, PermissionMode, Place, PromptLine, Rev, Seq,
     SessionId, SessionSettings, SessionStatus, ToolUseId, WorkspaceStatus,
 };
 
@@ -150,7 +150,7 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         }
         R::SessionPromptList(log::SessionPromptList { id }) => {
             world.session(&id)?;
-            let prompts = world.events_from(&id, 1).filter_map(PromptLine::of);
+            let prompts = world.events_from(&id, Seq::new(1)).filter_map(PromptLine::of);
             reply(C::Prompts(log::Prompts { prompts: prompts.collect() }))
         }
         // An older hub's build is from before compactions were listed too.
@@ -159,7 +159,7 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         }
         R::SessionCompactionList(log::SessionCompactionList { id }) => {
             world.session(&id)?;
-            let compactions = world.events_from(&id, 1).filter_map(CompactionLine::of);
+            let compactions = world.events_from(&id, Seq::new(1)).filter_map(CompactionLine::of);
             reply(C::Compactions(log::Compactions { compactions: compactions.collect() }))
         }
         R::SessionFind(log::SessionFind { id, subagent, query }) => {
@@ -275,7 +275,7 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
 }
 
 /// The log from `from_seq`, then the streaming tail, as a real hub sends them once it has caught up.
-fn subscribe(world: &World, id: &SessionId, from_seq: u64, subscription_id: u64) -> Answer {
+fn subscribe(world: &World, id: &SessionId, from_seq: Seq, subscription_id: u64) -> Answer {
     world.session(id)?;
     let events = world.events_from(id, from_seq).map(|event| HubFrame::Event { subscription_id, event: event.clone() });
     let tail = HubFrame::Tail { subscription_id, tail: world.tails.get(id).cloned().unwrap_or_default() };

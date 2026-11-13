@@ -80,7 +80,7 @@ mod tests {
         let id = ClientMessageId::from("p1");
 
         let pending = ItemKey::Prompt(id.clone()).element("prompt");
-        let recorded = ItemKey::prompt(7, Some(&id)).element("prompt");
+        let recorded = ItemKey::prompt(Seq::new(7), Some(&id)).element("prompt");
 
         assert_eq!(pending, recorded);
     }
@@ -90,24 +90,28 @@ mod tests {
         let message = MessageId::from("msg_1");
 
         let streaming = ItemKey::Block(message.clone(), 2).element("text");
-        let recorded = ItemKey::recorded_block(9, 0, Some(&message), Some(2)).element("text");
+        let recorded = ItemKey::recorded_block(Seq::new(9), 0, Some(&message), Some(2)).element("text");
 
         assert_eq!(streaming, recorded);
-        assert_eq!(ItemKey::recorded_block(9, 1, None, Some(2)), ItemKey::Event(9, 1), "nothing streamed");
+        assert_eq!(
+            ItemKey::recorded_block(Seq::new(9), 1, None, Some(2)),
+            ItemKey::Event(Seq::new(9), 1),
+            "nothing streamed"
+        );
     }
 
     #[test]
     fn no_two_items_or_parts_share_an_id() {
         let ids = [
-            ItemKey::Event(1, 256).element("text"),
-            ItemKey::Event(2, 0).element("text"),
-            ItemKey::Event(1, 0).element("text"),
-            ItemKey::Event(1, 0).element("output"),
+            ItemKey::Event(Seq::new(1), 256).element("text"),
+            ItemKey::Event(Seq::new(2), 0).element("text"),
+            ItemKey::Event(Seq::new(1), 0).element("text"),
+            ItemKey::Event(Seq::new(1), 0).element("output"),
             ItemKey::Block("a".into(), 0).element("text"),
             ItemKey::Block("b".into(), 0).element("text"),
             ItemKey::Block("a".into(), 1).element("text"),
             ItemKey::Block("1".into(), 0).element("text"),
-            ItemKey::prompt(3, None).element("text"),
+            ItemKey::prompt(Seq::new(3), None).element("text"),
             ItemKey::Prompt("1".into()).element("text"),
             ItemKey::Attachment("1".into()).element("text"),
             ItemKey::Call("1".into()).element("text"),

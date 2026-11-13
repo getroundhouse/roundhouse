@@ -5,7 +5,7 @@
 use client_core::{Client, SubscriptionItem};
 use protocol::client::HubNotice;
 use protocol::event::EventBody;
-use protocol::model::{ContextPart, ContextPartKind, ContextUsage, MaxSetBy, SessionId};
+use protocol::model::{ContextPart, ContextPartKind, ContextUsage, MaxSetBy, Seq, SessionId};
 
 use crate::accounts::the_week;
 use crate::support::{Stack, TIMEOUT, wait_for_turn_end, wait_until};
@@ -77,7 +77,7 @@ fn how_full_the_context_is_stays_out_of_the_log_and_the_accounts_limits_go_in() 
 
     // The record says how full the context is, and the log has nothing of it: it answers the worker's own question,
     // and the answer also lists the user's skills by path.
-    let (events, _) = client.session_read(&session.id, 1, 500, true).unwrap();
+    let (events, _) = client.session_read(&session.id, Seq::new(1), 500, true).unwrap();
     assert!(events.iter().all(|e| !e.raw.as_deref().unwrap_or_default().contains("get_context_usage")));
     assert!(events.iter().all(|e| !e.raw.as_deref().unwrap_or_default().contains("skillFrontmatter")));
     // What the agent heard of its account's limits is something it was told as it worked, so it's an event, with the

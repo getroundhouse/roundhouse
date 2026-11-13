@@ -3,7 +3,7 @@
 
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{AppContext as _, ElementId, Pixels, TestAppContext};
-use protocol::model::{Seq, Session, SessionId, SetupStatus, Workspace, WorkspaceId};
+use protocol::model::{Session, SessionId, SetupStatus, Workspace, WorkspaceId};
 
 use super::{Stack, Ui};
 
@@ -50,7 +50,7 @@ pub(crate) fn wait_out_setup(ui: &mut Ui) {
 /// in the window is still at work, and heard from its workspace's record that it was worked in then.
 pub(crate) fn worked_in(ui: &mut Ui, stack: &Stack, chat: &SessionId) {
     stack.client().session_prompt(chat, "say:done", None).unwrap();
-    let replied = |c: &Session| c.user_active_at_ms.is_some() && c.reply_seq != Seq::default() && !c.status.in_turn();
+    let replied = |c: &Session| c.user_active_at_ms.is_some() && c.has_reply() && !c.status.in_turn();
     let caught_up = |ui: &mut Ui| {
         let view = ui.view();
         let Some(c) = view.records().session(chat).filter(|c| replied(c)) else { return false };

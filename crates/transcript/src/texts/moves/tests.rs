@@ -45,14 +45,14 @@ fn replies_at(seqs: impl IntoIterator<Item = Seq>) -> client_core::session_log::
 fn a_text_drawn_somewhere_new_is_there_with_what_it_was_parsed_as() {
     let texts = Texts::alone();
     let reply = TextKey::named("reply");
-    texts.drawn_as(&reply, at(1), "What it said");
+    texts.drawn_as(&reply, at(Seq::new(1)), "What it said");
     let parsed = parse_of(&texts, &reply);
     texts.new_frame();
 
-    texts.0.borrow_mut().placed(&reply, at(2));
+    texts.0.borrow_mut().placed(&reply, at(Seq::new(2)));
 
-    assert_eq!(texts.place_of(&reply), Some(at(2)));
-    assert_eq!((texts.known_at(at(2)), texts.known_at(at(1))), (Some(reply.clone()), None));
+    assert_eq!(texts.place_of(&reply), Some(at(Seq::new(2))));
+    assert_eq!((texts.known_at(at(Seq::new(2))), texts.known_at(at(Seq::new(1)))), (Some(reply.clone()), None));
     assert!(parse_of(&texts, &reply).zip(parsed).is_some_and(|(now, was)| Rc::ptr_eq(&now, &was)), "not parsed again");
     assert_eq!(
         texts.leaves_of(&reply).map(|leaves| leaves.each().collect::<Vec<_>>().join("\n")).as_deref(),
@@ -66,15 +66,15 @@ fn a_text_drawn_somewhere_new_is_there_with_what_it_was_parsed_as() {
 fn a_text_drawn_where_another_was_takes_its_place_and_the_other_keeps_its_parse() {
     let texts = Texts::alone();
     let (first, second) = (TextKey::named("first"), TextKey::named("second"));
-    texts.drawn_as(&first, at(9), "First");
+    texts.drawn_as(&first, at(Seq::new(9)), "First");
     let parsed = parse_of(&texts, &first);
     texts.new_frame();
 
-    texts.drawn_as(&second, at(9), "Second");
+    texts.drawn_as(&second, at(Seq::new(9)), "Second");
     let place = texts.place_of(&first);
-    texts.0.borrow_mut().placed(&first, at(3));
+    texts.0.borrow_mut().placed(&first, at(Seq::new(3)));
 
-    assert_eq!(texts.known_at(at(9)), Some(second));
+    assert_eq!(texts.known_at(at(Seq::new(9))), Some(second));
     assert_eq!(place, None, "the first has no place until it's drawn again");
     assert!(parse_of(&texts, &first).zip(parsed).is_some_and(|(now, was)| Rc::ptr_eq(&now, &was)), "not parsed again");
 }
@@ -84,15 +84,15 @@ fn a_text_drawn_where_another_was_takes_its_place_and_the_other_keeps_its_parse(
 fn a_text_whose_place_another_has_taken_is_kept_as_long_as_it_would_have_been_there() {
     let texts = Texts::alone();
     let (first, second) = (TextKey::named("first"), TextKey::named("second"));
-    texts.drawn_as(&first, at(9), "First");
+    texts.drawn_as(&first, at(Seq::new(9)), "First");
     texts.new_frame();
-    texts.drawn_as(&second, at(9), "Second");
+    texts.drawn_as(&second, at(Seq::new(9)), "Second");
 
-    texts.let_go(&replies_at([9]), None);
+    texts.let_go(&replies_at([Seq::new(9)]), None);
     let kept = (texts.keeps(&first), texts.last_drawn_at(&first));
     texts.let_go(&replies_at([]), None);
 
-    assert_eq!(kept, (true, Some(at(9))), "while where it was last drawn is loaded");
+    assert_eq!(kept, (true, Some(at(Seq::new(9)))), "while where it was last drawn is loaded");
     assert!(!texts.keeps(&first) && !texts.keeps(&second), "and no longer");
 }
 
@@ -107,16 +107,16 @@ fn a_text_parsed_apart_is_parsed_wherever_it_s_moved_to_meanwhile(cx: &mut TestA
     });
     let reply = TextKey::named("reply");
     let long = "The signal box keeps a ledger.\n\n".repeat(2 * AT_ONCE / 32);
-    texts.0.borrow_mut().placed(&reply, at(1));
-    let (_, apart) = texts.parsed(&reply, &long, at(1).of, ImagesAre::TheKits);
+    texts.0.borrow_mut().placed(&reply, at(Seq::new(1)));
+    let (_, apart) = texts.parsed(&reply, &long, at(Seq::new(1)).of, ImagesAre::TheKits);
     cx.update(|cx| texts.parse_apart(reply.clone(), apart.expect("parsed apart"), cx));
     texts.new_frame();
 
-    texts.0.borrow_mut().placed(&reply, at(2));
+    texts.0.borrow_mut().placed(&reply, at(Seq::new(2)));
     cx.run_until_parked();
 
     assert!(parse_of(&texts, &reply).is_some_and(|parsed| parsed.source == long));
-    assert_eq!(*redrawn.borrow(), [Of::Event(2)]);
+    assert_eq!(*redrawn.borrow(), [Of::Event(Seq::new(2))]);
 }
 
 #[test]
@@ -125,9 +125,9 @@ fn a_text_parsed_apart_is_parsed_wherever_it_s_moved_to_meanwhile(cx: &mut TestA
 fn a_text_drawn_in_two_places_in_one_frame_is_caught() {
     let texts = Texts::alone();
     let reply = TextKey::named("reply");
-    texts.drawn_as(&reply, at(1), "What it said");
+    texts.drawn_as(&reply, at(Seq::new(1)), "What it said");
 
-    texts.drawn_as(&reply, at(2), "What it said");
+    texts.drawn_as(&reply, at(Seq::new(2)), "What it said");
 }
 
 #[test]
@@ -135,20 +135,20 @@ fn a_text_drawn_in_two_places_in_one_frame_is_caught() {
 #[should_panic(expected = "both drawn at")]
 fn two_texts_drawn_in_one_place_in_one_frame_are_caught() {
     let texts = Texts::alone();
-    texts.drawn_as(&TextKey::named("first"), at(1), "First");
+    texts.drawn_as(&TextKey::named("first"), at(Seq::new(1)), "First");
 
-    texts.drawn_as(&TextKey::named("second"), at(1), "Second");
+    texts.drawn_as(&TextKey::named("second"), at(Seq::new(1)), "Second");
 }
 
 #[test]
 fn a_text_that_s_let_go_of_has_no_place_and_is_not_kept() {
     let texts = Texts::alone();
-    let reply = TextKey::of(at(1));
-    texts.drawn_at(at(1), "What it said");
+    let reply = TextKey::of(at(Seq::new(1)));
+    texts.drawn_at(at(Seq::new(1)), "What it said");
 
     texts.let_go(&log([]), None);
 
-    assert_eq!((texts.place_of(&reply), texts.known_at(at(1))), (None, None));
+    assert_eq!((texts.place_of(&reply), texts.known_at(at(Seq::new(1)))), (None, None));
     assert!(!texts.keeps(&reply));
 }
 
@@ -215,7 +215,7 @@ fn a_reply_joined_as_it_was_written_is_parsed_whole_in_the_row_of_its_record(cx:
 
     drawn(&texts, &selection, &reply, TextAt::at_the_end(0), &said);
     let written = parse_of(&texts, &reply).map(|parsed| parsed.whole);
-    drawn(&texts, &selection, &reply, at(1), &said);
+    drawn(&texts, &selection, &reply, at(Seq::new(1)), &said);
     let recorded = parse_of(&texts, &reply).map(|parsed| parsed.whole);
 
     assert_eq!(written, Some(false), "joined from near its end as it's written");
@@ -232,8 +232,8 @@ enum Done {
 
 fn done() -> impl Strategy<Value = Done> {
     prop_oneof![
-        4 => (0..4u8, 1..5u64, any::<bool>()).prop_map(|(text, seq, next_frame)| Done::Drawn { text, seq, next_frame }),
-        1 => vec(1..5u64, 0..4).prop_map(|mut loaded| {
+        4 => (0..4u8, (1..5u64).prop_map(Seq::new), any::<bool>()).prop_map(|(text, seq, next_frame)| Done::Drawn { text, seq, next_frame }),
+        1 => vec((1..5u64).prop_map(Seq::new), 0..4).prop_map(|mut loaded| {
             loaded.sort_unstable();
             loaded.dedup();
             Done::LetGo { loaded }
@@ -274,7 +274,7 @@ proptest! {
                 }
                 Done::LetGo { loaded } => {
                     texts.let_go(&replies_at(loaded.iter().copied()), None);
-                    last_at.retain(|_, place: &mut TextAt| loaded.contains(&place.seq().unwrap_or(0)));
+                    last_at.retain(|_, place: &mut TextAt| loaded.contains(&place.seq().unwrap_or(Seq::new(0))));
                 }
             }
         }

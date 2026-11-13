@@ -49,7 +49,7 @@ pub(crate) fn waiting_on_you<'a>(chats: impl IntoIterator<Item = &'a Session>) -
 mod tests {
     use look::Signal;
     use protocol::event::{AgentTask, TaskKind, TurnOutcome};
-    use protocol::model::{Session, SessionStatus};
+    use protocol::model::{Seq, Session, SessionStatus};
 
     use super::{chat, waiting_on_you, workspace};
 
@@ -132,7 +132,7 @@ mod tests {
     /// The hub says a reply is unread on the same record, and the mark says the same either way.
     #[test]
     fn a_reply_nobody_has_read_leaves_the_mark_as_it_is() {
-        let unread = |chat: Session| Session { reply_seq: 2, read_seq: 1, ..chat };
+        let unread = |chat: Session| Session { reply_seq: Seq::new(2), read_seq: Seq::new(1), ..chat };
         for chat_of in [|| session(SessionStatus::Idle), || left_running(&[TaskKind::Command])] {
             assert!(unread(chat_of()).unread());
             assert_eq!(chat(&unread(chat_of())), chat(&chat_of()));

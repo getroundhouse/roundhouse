@@ -9,7 +9,7 @@ use protocol::event::ApprovalDecision;
 use protocol::frame;
 use protocol::model::{
     AgentKind, AnswerDraft, AnswerSoFar, DraftToKeep, Effort, ModelName, NewWorkspaceDraftToKeep, PermissionMode,
-    Place, SessionSettingsChange,
+    Place, Seq, SessionSettingsChange,
 };
 use protocol::prompt::Prompt;
 
@@ -55,7 +55,7 @@ fn every_request_about_a_session_keeps_its_form() {
         r#"{"method":"session_reopen","id":"s"}"#,
     );
     asked(
-        ClientRequest::SessionMarkRead(sessions::SessionMarkRead { id: "s".into(), through_seq: 9 }),
+        ClientRequest::SessionMarkRead(sessions::SessionMarkRead { id: "s".into(), through_seq: Seq::new(9) }),
         r#"{"method":"session_mark_read","id":"s","through_seq":9}"#,
     );
     asked(
@@ -78,7 +78,7 @@ fn every_request_about_a_session_keeps_its_form() {
 fn every_request_that_reads_a_sessions_log_keeps_its_form() {
     let read = ClientRequest::SessionRead(log::SessionRead {
         id: "s".into(),
-        from_seq: 1,
+        from_seq: Seq::new(1),
         limit: 500,
         max_bytes: None,
         include_raw: false,
@@ -132,7 +132,7 @@ fn every_request_that_follows_a_sessions_log_or_the_feed_keeps_its_form() {
     asked(
         ClientRequest::SessionSubscribe(subscriptions::SessionSubscribe {
             id: "s".into(),
-            from_seq: 5,
+            from_seq: Seq::new(5),
             subscription_id: 3,
         }),
         r#"{"method":"session_subscribe","id":"s","from_seq":5,"subscription_id":3}"#,

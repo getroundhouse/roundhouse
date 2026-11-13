@@ -1,4 +1,5 @@
 use gpui_kit::{Bounds, TestAppContext, point, px};
+use protocol::model::Seq;
 
 use super::test_layouts::in_pieces;
 use super::{End, Geometry, Selection};
@@ -10,7 +11,8 @@ fn a_selection_stays_in_a_text_that_moves(cx: &mut TestAppContext) {
     let texts = Texts::alone();
     let focus = cx.update(|cx| cx.focus_handle());
     let selection = Selection::new(texts.clone(), focus);
-    let (reply, written, recorded) = (TextKey::named("reply"), TextAt::only(1, 0), TextAt::only(7, 0));
+    let (reply, written, recorded) =
+        (TextKey::named("reply"), TextAt::only(Seq::new(1), 0), TextAt::only(Seq::new(7), 0));
     texts.drawn_as(&reply, written, "Hello world");
     let end = |byte| End { text: reply.clone(), leaf: 0, byte };
     selection.inner.borrow_mut().set(Some((end(0), end(5))));
@@ -29,7 +31,7 @@ fn the_text_a_press_was_on_is_kept_with_nothing_selected(cx: &mut TestAppContext
     let texts = Texts::alone();
     let focus = cx.update(|cx| cx.focus_handle());
     let selection = Selection::new(texts.clone(), focus);
-    let (reply, at) = (TextKey::named("reply"), TextAt::only(3, 0));
+    let (reply, at) = (TextKey::named("reply"), TextAt::only(Seq::new(3), 0));
     texts.drawn_as(&reply, at, "Hello world");
     let pressed = End { text: reply, leaf: 0, byte: 2 };
 
@@ -49,7 +51,7 @@ fn a_text_that_shows_only_the_space_between_its_lines_shows_none_of_its_leaves(c
     let (above, top) = (layouts[0].bounds().bottom(), layouts[1].bounds().top());
     let space = Bounds::from_corners(point(px(0.), above + px(1.)), point(px(200.), top - px(1.)));
     let into_the_second = Bounds::from_corners(space.origin, point(px(200.), top + px(1.)));
-    let (output, at) = (TextKey::named("output"), TextAt::only(1, 0));
+    let (output, at) = (TextKey::named("output"), TextAt::only(Seq::new(1), 0));
     // How many of its leaves show, drawn in a frame of their own where what shows of it is `shows`.
     let draw = |shows| {
         selection.new_frame();

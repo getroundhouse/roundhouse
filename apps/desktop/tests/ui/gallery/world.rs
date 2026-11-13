@@ -155,7 +155,7 @@ impl World {
         });
         let log = log_of(&id, created_at_ms, events);
         self.subagents.insert(id.clone(), records_of(&log));
-        let last_seq = log.last().map_or(0, |event| event.seq);
+        let last_seq = log.last().map_or(Seq::default(), |event| event.seq);
         let background_tasks = log
             .iter()
             .rev()
@@ -170,7 +170,7 @@ impl World {
             status,
             last_seq,
             created_at_ms,
-            updated_at_ms: created_at_ms + EVENT_GAP_MS * i64::try_from(last_seq).unwrap(),
+            updated_at_ms: created_at_ms + EVENT_GAP_MS * i64::try_from(last_seq.get()).unwrap(),
             title,
             background_tasks,
             ..protocol::fixtures::session(id.as_str())
@@ -256,8 +256,8 @@ impl World {
     /// Makes the end of a chat's log a reply nobody has read.
     pub(crate) fn unread(&mut self, id: &SessionId) {
         let session = self.sessions.iter_mut().find(|s| &s.id == id).unwrap();
-        assert!(session.last_seq > 0, "a chat with nothing in it has no reply");
-        (session.reply_seq, session.read_seq) = (session.last_seq, 0);
+        assert!(session.last_seq > Seq::default(), "a chat with nothing in it has no reply");
+        (session.reply_seq, session.read_seq) = (session.last_seq, Seq::default());
     }
 
     /// Closes a chat, this many minutes before [`NOW_MS`].
@@ -300,14 +300,14 @@ fn log_of(id: &SessionId, created_at_ms: i64, events: Vec<EventBody>) -> Vec<Ses
     let mut places: HashMap<Option<ToolUseId>, u64> = HashMap::new();
     events
         .into_iter()
-        .zip(1..)
-        .map(|(body, seq): (EventBody, Seq)| {
+        .zip((1..).map(Seq::new))
+        .map(|(body, seq)| {
             let subagent = body.subagent().cloned();
             let place = places.entry(subagent.clone()).or_default();
             *place += 1;
             SessionEvent {
                 session_id: id.clone(),
-                ts_ms: created_at_ms + EVENT_GAP_MS * i64::try_from(seq).unwrap(),
+                ts_ms: created_at_ms + EVENT_GAP_MS * i64::try_from(seq.get()).unwrap(),
                 subagent,
                 place: Place::new(*place),
                 ..protocol::fixtures::event(seq, body)

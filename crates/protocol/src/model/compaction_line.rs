@@ -45,7 +45,11 @@ mod tests {
     use super::*;
 
     fn event(subagent: Option<&str>, body: EventBody) -> SessionEvent {
-        SessionEvent { subagent: subagent.map(Into::into), place: Place::new(7), ..crate::fixtures::event(9, body) }
+        SessionEvent {
+            subagent: subagent.map(Into::into),
+            place: Place::new(7),
+            ..crate::fixtures::event(Seq::new(9), body)
+        }
     }
 
     fn compacted(by: CompactedBy) -> EventBody {
@@ -64,7 +68,7 @@ mod tests {
         let line = CompactionLine::of(&event(None, compacted(CompactedBy::Agent)));
 
         let at = CompactionLine {
-            seq: 9,
+            seq: Seq::new(9),
             place: Place::new(7),
             by: CompactedBy::Agent,
             before_tokens: Some(226_869),
@@ -76,7 +80,7 @@ mod tests {
     #[test]
     fn one_that_failed_a_subagents_and_any_other_event_have_none() {
         let failed = CompactionOutcome::Failed { error: Some("Not enough messages to compact.".to_string()) };
-        let failed = EventBody::AgentCompacted { asked: Some(3), keeping: None, outcome: failed };
+        let failed = EventBody::AgentCompacted { asked: Some(Seq::new(3)), keeping: None, outcome: failed };
 
         assert_eq!(CompactionLine::of(&event(None, failed)), None);
         assert_eq!(CompactionLine::of(&event(Some("toolu-1"), compacted(CompactedBy::Agent))), None);

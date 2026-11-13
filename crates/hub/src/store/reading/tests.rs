@@ -54,7 +54,8 @@ fn marking_read_never_reaches_a_reply_still_to_come() {
     let store = store_with_session(dir.path());
     turn(&store);
 
-    store.mark_read(&"s".into(), Seq::MAX).unwrap();
+    store.mark_read(&"s".into(), Seq::new(u64::MAX)).unwrap();
+    assert!(!session(&store).unread(), "read as far as it goes");
     let next = turn(&store);
 
     assert_eq!(session(&store).reply_seq, next);
@@ -88,7 +89,7 @@ fn marking_unread_brings_back_only_the_newest_reply() {
 
     assert!(unread.changed);
     assert!(unread.session.session.unread());
-    assert_eq!(unread.session.session.read_seq, newest - 1);
+    assert_eq!(unread.session.session.read_seq.get(), newest.get() - 1);
     assert!(!store.mark_unread(&"s".into()).unwrap().changed, "it's unread already");
     assert!(store.mark_read(&"s".into(), newest).unwrap().changed, "and it can be read again");
 }
@@ -118,7 +119,7 @@ fn marking_a_session_that_doesnt_exist_is_refused() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
 
-    let missing = store.mark_read(&"nope".into(), 1).map(|_| ()).unwrap_err();
+    let missing = store.mark_read(&"nope".into(), Seq::new(1)).map(|_| ()).unwrap_err();
 
     assert!(matches!(missing, StoreError::NotFound { kind: "session", .. }));
 }

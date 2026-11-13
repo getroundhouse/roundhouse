@@ -17,7 +17,10 @@ mod views;
 mod waiting;
 
 /// Far enough along that the subscription starts after the first page, so a prompt there comes only from the list.
-pub(super) const LAST_SEQ: Seq = 600;
+pub(super) const LAST_SEQ: Seq = Seq::new(1800);
+
+/// How far the agent's own events go by place, or a subagent's: a third of the way, as if they were every third event.
+pub(super) const LAST_PLACE: Place = Place::new(600);
 
 /// A hub that answers each request but its hello as `answer` says, if it says to, on each connection it's given. Each
 /// is answered on a thread of its own, so an answer can wait without holding up the rest. It reports every request
@@ -62,14 +65,13 @@ fn serve(stream: UnixStream, answer: &Arc<Answer>, asked: &flume::Sender<ClientR
 }
 
 /// What the hub answers that a test doesn't say: a read with no events, of a session that goes to [`LAST_SEQ`] by
-/// `seq` and by place, nothing for letting go of a subscription, which is sent without waiting for a reply, and Ok
-/// for anything else.
+/// `seq` and to [`LAST_PLACE`] by place, nothing for letting go of a subscription, which is sent without waiting for a
+/// reply, and Ok for anything else.
 pub(super) fn answered_simply(request: &ClientRequest) -> Option<ReplyOutcome> {
     if matches!(request, ClientRequest::SessionRead(_)) {
         Some(ReplyOutcome::Response(ClientResponse::Events(log::Events { events: Vec::new(), last_seq: LAST_SEQ })))
     } else if matches!(request, ClientRequest::SessionReadPlaces(_)) {
-        let placed =
-            ClientResponse::PlacedEvents(log::PlacedEvents { events: Vec::new(), last_place: Place::new(LAST_SEQ) });
+        let placed = ClientResponse::PlacedEvents(log::PlacedEvents { events: Vec::new(), last_place: LAST_PLACE });
         Some(ReplyOutcome::Response(placed))
     } else if matches!(request, ClientRequest::SessionCompactionList(_)) {
         Some(ReplyOutcome::Response(ClientResponse::Compactions(log::Compactions { compactions: Vec::new() })))

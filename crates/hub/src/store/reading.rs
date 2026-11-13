@@ -4,7 +4,7 @@ use protocol::model::{Seq, SessionId};
 use rusqlite::{Connection, OptionalExtension, params};
 
 use super::sessions::{SESSION_COLUMNS, session_from_row};
-use super::{Store, StoreError, StoredSession, lock};
+use super::{Store, StoreError, StoredSession, lock, seq_column};
 
 #[cfg(test)]
 mod tests;
@@ -19,11 +19,10 @@ impl Store {
     /// Marks the session read through `through_seq`, but never past its newest event, so a reply that hasn't come
     /// yet can't count as read. It only ever moves forward.
     pub fn mark_read(&self, id: &SessionId, through_seq: Seq) -> Result<Reading, StoreError> {
-        let through = i64::try_from(through_seq).unwrap_or(i64::MAX);
         self.change_reading(
             id,
             "UPDATE sessions SET read_seq = MIN(?1, last_seq) WHERE id = ?2 AND read_seq < MIN(?1, last_seq)",
-            params![through, id.as_str()],
+            params![seq_column(through_seq), id.as_str()],
         )
     }
 

@@ -77,7 +77,7 @@ fn cached(mut world: World, minutes_before_now: i64) -> World {
 
 /// The chat each of these screens shows: the newest with anything in it.
 fn shown_chat(world: &World) -> SessionId {
-    world.sessions.iter().rfind(|session| session.last_seq > 0).unwrap().id.clone()
+    world.sessions.iter().rfind(|session| session.last_seq > Seq::default()).unwrap().id.clone()
 }
 
 /// How long the chat had been idle when the prompt that found the cache expired came.
@@ -87,7 +87,7 @@ const IDLE_MS: i64 = 80 * 60_000;
 /// the cache again, and the reply.
 fn came_back() -> World {
     let mut events = finished();
-    let prompt = Seq::try_from(events.len()).unwrap() + 1;
+    let prompt = Seq::new(u64::try_from(events.len()).unwrap() + 1);
     let reply = "Yes. The badge reads the state from the workspace's record, so it's right as soon as the feed says.";
     events.extend([
         user_prompt("Does the badge update when the PR merges?"),

@@ -1,6 +1,7 @@
 use client_core::calls::{Failure, Recorded};
 use protocol::event::{AgentTask, CallKind, ContentBlock, Denied, SubagentOutcome, TaskKind};
 use protocol::fixtures;
+use protocol::model::Seq;
 use serde_json::{Value, json};
 
 use super::{Printer, called, came_back, denial, started};
@@ -71,8 +72,8 @@ fn an_agent_started_on_another_build_than_its_chat_s_last_says_it_was_updated() 
 #[test]
 fn a_subagents_end_says_which_it_was() {
     let mut printer = Printer::default();
-    printer.subagent(1, Some("Find the tests"), &"toolu_a".into());
-    printer.subagent(2, None, &"toolu_b".into());
+    printer.subagent(Seq::new(1), Some("Find the tests"), &"toolu_a".into());
+    printer.subagent(Seq::new(2), None, &"toolu_b".into());
 
     assert_eq!(printer.ending(&"toolu_a".into(), SubagentOutcome::Finished), "a subagent finished: Find the tests");
     assert_eq!(printer.ending(&"toolu_b".into(), SubagentOutcome::Stopped), "a subagent stopped: toolu_b");

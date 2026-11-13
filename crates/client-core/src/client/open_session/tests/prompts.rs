@@ -73,7 +73,10 @@ fn a_hub_too_old_to_list_prompts_is_followed_without_them_and_not_asked_again() 
 fn a_hub_that_fails_to_list_prompts_goes_on_being_followed_and_is_asked_again_on_a_new_connection() {
     let dir = tempfile::tempdir().unwrap();
     let socket = dir.path().join("hub.sock");
-    let lists = vec![refused(ErrorCode::Internal, "the disk is full"), listed(vec![PromptLine::new(3, "far back", 0)])];
+    let lists = vec![
+        refused(ErrorCode::Internal, "the disk is full"),
+        listed(vec![PromptLine::new(Seq::new(3), "far back", 0)]),
+    ];
     let heard = start_hub(&socket, lists);
     let client = Client::connect(&socket, "test").unwrap();
     let open = OpenSession::start(&client, &session());
@@ -94,7 +97,7 @@ fn a_hub_that_fails_to_list_prompts_goes_on_being_followed_and_is_asked_again_on
     // Kept here too, so the connection is still open for the follower to let go of its subscription on.
     let again = Client::connect(&socket, "test").unwrap();
     open.reconnect(&again);
-    until("listed on the new connection", || seqs(&open) == [3]);
+    until("listed on the new connection", || seqs(&open) == [Seq::new(3)]);
 
     assert!(open.take_errors().is_empty());
     drop(open);

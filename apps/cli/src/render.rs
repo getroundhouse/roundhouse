@@ -131,13 +131,13 @@ impl Printer {
     }
 
     /// That the agent started a subagent, by what it's for, or failing that its call.
-    fn subagent(&mut self, seq: u64, description: Option<&str>, call: &ToolUseId) {
+    fn subagent(&mut self, seq: Seq, description: Option<&str>, call: &ToolUseId) {
         let what = description.unwrap_or(call.as_str());
         self.line(seq, &format!("started a subagent: {what}"));
         self.subagents.insert(call.clone(), what.to_string());
     }
 
-    fn subagent_ended(&mut self, seq: u64, call: &ToolUseId, outcome: SubagentOutcome) {
+    fn subagent_ended(&mut self, seq: Seq, call: &ToolUseId, outcome: SubagentOutcome) {
         let ended = self.ending(call, outcome);
         self.line(seq, &ended);
     }
@@ -154,7 +154,7 @@ impl Printer {
         format!("a subagent {how}: {what}")
     }
 
-    fn background(&mut self, seq: u64, tasks: &[AgentTask], stopped: &[TaskId]) {
+    fn background(&mut self, seq: Seq, tasks: &[AgentTask], stopped: &[TaskId]) {
         if let Some(running) = self.newly_running(tasks) {
             self.line(seq, &running);
         }
@@ -173,7 +173,7 @@ impl Printer {
         (self.background.as_ref() != Some(&line)).then(|| self.background.insert(line).clone())
     }
 
-    fn block(&mut self, seq: u64, block: &ContentBlock) {
+    fn block(&mut self, seq: Seq, block: &ContentBlock) {
         match block {
             ContentBlock::Text { text, .. } => self.line(seq, text),
             ContentBlock::Thinking { text } if !text.is_empty() => {
@@ -258,7 +258,7 @@ impl Printer {
         }
     }
 
-    fn line(&mut self, seq: u64, text: &str) {
+    fn line(&mut self, seq: Seq, text: &str) {
         self.end_line();
         println!("[{seq}] {text}");
     }

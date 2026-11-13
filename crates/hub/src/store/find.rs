@@ -4,7 +4,7 @@ use protocol::event::EventBody;
 use protocol::find::{Found, Needle};
 use protocol::model::{Place, SessionId, ToolUseId};
 
-use super::{Store, StoreError, lock};
+use super::{Store, StoreError, lock, place_of};
 
 #[cfg(test)]
 mod tests;
@@ -27,7 +27,7 @@ impl Store {
         let mut rows = statement.query(rusqlite::params![session_id.as_str(), subagent.map(ToolUseId::as_str)])?;
         let mut found = Found { places: Vec::new(), through: Place::default() };
         while let Some(row) = rows.next()? {
-            let place = Place::new(row.get::<_, i64>(0)?.cast_unsigned());
+            let place = place_of(row, 0)?;
             found.through = place;
             // Borrowed rather than copied, since most bodies are passed over.
             let body = row.get_ref(1)?.as_str().map_err(rusqlite::Error::from)?;

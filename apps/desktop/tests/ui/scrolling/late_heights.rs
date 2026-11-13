@@ -74,7 +74,7 @@ fn scrolling_up_into_a_long_plan_moves_as_far_as_the_wheel_turns(cx: &mut TestAp
     let mut ui = Ui::open(cx, &stack);
     ui.wait("the workspace", |ui| ui.transcript().is_some());
     let approval = ui.next_open_approval();
-    ui.click(ElementId::NamedInteger("approve-plan".into(), approval));
+    ui.click(ElementId::NamedInteger("approve-plan".into(), approval.get()));
     ui.wait("the plan's turn to end", |ui| ui.session_status() == Some(SessionStatus::Idle));
     stack.run(&session, "prose:40:2");
     let transcript = ui.transcript().unwrap();

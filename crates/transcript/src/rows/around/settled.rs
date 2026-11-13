@@ -61,7 +61,7 @@ mod tests {
     use client_core::Answered;
     use protocol::event::{ApprovalOutcome, EventBody, Question, QuestionAnswer};
 
-    use super::{AnswerTo, Settled};
+    use super::{AnswerTo, Seq, Settled};
     use crate::fixtures::{closed, closed_by_position, event, log};
 
     fn asked(id: &str) -> EventBody {
@@ -74,8 +74,12 @@ mod tests {
 
     /// What became of the question `a`, asked first, with another's record and then `closing` after it.
     fn settled(closing: EventBody) -> Settled {
-        let log = log([event(1, asked("a")), event(2, closed("b", ApprovalOutcome::Denied, None)), event(3, closing)]);
-        Settled::read(&log, 1, &"a".into())
+        let log = log([
+            event(Seq::new(1), asked("a")),
+            event(Seq::new(2), closed("b", ApprovalOutcome::Denied, None)),
+            event(Seq::new(3), closing),
+        ]);
+        Settled::read(&log, Seq::new(1), &"a".into())
     }
 
     #[test]
@@ -119,7 +123,12 @@ mod tests {
         assert_eq!(before_answers_were_kept, Settled::Unknown);
         assert_eq!(before_answers_were_kept.answer_to(0, &question("Red or blue?")), AnswerTo::Unknown);
         assert_eq!(settled(closed("a", ApprovalOutcome::Unknown, Some(&[("Red or blue?", "Blue")]))), Settled::Unknown);
-        let never_closed = log([event(1, asked("a")), event(2, closed("b", ApprovalOutcome::Denied, None))]);
-        assert_eq!(Settled::read(&never_closed, 1, &"a".into()), Settled::Unknown, "only its own record closes it");
+        let never_closed =
+            log([event(Seq::new(1), asked("a")), event(Seq::new(2), closed("b", ApprovalOutcome::Denied, None))]);
+        assert_eq!(
+            Settled::read(&never_closed, Seq::new(1), &"a".into()),
+            Settled::Unknown,
+            "only its own record closes it"
+        );
     }
 }

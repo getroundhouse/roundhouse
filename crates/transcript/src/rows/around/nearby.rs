@@ -100,67 +100,81 @@ mod tests {
 
     #[test]
     fn nearby_events_go_as_far_as_their_reach() {
-        let log = log((1..=5).map(|seq| event(seq, result("x"))));
-        let seqs = |events: Vec<&protocol::event::SessionEvent>| events.iter().map(|e| e.seq).collect::<Vec<Seq>>();
+        let log = log((1..=5).map(|seq| event(Seq::new(seq), result("x"))));
+        let seqs =
+            |events: Vec<&protocol::event::SessionEvent>| events.iter().map(|e| e.seq.get()).collect::<Vec<u64>>();
 
-        assert_eq!(seqs(events_after(&log, 2, 2).collect()), [3, 4]);
-        assert_eq!(seqs(events_after(&log, 4, 10).collect()), [5], "to the end of the log");
-        assert_eq!(seqs(events_before(&log, 4, 2).collect()), [3, 2], "nearest first");
-        assert_eq!(seqs(events_before(&log, 2, 10).collect()), [1], "to the start of the log");
+        assert_eq!(seqs(events_after(&log, Seq::new(2), 2).collect()), [3, 4]);
+        assert_eq!(seqs(events_after(&log, Seq::new(4), 10).collect()), [5], "to the end of the log");
+        assert_eq!(seqs(events_before(&log, Seq::new(4), 2).collect()), [3, 2], "nearest first");
+        assert_eq!(seqs(events_before(&log, Seq::new(2), 10).collect()), [1], "to the start of the log");
     }
 
     #[test]
     fn a_call_is_found_by_its_id_among_the_events_before() {
-        let log = log([event(1, calls(&["a"])), event(2, calls(&["b", "c"])), event(3, result("c"))]);
+        let log = log([
+            event(Seq::new(1), calls(&["a"])),
+            event(Seq::new(2), calls(&["b", "c"])),
+            event(Seq::new(3), result("c")),
+        ]);
 
-        assert_eq!(call_before(&log, 3, &"c".into(), 5), Some((2, false)), "a command, which hands nothing off");
-        assert_eq!(call_before(&log, 3, &"a".into(), 1), None, "further back than it looks");
-        assert_eq!(call_before(&log, 3, &"d".into(), 5), None);
+        assert_eq!(
+            call_before(&log, Seq::new(3), &"c".into(), 5),
+            Some((Seq::new(2), false)),
+            "a command, which hands nothing off"
+        );
+        assert_eq!(call_before(&log, Seq::new(3), &"a".into(), 1), None, "further back than it looks");
+        assert_eq!(call_before(&log, Seq::new(3), &"d".into(), 5), None);
     }
 
     #[test]
     fn the_mode_before_is_the_last_one_the_agent_reported() {
         let log = log([
-            event(1, turn_started_in(Plan)),
-            event(2, changed_to(FullAccess)),
-            event(3, result("a")),
-            event(4, changed_to(Plan)),
+            event(Seq::new(1), turn_started_in(Plan)),
+            event(Seq::new(2), changed_to(FullAccess)),
+            event(Seq::new(3), result("a")),
+            event(Seq::new(4), changed_to(Plan)),
         ]);
 
-        assert_eq!(mode_before(&log, 1), None);
-        assert_eq!(mode_before(&log, 2), Some(Plan), "as a turn started");
-        assert_eq!(mode_before(&log, 4), Some(FullAccess));
+        assert_eq!(mode_before(&log, Seq::new(1)), None);
+        assert_eq!(mode_before(&log, Seq::new(2)), Some(Plan), "as a turn started");
+        assert_eq!(mode_before(&log, Seq::new(4)), Some(FullAccess));
     }
 
     #[test]
     fn the_mode_before_isnt_guessed_past_what_isnt_loaded() {
-        let log = log([event(1, changed_to(Plan)), event(3, changed_to(FullAccess))]);
+        let log = log([event(Seq::new(1), changed_to(Plan)), event(Seq::new(3), changed_to(FullAccess))]);
 
-        assert_eq!(mode_before(&log, 3), None);
+        assert_eq!(mode_before(&log, Seq::new(3)), None);
     }
 
     #[test]
     fn the_failed_request_a_turn_ended_on_is_the_agents_own_newest_in_that_turn() {
         let ended = log([
-            event(1, prompt("Go on")),
-            event(2, failed_request(None)),
-            event(3, failed_request(Some("call-1"))),
-            event(4, turn_ended()),
+            event(Seq::new(1), prompt("Go on")),
+            event(Seq::new(2), failed_request(None)),
+            event(Seq::new(3), failed_request(Some("call-1"))),
+            event(Seq::new(4), turn_ended()),
         ]);
-        let a_subagents =
-            log([event(1, prompt("Go on")), event(2, failed_request(Some("call-1"))), event(3, turn_ended())]);
+        let a_subagents = log([
+            event(Seq::new(1), prompt("Go on")),
+            event(Seq::new(2), failed_request(Some("call-1"))),
+            event(Seq::new(3), turn_ended()),
+        ]);
         let earlier = log([
-            event(1, failed_request(None)),
-            event(2, turn_ended()),
-            event(3, prompt("Go on")),
-            event(4, turn_ended()),
+            event(Seq::new(1), failed_request(None)),
+            event(Seq::new(2), turn_ended()),
+            event(Seq::new(3), prompt("Go on")),
+            event(Seq::new(4), turn_ended()),
         ]);
-        let went_past =
-            log([event(1, failed_request(None)), event(2, protocol::fixtures::turn_ended(TurnOutcome::Error))]);
+        let went_past = log([
+            event(Seq::new(1), failed_request(None)),
+            event(Seq::new(2), protocol::fixtures::turn_ended(TurnOutcome::Error)),
+        ]);
 
-        assert_eq!(failed_request_ending(&ended, 4), Some(2), "not the subagent's after it");
-        assert_eq!(failed_request_ending(&a_subagents, 3), None, "a subagent's leaves the agent going");
-        assert_eq!(failed_request_ending(&earlier, 4), None, "an earlier turn's");
-        assert_eq!(failed_request_ending(&went_past, 2), None, "a turn whose end says why it failed itself");
+        assert_eq!(failed_request_ending(&ended, Seq::new(4)), Some(Seq::new(2)), "not the subagent's after it");
+        assert_eq!(failed_request_ending(&a_subagents, Seq::new(3)), None, "a subagent's leaves the agent going");
+        assert_eq!(failed_request_ending(&earlier, Seq::new(4)), None, "an earlier turn's");
+        assert_eq!(failed_request_ending(&went_past, Seq::new(2)), None, "a turn whose end says why it failed itself");
     }
 }

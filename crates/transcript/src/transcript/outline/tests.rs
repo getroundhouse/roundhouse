@@ -1,3 +1,5 @@
+use protocol::model::Seq;
+
 use super::*;
 
 /// Prompts drawn in these rows.
@@ -6,8 +8,8 @@ fn at_rows(rows: &[usize]) -> Vec<Line> {
 }
 
 /// The `seq` of the event in `row`, in a chat that holds every event.
-fn seq_in(row: usize) -> u64 {
-    u64::try_from(row).unwrap() + 1
+fn seq_in(row: usize) -> Seq {
+    Seq::new(u64::try_from(row).unwrap() + 1)
 }
 
 fn prompt_at(row: usize, number: usize) -> Line {

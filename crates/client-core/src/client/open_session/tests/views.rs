@@ -9,7 +9,7 @@ use protocol::client::{
 };
 use protocol::event::{EventBody, NoticeLevel, SessionEvent};
 use protocol::frame;
-use protocol::model::{Place, Session, ToolUseId};
+use protocol::model::{Place, Seq, Session, ToolUseId};
 
 use super::super::{OpenSession, View};
 use crate::Client;
@@ -31,7 +31,7 @@ fn recorded(seq: u64, era: Era) -> SessionEvent {
         Era::Now => (None, Place::new(seq.div_ceil(2))),
     };
     let body = EventBody::Notice { level: NoticeLevel::Info, message: format!("{seq}"), parent_tool_use_id: None };
-    SessionEvent { subagent, place, ..protocol::fixtures::event(seq, body) }
+    SessionEvent { subagent, place, ..protocol::fixtures::event(Seq::new(seq), body) }
 }
 
 const LAST_SEQ: u64 = 5;
@@ -53,10 +53,10 @@ fn start_hub(socket: &Path, era: Era) -> flume::Receiver<ClientRequest> {
             let _ = asked.send(request.clone());
             let mut send = |frame: &HubFrame| stream.write_all(&frame::encode(frame).unwrap()).unwrap();
             let outcome = |response| HubFrame::Reply { id, outcome: ReplyOutcome::Response(response) };
-            let events_from = |from: u64| (from..=LAST_SEQ).map(|seq| recorded(seq, era));
+            let events_from = |from: Seq| (from.get()..=LAST_SEQ).map(|seq| recorded(seq, era));
             let placed_from = |subagent: &Option<ToolUseId>, from: Place| {
                 let of = |event: &SessionEvent| event.subagent == *subagent;
-                let events: Vec<SessionEvent> = events_from(1).filter(of).collect();
+                let events: Vec<SessionEvent> = events_from(Seq::FIRST).filter(of).collect();
                 let last = events.last().map_or(Place::default(), |event| event.place);
                 (events.into_iter().filter(|event| event.place >= from).collect::<Vec<_>>(), last)
             };
@@ -79,7 +79,7 @@ fn start_hub(socket: &Path, era: Era) -> flume::Receiver<ClientRequest> {
                 }
                 ClientRequest::SessionRead(log::SessionRead { from_seq, .. }) => {
                     let events = events_from(from_seq).collect();
-                    send(&outcome(ClientResponse::Events(log::Events { events, last_seq: LAST_SEQ })));
+                    send(&outcome(ClientResponse::Events(log::Events { events, last_seq: Seq::new(LAST_SEQ) })));
                 }
                 ClientRequest::SessionReadPlaces(log::SessionReadPlaces { subagent, from_place, limit, .. })
                     if era == Era::Now =>
@@ -102,7 +102,7 @@ fn start_hub(socket: &Path, era: Era) -> flume::Receiver<ClientRequest> {
 fn rows(open: &OpenSession) -> Vec<Option<u64>> {
     open.read(|log| {
         let row = |ix| match log.row(ix) {
-            Row::Event(event) => Some(event.seq),
+            Row::Event(event) => Some(event.seq.get()),
             Row::Unloaded => None,
         };
         (0..log.row_count()).map(row).collect()
@@ -130,7 +130,7 @@ fn first<T>(requests: &flume::Receiver<ClientRequest>, pick: impl Fn(&ClientRequ
 }
 
 fn session() -> Session {
-    Session { last_seq: LAST_SEQ, ..protocol::fixtures::session("s") }
+    Session { last_seq: Seq::new(LAST_SEQ), ..protocol::fixtures::session("s") }
 }
 
 #[test]
@@ -147,7 +147,7 @@ fn the_agents_own_events_from_a_hub_that_cant_read_them_apart_are_every_event_by
     let requests: Vec<ClientRequest> = asked.drain().collect();
     let by_place = requests.iter().position(|r| matches!(r, ClientRequest::SessionReadPlaces(_)));
     let by_seq = requests.iter().position(|r| {
-        matches!(r, ClientRequest::SessionSubscribe(subscriptions::SessionSubscribe { from_seq: 1, .. }))
+        matches!(r, ClientRequest::SessionSubscribe(subscriptions::SessionSubscribe { from_seq, .. }) if *from_seq == Seq::FIRST)
     });
     assert!(by_place.zip(by_seq).is_some_and(|(place, seq)| place < seq), "by place first, then by seq: {requests:?}");
 }
@@ -188,7 +188,7 @@ fn an_open_view_carries_on_by_seq_from_one_hub_that_cant_read_by_place_to_anothe
             None
         }
     });
-    assert_eq!(from, LAST_SEQ + 1, "it carries on from the last event it has");
+    assert_eq!(from, Seq::new(LAST_SEQ).next(), "it carries on from the last event it has");
     assert_eq!(open.read(SessionLog::events_added), added, "and starts nothing again");
     assert_eq!(rows(&open), EVERY.map(Some));
 }

@@ -189,7 +189,7 @@ fn a_plan_can_be_approved_or_sent_back(cx: &mut TestAppContext) {
     ui.press("enter");
     ui.wait("the plan", |ui| ui.session_status() == Some(SessionStatus::WaitingApproval));
     let seq = ui.next_open_approval();
-    ui.click(ElementId::NamedInteger("keep-planning".into(), seq));
+    ui.click(ElementId::NamedInteger("keep-planning".into(), seq.get()));
     ui.wait("the turn to end", |ui| ui.session_status() == Some(SessionStatus::Idle));
     assert_eq!(ui.chat_mode(), Some(Plan), "still planning");
 
@@ -197,7 +197,7 @@ fn a_plan_can_be_approved_or_sent_back(cx: &mut TestAppContext) {
     ui.press("enter");
     ui.wait("the next plan", |ui| ui.session_status() == Some(SessionStatus::WaitingApproval));
     let seq = ui.next_open_approval();
-    ui.click(ElementId::NamedInteger("approve-plan".into(), seq));
+    ui.click(ElementId::NamedInteger("approve-plan".into(), seq.get()));
     ui.wait("plan mode to end, by the agent's own report", |ui| {
         ui.session_status() == Some(SessionStatus::Idle) && ui.chat_mode() == Some(FullAccess)
     });

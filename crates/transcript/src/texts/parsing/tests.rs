@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use gpui_kit::base::text::editor_host::BlockNode;
 use gpui_kit::{Task, TestAppContext};
+use protocol::model::Seq;
 
 use super::super::ImagesAre::{TheKits, TheTranscripts};
 use super::super::{AT_ONCE, Of, Parsed, Text, TextAt, TextKey, Texts, parse};
@@ -10,14 +11,14 @@ use super::super::{AT_ONCE, Of, Parsed, Text, TextAt, TextKey, Texts, parse};
 /// The end of the chat, where a text can go on.
 const END: Of = Of::Tail;
 /// The row of an event, where a text is once it's recorded.
-const ROW: Of = Of::Event(1);
+const ROW: Of = Of::Event(Seq::new(1));
 
 /// What the first paragraph of a text made by [`with_kept`] shows, which a whole parse of it wouldn't, so a parse that
 /// kept the blocks before can be told from one that didn't.
 const KEPT: &str = "Kept as it was";
 
 fn id() -> TextKey {
-    TextKey::of(TextAt::only(1, 0))
+    TextKey::of(TextAt::only(Seq::new(1), 0))
 }
 
 /// Paragraphs of a reply, `bytes` long or a little more.
@@ -36,7 +37,7 @@ fn list(bytes: usize) -> String {
 fn with(parsed: Parsed) -> Texts {
     let texts = Texts::alone();
     let mut store = texts.0.borrow_mut();
-    store.placed(&id(), TextAt::only(1, 0));
+    store.placed(&id(), TextAt::only(Seq::new(1), 0));
     store.texts.insert(id(), Text::Parsed { parsed: Rc::new(parsed) });
     drop(store);
     texts

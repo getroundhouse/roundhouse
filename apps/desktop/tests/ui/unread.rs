@@ -23,7 +23,7 @@ fn replied(stack: &Stack, chat: &SessionId) -> Session {
     let client = stack.client();
     let mut session = client.session_get(chat).unwrap();
     let deadline = std::time::Instant::now() + crate::support::TIMEOUT;
-    while session.reply_seq == 0 {
+    while !session.has_reply() {
         assert!(std::time::Instant::now() < deadline, "timed out waiting for a reply");
         std::thread::sleep(std::time::Duration::from_millis(10));
         session = client.session_get(chat).unwrap();
@@ -33,7 +33,7 @@ fn replied(stack: &Stack, chat: &SessionId) -> Session {
 
 fn read_at_the_hub(stack: &Stack, chat: &SessionId) -> bool {
     let session = stack.client().session_get(chat).unwrap();
-    session.reply_seq > 0 && !session.unread()
+    session.has_reply() && !session.unread()
 }
 
 /// A window in front, with a repository and a workspace whose chat is showing. Returns them.

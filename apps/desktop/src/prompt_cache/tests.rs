@@ -1,4 +1,4 @@
-use protocol::model::{CacheTtl, ContextUsage, PromptCache, SessionStatus};
+use protocol::model::{CacheTtl, ContextUsage, PromptCache, Seq, SessionStatus};
 
 use super::*;
 
@@ -10,7 +10,7 @@ fn chat(id: &str, used_tokens: u64) -> Session {
     let context =
         ContextUsage { used_tokens, max_tokens: 1_000_000, model_tokens: None, max_set_by: None, parts: Vec::new() };
     Session {
-        last_seq: 4,
+        last_seq: Seq::new(4),
         context: Some(context),
         prompt_cache: Some(PromptCache { used_at_ms: SENT_MS, ttl: CacheTtl::OneHour, model: None, tokens: 313_500 }),
         ..protocol::fixtures::session(id)

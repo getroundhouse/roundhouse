@@ -76,14 +76,14 @@ impl Hub {
                 permission_mode,
                 effort,
                 status: SessionStatus::Idle,
-                last_seq: 0,
+                last_seq: Seq::default(),
                 created_at_ms: now,
                 updated_at_ms: now,
                 title: None,
                 title_source: TitleSource::FirstLine,
                 closed_at_ms: None,
-                reply_seq: 0,
-                read_seq: 0,
+                reply_seq: Seq::default(),
+                read_seq: Seq::default(),
                 turn_started_at_ms: None,
                 user_active_at_ms: None,
                 background_tasks: Vec::new(),
@@ -196,7 +196,7 @@ impl Hub {
         from_seq: Seq,
         through: Seq,
     ) -> Result<Vec<SessionEvent>, ApiError> {
-        let limit = u32::try_from(through - from_seq + 1)
+        let limit = u32::try_from(through.get() - from_seq.get() + 1)
             .map_or(crate::server::PUMP_PAGE_EVENTS, |n| n.min(crate::server::PUMP_PAGE_EVENTS));
         self.blocking(move |store| store.read_events(&id, from_seq, limit, crate::server::DEFAULT_READ_BYTES, false))
             .await

@@ -4,7 +4,7 @@
 use std::path::PathBuf;
 
 use gpui_kit::{AppContext as _, ElementId, SharedString, TestAppContext};
-use protocol::model::{RepoId, WorkspaceId};
+use protocol::model::{RepoId, Seq, WorkspaceId};
 
 use super::{Stack, Ui};
 
@@ -39,7 +39,7 @@ impl<'a> Ui<'a> {
         let (hub, checkout) = (stack.hub.clone(), stack.checkout.clone());
         let opens = desktop::Opens::WhereItWasLeft;
         (self.handle, self.view) = self.cx.update(|cx| desktop::open_main_window(hub, checkout, opens, cx)).unwrap();
-        self.seen_approval = 0;
+        self.seen_approval = Seq::default();
         self.wait("the app to connect", |ui| ui.view().client().is_some());
     }
 

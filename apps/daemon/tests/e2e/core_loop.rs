@@ -7,7 +7,7 @@ use std::process::Command;
 
 use client_core::Client;
 use protocol::event::EventBody;
-use protocol::model::WorkspaceStatus;
+use protocol::model::{Seq, WorkspaceStatus};
 
 use crate::support::{Stack, assert_gapless, assistant_text, git, read_all, wait_for_turn_end, wait_until};
 
@@ -63,7 +63,7 @@ fn prompts_are_recorded_before_anything_else_and_retries_are_recorded_once() {
 
     let (first, duplicate) = client.session_prompt(&session.id, "say:once", Some("msg-1".into())).unwrap();
     assert!(!duplicate);
-    assert_eq!(first, 1);
+    assert_eq!(first, Seq::new(1));
     let (again, duplicate) = client.session_prompt(&session.id, "say:once", Some("msg-1".into())).unwrap();
     assert!(duplicate);
     assert_eq!(again, first);
@@ -149,7 +149,7 @@ fn raw_agent_lines_are_kept_so_the_log_can_be_rebuilt() {
     let (_, session) = stack.workspace(&client);
     client.session_prompt(&session.id, "say:hello", None).unwrap();
     wait_for_turn_end(&client, &session.id, 1);
-    let (events, _) = client.session_read(&session.id, 1, 100, true).unwrap();
+    let (events, _) = client.session_read(&session.id, Seq::new(1), 100, true).unwrap();
     let assistant = events.iter().find(|e| matches!(e.body, EventBody::Assistant { .. })).unwrap();
     let raw: serde_json::Value = serde_json::from_str(assistant.raw.as_ref().unwrap()).unwrap();
     assert_eq!(raw["message"]["content"][0]["text"], "hello");

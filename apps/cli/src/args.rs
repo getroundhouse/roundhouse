@@ -48,7 +48,7 @@ pub(crate) enum Cmd {
     Attach {
         session: String,
         /// The first event to show. Defaults to the whole history.
-        #[arg(long, default_value_t = 1)]
+        #[arg(long, value_parser = seq(), default_value_t = Seq::FIRST)]
         from: Seq,
         /// Stop once the agent is no longer working.
         #[arg(long)]
@@ -60,7 +60,7 @@ pub(crate) enum Cmd {
     /// Print a range of a session's events and exit.
     Log {
         session: String,
-        #[arg(long, default_value_t = 1)]
+        #[arg(long, value_parser = seq(), default_value_t = Seq::FIRST)]
         from: Seq,
         #[arg(long, default_value_t = 500)]
         limit: u32,
@@ -191,6 +191,11 @@ pub(crate) enum SessionCmd {
     },
 }
 
+/// Takes an event's `seq` in its session's log.
+fn seq() -> impl TypedValueParser<Value = Seq> {
+    clap::value_parser!(u64).map(Seq::new)
+}
+
 /// Takes a name that names a model, so `default`, which would leave the choice to the agent's CLI, is refused here.
 fn model() -> impl TypedValueParser<Value = ModelName> {
     clap::builder::StringValueParser::new().try_map(ModelName::try_from)
@@ -206,4 +211,23 @@ fn mode() -> impl TypedValueParser<Value = PermissionMode> {
 fn effort() -> impl TypedValueParser<Value = Effort> {
     PossibleValuesParser::new(Effort::ALL.into_iter().filter_map(Effort::as_str))
         .try_map(|name| Effort::parse(&name).ok_or("not a level of effort"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// So following again from where the CLI said it stopped works, and so does leaving `--from` out, whose default
+    /// clap reads as it's printed.
+    #[test]
+    fn from_takes_a_seq_as_it_s_printed_and_is_the_first_when_left_out() {
+        let from = |args: &[&str]| {
+            let Cmd::Attach { from, .. } = Args::try_parse_from(args).unwrap().command else { panic!("not attach") };
+            from
+        };
+        let printed = Seq::new(7).to_string();
+
+        assert_eq!(from(&["roundhouse", "attach", "s", "--from", &printed]), Seq::new(7));
+        assert_eq!(from(&["roundhouse", "attach", "s"]), Seq::FIRST);
+    }
 }

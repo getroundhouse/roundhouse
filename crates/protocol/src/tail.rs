@@ -158,6 +158,11 @@ impl Tail {
     /// says so, when its request is dropped, when its turn or its agent ends, or when the agent writes again, which it
     /// can't while compacting.
     pub fn on_event(&mut self, seq: Seq, run: Option<RunId>, body: &EventBody) {
+        self.heard(Some(seq), run, body);
+    }
+
+    /// What [`Tail::on_event`] does, for an event recorded at `seq`, or one no hub has recorded yet.
+    fn heard(&mut self, seq: Option<Seq>, run: Option<RunId>, body: &EventBody) {
         match body {
             EventBody::Assistant { message_id, parent_tool_use_id, .. } => {
                 if let Some(id) = message_id {
@@ -188,7 +193,7 @@ impl Tail {
                 self.in_background.retain(|b| b.call != *call);
             }
             EventBody::CompactionAsked { .. } => {
-                self.compacting = Some(Compacting { run, asked: Some(seq), written_chars: None });
+                self.compacting = Some(Compacting { run, asked: seq, written_chars: None });
             }
             EventBody::AgentCompacting { written_chars } => {
                 self.compacting = Some(Compacting { run, asked: None, written_chars: *written_chars });
@@ -246,10 +251,11 @@ impl Tail {
         Tail { messages: messages.cloned().collect(), in_background: Vec::new(), compacting }
     }
 
-    /// Updates the tail for an event from `run` that no hub has recorded yet, as its worker sends it on. Only an event
-    /// the hub records itself, a compaction being asked for, needs its place in the log, and no agent sends one.
+    /// Updates the tail for an event from `run` that no hub has recorded yet, as its worker sends it on, so it has
+    /// no seq. Only an event the hub records itself, a compaction being asked for, needs its place in the log, and no
+    /// agent sends one.
     pub fn on_agent_event(&mut self, run: RunId, body: &EventBody) {
-        self.on_event(NOT_RECORDED, Some(run), body);
+        self.heard(None, Some(run), body);
     }
 
     /// Every run it holds something of, oldest first.
@@ -291,9 +297,6 @@ impl Tail {
         };
     }
 }
-
-/// Where an event no hub has recorded yet is in the log, which is nowhere, since the first event is 1.
-const NOT_RECORDED: Seq = 0;
 
 /// Whether what `by` writes comes from a run after `ended`. Nothing comes after an event with no run.
 fn later(ended: Option<RunId>, by: Option<RunId>) -> bool {

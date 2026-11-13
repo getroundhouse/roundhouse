@@ -182,7 +182,11 @@ mod tests {
 
     /// The message `id` from `first` on, as the CLI sends one: an event a block.
     fn message(first: Seq, id: &str, blocks: Vec<ContentBlock>) -> Vec<SessionEvent> {
-        (first..).zip(blocks).map(|(seq, block)| event(seq, assistant(Some(id), vec![block]))).collect()
+        (first.get()..)
+            .map(Seq::new)
+            .zip(blocks)
+            .map(|(seq, block)| event(seq, assistant(Some(id), vec![block])))
+            .collect()
     }
 
     #[test]
@@ -190,19 +194,26 @@ mod tests {
         let m = tab(subagent(SubagentStatus::Finished, Some("Two places.\n\nBoth compare directly.")));
         let repeated = |events: Vec<SessionEvent>| rows_repeating_report(&log(events), &m);
         let thinking = ContentBlock::Thinking { text: "Where?".into() };
-        let mut sent = vec![event(1, within("agent", calls(&["a"])))];
-        sent.extend(message(2, "m", vec![thinking, text("Two places."), text("Both compare directly.")]));
+        let mut sent = vec![event(Seq::new(1), within("agent", calls(&["a"])))];
+        sent.extend(message(Seq::new(2), "m", vec![thinking, text("Two places."), text("Both compare directly.")]));
 
         assert_eq!(repeated(sent), [2, 3], "as the CLI sends them, its words but not its thinking");
-        assert_eq!(repeated(vec![said(1, &["Two places.\n\nBoth compare directly."])]), [0]);
-        assert_eq!(repeated(vec![said(1, &["Two places.", "Both compare directly."])]), [0], "two blocks in one event");
-        assert!(repeated(message(1, "m", vec![text("Two places.")])).is_empty(), "only part of it");
-        let mut earlier = message(1, "m", vec![text("Two places."), text("Both compare directly.")]);
-        earlier.extend(message(3, "n", vec![text("Done.")]));
+        assert_eq!(repeated(vec![said(Seq::new(1), &["Two places.\n\nBoth compare directly."])]), [0]);
+        assert_eq!(
+            repeated(vec![said(Seq::new(1), &["Two places.", "Both compare directly."])]),
+            [0],
+            "two blocks in one event"
+        );
+        assert!(repeated(message(Seq::new(1), "m", vec![text("Two places.")])).is_empty(), "only part of it");
+        let mut earlier = message(Seq::new(1), "m", vec![text("Two places."), text("Both compare directly.")]);
+        earlier.extend(message(Seq::new(3), "n", vec![text("Done.")]));
         assert!(repeated(earlier).is_empty(), "words before its last message");
-        assert!(repeated(vec![event(1, within("agent", calls(&["a"])))]).is_empty(), "a call");
+        assert!(repeated(vec![event(Seq::new(1), within("agent", calls(&["a"])))]).is_empty(), "a call");
         let working = tab(subagent(SubagentStatus::Working, None));
-        assert!(rows_repeating_report(&log(vec![said(1, &["Two places."])]), &working).is_empty(), "no report yet");
+        assert!(
+            rows_repeating_report(&log(vec![said(Seq::new(1), &["Two places."])]), &working).is_empty(),
+            "no report yet"
+        );
     }
 
     #[test]

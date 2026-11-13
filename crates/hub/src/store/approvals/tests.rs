@@ -19,7 +19,7 @@ fn append(store: &Store, body: &EventBody) -> Option<Vec<OpenApproval>> {
 }
 
 fn open(at: &[(u64, &str)]) -> Vec<OpenApproval> {
-    at.iter().map(|&(seq, id)| OpenApproval { seq, approval_id: ApprovalId::from(id) }).collect()
+    at.iter().map(|&(seq, id)| OpenApproval { seq: Seq::new(seq), approval_id: ApprovalId::from(id) }).collect()
 }
 
 /// In the same commit as the event, so a client reading the record after it can't see an older answer.

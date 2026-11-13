@@ -5,7 +5,7 @@
 
 use protocol::attachment::{Attachment, MediaType};
 use protocol::event::LinkedImage;
-use protocol::model::{AttachmentId, SessionStatus};
+use protocol::model::{AttachmentId, Seq, SessionStatus};
 
 use super::events::{replied, taken, text_pointing, user_prompt};
 use super::pictures;
@@ -67,7 +67,8 @@ fn pointing(prompt: &str, reply: &str, kept: Vec<(&str, Vec<u8>)>) -> World {
     let images: Vec<LinkedImage> =
         kept.iter().map(|kept| LinkedImage { address: kept.0.to_string(), attachment: attachment(kept) }).collect();
     let ids: Vec<AttachmentId> = images.iter().map(|image| image.attachment.id.clone()).collect();
-    let events = vec![user_prompt(prompt), taken(1), text_pointing("msg-1", reply, images), replied(reply, 9, 0.05)];
+    let events =
+        vec![user_prompt(prompt), taken(Seq::new(1)), text_pointing("msg-1", reply, images), replied(reply, 9, 0.05)];
     let mut world = chat_world(SessionStatus::Idle, events);
     world.attachments.extend(ids.into_iter().zip(kept.into_iter().map(|(_, png)| png)));
     world

@@ -15,7 +15,7 @@ use protocol::model::{
 pub(crate) fn records_of(log: &[SessionEvent]) -> Vec<Subagent> {
     let mut held: BTreeMap<ToolUseId, Subagent> = BTreeMap::new();
     for event in log {
-        let rev = Rev::new(event.seq);
+        let rev = Rev::new(event.seq.get());
         match &event.body {
             EventBody::SubagentStarted { call, kind, description, prompt, in_background } => {
                 held.entry(call.clone()).or_insert(Subagent {

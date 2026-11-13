@@ -5,7 +5,7 @@
 
 use gpui_kit::{AppContext as _, TestAppContext};
 use protocol::event::EventBody;
-use protocol::model::{ContextUsage, SessionStatus};
+use protocol::model::{ContextUsage, Seq, SessionStatus};
 
 use crate::support::{Stack, Ui};
 
@@ -121,7 +121,7 @@ fn typing_compact_asks_the_same_way_with_what_follows_it_as_what_to_keep(cx: &mu
 
     ui.wait("the agent to compact", |ui| compacted(ui, Some("Keep the greeting")));
     assert_eq!(ui.composer_text(), "");
-    let typed = ui.events().iter().any(|e| matches!(e.body, EventBody::UserPrompt { .. } if e.seq > 2));
+    let typed = ui.events().iter().any(|e| matches!(e.body, EventBody::UserPrompt { .. } if e.seq > Seq::new(2)));
     assert!(!typed, "it isn't a prompt");
 }
 

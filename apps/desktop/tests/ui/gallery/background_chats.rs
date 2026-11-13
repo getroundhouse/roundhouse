@@ -4,7 +4,7 @@
 #![cfg(test)]
 
 use protocol::event::{AgentTask, EventBody, TaskKind};
-use protocol::model::SessionStatus;
+use protocol::model::{Seq, SessionStatus};
 use serde_json::json;
 
 use super::events::{replied, subagent_started, taken, task, text, tool_result, tool_use, user_prompt};
@@ -103,7 +103,7 @@ fn starting(kind: TaskKind, at: usize, call: &str) -> (Vec<EventBody>, AgentTask
 fn started(kinds: &[(TaskKind, usize)]) -> Vec<EventBody> {
     let mut events = vec![
         user_prompt("Move every crate over to typed aspects, a pull request for each, and get them merged."),
-        taken(1),
+        taken(Seq::new(1)),
         text("msg-1", "I'll give each crate to an agent of its own, and watch their pull requests through the queue."),
     ];
     let mut tasks = Vec::new();

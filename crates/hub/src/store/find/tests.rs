@@ -1,6 +1,6 @@
 use protocol::event::{ContentBlock, EventBody};
 use protocol::find::{Found, Needle};
-use protocol::model::{Place, ToolUseId};
+use protocol::model::{Place, Seq, ToolUseId};
 use protocol::prompt::Prompt;
 
 use crate::store::tests::{notice, store_with_session};
@@ -31,7 +31,7 @@ fn the_events_that_hold_the_text_are_found_by_place_oldest_first_as_of_the_newes
     let append = |body: &EventBody| store.append(&"s".into(), None, body, None, None, None).unwrap();
     append(&prompt("Make the train slow down"));
     append(&subagent_says("call", "the train's timetable"));
-    append(&EventBody::PromptTaken { prompt: 1 });
+    append(&EventBody::PromptTaken { prompt: Seq::new(1) });
     append(&notice("the TRAIN is late"));
     append(&subagent_says("call", "nothing here"));
     append(&notice("nothing here"));

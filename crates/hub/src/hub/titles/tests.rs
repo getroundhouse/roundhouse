@@ -1,9 +1,10 @@
 use protocol::attachment::MediaType;
+use protocol::model::Seq;
 
 use super::*;
 
 fn lines(texts: &[&str]) -> Vec<PromptLine> {
-    texts.iter().zip(1..).map(|(text, seq)| PromptLine::new(seq, text, 0)).collect()
+    texts.iter().zip(1..).map(|(text, seq)| PromptLine::new(Seq::new(seq), text, 0)).collect()
 }
 
 #[test]
@@ -23,7 +24,7 @@ fn nothing_typed_is_nothing_to_ask_about() {
 #[test]
 fn too_many_prompts_keep_the_first_and_the_newest_that_fit() {
     let long = "word ".repeat(PromptLine::MOST_CHARS);
-    let long = PromptLine::new(1, &long, 0).text().to_string();
+    let long = PromptLine::new(Seq::new(1), &long, 0).text().to_string();
     let most = MOST_PROMPT_CHARS / long.chars().count();
     let mut texts = vec!["Fix the login"];
     texts.extend(std::iter::repeat_n(long.as_str(), most + 2));
