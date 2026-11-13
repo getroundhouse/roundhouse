@@ -381,7 +381,7 @@ fn settings_stands_in_for_the_sidebar_at_the_width_it_was_dragged_to(cx: &mut Te
     let mut ui = with_a_workspace(cx, &stack);
     drag_edge(&mut ui, LEFT_EDGE, px(350.));
 
-    ui.press("cmd-,");
+    ui.press("secondary-,");
 
     assert_eq!(bounds(&mut ui, "settings-back").right(), px(350. - 12.), "Back is at its top right");
 }

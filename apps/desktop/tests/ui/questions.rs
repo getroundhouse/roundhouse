@@ -222,7 +222,7 @@ fn closing_settings_gives_focus_to_a_question_that_came_meanwhile(cx: &mut TestA
     let chat = ui.cx.read_entity(&pane, |p, _| p.active.clone()).unwrap();
 
     // Settings keeps the composer's focus to give back, and the question comes while it shows.
-    ui.press("cmd-,");
+    ui.press("secondary-,");
     stack.client().session_prompt(&chat, "ask:Now or later?=Now/Later", None).unwrap();
     ui.wait("the question", |ui| ui.session_status() == Some(SessionStatus::WaitingApproval));
     ui.next_open_approval();

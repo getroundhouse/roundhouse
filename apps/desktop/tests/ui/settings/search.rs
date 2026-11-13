@@ -26,7 +26,7 @@ fn left(ui: &mut Ui<'_>) -> (bool, bool) {
 
 /// Types into the search, with the cursor put there as Cmd-F does.
 fn search_for(ui: &mut Ui<'_>, typed: &str) {
-    ui.press("cmd-f");
+    ui.press("secondary-f");
     ui.input(typed);
     ui.frame();
 }
@@ -74,7 +74,7 @@ fn escape_goes_back_from_the_search_too(cx: &mut TestAppContext) {
 
 #[gpui_kit::test]
 fn cmd_w_goes_back_from_the_search_too(cx: &mut TestAppContext) {
-    assert!(goes_back_from_the_search(cx, "cmd-w"));
+    assert!(goes_back_from_the_search(cx, "secondary-w"));
 }
 
 #[gpui_kit::test]
@@ -112,7 +112,7 @@ fn the_page_shows_again_once_the_search_no_longer_hides_it(cx: &mut TestAppConte
     search_for(&mut ui, "nothing like it");
 
     // Cmd-F selects what's typed on every platform, where the kit's own key for that is only Cmd-A on a Mac.
-    ui.press("cmd-f");
+    ui.press("secondary-f");
     ui.press("backspace");
 
     assert!(!ui.has("settings-nothing-found"));

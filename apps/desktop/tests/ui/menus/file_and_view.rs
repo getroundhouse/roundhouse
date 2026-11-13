@@ -3,7 +3,7 @@
 
 use gpui_kit::{AppContext as _, TestAppContext};
 
-use super::{action, choose, enabled, items, key, with_a_repository};
+use super::{action, choose, enabled, items, key, keyed, with_a_repository};
 use crate::support::{Stack, Ui};
 
 #[gpui_kit::test]
@@ -16,10 +16,10 @@ fn the_file_menu_makes_things_and_closes_a_chat(cx: &mut TestAppContext) {
     assert!(action(&ui, "File", "New Chat").partial_eq(&desktop::NewChat));
     assert!(action(&ui, "File", "Add Project…").partial_eq(&desktop::AddRepository));
     assert!(action(&ui, "File", "Close Chat").partial_eq(&desktop::CloseChat));
-    assert_eq!(key(&ui, "File", "New Workspace").as_deref(), Some("cmd-n"));
-    assert_eq!(key(&ui, "File", "New Chat").as_deref(), Some("cmd-t"));
+    assert_eq!(key(&ui, "File", "New Workspace"), Some(keyed(&ui, "secondary-n")));
+    assert_eq!(key(&ui, "File", "New Chat"), Some(keyed(&ui, "secondary-t")));
     assert_eq!(key(&ui, "File", "Add Project…"), None);
-    assert_eq!(key(&ui, "File", "Close Chat").as_deref(), Some("cmd-w"));
+    assert_eq!(key(&ui, "File", "Close Chat"), Some(keyed(&ui, "secondary-w")));
 }
 
 #[gpui_kit::test]
@@ -32,9 +32,9 @@ fn the_view_menu_shows_the_diff_and_moves_between_workspaces(cx: &mut TestAppCon
     assert!(action(&ui, "View", "Show Diff").partial_eq(&desktop::ToggleDiff));
     assert!(action(&ui, "View", "Previous Workspace").partial_eq(&desktop::PreviousWorkspace));
     assert!(action(&ui, "View", "Next Workspace").partial_eq(&desktop::NextWorkspace));
-    assert_eq!(key(&ui, "View", "Show Diff").as_deref(), Some("cmd-shift-d"));
-    assert_eq!(key(&ui, "View", "Previous Workspace").as_deref(), Some("cmd-["));
-    assert_eq!(key(&ui, "View", "Next Workspace").as_deref(), Some("cmd-]"));
+    assert_eq!(key(&ui, "View", "Show Diff"), Some(keyed(&ui, "secondary-shift-d")));
+    assert_eq!(key(&ui, "View", "Previous Workspace"), Some(keyed(&ui, "secondary-[")));
+    assert_eq!(key(&ui, "View", "Next Workspace"), Some(keyed(&ui, "secondary-]")));
 }
 
 /// As the header's button does, whichever way the diff opened or closed.
@@ -63,7 +63,7 @@ fn close_chat_is_close_file_tab_while_the_file_tab_shows(cx: &mut TestAppContext
     let diff = ui.open_changes();
     ui.open_diff_of(&diff, "a.txt");
     assert_eq!(items(&ui, "File")[4], "Close File Tab");
-    assert_eq!(key(&ui, "File", "Close File Tab").as_deref(), Some("cmd-w"));
+    assert_eq!(key(&ui, "File", "Close File Tab"), Some(keyed(&ui, "secondary-w")));
 
     choose(&mut ui, "File", "Close File Tab");
 

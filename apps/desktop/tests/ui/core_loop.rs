@@ -96,7 +96,7 @@ fn the_core_loop(cx: &mut TestAppContext) {
     ui.wait("the turn to finish", |ui| ui.session_status() == Some(SessionStatus::Idle));
 
     // Archive. Uncommitted work means asking first, and "keep working" leaves it all alone.
-    ui.press("cmd-shift-a");
+    ui.press("secondary-shift-a");
     ui.wait("the question", |ui| ui.cx.has_pending_prompt());
     ui.cx.simulate_prompt_answer("Keep working");
     ui.frame();
@@ -105,7 +105,7 @@ fn the_core_loop(cx: &mut TestAppContext) {
 
     git(&worktree, &["add", "."]);
     git(&worktree, &["commit", "-qm", "the agent's work"]);
-    ui.press("cmd-shift-a");
+    ui.press("secondary-shift-a");
     ui.wait("the workspace to be archived", |ui| {
         ui.view().records().workspaces().iter().find(|w| w.id == id).unwrap().status == WorkspaceStatus::Archived
             && ui.view().busy == Busy::Free
@@ -165,24 +165,24 @@ fn the_keyboard_moves_between_workspaces_and_opens_the_diff(cx: &mut TestAppCont
     let first = ui.new_workspace();
     let second = ui.new_workspace();
 
-    ui.press("cmd-[");
+    ui.press("secondary-[");
     ui.wait("the previous workspace", |ui| ui.view().selected.as_ref() == Some(&first));
-    ui.press("cmd-]");
+    ui.press("secondary-]");
     ui.wait("the next workspace", |ui| ui.view().selected.as_ref() == Some(&second));
-    ui.press("cmd-]");
+    ui.press("secondary-]");
     ui.wait("wrapping around", |ui| ui.view().selected.as_ref() == Some(&first));
 
     ui.wait("the pane", |ui| ui.pane().is_some());
     let pane = ui.pane().unwrap();
-    ui.press("cmd-shift-d");
+    ui.press("secondary-shift-d");
     assert!(!ui.changes_open(), "it starts open, so this hides it");
-    ui.press("cmd-shift-d");
+    ui.press("secondary-shift-d");
     ui.wait("the sidebar of changes", |ui| ui.changes_open() && ui.cx.read_entity(&pane, |p, _| p.diff.is_some()));
     let review = ui.cx.read_entity(&pane, |p, _| p.diff.as_ref().map(|d| d.review.clone())).unwrap();
     ui.wait("it to see there are no changes", |ui| ui.cx.read_entity(&review, |r, _| r.has_no_changes()));
 
     let before = ui.view().records().workspaces().len();
-    ui.press("cmd-n");
+    ui.press("secondary-n");
     ui.wait("the new-workspace dialog", Ui::has_dialog);
     ui.press("enter");
     ui.wait("a third workspace", |ui| {

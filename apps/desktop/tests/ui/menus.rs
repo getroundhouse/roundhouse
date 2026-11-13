@@ -3,7 +3,9 @@
 
 #![cfg(test)]
 
-use gpui_kit::component::input::{Copy, Cut, Paste, Redo, SelectAll, Undo};
+use gpui_kit::component::input::{
+    Copy, Cut, DeleteToPreviousWordStart, MoveToPreviousWord, Paste, Redo, SelectAll, Undo,
+};
 use gpui_kit::{Action, AppContext as _, Keystroke, OperatingSystem, OwnedMenu, OwnedMenuItem, TestAppContext};
 
 use crate::support::{Stack, Ui};
@@ -38,28 +40,44 @@ fn action(ui: &Ui<'_>, menu_name: &str, name: &str) -> Box<dyn Action> {
     action.unwrap_or_else(|| panic!("no {name} in the {menu_name} menu"))
 }
 
-/// The key macOS shows beside an item, which is the first one bound to its action.
+/// The key shown beside an item, as [`keyed`] writes it.
 fn key(ui: &Ui<'_>, menu_name: &str, name: &str) -> Option<String> {
     key_for(ui, action(ui, menu_name, name).as_ref())
 }
 
-/// The key macOS shows beside an item that does `action`.
+/// The key shown beside an item that does `action`: on a Mac the first bound to it, which macOS shows, and elsewhere
+/// the last, which the kit shows.
 fn key_for(ui: &Ui<'_>, action: &dyn Action) -> Option<String> {
+    let os = ui.cx.update(|cx| cx.platform_info().os);
     let keymap = ui.cx.update(|cx| cx.key_bindings());
     let keymap = keymap.borrow();
-    let binding = keymap.bindings_for_action(action).next()?;
-    let keystrokes = binding.keystrokes().iter().map(|keystroke| keystroke.unparse(OperatingSystem::Mac));
+    let mut bindings = keymap.bindings_for_action(action);
+    let binding = if os == OperatingSystem::Mac { bindings.next() } else { bindings.next_back() }?;
+    let keystrokes = binding.keystrokes().iter().map(|keystroke| keystroke.unparse(os));
     Some(keystrokes.collect::<Vec<_>>().join(" "))
 }
 
-/// What pressing a key would do where focus is, without doing it.
-fn bound_where_focus_is(ui: &mut Ui<'_>, key: &'static str) -> Box<dyn Action> {
+/// `keys`, written as they're bound, as [`key`] gives them on the system the tests run on, so `secondary-n` is `cmd-n`
+/// on a Mac and `ctrl-n` elsewhere.
+fn keyed(ui: &Ui<'_>, keys: &str) -> String {
+    let os = ui.cx.update(|cx| cx.platform_info().os);
+    Keystroke::parse_with_os(keys, os).unwrap().unparse(os)
+}
+
+/// `keys` on a Mac, and no key elsewhere, for what only a Mac does.
+fn keyed_on_a_mac(ui: &Ui<'_>, keys: &str) -> Option<String> {
+    ui.cx.update(|cx| cx.platform_info().is_mac()).then(|| keyed(ui, keys))
+}
+
+/// What pressing a key would do where focus is, without doing it, or `None` for nothing.
+fn bound_where_focus_is(ui: &mut Ui<'_>, key: &str) -> Option<Box<dyn Action>> {
     ui.frame();
-    let keystroke = Keystroke::parse(key).unwrap();
+    let os = ui.cx.update(|cx| cx.platform_info().os);
+    let keystroke = Keystroke::parse_with_os(key, os).unwrap();
     let keymap = ui.cx.update(|cx| cx.key_bindings());
     let contexts = ui.cx.update_window(ui.handle, |_, window, _| window.context_stack()).unwrap();
     let (bindings, _) = keymap.borrow().bindings_for_input(&[keystroke], &contexts);
-    bindings.first().unwrap_or_else(|| panic!("nothing takes {key} here")).action().boxed_clone()
+    bindings.first().map(|binding| binding.action().boxed_clone())
 }
 
 /// Whether macOS shows the item as one that can be chosen, which is whether anything where focus is takes its action.
@@ -118,11 +136,11 @@ fn the_app_menu_has_what_every_mac_app_has_in_the_same_order(cx: &mut TestAppCon
     assert!(action(&ui, "Roundhouse", "Show All").partial_eq(&desktop::ShowAll));
     assert!(action(&ui, "Roundhouse", "Quit Roundhouse").partial_eq(&desktop::Quit));
     assert!(action(&ui, "Roundhouse", "Settings…").partial_eq(&desktop::OpenSettings));
-    assert_eq!(key(&ui, "Roundhouse", "Hide Roundhouse").as_deref(), Some("cmd-h"));
-    assert_eq!(key(&ui, "Roundhouse", "Hide Others").as_deref(), Some("alt-cmd-h"));
+    assert_eq!(key(&ui, "Roundhouse", "Hide Roundhouse"), keyed_on_a_mac(&ui, "secondary-h"));
+    assert_eq!(key(&ui, "Roundhouse", "Hide Others"), keyed_on_a_mac(&ui, "alt-secondary-h"));
     assert_eq!(key(&ui, "Roundhouse", "Show All"), None);
-    assert_eq!(key(&ui, "Roundhouse", "Quit Roundhouse").as_deref(), Some("cmd-q"));
-    assert_eq!(key(&ui, "Roundhouse", "Settings…").as_deref(), Some("cmd-,"));
+    assert_eq!(key(&ui, "Roundhouse", "Quit Roundhouse"), Some(keyed(&ui, "secondary-q")));
+    assert_eq!(key(&ui, "Roundhouse", "Settings…"), Some(keyed(&ui, "secondary-,")));
 }
 
 #[gpui_kit::test]
@@ -134,24 +152,57 @@ fn the_window_menu_has_minimize_and_zoom(cx: &mut TestAppContext) {
     assert_eq!(items(&ui, "Window"), ["-", "Minimize", "Zoom"]);
     assert!(action(&ui, "Window", "Minimize").partial_eq(&desktop::Minimize));
     assert!(action(&ui, "Window", "Zoom").partial_eq(&desktop::Zoom));
-    assert_eq!(key(&ui, "Window", "Minimize").as_deref(), Some("cmd-m"));
+    assert_eq!(key(&ui, "Window", "Minimize"), keyed_on_a_mac(&ui, "secondary-m"));
     assert_eq!(key(&ui, "Window", "Zoom"), None);
 }
 
-/// A text box binds keys of its own, and none of them may take these.
+/// A text box binds keys of its own, and none of them may take these. Off the Mac, Cmd is the Windows or Super key,
+/// which the system keeps, so what only a Mac does has no key there, and the others are on Ctrl.
 #[gpui_kit::test]
 fn the_app_and_window_keys_work_while_typing(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = typing(cx, &stack, "say:not sent yet");
+    let on_a_mac = cfg!(target_os = "macos");
 
-    for (key, menu_name, name) in [
-        ("cmd-h", "Roundhouse", "Hide Roundhouse"),
-        ("alt-cmd-h", "Roundhouse", "Hide Others"),
-        ("cmd-q", "Roundhouse", "Quit Roundhouse"),
-        ("cmd-m", "Window", "Minimize"),
+    for (key, menu_name, name, bound) in [
+        ("secondary-h", "Roundhouse", "Hide Roundhouse", on_a_mac),
+        ("alt-secondary-h", "Roundhouse", "Hide Others", on_a_mac),
+        ("secondary-q", "Roundhouse", "Quit Roundhouse", true),
+        ("secondary-m", "Window", "Minimize", on_a_mac),
     ] {
         let pressed = bound_where_focus_is(&mut ui, key);
-        assert!(pressed.partial_eq(action(&ui, menu_name, name).as_ref()), "{key} isn't {name} in the composer");
+        let item = action(&ui, menu_name, name);
+        assert_eq!(pressed.is_some_and(|pressed| pressed.partial_eq(item.as_ref())), bound, "{key} and {name}");
+    }
+    if !on_a_mac {
+        assert!(bound_where_focus_is(&mut ui, "cmd-q").is_none(), "the Windows or Super key quits nothing");
+    }
+}
+
+/// Off the Mac the text box's editing keys are on Ctrl, as the app's are, and none of the app's may take them.
+#[gpui_kit::test]
+fn the_text_box_keeps_its_own_keys(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = typing(cx, &stack, "say:not sent yet");
+
+    let mut edits: Vec<(&str, &dyn Action)> = vec![
+        ("secondary-a", &SelectAll),
+        ("secondary-c", &Copy),
+        ("secondary-x", &Cut),
+        ("secondary-v", &Paste),
+        ("secondary-z", &Undo),
+    ];
+    // Keys only the text box off the Mac has, which an app-wide key could take there without a Mac's tests seeing.
+    if !cfg!(target_os = "macos") {
+        edits.extend([
+            ("ctrl-y", &Redo as &dyn Action),
+            ("ctrl-left", &MoveToPreviousWord),
+            ("ctrl-backspace", &DeleteToPreviousWordStart),
+        ]);
+    }
+    for (key, edit) in edits {
+        let pressed = bound_where_focus_is(&mut ui, key);
+        assert!(pressed.is_some_and(|pressed| pressed.partial_eq(edit)), "{key} isn't the text box's");
     }
 }
 
@@ -197,15 +248,15 @@ fn the_edit_menu_has_find_for_the_chat_showing(cx: &mut TestAppContext) {
         })
         .collect();
     let wanted: [(&str, &dyn Action, &str); 3] = [
-        ("Find…", &desktop::FindInChat, "cmd-f"),
-        ("Find Next", &desktop::FindNext, "cmd-g"),
-        ("Find Previous", &desktop::FindPrevious, "cmd-shift-g"),
+        ("Find…", &desktop::FindInChat, "secondary-f"),
+        ("Find Next", &desktop::FindNext, "secondary-g"),
+        ("Find Previous", &desktop::FindPrevious, "secondary-shift-g"),
     ];
     assert_eq!(shown.len(), wanted.len());
     for ((name, action), (wanted_name, wanted_action, wanted_key)) in shown.iter().zip(wanted) {
         assert_eq!(name, wanted_name);
         assert!(action.partial_eq(wanted_action), "{name}");
-        assert_eq!(key_for(&ui, action.as_ref()).as_deref(), Some(wanted_key), "{name}");
+        assert_eq!(key_for(&ui, action.as_ref()), Some(keyed(&ui, wanted_key)), "{name}");
     }
     let available = |ui: &mut Ui<'_>| {
         ui.frame();

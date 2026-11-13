@@ -300,14 +300,14 @@ fn nothing_else_is_archived_or_restored_while_a_workspace_is_being_archived(cx: 
     let id = ui.new_workspace();
     ui.wait("the pull request's Archive", |ui| ui.shows_label("pull-request-action", "Archive"));
 
-    ui.press("cmd-shift-a");
+    ui.press("secondary-shift-a");
     ui.wait("it to start archiving", |_| held.runs() == 1);
     assert!(ui.disabled("pull-request-action"), "the pull request's Archive can't be pressed meanwhile");
     assert!(ui.shows_label("pull-request-action", "Archiving…"), "and says why");
     assert!(ui.shows_label(&format!("doing-{id}"), "Archiving…"), "as its row does, in place of its button");
     ui.hover(row(&other));
     assert!(ui.disabled(archive_button(&other)), "another row's can't be pressed either");
-    ui.press("cmd-shift-a");
+    ui.press("secondary-shift-a");
     // Only Home lists an archived workspace, and pressing its row there brings it back.
     ui.click("home");
     ui.click("home-archived");

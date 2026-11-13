@@ -58,7 +58,7 @@ fn the_file_tab_stays_behind_a_chat_until_its_closed(cx: &mut TestAppContext) {
     ui.click("show-file-tab");
     assert_eq!(showing(&ui), Showing::File);
 
-    ui.press("cmd-w");
+    ui.press("secondary-w");
 
     assert_eq!((showing(&ui), file_tab(&ui)), (Showing::Chat, None));
     assert!(!ui.has("show-file-tab"));
@@ -243,7 +243,7 @@ fn hiding_the_sidebar_of_changes_hides_it_in_every_workspace(cx: &mut TestAppCon
     assert!(ui.changes_open(), "open in the first, so open in the second");
 
     ui.click("toggle-diff");
-    ui.press("cmd-[");
+    ui.press("secondary-[");
 
     ui.wait("the first workspace", |ui| ui.view().selected.as_ref() == Some(&first));
     assert!(!ui.changes_open());

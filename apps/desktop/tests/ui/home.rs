@@ -53,7 +53,7 @@ fn the_workspaces_keys_do_nothing_while_home_hides_it(cx: &mut TestAppContext) {
     let (mut ui, _, _) = open_home(cx, &stack);
     assert!(ui.changes_open(), "it starts open");
 
-    ui.press("cmd-shift-d");
+    ui.press("secondary-shift-d");
 
     assert!(ui.changes_open(), "the sidebar of the workspace nobody can see stays as it was");
 }
@@ -100,7 +100,7 @@ fn an_archived_row_says_its_being_restored_until_it_is(cx: &mut TestAppContext) 
 fn going_back_from_settings_gives_homes_search_the_keys_after_the_selection_moved_under_it(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let (mut ui, first, second) = open_home(cx, &stack);
-    ui.press("cmd-,");
+    ui.press("secondary-,");
     ui.wait("Settings", |ui| ui.has("settings-back"));
 
     stack.client().workspace_archive(&second, false).unwrap();

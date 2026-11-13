@@ -80,7 +80,7 @@ fn the_keyboard_opens_moves_between_and_closes_chats(cx: &mut TestAppContext) {
     ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     ui.new_workspace();
     let first = ui.active_chat();
-    ui.press("cmd-t");
+    ui.press("secondary-t");
     ui.wait("a second chat", |ui| ui.open_chats().len() == 2);
     let second = ui.open_chats()[1].clone();
     ui.wait("it to show", |ui| ui.active_chat() == second);
@@ -88,12 +88,12 @@ fn the_keyboard_opens_moves_between_and_closes_chats(cx: &mut TestAppContext) {
     ui.wait("the first chat, wrapping around", |ui| ui.active_chat() == first);
     ui.press("ctrl-shift-tab");
     ui.wait("the second chat, wrapping back", |ui| ui.active_chat() == second);
-    ui.press("cmd-w");
+    ui.press("secondary-w");
     ui.wait("the second chat to close", |ui| ui.open_chats() == [first.clone()]);
     ui.wait("the first chat to show", |ui| ui.active_chat() == first);
 
     // Wherever focus was, switching chats puts it back in the composer, ready to type.
-    ui.press("cmd-t");
+    ui.press("secondary-t");
     ui.wait("another chat", |ui| ui.open_chats().len() == 2);
     let third = ui.open_chats()[1].clone();
     ui.wait("it to show", |ui| ui.active_chat() == third);

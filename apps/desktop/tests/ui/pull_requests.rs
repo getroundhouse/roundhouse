@@ -54,7 +54,7 @@ fn a_merged_pull_request_offers_archive_in_its_bar_and_in_the_header_while_the_b
     ui.wait("the bar to offer Archive", |ui| ui.shows_label("pull-request-bar", "Archive"));
     assert_eq!(ui.labelled("Archive").len(), 1, "only the bar offers it, and the header has none of its own");
 
-    ui.press("cmd-shift-d");
+    ui.press("secondary-shift-d");
     assert!(!ui.changes_open());
     assert!(ui.shows_label("pull-request-controls", "Archive"), "the header offers it in the bar's place");
     ui.click("pull-request-action");

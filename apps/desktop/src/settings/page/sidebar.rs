@@ -6,8 +6,9 @@ use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::component::{ActiveTheme as _, Icon, IconName, Sizable as _, ThemeStyled as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    App, Entity, Focusable as _, InteractiveElement as _, IntoElement, Keystroke, MouseButton, ParentElement as _,
-    Pixels, Role, StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, Window, div, px, rems,
+    App, Entity, Focusable as _, InteractiveElement as _, IntoElement, Keystroke, MouseButton, OperatingSystem,
+    ParentElement as _, Pixels, Role, StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, Window, div,
+    px, rems,
 };
 use look::Hand as _;
 
@@ -105,11 +106,7 @@ fn search_field(search: &Entity<InputState>, window: &Window, cx: &App) -> impl 
 /// The key that finds a setting, on a small raised key, with what's held apart from the key pressed.
 fn find_key(cx: &App) -> impl IntoElement {
     let theme = cx.theme();
-    let said = Keystroke::parse(FIND_KEY).map(|key| Kbd::format(&key)).unwrap_or_default();
-    // On a Mac each part is one symbol or letter, with the symbols for what's held smaller than the key pressed, as
-    // they are on its keys. Elsewhere the parts are words, and come with what goes between them.
-    let parts: Vec<String> =
-        if cfg!(target_os = "macos") { said.chars().map(String::from).collect() } else { vec![said] };
+    let parts = find_key_says(cx.platform_info().os);
     let pressed = parts.len().saturating_sub(1);
     let parts = parts
         .into_iter()
@@ -128,6 +125,16 @@ fn find_key(cx: &App) -> impl IntoElement {
         .line_height(px(10.))
         .text_color(theme.muted_foreground)
         .children(parts)
+}
+
+/// The parts of the key that finds a setting, with `secondary` read as `os` has it, and written as this build writes
+/// keys, with what's held first. On a Mac each part is one symbol or letter, so the symbols for what's held can be
+/// smaller than the key pressed, as they are on its keys. Elsewhere the parts are words, and come as one, with what
+/// goes between them.
+pub(super) fn find_key_says(os: OperatingSystem) -> Vec<String> {
+    // `secondary` is a different key on each system, so it's read for the one at hand.
+    let said = Keystroke::parse_with_os(FIND_KEY, os).map(|key| Kbd::format(&key)).unwrap_or_default();
+    if cfg!(target_os = "macos") { said.chars().map(String::from).collect() } else { vec![said] }
 }
 
 /// A page's row: its icon and name, filled a little lighter than the sidebar while it's the page showing, and while

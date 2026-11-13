@@ -1,7 +1,9 @@
 use std::rc::Rc;
 
+use gpui_kit::OperatingSystem;
 use gpui_kit::assets::IconName as Lucide;
 
+use super::sidebar::find_key_says;
 use super::{Control, Page, PageId, Section, Setting, found, shown};
 
 fn setting(name: &'static str, does: &'static str) -> Setting {
@@ -83,4 +85,16 @@ fn with_nothing_left_by_the_search_no_page_shows() {
     let sections = found(real(), "nothing like it");
 
     assert!(shown(&sections, Some(PageId::General)).is_none());
+}
+
+/// The search shows the key that finds a setting: Cmd on a Mac and Ctrl elsewhere, as it's bound.
+#[test]
+fn the_search_shows_its_key_as_this_system_writes_it() {
+    let (os, says) = if cfg!(target_os = "macos") {
+        (OperatingSystem::Mac, vec!["⌘", "F"])
+    } else {
+        (OperatingSystem::Linux, vec!["Ctrl+F"])
+    };
+
+    assert_eq!(find_key_says(os), says);
 }

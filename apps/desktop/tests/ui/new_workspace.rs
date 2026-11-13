@@ -91,7 +91,7 @@ fn closing_the_dialog_keeps_what_was_typed_for_next_time(cx: &mut TestAppContext
     let stack = Stack::new();
     let mut ui = open_with_a_repo(cx, &stack);
 
-    ui.press("cmd-n");
+    ui.press("secondary-n");
     ui.wait("the dialog", Ui::has_dialog);
     ui.input("half a thought");
     ui.press("escape");
@@ -239,7 +239,7 @@ fn settings_opened_while_a_workspace_is_made_keeps_the_one_under_it_showing(cx: 
     ui.wait("it to start making it", |_| making.runs() == 1);
     ui.wait_out_the_dialog_going();
 
-    ui.press("cmd-,");
+    ui.press("secondary-,");
     ui.wait("Settings", |ui| ui.has("settings-back"));
     making.release();
 

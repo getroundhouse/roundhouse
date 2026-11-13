@@ -57,13 +57,13 @@ fn the_sidebar_starts_last_active_first_and_the_heading_chooses_another_and_the_
         "the one worked in, then the newest, which nobody has worked in"
     );
     ui.click(sidebar_row(&first));
-    ui.press("cmd-]");
+    ui.press("secondary-]");
     assert_eq!(ui.view().selected.as_ref(), Some(&third), "the next one down the sidebar");
 
     sort_by(&mut ui, "Oldest first");
 
     assert_eq!(order(&mut ui, sidebar_row, &made), made);
-    ui.press("cmd-[");
+    ui.press("secondary-[");
     assert_eq!(ui.view().selected.as_ref(), Some(&second), "the one above it now");
 }
 
@@ -101,7 +101,7 @@ fn the_order_holds_still_while_the_pointer_is_on_the_list_and_changes_once_it_le
         [third.clone(), second.clone(), first.clone()],
         "so it can't move from a click"
     );
-    ui.press("cmd-]");
+    ui.press("secondary-]");
     assert_eq!(ui.view().selected.as_ref(), Some(&second), "the keys go in the order shown");
     ui.hover("send");
     assert_eq!(order(&mut ui, sidebar_row, &made), [second, third, first]);
@@ -193,7 +193,7 @@ fn a_new_workspaces_note_keeps_its_place_once_the_order_holds_and_the_workspace_
     let stack = Stack::new();
     let (mut ui, [first, second, third], _) = three_workspaces(cx, &stack);
     let making = Held::checkout(&stack);
-    ui.press("cmd-n");
+    ui.press("secondary-n");
     ui.wait("the new-workspace dialog", Ui::has_dialog);
     ui.press("enter");
     ui.wait("the note", |ui| on_its_way(ui).is_some());
@@ -225,7 +225,7 @@ fn a_workspace_another_client_is_making_shows_on_its_way_where_it_will_go(cx: &m
     ui.wait("the note", |ui| on_its_way(ui).is_some());
     let (coming, note) = on_its_way(&mut ui).unwrap();
     assert!(top(&mut ui, note) < top(&mut ui, sidebar_row(&third)), "at the top, where it will go");
-    ui.press("cmd-[");
+    ui.press("secondary-[");
     assert_eq!(ui.view().selected.as_ref(), Some(&first), "the keys go past it, round to the bottom");
     making.release();
     let made = asking.join().unwrap();
