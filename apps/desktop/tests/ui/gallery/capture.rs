@@ -15,7 +15,7 @@ use gpui_kit::component::WindowExt as _;
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{
     AnyWindowHandle, App, ClipboardEntry, ClipboardItem, Entity, ExternalPaths, HeadlessAppContext, Image, ImageFormat,
-    PlatformTextSystem,
+    InputEvent as _, MouseButton, MouseDownEvent, MouseMoveEvent, Pixels, PlatformTextSystem, point, px,
 };
 use image::RgbaImage;
 
@@ -120,6 +120,7 @@ impl Driver {
             Step::MoveAway => self.move_away(),
             Step::HoverTab(position) => self.hover_tab(*position),
             Step::Point(id) => self.point(*id),
+            Step::Drag(id, down) => self.drag(id, *down),
             Step::Type(text) => {
                 self.frame();
                 self.cx.update_window(self.handle, |_, window, cx| window.input(text, cx)).unwrap();
@@ -178,6 +179,23 @@ impl Driver {
         self.frame();
         let id = id.into();
         self.cx.update_window(self.handle, |_, window, cx| window.hover(id, cx)).unwrap();
+    }
+
+    /// Presses the middle of `id`, moves the pointer a little way down to start the drag, as GPUI waits for, and on
+    /// until it's `down` below where it was pressed, without letting go.
+    fn drag(&mut self, id: &'static str, down: Pixels) {
+        let id = gpui_kit::ElementId::from(gpui_kit::SharedString::from(id));
+        self.wait_for(&id);
+        let from = self.cx.update_window(self.handle, |_, window, _| window.find(id).bounds().center()).unwrap();
+        let started = from + point(px(0.), px(4.));
+        let press = MouseDownEvent { button: MouseButton::Left, position: from, click_count: 1, ..Default::default() };
+        let held =
+            |position| MouseMoveEvent { position, pressed_button: Some(MouseButton::Left), ..Default::default() };
+        let events = [press.to_platform_input(), held(started).to_platform_input()];
+        for event in events.into_iter().chain([held(from + point(px(0.), down)).to_platform_input()]) {
+            self.cx.update_window(self.handle, |_, window, cx| window.dispatch_event(event, cx)).unwrap();
+            self.frame();
+        }
     }
 
     fn right_click(&mut self, id: &'static str) {

@@ -6,11 +6,9 @@
 
 use desktop::lost_release::{self, Button};
 use gpui_kit::test::TestWindowExt as _;
-use gpui_kit::{
-    AppContext as _, InputEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, TestAppContext, point, px,
-};
+use gpui_kit::{AppContext as _, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, TestAppContext, point, px};
 
-use crate::support::{Stack, Ui};
+use crate::support::Stack;
 use crate::tools::{in_a_new_workspace, open_a_command};
 
 /// Moving the pointer over a chat's text went on selecting it, with no button held, until the next click. On Windows
@@ -24,9 +22,9 @@ fn a_move_after_a_press_whose_release_was_lost_selects_nothing(cx: &mut TestAppC
     // As far apart in what it printed as the test that selects it by dragging.
     let (from, to) = (printed.origin + point(px(14.), px(12.)), printed.bottom_right() - point(px(14.), px(12.)));
     ui.cx.update(|cx| lost_release::the_left_button_is(Button::Up, cx));
-    send(&mut ui, MouseDownEvent { button: MouseButton::Left, position: from, click_count: 1, ..Default::default() });
+    ui.send(MouseDownEvent { button: MouseButton::Left, position: from, click_count: 1, ..Default::default() });
 
-    send(&mut ui, MouseMoveEvent { position: to, pressed_button: None, ..Default::default() });
+    ui.send(MouseMoveEvent { position: to, pressed_button: None, ..Default::default() });
     ui.press("secondary-c");
 
     let copied = ui.cx.read_from_clipboard().and_then(|item| item.text());
@@ -43,20 +41,14 @@ fn a_press_held_while_moves_say_no_button_is_held_is_let_go_only_when_it_is_rele
     let on = ui.cx.update_window(ui.handle, |_, window, _| window.find("toggle-diff").bounds().center()).unwrap();
     let beside = on + point(px(1.), px(0.));
     ui.cx.update(|cx| lost_release::the_left_button_is(Button::Down, cx));
-    send(&mut ui, MouseMoveEvent { position: on, pressed_button: None, ..Default::default() });
-    send(&mut ui, MouseDownEvent { button: MouseButton::Left, position: on, click_count: 1, ..Default::default() });
+    ui.send(MouseMoveEvent { position: on, pressed_button: None, ..Default::default() });
+    ui.send(MouseDownEvent { button: MouseButton::Left, position: on, click_count: 1, ..Default::default() });
 
-    send(&mut ui, MouseMoveEvent { position: beside, pressed_button: None, ..Default::default() });
+    ui.send(MouseMoveEvent { position: beside, pressed_button: None, ..Default::default() });
 
     assert!(ui.changes_open(), "the button is still held, so it isn't clicked yet");
 
-    send(&mut ui, MouseUpEvent { button: MouseButton::Left, position: beside, click_count: 1, ..Default::default() });
+    ui.send(MouseUpEvent { button: MouseButton::Left, position: beside, click_count: 1, ..Default::default() });
 
     assert!(!ui.changes_open(), "it's clicked once it's let go");
-}
-
-/// Sends the window a pointer event, and lets it draw.
-fn send(ui: &mut Ui<'_>, event: impl InputEvent) {
-    ui.cx.update_window(ui.handle, |_, window, cx| window.dispatch_event(event.to_platform_input(), cx)).unwrap();
-    ui.frame();
 }

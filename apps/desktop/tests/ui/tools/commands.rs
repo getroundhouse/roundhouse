@@ -5,8 +5,8 @@
 use gpui_kit::base::TextSelection;
 use gpui_kit::test::{ClickOptions, TestWindowExt as _};
 use gpui_kit::{
-    AppContext as _, ElementId, InputEvent, Modifiers, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
-    Pixels, Point, ScrollDelta, TestAppContext, point, px,
+    AppContext as _, ElementId, Modifiers, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point,
+    ScrollDelta, TestAppContext, point, px,
 };
 
 use protocol::event::EventBody;
@@ -170,18 +170,11 @@ fn copied(ui: &mut Ui<'_>) -> Option<String> {
 fn selected_while_dragged(ui: &mut Ui<'_>, from: Point<Pixels>, to: Point<Pixels>) -> String {
     let (pressed, left) = (Some(MouseButton::Left), MouseButton::Left);
     let modifiers = Modifiers::default();
-    send(ui, MouseMoveEvent { position: from, pressed_button: None, modifiers });
-    send(ui, MouseDownEvent { button: left, position: from, modifiers, click_count: 1, first_mouse: false });
-    send(ui, MouseMoveEvent { position: (from + to) / 2., pressed_button: pressed, modifiers });
-    send(ui, MouseMoveEvent { position: to, pressed_button: pressed, modifiers });
+    ui.send(MouseMoveEvent { position: from, pressed_button: None, modifiers });
+    ui.send(MouseDownEvent { button: left, position: from, modifiers, click_count: 1, first_mouse: false });
+    ui.send(MouseMoveEvent { position: (from + to) / 2., pressed_button: pressed, modifiers });
+    ui.send(MouseMoveEvent { position: to, pressed_button: pressed, modifiers });
     let selected = ui.cx.update_window(ui.handle, |_, window, cx| TextSelection::selected_text(window, cx)).unwrap();
-    send(ui, MouseUpEvent { button: left, position: to, modifiers, click_count: 1 });
+    ui.send(MouseUpEvent { button: left, position: to, modifiers, click_count: 1 });
     selected
-}
-
-/// Sends `event` to the window, and lets the app draw what it changed.
-fn send(ui: &mut Ui<'_>, event: impl InputEvent) {
-    let event = event.to_platform_input();
-    ui.cx.update_window(ui.handle, |_, window, cx| window.dispatch_event(event, cx)).unwrap();
-    ui.frame();
 }

@@ -3,13 +3,18 @@
 //! views lay out by is a [`Sliding`], kept where they can all read it. A scroll to a place that can move meanwhile
 //! is a [`Scrolling`], which says what share of the way is left rather than where to be, since a slide between two
 //! values set as it starts can't follow a place that moves. Each skips the motion under Reduce Motion, and asks for
-//! frames only while it moves. `docs/gpui.md` has the rules.
+//! frames only while it moves. What scrolls on under a pointer held past its edge is [`ScrollingOn`]. `docs/gpui.md`
+//! has the rules.
 
 use std::time::{Duration, Instant};
 
 use gpui_kit::base::animation::ease_out_cubic;
 use gpui_kit::base::motion::Transition;
 use gpui_kit::{App, Window};
+
+mod edge;
+
+pub use edge::ScrollingOn;
 
 /// How long a panel takes to slide into place or away, such as a sidebar. Long enough to see where it went, and short
 /// enough not to wait for.
@@ -122,10 +127,15 @@ impl Sliding {
 
     /// Where it is now, for something drawn by it, which is drawn again on the next frame for as long as it moves.
     pub fn draw(&self, window: &mut Window, cx: &App) -> f32 {
-        if self.elapsed(cx).is_some_and(|elapsed| elapsed < PANEL) {
+        if self.moving(cx) {
             window.request_animation_frame();
         }
         self.value(cx)
+    }
+
+    /// Whether it's still on its way, which it is until its time is up. Once it isn't, it's where it was going.
+    pub fn moving(&self, cx: &App) -> bool {
+        self.elapsed(cx).is_some_and(|elapsed| elapsed < PANEL)
     }
 
     /// How long it has been on its way, or `None` for one that isn't moving at all.

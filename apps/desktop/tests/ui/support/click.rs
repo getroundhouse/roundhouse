@@ -1,9 +1,9 @@
-//! Clicking, the way a hand does.
+//! Clicking, the way a hand does, and any other event from the pointer.
 
 #![cfg(test)]
 
 use gpui_kit::test::{TestEventExt as _, TestWindowExt as _};
-use gpui_kit::{App, AppContext as _, ElementId, MouseButton, Pixels, Point, Window, point, px};
+use gpui_kit::{App, AppContext as _, ElementId, InputEvent, MouseButton, Pixels, Point, Window, point, px};
 
 use super::Ui;
 
@@ -43,6 +43,13 @@ impl Ui<'_> {
     pub(crate) fn click_at(&mut self, at: Point<Pixels>) {
         self.frame();
         self.cx.update_window(self.handle, |_, window, cx| click_at(window, at, cx)).unwrap();
+        self.frame();
+    }
+
+    /// Sends the window an event from the pointer, and lets the app draw what it changed.
+    pub(crate) fn send(&mut self, event: impl InputEvent) {
+        let event = event.to_platform_input();
+        self.cx.update_window(self.handle, |_, window, cx| window.dispatch_event(event, cx)).unwrap();
         self.frame();
     }
 }

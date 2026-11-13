@@ -1,26 +1,17 @@
 //! What the pointer does to a selection in a transcript's list: a press starts one, a drag moves its far end, and a
-//! pointer held past the list's top or bottom scrolls the list on, faster the further past it is. A drag that started
-//! in an area that scrolls its text, such as a compaction's long summary, scrolls that area on the same way while the
-//! pointer is past its top or bottom, as the kit's selection does. Past the list's edge too, both scroll, toward the
-//! same end of the chat.
+//! pointer held past the list's top or bottom scrolls the list on, faster the further past it is, as
+//! [`ScrollingOn`](look::motion::ScrollingOn) says. A drag that started in an area that scrolls its text, such as a
+//! compaction's long summary, scrolls that area on the same way while the pointer is past its top or bottom, as the
+//! kit's selection does. Past the list's edge too, both scroll, toward the same end of the chat.
 
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use gpui_kit::base::GlobalState;
 use gpui_kit::{
-    Bounds, DispatchPhase, ElementId, Hitbox, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels,
-    Window, px,
+    Bounds, DispatchPhase, ElementId, Hitbox, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Window,
 };
 
 use super::Selection;
-
-/// How fast the list scrolls under a pointer held past its edge, in points a second for each point past it.
-const PAST_THE_EDGE: f32 = 30.;
-/// The slowest and fastest it scrolls, in points a second.
-const SLOWEST: f32 = 240.;
-const FASTEST: f32 = 4800.;
-/// The longest a frame is taken to have been, so a stall doesn't throw the list a long way.
-const LONGEST_FRAME: Duration = Duration::from_millis(50);
 
 impl Selection {
     /// Listens for a press in the list at `hitbox`, in `bounds`, to select the text it's on or let go of what's
@@ -68,11 +59,7 @@ impl Selection {
     pub(crate) fn scroll_past_edge(&self, bounds: Bounds<Pixels>, now: Instant) -> Option<Pixels> {
         let mut selecting = self.inner.borrow_mut();
         let drag = selecting.drag.as_mut()?;
-        let Some(past) = past(drag.pointer.y, bounds) else {
-            drag.moved = None;
-            return None;
-        };
-        Some(scrolled(past, &mut drag.moved, now))
+        drag.scrolling.by(drag.pointer.y, bounds.top()..bounds.bottom(), now)
     }
 
     /// How far to scroll the area `area`, which shows what's in `visible` of it, down, at `now`, for a drag that
@@ -86,29 +73,6 @@ impl Selection {
     ) -> Option<Pixels> {
         let mut selecting = self.inner.borrow_mut();
         let drag = selecting.drag.as_mut().filter(|drag| drag.area.as_ref() == Some(area))?;
-        let Some(past) = past(drag.pointer.y, visible) else {
-            drag.area_moved = None;
-            return None;
-        };
-        Some(scrolled(past, &mut drag.area_moved, now))
+        drag.area_scrolling.by(drag.pointer.y, visible.top()..visible.bottom(), now)
     }
-}
-
-/// How far `y` is past the top of `bounds`, which is less than nothing, or past its bottom, if it is.
-fn past(y: Pixels, bounds: Bounds<Pixels>) -> Option<Pixels> {
-    if y < bounds.top() {
-        Some(y - bounds.top())
-    } else if y > bounds.bottom() {
-        Some(y - bounds.bottom())
-    } else {
-        None
-    }
-}
-
-/// How far something held `past` its edge scrolls, at `now`, since it last did, at `moved`, which this updates:
-/// faster the further past it is.
-fn scrolled(past: Pixels, moved: &mut Option<Instant>, now: Instant) -> Pixels {
-    let since = moved.replace(now).map_or(Duration::ZERO, |then| now.saturating_duration_since(then));
-    let speed = (f32::from(past.abs()) * PAST_THE_EDGE).clamp(SLOWEST, FASTEST);
-    px(past.signum() * speed * since.min(LONGEST_FRAME).as_secs_f32())
 }

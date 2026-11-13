@@ -3,6 +3,8 @@
 
 #![cfg(test)]
 
+use gpui_kit::px;
+
 use super::frame::{SIDEBAR, SIDEBAR_MENU};
 use super::screens::FOCUS;
 use super::steps::{Screen, Step};
@@ -41,6 +43,24 @@ pub(crate) const SCREENS: &[Screen] = &[
         frame: SIDEBAR,
         // Typed in the screen's own workspace, the fourth, which is then left for another, so its row has a pencil.
         steps: &[Step::Select(FOCUS), Step::Type(DRAFT), Step::Select("alder"), Step::Point("workspace-ws-4")],
+    },
+    Screen {
+        name: "project-collapsed",
+        spec: "sidebar.md",
+        world: Some(conversation),
+        // The first project is collapsed, with a workspace that has a reply nobody has read, and the pointer is left
+        // on the second project's row.
+        frame: SIDEBAR,
+        steps: &[Step::Select(FOCUS), Step::Click("project-repo-1"), Step::Point("project-repo-2")],
+    },
+    Screen {
+        name: "project-dragged",
+        spec: "sidebar.md",
+        world: Some(conversation),
+        // The first project is held partway down over the second, not yet past half of it, so its own place is
+        // still empty and the second hasn't moved.
+        frame: SIDEBAR,
+        steps: &[Step::Select(FOCUS), Step::Drag("project-repo-1", px(54.))],
     },
 ];
 

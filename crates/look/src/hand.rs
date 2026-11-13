@@ -1,10 +1,11 @@
-//! The pointing hand, over what a press does something to. `docs/spec/look.md` has the rule.
+//! The pointing hand, over what a press does something to, and the open one, over what can be dragged.
+//! `docs/spec/look.md` has the rules.
 
-use gpui_kit::Styled;
 use gpui_kit::component::Disableable;
+use gpui_kit::{CursorStyle, Styled};
 
-/// Something a press does something to: a button, a tab, a switch, or a row that opens something. The kit gives its
-/// buttons the arrow, as a Mac's own have, so each one asks for the hand here.
+/// Something a press does something to: a button, a tab, a switch, or a row that opens something, or something that
+/// can be dragged. The kit gives its buttons the arrow, as a Mac's own have, so each one asks for the hand here.
 pub trait Hand: Styled + Sized {
     /// The pointing hand over it.
     #[must_use]
@@ -17,6 +18,13 @@ pub trait Hand: Styled + Sized {
     #[must_use]
     fn hand_while(self, pressable: bool) -> Self {
         if pressable { self.hand() } else { self }
+    }
+
+    /// The open hand over it, for what can be dragged, whatever a press on it does. What drags it closes the hand
+    /// while it does, with the kit's `set_active_drag_cursor_style`.
+    #[must_use]
+    fn grab(self) -> Self {
+        self.cursor(CursorStyle::OpenHand)
     }
 }
 

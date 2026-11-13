@@ -41,6 +41,8 @@ mod scrolling;
 mod settings;
 mod setup;
 mod sidebar;
+mod sidebar_drag;
+mod sidebar_fold;
 mod sidebar_order;
 mod sidebar_tabs;
 mod sidebars;

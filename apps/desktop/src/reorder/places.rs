@@ -21,10 +21,14 @@ impl<K> Default for Places<K> {
     }
 }
 
-/// Where a list's rows are in this frame, as [`Places::arrange`] sent them.
+/// Where a list's rows are in this frame, as [`Places::arrange`] sent them, each from the top down.
 pub(crate) struct Arrangement {
-    /// How far down the list each row is drawn, from the top down: where it has got to on its way to its place.
+    /// How far down the list each row's place is, where it's going.
+    pub(crate) places: Rc<[Pixels]>,
+    /// How far down the list each row is drawn: where it has got to on its way to its place.
     pub(crate) drawn: Rc<[Pixels]>,
+    /// Whether each row is still on its way to its place. Once it isn't, it's drawn there.
+    pub(crate) moving: Rc<[bool]>,
     /// How far down the list ends, below the last row's place.
     pub(crate) end: Pixels,
 }
@@ -47,7 +51,7 @@ impl<K: Clone + Eq + Hash> Places<K> {
         window: &mut Window,
         cx: &App,
     ) -> Arrangement {
-        let (mut top, mut drawn) = (px(0.), Vec::new());
+        let (mut top, mut at_rest, mut drawn, mut moving) = (px(0.), Vec::new(), Vec::new(), Vec::new());
         let mut placed = HashMap::with_capacity(self.rows.len());
         for (id, height) in rows {
             let place = match self.rows.remove(&id) {
@@ -59,12 +63,23 @@ impl<K: Clone + Eq + Hash> Places<K> {
                 Some(place) => place,
                 None => Place { top, now: Sliding::at(f32::from(top)) },
             };
+            at_rest.push(place.top);
             drawn.push(px(place.now.draw(window, cx)));
+            moving.push(place.now.moving(cx));
             placed.insert(id, place);
             top += height;
         }
         self.rows = placed;
-        Arrangement { drawn: drawn.into(), end: top }
+        Arrangement { places: at_rest.into(), drawn: drawn.into(), moving: moving.into(), end: top }
+    }
+
+    /// Has a row slide back to its place from `off` below it, which is above it for less than none, where something
+    /// else had drawn it, as a drag that has just let go of it did.
+    pub(crate) fn slide_back(&mut self, id: &K, off: Pixels, cx: &App) {
+        if let Some(place) = self.rows.get_mut(id) {
+            place.now = Sliding::at(f32::from(place.top + off));
+            place.now.go(f32::from(place.top), cx);
+        }
     }
 
     /// Forgets every row, so each is at its place at once the next time the list is drawn.

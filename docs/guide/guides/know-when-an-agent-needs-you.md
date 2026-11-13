@@ -27,6 +27,8 @@ A workspace's title turns bright when it needs a look:
 
 Every other title is muted, so the ones that need you stand out. A chat's tab does the same.
 
+A project you've collapsed in the sidebar does it for the workspaces it has put away: its name turns bright, and says how many need a look.
+
 ![Replies you haven't read, in the sidebar](../../spec/screens/unread.png)
 
 A reply is read once its chat is showing in the window in front. One that comes while you're in another app waits until you're back.

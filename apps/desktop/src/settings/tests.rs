@@ -9,7 +9,13 @@ fn file() -> (tempfile::TempDir, SettingsFile) {
 #[test]
 fn what_is_saved_reads_back_the_same() {
     let (_dir, file) = file();
-    let chosen = Settings { always_expand_thinking: true, sidebar_sort: Sort::Oldest, ..Settings::default() };
+    let chosen = Settings {
+        always_expand_thinking: true,
+        sidebar_sort: Sort::Oldest,
+        collapsed_projects: BTreeSet::from([RepoId::from("one"), RepoId::from("another")]),
+        project_order: vec![RepoId::from("another"), RepoId::from("one")],
+        ..Settings::default()
+    };
 
     file.write(&chosen).unwrap();
 
@@ -73,6 +79,8 @@ fn saving_keeps_what_a_newer_build_wrote() {
         serde_json::json!({
             "always_expand_thinking": true,
             "sidebar_sort": "last_active",
+            "collapsed_projects": [],
+            "project_order": [],
             "notify": true,
             "play_sound": true,
             "sound": "chime",

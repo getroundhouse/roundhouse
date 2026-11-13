@@ -1,32 +1,39 @@
 //! Workspaces grouped by repository, each with its status, under a heading with the Add project button.
 
+use std::ops::Range;
 use std::rc::Rc;
 use std::time::Instant;
 
-use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::{ActiveTheme as _, Icon, IconName, IconNamed, Sizable as _, h_flex, v_flex};
+use gpui_kit::component::{ActiveTheme as _, Icon, IconNamed, v_flex};
 use gpui_kit::{
-    AnyElement, App, Context, Div, ElementId, FontWeight, Hsla, InteractiveElement as _, IntoElement, ParentElement,
-    Pixels, Styled, TestSupportExt as _, Window, div, px,
+    AnyElement, App, Context, Div, ElementId, Hsla, InteractiveElement as _, IntoElement, ParentElement, Pixels,
+    Styled, TestSupportExt as _, Window, div, px,
 };
-use look::{Hand as _, LineText};
-use look::{Signal, Work};
-use protocol::model::{Repo, RepoId, SetupStatus, Workspace, WorkspaceId, WorkspaceStatus};
+use look::LineText;
+use protocol::model::{RepoId, Workspace, WorkspaceId, WorkspaceStatus};
 
 use crate::app::{AppView, Connection};
-use crate::reorder::{self, Arrangement, Drawn};
+use crate::reorder;
+use crate::settings::Settings;
 use crate::workspace_order::Sort;
 use crate::workspace_pane::HEADER_HEIGHT;
 
+mod drag;
+mod fold;
 mod footer;
 mod heading;
 mod kept;
 mod nav;
+mod project;
 mod row;
 pub(crate) mod signal;
+mod standing;
 
+use fold::{Drawn, Fold, Laid};
 pub(crate) use kept::Kept;
 pub(crate) use row::doing;
+use standing::needs_a_look;
+pub(crate) use standing::{Standing, standing};
 
 /// The orders the sidebar can list each project's workspaces in, in the order its heading's menu offers them.
 pub(crate) const SORTS: [Sort; 2] = [Sort::LastActive, Sort::Oldest];
@@ -46,6 +53,8 @@ const LINE_GAP: Pixels = px(4.);
 const UNDER_REPO: Pixels = px(6.);
 /// The space between one repository's last line and the next repository.
 const GROUP_GAP: Pixels = px(8.);
+/// The space around the list, at its sides and above its first line.
+const LIST_PAD: Pixels = px(6.);
 
 /// One line of the list, by where its record is in the app's lists. The lines are made and drawn in the same frame,
 /// and those lists can't change in between.
@@ -67,6 +76,9 @@ enum LineId {
     Heading,
     Repo(RepoId),
     Workspace(WorkspaceId),
+    /// Where the list ends, which no line is drawn at. The last project's workspaces fold away under what comes
+    /// after them, as every project's do, and after them that's only this.
+    End,
 }
 
 impl Line {
@@ -78,11 +90,25 @@ impl Line {
         }
     }
 
+    /// Whether it's a workspace's line, which is under its project's row.
+    fn is_workspace(self) -> bool {
+        matches!(self, Line::Workspace(_) | Line::Creating(_))
+    }
+
     fn id(self, app: &AppView) -> LineId {
         match self {
             Line::Heading => LineId::Heading,
             Line::Repo(r) => LineId::Repo(app.records().repos()[r].id.clone()),
             Line::Workspace(w) | Line::Creating(w) => LineId::Workspace(app.records().workspaces()[w].id.clone()),
+        }
+    }
+
+    /// The project it's in, or is the row of.
+    fn project(self, app: &AppView) -> Option<&RepoId> {
+        match self {
+            Line::Heading => None,
+            Line::Repo(r) => Some(&app.records().repos()[r].id),
+            Line::Workspace(w) | Line::Creating(w) => Some(&app.records().workspaces()[w].repo_id),
         }
     }
 
@@ -98,66 +124,102 @@ impl Line {
     }
 }
 
-/// Every line, repository by repository, each one's workspaces in `sort`'s order, under the heading. The heading shows
-/// before there's a repository too, since it has the button that adds one, but only once there's a hub to add it to.
-/// Repositories listed while the hub is away, such as while it restarts, keep it over them. A workspace the hub is
-/// still making is a note in the place it will have, which its row takes once it's made. While someone is using the
-/// list, at `now`, the workspaces stay in the order they were in, as [`Hold::held`](crate::reorder::Hold::held) says,
-/// and any that come meanwhile go after them.
-fn lines(app: &AppView, sort: Sort, now: Instant) -> Vec<Line> {
-    let heading = connected(app) || !app.records().repos().is_empty();
+/// Every line, repository by repository in the order chosen, each one's workspaces in the order chosen, under the
+/// heading. The heading shows before there's a repository too, since it has the button that adds one, but only once
+/// there's a hub to add it to. Repositories listed while the hub is away, such as while it restarts, keep it over
+/// them. A repository has its workspaces under it only where `shows` says, which it doesn't for one that's collapsed.
+/// A workspace the hub is still making is a note in the place it will have, which its row takes once it's made. While
+/// someone is using the list, at `now`, the workspaces stay in the order they were in, as
+/// [`Hold::held`](crate::reorder::Hold::held) says, and any that come meanwhile go after them.
+fn lines(app: &AppView, settings: &Settings, now: Instant, shows: impl Fn(&RepoId) -> bool) -> Vec<Line> {
+    let sort = settings.sidebar_sort;
+    let repos = app.records().repos();
+    let heading = connected(app) || !repos.is_empty();
     let mut lines = if heading { vec![Line::Heading] } else { Vec::new() };
     let held = app.sidebar.hold.held(&sort, now);
     let workspaces = app.records().workspaces();
-    // One being archived is listed until it's gone, and one being restored once it's back.
-    let line = |w: usize| match workspaces[w].status {
-        WorkspaceStatus::Ready | WorkspaceStatus::Archiving => Some(Line::Workspace(w)),
-        WorkspaceStatus::Creating => Some(Line::Creating(w)),
-        WorkspaceStatus::Archived | WorkspaceStatus::Restoring | WorkspaceStatus::Unknown => None,
-    };
-    for (r, repo) in app.records().repos().iter().enumerate() {
+    let line = |w: usize| if lists(&workspaces[w]) { Line::Workspace(w) } else { Line::Creating(w) };
+    for r in drag::ordered(repos, app.sidebar.project_order(settings)) {
+        let repo = &repos[r];
         lines.push(Line::Repo(r));
+        if !shows(&repo.id) {
+            continue;
+        }
         let mut listed: Vec<usize> =
-            (0..workspaces.len()).filter(|&w| workspaces[w].repo_id == repo.id && line(w).is_some()).collect();
+            (0..workspaces.len()).filter(|&w| workspaces[w].repo_id == repo.id && has_line(&workspaces[w])).collect();
         sort.sort(&mut listed, workspaces);
         if let Some(held) = held {
             crate::reorder::keep_held(&mut listed, workspaces, held);
         }
-        lines.extend(listed.into_iter().filter_map(line));
+        lines.extend(listed.into_iter().map(line));
     }
     lines
 }
 
-/// The lines in this frame, where each is drawn on its way to its place, and how far down the list ends.
+/// The lines in this frame, each as it's drawn, how far down the list the surface under a dragged project's lines
+/// reaches, and how far down the list ends.
 pub(crate) struct Arranged {
-    lines: Rc<[Line]>,
-    drawn: Rc<[Drawn]>,
+    lines: Rc<[Drawn]>,
+    surface: Option<Range<Pixels>>,
     end: Pixels,
 }
 
 /// Works out the lines in the order the sidebar is in, and sends each to its place, so one that has moved slides
 /// there. Done on every frame, whether or not the sidebar shows, so a line that moved while it was hidden is in its
 /// place by the time it shows. Where each line has got to is read here, once for the frame, and asks for the next
-/// frame while one moves.
-pub(crate) fn arrange(app: &mut AppView, window: &mut Window, cx: &App) -> Arranged {
-    let sort = crate::settings::get(cx).sidebar_sort;
-    let lines: Rc<[Line]> = lines(app, sort, cx.background_executor().now()).into();
-    let sizes = sizes(&lines);
+/// frame while one moves. The workspaces of a project that's just been collapsed are still lines until they're
+/// covered, and have no place to go to, so [`fold`] says where they are. A project being dragged is moved on first,
+/// since it can change the order.
+pub(crate) fn arrange(app: &mut AppView, window: &mut Window, cx: &mut App) -> Arranged {
+    app.keep_up_with_a_drag(window, cx);
+    let settings = crate::settings::get(cx);
+    let (sort, collapsed) = (settings.sidebar_sort, &settings.collapsed_projects);
+    let fold = |repo: &RepoId| Fold::of(collapsed.contains(repo), app.sidebar.folding.contains(repo));
+    let lines = lines(app, &settings, cx.background_executor().now(), |repo| fold(repo).has_lines());
+    let folds = fold::folds(&lines, |repo| fold(&app.records().repos()[repo].id));
     let ids: Vec<LineId> = lines.iter().map(|line| line.id(app)).collect();
-    let shown =
-        ids.iter().filter_map(|id| if let LineId::Workspace(id) = id { Some(id.clone()) } else { None }).collect();
-    let Arrangement { drawn: tops, end } = app.sidebar.places.arrange(ids.into_iter().zip(sizes), window, cx);
+    // With those on their way under their project's row, so the order they're in holds until they're there.
+    let shown = ids.iter().filter_map(|id| if let LineId::Workspace(id) = id { Some(id.clone()) } else { None });
+    let shown = shown.collect();
+    let rests = |at: usize| fold::rests(lines[at], folds[at]);
+    let resting: Vec<Line> = (0..lines.len()).filter(|&at| rests(at)).map(|at| lines[at]).collect();
+    let places = (ids.into_iter().enumerate()).filter(|&(at, _)| rests(at)).map(|(_, id)| id).chain([LineId::End]);
+    let sizes = sizes(&resting).into_iter().chain([px(0.)]);
+    let sent = app.sidebar.places.arrange(places.zip(sizes), window, cx);
+    app.sidebar.groups = drag::groups(&resting, &sent.places, |repo| app.records().repos()[repo].id.clone());
+    let Laid { lines: mut drawn, end, settled } = fold::lay(&lines, &folds, &sent);
+    let dragged = drawn.iter().position(|drawn| matches!(drawn.line, Line::Repo(_)) && lifted(app, drawn.line));
+    let surface = app.sidebar.carry(&mut drawn, dragged);
+    // Only the projects listed, so one that goes partway isn't kept.
+    let still_folding = |drawn: &Drawn| match drawn.line {
+        Line::Repo(repo) if drawn.fold.moving() && !settled.contains(&repo) => {
+            Some(app.records().repos()[repo].id.clone())
+        }
+        _ => None,
+    };
+    app.sidebar.folding = drawn.iter().filter_map(still_folding).collect();
     app.sidebar.hold.showed(sort, shown);
-    let drawn = lines.iter().zip(tops.iter()).map(|(line, &top)| Drawn { top, height: line.height() }).collect();
-    Arranged { lines, drawn, end }
+    Arranged { lines: drawn.into(), surface, end }
 }
 
-/// The workspaces the sidebar lists, in its order, which is the order the keys that move between them go in.
+/// The workspaces the sidebar shows, in its order, which is the order the keys that move between them go in. A
+/// collapsed project's aren't among them.
+pub(crate) fn shown(app: &AppView, cx: &App) -> Vec<WorkspaceId> {
+    let collapsed = crate::settings::get(cx).collapsed_projects;
+    in_order(app, cx, |repo| !collapsed.contains(repo))
+}
+
+/// The workspaces the sidebar lists, in its order, whether or not their projects are collapsed.
 pub(crate) fn listed(app: &AppView, cx: &App) -> Vec<WorkspaceId> {
-    let sort = crate::settings::get(cx).sidebar_sort;
+    in_order(app, cx, |_| true)
+}
+
+/// The workspaces of the projects that `shows` says for, in the sidebar's order.
+fn in_order(app: &AppView, cx: &App, shows: impl Fn(&RepoId) -> bool) -> Vec<WorkspaceId> {
     let workspaces = app.records().workspaces();
     let workspace = |line: Line| if let Line::Workspace(w) = line { Some(workspaces[w].id.clone()) } else { None };
-    lines(app, sort, cx.background_executor().now()).into_iter().filter_map(workspace).collect()
+    let lines = lines(app, &crate::settings::get(cx), cx.background_executor().now(), shows);
+    lines.into_iter().filter_map(workspace).collect()
 }
 
 /// Whether the sidebar lists this workspace, to be opened. An archived one is only in Home, which can show it and bring
@@ -167,52 +229,57 @@ pub(crate) fn lists(workspace: &Workspace) -> bool {
     matches!(workspace.status, WorkspaceStatus::Ready | WorkspaceStatus::Archiving)
 }
 
+/// Whether the sidebar has a line for this workspace: its row, or the note that it's on its way.
+fn has_line(workspace: &Workspace) -> bool {
+    lists(workspace) || workspace.status == WorkspaceStatus::Creating
+}
+
 /// The room each line takes down the list: its height and the gap below it.
 fn sizes(lines: &[Line]) -> Vec<Pixels> {
     let gaps = lines.windows(2).map(|pair| pair[0].gap_before(pair[1]));
     lines.iter().zip(gaps.chain([px(0.)])).map(|(line, gap)| line.height() + gap).collect()
 }
 
+/// How far down the list each of `lines` goes at rest, and after them where the list ends, as
+/// [`Places`](reorder::Places) sends them.
+#[cfg(test)]
+fn places(lines: &[Line]) -> Vec<Pixels> {
+    let mut top = px(0.);
+    let mut places = vec![top];
+    places.extend(sizes(lines).into_iter().map(|size| {
+        top += size;
+        top
+    }));
+    places
+}
+
 fn connected(app: &AppView) -> bool {
     matches!(app.connection, Connection::Ready(_))
 }
 
-fn line(app: &AppView, line: Line, line_text: &LineText, window: &mut Window, cx: &mut Context<AppView>) -> AnyElement {
-    match line {
+/// Whether the line is one of the project's that's being dragged, or is on its way to its place from where it was
+/// let go, which are drawn over the others.
+fn lifted(app: &AppView, line: Line) -> bool {
+    app.sidebar.dragging.as_ref().is_some_and(|dragging| line.project(app) == Some(&dragging.project))
+}
+
+/// The line, cut off after as much as shows of it, for a workspace's row that its project's fold covers part of.
+fn line(
+    app: &AppView,
+    Drawn { line, fold, cut, out, .. }: Drawn,
+    line_text: &LineText,
+    window: &mut Window,
+    cx: &mut Context<AppView>,
+) -> AnyElement {
+    let element = match line {
         Line::Heading => heading::heading(app, connected(app), cx),
-        Line::Repo(r) => repo_header(app, &app.records().repos()[r], cx),
+        Line::Repo(r) => project::row(app, &app.records().repos()[r], fold.collapsed(), out, cx),
         Line::Workspace(w) => row::workspace_row(app, &app.records().workspaces()[w], line_text, window, cx),
         Line::Creating(w) => creating(&app.records().workspaces()[w], cx),
-    }
-}
-
-/// Where a workspace stands, as its row shows it, in the sidebar or in Home.
-pub(crate) struct Standing {
-    pub(crate) signal: Signal,
-    pub(crate) work: Work,
-    /// It needs a look, so its name stands out: it has a reply nobody has read, or a chat waiting on an answer or an
-    /// approval.
-    pub(crate) needs_a_look: bool,
-}
-
-pub(crate) fn standing(app: &AppView, workspace: &Workspace, cx: &App) -> Standing {
-    let chats = app.records().sessions(&workspace.id);
-    let unread = workspace.status != WorkspaceStatus::Archived && !app.unread_chats(&workspace.id, cx).is_empty();
-    let needs_a_look = unread || signal::waiting_on_you(chats);
-    let signal = if workspace.setup == SetupStatus::Running { Signal::SettingUp } else { signal::workspace(chats) };
-    // The hub keeps it on the record, open or not. A hub too old to do that leaves it to the pane, if it's open.
-    let work = crate::pull_request::recorded_work(workspace)
-        .or_else(|| app.panes.get(&workspace.id).map(|pane| pane.read(cx).work()))
-        .unwrap_or(Work::NoPr);
-    Standing { signal, work, needs_a_look }
-}
-
-#[cfg(feature = "testing")]
-impl AppView {
-    /// What a workspace's mark shows of its pull request, in the sidebar or in Home.
-    pub fn work_shown(&self, id: &protocol::model::WorkspaceId, cx: &App) -> Option<Work> {
-        let workspace = self.records().workspace(id)?;
-        Some(standing(self, workspace, cx).work)
+    };
+    match cut {
+        None => element,
+        Some(_) => div().size_full().overflow_hidden().child(element).into_any_element(),
     }
 }
 
@@ -220,40 +287,6 @@ impl AppView {
 pub(super) fn icon_box(icon: impl IconNamed, color: Hsla) -> Div {
     let icon = Icon::new(icon).size_3p5().text_color(color);
     div().flex_none().size_4().flex().items_center().justify_center().child(icon)
-}
-
-fn repo_header(app: &AppView, repo: &Repo, cx: &mut Context<AppView>) -> AnyElement {
-    let muted = cx.theme().muted_foreground;
-    let repo_id = repo.id.clone();
-    let creating = app.busy.creating_in() == Some(&repo.id);
-    h_flex()
-        .w_full()
-        .h(REPO_HEIGHT)
-        .px_1p5()
-        .gap_2()
-        .child(icon_box(IconName::Folder, look::faint()))
-        .child(
-            div()
-                .flex_1()
-                .min_w_0()
-                .truncate()
-                .text_sm()
-                .font_weight(FontWeight::MEDIUM)
-                .text_color(muted)
-                .child(repo.name.clone()),
-        )
-        .child(
-            Button::new(ElementId::Name(format!("new-in-{}", repo.id).into()))
-                .ghost()
-                .small()
-                .icon(IconName::Plus)
-                .text_color(muted)
-                .tooltip("New workspace")
-                .loading(creating)
-                .hand_while(!creating)
-                .on_click(cx.listener(move |t, _, window, cx| t.open_new_workspace(repo_id.clone(), window, cx))),
-        )
-        .into_any_element()
 }
 
 /// Level with the names of the workspaces above it.
@@ -277,11 +310,24 @@ pub(crate) fn render(app: &AppView, arranged: Arranged, cx: &mut Context<AppView
     let (background, border) = (theme.sidebar, theme.sidebar_border);
     // A moving mark builds this view again on every frame, so only the lines on screen are built, and a long list
     // costs no more than a short one.
-    let Arranged { lines, drawn, end } = arranged;
+    let Arranged { lines, surface, end } = arranged;
+    // A row has as much room as shows of it, which is none once what comes after its project has covered it.
+    let place = |drawn: &Drawn| reorder::Drawn {
+        top: drawn.top,
+        height: drawn.cut.unwrap_or_else(|| drawn.line.height()),
+        above: lifted(app, drawn.line),
+    };
+    // The surface first, so it's drawn under the lines it's for.
+    let first_line = usize::from(surface.is_some());
+    let places: Rc<[reorder::Drawn]> = surface.iter().map(drag::surface_drawn).chain(lines.iter().map(place)).collect();
     let list =
-        reorder::list(cx.entity(), "workspaces", &app.sidebar_scroll, drawn, end, move |app, in_sight, window, cx| {
+        reorder::list(cx.entity(), "workspaces", &app.sidebar_scroll, places, end, move |app, in_sight, window, cx| {
             let line_text = LineText::new(window, cx);
-            in_sight.iter().map(|&ix| line(app, lines[ix], &line_text, window, cx)).collect()
+            let drawn = |&ix: &usize| match ix.checked_sub(first_line) {
+                Some(at) => line(app, lines[at], &line_text, window, cx),
+                None => drag::surface(cx),
+            };
+            in_sight.iter().map(drawn).collect()
         });
     v_flex()
         .size_full()
@@ -298,7 +344,11 @@ pub(crate) fn render(app: &AppView, arranged: Arranged, cx: &mut Context<AppView
                 |t| &mut t.sidebar.hold,
                 cx,
             )
-            .child(list.flex_1().min_h_0().px_1p5().pt_1p5()),
+            // A drag is told to every element that listens for it, wherever the pointer is, so a project dragged
+            // past either end of the list still goes there.
+            .on_drag_move(cx.listener(AppView::drag_project))
+            .child(list.flex_1().min_h_0().px(LIST_PAD).pt(LIST_PAD))
+            .test_support(),
         )
         .child(footer::footer(app, cx))
 }
