@@ -39,8 +39,8 @@ pub use github::{GithubRateLimit, PullRequest, PullRequestReply, RateLimit};
 pub use one_off::{AccountFor, TitleFor, TitleReply};
 pub use tools::{ServeTools, ToolsServing, ToolsToken, WAIT_TOOL};
 pub use workspaces::{
-    ArchiveScript, CancelSetup, PrepareWorkspace, RemoveWorkspace, RestoreWorkspace, SetupDone, SetupLog,
-    SetupLogReply, SetupWorkspace, WorkspaceReady, WorktreeThere, WorktreeThereReply,
+    ArchiveScript, CancelSetup, NamesGitHas, NamesGitHasReply, PrepareWorkspace, RemoveWorkspace, RestoreWorkspace,
+    SetupDone, SetupLog, SetupLogReply, SetupWorkspace, WorkspaceReady, WorktreeThere, WorktreeThereReply,
 };
 pub use worktree::{
     AttachmentWrite, AttachmentWritten, FileOpenAt, FilePages, FileRead, FileReadAt, FolderRead, GitDiff, GitStatus,
@@ -91,6 +91,7 @@ pub enum WorkerRequest {
     /// See [`RunningAgents`].
     RunningAgents,
     Received(Received),
+    NamesGitHas(NamesGitHas),
     PrepareWorkspace(PrepareWorkspace),
     RestoreWorkspace(RestoreWorkspace),
     RemoveWorkspace(RemoveWorkspace),
@@ -135,6 +136,7 @@ pub enum WorkerResponse {
     Hello(HelloReply),
     RunningAgents(RunningAgentsReply),
     Ok,
+    NamesGitHas(NamesGitHasReply),
     WorkspaceReady(WorkspaceReady),
     WorktreeThere(WorktreeThereReply),
     GitStatus(model::GitStatus),

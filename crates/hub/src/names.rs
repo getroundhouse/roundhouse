@@ -1,5 +1,7 @@
 //! Default workspace names. Short, easy to say, and valid as branch names and directory names.
 
+use protocol::model::BranchName;
+
 pub(crate) const NAMES: &[&str] = &[
     "acacia",
     "alder",
@@ -110,6 +112,13 @@ pub(crate) fn is_valid(name: &str) -> bool {
         && !name.ends_with('.')
         && !name.ends_with(".lock")
         && chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+}
+
+/// The branch a workspace named `name` starts on. Its branches go in a folder of its name, so the branches its agents
+/// make sit under it, and one prefix finds them all. Git can't have a branch `holly` beside a folder `holly/`, so the
+/// first has a name of its own in the folder.
+pub(crate) fn start_branch(name: &str) -> BranchName {
+    BranchName::from(format!("{name}/start"))
 }
 
 #[cfg(test)]

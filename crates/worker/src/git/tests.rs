@@ -31,8 +31,10 @@ pub(crate) fn new_repo(dir: &Path) -> PathBuf {
     repo
 }
 
+/// On the branch the hub starts a workspace on.
 async fn prepare(root: &Path, repo: &Path, name: &str, base: Option<&str>) -> Result<WorkspaceReady, ApiError> {
-    prepare_workspace(root, "repo", repo.to_str().unwrap(), name, &name.into(), base).await
+    let branch = BranchName::from(format!("{name}/start"));
+    prepare_workspace(root, "repo", repo.to_str().unwrap(), name, &branch, base).await
 }
 
 #[tokio::test]
@@ -42,7 +44,7 @@ async fn creates_a_worktree_on_a_new_branch_from_the_current_branch() {
     let root = dir.path().join("ws");
     let prepared = prepare(&root, &repo, "alder", None).await.unwrap();
     assert_eq!(prepared.base_ref, "main");
-    assert_eq!(run(Path::new(&prepared.path), &["branch", "--show-current"]), "alder");
+    assert_eq!(run(Path::new(&prepared.path), &["branch", "--show-current"]), "alder/start");
     assert!(Path::new(&prepared.path).join("a.txt").exists());
 }
 
@@ -93,15 +95,57 @@ async fn existing_branches_paths_and_bad_input_are_refused() {
     // Same path and branch.
     assert_eq!(prepare(&root, &repo, "alder", None).await.err().unwrap().code, ErrorCode::NameTaken);
     // Same branch, different path.
-    let err =
-        prepare_workspace(&root, "repo", repo.to_str().unwrap(), "birch", &"alder".into(), None).await.err().unwrap();
+    let err = prepare_workspace(&root, "repo", repo.to_str().unwrap(), "birch", &"alder/start".into(), None)
+        .await
+        .err()
+        .unwrap();
     assert_eq!(err.code, ErrorCode::NameTaken);
+    // A branch git can't have beside it, whatever its case.
+    run(&repo, &["branch", "Elm"]);
+    assert_eq!(prepare(&root, &repo, "elm", None).await.err().unwrap().code, ErrorCode::NameTaken);
     let err = prepare(&root, &repo, "cedar", Some("--upload-pack=evil")).await.err().unwrap();
     assert_eq!(err.code, ErrorCode::InvalidRequest);
     let err = prepare(&root, &repo, "cedar", Some("no-such-ref")).await.err().unwrap();
     assert_eq!(err.code, ErrorCode::InvalidRequest);
     let err = prepare_workspace(&root, "repo", repo.to_str().unwrap(), "x", &"--bad".into(), None).await.err().unwrap();
     assert_eq!(err.code, ErrorCode::InvalidRequest);
+}
+
+/// A workspace's folder of branches is its own, so the hub skips a name git has a branch by or in, here or among
+/// `origin`'s as last fetched, a remote by, or a directory by. As they're spelled, for the hub to compare whatever
+/// their case.
+#[tokio::test]
+async fn the_names_git_has_are_each_branch_s_first_part_here_and_among_origin_s_each_remote_and_each_directory() {
+    let dir = tempfile::tempdir().unwrap();
+    let origin = new_repo(dir.path());
+    let clone = dir.path().join("clone");
+    run(dir.path(), &["clone", "-q", origin.to_str().unwrap(), clone.to_str().unwrap()]);
+    run(&clone, &["branch", "Alder"]);
+    run(&clone, &["branch", "birch/fix"]);
+    run(&origin, &["branch", "cedar/fix"]);
+    run(&clone, &["fetch", "-q"]);
+    let root = dir.path().join("ws");
+    std::fs::create_dir_all(root.join("repo").join("Dogwood")).unwrap();
+
+    let names = names_git_has(&root, "repo", clone.to_str().unwrap()).await.unwrap();
+
+    assert_eq!(names, ["Alder", "Dogwood", "HEAD", "birch", "cedar", "main", "origin"], "each once, as it's spelled");
+}
+
+/// A remote has a `HEAD` no branch can sit beside, where case isn't told apart, even before a fetch has recorded it,
+/// as for a remote added by hand. A repository with no remote has none.
+#[tokio::test]
+async fn head_is_a_name_git_has_once_there_s_a_remote() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = new_repo(dir.path());
+    let names = || names_git_has(dir.path(), "none", repo.to_str().unwrap());
+
+    let with_no_remote = names().await.unwrap();
+    run(&repo, &["remote", "add", "upstream", "https://example.invalid/repo.git"]);
+    let with_one_never_fetched = names().await.unwrap();
+
+    assert_eq!(with_no_remote, ["main"]);
+    assert_eq!(with_one_never_fetched, ["HEAD", "main", "upstream"]);
 }
 
 #[tokio::test]
@@ -115,7 +159,7 @@ async fn status_reports_each_kind_of_change_including_renames_and_odd_names() {
     run(path, &["mv", ".gitignore", "renamed"]);
 
     let status = status(&prepared.path).await.unwrap();
-    assert_eq!(status.branch, Some("alder".into()));
+    assert_eq!(status.branch, Some("alder/start".into()));
     assert_eq!(status.head, Some(CommitId::from(run(path, &["rev-parse", "HEAD"]).trim())));
     let find = |p: &str| status.files.iter().find(|f| f.path == p).unwrap_or_else(|| panic!("{p}: {:?}", status.files));
     assert_eq!(find("a.txt").status, ".M");

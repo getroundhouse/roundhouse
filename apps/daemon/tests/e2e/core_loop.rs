@@ -18,6 +18,11 @@ fn a_session_runs_in_a_real_worktree_with_the_worker_as_a_separate_process() {
     let (workspace, session) = stack.workspace(&client);
     let worktree = PathBuf::from(workspace.path.clone().unwrap());
     assert_eq!(git(&worktree, &["branch", "--show-current"]), workspace.branch.as_str());
+    assert_eq!(
+        workspace.branch.as_str(),
+        format!("{}/start", workspace.name),
+        "its branches go in a folder of its name"
+    );
     assert_eq!(workspace.status, WorkspaceStatus::Ready);
 
     client.session_prompt(&session.id, "say:hello from the agent; tool:pwd && echo made > made.txt", None).unwrap();

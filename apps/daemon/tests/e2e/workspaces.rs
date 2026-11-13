@@ -8,8 +8,8 @@ use client_core::{ClientError, new_request_id};
 use protocol::client::{ErrorCode, HubNotice};
 use protocol::event::EventBody;
 use protocol::model::{
-    AgentKind, ClientRequestId, DiffSide, FileContents, FileOpened, FilePage, PageLine, RecordKey,
-    SessionSettingsChange, SessionStatus, WorkspaceStatus,
+    AgentKind, ClientRequestId, DiffSide, FileContents, FileOpened, FilePage, PageLine, SessionSettingsChange,
+    SessionStatus, WorkspaceStatus,
 };
 
 use crate::support::{
@@ -248,10 +248,14 @@ fn workspace_names_are_checked_and_collisions_are_handled() {
     let err = client.workspace_create(&repo.id, Some("mine".into()), None, None).unwrap_err();
     assert!(matches!(err, ClientError::Api(e) if e.code == ErrorCode::NameTaken));
 
-    // A branch that exists outside the hub also blocks a chosen name, and leaves nothing behind.
+    // A branch that exists outside the hub also blocks a chosen name, and so does one in its folder, and either leaves
+    // nothing behind.
     git(&stack.repo(), &["branch", "taken"]);
-    let err = client.workspace_create(&repo.id, Some("taken".into()), None, None).unwrap_err();
-    assert!(matches!(err, ClientError::Api(e) if e.code == ErrorCode::NameTaken));
+    git(&stack.repo(), &["branch", "folder/fix"]);
+    for name in ["taken", "folder"] {
+        let err = client.workspace_create(&repo.id, Some(name.into()), None, None).unwrap_err();
+        assert!(matches!(err, ClientError::Api(e) if e.code == ErrorCode::NameTaken), "{name}");
+    }
     assert_eq!(client.workspace_list(true).unwrap().len(), 1);
     assert_eq!(client.workspace_list(true).unwrap()[0].id, first.id);
 
@@ -259,12 +263,13 @@ fn workspace_names_are_checked_and_collisions_are_handled() {
     assert_ne!(generated.name, first.name);
 }
 
-/// Git refuses a name it has a branch by before anything is made, so the workspace takes the next name in place, and a
-/// client following the feed sees one workspace on its way throughout, rather than one going and another coming. Its
-/// instance is made again under each name, since a provider's own tools call it by the name it was made with. Here
-/// git has every name the hub picks from, so each try is refused, and the workspace goes once its tries are used up.
+/// A name git has a branch by, or a folder of branches, is refused before anything is made, so the workspace takes
+/// another name in place, and a client following the feed sees one workspace on its way throughout, rather than one
+/// going and another coming. The worker says every name git has, so the next try skips them all, whatever their case,
+/// and here, where git has every name the hub picks from, takes one with a number. Its instance is made again under
+/// it, since a provider's own tools call it by the name it was made with.
 #[test]
-fn a_workspace_keeps_its_id_through_each_name_git_refuses_and_its_instance_takes_each() {
+fn a_workspace_whose_name_git_has_takes_one_git_doesnt_at_its_next_try_keeping_its_id() {
     let mut stack = Stack::start();
     stack.make_through_an_adapter();
     let client = stack.client();
@@ -272,36 +277,25 @@ fn a_workspace_keeps_its_id_through_each_name_git_refuses_and_its_instance_takes
     let repo = client.repo_add(stack.repo().to_str().unwrap()).unwrap();
     next_notice(&feed, "the repo");
     for name in hub::workspace_names() {
-        git(&stack.repo(), &["branch", name]);
+        git(&stack.repo(), &["branch", &format!("{}/fix", name.to_uppercase())]);
     }
 
-    let err = client.workspace_create(&repo.id, None, None, None).unwrap_err();
+    let made = client.workspace_create(&repo.id, None, None, None).unwrap();
 
-    assert!(matches!(err, ClientError::Api(e) if e.code == ErrorCode::NameTaken));
     let HubNotice::Workspace(first) = next_notice(&feed, "the workspace on its way") else { panic!() };
-    let mut names = vec![first.name.clone()];
-    let removed = loop {
-        match next_notice(&feed, "its next name, or its removal") {
-            HubNotice::Workspace(renamed) => {
-                assert_eq!((renamed.id.as_str(), renamed.status), (first.id.as_str(), WorkspaceStatus::Creating));
-                assert_eq!(renamed.branch.as_str(), renamed.name);
-                names.push(renamed.name);
-            }
-            HubNotice::Removed { record, .. } => break record,
-            other => panic!("not about the workspace: {other:?}"),
-        }
-    };
-    assert_eq!(removed, RecordKey::Workspace { id: first.id });
-    assert!(names.len() > 1, "it was given another name");
-    assert!(names.iter().enumerate().all(|(at, name)| !names[..at].contains(name)), "each different: {names:?}");
-    let made: Vec<String> = names.iter().map(|name| format!("roundhouse-{name}")).collect();
-    assert_eq!(stack.instances_made(), made);
-    assert!(client.workspace_list(true).unwrap().is_empty());
+    let HubNotice::Workspace(renamed) = next_notice(&feed, "its next name") else { panic!() };
+    assert_eq!((renamed.id.as_str(), renamed.status), (first.id.as_str(), WorkspaceStatus::Creating));
+    assert_eq!((made.id, made.status), (first.id, WorkspaceStatus::Ready));
+    assert_eq!(made.name, renamed.name);
+    assert!(made.name.ends_with("-2"), "{}", made.name);
+    assert_eq!(made.branch.as_str(), format!("{}/start", made.name));
+    let made_as: Vec<String> = [&first.name, &made.name].iter().map(|name| format!("roundhouse-{name}")).collect();
+    assert_eq!(stack.instances_made(), made_as);
 }
 
 /// The instance of a workspace that took another name is made again under it, and recorded as made, like any other.
 /// The hub tries names in the order they're listed, from the one after the last it tried, so a branch by the name after
-/// the first workspace's has git refuse the second workspace's first name, and not its next.
+/// the first workspace's has the hub refuse the second workspace's first name, which git has, and not its next.
 #[test]
 fn a_workspace_made_under_its_next_name_has_its_instance_made_again_and_recorded() {
     let mut stack = Stack::start();

@@ -16,9 +16,8 @@ use protocol::versions::Versions;
 use protocol::worker::{
     AccountFor, AgentApproval, AgentCancel, AgentCompact, AgentConfigure, AgentPrompt, AgentStop, AttachmentWrite,
     AttachmentWritten, FileOpenAt, FilePages, FileRead, FileReadAt, FolderRead, GitDiff, GitStatus, HelloReply,
-    PrepareWorkspace, PullRequest, PullRequestReply, Received, RemoveWorkspace, RestoreWorkspace, RunningAgentsReply,
-    ServeTools, SetupLog, SetupLogReply, TitleFor, ToolsServing, WORKER_PROTOCOL_VERSION, WatchBranches, WorkerFrame,
-    WorkerRequest, WorkerResponse, WorktreeThere, WorktreeThereReply,
+    PullRequest, PullRequestReply, Received, RunningAgentsReply, ServeTools, SetupLog, SetupLogReply, TitleFor,
+    ToolsServing, WORKER_PROTOCOL_VERSION, WatchBranches, WorkerFrame, WorkerRequest, WorkerResponse,
 };
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::{mpsc, oneshot, watch};
@@ -36,6 +35,7 @@ mod connection;
 mod listen;
 mod outbox;
 mod scripts;
+mod worktrees;
 
 #[cfg(unix)]
 pub use listen::listen;
@@ -227,28 +227,11 @@ async fn handle(
         }
         WorkerRequest::RunningAgents => Ok(running_agents(state)),
         WorkerRequest::Unknown => Err(unsupported(None)),
-        WorkerRequest::PrepareWorkspace(asked) => {
-            let PrepareWorkspace { repo_name, repo_path, workspace_name, branch, base_ref } = asked;
-            let root = &state.config.workspaces_root;
-            let ready =
-                git::prepare_workspace(root, &repo_name, &repo_path, &workspace_name, &branch, base_ref.as_deref());
-            Ok(WorkerResponse::WorkspaceReady(ready.await?))
-        }
-        WorkerRequest::RestoreWorkspace(RestoreWorkspace { repo_path, path, branch }) => {
-            let _moving = state.moving.lock().await;
-            git::restore_workspace(&repo_path, &path, &branch).await?;
-            Ok(WorkerResponse::Ok)
-        }
-        WorkerRequest::RemoveWorkspace(RemoveWorkspace { repo_path, path, force }) => {
-            let _moving = state.moving.lock().await;
-            git::remove_workspace(&repo_path, &path, force, &state.config.deleter).await?;
-            Ok(WorkerResponse::Ok)
-        }
-        WorkerRequest::WorktreeThere(WorktreeThere { path }) => {
-            let _moving = state.moving.lock().await;
-            let there = git::worktree_there(&path).await;
-            Ok(WorkerResponse::WorktreeThere(WorktreeThereReply { there }))
-        }
+        WorkerRequest::NamesGitHas(asked) => worktrees::names_git_has(state, asked).await,
+        WorkerRequest::PrepareWorkspace(asked) => worktrees::prepare(state, asked).await,
+        WorkerRequest::RestoreWorkspace(asked) => worktrees::restore(state, asked).await,
+        WorkerRequest::RemoveWorkspace(asked) => worktrees::remove(state, asked).await,
+        WorkerRequest::WorktreeThere(asked) => worktrees::there(state, asked).await,
         WorkerRequest::GitStatus(GitStatus { path }) => Ok(WorkerResponse::GitStatus(git::status(&path).await?)),
         WorkerRequest::GitDiff(GitDiff { path, base_ref }) => {
             Ok(WorkerResponse::GitDiff(git::diff(&path, base_ref.as_deref()).await?))

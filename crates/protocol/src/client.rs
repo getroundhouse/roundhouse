@@ -184,7 +184,7 @@ pub enum ErrorCode {
     Conflict,
     /// Asking again with `force` would go ahead, at the cost the message describes.
     NeedsForce,
-    /// A name is in use, or the branch or directory it would need is.
+    /// A name is in use, or the branch, folder of branches or directory it would need is.
     NameTaken,
     /// A worker or provider failed.
     Worker,

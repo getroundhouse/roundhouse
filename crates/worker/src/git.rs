@@ -13,11 +13,14 @@ use tokio::process::Command;
 pub(crate) mod blob;
 pub(crate) mod branches;
 pub(crate) mod files;
+mod names;
 mod pull_request;
 mod removal;
 #[cfg(test)]
 pub(crate) mod tests;
 
+use names::branch_in_the_way;
+pub use names::names_git_has;
 pub use pull_request::{pull_request, rate_limit};
 pub use removal::remove_workspace;
 
@@ -126,14 +129,15 @@ pub async fn prepare_workspace(
     reject_option_like(branch.as_str(), "a branch name")?;
     let repo = PathBuf::from(repo_path);
     let path = root.join(repo_name).join(workspace_name);
+    // First, so a name git can't have at all is refused as that, rather than as one something else has.
+    if !git(&repo, &["check-ref-format", "--branch", branch.as_str()]).await?.success {
+        return Err(ApiError::new(ErrorCode::InvalidRequest, format!("{branch} isn't a valid branch name")));
+    }
     if path.exists() {
         return Err(ApiError::new(ErrorCode::NameTaken, format!("{} already exists", path.display())));
     }
-    if ref_exists(&repo, &format!("refs/heads/{branch}")).await? {
-        return Err(ApiError::new(ErrorCode::NameTaken, format!("branch {branch} already exists")));
-    }
-    if !git(&repo, &["check-ref-format", "--branch", branch.as_str()]).await?.success {
-        return Err(ApiError::new(ErrorCode::InvalidRequest, format!("{branch} isn't a valid branch name")));
+    if let Some(taken) = branch_in_the_way(&repo, branch).await? {
+        return Err(ApiError::new(ErrorCode::NameTaken, format!("branch {taken} already exists")));
     }
 
     let base = match base_ref {
