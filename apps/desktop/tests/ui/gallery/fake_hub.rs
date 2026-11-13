@@ -122,7 +122,8 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         R::NewWorkspaceDraftKeep(_)
         | R::NewWorkspaceDraftFileAdd(_)
         | R::NewWorkspaceDraftFileRead(_)
-        | R::NewWorkspaceDraftFileRemove(_) => Err(ApiError::new(
+        | R::NewWorkspaceDraftFileRemove(_)
+        | R::NewWorkspaceCreate(_) => Err(ApiError::new(
             ErrorCode::Unsupported,
             "the gallery's hub doesn't keep what's in the new-workspace dialog",
         )),

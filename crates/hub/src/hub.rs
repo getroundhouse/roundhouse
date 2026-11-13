@@ -16,6 +16,7 @@ mod comments;
 mod feed;
 mod hub_settings;
 mod instances;
+mod new_workspace;
 mod new_workspace_draft;
 mod pull_requests;
 mod queues;

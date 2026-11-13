@@ -16,6 +16,7 @@ pub mod accounts;
 pub mod drafts;
 mod feed;
 pub mod files;
+pub mod new_workspace;
 pub mod queue;
 mod request;
 pub mod waits;
@@ -46,6 +47,8 @@ pub enum ClientResponse {
     HubStatus(HubStatus),
     HubSettings(HubSettings),
     NewWorkspaceDraft(NewWorkspaceDraft),
+    /// Boxed, since it holds a workspace and a session, so every other response isn't as large.
+    NewWorkspaceMade(Box<new_workspace::NewWorkspaceMade>),
     Repo(Repo),
     Repos {
         repos: Vec<Repo>,

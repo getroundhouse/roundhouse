@@ -7,7 +7,8 @@ use std::sync::atomic::Ordering;
 use parking_lot::Mutex;
 use protocol::Build;
 use protocol::client::{
-    ApiError, ClientRequest, ClientResponse, ErrorCode, HubFrame, HubNotice, ReplyOutcome, drafts, files, queue, waits,
+    ApiError, ClientRequest, ClientResponse, ErrorCode, HubFrame, HubNotice, ReplyOutcome, drafts, files,
+    new_workspace, queue, waits,
 };
 use protocol::frame::{self, Call};
 use protocol::model::{Place, SessionId};
@@ -317,6 +318,9 @@ async fn handle(
         R::NewWorkspaceDraftFileRemove(drafts::NewWorkspaceDraftFileRemove { id }) => {
             hub.file_remove(FileFor::NewWorkspace, id).await?;
             C::Ok
+        }
+        R::NewWorkspaceCreate(new_workspace::NewWorkspaceCreate { made_of, client_request_id }) => {
+            C::NewWorkspaceMade(Box::new(hub.new_workspace_create(made_of, client_request_id).await?))
         }
         R::SessionAccount { id } => C::SessionAccount(hub.session_account(id).await?),
         R::AccountConnect(_) | R::AccountDisconnect(_) => {

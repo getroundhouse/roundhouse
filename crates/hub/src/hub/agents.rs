@@ -12,6 +12,13 @@ impl Hub {
         self.agents.clone()
     }
 
+    /// The kind a chat runs when nothing names one, such as the first chat of a workspace made from the new-workspace
+    /// dialog: the first described, as client-core picks for a new chat, or Claude, which a hub that describes none
+    /// refuses as it would any kind.
+    pub(super) fn new_chat_kind(&self) -> AgentKind {
+        self.agents.first().map_or(AgentKind::Claude, |agent| agent.kind)
+    }
+
     /// `kind`'s description, or a refusal for a kind this hub doesn't run.
     pub(super) fn agent(&self, kind: AgentKind) -> Result<&AgentDescription, ApiError> {
         let described = self.agents.iter().find(|agent| agent.kind == kind);

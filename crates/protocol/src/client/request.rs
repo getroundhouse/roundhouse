@@ -6,7 +6,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::{accounts, drafts, files, queue, waits};
+use super::{accounts, drafts, files, new_workspace, queue, waits};
 use crate::attachment::{AttachmentBytes, MediaType};
 use crate::event::ApprovalDecision;
 use crate::model::{
@@ -376,6 +376,7 @@ pub enum ClientRequest {
     NewWorkspaceDraftFileAdd(drafts::NewWorkspaceDraftFileAdd),
     NewWorkspaceDraftFileRead(drafts::NewWorkspaceDraftFileRead),
     NewWorkspaceDraftFileRemove(drafts::NewWorkspaceDraftFileRemove),
+    NewWorkspaceCreate(new_workspace::NewWorkspaceCreate),
     /// Sets the title someone typed, as [`ClientRequest::WorkspaceRename`] does for a workspace.
     SessionRename {
         id: SessionId,
