@@ -1,6 +1,6 @@
-//! What `RecordsFeed` and `OpenSession` share: following something a hub serves, on a thread of its own,
-//! and telling readers when it changed. When the subscription falls behind, or there's a new connection, it
-//! starts again from where it got to.
+//! What `RecordsFeed`, `OpenSession` and `OpenTerminal` share: following something a hub serves, on a thread of its
+//! own, and telling readers when it changed. When the subscription falls behind, or there's a new connection, it starts
+//! again from where it got to.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -10,8 +10,9 @@ use protocol::client::ErrorCode;
 
 use super::{Client, ClientError, Ended, Result, Subscription, SubscriptionItem};
 
-/// What's followed, and how.
-pub(super) trait Source: Send + 'static {
+/// What's followed, and how. It's made on the thread that follows it, so it needn't be sent between threads, as one
+/// that keeps Ghostty's terminal can't be.
+pub(super) trait Source: 'static {
     type Held: Send + 'static;
 
     /// Subscribes, and catches up on anything the subscription won't send, such as a list of records. Runs
@@ -21,8 +22,9 @@ pub(super) trait Source: Send + 'static {
     /// Takes in one item. Returns whether it changed what's held.
     fn apply(&mut self, client: &Client, held: &Mutex<Self::Held>, item: SubscriptionItem) -> Result<bool>;
 
-    /// Does what a reader asked for, such as fetching history. Returns whether it changed what's held.
-    fn asked(&mut self, client: &Client, held: &Mutex<Self::Held>) -> Result<bool>;
+    /// Does what a reader asked for, such as fetching history, on `connection`, or without one while there's none, as
+    /// a source that does what's asked from what it holds can. Returns whether it changed what's held.
+    fn asked(&mut self, connection: Option<&Client>, held: &Mutex<Self::Held>) -> Result<bool>;
 
     /// There's a new connection, which may be to another hub, such as a newer one after a restart. Runs just before
     /// [`Source::resume`] does for it.
@@ -74,8 +76,12 @@ impl<H> Clone for Follow<H> {
 }
 
 impl<H: Send + 'static> Follow<H> {
-    /// Starts following on a thread of its own, so this doesn't wait for the hub.
-    pub(super) fn start<S: Source<Held = H>>(client: &Client, held: H, source: S) -> Self {
+    /// Starts following on a thread of its own, so this doesn't wait for the hub, with the source `source` makes there.
+    pub(super) fn start<S: Source<Held = H>>(
+        client: &Client,
+        held: H,
+        source: impl FnOnce() -> S + Send + 'static,
+    ) -> Self {
         let (signal, changed) = flume::bounded(1);
         let (wake, woken) = flume::bounded(1);
         let shared = Arc::new(Shared {
@@ -86,8 +92,11 @@ impl<H: Send + 'static> Follow<H> {
             errors: Mutex::new(Vec::new()),
             signal,
         });
-        let follower = Follower { source, client: client.clone(), shared: shared.clone(), woken, subscription: None };
-        if let Err(e) = std::thread::Builder::new().name("follow hub".to_string()).spawn(move || follower.run()) {
+        let (client, thread_shared) = (client.clone(), shared.clone());
+        let follow = move || {
+            Follower { source: source(), client, shared: thread_shared, woken, subscription: None }.run();
+        };
+        if let Err(e) = std::thread::Builder::new().name("follow hub".to_string()).spawn(follow) {
             shared.failed(FollowError::Following(ClientError::Io(e)));
         }
         Self { shared, changed, wake }
@@ -203,17 +212,24 @@ impl<S: Source> Follower<S> {
     fn woken(&mut self) {
         let reconnect = self.shared.reconnect.lock().take();
         if let Some(client) = reconnect {
+            // What was asked before the next connection came is done without one, whether or not this has heard the
+            // last go, so what that would send the hub, such as what was typed, isn't sent on the next, as typing over
+            // a connection that's going isn't. A source that fetches leaves what was asked for the next.
+            self.ask(false);
             self.client = client;
             self.source.reconnected();
             self.resume();
         }
-        // Nothing can be fetched without a connection, so what's asked waits for one.
-        if self.subscription.is_some() {
-            match self.source.asked(&self.client, &self.shared.held) {
-                Ok(true) => self.shared.changed(),
-                Ok(false) => {}
-                Err(e) => self.shared.failed(FollowError::Asked(e)),
-            }
+        self.ask(self.subscription.is_some());
+    }
+
+    /// Asks the source to do what was asked of it, on the connection if `connected`.
+    fn ask(&mut self, connected: bool) {
+        let connection = connected.then_some(&self.client);
+        match self.source.asked(connection, &self.shared.held) {
+            Ok(true) => self.shared.changed(),
+            Ok(false) => {}
+            Err(e) => self.shared.failed(FollowError::Asked(e)),
         }
     }
 

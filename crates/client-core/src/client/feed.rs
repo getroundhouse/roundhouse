@@ -20,7 +20,7 @@ impl RecordsFeed {
     /// Starts following, on a thread of its own: subscribes, then lists, so nothing can change in between
     /// unseen.
     pub fn start(client: &Client) -> RecordsFeed {
-        RecordsFeed { follow: Follow::start(client, HubRecords::default(), RecordsSource) }
+        RecordsFeed { follow: Follow::start(client, HubRecords::default(), || RecordsSource) }
     }
 
     /// Says that something changed: the records, the connection, or an error to hear about. It holds one
@@ -102,12 +102,16 @@ impl Source for RecordsSource {
                 list_subagents(client, held)? || changed
             }
             SubscriptionItem::Notice(notice) => held.lock().apply_notice(*notice),
-            SubscriptionItem::Event(_) | SubscriptionItem::Tail(_) | SubscriptionItem::Delta(_) => false,
+            SubscriptionItem::Event(_)
+            | SubscriptionItem::Tail(_)
+            | SubscriptionItem::Delta(_)
+            | SubscriptionItem::Terminal(_) => false,
         })
     }
 
-    /// Lists the subagents of a session a view has just asked for.
-    fn asked(&mut self, client: &Client, held: &Mutex<HubRecords>) -> Result<bool> {
+    /// Lists the subagents of a session a view has just asked for, once there's a connection to list them on.
+    fn asked(&mut self, connection: Option<&Client>, held: &Mutex<HubRecords>) -> Result<bool> {
+        let Some(client) = connection else { return Ok(false) };
         list_subagents(client, held)
     }
 }

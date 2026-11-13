@@ -164,7 +164,7 @@ pub(crate) fn follow(
                     }
                     true
                 }
-                SubscriptionItem::Notice(_) => false,
+                SubscriptionItem::Notice(_) | SubscriptionItem::Terminal(_) => false,
             };
             if until_idle && check && finished(last_seq)? {
                 return Ok(());

@@ -72,7 +72,7 @@ impl OpenSession {
             last_seq: session.last_seq,
             placed: false,
         };
-        let follow = Follow::start(client, log, source);
+        let follow = Follow::start(client, log, move || source);
         follow.wake();
         OpenSession { follow, session_id: session.id.clone(), view, searches: Arc::default() }
     }
@@ -236,13 +236,15 @@ impl Source for SessionSource {
                 log.apply_delta(&delta);
                 true
             }
-            SubscriptionItem::Notice(_) => false,
+            SubscriptionItem::Notice(_) | SubscriptionItem::Terminal(_) => false,
         })
     }
 
     /// Fetches the pages around where the view is looking that aren't loaded, then each request waiting on an answer
-    /// that none of them holds, then the session's prompts if they haven't been listed.
-    fn asked(&mut self, client: &Client, held: &Mutex<SessionLog>) -> Result<bool> {
+    /// that none of them holds, then the session's prompts if they haven't been listed, once there's a connection to
+    /// fetch them on.
+    fn asked(&mut self, connection: Option<&Client>, held: &Mutex<SessionLog>) -> Result<bool> {
+        let Some(client) = connection else { return Ok(false) };
         let pages = held.lock().pages_to_fetch();
         let requests = held.lock().requests_to_fetch();
         let fetched = !pages.is_empty() || !requests.is_empty();

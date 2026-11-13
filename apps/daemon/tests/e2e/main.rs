@@ -48,6 +48,7 @@ mod stopping_the_hub;
 mod subagents;
 #[cfg(test)]
 mod support;
+mod terminals;
 mod titles;
 mod tools;
 mod workspaces;

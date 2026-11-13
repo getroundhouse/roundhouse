@@ -1,6 +1,6 @@
 [package]
 name = "terminal-state"
-description = "What a terminal shows, kept from what the program in it writes, and the bytes that draw it again in another terminal. No IO and no UI."
+description = "What a terminal shows, kept from what the program in it writes, the bytes that draw it again in another terminal, a plain copy of it to draw, and what its program reads for a key or a paste. No IO and no UI."
 version.workspace = true
 edition.workspace = true
 publish.workspace = true

@@ -16,6 +16,8 @@ use crate::Client;
 /// What the stand-in does with a request.
 pub enum Does {
     Answers(Box<ReplyOutcome>),
+    /// Answers, then sends these, as a hub follows what a client subscribed to.
+    AnswersThen(Box<ReplyOutcome>, Vec<HubFrame>),
     /// Nothing, as with a request the test isn't about.
     Nothing,
     /// Goes away, as a hub that's stopped does.
@@ -45,6 +47,12 @@ pub fn listen(socket: &Path, mut does: impl FnMut(ClientRequest) -> Does + Send 
             let frame: ClientFrame = serde_json::from_str(&line).unwrap();
             match does(frame.request) {
                 Does::Answers(outcome) => reply(&mut stream, frame.id, *outcome),
+                Does::AnswersThen(outcome, then) => {
+                    reply(&mut stream, frame.id, *outcome);
+                    for frame in then {
+                        stream.write_all(&frame::encode(&frame).unwrap()).unwrap();
+                    }
+                }
                 Does::Nothing => {}
                 Does::HangsUp => return,
             }
