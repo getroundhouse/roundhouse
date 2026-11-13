@@ -12,6 +12,7 @@ mod follow;
 mod lines;
 mod open_file;
 mod open_session;
+mod open_terminal;
 mod options;
 mod outline;
 mod places;
@@ -19,6 +20,7 @@ mod prompts;
 mod queueing;
 mod start;
 mod stream;
+mod terminals;
 mod typed;
 
 use std::collections::{HashMap, HashSet};
@@ -37,6 +39,7 @@ use protocol::event::SessionEvent;
 use protocol::frame;
 use protocol::model::{AttachmentId, SessionId};
 use protocol::tail::{StreamDelta, Tail};
+use protocol::terminal::TerminalUpdate;
 use stream::Stream;
 
 pub use admin::{HubAdmin, IdleStop, Restart, restart_hub, stop_hub, stop_hub_if_idle, stop_hub_if_still};
@@ -47,6 +50,7 @@ pub use follow::FollowError;
 pub(crate) use lines::Place;
 pub use open_file::{OpenFile, Opening};
 pub use open_session::{OpenSession, Search, Searched, Stretch, View};
+pub use open_terminal::OpenTerminal;
 pub(crate) use queueing::Shown;
 pub use start::Daemon;
 
@@ -93,6 +97,8 @@ pub enum SubscriptionItem {
     Delta(StreamDelta),
     /// Only on a feed subscription.
     Notice(Box<HubNotice>),
+    /// Only on a terminal's.
+    Terminal(TerminalUpdate),
 }
 
 /// Why a subscription's channel closed.
@@ -164,10 +170,26 @@ struct Inner {
 impl Inner {
     /// Asks the hub to stop following `subscription_id`, without waiting for its reply, which is dropped when it comes.
     fn unsubscribe(&self, subscription_id: u64) -> Result<()> {
+        self.send_only(subscriptions::SessionUnsubscribe { subscription_id }.into_request())
+    }
+
+    /// Sends `request` without waiting for its reply, which the reader drops, since nothing waits for it.
+    fn send_only(&self, request: ClientRequest) -> Result<()> {
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
-        let request = subscriptions::SessionUnsubscribe { subscription_id }.into_request();
+        self.send(id, request)
+    }
+
+    /// Sends `request` as call `id`, or says there's no connection to send it on.
+    fn send(&self, id: u64, request: ClientRequest) -> Result<()> {
         let line = frame::encode(&ClientFrame { id, request }).map_err(|e| ClientError::Unexpected(e.to_string()))?;
-        self.writer.lock().write_all(&line)?;
+        if *self.disconnected.lock() {
+            return Err(ClientError::Disconnected);
+        }
+        // Writing to the hub only fails once it has gone, which the reader may not have found yet.
+        if self.writer.lock().write_all(&line).is_err() {
+            *self.disconnected.lock() = true;
+            return Err(ClientError::Disconnected);
+        }
         Ok(())
     }
 }
@@ -256,18 +278,12 @@ impl Client {
     /// in one place.
     fn exchange(&self, request: ClientRequest) -> Result<ClientResponse> {
         let id = self.inner.next_id.fetch_add(1, Ordering::Relaxed);
-        let line = frame::encode(&ClientFrame { id, request }).map_err(|e| ClientError::Unexpected(e.to_string()))?;
         let (reply_tx, reply_rx) = flume::bounded(1);
+        // Before it's sent, so a reader that finishes after it was sent fails it, rather than leaving it to wait.
         self.inner.pending.lock().insert(id, reply_tx);
-        if *self.inner.disconnected.lock() {
+        if let Err(e) = self.inner.send(id, request) {
             self.inner.pending.lock().remove(&id);
-            return Err(ClientError::Disconnected);
-        }
-        // Writing to the hub only fails once it has gone, which the reader may not have found yet.
-        if self.inner.writer.lock().write_all(&line).is_err() {
-            self.inner.pending.lock().remove(&id);
-            *self.inner.disconnected.lock() = true;
-            return Err(ClientError::Disconnected);
+            return Err(e);
         }
         reply_rx.recv().map_err(|_| ClientError::Disconnected)?
     }
@@ -308,8 +324,9 @@ fn read_frames(inner: &Arc<Inner>, stream: Stream) {
             HubFrame::Notice { subscription_id, notice } => {
                 deliver(inner, subscription_id, SubscriptionItem::Notice(Box::new(notice)));
             }
-            // Nothing attaches to a terminal yet, so no subscription follows one.
-            HubFrame::Terminal { .. } => {}
+            HubFrame::Terminal { subscription_id, update } => {
+                deliver(inner, subscription_id, SubscriptionItem::Terminal(update));
+            }
         }
     }
     *inner.disconnected.lock() = true;

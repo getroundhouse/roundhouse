@@ -1,5 +1,5 @@
-//! The worker's copy of one terminal. Everything the program in it writes goes through it, and it gives back what a
-//! fresh terminal needs to show the same.
+//! A copy of one terminal, the worker's or a client's. Everything the program in it writes goes through it, and it
+//! gives back what a fresh terminal needs to show the same, what a view draws, and what the program reads for a key.
 
 use libghostty_vt::Terminal;
 use libghostty_vt::effect::{
@@ -10,8 +10,12 @@ use libghostty_vt::fmt::{Extras, Format, Formatter};
 use libghostty_vt::screen::Screen;
 use libghostty_vt::snapshot::Decoder;
 
+use crate::drawn::Rgb;
+
+mod drawing;
 #[cfg(test)]
 mod tests;
+mod typing;
 
 /// Abandons any sequence a copy was partway through, then goes back to the shell's screen, as vim does as it quits.
 const TO_SHELL_SCREEN: &[u8] = b"\x18\x1b[?1049l";
@@ -47,6 +51,8 @@ pub enum MirrorError {
 #[derive(Debug)]
 pub struct Mirror {
     terminal: Terminal<'static, 'static>,
+    drawing: Option<drawing::Drawing>,
+    typing: Option<typing::Typing>,
 }
 
 impl Mirror {
@@ -56,7 +62,7 @@ impl Mirror {
         terminal.set_scrollback_max_lines(Some(HISTORY_LINES))?;
         // From the start, since only bytes written after it's on can be carried over by a snapshot.
         terminal.set_continuation_max_bytes(LONGEST_UNFINISHED_BYTES)?;
-        Ok(Self { terminal })
+        Ok(Self { terminal, drawing: None, typing: None })
     }
 
     /// A copy that answers what the program asks of its terminal, such as where the cursor is, or what the terminal
@@ -76,6 +82,19 @@ impl Mirror {
     pub fn resize(&mut self, size: Size) -> Result<(), MirrorError> {
         // Nothing here knows how big a cell is, so a program that asks the size in pixels is told nothing.
         Ok(self.terminal.resize(size.cols, size.rows, 0, 0)?)
+    }
+
+    pub fn size(&self) -> Result<Size, MirrorError> {
+        Ok(Size { cols: self.terminal.cols()?, rows: self.terminal.rows()? })
+    }
+
+    /// The colours a cell that sets none is drawn in, which a client takes from its own look.
+    pub fn set_colors(&mut self, foreground: Rgb, background: Rgb) -> Result<(), MirrorError> {
+        let ghostty = |color: Rgb| libghostty_vt::color::Rgb { r: color.r, g: color.g, b: color.b };
+        self.terminal
+            .set_default_fg_color(Some(ghostty(foreground)))?
+            .set_default_bg_color(Some(ghostty(background)))?;
+        Ok(())
     }
 
     /// Bytes that make a fresh terminal of the same size show what this one does, so that what the program writes

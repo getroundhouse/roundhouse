@@ -1,5 +1,7 @@
 use protocol::client::HubNotice;
-use protocol::model::{DiffComment, DiffSide, RecordKey, Records, Repo, Rev, Session, Subagent, Title, Workspace};
+use protocol::model::{
+    DiffComment, DiffSide, RecordKey, Records, Repo, Rev, Session, Subagent, Terminal, Title, Workspace,
+};
 
 use crate::records::HubRecords;
 
@@ -34,17 +36,22 @@ fn comment(id: &str, workspace: &str, rev: u64) -> DiffComment {
     }
 }
 
+fn terminal(id: &str, workspace: &str, opened_at_ms: i64, rev: u64) -> Terminal {
+    Terminal { id: id.into(), workspace_id: workspace.into(), opened_at_ms, rev: Rev::new(rev) }
+}
+
 fn subagent(session: &str, call: &str, started_at_ms: i64, rev: u64) -> Subagent {
     Subagent { session_id: session.into(), started_at_ms, rev: Rev::new(rev), ..protocol::fixtures::subagent(call) }
 }
 
-/// Two workspaces, each with a session, and a comment on the first's diff.
+/// Two workspaces, each with a session, and a comment on the first's diff and two terminals open in it.
 fn listed() -> Records {
     Records {
         repos: vec![repo("r2", "zeta"), repo("r", "alpha")],
         workspaces: vec![workspace("w2", 20, 3), workspace("w", 10, 2)],
         sessions: vec![session("s2", "w", 30, 5), session("s", "w", 10, 4), session("t", "w2", 0, 6)],
         comments: vec![comment("c", "w", 7)],
+        terminals: vec![terminal("t1", "w", 30, 3), terminal("t2", "w", 10, 1)],
         rev: Rev::new(7),
         ..Records::default()
     }
@@ -69,6 +76,8 @@ fn each_kind_is_listed_in_the_order_views_show_it_and_found_by_its_id() {
     assert_eq!(shown.repo(&"r".into()).map(|r| r.name.as_str()), Some("alpha"));
     assert_eq!(ids(shown.comments(&"w".into()), |c| c.id.as_str()), ["c"]);
     assert!(shown.comments(&"w2".into()).is_empty() && shown.sessions(&"gone".into()).is_empty());
+    assert_eq!(ids(shown.terminals(&"w".into()), |t| t.id.as_str()), ["t2", "t1"], "in the order they opened");
+    assert!(shown.terminals(&"w2".into()).is_empty());
     assert_eq!(shown.every_session().count(), 3);
 }
 
@@ -93,14 +102,29 @@ fn a_view_is_told_which_parts_changed_since_it_last_looked() {
 
     held.apply_notice(HubNotice::Session(session("s2", "w", 30, 8)));
     held.apply_notice(HubNotice::Removed { record: RecordKey::Comment { id: "c".into() }, rev: Rev::new(9) });
+    held.apply_notice(HubNotice::Terminal(terminal("t3", "w2", 40, 10)));
     let now = held.snapshot();
     let changes = now.changes_since(&before);
 
     assert!(changes.any());
     assert!(changes.sessions(&"w".into()) && !changes.sessions(&"w2".into()), "only the workspace it's in");
     assert!(changes.comments(&"w".into()), "one went");
+    assert!(changes.terminals(&"w2".into()) && !changes.terminals(&"w".into()), "one opened, in the second");
     assert!(!changes.workspace(&"w".into()) && !changes.workspace(&"w2".into()), "no workspace's own record");
     assert!(!now.changes_since(&now).any());
+}
+
+#[test]
+fn a_terminal_that_closes_goes_from_its_workspace() {
+    let mut held = HubRecords::default();
+    held.apply_list(listed());
+    let before = held.snapshot();
+
+    held.apply_notice(HubNotice::Removed { record: RecordKey::Terminal { id: "t1".into() }, rev: Rev::new(8) });
+    let now = held.snapshot();
+
+    assert_eq!(ids(now.terminals(&"w".into()), |t| t.id.as_str()), ["t2"]);
+    assert!(now.changes_since(&before).terminals(&"w".into()));
 }
 
 #[test]
