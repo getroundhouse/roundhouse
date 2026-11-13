@@ -48,6 +48,11 @@ fn build_dir(paths: &Paths) -> PathBuf {
     paths.hub_copy(&build(1)).parent().unwrap().to_path_buf()
 }
 
+/// What build 1's copy is called.
+pub(super) fn copy_name(paths: &Paths) -> String {
+    paths.hub_copy(&build(1)).file_name().unwrap().to_string_lossy().into_owned()
+}
+
 pub(super) fn files_in(dir: &Path) -> Vec<String> {
     let mut files: Vec<_> =
         std::fs::read_dir(dir).unwrap().map(|file| file.unwrap().file_name().to_string_lossy().into_owned()).collect();
@@ -259,7 +264,7 @@ fn a_copy_another_client_put_in_place_first_is_never_replaced() {
     assert_eq!(also, copy);
     assert_eq!(std::fs::metadata(&copy).unwrap().ino(), published, "replaced");
     assert_eq!(std::fs::read_to_string(&copy).unwrap(), first);
-    assert_eq!(files_in(&build_dir(&paths)), [DAEMON_NAME], "a temporary file was left behind");
+    assert_eq!(files_in(&build_dir(&paths)), [copy_name(&paths)], "a temporary file was left behind");
 }
 
 /// Each writes under a temporary name of its own, so none can move another's into place, whole or not.
@@ -284,7 +289,7 @@ fn clients_copying_at_once_each_get_a_whole_copy() {
     for copy in copies {
         assert!(copy.join().unwrap() == script, "a copy that wasn't whole");
     }
-    assert_eq!(files_in(&build_dir(&paths)), [DAEMON_NAME], "a temporary file was left behind");
+    assert_eq!(files_in(&build_dir(&paths)), [copy_name(&paths)], "a temporary file was left behind");
 }
 
 /// Files a process writes aren't quarantined unless it asks for that, so the copy runs without a check from

@@ -16,6 +16,10 @@ pub const ENV_LOG: &str = "ROUNDHOUSE_LOG";
 /// The binary that runs as a hub or a worker. It gives this name in `--version` too.
 pub const DAEMON_NAME: &str = "roundhoused";
 
+/// What a stamped build's copy of the daemon is called, and so what its hub and the workers that hub starts are called
+/// wherever a process is named for its file. "Updating the app" in `docs/architecture.md` says why it's a plain file.
+const HUB_COPY_NAME: &str = "Roundhouse Hub";
+
 /// What a worker locks in its instance's state directory while it serves the instance, so the instance has one
 /// worker at a time.
 pub const WORKER_LOCK_FILE: &str = "worker.lock";
@@ -29,9 +33,14 @@ pub const AGENTS_DIR: &str = "agents";
 /// that directory, and both it and what connects to it name the socket relative to it, since the whole path can be
 /// longer than a socket's may be.
 pub const WORKER_SOCKET_FILE: &str = "worker.sock";
-/// The daemon's file, which on Windows has the extension a program there needs.
+/// The daemon's file.
 pub fn daemon_file() -> String {
-    format!("{DAEMON_NAME}{}", std::env::consts::EXE_SUFFIX)
+    program_file(DAEMON_NAME)
+}
+
+/// A program's file, which on Windows has the extension a program there needs.
+fn program_file(name: &str) -> String {
+    format!("{name}{}", std::env::consts::EXE_SUFFIX)
 }
 
 /// The variable that names the user's home directory.
@@ -68,10 +77,16 @@ pub struct Paths {
 }
 
 impl Paths {
-    /// The copy of the daemon that `build`'s hubs run from, in a directory named for the build.
+    /// The copy of the daemon that `build`'s hubs run from, called `Roundhouse Hub`, in a directory named for the build.
     pub fn hub_copy(&self, build: &StampedBuild) -> PathBuf {
-        self.daemons_dir.join(format!("{}-{}", build.version(), build.number())).join(daemon_file())
+        self.daemons_dir.join(format!("{}-{}", build.version(), build.number())).join(program_file(HUB_COPY_NAME))
     }
+}
+
+/// Each name a build's copy can have in its directory: the one [`Paths::hub_copy`] gives it, and the daemon's, which
+/// builds from before copies were called `Roundhouse Hub` gave theirs.
+pub fn hub_copy_files() -> [String; 2] {
+    [program_file(HUB_COPY_NAME), daemon_file()]
 }
 
 /// Whether `name` is one [`Paths::hub_copy`] gives a build's directory in [`Paths::daemons_dir`].
@@ -248,13 +263,14 @@ mod tests {
     }
 
     #[test]
-    fn a_hub_copy_is_named_for_its_build_version_and_number() {
+    fn a_hub_copy_is_called_roundhouse_hub_in_a_directory_named_for_its_build() {
         let (home, data) = (whole("/h"), whole("/d"));
         let paths = resolve(env_of(&[(HOME_VAR, &home), (ENV_HOME, &data)])).unwrap();
 
         let copy = paths.hub_copy(&StampedBuild::new("abc123", 7).unwrap());
 
-        assert_eq!(copy, Path::new(&data).join("daemons/abc123-7").join(daemon_file()));
+        let file = format!("Roundhouse Hub{}", std::env::consts::EXE_SUFFIX);
+        assert_eq!(copy, Path::new(&data).join("daemons/abc123-7").join(file));
     }
 
     #[test]

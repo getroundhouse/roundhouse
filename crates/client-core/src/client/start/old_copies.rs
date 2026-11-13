@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
 use protocol::StampedBuild;
-use protocol::paths::{Paths, daemon_file, is_hub_copy_dir};
+use protocol::paths::{Paths, hub_copy_files, is_hub_copy_dir};
 
 use super::temporary_prefix;
 
@@ -45,19 +45,23 @@ fn build_dirs(daemons_dir: &Path) -> Vec<PathBuf> {
         .collect()
 }
 
-/// Removes the copy in `dir`, and then `dir` if that leaves it empty, unless the copy was made within [`KEEP_FOR`] of
-/// `now` or a process runs from it. It's removed while it's claimed, so nothing starting from it can mark it first.
+/// Removes the copy in `dir`, by whichever name it has, and then `dir` if that leaves it empty, unless the copy was
+/// made within [`KEEP_FOR`] of `now` or a process runs from it.
 fn remove_if_unused(dir: &Path, now: SystemTime) {
-    let copy = dir.join(daemon_file());
-    let removed = match process::claim_unused(&copy) {
-        Ok(Some(_claimed)) => !changed_within(&copy, KEEP_FOR, now) && std::fs::remove_file(&copy).is_ok(),
-        Ok(None) => false,
-        // There was only ever a temporary copy, if anything.
-        Err(e) => e.kind() == io::ErrorKind::NotFound,
-    };
-    if removed {
+    if hub_copy_files().iter().all(|file| gone_unless_used(&dir.join(file), now)) {
         // Only if it's empty, so not while a client is making a copy in it.
         let _ = std::fs::remove_dir(dir);
+    }
+}
+
+/// Whether nothing is at `copy` once it's removed, unless it was made within [`KEEP_FOR`] of `now` or a process runs
+/// from it. It's removed while it's claimed, so nothing starting from it can mark it first.
+fn gone_unless_used(copy: &Path, now: SystemTime) -> bool {
+    match process::claim_unused(copy) {
+        Ok(Some(_claimed)) => !changed_within(copy, KEEP_FOR, now) && std::fs::remove_file(copy).is_ok(),
+        Ok(None) => false,
+        // None by this name, and maybe only ever a temporary copy.
+        Err(e) => e.kind() == io::ErrorKind::NotFound,
     }
 }
 

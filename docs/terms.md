@@ -8,7 +8,7 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 
 | Term | Meaning | In code |
 |---|---|---|
-| Roundhouse | This product: the desktop app, the CLI, and the hubs and workers behind them. Capitalized as a name, and lowercase only for a binary | `roundhouse`, `roundhoused`, `roundhouse-desktop` |
+| Roundhouse | This product: the desktop app, the CLI, and the hubs and workers behind them. Capitalized as a name, and lowercase for a binary, but for the hub's copy of the daemon, `Roundhouse Hub` | `roundhouse`, `roundhoused`, `roundhouse-desktop` |
 | Hub | The server that clients connect to. It owns workspaces, sessions and their logs, and leaves the work itself to workers | `hub` |
 | Worker | The process that does a workspace's work: its agents, git and scripts. It reports to its hub. There's one per workspace | `worker` |
 | Provider | A kind of place a hub can run workers, such as this machine, an Incus instance or a cloud sandbox. The local provider runs workers on this machine, and it isn't special | `Provider`, `LocalProvider` |
@@ -106,7 +106,7 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 | Build number | Puts the builds an install or a package makes in order, so the app can tell a hub is older. Any other build has none, so it's never replaced | `protocol::Build::number` |
 | Stamped build | A build stamped with both a build version and a build number, as an install or a package does. Any other build says `-dev` whatever its code | `protocol::StampedBuild`, `protocol::this_build!` |
 | Checkout | A copy of this repository that the app is built from, such as one in a workspace. A build that isn't stamped names its checkout in the sidebar and the window's title, with the note it was opened with, so copies open at once can be told apart. As it quits it says on stderr whether someone quit it or it had done what it was opened for, since it exits with 0 either way | `desktop::checkout::Checkout`, `--note`, `desktop::why_quit` |
-| Hub's copy | The copy of the daemon that a stamped build's hubs run from, at `daemons/<version>-<number>/roundhoused` in the data directory. A client that starts a hub removes the old ones nothing runs from | `Paths::hub_copy`, `Daemon`, `process::RunningFrom` |
+| Hub's copy | The copy of the daemon that a stamped build's hubs run from, at `daemons/<version>-<number>/Roundhouse Hub` in the data directory. A client that starts a hub removes the old ones nothing runs from | `Paths::hub_copy`, `Daemon`, `process::RunningFrom` |
 | Subscription | A client following one session's log, from a given seq, or the agent's own events or one subagent's in it, from a given place | `subscription_id` |
 | Feed | The hub-wide stream that says a record changed, for sidebars and the like | `subscribe_feed`, `HubNotice`, `RecordNotice` |
 | Update feed | The signed list of published builds that the app checks to update itself. Always written in full, so it isn't confused with the hub's feed | `releases.osx.json`, `updates::source`, `UpdateFeedKey` |
@@ -125,7 +125,7 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 | Name, title | A workspace's name, such as `holly`, is its directory and the branch it started on, and never changes once it's made. Its title is what the sidebar shows | "Name" only for the directory and branch. Renaming a workspace changes its title |
 | Worker, agent | A worker is our process, and an agent is the CLI it runs | The one you mean. A worker can outlive its agents, and agents can outlive a killed worker |
 | Agent, harness | What other tools call a harness, the program that runs a model with its tools, such as the Claude CLI, is an agent here | "Agent". "Harness" only as another tool's word |
-| Hub, daemon | `roundhoused` is one binary that runs as a hub, as a worker, or as the local provider's adapter | "Hub" or "worker". "Daemon" only for the binary |
+| Hub, daemon | `roundhoused` is one binary that runs as a hub, as a worker, or as the local provider's adapter. A stamped build's hub runs from its copy of it, `Roundhouse Hub`, and so do the workers that hub starts | "Hub" or "worker". "Daemon" only for the binary |
 | Run, turn | A run is a process's lifetime, and a turn is one exchange within it | The one you mean. Counting turns can't give a session's status, as a prompt mid-turn adds none |
 | Approval mode, permission mode | The same setting. `--permission-mode`, `permissionMode` and `bypassPermissions` are the CLI's names | "Approval mode" in docs and interface text, and `PermissionMode` and `permission_mode` in code |
 | Status | `SessionStatus`, `WorkspaceStatus`, `SetupStatus` or `GitStatus` | Say which |

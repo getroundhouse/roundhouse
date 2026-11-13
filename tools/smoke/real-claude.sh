@@ -137,8 +137,9 @@ WORKER=$(ps -o ppid= -p "$AGENT" | tr -d ' ')
 HUB=$(ps -o ppid= -p "$WORKER" | tr -d ' ')
 HUB_REPORTED=$(hub_pid)
 check "the agent is a real claude process in the worktree's session" 'ps -o command= -p "$AGENT" | grep -q claude'
-check "the worker is a separate process from the agent and the hub" '[ "$WORKER" != "$AGENT" ] && [ "$WORKER" != "$HUB" ] && ps -o command= -p "$WORKER" | grep -q "roundhoused worker"'
-check "the hub is the worker's parent" '[ "$HUB" = "$HUB_REPORTED" ] && ps -o command= -p "$HUB" | grep -q "roundhoused hub"'
+# A stamped build's hub runs from its copy of the daemon, which is called Roundhouse Hub, and its workers do too.
+check "the worker is a separate process from the agent and the hub" '[ "$WORKER" != "$AGENT" ] && [ "$WORKER" != "$HUB" ] && ps -o command= -p "$WORKER" | grep -qE "(roundhoused|Roundhouse Hub) worker"'
+check "the hub is the worker's parent" '[ "$HUB" = "$HUB_REPORTED" ] && ps -o command= -p "$HUB" | grep -qE "(roundhoused|Roundhouse Hub) hub"'
 check "the agent is still running with the client gone" 'alive "$AGENT"'
 check "the session still reports running" '[ "$(session_status smoke)" = Running ]'
 check "the hub sees only the client asking" 'cli hub status | grep -q "1 client(s)"'
