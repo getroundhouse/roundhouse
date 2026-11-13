@@ -612,6 +612,8 @@ The API keeps what an agent's requests read and write for a while, so the next r
 
   ![Three lines of a test run selected in a terminal](screens/terminal-selection.png)
 
+- **In a terminal, every key goes to its program but the app's keys on `Cmd` on a Mac,** as in terminal apps there, and off the Mac the app's keys on `Ctrl-Shift`, as `menus.md` says, and `Ctrl-Tab` and `Ctrl-Shift-Tab` on both, which Ghostty keeps too. `Cmd-Left`, `Cmd-Right` and `Cmd-Backspace` are the program's too, as Ghostty has them, sent as `Ctrl-A`, `Ctrl-E` and `Ctrl-U`, which a shell reads as going to the start of the line and to its end, and as deleting back to its start in bash and fish, or the whole line in zsh. `Option-Left` and `Option-Right` go back a word and on one, sent as Escape with `b` or `f`. A key that acts on a chat acts only while one shows, so Find and stopping the agent, `Cmd-.`, do nothing while a terminal, a file tab or a subagent tab is in front, rather than act on a chat out of sight, and off the Mac their keys are the program's in a terminal. *Unconfirmed:* the rule, `Ctrl-Tab` on a Mac, and stopping the agent doing nothing from a file tab or a subagent tab.
+
 ## Closing chats, and keys
 
 - **Closing a chat stops its agent and keeps its history.** Closing the last one starts a new one rather than leaving nothing, and a workspace's first chat is found or made by the hub, so two clients opening a workspace at once share one chat. *Unconfirmed.*

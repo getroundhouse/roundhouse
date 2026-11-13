@@ -101,26 +101,33 @@ impl TerminalCopy {
         Ok(ToHub { resize: Some(terminal_size(fit)), ..ToHub::default() })
     }
 
-    /// A key. One the program reads anything for also goes back to the screen from wherever the history is scrolled to,
-    /// and clears what's selected, as typing does in Ghostty. Nothing is sent before the first screen, since what the
-    /// program reads for a key depends on the modes it set.
+    /// A key, which the program reads by the modes it set.
     pub(super) fn key(&mut self, press: &KeyPress) -> Result<ToHub, MirrorError> {
+        self.typed(|mirror| mirror.key(press))
+    }
+
+    pub(super) fn paste(&mut self, text: &str) -> Result<ToHub, MirrorError> {
+        self.typed(|mirror| mirror.paste(text))
+    }
+
+    /// `text` as it is, whatever modes the program set.
+    pub(super) fn text(&mut self, text: &str) -> Result<ToHub, MirrorError> {
+        self.typed(|_| Ok(text.as_bytes().to_vec()))
+    }
+
+    /// Sends what the program reads for something typed, as `input` says. Nothing is sent before the first screen, since
+    /// what the program reads for a key depends on the modes it set, which come with it, and a paste or text is dropped
+    /// then too, so nothing typed reaches the program ahead of what was typed before it. Anything the program reads also
+    /// goes back to the screen from wherever the history is scrolled to, and clears what's selected, as typing does in
+    /// Ghostty.
+    fn typed(&mut self, input: impl FnOnce(&mut Mirror) -> Result<Vec<u8>, MirrorError>) -> Result<ToHub, MirrorError> {
         let Some(mirror) = &mut self.mirror else { return Ok(ToHub::default()) };
-        let input = mirror.key(press)?;
+        let input = input(mirror)?;
         if !input.is_empty() {
             mirror.scroll_to_screen();
             mirror.clear_selection()?;
             self.changed = true;
         }
-        Ok(ToHub { input, ..ToHub::default() })
-    }
-
-    pub(super) fn paste(&mut self, text: &str) -> Result<ToHub, MirrorError> {
-        let Some(mirror) = &mut self.mirror else { return Ok(ToHub::default()) };
-        let input = mirror.paste(text)?;
-        mirror.scroll_to_screen();
-        mirror.clear_selection()?;
-        self.changed = true;
         Ok(ToHub { input, ..ToHub::default() })
     }
 

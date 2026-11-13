@@ -94,7 +94,7 @@ fn keyed(ui: &Ui<'_>, keys: &str) -> String {
 }
 
 /// What pressing a key would do where focus is, without doing it, or `None` for nothing.
-fn bound_where_focus_is(ui: &mut Ui<'_>, key: &str) -> Option<Box<dyn Action>> {
+pub(crate) fn bound_where_focus_is(ui: &mut Ui<'_>, key: &str) -> Option<Box<dyn Action>> {
     ui.frame();
     let os = ui.cx.update(|cx| cx.platform_info().os);
     let keystroke = Keystroke::parse_with_os(key, os).unwrap();
@@ -102,6 +102,28 @@ fn bound_where_focus_is(ui: &mut Ui<'_>, key: &str) -> Option<Box<dyn Action>> {
     let contexts = ui.cx.update_window(ui.handle, |_, window, _| window.context_stack()).unwrap();
     let (bindings, _) = keymap.borrow().bindings_for_input(&[keystroke], &contexts);
     bindings.first().map(|binding| binding.action().boxed_clone())
+}
+
+/// Every key bound to something where focus is, by itself rather than after another, with what pressing it would do
+/// there.
+pub(crate) fn every_key_bound_where_focus_is(ui: &mut Ui<'_>) -> Vec<(Keystroke, Box<dyn Action>)> {
+    ui.frame();
+    let keymap = ui.cx.update(|cx| cx.key_bindings());
+    let contexts = ui.cx.update_window(ui.handle, |_, window, _| window.context_stack()).unwrap();
+    let keymap = keymap.borrow();
+    let mut keys: Vec<Keystroke> = Vec::new();
+    for binding in keymap.bindings() {
+        if let [only] = binding.keystrokes()
+            && !keys.contains(only.inner())
+        {
+            keys.push(only.inner().clone());
+        }
+    }
+    let bound = |keys: Keystroke| {
+        let (bindings, _) = keymap.bindings_for_input(std::slice::from_ref(&keys), &contexts);
+        bindings.first().map(|binding| (keys, binding.action().boxed_clone()))
+    };
+    keys.into_iter().filter_map(bound).collect()
 }
 
 /// Whether macOS shows the item as one that can be chosen, which is whether anything where focus is takes its action.

@@ -83,7 +83,7 @@ Archiving removes the worktree and keeps the branch, following it if the agent r
 - **The repository's `archive` script runs,** then its agents stop.
 - **It's done as soon as the worktree is out of the way,** and the files are deleted after, so it doesn't wait for a build's output to be deleted.
 
-Archive is on a workspace's row in the sidebar and on Home, in the row's right-click menu, on `Cmd-Shift-A`, and on the pull request's bar once the pull request is merged or closed.
+Archive is on a workspace's row in the sidebar and on Home, in the row's right-click menu, on `Cmd-Shift-A` and File > Archive Workspace, and on the pull request's bar once the pull request is merged or closed.
 
 ## Restoring
 

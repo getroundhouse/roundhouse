@@ -23,7 +23,9 @@ use crate::keys::key_press;
 /// elsewhere, as terminal apps there have them, since a terminal's Control keys are its program's. They're the kit's
 /// actions, which the text boxes take too, so the Edit menu's items work in a terminal as well. And keeps the kit's
 /// from keys that are the program's: Tab and Shift-Tab, which it has move the keys to what's next on screen, and Ctrl-C
-/// off the Mac, which it has copy.
+/// off the Mac, which it has copy. On a Mac, it gives the keys Ghostty gives a meaning there that meaning: Command with
+/// Left, Right or Backspace, which would otherwise be the app's, and Option with Left or Right, which would otherwise be
+/// sent as a key few shells read.
 pub fn bind_keys(cx: &mut App) {
     let mac = cx.platform_info().is_mac();
     let [copy, paste, select_all] =
@@ -36,10 +38,27 @@ pub fn bind_keys(cx: &mut App) {
         KeyBinding::new("tab", NoAction, Some(KEY_CONTEXT)),
         KeyBinding::new("shift-tab", NoAction, Some(KEY_CONTEXT)),
     ]);
-    if !mac {
+    if mac {
+        let send = |keys, text| KeyBinding::new(keys, SendText(text), Some(KEY_CONTEXT));
+        cx.bind_keys([
+            // Ctrl-A and Ctrl-E, to the start of the line and its end, and Ctrl-U, which bash and fish read as deleting
+            // back to its start, and zsh as deleting the line.
+            send("cmd-left", "\x01"),
+            send("cmd-right", "\x05"),
+            send("cmd-backspace", "\x15"),
+            // Escape and `b`, back a word, and Escape and `f`, on a word.
+            send("alt-left", "\x1bb"),
+            send("alt-right", "\x1bf"),
+        ]);
+    } else {
         cx.bind_keys([KeyBinding::new("ctrl-c", NoAction, Some(KEY_CONTEXT))]);
     }
 }
+
+/// Sends its text to the program as it is, whatever modes the program set, for a key bound to it.
+#[derive(Clone, PartialEq, Debug, gpui_kit::Action)]
+#[action(namespace = terminal, no_json)]
+struct SendText(&'static str);
 
 /// The context a terminal's keys are bound in, which the app leaves some of its own shortcuts out of.
 pub const KEY_CONTEXT: &str = "Terminal";
@@ -114,6 +133,10 @@ impl TerminalView {
         let Some(press) = key_press(event, self.os) else { return };
         self.open.key(press);
         cx.stop_propagation();
+    }
+
+    fn send_text(&mut self, text: &SendText, _: &mut Window, _: &mut Context<Self>) {
+        self.open.send_text(text.0.to_owned());
     }
 
     fn paste(&mut self, _: &Paste, _: &mut Window, cx: &mut Context<Self>) {
@@ -224,6 +247,7 @@ impl Render for TerminalView {
             .overflow_hidden()
             .on_key_down(cx.listener(Self::key_down))
             .on_action(cx.listener(Self::paste))
+            .on_action(cx.listener(Self::send_text))
             .on_action(cx.listener(Self::copy))
             .on_action(cx.listener(Self::select_all))
             .on_scroll(cx.listener(Self::scroll_wheel))
