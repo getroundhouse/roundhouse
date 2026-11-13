@@ -25,6 +25,7 @@ mod file_chats;
 mod finding;
 mod frame;
 mod headless;
+mod home_screens;
 mod icon;
 mod image_chats;
 mod image_files;
@@ -150,6 +151,7 @@ fn screens() -> impl Iterator<Item = &'static steps::Screen> {
         .chain(turn_screens::SCREENS)
         .chain(call_screens::SCREENS)
         .chain(sidebar_screens::SCREENS)
+        .chain(home_screens::SCREENS)
 }
 
 /// What's wrong with a picture: its spec doesn't show it, it keeps changing, or it isn't as approved. With
