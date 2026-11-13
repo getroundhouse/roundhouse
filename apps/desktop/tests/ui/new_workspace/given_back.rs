@@ -45,6 +45,31 @@ fn a_workspace_that_cant_be_made_gives_the_prompt_back_to_the_dialog(cx: &mut Te
     assert!(ui.dialog_planning(), "plan mode comes back with the prompt");
 }
 
+/// The hub gives the new chat the prompt only whole. Here it has lost a file's bytes, so it can't copy it, and the
+/// prompt stays in the dialog, which opens again to show it with the file, though the workspace was made.
+#[gpui_kit::test]
+fn a_prompt_the_hub_couldnt_give_the_new_chat_whole_goes_back_to_the_dialog(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = open_with_a_repo(cx, &stack);
+    ui.open_new_workspace();
+    ui.input("say:with notes");
+    ui.paste(copied(&stack, 1));
+    ui.wait("the file to be attached", |ui| ui.dialog_attached().len() == 1);
+    ui.view().drafts().unwrap().flushed().recv().unwrap();
+    for kept in std::fs::read_dir(stack.hub.paths.attachments_dir.join("workspace-draft.files")).unwrap() {
+        std::fs::remove_file(kept.unwrap().path()).unwrap();
+    }
+    let before = ui.view().records().workspaces().len();
+
+    ui.press("enter");
+
+    ui.wait_for_a_new_workspace(before);
+    ui.wait("the dialog again", |ui| ui.has_dialog() && ui.dialog_text() == "say:with notes");
+    assert!(ui.view().error.clone().unwrap().contains("couldn't send that"));
+    assert_eq!(ui.dialog_attached(), ["file-0.txt"]);
+    assert_eq!(ui.composer_text(), "", "nothing went to the new chat's composer");
+}
+
 /// The dialog can only hold as many files as a prompt carries, so of those given back and those attached since, the
 /// last don't fit, and it says so.
 #[gpui_kit::test]

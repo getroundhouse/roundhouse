@@ -61,8 +61,10 @@ pub struct Request {
 }
 
 impl Request {
-    /// A request that's not from the dialog, which asks the hub to make what it says, with the model and effort it
-    /// names, or with `None`, what the agent starts a chat with.
+    /// A request that's not from the dialog, such as a test's, which asks the hub to make what it says, with the model
+    /// and effort it names, or with `None`, what the agent starts a chat with. The hub refuses any file it carries,
+    /// since only the dialog gives the hub its files.
+    #[cfg(feature = "testing")]
     pub fn new(
         repo: RepoId,
         prompt: Prompt<FileToSend>,

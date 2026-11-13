@@ -4,7 +4,8 @@
 
 use client_core::{Client, ClientError, FileToSend, Written};
 use protocol::attachment::Attachment;
-use protocol::client::new_workspace::NewWorkspaceMade;
+use protocol::client::ApiError;
+use protocol::client::new_workspace::{NewWorkspaceMade, UnsentPrompt};
 use protocol::model::{NewWorkspaceDraftToKeep, PermissionMode, Session, SessionSettingsChange, Workspace};
 use protocol::prompt::Prompt;
 
@@ -39,13 +40,16 @@ pub(super) struct GivenBack {
     pub(super) prompt: Prompt<FileToSend>,
     /// Files the hub keeps for the dialog that weren't read back, which only the dialog can put back.
     pub(super) coming_back: Vec<Attachment>,
+    /// Whether the hub still keeps it as what's in the dialog, as one it couldn't give the new chat whole, so it goes
+    /// back there, as one is when nothing was made, rather than to the new chat's composer.
+    pub(super) in_the_dialog: bool,
 }
 
 impl Unsent {
     /// All of `request`, given back, since `failed` failed before anything was sent.
     fn of(request: Request, failed: Step, error: ClientError) -> Self {
         let Request { prompt, coming_back, permission_mode, .. } = request;
-        let given_back = Some(GivenBack { prompt, coming_back });
+        let given_back = Some(GivenBack { prompt, coming_back, in_the_dialog: false });
         Self { given_back, permission_mode, failed, error }
     }
 }
@@ -59,6 +63,8 @@ pub(super) enum Step {
     /// doesn't start on it with full access.
     Model,
     Prompt,
+    /// Hearing back from the hub, which may have made it.
+    Answer,
 }
 
 impl Step {
@@ -69,6 +75,7 @@ impl Step {
             Step::Chat => format!("couldn't start the workspace's chat: {e}"),
             Step::Model => format!("couldn't give the chat the model, effort and mode chosen: {e}"),
             Step::Prompt => format!("couldn't send that: {e}"),
+            Step::Answer => format!("couldn't tell whether the workspace was made: {e}"),
         }
     }
 }
@@ -81,26 +88,44 @@ pub(super) fn make(client: &Client, request: Request) -> Made {
         let _ = kept.recv();
     }
     match client.new_workspace_create(&request.made_of, client_core::new_request_id()) {
-        Ok(NewWorkspaceMade { workspace, session, unsent }) => {
-            let unsent = unsent.map(|e| {
-                // The chat has what was chosen, unless giving it that is what failed.
-                let failed = if as_chosen(&session, &request) { Step::Prompt } else { Step::Model };
-                // A new chat's composer holds only what the hub put there. If it couldn't, the prompt is put back
-                // here, without the files the dialog hadn't read back, which only the hub has.
-                let put_there = !session.draft.is_empty() || !request.has_prompt();
-                let mut unsent = Unsent::of(request, failed, ClientError::Api(e));
-                if put_there {
-                    unsent.given_back = None;
-                }
-                unsent
-            });
+        Ok(NewWorkspaceMade { workspace, session, unchosen, unsent }) => {
+            let unsent = unsent_by_the_hub(request, unchosen, unsent);
             Made { workspace: Some(workspace), session: Some(session), unsent, dialog_to_empty: None }
         }
         Err(e) if e.is_unsupported() => step_by_step(client, request),
         Err(error) => {
-            let unsent = Some(Unsent::of(request, Step::Workspace, error));
+            // A refusal comes before anything is made. Anything else, such as the connection going, may have come
+            // after.
+            let failed = if matches!(error, ClientError::Api(_)) { Step::Workspace } else { Step::Answer };
+            let unsent = Some(Unsent::of(request, failed, error));
             Made { workspace: None, session: None, unsent, dialog_to_empty: None }
         }
+    }
+}
+
+/// What the hub says it didn't do with the prompt of a workspace it made. One in the new chat's composer is there
+/// already. One the hub couldn't give the chat whole is still in the dialog, which is where it goes back, with the
+/// files the dialog hadn't read back. A chat that couldn't be given what was chosen is said to have failed at that.
+fn unsent_by_the_hub(request: Request, unchosen: Option<ApiError>, unsent: Option<UnsentPrompt>) -> Option<Unsent> {
+    let failed = if unchosen.is_some() { Step::Model } else { Step::Prompt };
+    let permission_mode = request.permission_mode;
+    match (unsent, unchosen) {
+        (Some(UnsentPrompt { error, in_composer: false }), unchosen) => {
+            let mut unsent = Unsent::of(request, failed, ClientError::Api(unchosen.unwrap_or(error)));
+            if let Some(given_back) = &mut unsent.given_back {
+                given_back.in_the_dialog = true;
+            }
+            Some(unsent)
+        }
+        (Some(UnsentPrompt { error, in_composer: true }), unchosen) => {
+            let error = ClientError::Api(unchosen.unwrap_or(error));
+            Some(Unsent { given_back: None, permission_mode, failed, error })
+        }
+        // Nothing was typed, so there's nothing to give back, but the chat still isn't as chosen.
+        (None, Some(unchosen)) => {
+            Some(Unsent { given_back: None, permission_mode, failed, error: ClientError::Api(unchosen) })
+        }
+        (None, None) => None,
     }
 }
 

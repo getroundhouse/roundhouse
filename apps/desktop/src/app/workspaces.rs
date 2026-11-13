@@ -126,7 +126,8 @@ impl AppView {
                     // Making it stopped partway, so it may have been made.
                     Err(e) => {
                         t.show_error(format!("couldn't tell whether the workspace was made: {e}"), cx);
-                        let given_back = made::GivenBack { prompt: Prompt::new(typed), coming_back };
+                        let (prompt, in_the_dialog) = (Prompt::new(typed), false);
+                        let given_back = made::GivenBack { prompt, coming_back, in_the_dialog };
                         t.give_back_to_dialog(given_back, permission_mode, cx);
                     }
                 }
@@ -166,7 +167,9 @@ impl AppView {
         let Some(unsent) = unsent else { return };
         self.show_error(unsent.failed.failed(&unsent.error), cx);
         let made::Unsent { given_back, permission_mode, .. } = unsent;
-        let Some(id) = made_id else {
+        // To the dialog if nothing was made, or if the hub still keeps it there.
+        let in_the_dialog = given_back.as_ref().is_some_and(|given_back| given_back.in_the_dialog);
+        let (Some(id), false) = (made_id, in_the_dialog) else {
             if let Some(given_back) = given_back {
                 self.give_back_to_dialog(given_back, permission_mode, cx);
             }

@@ -110,7 +110,7 @@ impl AppView {
     pub(super) fn give_back_to_dialog(&mut self, given_back: GivenBack, mode: PermissionMode, cx: &mut Context<Self>) {
         let Some(dialog) = self.new_workspace.clone() else { return };
         let this = cx.weak_entity();
-        let GivenBack { prompt, coming_back } = given_back;
+        let GivenBack { prompt, coming_back, .. } = given_back;
         let _ = self.window.update(cx, |_, window, cx| {
             dialog.update(cx, |dialog, cx| dialog.give_back(prompt, coming_back, mode, window, cx));
             if !window.has_active_dialog(cx) {

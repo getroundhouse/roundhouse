@@ -141,43 +141,63 @@ fn a_file_the_hub_kept_that_cant_be_read_back_gives_all_of_it_back_before_anythi
     assert_eq!(given_back.coming_back, [on_the_hub()]);
 }
 
-/// A hub that makes it, and couldn't send the prompt, which it put in the chat's composer if `put_there`, and whose
-/// chat has what was chosen unless `unchosen`.
-fn made_by_the_hub(put_there: bool, unchosen: bool) -> Made {
+/// A hub that makes it, and couldn't send the prompt, which it put in the chat's composer if `in_composer`, and whose
+/// chat couldn't be given what was chosen if `unchosen`.
+fn made_by_the_hub(in_composer: bool, unchosen: bool) -> Made {
     let dir = tempfile::tempdir().unwrap();
     let (client, _) = hub_that_says(&dir, move |request| {
         let ClientRequest::NewWorkspaceCreate(_) = request else { return None };
         let mut session = fixtures::session("s");
-        if put_there {
+        if in_composer {
             session.draft = Draft { text: "say:hi".to_string(), files: vec![on_the_hub()] };
         }
-        if unchosen {
-            session.permission_mode = PermissionMode::Plan;
-        }
-        let unsent = Some(ApiError::new(ErrorCode::Internal, "it went wrong"));
-        let made = NewWorkspaceMade { workspace: fixtures::workspace("w"), session, unsent };
+        let unchosen = unchosen.then(|| ApiError::new(ErrorCode::InvalidRequest, "not that effort"));
+        let unsent = Some(UnsentPrompt { error: ApiError::new(ErrorCode::Internal, "it went wrong"), in_composer });
+        let made = NewWorkspaceMade { workspace: fixtures::workspace("w"), session, unchosen, unsent };
         Some(ReplyOutcome::Response(ClientResponse::NewWorkspaceMade(Box::new(made))))
     });
     make(&client, request())
 }
 
+/// One the hub couldn't give the chat whole is still in the dialog, where it goes back, with the file the dialog hadn't
+/// read back.
 #[test]
-fn a_prompt_the_hub_made_it_with_and_couldnt_send_is_given_back_only_if_it_couldnt_put_it_in_the_composer() {
+fn a_prompt_the_hub_made_it_with_and_couldnt_send_is_given_back_to_the_dialog_unless_its_in_the_composer() {
     let in_composer = made_by_the_hub(true, false).unsent.expect("it wasn't sent");
     assert!(in_composer.given_back.is_none(), "the composer has it");
     assert_eq!(in_composer.failed, Step::Prompt);
 
-    let nowhere = made_by_the_hub(false, false).unsent.expect("it wasn't sent");
-    let given_back = nowhere.given_back.expect("it's given back");
+    let in_the_dialog = made_by_the_hub(false, false).unsent.expect("it wasn't sent");
+    let given_back = in_the_dialog.given_back.expect("it's given back");
+    assert!(given_back.in_the_dialog);
     assert_eq!(given_back.prompt.text, "say:hi");
     assert_eq!(given_back.prompt.files.len(), 1, "the file the dialog had");
+    assert_eq!(given_back.coming_back, [on_the_hub()]);
 }
 
 /// Its chat couldn't be given the model, effort and mode chosen, which is what the hub says went wrong.
 #[test]
 fn a_chat_the_hub_couldnt_give_what_was_chosen_says_so() {
     let unchosen = made_by_the_hub(true, true).unsent.expect("it wasn't sent");
+
     assert_eq!(unchosen.failed, Step::Model);
+    assert!(unchosen.error.to_string().contains("not that effort"), "{}", unchosen.error);
+}
+
+/// The hub may have made it before the connection went, so it's not said to have been refused.
+#[test]
+fn a_hub_that_goes_away_while_making_it_isnt_taken_for_one_that_refused() {
+    let dir = tempfile::tempdir().unwrap();
+    let client = stand_in_hub::connect(&dir.path().join("hub.sock"), |request| match request {
+        ClientRequest::NewWorkspaceCreate(_) => Does::HangsUp,
+        _ => Does::Nothing,
+    });
+
+    let made = make(&client, request());
+
+    let unsent = made.unsent.expect("it's given back");
+    assert_eq!(unsent.failed, Step::Answer);
+    assert!(unsent.given_back.is_some_and(|given_back| given_back.prompt.text == "say:hi"));
 }
 
 /// So the hub makes it from what was asked for, and has the files the dialog was given, not from what it kept before.
