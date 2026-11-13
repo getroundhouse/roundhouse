@@ -56,7 +56,7 @@
 
   ![A thought being written](screens/thinking-streaming.png)
 
-- **A finished turn ends with how long it took and when it ended,** such as "1m, 48s · 2:15 PM", and a button that copies the agent's final message. It says only as much of the day as it takes to tell when: none today, the day of the week within the last week, and the date before that. A stopped turn says "Stopped" instead, and one that failed says why, in red.
+- **A finished turn ends with how long it took and when it ended,** such as "1m, 48s · 2:15 PM", and a button that copies the agent's final message. It says only as much of the day as it takes to tell when: none today, the day of the week within the last week, and the date before that. A stopped turn says "Stopped" instead, and one that failed says why, in red, but for one that ended on a failed request to the model, whose card says why.
 
   **A finished turn,** with tools, a list and code, and a pull request open for the branch. *Unconfirmed.*
 
@@ -77,6 +77,14 @@
 
   ![A card across midnight](screens/turn-card-midnight.png)
 
+- **When one of the agent's requests to its model fails, a red card says so where it failed,** since that's where the agent stopped short, as an approval's card is amber since it waits on you. It's titled with what kind of failure it was, as the agent's CLI says apart from its words, which can change, such as `Usage limit reached`, `Couldn't sign in` or `The model's API is overloaded`. For a limit it says when the limit resets, as `Resets Thu 9:00 PM`, said as a turn's end says a time. Under that are the CLI's own words, which say what to do, with an address in them a link. A turn that ended on the card has no line of its own, since the card says why. A subagent's is in its tab, since the agent goes on without it.
+
+  **A turn that failed on the account's usage limit, after the CLI said its model was changed.**
+
+  ![A request that failed, with Retry](screens/request-failed.png)
+
+- **The card the newest turn ended on has Retry, while the agent is stopped short on it and until something is sent,** which asks the agent to carry on, as the prompt `Continue`, with the model the chat runs now, so choosing another model and pressing Retry gets past a model's limit. The agent already has what it was asked, and what it did before the failure, so the prompt isn't sent again, which would ask it twice. Every kind of failure has it, even one that Retry can't get past, such as a failed sign-in, since that's rare. Retry goes as soon as it's pressed, or anything else is sent, and an older card, or one the turn went on past, has none. If the hub refuses it, the chat says so, and the composer is left as it was, since nobody typed `Continue`.
+- **What the agent's CLI says itself, rather than the agent, is a line of its own,** muted, or amber for what a command it ran printed as an error, such as `Set model to opus (claude-opus-5-5)` when the model is changed, or a note of the CLI's, so it isn't taken for the agent's words.
 - **An image a reply points to shows in the reply, if it's in the workspace,** written as Markdown, such as `![The board after](docs/screens/board-after.png)`, by its path in full or from the workspace. One written into the reply as a `data:` address shows too. On a line of its own, it's as wide as it is, up to the column's, and among words it's the height of the text. Images with nothing but spaces or line breaks between them, such as a before and an after on lines one after another, are each on a line of their own, one under another, and so are images written that way in a prompt. It's the file as it was when the reply came, which the hub keeps, so when the agent changes the file and points to it again, each reply keeps what it showed, and every client shows the same, even after the workspace is archived. One that wasn't there when the reply came shows nothing, and so does one in a reply from before the hub kept them. One anywhere else on the machine or on the web shows nothing, since what the agent writes can't be trusted to point only where it should, and neither does anything in the workspace that isn't an image. *Unconfirmed.*
 
   **A reply that points to a screenshot in the workspace.** *Unconfirmed.*
@@ -349,7 +357,7 @@ Every call is drawn the same way, as `look.md` says, and each kind fills in what
 - **A queued prompt's buttons show only while the pointer is over it,** which lights its row, so it's clear which prompt they're for.
 - **The arrow on a queued prompt steers the agent with it,** as Enter does, rather than leaving it to wait its turn.
 - **The queue belongs to the hub, not the app,** so it's still sent with the app closed, and every client shows the same queue. *Unconfirmed.*
-- **Stopping the agent holds the queue, and so does the agent going away mid-turn,** since then it's for the person to say whether to go on. The queue says it's waiting, and the arrow on a prompt sends it as a turn of its own, after which the rest follow. Sending any prompt lets the queue go on, once that turn ends. The hold is on the session's record, so it lasts through a hub restart. *Unconfirmed.*
+- **Stopping the agent holds the queue, and so does the agent going away mid-turn or failing its turn,** since then it's for the person to say whether to go on, and a prompt sent after a failure, such as a usage limit, could fail as the turn did. The queue says it's waiting, and the arrow on a prompt sends it as a turn of its own, after which the rest follow. Sending any prompt lets the queue go on, once that turn ends. The hold is on the session's record, so it lasts through a hub restart. *Unconfirmed.*
 
   **The queue held after a stop, the last prompt with two files.** *Unconfirmed.*
 

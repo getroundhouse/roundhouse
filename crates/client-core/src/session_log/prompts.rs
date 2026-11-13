@@ -143,6 +143,13 @@ impl SessionLog {
         waiting
     }
 
+    /// Whether something the person sent is still waiting for the agent: a prompt on its way to the hub, as
+    /// [`SessionLog::pending`] has them, or one recorded and not yet taken, which [`SessionLog::prompt_at`] puts at the
+    /// end of the chat, whether or not it's loaded.
+    pub fn has_prompts_waiting(&self) -> bool {
+        !self.pending.is_empty() || !self.at_the_end().is_empty()
+    }
+
     /// Where each prompt was last settled, for a log of a stretch of this chat.
     pub fn settled_prompts(&self) -> Settled {
         self.settled.clone()

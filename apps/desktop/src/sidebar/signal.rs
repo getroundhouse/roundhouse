@@ -22,14 +22,18 @@ pub(crate) fn workspace(chats: &[Session]) -> Signal {
 /// A chat's mark. The light sweeps only for the agent's own work: a turn, or a subagent it left going
 /// when its turn ended. Anything else left going might end by itself, as a test run does, or be held open, as an app
 /// is, and the agent doesn't say which. So that gets a quieter light, which claims only that something is running.
+/// An agent that stopped short, by going away mid-turn or failing its turn, needs the person more than anything it
+/// left going does.
 pub(crate) fn chat(session: &Session) -> Signal {
     match session.status {
         SessionStatus::Running => Signal::Working,
+        SessionStatus::Interrupted => Signal::Failed,
+        // Its turn failed, whatever it left going.
+        SessionStatus::Idle | SessionStatus::Background if session.turn_failed() => Signal::Failed,
         SessionStatus::Background if session.background_tasks.iter().any(|task| task.kind == TaskKind::Subagent) => {
             Signal::Working
         }
         SessionStatus::Background => Signal::Background,
-        SessionStatus::Interrupted => Signal::Failed,
         // Waiting on an answer or an approval, the agent holds still, and the chat's name says it needs a look.
         SessionStatus::WaitingApproval | SessionStatus::Idle | SessionStatus::Unknown => Signal::Idle,
     }
@@ -44,7 +48,7 @@ pub(crate) fn waiting_on_you<'a>(chats: impl IntoIterator<Item = &'a Session>) -
 #[cfg(test)]
 mod tests {
     use look::Signal;
-    use protocol::event::{AgentTask, TaskKind};
+    use protocol::event::{AgentTask, TaskKind, TurnOutcome};
     use protocol::model::{Session, SessionStatus};
 
     use super::{chat, waiting_on_you, workspace};
@@ -72,6 +76,21 @@ mod tests {
         assert_eq!(workspace(&chats), Signal::Working);
         let chats = [session(Interrupted), left_running(&[TaskKind::Subagent]), session(Idle)];
         assert_eq!(workspace(&chats), Signal::Working);
+    }
+
+    #[test]
+    fn a_turn_that_failed_stops_the_chat_short_over_what_it_left_going_until_a_turn_starts() {
+        let failed = |chat: Session| Session { reply_outcome: Some(TurnOutcome::Error), ..chat };
+
+        assert_eq!(chat(&failed(session(SessionStatus::Idle))), Signal::Failed);
+        assert_eq!(chat(&failed(left_running(&[TaskKind::Subagent]))), Signal::Failed);
+        assert_eq!(chat(&failed(session(SessionStatus::Running))), Signal::Working, "a turn started since");
+        let stopped = Session { reply_outcome: Some(TurnOutcome::Cancelled), ..session(SessionStatus::Idle) };
+        assert_eq!(chat(&stopped), Signal::Idle, "the person stopped it");
+        assert_eq!(
+            workspace(&[left_running(&[TaskKind::Command]), failed(session(SessionStatus::Idle))]),
+            Signal::Failed
+        );
     }
 
     #[test]

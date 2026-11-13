@@ -12,6 +12,10 @@ claude
 
 If it asks you to log in, do, then send the prompt again. A chat whose agent stopped short picks up its conversation at its next prompt.
 
+## An agent reached its usage limit
+
+The chat ends on a card saying `Usage limit reached`, and when the limit resets. Choose another model in the composer, then click `Retry`, or wait until it resets. The words under it, which are the CLI's, say where to manage your usage.
+
 ## The pull request's bar only offers Create PR
 
 Pull requests are read with GitHub's CLI. Check that:

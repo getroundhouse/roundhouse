@@ -274,3 +274,17 @@ fn a_page_that_brings_a_prompt_or_where_it_was_taken_changes_the_other_row_too()
     assert_eq!(log.take_changes().rows, Some(0..252), "the page, and the row that took the prompt in it");
     assert_eq!(log.prompt_at(250), PromptAt::Settled(251));
 }
+
+#[test]
+fn a_prompt_waits_for_the_agent_from_when_its_sent_until_its_taken() {
+    let mut log = log(vec![prompt(), taken(1)]);
+    assert!(!log.has_prompts_waiting(), "taken");
+
+    log.add_pending(protocol::model::QueuedPrompt { client_msg_id: "m".into(), prompt: Prompt::new("steer") });
+    assert!(log.has_prompts_waiting(), "on its way");
+    log.apply_event(event(3, EventBody::UserPrompt { client_msg_id: Some("m".into()), prompt: Prompt::new("steer") }));
+    assert!(log.has_prompts_waiting(), "recorded");
+    log.apply_event(event(4, taken(3)));
+
+    assert!(!log.has_prompts_waiting());
+}

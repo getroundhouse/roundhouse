@@ -34,6 +34,9 @@ pub(crate) struct AtWork {
     pub(crate) wait: Option<Wait>,
     /// The event that ended the newest turn, whose line and card say how long the cache has left. 0 until one has.
     pub(crate) reply_seq: Seq,
+    /// Whether that turn failed and no turn has started since, so the agent is stopped short on it, and the request it
+    /// failed on can be tried again.
+    pub(crate) failed: bool,
     /// What the cache holds of the conversation while it can expire, once the newest turn has ended. While the agent
     /// waits on the person mid-turn, the newest turn's line is an earlier turn's, and says nothing of it.
     pub(crate) cache: Option<IdleCache>,
@@ -55,6 +58,7 @@ impl AtWork {
             background: session.background_tasks.clone(),
             wait: session.wait.clone(),
             reply_seq: session.reply_seq,
+            failed: session.turn_failed(),
             cache: session.idle_cache().filter(|_| !session.status.in_turn()).map(|cache| IdleCache {
                 cache: cache.clone(),
                 worth_telling: session.cache_worth_telling().is_some(),
@@ -70,6 +74,7 @@ impl AtWork {
             background: Vec::new(),
             wait: None,
             reply_seq: 0,
+            failed: false,
             cache: None,
         }
     }
@@ -108,6 +113,7 @@ impl Transcript {
         for reply in replies {
             self.redraw_reply(reply);
         }
+        self.follow_retry();
         // The rest is drawn in the last row, with the streaming tail.
         self.redraw_end();
         cx.notify();
@@ -122,6 +128,22 @@ impl Transcript {
     /// Draws the end of the turn `reply` again, for what it says of the cache. Not loaded, so not drawn either.
     fn redraw_reply(&self, reply: Seq) {
         if let Some(row) = self.session.read(|log| log.row_of(reply)) {
+            self.list.out_of_date(row..row + 1);
+        }
+    }
+
+    /// Works out again which failed request's card offers Retry, and measures again the card that gains it and the one
+    /// that loses it, since Retry makes a card taller. The record, the events and what's sent each change it, and the
+    /// first two arrive apart in either order, so it's followed as each changes rather than as a card is drawn.
+    pub(super) fn follow_retry(&self) {
+        let now = self.session.read(|log| crate::rows::retry_at(log, &self.model.borrow().at_work));
+        let before = std::mem::replace(&mut self.model.borrow_mut().retry_at, now);
+        if before == now {
+            return;
+        }
+        let rows: Vec<usize> =
+            self.session.read(|log| [before, now].into_iter().flatten().filter_map(|seq| log.row_of(seq)).collect());
+        for row in rows {
             self.list.out_of_date(row..row + 1);
         }
     }

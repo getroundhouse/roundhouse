@@ -9,13 +9,14 @@ use protocol::model::{
 };
 use serde_json::json;
 
-use super::{Answer, Around, Reply, Settled, block_key};
+use super::{Answer, Around, Reply, Settled, block_key, retry_at};
 use crate::fixtures::{
-    asked, asking, calls, calls_to, closed, closed_by_position, event, from_the_agent, log, record, result, within,
+    asked, asking, calls, calls_to, closed, closed_by_position, event, failed_request, from_the_agent, log, prompt,
+    record, result, turn_ended, within,
 };
 use crate::folds::Fold;
 use crate::item_key::ItemKey;
-use crate::transcript::Model;
+use crate::transcript::{AtWork, Model};
 
 #[test]
 fn a_recorded_block_is_known_by_its_place_in_its_message() {
@@ -234,4 +235,30 @@ fn a_failed_result_says_how_its_command_exited_however_it_was_recorded() {
         let failure = reply.result().and_then(Answer::failure).unwrap();
         assert_eq!((failure.label().as_str(), failure.output), ("Exit 2", "no rule to make it"));
     }
+}
+
+/// Retry asks the agent to carry on from the turn it stopped short on, so only the card that turn ended on has it, and
+/// only while the agent is still stopped there.
+#[test]
+fn only_the_card_the_newest_turn_ended_on_offers_retry_until_something_is_sent() {
+    let taken = |prompt| EventBody::PromptTaken { prompt };
+    let turns = [
+        event(1, prompt("Fix it")),
+        event(2, taken(1)),
+        event(3, failed_request(None)),
+        event(4, turn_ended()),
+        event(5, prompt("Continue")),
+        event(6, taken(5)),
+        event(7, failed_request(None)),
+        event(8, turn_ended()),
+    ];
+    let twice = log(turns.clone());
+    let mut at_work = AtWork { reply_seq: 8, ..AtWork::default() };
+    assert_eq!(retry_at(&twice, &at_work), None, "the record doesn't say the turn failed");
+
+    at_work.failed = true;
+
+    assert_eq!(retry_at(&twice, &at_work), Some(7), "not the older turn's");
+    let sent = log(turns.into_iter().chain([event(9, prompt("Try Sonnet"))]));
+    assert_eq!(retry_at(&sent, &at_work), None, "something has been sent since");
 }

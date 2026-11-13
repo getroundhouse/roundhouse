@@ -61,6 +61,8 @@ pub(crate) enum Part {
     FoundLines(u32),
     /// What went wrong in a turn that failed.
     TurnError,
+    /// Why a request to the model failed, in the agent's CLI's words.
+    FailedRequest,
     /// What the agent last printed before it stopped unexpectedly.
     Exit,
 }
@@ -102,6 +104,7 @@ impl Part {
             Part::FoundPath(n) => return Cow::Owned(format!("found-path-{n}")),
             Part::FoundLines(n) => return Cow::Owned(format!("found-lines-{n}")),
             Part::TurnError => "turn-error",
+            Part::FailedRequest => "failed-request",
             Part::Exit => "exit",
         })
     }

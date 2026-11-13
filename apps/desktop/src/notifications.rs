@@ -4,7 +4,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use protocol::model::{Seq, Session, SessionId, SessionStatus, Title, WorkspaceId};
+use protocol::model::{Seq, Session, SessionId, Title, WorkspaceId};
 
 use crate::sidebar::signal::waiting_on_you;
 
@@ -63,11 +63,7 @@ struct Seen {
 
 impl Seen {
     fn of(session: &Session) -> Self {
-        Self {
-            reply: session.reply_seq,
-            waiting: waiting_on_you([session]),
-            stopped: session.status == SessionStatus::Interrupted,
-        }
+        Self { reply: session.reply_seq, waiting: waiting_on_you([session]), stopped: session.stopped_short() }
     }
 }
 
@@ -114,7 +110,8 @@ fn came_to_need(before: Seen, session: &Session) -> Option<Why> {
     let now = Seen::of(session);
     if now.waiting && !before.waiting {
         Some(Why::WaitingOnYou)
-    } else if now.stopped && !before.stopped {
+    } else if now.stopped && (!before.stopped || now.reply > before.reply) {
+        // A turn that failed again, after one that failed before it, which a look between them didn't see start.
         Some(Why::StoppedShort)
     } else if now.reply > before.reply && session.unread() {
         Some(Why::Finished)

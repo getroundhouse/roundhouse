@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use gpui_kit::PlatformTextSystem;
-use protocol::event::{EventBody, ExitReason, NoticeLevel, TurnOutcome};
+use protocol::event::{EventBody, ExitReason, FailureKind, NoticeLevel, RequestFailure, TurnOutcome};
 use protocol::model::SessionStatus;
 
 use super::world::World;
@@ -56,7 +56,8 @@ fn every_kind_of_call() -> World {
     chat_world(SessionStatus::Idle, chats.concat())
 }
 
-/// A notice, a turn that failed, and the agent stopping unexpectedly, each saying what went wrong.
+/// A notice, a request that failed, a turn that failed, and the agent stopping unexpectedly, each saying what went
+/// wrong.
 fn what_went_wrong() -> Vec<EventBody> {
     let failed = EventBody::TurnEnded {
         outcome: TurnOutcome::Error,
@@ -82,5 +83,10 @@ fn what_went_wrong() -> Vec<EventBody> {
         message: "The agent's CLI is 2 versions behind".into(),
         parent_tool_use_id: None,
     };
-    vec![notice, failed, stopped]
+    let limit = RequestFailure {
+        message: super::failure_chats::LIMIT_REACHED.into(),
+        kind: FailureKind::Limit,
+        resets_at_ms: None,
+    };
+    vec![notice, EventBody::RequestFailed { parent_tool_use_id: None, failure: limit }, failed, stopped]
 }
