@@ -347,10 +347,10 @@ async fn handle(
             configure_agent(state, &session_id, &options).await
         }
         WorkerRequest::AgentStop(AgentStop { session_id }) => stop_agent(state, &session_id).await,
-        WorkerRequest::TitleFor(TitleFor { agent, prompt, images, login: _ }) => {
-            title_for(state, agent, &Prompt::carrying(prompt, images)).await
+        WorkerRequest::TitleFor(TitleFor { agent, prompt, images, login }) => {
+            title_for(state, agent, &Prompt::carrying(prompt, images), login).await
         }
-        WorkerRequest::AccountFor(AccountFor { agent, login: _ }) => account_for(state, agent).await,
+        WorkerRequest::AccountFor(AccountFor { agent, login }) => account_for(state, agent, login).await,
         WorkerRequest::ServeTools(ServeTools { port }) => {
             Ok(WorkerResponse::ToolsServing(ToolsServing { port: state.tools.serve(port).await? }))
         }

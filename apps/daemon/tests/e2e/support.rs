@@ -103,6 +103,8 @@ impl Stack {
         for name in GH_LOGINS {
             command.env_remove(name);
         }
+        // So the fake agent says who's logged in, not that it has the token of whoever runs the tests.
+        command.env_remove("CLAUDE_CODE_OAUTH_TOKEN");
         command
     }
 

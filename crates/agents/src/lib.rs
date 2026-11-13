@@ -14,8 +14,8 @@ use async_trait::async_trait;
 use protocol::attachment::{AttachmentFile, NewAttachment};
 use protocol::event::{ApprovalDecision, EventBody};
 use protocol::model::{
-    AgentAccount, AgentDescription, AgentKind, ApprovalId, CacheRequest, ContextUsage, Seq, SessionSettingsChange,
-    Title, UsageLimit,
+    AgentAccount, AgentDescription, AgentKind, AgentLogin, ApprovalId, CacheRequest, ContextUsage, Seq,
+    SessionSettingsChange, Title, UsageLimit,
 };
 use protocol::prompt::Prompt;
 use protocol::tail::StreamDelta;
@@ -89,6 +89,9 @@ pub struct AgentOptions {
     /// What the agent is told about working in Roundhouse, added to its system prompt at every launch. `None` for a
     /// one-off call, which has a system prompt of its own.
     pub instructions: Option<String>,
+    /// The login its hub holds for the account to run under, which the CLI is given for as long as it runs and nothing
+    /// keeps afterwards. `None` runs it under this machine's own login.
+    pub login: Option<AgentLogin>,
 }
 
 /// Where an agent reaches the worker's tools, over MCP.
@@ -145,7 +148,8 @@ pub async fn spawn(
     }
 }
 
-/// The account `kind`'s CLI is logged in to on this machine, from a one-off call that runs in `scratch_dir`.
+/// The account `kind`'s CLI runs under here, with `options.login` or with this machine's own, from a one-off call
+/// that runs in `scratch_dir`.
 pub async fn account(kind: AgentKind, options: &AgentOptions, scratch_dir: &Path) -> Result<AgentAccount, AgentError> {
     match kind {
         AgentKind::Claude => claude::account(options, scratch_dir).await,

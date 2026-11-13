@@ -61,8 +61,9 @@
 //! `--session-id` fails if there is, as with the real CLI.
 //!
 //! With `--no-session-persistence`, it's the one-off call that titles a prompt instead. See `title.rs`. And as
-//! `auth status --json`, it says who's logged in. Its first turn says what's left of the account's limits, as the
-//! real CLI's does, and `get_usage` says it whenever it's asked. See `account.rs`.
+//! `auth status --json`, it says who's logged in, or only that it has a token when it's given one. Its first turn says
+//! what's left of the account's limits, as the real CLI's does, and `get_usage` says it whenever it's asked. See
+//! `account.rs`.
 
 #![expect(
     clippy::unwrap_used,

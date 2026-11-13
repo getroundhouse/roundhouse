@@ -1,5 +1,6 @@
 //! Whose account the CLI is logged in to, from `claude auth status --json`, which answers from what's on the machine
-//! and spends nothing. `docs/claude-cli.md` has what it says.
+//! and spends nothing. `docs/claude-cli.md` has what it says. Under a login its hub holds, it says only that there's a
+//! token, not whose, so the account has no ID here and its hub names it.
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -11,6 +12,9 @@ use super::one_off::{self, OneOff};
 use super::process::resolve_binary;
 use crate::{AgentError, AgentOptions, NoAccount};
 
+/// How the CLI says it's logged in with a token `claude setup-token` made.
+const TOKEN_LOGIN: &str = "oauth_token";
+
 /// It answers in about a tenth of a second, so one taking this long is stuck.
 const TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -20,18 +24,25 @@ pub async fn account(options: &AgentOptions, scratch_dir: &Path) -> Result<Agent
     let bin = resolve_binary(&options.binary).ok_or(AgentError::NotInstalled)?;
     let pid_file: Option<PathBuf> = options.pid_file.clone();
     let args = ["auth", "status", "--json"].map(String::from).to_vec();
-    let call = OneOff { bin: &bin, cwd: scratch_dir, args, stdin: b"", timeout: TIMEOUT, pid_file };
+    let login = options.login.as_ref();
+    let call = OneOff { bin: &bin, cwd: scratch_dir, args, stdin: b"", timeout: TIMEOUT, pid_file, login };
     let output = one_off::run(call).await?;
     // How it exited isn't looked at: what it printed says whether anyone is logged in.
-    Ok(account_from(&output.stdout)?)
+    Ok(account_from(&output.stdout, login.is_some())?)
 }
 
 /// What the CLI's status says, in words for a person. Anything it doesn't say is left out, as a plan is for a login
 /// with an API key. An answer that doesn't say whether anyone is logged in is no answer, rather than nobody.
-fn account_from(stdout: &[u8]) -> Result<AgentAccount, NoAccount> {
+///
+/// `under_a_login` says the CLI was given a login its hub holds. An answer that it's logged in some other way is
+/// refused then, since the CLI's own settings put something before the token, and the account isn't the hub's.
+fn account_from(stdout: &[u8], under_a_login: bool) -> Result<AgentAccount, NoAccount> {
     let status: Value = serde_json::from_slice(stdout).map_err(|_| NoAccount::Unreadable)?;
     let logged_in = status.get("loggedIn").and_then(Value::as_bool).ok_or(NoAccount::Unreadable)?;
     let said = |key: &str| status.get(key).and_then(Value::as_str).map(str::trim).filter(|said| !said.is_empty());
+    if let Some(method) = said("authMethod").filter(|method| under_a_login && *method != TOKEN_LOGIN) {
+        return Err(NoAccount::Outranked { under: method.to_string() });
+    }
     Ok(AgentAccount {
         id: logged_in.then(|| account_id(said("orgId"), said("email"))).flatten(),
         logged_in,
@@ -77,6 +88,7 @@ fn provider_name(provider: &str) -> String {
 fn login_name(method: &str) -> String {
     match method {
         "claude.ai" => "Claude account",
+        TOKEN_LOGIN => "Long-lived token",
         other => other,
     }
     .to_string()
@@ -95,7 +107,7 @@ mod tests {
     use super::*;
 
     fn read(status: &Value) -> AgentAccount {
-        account_from(status.to_string().as_bytes()).unwrap()
+        account_from(status.to_string().as_bytes(), false).unwrap()
     }
 
     fn subscription(organization: &str, email: &str) -> Value {
@@ -128,6 +140,33 @@ mod tests {
         assert_eq!(account.id, None, "a login that names nobody can't be told from another");
     }
 
+    /// What the CLI says under a token `claude setup-token` made, as `docs/claude-cli.md` records.
+    #[test]
+    fn a_token_login_is_logged_in_and_says_how_but_not_who() {
+        let status = json!({"loggedIn": true, "authMethod": "oauth_token", "apiProvider": "firstParty"});
+
+        let account = account_from(status.to_string().as_bytes(), true).unwrap();
+
+        assert!(account.logged_in);
+        assert_eq!(account.login.as_deref(), Some("Long-lived token"));
+        assert_eq!(account.model_provider.as_deref(), Some("Anthropic API"));
+        assert_eq!((account.id, account.email, account.plan), (None, None, None), "its hub names the account");
+    }
+
+    /// Such as a machine whose own settings set an API key, which the CLI puts before a token.
+    #[test]
+    fn a_cli_given_a_login_that_runs_under_something_else_says_so_rather_than_whose_that_is() {
+        let status = json!({"loggedIn": true, "authMethod": "api_key", "apiProvider": "firstParty"});
+
+        let under_a_login = account_from(status.to_string().as_bytes(), true);
+
+        assert!(
+            matches!(&under_a_login, Err(NoAccount::Outranked { under }) if under == "api_key"),
+            "{under_a_login:?}"
+        );
+        assert_eq!(read(&status).login.as_deref(), Some("api_key"), "with no login given, it's the machine's own");
+    }
+
     #[test]
     fn nobody_logged_in_is_no_account_however_else_it_answers() {
         let status = json!({"loggedIn": false, "authMethod": "none", "apiProvider": "firstParty", "orgId": "0000"});
@@ -141,7 +180,7 @@ mod tests {
     #[test]
     fn an_answer_that_doesnt_say_whether_anyone_is_logged_in_is_no_account() {
         for answer in ["not json", "null", "{}", r#"{"error":"keychain locked"}"#, r#"{"loggedIn":"yes"}"#] {
-            assert!(matches!(account_from(answer.as_bytes()), Err(NoAccount::Unreadable)), "{answer}");
+            assert!(matches!(account_from(answer.as_bytes(), false), Err(NoAccount::Unreadable)), "{answer}");
         }
     }
 
