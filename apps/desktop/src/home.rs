@@ -8,20 +8,19 @@ use std::rc::Rc;
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::{InputEvent, InputState};
-use gpui_kit::component::v_virtual_list;
-use gpui_kit::component::{ActiveTheme as _, Sizable as _, VirtualListScrollHandle, h_flex, v_flex};
+use gpui_kit::component::{ActiveTheme as _, Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, AppContext as _, Context, ElementId, Entity, FontWeight, InteractiveElement as _, IntoElement,
-    ParentElement, Pixels, StatefulInteractiveElement as _, Styled, Subscription, TestSupportExt as _, Window, div, px,
-    size,
+    ParentElement, Pixels, ScrollHandle, StatefulInteractiveElement as _, Styled, Subscription, TestSupportExt as _,
+    Window, div, px,
 };
 use look::{Hand as _, InRegion as _, LineText, Off as _, Placed, Region};
 use protocol::model::{RepoId, Workspace, WorkspaceId, WorkspaceStatus};
 
 use crate::app::AppView;
 use crate::prompt_cache;
-use crate::reorder::{self, Hold, Places};
+use crate::reorder::{self, Arrangement, Drawn, Hold, Places};
 use crate::sidebar::{Standing, doing, standing};
 use crate::workspace_order::Sort;
 
@@ -37,7 +36,7 @@ pub(crate) struct Home {
     pub(crate) archived: ArchiveFilter,
     pub(crate) sort: Sort,
     /// Where the list is scrolled to. The list is made again each frame, so it can't keep that itself.
-    scroll: VirtualListScrollHandle,
+    scroll: ScrollHandle,
     /// Where each row is going, and has got to, so one that moves slides there, as in the sidebar.
     places: Places<WorkspaceId>,
     /// What holds the order still while someone is using the list, as in the sidebar, for as long as it shows the
@@ -70,7 +69,7 @@ impl Home {
             repo: None,
             archived: ArchiveFilter::Hide,
             sort: Sort::LastActive,
-            scroll: VirtualListScrollHandle::new(),
+            scroll: ScrollHandle::new(),
             places: Places::default(),
             hold: Hold::default(),
             _following: following,
@@ -145,11 +144,12 @@ fn listed(
     listed
 }
 
-/// The workspaces listed in this frame, by where they are in the app's list, and how far each row is from its place on
-/// its way there.
+/// The workspaces listed in this frame, by where they are in the app's list, where each row is drawn on its way to its
+/// place, and how far down the list ends.
 pub(crate) struct Rows {
     listed: Rc<[usize]>,
-    offsets: Rc<[Pixels]>,
+    drawn: Rc<[Drawn]>,
+    end: Pixels,
 }
 
 /// Works out the workspaces the list shows, in its order, and sends each row to its place, so one that has moved slides
@@ -173,29 +173,28 @@ pub(crate) fn arrange(app: &mut AppView, window: &mut Window, cx: &App) -> Rows 
     if home.hold.last_showing().is_some_and(|shown| shown.search != showing.search) {
         app.home.places.forget();
     }
-    let offsets = app.home.places.arrange(ids.iter().map(|id| (id.clone(), ROW_HEIGHT)), window, cx);
+    let Arrangement { drawn, end } = app.home.places.arrange(ids.iter().map(|id| (id.clone(), ROW_HEIGHT)), window, cx);
     app.home.hold.showed(showing, ids);
-    Rows { listed: listed.into(), offsets }
+    let drawn = drawn.iter().map(|&top| Drawn { top, height: ROW_HEIGHT }).collect();
+    Rows { listed: listed.into(), drawn, end }
 }
 
 pub(crate) fn page(app: &AppView, rows: Rows, cx: &mut Context<AppView>) -> impl IntoElement {
-    let Rows { listed, offsets } = rows;
+    let Rows { listed, drawn, end } = rows;
     let empty = listed.is_empty();
-    let sizes = Rc::new(vec![size(px(0.), ROW_HEIGHT); listed.len()]);
     // A moving mark builds this view again on every frame, so only the rows on screen are built.
-    let list = v_virtual_list(cx.entity(), "home-rows", sizes, move |app, range, window, cx| {
-        let line_text = LineText::new(window, cx);
-        let drawn = |ix: usize| {
-            reorder::offset_by(row(app, &app.records().workspaces()[listed[ix]], &line_text, cx), offsets[ix])
-        };
-        range.map(drawn).collect::<Vec<_>>()
-    });
+    let list =
+        reorder::list(cx.entity(), "home-rows", &app.home.scroll, drawn, end, move |app, in_sight, window, cx| {
+            let line_text = LineText::new(window, cx);
+            let build = |&ix: &usize| row(app, &app.records().workspaces()[listed[ix]], &line_text, cx);
+            in_sight.iter().map(build).collect()
+        });
     let list = reorder::hears_the_pointer(
         div().id("home-list").flex_1().min_h_0().flex().flex_col(),
         |t| &mut t.home.hold,
         cx,
     )
-    .child(list.track_scroll(&app.home.scroll).flex_1().min_h_0());
+    .child(list.flex_1().min_h_0());
     v_flex()
         .region(Region::Home)
         .size_full()

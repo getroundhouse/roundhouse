@@ -5,8 +5,7 @@ use std::collections::{HashMap, HashSet};
 
 use client_core::records::Snapshot;
 use client_core::{Client, Drafts, HubAdmin, RecordsFeed};
-use gpui_kit::component::VirtualListScrollHandle;
-use gpui_kit::{AnyWindowHandle, AppContext, Context, Entity, FocusHandle, Task, Window};
+use gpui_kit::{AnyWindowHandle, AppContext, Context, Entity, FocusHandle, ScrollHandle, Task, Window};
 use protocol::client::HubStatus;
 use protocol::model::{SessionId, Workspace, WorkspaceId};
 
@@ -87,7 +86,7 @@ pub struct AppView {
     pub panes: HashMap<WorkspaceId, Entity<WorkspacePane>>,
     pub error: Option<String>,
     /// Where the sidebar's list is scrolled to. The list is made again each frame, so it can't keep that itself.
-    pub(crate) sidebar_scroll: VirtualListScrollHandle,
+    pub(crate) sidebar_scroll: ScrollHandle,
     /// What the sidebar keeps from one frame to the next, besides where it's scrolled to.
     pub(crate) sidebar: crate::sidebar::Kept,
     /// The workspace whose row in the sidebar the pointer is over, which shows its archive button.
@@ -164,7 +163,7 @@ impl AppView {
             home: crate::home::Home::new(window, cx),
             panes: HashMap::new(),
             error: None,
-            sidebar_scroll: VirtualListScrollHandle::new(),
+            sidebar_scroll: ScrollHandle::new(),
             sidebar: crate::sidebar::Kept::default(),
             pointing_at: None,
             busy: Busy::Free,

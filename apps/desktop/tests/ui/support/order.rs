@@ -1,11 +1,14 @@
-//! Workspaces whose order changes as they're worked in, as the sidebar and Home list them: three to put in order,
-//! working in one, and the order their rows are drawn in.
+//! Workspaces whose order changes as they're worked in, as the sidebar and Home list them: three to put in order, more
+//! than the sidebar has room for, working in one, and the order their rows are drawn in.
 
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{AppContext as _, ElementId, Pixels, TestAppContext};
-use protocol::model::{Seq, Session, SessionId, WorkspaceId};
+use protocol::model::{Seq, Session, SessionId, SetupStatus, Workspace, WorkspaceId};
 
 use super::{Stack, Ui};
+
+/// More workspaces than the sidebar has room for in the window.
+pub(crate) const MORE_THAN_FIT: usize = 40;
 
 /// A window with three workspaces in one repository, made in the order they're returned, each with its chat.
 pub(crate) fn three_workspaces<'a>(
@@ -20,6 +23,27 @@ pub(crate) fn three_workspaces<'a>(
     }
     let (workspaces, chats): (Vec<_>, Vec<_>) = made.into_iter().unzip();
     (ui, workspaces.try_into().unwrap(), chats.try_into().unwrap())
+}
+
+/// A window with [`MORE_THAN_FIT`] workspaces in one repository, each set up, and the workspaces in the order they
+/// were made.
+pub(crate) fn more_than_fit<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> (Ui<'a>, Vec<WorkspaceId>) {
+    let client = stack.client();
+    let repo = client.repo_add(stack.repo().to_str().unwrap()).unwrap();
+    let made: Vec<WorkspaceId> =
+        (0..MORE_THAN_FIT).map(|_| client.workspace_create(&repo.id, None, None, None).unwrap().id).collect();
+    let mut ui = Ui::open(cx, stack);
+    ui.wait("every workspace", |ui| ui.view().visible_workspaces().len() == MORE_THAN_FIT);
+    wait_out_setup(&mut ui);
+    (ui, made)
+}
+
+/// Waits until every workspace's setup has ended. A workspace's mark moves while its setup is running, and the hub
+/// starts it a moment after it says the workspace is ready, so until it has ended, a mark can still ask for a frame
+/// after every frame for as long as motion is allowed, and nothing could be seen to come to rest.
+pub(crate) fn wait_out_setup(ui: &mut Ui) {
+    let ended = |w: &Workspace| matches!(w.setup, SetupStatus::Succeeded | SetupStatus::Failed { .. });
+    ui.wait("every workspace's setup to end", |ui| ui.view().records().workspaces().iter().all(ended));
 }
 
 /// Sends `chat` its first prompt, as the person would, and waits until the app has heard its agent reply, so nothing

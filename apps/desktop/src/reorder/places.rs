@@ -1,6 +1,6 @@
 //! Where each of a list's rows is going, so that when the order changes, or a row comes or goes, each row that moves
-//! slides from where it was to where it now goes. A row is laid out where it's going and drawn where it has got to, so
-//! nothing else is laid out again for it as it moves.
+//! slides from where it was to where it now goes. It says where each row is drawn in this frame, and
+//! [`list`](super::list) draws it there.
 
 use std::collections::HashMap;
 use std::hash::Hash;
@@ -21,6 +21,14 @@ impl<K> Default for Places<K> {
     }
 }
 
+/// Where a list's rows are in this frame, as [`Places::arrange`] sent them.
+pub(crate) struct Arrangement {
+    /// How far down the list each row is drawn, from the top down: where it has got to on its way to its place.
+    pub(crate) drawn: Rc<[Pixels]>,
+    /// How far down the list ends, below the last row's place.
+    pub(crate) end: Pixels,
+}
+
 struct Place {
     /// How far down the list it goes.
     top: Pixels,
@@ -30,16 +38,16 @@ struct Place {
 
 impl<K: Clone + Eq + Hash> Places<K> {
     /// Sends each row, given from the top down with the room it takes, to its place, from wherever it has got to, so
-    /// one turned back partway doesn't jump. Says how far from its place to draw each now, which is above it for one
-    /// on its way up, and asks for the next frame while one moves. A row that wasn't there before is at its place at
-    /// once, and one that has gone is forgotten, so one that comes back later doesn't slide in from where it was then.
+    /// one turned back partway doesn't jump. Says where to draw each now, and asks for the next frame while one moves.
+    /// A row that wasn't there before is at its place at once, and one that has gone is forgotten, so one that comes
+    /// back later doesn't slide in from where it was then.
     pub(crate) fn arrange(
         &mut self,
         rows: impl IntoIterator<Item = (K, Pixels)>,
         window: &mut Window,
         cx: &App,
-    ) -> Rc<[Pixels]> {
-        let (mut top, mut order) = (px(0.), Vec::new());
+    ) -> Arrangement {
+        let (mut top, mut drawn) = (px(0.), Vec::new());
         let mut placed = HashMap::with_capacity(self.rows.len());
         for (id, height) in rows {
             let place = match self.rows.remove(&id) {
@@ -51,13 +59,12 @@ impl<K: Clone + Eq + Hash> Places<K> {
                 Some(place) => place,
                 None => Place { top, now: Sliding::at(f32::from(top)) },
             };
-            order.push(id.clone());
+            drawn.push(px(place.now.draw(window, cx)));
             placed.insert(id, place);
             top += height;
         }
         self.rows = placed;
-        let offset = |id: &K| self.rows.get(id).map_or(px(0.), |place| px(place.now.draw(window, cx)) - place.top);
-        order.iter().map(offset).collect()
+        Arrangement { drawn: drawn.into(), end: top }
     }
 
     /// Forgets every row, so each is at its place at once the next time the list is drawn.

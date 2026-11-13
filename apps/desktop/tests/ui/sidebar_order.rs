@@ -6,9 +6,11 @@ use std::time::Duration;
 
 use gpui_kit::test::TestQueryExt as _;
 use gpui_kit::{AppContext as _, ElementId, TestAppContext};
-use protocol::model::{WorkspaceId, WorkspaceStatus};
+use protocol::model::{AgentKind, SessionSettingsChange, WorkspaceId, WorkspaceStatus};
 
-use crate::support::{Held, Stack, Ui, order, sidebar_row, three_workspaces, top, worked_in};
+use crate::support::{
+    Held, MORE_THAN_FIT, Stack, Ui, more_than_fit, order, sidebar_row, three_workspaces, top, worked_in,
+};
 
 /// The workspace the hub is making, once the app has heard of it and the last frame drew its note in the sidebar, and
 /// the note.
@@ -85,6 +87,61 @@ fn a_row_slides_to_its_new_place_and_comes_to_rest_there(cx: &mut TestAppContext
     assert_eq!(top(&mut ui, sidebar_row(&second)), goes);
     assert_eq!(ui.play(look::motion::PANEL), 0, "and nothing asks for another frame");
     assert_eq!(order(&mut ui, sidebar_row, &[first.clone(), second.clone(), third.clone()]), [second, third, first]);
+}
+
+/// The list builds the rows drawn in sight in each frame, wherever their places are. A row whose place is now below
+/// the window is still drawn on its way there, rather than going at once.
+#[gpui_kit::test]
+fn a_row_going_down_out_of_sight_is_drawn_on_its_way_there(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let (mut ui, made) = more_than_fit(cx, &stack);
+    // Nobody has worked in any, so the newest is first, and oldest first puts it below the window.
+    let newest = &made[MORE_THAN_FIT - 1];
+    let was = top(&mut ui, sidebar_row(newest));
+    ui.allow_motion();
+
+    sort_by(&mut ui, "Oldest first");
+
+    assert_eq!(top(&mut ui, sidebar_row(newest)), was, "it starts from where it was, since no time has passed");
+    ui.play(look::motion::PANEL / 16);
+    let on_its_way = top(&mut ui, sidebar_row(newest));
+    assert!(on_its_way > was, "it's drawn on its way down, at {on_its_way:?} from {was:?}");
+    ui.settle(look::motion::PANEL / 4);
+    assert!(!ui.has(sidebar_row(newest)), "and once it's there, it's out of sight");
+}
+
+/// A row on its way up from below the window isn't built while it's drawn below the window, though its place is in
+/// sight, and is once it's drawn in sight, partway up.
+#[gpui_kit::test]
+fn a_row_coming_up_from_below_the_window_is_built_once_its_drawn_in_sight(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let client = stack.client();
+    let (mut ui, made) = more_than_fit(cx, &stack);
+    // Nobody has worked in any, so the newest is first and the oldest is below the window.
+    let (oldest, newest) = (&made[0], &made[MORE_THAN_FIT - 1]);
+    assert!(!ui.has(sidebar_row(oldest)));
+    let first = top(&mut ui, sidebar_row(newest));
+    ui.allow_motion();
+
+    // Making a chat in it counts as working in it, which sends it to the top once the app has heard that from its
+    // workspace's record, which comes apart from the chat's.
+    let worked_in = |ui: &Ui| ui.view().records().workspace(oldest).and_then(|w| w.user_active_at_ms);
+    let before = worked_in(&ui);
+    client.session_create(oldest, AgentKind::Claude, SessionSettingsChange::default(), None).unwrap();
+    ui.wait("it to be worked in", |ui| worked_in(ui) != before);
+
+    assert!(!ui.has(sidebar_row(oldest)), "it's still drawn below the window, where it was, so it isn't built");
+    for frame in 0.. {
+        assert!(frame < 64, "it never came into sight");
+        ui.play(look::motion::PANEL / 64);
+        if ui.has(sidebar_row(oldest)) {
+            break;
+        }
+    }
+    let coming = top(&mut ui, sidebar_row(oldest));
+    assert!(coming > first, "it's built partway up, at {coming:?}, on its way to {first:?}");
+    ui.settle(look::motion::PANEL / 4);
+    assert_eq!(top(&mut ui, sidebar_row(oldest)), first, "and it comes to rest at the top");
 }
 
 #[gpui_kit::test]
