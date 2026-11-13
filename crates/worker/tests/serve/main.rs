@@ -4,6 +4,8 @@
 
 mod hellos;
 mod logins;
+#[cfg(unix)]
+mod terminals;
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;

@@ -9,3 +9,5 @@ infra/.terraform/
 infra/terraform.tfstate*
 infra/*_override.tf
 infra/*.tfplan
+# Zig's cache, which setup-zig puts in the checkout, so a release build is still clean once Ghostty's core is built.
+.zig-cache/

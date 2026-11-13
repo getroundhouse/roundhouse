@@ -2,6 +2,10 @@
 //! fresh terminal needs to show the same.
 
 use libghostty_vt::Terminal;
+use libghostty_vt::effect::{
+    ConformanceLevel, DeviceAttributeFeature, DeviceAttributes, DeviceType, PrimaryDeviceAttributes,
+    SecondaryDeviceAttributes, TertiaryDeviceAttributes,
+};
 use libghostty_vt::fmt::{Extras, Format, Formatter};
 use libghostty_vt::screen::Screen;
 use libghostty_vt::snapshot::Decoder;
@@ -16,6 +20,12 @@ const HISTORY_LINES: usize = 10_000;
 /// The longest unfinished sequence a snapshot carries over, which covers everything but a large image or clipboard
 /// write cut off partway.
 const LONGEST_UNFINISHED_BYTES: usize = 64 * 1024;
+/// What the terminal says it is when a program asks, which is what most terminals say: a VT220, with colour.
+const ATTRIBUTES: DeviceAttributes = DeviceAttributes {
+    primary: PrimaryDeviceAttributes::new(ConformanceLevel::VT220, &[DeviceAttributeFeature::ANSI_COLOR]),
+    secondary: SecondaryDeviceAttributes { device_type: DeviceType::VT220, firmware_version: 0, rom_cartridge: 0 },
+    tertiary: TertiaryDeviceAttributes { unit_id: 0 },
+};
 
 /// How many columns and rows a terminal has.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -40,6 +50,7 @@ pub struct Mirror {
 }
 
 impl Mirror {
+    /// A copy that answers nothing the program asks, as a client's is, since the worker's answers.
     pub fn new(size: Size) -> Result<Self, MirrorError> {
         let mut terminal = Terminal::new(size.cols, size.rows)?;
         terminal.set_scrollback_max_lines(Some(HISTORY_LINES))?;
@@ -48,9 +59,23 @@ impl Mirror {
         Ok(Self { terminal })
     }
 
+    /// A copy that answers what the program asks of its terminal, such as where the cursor is, or what the terminal
+    /// is, by giving `answer` what the program reads back. It's called as a write or a new size takes in a question.
+    pub fn answering(size: Size, mut answer: impl FnMut(&[u8]) + 'static) -> Result<Self, MirrorError> {
+        let mut mirror = Self::new(size)?;
+        mirror.terminal.on_pty_write(move |_, bytes| answer(bytes))?.on_device_attributes(|_| Some(ATTRIBUTES))?;
+        Ok(mirror)
+    }
+
     /// What the program wrote, however its output was split up, such as partway through a sequence.
     pub fn write(&mut self, output: &[u8]) {
         self.terminal.vt_write(output);
+    }
+
+    /// Gives the terminal a new size, which rewraps the shell's screen and its history, as the program's terminal has.
+    pub fn resize(&mut self, size: Size) -> Result<(), MirrorError> {
+        // Nothing here knows how big a cell is, so a program that asks the size in pixels is told nothing.
+        Ok(self.terminal.resize(size.cols, size.rows, 0, 0)?)
     }
 
     /// Bytes that make a fresh terminal of the same size show what this one does, so that what the program writes

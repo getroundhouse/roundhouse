@@ -22,9 +22,9 @@ use unix as sys;
 #[cfg(windows)]
 use windows as sys;
 
-#[cfg(unix)]
-pub use group::own_session;
 pub use group::{Signal, own_group, signal_group};
+#[cfg(unix)]
+pub use group::{group_running, own_session};
 pub use record::{ProcessRecord, start_time};
 pub use running_from::{Claimed, RunningFrom, claim_unused};
 pub use stdio::keep_stdio_from_children;

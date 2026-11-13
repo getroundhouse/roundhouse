@@ -86,22 +86,22 @@ where
             continue;
         }
         // Answered here rather than on a task of their own, since what the hub asks in them has to hold for every
-        // call after, and when the connection ends.
+        // call after, and when the connection ends, or happen in the order it was asked, as typing does.
         match request {
-            Ok(WorkerRequest::Hello(Hello { protocol_version, oldest_protocol_version, keep_running_without_hub })) => {
-                let answer = hello(worker.state.config.build, protocol_version, oldest_protocol_version);
-                let greeted = answer.is_ok();
-                let _ = frames.send(reply(answer)).await;
-                if greeted {
-                    keep_running = Some(keep_running_without_hub);
-                    // After the reply, so the hub knows which version this is before anything else reaches it.
-                    worker.state.outbox.attach(frames.clone(), keep_running_without_hub).await;
-                    worker.state.asks.ask_again().await;
-                }
+            Ok(WorkerRequest::Hello(asked)) => {
+                keep_running = greet(worker, &frames, asked, reply).await.or(keep_running);
             }
             Ok(WorkerRequest::Stop) => {
                 asked_to_stop = true;
                 let _ = frames.send(reply(Ok(WorkerResponse::Ok))).await;
+            }
+            Ok(WorkerRequest::TerminalInput(typed)) => {
+                let typed = worker.state.terminals.input(typed);
+                let _ = frames.send(reply(typed.map(|()| WorkerResponse::Ok))).await;
+            }
+            Ok(WorkerRequest::TerminalResize(resize)) => {
+                let resized = worker.state.terminals.resize(resize);
+                let _ = frames.send(reply(resized.map(|()| WorkerResponse::Ok))).await;
             }
             request => {
                 // Each call runs on a task of its own, so a stop read after this could otherwise be handled before the
@@ -119,6 +119,27 @@ where
     }
     let ended = if asked_to_stop || keep_running == Some(false) { Ended::Stop } else { Ended::Lost };
     Closing { ended, frames, writer }
+}
+
+/// Answers the hub's hello, and once the worker speaks the hub's version, sends it what's on its way and says whether
+/// it asked the worker to keep running without it.
+async fn greet(
+    worker: &Worker,
+    frames: &mpsc::Sender<Arc<WorkerFrame>>,
+    asked: Hello,
+    reply: impl FnOnce(Result<WorkerResponse, ApiError>) -> Arc<WorkerFrame>,
+) -> Option<bool> {
+    let Hello { protocol_version, oldest_protocol_version, keep_running_without_hub } = asked;
+    let answer = hello(worker.state.config.build, protocol_version, oldest_protocol_version);
+    let greeted = answer.is_ok();
+    let _ = frames.send(reply(answer)).await;
+    if !greeted {
+        return None;
+    }
+    // After the reply, so the hub knows which version this is before anything else reaches it.
+    worker.state.outbox.attach(frames.clone(), keep_running_without_hub).await;
+    worker.state.asks.ask_again().await;
+    Some(keep_running_without_hub)
 }
 
 /// The next call the hub sends, or answer to what the worker asked, or `None` once it has stopped sending, or sent more
