@@ -244,9 +244,14 @@ fn every_reply_about_the_connection_and_the_workspace_keeps_its_form() {
 
 #[test]
 fn every_reply_about_the_worktree_keeps_its_form() {
-    let status = GitStatus { branch: Some("birch".into()), ..GitStatus::default() };
+    let status = GitStatus { branch: Some("birch".into()), head: Some("c1".into()), ..GitStatus::default() };
     answered(
         WorkerResponse::GitStatus(status),
+        r#"{"result":"git_status","branch":"birch","head":"c1","ahead":0,"behind":0,"files":[],"unreferenced_commits":false}"#,
+    );
+    let no_commit_yet = GitStatus { branch: Some("birch".into()), ..GitStatus::default() };
+    answered(
+        WorkerResponse::GitStatus(no_commit_yet),
         r#"{"result":"git_status","branch":"birch","head":null,"ahead":0,"behind":0,"files":[],"unreferenced_commits":false}"#,
     );
     let diff = GitDiff { base_commit: Some("c1".into()), patch: String::new(), truncated: false };

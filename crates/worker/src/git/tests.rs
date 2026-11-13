@@ -116,7 +116,7 @@ async fn status_reports_each_kind_of_change_including_renames_and_odd_names() {
 
     let status = status(&prepared.path).await.unwrap();
     assert_eq!(status.branch, Some("alder".into()));
-    assert!(status.head.is_some());
+    assert_eq!(status.head, Some(CommitId::from(run(path, &["rev-parse", "HEAD"]).trim())));
     let find = |p: &str| status.files.iter().find(|f| f.path == p).unwrap_or_else(|| panic!("{p}: {:?}", status.files));
     assert_eq!(find("a.txt").status, ".M");
     assert_eq!(find("with space.txt").status, "??");

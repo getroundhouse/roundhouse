@@ -8,7 +8,8 @@ use super::{BranchName, CommitId};
 pub struct GitStatus {
     /// The branch checked out, or `None` on a detached HEAD.
     pub branch: Option<BranchName>,
-    pub head: Option<String>,
+    /// The commit checked out, or `None` on a branch with no commit yet.
+    pub head: Option<CommitId>,
     /// Against the branch's upstream. Workspace branches have none until they're pushed, so these
     /// don't say how far a branch is from its base.
     pub ahead: u32,
