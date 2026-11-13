@@ -223,7 +223,7 @@ fn parse_status(output: &str) -> GitStatus {
                 Some("branch.head") => {
                     status.branch = parts.next().filter(|b| *b != "(detached)").map(BranchName::from);
                 }
-                Some("branch.oid") => status.head = parts.next().filter(|o| *o != "(initial)").map(String::from),
+                Some("branch.oid") => status.head = parts.next().filter(|o| *o != "(initial)").map(CommitId::from),
                 Some("branch.ab") => {
                     let count = |part: Option<&str>| part.and_then(|p| p[1..].parse().ok()).unwrap_or(0);
                     status.ahead = count(parts.next());
