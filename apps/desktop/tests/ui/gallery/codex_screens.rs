@@ -48,6 +48,6 @@ pub(super) const SCREENS: &[Screen] = &[
         spec: "chats.md",
         world: Some(offered),
         frame: TABS_MENU,
-        steps: &[Step::Select(FOCUS), Step::Click("new-chat")],
+        steps: &[Step::Select(FOCUS), Step::Click("new-tab")],
     },
 ];

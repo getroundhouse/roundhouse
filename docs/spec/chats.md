@@ -597,7 +597,7 @@ Every call is drawn the same way, as the first rule below says, and each kind fi
 
 ## The model and plan mode
 
-- **A workspace can have Claude, Codex and Antigravity chats.** Choose the agent in the new-workspace dialog or from the chat tabs' `+`; a chat keeps the kind it was created with. When only one kind is offered, the tabs' `+` starts its chat directly. The keyboard shortcut starts another of the current chat's kind. *Unconfirmed.*
+- **A workspace can have Claude, Codex and Antigravity chats.** Choose the agent in the new-workspace dialog or from the chat tabs' `+`; a chat keeps the kind it was created with. When only one kind is offered, the tabs' `+` offers New chat, which starts its chat, rather than a chat with each. The keyboard shortcut starts another of the current chat's kind. *Unconfirmed.*
 - **Codex starts on GPT-6.1 Sol at Low effort, with the worker machine's native Codex sign-in.** Roundhouse leaves those credentials with Codex. Its model, mode and effort changes apply on the next turn. Its completed plan waits for approval even when Codex returns it as ordinary final text, so implementation cannot follow an unapproved plan. *Unconfirmed.*
   ![Choose the agent for a new chat](screens/new-chat-agents.png)
 
@@ -803,6 +803,21 @@ The API keeps what an agent's requests read and write for a while, so the next r
   ![Chat tabs](screens/chat-tabs.png)
 
 - **Every tab is 200px wide,** with its mark and as much of its title as fits, so the row doesn't shift when a chat gets its title. *Unconfirmed.*
+
+- **The `+` after the tabs opens a menu of a new chat and a new terminal,** since a workspace's tabs hold both. Each item is New Chat's and New Terminal's own, so it shows their key, and does what the key does. When more than one kind of agent is offered, a chat with each takes New chat's place, without a key, since the key starts another of the current chat's kind. *Unconfirmed:* the menu.
+
+  **The menu the `+` opens.** *Unconfirmed.*
+
+  ![The new chat and new terminal menu](screens/new-tab-menu.png)
+
+- **`Cmd-Shift-T` opens a new terminal,** as `Cmd-T` opens a new chat.
+- **A terminal is a shell in the workspace's worktree, in a tab after the chats',** named Terminal, and Terminal 2 and on by their place among those open, so closing one renumbers the ones after it, with a terminal's icon in place of a chat's mark. Its tab is built as a chat's is, with the same width, underline and close button, so the row reads as one row of tabs. It shows at once when it's opened, and takes the keys while it shows. Its lines are 1.3 times its font's size apart, about as a terminal app spaces them. *Unconfirmed.*
+
+  **A terminal in front, after a test run.** *Unconfirmed.*
+
+  ![A terminal tab showing a test run](screens/terminal.png)
+
+- **Closing a terminal's tab ends its shell,** and a shell that ends, such as with `exit`, takes its tab with it. Quitting the app doesn't end it, so it's there again when the app opens, and neither does restarting the hub, but archiving the workspace does. `Cmd-W` closes the terminal showing, and `Ctrl-Tab` comes to the terminals after the chats. *Unconfirmed:* a shell's end taking its tab, and `Cmd-W` and `Ctrl-Tab` for a terminal.
 
 ## Closing chats, and keys
 

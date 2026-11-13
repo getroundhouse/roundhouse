@@ -13,8 +13,7 @@ fn choosing_codex_and_then_using_the_keyboard_keeps_each_chats_agent(cx: &mut Te
     let mut ui = in_a_new_workspace(cx, &stack);
     let claude = ui.active_chat();
 
-    ui.click("new-chat");
-    ui.click_menu_item("New Codex chat");
+    ui.pick_item("new-tab", "New Codex chat");
     ui.wait("the Codex chat", |ui| ui.open_chats().len() == 2 && ui.active_chat() != claude);
     let codex = ui.active_chat();
     let chosen = client.session_get(&codex).unwrap();
@@ -54,8 +53,7 @@ fn choosing_antigravity_and_then_using_the_keyboard_keeps_each_chats_agent(cx: &
     let mut ui = in_a_new_workspace(cx, &stack);
     let claude = ui.active_chat();
 
-    ui.click("new-chat");
-    ui.click_menu_item("New Antigravity chat");
+    ui.pick_item("new-tab", "New Antigravity chat");
     ui.wait("the Antigravity chat", |ui| ui.open_chats().len() == 2 && ui.active_chat() != claude);
     let agy = ui.active_chat();
     let chosen = client.session_get(&agy).unwrap();

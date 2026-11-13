@@ -11,6 +11,7 @@ pub mod events;
 mod serve;
 mod stand_in;
 mod subagent_records;
+mod terminals;
 #[cfg(test)]
 mod tests;
 mod world;

@@ -7,8 +7,8 @@ use gpui_kit::{Context, FocusHandle, Focusable as _, Window};
 use super::{Opened, Showing, WorkspacePane};
 
 impl WorkspacePane {
-    /// Focuses the file tab's view while it shows, the subagent's work while its tab does, and what's in the composer's
-    /// place otherwise. The composer isn't drawn behind either tab.
+    /// Focuses the file tab's view while it shows, the subagent's work while its tab does, a terminal while it does,
+    /// and what's in the composer's place otherwise. The composer isn't drawn behind any of them.
     pub fn focus_showing(&self, window: &mut Window, cx: &mut Context<Self>) {
         if !self.drawn() {
             return;
@@ -22,6 +22,7 @@ impl WorkspacePane {
                 }
             }
             Showing::Chat => self.focus_composer(window, cx),
+            Showing::Terminal => self.focus_terminal(window, cx),
             Showing::Subagent => {
                 if let Some(focus) = self.subagents.focus() {
                     window.focus(focus, cx);

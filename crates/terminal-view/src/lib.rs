@@ -7,4 +7,4 @@ mod grid;
 mod keys;
 mod view;
 
-pub use view::{KEY_CONTEXT, TerminalView};
+pub use view::{KEY_CONTEXT, SHOWN_ID, TerminalView, bind_keys};

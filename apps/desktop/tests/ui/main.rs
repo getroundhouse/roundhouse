@@ -58,6 +58,7 @@ mod streaming;
 mod subagents;
 #[cfg(test)]
 mod support;
+mod terminals;
 mod title_strip;
 mod titles;
 mod tool_use;

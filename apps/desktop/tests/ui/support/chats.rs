@@ -73,13 +73,13 @@ impl Ui<'_> {
         })
     }
 
-    /// Chooses a Claude chat from the new-chat menu and waits until that chat is showing. It's the one that wasn't open
-    /// before, rather than the last, since chats are listed by when they were made, and two made within a millisecond
-    /// of each other, or with the clock set back between them, needn't be listed in the order they were made.
+    /// Chooses a Claude chat from the `+` after the tabs and waits until that chat is showing. It's the one that wasn't
+    /// open before, rather than the last, since chats are listed by when they were made, and two made within a
+    /// millisecond of each other, or with the clock set back between them, needn't be listed in the order they were
+    /// made.
     pub(crate) fn new_chat(&mut self) -> SessionId {
         let before = self.open_chats();
-        self.click("new-chat");
-        self.click_menu_item("New Claude Code chat");
+        self.pick_item("new-tab", "New Claude Code chat");
         self.wait("the new chat", |ui| ui.open_chats().len() > before.len() && ui.transcript().is_some());
         let newest = self.open_chats().into_iter().find(|id| !before.contains(id)).unwrap();
         self.wait("the new chat to show", |ui| ui.active_chat() == newest);

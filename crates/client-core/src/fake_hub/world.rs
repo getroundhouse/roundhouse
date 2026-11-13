@@ -10,10 +10,11 @@ use protocol::model::{
     Account, AttachmentId, CacheTtl, ContextUsage, DiffComment, FileContents, FoundGithubLogin, GitDiff, GithubAccount,
     GithubApp, GithubSettings, GithubSignIn, GithubSignInStatus, InstanceId, ModelName, PORTS_PER_WORKSPACE, Place,
     PromptCache, PullRequest, Records, Repo, RepoId, RepoOrigin, Rev, Seq, Session, SessionId, SessionStatus, Subagent,
-    SubagentId, Title, Workspace, WorkspaceId, WorktreeFiles,
+    SubagentId, Terminal, TerminalId, Title, Workspace, WorkspaceId, WorktreeFiles,
 };
 use protocol::prompt::Prompt;
 use protocol::tail::Tail;
+use protocol::terminal::{TerminalScreen, TerminalSize};
 
 use super::subagent_records::records_of;
 
@@ -87,6 +88,8 @@ pub struct World {
     pub saved_hubs: Vec<(&'static str, &'static str)>,
     /// What a push from each repository's workspaces would meet on GitHub, as the hub last checked.
     pub github_reach: Vec<protocol::model::GithubReach>,
+    /// Each open terminal, and what it shows, as the bytes that draw it in a fresh terminal of its size.
+    pub terminals: Vec<(Terminal, TerminalScreen)>,
     records: i64,
 }
 
@@ -170,10 +173,18 @@ impl World {
             found_github_logins: self.found_github_logins.clone(),
             github_apps: self.github_apps.clone(),
             github_reach: self.github_reach.clone(),
-            // No screen shows a terminal yet.
-            terminals: Vec::new(),
+            terminals: self.terminals.iter().map(|(terminal, _)| terminal.clone()).collect(),
             rev: Rev::default(),
         }
+    }
+
+    /// A terminal open in `workspace`, showing `shows`, at `size`.
+    pub fn terminal(&mut self, workspace: &WorkspaceId, size: TerminalSize, shows: &[u8]) -> TerminalId {
+        let id = TerminalId::from(format!("term-{}", self.terminals.len() + 1));
+        let opened_at_ms = self.next_time();
+        let terminal = Terminal { id: id.clone(), workspace_id: workspace.clone(), opened_at_ms, rev: Rev::default() };
+        self.terminals.push((terminal, TerminalScreen { size, bytes: shows.into() }));
+        id
     }
 
     pub fn workspace_mut(&mut self, id: &WorkspaceId) -> &mut Workspace {

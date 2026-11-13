@@ -6,7 +6,7 @@ When an agent pushes, opens a pull request or comments, GitHub records someone a
 
 ## An account you add
 
-**Sign in with GitHub**, or paste a token, and agents act as you. Every machine's `git` and `gh` use the default for github.com, so agents push and open pull requests as it, and Roundhouse reads pull requests with it, wherever they run. Nothing else on the machine has to be logged in.
+**Sign in with GitHub**, or paste a token, and agents act as you. Every machine's `git` and `gh` use the default for github.com, so agents push and open pull requests as it, and so does what you type in a workspace's terminal, and Roundhouse reads pull requests with it, wherever they run. Nothing else on the machine has to be logged in.
 
 - Their pull requests are yours, so GitHub won't let you approve them, and nothing on GitHub tells their work from yours.
 - What they ask of GitHub counts against your rate limit.

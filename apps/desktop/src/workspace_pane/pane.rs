@@ -1,4 +1,4 @@
-use super::{attaching, closed, composer, dictating, file_tab, queue, reading, subagent_tab};
+use super::{attaching, closed, composer, dictating, file_tab, queue, reading, subagent_tab, terminals};
 use crate::all_files::AllFiles;
 use crate::attached::Attachments;
 use crate::busy::Busy;
@@ -15,7 +15,7 @@ use file_tab::FileTab;
 use gpui_kit::component::input::TextareaState;
 use gpui_kit::{AnyWindowHandle, AppContext as _, Context, Entity, EventEmitter, Subscription, Task, Window};
 use protocol::attachment::Attachment;
-use protocol::model::{AgentKind, Seq, Session, SessionId, Workspace, WorkspaceId, WorkspaceStatus};
+use protocol::model::{AgentKind, Seq, Session, SessionId, TerminalId, Workspace, WorkspaceId, WorkspaceStatus};
 use reading::Reading;
 use std::collections::{HashMap, VecDeque};
 use transcript::Transcript;
@@ -30,6 +30,8 @@ pub enum Showing {
     File,
     /// The subagent tab, in place of the active chat.
     Subagent,
+    /// One of the workspace's terminals, in place of the active chat.
+    Terminal,
 }
 
 /// The workspace's diff and the views of its worktree, made together the first time the sidebar of changes opens, then
@@ -79,11 +81,19 @@ pub enum PaneEvent {
     Archive(WorkspaceId, bool),
     /// Title the workspace again from what's been asked in it.
     RegenerateTitle(WorkspaceId),
-    /// What's in front under the tabs changed, so the chat being read may have.
+    /// What's in front under the tabs changed, so the chat being read may have, and what has focus should follow it
+    /// in the pane on screen.
     Showing,
     Present(Presentation),
     /// Show Git in Settings, where the default GitHub account is chosen and accounts are connected.
     OpenGit,
+}
+
+/// A tab to show once client-core's copy of the records has it open.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) enum Next {
+    Chat(SessionId),
+    Terminal(TerminalId),
 }
 
 pub struct WorkspacePane {
@@ -93,8 +103,9 @@ pub struct WorkspacePane {
     /// What's shown of the workspace's records, as of client-core's last change: its own, its sessions' and its
     /// comments', and through them the accounts its sessions name and their subagents.
     pub(super) shown: InWorkspace,
-    /// A chat to show once client-core's copy has it, such as one just made.
-    pub(super) showing_next: Option<SessionId>,
+    /// A chat or a terminal to show once client-core's copy has it, such as one just made. Only the last whose reply
+    /// came, so one whose record comes after a newer one's doesn't take the front from it.
+    pub(super) showing_next: Option<Next>,
     pub active: Option<SessionId>,
     /// What the pane holds for each chat.
     pub(super) chats: HashMap<SessionId, Chat>,
@@ -122,6 +133,7 @@ pub struct WorkspacePane {
     pub composer: Entity<TextareaState>,
     pub diff: Option<Diff>,
     pub(super) subagents: subagent_tab::Subagents,
+    pub(super) terminals: terminals::Terminals,
     pub pull_request: Lookup,
     /// How many times the pull request has been asked for, so only the newest answer is shown.
     pub(super) pull_request_asks: u64,
@@ -196,6 +208,7 @@ impl WorkspacePane {
             composer,
             diff: None,
             subagents: subagent_tab::Subagents::default(),
+            terminals: terminals::Terminals::default(),
             pull_request,
             pull_request_asks: 0,
             setup_log: None,
@@ -253,6 +266,7 @@ impl WorkspacePane {
         for transcript in self.every_transcript() {
             transcript.update(cx, |t, _| t.reconnect(client));
         }
+        self.reconnect_terminals(client, cx);
         if let Some(diff) = &mut self.diff {
             diff.sidebar_tab.reconnected();
             diff.review.update(cx, |r, _| r.reconnect(client));
@@ -300,6 +314,11 @@ impl WorkspacePane {
             self.take_drafts_from_elsewhere(cx);
         }
         self.pass_on_subagents(&changes, cx);
+        if changes.terminals(&id) {
+            self.set_terminals(cx);
+        }
+        // Once the sessions and the terminals are both taken in, whichever the next tab is.
+        self.show_next(cx);
         self.pass_on_agents(cx);
         if changes.comments(&id)
             && let Some(diff) = &self.diff
