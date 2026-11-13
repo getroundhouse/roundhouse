@@ -9,7 +9,7 @@ use rusqlite::{OptionalExtension, Row, TransactionBehavior, params};
 
 use super::drafts::forget_drafts;
 use super::made::{Made, inserted, made_by};
-use super::{Store, StoreError, StoredSession, current_rev, from_text, lock, rev_of, text_of};
+use super::{Store, StoreError, StoredSession, current_rev, from_text, json_at, lock, rev_of, text_of};
 
 /// What a session's row holds, as it's written.
 macro_rules! session_row_columns {
@@ -61,29 +61,26 @@ pub(super) fn session_from_row(row: &Row) -> rusqlite::Result<StoredSession> {
             reply_seq: row.get::<_, i64>(13)?.cast_unsigned(),
             read_seq: row.get::<_, i64>(14)?.cast_unsigned(),
             // Written only by this hub, as JSON. Anything it can't read is nothing it knows to be running.
-            background_tasks: serde_json::from_str(&row.get::<_, String>(15)?).unwrap_or_default(),
+            background_tasks: json_at(row, 15)?.unwrap_or_default(),
             title_source: from_text(row.get(16)?)?,
             queued: queue_from(&row.get::<_, String>(17)?)?,
             queue_held: row.get(18)?,
             turn_started_at_ms: row.get(19)?,
             effort: from_text(row.get(20)?)?,
             // Written only by this hub, as JSON. One it can't read is as good as none, until the agent next says.
-            context: row.get::<_, Option<String>>(21)?.and_then(|json| serde_json::from_str(&json).ok()),
+            context: json_at(row, 21)?,
             account: row.get::<_, Option<String>>(22)?.map(Into::into),
             user_active_at_ms: row.get(23)?,
             // Written only by this hub, as JSON. One it can't read is as good as none, until the agent next asks.
-            prompt_cache: row.get::<_, Option<String>>(24)?.and_then(|json| serde_json::from_str(&json).ok()),
+            prompt_cache: json_at(row, 24)?,
             // Written only by this hub, as JSON. One it can't read is as good as nothing typed.
-            draft: row
-                .get::<_, Option<String>>(25)?
-                .and_then(|json| serde_json::from_str(&json).ok())
-                .unwrap_or_default(),
+            draft: json_at(row, 25)?.unwrap_or_default(),
             // The same.
-            answer_draft: row.get::<_, Option<String>>(26)?.and_then(|json| serde_json::from_str(&json).ok()),
+            answer_draft: json_at(row, 26)?,
             // Written only by this hub, as JSON. One it can't read says nothing, which leaves a client to look in the
             // log, as one from an older hub does.
-            untaken: serde_json::from_str(&row.get::<_, String>(27)?).ok(),
-            open_approvals: serde_json::from_str(&row.get::<_, String>(28)?).ok(),
+            untaken: json_at(row, 27)?,
+            open_approvals: json_at(row, 28)?,
             agent_opened: Some(row.get(10)?),
             // Written by the query, from the waits table, so one it can't read is a query that doesn't match `Wait`.
             wait: row.get::<_, Option<String>>(29)?.map(|json| wait_from(&json)).transpose()?,

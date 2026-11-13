@@ -137,6 +137,12 @@ fn from_text<T: DeserializeOwned>(text: String) -> rusqlite::Result<T> {
         .map_err(|e| rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(e)))
 }
 
+/// What a column holds as JSON, which only a hub writes, or `None` when it holds nothing, or what this build can't
+/// read, such as one a build with another idea of it wrote. Each caller says what one it can't read means there.
+fn json_at<T: DeserializeOwned>(row: &Row<'_>, column: usize) -> rusqlite::Result<Option<T>> {
+    Ok(row.get::<_, Option<String>>(column)?.and_then(|json| serde_json::from_str(&json).ok()))
+}
+
 impl Store {
     /// Opens the database at `path`, and migrates it if an older build wrote it, after saving a copy in
     /// `backups_dir`.

@@ -6,7 +6,7 @@ use rusqlite::{Connection, OptionalExtension, Row, params};
 
 use super::instances::{InstanceStage, record_instance};
 use super::made::{Made, inserted, made_by};
-use super::{Store, StoreError, from_text, lock, now_ms, rev_of, text_of};
+use super::{Store, StoreError, from_text, json_at, lock, now_ms, rev_of, text_of};
 
 #[cfg(test)]
 mod tests;
@@ -89,17 +89,17 @@ pub(super) fn workspace_from_row(row: &Row) -> rusqlite::Result<Workspace> {
         instance_id: row.get::<_, String>(8)?.into(),
         created_at_ms: row.get(9)?,
         archived_at_ms: row.get(10)?,
-        setup: serde_json::from_str(&row.get::<_, String>(11)?).unwrap_or(SetupStatus::Unknown),
+        setup: json_at(row, 11)?.unwrap_or(SetupStatus::Unknown),
         port_base: row.get(12)?,
         title: row.get::<_, Option<String>>(13)?.as_deref().and_then(Title::tidied),
         title_source: from_text(row.get(14)?)?,
         // One that no longer reads, from a build whose idea of a pull request this one doesn't share, is looked for again.
-        pull_request: row.get::<_, Option<String>>(15)?.and_then(|found| serde_json::from_str(&found).ok()),
+        pull_request: json_at(row, 15)?,
         // Written only by this hub, as JSON. One it can't read is as good as none.
-        comment_draft: row.get::<_, Option<String>>(17)?.and_then(|json| serde_json::from_str(&json).ok()),
+        comment_draft: json_at(row, 17)?,
         user_active_at_ms: row.get(16)?,
         // Read again by the next worker, so one that no longer reads is only missing until then.
-        branches: row.get::<_, Option<String>>(18)?.and_then(|branches| serde_json::from_str(&branches).ok()),
+        branches: json_at(row, 18)?,
         pull_request_branch: row.get::<_, Option<String>>(19)?.map(BranchName::from),
         worker_build: row.get(20)?,
         rev: rev_of(row, 21)?,
@@ -289,11 +289,11 @@ impl Store {
         let (before, changed) = {
             let conn = lock(&self.writer);
             let select = "SELECT branches FROM workspaces WHERE id = ?";
-            let before: Option<String> = conn.query_row(select, [id.as_str()], |row| row.get(0))?;
+            // Ones that no longer read are as good as none recorded before.
+            let before = conn.query_row(select, [id.as_str()], |row| json_at(row, 0))?;
             let update = "UPDATE workspaces SET branches = ?1 WHERE id = ?2 AND branches IS NOT ?1";
             (before, conn.execute(update, params![text, id.as_str()])? > 0)
         };
-        let before = before.and_then(|before| serde_json::from_str(&before).ok());
         Ok(BranchesSet { before, workspace: if changed { Some(self.get_workspace(id)?) } else { None } })
     }
 

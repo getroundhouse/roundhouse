@@ -5,7 +5,7 @@ use protocol::model::{Call, ModelName, RecentWork, Rev, SessionId, Subagent, Sub
 use rusqlite::types::ValueRef;
 use rusqlite::{Connection, OptionalExtension, Row, params};
 
-use super::{Store, StoreError, current_rev, from_text, lock, rev_of, text_of};
+use super::{Store, StoreError, current_rev, from_text, json_at, lock, rev_of, text_of};
 
 mod recent;
 
@@ -142,14 +142,10 @@ fn recent_work(tx: &Connection, session: &str, call: &ToolUseId) -> Result<Optio
     let working = text_of(&SubagentStatus::Working);
     let recent = tx
         .prepare_cached("SELECT recent FROM subagents WHERE session_id = ? AND call = ? AND status = ?")?
-        .query_row(params![session, call.as_str(), working], |row| row.get::<_, Option<String>>(0))
+        .query_row(params![session, call.as_str(), working], |row| json_at::<RecentWork>(row, 0))
         .optional()?;
-    Ok(recent.map(|recent| read_recent(recent.as_deref())))
-}
-
-/// Written only by this hub, as JSON. What it can't read is nothing it knows of.
-fn read_recent(json: Option<&str>) -> RecentWork {
-    json.and_then(|json| serde_json::from_str(json).ok()).unwrap_or_default()
+    // Written only by this hub, as JSON. What it can't read is nothing it knows of.
+    Ok(recent.map(Option::unwrap_or_default))
 }
 
 fn call_in(block: &ContentBlock) -> Option<Call> {
@@ -172,10 +168,11 @@ fn subagent_from_row(row: &Row<'_>) -> rusqlite::Result<Subagent> {
         ended_at_ms: row.get(8)?,
         calls: row.get(9)?,
         // Written only by this hub, as JSON. One it can't read is none it knows of.
-        latest_call: row.get::<_, Option<String>>(10)?.and_then(|call| serde_json::from_str(&call).ok()),
+        latest_call: json_at(row, 10)?,
         report: text_at(row, 11)?,
         rev: rev_of(row, 12)?,
-        recent: read_recent(row.get::<_, Option<String>>(13)?.as_deref()),
+        // As in `recent_work`.
+        recent: json_at(row, 13)?.unwrap_or_default(),
     })
 }
 
