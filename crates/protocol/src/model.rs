@@ -205,6 +205,18 @@ pub struct Repo {
     pub rev: Rev,
 }
 
+impl ProviderName {
+    /// What a hub calls the provider that runs workers on its own machine.
+    pub const LOCAL: &'static str = "local";
+
+    pub fn is_local(&self) -> bool {
+        self.as_str() == Self::LOCAL
+    }
+}
+
+/// How many ports are set aside for each workspace, from its [`Workspace::port_base`].
+pub const PORTS_PER_WORKSPACE: u16 = 10;
+
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum WorkspaceStatus {
@@ -248,7 +260,7 @@ pub struct Workspace {
     #[serde(default)]
     pub user_active_at_ms: Option<i64>,
     pub setup: SetupStatus,
-    /// The first of ten ports set aside for this workspace, so workspaces don't collide.
+    /// The first of the [`PORTS_PER_WORKSPACE`] ports set aside for this workspace, so workspaces don't collide.
     pub port_base: u16,
     #[serde(default)]
     pub rev: Rev,

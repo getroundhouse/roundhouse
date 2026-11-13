@@ -45,6 +45,8 @@ pub enum Region {
     Home,
     /// The card that says what an update does, above its card in the sidebar.
     UpdateDetails,
+    /// Where a workspace's worktree is and which build its agents are on, shown from its name in the header.
+    WorkspaceCard,
 }
 
 impl Region {
@@ -71,6 +73,7 @@ impl Region {
             Region::UsageCard => "usage-card",
             Region::Home => "home-page",
             Region::UpdateDetails => "update-details-card",
+            Region::WorkspaceCard => "workspace-card",
         }
     }
 }

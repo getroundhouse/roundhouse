@@ -46,6 +46,7 @@ mod subagent_tab;
 mod tests;
 mod view;
 mod waiting;
+mod workspace_card;
 
 /// What shows under the tabs.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

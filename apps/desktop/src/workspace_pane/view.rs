@@ -15,6 +15,7 @@ use look::{Hand as _, InRegion as _, LineText, Off as _, Region};
 use protocol::model::{Session, SessionStatus};
 
 use super::setup::setup_log_view;
+use super::workspace_card;
 use super::{HEADER_HEIGHT, Mark, Opened, PaneEvent, Showing, WorkspacePane};
 use crate::sides::{self, AtTheTop, Side, Sidebar};
 use crate::{prompt_cache, right_click};
@@ -199,13 +200,16 @@ impl WorkspacePane {
     /// What the workspace is called, and the branch it's on and where that started. When they don't fit, the words
     /// give way and end in an ellipsis, so the button beside the title is never pushed out of view. The branch and
     /// where it started are smaller, and the branch is in the code font, so they're set on the title's baseline, as
-    /// words on one line are, rather than centred, which would leave them sitting higher.
+    /// words on one line are, rather than centred, which would leave them sitting higher. Resting the pointer on the
+    /// title shows where the workspace is, as `workspace_card.rs` says.
     fn heading(&self, line_text: &LineText, cx: &mut Context<Self>) -> impl IntoElement {
         let muted = cx.theme().muted_foreground;
         let LineText { body, small, code } = line_text;
         let words = || div().min_w_0().overflow_hidden().text_ellipsis();
         let title = self.workspace().label().to_string();
         let title = words().id("workspace-title").role(gpui_kit::Role::Heading).aria_label(title.clone()).child(title);
+        let title = body.set(title).font_weight(FontWeight::MEDIUM).test_support();
+        let title = workspace_card::card(title, self.workspace(), self.client.hub_version());
         let branch = words().text_color(muted).child(self.workspace().branch.to_string());
         let base = words().text_color(look::faint());
         let base = base.child(format!("from {}", self.workspace().base_ref.as_deref().unwrap_or("?")));
@@ -215,7 +219,7 @@ impl WorkspacePane {
             .gap_2()
             .overflow_hidden()
             .whitespace_nowrap()
-            .child(body.set(title).font_weight(FontWeight::MEDIUM).test_support())
+            .child(title)
             .child(div().flex_none().child(self.regenerate_title_button(cx)))
             .child(body.set(div().flex_none().text_color(look::faint()).child("/")))
             .child(code.set(branch))

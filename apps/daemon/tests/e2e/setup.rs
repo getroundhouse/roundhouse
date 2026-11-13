@@ -9,6 +9,7 @@ use std::time::{Duration, Instant};
 use client_core::ClientError;
 use protocol::client::ErrorCode;
 use protocol::event::{ContentBlock, EventBody};
+use protocol::model::PORTS_PER_WORKSPACE;
 
 use crate::support::{
     Stack, assistant_text, commit_settings, git, parent_of, read_all, signal, wait_for_setup, wait_for_turn_end,
@@ -244,7 +245,7 @@ fn the_agent_sees_the_workspace_variables_and_each_workspace_has_its_own_ports()
     let client = stack.client();
     let (first, session) = stack.workspace(&client);
     let (second, _) = stack.workspace(&client);
-    assert_eq!(second.port_base, first.port_base + 10);
+    assert_eq!(second.port_base, first.port_base + PORTS_PER_WORKSPACE);
     client
         .session_prompt(
             &session.id,

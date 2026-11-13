@@ -1,7 +1,7 @@
 //! Workspaces.
 
 use protocol::model::{BranchName, Branches, PullRequestFound, SetupStatus, Title, Workspace, WorkspaceStatus};
-use protocol::model::{ClientRequestId, RepoId, Rev, WorkspaceId};
+use protocol::model::{ClientRequestId, PORTS_PER_WORKSPACE, RepoId, Rev, WorkspaceId};
 use rusqlite::{Connection, OptionalExtension, Row, params};
 
 use super::instances::{InstanceStage, record_instance};
@@ -20,8 +20,6 @@ pub struct BranchesSet {
     /// The workspace, if they changed it.
     pub workspace: Option<Workspace>,
 }
-
-const PORTS_PER_WORKSPACE: u16 = 10;
 
 /// Archiving or restoring a workspace, which its record says from when it's asked until it's done, or until it's put
 /// back as it was, when it can't be done.

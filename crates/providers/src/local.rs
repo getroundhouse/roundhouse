@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use process::{ProcessRecord, Signal, signal_group};
-use protocol::model::InstanceId;
+use protocol::model::{InstanceId, ProviderName};
 use protocol::paths::{AGENTS_DIR, WORKER_RECORD_FILE};
 use tokio::io::{AsyncRead, AsyncReadExt};
 use tokio::process::Command;
@@ -233,7 +233,7 @@ fn merge_paths(login: Option<&str>, own: Option<&str>) -> Option<String> {
 #[async_trait]
 impl Provider for LocalProvider {
     fn name(&self) -> &'static str {
-        "local"
+        ProviderName::LOCAL
     }
 
     /// Its workers run the hub's own executable, so it names no targets to be given workers for.
