@@ -12,16 +12,19 @@ use crate::model::{Account, AccountId, AgentKind, LoginToken};
 /// and gave a client, and the hub never sends it back.
 ///
 /// With `account`, it renews that account's login, replacing it, as when its token is about to end, so the account
-/// keeps its limits and its sessions, and one whose login was disconnected has one again. Without, a token the hub
-/// already holds for that kind finds its account, and one it held and was told to forget makes a new account, since
-/// the hub keeps nothing to know it again by. Sending the same again changes nothing more than the name. The token and
+/// keeps its limits and its sessions, and one whose login was disconnected has one again. With the token that account
+/// holds already, only its name changes, since its login is the same. Without, it makes a new account, but for a token
+/// the hub already holds for that kind: under that account's name it finds the account and changes nothing, as when a
+/// client sends the same again, and under another it's refused, since the person meant to add an account. A token the
+/// hub held and was told to forget makes a new account, since the hub keeps nothing to know it again by. The token and
 /// the name are trimmed.
 ///
 /// Refused with `InvalidRequest` when the name is empty or longer than 200 bytes, when the token is empty, very long,
 /// or has a space or a control character inside, when the hub can hold no login for that kind, as its
 /// [`AgentDescription::login`](crate::model::AgentDescription::login) says, and when `account` names one whose ID the
 /// hub didn't choose for a login of that kind, since nothing says the token is that account's. Refused with `NotFound`
-/// when there's no such account, and with `Conflict` when another account holds the same token.
+/// when there's no such account, and with `Conflict` when another account holds the same token, or, without
+/// `account`, when the one that holds it has another name.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct AccountConnect {
     pub agent: AgentKind,

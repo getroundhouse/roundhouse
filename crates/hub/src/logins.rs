@@ -107,13 +107,14 @@ impl Logins {
     }
 
     /// Has the hub hold `connect`'s login, as `AccountConnect` says. A token it already holds changes only the name of
-    /// the account that holds it. Otherwise the token's file is written, and then the row, so a hub that stops between
-    /// the two leaves a file no row names.
+    /// the account that holds it, when that's the account named, and without one finds that account under its own name
+    /// and is refused under another. Otherwise the token's file is written, and then the row, so a hub that stops
+    /// between the two leaves a file no row names.
     pub(crate) fn connect(&self, connect: &Connect) -> Result<AccountChange, ApiError> {
         let _one_at_a_time = self.one_at_a_time.lock();
         let holding = self.holding(connect.agent, &connect.token)?;
         let id = match (&connect.account, holding) {
-            (None, Some(holding)) => return self.rename(&holding, &connect.name),
+            (None, Some(holding)) => return self.connected_already(&holding, &connect.name),
             (None, None) => &connect.new_id,
             (Some(id), holding) => {
                 self.renewable(id, connect.agent)?;
@@ -238,6 +239,19 @@ impl Logins {
         let message =
             "the hub didn't choose that account's ID for a login of that kind, so nothing says the token is its";
         Err(ApiError::new(ErrorCode::InvalidRequest, message))
+    }
+
+    /// What connecting a token the hub already holds for `holding` does without naming an account. Under the same name
+    /// it's the same again, as when a client didn't hear the answer, so it finds the account and changes nothing.
+    /// Under another, it's refused: the person means to add an account, and renaming the one that holds the token
+    /// would look as if they had.
+    fn connected_already(&self, holding: &AccountId, name: &str) -> Result<AccountChange, ApiError> {
+        let account = self.record(holding)?;
+        if account.name.as_deref() == Some(name) {
+            return Ok(AccountChange { account, changed: false });
+        }
+        let called = account.name.as_deref().unwrap_or(holding.as_str());
+        Err(ApiError::new(ErrorCode::Conflict, format!("that token is connected already, as {called}")))
     }
 
     fn rename(&self, id: &AccountId, name: &str) -> Result<AccountChange, ApiError> {
