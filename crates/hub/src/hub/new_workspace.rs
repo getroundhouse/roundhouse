@@ -5,7 +5,7 @@
 use std::sync::Arc;
 
 use protocol::attachment::{Attachment, AttachmentBytes};
-use protocol::client::new_workspace::NewWorkspaceMade;
+use protocol::client::new_workspace::{NewWorkspaceMade, UnsentPrompt};
 use protocol::client::{ApiError, ErrorCode, HubNotice};
 use protocol::model::{
     AttachmentId, ClientMessageId, ClientRequestId, DraftToKeep, NewWorkspaceDraftToKeep, PermissionMode, Session,
@@ -41,11 +41,12 @@ impl Hub {
         let files = self.dialog_files(&made_of, again).await?;
         let workspace = self.workspace_create(repo_id, None, None, Some(client_request_id.clone())).await?;
         let (session, unchosen) = self.first_chat(&workspace.id, &made_of).await?;
-        let (session, unsent, taken) = self.first_prompt(session, unchosen, &made_of, &files, &client_request_id).await;
+        let first = self.first_prompt(session, unchosen.clone(), &made_of, &files, &client_request_id);
+        let (session, unsent, taken) = first.await;
         if taken {
             self.done_with_dialog(&made_of).await;
         }
-        Ok(NewWorkspaceMade { workspace, session, unsent })
+        Ok(NewWorkspaceMade { workspace, session, unchosen, unsent })
     }
 
     /// Each file `made_of` names that the hub keeps for the dialog. One it doesn't is refused, unless the request was
@@ -96,10 +97,12 @@ impl Hub {
         }
     }
 
-    /// Sends the chat the prompt, if there is one, with copies of the dialog's files, or puts it in the chat's composer
-    /// if it can't be sent, saying why. It isn't sent to a chat that couldn't be given the model, effort and mode
-    /// picked, which `unchosen` says, so one that's to plan doesn't start on it with full access. Returns the chat, why
-    /// the prompt wasn't sent, and whether the chat has it now, one way or the other, so the dialog can let it go.
+    /// Copies the dialog's files to the chat and sends it the prompt, if there is one, or puts the prompt in the chat's
+    /// composer if it can't be sent, saying why. It isn't sent to a chat that couldn't be given the model, effort and
+    /// mode picked, which `unchosen` says, so one that's to plan doesn't start on it with full access. It goes to the
+    /// chat only whole, so if a file can't be copied, or the composer can't be given it, it stays only in the dialog,
+    /// which has every file. Returns the chat, the prompt if it wasn't sent, and whether the chat has it now, one way or
+    /// the other, so the dialog can let it go.
     async fn first_prompt(
         self: &Arc<Self>,
         session: Session,
@@ -107,43 +110,29 @@ impl Hub {
         made_of: &NewWorkspaceDraftToKeep,
         files: &[Attachment],
         client_request_id: &ClientRequestId,
-    ) -> (Session, Option<ApiError>, bool) {
+    ) -> (Session, Option<UnsentPrompt>, bool) {
         if !says_or_carries(&made_of.text, made_of.files.len()) {
-            return (session, unchosen, true);
+            return (session, None, true);
+        }
+        if let Err(error) = self.copy_files(&session, files).await {
+            return (session, Some(UnsentPrompt { error, in_composer: false }), false);
         }
         let sent = match unchosen {
-            None => self.send_first_prompt(&session, made_of, files, client_request_id).await,
-            Some(unchosen) => {
-                if let Err(e) = self.copy_files(&session, files).await {
-                    warn!(session = %session.id, "couldn't copy the new-workspace dialog's files: {e}");
-                }
-                Err(unchosen)
+            None => {
+                let message = ClientMessageId::from(client_request_id.as_str());
+                self.session_prompt(session.id.clone(), Some(message), first_prompt_of(made_of)).await.map(drop)
             }
+            Some(unchosen) => Err(unchosen),
         };
-        let Err(unsent) = sent else { return (session, None, true) };
-        // The chat leaves out a file it wasn't given, such as one whose copy failed.
+        let Err(error) = sent else { return (session, None, true) };
         let draft = DraftToKeep { text: made_of.text.clone(), files: made_of.files.clone() };
         match self.session_draft(session.id.clone(), draft).await {
-            Ok(kept) => (kept, Some(unsent), true),
+            Ok(kept) => (kept, Some(UnsentPrompt { error, in_composer: true }), true),
             Err(e) => {
                 warn!(session = %session.id, "couldn't keep a new workspace's first prompt in its composer: {e}");
-                (session, Some(unsent), false)
+                (session, Some(UnsentPrompt { error, in_composer: false }), false)
             }
         }
-    }
-
-    /// Copies the dialog's files to the chat, then sends the prompt carrying every file named, with an ID from the
-    /// request's, so sending the request again sends it once.
-    async fn send_first_prompt(
-        self: &Arc<Self>,
-        session: &Session,
-        made_of: &NewWorkspaceDraftToKeep,
-        files: &[Attachment],
-        client_request_id: &ClientRequestId,
-    ) -> Result<(), ApiError> {
-        self.copy_files(session, files).await?;
-        let message = ClientMessageId::from(client_request_id.as_str());
-        self.session_prompt(session.id.clone(), Some(message), first_prompt_of(made_of)).await.map(drop)
     }
 
     /// Copies each of the dialog's files to the chat, as a client adds one, unless the chat has it already.

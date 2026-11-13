@@ -41,7 +41,7 @@ async fn what_cant_be_made_is_refused_before_anything_is() {
 
 /// A file the dialog has had for long isn't let go of while a workspace is made from it, should the dialog stop naming
 /// it meanwhile. It waits as long again once the hub has found it, even if making the workspace then fails, as it does
-/// here, with no such repository.
+/// here, since this hub never starts a worker.
 #[tokio::test]
 async fn the_dialogs_files_wait_as_long_again_once_a_workspace_is_made_from_them() {
     let dir = tempfile::tempdir().unwrap();

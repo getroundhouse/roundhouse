@@ -133,10 +133,36 @@ fn a_prompt_for_a_chat_that_couldnt_be_given_what_was_picked_goes_to_its_compose
 
     let made = client.new_workspace_create(&made_of, "make it".into()).unwrap();
 
-    assert!(made.unsent.is_some(), "it says why it wasn't sent");
+    assert!(made.unchosen.is_some(), "it says the chat couldn't be given what was picked");
+    assert!(made.unsent.as_ref().is_some_and(|unsent| unsent.in_composer), "{:?}", made.unsent);
     let draft = &made.session.draft;
     assert_eq!(draft.text, "fix the login");
     assert_eq!(draft.files.iter().map(|file| &file.id).collect::<Vec<_>>(), [&made_of.files[0]]);
     assert_eq!(prompts(&client, &made.session.id), []);
     assert_eq!(client.records_list().unwrap().new_workspace_draft.unwrap().text, "", "the chat has it now");
+}
+
+/// The prompt goes to the chat only whole. Here the hub has lost a file's bytes, so it can't be copied, and the prompt
+/// stays in the dialog, which keeps every file, rather than going to the composer without the one that couldn't.
+#[test]
+fn a_prompt_whose_file_cant_be_copied_stays_in_the_dialog_with_every_file() {
+    let stack = Stack::start();
+    let client = stack.client();
+    let made_of = kept_in_the_dialog(&stack, &client, "fix the login");
+    let lost = FileToSend::checked("lost.txt", MediaType::Text, b"two\n".to_vec()).unwrap();
+    client.new_workspace_draft_file_add(&lost.attachment.id, "lost.txt", MediaType::Text, lost.data).unwrap();
+    let made_of = NewWorkspaceDraftToKeep { files: vec![made_of.files[0].clone(), lost.attachment.id], ..made_of };
+    client.new_workspace_draft_keep(&made_of).unwrap();
+    let bytes = stack.paths().attachments_dir.join("workspace-draft.files").join(made_of.files[1].as_str());
+    std::fs::remove_file(bytes).unwrap();
+
+    let made = client.new_workspace_create(&made_of, "make it".into()).unwrap();
+
+    assert!(made.unsent.as_ref().is_some_and(|unsent| !unsent.in_composer), "{:?}", made.unsent);
+    assert!(made.session.draft.is_empty(), "nothing went to the composer");
+    assert_eq!(prompts(&client, &made.session.id), []);
+    let kept = client.records_list().unwrap().new_workspace_draft.unwrap();
+    assert_eq!(kept.text, "fix the login", "the dialog still has it");
+    assert_eq!(kept.files.iter().map(|file| &file.id).collect::<Vec<_>>(), made_of.files.iter().collect::<Vec<_>>());
+    assert_eq!(client.new_workspace_draft_file_read(&made_of.files[0]).unwrap(), b"one\n");
 }
