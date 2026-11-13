@@ -1,4 +1,6 @@
-//! Whose account an agent runs under, and how much of its limits is left.
+//! Whose account an agent runs under, the login the hub holds for it, and how much of its limits is left.
+
+use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
@@ -40,10 +42,11 @@ impl AgentAccount {
 }
 
 /// An account agents run under, as a record the hub keeps, so every client shows the same of it and it's there once
-/// the agents have gone. Who it is comes from the worker, read each time an agent under it launches. What's left of
-/// its limits is what any agent under it last heard, in whichever workspace, since a limit is the account's rather
-/// than a session's. Only a login that can be told from another has a record, so whoever it is is logged in. Who it
-/// is, from `model_provider` on, is what [`AgentAccount`] says.
+/// the agents have gone. Who it is comes from the worker, read each time an agent under it launches, and for a login
+/// the hub holds, from the hub's record of that login too, since a token doesn't say whose it is. What's left of its
+/// limits is what any agent under it last heard, in whichever workspace, since a limit is the account's rather than a
+/// session's. Only a login that can be told from another has a record, so whoever it is is logged in. Who it is, from
+/// `model_provider` on, is what [`AgentAccount`] says.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Account {
     pub id: AccountId,
@@ -58,12 +61,67 @@ pub struct Account {
     pub login: Option<String>,
     #[serde(default)]
     pub email: Option<String>,
+    /// What the person called the account as they connected a login to it, since a token doesn't say whose it is. It
+    /// stays once the login is disconnected, since the sessions that ran under it still name the account.
+    #[serde(default)]
+    pub name: Option<String>,
     /// Shortest window first. Empty until an agent under the account has heard of one, and for an account with none.
     /// None says when it was heard, since hearing the same again isn't a change to the record.
     #[serde(default)]
     pub limits: Vec<UsageLimit>,
+    /// The login the hub holds for the account and hands to workers, if it holds one. `None` for an account that
+    /// agents run under through the login on their worker's machine, and for one whose login was disconnected.
+    #[serde(default)]
+    pub held_login: Option<HeldLogin>,
     #[serde(default)]
     pub rev: Rev,
+}
+
+/// What an [`Account`]'s record says of the login the hub holds for it. It never carries the token, which only the
+/// hub and the workers it hands it to have.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct HeldLogin {
+    /// When the hub was given it, by the hub's clock.
+    pub connected_at_ms: i64,
+    /// When it stops working at the latest, by the hub's clock, if the hub knows. The CLI doesn't say when a token
+    /// ends, so for one `claude setup-token` made, it's a year after it was connected, and sooner for one made before.
+    #[serde(default)]
+    pub ends_at_ms: Option<i64>,
+}
+
+/// A login the hub holds for an account, as it hands it to a worker for an agent or a one-off call to run under, so the
+/// worker's machine needs no login of its own. The hub gives one only to a worker, which keeps it only while the agent
+/// or the call it came with runs. No provider's adapter is given one, though one that carries a worker's stream itself
+/// passes it on unread.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct AgentLogin {
+    /// A token the agent's own CLI made to last, such as `claude setup-token`'s, which the agent's adapter gives the CLI
+    /// in its own way.
+    pub token: LoginToken,
+}
+
+/// The token of a login the hub holds, which is all it takes to use the account, so it's kept out of logs: its `Debug`
+/// says only that it's there, and a request or a reply that carries one can be logged whole. On the wire it's a
+/// string.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(transparent)]
+pub struct LoginToken(String);
+
+impl LoginToken {
+    pub fn new(token: impl Into<String>) -> Self {
+        Self(token.into())
+    }
+
+    /// The token itself, for handing to the agent's CLI or keeping, and nothing else.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl fmt::Debug for LoginToken {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("LoginToken(..)")
+    }
 }
 
 /// What a session's agent runs under: the account, and what the hub has heard of that account's limits, from any
@@ -142,6 +200,17 @@ mod tests {
 
         assert_eq!(account.id, AccountId::from("claude-1"));
         assert_eq!((account.email, account.limits, account.rev), (None, Vec::new(), Rev::default()));
+        assert_eq!((account.name, account.held_login), (None, None));
+    }
+
+    #[test]
+    fn a_login_carries_its_token_on_the_wire_and_hides_it_from_debug() {
+        let login = AgentLogin { token: LoginToken::new("a-made-up-token") };
+
+        assert_eq!(serde_json::to_string(&login).unwrap(), r#"{"token":"a-made-up-token"}"#);
+        assert_eq!(serde_json::from_str::<AgentLogin>(r#"{"token":"a-made-up-token"}"#).unwrap(), login);
+        assert_eq!(login.token.as_str(), "a-made-up-token");
+        assert!(!format!("{login:?}").contains("made-up"), "{login:?}");
     }
 
     #[test]

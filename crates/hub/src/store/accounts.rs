@@ -41,7 +41,10 @@ fn account(conn: &Connection, id: &AccountId) -> rusqlite::Result<Option<Account
                     plan: row.get(2)?,
                     login: row.get(3)?,
                     email: row.get(4)?,
+                    // The hub holds no logins yet, so nobody has named an account.
+                    name: None,
                     limits: Vec::new(),
+                    held_login: None,
                     rev: rev_of(row, 5)?,
                 })
             },

@@ -63,6 +63,7 @@ fn spec(model: Option<&'static str>, mode: PermissionMode) -> AgentSpec {
         },
         env: vec![],
         tools_token: None,
+        login: None,
     }
 }
 

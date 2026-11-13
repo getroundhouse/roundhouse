@@ -6,7 +6,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::{drafts, files, queue, waits};
+use super::{accounts, drafts, files, queue, waits};
 use crate::attachment::{AttachmentBytes, MediaType};
 use crate::event::ApprovalDecision;
 use crate::model::{
@@ -291,6 +291,10 @@ pub enum ClientRequest {
     SessionAccount {
         id: SessionId,
     },
+    /// See [`accounts::AccountConnect`].
+    AccountConnect(accounts::AccountConnect),
+    /// See [`accounts::AccountDisconnect`].
+    AccountDisconnect(accounts::AccountDisconnect),
     /// See [`files::WorkspaceFiles`].
     WorkspaceFiles(files::WorkspaceFiles),
     /// See [`files::WorkspaceFolderRead`].

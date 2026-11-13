@@ -319,6 +319,9 @@ async fn handle(
             C::Ok
         }
         R::SessionAccount { id } => C::SessionAccount(hub.session_account(id).await?),
+        R::AccountConnect(_) | R::AccountDisconnect(_) => {
+            return Err(ApiError::new(ErrorCode::Unsupported, "this hub doesn't hold agents' logins yet"));
+        }
         R::SessionQueue(queue::SessionQueue { id, client_msg_id, prompt }) => {
             C::Session(hub.session_queue(id, client_msg_id, prompt).await?)
         }

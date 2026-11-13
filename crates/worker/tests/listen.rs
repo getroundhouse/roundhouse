@@ -66,6 +66,7 @@ impl Listening {
             settings: agents::claude::description().defaults,
             env: vec![],
             tools_token: None,
+            login: None,
         })
     }
 

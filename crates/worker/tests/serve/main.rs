@@ -258,6 +258,7 @@ fn agent_start(session_id: &str, cwd: &Path, tools_token: Option<ToolsToken>) ->
         settings: agents::claude::description().defaults,
         env: vec![],
         tools_token,
+        login: None,
     }
 }
 

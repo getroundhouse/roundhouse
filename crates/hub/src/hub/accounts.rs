@@ -22,7 +22,7 @@ impl Hub {
         agent: AgentKind,
     ) -> Result<AgentAccount, ApiError> {
         let worktree = self.ready_worktree(workspace_id).await?;
-        worktree.link().call(AccountFor { agent }).await
+        worktree.link().call(AccountFor { agent, login: None }).await
     }
 
     /// The account the session's agent runs under, and what's been heard of that account's limits, by any agent
