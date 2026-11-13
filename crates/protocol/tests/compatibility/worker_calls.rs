@@ -1,8 +1,6 @@
 //! Every request a hub sends its worker, and every reply a worker sends back, spelled out, since a worker can outlive
 //! the hub that started it, and the next hub can be of another build.
 
-use std::fmt::Debug;
-
 use protocol::attachment::{Attachment, AttachmentBytes, MediaType, NewAttachment};
 use protocol::event::ApprovalDecision;
 use protocol::frame;
@@ -16,18 +14,12 @@ use protocol::worker::{
     self, AgentSpec, RateLimit, RunningAgent, ToolsToken, WorkerCall, WorkerFrame, WorkerOutcome, WorkerRequest,
     WorkerResponse,
 };
-use serde::Serialize;
-use serde::de::DeserializeOwned;
+
+use super::keeps_its_form;
 
 /// A login a hub holds, as it hands it to a worker.
 fn login() -> AgentLogin {
     AgentLogin { token: LoginToken::new("made-up") }
-}
-
-/// `message` is written as `line`, and `line` reads as `message`.
-fn keeps_its_form<T: Serialize + DeserializeOwned + PartialEq + Debug>(message: &T, line: &str) {
-    assert_eq!(String::from_utf8(frame::encode(message).unwrap()).unwrap(), format!("{line}\n"));
-    assert_eq!(&frame::decode::<T>(line.as_bytes()).unwrap(), message, "{line}");
 }
 
 /// `request` is written as `{"id":7,"request":<form>}`, and that reads as `request`.

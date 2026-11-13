@@ -1,7 +1,7 @@
 // Against a stand-in hub on a Unix socket.
 #![cfg(unix)]
 
-use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, ReplyOutcome};
+use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, ReplyOutcome, admin};
 use protocol::model::{Effort, ModelName, PermissionMode, SessionSettings};
 
 use super::*;
@@ -41,7 +41,7 @@ fn read_from(answer: ReplyOutcome) -> Result<Agents> {
 #[test]
 fn a_new_chat_runs_the_first_kind_the_hub_describes_that_this_build_can_name() {
     let newer = described(AgentKind::Unknown);
-    let listed = ClientResponse::Agents { agents: vec![newer, described(AgentKind::Claude)] };
+    let listed = ClientResponse::Agents(admin::Agents { agents: vec![newer, described(AgentKind::Claude)] });
 
     let agents = read_from(ReplyOutcome::Response(listed)).unwrap();
 

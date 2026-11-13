@@ -3,7 +3,7 @@
 use std::path::Path;
 use std::time::{Duration, Instant};
 
-use protocol::client::{ClientRequest, ErrorCode, HubStatus};
+use protocol::client::{ErrorCode, HubStatus, admin};
 
 use super::{Client, ClientError, Result, hub_is_missing};
 
@@ -70,7 +70,7 @@ pub enum Restart {
 /// unless something still holds it up after as long as a hub gets to stop, such as another client's request.
 pub fn restart_hub(client: &Client) -> Result<Restart> {
     let setups = client.hub_status()?.running_setups;
-    match client.expect_ok(ClientRequest::HubRestart) {
+    match client.call(admin::HubRestart) {
         // The hub did what was asked before its reply got out.
         Err(e) if hub_is_missing(&e) => {}
         other => other?,

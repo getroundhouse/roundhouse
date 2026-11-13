@@ -11,7 +11,8 @@ use std::sync::Arc;
 use protocol::attachment::AttachmentBytes;
 use protocol::client::CLIENT_PROTOCOL_VERSION;
 use protocol::client::{
-    ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HubFrame, HubStatus, ReplyOutcome, drafts, files,
+    ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HelloReply, HubFrame, HubStatus, ReplyOutcome,
+    admin, attachments, comments, drafts, files, log, records, sessions, subscriptions, workspaces,
 };
 use protocol::event::SessionEvent;
 use protocol::find::{Found, Needle};
@@ -79,37 +80,44 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
     use ClientResponse as C;
     let reply = |response| Ok(Outcome::Reply(response, Vec::new()));
     match request {
-        R::Hello { .. } => {
-            reply(C::Hello { protocol_version: CLIENT_PROTOCOL_VERSION, hub_version: version(world).to_string() })
-        }
+        R::Hello(_) => reply(C::Hello(HelloReply {
+            protocol_version: CLIENT_PROTOCOL_VERSION,
+            hub_version: version(world).to_string(),
+        })),
         R::HubStatus => reply(C::HubStatus(status(world))),
-        R::RepoList => reply(C::Repos { repos: world.repos.clone() }),
+        R::RepoList => reply(C::Repos(records::Repos { repos: world.repos.clone() })),
         R::RecordsList => reply(C::Records(world.records())),
         // Even as an older hub, so a screen of one draws the agent as the app's own hub would describe it.
-        R::AgentList => reply(C::Agents { agents: vec![claude()] }),
-        R::WorkspaceList { include_archived } => reply(C::Workspaces {
-            workspaces: world
-                .workspaces
-                .iter()
-                .filter(|w| include_archived || w.status != WorkspaceStatus::Archived)
-                .cloned()
-                .collect(),
-        }),
-        R::WorkspaceStatus { .. } => reply(C::GitStatus(GitStatus::default())),
-        R::WorkspaceDiff { id } => reply(C::GitDiff(world.diffs.get(&id).cloned().unwrap_or_else(GitDiff::default))),
-        R::WorkspaceSetupLog { id } => {
-            reply(C::SetupLog { text: world.setup_logs.get(&id).cloned().unwrap_or_default() })
+        R::AgentList => reply(C::Agents(admin::Agents { agents: vec![claude()] })),
+        R::WorkspaceList(workspaces::WorkspaceList { include_archived }) => {
+            reply(C::Workspaces(workspaces::Workspaces {
+                workspaces: world
+                    .workspaces
+                    .iter()
+                    .filter(|w| include_archived || w.status != WorkspaceStatus::Archived)
+                    .cloned()
+                    .collect(),
+            }))
         }
-        R::WorkspacePullRequest { id } => reply(C::PullRequest { pull_request: world.pull_requests.get(&id).cloned() }),
-        R::CommentList { workspace_id } => {
-            reply(C::Comments { comments: world.comments.get(&workspace_id).cloned().unwrap_or_default() })
+        R::WorkspaceStatus(_) => reply(C::GitStatus(GitStatus::default())),
+        R::WorkspaceDiff(workspaces::WorkspaceDiff { id }) => {
+            reply(C::GitDiff(world.diffs.get(&id).cloned().unwrap_or_else(GitDiff::default)))
         }
-        R::SessionList { workspace_id } => reply(C::Sessions {
+        R::WorkspaceSetupLog(workspaces::WorkspaceSetupLog { id }) => {
+            reply(C::SetupLog(workspaces::SetupLog { text: world.setup_logs.get(&id).cloned().unwrap_or_default() }))
+        }
+        R::WorkspacePullRequest(workspaces::WorkspacePullRequest { id }) => {
+            reply(C::PullRequest(workspaces::PullRequestReply { pull_request: world.pull_requests.get(&id).cloned() }))
+        }
+        R::CommentList(comments::CommentList { workspace_id }) => reply(C::Comments(comments::Comments {
+            comments: world.comments.get(&workspace_id).cloned().unwrap_or_default(),
+        })),
+        R::SessionList(sessions::SessionList { workspace_id }) => reply(C::Sessions(sessions::Sessions {
             sessions: world.sessions.iter().filter(|s| s.workspace_id == workspace_id).cloned().collect(),
-        }),
+        })),
         // A draft is taken as a hub that keeps it would, though it's left out of the screen's records, which don't
         // change. So is an answer being typed.
-        R::SessionGet { id }
+        R::SessionGet(sessions::SessionGet { id })
         | R::SessionDraft(drafts::SessionDraft { id, .. })
         | R::SessionAnswerDraft(drafts::SessionAnswerDraft { id, .. }) => {
             reply(C::Session(world.session(&id)?.clone()))
@@ -127,34 +135,34 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
             ErrorCode::Unsupported,
             "the gallery's hub doesn't keep what's in the new-workspace dialog",
         )),
-        R::SessionEnsure { workspace_id, .. } => {
+        R::SessionEnsure(sessions::SessionEnsure { workspace_id, .. }) => {
             let open = world.sessions.iter().rev().find(|s| s.workspace_id == workspace_id && s.closed_at_ms.is_none());
             reply(C::Session(open.cloned().ok_or_else(|| read_only("give this workspace a chat in the screen"))?))
         }
-        R::SessionRead { id, from_seq, limit, .. } => {
+        R::SessionRead(log::SessionRead { id, from_seq, limit, .. }) => {
             let session = world.session(&id)?;
             let events = world.events_from(&id, from_seq).take(usize::try_from(limit).unwrap_or(usize::MAX));
-            reply(C::Events { events: events.cloned().collect(), last_seq: session.last_seq })
+            reply(C::Events(log::Events { events: events.cloned().collect(), last_seq: session.last_seq }))
         }
         // An older hub's build is from before prompts were listed.
-        R::SessionPromptList { .. } if world.hub.is_some() => {
+        R::SessionPromptList(_) if world.hub.is_some() => {
             Err(ApiError::new(ErrorCode::Unsupported, "an older hub doesn't list prompts"))
         }
-        R::SessionPromptList { id } => {
+        R::SessionPromptList(log::SessionPromptList { id }) => {
             world.session(&id)?;
             let prompts = world.events_from(&id, 1).filter_map(PromptLine::of);
-            reply(C::Prompts { prompts: prompts.collect() })
+            reply(C::Prompts(log::Prompts { prompts: prompts.collect() }))
         }
         // An older hub's build is from before compactions were listed too.
-        R::SessionCompactionList { .. } if world.hub.is_some() => {
+        R::SessionCompactionList(_) if world.hub.is_some() => {
             Err(ApiError::new(ErrorCode::Unsupported, "an older hub doesn't list compactions"))
         }
-        R::SessionCompactionList { id } => {
+        R::SessionCompactionList(log::SessionCompactionList { id }) => {
             world.session(&id)?;
             let compactions = world.events_from(&id, 1).filter_map(CompactionLine::of);
-            reply(C::Compactions { compactions: compactions.collect() })
+            reply(C::Compactions(log::Compactions { compactions: compactions.collect() }))
         }
-        R::SessionFind { id, subagent, query } => {
+        R::SessionFind(log::SessionFind { id, subagent, query }) => {
             world.session(&id)?;
             let needle = Needle::new(&query).map_err(|e| ApiError::new(ErrorCode::InvalidRequest, e.to_string()))?;
             let theirs: Vec<&SessionEvent> = world.placed_from(&id, subagent.as_ref(), Place::new(1)).collect();
@@ -162,27 +170,32 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
             let through = theirs.last().map_or(Place::new(0), |event| event.place);
             reply(C::Found(Found { places: places.collect(), through }))
         }
-        R::SessionSubscribe { id, from_seq, subscription_id } => subscribe(world, &id, from_seq, subscription_id),
-        R::SessionReadPlaces { id, subagent, from_place, limit, .. } => {
+        R::SessionSubscribe(subscriptions::SessionSubscribe { id, from_seq, subscription_id }) => {
+            subscribe(world, &id, from_seq, subscription_id)
+        }
+        R::SessionReadPlaces(log::SessionReadPlaces { id, subagent, from_place, limit, .. }) => {
             world.session(&id)?;
             let last_place =
                 world.placed_from(&id, subagent.as_ref(), Place::new(1)).last().map_or(Place::new(0), |e| e.place);
             let events = world
                 .placed_from(&id, subagent.as_ref(), from_place)
                 .take(usize::try_from(limit).unwrap_or(usize::MAX));
-            reply(C::PlacedEvents { events: events.cloned().collect(), last_place })
+            reply(C::PlacedEvents(log::PlacedEvents { events: events.cloned().collect(), last_place }))
         }
-        R::SessionSubscribePlaces { id, subagent, from_place, subscription_id } => {
-            subscribe_places(world, &id, subagent.as_ref(), from_place, subscription_id)
-        }
-        R::SessionSubagents { id } => {
+        R::SessionSubscribePlaces(subscriptions::SessionSubscribePlaces {
+            id,
+            subagent,
+            from_place,
+            subscription_id,
+        }) => subscribe_places(world, &id, subagent.as_ref(), from_place, subscription_id),
+        R::SessionSubagents(records::SessionSubagents { id }) => {
             world.session(&id)?;
-            reply(C::Subagents { subagents: world.subagents_of(&id), rev: Rev::default() })
+            reply(C::Subagents(records::Subagents { subagents: world.subagents_of(&id), rev: Rev::default() }))
         }
-        R::FeedSubscribe { .. } | R::SessionUnsubscribe { .. } => reply(C::Ok),
-        R::AttachmentRead { id, .. } => {
+        R::FeedSubscribe(_) | R::SessionUnsubscribe(_) => reply(C::Ok),
+        R::AttachmentRead(attachments::AttachmentRead { id, .. }) => {
             let data = world.attachments.get(&id).ok_or_else(|| ApiError::new(ErrorCode::NotFound, "no such file"))?;
-            reply(C::AttachmentData { data: AttachmentBytes::new(data.clone()) })
+            reply(C::AttachmentData(attachments::AttachmentData { data: AttachmentBytes::new(data.clone()) }))
         }
         // An older hub's build is from before files were listed, too.
         R::WorkspaceFiles(_) if world.hub.is_some() => {
@@ -219,40 +232,40 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         R::HubShutdown
         | R::HubRestart
         | R::HubShutdownIfIdle
-        | R::HubConfigure { .. }
-        | R::RepoAdd { .. }
-        | R::WorkspaceCreate { .. }
-        | R::WorkspaceArchive { .. }
-        | R::WorkspaceRestore { .. }
-        | R::WorkspaceRename { .. }
-        | R::WorkspaceRerunSetup { .. }
-        | R::CommentAdd { .. }
-        | R::CommentEdit { .. }
-        | R::CommentDelete { .. }
-        | R::SessionCreate { .. }
-        | R::SessionPrompt { .. }
-        | R::AttachmentAdd { .. }
-        | R::AttachmentRemove { .. }
+        | R::HubConfigure(_)
+        | R::RepoAdd(_)
+        | R::WorkspaceCreate(_)
+        | R::WorkspaceArchive(_)
+        | R::WorkspaceRestore(_)
+        | R::WorkspaceRename(_)
+        | R::WorkspaceRerunSetup(_)
+        | R::CommentAdd(_)
+        | R::CommentEdit(_)
+        | R::CommentDelete(_)
+        | R::SessionCreate(_)
+        | R::SessionPrompt(_)
+        | R::AttachmentAdd(_)
+        | R::AttachmentRemove(_)
         | R::SessionQueue(_)
         | R::SessionChangeQueued(_)
         | R::SessionUnqueue(_)
         | R::SessionSendQueued(_)
-        | R::SessionApprove { .. }
-        | R::SessionCancel { .. }
-        | R::SessionCompact { .. }
-        | R::SessionConfigure { .. }
-        | R::SessionClose { .. }
-        | R::SessionReopen { .. }
+        | R::SessionApprove(_)
+        | R::SessionCancel(_)
+        | R::SessionCompact(_)
+        | R::SessionConfigure(_)
+        | R::SessionClose(_)
+        | R::SessionReopen(_)
         | R::SessionCallOffWait(_)
-        | R::SessionMarkRead { .. }
-        | R::SessionMarkUnread { .. }
-        | R::SessionRename { .. }
+        | R::SessionMarkRead(_)
+        | R::SessionMarkUnread(_)
+        | R::SessionRename(_)
         | R::AccountConnect(_)
         | R::AccountDisconnect(_) => Err(read_only("change anything")),
         // So a screen can show a workspace waiting for its new title. One on its way out is the world's to say.
-        R::WorkspaceRegenerateTitle { .. } => Ok(Outcome::Never),
+        R::WorkspaceRegenerateTitle(_) => Ok(Outcome::Never),
         // The app reads whose account it is from the records, so a screen that asks some other way is wrong.
-        R::SessionAccount { .. } | R::Unknown => {
+        R::SessionAccount(_) | R::Unknown => {
             Err(ApiError::new(ErrorCode::Unsupported, "the gallery's hub doesn't know that request"))
         }
     }

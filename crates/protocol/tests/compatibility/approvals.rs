@@ -3,7 +3,7 @@
 
 #![cfg(test)]
 
-use protocol::client::{ClientFrame, ClientRequest};
+use protocol::client::{ClientFrame, ClientRequest, agent};
 use protocol::event::{ApprovalDecision, Asking, EventBody, Question, QuestionAnswer, QuestionOption, SessionEvent};
 use protocol::frame;
 
@@ -71,7 +71,9 @@ fn every_decision_keeps_its_form() {
             r#"{{"id":3,"request":{{"method":"session_approve","id":"s","approval_id":"a","decision":{decision}}}}}"#
         );
         let frame: ClientFrame = frame::decode(line.as_bytes()).unwrap();
-        let ClientRequest::SessionApprove { decision: read, .. } = &frame.request else { panic!("{frame:?}") };
+        let ClientRequest::SessionApprove(agent::SessionApprove { decision: read, .. }) = &frame.request else {
+            panic!("{frame:?}")
+        };
         assert_eq!(frame::encode(&frame).unwrap(), [line.as_bytes(), b"\n"].concat(), "and it's written as it's read");
         read.clone()
     };

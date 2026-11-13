@@ -1,10 +1,10 @@
 //! The requests that read a workspace's worktree: what files it has, and what one holds, now or in a commit, whole
-//! or a page at a time. Each is the body of the `ClientRequest` of its name, which has the same form on the wire as
-//! if its fields were the request's own.
+//! or a page at a time.
 
 use serde::{Deserialize, Serialize};
 
-use crate::model::{CommitId, WorkspaceId};
+use super::{ClientRequest, ClientResponse, Reply, Request};
+use crate::model::{CommitId, FileContents, FileOpened, FilePages, WorkspaceId, WorktreeFiles};
 
 /// The files in the workspace's worktree, for browsing them: tracked, new and ignored, apart from what's in a
 /// folder git ignores whole, or that's a repository of its own, which is listed as a folder for
@@ -12,6 +12,14 @@ use crate::model::{CommitId, WorkspaceId};
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct WorkspaceFiles {
     pub id: WorkspaceId,
+}
+
+impl Request for WorkspaceFiles {
+    type Reply = WorktreeFiles;
+
+    fn into_request(self) -> ClientRequest {
+        ClientRequest::WorkspaceFiles(self)
+    }
 }
 
 /// What's directly in the folder at `path` in the workspace's worktree, its files and its folders, for opening one
@@ -23,6 +31,21 @@ pub struct WorkspaceFolderRead {
     pub path: String,
 }
 
+impl Request for WorkspaceFolderRead {
+    type Reply = WorktreeFiles;
+
+    fn into_request(self) -> ClientRequest {
+        ClientRequest::WorkspaceFolderRead(self)
+    }
+}
+
+impl Reply for WorktreeFiles {
+    fn read(response: ClientResponse) -> Result<Self, ClientResponse> {
+        let ClientResponse::WorktreeFiles(files) = response else { return Err(response) };
+        Ok(files)
+    }
+}
+
 /// What the file at `path` in the workspace's worktree holds, for showing it. `path` is relative to the worktree,
 /// as `WorkspaceFiles` gives it, and refused unless it's a file inside the worktree, links followed. A hub older
 /// than this refuses it as unsupported.
@@ -30,6 +53,14 @@ pub struct WorkspaceFolderRead {
 pub struct WorkspaceFileRead {
     pub id: WorkspaceId,
     pub path: String,
+}
+
+impl Request for WorkspaceFileRead {
+    type Reply = FileContents;
+
+    fn into_request(self) -> ClientRequest {
+        ClientRequest::WorkspaceFileRead(self)
+    }
 }
 
 /// What the file at `path` held in `commit`, in the repository of the workspace's worktree, for showing what a
@@ -47,6 +78,21 @@ pub struct WorkspaceFileReadAt {
     pub path: String,
 }
 
+impl Request for WorkspaceFileReadAt {
+    type Reply = FileContents;
+
+    fn into_request(self) -> ClientRequest {
+        ClientRequest::WorkspaceFileReadAt(self)
+    }
+}
+
+impl Reply for FileContents {
+    fn read(response: ClientResponse) -> Result<Self, ClientResponse> {
+        let ClientResponse::FileContents(contents) = response else { return Err(response) };
+        Ok(contents)
+    }
+}
+
 /// Opens the file at `path` as `commit` held it, to be read a page of lines at a time with `WorkspaceFilePages`,
 /// for showing a file that can be too big for `WorkspaceFileReadAt` to send, such as the lines a diff leaves out
 /// of it. Answers with `FileOpened`, with every page when the file is small enough to send at once, and is refused
@@ -56,6 +102,21 @@ pub struct WorkspaceFileOpenAt {
     pub id: WorkspaceId,
     pub commit: CommitId,
     pub path: String,
+}
+
+impl Request for WorkspaceFileOpenAt {
+    type Reply = FileOpened;
+
+    fn into_request(self) -> ClientRequest {
+        ClientRequest::WorkspaceFileOpenAt(self)
+    }
+}
+
+impl Reply for FileOpened {
+    fn read(response: ClientResponse) -> Result<Self, ClientResponse> {
+        let ClientResponse::FileOpened(opened) = response else { return Err(response) };
+        Ok(opened)
+    }
 }
 
 /// Pages of the lines of the file at `path` as `commit` held it, as `WorkspaceFileOpenAt` opened it, with
@@ -72,61 +133,17 @@ pub struct WorkspaceFilePages {
     pub pages: Vec<u32>,
 }
 
-#[cfg(test)]
-mod tests {
-    use serde_json::json;
+impl Request for WorkspaceFilePages {
+    type Reply = FilePages;
 
-    use super::*;
-    use crate::client::ClientRequest;
+    fn into_request(self) -> ClientRequest {
+        ClientRequest::WorkspaceFilePages(self)
+    }
+}
 
-    /// The same as when their fields were the requests' own, so a peer from before reads them.
-    #[test]
-    fn a_request_s_body_travels_beside_its_method() {
-        let (id, commit, path) = (WorkspaceId::from("w1"), CommitId::from("c1"), "a.txt".to_string());
-        let requests = [
-            (ClientRequest::WorkspaceFiles(WorkspaceFiles { id: id.clone() }), json!({"method": "workspace_files"})),
-            (
-                ClientRequest::WorkspaceFolderRead(WorkspaceFolderRead { id: id.clone(), path: "src".into() }),
-                json!({"method": "workspace_folder_read", "path": "src"}),
-            ),
-            (
-                ClientRequest::WorkspaceFileRead(WorkspaceFileRead { id: id.clone(), path: path.clone() }),
-                json!({"method": "workspace_file_read", "path": "a.txt"}),
-            ),
-            (
-                ClientRequest::WorkspaceFileReadAt(WorkspaceFileReadAt {
-                    id: id.clone(),
-                    commit: commit.clone(),
-                    path: path.clone(),
-                }),
-                json!({"method": "workspace_file_read_at", "commit": "c1", "path": "a.txt"}),
-            ),
-            (
-                ClientRequest::WorkspaceFileOpenAt(WorkspaceFileOpenAt {
-                    id: id.clone(),
-                    commit: commit.clone(),
-                    path: path.clone(),
-                }),
-                json!({"method": "workspace_file_open_at", "commit": "c1", "path": "a.txt"}),
-            ),
-            (
-                ClientRequest::WorkspaceFilePages(WorkspaceFilePages {
-                    id,
-                    commit,
-                    path,
-                    page_lines: 256,
-                    pages: vec![3],
-                }),
-                json!({"method": "workspace_file_pages", "commit": "c1", "path": "a.txt", "page_lines": 256, "pages": [3]}),
-            ),
-        ];
-
-        for (request, mut form) in requests {
-            form["id"] = json!("w1");
-            let sent = serde_json::to_value(&request).unwrap();
-
-            assert_eq!(sent, form);
-            assert_eq!(serde_json::from_value::<ClientRequest>(sent).unwrap(), request);
-        }
+impl Reply for FilePages {
+    fn read(response: ClientResponse) -> Result<Self, ClientResponse> {
+        let ClientResponse::FilePages(pages) = response else { return Err(response) };
+        Ok(pages)
     }
 }

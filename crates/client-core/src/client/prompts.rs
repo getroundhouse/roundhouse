@@ -3,11 +3,11 @@
 //! [`Client::send_prompt`], which add their files first, in their place in their chat's line. The calls here that
 //! send one whose files are added already are for tests.
 
-use protocol::client::{ClientRequest, ClientResponse, queue};
+use protocol::client::{agent, queue};
 use protocol::model::{AttachmentId, ClientMessageId, Seq, Session, SessionId};
 use protocol::prompt::Prompt;
 
-use super::{Client, Result, unexpected};
+use super::{Client, Result};
 
 impl Client {
     /// Sends a prompt that says only `text`, for a test, which can send it under no ID, as a client from before them
@@ -40,10 +40,8 @@ impl Client {
         client_msg_id: Option<ClientMessageId>,
         prompt: Prompt<AttachmentId>,
     ) -> Result<(Seq, bool)> {
-        let reply = self.call(ClientRequest::SessionPrompt { id: id.clone(), client_msg_id, prompt })?;
-        let ClientResponse::PromptRecorded { seq, duplicate } = reply else {
-            return unexpected(&reply);
-        };
+        let agent::PromptRecorded { seq, duplicate } =
+            self.call(agent::SessionPrompt { id: id.clone(), client_msg_id, prompt })?;
         Ok((seq, duplicate))
     }
 
@@ -65,36 +63,28 @@ impl Client {
         self.queue_carried(id, client_msg_id, prompt)
     }
 
-    /// Queues a prompt whose files have each been added to the session. See [`ClientRequest::SessionQueue`].
+    /// Queues a prompt whose files have each been added to the session. See [`queue::SessionQueue`].
     pub(crate) fn queue_carried(
         &self,
         id: &SessionId,
         client_msg_id: ClientMessageId,
         prompt: Prompt<AttachmentId>,
     ) -> Result<Session> {
-        self.expect_session(ClientRequest::SessionQueue(queue::SessionQueue { id: id.clone(), client_msg_id, prompt }))
+        self.call(queue::SessionQueue { id: id.clone(), client_msg_id, prompt })
     }
 
-    /// See [`ClientRequest::SessionChangeQueued`].
+    /// See [`queue::SessionChangeQueued`].
     pub fn session_change_queued(&self, id: &SessionId, client_msg_id: ClientMessageId, text: &str) -> Result<Session> {
-        let text = text.to_string();
-        self.expect_session(ClientRequest::SessionChangeQueued(queue::SessionChangeQueued {
-            id: id.clone(),
-            client_msg_id,
-            text,
-        }))
+        self.call(queue::SessionChangeQueued { id: id.clone(), client_msg_id, text: text.to_string() })
     }
 
-    /// See [`ClientRequest::SessionUnqueue`].
+    /// See [`queue::SessionUnqueue`].
     pub fn session_unqueue(&self, id: &SessionId, client_msg_id: ClientMessageId) -> Result<Session> {
-        self.expect_session(ClientRequest::SessionUnqueue(queue::SessionUnqueue { id: id.clone(), client_msg_id }))
+        self.call(queue::SessionUnqueue { id: id.clone(), client_msg_id })
     }
 
-    /// See [`ClientRequest::SessionSendQueued`].
+    /// See [`queue::SessionSendQueued`].
     pub fn session_send_queued(&self, id: &SessionId, client_msg_id: ClientMessageId) -> Result<Session> {
-        self.expect_session(ClientRequest::SessionSendQueued(queue::SessionSendQueued {
-            id: id.clone(),
-            client_msg_id,
-        }))
+        self.call(queue::SessionSendQueued { id: id.clone(), client_msg_id })
     }
 }

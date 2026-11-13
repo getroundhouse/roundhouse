@@ -7,14 +7,15 @@ use std::sync::atomic::Ordering;
 use parking_lot::Mutex;
 use protocol::Build;
 use protocol::client::{
-    ApiError, ClientRequest, ClientResponse, ErrorCode, HubFrame, HubNotice, ReplyOutcome, drafts, files,
-    new_workspace, queue, waits,
+    ApiError, ClientRequest, ClientResponse, ErrorCode, Hello, HelloReply, HubFrame, ReplyOutcome, admin, agent,
+    attachments, comments, drafts, files, log, new_workspace, queue, records, sessions, subscriptions, waits,
+    workspaces,
 };
 use protocol::frame::{self, Call};
-use protocol::model::{Place, SessionId};
+use protocol::model::Place;
 use protocol::versions::Versions;
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
-use tokio::sync::{broadcast, mpsc};
+use tokio::sync::mpsc;
 use tokio::task::AbortHandle;
 use tracing::{debug, warn};
 
@@ -24,9 +25,11 @@ use crate::hub::Hub;
 use crate::listener::Listener;
 use crate::store::AddedBy;
 use crate::versions;
-use pump::{Following, pump};
+use pump::Following;
+use subscribing::{follow_feed, follow_log, unsubscribe};
 
 mod pump;
+mod subscribing;
 
 pub(crate) const DEFAULT_READ_BYTES: u64 = 4 * 1024 * 1024;
 pub(crate) const MAX_READ_EVENTS: u32 = 2000;
@@ -135,16 +138,16 @@ fn works_without_hello(request: &ClientRequest) -> bool {
 /// `None` for a first request this hub couldn't read, which can't be a hello it can answer.
 fn hello(build: Build, request: Option<&ClientRequest>) -> (ReplyOutcome, bool) {
     let error = |message: String| (ReplyOutcome::Error(ApiError::new(ErrorCode::VersionMismatch, message)), false);
-    let Some(ClientRequest::Hello { protocol_version, oldest_protocol_version, .. }) = request else {
+    let Some(ClientRequest::Hello(Hello { protocol_version, oldest_protocol_version, .. })) = request else {
         return error("the first request on a connection must be hello".to_string());
     };
     let theirs = Versions::from_hello(*protocol_version, *oldest_protocol_version);
     match versions::CLIENTS.newest_shared(theirs) {
         Some(chosen) => (
-            ReplyOutcome::Response(ClientResponse::Hello {
+            ReplyOutcome::Response(ClientResponse::Hello(HelloReply {
                 protocol_version: chosen,
                 hub_version: build.version().to_string(),
-            }),
+            })),
             true,
         ),
         None => error(format!(
@@ -153,37 +156,6 @@ fn hello(build: Build, request: Option<&ClientRequest>) -> (ReplyOutcome, bool) 
             versions::CLIENTS,
         )),
     }
-}
-
-/// Holds the lock while `start` runs, so two requests can't both take one subscription ID.
-fn add_subscription(
-    connection: &Connection,
-    subscription_id: u64,
-    start: impl FnOnce() -> AbortHandle,
-) -> Result<(), ApiError> {
-    let mut subscriptions = connection.subscriptions.lock();
-    if subscriptions.contains_key(&subscription_id) {
-        return Err(ApiError::new(ErrorCode::InvalidRequest, format!("subscription {subscription_id} already exists")));
-    }
-    subscriptions.insert(subscription_id, start());
-    Ok(())
-}
-
-/// Starts feeding a subscription to a session's log.
-async fn subscribe(
-    hub: &Arc<Hub>,
-    connection: &Connection,
-    id: SessionId,
-    subscription_id: u64,
-    following: Following,
-) -> Result<ClientResponse, ApiError> {
-    let session = hub.live_session(&id).await?;
-    add_subscription(connection, subscription_id, || {
-        let live = session.subscribe();
-        let frames = connection.frames.clone();
-        tokio::spawn(pump(hub.clone(), session.clone(), id, subscription_id, following, live, frames)).abort_handle()
-    })?;
-    Ok(ClientResponse::Ok)
 }
 
 #[expect(clippy::too_many_lines, reason = "a flat dispatch, with one short arm per request")]
@@ -195,7 +167,7 @@ async fn handle(
     use ClientRequest as R;
     use ClientResponse as C;
     Ok(match request {
-        R::Hello { .. } => return Err(ApiError::new(ErrorCode::InvalidRequest, "already said hello")),
+        R::Hello(_) => return Err(ApiError::new(ErrorCode::InvalidRequest, "already said hello")),
         R::Unknown => return Err(hub.unsupported(None)),
         R::HubStatus => C::HubStatus(hub.status()),
         R::HubShutdown => {
@@ -210,26 +182,32 @@ async fn handle(
             hub.request_restart()?;
             C::Ok
         }
-        R::HubConfigure { settings } => C::HubSettings(hub.hub_configure(settings).await?),
-        R::RepoAdd { path } => C::Repo(hub.repo_add(path).await?),
-        R::RepoList => C::Repos { repos: hub.repo_list().await? },
+        R::HubConfigure(admin::HubConfigure { settings }) => C::HubSettings(hub.hub_configure(settings).await?),
+        R::RepoAdd(records::RepoAdd { path }) => C::Repo(hub.repo_add(path).await?),
+        R::RepoList => C::Repos(records::Repos { repos: hub.repo_list().await? }),
         R::RecordsList => C::Records(hub.records_list().await?),
-        R::AgentList => C::Agents { agents: hub.agent_list() },
-        R::WorkspaceCreate { repo_id, name, base_ref, client_request_id } => {
+        R::AgentList => C::Agents(admin::Agents { agents: hub.agent_list() }),
+        R::WorkspaceCreate(workspaces::WorkspaceCreate { repo_id, name, base_ref, client_request_id }) => {
             C::Workspace(hub.workspace_create(repo_id, name, base_ref, client_request_id).await?)
         }
-        R::WorkspaceList { include_archived } => {
-            C::Workspaces { workspaces: hub.workspace_list(include_archived).await? }
+        R::WorkspaceList(workspaces::WorkspaceList { include_archived }) => {
+            C::Workspaces(workspaces::Workspaces { workspaces: hub.workspace_list(include_archived).await? })
         }
-        R::WorkspaceArchive { id, force } => C::Workspace(hub.workspace_archive(id, force).await?),
-        R::WorkspaceRestore { id } => C::Workspace(hub.workspace_restore(id).await?),
-        R::WorkspaceRename { id, title } => C::Workspace(hub.workspace_rename(id, &title).await?),
+        R::WorkspaceArchive(workspaces::WorkspaceArchive { id, force }) => {
+            C::Workspace(hub.workspace_archive(id, force).await?)
+        }
+        R::WorkspaceRestore(workspaces::WorkspaceRestore { id }) => C::Workspace(hub.workspace_restore(id).await?),
+        R::WorkspaceRename(workspaces::WorkspaceRename { id, title }) => {
+            C::Workspace(hub.workspace_rename(id, &title).await?)
+        }
         R::WorkspaceCommentDraft(drafts::WorkspaceCommentDraft { id, draft }) => {
             C::Workspace(hub.workspace_comment_draft(id, draft).await?)
         }
-        R::WorkspaceRegenerateTitle { id } => C::Workspace(hub.workspace_regenerate_title(id).await?),
-        R::WorkspaceStatus { id } => C::GitStatus(hub.workspace_status(id).await?),
-        R::WorkspaceDiff { id } => C::GitDiff(hub.workspace_diff(id).await?),
+        R::WorkspaceRegenerateTitle(workspaces::WorkspaceRegenerateTitle { id }) => {
+            C::Workspace(hub.workspace_regenerate_title(id).await?)
+        }
+        R::WorkspaceStatus(workspaces::WorkspaceStatus { id }) => C::GitStatus(hub.workspace_status(id).await?),
+        R::WorkspaceDiff(workspaces::WorkspaceDiff { id }) => C::GitDiff(hub.workspace_diff(id).await?),
         R::WorkspaceFiles(files::WorkspaceFiles { id }) => C::WorktreeFiles(hub.workspace_files(id).await?),
         R::WorkspaceFolderRead(files::WorkspaceFolderRead { id, path }) => {
             C::WorktreeFiles(hub.workspace_folder_read(id, path).await?)
@@ -244,65 +222,88 @@ async fn handle(
             C::FileOpened(hub.workspace_file_open_at(id, commit, path).await?)
         }
         R::WorkspaceFilePages(asked) => C::FilePages(hub.workspace_file_pages(asked).await?),
-        R::WorkspaceSetupLog { id } => C::SetupLog { text: hub.workspace_setup_log(id).await? },
-        R::WorkspaceRerunSetup { id } => C::Workspace(hub.workspace_rerun_setup(id).await?),
-        R::WorkspacePullRequest { id } => C::PullRequest { pull_request: hub.workspace_pull_request(id).await? },
-        R::CommentAdd { workspace_id, path, side, line, text, client_request_id } => {
+        R::WorkspaceSetupLog(workspaces::WorkspaceSetupLog { id }) => {
+            C::SetupLog(workspaces::SetupLog { text: hub.workspace_setup_log(id).await? })
+        }
+        R::WorkspaceRerunSetup(workspaces::WorkspaceRerunSetup { id }) => {
+            C::Workspace(hub.workspace_rerun_setup(id).await?)
+        }
+        R::WorkspacePullRequest(workspaces::WorkspacePullRequest { id }) => {
+            C::PullRequest(workspaces::PullRequestReply { pull_request: hub.workspace_pull_request(id).await? })
+        }
+        R::CommentAdd(comments::CommentAdd { workspace_id, path, side, line, text, client_request_id }) => {
             C::Comment(hub.comment_add(workspace_id, path, side, line, text, client_request_id).await?)
         }
-        R::CommentList { workspace_id } => C::Comments { comments: hub.comment_list(workspace_id).await? },
-        R::CommentEdit { id, text } => C::Comment(hub.comment_edit(id, text).await?),
-        R::CommentDelete { id } => {
+        R::CommentList(comments::CommentList { workspace_id }) => {
+            C::Comments(comments::Comments { comments: hub.comment_list(workspace_id).await? })
+        }
+        R::CommentEdit(comments::CommentEdit { id, text }) => C::Comment(hub.comment_edit(id, text).await?),
+        R::CommentDelete(comments::CommentDelete { id }) => {
             hub.comment_delete(id).await?;
             C::Ok
         }
-        R::SessionCreate { workspace_id, agent, options, client_request_id } => {
-            C::Session(hub.session_create(workspace_id, agent, options, client_request_id).await?)
+        R::SessionCreate(sessions::SessionCreate { workspace_id, agent: kind, options, client_request_id }) => {
+            C::Session(hub.session_create(workspace_id, kind, options, client_request_id).await?)
         }
-        R::SessionEnsure { workspace_id, agent } => C::Session(hub.session_ensure(workspace_id, agent).await?),
-        R::SessionList { workspace_id } => C::Sessions { sessions: hub.session_list(workspace_id).await? },
-        R::SessionGet { id } => C::Session(hub.session_get(id).await?),
-        R::SessionRead { id, from_seq, limit, max_bytes, include_raw } => {
-            hub.session_read(id, from_seq, limit, max_bytes, include_raw).await?
+        R::SessionEnsure(sessions::SessionEnsure { workspace_id, agent: kind }) => {
+            C::Session(hub.session_ensure(workspace_id, kind).await?)
         }
-        R::SessionPromptList { id } => C::Prompts { prompts: hub.session_prompt_list(id).await? },
-        R::SessionCompactionList { id } => C::Compactions { compactions: hub.session_compaction_list(id).await? },
-        R::SessionFind { id, subagent, query } => C::Found(hub.session_find(id, subagent, &query).await?),
-        R::SessionSubscribe { id, from_seq, subscription_id } => {
-            subscribe(hub, connection, id, subscription_id, Following::Log { next: from_seq.max(1) }).await?
+        R::SessionList(sessions::SessionList { workspace_id }) => {
+            C::Sessions(sessions::Sessions { sessions: hub.session_list(workspace_id).await? })
         }
-        R::SessionReadPlaces { id, subagent, from_place, limit, max_bytes, include_raw } => {
-            hub.session_read_places(id, subagent, from_place, limit, max_bytes, include_raw).await?
+        R::SessionGet(sessions::SessionGet { id }) => C::Session(hub.session_get(id).await?),
+        R::SessionRead(log::SessionRead { id, from_seq, limit, max_bytes, include_raw }) => {
+            C::Events(hub.session_read(id, from_seq, limit, max_bytes, include_raw).await?)
         }
-        R::SessionSubagents { id } => hub.session_subagents(id).await?,
-        R::SessionSubscribePlaces { id, subagent, from_place, subscription_id } => {
+        R::SessionPromptList(log::SessionPromptList { id }) => {
+            C::Prompts(log::Prompts { prompts: hub.session_prompt_list(id).await? })
+        }
+        R::SessionCompactionList(log::SessionCompactionList { id }) => {
+            C::Compactions(log::Compactions { compactions: hub.session_compaction_list(id).await? })
+        }
+        R::SessionFind(log::SessionFind { id, subagent, query }) => {
+            C::Found(hub.session_find(id, subagent, &query).await?)
+        }
+        R::SessionSubscribe(subscriptions::SessionSubscribe { id, from_seq, subscription_id }) => {
+            follow_log(hub, connection, id, subscription_id, Following::Log { next: from_seq.max(1) }).await?;
+            C::Ok
+        }
+        R::SessionReadPlaces(log::SessionReadPlaces { id, subagent, from_place, limit, max_bytes, include_raw }) => {
+            C::PlacedEvents(hub.session_read_places(id, subagent, from_place, limit, max_bytes, include_raw).await?)
+        }
+        R::SessionSubagents(records::SessionSubagents { id }) => C::Subagents(hub.session_subagents(id).await?),
+        R::SessionSubscribePlaces(subscriptions::SessionSubscribePlaces {
+            id,
+            subagent,
+            from_place,
+            subscription_id,
+        }) => {
             let next = from_place.max(Place::new(1));
-            subscribe(hub, connection, id, subscription_id, Following::Places { subagent, next }).await?
-        }
-        R::FeedSubscribe { subscription_id } => {
-            add_subscription(connection, subscription_id, || {
-                tokio::spawn(pump_feed(hub.subscribe_feed(), subscription_id, connection.frames.clone())).abort_handle()
-            })?;
+            follow_log(hub, connection, id, subscription_id, Following::Places { subagent, next }).await?;
             C::Ok
         }
-        R::SessionUnsubscribe { subscription_id } => {
-            if let Some(subscription) = connection.subscriptions.lock().remove(&subscription_id) {
-                subscription.abort();
-            }
+        R::FeedSubscribe(subscriptions::FeedSubscribe { subscription_id }) => {
+            follow_feed(hub, connection, subscription_id)?;
             C::Ok
         }
-        R::SessionPrompt { id, client_msg_id, prompt } => {
+        R::SessionUnsubscribe(subscriptions::SessionUnsubscribe { subscription_id }) => {
+            unsubscribe(connection, subscription_id);
+            C::Ok
+        }
+        R::SessionPrompt(agent::SessionPrompt { id, client_msg_id, prompt }) => {
             let (seq, duplicate) = hub.session_prompt(id, client_msg_id, prompt).await?;
-            C::PromptRecorded { seq, duplicate }
+            C::PromptRecorded(agent::PromptRecorded { seq, duplicate })
         }
-        R::AttachmentAdd { session_id, id, name, media_type, data } => {
+        R::AttachmentAdd(attachments::AttachmentAdd { session_id, id, name, media_type, data }) => {
             let kept_for = FileFor::Session(session_id);
             C::Attachment(hub.file_add(kept_for, id, name, media_type, data, AddedBy::Client).await?)
         }
-        R::AttachmentRead { session_id, id } => {
-            C::AttachmentData { data: hub.file_read(FileFor::Session(session_id), id).await? }
+        R::AttachmentRead(attachments::AttachmentRead { session_id, id }) => {
+            C::AttachmentData(attachments::AttachmentData {
+                data: hub.file_read(FileFor::Session(session_id), id).await?,
+            })
         }
-        R::AttachmentRemove { session_id, id } => {
+        R::AttachmentRemove(attachments::AttachmentRemove { session_id, id }) => {
             hub.file_remove(FileFor::Session(session_id), id).await?;
             C::Ok
         }
@@ -313,7 +314,7 @@ async fn handle(
             C::Attachment(hub.file_add(FileFor::NewWorkspace, id, name, media_type, data, AddedBy::Client).await?)
         }
         R::NewWorkspaceDraftFileRead(drafts::NewWorkspaceDraftFileRead { id }) => {
-            C::AttachmentData { data: hub.file_read(FileFor::NewWorkspace, id).await? }
+            C::AttachmentData(attachments::AttachmentData { data: hub.file_read(FileFor::NewWorkspace, id).await? })
         }
         R::NewWorkspaceDraftFileRemove(drafts::NewWorkspaceDraftFileRemove { id }) => {
             hub.file_remove(FileFor::NewWorkspace, id).await?;
@@ -322,7 +323,7 @@ async fn handle(
         R::NewWorkspaceCreate(new_workspace::NewWorkspaceCreate { made_of, client_request_id }) => {
             C::NewWorkspaceMade(Box::new(hub.new_workspace_create(made_of, client_request_id).await?))
         }
-        R::SessionAccount { id } => C::SessionAccount(hub.session_account(id).await?),
+        R::SessionAccount(sessions::SessionAccount { id }) => C::SessionAccount(hub.session_account(id).await?),
         R::AccountConnect(_) | R::AccountDisconnect(_) => {
             return Err(ApiError::new(ErrorCode::Unsupported, "this hub doesn't hold agents' logins yet"));
         }
@@ -338,15 +339,19 @@ async fn handle(
         R::SessionSendQueued(queue::SessionSendQueued { id, client_msg_id }) => {
             C::Session(hub.session_send_queued(id, client_msg_id).await?)
         }
-        R::SessionApprove { id, approval_id, decision } => {
+        R::SessionApprove(agent::SessionApprove { id, approval_id, decision }) => {
             hub.session_approve(id, approval_id, decision).await?;
             C::Ok
         }
-        R::SessionConfigure { id, options } => C::Session(hub.session_configure(id, options).await?),
-        R::SessionClose { id } => C::Session(hub.session_close(id).await?),
-        R::SessionReopen { id } => C::Session(hub.session_reopen(id).await?),
-        R::SessionMarkRead { id, through_seq } => C::Session(hub.session_mark_read(id, through_seq).await?),
-        R::SessionMarkUnread { id } => C::Session(hub.session_mark_unread(id).await?),
+        R::SessionConfigure(sessions::SessionConfigure { id, options }) => {
+            C::Session(hub.session_configure(id, options).await?)
+        }
+        R::SessionClose(sessions::SessionClose { id }) => C::Session(hub.session_close(id).await?),
+        R::SessionReopen(sessions::SessionReopen { id }) => C::Session(hub.session_reopen(id).await?),
+        R::SessionMarkRead(sessions::SessionMarkRead { id, through_seq }) => {
+            C::Session(hub.session_mark_read(id, through_seq).await?)
+        }
+        R::SessionMarkUnread(sessions::SessionMarkUnread { id }) => C::Session(hub.session_mark_unread(id).await?),
         R::SessionCallOffWait(waits::SessionCallOffWait { id, wait }) => {
             C::Session(hub.session_call_off_wait(id, wait).await?)
         }
@@ -354,27 +359,14 @@ async fn handle(
         R::SessionAnswerDraft(drafts::SessionAnswerDraft { id, draft }) => {
             C::Session(hub.session_answer_draft(id, draft).await?)
         }
-        R::SessionRename { id, title } => C::Session(hub.session_rename(id, &title).await?),
-        R::SessionCancel { id } => {
+        R::SessionRename(sessions::SessionRename { id, title }) => C::Session(hub.session_rename(id, &title).await?),
+        R::SessionCancel(agent::SessionCancel { id }) => {
             hub.session_cancel(id).await?;
             C::Ok
         }
-        R::SessionCompact { id, keeping } => {
+        R::SessionCompact(agent::SessionCompact { id, keeping }) => {
             hub.session_compact(id, keeping).await?;
             C::Ok
         }
     })
-}
-
-async fn pump_feed(mut feed: broadcast::Receiver<HubNotice>, subscription_id: u64, frames: mpsc::Sender<HubFrame>) {
-    loop {
-        let notice = match feed.recv().await {
-            Ok(notice) => notice,
-            Err(broadcast::error::RecvError::Lagged(_)) => HubNotice::Resync,
-            Err(broadcast::error::RecvError::Closed) => return,
-        };
-        if frames.send(HubFrame::Notice { subscription_id, notice }).await.is_err() {
-            return;
-        }
-    }
 }

@@ -2,7 +2,9 @@
 
 use std::sync::atomic::Ordering;
 
-use protocol::client::{ClientRequest, ClientResponse, HubStatus, waits};
+use protocol::client::{
+    HubStatus, Request, admin, agent, comments, log, records, sessions, subscriptions, waits, workspaces,
+};
 use protocol::event::{ApprovalDecision, SessionEvent};
 use protocol::find::Found;
 use protocol::model::{
@@ -11,19 +13,15 @@ use protocol::model::{
     Subagent, ToolUseId, WaitId, Workspace, WorkspaceId,
 };
 
-use super::{Client, Result, Subscription, hub_is_missing, subscription_channel, unexpected};
+use super::{Client, Result, Subscription, hub_is_missing, subscription_channel};
 
 impl Client {
     pub fn hub_status(&self) -> Result<HubStatus> {
-        let reply = self.call(ClientRequest::HubStatus)?;
-        let ClientResponse::HubStatus(status) = reply else {
-            return unexpected(&reply);
-        };
-        Ok(status)
+        self.call(admin::HubStatus)
     }
 
     pub fn hub_shutdown(&self) -> Result<()> {
-        match self.expect_ok(ClientRequest::HubShutdown) {
+        match self.call(admin::HubShutdown) {
             // The hub did what was asked before its reply got out.
             Err(e) if hub_is_missing(&e) => Ok(()),
             other => other,
@@ -33,7 +31,7 @@ impl Client {
     /// Asks the hub to stop if nothing would notice, which it decides. A busy one refuses with `Conflict`, and one
     /// older than this request refuses it, as `is_unsupported` says.
     pub fn hub_shutdown_if_idle(&self) -> Result<()> {
-        match self.expect_ok(ClientRequest::HubShutdownIfIdle) {
+        match self.call(admin::HubShutdownIfIdle) {
             // The hub did what was asked before its reply got out.
             Err(e) if hub_is_missing(&e) => Ok(()),
             other => other,
@@ -43,37 +41,21 @@ impl Client {
     /// Changes the hub's own settings, and returns them as they are now. A hub older than this refuses it, as
     /// `is_unsupported` says.
     pub fn hub_configure(&self, change: HubSettingsChange) -> Result<HubSettings> {
-        let reply = self.call(ClientRequest::HubConfigure { settings: change })?;
-        let ClientResponse::HubSettings(settings) = reply else {
-            return unexpected(&reply);
-        };
-        Ok(settings)
+        self.call(admin::HubConfigure { settings: change })
     }
 
     pub fn repo_add(&self, path: &str) -> Result<Repo> {
-        let reply = self.call(ClientRequest::RepoAdd { path: path.to_string() })?;
-        let ClientResponse::Repo(repo) = reply else {
-            return unexpected(&reply);
-        };
-        Ok(repo)
+        self.call(records::RepoAdd { path: path.to_string() })
     }
 
     /// Every record as of one revision. Follow the feed first. A hub older than this refuses it, as
     /// `is_unsupported` says.
     pub fn records_list(&self) -> Result<Records> {
-        let reply = self.call(ClientRequest::RecordsList)?;
-        let ClientResponse::Records(records) = reply else {
-            return unexpected(&reply);
-        };
-        Ok(records)
+        self.call(records::RecordsList)
     }
 
     pub fn repo_list(&self) -> Result<Vec<Repo>> {
-        let reply = self.call(ClientRequest::RepoList)?;
-        let ClientResponse::Repos { repos } = reply else {
-            return unexpected(&reply);
-        };
-        Ok(repos)
+        Ok(self.call(records::RepoList)?.repos)
     }
 
     /// Sending the same `client_request_id` again returns the workspace the first request made.
@@ -84,75 +66,50 @@ impl Client {
         base_ref: Option<String>,
         client_request_id: Option<ClientRequestId>,
     ) -> Result<Workspace> {
-        self.expect_workspace(ClientRequest::WorkspaceCreate {
-            repo_id: repo_id.clone(),
-            name,
-            base_ref,
-            client_request_id,
-        })
+        self.call(workspaces::WorkspaceCreate { repo_id: repo_id.clone(), name, base_ref, client_request_id })
     }
 
     pub fn workspace_list(&self, include_archived: bool) -> Result<Vec<Workspace>> {
-        let reply = self.call(ClientRequest::WorkspaceList { include_archived })?;
-        let ClientResponse::Workspaces { workspaces } = reply else {
-            return unexpected(&reply);
-        };
-        Ok(workspaces)
+        Ok(self.call(workspaces::WorkspaceList { include_archived })?.workspaces)
     }
 
     pub fn workspace_archive(&self, id: &WorkspaceId, force: bool) -> Result<Workspace> {
-        self.expect_workspace(ClientRequest::WorkspaceArchive { id: id.clone(), force })
+        self.call(workspaces::WorkspaceArchive { id: id.clone(), force })
     }
 
     pub fn workspace_restore(&self, id: &WorkspaceId) -> Result<Workspace> {
-        self.expect_workspace(ClientRequest::WorkspaceRestore { id: id.clone() })
+        self.call(workspaces::WorkspaceRestore { id: id.clone() })
     }
 
-    /// See [`ClientRequest::WorkspaceRename`]. A hub older than this refuses it, as `is_unsupported` says.
+    /// See [`workspaces::WorkspaceRename`]. A hub older than this refuses it, as `is_unsupported` says.
     pub fn workspace_rename(&self, id: &WorkspaceId, title: &str) -> Result<Workspace> {
-        self.expect_workspace(ClientRequest::WorkspaceRename { id: id.clone(), title: title.to_string() })
+        self.call(workspaces::WorkspaceRename { id: id.clone(), title: title.to_string() })
     }
 
-    /// See [`ClientRequest::WorkspaceRegenerateTitle`]. It waits on a model, usually for a second or two. A hub older
+    /// See [`workspaces::WorkspaceRegenerateTitle`]. It waits on a model, usually for a second or two. A hub older
     /// than this refuses it, as `is_unsupported` says.
     pub fn workspace_regenerate_title(&self, id: &WorkspaceId) -> Result<Workspace> {
-        self.expect_workspace(ClientRequest::WorkspaceRegenerateTitle { id: id.clone() })
+        self.call(workspaces::WorkspaceRegenerateTitle { id: id.clone() })
     }
 
     pub fn workspace_status(&self, id: &WorkspaceId) -> Result<GitStatus> {
-        let reply = self.call(ClientRequest::WorkspaceStatus { id: id.clone() })?;
-        let ClientResponse::GitStatus(status) = reply else {
-            return unexpected(&reply);
-        };
-        Ok(status)
+        self.call(workspaces::WorkspaceStatus { id: id.clone() })
     }
 
     pub fn workspace_diff(&self, id: &WorkspaceId) -> Result<GitDiff> {
-        let reply = self.call(ClientRequest::WorkspaceDiff { id: id.clone() })?;
-        let ClientResponse::GitDiff(diff) = reply else {
-            return unexpected(&reply);
-        };
-        Ok(diff)
+        self.call(workspaces::WorkspaceDiff { id: id.clone() })
     }
 
     pub fn workspace_setup_log(&self, id: &WorkspaceId) -> Result<String> {
-        let reply = self.call(ClientRequest::WorkspaceSetupLog { id: id.clone() })?;
-        let ClientResponse::SetupLog { text } = reply else {
-            return unexpected(&reply);
-        };
-        Ok(text)
+        Ok(self.call(workspaces::WorkspaceSetupLog { id: id.clone() })?.text)
     }
 
     pub fn workspace_rerun_setup(&self, id: &WorkspaceId) -> Result<Workspace> {
-        self.expect_workspace(ClientRequest::WorkspaceRerunSetup { id: id.clone() })
+        self.call(workspaces::WorkspaceRerunSetup { id: id.clone() })
     }
 
     pub fn workspace_pull_request(&self, id: &WorkspaceId) -> Result<Option<PullRequest>> {
-        let reply = self.call(ClientRequest::WorkspacePullRequest { id: id.clone() })?;
-        let ClientResponse::PullRequest { pull_request } = reply else {
-            return unexpected(&reply);
-        };
-        Ok(pull_request)
+        Ok(self.call(workspaces::WorkspacePullRequest { id: id.clone() })?.pull_request)
     }
 
     /// Sending the same `client_request_id` again returns the comment the first request made.
@@ -165,68 +122,45 @@ impl Client {
         text: &str,
         client_request_id: Option<ClientRequestId>,
     ) -> Result<DiffComment> {
-        let request = ClientRequest::CommentAdd {
+        self.call(comments::CommentAdd {
             workspace_id: workspace_id.clone(),
             path: path.to_string(),
             side,
             line,
             text: text.to_string(),
             client_request_id,
-        };
-        let reply = self.call(request)?;
-        let ClientResponse::Comment(comment) = reply else {
-            return unexpected(&reply);
-        };
-        Ok(comment)
+        })
     }
 
     pub fn comment_list(&self, workspace_id: &WorkspaceId) -> Result<Vec<DiffComment>> {
-        let reply = self.call(ClientRequest::CommentList { workspace_id: workspace_id.clone() })?;
-        let ClientResponse::Comments { comments } = reply else {
-            return unexpected(&reply);
-        };
-        Ok(comments)
+        Ok(self.call(comments::CommentList { workspace_id: workspace_id.clone() })?.comments)
     }
 
     /// Replaces a comment's text. Sending it again sets the same text.
     pub fn comment_edit(&self, id: &CommentId, text: &str) -> Result<DiffComment> {
-        let reply = self.call(ClientRequest::CommentEdit { id: id.clone(), text: text.to_string() })?;
-        let ClientResponse::Comment(comment) = reply else {
-            return unexpected(&reply);
-        };
-        Ok(comment)
+        self.call(comments::CommentEdit { id: id.clone(), text: text.to_string() })
     }
 
     pub fn comment_delete(&self, id: &CommentId) -> Result<()> {
-        self.expect_ok(ClientRequest::CommentDelete { id: id.clone() })
+        self.call(comments::CommentDelete { id: id.clone() })
     }
 
     pub fn session_list(&self, workspace_id: &WorkspaceId) -> Result<Vec<Session>> {
-        let reply = self.call(ClientRequest::SessionList { workspace_id: workspace_id.clone() })?;
-        let ClientResponse::Sessions { sessions } = reply else {
-            return unexpected(&reply);
-        };
-        Ok(sessions)
+        Ok(self.call(sessions::SessionList { workspace_id: workspace_id.clone() })?.sessions)
     }
 
     pub fn session_ensure(&self, workspace_id: &WorkspaceId, agent: AgentKind) -> Result<Session> {
-        self.expect_session(ClientRequest::SessionEnsure { workspace_id: workspace_id.clone(), agent })
+        self.call(sessions::SessionEnsure { workspace_id: workspace_id.clone(), agent })
     }
 
     pub fn session_get(&self, id: &SessionId) -> Result<Session> {
-        self.expect_session(ClientRequest::SessionGet { id: id.clone() })
+        self.call(sessions::SessionGet { id: id.clone() })
     }
 
     /// Which of the session's events hold `query`, as [`protocol::find::Needle::is_in_event`] says. A hub older than
     /// this refuses it as unsupported.
     pub fn session_find(&self, id: &SessionId, subagent: Option<&ToolUseId>, query: &str) -> Result<Found> {
-        let request =
-            ClientRequest::SessionFind { id: id.clone(), subagent: subagent.cloned(), query: query.to_string() };
-        let reply = self.call(request)?;
-        let ClientResponse::Found(found) = reply else {
-            return unexpected(&reply);
-        };
-        Ok(found)
+        self.call(log::SessionFind { id: id.clone(), subagent: subagent.cloned(), query: query.to_string() })
     }
 
     /// Returns the events and the session's newest `seq`.
@@ -237,16 +171,13 @@ impl Client {
         limit: u32,
         include_raw: bool,
     ) -> Result<(Vec<SessionEvent>, Seq)> {
-        let request = ClientRequest::SessionRead { id: id.clone(), from_seq, limit, max_bytes: None, include_raw };
-        let reply = self.call(request)?;
-        let ClientResponse::Events { events, last_seq } = reply else {
-            return unexpected(&reply);
-        };
+        let read = log::SessionRead { id: id.clone(), from_seq, limit, max_bytes: None, include_raw };
+        let log::Events { events, last_seq } = self.call(read)?;
         Ok((events, last_seq))
     }
 
     pub fn session_subscribe(&self, id: &SessionId, from_seq: Seq) -> Result<Subscription> {
-        self.subscribe(|subscription_id| ClientRequest::SessionSubscribe { id: id.clone(), from_seq, subscription_id })
+        self.subscribe(|subscription_id| subscriptions::SessionSubscribe { id: id.clone(), from_seq, subscription_id })
     }
 
     /// The session's subagents, oldest first, with the revision they're as of, which a [`HubNotice::Subagent`] newer
@@ -255,25 +186,22 @@ impl Client {
     ///
     /// [`HubNotice::Subagent`]: protocol::client::HubNotice::Subagent
     pub fn session_subagents(&self, id: &SessionId) -> Result<(Vec<Subagent>, Rev)> {
-        let reply = self.call(ClientRequest::SessionSubagents { id: id.clone() })?;
-        let ClientResponse::Subagents { subagents, rev } = reply else {
-            return unexpected(&reply);
-        };
+        let records::Subagents { subagents, rev } = self.call(records::SessionSubagents { id: id.clone() })?;
         Ok((subagents, rev))
     }
 
-    /// Follows changes to repositories, workspaces and sessions. See [`ClientRequest::FeedSubscribe`].
+    /// Follows changes to repositories, workspaces and sessions. See [`subscriptions::FeedSubscribe`].
     pub fn feed_subscribe(&self) -> Result<Subscription> {
-        self.subscribe(|subscription_id| ClientRequest::FeedSubscribe { subscription_id })
+        self.subscribe(|subscription_id| subscriptions::FeedSubscribe { subscription_id })
     }
 
     /// Sends the subscription `request` makes for an ID of its own.
-    pub(super) fn subscribe(&self, request: impl FnOnce(u64) -> ClientRequest) -> Result<Subscription> {
+    pub(super) fn subscribe<R: Request<Reply = ()>>(&self, request: impl FnOnce(u64) -> R) -> Result<Subscription> {
         // Registered before the request goes out, because items can arrive before the reply.
         let subscription_id = self.inner.next_id.fetch_add(1, Ordering::Relaxed);
         let (items_tx, items) = subscription_channel();
         self.inner.subscriptions.lock().insert(subscription_id, items_tx);
-        if let Err(e) = self.expect_ok(request(subscription_id)) {
+        if let Err(e) = self.call(request(subscription_id)) {
             self.inner.subscriptions.lock().remove(&subscription_id);
             return Err(e);
         }
@@ -281,70 +209,44 @@ impl Client {
     }
 
     pub fn session_approve(&self, id: &SessionId, approval_id: &ApprovalId, decision: ApprovalDecision) -> Result<()> {
-        self.expect_ok(ClientRequest::SessionApprove { id: id.clone(), approval_id: approval_id.clone(), decision })
+        self.call(agent::SessionApprove { id: id.clone(), approval_id: approval_id.clone(), decision })
     }
 
     pub fn session_close(&self, id: &SessionId) -> Result<Session> {
-        self.expect_session(ClientRequest::SessionClose { id: id.clone() })
+        self.call(sessions::SessionClose { id: id.clone() })
     }
 
     /// See [`waits::SessionCallOffWait`].
     pub fn session_call_off_wait(&self, id: &SessionId, wait: &WaitId) -> Result<Session> {
-        let request = waits::SessionCallOffWait { id: id.clone(), wait: wait.clone() };
-        self.expect_session(ClientRequest::SessionCallOffWait(request))
+        self.call(waits::SessionCallOffWait { id: id.clone(), wait: wait.clone() })
     }
 
     pub fn session_reopen(&self, id: &SessionId) -> Result<Session> {
-        self.expect_session(ClientRequest::SessionReopen { id: id.clone() })
+        self.call(sessions::SessionReopen { id: id.clone() })
     }
 
-    /// See [`ClientRequest::SessionMarkRead`]. A hub older than this refuses it, as `is_unsupported` says.
+    /// See [`sessions::SessionMarkRead`]. A hub older than this refuses it, as `is_unsupported` says.
     pub fn session_mark_read(&self, id: &SessionId, through_seq: Seq) -> Result<Session> {
-        self.expect_session(ClientRequest::SessionMarkRead { id: id.clone(), through_seq })
+        self.call(sessions::SessionMarkRead { id: id.clone(), through_seq })
     }
 
-    /// See [`ClientRequest::SessionMarkUnread`]. A hub older than this refuses it, as `is_unsupported` says.
+    /// See [`sessions::SessionMarkUnread`]. A hub older than this refuses it, as `is_unsupported` says.
     pub fn session_mark_unread(&self, id: &SessionId) -> Result<Session> {
-        self.expect_session(ClientRequest::SessionMarkUnread { id: id.clone() })
+        self.call(sessions::SessionMarkUnread { id: id.clone() })
     }
 
-    /// See [`ClientRequest::SessionRename`]. A hub older than this refuses it, as `is_unsupported` says.
+    /// See [`sessions::SessionRename`]. A hub older than this refuses it, as `is_unsupported` says.
     pub fn session_rename(&self, id: &SessionId, title: &str) -> Result<Session> {
-        self.expect_session(ClientRequest::SessionRename { id: id.clone(), title: title.to_string() })
+        self.call(sessions::SessionRename { id: id.clone(), title: title.to_string() })
     }
 
     pub fn session_cancel(&self, id: &SessionId) -> Result<()> {
-        self.expect_ok(ClientRequest::SessionCancel { id: id.clone() })
+        self.call(agent::SessionCancel { id: id.clone() })
     }
 
     /// Asks the agent to compact its conversation, keeping what `keeping` says. Refused while it's on a turn.
     pub fn session_compact(&self, id: &SessionId, keeping: Option<&str>) -> Result<()> {
-        let keeping = keeping.map(str::to_string);
-        self.expect_ok(ClientRequest::SessionCompact { id: id.clone(), keeping })
-    }
-
-    pub(super) fn expect_ok(&self, request: ClientRequest) -> Result<()> {
-        let reply = self.call(request)?;
-        let ClientResponse::Ok = reply else {
-            return unexpected(&reply);
-        };
-        Ok(())
-    }
-
-    pub(super) fn expect_workspace(&self, request: ClientRequest) -> Result<Workspace> {
-        let reply = self.call(request)?;
-        let ClientResponse::Workspace(workspace) = reply else {
-            return unexpected(&reply);
-        };
-        Ok(workspace)
-    }
-
-    pub(super) fn expect_session(&self, request: ClientRequest) -> Result<Session> {
-        let reply = self.call(request)?;
-        let ClientResponse::Session(session) = reply else {
-            return unexpected(&reply);
-        };
-        Ok(session)
+        self.call(agent::SessionCompact { id: id.clone(), keeping: keeping.map(str::to_string) })
     }
 }
 

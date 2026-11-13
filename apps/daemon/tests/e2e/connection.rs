@@ -8,7 +8,7 @@ use std::path::Path;
 use std::time::Instant;
 
 use client_core::{Client, ClientError, Ended, HubAdmin};
-use protocol::client::{ClientRequest, ClientResponse, ErrorCode, HubFrame, ReplyOutcome};
+use protocol::client::{ClientRequest, ClientResponse, ErrorCode, Hello, HelloReply, HubFrame, ReplyOutcome, Request};
 use protocol::event::EventBody;
 use protocol::model::{AgentKind, DiffSide, SessionSettingsChange};
 
@@ -67,7 +67,7 @@ fn hello() -> String {
 fn a_hub_refuses_a_request_it_does_not_know_and_carries_on() {
     let stack = Stack::start();
     let mut connection = RawConnection::open(&stack);
-    assert!(matches!(connection.ask(1, &hello()), ReplyOutcome::Response(ClientResponse::Hello { .. })));
+    assert!(matches!(connection.ask(1, &hello()), ReplyOutcome::Response(ClientResponse::Hello(_))));
 
     let refused = connection.ask(2, r#"{"method":"from_a_newer_client","path":"a"}"#);
 
@@ -90,7 +90,7 @@ fn a_hub_takes_a_client_whose_hello_names_its_version_in_a_range() {
     let taken = connection.ask(1, &newer);
 
     assert!(
-        matches!(&taken, ReplyOutcome::Response(ClientResponse::Hello { protocol_version, .. }) if *protocol_version == ours),
+        matches!(&taken, ReplyOutcome::Response(ClientResponse::Hello(HelloReply { protocol_version, .. })) if *protocol_version == ours),
         "{taken:?}"
     );
     let mut refused = RawConnection::open(&stack);
@@ -111,7 +111,7 @@ fn a_hub_takes_a_client_whose_hello_names_its_version_in_a_range() {
 fn a_hub_refuses_a_request_it_cannot_read_and_carries_on() {
     let stack = Stack::start();
     let mut connection = RawConnection::open(&stack);
-    assert!(matches!(connection.ask(1, &hello()), ReplyOutcome::Response(ClientResponse::Hello { .. })));
+    assert!(matches!(connection.ask(1, &hello()), ReplyOutcome::Response(ClientResponse::Hello(_))));
 
     let approve = r#"{"method":"session_approve","id":"s","approval_id":"a","decision":{"decision":"allow_always"}}"#;
     let refused = connection.ask(2, approve);
@@ -183,12 +183,23 @@ fn a_refused_client_can_still_see_the_hub_on_a_new_connection() {
     assert!(!status.on_demand, "this stack starts its hub by hand");
 }
 
+/// A request no hub knows, as from a client newer than it.
+struct FromANewerClient;
+
+impl Request for FromANewerClient {
+    type Reply = ();
+
+    fn into_request(self) -> ClientRequest {
+        ClientRequest::Unknown
+    }
+}
+
 #[test]
 fn a_client_can_tell_when_its_hub_does_not_know_a_request() {
     let stack = Stack::start();
     let client = stack.client();
 
-    let refused = client.call(ClientRequest::Unknown).unwrap_err();
+    let refused = client.call(FromANewerClient).unwrap_err();
 
     assert!(refused.is_unsupported());
     client.hub_status().unwrap();
@@ -278,7 +289,11 @@ fn a_client_with_the_wrong_protocol_version_is_told_so() {
     let mut stream = std::os::unix::net::UnixStream::connect(stack.socket()).unwrap();
     let hello = protocol::client::ClientFrame {
         id: 1,
-        request: ClientRequest::Hello { protocol_version: 9999, client: "old".into(), oldest_protocol_version: None },
+        request: ClientRequest::Hello(Hello {
+            protocol_version: 9999,
+            client: "old".into(),
+            oldest_protocol_version: None,
+        }),
     };
     stream.write_all(&protocol::frame::encode(&hello).unwrap()).unwrap();
     let mut line = String::new();

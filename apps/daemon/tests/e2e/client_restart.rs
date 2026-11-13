@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 
 use client_core::session_log::{Row, SessionLog};
 use client_core::{OpenSession, SubscriptionItem};
-use protocol::client::ClientRequest;
+use protocol::client::{ClientRequest, Hello, subscriptions};
 use protocol::event::{EventBody, SessionEvent};
 use protocol::model::SessionStatus;
 use protocol::tail::Tail;
@@ -204,12 +204,16 @@ fn a_client_that_stalled_during_a_message_ends_with_nothing_left_in_its_tail() {
     // A client that subscribes, then doesn't read its socket until everything has finished.
     let mut stream = std::os::unix::net::UnixStream::connect(stack.socket()).unwrap();
     let requests = [
-        ClientRequest::Hello {
+        ClientRequest::Hello(Hello {
             protocol_version: protocol::client::CLIENT_PROTOCOL_VERSION,
             client: "stalled".into(),
             oldest_protocol_version: None,
-        },
-        ClientRequest::SessionSubscribe { id: session.id.clone(), from_seq: 1, subscription_id: 7 },
+        }),
+        ClientRequest::SessionSubscribe(subscriptions::SessionSubscribe {
+            id: session.id.clone(),
+            from_seq: 1,
+            subscription_id: 7,
+        }),
     ];
     for (id, request) in requests.into_iter().enumerate() {
         stream.write_all(&protocol::frame::encode(&ClientFrame { id: id as u64, request }).unwrap()).unwrap();

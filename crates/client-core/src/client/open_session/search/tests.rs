@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use protocol::client::{ClientRequest, ClientResponse, ErrorCode, ReplyOutcome};
+use protocol::client::{ClientRequest, ClientResponse, ErrorCode, ReplyOutcome, log};
 use protocol::event::{EventBody, NoticeLevel};
 use protocol::find::Found;
 use protocol::model::{Place, ToolUseId};
@@ -29,7 +29,7 @@ fn found(places: &[u64]) -> ReplyOutcome {
 /// The events of the agent or subagent asked for from a read by place, each a notice, to its end, with seqs far from
 /// their places, as a subagent's are.
 fn read(request: &ClientRequest) -> Option<ReplyOutcome> {
-    let ClientRequest::SessionReadPlaces { subagent, from_place, limit, .. } = request else {
+    let ClientRequest::SessionReadPlaces(log::SessionReadPlaces { subagent, from_place, limit, .. }) = request else {
         return answered_simply(request);
     };
     let from = from_place.get();
@@ -43,7 +43,10 @@ fn read(request: &ClientRequest) -> Option<ReplyOutcome> {
             }
         })
         .collect();
-    Some(ReplyOutcome::Response(ClientResponse::PlacedEvents { events, last_place: Place::new(LAST_SEQ) }))
+    Some(ReplyOutcome::Response(ClientResponse::PlacedEvents(log::PlacedEvents {
+        events,
+        last_place: Place::new(LAST_SEQ),
+    })))
 }
 
 /// Where each read the hub has been sent for a stretch so far starts, and whose events it reads, gathering them
@@ -56,7 +59,10 @@ fn reads_from(
     heard
         .iter()
         .filter_map(|request| {
-            let ClientRequest::SessionReadPlaces { from_place, limit, subagent, .. } = request else { return None };
+            let ClientRequest::SessionReadPlaces(log::SessionReadPlaces { from_place, limit, subagent, .. }) = request
+            else {
+                return None;
+            };
             (*limit > 1).then(|| (from_place.get(), subagent.clone()))
         })
         .collect()
@@ -66,7 +72,7 @@ fn queries_asked(requests: &[ClientRequest]) -> Vec<(&str, Option<&ToolUseId>)> 
     requests
         .iter()
         .filter_map(|request| {
-            let ClientRequest::SessionFind { query, subagent, .. } = request else { return None };
+            let ClientRequest::SessionFind(log::SessionFind { query, subagent, .. }) = request else { return None };
             Some((query.as_str(), subagent.as_ref()))
         })
         .collect()
@@ -86,7 +92,7 @@ fn what_the_hub_names_is_read_with_what_s_around_it_a_stretch_at_a_time() {
     let dir = tempfile::tempdir().unwrap();
     let socket = dir.path().join("hub.sock");
     let requests = start_hub_answering(&socket, |request| {
-        if matches!(request, ClientRequest::SessionFind { .. }) { Some(found(&[100, 300, 500])) } else { read(request) }
+        if matches!(request, ClientRequest::SessionFind(_)) { Some(found(&[100, 300, 500])) } else { read(request) }
     });
     let client = connect(&socket);
     let helper: ToolUseId = "helper".into();
@@ -123,7 +129,7 @@ fn a_chat_has_one_search_at_the_hub_at_a_time_and_one_typed_over_isn_t_asked() {
     let socket = dir.path().join("hub.sock");
     let (answer, answered) = flume::unbounded::<()>();
     let requests = start_hub_answering(&socket, move |request| {
-        if matches!(request, ClientRequest::SessionFind { .. }) {
+        if matches!(request, ClientRequest::SessionFind(_)) {
             answered.recv().unwrap();
             Some(found(&[]))
         } else {
@@ -158,7 +164,7 @@ fn a_hub_too_old_to_find_isn_t_asked_again_until_a_new_connection() {
     let dir = tempfile::tempdir().unwrap();
     let socket = dir.path().join("hub.sock");
     let requests = start_hub_answering(&socket, |request| {
-        if matches!(request, ClientRequest::SessionFind { .. }) {
+        if matches!(request, ClientRequest::SessionFind(_)) {
             Some(refused(ErrorCode::Unsupported, "unknown request"))
         } else {
             answered_simply(request)
@@ -192,7 +198,7 @@ fn a_query_too_short_isn_t_asked_and_a_failure_says_why_once() {
     let dir = tempfile::tempdir().unwrap();
     let socket = dir.path().join("hub.sock");
     let requests = start_hub_answering(&socket, |request| {
-        if matches!(request, ClientRequest::SessionFind { .. }) {
+        if matches!(request, ClientRequest::SessionFind(_)) {
             Some(refused(ErrorCode::Internal, "the disk is full"))
         } else {
             answered_simply(request)
@@ -234,11 +240,12 @@ fn a_log_that_holds_every_event_needs_no_hub_once_it_knows_how_far_they_go() {
     let socket = dir.path().join("hub.sock");
     let (answer, answered) = flume::unbounded::<()>();
     let requests = start_hub_answering(&socket, move |request| {
-        if matches!(request, ClientRequest::SessionReadPlaces { .. }) {
+        if matches!(request, ClientRequest::SessionReadPlaces(_)) {
             answered.recv().unwrap();
-            let placed = ClientResponse::PlacedEvents { events: Vec::new(), last_place: Place::new(1) };
+            let placed =
+                ClientResponse::PlacedEvents(log::PlacedEvents { events: Vec::new(), last_place: Place::new(1) });
             Some(ReplyOutcome::Response(placed))
-        } else if matches!(request, ClientRequest::SessionFind { .. }) {
+        } else if matches!(request, ClientRequest::SessionFind(_)) {
             Some(found(&[]))
         } else {
             answered_simply(request)

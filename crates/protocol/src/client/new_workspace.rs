@@ -3,7 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::ApiError;
+use super::{ApiError, ClientRequest, ClientResponse, Reply, Request};
 use crate::model::{ClientRequestId, NewWorkspaceDraftToKeep, Session, Workspace};
 
 /// Makes a workspace from what's in the new-workspace dialog, as `made_of` says it is, as Create does: the workspace, in
@@ -21,6 +21,14 @@ pub struct NewWorkspaceCreate {
     pub client_request_id: ClientRequestId,
 }
 
+impl Request for NewWorkspaceCreate {
+    type Reply = NewWorkspaceMade;
+
+    fn into_request(self) -> ClientRequest {
+        ClientRequest::NewWorkspaceCreate(self)
+    }
+}
+
 /// What [`NewWorkspaceCreate`] made.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct NewWorkspaceMade {
@@ -36,6 +44,13 @@ pub struct NewWorkspaceMade {
     pub unsent: Option<UnsentPrompt>,
 }
 
+impl Reply for NewWorkspaceMade {
+    fn read(response: ClientResponse) -> Result<Self, ClientResponse> {
+        let ClientResponse::NewWorkspaceMade(made) = response else { return Err(response) };
+        Ok(*made)
+    }
+}
+
 /// A prompt [`NewWorkspaceCreate`] didn't send, and where it is.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct UnsentPrompt {
@@ -44,32 +59,4 @@ pub struct UnsentPrompt {
     /// Whether the chat's composer has it, with every file it carries. Otherwise it's only what's in the dialog, which
     /// the hub goes on keeping, files and all.
     pub in_composer: bool,
-}
-
-#[cfg(test)]
-mod tests {
-    use serde_json::json;
-
-    use super::*;
-    use crate::client::ClientRequest;
-
-    #[test]
-    fn the_request_travels_as_its_fields_beside_its_method() {
-        let made_of =
-            NewWorkspaceDraftToKeep { text: "fix the login".into(), files: vec!["f1".into()], ..Default::default() };
-        let request = ClientRequest::NewWorkspaceCreate(NewWorkspaceCreate {
-            made_of: made_of.clone(),
-            client_request_id: "make it".into(),
-        });
-
-        let sent = serde_json::to_value(&request).unwrap();
-
-        let form = json!({
-            "method": "new_workspace_create",
-            "made_of": serde_json::to_value(&made_of).unwrap(),
-            "client_request_id": "make it",
-        });
-        assert_eq!(sent, form);
-        assert_eq!(serde_json::from_value::<ClientRequest>(sent).unwrap(), request);
-    }
 }

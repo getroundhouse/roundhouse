@@ -1,17 +1,17 @@
 //! The requests that change a chat's queue of prompts, which the hub sends from in turn: one put at its end, changed,
-//! taken out, or sent out of its turn. Each is the body of the `ClientRequest` of its name, which has the same form on
-//! the wire as if its fields were the request's own.
+//! taken out, or sent out of its turn.
 
 use serde::{Deserialize, Serialize};
 
-use crate::model::{AttachmentId, ClientMessageId, SessionId};
+use super::{ClientRequest, Request};
+use crate::model::{AttachmentId, ClientMessageId, Session, SessionId};
 use crate::prompt::Prompt;
 
 /// Puts a prompt at the end of the queue. Sending it again under the same `client_msg_id` changes nothing, so a
 /// retry is safe, and `SessionChangeQueued` is what changes it. Refused with `Conflict` once that prompt has been
-/// sent, since the agent has it by then. Answers with the session. On an idle agent it's sent at once, unless the
-/// queue is held, as `Session::queue_held` says. As with `SessionPrompt`, each of the prompt's files has to have been
-/// added to this session first, and a prompt with any can have no text.
+/// sent, since the agent has it by then. On an idle agent it's sent at once, unless the queue is held, as
+/// `Session::queue_held` says. As with `SessionPrompt`, each of the prompt's files has to have been added to this
+/// session first, and a prompt with any can have no text.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct SessionQueue {
     pub id: SessionId,
@@ -20,10 +20,18 @@ pub struct SessionQueue {
     pub prompt: Prompt<AttachmentId>,
 }
 
+impl Request for SessionQueue {
+    type Reply = Session;
+
+    fn into_request(self) -> ClientRequest {
+        ClientRequest::SessionQueue(self)
+    }
+}
+
 /// Changes the text of the prompt queued under `client_msg_id`, which keeps its place and the files it was queued
 /// with, so with any the text can be empty. Refused with `Conflict` once it's been sent, since the agent has it by
 /// then, and with `NotFound` once it's been taken out, so a change that comes too late is never queued as a prompt
-/// of its own. Answers with the session. A hub older than this refuses it as unsupported.
+/// of its own. A hub older than this refuses it as unsupported.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct SessionChangeQueued {
     pub id: SessionId,
@@ -31,12 +39,28 @@ pub struct SessionChangeQueued {
     pub text: String,
 }
 
+impl Request for SessionChangeQueued {
+    type Reply = Session;
+
+    fn into_request(self) -> ClientRequest {
+        ClientRequest::SessionChangeQueued(self)
+    }
+}
+
 /// Takes a prompt out of the queue. Taking out one that isn't there, because it's been sent or taken out already,
-/// changes nothing. Answers with the session.
+/// changes nothing.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct SessionUnqueue {
     pub id: SessionId,
     pub client_msg_id: ClientMessageId,
+}
+
+impl Request for SessionUnqueue {
+    type Reply = Session;
+
+    fn into_request(self) -> ClientRequest {
+        ClientRequest::SessionUnqueue(self)
+    }
 }
 
 /// Sends the prompt queued under `client_msg_id` now, out of its turn: into the turn the agent is working on, which
@@ -47,4 +71,12 @@ pub struct SessionUnqueue {
 pub struct SessionSendQueued {
     pub id: SessionId,
     pub client_msg_id: ClientMessageId,
+}
+
+impl Request for SessionSendQueued {
+    type Reply = Session;
+
+    fn into_request(self) -> ClientRequest {
+        ClientRequest::SessionSendQueued(self)
+    }
 }

@@ -7,8 +7,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use parking_lot::Mutex;
-use protocol::client::CLIENT_PROTOCOL_VERSION;
-use protocol::client::{ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HubFrame, ReplyOutcome};
+use protocol::client::{ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HubFrame, ReplyOutcome, log};
 use protocol::frame;
 use protocol::model::{Place, Seq, Session};
 
@@ -48,10 +47,8 @@ fn serve(stream: UnixStream, answer: &Arc<Answer>, asked: &flume::Sender<ClientR
         let _ = asked.send(request.clone());
         let (writer, answer) = (writer.clone(), answer.clone());
         std::thread::spawn(move || {
-            let outcome = if matches!(request, ClientRequest::Hello { .. }) {
-                let hello =
-                    ClientResponse::Hello { protocol_version: CLIENT_PROTOCOL_VERSION, hub_version: "scripted".into() };
-                Some(ReplyOutcome::Response(hello))
+            let outcome = if matches!(request, ClientRequest::Hello(_)) {
+                Some(ReplyOutcome::Response(crate::stand_in_hub::hello_reply("scripted")))
             } else {
                 answer(&request)
             };
@@ -67,14 +64,15 @@ fn serve(stream: UnixStream, answer: &Arc<Answer>, asked: &flume::Sender<ClientR
 /// `seq` and by place, nothing for letting go of a subscription, which is sent without waiting for a reply, and Ok
 /// for anything else.
 pub(super) fn answered_simply(request: &ClientRequest) -> Option<ReplyOutcome> {
-    if matches!(request, ClientRequest::SessionRead { .. }) {
-        Some(ReplyOutcome::Response(ClientResponse::Events { events: Vec::new(), last_seq: LAST_SEQ }))
-    } else if matches!(request, ClientRequest::SessionReadPlaces { .. }) {
-        let placed = ClientResponse::PlacedEvents { events: Vec::new(), last_place: Place::new(LAST_SEQ) };
+    if matches!(request, ClientRequest::SessionRead(_)) {
+        Some(ReplyOutcome::Response(ClientResponse::Events(log::Events { events: Vec::new(), last_seq: LAST_SEQ })))
+    } else if matches!(request, ClientRequest::SessionReadPlaces(_)) {
+        let placed =
+            ClientResponse::PlacedEvents(log::PlacedEvents { events: Vec::new(), last_place: Place::new(LAST_SEQ) });
         Some(ReplyOutcome::Response(placed))
-    } else if matches!(request, ClientRequest::SessionCompactionList { .. }) {
-        Some(ReplyOutcome::Response(ClientResponse::Compactions { compactions: Vec::new() }))
-    } else if matches!(request, ClientRequest::SessionUnsubscribe { .. }) {
+    } else if matches!(request, ClientRequest::SessionCompactionList(_)) {
+        Some(ReplyOutcome::Response(ClientResponse::Compactions(log::Compactions { compactions: Vec::new() })))
+    } else if matches!(request, ClientRequest::SessionUnsubscribe(_)) {
         None
     } else {
         Some(ReplyOutcome::Response(ClientResponse::Ok))
@@ -104,7 +102,7 @@ pub(super) fn requests_until_unsubscribed(
     subscriptions: usize,
 ) -> Vec<ClientRequest> {
     let mut requests = Vec::new();
-    while requests.iter().filter(|r| matches!(r, ClientRequest::SessionUnsubscribe { .. })).count() < subscriptions {
+    while requests.iter().filter(|r| matches!(r, ClientRequest::SessionUnsubscribe(_))).count() < subscriptions {
         let Ok(request) = heard.recv_timeout(Duration::from_secs(10)) else {
             panic!("the follower never let go: {requests:?}");
         };

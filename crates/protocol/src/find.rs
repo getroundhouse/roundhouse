@@ -44,7 +44,7 @@ pub enum NeedleError {
     TooLong,
 }
 
-/// Which of a chat's events may hold a needle, from [`crate::client::ClientRequest::SessionFind`], by their place among
+/// Which of a chat's events may hold a needle, from [`crate::client::log::SessionFind`], by their place among
 /// the events of the agent or subagent it asked of.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Found {

@@ -3,17 +3,23 @@
 
 #![cfg(test)]
 
+use std::fmt::Debug;
+
 use protocol::client::{
     ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HubFrame, HubNotice, HubStatus, ReplyOutcome,
+    records,
 };
 use protocol::event::{AgentTask, CompactedBy, CompactionOutcome, EventBody, SessionEvent, TaskKind};
 use protocol::frame;
 use protocol::model::{LimitWindow, ModelName, Place, PullRequestFound, RecordKey, Rev};
 use protocol::tail::{Compacting, StreamDelta, Tail};
+use serde::Serialize;
+use serde::de::DeserializeOwned;
 
 mod agents;
 mod approvals;
 mod calls;
+mod client_calls;
 mod events;
 mod hellos;
 mod prompts;
@@ -23,6 +29,12 @@ mod sessions;
 mod worker;
 mod worker_calls;
 mod workspaces;
+
+/// `message` is written as `line`, and `line` reads as `message`, for the calls each protocol spells out.
+fn keeps_its_form<T: Serialize + DeserializeOwned + PartialEq + Debug>(message: &T, line: &str) {
+    assert_eq!(String::from_utf8(frame::encode(message).unwrap()).unwrap(), format!("{line}\n"));
+    assert_eq!(&frame::decode::<T>(line.as_bytes()).unwrap(), message, "{line}");
+}
 
 /// Spelled out, because these have to stay readable by a client of any version, even across a real
 /// break. If this fails, a client can no longer see or stop a hub it can't otherwise talk to.
@@ -76,7 +88,7 @@ fn a_known_request_with_a_new_field_still_decodes() {
 
     let frame: ClientFrame = frame::decode(line).unwrap();
 
-    assert_eq!(frame.request, ClientRequest::RepoAdd { path: "a".to_string() });
+    assert_eq!(frame.request, ClientRequest::RepoAdd(records::RepoAdd { path: "a".to_string() }));
 }
 
 #[test]
@@ -328,17 +340,6 @@ fn a_compaction_that_failed_or_that_this_build_doesnt_know_still_reads() {
     for unknown in [by_newer, by_nobody] {
         assert!(matches!(unknown, CompactionOutcome::Compacted { by: CompactedBy::Unknown, .. }), "{unknown:?}");
     }
-}
-
-/// An older hub refuses it as a request it doesn't know, which a client tells apart.
-#[test]
-fn asking_to_compact_keeps_its_form() {
-    let id = "s".into();
-    let asked = ClientFrame { id: 4, request: ClientRequest::SessionCompact { id, keeping: Some("The API".into()) } };
-
-    let sent = frame::encode(&asked).unwrap();
-
-    assert_eq!(sent, b"{\"id\":4,\"request\":{\"method\":\"session_compact\",\"id\":\"s\",\"keeping\":\"The API\"}}\n");
 }
 
 /// A turn's end from an agent that doesn't say it was only a compaction wasn't, and one that wasn't says nothing of it.

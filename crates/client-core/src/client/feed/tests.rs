@@ -4,7 +4,7 @@
 use std::path::Path;
 use std::time::{Duration, Instant};
 
-use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, ReplyOutcome};
+use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, ReplyOutcome, admin};
 use protocol::model::{AgentDescription, AgentKind, Effort, ModelName, PermissionMode, Rev, SessionSettings};
 
 use super::*;
@@ -34,7 +34,7 @@ fn claude() -> AgentDescription {
 fn following(dir: &Path, agents: ReplyOutcome) -> RecordsFeed {
     let mut agents = Some(agents);
     let client = stand_in_hub::connect(&dir.join("hub.sock"), move |request| {
-        let answer = if matches!(request, ClientRequest::FeedSubscribe { .. }) {
+        let answer = if matches!(request, ClientRequest::FeedSubscribe(_)) {
             ReplyOutcome::Response(ClientResponse::Ok)
         } else if request == ClientRequest::AgentList {
             agents.take().unwrap()
@@ -63,7 +63,8 @@ fn following(dir: &Path, agents: ReplyOutcome) -> RecordsFeed {
 fn the_copy_holds_what_the_hubs_agents_offer_beside_its_records() {
     let dir = tempfile::tempdir().unwrap();
 
-    let feed = following(dir.path(), ReplyOutcome::Response(ClientResponse::Agents { agents: vec![claude()] }));
+    let feed =
+        following(dir.path(), ReplyOutcome::Response(ClientResponse::Agents(admin::Agents { agents: vec![claude()] })));
 
     let shown = feed.snapshot();
     assert_eq!(shown.agents().of(AgentKind::Claude), Some(&claude()));

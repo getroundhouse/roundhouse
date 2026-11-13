@@ -1,22 +1,15 @@
-//! How a client asks what each kind of agent a hub runs offers, and how the hub answers, which a client of any later
-//! version has to read, so it can offer what an older hub's agents take.
+//! How a hub answers a client asking what each kind of agent it runs offers, which a client of any later version has to
+//! read, so it can offer what an older hub's agents take. How the client asks is in `client_calls`.
 
-use protocol::client::{ClientFrame, ClientRequest, ClientResponse, HubFrame, ReplyOutcome};
+use protocol::client::{ClientResponse, HubFrame, ReplyOutcome, admin};
 use protocol::frame;
 use protocol::model::{AgentFeature, AgentKind, Effort, ModelName, PermissionMode};
-
-#[test]
-fn asking_what_the_agents_offer_keeps_its_form() {
-    let asked = ClientFrame { id: 5, request: ClientRequest::AgentList };
-
-    assert_eq!(frame::encode(&asked).unwrap(), b"{\"id\":5,\"request\":{\"method\":\"agent_list\"}}\n");
-}
 
 #[test]
 fn what_each_kind_offers_reads_and_what_a_newer_hub_adds_reads_as_unknown() {
     let reply = br#"{"frame":"reply","id":5,"response":{"result":"agents","agents":[{"kind":"claude","name":"Claude Code","usage_heading":"Claude usage","models":[{"model":"opus","label":"Opus"},{"model":"haiku","label":"Haiku"}],"efforts":["low","xhigh","ultra"],"modes":["bypassPermissions","plan"],"defaults":{"model":"opus","permission_mode":"bypassPermissions","effort":"xhigh"},"features":["compacts","flies"],"from_a_newer_hub":true},{"kind":"from_a_newer_hub","name":"Other","usage_heading":"Other usage","models":[],"efforts":[],"modes":[],"defaults":{"model":"other","permission_mode":"bypassPermissions","effort":"low"}}]}}"#;
 
-    let HubFrame::Reply { outcome: ReplyOutcome::Response(ClientResponse::Agents { agents }), .. } =
+    let HubFrame::Reply { outcome: ReplyOutcome::Response(ClientResponse::Agents(admin::Agents { agents })), .. } =
         frame::decode(reply).unwrap()
     else {
         panic!("not a list of agents");
