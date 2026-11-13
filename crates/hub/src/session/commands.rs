@@ -64,10 +64,7 @@ impl LiveSession {
             self.agent_lost(previous.link, ExitReason::WorkerLost).await;
         }
         let (workspace, cwd) = hub.ready_workspace(&self.workspace_id).await?.into_parts();
-        let repo = {
-            let repo_id = workspace.repo_id.clone();
-            hub.blocking(move |store| store.get_repo(&repo_id)).await?
-        };
+        let repo = hub.repo_of(&workspace).await?;
         let mut env = crate::hub::workspace_env(&workspace, &repo);
         env.push(("CONDUCTOR_SESSION_ID".to_string(), self.id.to_string()));
         let _nothing_changes_meanwhile = self.configuring.lock().await;

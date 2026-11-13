@@ -7,7 +7,8 @@ use std::time::Duration;
 use protocol::client::{ApiError, ErrorCode, error_chain};
 use protocol::model::{SessionId, WorkspaceId};
 use protocol::worker::{
-    AskReply, CancelWait, PullRequestAnswer, ReadWait, ServeTools, StartWait, ToolsServing, ToolsToken, WorkerAsk,
+    AskReply, CancelWait, CreateWorktree, PullRequestAnswer, ReadWait, RemoveWorktree, ServeTools, StartWait,
+    ToolsServing, ToolsToken, WorkerAsk,
 };
 use tracing::warn;
 
@@ -89,11 +90,14 @@ impl Hub {
             }
             WorkerAsk::Wait(ReadWait { wait }) => self.wait_of(&session_id, wait).await.map(AskReply::Wait),
             WorkerAsk::CancelWait(CancelWait { wait }) => self.cancel_wait(&session_id, wait).await.map(AskReply::Wait),
-            // This hub keeps no worktree but a workspace's own, so it refuses these as it does an ask it doesn't know.
-            WorkerAsk::CreateWorktree(_)
-            | WorkerAsk::RemoveWorktree(_)
-            | WorkerAsk::ListWorktrees
-            | WorkerAsk::Unknown => Err(self.unsupported(None)),
+            WorkerAsk::CreateWorktree(CreateWorktree { on, key }) => {
+                self.create_child(workspace_id, link, session_id, on, key).await.map(AskReply::WorktreeCreated)
+            }
+            WorkerAsk::RemoveWorktree(RemoveWorktree { path, force }) => {
+                self.remove_child(workspace_id, link, path, force).await.map(AskReply::from)
+            }
+            WorkerAsk::ListWorktrees => self.list_worktrees(workspace_id, link).await.map(AskReply::Worktrees),
+            WorkerAsk::Unknown => Err(self.unsupported(None)),
         }
     }
 }

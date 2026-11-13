@@ -88,10 +88,7 @@ pub(super) async fn read_frames(
             start_answering(&hub, &link, &workspace_id, id, session_id, ask);
             continue;
         }
-        if let WorkerFrame::Branches { branches } = parsed {
-            hub.branches_read(&workspace_id, &link, branches).await;
-            continue;
-        }
+        let Some(parsed) = hub.branches_frame(&workspace_id, &link, parsed).await else { continue };
         let mut held = link.held.lock().await;
         match held.as_mut() {
             Some(held) => held.push(parsed),
@@ -113,7 +110,7 @@ pub(super) async fn read_frames(
 /// Passes one of the agents' frames on to its session, and notes what's numbered to acknowledge once it's recorded.
 pub(super) async fn route(hub: &Arc<Hub>, link: &WorkerLink, frame: WorkerFrame) {
     let (session_id, item, seq) = match frame {
-        // Taken where they're read, but for another worktree's branches, which this hub asks no worker to watch.
+        // Taken where they're read.
         WorkerFrame::Reply { .. }
         | WorkerFrame::Ask { .. }
         | WorkerFrame::Branches { .. }

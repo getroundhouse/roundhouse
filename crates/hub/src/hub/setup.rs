@@ -126,8 +126,7 @@ impl Hub {
         if self.setup_gates.lock().contains_key(&id) {
             return Err(ApiError::new(ErrorCode::Conflict, "setup is already running"));
         }
-        let repo_id = ready.workspace().repo_id.clone();
-        let repo = self.blocking(move |store| store.get_repo(&repo_id)).await?;
+        let repo = self.repo_of(ready.workspace()).await?;
         self.start_setup(repo, ready).await
     }
 

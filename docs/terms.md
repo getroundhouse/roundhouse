@@ -158,7 +158,7 @@ These sound alike, and do different things.
 | Stop, in code | A process | Ends it, and gives it time to finish. `AgentStop`, `Provider::stop` | The next prompt starts a new one |
 | Kill | An instance | Like stop, without the time. For a worker that isn't responding. `Provider::kill` | The next prompt starts a new one |
 | Close | A session | Stops its agent and hides it from the tabs. The history stays. `session_close`, `Session::is_open` | It can be reopened with `session_reopen` |
-| Archive | A workspace | Removes the worktree and keeps the branch. Refuses if work would be lost, unless forced. Its record says it's being archived until it's done, or put back. `workspace_archive`, `WorkspaceStatus::Archiving` | It can be restored |
+| Archive | A workspace | Removes its worktree, and any others made for its work, and keeps their branches. Refuses if work would be lost, unless forced. Its record says it's being archived until it's done, or put back. `workspace_archive`, `WorkspaceStatus::Archiving` | It can be restored |
 | Destroy | An instance | Removes it. `Provider::destroy` | It's gone |
 | Disconnect | An account's login | The hub forgets the login it holds for the account, so no agent launched after runs under it. It doesn't revoke the token. `account_disconnect` | The account's record stays, and connecting a token to it gives it a login again |
 | Discard | A half-made workspace | Removes a workspace that failed while being created, or was left by a crash. `discard_workspace`, `take_unfinished_workspaces` | It's gone |
