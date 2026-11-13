@@ -29,6 +29,7 @@ fn limit(name: &str, said: &Value) -> Option<UsageLimit> {
     let resets_at = said.get("resets_at").and_then(Value::as_str).and_then(|at| DateTime::parse_from_rfc3339(at).ok());
     Some(UsageLimit {
         window,
+        model: None,
         used_percent,
         resets_at_ms: resets_at.map(|at| at.timestamp_millis()),
         heard_at_ms: None,
@@ -67,12 +68,14 @@ mod tests {
             [
                 UsageLimit {
                     window: LimitWindow::FiveHours,
+                    model: None,
                     used_percent: 61,
                     resets_at_ms: Some(4_102_446_600_000),
                     heard_at_ms: None
                 },
                 UsageLimit {
                     window: LimitWindow::SevenDays,
+                    model: None,
                     used_percent: 4,
                     resets_at_ms: Some(4_102_444_800_000),
                     heard_at_ms: None

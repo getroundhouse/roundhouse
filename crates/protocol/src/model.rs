@@ -26,7 +26,9 @@ mod title;
 mod wait;
 mod worktrees;
 
-pub use account::{Account, AgentAccount, AgentLogin, HeldLogin, LimitWindow, LoginToken, SessionAccount, UsageLimit};
+pub use account::{
+    Account, AgentAccount, AgentLogin, HeldLogin, LimitWindow, LoginToken, ModelLabel, SessionAccount, UsageLimit,
+};
 pub use agent::{AgentDescription, AgentFeature, LoginDescription, ModelChoice, NotOffered};
 pub use branches::{Branch, Branches, Head, Upstream};
 pub use cache::{CACHE_WORTH_TELLING_TOKENS, CacheRequest, CacheState, CacheTtl, PromptCache};

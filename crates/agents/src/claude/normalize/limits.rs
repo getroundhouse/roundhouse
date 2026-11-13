@@ -34,7 +34,13 @@ fn limit(name: &str, window: &Value) -> Option<UsageLimit> {
     let share = window.get("utilization")?.as_f64()?;
     let resets_at_ms = window.get("resetsAt").and_then(Value::as_i64).map(|s| s.saturating_mul(1000));
     // A share from 0 to 1, unlike the whole percent `get_usage` answers with.
-    Some(UsageLimit { window: window_kind, used_percent: whole_percent(share * 100.), resets_at_ms, heard_at_ms: None })
+    Some(UsageLimit {
+        window: window_kind,
+        model: None,
+        used_percent: whole_percent(share * 100.),
+        resets_at_ms,
+        heard_at_ms: None,
+    })
 }
 
 /// The window the CLI calls `name`, in this line and in what it answers `get_usage` alike. `None` for one with no
@@ -67,7 +73,7 @@ mod tests {
     use super::*;
 
     fn limit(window: LimitWindow, used_percent: u8, resets_at_ms: Option<i64>) -> UsageLimit {
-        UsageLimit { window, used_percent, resets_at_ms, heard_at_ms: None }
+        UsageLimit { window, model: None, used_percent, resets_at_ms, heard_at_ms: None }
     }
 
     #[test]

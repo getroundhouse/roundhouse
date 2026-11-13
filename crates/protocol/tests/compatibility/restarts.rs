@@ -3,7 +3,7 @@
 
 use protocol::client::{ClientFrame, ClientRequest, HubStatus};
 use protocol::frame;
-use protocol::model::RunId;
+use protocol::model::{LimitWindow, ModelLabel, RunId};
 use protocol::worker::{
     Received, RunningAgent, RunningAgentsReply, WorkerCall, WorkerFrame, WorkerRequest, WorkerResponse,
 };
@@ -32,15 +32,35 @@ fn what_a_hub_asks_of_a_worker_it_reconnects_to_keeps_its_form() {
 /// numbering still reads.
 #[test]
 fn what_a_worker_sends_keeps_its_form_numbered_and_not() {
-    let numbered =
-        WorkerFrame::AgentLimits { session_id: "s".into(), run: RunId::new(4), limits: vec![], seq: Some(9) };
+    let numbered = WorkerFrame::AgentLimits {
+        session_id: "s".into(),
+        run: RunId::new(4),
+        limits: vec![],
+        every_models_week: false,
+        seq: Some(9),
+    };
     let line = br#"{"frame":"agent_limits","session_id":"s","run":4,"limits":[],"seq":9}"#;
     assert_eq!(frame::encode(&numbered).unwrap(), [&line[..], b"\n"].concat());
 
     let unnumbered: WorkerFrame =
         frame::decode(br#"{"frame":"agent_limits","session_id":"s","run":4,"limits":[]}"#).unwrap();
-    let WorkerFrame::AgentLimits { seq, .. } = unnumbered else { panic!("{unnumbered:?}") };
-    assert_eq!(seq, None);
+    let WorkerFrame::AgentLimits { seq, every_models_week, .. } = unnumbered else { panic!("{unnumbered:?}") };
+    assert_eq!((seq, every_models_week), (None, false), "a worker from before says nothing of models' weeks");
+}
+
+/// A worker that lists every model's week says so, with each by its model.
+#[test]
+fn a_worker_that_lists_every_models_week_says_so_and_keeps_its_form() {
+    let line = br#"{"frame":"agent_limits","session_id":"s","run":4,"limits":[{"window":"model_seven_days","model":"Fable","used_percent":88,"resets_at_ms":9,"heard_at_ms":null}],"every_models_week":true}"#;
+    let frame: WorkerFrame = frame::decode(line).unwrap();
+
+    let WorkerFrame::AgentLimits { limits, every_models_week, .. } = &frame else { panic!("{frame:?}") };
+    assert!(every_models_week);
+    assert_eq!(
+        limits.iter().map(|limit| (limit.window, limit.model.clone(), limit.used_percent)).collect::<Vec<_>>(),
+        [(LimitWindow::ModelSevenDays, Some(ModelLabel::new("Fable")), 88)]
+    );
+    assert_eq!(frame::encode(&frame).unwrap(), [&line[..], b"\n"].concat());
 }
 
 /// What an agent is writing, as a worker sends it to a hub that connects.

@@ -97,6 +97,7 @@ pub(super) fn context() -> World {
     });
     let week = UsageLimit {
         window: LimitWindow::SevenDays,
+        model: None,
         used_percent: 4,
         resets_at_ms: Some(NOW_MS + 150 * HOUR_MS),
         // As an account's record has it, which doesn't say when.
@@ -104,6 +105,7 @@ pub(super) fn context() -> World {
     };
     let hours = UsageLimit {
         window: LimitWindow::FiveHours,
+        model: None,
         used_percent: 29,
         resets_at_ms: Some(NOW_MS + 3 * HOUR_MS),
         heard_at_ms: None,

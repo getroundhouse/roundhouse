@@ -76,6 +76,11 @@ pub enum WorkerFrame {
         session_id: SessionId,
         run: RunId,
         limits: Vec<UsageLimit>,
+        /// Whether `limits` holds every model's own week the account has, as an answer that lists them all does, so
+        /// one the hub heard of earlier that isn't among them has gone, such as a model whose label changed. `false`
+        /// from a worker that doesn't say, which leaves every one the hub knows of.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        every_models_week: bool,
         /// Its number among what the worker keeps until a hub has recorded it, for a hub that said
         /// [`keep_running_without_hub`](super::Hello::keep_running_without_hub). `None` otherwise.
         #[serde(default, skip_serializing_if = "Option::is_none")]

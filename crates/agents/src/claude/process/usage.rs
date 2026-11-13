@@ -128,7 +128,13 @@ mod tests {
     use super::*;
 
     fn the_week() -> Vec<UsageLimit> {
-        vec![UsageLimit { window: LimitWindow::SevenDays, used_percent: 4, resets_at_ms: None, heard_at_ms: None }]
+        vec![UsageLimit {
+            window: LimitWindow::SevenDays,
+            model: None,
+            used_percent: 4,
+            resets_at_ms: None,
+            heard_at_ms: None,
+        }]
     }
 
     #[test]

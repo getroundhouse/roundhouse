@@ -42,7 +42,7 @@ pub(super) struct Usage {
 /// build has no name for couldn't be told from another.
 fn shown(limits: &[UsageLimit], now_ms: i64) -> Vec<(&'static str, UsageLimit)> {
     let current = limits.iter().filter(|limit| limit.resets_at_ms.is_none_or(|at_ms| at_ms > now_ms));
-    current.filter_map(|limit| Some((words::window(limit.window)?, *limit))).collect()
+    current.filter_map(|limit| Some((words::window(limit.window)?, limit.clone()))).collect()
 }
 
 impl WorkspacePane {
@@ -152,7 +152,13 @@ mod tests {
 
     #[test]
     fn a_limit_that_has_started_again_since_it_was_heard_or_has_no_name_here_isnt_shown() {
-        let limit = |window, resets_at_ms| UsageLimit { window, used_percent: 40, resets_at_ms, heard_at_ms: None };
+        let limit = |window, resets_at_ms| UsageLimit {
+            window,
+            model: None,
+            used_percent: 40,
+            resets_at_ms,
+            heard_at_ms: None,
+        };
         let (ended, going, open_ended, unnamed) = (
             limit(LimitWindow::FiveHours, Some(999)),
             limit(LimitWindow::SevenDays, Some(1_001)),
@@ -160,7 +166,8 @@ mod tests {
             limit(LimitWindow::Unknown, None),
         );
 
-        assert_eq!(shown(&[ended, going, open_ended, unnamed], 1_000), [("7d limit", going), ("7d limit", open_ended)]);
+        let all = [ended, going.clone(), open_ended.clone(), unnamed];
+        assert_eq!(shown(&all, 1_000), [("7d limit", going.clone()), ("7d limit", open_ended)]);
         assert_eq!(shown(&[going], 1_001), [], "it starts again the moment its window ends");
     }
 }

@@ -144,9 +144,13 @@ pub struct SessionAccount {
 }
 
 /// How much of one limit on an account's use is used up.
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct UsageLimit {
     pub window: LimitWindow,
+    /// The model whose use alone a [`LimitWindow::ModelSevenDays`] limit counts. `None` for any other window. Each
+    /// model's week is a limit of its own, so one without a model can't be told from another's.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<ModelLabel>,
     /// From 0 to 100.
     pub used_percent: u8,
     /// When the window ends and the limit starts again.
@@ -165,14 +169,42 @@ impl UsageLimit {
     }
 }
 
-/// How long a limit counts use over, shortest first.
+/// How long a limit counts use over, and of what, shortest first, with one model's own week after the week of all of
+/// them.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(rename_all = "snake_case")]
 pub enum LimitWindow {
     FiveHours,
     SevenDays,
+    /// The week's use of one model alone, the limit's [`UsageLimit::model`]. An account can run out of it while the
+    /// week of all of them has some left, and then that model stops, or spends usage credits where the account has
+    /// them, while the others go on.
+    ModelSevenDays,
     #[serde(other)]
     Unknown,
+}
+
+/// A model as its provider labels it for people, such as `Fable`, which a limit on one model's use names. It's the
+/// provider's, shown as it comes, so a new model's limit needs no new build to be named. It isn't a
+/// [`ModelName`](super::ModelName), which is what an agent is asked to run.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[serde(transparent)]
+pub struct ModelLabel(String);
+
+impl ModelLabel {
+    pub fn new(label: impl Into<String>) -> Self {
+        Self(label.into())
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl fmt::Display for ModelLabel {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0)
+    }
 }
 
 #[cfg(test)]
@@ -183,6 +215,7 @@ mod tests {
     fn whats_left_of_a_limit_is_the_rest_of_it() {
         let limit = |used_percent| UsageLimit {
             window: LimitWindow::SevenDays,
+            model: None,
             used_percent,
             resets_at_ms: None,
             heard_at_ms: None,
@@ -200,6 +233,25 @@ mod tests {
         let newer: UsageLimit = serde_json::from_str(r#"{"window":"thirty_days","used_percent":3}"#).unwrap();
 
         assert_eq!(newer.window, LimitWindow::Unknown);
+    }
+
+    #[test]
+    fn a_models_week_names_its_model_on_the_wire_and_another_window_says_nothing_of_one() {
+        let week = UsageLimit {
+            window: LimitWindow::SevenDays,
+            model: None,
+            used_percent: 4,
+            resets_at_ms: None,
+            heard_at_ms: None,
+        };
+        let fables = UsageLimit { window: LimitWindow::ModelSevenDays, model: Some(ModelLabel::new("Fable")), ..week };
+
+        assert_eq!(
+            serde_json::to_value(&fables).unwrap(),
+            serde_json::json!({"window": "model_seven_days", "model": "Fable", "used_percent": 4, "resets_at_ms": null,
+                "heard_at_ms": null})
+        );
+        assert!(serde_json::to_value(&week).unwrap().get("model").is_none());
     }
 
     #[test]

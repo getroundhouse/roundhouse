@@ -169,9 +169,13 @@ async fn forward_output(
             AgentOutput::Cache(request) => {
                 WorkerFrame::AgentCache { session_id: session_id.clone(), run, request, seq: None }
             }
-            AgentOutput::Limits(limits) => {
-                WorkerFrame::AgentLimits { session_id: session_id.clone(), run, limits, seq: None }
-            }
+            AgentOutput::Limits(limits) => WorkerFrame::AgentLimits {
+                session_id: session_id.clone(),
+                run,
+                limits,
+                every_models_week: false,
+                seq: None,
+            },
             AgentOutput::Exited { code, signal, stderr_tail, requested } => {
                 {
                     let mut agents = state.agents.lock();

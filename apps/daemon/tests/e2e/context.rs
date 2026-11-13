@@ -41,6 +41,7 @@ fn after_prompts(prompts: u64) -> ContextUsage {
 fn the_week() -> UsageLimit {
     UsageLimit {
         window: LimitWindow::SevenDays,
+        model: None,
         used_percent: 4,
         resets_at_ms: Some(4_102_444_800_000),
         heard_at_ms: None,
