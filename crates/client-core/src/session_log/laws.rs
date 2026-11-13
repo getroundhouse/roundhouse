@@ -4,6 +4,7 @@ use proptest::collection::vec;
 use proptest::prelude::*;
 use proptest::test_runner::{Config, RngSeed};
 
+use super::pages::PAGE_EVENTS;
 use super::tests::page;
 use super::*;
 use protocol::prompt::Prompt;

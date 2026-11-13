@@ -1,3 +1,4 @@
+use super::pages::PAGE_EVENTS;
 use super::*;
 use protocol::event::{ApprovalOutcome, NoticeLevel};
 use protocol::fixtures::{approval_request, event};
