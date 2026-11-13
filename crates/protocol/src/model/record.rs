@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     Account, AccountId, CommentId, DiffComment, HubSettings, NewWorkspaceDraft, Repo, RepoId, Rev, Session, SessionId,
-    Subagent, ToolUseId, Workspace, WorkspaceId,
+    Subagent, Terminal, TerminalId, ToolUseId, Workspace, WorkspaceId,
 };
 
 /// Which record, of which kind. A kind this build doesn't know reads as `Unknown`.
@@ -38,6 +38,9 @@ pub enum RecordKey {
         session_id: SessionId,
         call: ToolUseId,
     },
+    Terminal {
+        id: TerminalId,
+    },
     #[serde(other)]
     Unknown,
 }
@@ -54,6 +57,7 @@ pub enum Record {
     NewWorkspaceDraft(NewWorkspaceDraft),
     /// Listed by session, apart from [`Records`], since a session can have many.
     Subagent(Subagent),
+    Terminal(Terminal),
 }
 
 impl Record {
@@ -69,6 +73,7 @@ impl Record {
             Record::Subagent(subagent) => {
                 RecordKey::Subagent { session_id: subagent.session_id.clone(), call: subagent.call.clone() }
             }
+            Record::Terminal(terminal) => RecordKey::Terminal { id: terminal.id.clone() },
         }
     }
 
@@ -83,6 +88,7 @@ impl Record {
             Record::Account(account) => account.rev,
             Record::NewWorkspaceDraft(draft) => draft.rev,
             Record::Subagent(subagent) => subagent.rev,
+            Record::Terminal(terminal) => terminal.rev,
         }
     }
 }
@@ -103,6 +109,9 @@ pub struct Records {
     /// `None` from a hub from before it kept one.
     #[serde(default)]
     pub new_workspace_draft: Option<NewWorkspaceDraft>,
+    /// The terminals open in every workspace. Empty from a hub from before terminals.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub terminals: Vec<Terminal>,
     /// The hub's newest revision when this was read. A record missing from the list is gone, unless
     /// a client holds a copy newer than this.
     pub rev: Rev,
@@ -111,14 +120,24 @@ pub struct Records {
 impl Records {
     /// Each record in the list, of every kind. The list's own revision is `rev`, which this leaves out.
     pub fn into_records(self) -> impl Iterator<Item = Record> {
-        let Records { repos, workspaces, sessions, comments, hub_settings, accounts, new_workspace_draft, rev: _ } =
-            self;
+        let Records {
+            repos,
+            workspaces,
+            sessions,
+            comments,
+            hub_settings,
+            accounts,
+            new_workspace_draft,
+            terminals,
+            rev: _,
+        } = self;
         let records = repos.into_iter().map(Record::Repo);
         let records = records.chain(workspaces.into_iter().map(Record::Workspace));
         let records = records.chain(sessions.into_iter().map(Record::Session));
         let records = records.chain(comments.into_iter().map(Record::Comment));
         let records = records.chain(hub_settings.into_iter().map(Record::HubSettings));
         let records = records.chain(accounts.into_iter().map(Record::Account));
-        records.chain(new_workspace_draft.into_iter().map(Record::NewWorkspaceDraft))
+        let records = records.chain(new_workspace_draft.into_iter().map(Record::NewWorkspaceDraft));
+        records.chain(terminals.into_iter().map(Record::Terminal))
     }
 }

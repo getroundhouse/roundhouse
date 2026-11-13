@@ -1,13 +1,14 @@
-//! What a worker sends its hub: the reply to each call, and, as it happens, what its agents say, what it asks, and the
-//! branches it watches.
+//! What a worker sends its hub: the reply to each call, and, as it happens, what its agents say, what it asks, the
+//! branches it watches, and what its terminals' programs write.
 
 use serde::{Deserialize, Serialize};
 
 use super::{AskId, WorkerAsk, WorkerOutcome};
 use crate::attachment::NewAttachment;
 use crate::event::EventBody;
-use crate::model::{Branches, CacheRequest, ContextUsage, RunId, SessionId, UsageLimit};
+use crate::model::{Branches, CacheRequest, ContextUsage, RunId, SessionId, TerminalId, UsageLimit};
 use crate::tail::{StreamDelta, Tail};
+use crate::terminal::{TerminalUpdate, UpdateIndex};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(tag = "frame", rename_all = "snake_case")]
@@ -105,5 +106,14 @@ pub enum WorkerFrame {
     ChildBranches {
         path: String,
         branches: Branches,
+    },
+    /// What happens next in a terminal: what its program wrote, a new size, or its end, but never a screen, which
+    /// comes only in a [`TerminalShown`](super::TerminalShown). It isn't kept for a hub that isn't there, since a hub
+    /// that connects asks what the terminal shows, and that takes it in.
+    Terminal {
+        terminal: TerminalId,
+        /// So a hub can tell which updates come after a screen it asked for.
+        at: UpdateIndex,
+        update: TerminalUpdate,
     },
 }

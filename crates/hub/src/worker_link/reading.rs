@@ -89,6 +89,10 @@ pub(super) async fn read_frames(
             continue;
         }
         let Some(parsed) = hub.branches_frame(&workspace_id, &link, parsed).await else { continue };
+        // No terminal is started by this hub yet, so none has anywhere to go.
+        if let WorkerFrame::Terminal { .. } = parsed {
+            continue;
+        }
         let mut held = link.held.lock().await;
         match held.as_mut() {
             Some(held) => held.push(parsed),
@@ -114,7 +118,8 @@ pub(super) async fn route(hub: &Arc<Hub>, link: &WorkerLink, frame: WorkerFrame)
         WorkerFrame::Reply { .. }
         | WorkerFrame::Ask { .. }
         | WorkerFrame::Branches { .. }
-        | WorkerFrame::ChildBranches { .. } => return,
+        | WorkerFrame::ChildBranches { .. }
+        | WorkerFrame::Terminal { .. } => return,
         WorkerFrame::AgentEvent { session_id, run, body, raw, attachments, seq } => {
             (session_id, Item::Event { run, body: Box::new(body), raw, attachments, seq }, seq)
         }
@@ -152,7 +157,8 @@ fn agent_of(frame: &WorkerFrame) -> Option<(SessionId, RunId)> {
         WorkerFrame::Reply { .. }
         | WorkerFrame::Ask { .. }
         | WorkerFrame::Branches { .. }
-        | WorkerFrame::ChildBranches { .. } => None,
+        | WorkerFrame::ChildBranches { .. }
+        | WorkerFrame::Terminal { .. } => None,
         WorkerFrame::AgentEvent { session_id, run, .. }
         | WorkerFrame::AgentDelta { session_id, run, .. }
         | WorkerFrame::AgentContext { session_id, run, .. }

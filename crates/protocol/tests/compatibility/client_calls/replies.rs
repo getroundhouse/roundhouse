@@ -61,10 +61,11 @@ fn every_reply_of_the_hub_itself_or_listing_its_records_keeps_its_form() {
         keeping_awake: true,
         keeps_workers: true,
         oldest_protocol_version: Some(2),
+        open_terminals: 1,
     };
     answered(
         ClientResponse::HubStatus(status),
-        r#"{"result":"hub_status","pid":7,"hub_version":"0.1.9","protocol_version":3,"started_at_ms":1,"workers":4,"running_sessions":2,"clients":1,"on_demand":true,"build_number":42,"running_setups":1,"requests":3,"keeping_awake":true,"keeps_workers":true,"oldest_protocol_version":2}"#,
+        r#"{"result":"hub_status","pid":7,"hub_version":"0.1.9","protocol_version":3,"started_at_ms":1,"workers":4,"running_sessions":2,"clients":1,"on_demand":true,"build_number":42,"running_setups":1,"requests":3,"keeping_awake":true,"keeps_workers":true,"oldest_protocol_version":2,"open_terminals":1}"#,
     );
     answered(ClientResponse::Agents(admin::Agents { agents: vec![] }), r#"{"result":"agents","agents":[]}"#);
     let account = Account {

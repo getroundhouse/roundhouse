@@ -1,13 +1,15 @@
 //! What a client asks a hub to do.
 //!
 //! Each request that changes something is safe to send again after a lost reply: it either has the same effect however
-//! often it's applied, or carries an ID the client chose, which the hub records once. Each says which.
+//! often it's applied, or carries an ID the client chose, which the hub records once. Each says which. Two act again
+//! once what they acted on has passed, as each says: [`agent::SessionCancel`] and [`workspaces::WorkspaceRerunSetup`].
+//! [`terminals::TerminalInput`] is never safe to send again, since typing twice isn't typing once.
 
 use serde::{Deserialize, Serialize};
 
 use super::{
     Hello, accounts, admin, agent, attachments, comments, drafts, files, log, new_workspace, queue, records, sessions,
-    subscriptions, waits, workspaces,
+    subscriptions, terminals, waits, workspaces,
 };
 
 /// Every request, each with a type of its own that names what it's answered with. One with no fields is a variant with
@@ -100,6 +102,11 @@ pub enum ClientRequest {
     NewWorkspaceDraftFileRemove(drafts::NewWorkspaceDraftFileRemove),
     NewWorkspaceCreate(new_workspace::NewWorkspaceCreate),
     SessionRename(sessions::SessionRename),
+    TerminalOpen(terminals::TerminalOpen),
+    TerminalAttach(terminals::TerminalAttach),
+    TerminalInput(terminals::TerminalInput),
+    TerminalResize(terminals::TerminalResize),
+    TerminalClose(terminals::TerminalClose),
     /// Any request this build doesn't know, from a client newer than it. A hub answers with
     /// [`super::ErrorCode::Unsupported`] and carries on.
     #[serde(other)]

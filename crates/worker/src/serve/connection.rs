@@ -2,16 +2,20 @@
 
 use std::sync::Arc;
 
+use protocol::Build;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::frame::{self, Call};
-use protocol::worker::{Hello, ToWorker, WorkerFrame, WorkerOutcome, WorkerRequest, WorkerResponse};
+use protocol::versions::Versions;
+use protocol::worker::{
+    Hello, HelloReply, ToWorker, WORKER_PROTOCOL_VERSION, WorkerFrame, WorkerOutcome, WorkerRequest, WorkerResponse,
+};
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use tracing::{error, warn};
 
 use super::scripts::setup_requested;
-use super::{Worker, handle, hello};
+use super::{Worker, handle};
 
 /// Enough for a burst of what agents say, without holding much for a hub that's slow to read.
 const QUEUED_FRAMES: usize = 1024;
@@ -157,3 +161,28 @@ async fn write_frames<W: AsyncWrite + Unpin>(mut writer: W, mut frames: mpsc::Re
         }
     }
 }
+
+/// A worker speaks only its own version, and takes a hub whose hello names it, since a hub speaks the one before its
+/// own too once a protocol breaks, as "Changing the protocol" in `docs/architecture.md` says.
+fn hello(build: Build, newest: u32, oldest: Option<u32>) -> Result<WorkerResponse, ApiError> {
+    let (ours, hub) = (Versions::only(WORKER_PROTOCOL_VERSION), Versions::from_hello(newest, oldest));
+    let Some(chosen) = ours.newest_shared(hub) else {
+        let message = format!("the hub speaks {hub}, and this worker speaks {ours}");
+        return Err(ApiError::new(ErrorCode::VersionMismatch, message));
+    };
+    Ok(WorkerResponse::Hello(HelloReply { protocol_version: chosen, build: Some(said(build)) }))
+}
+
+/// Which build this worker is, as its hello says. A test can have it say another, with [`TEST_BUILD`], as a worker an
+/// earlier hub left would.
+fn said(build: Build) -> String {
+    #[cfg(feature = "testing")]
+    if let Ok(build) = std::env::var(TEST_BUILD) {
+        return build;
+    }
+    build.version().to_string()
+}
+
+/// The variable that names the build a worker says it is, in tests.
+#[cfg(feature = "testing")]
+pub const TEST_BUILD: &str = "ROUNDHOUSE_TEST_WORKER_BUILD";

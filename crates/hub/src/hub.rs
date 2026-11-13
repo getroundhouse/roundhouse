@@ -283,6 +283,8 @@ impl Hub {
             keeping_awake: self.awake.holding(),
             keeps_workers: KEEPS_WORKERS,
             oldest_protocol_version: Some(versions::CLIENTS.oldest),
+            // It refuses to open one.
+            open_terminals: 0,
         }
     }
 

@@ -127,6 +127,8 @@ impl World {
             accounts: self.accounts.clone(),
             // As from a hub that doesn't keep one, since its hub refuses to.
             new_workspace_draft: None,
+            // No screen shows a terminal yet.
+            terminals: Vec::new(),
             rev: Rev::default(),
         }
     }

@@ -358,6 +358,7 @@ mod tests {
             keeping_awake: false,
             keeps_workers: false,
             oldest_protocol_version: None,
+            open_terminals: 0,
         }
     }
 

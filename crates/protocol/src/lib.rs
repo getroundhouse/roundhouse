@@ -11,6 +11,7 @@
 #![warn(clippy::wildcard_enum_match_arm)]
 
 pub mod attachment;
+mod base64_bytes;
 mod build;
 pub mod client;
 pub mod event;
@@ -24,6 +25,7 @@ pub mod prompt;
 pub mod provider;
 pub mod short_text;
 pub mod tail;
+pub mod terminal;
 pub mod versions;
 pub mod worker;
 

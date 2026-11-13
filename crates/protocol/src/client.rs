@@ -11,9 +11,10 @@ use crate::event::SessionEvent;
 use crate::find::Found;
 use crate::model::{
     Account, DiffComment, FileContents, FileOpened, FilePages, GitDiff, GitStatus, HubSettings, NewWorkspaceDraft,
-    Records, Repo, Session, SessionAccount, TitleError, Workspace, WorktreeFiles,
+    Records, Repo, Session, SessionAccount, Terminal, TitleError, Workspace, WorktreeFiles,
 };
 use crate::tail::{StreamDelta, Tail};
+use crate::terminal::TerminalUpdate;
 
 pub mod accounts;
 pub mod admin;
@@ -31,6 +32,7 @@ pub mod records;
 mod request;
 pub mod sessions;
 pub mod subscriptions;
+pub mod terminals;
 pub mod waits;
 pub mod workspaces;
 
@@ -116,6 +118,7 @@ pub enum ClientResponse {
     FileContents(FileContents),
     FileOpened(FileOpened),
     FilePages(FilePages),
+    Terminal(Terminal),
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -157,13 +160,21 @@ pub struct HubStatus {
     /// hub from before this, which speaks only the one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub oldest_protocol_version: Option<u32>,
+    /// Terminals open in its workspaces, or being opened, whose shells stopping their workers would end. A hub from
+    /// before terminals has none.
+    #[serde(default)]
+    pub open_terminals: u32,
 }
 
 impl HubStatus {
-    /// Whether nothing would notice the hub stopping: nothing is running on it, and whoever asked for this is its one
-    /// client, with their request the one thing it's doing.
+    /// Whether nothing would notice the hub stopping: nothing is running on it, no terminal is open, and whoever asked
+    /// for this is its one client, with their request the one thing it's doing.
     pub fn is_idle(&self) -> bool {
-        self.running_sessions == 0 && self.running_setups == 0 && self.requests <= 1 && self.clients <= 1
+        self.running_sessions == 0
+            && self.running_setups == 0
+            && self.open_terminals == 0
+            && self.requests <= 1
+            && self.clients <= 1
     }
 }
 
@@ -254,6 +265,11 @@ pub enum HubFrame {
     Notice {
         subscription_id: u64,
         notice: HubNotice,
+    },
+    /// What happens next in the terminal a `TerminalAttach` follows, in order, starting with what it shows.
+    Terminal {
+        subscription_id: u64,
+        update: TerminalUpdate,
     },
 }
 

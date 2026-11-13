@@ -168,7 +168,13 @@ async fn handle(
     use ClientResponse as C;
     Ok(match request {
         R::Hello(_) => return Err(ApiError::new(ErrorCode::InvalidRequest, "already said hello")),
-        R::Unknown => return Err(hub.unsupported(None)),
+        // And those about terminals, which it refuses as a hub from before them does, until it runs them.
+        R::Unknown
+        | R::TerminalOpen(_)
+        | R::TerminalAttach(_)
+        | R::TerminalInput(_)
+        | R::TerminalResize(_)
+        | R::TerminalClose(_) => return Err(hub.unsupported(None)),
         R::HubStatus => C::HubStatus(hub.status()),
         R::HubShutdown => {
             hub.request_stop();

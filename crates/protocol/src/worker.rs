@@ -23,6 +23,7 @@ mod connection;
 mod frames;
 mod github;
 mod one_off;
+mod terminals;
 mod tools;
 mod workspaces;
 mod worktree;
@@ -40,6 +41,10 @@ pub use connection::{Hello, HelloReply, Received, RunningAgent, RunningAgents, R
 pub use frames::WorkerFrame;
 pub use github::{GithubRateLimit, PullRequest, PullRequestReply, RateLimit};
 pub use one_off::{AccountFor, TitleFor, TitleReply};
+pub use terminals::{
+    RunningTerminal, RunningTerminals, RunningTerminalsReply, TerminalInput, TerminalResize, TerminalShow,
+    TerminalShown, TerminalStart, TerminalStop,
+};
 pub use tools::{ServeTools, ToolsServing, ToolsToken, WAIT_TOOL};
 pub use workspaces::{
     ArchiveScript, CancelSetup, NamesGitHas, NamesGitHasReply, PrepareWorkspace, RemoveWorkspace, RestoreWorkspace,
@@ -128,6 +133,13 @@ pub enum WorkerRequest {
     TitleFor(TitleFor),
     AccountFor(AccountFor),
     ServeTools(ServeTools),
+    TerminalStart(TerminalStart),
+    TerminalInput(TerminalInput),
+    TerminalResize(TerminalResize),
+    TerminalShow(TerminalShow),
+    TerminalStop(TerminalStop),
+    /// See [`RunningTerminals`].
+    RunningTerminals,
     /// Any request this build doesn't know, from a hub newer than it. A worker answers with
     /// [`ErrorCode::Unsupported`](crate::client::ErrorCode::Unsupported) and carries on, as a hub does a client's.
     #[serde(other)]
@@ -162,6 +174,8 @@ pub enum WorkerResponse {
     Title(TitleReply),
     Account(AgentAccount),
     ToolsServing(ToolsServing),
+    TerminalShown(TerminalShown),
+    RunningTerminals(RunningTerminalsReply),
 }
 
 pub type WorkerOutcome = Outcome<WorkerResponse>;
@@ -178,6 +192,7 @@ mod tests {
         assert_eq!(sent(Stop.into_request()), r#"{"method":"stop"}"#);
         assert_eq!(sent(RunningAgents.into_request()), r#"{"method":"running_agents"}"#);
         assert_eq!(sent(CancelSetup.into_request()), r#"{"method":"cancel_setup"}"#);
+        assert_eq!(sent(RunningTerminals.into_request()), r#"{"method":"running_terminals"}"#);
     }
 
     /// The rest each read the variant that holds them, which the compiler checks.

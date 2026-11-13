@@ -147,6 +147,7 @@ fn status(args: &Args, paths: &Paths) -> HubStatus {
         keeping_awake: false,
         keeps_workers: args.keeps_workers,
         oldest_protocol_version: None,
+        open_terminals: 0,
     }
 }
 

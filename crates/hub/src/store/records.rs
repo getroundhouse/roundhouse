@@ -37,6 +37,8 @@ impl Store {
             hub_settings: Some(hub_settings(&tx)?),
             accounts: accounts(&tx)?,
             new_workspace_draft: Some(new_workspace_draft(&tx)?),
+            // Kept in memory rather than here, as `Terminal` says, and none is opened yet.
+            terminals: Vec::new(),
             rev: current_rev(&tx)?,
         };
         tx.commit()?;
