@@ -14,6 +14,14 @@ impl Ui<'_> {
         self.cx.read_entity(&transcript, |t, _| (0..t.row_count()).filter_map(|row| t.event_at(row)).collect())
     }
 
+    /// The row the open chat's log has `event` in, whether it's loaded or not, as its position there says. It has to be
+    /// one of the events the chat follows, which by place are the agent's own.
+    pub(crate) fn row_of(&self, event: &SessionEvent) -> usize {
+        let transcript = self.transcript().unwrap();
+        let row = self.cx.read_entity(&transcript, |t, _| t.event_row(event));
+        row.unwrap_or_else(|| panic!("the chat doesn't follow {event:?}"))
+    }
+
     pub(crate) fn assistant_text(&self) -> String {
         let mut text = String::new();
         for event in self.events() {

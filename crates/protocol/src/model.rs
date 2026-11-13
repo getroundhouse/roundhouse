@@ -197,15 +197,6 @@ impl Rev {
     }
 }
 
-/// A `seq` as a position in a list of events.
-#[expect(
-    clippy::cast_possible_truncation,
-    reason = "only 64-bit targets are supported, where this can't lose anything"
-)]
-pub const fn seq_index(seq: Seq) -> usize {
-    seq as usize
-}
-
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Repo {
     pub id: RepoId,

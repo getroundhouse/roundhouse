@@ -11,7 +11,7 @@ use std::sync::Arc;
 
 use client_core::session_log::{By, MAX_LOADED_EVENTS, SessionLog};
 use protocol::event::{ContentBlock, EventBody, SessionEvent};
-use protocol::model::{Seq, Subagent as Record, SubagentStatus, ToolUseId, seq_index};
+use protocol::model::{Seq, Subagent as Record, SubagentStatus, ToolUseId};
 
 use super::{Around, BlockAround, Opening, Reply, blocks_of, nearby};
 use crate::transcript::Model;
@@ -100,7 +100,8 @@ pub(crate) fn its_call(log: &SessionLog, m: &Model, event: &SessionEvent) -> Opt
     let parent = parent_of(&event.body)?;
     let call = m.subagent_calls.borrow_mut().find(log, event.seq, parent)?;
     // The same reach as `Subagent::read`, which gathers the events after its call's row.
-    (call < event.seq && seq_index(event.seq - call) <= REACH).then_some(call)
+    let (row, call_row) = (log.row_of(event.seq)?, log.row_of(call)?);
+    (call_row < row && row - call_row <= REACH).then_some(call)
 }
 
 /// Where the calls that started subagents are, as rows have looked for them. A subagent's events, which can fill a

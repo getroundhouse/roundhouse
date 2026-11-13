@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{AppContext as _, ElementId, Pixels, ScrollDelta, SharedString, TestAppContext, point, px};
 use protocol::event::{EventBody, SessionEvent};
-use protocol::model::{Seq, SessionId, SessionStatus, SettledAt, seq_index};
+use protocol::model::{Seq, SessionId, SessionStatus, SettledAt};
 
 use crate::support::{Stack, TIMEOUT, Ui};
 
@@ -229,7 +229,7 @@ fn a_compaction_recorded_while_the_chat_shows_joins_its_outline(cx: &mut TestApp
     compact(&stack, &session);
 
     let compaction = stack.client().session_compaction_list(&session).unwrap()[0].clone();
-    let row = seq_index(compaction.seq) - 1;
+    let row = ui.row_of(&stack.event(&session, compaction.seq));
     ui.wait("its dot", |ui| ui.has(row_id("outline-dot", row)));
     let only = row_id("outline-tick", prompt_rows(&ui)[0]);
     let (tick, dot) = (ui.bounds(only), ui.bounds(row_id("outline-dot", row)));

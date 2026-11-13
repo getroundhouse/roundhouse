@@ -1,4 +1,4 @@
-use client_core::session_log::SessionLog;
+use client_core::session_log::{Position, SessionLog};
 use protocol::event::{ApprovalOutcome, CallKind, ContentBlock, EventBody, ExitReason, TurnOutcome};
 use serde_json::json;
 
@@ -67,7 +67,7 @@ fn a_call_its_adapter_said_hands_work_off_gathers_its_subagent_s_work() {
 
     assert_eq!((count(&unsaid, "parser", 0), count(&unsaid, "parser", 1)), (0, 1), "in a row of its own");
     assert_eq!((count(&said, "parser", 0), count(&said, "parser", 1)), (1, 0), "in the call's row");
-    assert_eq!(rows_drawing(&said, &Model::default(), 2), [0]);
+    assert_eq!(rows_drawing(&said, &Model::default(), Position::of_row(1)), [0]);
 }
 
 #[test]
@@ -133,10 +133,10 @@ fn a_prompt_is_found_where_its_drawn() {
     let needle = |log: &SessionLog| (0..5).map(|row| count(log, "sidebar", row)).collect::<Vec<_>>();
 
     assert_eq!(needle(&log), [0, 0, 0, 1, 0], "the thought, and not the prompt waiting at the end");
-    assert_eq!(rows_drawing(&log, &Model::default(), 3), Vec::<usize>::new());
+    assert_eq!(rows_drawing(&log, &Model::default(), Position::of_row(2)), Vec::<usize>::new());
     log.apply_event(event(5, EventBody::PromptTaken { prompt: 3 }));
     assert_eq!(needle(&log), [0, 0, 0, 1, 1], "under the thought, in the row that took it");
-    assert_eq!(rows_drawing(&log, &Model::default(), 3), [4]);
+    assert_eq!(rows_drawing(&log, &Model::default(), Position::of_row(2)), [4]);
 }
 
 #[test]
@@ -150,7 +150,11 @@ fn a_call_s_result_is_found_in_the_call_s_row_which_draws_it() {
     assert_eq!(count(&log, "cargo", 0), 1, "the command");
     assert_eq!(count(&log, "the tests", 0), 1, "what the agent said it's for");
     assert_eq!(count(&log, "failed", 1), 0, "the result draws nothing of its own");
-    assert_eq!(rows_drawing(&log, &Model::default(), 2), [0, 1], "but its call's row is counted again");
+    assert_eq!(
+        rows_drawing(&log, &Model::default(), Position::of_row(1)),
+        [0, 1],
+        "but its call's row is counted again"
+    );
 }
 
 /// A call the person denied never ran, so what the agent was told is found once, as what the person said, and not as
@@ -188,7 +192,7 @@ fn a_subagent_s_work_is_found_in_the_call_that_started_it() {
 
     assert_eq!(count(&log, "parser", 0), 1);
     assert_eq!(count(&log, "parser", 1), 0);
-    assert_eq!(rows_drawing(&log, &Model::default(), 2), [0]);
+    assert_eq!(rows_drawing(&log, &Model::default(), Position::of_row(1)), [0]);
 }
 
 /// A call's own prose is found in the row that draws it, in the order that row shows it: a call in a subagent's work

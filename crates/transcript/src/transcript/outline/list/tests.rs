@@ -1,9 +1,8 @@
-use protocol::model::seq_index;
-
 use super::*;
 
+/// The prompt `line`, in its own row in a chat that holds every event.
 fn prompt(line: PromptLine) -> Line {
-    Line { row: seq_index(line.seq()) - 1, kind: Kind::Prompt { line, number: 1 } }
+    Line { row: usize::try_from(line.seq()).unwrap() - 1, kind: Kind::Prompt { line, number: 1 } }
 }
 
 fn lines(seqs: &[u64]) -> Vec<Line> {

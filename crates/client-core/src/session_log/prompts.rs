@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{Seq, SettledAt, Settlement};
 
-use super::SessionLog;
+use super::{Row, SessionLog};
 
 #[cfg(test)]
 mod tests;
@@ -79,10 +79,9 @@ impl SessionLog {
         // What comes after it in this log, which holds every event about a prompt, whether it's the whole log or the
         // agent's own events. One it doesn't hold, such as one past its end, has nothing after it yet.
         let Some(row) = self.row_of(seq) else { return PromptState::Waiting };
-        let position = row as u64 + 1;
-        for later in position + 1..=self.last {
+        for later in row + 1..self.row_count() {
             // Not loaded, so far behind the tail, where it was settled long ago.
-            let Some(event) = self.events.get(&later) else {
+            let Row::Event(event) = self.row(later) else {
                 return if dropped { PromptState::Dropped } else { PromptState::Taken };
             };
             if matches!(event.body, EventBody::PromptTaken { prompt } if prompt == seq) {
@@ -168,7 +167,7 @@ impl SessionLog {
 
     /// The event recorded at `seq`, if it's loaded.
     pub(super) fn event_of(&self, seq: Seq) -> Option<&SessionEvent> {
-        self.events.get(&(self.row_of(seq)? as u64 + 1))
+        self.events.get(&self.position_of(seq)?)
     }
 
     /// Notes that the prompt recorded at `prompt` was settled `at`, and tells a view of each row that moves.
@@ -200,7 +199,7 @@ impl SessionLog {
         let settled = [left, self.settled.at(seq)].into_iter().flatten().map(|at| self.row_at(at.seq, at.place));
         let rows: Vec<usize> = self.row_of(seq).into_iter().chain(settled).collect();
         for row in rows {
-            if self.events.contains_key(&(row as u64 + 1)) {
+            if matches!(self.row(row), Row::Event(_)) {
                 self.touched(row..row + 1);
             }
         }

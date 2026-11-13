@@ -5,7 +5,8 @@
 use std::time::{Duration, Instant};
 
 use gpui_kit::{AppContext as _, SharedString};
-use protocol::model::{AgentKind, PermissionMode, SessionId, SessionSettingsChange, SessionStatus};
+use protocol::event::SessionEvent;
+use protocol::model::{AgentKind, PermissionMode, Place, Seq, SessionId, SessionSettingsChange, SessionStatus};
 
 use super::{Stack, TIMEOUT, Ui};
 
@@ -16,6 +17,19 @@ impl Stack {
         let repo = client.repo_add(self.repo().to_str().unwrap()).unwrap();
         let workspace = client.workspace_create(&repo.id, None, None, None).unwrap();
         client.session_create(&workspace.id, AgentKind::Claude, SessionSettingsChange::default(), None).unwrap().id
+    }
+
+    /// The event the hub recorded at `seq` in the chat.
+    pub(crate) fn event(&self, chat: &SessionId, seq: Seq) -> SessionEvent {
+        self.client().session_read(chat, seq, 1, false).unwrap().0.remove(0)
+    }
+
+    /// The newest of the agent's own events in the chat, as the hub recorded it, which is the last the chat shows. The
+    /// session's newest event can be a subagent's, which the chat doesn't follow.
+    pub(crate) fn newest_event(&self, chat: &SessionId) -> SessionEvent {
+        let client = self.client();
+        let (_, last) = client.session_read_places(chat, None, Place::new(1), 1).unwrap();
+        client.session_read_places(chat, None, last, 1).unwrap().0.remove(0)
     }
 
     /// Sends the script to the chat as a prompt, and waits for its agent to finish it.

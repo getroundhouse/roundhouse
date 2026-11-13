@@ -4,10 +4,10 @@
 use gpui_kit::test::{ElementSnapshot, TestWindowExt as _};
 use gpui_kit::{AppContext as _, ElementId, Entity, Pixels, ScrollDelta, TestAppContext, point, px};
 use protocol::event::{ContentBlock, EventBody};
-use protocol::model::{SessionId, SessionStatus, seq_index};
+use protocol::model::SessionStatus;
 use transcript::{Place, Transcript};
 
-use super::{A_FRAME, wait_for_the_list_to_settle};
+use super::{A_FRAME, settle_at_the_end};
 use crate::support::{Stack, Ui};
 
 /// How far each turn of the wheel goes, about what a trackpad sends at once.
@@ -27,7 +27,7 @@ fn scrolling_up_into_a_long_open_thought_moves_as_far_as_the_wheel_turns(cx: &mu
     ui.wait("the workspace", |ui| ui.transcript().is_some());
     let transcript = ui.transcript().unwrap();
     ui.cx.update_entity(&transcript, |t, cx| t.set_thinking_open(true, cx));
-    wait_for_the_list_to_settle(&mut ui, last_row(&stack, &session));
+    settle_at_the_end(&mut ui, &stack, &session);
 
     let steps = steps_up_to_the_start(&mut ui, &transcript);
 
@@ -48,10 +48,10 @@ fn a_long_thought_opened_again_has_its_height_at_once(cx: &mut TestAppContext) {
     let thought = thought_row(&ui, &transcript);
     let height = |ui: &Ui<'_>| ui.cx.read_entity(&transcript, |t, _| t.list().row_height(thought));
     ui.cx.update_entity(&transcript, |t, cx| t.set_thinking_open(true, cx));
-    wait_for_the_list_to_settle(&mut ui, last_row(&stack, &session));
+    settle_at_the_end(&mut ui, &stack, &session);
     let opened = height(&ui);
     ui.cx.update_entity(&transcript, |t, cx| t.set_thinking_open(false, cx));
-    wait_for_the_list_to_settle(&mut ui, last_row(&stack, &session));
+    settle_at_the_end(&mut ui, &stack, &session);
 
     ui.cx.update_entity(&transcript, |t, cx| t.set_thinking_open(true, cx));
     // One frame, with nothing else let run, so a text parsed on another thread wouldn't be in yet.
@@ -78,7 +78,7 @@ fn scrolling_up_into_a_long_plan_moves_as_far_as_the_wheel_turns(cx: &mut TestAp
     ui.wait("the plan's turn to end", |ui| ui.session_status() == Some(SessionStatus::Idle));
     stack.run(&session, "prose:40:2");
     let transcript = ui.transcript().unwrap();
-    wait_for_the_list_to_settle(&mut ui, last_row(&stack, &session));
+    settle_at_the_end(&mut ui, &stack, &session);
 
     let steps = steps_up_to_the_start(&mut ui, &transcript);
 
@@ -99,7 +99,7 @@ fn a_long_text_parsed_once_it_is_at_the_top_of_the_window_moves_nothing_on_scree
     ui.wait("the workspace", |ui| ui.transcript().is_some());
     let transcript = ui.transcript().unwrap();
     // Closed, so the thought's text isn't drawn, and nothing has parsed it.
-    wait_for_the_list_to_settle(&mut ui, last_row(&stack, &session));
+    settle_at_the_end(&mut ui, &stack, &session);
     let thought = thought_row(&ui, &transcript);
     ui.cx.update_entity(&transcript, |t, cx| t.set_thinking_open(true, cx));
     let top = |ui: &Ui<'_>| ui.cx.read_entity(&transcript, |t, _| t.list().top());
@@ -131,7 +131,7 @@ fn a_long_thought_opened_from_its_line_at_the_top_of_the_window_opens_under_it(c
     let mut ui = Ui::open(cx, &stack);
     ui.wait("the workspace", |ui| ui.transcript().is_some());
     let transcript = ui.transcript().unwrap();
-    wait_for_the_list_to_settle(&mut ui, last_row(&stack, &session));
+    settle_at_the_end(&mut ui, &stack, &session);
     let thought = thought_row(&ui, &transcript);
     while ui.cx.read_entity(&transcript, |t, _| t.list().top().row) > thought {
         ui.scroll("transcript", ScrollDelta::Pixels(point(px(0.), STEP)));
@@ -192,11 +192,6 @@ fn to_the_end(ui: &Ui<'_>, transcript: &Entity<Transcript>) -> Pixels {
         let below: Pixels = (top.row..list.row_count()).map(|row| list.row_height(row).unwrap_or_default()).sum();
         below - top.offset
     })
-}
-
-/// The row of the session's latest event.
-fn last_row(stack: &Stack, session: &SessionId) -> usize {
-    seq_index(stack.client().session_get(session).unwrap().last_seq) - 1
 }
 
 /// Turns the wheel up a [`STEP`] at a time, as a trackpad does, until the list is at the start, letting the list come

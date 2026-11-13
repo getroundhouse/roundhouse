@@ -14,13 +14,14 @@ use protocol::model::SessionId;
 
 use super::{View, read_range};
 use crate::client::follow::Teller;
+use crate::session_log::Position;
 use crate::{Client, ClientError, Result};
 
 #[cfg(test)]
 mod tests;
 
 /// The most events read at once, well within what a log holds.
-const LONGEST: u64 = 1000;
+const LONGEST: usize = 1000;
 
 /// What a session's searches share.
 #[derive(Default)]
@@ -57,10 +58,10 @@ pub enum Searched {
 pub struct Stretch {
     /// Every event in the stretch, oldest first.
     pub events: Vec<SessionEvent>,
-    /// The places of those the hub named that it was read for, each with every event within the search's `around`
-    /// places of it, but for any before the first or after the last. An event the hub named is in one stretch's
-    /// `holding`, though it can be in another's `events` too.
-    pub holding: Vec<u64>,
+    /// Where those the hub named that it was read for are in the log, by their places, each with every event within the
+    /// search's `around` places of it, but for any before the first or after the last. An event the hub named is in one
+    /// stretch's `holding`, though it can be in another's `events` too.
+    pub holding: Vec<Position>,
 }
 
 /// A search of a session, from [`super::OpenSession::search`], on a thread of its own, which stops once this has gone.
@@ -111,7 +112,7 @@ pub(super) struct Asking {
     pub(super) view: View,
     pub(super) needle: Needle,
     /// How many places either side of each event it names are read with it.
-    pub(super) around: u64,
+    pub(super) around: usize,
 }
 
 /// A search on its thread.
@@ -172,8 +173,9 @@ impl Job {
                 Err(e) => return Err(e),
             }
         };
-        let places: Vec<u64> = found.places.iter().map(|place| place.get()).collect();
-        for (range, holding) in stretches(&places, *around) {
+        // A search reads by place, so the places the hub names are the positions in the log.
+        let positions: Vec<Position> = found.places.iter().copied().map(Position::of_place).collect();
+        for (range, holding) in stretches(&positions, *around) {
             if self.gone() {
                 return Ok(Searched::Underway);
             }
@@ -192,21 +194,22 @@ impl Job {
     }
 }
 
-/// The stretches to read for `places`, oldest first, each with every event within `around` places of those it's read
+/// The stretches to read for `positions`, oldest first, each with every event within `around` places of those it's read
 /// for, and none longer than [`LONGEST`]. Where a run of them is too long for one, the next starts back far enough to
-/// have what's before its first, so each event is read with everything around it.
-fn stretches(places: &[u64], around: u64) -> Vec<(Range<u64>, Vec<u64>)> {
+/// have what's before its first, so each event is read with everything around it. The hub names no event at 0, which
+/// has no row, so there's nothing to read for one.
+fn stretches(positions: &[Position], around: usize) -> Vec<(Range<Position>, Vec<Position>)> {
     let around = around.min((LONGEST - 1) / 2);
-    let mut out: Vec<(Range<u64>, Vec<u64>)> = Vec::new();
-    for &place in places {
-        let (start, end) = (place.saturating_sub(around).max(1), place + around + 1);
+    let mut out: Vec<(Range<usize>, Vec<Position>)> = Vec::new();
+    for (&position, row) in positions.iter().filter_map(|position| Some((position, position.row()?))) {
+        let (start, end) = (row.saturating_sub(around), row + around + 1);
         match out.last_mut() {
-            Some((range, holding)) if start <= range.end && end - range.start <= LONGEST => {
-                range.end = end;
-                holding.push(place);
+            Some((rows, holding)) if start <= rows.end && end - rows.start <= LONGEST => {
+                rows.end = end;
+                holding.push(position);
             }
-            Some(_) | None => out.push((start..end, vec![place])),
+            Some(_) | None => out.push((start..end, vec![position])),
         }
     }
-    out
+    out.into_iter().map(|(rows, holding)| (Position::of_rows(rows), holding)).collect()
 }

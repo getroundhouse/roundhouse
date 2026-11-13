@@ -14,6 +14,15 @@ use super::super::tests::{
 use super::*;
 use crate::session_log::{By, SessionLog};
 
+/// The position of the event at `place`, in a log by place, as a search reads.
+fn at(place: u64) -> Position {
+    Position::of_place(Place::new(place))
+}
+
+fn at_each(places: &[u64]) -> Vec<Position> {
+    places.iter().copied().map(at).collect()
+}
+
 /// Long enough for a search that's to be held up to have asked for what it's not to.
 const A_WHILE: Duration = Duration::from_millis(100);
 
@@ -112,14 +121,14 @@ fn what_the_hub_names_is_read_with_what_s_around_it_a_stretch_at_a_time() {
     assert_eq!(queries_asked(&heard), [("parser", Some(&helper))], "of the subagent the view follows");
     assert_eq!(search.searched(), Searched::Underway);
     let first = search.take().unwrap();
-    assert_eq!(first.holding, [100]);
+    assert_eq!(first.holding, [at(100)]);
     let places: Vec<u64> = first.events.iter().map(|event| event.place.get()).collect();
     assert_eq!(places, (36..165).collect::<Vec<_>>(), "everything within 64 places of it");
     until("the third is read", || reads_from(&requests, &mut heard).len() == 3);
-    assert_eq!(search.take().unwrap().holding, [300]);
+    assert_eq!(search.take().unwrap().holding, [at(300)]);
     until("the last is sent", || search.stretches.len() == 1);
     assert_eq!(search.searched(), Searched::Underway, "it isn't done while the last is still to be taken");
-    assert_eq!(search.take().unwrap().holding, [500]);
+    assert_eq!(search.take().unwrap().holding, [at(500)]);
     until("done", || search.searched() == Searched::Done);
     assert!(search.take().is_none());
 }
@@ -259,7 +268,7 @@ fn a_log_that_holds_every_event_needs_no_hub_once_it_knows_how_far_they_go() {
 
     let before = open.search(&client, needle("parser"), 64);
     answer.send(()).unwrap();
-    until("it knows how far they go", || open.read(SessionLog::last) == 1);
+    until("it knows how far they go", || open.read(SessionLog::last) == at(1));
     open.follow.update(|log| log.apply_event(only));
 
     assert_eq!(open.search(&client, needle("parser"), 64).searched(), Searched::Done);
@@ -271,21 +280,26 @@ fn a_log_that_holds_every_event_needs_no_hub_once_it_knows_how_far_they_go() {
 
 #[test]
 fn events_near_each_other_are_read_together_and_far_ones_apart() {
-    assert_eq!(stretches(&[100, 150, 900], 64), [(36..215, vec![100, 150]), (836..965, vec![900])]);
-    assert_eq!(stretches(&[10], 64), [(1..75, vec![10])], "from the first place");
+    let near = [(at(36)..at(215), at_each(&[100, 150])), (at(836)..at(965), at_each(&[900]))];
+
+    assert_eq!(stretches(&at_each(&[100, 150, 900]), 64), near);
+    assert_eq!(stretches(&at_each(&[10]), 64), [(at(1)..at(75), at_each(&[10]))], "from the first place");
+    assert_eq!(stretches(&at_each(&[0]), 64), [], "and none for 0, where no event is");
 }
 
 #[test]
 fn a_long_run_of_events_is_read_a_stretch_at_a_time_each_with_what_s_around_it() {
     let places: Vec<u64> = (100..5000).step_by(30).collect();
 
-    let read = stretches(&places, 64);
+    let read = stretches(&at_each(&places), 64);
 
     assert!(read.len() > 1);
-    assert!(read.iter().all(|(range, _)| range.end - range.start <= LONGEST), "{read:?}");
-    let holding: Vec<u64> = read.iter().flat_map(|(_, holding)| holding.iter().copied()).collect();
-    assert_eq!(holding, places, "each once, in order");
+    let places_in = |range: &Range<Position>| range.start.place().get()..range.end.place().get();
+    assert!(read.iter().all(|(range, _)| places_in(range).count() <= LONGEST), "{read:?}");
+    let holding: Vec<Position> = read.iter().flat_map(|(_, holding)| holding.iter().copied()).collect();
+    assert_eq!(holding, at_each(&places), "each once, in order");
     for (range, holding) in &read {
-        assert!(holding.iter().all(|at| range.start <= at - 64 && at + 64 < range.end), "{range:?} {holding:?}");
+        let (range, held) = (places_in(range), holding.iter().map(|at| at.place().get()));
+        assert!(held.clone().all(|at| range.start <= at - 64 && at + 64 < range.end), "{range:?} {holding:?}");
     }
 }

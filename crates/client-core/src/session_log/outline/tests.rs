@@ -47,11 +47,11 @@ fn a_prompt_stays_listed_after_its_page_is_dropped() {
     let mut first = page(1..251);
     first[9] = prompt(10, "far back");
     log.focus_on(0);
-    log.install_page(1, first);
+    log.install_page(Position::of_seq(1), first);
 
     log.focus_on(2999);
     for start in (251..3000).step_by(250) {
-        log.install_page(start, page(start..start + 250));
+        log.install_page(Position::of_seq(start), page(start..start + 250));
     }
 
     assert!(matches!(log.row(9), crate::session_log::Row::Unloaded), "its page is gone");
@@ -80,8 +80,8 @@ fn the_list_is_wanted_until_the_hub_answers_and_after_a_failure_only_once_its_re
 #[test]
 fn a_prompt_is_drawn_at_its_place_among_the_agents_own_events_and_in_the_whole_log_at_its_seq() {
     let placed = |seq, place| line(seq).placed(Place::new(place));
-    let mut own = SessionLog::by_place(0);
-    own.reaches(4);
+    let mut own = SessionLog::by_place(Place::default());
+    own.reaches(Place::new(4));
     let mut whole = SessionLog::new(12);
 
     // After a subagent's events, so its place isn't its `seq`.
@@ -191,8 +191,8 @@ fn a_compaction_both_listed_and_given_is_there_once_and_changes_nothing_the_seco
 
 #[test]
 fn a_compaction_is_drawn_at_its_place_among_the_agents_own_events_and_in_the_whole_log_at_its_seq() {
-    let mut own = SessionLog::by_place(0);
-    own.reaches(4);
+    let mut own = SessionLog::by_place(Place::default());
+    own.reaches(Place::new(4));
     let whole = SessionLog::new(12);
 
     // After a subagent's events, so its place isn't its `seq`.
