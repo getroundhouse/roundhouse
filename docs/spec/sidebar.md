@@ -1,6 +1,11 @@
 # Sidebar
 
 - **Home, Create and Search sit at the top, above the workspaces, with a line under them.** Home shows every workspace in place of the workspace, as `home.md` says, and Create opens the new-workspace dialog for the selected workspace's project, or for the one Home's list shows while Home shows, as `Cmd-N` does. Each is a muted icon and label, filled while what it opens is showing. *Unconfirmed.*
+
+  **The sidebar while Home shows, with Home filled, and a pencil on the workspace Home hides, which has something typed in it.** *Unconfirmed.*
+
+  ![The sidebar while Home shows](screens/sidebar-on-home.png)
+
 - **Search is only a place for searching.** *Not built:* it does nothing when pressed, and what it searches isn't decided.
 - **The workspaces are listed by project, under a small faint heading.** A project's row has its folder, its name in medium weight, and a button for a new workspace in it. Its workspaces are set in below it, so they read as its, each with its mark and its name at body size. Rows are 36px, 4px apart. *Unconfirmed.*
 - **Add project is at the heading's right end, in words,** so it isn't taken for the button for a new workspace on each project's row under it. The heading shows before there's a project too, so the button is in the same place from the start. Without a hub, such as while it restarts, Add project is greyed out, and the heading shows only over projects already listed. *Unconfirmed:* without a hub.
@@ -9,14 +14,19 @@
 - **A workspace's row shows how many lines it has added and removed,** in green and red at its right, with either left out when it's none. *Not built:* the hub doesn't send them.
 - **A workspace's row shows a pencil while something typed in it isn't sent,** in a chat's composer, attached there, or as an answer to a question, so a prompt left half-written in another workspace isn't forgotten. The workspace showing has none, since what's typed in it is in view, but has one while Home shows in its place. It's muted, at the row's right end, in the place of the button that archives the workspace under the pointer, so no more of the name is cut short than the pencil needs. When the button shows, the pencil slides aside to just left of it, a little further from it than the icons' own edges would put it, so the two don't run together, and it slides back as the button goes. *Unconfirmed.* What's typed and attached in a composer is the hub's, as `chats.md` says, so a row has a pencil for it from before the app opened, and in another client. *Not built:* an answer being typed is only in the app that has it, so no other client shows a pencil for it.
 
-**Something typed in two workspaces that aren't showing, with the pointer on one of them.** *Unconfirmed.*
+  **Something typed in two workspaces that aren't showing, with the pointer on one of them.** *Unconfirmed.*
 
-![Something typed in two workspaces](screens/drafts.png)
+  ![Something typed in two workspaces](screens/drafts.png)
 
 ## Order
 
 - **Each project's workspaces are listed last active first,** unless oldest first is chosen instead. *Unconfirmed:* oldest first.
 - **The order is chosen from a button at the heading, before Add project.** The button shows only while the pointer is on the heading, as a row's archive button does, so the list stays quiet, and its menu ticks the order chosen, which lasts once the app quits. The projects keep their order, and `Cmd-[` and `Cmd-]` go in the order shown. *Unconfirmed.*
+
+  **The menu of orders, opened from the button at the heading, with the one chosen ticked.** *Unconfirmed.*
+
+  ![The menu that chooses the order](screens/sort-menu.png)
+
 - **Last active puts first the workspace someone most recently did something in,** by the hub's clock, so every client agrees. Nothing its agents do counts, not even finishing a turn, so the workspaces at work stay where they are until someone turns to one.
 - **What counts is making the workspace, making a chat in it, sending one of its agents a prompt, and answering one of its agents' questions or approvals.** A prompt counts as it's sent, or as it's queued for when the agent finishes, rather than when the queue sends it, so a workspace doesn't jump up long after anyone touched it. A new workspace starts at the top, and the note that one is on its way is where it will go. *Unconfirmed.*
 - **While someone is using the list, the order holds still,** so a row doesn't move out from under a click: while the pointer moves over the list and for a second and a half after it stops, and while a row's menu is open, which would go if its row moved. Pressing a key ends it until the pointer moves again, so the order goes on changing while someone types with the pointer resting there. A workspace that comes meanwhile goes after the others until it ends, and so does the note that one is on its way, if it comes meanwhile too. Then each row slides to its place. A note already showing as the order began to hold keeps its place, and the workspace takes it once it's made, so nothing moves, unless it can't be made, when the rows under the note close up. Choosing another order from the heading takes at once. *Unconfirmed.*
@@ -25,59 +35,74 @@
 ## Hiding and widening
 
 - **A button in the window's top left corner, beside the window's buttons on a Mac, hides the sidebar, and shows it again,** as the button at the other end of the header does the sidebar of changes. It stays where it is whether the sidebar shows or not, so it's always in the same place, except in full screen, where macOS puts the window's buttons away and it sits where they were. While the sidebar is hidden, the workspace has its room, and what's in the strip along the top starts after the button: the workspace's header, Home's bar, or an error, which sits above the header and leaves it to start at the window's edge. The choice holds until the app quits.
+
+  **The sidebar hidden, with the workspace's header starting after the button that shows it again.** *Unconfirmed.*
+
+  ![The sidebar hidden](screens/sidebar-hidden.png)
+
 - **Both sidebars slide open and shut, in a fifth of a second,** each moving out past its edge of the window as one piece, so it's plain where it went. What's beside a sidebar moves with it, so nothing jumps. A sidebar turned back partway slides from where it had got to. Reduce Motion skips the slide.
 - **Dragging a sidebar's inner edge changes how wide it is,** from 220px to 480px for this one and from 300px to 800px for the sidebar of changes, and no wider than leaves 360px between the two. This one can push the sidebar of changes as far as its narrowest, and the sidebar of changes drags only into the room this one leaves. The pointer shows the edge can be dragged, and the edge shows a short bar while the pointer is on it. The width holds in every workspace, and while the sidebar is hidden, until the app quits.
+
+  **The pointer on the sidebar's inner edge, which shows its short bar.** *Unconfirmed.*
+
+  ![The sidebar's edge under the pointer](screens/sidebar-edge.png)
+
 - **In a window too narrow for both sidebars at their widths and 360px between them, the sidebar of changes gives way first, and then this one,** each no further than its narrowest, and each is as wide as it was dragged again once the window has the room. A window narrower still squeezes what's between them. A sidebar takes as much of the window as shows of it, so one sliding away gives up its room as it goes and the other widens into it, rather than all at once. The sidebar of changes takes room only where it shows, so on Home and in Settings this one is as wide as it was dragged.
 - **A sidebar dragged to within 8px of its usual width takes it,** which is 290px for this one and 432px for the sidebar of changes, so the usual layout is easy to get back to.
 - **A Mac's trackpad taps as the edge takes its usual width,** as Keynote's does when what's dragged lines up with a guide, so the place can be felt without looking. It taps once as the edge arrives, and not again while the pointer moves on within reach of it, or as the edge leaves. A mouse feels nothing, and macOS decides from the trackpad, accessibility settings and the person's preferences whether it plays. *Unconfirmed.*
 
-**The sidebar hidden, with the workspace's header starting after the button that shows it again.** *Unconfirmed.*
-
-![The sidebar hidden](screens/sidebar-hidden.png)
-
 ## Replies you haven't read
 
 - **A chat that needs a look has its name at full brightness in medium weight,** in its tab and in its workspace's row: one with a reply you haven't read, or one waiting on you for an answer or an approval. Every other name is muted, so which agents have finished or are stuck since you last looked stands out without opening each one. That includes the selected workspace's name and the open chat's title, which look as they do when they aren't selected, as `look.md` says for lists. A chat waiting on you stays that way until it's answered, whether or not it's showing. Its mark doesn't change, since what's about you is on the name, not the mark, as `look.md` says. A reply is the end of a turn, and one the agent was cut off from shows as stopped short instead. The hub keeps how far each chat is read, so every client agrees. *Unconfirmed.*
+
+  **Replies you haven't read, in another workspace and in this one's other chat, which the sidebar shows by each workspace and the tabs by each chat.** *Unconfirmed.*
+
+  ![Replies you haven't read, in the sidebar](screens/unread.png)
+
+  ![The other chat's tab, with a reply you haven't read](screens/unread-tab.png)
+
 - **A reply is read once its chat is showing in the window in front,** whether it comes while the chat is showing or the chat is shown later. One that comes while another app is in front waits until you come back. *Unconfirmed.*
 - **Right-clicking a tab or a workspace's row marks it read, or unread again.** Marking a workspace read reads all its chats, and marking it unread marks the newest reply in its chat last worked in. A chat marked unread stays unread while it's showing, until you go to another chat, workspace or app and come back to it. *Unconfirmed.*
+
+  **A tab's menu, for a chat with a reply nobody has read.** *Unconfirmed.*
+
+  ![A tab's menu](screens/chat-menu.png)
+
 - **`Cmd-Shift-U` marks the workspace showing read, or unread again,** as its row's menu would, and is the key Mail uses for a message. That row's menu shows it beside the item. Other rows' menus show no key, since it wouldn't act on them, and neither do tabs' menus, since it marks the workspace rather than the chat. *Unconfirmed.*
-
-**Replies you haven't read, in another workspace and in this one's other chat, which the sidebar shows by each workspace and the tabs by each chat.** *Unconfirmed.*
-
-![Replies you haven't read, in the sidebar](screens/unread.png)
-
-![The other chat's tab, with a reply you haven't read](screens/unread-tab.png)
 
 ## A chat's cache
 
 - **A clock at a workspace's row's right end says one of its chats' caches is about to expire,** and pointing at it says how soon, for the soonest, as `chats.md` says. It's after the pencil if there is one, so a row's end is always in one order: the pencil, the clock, then the button that archives the workspace under the pointer, whichever of them show, with the last of them at the row's right end. It slides aside for the button as the pencil does. It doesn't show while the row says what the workspace is waiting on the hub for, since that's the workspace going or coming back. *Unconfirmed:* its place, and that it doesn't show then.
 
+  **The pointer on a row with something typed in it and a chat whose cache is about to expire: the pencil, the clock, then the button that archives it.** *Unconfirmed.*
+
+  ![A row's pencil, clock and archive button](screens/row-end.png)
+
 ## Archiving
 
 - **Pointing at a workspace's row shows a button that archives it,** at the row's right end, in line with its project's button for a new workspace, so a finished workspace can go without opening it first. Only the row under the pointer has one, not even the workspace showing, so the list stays quiet. No name is cut short to keep room for it, so the end of a long name gives way to it only while it shows. It fades in as the name, and a pencil or a clock in its place, make room for it, and out as they take the room back, and it can be pressed from the moment the pointer comes. Pressing it doesn't open the workspace. *Unconfirmed.*
+
+  **Pointing at a row that isn't showing.** *Unconfirmed.*
+
+  ![Pointing at a row that isn't showing](screens/archive-button.png)
+
 - **Right-clicking a row offers Archive too,** below a line, after what a chat's tab offers and Regenerate title, which `workspaces.md` describes. Both archive as `Cmd-Shift-A` does, asking first if there's work it would lose, as `workspaces.md` says. *Unconfirmed.*
+
+  **The menu of the workspace showing, whose other chat has a reply nobody has read.** *Unconfirmed.*
+
+  ![The menu of the workspace showing](screens/workspace-menu.png)
+
 - **Each item in a row's or a tab's menu has an icon:** an envelope to mark it unread, an open one to mark it read, a pencil to rename it, a pencil with sparks for a new title, and a box to archive it. *Unconfirmed.*
 - **Renaming has no key,** since a Mac has no usual one, and Return, which Finder renames with, sends what's typed in the composer. *Unconfirmed.*
 - **`Cmd-Shift-A` archives the workspace showing,** and only its row's menu shows the key beside Archive, since it wouldn't act on another row. *Unconfirmed.*
+
+  **The menu of another workspace, which shows no keys, since they'd act on the one showing.** *Unconfirmed.*
+
+  ![The menu of another workspace](screens/other-workspace-menu.png)
+
 - **While the app is making, archiving or restoring a workspace, it starts none of those,** so a button or key pressed twice does it once, and its buttons that archive are greyed out. A workspace being archived or restored from elsewhere, such as the command line, can't be archived or restored again meanwhile, and the others can. *Unconfirmed.*
 - **The workspace being archived says Archiving… at its row's right end, in place of its button,** from the press until it has gone, wherever the pointer is and whether its button, its menu or `Cmd-Shift-A` started it, so it's clear the press took. Its pull request's Archive, if it offers one, says it too. Every window says it, wherever it was asked for, such as from the command line, since the workspace's record says it's being archived. *Unconfirmed.*
 
-**Pointing at a row that isn't showing.** *Unconfirmed.*
+  **Archiving a row that isn't showing, from its button, once the pointer has left it.** *Unconfirmed.*
 
-![Pointing at a row that isn't showing](screens/archive-button.png)
-
-**Archiving a row that isn't showing, from its button, once the pointer has left it.** *Unconfirmed.*
-
-![Archiving a row that isn't showing](screens/archiving.png)
-
-**The menu of the workspace showing, whose other chat has a reply nobody has read.** *Unconfirmed.*
-
-![The menu of the workspace showing](screens/workspace-menu.png)
-
-**The menu of another workspace, which shows no keys, since they'd act on the one showing.** *Unconfirmed.*
-
-![The menu of another workspace](screens/other-workspace-menu.png)
-
-**A tab's menu, for a chat with a reply nobody has read.** *Unconfirmed.*
-
-![A tab's menu](screens/chat-menu.png)
+  ![Archiving a row that isn't showing](screens/archiving.png)

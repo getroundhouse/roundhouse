@@ -35,6 +35,7 @@ mod pictures;
 mod pull_requests;
 mod question_chats;
 mod screens;
+mod sidebar_screens;
 mod steps;
 mod subagent_chats;
 mod subagent_records;
@@ -148,6 +149,7 @@ fn screens() -> impl Iterator<Item = &'static steps::Screen> {
         .chain(workspace_screens::SCREENS)
         .chain(turn_screens::SCREENS)
         .chain(call_screens::SCREENS)
+        .chain(sidebar_screens::SCREENS)
 }
 
 /// What's wrong with a picture: its spec doesn't show it, it keeps changing, or it isn't as approved. With
