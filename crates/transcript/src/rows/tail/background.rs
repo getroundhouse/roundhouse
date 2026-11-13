@@ -4,7 +4,6 @@
 //! request, with Stop.
 
 use client_core::session_log::By;
-use gpui_kit::component::Sizable as _;
 use gpui_kit::component::button::Button;
 use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::prelude::FluentBuilder as _;
@@ -12,7 +11,7 @@ use gpui_kit::{
     AnyElement, App, Div, ElementId, InteractiveElement as _, IntoElement, ParentElement,
     StatefulInteractiveElement as _, Styled, TestSupportExt as _, WeakEntity, div,
 };
-use look::{Hand as _, TaskRing};
+use look::{Hand as _, Sizing as _, TaskRing};
 use protocol::event::AgentTask;
 use protocol::model::{Wait, WaitId, WaitUntil};
 
@@ -134,7 +133,7 @@ fn stop_waiting(wait: &WaitId, this: &WeakEntity<Transcript>) -> AnyElement {
     Button::new(ElementId::Name(format!("wait-stop/{wait}").into()))
         .hand()
         .outline()
-        .xsmall()
+        .sized(look::ControlSize::Small)
         .label("Stop")
         .tooltip("Stop waiting, and tell the agent")
         .on_click(move |_, _, cx| {

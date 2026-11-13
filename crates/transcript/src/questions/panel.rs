@@ -6,12 +6,12 @@
 use std::time::{Duration, Instant};
 
 use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::{IconName, Sizable as _, h_flex, v_flex};
+use gpui_kit::component::{IconName, h_flex, v_flex};
 use gpui_kit::{
     App, Context, FocusHandle, Focusable, InteractiveElement as _, IntoElement, KeyDownEvent, ParentElement, Render,
     Styled, WeakEntity, Window, div,
 };
-use look::{InRegion as _, Off as _, Region, Shaped as _};
+use look::{InRegion as _, Off as _, Region, Shaped as _, Sizing as _};
 use protocol::event::{ApprovalDecision, Question, QuestionAnswer};
 use protocol::model::{ApprovalId, ToolUseId};
 
@@ -273,7 +273,7 @@ impl Render for QuestionPanel {
         // The composer's Send, since this is in the composer's place.
         let send = Button::new("question-send")
             .primary()
-            .small()
+            .sized_square(look::ControlSize::Small)
             .icon(IconName::ArrowUp)
             .tooltip(if self.asked.len() > 1 { "Send answers" } else { "Send answer" })
             .off_while(!ready)

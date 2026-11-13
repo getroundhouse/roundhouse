@@ -3,7 +3,6 @@
 
 use std::rc::Rc;
 
-use gpui_kit::component::Sizable as _;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::menu::{DropdownMenu as _, PopupMenu, PopupMenuItem};
 use gpui_kit::component::tooltip::Tooltip;
@@ -12,7 +11,7 @@ use gpui_kit::{
     Anchor, App, InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce, SharedString,
     StatefulInteractiveElement as _, Styled as _, Window, div,
 };
-use look::Hand as _;
+use look::{Hand as _, Sizing as _};
 use protocol::model::{AgentDescription, Effort, ModelName};
 
 /// What was picked in the model picker's menu.
@@ -109,7 +108,7 @@ impl RenderOnce for ModelPicker {
         Button::new(self.id)
             .hand()
             .ghost()
-            .xsmall()
+            .sized(look::ControlSize::Small)
             .dropdown_caret(true)
             .label(self.label)
             .when_some(effort, |button, effort| button.child(div().text_color(muted).child(effort)))

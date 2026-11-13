@@ -4,7 +4,7 @@
 
 use gpui_kit::component::h_flex;
 use gpui_kit::prelude::FluentBuilder as _;
-use gpui_kit::{AnyElement, App, IntoElement, ParentElement as _, Styled as _, div, px};
+use gpui_kit::{AnyElement, App, IntoElement, ParentElement as _, Styled as _, div};
 use look::{Shaped as _, Typeset as _};
 
 use crate::file_tree::split;
@@ -17,11 +17,12 @@ pub(crate) fn file_header(path: &str, note: Option<String>, end: Option<AnyEleme
     let muted = colors.text_muted;
     let (folders, name) = split(path);
     let (folders, name) = (folders.to_string(), name.to_string());
-    // The folders give way before the name does, as they do in the sidebar.
+    // The folders give way before the name does, as they do in the sidebar. As tall as a regular button, as the switch
+    // of views beside it in a diff is.
     let pill = h_flex()
         .flex_shrink(1.)
         .min_w_0()
-        .h(px(24.))
+        .h(look::ControlSize::Regular.height())
         .px_2()
         .corners(look::Corner::Control)
         .bg(colors.raised)

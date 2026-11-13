@@ -6,12 +6,12 @@
 use gpui_kit::base::Popup;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::menu::PopupMenu;
-use gpui_kit::component::{IconName, Selectable as _, Sizable as _};
+use gpui_kit::component::{IconName, Selectable as _};
 use gpui_kit::{
     Anchor, ClickEvent, Context, DismissEvent, Entity, FocusHandle, Focusable as _, InteractiveElement as _,
     IntoElement, MouseButton, Subscription, Window, px,
 };
-use look::Hand as _;
+use look::{Hand as _, Sizing as _};
 
 use super::AppView;
 
@@ -56,7 +56,7 @@ pub(super) fn button(app: &AppView, cx: &mut Context<AppView>) -> impl IntoEleme
     let button = Button::new("menus")
         .hand()
         .ghost()
-        .small()
+        .sized_square(look::ControlSize::Small)
         .icon(IconName::Menu)
         .tooltip("Menu")
         .selected(open.is_some())

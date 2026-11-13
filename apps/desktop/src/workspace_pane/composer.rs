@@ -4,13 +4,13 @@
 
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::{InputEvent, Textarea, TextareaState};
-use gpui_kit::component::{IconName, Sizable as _, h_flex, v_flex};
+use gpui_kit::component::{IconName, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, AppContext as _, Context, Div, Entity, Focusable as _, IntoElement, ParentElement, Pixels, Styled,
-    Subscription, Window, div, px,
+    Subscription, Window, div,
 };
-use look::{Hand as _, InRegion as _, Off as _, Region, Shaped as _};
+use look::{Hand as _, InRegion as _, Off as _, Region, Shaped as _, Sizing as _};
 use protocol::model::{Effort, ModelName, PermissionMode, SessionId, SessionSettingsChange};
 use protocol::prompt::Prompt;
 
@@ -258,9 +258,7 @@ impl WorkspacePane {
             Button::new("stop")
                 .hand()
                 .primary()
-                .small()
-                .size_6()
-                .p_0()
+                .sized_square(look::ControlSize::Small)
                 .child(div().size_2p5().corners(look::Corner::Glyph).bg(stop_mark))
                 .accessibility_label("Stop")
                 .tooltip_with_action("Stop", &StopAgent, None)
@@ -269,7 +267,7 @@ impl WorkspacePane {
         } else {
             Button::new("send")
                 .primary()
-                .small()
+                .sized_square(look::ControlSize::Small)
                 .icon(IconName::ArrowUp)
                 // What's typed waits for the hub, as `hub_went_away` says.
                 .off_while(self.hub == Hub::Away)
@@ -286,8 +284,8 @@ impl WorkspacePane {
 pub(super) struct Slot(Div);
 
 impl Slot {
-    /// How wide and tall a slot is, which is the main action's size: a small control's, in `docs/spec/look.md`.
-    pub(super) const SIZE: Pixels = px(24.);
+    /// How wide and tall a slot is, which is the main action's size: a small button's.
+    pub(super) const SIZE: Pixels = look::ControlSize::Small.height();
 
     pub(super) fn holding(holds: impl IntoElement) -> Self {
         Self(middle().flex_none().size(Self::SIZE).child(holds))

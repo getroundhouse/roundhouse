@@ -11,7 +11,7 @@ use gpui_kit::{
     AnyElement, Context, InteractiveElement as _, IntoElement as _, ParentElement as _, SharedString,
     StatefulInteractiveElement as _, Styled, Window, div, relative,
 };
-use look::{Hand as _, Typeset as _};
+use look::{Hand as _, Sizing as _, Typeset as _};
 
 use super::view::{TAB_GROUP, TAB_WIDTH};
 use super::{Showing, WorkspacePane};
@@ -131,7 +131,7 @@ impl WorkspacePane {
         let close = Button::new("close-file-tab")
             .hand()
             .ghost()
-            .xsmall()
+            .sized_square(look::ControlSize::Small)
             .icon(IconName::Close)
             .tooltip("Close file tab")
             .on_click(cx.listener(|t, _, _, cx| {

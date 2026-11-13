@@ -4,9 +4,9 @@
 use gpui_kit::component::button::Button;
 use gpui_kit::component::menu::DropdownMenu as _;
 use gpui_kit::component::switch::Switch;
-use gpui_kit::component::{Sizable as _, h_flex, v_flex};
+use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::{Anchor, AnyElement, App, IntoElement, ParentElement as _, Styled as _, div};
-use look::{Hand as _, Off as _, Typeset as _};
+use look::{Hand as _, Off as _, Sizing as _, Typeset as _};
 
 use super::{Control, Setting};
 
@@ -38,7 +38,7 @@ pub(super) fn row(setting: &Setting, cx: &App) -> AnyElement {
                 .accessibility_label(format!("{}: {chosen}", setting.name))
                 .hand()
                 .outline()
-                .small()
+                .sized(look::ControlSize::Regular)
                 .dropdown_caret(true)
                 .label(chosen)
                 .dropdown_menu_with_anchor(Anchor::TopRight, move |popup, window, cx| menu(popup, window, cx))

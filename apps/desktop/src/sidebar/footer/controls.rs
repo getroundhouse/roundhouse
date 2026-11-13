@@ -2,11 +2,10 @@
 //! Settings' gear, as `docs/spec/updates.md` says.
 
 use gpui_kit::assets::IconName as Lucide;
-use gpui_kit::component::Sizable as _;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::menu::{DropdownMenu as _, PopupMenu, PopupMenuItem};
 use gpui_kit::{Anchor, App, Context, IntoElement, Styled as _, Window};
-use look::Hand as _;
+use look::{Hand as _, Sizing as _};
 
 use crate::OpenSettings;
 use crate::app::AppView;
@@ -17,7 +16,13 @@ const CHANGELOG: &str = "https://github.com/getroundhouse/roundhouse/commits/mai
 
 /// A small, faint, borderless button with only an icon, named `name` for assistive apps.
 fn faint_button(id: &'static str, icon: Lucide, name: &'static str, cx: &App) -> Button {
-    Button::new(id).hand().ghost().small().icon(icon).text_color(look::colors(cx).text_faint).accessibility_label(name)
+    Button::new(id)
+        .hand()
+        .ghost()
+        .sized_square(look::ControlSize::Small)
+        .icon(icon)
+        .text_color(look::colors(cx).text_faint)
+        .accessibility_label(name)
 }
 
 /// A question mark, whose menu opens upward from it, toward the sidebar's left, so it stays over the sidebar.

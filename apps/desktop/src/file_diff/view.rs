@@ -3,9 +3,9 @@
 
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::{Selectable as _, Sizable as _, h_flex};
-use gpui_kit::{AnyElement, App, Global, IntoElement as _, ParentElement as _, Styled as _, px};
-use look::{Hand as _, Shaped as _};
+use gpui_kit::component::{Selectable as _, h_flex};
+use gpui_kit::{AnyElement, App, Global, IntoElement as _, ParentElement as _, Styled as _};
+use look::{Hand as _, Shaped as _, Sizing as _};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum DiffView {
@@ -68,20 +68,22 @@ pub(super) fn chosen(cx: &App) -> DiffView {
     cx.try_global::<Chosen>().map_or_default(|chosen| chosen.0)
 }
 
-/// The three views, as one switch, with the one showing pressed in.
+/// The three views, as one switch, with the one showing pressed in: small segments with room around them that makes
+/// the switch as tall as a regular button, as the bar's own are.
 pub(super) fn switch(cx: &App) -> AnyElement {
     let showing = chosen(cx);
+    let room = (look::ControlSize::Regular.height() - look::ControlSize::Small.height()) / 2.;
     h_flex()
         .flex_none()
-        .p(px(2.))
-        .gap(px(2.))
+        .p(room)
+        .gap(room)
         .corners(look::Corner::Control)
         .bg(look::colors(cx).raised)
         .children(DiffView::ALL.map(|view| {
             Button::new(view.id())
                 .hand()
                 .ghost()
-                .xsmall()
+                .sized_square(look::ControlSize::Small)
                 .icon(view.icon())
                 .selected(view == showing)
                 .tooltip(view.name())

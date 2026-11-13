@@ -10,7 +10,7 @@ use gpui_kit::{
     AppContext as _, Context, Entity, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Styled as _,
     Subscription, Task, TestSupportExt as _, Window, div, px,
 };
-use look::{Hand as _, InRegion as _, Off as _, Region, Typeset as _};
+use look::{Hand as _, InRegion as _, Off as _, Region, Sizing as _, Typeset as _};
 
 use crate::transcript::Transcript;
 use client_core::session_log::SessionLog;
@@ -92,7 +92,7 @@ impl Transcript {
             Button::new(id)
                 .off_while(none)
                 .ghost()
-                .xsmall()
+                .sized_square(look::ControlSize::Small)
                 .icon(icon)
                 .tooltip(what)
                 .on_click(cx.listener(move |t, _, window, cx| t.find_next(forward, window, cx)))
@@ -102,7 +102,7 @@ impl Transcript {
         let close = Button::new("find-close")
             .hand()
             .ghost()
-            .xsmall()
+            .sized_square(look::ControlSize::Small)
             .icon(IconName::Close)
             .tooltip("Close")
             .on_click(cx.listener(|t, _, _, cx| t.close_find(cx)));

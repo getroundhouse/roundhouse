@@ -5,12 +5,12 @@
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::menu::{DropdownMenu as _, PopupMenu, PopupMenuItem};
-use gpui_kit::component::{Icon, IconName, Sizable as _, h_flex, v_flex};
+use gpui_kit::component::{Icon, IconName, h_flex, v_flex};
 use gpui_kit::{
     AnyElement, App, Div, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Role, SharedString,
     StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, Window, div, px,
 };
-use look::{Off as _, Typeset as _};
+use look::{Off as _, Sizing as _, Typeset as _};
 use protocol::model::{Account, AgentKind};
 
 use super::words::{self, Standing};
@@ -135,7 +135,7 @@ fn controls(drawing: &Drawing<'_>, account: &Account, called: &str, standing: Op
         let again = Button::new(SharedString::from(format!("account-again-{id}")))
             .accessibility_label(format!("Connect {called} again"))
             .outline()
-            .small()
+            .sized(look::ControlSize::Regular)
             .label("Connect again")
             .off_while(!can_ask || !makes_a_token)
             .on_click(move |_, window, cx| open(window, cx));
@@ -146,7 +146,7 @@ fn controls(drawing: &Drawing<'_>, account: &Account, called: &str, standing: Op
     let more = Button::new(SharedString::from(format!("account-more-{id}")))
         .accessibility_label(format!("More for {called}"))
         .ghost()
-        .small()
+        .sized_square(look::ControlSize::Regular)
         .icon(IconName::Ellipsis)
         .off_while(!can_ask)
         .dropdown_menu(move |menu: PopupMenu, _, _| {

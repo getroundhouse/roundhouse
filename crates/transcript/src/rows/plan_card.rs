@@ -5,7 +5,7 @@ use client_core::Approval;
 use gpui_kit::component::h_flex;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{AnyElement, App, ClickEvent, Div, ElementId, IntoElement, ParentElement, Styled, Window, div};
-use look::{Hand as _, Typeset as _};
+use look::{Hand as _, Sizing as _, Typeset as _};
 use protocol::event::{ApprovalDecision, Asking, EventBody};
 use protocol::model::Seq;
 
@@ -29,7 +29,11 @@ pub(super) fn plan_card(seq: Seq, body: &EventBody, open: bool, shared: &Shared,
     };
     let allow = approval.allowed();
     let answer_button = |name: &'static str, label: &'static str, decision: ApprovalDecision| {
-        Button::new(ElementId::NamedInteger(name.into(), seq.get())).hand().label(label).on_click(answer(decision))
+        Button::new(ElementId::NamedInteger(name.into(), seq.get()))
+            .sized(look::ControlSize::Large)
+            .hand()
+            .label(label)
+            .on_click(answer(decision))
     };
     // Nothing's found in what asks the person something.
     let content = shared.texts.draw(

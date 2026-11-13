@@ -1,23 +1,11 @@
 use gpui_kit::{AbsoluteLength, Styled as _, div};
 
 use super::{Corner, Shaped as _};
-
-/// The spec's file that has the table of the corners.
-const LOOK: &str = include_str!("../../../../docs/spec/look.md");
+use crate::spec_table;
 
 #[test]
 fn the_specs_table_has_every_corner_in_order_as_the_app_rounds_it() {
-    let section =
-        LOOK.split("\n## Space and shape\n").nth(1).and_then(|rest| rest.split("\n## ").next()).unwrap_or_default();
-    let table: Vec<[String; 2]> = section
-        .lines()
-        .filter_map(|line| line.strip_prefix("| `"))
-        .map(|row| {
-            let mut cells = row.split(" | ").map(str::to_string);
-            let mut cell = || cells.next().unwrap_or_default();
-            [cell().trim_end_matches('`').to_string(), cell()]
-        })
-        .collect();
+    let table: Vec<[String; 2]> = spec_table::rows("**Every corner, by its name.**");
 
     let rounded: Vec<[String; 2]> = Corner::ALL.iter().map(|corner| corner.written()).collect();
     assert_eq!(table, rounded, "docs/spec/look.md's table of the corners, against crates/look/src/shape.rs");

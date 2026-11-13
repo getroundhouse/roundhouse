@@ -5,12 +5,12 @@
 //! kind of image it is and how big, and in Difference how much changed.
 
 use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::{Selectable as _, Sizable as _, h_flex, v_flex};
+use gpui_kit::component::{Selectable as _, h_flex, v_flex};
 use gpui_kit::{
     AnyElement, App, Context, Div, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Render,
     SharedString, Styled as _, TestSupportExt as _, WeakEntity, Window, div, px,
 };
-use look::{Hand as _, Shaped as _, Typeset as _};
+use look::{Hand as _, Shaped as _, Sizing as _, Typeset as _};
 
 use super::{Comparison, ImageDiff, Outcome, Shown, Side, choose, comparison, stacked};
 use crate::file_image::{FileImage, Placed, fitted};
@@ -211,10 +211,12 @@ fn choice(
     view: WeakEntity<ImageDiff>,
     chosen: impl Fn(&mut App) + 'static,
 ) -> Button {
-    Button::new(id).hand().ghost().xsmall().selected(selected).label(label).on_click(move |_, _, cx| {
-        chosen(cx);
-        let _ = view.update(cx, |_, cx| cx.notify());
-    })
+    Button::new(id).hand().ghost().sized(look::ControlSize::Regular).selected(selected).label(label).on_click(
+        move |_, _, cx| {
+            chosen(cx);
+            let _ = view.update(cx, |_, cx| cx.notify());
+        },
+    )
 }
 
 /// One side, shown on its own, which Space and a click on the image flip to the other.

@@ -15,9 +15,9 @@ const MACOS_BUTTONS_WIDTH: Pixels = px(60.);
 /// The space between macOS's buttons and the button beside them, which leaves that button's icon about as far from
 /// them as they are from each other.
 const AFTER_MACOS_BUTTONS: Pixels = px(6.);
-/// The buttons in the corner, which hide and show the sidebar on the left, and off the Mac open the menus: the kit's
-/// small button.
-const CORNER_BUTTON_WIDTH: Pixels = px(24.);
+/// The buttons in the corner, which hide and show the sidebar on the left, and off the Mac open the menus: a small
+/// button's square.
+const CORNER_BUTTON_WIDTH: Pixels = look::ControlSize::Small.height();
 /// The room between the corner's buttons, as between the buttons in Home's bar.
 const BETWEEN_THE_BUTTONS: Pixels = px(4.);
 

@@ -8,25 +8,22 @@ use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::base::motion::transition;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::menu::{ContextMenuExt as _, PopupMenu, PopupMenuItem};
-use gpui_kit::component::{Selectable as _, Sizable as _, h_flex};
+use gpui_kit::component::{Selectable as _, h_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     Action, AnyElement, App, Context, ElementId, InteractiveElement as _, IntoElement, MouseButton, ParentElement,
     Pixels, Role, StatefulInteractiveElement as _, Styled, TestSupportExt as _, Window, div, px,
 };
-use look::{Hand as _, LineText, Off as _, Placed, Typeset as _};
+use look::{Hand as _, LineText, Off as _, Placed, Sizing as _, Typeset as _};
 use protocol::model::{Workspace, WorkspaceId};
 
-use super::{MARK_GAP, ROW_HEIGHT, ROW_INSET, Standing, icon_box, standing};
+use super::{ICON_BOX, MARK_GAP, ROW_HEIGHT, ROW_INSET, Standing, icon_box, standing};
 use crate::app::AppView;
 use crate::{ArchiveWorkspace, MarkWorkspace};
 use crate::{prompt_cache, right_click};
 
-/// As wide as the kit's small icon button, which the button that archives a row is.
-const BUTTON: Pixels = px(24.);
-/// How far in from the row's right end a pencil or a clock rests: half of what the button is wider than its box by, so
-/// it's in the middle of the button's place.
-const IN_BUTTONS_PLACE: Pixels = px(4.);
+/// As wide as the button that archives a row, a small button's square.
+const BUTTON: Pixels = look::ControlSize::Small.height();
 
 pub(super) fn workspace_row(
     app: &AppView,
@@ -190,10 +187,10 @@ fn right_end(
         let doing = doing(format!("doing-{}", workspace.id), waiting, small, cx);
         end.child(div().when(drafted, |d| d.pl(MARK_GAP)).child(doing))
     } else {
-        // The icons rest in the middle of the button's place, and end against its box once it has come. Its padding
-        // is then the room between them and it: a little more than if they were set edge to edge, so they don't run
-        // together.
-        let rests = if icons { IN_BUTTONS_PLACE } else { px(0.) };
+        // The icons rest in the middle of the button's place, half of what the button is wider than their box by in
+        // from the row's right end, and end against its box once it has come. Its padding is then the room between
+        // them and it: a little more than if they were set edge to edge, so they don't run together.
+        let rests = if icons { (BUTTON - ICON_BOX) / 2. } else { px(0.) };
         let room = div().flex_none().h(BUTTON).w(rests + (BUTTON - rests) * came);
         // The button is whole and in its place from the first frame, over the room that's still opening for it, so a
         // press where it's coming lands on it rather than on the row.
@@ -219,7 +216,7 @@ fn archive_button(app: &AppView, workspace: &Workspace, cx: &mut Context<AppView
     let id = workspace.id.clone();
     let button = Button::new(ElementId::Name(format!("archive-{}", workspace.id).into()))
         .ghost()
-        .small()
+        .sized_square(look::ControlSize::Small)
         .icon(Lucide::Archive)
         .text_color(look::colors(cx).text_muted)
         .tooltip("Archive")

@@ -11,7 +11,7 @@ use gpui_kit::{
     Anchor, AnyElement, App, Context, InteractiveElement as _, IntoElement, ParentElement, Pixels, SharedString,
     Styled, Window, div, px,
 };
-use look::Hand as _;
+use look::{Hand as _, Sizing as _};
 use protocol::model::SessionId;
 
 use super::WorkspacePane;
@@ -64,12 +64,12 @@ impl WorkspacePane {
         let icon = div()
             .text_color(resting)
             .group_hover(BUTTON_GROUP, move |s| s.text_color(lit))
-            .child(Icon::new(IconName::RotateCcwClock).xsmall());
+            .child(Icon::new(IconName::RotateCcwClock));
         let (this, on_open) = (cx.weak_entity(), cx.weak_entity());
         let button = Button::new("closed-chats")
             .hand()
             .custom(ButtonCustomVariant::new(cx))
-            .xsmall()
+            .sized_square(look::ControlSize::Regular)
             .child(icon)
             .accessibility_label("Closed chats")
             .tooltip("Closed chats")

@@ -13,7 +13,7 @@ use gpui_kit::{
     ParentElement as _, Pixels, SharedString, StatefulInteractiveElement as _, Styled, TestSupportExt as _, WeakEntity,
     div, px,
 };
-use look::{Hand as _, Shaped as _, Typeset as _};
+use look::{Hand as _, Shaped as _, Sizing as _, Typeset as _};
 use protocol::model::{DiffComment, DiffSide};
 
 use super::FileDiff;
@@ -22,16 +22,33 @@ use super::draft::LineAt;
 use super::layout::{Fold, Row, STEP};
 use super::selection::{DrawnLines, Selection};
 use super::sides::Sides;
-use crate::file_view::LINE_HEIGHT;
+use crate::file_view::{LINE_HEIGHT, numbers_width};
 use crate::patch::LineKind;
 use code::{Code, code};
 
 mod code;
+#[cfg(test)]
+mod tests;
 
 /// Taller than a line, so a fold reads as a band across the code rather than as a line of it.
 pub(super) const FOLD_HEIGHT: Pixels = px(28.);
 /// The column between the line numbers and the code, which says how a line changed.
 pub(super) const SIGN: Pixels = px(16.);
+/// The room between a fold's two arrows.
+const BETWEEN_ARROWS: Pixels = px(4.);
+/// How wide a side's column of line numbers is, and the gutter before its code, for a file whose numbers go up to
+/// `highest`. A fold's two arrows sit in the gutter, which in a split view is a side's one column of numbers, so that
+/// column is at least as wide as both of them, apart.
+pub(super) fn gutter(highest: usize, split: bool) -> (Pixels, Pixels) {
+    let numbers = numbers_width(highest);
+    if split {
+        let numbers = numbers.max(look::ControlSize::Small.height() * 2. + BETWEEN_ARROWS);
+        (numbers, numbers)
+    } else {
+        (numbers, numbers * 2.)
+    }
+}
+
 /// Each line's group, whose hover shows its button to add a comment.
 const LINE: &str = "diff-line";
 
@@ -241,11 +258,15 @@ fn fold_row(fold: &Fold, drawing: &Drawing, cx: &App) -> AnyElement {
     }
     let arrows = arrows.into_iter().map(|(id, icon, tooltip, opens)| {
         let view = drawing.view.clone();
-        Button::new((id, start)).hand().ghost().xsmall().icon(Icon::new(icon)).tooltip(tooltip).on_click(
-            move |_, _, cx| {
+        Button::new((id, start))
+            .hand()
+            .ghost()
+            .sized_square(look::ControlSize::Small)
+            .icon(Icon::new(icon))
+            .tooltip(tooltip)
+            .on_click(move |_, _, cx| {
                 let _ = view.update(cx, |t, cx| t.open(opens.clone(), cx));
-            },
-        )
+            })
     });
     let said = format!("{lines} unchanged line{}", if lines == 1 { "" } else { "s" });
     h_flex()
@@ -253,7 +274,7 @@ fn fold_row(fold: &Fold, drawing: &Drawing, cx: &App) -> AnyElement {
         .h(FOLD_HEIGHT)
         .bg(colors.inset)
         .text_color(colors.text_muted)
-        .child(h_flex().flex_none().w(drawing.gutter).justify_center().gap_1().children(arrows))
+        .child(h_flex().flex_none().w(drawing.gutter).justify_center().gap(BETWEEN_ARROWS).children(arrows))
         .child(div().pl(SIGN).typeset(look::Type::Detail).child(said))
         .into_any_element()
 }

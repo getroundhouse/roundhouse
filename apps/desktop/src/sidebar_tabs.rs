@@ -127,7 +127,8 @@ pub(crate) fn bar(
         .w_full()
         .h(HEIGHT)
         .pl_1()
-        .pr_2()
+        // As far in as the rows under it, so what's at its right end lines up with what's at theirs.
+        .pr_3()
         .gap_2()
         // The bar's bottom edge, under the tabs rather than a border, so the line under the tab chosen can cover it,
         // as it does under the chat tabs.

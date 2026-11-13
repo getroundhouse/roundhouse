@@ -22,12 +22,12 @@ use protocol::model::CommentDraft;
 
 use crate::FlipImage;
 use crate::file_header::file_header;
-use crate::file_view::{LINE_HEIGHT, numbers_width};
+use crate::file_view::LINE_HEIGHT;
 use crate::image_diff::{self, ImageDiff};
 use crate::patch::FilePatch;
 use crate::review::{Review, ReviewEvent};
 pub use draft::{Draft, LineAt};
-use draw::{Drawing, FOLD_HEIGHT, SIGN};
+use draw::{Drawing, FOLD_HEIGHT, SIGN, gutter};
 use layout::{Note, Old, Row, Shape};
 use list::{Code, DiffList, Height, Place};
 use opened::Opened;
@@ -249,9 +249,8 @@ impl FileDiff {
         }
         let (mono, size) = (look::Type::Code.family(cx), look::Type::Code.size(window.rem_size()));
         let split = view::chosen(cx).split();
-        let numbers =
-            numbers_width(usize::try_from(highest(&shown.file, shown.sides.extent.lines())).unwrap_or(usize::MAX));
-        let gutter = if split { numbers } else { numbers * 2. };
+        let highest = usize::try_from(highest(&shown.file, shown.sides.extent.lines())).unwrap_or(usize::MAX);
+        let (numbers, gutter) = gutter(highest, split);
         let advance = window.text_system().advance(window.text_system().resolve_font(&font(mono)), size, 'm');
         let widest = advance.map_or(px(0.), |advance| advance.width) * count(shown.sides.widest) + SIGN;
         self.list.set_code(Code { widest, columns: if split { 2 } else { 1 }, gutter: gutter + SIGN });

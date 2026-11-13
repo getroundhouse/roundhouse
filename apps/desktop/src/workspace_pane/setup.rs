@@ -1,12 +1,12 @@
 //! The workspace's setup script: its status line and its log.
 
 use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::{Sizable as _, h_flex};
+use gpui_kit::component::h_flex;
 use gpui_kit::{
     AnyElement, App, AppContext, Context, IntoElement, ParentElement, SharedString, StatefulInteractiveElement, Styled,
     div, px,
 };
-use look::{Hand as _, InRegion as _, Region, Typeset as _};
+use look::{Hand as _, InRegion as _, Region, Sizing as _, Typeset as _};
 use protocol::model::{Record, SetupStatus};
 
 use super::{PaneEvent, WorkspacePane};
@@ -112,15 +112,17 @@ impl WorkspacePane {
                     Button::new("setup-log")
                         .hand()
                         .ghost()
-                        .xsmall()
+                        .sized(look::ControlSize::Small)
                         .label(log_label)
                         .on_click(cx.listener(|t, _, _, cx| t.toggle_setup_log(cx))),
                 )
+                // The last button out past its own room, so its words end as far in as the message starts.
                 .child(if running {
                     Button::new("stop-setup")
                         .hand()
                         .ghost()
-                        .xsmall()
+                        .sized(look::ControlSize::Small)
+                        .mr(-look::ControlSize::Small.padding())
                         .label("Stop")
                         .on_click(cx.listener(|t, _, _, cx| t.stop_agent(cx)))
                         .into_any_element()
@@ -128,7 +130,8 @@ impl WorkspacePane {
                     Button::new("rerun-setup")
                         .hand()
                         .ghost()
-                        .xsmall()
+                        .sized(look::ControlSize::Small)
+                        .mr(-look::ControlSize::Small.padding())
                         .label("Run again")
                         .on_click(cx.listener(|t, _, _, cx| t.rerun_setup(cx)))
                         .into_any_element()

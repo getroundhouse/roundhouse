@@ -12,7 +12,7 @@ use gpui_kit::{
     AnyElement, App, Div, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Styled as _, Window, div,
     px,
 };
-use look::{Hand as _, Off as _};
+use look::{Hand as _, Off as _, Sizing as _};
 use look::{Typeset as _, Work};
 use protocol::model::{BranchName, Local, PullRequest, Standing, Workspace};
 use transcript::PullRequestStanding;
@@ -190,7 +190,7 @@ fn number(pr: &PullRequest, work: Work, cx: &App) -> AnyElement {
     let (url, colors) = (pr.url.clone(), look::colors(cx));
     Button::new("pull-request")
         .hand()
-        .small()
+        .sized(look::ControlSize::Regular)
         .outline()
         .border_color(work.edge(colors))
         .text_color(work.text(colors))
@@ -216,7 +216,7 @@ fn action_button(
     let doing = doing.filter(|_| action == Action::Archive);
     let disabled = action == Action::Archive && (!busy.is_free() || doing.is_some());
     let label = doing.unwrap_or(action.label());
-    let button = Button::new("pull-request-action").small().label(label).off_while(disabled);
+    let button = Button::new("pull-request-action").sized(look::ControlSize::Regular).label(label).off_while(disabled);
     let button = match work.hue(colors) {
         // The kit draws a custom button's colour faintly, so the fill is set on the button itself, which hover and
         // press still change. Not while it's disabled, since the kit lays the button's own style over its disabled

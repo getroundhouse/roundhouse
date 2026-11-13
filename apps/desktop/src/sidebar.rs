@@ -283,10 +283,13 @@ fn line(
     }
 }
 
+/// How wide the box an item's or a repository's icon is centred in is: as wide as a line of body text is tall.
+pub(super) const ICON_BOX: Pixels = px(16.);
+
 /// An icon centred in a box as wide as a line of body text is tall, as the sidebar's items and repositories have.
 pub(super) fn icon_box(icon: impl IconNamed, color: Hsla) -> Div {
     let icon = Icon::new(icon).size_3p5().text_color(color);
-    div().flex_none().size_4().flex().items_center().justify_center().child(icon)
+    div().flex_none().size(ICON_BOX).flex().items_center().justify_center().child(icon)
 }
 
 /// Level with the names of the workspaces above it.

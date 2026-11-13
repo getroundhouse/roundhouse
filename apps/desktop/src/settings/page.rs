@@ -10,13 +10,13 @@ use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::InputState;
 use gpui_kit::component::menu::PopupMenu;
 use gpui_kit::component::scroll::ScrollableElement as _;
-use gpui_kit::component::{IconName, Sizable as _, v_flex};
+use gpui_kit::component::{IconName, v_flex};
 use gpui_kit::{
     AnyElement, App, ClickEvent, Context, FocusHandle, InteractiveElement as _, IntoElement, ParentElement as _,
     Pixels, RenderOnce, ScrollHandle, SharedString, StatefulInteractiveElement as _, Styled as _, TestSupportExt as _,
     Window, div, px,
 };
-use look::{Hand as _, Typeset as _};
+use look::{Hand as _, Sizing as _, Typeset as _};
 
 use client_core::records::Snapshot;
 use client_core::{Client, RecordsFeed};
@@ -253,7 +253,7 @@ fn way_back(width: Pixels, back: Back, cx: &App) -> impl IntoElement {
         Button::new("settings-back")
             .hand()
             .ghost()
-            .small()
+            .sized(look::ControlSize::Regular)
             .icon(IconName::ArrowLeft)
             .label("Back")
             .text_color(look::colors(cx).text_muted)
