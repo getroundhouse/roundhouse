@@ -8,12 +8,12 @@ use protocol::model::{
     BranchName, ClientRequestId, ProviderName, RecordKey, Repo, RepoId, Rev, SetupStatus, TitleSource, Workspace,
     WorkspaceId, WorkspaceStatus,
 };
-use protocol::worker::{WorkerRequest, WorkerResponse};
+use protocol::worker::{PrepareWorkspace, WorkspaceReady};
 use providers::Provider;
 use tracing::{error, warn};
 
 use super::ready::ReadyWorkspace;
-use super::{Hub, new_id, unexpected};
+use super::{Hub, new_id};
 use crate::error::{internal, provider_failed};
 use crate::store::{Made, Store, now_ms};
 
@@ -180,7 +180,7 @@ impl Hub {
             self.blocking(move |store| store.instance_made(&instance_id)).await?;
             let link = self.ensure_worker(&workspace.id).await?;
             let asked = link
-                .call(WorkerRequest::PrepareWorkspace {
+                .call(PrepareWorkspace {
                     repo_name: repo.name.clone(),
                     repo_path: repo.path.clone(),
                     workspace_name: workspace.name.clone(),
@@ -199,9 +199,7 @@ impl Hub {
                 asked => break (asked?, link),
             }
         };
-        let WorkerResponse::WorkspaceReady { path, branch, base_ref, warnings, branches } = reply else {
-            return Err(unexpected(&reply));
-        };
+        let WorkspaceReady { path, branch, base_ref, warnings, branches } = reply;
         for warning in &warnings {
             warn!(workspace = workspace.name, "{warning}");
         }

@@ -7,14 +7,15 @@ use std::sync::Arc;
 
 use protocol::client::{ApiError, ErrorCode, HubNotice};
 use protocol::model::{BranchName, Repo, Workspace, WorkspaceId};
-use protocol::worker::{WorkerRequest, WorkerResponse};
+use protocol::worker::{ArchiveScript, CancelSetup, GitStatus, RemoveWorkspace, RestoreWorkspace};
+use protocol::worker::{WorktreeThere, WorktreeThereReply};
 use tokio::sync::oneshot;
 use tracing::{error, info, warn};
 
 use super::workspace_env;
 use crate::error::internal;
+use crate::hub::Hub;
 use crate::hub::ready::ReadyWorkspace;
-use crate::hub::{Hub, unexpected};
 use crate::session::Command;
 use crate::store::{Ended, Move};
 use crate::worker_link::WorkerLink;
@@ -70,24 +71,21 @@ impl Hub {
         let link = self.ensure_worker(id).await?;
 
         // Before anything changes, so refusing leaves the workspace as it was.
-        let status = link.call(WorkerRequest::GitStatus { path: path.clone() }).await;
+        let status = link.call(GitStatus { path: path.clone() }).await;
         if !force
-            && let Ok(WorkerResponse::GitStatus(status)) = &status
+            && let Ok(status) = &status
             && let Some(loss) = status.loss_if_removed()
         {
             return Err(ApiError::new(ErrorCode::NeedsForce, loss));
         }
 
         // Interrupt setup first, so the script isn't running in a worktree that's about to go.
-        let _ = link.call(WorkerRequest::CancelSetup).await;
+        let _ = link.call(CancelSetup).await;
         self.call_off_waits_of(id).await?;
-        let script = WorkerRequest::ArchiveScript {
-            repo_path: repo.path.clone(),
-            path: path.clone(),
-            env: workspace_env(workspace, &repo),
-        };
+        let script =
+            ArchiveScript { repo_path: repo.path.clone(), path: path.clone(), env: workspace_env(workspace, &repo) };
         match link.call(script).await {
-            Ok(_) => {}
+            Ok(()) => {}
             Err(e) if !force => return Err(e),
             Err(e) => warn!(workspace = workspace.name, "the archive script failed: {}", e.message),
         }
@@ -97,16 +95,13 @@ impl Hub {
         // workspace archived would end that one with no client told.
         self.call_off_waits_of(id).await?;
         // Checks again unless forced, because the agent may have written files before it stopped.
-        let reply = link.call(WorkerRequest::RemoveWorkspace { repo_path: repo.path, path, force }).await?;
-        if !matches!(reply, WorkerResponse::Ok) {
-            return Err(unexpected(&reply));
-        }
+        link.call(RemoveWorkspace { repo_path: repo.path, path, force }).await?;
         let provider = self.provider(&workspace.provider)?;
         self.close_worker(workspace, &link, provider.as_ref()).await;
         // Agents are expected to rename their branch to match the work. Restoring needs its real name.
         Ok(match status {
-            Ok(WorkerResponse::GitStatus(status)) => status.branch,
-            _ => None,
+            Ok(status) => status.branch,
+            Err(_) => None,
         })
     }
 
@@ -171,12 +166,8 @@ impl Hub {
         };
         let path = workspace.path.clone().ok_or_else(|| internal("an archived workspace has no path"))?;
         let link = self.ensure_worker(&workspace.id).await?;
-        let request =
-            WorkerRequest::RestoreWorkspace { repo_path: repo.path.clone(), path, branch: workspace.branch.clone() };
-        let reply = link.call(request).await?;
-        if !matches!(reply, WorkerResponse::Ok) {
-            return Err(unexpected(&reply));
-        }
+        let request = RestoreWorkspace { repo_path: repo.path.clone(), path, branch: workspace.branch.clone() };
+        link.call(request).await?;
         Ok((repo, link))
     }
 
@@ -260,10 +251,7 @@ impl Hub {
         let workspace = self.workspace(id).await?;
         let path = workspace.path.clone().ok_or_else(|| internal("a workspace being moved has no path"))?;
         let link = self.ensure_worker(id).await?;
-        let reply = link.call(WorkerRequest::WorktreeThere { path }).await?;
-        let WorkerResponse::WorktreeThere { there } = reply else {
-            return Err(unexpected(&reply));
-        };
+        let WorktreeThereReply { there } = link.call(WorktreeThere { path }).await?;
         match (moving, there) {
             // It got no further than the worktree, so the workspace is as it was before.
             (Move::Archive, true) | (Move::Restore, false) => {

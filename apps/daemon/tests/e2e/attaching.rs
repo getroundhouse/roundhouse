@@ -9,7 +9,7 @@ use protocol::client::ErrorCode;
 use protocol::frame;
 use protocol::paths::{WORKER_RECORD_FILE, WORKER_SOCKET_FILE};
 use protocol::worker::{
-    WORKER_PROTOCOL_VERSION, WorkerCall, WorkerFrame, WorkerOutcome, WorkerRequest, WorkerResponse,
+    Hello, WORKER_PROTOCOL_VERSION, WorkerCall, WorkerFrame, WorkerOutcome, WorkerRequest, WorkerResponse,
 };
 
 use crate::support::{is_alive, wait_until};
@@ -54,7 +54,7 @@ impl Attached {
 
     pub(crate) fn hello(&mut self, keep_running_without_hub: bool) {
         let answer = self.say_hello(keep_running_without_hub);
-        assert!(matches!(answer, WorkerOutcome::Response(WorkerResponse::Hello { .. })), "{answer:?}");
+        assert!(matches!(answer, WorkerOutcome::Response(WorkerResponse::Hello(_))), "{answer:?}");
     }
 
     /// As the next hub reaches the worker of the instance whose state is kept in `state_dir`, once the worker has let
@@ -65,7 +65,7 @@ impl Attached {
         wait_until("the worker to let go of the hub before", || {
             let mut attached = Self::start_in(workspaces_root, state_dir);
             match attached.say_hello(true) {
-                WorkerOutcome::Response(WorkerResponse::Hello { .. }) => next = Some(attached),
+                WorkerOutcome::Response(WorkerResponse::Hello(_)) => next = Some(attached),
                 WorkerOutcome::Error(e) if e.code == ErrorCode::Conflict => attached.close(),
                 other => panic!("{other:?}"),
             }
@@ -75,11 +75,11 @@ impl Attached {
     }
 
     fn say_hello(&mut self, keep_running_without_hub: bool) -> WorkerOutcome {
-        let hello = WorkerRequest::Hello {
+        let hello = WorkerRequest::Hello(Hello {
             protocol_version: WORKER_PROTOCOL_VERSION,
             oldest_protocol_version: None,
             keep_running_without_hub,
-        };
+        });
         self.call(1, hello)
     }
 

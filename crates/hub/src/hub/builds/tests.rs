@@ -10,7 +10,7 @@ use protocol::client::{ApiError, ErrorCode};
 use protocol::event::{EventBody, ExitReason};
 use protocol::model::{RunId, SessionStatus};
 use protocol::prompt::Prompt;
-use protocol::worker::WorkerRequest;
+use protocol::worker::{GitStatus, WorkerRequest};
 
 use super::*;
 use crate::hub::setup::SetupGate;
@@ -89,11 +89,11 @@ async fn a_worker_with_a_call_under_way_isnt_replaced() {
     let hub = hub_in(dir.path());
     let link = WorkerLink::answering(|request| {
         let refused = Some(Err(ApiError::new(ErrorCode::Worker, "a stand-in does nothing")));
-        if matches!(request, WorkerRequest::GitStatus { .. }) { None } else { refused }
+        if matches!(request, WorkerRequest::GitStatus(_)) { None } else { refused }
     });
     hub.workers.lock().insert(w(), link.clone());
     let calling = link.clone();
-    tokio::spawn(async move { calling.call(WorkerRequest::GitStatus { path: "/w".into() }).await });
+    tokio::spawn(async move { calling.call(GitStatus { path: "/w".into() }).await });
     let deadline = Instant::now() + TIMEOUT;
     while link.calls_under_way() == 0 {
         assert!(Instant::now() < deadline, "the call never went");

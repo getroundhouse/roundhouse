@@ -4,7 +4,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use protocol::client::{ApiError, ErrorCode};
-use protocol::worker::WorkerResponse;
+use protocol::worker::{SetupDone, WorkerResponse};
 
 use super::State;
 use crate::setup;
@@ -54,7 +54,7 @@ pub(crate) async fn run_setup(
     }
     let Some(script) = settings.setup else {
         *state.setup.lock() = Setup::Idle;
-        return Ok(WorkerResponse::SetupDone { code: Some(0) });
+        return Ok(WorkerResponse::SetupDone(SetupDone { code: Some(0) }));
     };
     setup::append_log(&log, "Running the setup script");
     // Recorded like an agent, so the provider can stop it if this worker is killed.
@@ -81,7 +81,7 @@ pub(crate) async fn run_setup(
         Some(code) => setup::append_log(&log, &format!("The setup script exited with {code}")),
         None => setup::append_log(&log, "The setup script was stopped"),
     }
-    Ok(WorkerResponse::SetupDone { code })
+    Ok(WorkerResponse::SetupDone(SetupDone { code }))
 }
 
 pub(crate) async fn run_archive_script(

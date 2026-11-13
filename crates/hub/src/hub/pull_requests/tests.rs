@@ -4,7 +4,7 @@
 use std::sync::atomic::AtomicUsize;
 
 use protocol::model::{Branches, Head};
-use protocol::worker::RateLimit;
+use protocol::worker::{RateLimit, WorkerRequest, WorkerResponse};
 
 use super::*;
 use crate::hub::tests::{hub_with_worktree, open, reading, reading_within, says};
@@ -88,9 +88,12 @@ async fn a_switch_reads_only_while_what_is_known_is_another_branchs() {
     let reads = Arc::new(AtomicUsize::new(0));
     let counted = reads.clone();
     let link = WorkerLink::answering(move |request| {
-        Some(Ok(if matches!(request, WorkerRequest::PullRequest { .. }) {
+        Some(Ok(if matches!(request, WorkerRequest::PullRequest(_)) {
             counted.fetch_add(1, Ordering::SeqCst);
-            WorkerResponse::PullRequest { pull_request: Some(open()), branch: Some(BranchName::from("header")) }
+            WorkerResponse::PullRequest(PullRequestReply {
+                pull_request: Some(open()),
+                branch: Some(BranchName::from("header")),
+            })
         } else {
             WorkerResponse::Ok
         }))

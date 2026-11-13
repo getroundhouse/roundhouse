@@ -8,7 +8,10 @@ use std::time::Duration;
 use protocol::Build;
 use protocol::client::{ApiError, ErrorCode, error_chain};
 use protocol::model::{InstanceId, RunId, SessionId, WorkspaceId};
-use protocol::worker::{AskAnswer, RunningAgent, WorkerCall, WorkerFrame, WorkerRequest, WorkerResponse};
+use protocol::worker::{
+    AskAnswer, Hello, HelloReply, Received, Reply, Request, RunningAgent, RunningAgents, Stop, WorkerCall, WorkerFrame,
+    WorkerResponse,
+};
 use providers::Provider;
 use tokio::sync::{Mutex as AsyncMutex, watch};
 use tracing::warn;
@@ -63,6 +66,11 @@ fn lost() -> ApiError {
     ApiError::new(ErrorCode::Worker, "the connection to the worker was lost")
 }
 
+/// A reply of another kind than its request is answered with, which only a worker that's wrong sends.
+fn unexpected(reply: &WorkerResponse) -> ApiError {
+    ApiError::new(ErrorCode::Worker, format!("unexpected reply from the worker: {reply:?}"))
+}
+
 impl WorkerLink {
     /// Starts the instance's worker and says hello. On failure nothing is left running, so the next
     /// attempt starts clean.
@@ -97,22 +105,21 @@ impl WorkerLink {
             reader,
         ));
 
-        let hello = link.call(WorkerRequest::Hello {
+        let hello = link.call(Hello {
             protocol_version: versions::WORKERS.newest,
             oldest_protocol_version: Some(versions::WORKERS.oldest),
             // So a restart leaves it running, for the next hub. The hub says when it means it to stop.
             keep_running_without_hub: true,
         });
         let failure = match tokio::time::timeout(HELLO_TIMEOUT, hello).await {
-            Ok(Ok(WorkerResponse::Hello { protocol_version, build })) if versions::WORKERS.speaks(protocol_version) => {
+            Ok(Ok(HelloReply { protocol_version, build })) if versions::WORKERS.speaks(protocol_version) => {
                 let _ = link.build.set(build);
                 return Ok(link);
             }
-            Ok(Ok(WorkerResponse::Hello { protocol_version, .. })) => ApiError::new(
+            Ok(Ok(HelloReply { protocol_version, .. })) => ApiError::new(
                 ErrorCode::VersionMismatch,
                 format!("the worker chose protocol {protocol_version}, and this hub speaks {}", versions::WORKERS),
             ),
-            Ok(Ok(other)) => ApiError::new(ErrorCode::Worker, format!("unexpected hello reply: {other:?}")),
             Ok(Err(e)) => e,
             Err(_) => ApiError::new(ErrorCode::Worker, format!("the worker didn't answer within {HELLO_TIMEOUT:?}")),
         };
@@ -128,21 +135,24 @@ impl WorkerLink {
         Err(failure)
     }
 
-    pub(crate) async fn call(&self, request: WorkerRequest) -> Result<WorkerResponse, ApiError> {
+    /// The worker's reply, as what the request is answered with. A reply of another kind fails here, so a caller has
+    /// only the reply it asked for to handle.
+    pub(crate) async fn call<R: Request>(&self, request: R) -> Result<R::Reply, ApiError> {
         self.send(request).await?.await
     }
 
-    /// Returns once the request is queued, with its reply to wait for. Requests reach the worker in the order
-    /// they're queued.
-    pub(crate) async fn send(
+    /// Returns once the request is queued, with its reply to wait for, read as [`WorkerLink::call`] reads it. Requests
+    /// reach the worker in the order they're queued.
+    pub(crate) async fn send<R: Request>(
         &self,
-        request: WorkerRequest,
-    ) -> Result<impl Future<Output = Result<WorkerResponse, ApiError>> + use<>, ApiError> {
+        request: R,
+    ) -> Result<impl Future<Output = Result<R::Reply, ApiError>> + use<R>, ApiError> {
+        let request = request.into_request();
         let replied = self.calls.send(|id| WorkerCall { id, request }).await.map_err(|e| match e {
             NotSent::Closed => lost(),
             NotSent::Encoding(e) => internal(e.to_string()),
         })?;
-        Ok(async move { replied.await.map_err(|_| lost())? })
+        Ok(async move { R::Reply::read(replied.await.map_err(|_| lost())??).map_err(|reply| unexpected(&reply)) })
     }
 
     /// Answers what the worker asked. Like a call, it's dropped if the connection has ended, since nobody is left to
@@ -227,7 +237,7 @@ impl WorkerLink {
     /// Asks the worker to stop, and closes its stdin. It stops its agents, flushes, and exits.
     pub(crate) async fn close(&self) {
         // Not waited for, since its reply can't come before what's ahead of it, such as an agent's last output.
-        let _ = self.send(WorkerRequest::Stop).await;
+        let _ = self.send(Stop).await;
         self.calls.close();
     }
 
@@ -236,7 +246,7 @@ impl WorkerLink {
     pub(crate) async fn leave(self: &Arc<Self>, hub: &Arc<Hub>) {
         self.left.store(true, Ordering::SeqCst);
         if let Some(through) = self.acks.recorded(hub).await {
-            let _ = self.send(WorkerRequest::Received { through }).await;
+            let _ = self.send(Received { through }).await;
         }
         self.calls.close();
     }
@@ -256,11 +266,7 @@ impl WorkerLink {
 
     /// The agents the worker is running.
     pub(crate) async fn running_agents(&self) -> Result<Vec<RunningAgent>, ApiError> {
-        let reply = self.call(WorkerRequest::RunningAgents).await?;
-        let WorkerResponse::RunningAgents { agents } = reply else {
-            return Err(ApiError::new(ErrorCode::Worker, format!("unexpected reply to running_agents: {reply:?}")));
-        };
-        Ok(agents)
+        Ok(self.call(RunningAgents).await?.agents)
     }
 
     /// Which run each session's agent is, by what the worker has sent of it while it's held, the newest if several.

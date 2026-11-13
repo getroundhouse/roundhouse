@@ -13,8 +13,8 @@ use protocol::event::EventBody;
 use protocol::frame;
 use protocol::model::{AgentKind, RunId};
 use protocol::worker::{
-    AgentSpec, RunningAgent, WORKER_PROTOCOL_VERSION, WorkerCall, WorkerFrame, WorkerOutcome, WorkerRequest,
-    WorkerResponse,
+    AgentSpec, AgentStarted, Hello, Received, RunningAgent, RunningAgentsReply, WORKER_PROTOCOL_VERSION, WorkerCall,
+    WorkerFrame, WorkerOutcome, WorkerRequest, WorkerResponse,
 };
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, Lines};
 use tokio::net::UnixStream;
@@ -101,14 +101,16 @@ impl Hub {
     /// that lists its agents, with that list.
     async fn greet(socket: &Path, keep_running_without_hub: bool) -> (Self, Vec<WorkerFrame>, Vec<RunningAgent>) {
         let mut hub = Self::connect(socket).await;
-        let hello = WorkerRequest::Hello {
+        let hello = WorkerRequest::Hello(Hello {
             protocol_version: WORKER_PROTOCOL_VERSION,
             oldest_protocol_version: None,
             keep_running_without_hub,
-        };
-        assert!(matches!(hub.call(hello).await.0, WorkerOutcome::Response(WorkerResponse::Hello { .. })));
+        });
+        assert!(matches!(hub.call(hello).await.0, WorkerOutcome::Response(WorkerResponse::Hello(_))));
         let (listed, before) = hub.call(WorkerRequest::RunningAgents).await;
-        let WorkerOutcome::Response(WorkerResponse::RunningAgents { agents }) = listed else { panic!("{listed:?}") };
+        let WorkerOutcome::Response(WorkerResponse::RunningAgents(RunningAgentsReply { agents })) = listed else {
+            panic!("{listed:?}")
+        };
         (hub, before, agents)
     }
 
@@ -166,7 +168,7 @@ async fn a_worker_asked_to_keep_running_carries_on_without_its_hub_and_sends_the
     let worker = Listening::start(WAIT);
     let (mut first, _, _) = Hub::greet(&worker.socket, true).await;
     let (started, _) = first.call(worker.start_spec()).await;
-    assert!(matches!(started, WorkerOutcome::Response(WorkerResponse::AgentStarted { .. })), "{started:?}");
+    assert!(matches!(started, WorkerOutcome::Response(WorkerResponse::AgentStarted(_))), "{started:?}");
     first.go().await;
 
     let (mut second, _, agents) = Hub::greet(&worker.socket, true).await;
@@ -176,7 +178,7 @@ async fn a_worker_asked_to_keep_running_carries_on_without_its_hub_and_sends_the
     let missed = second.until_exited().await;
     second.go().await;
     let (mut third, replayed, agents) = Hub::greet(&worker.socket, true).await;
-    let (received, _) = third.call(WorkerRequest::Received { through: 1 }).await;
+    let (received, _) = third.call(WorkerRequest::Received(Received { through: 1 })).await;
     third.go().await;
     let (mut fourth, after_recording, _) = Hub::greet(&worker.socket, true).await;
     let (stopped, _) = fourth.call(WorkerRequest::Stop).await;
@@ -216,7 +218,7 @@ async fn a_second_hub_is_refused_while_one_is_connected() {
     let (still, _) = first.call(WorkerRequest::RunningAgents).await;
 
     assert!(matches!(&refused, WorkerOutcome::Error(e) if e.code == ErrorCode::Conflict), "{refused:?}");
-    assert!(matches!(still, WorkerOutcome::Response(WorkerResponse::RunningAgents { .. })), "{still:?}");
+    assert!(matches!(still, WorkerOutcome::Response(WorkerResponse::RunningAgents(_))), "{still:?}");
     first.call(WorkerRequest::Stop).await;
     first.go().await;
     worker.stopped().await;
@@ -228,7 +230,9 @@ async fn a_worker_left_without_a_hub_stops_its_agents_in_time() {
     let worker = Listening::start(Duration::from_millis(500));
     let (mut hub, _, _) = Hub::greet(&worker.socket, true).await;
     let (started, _) = hub.call(worker.start_spec()).await;
-    let WorkerOutcome::Response(WorkerResponse::AgentStarted { pid, .. }) = started else { panic!("{started:?}") };
+    let WorkerOutcome::Response(WorkerResponse::AgentStarted(AgentStarted { pid, .. })) = started else {
+        panic!("{started:?}")
+    };
 
     hub.go().await;
     worker.stopped().await;

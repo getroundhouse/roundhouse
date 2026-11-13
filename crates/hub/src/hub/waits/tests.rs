@@ -3,7 +3,7 @@
 
 use protocol::event::{AgentTask, EventBody, ExitReason, NoticeLevel, TaskKind};
 use protocol::model::{Checks, Local, MergeState, PrState, QueueState, SessionStatus, Workspace};
-use protocol::worker::{AskReply, RateLimit, WorkerAsk, WorkerRequest, WorkerResponse};
+use protocol::worker::{AskReply, PullRequestReply, RateLimit, WorkerAsk, WorkerRequest, WorkerResponse};
 
 use super::*;
 pub(super) use crate::hub::tests::open;
@@ -189,7 +189,7 @@ async fn a_wait_doesnt_start_when_its_read_doesnt_finish_before_the_worker_stops
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_with_worktree(dir.path());
     let stuck = WorkerLink::answering(|request| {
-        (!matches!(request, WorkerRequest::PullRequest { .. })).then_some(Ok(WorkerResponse::Ok))
+        (!matches!(request, WorkerRequest::PullRequest(_))).then_some(Ok(WorkerResponse::Ok))
     });
     hub.workers.lock().insert("w".into(), stuck.clone());
     let asked_at = tokio::time::Instant::now();
@@ -264,12 +264,12 @@ async fn archiving_a_workspace_calls_off_its_waits_before_its_archive_script_run
     let link = WorkerLink::answering({
         let (hub, waiting) = (Arc::downgrade(&hub), waiting_as_the_script_ran.clone());
         move |request| {
-            if matches!(request, WorkerRequest::ArchiveScript { .. }) {
+            if matches!(request, WorkerRequest::ArchiveScript(_)) {
                 let waited_on = hub.upgrade().map(|hub| hub.store.workspaces_waited_on().unwrap());
                 *waiting.lock() = waited_on.map(|workspaces| !workspaces.is_empty());
             }
-            Some(Ok(if matches!(request, WorkerRequest::PullRequest { .. }) {
-                WorkerResponse::PullRequest { pull_request: Some(open()), branch: None }
+            Some(Ok(if matches!(request, WorkerRequest::PullRequest(_)) {
+                WorkerResponse::PullRequest(PullRequestReply { pull_request: Some(open()), branch: None })
             } else {
                 WorkerResponse::Ok
             }))
@@ -308,8 +308,10 @@ async fn a_wait_ending_starts_the_agent_of_a_chat_waiting_on_nothing_else() {
                 if matches!(request, WorkerRequest::AgentStart(_)) {
                     *starts.lock() += 1;
                 }
-                Some(if matches!(request, WorkerRequest::PullRequest { .. }) {
-                    says.lock().clone().map(|pull_request| WorkerResponse::PullRequest { pull_request, branch: None })
+                Some(if matches!(request, WorkerRequest::PullRequest(_)) {
+                    says.lock().clone().map(|pull_request| {
+                        WorkerResponse::PullRequest(PullRequestReply { pull_request, branch: None })
+                    })
                 } else {
                     // Not that it started, so starting fails.
                     Ok(WorkerResponse::Ok)

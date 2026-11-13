@@ -4,14 +4,19 @@
 use protocol::client::{ClientFrame, ClientRequest, HubStatus};
 use protocol::frame;
 use protocol::model::RunId;
-use protocol::worker::{RunningAgent, WorkerCall, WorkerFrame, WorkerRequest, WorkerResponse};
+use protocol::worker::{
+    Received, RunningAgent, RunningAgentsReply, WorkerCall, WorkerFrame, WorkerRequest, WorkerResponse,
+};
 
 #[test]
 fn what_a_hub_asks_of_a_worker_it_reconnects_to_keeps_its_form() {
     let calls = [
         (WorkerRequest::Stop, &br#"{"id":1,"request":{"method":"stop"}}"#[..]),
         (WorkerRequest::RunningAgents, br#"{"id":1,"request":{"method":"running_agents"}}"#),
-        (WorkerRequest::Received { through: 12 }, br#"{"id":1,"request":{"method":"received","through":12}}"#),
+        (
+            WorkerRequest::Received(Received { through: 12 }),
+            br#"{"id":1,"request":{"method":"received","through":12}}"#,
+        ),
     ];
     for (request, line) in calls {
         assert_eq!(frame::encode(&WorkerCall { id: 1, request }).unwrap(), [line, b"\n"].concat());
@@ -20,7 +25,7 @@ fn what_a_hub_asks_of_a_worker_it_reconnects_to_keeps_its_form() {
     let reply: WorkerResponse =
         frame::decode(br#"{"result":"running_agents","agents":[{"session_id":"s","run":4}]}"#).unwrap();
     let running = RunningAgent { session_id: "s".into(), run: RunId::new(4) };
-    assert_eq!(reply, WorkerResponse::RunningAgents { agents: vec![running] });
+    assert_eq!(reply, WorkerResponse::RunningAgents(RunningAgentsReply { agents: vec![running] }));
 }
 
 /// Numbered for a hub that asked the worker to keep running without it, and not otherwise, which a hub from before

@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use parking_lot::Mutex;
 use protocol::model::SessionId;
-use protocol::worker::WorkerRequest;
+use protocol::worker::Received;
 use tokio::sync::{Notify, oneshot};
 
 use super::WorkerLink;
@@ -71,7 +71,7 @@ pub(super) async fn acknowledge(hub: Arc<Hub>, link: Arc<WorkerLink>) {
             () = link.wait_closed() => return,
         }
         if let Some(through) = link.acks.recorded(&hub).await
-            && link.send(WorkerRequest::Received { through }).await.is_err()
+            && link.send(Received { through }).await.is_err()
         {
             return;
         }

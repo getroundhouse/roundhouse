@@ -6,7 +6,8 @@ use std::process::Stdio;
 use std::time::Duration;
 
 use protocol::client::{ApiError, ErrorCode};
-use protocol::model::{BranchName, Branches, CommitId, GitDiff, GitFile, GitStatus};
+use protocol::model::{BranchName, CommitId, GitDiff, GitFile, GitStatus};
+use protocol::worker::WorkspaceReady;
 use tokio::process::Command;
 
 pub(crate) mod blob;
@@ -25,16 +26,6 @@ const GH_TIMEOUT: Duration = Duration::from_secs(15);
 /// Keeps a diff response bounded when an agent leaves build output untracked and unignored.
 const MAX_UNTRACKED_FILES: usize = 200;
 const MAX_UNTRACKED_BYTES: usize = 8 * 1024 * 1024;
-
-pub struct Prepared {
-    pub path: String,
-    pub branch: BranchName,
-    pub base_ref: String,
-    pub warnings: Vec<String>,
-    /// As the worktree was made, so its workspace is ready with them. `None` when they couldn't be read, which the
-    /// watch then reads again.
-    pub branches: Option<Branches>,
-}
 
 fn git_error(message: impl Into<String>) -> ApiError {
     ApiError::new(ErrorCode::Worker, message)
@@ -131,7 +122,7 @@ pub async fn prepare_workspace(
     workspace_name: &str,
     branch: &BranchName,
     base_ref: Option<&str>,
-) -> Result<Prepared, ApiError> {
+) -> Result<WorkspaceReady, ApiError> {
     reject_option_like(branch.as_str(), "a branch name")?;
     let repo = PathBuf::from(repo_path);
     let path = root.join(repo_name).join(workspace_name);
@@ -177,7 +168,7 @@ pub async fn prepare_workspace(
     // `git pull` from the workspace would act on main.
     git_ok(&repo, &["worktree", "add", "--no-track", "-b", branch.as_str(), &path_str, &base]).await?;
     let branches = branches::read_now(&path).await.ok();
-    Ok(Prepared { path: path_str, branch: branch.clone(), base_ref: base, warnings, branches })
+    Ok(WorkspaceReady { path: path_str, branch: branch.clone(), base_ref: base, warnings, branches })
 }
 
 pub async fn restore_workspace(repo_path: &str, path: &str, branch: &BranchName) -> Result<(), ApiError> {

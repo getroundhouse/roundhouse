@@ -13,7 +13,13 @@ use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{RunId, SessionId};
 use protocol::prompt::Prompt;
 use protocol::versions::Versions;
-use protocol::worker::{WORKER_PROTOCOL_VERSION, WorkerFrame, WorkerRequest, WorkerResponse};
+use protocol::worker::{
+    AccountFor, AgentApproval, AgentCancel, AgentCompact, AgentConfigure, AgentPrompt, AgentStop, AttachmentWrite,
+    AttachmentWritten, FileOpenAt, FilePages, FileRead, FileReadAt, FolderRead, GitDiff, GitStatus, HelloReply,
+    PrepareWorkspace, PullRequest, PullRequestReply, Received, RemoveWorkspace, RestoreWorkspace, RunningAgentsReply,
+    ServeTools, SetupLog, SetupLogReply, TitleFor, ToolsServing, WORKER_PROTOCOL_VERSION, WatchBranches, WorkerFrame,
+    WorkerRequest, WorkerResponse, WorktreeThere, WorktreeThereReply,
+};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::{mpsc, oneshot, watch};
 use tokio::task::{AbortHandle, JoinSet};
@@ -212,57 +218,47 @@ async fn handle(
         |unreadable: Option<&serde_json::Error>| ApiError::unsupported_request("this worker", build, unreadable);
     match request.map_err(|e| unsupported(Some(&e)))? {
         // About the connection they came on, which answers them itself.
-        WorkerRequest::Hello { .. } | WorkerRequest::Stop => {
+        WorkerRequest::Hello(_) | WorkerRequest::Stop => {
             Err(ApiError::new(ErrorCode::Internal, "the connection answers this itself"))
         }
-        WorkerRequest::Received { through } => {
+        WorkerRequest::Received(Received { through }) => {
             state.outbox.received(through).await;
             Ok(WorkerResponse::Ok)
         }
         WorkerRequest::RunningAgents => Ok(running_agents(state)),
         WorkerRequest::Unknown => Err(unsupported(None)),
-        WorkerRequest::PrepareWorkspace { repo_name, repo_path, workspace_name, branch, base_ref } => {
-            let prepared = git::prepare_workspace(
-                &state.config.workspaces_root,
-                &repo_name,
-                &repo_path,
-                &workspace_name,
-                &branch,
-                base_ref.as_deref(),
-            )
-            .await?;
-            Ok(WorkerResponse::WorkspaceReady {
-                path: prepared.path,
-                branch: prepared.branch,
-                base_ref: prepared.base_ref,
-                warnings: prepared.warnings,
-                branches: prepared.branches,
-            })
+        WorkerRequest::PrepareWorkspace(asked) => {
+            let PrepareWorkspace { repo_name, repo_path, workspace_name, branch, base_ref } = asked;
+            let root = &state.config.workspaces_root;
+            let ready =
+                git::prepare_workspace(root, &repo_name, &repo_path, &workspace_name, &branch, base_ref.as_deref());
+            Ok(WorkerResponse::WorkspaceReady(ready.await?))
         }
-        WorkerRequest::RestoreWorkspace { repo_path, path, branch } => {
+        WorkerRequest::RestoreWorkspace(RestoreWorkspace { repo_path, path, branch }) => {
             let _moving = state.moving.lock().await;
             git::restore_workspace(&repo_path, &path, &branch).await?;
             Ok(WorkerResponse::Ok)
         }
-        WorkerRequest::RemoveWorkspace { repo_path, path, force } => {
+        WorkerRequest::RemoveWorkspace(RemoveWorkspace { repo_path, path, force }) => {
             let _moving = state.moving.lock().await;
             git::remove_workspace(&repo_path, &path, force, &state.config.deleter).await?;
             Ok(WorkerResponse::Ok)
         }
-        WorkerRequest::WorktreeThere { path } => {
+        WorkerRequest::WorktreeThere(WorktreeThere { path }) => {
             let _moving = state.moving.lock().await;
-            Ok(WorkerResponse::WorktreeThere { there: git::worktree_there(&path).await })
+            let there = git::worktree_there(&path).await;
+            Ok(WorkerResponse::WorktreeThere(WorktreeThereReply { there }))
         }
-        WorkerRequest::GitStatus { path } => Ok(WorkerResponse::GitStatus(git::status(&path).await?)),
-        WorkerRequest::GitDiff { path, base_ref } => {
+        WorkerRequest::GitStatus(GitStatus { path }) => Ok(WorkerResponse::GitStatus(git::status(&path).await?)),
+        WorkerRequest::GitDiff(GitDiff { path, base_ref }) => {
             Ok(WorkerResponse::GitDiff(git::diff(&path, base_ref.as_deref()).await?))
         }
-        WorkerRequest::PullRequest { path } => {
+        WorkerRequest::PullRequest(PullRequest { path }) => {
             // `gh` finds the pull request by the branch checked out.
             let branch = git::branches::checked_out(Path::new(&path)).await;
-            Ok(WorkerResponse::PullRequest { pull_request: git::pull_request(&path).await?, branch })
+            Ok(WorkerResponse::PullRequest(PullRequestReply { pull_request: git::pull_request(&path).await?, branch }))
         }
-        WorkerRequest::WatchBranches { path } => {
+        WorkerRequest::WatchBranches(WatchBranches { path }) => {
             let (first, sent) = oneshot::channel();
             let watching = branch_watch::watch(path.into(), state.outbox.clone(), state.stopping.subscribe(), first);
             if let Some(earlier) = state.watching.lock().replace(tokio::spawn(watching).abort_handle()) {
@@ -272,86 +268,92 @@ async fn handle(
             let _ = sent.await;
             Ok(WorkerResponse::Ok)
         }
-        WorkerRequest::GithubRateLimit { path } => Ok(WorkerResponse::GithubRateLimit(git::rate_limit(&path).await?)),
-        WorkerRequest::SetupWorkspace { repo_path, path, env } => run_setup(state, &repo_path, &path, &env).await,
+        WorkerRequest::GithubRateLimit(asked) => {
+            Ok(WorkerResponse::GithubRateLimit(git::rate_limit(&asked.path).await?))
+        }
+        WorkerRequest::SetupWorkspace(asked) => run_setup(state, &asked.repo_path, &asked.path, &asked.env).await,
         WorkerRequest::CancelSetup => {
             stop_setup_script(state);
             Ok(WorkerResponse::Ok)
         }
-        WorkerRequest::SetupLog { path } => {
+        WorkerRequest::SetupLog(SetupLog { path }) => {
             let log = setup::setup_log_path(state.config.state_dir.as_deref(), Path::new(&path));
-            Ok(WorkerResponse::SetupLog { text: setup::read_log_tail(&log, SETUP_LOG_TAIL_BYTES) })
+            Ok(WorkerResponse::SetupLog(SetupLogReply { text: setup::read_log_tail(&log, SETUP_LOG_TAIL_BYTES) }))
         }
-        WorkerRequest::ArchiveScript { repo_path, path, env } => {
-            run_archive_script(state, &repo_path, &path, &env).await
+        WorkerRequest::ArchiveScript(asked) => {
+            run_archive_script(state, &asked.repo_path, &asked.path, &asked.env).await
         }
-        WorkerRequest::AttachmentWrite { path, name, data } => {
+        WorkerRequest::AttachmentWrite(AttachmentWrite { path, name, data }) => {
             let written = tokio::task::spawn_blocking(move || {
                 crate::attachments::write(Path::new(&path), &name, data.as_slice())
             })
             .await
             .map_err(|e| ApiError::new(ErrorCode::Internal, format!("writing an attachment stopped: {e}")))??;
-            Ok(WorkerResponse::AttachmentWritten { path: written.to_string_lossy().into_owned() })
+            Ok(WorkerResponse::AttachmentWritten(AttachmentWritten { path: written.to_string_lossy().into_owned() }))
         }
-        WorkerRequest::ListFiles { path } => Ok(WorkerResponse::Files(crate::files::list(Path::new(&path)).await?)),
-        WorkerRequest::FolderRead { path, folder } => {
+        WorkerRequest::ListFiles(asked) => Ok(WorkerResponse::Files(crate::files::list(Path::new(&asked.path)).await?)),
+        WorkerRequest::FolderRead(FolderRead { path, folder }) => {
             let files = tokio::task::spawn_blocking(move || crate::files::read_folder(Path::new(&path), &folder))
                 .await
                 .map_err(|e| ApiError::new(ErrorCode::Internal, format!("reading a folder stopped: {e}")))??;
             Ok(WorkerResponse::Files(files))
         }
-        WorkerRequest::FileRead { path, file } => {
+        WorkerRequest::FileRead(FileRead { path, file }) => {
             let contents = tokio::task::spawn_blocking(move || crate::files::read(Path::new(&path), &file))
                 .await
                 .map_err(|e| ApiError::new(ErrorCode::Internal, format!("reading a file stopped: {e}")))??;
             Ok(WorkerResponse::FileContents(contents))
         }
-        WorkerRequest::FileReadAt { path, commit, file } => {
+        WorkerRequest::FileReadAt(FileReadAt { path, commit, file }) => {
             Ok(WorkerResponse::FileContents(crate::files::read_at(Path::new(&path), &commit, &file).await?))
         }
-        WorkerRequest::FileOpenAt { path, commit, file } => {
+        WorkerRequest::FileOpenAt(FileOpenAt { path, commit, file }) => {
             Ok(WorkerResponse::FileOpened(crate::files::open_at(Path::new(&path), &commit, &file).await?))
         }
-        WorkerRequest::FilePages { path, commit, file, page_lines, pages } => {
+        WorkerRequest::FilePages(FilePages { path, commit, file, page_lines, pages }) => {
             let pages = crate::files::pages(Path::new(&path), &commit, &file, page_lines, &pages).await?;
             Ok(WorkerResponse::FilePages(pages))
         }
         WorkerRequest::AgentStart(spec) => start_agent(state, forwarders, spec).await,
-        WorkerRequest::AgentPrompt { session_id, seq, prompt } => {
+        WorkerRequest::AgentPrompt(AgentPrompt { session_id, seq, prompt }) => {
             let agent = state.live_agent(&session_id);
             Ok(delivery(match agent {
                 Some(agent) => agent.send_prompt(seq, &prompt).await.is_ok(),
                 None => false,
             }))
         }
-        WorkerRequest::AgentApproval { session_id, approval_id, decision } => {
+        WorkerRequest::AgentApproval(AgentApproval { session_id, approval_id, decision }) => {
             let agent = state.live_agent(&session_id);
             Ok(delivery(match agent {
                 Some(agent) => agent.resolve_approval(&approval_id, &decision).await.is_ok(),
                 None => false,
             }))
         }
-        WorkerRequest::AgentCancel { session_id } => {
+        WorkerRequest::AgentCancel(AgentCancel { session_id }) => {
             let agent = state.live_agent(&session_id);
             Ok(delivery(match agent {
                 Some(agent) => agent.interrupt().await.is_ok(),
                 None => false,
             }))
         }
-        WorkerRequest::AgentCompact { session_id, asked, keeping } => {
+        WorkerRequest::AgentCompact(AgentCompact { session_id, asked, keeping }) => {
             let agent = state.live_agent(&session_id);
             Ok(delivery(match agent {
                 Some(agent) => agent.compact(asked, keeping.as_deref()).await.is_ok(),
                 None => false,
             }))
         }
-        WorkerRequest::AgentConfigure { session_id, options } => configure_agent(state, &session_id, &options).await,
-        WorkerRequest::AgentStop { session_id } => stop_agent(state, &session_id).await,
-        WorkerRequest::TitleFor { agent, prompt, images } => {
+        WorkerRequest::AgentConfigure(AgentConfigure { session_id, options }) => {
+            configure_agent(state, &session_id, &options).await
+        }
+        WorkerRequest::AgentStop(AgentStop { session_id }) => stop_agent(state, &session_id).await,
+        WorkerRequest::TitleFor(TitleFor { agent, prompt, images }) => {
             title_for(state, agent, &Prompt::carrying(prompt, images)).await
         }
-        WorkerRequest::AccountFor { agent } => account_for(state, agent).await,
-        WorkerRequest::ServeTools { port } => Ok(WorkerResponse::ToolsServing { port: state.tools.serve(port).await? }),
+        WorkerRequest::AccountFor(AccountFor { agent }) => account_for(state, agent).await,
+        WorkerRequest::ServeTools(ServeTools { port }) => {
+            Ok(WorkerResponse::ToolsServing(ToolsServing { port: state.tools.serve(port).await? }))
+        }
     }
 }
 
@@ -363,7 +365,7 @@ fn hello(build: Build, newest: u32, oldest: Option<u32>) -> Result<WorkerRespons
         let message = format!("the hub speaks {hub}, and this worker speaks {ours}");
         return Err(ApiError::new(ErrorCode::VersionMismatch, message));
     };
-    Ok(WorkerResponse::Hello { protocol_version: chosen, build: Some(said(build)) })
+    Ok(WorkerResponse::Hello(HelloReply { protocol_version: chosen, build: Some(said(build)) }))
 }
 
 /// Which build this worker is, as its hello says. A test can have it say another, with [`TEST_BUILD`], as a worker an
@@ -389,7 +391,7 @@ fn running_agents(state: &State) -> WorkerResponse {
         run: agent.run,
     };
     let agents = running.map(listed);
-    WorkerResponse::RunningAgents { agents: agents.collect() }
+    WorkerResponse::RunningAgents(RunningAgentsReply { agents: agents.collect() })
 }
 
 fn delivery(delivered: bool) -> WorkerResponse {

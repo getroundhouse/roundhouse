@@ -11,7 +11,7 @@ use protocol::attachment::{
 };
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{AttachmentId, SessionId, WorkspaceId};
-use protocol::worker::{WorkerRequest, WorkerResponse};
+use protocol::worker::AttachmentWrite;
 use tracing::warn;
 
 use super::Hub;
@@ -174,10 +174,7 @@ impl Hub {
             return Err(internal(format!("the hub doesn't have {} to send", attachment.name)));
         };
         let (path, name, data) = (worktree.to_string(), attachment.name.clone(), AttachmentBytes::new(data));
-        let reply = link.call(WorkerRequest::AttachmentWrite { path, name, data }).await?;
-        let WorkerResponse::AttachmentWritten { path } = reply else {
-            return Err(internal("the worker didn't say where it put a file"));
-        };
+        let path = link.call(AttachmentWrite { path, name, data }).await?.path;
         let (session, id, kept) = (session_id.clone(), attachment.id.clone(), path.clone());
         self.blocking(move |store| store.set_attachment_placed_at(&session, &id, &kept)).await?;
         if !attachment.media_type.is_image()

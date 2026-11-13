@@ -61,7 +61,7 @@ async fn a_wait_asked_for_as_the_archive_script_runs_is_refused_and_none_is_left
     let link = WorkerLink::answering({
         let (hub, refused) = (Arc::downgrade(&hub), refused.clone());
         move |request| {
-            if matches!(request, WorkerRequest::ArchiveScript { .. })
+            if matches!(request, WorkerRequest::ArchiveScript(_))
                 && let Some(hub) = hub.upgrade()
             {
                 let started = hub.store.start_wait(&wait(WaitUntil::Done), Seen::default());

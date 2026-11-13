@@ -28,7 +28,7 @@ pub enum WorkerFrame {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         attachments: Vec<NewAttachment>,
         /// Its number among what the worker keeps until a hub has recorded it, for a hub that said
-        /// [`keep_running_without_hub`](super::WorkerRequest::Hello::keep_running_without_hub). `None` otherwise.
+        /// [`keep_running_without_hub`](super::Hello::keep_running_without_hub). `None` otherwise.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         seq: Option<u64>,
     },
@@ -53,7 +53,7 @@ pub enum WorkerFrame {
         run: RunId,
         context: ContextUsage,
         /// Its number among what the worker keeps until a hub has recorded it, for a hub that said
-        /// [`keep_running_without_hub`](super::WorkerRequest::Hello::keep_running_without_hub). `None` otherwise.
+        /// [`keep_running_without_hub`](super::Hello::keep_running_without_hub). `None` otherwise.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         seq: Option<u64>,
     },
@@ -65,7 +65,7 @@ pub enum WorkerFrame {
         run: RunId,
         request: CacheRequest,
         /// Its number among what the worker keeps until a hub has recorded it, for a hub that said
-        /// [`keep_running_without_hub`](super::WorkerRequest::Hello::keep_running_without_hub). `None` otherwise.
+        /// [`keep_running_without_hub`](super::Hello::keep_running_without_hub). `None` otherwise.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         seq: Option<u64>,
     },
@@ -77,7 +77,7 @@ pub enum WorkerFrame {
         run: RunId,
         limits: Vec<UsageLimit>,
         /// Its number among what the worker keeps until a hub has recorded it, for a hub that said
-        /// [`keep_running_without_hub`](super::WorkerRequest::Hello::keep_running_without_hub). `None` otherwise.
+        /// [`keep_running_without_hub`](super::Hello::keep_running_without_hub). `None` otherwise.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         seq: Option<u64>,
     },
@@ -89,7 +89,7 @@ pub enum WorkerFrame {
         ask: WorkerAsk,
     },
     /// What the watched worktree's branches are now, whole, as
-    /// [`WatchBranches`](super::WorkerRequest::WatchBranches) asked, so a frame replaces every one before it, and only
+    /// [`WatchBranches`](super::WatchBranches) asked, so a frame replaces every one before it, and only
     /// the newest matters.
     Branches {
         branches: Branches,

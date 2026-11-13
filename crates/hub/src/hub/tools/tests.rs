@@ -3,7 +3,7 @@ use std::sync::Arc;
 use parking_lot::Mutex;
 use protocol::client::ErrorCode;
 use protocol::model::Workspace;
-use protocol::worker::{WorkerAsk, WorkerRequest, WorkerResponse};
+use protocol::worker::{ServeTools, ToolsServing, WorkerAsk, WorkerRequest, WorkerResponse};
 
 use crate::hub::tests::hub_in;
 use crate::worker_link::WorkerLink;
@@ -42,9 +42,11 @@ fn serving_on(port: u16) -> (Arc<WorkerLink>, AskedFor) {
     let asked = Arc::new(Mutex::new(Vec::new()));
     let kept = asked.clone();
     let link = WorkerLink::answering(move |request| {
-        let WorkerRequest::ServeTools { port: wanted } = request else { return Some(Ok(WorkerResponse::Ok)) };
+        let WorkerRequest::ServeTools(ServeTools { port: wanted }) = request else {
+            return Some(Ok(WorkerResponse::Ok));
+        };
         kept.lock().push(wanted);
-        Some(Ok(WorkerResponse::ToolsServing { port }))
+        Some(Ok(WorkerResponse::ToolsServing(ToolsServing { port })))
     });
     (link, asked)
 }

@@ -20,6 +20,7 @@ mod refusals;
 mod restarts;
 mod sessions;
 mod worker;
+mod worker_calls;
 mod workspaces;
 
 /// Spelled out, because these have to stay readable by a client of any version, even across a real

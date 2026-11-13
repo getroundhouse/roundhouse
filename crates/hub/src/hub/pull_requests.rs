@@ -12,13 +12,13 @@ use budget::{Budget, calls_to_read};
 use parking_lot::Mutex;
 use protocol::client::{ApiError, ErrorCode, HubNotice};
 use protocol::model::{BranchName, PullRequest, PullRequestFound, Workspace, WorkspaceId};
-use protocol::worker::{WorkerRequest, WorkerResponse};
+use protocol::worker::{self, GithubRateLimit, PullRequestReply};
 use schedule::{Schedule, Went};
 use tokio::sync::{Mutex as AsyncMutex, OwnedMutexGuard};
 use tracing::debug;
 
+use super::Hub;
 use super::ready::ReadyWorkspace;
-use super::{Hub, unexpected};
 use crate::store::{Store, now_ms};
 use crate::worker_link::WorkerLink;
 
@@ -264,11 +264,11 @@ impl Hub {
     /// last said is old, or else says when it's worth trying again.
     async fn spend(&self, link: &WorkerLink, path: &str, calls: u32, asked: Asked) -> Result<(), Instant> {
         if self.pull_requests.budget.lock().needs_github(Instant::now()) {
-            let reply = link.call(WorkerRequest::GithubRateLimit { path: path.to_string() }).await;
+            let reply = link.call(GithubRateLimit { path: path.to_string() }).await;
             let mut budget = self.pull_requests.budget.lock();
             match reply {
-                Ok(WorkerResponse::GithubRateLimit(limit)) => budget.github_said(limit, Instant::now(), now_ms()),
-                Ok(_) | Err(_) => budget.github_unknown(Instant::now()),
+                Ok(limit) => budget.github_said(limit, Instant::now(), now_ms()),
+                Err(_) => budget.github_unknown(Instant::now()),
             }
         }
         self.pull_requests.budget.lock().take(calls, asked, Instant::now())
@@ -377,8 +377,7 @@ struct Found {
 }
 
 async fn ask(link: &WorkerLink, path: String) -> Result<Found, ApiError> {
-    let reply = link.call(WorkerRequest::PullRequest { path }).await?;
-    let WorkerResponse::PullRequest { pull_request, branch } = reply else { return Err(unexpected(&reply)) };
+    let PullRequestReply { pull_request, branch } = link.call(worker::PullRequest { path }).await?;
     Ok(Found { found: PullRequestFound { pull_request }, on: branch })
 }
 
