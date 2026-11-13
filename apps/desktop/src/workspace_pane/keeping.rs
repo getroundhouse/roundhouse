@@ -3,9 +3,9 @@
 //! client: the pane starts with what the hub has, reads back the files it kept, has it keep each change, and shows a
 //! change made elsewhere, such as in another client. Quitting loses only what the hub hasn't had yet.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
-use client_core::{DraftChange, DraftKey, FilesFor, KeptDraft};
+use client_core::{CameBack, DraftChange, DraftKey, FilesFor, KeptDraft, ReadBack};
 use gpui_kit::{App, Context, Entity};
 use protocol::attachment::Attachment;
 use protocol::model::{AttachmentId, Draft, DraftToKeep, Session, SessionId};
@@ -14,19 +14,7 @@ use transcript::QuestionPanel;
 
 use super::attaching::Composed;
 use super::{Chat, PaneEvent, WorkspacePane};
-use crate::attached::{Attachments, ReadBack, came_back, read_back};
-
-/// What the hub kept of each open chat's composer, for a pane to start with: its text, and the files to read back,
-/// which come once they're read.
-pub(super) fn kept_in(sessions: &[Session]) -> HashMap<SessionId, Chat> {
-    let kept = sessions.iter().filter(|s| s.is_open() && !s.draft.is_empty());
-    let chat = |s: &Session| Chat {
-        draft: Some(Composed { text: s.draft.text.clone(), files: Attachments::default() }),
-        restoring: Some(s.draft.files.clone()).filter(|files| !files.is_empty()),
-        ..Chat::default()
-    };
-    kept.map(|s| (s.id.clone(), chat(s))).collect()
-}
+use crate::attached::{Attachments, read_back};
 
 /// Whether the hub keeps something typed or attached in one of these chats, for a workspace that has no pane yet.
 pub(crate) fn drafted(sessions: &[Session]) -> bool {
@@ -115,11 +103,15 @@ impl WorkspacePane {
         }
     }
 
-    /// Says that each open chat shows the draft on its record, as a pane does as it starts, so a newer record carrying
-    /// the same draft isn't taken for one made elsewhere.
-    pub(super) fn took_drafts(&self) {
-        for session in self.open_sessions() {
-            self.keeper.took(KeptDraft::composer(session));
+    /// Takes what the hub kept of each open chat's composer, from when this app or another last had it, as a pane does
+    /// as it starts, before any chat shows, and says it shows each, so a newer record carrying the same draft isn't
+    /// taken for one made elsewhere.
+    pub(super) fn take_kept_drafts(&mut self, cx: &mut Context<Self>) {
+        for session in self.open_sessions().cloned().collect::<Vec<Session>>() {
+            self.keeper.took(KeptDraft::composer(&session));
+            if !session.draft.is_empty() {
+                self.take_draft(&session.id, session.draft, cx);
+            }
         }
     }
 
@@ -193,8 +185,9 @@ impl WorkspacePane {
         }
     }
 
-    /// Puts a draft made elsewhere in its chat here: its text, the files here that it still names, and the rest once
-    /// they're read back. A file it stopped naming is let go of by whoever took it out.
+    /// Puts a draft the hub keeps in its chat here, as the pane starts or as one made elsewhere arrives: its text, the
+    /// files here that it still names, and the rest once they're read back. A file it stopped naming is let go of by
+    /// whoever took it out.
     fn take_draft(&mut self, id: &SessionId, draft: Draft, cx: &mut Context<Self>) {
         let named: HashSet<AttachmentId> = draft.files.iter().map(|file| file.id.clone()).collect();
         let files = self.files_for(Some(id));
@@ -216,11 +209,12 @@ impl WorkspacePane {
                 });
             });
         } else {
-            // Its files are its draft's, which `files_for` made if it had none.
+            // Its files are its draft's, which `files_for` made if it had none. One whose files are still coming back
+            // stays, so the chat still shows it has something.
             let chat = self.held(id);
             let here = chat.draft.get_or_insert_default();
             here.text = draft.text;
-            if here.text.is_empty() && here.files.is_empty() {
+            if here.text.is_empty() && here.files.is_empty() && missing.is_empty() {
                 chat.draft = None;
             }
         }
@@ -242,21 +236,26 @@ impl WorkspacePane {
         }
     }
 
-    /// Reads back the files the hub kept with a chat's draft, off the main thread. A read isn't a command quitting
-    /// waits for, as it can be a lot of bytes, and the hub keeps them anyway.
+    /// Reads back the files the hub kept with a chat's draft, off the main thread.
     fn bring_back(&self, chat: SessionId, files: Vec<Attachment>, cx: &mut Context<Self>) {
-        let (client, of) = (self.client.clone(), chat.clone());
-        let read = move |file: &AttachmentId| client.attachment_read(&of, file);
-        read_back(files, read, move |t: &mut Self, read, cx| t.brought_back(&chat, read, cx), cx);
+        let kept_for = FilesFor::Chat(chat.clone());
+        read_back(
+            self.client.clone(),
+            kept_for,
+            files,
+            move |t: &mut Self, read, cx| t.brought_back(&chat, read, cx),
+            cx,
+        );
     }
 
     /// Puts a chat's kept files back in its composer, before any attached since, where every draft kept meanwhile has
     /// named them, so nothing needs keeping again, which could undo a change made elsewhere that hasn't arrived yet.
     /// Without a connection, they're read again on the next.
-    fn brought_back(&mut self, chat: &SessionId, read: Vec<ReadBack>, cx: &mut Context<Self>) {
+    fn brought_back(&mut self, chat: &SessionId, read: ReadBack, cx: &mut Context<Self>) {
         let waiting = self.chats.get(chat).and_then(|held| held.restoring.as_deref()).unwrap_or_default();
-        let Some((files, mut problems)) = came_back(waiting, read) else { return };
+        let Some(CameBack { files, unread }) = read.came_back(waiting) else { return };
         self.held(chat).restoring = None;
+        let mut problems: Vec<String> = unread.iter().map(ToString::to_string).collect();
         problems.extend(self.files_for(Some(chat)).bring_back(files, &FilesFor::Chat(chat.clone())));
         for problem in problems {
             cx.emit(PaneEvent::Error(problem));
@@ -293,11 +292,16 @@ impl WorkspacePane {
             let text = self.composer.read(cx).text().chars().any(|c| !c.is_whitespace());
             let composed = text || !self.attached.is_empty();
             match &self.active {
-                Some(id) => Unsent {
-                    composed: Typed { any: composed, unkept: self.keeper.unkept(&DraftKey::Composer(id.clone())) },
-                    answering: answering(id),
-                    only_here: only_here(id),
-                },
+                Some(id) => {
+                    // As for a chat not showing, one whose files are on their way back has them on the hub.
+                    let restoring = self.chats.get(id).is_some_and(|chat| chat.restoring.is_some());
+                    let unkept = self.keeper.unkept(&DraftKey::Composer(id.clone()));
+                    Unsent {
+                        composed: Typed { any: composed || restoring, unkept },
+                        answering: answering(id),
+                        only_here: only_here(id),
+                    }
+                }
                 // While the workspace's first chat is being made.
                 None => Unsent { only_here: composed, ..Unsent::default() },
             }

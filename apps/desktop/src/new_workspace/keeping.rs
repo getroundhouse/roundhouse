@@ -4,14 +4,14 @@
 
 use std::collections::HashSet;
 
-use client_core::{Client, DraftChange, DraftKey, Drafts, FilesFor, KeptDraft};
+use client_core::{CameBack, Client, DraftChange, DraftKey, Drafts, FilesFor, KeptDraft, ReadBack};
 use gpui_kit::{App, Context, Window};
 use protocol::attachment::Attachment;
 use protocol::model::{AttachmentId, NewWorkspaceDraft, NewWorkspaceDraftToKeep, PermissionMode};
 use protocol::prompt::says_or_carries;
 
 use super::{DialogEvent, NewWorkspaceDialog};
-use crate::attached::{ReadBack, came_back, read_back};
+use crate::attached::read_back;
 
 /// What keeps the dialog on the hub, and the connection its files are read back on.
 #[derive(Default)]
@@ -137,23 +137,22 @@ impl NewWorkspaceDialog {
         self.bring_back(cx);
     }
 
-    /// Reads back the files the record names that aren't here, off the main thread. A read isn't a command quitting
-    /// waits for, as it can be a lot of bytes, and the hub keeps them anyway.
+    /// Reads back the files the record names that aren't here, off the main thread.
     fn bring_back(&self, cx: &mut Context<Self>) {
         let (Some(client), files) = (self.keeping.client.clone(), self.keeping.restoring.clone()) else { return };
         if files.is_empty() {
             return;
         }
-        let read = move |file: &AttachmentId| client.new_workspace_draft_file_read(file);
-        read_back(files, read, Self::brought_back, cx);
+        read_back(client, FilesFor::NewWorkspace, files, Self::brought_back, cx);
     }
 
     /// Puts the files read back in the dialog, before any attached since, then has the hub keep what's here if that
     /// isn't what its record says, such as with something typed meanwhile. Keeping it otherwise could undo a change
     /// made elsewhere that hasn't arrived yet. Without a connection, they're read again on the next.
-    fn brought_back(&mut self, read: Vec<ReadBack>, cx: &mut Context<Self>) {
-        let Some((files, mut problems)) = came_back(&self.keeping.restoring, read) else { return };
+    fn brought_back(&mut self, read: ReadBack, cx: &mut Context<Self>) {
+        let Some(CameBack { files, unread }) = read.came_back(&self.keeping.restoring) else { return };
         self.keeping.restoring.clear();
+        let mut problems: Vec<String> = unread.iter().map(ToString::to_string).collect();
         problems.extend(self.attached.bring_back(files, &FilesFor::NewWorkspace));
         for problem in problems {
             cx.emit(DialogEvent::Error(problem));

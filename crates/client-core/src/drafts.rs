@@ -24,8 +24,11 @@ use protocol::model::{
 use crate::{Client, FileToSend};
 
 mod keeper;
+mod read_back;
 #[cfg(test)]
 mod tests;
+
+pub use read_back::{CameBack, NotReadBack, ReadBack};
 
 /// The longest a change waits to be kept while typing goes on, so typing a word isn't a call for each letter, and an
 /// app that stops without quitting loses at most this much of it.
