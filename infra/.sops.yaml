@@ -1,0 +1,4 @@
+# secrets.tf's key. SOPS reads this only to create a file or change its keys, from this directory.
+creation_rules:
+  - path_regex: secrets\.enc\.yaml$
+    kms: arn:aws:kms:us-east-2:752393545121:alias/roundhouse-secrets

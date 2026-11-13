@@ -4,3 +4,8 @@ target/
 dist/
 .DS_Store
 __pycache__/
+# Terraform's working files and local state. Its lockfile is committed
+infra/.terraform/
+infra/terraform.tfstate*
+infra/*_override.tf
+infra/*.tfplan

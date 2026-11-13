@@ -136,6 +136,7 @@ tools/
   install.sh       Installs this commit as a version of its own, outside `target/`
   package/         Packages this commit as Roundhouse.app with Velopack, signed and notarized when given the keys, or Windows binaries as an installer, or Linux binaries as an AppImage, and publishes each as an update
   perf/            Performance tests against the real app. Not built, see `docs/performance.md`
+infra/             Terraform for the AWS account where RunsOn can run CI's jobs on Spot instances, applied by hand. Unconfirmed
 .github/workflows/ CI: the full checks on Linux for every PR that changes more than Markdown and the marketing site, with the guide built for every PR that changes what it's made of, and on a Mac when dependencies change. On Windows, for every PR that changes Rust, a lint of the product's code as built for it, and a hub started and stopped. The release workflow publishes each merge to `main`
 ```
 
