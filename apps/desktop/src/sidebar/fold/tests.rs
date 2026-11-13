@@ -32,7 +32,7 @@ fn laid(first: Fold, moved: f32) -> Laid {
     let resting: Vec<Line> = (LINES.iter().zip(&folds)).filter(|&(&l, &f)| rests(l, f)).map(|(&l, _)| l).collect();
     let places = places(&resting);
     let after_first = resting.iter().position(|line| matches!(line, Line::Repo(1))).unwrap();
-    let off: Vec<f32> = (0..places.len()).map(|at| if at < after_first { 0. } else { moved }).collect();
+    let off = Vec::from_fn(places.len(), |at| if at < after_first { 0. } else { moved });
     lay(&LINES, &folds, &sent(&places, &off))
 }
 

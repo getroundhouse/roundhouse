@@ -110,7 +110,7 @@ impl Global for Played {}
 /// The sounds played so far, by name, oldest first, whether or not there was a speaker to play them.
 #[cfg(feature = "testing")]
 pub fn played(cx: &App) -> Vec<String> {
-    cx.try_global::<Played>().map(|played| played.0.clone()).unwrap_or_default()
+    cx.try_global::<Played>().map_or_default(|played| played.0.clone())
 }
 
 /// The names of this computer's alert sounds. Only a Mac has them, in each `Library/Sounds`.

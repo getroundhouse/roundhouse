@@ -41,7 +41,7 @@ fn the_newest_calls_are_kept_each_with_the_text_just_before_it_then_what_it_has_
 fn a_call_s_result_is_kept_with_it_cut_short() {
     let mut work = RecentWork::default();
     add(&mut work, &[call("short"), call("long")], true);
-    let long = (0..RESULT_KEPT).map(|n| n.to_string()).collect::<Vec<_>>().join("\n");
+    let long = Vec::from_fn(RESULT_KEPT, |n| n.to_string()).join("\n");
 
     assert!(add(&mut work, &[result("short", "one\ntwo"), result("long", &long)], true));
     assert!(!add(&mut work, &[result("gone", "x")], true), "a call it doesn't keep");

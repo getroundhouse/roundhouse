@@ -12,7 +12,7 @@ pub(crate) fn model_name(model: &ModelName) -> String {
 
 /// `None` for an ID that isn't a family's name and then its version, a number or two at a time.
 fn said(id: &str) -> Option<String> {
-    let bare = id.strip_prefix("claude-").unwrap_or(id);
+    let bare = id.trim_prefix("claude-");
     // Such as `[1m]`, for a model with a larger context.
     let bare = bare.split_once('[').map_or(bare, |(before, _)| before);
     let mut parts = bare.split('-');

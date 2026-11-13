@@ -18,7 +18,7 @@ fn prompts_too_far_back_to_be_loaded_are_listed_and_jumped_to(cx: &mut TestAppCo
     stack.run(&session, "prose:4:0");
     stack.run(&session, "say:the second turn");
     // Far more events than the transcript loads to start with, so the prompts before it aren't among them.
-    let script: Vec<String> = (0..700).map(|i| format!("say:message {i}")).collect();
+    let script = Vec::from_fn(700, |i| format!("say:message {i}"));
     stack.run(&session, &script.join("; "));
     stack.run(&session, "say:the last turn");
     let mut ui = Ui::open(cx, &stack);
@@ -152,7 +152,7 @@ fn a_compaction_too_far_back_to_be_loaded_is_marked_and_jumped_to(cx: &mut TestA
     }
     compact(&stack, &session);
     // Far more events than the transcript loads to start with, so the compaction before them isn't among them.
-    let script: Vec<String> = (0..700).map(|i| format!("say:message {i}")).collect();
+    let script = Vec::from_fn(700, |i| format!("say:message {i}"));
     stack.run(&session, &script.join("; "));
     stack.run(&session, "say:the last turn");
     let mut ui = Ui::open(cx, &stack);

@@ -15,7 +15,7 @@ use crate::support::{Stack, Ui};
 
 pub(crate) fn queued(ui: &Ui) -> Vec<QueuedPrompt> {
     let pane = ui.pane().unwrap();
-    ui.cx.read_entity(&pane, |p, _| p.session().map(|s| s.queued.clone()).unwrap_or_default())
+    ui.cx.read_entity(&pane, |p, _| p.session().map_or_default(|s| s.queued.clone()))
 }
 
 fn held(ui: &Ui) -> bool {

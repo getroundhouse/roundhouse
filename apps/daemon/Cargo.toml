@@ -15,13 +15,15 @@ agents.workspace = true
 anyhow.workspace = true
 clap.workspace = true
 hub.workspace = true
-libc.workspace = true
 process.workspace = true
 protocol.workspace = true
 tokio.workspace = true
 tracing-subscriber.workspace = true
 tracing.workspace = true
 worker.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+libc.workspace = true
 
 [dev-dependencies]
 agents = { workspace = true, features = ["testing"] }

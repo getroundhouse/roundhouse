@@ -98,13 +98,11 @@ fn a_prompt_sent_mid_turn_folds_in_and_the_session_stays_running_until_it_is_don
 fn many_sessions_run_at_once_without_mixing_their_output() {
     let stack = Stack::start();
     let client = stack.client();
-    let sessions: Vec<_> = (0..4)
-        .map(|i| {
-            let (workspace, session) = stack.workspace(&client);
-            client.session_prompt(&session.id, &format!("slow:8:s{i}-; tool:pwd"), None).unwrap();
-            (workspace, session, format!("s{i}-"))
-        })
-        .collect();
+    let sessions = Vec::from_fn(4, |i| {
+        let (workspace, session) = stack.workspace(&client);
+        client.session_prompt(&session.id, &format!("slow:8:s{i}-; tool:pwd"), None).unwrap();
+        (workspace, session, format!("s{i}-"))
+    });
     for (_, session, marker) in &sessions {
         let events = wait_for_turn_end(&client, &session.id, 1);
         assert_gapless(&events);

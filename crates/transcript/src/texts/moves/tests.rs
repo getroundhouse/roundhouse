@@ -161,7 +161,7 @@ fn the_end_of_the_chat_keeps_only_the_few_texts_it_drew_last_and_doesn_t_draw_no
     texts.drawn_as(&selected, held, "Selected");
     texts.new_frame();
     texts.drawn_as(&TextKey::named("after it"), held, "After it");
-    let stopped: Vec<TextKey> = (0..12).map(|n| TextKey::named(format!("stopped {n}"))).collect();
+    let stopped = Vec::from_fn(12, |n| TextKey::named(format!("stopped {n}")));
     for reply in &stopped {
         texts.new_frame();
         texts.drawn_as(reply, TextAt::at_the_end(0), "Half a reply");
@@ -173,7 +173,7 @@ fn the_end_of_the_chat_keeps_only_the_few_texts_it_drew_last_and_doesn_t_draw_no
 
     let kept: Vec<bool> = stopped.iter().map(|reply| texts.keeps(reply)).collect();
     // The first and the last have a place there, and of the others, the last eight were drawn there most recently.
-    let expected: Vec<bool> = (0..12).map(|n| n == 0 || n >= 3).collect();
+    let expected = Vec::from_fn(12, |n| n == 0 || n >= 3);
     assert_eq!(kept, expected);
     assert!(texts.keeps(&selected), "and one that's selected");
     texts.let_go(&log([]), None);
@@ -186,7 +186,7 @@ fn the_end_of_the_chat_keeps_only_the_few_texts_it_drew_last_and_doesn_t_draw_no
 fn a_reply_the_end_of_the_chat_no_longer_draws_is_left_there(cx: &mut TestAppContext) {
     let texts = Texts::alone();
     let selection = Selection::new(texts.clone(), cx.update(|cx| cx.focus_handle()));
-    let stopped: Vec<TextKey> = (0..9).map(|n| TextKey::named(format!("stopped {n}"))).collect();
+    let stopped = Vec::from_fn(9, |n| TextKey::named(format!("stopped {n}")));
     for reply in &stopped {
         drawn(&texts, &selection, reply, TextAt::at_the_end(0), "Half a reply");
     }

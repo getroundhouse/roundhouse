@@ -117,7 +117,7 @@ fn asked_and_answered() -> impl Strategy<Value = (Vec<Question>, Vec<QuestionAns
             .iter()
             .enumerate()
             .map(|(q, &(options, multiple))| {
-                let labels: Vec<String> = (0..options).map(|o| format!("Q{q} option {o}")).collect();
+                let labels = Vec::from_fn(options, |o| format!("Q{q} option {o}"));
                 let labels: Vec<&str> = labels.iter().map(String::as_str).collect();
                 question(&format!("Question {q}?"), &labels, multiple)
             })

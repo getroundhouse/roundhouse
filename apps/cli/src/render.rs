@@ -309,7 +309,7 @@ fn asked_to_compact(keeping: Option<&str>) -> String {
 
 /// That the agent is compacting, with how much of the summary it has written, since it says so every 30 s.
 fn compacting(written_chars: Option<u64>) -> String {
-    let written = written_chars.map_or_else(String::new, |written| format!(", {written} characters written"));
+    let written = written_chars.map_or_default(|written| format!(", {written} characters written"));
     format!("compacting the conversation{written}")
 }
 

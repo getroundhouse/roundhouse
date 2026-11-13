@@ -40,7 +40,7 @@ pub(super) fn list(
         chosen: app.raised_hover,
         hovered: app.row_hover,
     };
-    let choice = panel.asked.get(panel.showing).map(|asked| asked.choice.clone()).unwrap_or_default();
+    let choice = panel.asked.get(panel.showing).map_or_default(|asked| asked.choice.clone());
     let rows: Vec<AnyElement> = question
         .options
         .iter()

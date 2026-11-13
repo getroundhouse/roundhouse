@@ -191,7 +191,7 @@ fn branch(fields: &[String], tips: &HashMap<String, CommitId>) -> Option<Branch>
     let [refname, tip, upstream, remote, remote_ref] = fields else { return None };
     let upstream = (!upstream.is_empty() && !remote.is_empty() && !remote_ref.is_empty()).then(|| Upstream {
         remote: RemoteName::from(remote.as_str()),
-        name: BranchName::from(remote_ref.strip_prefix("refs/heads/").unwrap_or(remote_ref)),
+        name: BranchName::from(remote_ref.trim_prefix("refs/heads/")),
         tip: tips.get(upstream).cloned(),
     });
     let name = BranchName::from(refname.strip_prefix("refs/heads/")?);

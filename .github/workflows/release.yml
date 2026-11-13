@@ -51,7 +51,6 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
-  CARGO_INCREMENTAL: "0"
   # The .NET SDK the jobs that package install, since the vpk dotnet-tools.json pins runs on 8, 9 or 10. Each installs
   # it in a directory of its own, since next to the runner image's SDKs dotnet runs the newest, and 11 stopped vpk.sh.
   # renovate: datasource=dotnet-version depName=dotnet-sdk
@@ -320,16 +319,11 @@ jobs:
           # holds release builds.
           key: release-${{ matrix.runner }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', '**/Cargo.toml') }}
           restore-keys: release-${{ matrix.runner }}-
-      # As for the Mac.
-      - uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
-        with:
-          version: v0.19.0
+      # No sccache, unlike the Mac and Linux, so our own crates build again each time. Since Cargo 1.100 gives each
+      # dependency a folder of its own, rustc's command line for a crate with many passes Windows' limit of 32,767
+      # characters. Cargo then hands rustc its arguments in a file, but sccache spells them out again to start rustc.
       - name: Build
         id: build
-        env:
-          RUSTC_WRAPPER: sccache
-          SCCACHE_GHA_ENABLED: "true"
-          SCCACHE_GHA_RW_MODE: ${{ github.ref == 'refs/heads/main' && 'READ_WRITE' || 'READ_ONLY' }}
         run: |
           rustup target add "$CARGO_BUILD_TARGET"
           build="$(tools/build.sh --package "$RUNNER_TEMP/binaries")"

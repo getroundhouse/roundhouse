@@ -134,7 +134,7 @@ fn find_key(cx: &App) -> impl IntoElement {
 /// goes between them.
 pub(super) fn find_key_says(os: OperatingSystem) -> Vec<String> {
     // `secondary` is a different key on each system, so it's read for the one at hand.
-    let said = Keystroke::parse_with_os(FIND_KEY, os).map(|key| Kbd::format(&key)).unwrap_or_default();
+    let said = Keystroke::parse_with_os(FIND_KEY, os).map_or_default(|key| Kbd::format(&key));
     if cfg!(target_os = "macos") { said.chars().map(String::from).collect() } else { vec![said] }
 }
 

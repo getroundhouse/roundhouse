@@ -49,7 +49,7 @@ impl Subagent {
             let calls = record.as_ref().map_or(0, |record| usize::try_from(record.calls).unwrap_or(usize::MAX));
             m.subagent_rows.borrow_mut().insert(id.clone(), seq);
             let working = record.as_ref().filter(|record| record.status == SubagentStatus::Working);
-            let lately = working.filter(|_| open).map(|record| lately::lately(record)).unwrap_or_default();
+            let lately = working.filter(|_| open).map_or_default(|record| lately::lately(record));
             let lately = lately
                 .into_iter()
                 .map(|Lately { block, key, result }| {

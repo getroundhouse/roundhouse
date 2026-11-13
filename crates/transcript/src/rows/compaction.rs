@@ -128,7 +128,7 @@ pub(super) fn of(seq: Seq, body: &EventBody, around: &Around, shared: &Shared, c
             (*by, *before_tokens, *after_tokens, *took_ms, summary.as_deref())
         }
         CompactionOutcome::Failed { error } => {
-            let why = error.as_deref().map_or_else(String::new, |error| format!(" {error}"));
+            let why = error.as_deref().map_or_default(|error| format!(" {error}"));
             return colored_line(format!("Couldn't compact the conversation.{why}"), look::colors(cx).error);
         }
         CompactionOutcome::Unknown => (CompactedBy::Unknown, None, None, None, None),

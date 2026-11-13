@@ -97,7 +97,7 @@ fn login_name(method: &str) -> String {
 /// The CLI names a plan in lower case, such as `max`.
 fn capitalized(name: &str) -> String {
     let mut letters = name.chars();
-    letters.next().map(|first| first.to_uppercase().chain(letters).collect()).unwrap_or_default()
+    letters.next().map_or_default(|first| first.to_uppercase().chain(letters).collect())
 }
 
 #[cfg(test)]

@@ -96,10 +96,10 @@ fn tool_use(event: &SessionEvent) -> Vec<String> {
 
 /// A question, under its header, and its options numbered, with what each means.
 fn question(question: &Question) -> Vec<String> {
-    let header = question.header.as_ref().map_or_else(String::new, |header| format!("{header}: "));
+    let header = question.header.as_ref().map_or_default(|header| format!("{header}: "));
     let mut lines = vec![format!("QUESTION: {header}{}", question.text)];
     for (number, option) in (1..).zip(&question.options) {
-        let means = option.description.as_ref().map_or_else(String::new, |description| format!(": {description}"));
+        let means = option.description.as_ref().map_or_default(|description| format!(": {description}"));
         lines.push(format!("  {number}. {}{means}", option.label));
     }
     if question.multiple {

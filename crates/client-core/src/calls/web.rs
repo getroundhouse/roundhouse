@@ -31,7 +31,7 @@ impl<'a> WebSearch<'a> {
 pub fn site(url: &str) -> &str {
     let rest = url.split_once("://").map_or(url, |(_, rest)| rest);
     let host = rest.split(['/', '?', '#']).next().unwrap_or(rest);
-    host.strip_prefix("www.").unwrap_or(host)
+    host.trim_prefix("www.")
 }
 
 #[derive(Debug, PartialEq, Eq)]

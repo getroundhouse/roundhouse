@@ -27,7 +27,7 @@ pub(crate) fn read_prompt(content: &Value) -> String {
         }
     });
     *LAST_ATTACHED.lock() = described.collect();
-    script_at.map(|at| blocks[at]["text"].as_str().unwrap_or_default().to_string()).unwrap_or_default()
+    script_at.map_or_default(|at| blocks[at]["text"].as_str().unwrap_or_default().to_string())
 }
 
 /// `<attachment name="N" path="P">` with the file inside, or `<attachment name="N" path="P" />` for one to open.

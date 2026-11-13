@@ -170,7 +170,7 @@ pub fn read_log_tail(log: &Path, max_bytes: u64) -> String {
     }
     let mut bytes = Vec::new();
     let _ = file.read_to_end(&mut bytes);
-    String::from_utf8_lossy(&bytes).into_owned()
+    String::from_utf8_lossy_owned(bytes)
 }
 
 #[cfg(test)]

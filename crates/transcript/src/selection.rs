@@ -312,9 +312,7 @@ impl Selection {
     /// [`Selection::text`] makes, for a test of the order the chat's texts are in.
     #[cfg(feature = "testing")]
     pub(crate) fn all_as_copied(&self) -> String {
-        self.whole()
-            .and_then(|ends| self.spots(&ends))
-            .map_or_else(String::new, |(start, end)| self.between(start, end))
+        self.whole().and_then(|ends| self.spots(&ends)).map_or_default(|(start, end)| self.between(start, end))
     }
 
     /// What a copy would hold now, for a test of what a drag selects as it goes.
@@ -346,7 +344,7 @@ impl Selection {
 
     /// What's selected, as text.
     fn text(&self) -> String {
-        self.ordered().map_or_else(String::new, |(start, end)| self.between(start, end))
+        self.ordered().map_or_default(|(start, end)| self.between(start, end))
     }
 
     /// Its ends, first first, where they are now, if anything's selected.

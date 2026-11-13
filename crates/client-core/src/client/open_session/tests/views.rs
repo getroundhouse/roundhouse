@@ -105,7 +105,7 @@ fn rows(open: &OpenSession) -> Vec<Option<u64>> {
             Row::Event(event) => Some(event.seq.get()),
             Row::Unloaded => None,
         };
-        (0..log.row_count()).map(row).collect()
+        Vec::from_fn(log.row_count(), row)
     })
 }
 

@@ -127,9 +127,9 @@ fn tidy(answer: &str) -> Option<Title> {
     let line = answer.lines().map(str::trim).find(|line| !line.is_empty())?;
     let plain: String = line.trim_start_matches('#').chars().filter(|c| !matches!(c, '*' | '`')).collect();
     let plain = plain.trim();
-    let plain = plain.strip_prefix("Title:").unwrap_or(plain);
+    let plain = plain.trim_prefix("Title:");
     let plain = plain.trim_matches(|c: char| matches!(c, '"' | '\'' | '“' | '”' | '‘' | '’') || c.is_whitespace());
-    Title::from_first_line(plain.strip_suffix('.').unwrap_or(plain))
+    Title::from_first_line(plain.trim_suffix('.'))
 }
 
 #[cfg(test)]

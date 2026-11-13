@@ -12,16 +12,14 @@ pub(super) fn prose(paragraphs: usize, seed: u64) -> Vec<String> {
         state = state.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1_442_695_040_888_963_407);
         usize::try_from((state >> 33) % n).unwrap()
     };
-    (0..paragraphs)
-        .map(|_| {
-            let words = [6, 14, 30, 60, 120][next(5)];
-            let sentence: Vec<&str> = (0..words).map(|_| WORDS[next(16)]).collect();
-            let text = sentence.join(" ");
-            match next(8) {
-                0 => format!("- {}\n- {}\n- {}\n\n", WORDS[next(16)], text, WORDS[next(16)]),
-                1 => format!("```rust\nfn {}() {{\n    {}\n}}\n```\n\n", WORDS[next(16)], text),
-                _ => format!("{text}.\n\n"),
-            }
-        })
-        .collect()
+    Vec::from_fn(paragraphs, |_| {
+        let words = [6, 14, 30, 60, 120][next(5)];
+        let sentence = Vec::from_fn(words, |_| WORDS[next(16)]);
+        let text = sentence.join(" ");
+        match next(8) {
+            0 => format!("- {}\n- {}\n- {}\n\n", WORDS[next(16)], text, WORDS[next(16)]),
+            1 => format!("```rust\nfn {}() {{\n    {}\n}}\n```\n\n", WORDS[next(16)], text),
+            _ => format!("{text}.\n\n"),
+        }
+    })
 }

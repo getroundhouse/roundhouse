@@ -67,7 +67,7 @@ pub(super) fn path(address: &str) -> Option<String> {
     if address.starts_with("data:") {
         return None;
     }
-    let path = address.strip_prefix("file://").unwrap_or(address);
+    let path = address.trim_prefix("file://");
     if path.is_empty() || path.contains("://") {
         return None;
     }

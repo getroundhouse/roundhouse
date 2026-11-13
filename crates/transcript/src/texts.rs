@@ -256,7 +256,7 @@ impl Texts {
         let outer = self.0.borrow_mut().in_row.replace(mine);
         let drawn = draw();
         let mut store = self.0.borrow_mut();
-        let these = std::mem::replace(&mut store.in_row, outer).map(|mine| mine.these).unwrap_or_default();
+        let these = std::mem::replace(&mut store.in_row, outer).map_or_default(|mine| mine.these);
         let Store { places, hidden, .. } = &mut *store;
         let mut left = Vec::new();
         for (at, id) in places.within(TextAt::first_of(of)..).take_while(|(at, _)| at.of == of) {
@@ -285,7 +285,7 @@ impl Texts {
         let whose = ImagesAre::of(&source, images.is_some());
         let (parsed, apart) = self.parsed(&known, &source, at.of, whose);
         let marks = (parsed.as_ref().zip(written.found))
-            .map_or_else(Vec::new, |(parsed, (id, find))| find.marks_in_leaves(id, &parsed.leaves));
+            .map_or_default(|(parsed, (id, find))| find.marks_in_leaves(id, &parsed.leaves));
         let (texts, selection) = (self.clone(), selection.clone());
         let area = written.area.clone();
         ProseElement { known, at, area, text: parsed, apart, marks, images, texts, selection }.into_any_element()

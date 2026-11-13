@@ -105,7 +105,7 @@ mod tests {
 
     #[test]
     fn a_huge_change_is_left_to_the_result_s_text() {
-        let lines: Vec<String> = (0..5000).map(|i| format!("+line {i}")).collect();
+        let lines = Vec::from_fn(5000, |i| format!("+line {i}"));
         let line = json!({ "tool_use_result": { "structuredPatch": [
             { "oldStart": 1, "newStart": 1, "lines": lines },
         ]}});

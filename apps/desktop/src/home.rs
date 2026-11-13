@@ -211,7 +211,7 @@ fn row(app: &AppView, workspace: &Workspace, line_text: &LineText, cx: &mut Cont
     let colors = look::colors(cx);
     let (border, hover, muted) = (colors.edge, colors.row_hover, colors.text_muted);
     let Standing { signal, work, needs_a_look } = standing(app, workspace, cx);
-    let repo = app.repo(&workspace.repo_id).map(|r| r.name.clone()).unwrap_or_default();
+    let repo = app.repo(&workspace.repo_id).map_or_default(|r| r.name.clone());
     let its_chats = app.records().sessions(&workspace.id).iter().filter(|_| prompt_cache::told_of(workspace));
     let expiring = prompt_cache::soonest_expiring(its_chats, look::now_ms(cx))
         .map(|left_ms| line_text.detail.set(div().flex_none().text_color(muted).child(look::expires_in(left_ms))));

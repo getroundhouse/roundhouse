@@ -91,7 +91,7 @@ fn changes() -> impl Strategy<Value = Vec<(u8, u8)>> {
 fn everything_in_any_order() -> impl Strategy<Value = (Hub, Vec<Delivery>)> {
     (changes(), vec(any::<Index>(), 0..6), vec(any::<Index>(), 0..4)).prop_flat_map(|(changes, again, lists)| {
         let hub = Hub::run(&changes, true);
-        let mut deliveries: Vec<Delivery> = (0..hub.notices.len()).map(Delivery::Notice).collect();
+        let mut deliveries = Vec::from_fn(hub.notices.len(), Delivery::Notice);
         if !hub.notices.is_empty() {
             deliveries.extend(again.iter().map(|i| Delivery::Notice(i.index(hub.notices.len()))));
         }

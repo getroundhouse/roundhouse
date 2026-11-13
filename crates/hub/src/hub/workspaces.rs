@@ -28,7 +28,7 @@ pub(crate) fn workspace_env(workspace: &Workspace, repo: &Repo) -> Vec<(String, 
         ("CONDUCTOR_WORKSPACE_NAME".to_string(), workspace.name.clone()),
         ("CONDUCTOR_WORKSPACE_ID".to_string(), workspace.id.to_string()),
         ("CONDUCTOR_ROOT_PATH".to_string(), repo.path.clone()),
-        ("CONDUCTOR_DEFAULT_BRANCH".to_string(), base.strip_prefix("origin/").unwrap_or(base).to_string()),
+        ("CONDUCTOR_DEFAULT_BRANCH".to_string(), base.trim_prefix("origin/").to_string()),
         ("CONDUCTOR_PORT".to_string(), workspace.port_base.to_string()),
         ("CONDUCTOR_IS_LOCAL".to_string(), "1".to_string()),
     ];

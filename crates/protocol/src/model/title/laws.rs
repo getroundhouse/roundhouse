@@ -45,7 +45,7 @@ proptest! {
         if let Some(first) = first {
             prop_assert!(first.chars().count() <= 49, "{first:?}");
             let line = text.split(breaks_line).find_map(Title::tidied).unwrap();
-            let kept = first.strip_suffix('…').unwrap_or(&first);
+            let kept = first.trim_suffix('…');
             prop_assert!(line.starts_with(kept), "{first:?} from {line:?}");
         }
     }

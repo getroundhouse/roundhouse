@@ -27,7 +27,7 @@ impl Lines {
     /// thread. A line ending at the very end doesn't start another line.
     pub(crate) fn new(text: &str, language: Option<&str>) -> Self {
         let text = text.replace('\t', TAB);
-        let spans = language.map(|language| look::highlight(language, &text)).unwrap_or_default();
+        let spans = language.map_or_default(|language| look::highlight(language, &text));
         let mut ranges = Vec::new();
         let mut start = 0;
         for line in text.split_inclusive('\n') {

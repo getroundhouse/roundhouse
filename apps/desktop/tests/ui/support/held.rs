@@ -41,7 +41,7 @@ impl Held {
     /// It gives up once the test's directory has gone too, which a failed test deletes as it lets the script go.
     fn script(&self) -> String {
         let (runs, released) = (self.runs.display(), self.released.display());
-        let dir = self.released.parent().map(|dir| dir.display().to_string()).unwrap_or_default();
+        let dir = self.released.parent().map_or_default(|dir| dir.display().to_string());
         format!("echo ran >> {runs}; until [ -f {released} ] || [ ! -d {dir} ]; do sleep 0.01; done")
     }
 

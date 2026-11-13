@@ -43,7 +43,7 @@ pub(super) fn describe(pull_request: Option<&PullRequest>) -> String {
     let Some(pr) = pull_request else {
         return "This workspace's branch has no pull request on GitHub.".to_string();
     };
-    let into = pr.base.as_ref().map(|base| format!(", into {base}")).unwrap_or_default();
+    let into = pr.base.as_ref().map_or_default(|base| format!(", into {base}"));
     let stands = Standing::of(Some(pr));
     let mut lines = vec![format!("Pull request #{}, \"{}\"{into}: {}", pr.number, pr.title, pr.url)];
     lines.push(standing(stands));

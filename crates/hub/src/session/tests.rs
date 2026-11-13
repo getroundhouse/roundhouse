@@ -37,7 +37,7 @@ fn exited() -> EventBody {
 fn tasks(count: usize) -> EventBody {
     let task =
         |i: usize| AgentTask { id: format!("t{i}").into(), description: None, kind: TaskKind::Command, call: None };
-    EventBody::AgentTasks { tasks: (0..count).map(task).collect(), stopped: Vec::new() }
+    EventBody::AgentTasks { tasks: Vec::from_fn(count, task), stopped: Vec::new() }
 }
 
 /// The last task gone, because it was stopped.

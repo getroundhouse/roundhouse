@@ -30,8 +30,7 @@ pub(crate) fn three_workspaces<'a>(
 pub(crate) fn more_than_fit<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> (Ui<'a>, Vec<WorkspaceId>) {
     let client = stack.client();
     let repo = client.repo_add(stack.repo().to_str().unwrap()).unwrap();
-    let made: Vec<WorkspaceId> =
-        (0..MORE_THAN_FIT).map(|_| client.workspace_create(&repo.id, None, None, None).unwrap().id).collect();
+    let made = Vec::from_fn(MORE_THAN_FIT, |_| client.workspace_create(&repo.id, None, None, None).unwrap().id);
     let mut ui = Ui::open(cx, stack);
     ui.wait("every workspace", |ui| ui.view().visible_workspaces().len() == MORE_THAN_FIT);
     wait_out_setup(&mut ui);

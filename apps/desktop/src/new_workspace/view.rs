@@ -37,7 +37,7 @@ impl NewWorkspaceDialog {
     /// The repository it'll be made in, which opens a menu of the others.
     fn header(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let repos = &self.offer.repos;
-        let name = repos.iter().find(|(id, _)| *id == self.repo).map(|(_, name)| name.clone()).unwrap_or_default();
+        let name = repos.iter().find(|(id, _)| *id == self.repo).map_or_default(|(_, name)| name.clone());
         let (choices, current, this) = (repos.clone(), self.repo.clone(), cx.weak_entity());
         let menu = move |mut menu: PopupMenu, _: &mut Window, _: &mut Context<PopupMenu>| {
             for (id, name) in &choices {

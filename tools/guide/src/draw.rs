@@ -220,7 +220,7 @@ impl Drawing<'_> {
 
 /// What a link or a picture says when it's pointed at, as an attribute, if it was given something to say.
 fn title(title: Option<&str>) -> String {
-    title.map(|title| format!(" title=\"{}\"", escape(title))).unwrap_or_default()
+    title.map_or_default(|title| format!(" title=\"{}\"", escape(title)))
 }
 
 fn holds_a_link(nodes: &[Node]) -> bool {
@@ -228,7 +228,7 @@ fn holds_a_link(nodes: &[Node]) -> bool {
 }
 
 fn code_block(code: &Code) -> String {
-    let language = code.lang.as_deref().map(|lang| format!(" class=\"language-{}\"", escape(lang))).unwrap_or_default();
+    let language = code.lang.as_deref().map_or_default(|lang| format!(" class=\"language-{}\"", escape(lang)));
     format!("<pre><code{language}>{}</code></pre>\n", escape(&code.value))
 }
 

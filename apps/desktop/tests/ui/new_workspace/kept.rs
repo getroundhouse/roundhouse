@@ -113,7 +113,7 @@ fn a_change_made_to_the_dialog_elsewhere_while_something_from_here_is_on_its_way
     stack.client().new_workspace_draft_keep(&typed_elsewhere("typed elsewhere")).unwrap();
     // Arrived in client-core, but nothing has run on the main thread since, so the dialog hasn't seen it.
     let records = ui.view().feed().unwrap();
-    let in_records = || records.snapshot().new_workspace_draft().map(|draft| draft.text.clone()).unwrap_or_default();
+    let in_records = || records.snapshot().new_workspace_draft().map_or_default(|draft| draft.text.clone());
     wait_until("client-core to hear of the change", || in_records() == "typed elsewhere");
 
     let frozen = Frozen::stop(pid);

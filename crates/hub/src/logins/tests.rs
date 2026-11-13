@@ -282,17 +282,15 @@ fn eight_at_once(
     name: fn(usize) -> String,
 ) -> Vec<Result<AccountId, ErrorCode>> {
     let barrier = Arc::new(Barrier::new(8));
-    let connects: Vec<_> = (0..8)
-        .map(|at| {
-            let (logins, barrier) = (logins.clone(), barrier.clone());
-            std::thread::spawn(move || {
-                barrier.wait();
-                let new_id = AccountId::from(format!("claude-login-{token}-{at}"));
-                let connect = Connect { new_id, ..connect(&name(at), token, None) };
-                logins.connect(&connect).map(|change| change.account.id).map_err(|e| e.code)
-            })
+    let connects = Vec::from_fn(8, |at| {
+        let (logins, barrier) = (logins.clone(), barrier.clone());
+        std::thread::spawn(move || {
+            barrier.wait();
+            let new_id = AccountId::from(format!("claude-login-{token}-{at}"));
+            let connect = Connect { new_id, ..connect(&name(at), token, None) };
+            logins.connect(&connect).map(|change| change.account.id).map_err(|e| e.code)
         })
-        .collect();
+    });
     connects.into_iter().map(|connect| connect.join().unwrap()).collect()
 }
 

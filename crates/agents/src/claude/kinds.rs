@@ -92,7 +92,7 @@ fn take_exit_code(text: &mut String) -> Option<i32> {
 fn take_refusal_tags(text: &mut String) {
     let trimmed = text.trim();
     if let Some(said) = trimmed.strip_prefix(TOOL_ERROR_OPEN) {
-        *text = said.strip_suffix(TOOL_ERROR_CLOSE).unwrap_or(said).to_string();
+        *text = said.trim_suffix(TOOL_ERROR_CLOSE).to_string();
     }
 }
 

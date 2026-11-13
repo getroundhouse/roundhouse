@@ -52,8 +52,7 @@ fn one_long<'a>(
 ) -> (Ui<'a>, [RepoId; 2], [WorkspaceId; 4], WorkspaceId) {
     let (mut ui, projects, four) = two_projects(cx, stack);
     let client = stack.client();
-    let made: Vec<WorkspaceId> =
-        (0..MORE_THAN_FIT).map(|_| client.workspace_create(&projects[long], None, None, None).unwrap().id).collect();
+    let made = Vec::from_fn(MORE_THAN_FIT, |_| client.workspace_create(&projects[long], None, None, None).unwrap().id);
     ui.wait("every workspace", |ui| ui.view().visible_workspaces().len() == MORE_THAN_FIT + 4);
     wait_out_setup(&mut ui);
     (ui, projects, four, made.last().unwrap().clone())
