@@ -12,7 +12,7 @@ use tracing::debug;
 
 use super::asking::{Over, Work, work};
 use super::{Shared, control};
-use crate::claude::usage::usage_limits;
+use crate::claude::usage::{lists_every_models_week, usage_limits};
 use crate::{AgentError, AgentOutput};
 
 /// The least time between two words of the account's limits, the CLI's own or an answer to an ask. The CLI writes a
@@ -94,7 +94,8 @@ pub(super) fn after(shared: &Arc<Shared>, body: &EventBody, output: &mpsc::Sende
     let (shared, output) = (shared.clone(), output.clone());
     tokio::spawn(async move {
         let answer = control(&shared, json!({"subtype": "get_usage"})).await;
-        report(&shared, &output, answer.map(|reply| usage_limits(&reply)));
+        let every_models_week = answer.as_ref().is_ok_and(lists_every_models_week);
+        report(&shared, &output, answer.map(|reply| usage_limits(&reply)), every_models_week);
     });
 }
 
@@ -109,15 +110,21 @@ fn asks_after(work: Work) -> Option<bool> {
     }
 }
 
-/// Reports what the CLI answered. It's sent under the lock, without waiting, so it can't come after the process's
-/// exit, and a report there's no room for is dropped, since the next ask brings another.
-fn report(shared: &Shared, output: &mpsc::Sender<AgentOutput>, answer: Result<Vec<UsageLimit>, AgentError>) {
+/// Reports what the CLI answered, which is `every_models_week` the account has when it lists them all. It's sent under
+/// the lock, without waiting, so it can't come after the process's exit, and a report there's no room for is dropped,
+/// since the next ask brings another.
+fn report(
+    shared: &Shared,
+    output: &mpsc::Sender<AgentOutput>,
+    answer: Result<Vec<UsageLimit>, AgentError>,
+    every_models_week: bool,
+) {
     if let Err(e) = &answer {
         debug!("the agent didn't say what's left of its account's limits: {e}");
     }
     let mut watch = shared.usage.lock();
     if let Some(limits) = watch.answered(answer) {
-        let _ = output.try_send(AgentOutput::Limits(limits));
+        let _ = output.try_send(AgentOutput::Limits { limits, every_models_week });
     }
 }
 

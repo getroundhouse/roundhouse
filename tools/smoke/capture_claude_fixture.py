@@ -414,16 +414,35 @@ def made_up_usage(value):
     """`get_usage` answers with how much of the account's limits is used, how it was used, by day and week, and what
     it was spent on, which is all personal. This keeps whether it says there are limits to tell of, and which windows
     the account has, each with only the keys the adapter reads, with made-up numbers, as `made_up_limits` does. It
-    names many more, with `null` for each the account doesn't have, which are left out."""
+    names many more, with `null` for each the account doesn't have, which are left out. Of the usage endpoint's own
+    rows, in `limits`, it keeps each one's kind, and the label of the model it's scoped to, with made-up numbers too.
+    A row scoped to a surface keeps only that it is."""
     answer = value.get("response", {}).get("response")
     if value.get("type") == "control_response" and isinstance(answer, dict) and "rate_limits" in answer:
         made_up = {"utilization": 25, "resets_at": "2100-01-01T00:00:00+00:00"}
         windows = answer["rate_limits"] if isinstance(answer["rate_limits"], dict) else {}
         kept = {name: {key: made_up[key] for key in made_up if key in window}
                 for name, window in windows.items() if isinstance(window, dict)}
+        if isinstance(windows.get("limits"), list):
+            kept["limits"] = [made_up_row(row) for row in windows["limits"] if isinstance(row, dict)]
         value["response"]["response"] = {"rate_limits_available": answer.get("rate_limits_available"),
                                          "rate_limits": kept}
     return value
+
+
+def made_up_row(row):
+    """A row of the usage endpoint's, with its kind and the label of the model it's scoped to, and made-up numbers,
+    or none where it had none."""
+    scope = row.get("scope")
+    if isinstance(scope, dict):
+        model = scope.get("model")
+        label = model.get("display_name") if isinstance(model, dict) else None
+        scope = {"model": {"display_name": label} if isinstance(label, str) else None,
+                 "surface": {} if scope.get("surface") is not None else None}
+    else:
+        scope = None
+    return {"kind": row.get("kind"), "percent": None if row.get("percent") is None else 25,
+            "resets_at": None if row.get("resets_at") is None else "2100-01-01T00:00:00+00:00", "scope": scope}
 
 
 def made_up_limits(info):

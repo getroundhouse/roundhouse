@@ -40,8 +40,12 @@ pub enum AgentOutput {
     /// turn makes many, but each matters, since the hub compares each with the one before.
     Cache(CacheRequest),
     /// What's used of each of the account's limits now, shortest window first, when the adapter asked rather than
-    /// the agent saying so by itself. It answers the adapter's own question, so it isn't an event, as `Context` isn't.
-    Limits(Vec<UsageLimit>),
+    /// the agent saying so by itself, and whether that's every model's own week the account has, as an answer that
+    /// lists them all is. It answers the adapter's own question, so it isn't an event, as `Context` isn't.
+    Limits {
+        limits: Vec<UsageLimit>,
+        every_models_week: bool,
+    },
     /// Always the last thing sent.
     Exited {
         code: Option<i32>,

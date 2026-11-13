@@ -110,14 +110,31 @@ fn the_cli_says_how_full_its_context_is_and_what_its_made_of() {
 }
 
 /// Its numbers are made up as it's captured, since they're the account's, so this checks the keys the adapter reads.
-/// The five hours' window is there only when the account has been used in them.
+/// The five hours' window is there only when the account has been used in them, and a model's own week only when the
+/// account has one.
 #[test]
 fn the_cli_says_how_much_is_used_of_each_of_its_accounts_limits_and_when_it_starts_again() {
-    let limits = agents::claude::usage_limits(&answer_to("get_usage").unwrap());
+    let answer = answer_to("get_usage").unwrap();
+    let limits = agents::claude::usage_limits(&answer);
 
     assert!(limits.iter().any(|limit| limit.window == LimitWindow::SevenDays), "{limits:?}");
-    // What it says of its use beyond the plan's limits has no window here, and no time it starts again.
-    let made_up = |limit: &UsageLimit| limit.used_percent == 25 && limit.resets_at_ms == Some(4_102_444_800_000);
+    // The rows are every model's week, and each is a limit, named by the model's label.
+    assert!(agents::claude::lists_every_models_week(&answer), "the CLI passes the usage endpoint's rows on");
+    // A model's on one surface isn't its own week, and two rows with one label are one.
+    let rows = answer["rate_limits"]["limits"].as_array().unwrap();
+    let scoped = rows.iter().filter(|row| row["kind"] == "weekly_scoped" && row["scope"]["surface"].is_null());
+    let labels = scoped.filter_map(|row| row["scope"]["model"]["display_name"].as_str()).map(str::trim);
+    let mut labels: Vec<&str> = labels.filter(|label| !label.is_empty()).collect();
+    labels.sort_unstable();
+    labels.dedup();
+    let models = limits.iter().filter(|limit| limit.window == LimitWindow::ModelSevenDays);
+    let named: Vec<&str> = models.map(|limit| limit.model.as_ref().unwrap().as_str()).collect();
+    assert_eq!(named, labels, "{limits:?}");
+    // What it says of its use beyond the plan's limits has no window here. A row with no time it starts again is
+    // captured with none.
+    let made_up = |limit: &UsageLimit| {
+        limit.used_percent == 25 && limit.resets_at_ms.is_none_or(|at_ms| at_ms == 4_102_444_800_000)
+    };
     assert!(limits.iter().all(made_up), "{limits:?}");
 }
 

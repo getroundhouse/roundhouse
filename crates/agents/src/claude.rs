@@ -22,7 +22,7 @@ pub use effort::applied_effort;
 pub use normalize::{Normalized, Normalizer, Parsed};
 pub use process::{SCRUBBED_ENV, build_args, spawn, spawn_at};
 pub use title::title_for;
-pub use usage::usage_limits;
+pub use usage::{lists_every_models_week, usage_limits};
 
 /// The name the adapter gives the server of the worker's tools in the CLI's config, which the CLI puts in the name of
 /// each of them, such as
