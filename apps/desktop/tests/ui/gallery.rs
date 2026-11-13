@@ -25,16 +25,20 @@ mod file_chats;
 mod finding;
 mod frame;
 mod headless;
+mod home_screens;
 mod icon;
 mod image_chats;
 mod image_files;
 mod long_chats;
+mod look_screens;
 mod mark_states;
 mod patch;
 mod pictures;
 mod pull_requests;
 mod question_chats;
 mod screens;
+mod settings_screens;
+mod sidebar_screens;
 mod steps;
 mod subagent_chats;
 mod subagent_records;
@@ -148,6 +152,10 @@ fn screens() -> impl Iterator<Item = &'static steps::Screen> {
         .chain(workspace_screens::SCREENS)
         .chain(turn_screens::SCREENS)
         .chain(call_screens::SCREENS)
+        .chain(sidebar_screens::SCREENS)
+        .chain(home_screens::SCREENS)
+        .chain(settings_screens::SCREENS)
+        .chain(look_screens::SCREENS)
 }
 
 /// What's wrong with a picture: its spec doesn't show it, it keeps changing, or it isn't as approved. With

@@ -4,16 +4,30 @@ The app's own settings, and where they're shown.
 
 - **Settings… in the app menu, or `Cmd-,`, shows Settings in place of the sidebar and the workspace,** in the same window. `Back`, Escape or `Cmd-W` goes back to where you were, with what you were typing still focused, or to a workspace selected in its place meanwhile, such as when the one showing was archived from elsewhere, which then has the keys. While Settings shows, the workspace's keys do nothing, since what they'd act on is hidden, and a reply that comes in the chat it hides is read once you go back. *Unconfirmed:* the ways back, the workspace selected meanwhile, the keys doing nothing, and the reply waiting.
 - **A page for each part of the app is in a sidebar on the left, and the chosen page's settings fill the rest.** The sidebar is as wide as the one it stands in for, with a muted `Back` at its top right, level with the window's buttons. *Unconfirmed.*
+
+  **General, the first page.** *Unconfirmed.*
+
+  ![Settings](screens/settings.png)
+
 - **The pages are listed under small muted headings, each page with an icon before its name.** Personal holds the pages about how the app and its hub work for you, rather than about a project. A page's row is 32px tall, and the one showing is filled. *Unconfirmed.*
 - **A search at the sidebar's top finds a setting by what it's called or what it does, in any case, as it's typed.** Only the settings that match are left, with the pages they're on and those pages' headings, and the page says so when nothing matches. While it's empty the search says Search settings, in faint text, and it always shows `⌘F`, which puts the cursor in it with what's typed selected, so what's typed next replaces it, as a Mac's search fields do. Escape and `Cmd-W` go back from the search too, and Settings opens again with nothing in it, on its first page, since a search is for finding one setting now. It's 28px tall, on the pane's colour, with an edge lighter than a line, since it's something to type in. *Unconfirmed.*
+
+  **A search, leaving the settings that match, with their pages and headings.** *Unconfirmed.*
+
+  ![Settings narrowed by a search](screens/settings-search.png)
+
+  **A search that matches nothing.** *Unconfirmed.*
+
+  ![A settings search that matches nothing](screens/settings-nothing-found.png)
+
 - **A page starts with its name, at 24px, and each setting is a row under it:** what it's called and what it does on the left, its control on the right, and a line under it that sets it apart from the next. The name is below the strip along the top, which stays clear for moving the window.
 - **A setting takes effect at once, everywhere it shows, and lasts.** There's no Save button. *Unconfirmed.*
 - **A setting belongs to whatever carries it out.** How the app looks and behaves is the app's, and belongs to this Mac rather than to a hub, since the app can show several hubs and has to draw before it reaches any. What a hub does whether or not the app is open is that hub's, which keeps it, so it holds after the hub restarts and every app showing that hub shows the same.
 - **A hub's setting can only be changed while its hub is there to ask.** Its switch shows what the hub says, and changes when the hub has. While the hub is out of reach, or with a hub from before it kept settings, the switch shows off and can't be flipped.
 
-**General, the first page.** *Unconfirmed.*
+  **A hub from before hubs kept settings, whose switch shows off.** *Unconfirmed.*
 
-![Settings](screens/settings.png)
+  ![A hub's setting greyed out](screens/settings-older-hub.png)
 
 ## General
 

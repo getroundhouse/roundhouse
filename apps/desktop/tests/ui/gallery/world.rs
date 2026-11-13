@@ -59,6 +59,8 @@ pub(crate) struct World {
     pub(crate) hub: Option<HubBuild>,
     /// The records of the accounts the screen's chats run under.
     pub(crate) accounts: Vec<Account>,
+    /// The hub is from before hubs kept settings, so it sends none.
+    pub(crate) keeps_no_settings: bool,
     records: i64,
 }
 
@@ -113,7 +115,8 @@ impl World {
             sessions: self.sessions.clone(),
             comments: self.comments.values().flatten().cloned().collect(),
             // As a hub starts out.
-            hub_settings: Some(protocol::model::HubSettings { keep_awake: true, rev: Rev::default() }),
+            hub_settings: (!self.keeps_no_settings)
+                .then(|| protocol::model::HubSettings { keep_awake: true, rev: Rev::default() }),
             accounts: self.accounts.clone(),
             // As from a hub that doesn't keep one, since its hub refuses to.
             new_workspace_draft: None,
