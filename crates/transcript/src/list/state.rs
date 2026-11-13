@@ -108,9 +108,9 @@ impl State {
         self.furthest() > px(0.) && !self.is_following()
     }
 
-    /// Whether it's keeping to the latest row, at the window's bottom or held still above it.
+    /// Whether it's keeping to the latest row.
     fn is_following(&self) -> bool {
-        matches!(self.keeping, Keeping::Latest | Keeping::Still { follows: true })
+        matches!(self.keeping, Keeping::Latest)
     }
 
     /// Goes to the latest row, and keeps to it as more arrives.
@@ -136,11 +136,10 @@ impl State {
     pub(super) fn scroll_by(&mut self, turned: Pixels) {
         match self.keeping {
             // There's nothing further down.
-            Keeping::Latest | Keeping::Still { follows: true } if turned <= px(0.) => return,
+            Keeping::Latest if turned <= px(0.) => return,
             // From where keeping to the latest row had it.
             Keeping::Latest => self.go_to(self.furthest()),
-            // From where it is, and the next frame puts the session's end back at the window's bottom.
-            Keeping::Place | Keeping::ToLatest(_) | Keeping::AtBottom(_) | Keeping::Still { .. } => {}
+            Keeping::Place | Keeping::ToLatest(_) | Keeping::AtBottom(_) => {}
         }
         self.keeping = Keeping::Place;
         self.moved -= turned;
@@ -181,7 +180,7 @@ impl State {
     pub(super) fn kept_at_bottom(&self) -> Option<usize> {
         match self.keeping {
             Keeping::AtBottom(row) => Some(row),
-            Keeping::Latest | Keeping::Place | Keeping::ToLatest(_) | Keeping::Still { .. } => None,
+            Keeping::Latest | Keeping::Place | Keeping::ToLatest(_) => None,
         }
     }
 
@@ -194,12 +193,10 @@ impl State {
     /// Where to lay the rows out from. A top that's moved more than `walked` is found from what the rows are guessed
     /// to come to instead, since finding it row by row would measure every row between.
     pub(super) fn lay_from(&self, walked: Pixels) -> Start {
-        match (&self.keeping, self.anchor) {
-            (Keeping::Still { follows }, Some(at)) => return Start::Still { at, follows: *follows },
-            // Or the row it held still has gone, so it keeps to what it would have come to.
-            (Keeping::Latest, _) | (Keeping::Still { follows: true }, None) => return Start::Latest,
-            (Keeping::AtBottom(row), _) => return Start::AtBottom { row: *row },
-            (Keeping::Still { follows: false } | Keeping::Place | Keeping::ToLatest(_), _) => {}
+        match self.keeping {
+            Keeping::Latest => return Start::Latest,
+            Keeping::AtBottom(row) => return Start::AtBottom { row },
+            Keeping::Place | Keeping::ToLatest(_) => {}
         }
         if self.moved.abs() <= walked {
             return match self.anchor {
@@ -212,18 +209,12 @@ impl State {
     }
 
     /// The rows were laid out with `top` at the top of the window, `anchor` to keep where it is in the next frame,
-    /// and with the session's `end` where it says. Someone who has scrolled back down to the latest row's end is
-    /// keeping to it again, and so is a list on its way down to it. A row held still stays so only while that
-    /// leaves the end in sight above the window's bottom, from where the list is still keeping to the latest row.
-    /// With the end out of sight, the list is at a place like any other.
-    pub(super) fn laid_out(&mut self, top: Place, anchor: Option<Anchor>, end: End) {
+    /// and with the latest row's end in sight or not. Whatever it was keeping to, a list laid out with that end in
+    /// sight keeps to it again, as someone does who has scrolled back down to it.
+    pub(super) fn laid_out(&mut self, top: Place, anchor: Option<Anchor>, end_in_sight: bool) {
         (self.top, self.moved, self.anchor) = (top, px(0.), anchor);
-        let still = matches!(self.keeping, Keeping::Still { .. });
-        match end {
-            End::Short if still => self.keeping = Keeping::Still { follows: true },
-            End::Short | End::InSight => self.go_to_latest(),
-            End::OutOfSight if still => self.keeping = Keeping::Place,
-            End::OutOfSight => {}
+        if end_in_sight {
+            self.go_to_latest();
         }
     }
 
@@ -333,28 +324,13 @@ enum Keeping {
     /// The latest row, which it does until someone scrolls away from it, and again once they're back.
     #[default]
     Latest,
-    /// The place at the top, wherever someone scrolled the list or sent it.
+    /// The place at the top, wherever someone scrolled the list or sent it, or the row someone opened or closed
+    /// something in, where it is in the window, as [`State::keep_still`] says.
     Place,
     /// The latest row, which it's on its way down to by itself, as the button back to it sends it.
     ToLatest(Scrolling),
     /// The end of a row at the window's bottom, as the outline sends it to a prompt, until something else moves it.
     AtBottom(usize),
-    /// The row someone opened or closed something in, exactly where it is in the window, as [`Start::Still`] says.
-    /// It `follows` once a frame has laid it out with the session's end in sight above the window's bottom, as
-    /// closing something in the last rows leaves it: the list is still keeping to the latest row, which comes down
-    /// to the bottom as more arrives.
-    Still { follows: bool },
-}
-
-/// Where a frame left the session's end.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum End {
-    /// Below the window's bottom, or not laid out at all.
-    OutOfSight,
-    /// In the window, at its bottom, or above it in a session that doesn't fill the window.
-    InSight,
-    /// In the window, above its bottom, with rows above the window's top that a row held still kept there.
-    Short,
 }
 
 /// The runs in order with each that starts where the one before it ends made one with it, such as the streaming
@@ -370,8 +346,8 @@ fn joined(runs: Vec<Range<usize>>) -> Vec<Range<usize>> {
     joined
 }
 
-/// Whether two lists of joined runs of loaded rows hold the same pages of history, so they differ only in where the last run ends,
-/// which is where rows come and go as an agent works.
+/// Whether two lists of joined runs of loaded rows hold the same pages of history, so they differ only in where the
+/// last run ends, which is where rows come and go as an agent works.
 fn same_pages(was: &[Range<usize>], now: &[Range<usize>]) -> bool {
     let starts = |runs: &[Range<usize>]| runs.iter().map(|run| run.start).collect::<Vec<_>>();
     let ends_before_the_last = |runs: &[Range<usize>]| runs.iter().rev().skip(1).map(|run| run.end).collect::<Vec<_>>();

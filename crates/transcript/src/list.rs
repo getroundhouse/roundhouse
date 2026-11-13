@@ -97,10 +97,10 @@ impl TranscriptList {
         self.state.borrow_mut().all_out_of_date();
     }
 
-    /// Someone opened or closed something in `row`, so the list keeps that row where it is, and what they clicked
-    /// stays under the pointer.
-    pub(crate) fn keep_still(&self, row: usize) {
-        self.state.borrow_mut().keep_still(row);
+    /// Someone opened something in `row`, or closed something if not `open`, so the list keeps that row where it is,
+    /// and what they clicked stays under the pointer, as far as the session's end lets it.
+    pub(crate) fn keep_still(&self, row: usize, open: bool) {
+        self.state.borrow_mut().keep_still(row, open);
     }
 
     pub fn go_to_row(&self, row: usize) {

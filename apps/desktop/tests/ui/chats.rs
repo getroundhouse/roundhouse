@@ -272,8 +272,9 @@ fn pointing_at_a_background_tasks_line_says_whether_its_running_or_watching(cx: 
 
 /// With more in the background than have a line each, the tasks of a kind share one line, which opens to their own
 /// lines and closes again. It's at the end of a chat longer than the window, which keeps to its end, and it stays
-/// where it is as it opens, so a second click with the pointer where it was closes it. Once its tasks have gone, the
-/// line that comes for the next lot starts closed, since it's another line.
+/// where it is as it opens, so a second click with the pointer where it was closes it. Closed with the chat keeping
+/// to its end again, which has taken the line up, it comes back down with the chat's end to the window's bottom.
+/// Once its tasks have gone, the line that comes for the next lot starts closed, since it's another line.
 #[gpui_kit::test]
 fn several_background_tasks_of_a_kind_share_a_line_that_opens_to_theirs(cx: &mut TestAppContext) {
     const SEVERAL: &str = "several/tasks/commands";
@@ -309,16 +310,19 @@ fn several_background_tasks_of_a_kind_share_a_line_that_opens_to_theirs(cx: &mut
     ui.click_at(pointer);
     ui.wait("their lines to go, at a click where the pointer was", |ui| shown(ui, &lines) == 0);
 
-    // Open, with the chat keeping to its end again, the line is higher up, and closing it leaves the chat ending
-    // above the window's bottom, rather than bringing the line down from under the pointer.
+    // Open, with the chat keeping to its end again, the line is higher up, and closing it brings the chat's end back
+    // down to the window's bottom, rather than leaving room under it that shows nothing.
+    let closed_at_the_end = ui.bounds(SEVERAL);
     ui.click_at(pointer);
     ui.keep_to_the_end();
     ui.wait("each task's own line again", |ui| shown(ui, &lines) == 5);
-    let pointer = ui.bounds(SEVERAL).center();
-    ui.click_at(pointer);
+    let higher_up = ui.bounds(SEVERAL);
+    assert!(higher_up.top() < closed_at_the_end.top(), "the chat's end took the line up");
+    ui.click_at(higher_up.center());
     ui.wait("their lines to go again", |ui| shown(ui, &lines) == 0);
+    assert_eq!(ui.bounds(SEVERAL), closed_at_the_end, "the line came back down with the chat's end");
     ui.click_at(pointer);
-    ui.wait("each task's own line, at a click where the pointer was", |ui| shown(ui, &lines) == 5);
+    ui.wait("each task's own line, at a click where the line is", |ui| shown(ui, &lines) == 5);
     for file in files {
         std::fs::write(file, "").unwrap();
     }
