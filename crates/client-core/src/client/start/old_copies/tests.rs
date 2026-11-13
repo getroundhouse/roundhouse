@@ -2,7 +2,9 @@ use std::fs::File;
 
 use process::RunningFrom;
 
-use super::super::tests::{build, files_in, paths_in};
+use protocol::paths::daemon_file;
+
+use super::super::tests::{build, copy_name, files_in, paths_in};
 use super::*;
 
 /// Longer ago than a copy is kept.
@@ -11,10 +13,14 @@ const LONG_AGO: Duration = Duration::from_hours(48);
 /// Puts a copy in place for each build numbered, as if each had started a hub here, `ago`.
 fn copies(paths: &Paths, numbers: &[u64], ago: Duration) {
     for &number in numbers {
-        let copy = paths.hub_copy(&build(number));
-        std::fs::create_dir_all(copy.parent().unwrap()).unwrap();
-        File::create(&copy).unwrap().set_modified(SystemTime::now() - ago).unwrap();
+        copy_at(&paths.hub_copy(&build(number)), ago);
     }
+}
+
+/// Puts a copy in place at `copy`, made `ago`.
+fn copy_at(copy: &Path, ago: Duration) {
+    std::fs::create_dir_all(copy.parent().unwrap()).unwrap();
+    File::create(copy).unwrap().set_modified(SystemTime::now() - ago).unwrap();
 }
 
 /// What's left in the directory of copies.
@@ -48,6 +54,25 @@ fn a_copy_a_process_runs_from_stays() {
     assert_eq!(left(&paths), ["abc123-1", "abc123-3"]);
 }
 
+/// Builds from before copies were called Roundhouse Hub named theirs for the daemon, and a worker of one of them can
+/// still be running from it.
+#[test]
+fn a_copy_named_for_the_daemon_goes_unless_a_process_runs_from_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let paths = paths_in(dir.path());
+    copies(&paths, &[3], LONG_AGO);
+    let named_for_the_daemon = |number| paths.hub_copy(&build(number)).with_file_name(daemon_file());
+    for number in [1, 2] {
+        copy_at(&named_for_the_daemon(number), LONG_AGO);
+    }
+    let _running = RunningFrom::mark(&named_for_the_daemon(1)).unwrap();
+
+    remove_unused(&paths, &build(3));
+
+    assert_eq!(left(&paths), ["abc123-1", "abc123-3"]);
+    assert_eq!(files_in(named_for_the_daemon(1).parent().unwrap()), [daemon_file()]);
+}
+
 #[test]
 fn a_temporary_copy_goes_once_abandoned_and_one_being_made_stays() {
     let dir = tempfile::tempdir().unwrap();
@@ -61,7 +86,7 @@ fn a_temporary_copy_goes_once_abandoned_and_one_being_made_stays() {
 
     remove_unused(&paths, &build(1));
 
-    assert_eq!(files_in(&build_dir), [being_made, daemon_file()]);
+    assert_eq!(files_in(&build_dir), [being_made, copy_name(&paths)]);
 }
 
 /// A client killed while making the first copy of its build can leave a directory with nothing else in it.
