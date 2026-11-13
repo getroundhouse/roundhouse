@@ -21,6 +21,7 @@ use tracing::warn;
 use super::command;
 use crate::Timers;
 use crate::serve::Outbox;
+use crate::terminals::process_records::ProcessRecords;
 use crate::terminals::running::{Ending, Running, ToShell};
 
 /// The most a read takes from the PTY at once.
@@ -68,9 +69,11 @@ impl Serving {
 pub(super) static OPENING_A_PTY: Mutex<()> = Mutex::new(());
 
 /// Starts the shell in `start.cwd`, given what every process the worker starts is, and the threads that read and write
-/// it, and waits on it, with the worker's `timers`. It blocks.
+/// it, and waits on it, with the worker's `timers`, and keeps the process records of what it runs in `records_dir`. It
+/// blocks.
 pub(in crate::terminals) fn start(
     start: TerminalStart,
+    records_dir: &Path,
     timers: Timers,
     given: &Environment,
     ending: Ending,
@@ -94,12 +97,16 @@ pub(in crate::terminals) fn start(
     // Before the shell, so a failure leaves nothing running. Each ends once the PTY or its channel has gone.
     spawn("terminal-reader", move || read_output(reader, &output)).map_err(|e| failed("couldn't read", &e))?;
     spawn("terminal-writer", move || write_typed(writer, &to_type)).map_err(|e| failed("couldn't write", &e))?;
+    let process_records = ProcessRecords::new(records_dir, &terminal);
 
     let child = pty.slave.spawn_command(command::shell(&cwd, env, given));
     let child = child.map_err(|e| failed("couldn't start a shell", &e))?;
     // Otherwise the PTY stays open once every program in it has closed it, and the reader never hears the end.
     drop(pty.slave);
     let pid = child.process_id();
+    if let Some(pid) = pid {
+        process_records.shell(pid);
+    }
     let (exited, exit) = oneshot::channel();
     if let Err(e) = spawn("terminal-waiter", move || wait(child, exited)) {
         if let Some(pid) = pid {
@@ -108,8 +115,10 @@ pub(in crate::terminals) fn start(
         return Err(failed("couldn't wait for the shell", &e));
     }
     let next = UpdateIndex::new(0);
-    let stop_grace = timers.terminal_stop_grace;
-    let shell = Shell { terminal, size, master: pty.master, pid, front: None, stop_grace, outbox, next, exit: None };
+    let (master, stop_grace, look_every) = (pty.master, timers.terminal_stop_grace, timers.look_in_front_every);
+    let front = None;
+    let shell =
+        Shell { terminal, size, master, pid, front, process_records, look_every, stop_grace, outbox, next, exit: None };
     let (to_shell, told) = mpsc::unbounded_channel();
     let running = Running {
         number: ending.number,
@@ -174,9 +183,12 @@ struct Shell {
     master: Box<dyn MasterPty + Send>,
     /// The shell's, which leads a process group of its own.
     pid: Option<u32>,
-    /// The group of the job the shell last ran in front, as it was signalled, which an interactive shell starts in a
-    /// group of its own, and which can outlast the shell.
+    /// The group of the job the shell last ran in front, as it was last looked at, which an interactive shell starts
+    /// in a group of its own, and which can outlast the shell. Never the shell's own.
     front: Option<u32>,
+    process_records: ProcessRecords,
+    /// How often to look at which job the shell runs in front, to record it.
+    look_every: Duration,
     /// How long the shell asked to end, and the job it runs, have to end by themselves before they're killed.
     stop_grace: Duration,
     outbox: Arc<Outbox>,
@@ -207,6 +219,7 @@ impl Shell {
                 self.signal(process::Signal::Kill);
             }
         }
+        self.process_records.finished();
         ending.forget();
         let exited = self.exit.unwrap_or(TerminalExit { code: None });
         self.send(TerminalUpdate::Exited(exited)).await;
@@ -220,6 +233,8 @@ impl Shell {
         exit: &mut oneshot::Receiver<TerminalExit>,
     ) {
         let (mut kill_at, mut done_at, mut read_all, mut untold) = (None, None, false, false);
+        let mut look = tokio::time::interval(self.look_every);
+        look.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
         while !(read_all && self.exit.is_some()) {
             // In this order, so neither a stop nor the end waits out a program that writes without a pause.
             tokio::select! {
@@ -245,6 +260,8 @@ impl Shell {
                     self.signal(process::Signal::Kill);
                     kill_at = None;
                 }
+                // Not on Windows, which has no groups to look at.
+                _ = look.tick(), if cfg!(unix) && self.exit.is_none() => self.look_in_front(),
                 output = read.recv(), if !read_all => match output {
                     Some(output) => self.wrote(mirror, output).await,
                     None => read_all = true,
@@ -265,7 +282,7 @@ impl Shell {
         reason = "the pace a job that outlasted its shell is looked at again until it ends or its grace is up"
     )]
     async fn outlasted_by_front(&self, kill_at: Instant) {
-        let Some(front) = self.front.filter(|front| Some(*front) != self.pid) else { return };
+        let Some(front) = self.front else { return };
         while process::group_running(front) {
             if Instant::now() >= kill_at {
                 process::signal_group(front, process::Signal::Kill);
@@ -328,16 +345,31 @@ impl Shell {
     /// those end too, but for one started to outlive the terminal, such as with `nohup`.
     fn signal(&mut self, signal: process::Signal) {
         // Before the shell is signalled, since the PTY says which it is only while the shell runs.
-        #[cfg(unix)]
-        if let Some(front) = self.master.process_group_leader().and_then(|group| u32::try_from(group).ok()) {
-            self.front = Some(front);
-        }
+        self.look_in_front();
         if let Some(pid) = self.pid.filter(|_| self.exit.is_none()) {
             process::signal_group(pid, signal);
         }
-        if let Some(front) = self.front.filter(|front| Some(*front) != self.pid) {
+        if let Some(front) = self.front {
             process::signal_group(front, signal);
         }
+    }
+
+    /// Notes which job the shell runs in front, but for the shell itself, and records it, since it can outlast the shell.
+    fn look_in_front(&mut self) {
+        let Some(front) = in_front(&*self.master) else { return };
+        self.front = Some(front).filter(|front| Some(*front) != self.pid);
+        self.process_records.front(self.front);
+    }
+}
+
+/// The group in front, which a PTY says only while its shell runs, and only on Unix, as Windows has no groups.
+fn in_front(master: &dyn MasterPty) -> Option<u32> {
+    #[cfg(unix)]
+    return master.process_group_leader().and_then(|group| u32::try_from(group).ok());
+    #[cfg(windows)]
+    {
+        let _ = master;
+        None
     }
 }
 

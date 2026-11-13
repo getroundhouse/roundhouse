@@ -6,6 +6,7 @@ use std::sync::Arc;
 use protocol::client::terminals::TerminalOpen;
 use protocol::client::{ApiError, ErrorCode, HubNotice};
 use protocol::model::{Terminal, TerminalId, WorkspaceId};
+use protocol::paths;
 use protocol::terminal::TerminalSize;
 use protocol::worker;
 use tokio::sync::watch;
@@ -20,6 +21,9 @@ impl Hub {
     /// record. One open already is answered with its record, and one being opened with how that ends.
     pub(crate) async fn terminal_open(self: &Arc<Self>, open: TerminalOpen) -> Result<Terminal, ApiError> {
         let TerminalOpen { workspace_id, id, size } = open;
+        // Its ID names the files the worker keeps its process records in, so one the worker would refuse is refused
+        // before anything is noted or started.
+        paths::file_name_id("a terminal's", id.as_str())?;
         // Before it asks for the worker, so nothing replaces or stops that worker as it opens, and before the shell
         // starts, so what the worker sends of it, such as the shell's end, has somewhere to go.
         let noted = match self.terminals.open.lock().entry(id.clone()) {

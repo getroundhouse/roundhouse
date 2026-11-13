@@ -1,12 +1,13 @@
 //! The hub's end of a worker's stream, for the terminal tests.
 
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use protocol::client::ErrorCode;
 use protocol::frame;
 use protocol::model::TerminalId;
+use protocol::paths::AGENTS_DIR;
 use protocol::terminal::{TerminalSize, TerminalUpdate, UpdateIndex};
 use protocol::worker::{
     RunningTerminalsReply, TerminalInput, TerminalShow, TerminalShown, TerminalStart, WorkerCall, WorkerFrame,
@@ -45,7 +46,8 @@ pub(super) struct Hub {
 }
 
 impl Hub {
-    /// A worker for workspaces in `dir`, with the timers a test's worker runs with.
+    /// A worker for workspaces in `dir`, with the timers a test's worker runs with, which keeps its process records in
+    /// [`process_records_dir`].
     pub(super) async fn start(dir: &Path) -> Self {
         Self::start_with(dir, worker::Timers::FOR_TESTS).await
     }
@@ -208,6 +210,11 @@ impl Hub {
             _ => {}
         }
     }
+}
+
+/// Where the worker [`Hub::start`] starts for workspaces in `dir` records what its terminals run.
+pub(super) fn process_records_dir(dir: &Path) -> PathBuf {
+    config(dir, None).state_dir.join(AGENTS_DIR)
 }
 
 pub(super) fn refused(outcome: &WorkerOutcome, code: ErrorCode) -> bool {

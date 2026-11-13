@@ -1,13 +1,11 @@
 use crate::error::internal;
-use protocol::client::{ApiError, ErrorCode};
+use protocol::client::ApiError;
 use protocol::model::{AttachmentId, SessionId};
+use protocol::paths;
 use std::collections::HashSet;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
-
-/// Longer than any ID a client or worker makes, which is a UUID.
-const MAX_ID_CHARS: usize = 64;
 
 /// Where the new-workspace dialog's files wait, which has a `.`, so no session's directory can be it. It keeps the name
 /// it was first made with, since a hub may have files there already.
@@ -37,11 +35,11 @@ impl AttachmentFiles {
             FileFor::Session(session_id) => self.session_dir(session_id)?,
             FileFor::NewWorkspace => self.dir.join(NEW_WORKSPACE_DRAFT_DIR),
         };
-        Ok(dir.join(safe(id.as_str())?))
+        Ok(dir.join(paths::file_name_id("an attachment's", id.as_str())?))
     }
 
     pub(super) fn session_dir(&self, session_id: &SessionId) -> Result<PathBuf, ApiError> {
-        Ok(self.dir.join(safe(session_id.as_str())?))
+        Ok(self.dir.join(paths::file_name_id("a session's", session_id.as_str())?))
     }
 
     /// Refuses an ID that couldn't be kept, before anything is written.
@@ -110,17 +108,6 @@ impl AttachmentFiles {
             _ => Ok(()),
         }
     }
-}
-
-/// Only lowercase letters, digits, `-` and `_`, which a UUID is, so no ID can climb out of the directory, and no two
-/// name one file on a disk that ignores case, as a Mac's does.
-fn safe(id: &str) -> Result<&str, ApiError> {
-    let allowed = |c: char| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_';
-    if id.is_empty() || id.len() > MAX_ID_CHARS || !id.chars().all(allowed) {
-        let message = "an attachment's ID can only be lowercase letters, digits, - and _";
-        return Err(ApiError::new(ErrorCode::InvalidRequest, message));
-    }
-    Ok(id)
 }
 
 /// Off the async threads, since a file can be large.

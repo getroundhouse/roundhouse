@@ -1,8 +1,9 @@
 //! Each terminal a worker runs, from starting its shell to its end.
 
+use std::path::Path;
 use std::time::Duration;
 
-use super::hub::{Hub, OPENED_AT_MS, SIZE, WAIT, contains, input, refused};
+use super::hub::{Hub, OPENED_AT_MS, SIZE, WAIT, contains, input, process_records_dir, refused};
 use protocol::client::ErrorCode;
 use protocol::model::GithubToken;
 use protocol::terminal::{TerminalExit, TerminalSize, TerminalUpdate};
@@ -142,6 +143,22 @@ async fn a_size_with_no_cells_or_too_many_is_refused() {
     hub.finish().await;
 }
 
+/// Its ID names the files its processes are recorded in, so one that would name a file elsewhere, or that a disk that
+/// ignores case would take for another's, starts nothing.
+#[tokio::test]
+async fn a_terminal_whose_id_cant_name_a_file_is_refused() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut hub = Hub::start(dir.path()).await;
+
+    let started = [hub.start_terminal("../t", dir.path(), SIZE).await, hub.start_terminal("T", dir.path(), SIZE).await];
+
+    for started in &started {
+        assert!(refused(started, ErrorCode::InvalidRequest), "{started:?}");
+    }
+    assert_eq!(hub.listed().await, []);
+    hub.finish().await;
+}
+
 /// One that can't start, here since its folder has gone, says so, leaves nothing running, and the worker goes on to
 /// start the next.
 #[tokio::test]
@@ -220,6 +237,61 @@ async fn stopping_a_terminal_ends_its_shell_and_the_job_it_runs() {
     hub.finish().await;
 }
 
+/// So the provider can stop them if the worker is killed: the shell as it starts, and the job it runs in front once the
+/// worker has looked, as often as its timers say, until that job ends. Nothing is left recorded once the terminal has.
+#[tokio::test]
+async fn a_terminal_records_its_shell_and_the_job_in_front_while_they_run() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut hub = Hub::start(dir.path()).await;
+    hub.open("t", dir.path()).await;
+    hub.type_in("t", r#"echo "shell $$""#).await;
+    let shell = hub.until_pid("shell ").await;
+    until_recorded(dir.path(), "terminal-t.pid", Some(shell)).await;
+
+    hub.type_in("t", r#"sh -c 'echo "job $$"; exec sleep 60'"#).await;
+    let job = hub.until_pid("job ").await;
+    until_recorded(dir.path(), "terminal-t.front.pid", Some(job)).await;
+    // Control-C, which ends the job, so the shell is in front again.
+    hub.call(input("t", "\x03")).await;
+    until_recorded(dir.path(), "terminal-t.front.pid", None).await;
+    hub.finish().await;
+
+    let left: Vec<_> =
+        std::fs::read_dir(process_records_dir(dir.path())).unwrap().flatten().map(|entry| entry.file_name()).collect();
+    assert!(left.is_empty(), "{left:?}");
+}
+
+/// A stop gives the job in front a grace to end, and a worker killed in it leaves the job recorded, so the provider
+/// still stops it: it's recorded until it has ended, or been killed. The grace is shorter here than a worker's, and long
+/// enough to read the record in.
+#[tokio::test]
+async fn a_terminal_being_stopped_keeps_its_job_recorded_until_the_job_has_ended() {
+    let dir = tempfile::tempdir().unwrap();
+    let timers = worker::Timers { terminal_stop_grace: Duration::from_millis(500), ..worker::Timers::FOR_TESTS };
+    let mut hub = Hub::start_with(dir.path(), timers).await;
+    hub.open("t", dir.path()).await;
+    let hupped = dir.path().join("hupped");
+    // It notes the hangup and runs on, until it's killed.
+    let job = format!(r#"sh -c 'trap ": > {}" HUP; echo "job $$"; while :; do sleep 60; done'"#, hupped.display());
+    hub.type_in("t", &job).await;
+    let job = hub.until_pid("job ").await;
+    until_recorded(dir.path(), "terminal-t.front.pid", Some(job)).await;
+    let front = process_records_dir(dir.path()).join("terminal-t.front.pid");
+    let while_stopping = async {
+        waiting::task::until(WAIT, "the job was never hung up on", || hupped.exists()).await;
+        process::ProcessRecord::read(&front).map(|record| record.pid)
+    };
+
+    let stop = hub.call(WorkerRequest::TerminalStop(TerminalStop { terminal: "t".into() }));
+    let (stopped, recorded) = tokio::join!(stop, while_stopping);
+
+    assert_eq!(stopped, WorkerOutcome::Response(WorkerResponse::Ok));
+    assert_eq!(recorded, Some(job), "it was recorded as it was hung up on");
+    assert_eq!(process::ProcessRecord::read(&front), None);
+    gone(job).await;
+    hub.finish().await;
+}
+
 /// It's killed once it has had as long as it gets to end, so a stop always ends.
 #[tokio::test]
 async fn stopping_a_terminal_ends_a_shell_that_doesnt_end_when_its_hung_up_on() {
@@ -261,6 +333,17 @@ async fn typing_into_a_terminal_that_isnt_running_says_so() {
 
     assert!(refused(&typed, ErrorCode::NotFound), "{typed:?}");
     hub.finish().await;
+}
+
+/// Until the worker has recorded `pid` as `name`, or nothing, as it does once it has looked at what's in front.
+async fn until_recorded(dir: &Path, name: &str, pid: Option<u32>) {
+    let path = process_records_dir(dir).join(name);
+    let recorded = || process::ProcessRecord::read(&path).map(|record| record.pid);
+    waiting::task::until_ok(WAIT, || match recorded() {
+        found if found == pid => Ok(()),
+        found => Err(format!("{name} records {found:?}, not {pid:?}")),
+    })
+    .await;
 }
 
 /// Once there's no process with `pid`.

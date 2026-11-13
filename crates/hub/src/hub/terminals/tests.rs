@@ -101,6 +101,19 @@ async fn a_terminal_that_cant_open_leaves_nothing() {
     assert_eq!(listed(&hub).await.terminals, Vec::new());
 }
 
+/// Its ID names files its worker keeps, so one that can't name a file is refused before the worker is asked anything.
+#[tokio::test]
+async fn a_terminal_whose_id_cant_name_a_file_is_refused_before_its_worker_is_asked() {
+    let dir = tempfile::tempdir().unwrap();
+    let (hub, _link, asked) = with_worker(dir.path());
+
+    let refused = hub.terminal_open(open("../t")).await;
+
+    assert_eq!(refused.map_err(|e| e.code), Err(ErrorCode::InvalidRequest));
+    assert!(asked.lock().is_empty(), "{:?}", asked.lock());
+    assert_eq!(hub.terminals.count(), 0);
+}
+
 /// One sent again before the first has opened it waits for that, rather than starting it too, so the two can't
 /// undo each other, as one failing took away what the other noted.
 #[tokio::test]
