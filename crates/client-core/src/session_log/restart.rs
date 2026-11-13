@@ -30,8 +30,9 @@ impl SessionLog {
     }
 
     /// Starts again as `fresh`, keeping the prompts on their way, those recorded that it knows of and where each was
-    /// settled, where a view is looking, and what it has yet to hear of, and telling it every row changed, the
-    /// prompts' among them. Events added go on counting, since a view may have kept the count.
+    /// settled, where a view is looking, what it has yet to hear of, and which requests wait, which are fetched again,
+    /// and telling it every row changed, the prompts' among them. Events added go on counting, since a view may have
+    /// kept the count.
     fn restart(&mut self, fresh: Self) {
         let rows = self.row_count();
         let old = std::mem::replace(self, fresh);
@@ -40,6 +41,7 @@ impl SessionLog {
         self.changes = old.changes;
         self.outline = old.outline;
         self.settled = old.settled;
+        self.apart = old.apart.again();
         self.outline.moved(self.by);
         self.events_added = old.events_added + 1;
         self.touched(0..rows.max(self.row_count()) + 1);

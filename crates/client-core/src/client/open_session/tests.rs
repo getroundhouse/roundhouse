@@ -14,6 +14,7 @@ use protocol::model::{Place, Seq, Session};
 mod compactions;
 mod prompts;
 mod views;
+mod waiting;
 
 /// Far enough along that the subscription starts after the first page, so a prompt there comes only from the list.
 pub(super) const LAST_SEQ: Seq = 600;

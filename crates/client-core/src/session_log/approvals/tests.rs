@@ -58,3 +58,68 @@ fn what_is_loaded_after_the_record_was_read_says_what_has_changed_since() {
     assert_eq!(seqs(&log.open_approvals(Some(&read_then))), [3]);
     assert_eq!(seqs(&log.open_approvals(Some(&recorded(&[(3, "b")], 3)))), [3]);
 }
+
+/// A request asked long before, such as by a subagent in the background, can be in a page that isn't loaded.
+#[test]
+fn a_waiting_request_no_page_holds_is_fetched_on_its_own_once_and_let_go_once_answered() {
+    let mut log = SessionLog::new(0);
+    log.apply_event(later(600));
+    let waiting = recorded(&[(9, "z")], 600);
+    log.waiting_on(Some(&waiting));
+    log.take_changes();
+
+    assert_eq!(log.requests_to_fetch(), [9]);
+    assert_eq!(log.requests_to_fetch(), [] as [Seq; 0], "it's on its way");
+    log.install_request(9, Some(asked(9, "z")));
+    assert_eq!(seqs(&log.open_approvals(Some(&waiting))), [9]);
+    let changes = log.take_changes();
+    assert!(changes.requests_fetched && changes.rows.is_none(), "a view asks again, and no row changed");
+    assert_eq!(log.requests_to_fetch(), [] as [Seq; 0], "it's here");
+
+    log.waiting_on(Some(&recorded(&[], 601)));
+    log.waiting_on(Some(&waiting));
+    assert_eq!(log.requests_to_fetch(), [9], "let go of, so fetched again");
+}
+
+#[test]
+fn a_waiting_request_that_couldnt_be_fetched_waits_for_the_next_connection() {
+    let mut log = SessionLog::new(0);
+    log.apply_event(later(600));
+    log.waiting_on(Some(&recorded(&[(9, "z"), (10, "y")], 600)));
+
+    assert_eq!(log.requests_to_fetch(), [9, 10]);
+    log.fetch_failed();
+    assert_eq!(log.requests_to_fetch(), [] as [Seq; 0]);
+    log.retry_failed();
+    assert_eq!(log.requests_to_fetch(), [9, 10]);
+    log.install_request(9, None);
+    log.install_request(10, Some(asked(9, "z")));
+    assert!(log.open_approvals(Some(&recorded(&[(9, "z"), (10, "y")], 600))).is_empty(), "nor is one not asked for");
+    assert_eq!(log.requests_to_fetch(), [] as [Seq; 0], "until the next connection");
+    log.retry_failed();
+    assert_eq!(log.requests_to_fetch(), [9, 10]);
+
+    // One fetched after it no longer waits is let go of, and fetched again if it waits again.
+    log.waiting_on(Some(&recorded(&[], 601)));
+    log.install_request(9, Some(asked(9, "z")));
+    log.waiting_on(Some(&recorded(&[(9, "z")], 601)));
+    assert_eq!(log.requests_to_fetch(), [9]);
+}
+
+/// Its page can be let go of as a view looks elsewhere, and what waits is still asked.
+#[test]
+fn a_waiting_request_whose_page_is_let_go_of_is_kept() {
+    let last = 15_000;
+    let mut log = SessionLog::new(last);
+    let waiting = recorded(&[(1, "a")], last);
+    log.waiting_on(Some(&waiting));
+    for start in (1..last).step_by(250) {
+        let events = (start..start + 250).map(|seq| if seq == 1 { asked(1, "a") } else { later(seq) }).collect();
+        log.focus_on(usize::try_from(start).unwrap() - 1);
+        log.install_page(start, events);
+    }
+
+    assert_eq!(log.row(0), crate::session_log::Row::Unloaded, "its page went");
+    assert_eq!(seqs(&log.open_approvals(Some(&waiting))), [1]);
+    assert_eq!(log.requests_to_fetch(), [] as [Seq; 0], "and it isn't fetched again");
+}

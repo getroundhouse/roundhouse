@@ -41,6 +41,9 @@ pub struct Changes {
     pub rows: Option<Range<usize>>,
     /// How many turns ended. Anything taken from the worktree may be out of date after one.
     pub turns_ended: usize,
+    /// A request waiting on an answer was fetched on its own, so what waits is to be asked again, though no row
+    /// changed.
+    pub requests_fetched: bool,
 }
 
 /// What a log's rows follow, and so what an event's position is.
@@ -80,6 +83,8 @@ pub struct SessionLog {
     events_added: u64,
     outline: outline::Outline,
     settled: Settled,
+    /// The requests still waiting on an answer that no page loaded here holds.
+    apart: approvals::Apart,
 }
 
 fn page_of(position: u64) -> u64 {
@@ -87,7 +92,7 @@ fn page_of(position: u64) -> u64 {
 }
 
 /// Where a subscription starts for a log that reaches `last`: the start of the page before the newest,
-/// so every page it delivers arrives whole, and an open approval, which is always near the end, comes too.
+/// so every page it delivers arrives whole, and an open approval, which is usually near the end, comes too.
 pub(crate) fn first_live(last: u64) -> u64 {
     page_range(page_of(last).saturating_sub(1)).start
 }
@@ -229,16 +234,18 @@ impl SessionLog {
         }
     }
 
-    /// A fetch failed, so the pages still on their way won't come. They aren't asked for again until
+    /// A fetch failed, so the pages and requests still on their way won't come. They aren't asked for again until
     /// [`SessionLog::retry_failed`], so a view looking at them doesn't keep asking.
     pub(crate) fn fetch_failed(&mut self) {
         self.failed.append(&mut self.in_flight);
+        self.apart.fetch_failed();
     }
 
-    /// Lets failed pages, and a failed list of prompts, be asked for again, such as on a new connection.
+    /// Lets failed pages and requests, and a failed list of prompts, be asked for again, such as on a new connection.
     pub(crate) fn retry_failed(&mut self) {
         self.failed.clear();
         self.outline.retry_failed();
+        self.apart.retry_failed();
     }
 
     /// Takes an event from a live subscription.
@@ -324,6 +331,8 @@ impl SessionLog {
             for position in doomed {
                 if let Some(event) = self.events.remove(&position) {
                     self.positions.remove(&event.seq);
+                    // A request that waits stays, so what waits is still asked.
+                    self.apart.keep_if_waiting(event);
                 }
             }
         }
