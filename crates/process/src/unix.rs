@@ -1,4 +1,4 @@
-//! Process groups and signals, and `ps` for a process's start time.
+//! Process groups and sessions, signals, and `ps` for a process's start time.
 
 use std::os::unix::process::CommandExt as _;
 use std::process::Command;
@@ -17,7 +17,8 @@ pub(crate) fn own_group(command: &mut Command) {
     command.process_group(0);
 }
 
-pub(crate) fn own_session(command: &mut Command) {
+/// In a session of its own.
+pub(crate) fn detach(command: &mut Command) {
     // SAFETY: setsid is async-signal-safe, which is all pre_exec requires.
     unsafe {
         command.pre_exec(|| {
@@ -74,6 +75,23 @@ mod tests {
             assert!(std::time::Instant::now() < deadline, "the child of the group leader is still running");
             std::thread::sleep(std::time::Duration::from_millis(10));
         }
+    }
+
+    #[test]
+    fn a_detached_process_leads_a_session_of_its_own() {
+        let mut command = Command::new("sleep");
+        command.arg("30");
+        detach(&mut command);
+
+        let mut started = command.spawn().unwrap();
+
+        let pid = libc::pid_t::try_from(started.id()).unwrap();
+        // SAFETY: getsid takes any PID, and 0 for this process's own, and touches no memory.
+        let (its, ours) = unsafe { (libc::getsid(pid), libc::getsid(0)) };
+        started.kill().unwrap();
+        started.wait().unwrap();
+        assert_eq!(its, pid, "it isn't the leader of a session");
+        assert_ne!(its, ours, "it's in this process's session");
     }
 
     #[test]
