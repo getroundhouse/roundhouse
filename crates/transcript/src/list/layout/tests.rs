@@ -1,5 +1,7 @@
 use super::*;
 
+mod still;
+
 /// A window 300 tall.
 const TALL: Pixels = px(300.);
 

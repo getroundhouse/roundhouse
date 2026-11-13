@@ -28,6 +28,16 @@ impl Ui<'_> {
         text
     }
 
+    /// Has the chat keep to its end again, as someone does who scrolls back down to it. A line that's clicked open
+    /// stays where it is in the window, so what it opened to can run on past the window's bottom.
+    pub(crate) fn keep_to_the_end(&mut self) {
+        let transcript = self.transcript().unwrap();
+        self.cx.update_entity(&transcript, |t, cx| {
+            t.list().go_to_latest();
+            cx.notify();
+        });
+    }
+
     pub(crate) fn session_status(&self) -> Option<SessionStatus> {
         let pane = self.pane()?;
         self.cx.read_entity(&pane, |p, _| p.session().map(|s| s.status))

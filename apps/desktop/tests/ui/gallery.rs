@@ -10,6 +10,7 @@
 #![cfg(test)]
 
 mod approved;
+mod background_chats;
 mod baselines;
 mod cache_screens;
 mod capture;
@@ -137,6 +138,7 @@ fn screens() -> impl Iterator<Item = &'static steps::Screen> {
         .chain(DIFF_SCREENS)
         .chain(TOOL_SCREENS)
         .chain(subagent_chats::SCREENS)
+        .chain(background_chats::SCREENS)
         .chain(compaction_chats::SCREENS)
         .chain(cache_screens::SCREENS)
         .chain(UPDATE_SCREENS)

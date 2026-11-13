@@ -87,7 +87,7 @@ impl ListElement {
         let first = shown.next();
         let shown = first.map_or(0..0, |first| first..shown.next_back().unwrap_or(first) + 1);
         let mut state = self.state.borrow_mut();
-        state.laid_out(layout.top, layout.anchor, layout.end_in_sight);
+        state.laid_out(layout.top, layout.anchor, layout.end());
         (state.shown, state.last_in_sight) = (shown, layout.last_in_sight);
         drop(state);
         // The lowest of them, which is the one nearest what's already loaded when scrolling back through a session,

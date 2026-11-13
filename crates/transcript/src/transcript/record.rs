@@ -8,11 +8,12 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use gpui_kit::{Context, SharedString, Task};
-use protocol::event::{AgentTask, TaskKind};
+use protocol::event::AgentTask;
 use protocol::model::{AgentDescription, PromptCache, Seq, Session, Subagent, SubagentStatus, Wait};
 
 use super::Transcript;
 use crate::prose::Of;
+use crate::task_lines;
 
 /// How often the time a turn has taken is drawn again while the agent works, for its tenths.
 const TICK: Duration = Duration::from_millis(100);
@@ -25,7 +26,8 @@ pub(crate) struct AtWork {
     pub(crate) working: bool,
     /// When the newest turn started, by the hub's clock. `None` from a hub that doesn't say.
     pub(crate) turn_started_at_ms: Option<i64>,
-    /// What it's running in the background, but for its waits on the pull request, which `wait` is the hub's own of.
+    /// What it's running in the background, in the order it started them. Its waits on the pull request are among
+    /// them, and have no line, since `wait` is the hub's own of the one it has open.
     pub(crate) background: Vec<AgentTask>,
     /// The wait it has open on the pull request, as the hub keeps it, which the CLI's list of tasks only has a copy of,
     /// which can still list one that has ended.
@@ -50,7 +52,7 @@ impl AtWork {
         AtWork {
             working: session.status.is_working(),
             turn_started_at_ms: session.turn_started_at_ms,
-            background: session.background_tasks.iter().filter(|task| task.kind != TaskKind::Wait).cloned().collect(),
+            background: session.background_tasks.clone(),
             wait: session.wait.clone(),
             reply_seq: session.reply_seq,
             cache: session.idle_cache().filter(|_| !session.status.in_turn()).map(|cache| IdleCache {
@@ -99,6 +101,7 @@ impl Transcript {
             }
             // The newest turn's line and card say what the cache holds, and an older one's say nothing of it.
             let replies = [m.at_work.reply_seq, at_work.reply_seq];
+            task_lines::forget_gone(&at_work.background, &mut m.folds);
             m.at_work = at_work;
             replies
         };
@@ -106,9 +109,14 @@ impl Transcript {
             self.redraw_reply(reply);
         }
         // The rest is drawn in the last row, with the streaming tail.
+        self.redraw_end();
+        cx.notify();
+    }
+
+    /// Measures the last row again, which draws the chat's end.
+    pub(super) fn redraw_end(&self) {
         let rows = self.list.row_count();
         self.list.out_of_date(rows.saturating_sub(1)..rows);
-        cx.notify();
     }
 
     /// Draws the end of the turn `reply` again, for what it says of the cache. Not loaded, so not drawn either.

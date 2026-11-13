@@ -5,9 +5,11 @@
 use std::time::Duration;
 
 use gpui_kit::{AppContext as _, SharedString, TestAppContext};
+use protocol::event::EventBody;
 use protocol::model::{SessionId, SessionStatus, Title};
 
 use crate::support::{Stack, Ui};
+use crate::tools::{bounds, in_a_new_workspace};
 
 #[gpui_kit::test]
 fn a_new_workspace_starts_with_one_chat(cx: &mut TestAppContext) {
@@ -266,6 +268,65 @@ fn pointing_at_a_background_tasks_line_says_whether_its_running_or_watching(cx: 
             ui.shows_label("background-pointed-at", said)
         });
     }
+}
+
+/// With more in the background than have a line each, the tasks of a kind share one line, which opens to their own
+/// lines and closes again. It's at the end of a chat longer than the window, which keeps to its end, and it stays
+/// where it is as it opens, so a second click with the pointer where it was closes it. Once its tasks have gone, the
+/// line that comes for the next lot starts closed, since it's another line.
+#[gpui_kit::test]
+fn several_background_tasks_of_a_kind_share_a_line_that_opens_to_theirs(cx: &mut TestAppContext) {
+    const SEVERAL: &str = "several/tasks/commands";
+    let stack = Stack::new();
+    let mut ui = in_a_new_workspace(cx, &stack);
+    let chat = ui.active_chat();
+    let going = || stack.client().session_get(&chat).unwrap().background_tasks;
+    // Starts five commands that each run until its file is there, and gives their lines once the turn has left them.
+    let start = |ui: &mut Ui<'_>, lot: &str| {
+        let files: Vec<_> = (0..5).map(|at| stack.dir.path().join(format!("{lot}-{at}"))).collect();
+        let each: Vec<String> = files.iter().map(|file| format!("background:{}", file.display())).collect();
+        // A click in the chat gives it the focus, for copying what's selected there.
+        ui.click("composer");
+        ui.input(&format!("burst:3000; {}", each.join("; ")));
+        ui.press("enter");
+        ui.wait(&format!("the {lot} turn to end with five left going"), |ui| {
+            ui.session_status() == Some(SessionStatus::Background) && going().len() == 5
+        });
+        let lines: Vec<_> = going().iter().map(|task| SharedString::from(format!("background-{}", task.id))).collect();
+        (files, lines)
+    };
+    let shown = |ui: &mut Ui<'_>, lines: &[SharedString]| lines.iter().filter(|line| ui.has((*line).clone())).count();
+
+    let (files, lines) = start(&mut ui, "first");
+    ui.wait("their one line", |ui| ui.shows_label(SEVERAL, "5 commands"));
+    assert_eq!(shown(&mut ui, &lines), 0, "closed, none has a line of its own");
+    // The line the turn ends with can come just after, and would move the tasks' line as it's clicked.
+    ui.wait("the turn's end", |ui| ui.events().iter().any(|e| matches!(e.body, EventBody::TurnEnded { .. })));
+
+    let pointer = bounds(&mut ui, SEVERAL).center();
+    ui.click_at(pointer);
+    ui.wait("each task's own line", |ui| shown(ui, &lines) == 5);
+    ui.click_at(pointer);
+    ui.wait("their lines to go, at a click where the pointer was", |ui| shown(ui, &lines) == 0);
+
+    // Open, with the chat keeping to its end again, the line is higher up, and closing it leaves the chat ending
+    // above the window's bottom, rather than bringing the line down from under the pointer.
+    ui.click_at(pointer);
+    ui.keep_to_the_end();
+    ui.wait("each task's own line again", |ui| shown(ui, &lines) == 5);
+    let pointer = bounds(&mut ui, SEVERAL).center();
+    ui.click_at(pointer);
+    ui.wait("their lines to go again", |ui| shown(ui, &lines) == 0);
+    ui.click_at(pointer);
+    ui.wait("each task's own line, at a click where the pointer was", |ui| shown(ui, &lines) == 5);
+    for file in files {
+        std::fs::write(file, "").unwrap();
+    }
+    ui.wait("them all to finish", |ui| ui.session_status() == Some(SessionStatus::Idle) && going().is_empty());
+    let (_, lines) = start(&mut ui, "second");
+
+    ui.wait("the next lot's line", |ui| ui.shows_label(SEVERAL, "5 commands"));
+    assert_eq!(shown(&mut ui, &lines), 0, "a line that came back starts closed");
 }
 
 #[gpui_kit::test]

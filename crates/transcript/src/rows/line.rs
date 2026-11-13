@@ -9,8 +9,8 @@ use gpui_kit::assets::IconName;
 use gpui_kit::component::{ActiveTheme as _, Icon, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, AnyView, App, Div, Hsla, InteractiveElement, IntoElement, ParentElement, Role, SharedString,
-    StatefulInteractiveElement, Styled, TestSupportExt as _, Window, div, px, relative,
+    AnyElement, AnyView, App, Div, ElementId, Hsla, InteractiveElement, IntoElement, ParentElement, Pixels, Role,
+    SharedString, Stateful, StatefulInteractiveElement, Styled, TestSupportExt as _, Window, div, px, relative,
 };
 use look::{Hand as _, LineText};
 
@@ -28,7 +28,7 @@ pub(super) const HEIGHT: f32 = 28.0;
 /// The hover group of one line, which turns its icon into the way to open it.
 const GROUP: &str = "tool-line";
 /// More of prose's start than a line has room for, so a long first line isn't copied to be cut off.
-const START_CHARS: usize = 160;
+pub(super) const START_CHARS: usize = 160;
 
 pub(super) struct Line {
     icon: IconName,
@@ -105,34 +105,18 @@ impl Line {
     }
 
     pub(super) fn render(self, toggle: &Toggle, cx: &App) -> AnyElement {
-        let theme = cx.theme();
         let (this, key, seq, fold, open) =
             (toggle.shared.this.clone(), toggle.key.clone(), toggle.seq, toggle.fold, toggle.open);
-        let hover = theme.muted;
         let line_text = &toggle.shared.line_text;
         let parts = self.parts.into_iter().map(|part| part.render(line_text, cx));
-        h_flex()
-            .id(toggle.key.element("call"))
-            .group(GROUP)
-            .role(Role::Button)
-            .aria_label(self.title.clone())
-            .aria_expanded(open)
-            .h(px(HEIGHT))
-            .mx(px(-8.))
-            .px(px(8.))
-            .gap_2()
-            .rounded(px(6.))
-            .overflow_hidden()
-            .whitespace_nowrap()
-            .hand()
-            .hover(move |d| d.bg(hover))
-            .on_click(move |_, _, cx| {
-                let _ = this.update(cx, |t, cx| t.set_open(seq, key.clone(), fold, !open, cx));
-            })
+        let set_open = move |cx: &mut App| {
+            let _ = this.update(cx, |t, cx| t.set_open(seq, key.clone(), fold, !open, cx));
+        };
+        opening(toggle.key.element("call"), self.title.clone(), open, set_open, cx)
             .when_some(self.preview.filter(|_| !open), |d, preview| {
                 d.hoverable_tooltip(move |window, cx| preview(window, cx))
             })
-            .child(icon(self.icon, open, cx))
+            .child(lead(glyph(self.icon), px(ICON), open, cx))
             .child(
                 line_text.body.set(
                     div()
@@ -198,21 +182,50 @@ impl Part {
     }
 }
 
-/// The kind's icon, which turns into the way to open or close the line while it's hovered.
-fn icon(kind: IconName, open: bool, cx: &App) -> Div {
+/// A line that opens and closes what's under it when it's clicked, before what it holds: as tall as every line, lit
+/// under the pointer, and a button to assistive apps, named `label`, which says whether it's open. A tool call's line
+/// is one, and so is the line for several background tasks at the chat's end.
+pub(super) fn opening(
+    id: ElementId,
+    label: SharedString,
+    open: bool,
+    on_click: impl Fn(&mut App) + 'static,
+    cx: &App,
+) -> Stateful<Div> {
+    let hover = cx.theme().muted;
+    h_flex()
+        .id(id)
+        .group(GROUP)
+        .role(Role::Button)
+        .aria_label(label)
+        .aria_expanded(open)
+        .h(px(HEIGHT))
+        .mx(px(-8.))
+        .px(px(8.))
+        .gap_2()
+        .rounded(px(6.))
+        .overflow_hidden()
+        .whitespace_nowrap()
+        .hand()
+        .hover(move |d| d.bg(hover))
+        .on_click(move |_, _, cx| on_click(cx))
+}
+
+/// What a line that opens starts with, such as its kind's icon, `width` wide, which turns into the way to open or
+/// close the line while it's hovered.
+pub(super) fn lead(mark: impl IntoElement, width: Pixels, open: bool, cx: &App) -> Div {
     let chevron = if open { IconName::ChevronDown } else { IconName::ChevronRight };
     let layer = || div().absolute().top_0().left_0();
-    div()
-        .relative()
-        .flex_none()
-        .size(px(ICON))
-        .child(layer().group_hover(GROUP, Styled::invisible).child(glyph(kind)))
-        .child(
-            layer()
-                .invisible()
-                .group_hover(GROUP, Styled::visible)
-                .child(Icon::new(chevron).size(px(ICON)).text_color(cx.theme().foreground)),
-        )
+    div().relative().flex_none().size(width).child(layer().group_hover(GROUP, Styled::invisible).child(mark)).child(
+        layer()
+            .size_full()
+            .flex()
+            .items_center()
+            .justify_center()
+            .invisible()
+            .group_hover(GROUP, Styled::visible)
+            .child(Icon::new(chevron).size(px(ICON)).text_color(cx.theme().foreground)),
+    )
 }
 
 /// The kind's icon as a line starts with it, for a line that doesn't open, such as one that's still streaming.

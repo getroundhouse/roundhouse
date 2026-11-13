@@ -10,6 +10,7 @@ use super::layout::{Anchor, Start};
 
 mod heading;
 mod scrollbar;
+mod still;
 
 /// A place in a transcript: a row, and how far into it.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -107,9 +108,9 @@ impl State {
         self.furthest() > px(0.) && !self.is_following()
     }
 
-    /// Whether it's keeping to the latest row.
+    /// Whether it's keeping to the latest row, at the window's bottom or held still above it.
     fn is_following(&self) -> bool {
-        matches!(self.keeping, Keeping::Latest)
+        matches!(self.keeping, Keeping::Latest | Keeping::Still { follows: true })
     }
 
     /// Goes to the latest row, and keeps to it as more arrives.
@@ -135,10 +136,11 @@ impl State {
     pub(super) fn scroll_by(&mut self, turned: Pixels) {
         match self.keeping {
             // There's nothing further down.
-            Keeping::Latest if turned <= px(0.) => return,
+            Keeping::Latest | Keeping::Still { follows: true } if turned <= px(0.) => return,
             // From where keeping to the latest row had it.
             Keeping::Latest => self.go_to(self.furthest()),
-            Keeping::Place | Keeping::ToLatest(_) | Keeping::AtBottom(_) => {}
+            // From where it is, and the next frame puts the session's end back at the window's bottom.
+            Keeping::Place | Keeping::ToLatest(_) | Keeping::AtBottom(_) | Keeping::Still { .. } => {}
         }
         self.keeping = Keeping::Place;
         self.moved -= turned;
@@ -179,7 +181,7 @@ impl State {
     pub(super) fn kept_at_bottom(&self) -> Option<usize> {
         match self.keeping {
             Keeping::AtBottom(row) => Some(row),
-            Keeping::Latest | Keeping::Place | Keeping::ToLatest(_) => None,
+            Keeping::Latest | Keeping::Place | Keeping::ToLatest(_) | Keeping::Still { .. } => None,
         }
     }
 
@@ -189,27 +191,15 @@ impl State {
         (self.top, self.moved, self.anchor) = (top, px(0.), None);
     }
 
-    /// Someone opened or closed something in `row`, which keeps it where it is in the window, as [`Anchor`] says,
-    /// if it's in sight.
-    pub(super) fn keep_still(&mut self, row: usize) {
-        let top = self.heights.above(row) - self.heights.above(self.top.row) - self.top.offset;
-        if row >= self.top.row && top < self.tall() {
-            self.anchor = Some(Anchor { row, top });
-            match self.keeping {
-                // Kept still rather than with a row's end at the bottom, so what was clicked stays under the pointer.
-                Keeping::AtBottom(_) => self.keeping = Keeping::Place,
-                Keeping::Latest | Keeping::Place | Keeping::ToLatest(_) => {}
-            }
-        }
-    }
-
     /// Where to lay the rows out from. A top that's moved more than `walked` is found from what the rows are guessed
     /// to come to instead, since finding it row by row would measure every row between.
     pub(super) fn lay_from(&self, walked: Pixels) -> Start {
-        match self.keeping {
-            Keeping::Latest => return Start::Latest,
-            Keeping::AtBottom(row) => return Start::AtBottom { row },
-            Keeping::Place | Keeping::ToLatest(_) => {}
+        match (&self.keeping, self.anchor) {
+            (Keeping::Still { follows }, Some(at)) => return Start::Still { at, follows: *follows },
+            // Or the row it held still has gone, so it keeps to what it would have come to.
+            (Keeping::Latest, _) | (Keeping::Still { follows: true }, None) => return Start::Latest,
+            (Keeping::AtBottom(row), _) => return Start::AtBottom { row: *row },
+            (Keeping::Still { follows: false } | Keeping::Place | Keeping::ToLatest(_), _) => {}
         }
         if self.moved.abs() <= walked {
             return match self.anchor {
@@ -222,12 +212,18 @@ impl State {
     }
 
     /// The rows were laid out with `top` at the top of the window, `anchor` to keep where it is in the next frame,
-    /// and with the latest row's end in sight or not. Someone who has scrolled back down to that is keeping to it
-    /// again, and so is a list on its way down to it.
-    pub(super) fn laid_out(&mut self, top: Place, anchor: Option<Anchor>, end_in_sight: bool) {
+    /// and with the session's `end` where it says. Someone who has scrolled back down to the latest row's end is
+    /// keeping to it again, and so is a list on its way down to it. A row held still stays so only while that
+    /// leaves the end in sight above the window's bottom, from where the list is still keeping to the latest row.
+    /// With the end out of sight, the list is at a place like any other.
+    pub(super) fn laid_out(&mut self, top: Place, anchor: Option<Anchor>, end: End) {
         (self.top, self.moved, self.anchor) = (top, px(0.), anchor);
-        if end_in_sight {
-            self.go_to_latest();
+        let still = matches!(self.keeping, Keeping::Still { .. });
+        match end {
+            End::Short if still => self.keeping = Keeping::Still { follows: true },
+            End::Short | End::InSight => self.go_to_latest(),
+            End::OutOfSight if still => self.keeping = Keeping::Place,
+            End::OutOfSight => {}
         }
     }
 
@@ -343,6 +339,22 @@ enum Keeping {
     ToLatest(Scrolling),
     /// The end of a row at the window's bottom, as the outline sends it to a prompt, until something else moves it.
     AtBottom(usize),
+    /// The row someone opened or closed something in, exactly where it is in the window, as [`Start::Still`] says.
+    /// It `follows` once a frame has laid it out with the session's end in sight above the window's bottom, as
+    /// closing something in the last rows leaves it: the list is still keeping to the latest row, which comes down
+    /// to the bottom as more arrives.
+    Still { follows: bool },
+}
+
+/// Where a frame left the session's end.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum End {
+    /// Below the window's bottom, or not laid out at all.
+    OutOfSight,
+    /// In the window, at its bottom, or above it in a session that doesn't fill the window.
+    InSight,
+    /// In the window, above its bottom, with rows above the window's top that a row held still kept there.
+    Short,
 }
 
 /// The runs in order with each that starts where the one before it ends made one with it, such as the streaming

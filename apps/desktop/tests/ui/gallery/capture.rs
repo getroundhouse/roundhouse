@@ -225,10 +225,20 @@ impl Driver {
         self.paste(ClipboardItem::from(ClipboardEntry::ExternalPaths(copied)));
     }
 
-    /// Clicks the line with this label, then moves away from it, so the picture shows it open rather than hovered.
+    /// Clicks the line with this label, then moves away from it, so the picture shows it open rather than hovered. A
+    /// line that's clicked stays where it is in the window, with what it opened to running on under it, so the chat
+    /// then goes back to its end, where every screen's chat starts, and the picture shows what the line opened to.
     fn open(&mut self, label: &'static str) {
         let id = self.find(Target::Label(label));
         self.cx.update_window(self.handle, |_, window, cx| window.click(id, cx)).unwrap();
+        self.update_pane(|pane, cx| {
+            if let Some(chat) = pane.transcript() {
+                chat.update(cx, |chat, cx| {
+                    chat.list().go_to_latest();
+                    cx.notify();
+                });
+            }
+        });
         self.move_away();
     }
 

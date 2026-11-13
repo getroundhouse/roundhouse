@@ -28,7 +28,7 @@ pub(super) fn session(rows: usize, height: f32) -> State {
 pub(super) fn scrolled_to(rows: usize, height: f32, row: usize, offset: f32) -> State {
     let mut state = session(rows, height);
     state.go_to_row(row);
-    state.laid_out(at(row, offset), None, false);
+    state.laid_out(at(row, offset), None, End::OutOfSight);
     state
 }
 
@@ -63,7 +63,7 @@ fn the_wheel_moves_the_top_without_knowing_how_tall_the_rows_it_passes_are() {
     assert_eq!(lay_from(&state), Start::Top { at: at(10, 5.), moved: px(-20.) });
     assert_eq!(state.scrolled(), px(485.));
 
-    state.laid_out(at(9, 35.), None, false);
+    state.laid_out(at(9, 35.), None, End::OutOfSight);
 
     assert_eq!(lay_from(&state), Start::Top { at: at(9, 35.), moved: px(0.) });
     assert_eq!(state.scrolled(), px(485.));
@@ -73,7 +73,7 @@ fn the_wheel_moves_the_top_without_knowing_how_tall_the_rows_it_passes_are() {
 fn a_frame_lays_the_rows_out_from_the_one_the_last_left_to_keep_still() {
     let mut state = scrolled_to(100, 50., 10, 20.);
     let anchor = Anchor { row: 11, top: px(30.) };
-    state.laid_out(at(10, 20.), Some(anchor), false);
+    state.laid_out(at(10, 20.), Some(anchor), End::OutOfSight);
     assert_eq!(lay_from(&state), Start::Anchored { at: anchor, moved: px(0.) });
 
     state.scroll_by(px(20.));
@@ -87,7 +87,7 @@ fn a_frame_lays_the_rows_out_from_the_one_the_last_left_to_keep_still() {
 pub(super) fn kept_at_the_bottom() -> State {
     let mut state = scrolled_to(100, 50., 10, 0.);
     state.go_to_row_at_bottom(40);
-    state.laid_out(at(35, 0.), Some(Anchor { row: 35, top: px(0.) }), false);
+    state.laid_out(at(35, 0.), Some(Anchor { row: 35, top: px(0.) }), End::OutOfSight);
     state
 }
 
@@ -145,7 +145,7 @@ fn a_row_at_the_bottom_stays_as_rows_arrive_and_goes_once_the_end_is_in_sight() 
     let mut at_the_end = kept_at_the_bottom();
 
     arriving.set_rows(120, std::iter::once(0..120).collect());
-    at_the_end.laid_out(at(94, 0.), None, true);
+    at_the_end.laid_out(at(94, 0.), None, End::InSight);
 
     assert_eq!(lay_from(&arriving), Start::AtBottom { row: 40 });
     assert_eq!(lay_from(&at_the_end), Start::Latest);
@@ -161,15 +161,6 @@ fn the_wheel_moves_on_from_where_the_last_frame_left_a_row_at_the_bottom() {
 }
 
 #[test]
-fn opening_something_above_a_row_at_the_bottom_keeps_what_was_clicked_still() {
-    let mut state = kept_at_the_bottom();
-
-    state.keep_still(38);
-
-    assert_eq!(lay_from(&state), Start::Anchored { at: Anchor { row: 38, top: px(150.) }, moved: px(0.) });
-}
-
-#[test]
 fn a_row_past_the_end_isnt_sent_to_the_bottom() {
     let mut state = scrolled_to(100, 50., 10, 0.);
 
@@ -177,26 +168,6 @@ fn a_row_past_the_end_isnt_sent_to_the_bottom() {
 
     assert_eq!(state.kept_at_bottom(), None);
     assert_eq!(lay_from(&state), Start::Top { at: at(10, 0.), moved: px(0.) });
-}
-
-#[test]
-fn a_row_someone_opens_or_closes_something_in_is_kept_still_if_it_is_in_sight() {
-    let mut state = scrolled_to(100, 50., 10, 20.);
-    let first_in_sight = Anchor { row: 11, top: px(30.) };
-    state.laid_out(at(10, 20.), Some(first_in_sight), false);
-    let kept = |state: &State| {
-        let Start::Anchored { at, .. } = lay_from(state) else { panic!("laid out from {:?}", lay_from(state)) };
-        at
-    };
-
-    state.keep_still(9);
-    assert_eq!(kept(&state), first_in_sight, "not a row above the window");
-    state.keep_still(17);
-    assert_eq!(kept(&state), first_in_sight, "nor one below it");
-    state.keep_still(13);
-    assert_eq!(kept(&state), Anchor { row: 13, top: px(130.) });
-    state.keep_still(10);
-    assert_eq!(kept(&state), Anchor { row: 10, top: px(-20.) }, "even reaching up past the window's top");
 }
 
 #[test]
@@ -218,13 +189,13 @@ fn laying_the_rows_out_with_the_end_in_sight_keeps_to_the_latest_row_again() {
     let mut state = scrolled_to(100, 50., 90, 0.);
     assert!(state.is_scrolled_up());
 
-    state.laid_out(at(94, 0.), None, true);
+    state.laid_out(at(94, 0.), None, End::InSight);
 
     assert!(!state.is_scrolled_up());
     assert_eq!(lay_from(&state), Start::Latest);
 
     // And goes on doing so however the next frame comes out, until someone scrolls away.
-    state.laid_out(at(94, 0.), None, false);
+    state.laid_out(at(94, 0.), None, End::OutOfSight);
     assert_eq!(lay_from(&state), Start::Latest);
 }
 

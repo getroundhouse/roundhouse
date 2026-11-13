@@ -52,7 +52,7 @@ pub(crate) const SCREENS: &[Screen] = &[
 ];
 
 /// What Claude sends back as soon as a subagent starts in the background.
-const LAUNCHED: &str = "Async agent launched successfully.";
+pub(super) const LAUNCHED: &str = "Async agent launched successfully.";
 
 const FIND_PROMPT: &str = "In /workspaces/aspen, find every place that checks whether a signal shows Stop, such as \
                            `== Aspect::Stop` or a match arm. List each with its file and line, and say what it does \
