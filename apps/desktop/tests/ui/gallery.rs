@@ -4,8 +4,8 @@
 //! `gallery/update_screens.rs`, and the real app connects to it, so what's drawn is exactly what the app draws. Each picture shows only the part of
 //! the window its screen is about, as `gallery/frame.rs` says. What each screen looks like now goes in
 //! `.context/gallery/` at the repo's root, for looking at. The app icon is drawn and checked the same way, in
-//! `gallery/icon.rs`, as are every state of a pull request's bar and of the status mark. Text of each kind is drawn the
-//! same way at several scales, in `gallery/baselines.rs`, to check it lines up.
+//! `gallery/icon.rs`, as are every state of a pull request's bar and of the status mark, and every colour. Text of
+//! each kind is drawn the same way at several scales, in `gallery/baselines.rs`, to check it lines up.
 
 #![cfg(test)]
 
@@ -17,6 +17,7 @@ mod cache_screens;
 mod call_screens;
 mod capture;
 mod chats;
+mod colours;
 mod compaction_chats;
 mod context_screens;
 mod diff_screens;
@@ -91,6 +92,15 @@ fn every_state_of_the_mark_looks_as_approved() {
 }
 
 #[test]
+fn every_colour_looks_as_approved() {
+    let text_system: Arc<dyn PlatformTextSystem> = Arc::new(gpui_apple::AppleTextSystem::new());
+
+    let picture = colours::draw(&text_system);
+
+    report(&look_at(colours::NAME, colours::SPEC, &picture));
+}
+
+#[test]
 fn text_of_every_kind_sits_on_body_texts_baseline_at_every_scale() {
     let text_system: Arc<dyn PlatformTextSystem> = Arc::new(gpui_apple::AppleTextSystem::new());
     let mut problems = Vec::new();
@@ -122,7 +132,8 @@ fn every_screen_looks_as_approved() {
             problems.extend(framing.into_iter().map(|problem| format!("{}: {problem}", screen.name)));
         }
     }
-    let names: Vec<&str> = screens().map(|s| s.name).chain([pull_requests::NAME, mark_states::NAME]).collect();
+    let names: Vec<&str> =
+        screens().map(|s| s.name).chain([pull_requests::NAME, mark_states::NAME, colours::NAME]).collect();
     problems.extend(approved::without_a_screen(&names).into_iter().map(|name| format!("{name}.png has no screen")));
     report(&problems);
 }

@@ -4,7 +4,7 @@ use std::ops::Range;
 use std::rc::Rc;
 use std::time::Instant;
 
-use gpui_kit::component::{ActiveTheme as _, Icon, IconNamed, v_flex};
+use gpui_kit::component::{Icon, IconNamed, v_flex};
 use gpui_kit::{
     AnyElement, App, Context, Div, ElementId, Hsla, InteractiveElement as _, IntoElement, ParentElement, Pixels,
     Styled, TestSupportExt as _, Window, div, px,
@@ -298,7 +298,7 @@ fn creating(workspace: &Workspace, cx: &mut Context<AppView>) -> AnyElement {
         .flex()
         .items_center()
         .text_sm()
-        .text_color(cx.theme().muted_foreground)
+        .text_color(look::colors(cx).text_muted)
         .child("Creating a workspace…")
         .test_support()
         .into_any_element()
@@ -306,8 +306,8 @@ fn creating(workspace: &Workspace, cx: &mut Context<AppView>) -> AnyElement {
 
 /// The sidebar, filling the frame `sides` puts it in, with the lines `arrange` worked out for this frame.
 pub(crate) fn render(app: &AppView, arranged: Arranged, cx: &mut Context<AppView>) -> impl IntoElement {
-    let theme = cx.theme();
-    let (background, border) = (theme.sidebar, theme.sidebar_border);
+    let colors = look::colors(cx);
+    let (background, border) = (colors.sidebar, colors.edge);
     // A moving mark builds this view again on every frame, so only the lines on screen are built, and a long list
     // costs no more than a short one.
     let Arranged { lines, surface, end } = arranged;

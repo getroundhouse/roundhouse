@@ -42,7 +42,7 @@ pub(super) fn lines(toggle: &Toggle, part: Part, language: &str, sections: &[Sec
     let (mut drawn, mut at) = (Vec::new(), 0);
     for (i, (section, shown)) in sections.iter().zip(shown).filter(|(_, shown)| *shown > 0).enumerate() {
         if i > 0 {
-            drawn.push(gap());
+            drawn.push(gap(cx));
         }
         let lines = &section[..shown];
         let len = joined_len(lines);
@@ -129,11 +129,11 @@ fn row(
     area: Option<ElementId>,
     cx: &App,
 ) -> AnyElement {
-    let theme = cx.theme();
+    let colors = look::colors(cx);
     let (tint, numbers) = match line.mark {
-        Mark::Same => (None, look::faint()),
-        Mark::Added => (Some(theme.success), theme.success.opacity(0.75)),
-        Mark::Removed => (Some(theme.danger), theme.danger.opacity(0.75)),
+        Mark::Same => (None, colors.text_faint),
+        Mark::Added => (Some(colors.added), colors.added.opacity(0.75)),
+        Mark::Removed => (Some(colors.removed), colors.removed.opacity(0.75)),
     };
     let styles = with_changed(syntax, &line.changed, tint.map(|t| t.opacity(0.3)), line.text.len());
     let styles = marks.over(&styles, line.text.len());
@@ -161,7 +161,7 @@ fn row(
                 .flex_none()
                 .pr_3()
                 .whitespace_nowrap()
-                .text_color(theme.foreground)
+                .text_color(colors.text)
                 .child(find::styled(text, styles, here, area)),
         )
         .into_any_element()
@@ -179,12 +179,12 @@ fn expand_tabs(text: &str, styles: &[(Range<usize>, HighlightStyle)]) -> (String
 }
 
 /// The faint mark between two sections of a file that aren't next to each other, where their numbers go.
-fn gap() -> AnyElement {
+fn gap(cx: &App) -> AnyElement {
     h_flex()
         .h(px(LINE_HEIGHT))
         .border_l(px(BAR_WIDTH))
         .border_color(gpui_kit::transparent_black())
-        .child(div().w(px(NUMBERS_WIDTH)).pr_3().text_right().text_color(look::faint()).child("⋯"))
+        .child(div().w(px(NUMBERS_WIDTH)).pr_3().text_right().text_color(look::colors(cx).text_faint).child("⋯"))
         .into_any_element()
 }
 

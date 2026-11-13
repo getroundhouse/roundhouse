@@ -7,7 +7,7 @@
 use std::io::Cursor;
 use std::sync::Arc;
 
-use gpui_kit::component::{ActiveTheme as _, h_flex};
+use gpui_kit::component::h_flex;
 use gpui_kit::{
     AnyElement, App, AvailableSpace, Div, IntoElement, ObjectFit, ParentElement as _, RenderImage, Styled,
     StyledImage as _, canvas, checkerboard, div, img, px,
@@ -142,13 +142,13 @@ fn frame((width, height): (u32, u32), scale: f32) -> Div {
 
 /// A checkerboard filling what it's in, which what's clear in an image drawn over it shows.
 fn checkered(cx: &App) -> Div {
-    let theme = cx.theme();
-    div().size_full().bg(theme.muted).child(div().size_full().bg(checkerboard(theme.border, SQUARE)))
+    let colors = look::colors(cx);
+    div().size_full().bg(colors.inset).child(div().size_full().bg(checkerboard(colors.edge, SQUARE)))
 }
 
 /// `drawn` inside a thin edge, so an image shows where it ends even when its own colour at its sides is the pane's.
 pub(crate) fn edged(drawn: Div, cx: &App) -> Div {
-    div().flex_none().border_1().border_color(cx.theme().border).child(drawn)
+    div().flex_none().border_1().border_color(look::colors(cx).edge).child(drawn)
 }
 
 /// Where in the room what's fitted to it is put, down: across, it's always in the middle.

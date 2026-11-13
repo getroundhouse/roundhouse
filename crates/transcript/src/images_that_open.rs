@@ -61,7 +61,7 @@ fn open(image: ImageSource, covers: (u32, u32), window: &mut Window, cx: &mut Ap
             .p_0()
             .min_h(px(0.))
             .w(shown.width + px(2. * IMAGE_EDGE))
-            .bg(cx.theme().muted)
+            .bg(look::colors(cx).inset)
             .centered()
             .close_button(false)
             .child(DialogClose::new().child(opened))

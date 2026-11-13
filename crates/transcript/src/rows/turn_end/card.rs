@@ -3,7 +3,7 @@
 //! of the models, in tokens. Its subagents' are left out. It says only what the turn's end recorded, so a part it
 //! doesn't say is left out. The newest turn's card also says how long the cache has left.
 
-use gpui_kit::component::{ActiveTheme as _, h_flex, v_flex};
+use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::{
     AnyElement, App, Div, FontWeight, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, SharedString,
     StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, div, px,
@@ -56,7 +56,7 @@ impl TurnCard {
             .gap_1()
             .text_sm()
             .children(heading.map(|heading| div().font_weight(FontWeight::MEDIUM).child(heading)))
-            .children(day.map(|day| div().whitespace_nowrap().text_color(cx.theme().muted_foreground).child(day)))
+            .children(day.map(|day| div().whitespace_nowrap().text_color(look::colors(cx).text_muted).child(day)))
             .children(times)
             .children(counts)
             .children(cache)
@@ -83,7 +83,7 @@ fn table(rows: Vec<(&'static str, String)>, cx: &App) -> Div {
 
 /// The rule each part of the card starts under.
 pub(super) fn rule(cx: &App) -> Div {
-    div().my_1().h(px(1.)).bg(cx.theme().border)
+    div().my_1().h(px(1.)).bg(look::colors(cx).edge)
 }
 
 /// A name and what it says, after `mark` if there is one, at either end of a line, said together to assistive apps.
@@ -93,7 +93,7 @@ pub(super) fn row(name: &'static str, said: String, mark: Option<AnyElement>, cx
         .justify_between()
         .gap_6()
         .aria_label(format!("{name} {said}"))
-        .child(div().text_color(cx.theme().muted_foreground).child(name))
+        .child(div().text_color(look::colors(cx).text_muted).child(name))
         .child(h_flex().gap_1p5().children(mark).child(div().whitespace_nowrap().child(said)))
         .test_support()
 }

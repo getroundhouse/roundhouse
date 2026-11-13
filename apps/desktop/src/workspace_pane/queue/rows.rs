@@ -3,7 +3,7 @@
 use gpui_kit::assets::IconName;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::{Escape, Textarea};
-use gpui_kit::component::{ActiveTheme as _, Icon, Sizable as _, Size, h_flex, v_flex};
+use gpui_kit::component::{Icon, Sizable as _, Size, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, Context, ElementId, Hsla, InteractiveElement as _, IntoElement, ParentElement, SharedString,
@@ -46,8 +46,8 @@ impl WorkspacePane {
             .chain(pending.iter().map(|prompt| (prompt, Row::Pending)))
             .map(|(prompt, row)| self.queued_row(prompt, row, cx))
             .collect();
-        let theme = cx.theme();
-        let (border, muted) = (theme.border, theme.muted_foreground);
+        let colors = look::colors(cx);
+        let (border, muted) = (colors.edge, colors.text_muted);
         let heading = if session.queue_held { "Queued, waiting since the agent stopped" } else { "Queued" };
         Some(
             v_flex()
@@ -57,7 +57,7 @@ impl WorkspacePane {
                 .border_1()
                 .border_b_0()
                 .border_color(border)
-                .bg(theme.background)
+                .bg(colors.pane)
                 .child(
                     div().px_3().py_1p5().border_b_1().border_color(border).text_xs().text_color(muted).child(heading),
                 )
@@ -77,11 +77,11 @@ impl WorkspacePane {
             return editing_row(editing, cx);
         }
         let group = SharedString::from(format!("queued-{id}"));
-        let theme = cx.theme();
+        let colors = look::colors(cx);
         // Muted, so they don't compete with the prompt's text, and the row a step lighter than the card under them.
         let (text, muted, lit) = match row {
-            Row::Queued { .. } => (theme.foreground, theme.muted_foreground, theme.muted),
-            Row::Pending => (look::faint(), theme.muted_foreground, theme.background),
+            Row::Queued { .. } => (colors.text, colors.text_muted, colors.inset),
+            Row::Pending => (colors.text_faint, colors.text_muted, colors.pane),
         };
         h_flex()
             .id(ElementId::Name(group.clone()))
@@ -133,7 +133,7 @@ fn queued_buttons(
 
 /// The editor in place of the prompt's text, with what it carries still beside it, since a change keeps that.
 fn editing_row(editing: &Editing, cx: &mut Context<WorkspacePane>) -> AnyElement {
-    let muted = cx.theme().muted_foreground;
+    let muted = look::colors(cx).text_muted;
     // Down by as much as the editor's text is, so the two share a line.
     let beside = div().pt(Size::Medium.input_py()).children(carried(&editing.was, muted));
     h_flex()

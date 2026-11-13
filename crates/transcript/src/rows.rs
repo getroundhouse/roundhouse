@@ -6,7 +6,7 @@ use std::rc::Rc;
 use client_core::OpenSession;
 use client_core::calls::Recorded;
 use client_core::session_log::{By, Row};
-use gpui_kit::component::{ActiveTheme as _, h_flex, v_flex};
+use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, Div, ElementId, Hsla, InteractiveElement as _, IntoElement, ParentElement, SharedString, Stateful,
@@ -201,18 +201,18 @@ fn rule_row(middle: impl IntoElement, cx: &App) -> AnyElement {
 /// A rule across the chat with `middle` in its middle, as a compaction, a cache that had expired and an update are
 /// drawn.
 fn rule_across(middle: impl IntoElement, cx: &App) -> Div {
-    let border = cx.theme().border;
+    let border = look::colors(cx).edge;
     let rule = || div().flex_1().h(px(1.)).bg(border);
     h_flex().w_full().items_center().gap_3().child(rule()).child(middle).child(rule())
 }
 
 /// What's said in the middle of a rule across the chat, small and faint.
-fn rule_middle(id: impl Into<ElementId>) -> Stateful<Div> {
-    h_flex().id(id).flex_none().gap_1p5().px_2().py_0p5().text_xs().text_color(look::faint())
+fn rule_middle(id: impl Into<ElementId>, cx: &App) -> Stateful<Div> {
+    h_flex().id(id).flex_none().gap_1p5().px_2().py_0p5().text_xs().text_color(look::colors(cx).text_faint)
 }
 
-fn muted_line(text: impl Into<SharedString>) -> AnyElement {
-    row().child(div().text_xs().text_color(look::faint()).child(text.into())).into_any_element()
+fn muted_line(text: impl Into<SharedString>, cx: &App) -> AnyElement {
+    row().child(div().text_xs().text_color(look::colors(cx).text_faint).child(text.into())).into_any_element()
 }
 
 /// A message of the agent's, or what came back to it, recorded at `seq`: each of its `blocks` as `around` says.
@@ -282,12 +282,14 @@ fn render_event(
         EventBody::ApprovalRequested { .. } => plan_card(seq, body, around.approval_open, shared, cx),
         // A question's line says what became of it, and so does a denied call's, as `Closes` says.
         EventBody::ApprovalResolved { .. } if matches!(around.closes, Closes::SaidElsewhere) => empty(),
-        EventBody::ApprovalResolved { outcome: ApprovalOutcome::Cancelled, .. } => muted_line("Approval cancelled"),
+        EventBody::ApprovalResolved { outcome: ApprovalOutcome::Cancelled, .. } => muted_line("Approval cancelled", cx),
         EventBody::ApprovalResolved { outcome: ApprovalOutcome::Denied, .. } => match &around.closes {
-            Closes::ForASubagent { tool, subagent } => muted_line(format!("Denied {tool} for {subagent}")),
-            Closes::Unsaid | Closes::SaidElsewhere => muted_line("Denied"),
+            Closes::ForASubagent { tool, subagent } => muted_line(format!("Denied {tool} for {subagent}"), cx),
+            Closes::Unsaid | Closes::SaidElsewhere => muted_line("Denied", cx),
         },
-        EventBody::AgentMode { permission_mode } => muted_line(mode::mode_change(around.mode_before, *permission_mode)),
+        EventBody::AgentMode { permission_mode } => {
+            muted_line(mode::mode_change(around.mode_before, *permission_mode), cx)
+        }
         EventBody::AgentExited { reason, stderr_tail, .. } => agent_exited(seq, *reason, stderr_tail, find, cx),
         EventBody::Notice { level, message, .. } => notice(seq, *level, message, shared, find, cx),
         // These tell the hub things, and there's nothing here for a person. An agent's start says something only when
@@ -368,7 +370,7 @@ fn render_block(
         ContentBlock::ToolResult { .. } if drawing.with_call => return None,
         ContentBlock::ToolResult { .. } => tools::result(&toggle, drawing.reply.result()?, cx),
         ContentBlock::Image { .. } => {
-            div().text_xs().text_color(cx.theme().muted_foreground).child("Image").into_any_element()
+            div().text_xs().text_color(look::colors(cx).text_muted).child("Image").into_any_element()
         }
         ContentBlock::Unknown => return None,
     })

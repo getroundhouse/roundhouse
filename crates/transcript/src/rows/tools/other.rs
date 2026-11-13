@@ -3,7 +3,6 @@
 
 use client_core::calls::Other;
 use gpui_kit::assets::IconName;
-use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{AnyElement, App, Div, IntoElement, ParentElement};
 use serde_json::Value;
@@ -53,11 +52,12 @@ fn json(input: &Value) -> String {
 }
 
 fn opened(input: &Value, answer: Option<&Answer>, toggle: &Toggle, cx: &App) -> Div {
+    let colors = look::colors(cx);
     block::frame(cx)
         .child(block::label("Input", cx))
         .child(block::code(toggle, Text::Input, "json", "", &json(input), cx))
         .when_some(came_back(answer), |d, answer| {
-            let color = if answer.failure().is_some() { cx.theme().danger } else { cx.theme().foreground };
+            let color = if answer.failure().is_some() { colors.error } else { colors.text };
             let images = answer.images();
             d.child(block::separator(cx))
                 .child(block::label("Output", cx))

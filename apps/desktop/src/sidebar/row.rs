@@ -8,7 +8,7 @@ use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::base::motion::transition;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::menu::{ContextMenuExt as _, PopupMenu, PopupMenuItem};
-use gpui_kit::component::{ActiveTheme as _, Selectable as _, Sizable as _, h_flex};
+use gpui_kit::component::{Selectable as _, Sizable as _, h_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     Action, AnyElement, App, Context, ElementId, FontWeight, InteractiveElement as _, IntoElement, MouseButton,
@@ -38,7 +38,7 @@ pub(super) fn workspace_row(
     // While Home shows, it's what's showing, rather than the workspace still selected under it.
     let selected = !app.home_showing() && app.selected.as_ref() == Some(&workspace.id);
     let id = workspace.id.clone();
-    let muted = cx.theme().muted_foreground;
+    let muted = look::colors(cx).text_muted;
     let Standing { signal: mark, work, needs_a_look } = standing(app, workspace, cx);
     let menu = row_menu(app, workspace, cx);
     let label = workspace.label().to_string();
@@ -157,6 +157,7 @@ fn right_end(
     window: &mut Window,
     cx: &mut Context<AppView>,
 ) -> Option<AnyElement> {
+    let muted = look::colors(cx).text_muted;
     let End { drafted, expiring, pointing, waiting } = end;
     let expiring = expiring.filter(|_| waiting.is_none());
     let icons = drafted || expiring.is_some();
@@ -170,14 +171,14 @@ fn right_end(
     if !icons && !button && waiting.is_none() {
         return None;
     }
-    let pencil = icon_box(Lucide::Pencil, cx.theme().muted_foreground)
+    let pencil = icon_box(Lucide::Pencil, muted)
         .id(ElementId::Name(format!("draft-{}", workspace.id).into()))
         .role(Role::Image)
         .aria_label("Draft")
         .test_support();
     // In a box as wide as the pencil's, so the two sit as the sidebar's icons do.
     let clock = expiring.map(|left_ms| {
-        let clock = prompt_cache::clock(format!("row-cache-{}", workspace.id), left_ms, cx.theme().muted_foreground);
+        let clock = prompt_cache::clock(format!("row-cache-{}", workspace.id), left_ms, muted);
         div().flex_none().size_4().flex().items_center().justify_center().child(clock)
     });
     let icons_drawn = h_flex().gap_1().when(drafted, |d| d.child(pencil)).children(clock);
@@ -186,7 +187,7 @@ fn right_end(
     let end = h_flex().flex_none().pl(before).child(icons_drawn);
     // Text has no padding of its own to keep it off the pencil, as the button has.
     let end = if let Some(waiting) = waiting {
-        let doing = doing(format!("doing-{}", workspace.id), waiting, small);
+        let doing = doing(format!("doing-{}", workspace.id), waiting, small, cx);
         end.child(div().when(drafted, |d| d.pl(MARK_GAP)).child(doing))
     } else {
         // The icons rest in the middle of the button's place, and end against its box once it has come. Its padding
@@ -206,8 +207,8 @@ fn right_end(
 /// What a workspace is waiting on the hub for, such as `Archiving…`, in place of its button to do that. It shows
 /// whether a button, a menu or a key started it, and wherever the pointer is, so it's clear the press took. It's
 /// smaller than the workspace's name, so it's set on the name's baseline.
-pub(crate) fn doing(id: String, waiting: &'static str, small: &Placed) -> impl IntoElement {
-    let text = small.set(div().flex_none().text_color(look::faint()).child(waiting));
+pub(crate) fn doing(id: String, waiting: &'static str, small: &Placed, cx: &App) -> impl IntoElement {
+    let text = small.set(div().flex_none().text_color(look::colors(cx).text_faint).child(waiting));
     div().id(ElementId::Name(id.into())).role(Role::Status).aria_label(waiting).child(text).test_support()
 }
 
@@ -220,7 +221,7 @@ fn archive_button(app: &AppView, workspace: &Workspace, cx: &mut Context<AppView
         .ghost()
         .small()
         .icon(Lucide::Archive)
-        .text_color(cx.theme().muted_foreground)
+        .text_color(look::colors(cx).text_muted)
         .tooltip("Archive")
         // So it can't be pressed twice. A disabled button still takes the click, so the row doesn't open instead.
         .off_while(!app.busy.is_free())

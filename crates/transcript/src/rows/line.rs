@@ -117,7 +117,7 @@ impl Line {
             .when_some(self.preview.filter(|_| !open), |d, preview| {
                 d.hoverable_tooltip(move |window, cx| preview(window, cx))
             })
-            .child(lead(glyph(self.icon), px(ICON), open, cx))
+            .child(lead(glyph(self.icon, cx), px(ICON), open, cx))
             .child(
                 line_text.body.set(
                     div()
@@ -145,29 +145,29 @@ impl Part {
 
     /// Code, a note, a summary and counts go on the title's baseline. A pill and a chip are shapes, so they're centred.
     fn render(self, line_text: &LineText, cx: &App) -> AnyElement {
-        let theme = cx.theme();
+        let colors = look::colors(cx);
         match self {
-            Part::Pill(text, marks) => pill(text, &marks, theme.muted_foreground, theme.secondary, cx),
+            Part::Pill(text, marks) => pill(text, &marks, colors.text_muted, colors.raised, cx),
             Part::Chip(text) => div()
                 .flex_none()
                 .px_2()
                 .rounded(px(6.))
                 .border_1()
-                .border_color(theme.input)
+                .border_color(colors.control_edge)
                 .text_sm()
-                .text_color(theme.muted_foreground)
+                .text_color(colors.text_muted)
                 .child(text)
                 .into_any_element(),
             Part::Code(text) => line_text
                 .code
-                .set(div().min_w_0().overflow_hidden().text_ellipsis().text_color(look::faint()).child(text))
+                .set(div().min_w_0().overflow_hidden().text_ellipsis().text_color(colors.text_faint).child(text))
                 .into_any_element(),
             Part::Note(text) => {
-                line_text.body.set(div().flex_none().text_color(look::faint()).child(text)).into_any_element()
+                line_text.body.set(div().flex_none().text_color(colors.text_faint).child(text)).into_any_element()
             }
             Part::Summary(text) => line_text
                 .body
-                .set(div().min_w_0().overflow_hidden().text_ellipsis().text_color(look::faint()).child(text))
+                .set(div().min_w_0().overflow_hidden().text_ellipsis().text_color(colors.text_faint).child(text))
                 .into_any_element(),
             Part::Counts(Counts { added, removed }) => line_text
                 .code
@@ -175,8 +175,8 @@ impl Part {
                     h_flex()
                         .flex_none()
                         .gap_1()
-                        .child(div().text_color(theme.success).child(format!("+{added}")))
-                        .child(div().text_color(theme.danger).child(format!("−{removed}"))),
+                        .child(div().text_color(colors.added).child(format!("+{added}")))
+                        .child(div().text_color(colors.removed).child(format!("−{removed}"))),
                 )
                 .into_any_element(),
         }
@@ -193,7 +193,7 @@ pub(super) fn opening(
     on_click: impl Fn(&mut App) + 'static,
     cx: &App,
 ) -> Stateful<Div> {
-    let hover = cx.theme().muted;
+    let hover = look::colors(cx).line_hover;
     h_flex()
         .id(id)
         .group(GROUP)
@@ -225,17 +225,17 @@ pub(super) fn lead(mark: impl IntoElement, width: Pixels, open: bool, cx: &App) 
             .justify_center()
             .invisible()
             .group_hover(GROUP, Styled::visible)
-            .child(Icon::new(chevron).size(px(ICON)).text_color(cx.theme().foreground)),
+            .child(Icon::new(chevron).size(px(ICON)).text_color(look::colors(cx).text)),
     )
 }
 
 /// The kind's icon as a line starts with it, for a line that doesn't open, such as one that's still streaming.
-pub(super) fn still_icon(kind: IconName) -> Div {
-    div().flex_none().size(px(ICON)).child(glyph(kind))
+pub(super) fn still_icon(kind: IconName, cx: &App) -> Div {
+    div().flex_none().size(px(ICON)).child(glyph(kind, cx))
 }
 
-fn glyph(kind: IconName) -> Icon {
-    Icon::new(kind).size(px(ICON)).text_color(look::faint())
+fn glyph(kind: IconName, cx: &App) -> Icon {
+    Icon::new(kind).size(px(ICON)).text_color(look::colors(cx).text_faint)
 }
 
 /// Code on a pill, cut off with an ellipsis when it doesn't fit, with its matches.
@@ -295,16 +295,22 @@ pub(super) fn shown_failure(answer: Option<&Answer>, shows_output: bool, key: &I
 
 /// The line under a call whose result says it failed, so it shows while the call is closed.
 fn failure(failure: &Failure, cx: &App) -> AnyElement {
-    let danger = cx.theme().danger;
+    let error_colour = look::colors(cx).error;
     h_flex()
         .h(px(HEIGHT))
         .gap_2()
         .overflow_hidden()
         .whitespace_nowrap()
-        .child(Icon::new(IconName::CircleX).flex_none().size(px(ICON)).text_color(danger))
-        .child(div().flex_none().text_color(danger).child(failure.label()))
+        .child(Icon::new(IconName::CircleX).flex_none().size(px(ICON)).text_color(error_colour))
+        .child(div().flex_none().text_color(error_colour).child(failure.label()))
         .when(!failure.message.is_empty(), |d| {
-            d.child(pill(failure.message.to_string().into(), &Marks::default(), danger, danger.opacity(0.09), cx))
+            d.child(pill(
+                failure.message.to_string().into(),
+                &Marks::default(),
+                error_colour,
+                error_colour.opacity(0.09),
+                cx,
+            ))
         })
         .into_any_element()
 }
@@ -328,7 +334,8 @@ pub(super) fn shown_denial(answer: Option<&Answer>, key: &ItemKey, gather: &mut 
 /// The line under a call the person denied, quiet, since it's what they chose: `Denied`, then what they told the agent,
 /// cut off where the line ends.
 fn denial(denied: &Denied, toggle: &Toggle, cx: &App) -> AnyElement {
-    let muted = cx.theme().muted_foreground;
+    let colors = look::colors(cx);
+    let muted = colors.text_muted;
     let said = said(denied);
     h_flex()
         .id("call-denied")
@@ -338,7 +345,7 @@ fn denial(denied: &Denied, toggle: &Toggle, cx: &App) -> AnyElement {
         .whitespace_nowrap()
         .role(Role::Label)
         .aria_label(said.map_or_else(|| "Denied".to_string(), |said| format!("Denied: {said}")))
-        .child(Icon::new(IconName::CircleX).flex_none().size(px(ICON)).text_color(look::faint()))
+        .child(Icon::new(IconName::CircleX).flex_none().size(px(ICON)).text_color(colors.text_faint))
         .child(div().flex_none().text_color(muted).child("Denied"))
         .when_some(said, |d, said| {
             let words = find::marked(said.to_string().into(), &toggle.marks(Text::Said, said), &[], None);

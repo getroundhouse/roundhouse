@@ -1,7 +1,6 @@
 //! What the app says of a session in a line of its own: that its agent stopped, with what it last printed, and what
 //! the hub or the agent's CLI wanted said.
 
-use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::{AnyElement, App, IntoElement as _, ParentElement as _, Styled as _, div};
 use protocol::event::{ExitReason, NoticeLevel};
 use protocol::model::Seq;
@@ -22,13 +21,13 @@ pub(super) fn agent_exited(
     match reason {
         ExitReason::Requested => empty(),
         ExitReason::HubRestart => {
-            muted_line("The app restarted while the agent was working. Send a message to continue.")
+            muted_line("The app restarted while the agent was working. Send a message to continue.", cx)
         }
         ExitReason::WorkerLost | ExitReason::Unexpected | ExitReason::StartFailed | ExitReason::Unknown => {
             const STOPPED: &str = "The agent stopped unexpectedly. ";
             let printed = exit_output(reason, stderr_tail).unwrap_or_default();
             let marks = find.marks(&(ItemKey::Event(seq, 0), Part::Exit), printed).moved(STOPPED.len());
-            marked_line(format!("{STOPPED}{printed}"), &marks, cx.theme().danger)
+            marked_line(format!("{STOPPED}{printed}"), &marks, look::colors(cx).stopped)
         }
     }
 }
@@ -53,10 +52,11 @@ pub(super) fn notice(
     find: &FindLook,
     cx: &App,
 ) -> AnyElement {
+    let colors = look::colors(cx);
     let color = match level {
-        NoticeLevel::Error => cx.theme().danger,
-        NoticeLevel::Warning => cx.theme().warning,
-        NoticeLevel::Info | NoticeLevel::Unknown => cx.theme().muted_foreground,
+        NoticeLevel::Error => colors.error,
+        NoticeLevel::Warning => colors.warning,
+        NoticeLevel::Info | NoticeLevel::Unknown => colors.text_muted,
     };
     let id = (ItemKey::Event(seq, 0), Part::Notice);
     let said = from_blocks(&Written::found(TextAt::only(seq, 0), &id, find, message), None, shared);

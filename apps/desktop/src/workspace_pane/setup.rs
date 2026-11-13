@@ -14,6 +14,7 @@ use super::{PaneEvent, WorkspacePane};
 const SETUP_LOG_REFRESH: std::time::Duration = std::time::Duration::from_secs(1);
 
 pub(super) fn setup_log_view(text: String, cx: &App) -> impl IntoElement {
+    let colors = look::colors(cx);
     div()
         .region(Region::SetupLog)
         .flex_none()
@@ -23,10 +24,10 @@ pub(super) fn setup_log_view(text: String, cx: &App) -> impl IntoElement {
         .px_3()
         .py_2()
         .border_t_1()
-        .border_color(cx.theme().border)
+        .border_color(colors.edge)
         .font_family(cx.theme().mono_font_family.clone())
         .text_size(cx.theme().mono_font_size)
-        .text_color(cx.theme().muted_foreground)
+        .text_color(colors.text_muted)
         .child(SharedString::from(if text.is_empty() { "Nothing yet.".to_string() } else { text }))
 }
 
@@ -93,8 +94,8 @@ impl WorkspacePane {
             SetupStatus::Failed { code: None } => ("Setup didn't finish, so the agent may find things missing.", false),
             _ => return None,
         };
-        let theme = cx.theme();
-        let (border, muted, warning) = (theme.border, theme.muted_foreground, theme.warning);
+        let colors = look::colors(cx);
+        let (border, muted, warning) = (colors.edge, colors.text_muted, colors.warning);
         let log_label = if self.setup_log.is_some() { "Hide log" } else { "View log" };
         Some(
             h_flex()

@@ -208,6 +208,7 @@ struct DiffPreview {
 impl Render for DiffPreview {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
+        let colors = look::colors(cx);
         // It isn't in the transcript, so it has nothing to find in.
         let none = Marks::default();
         let rows = self.sections.iter().flat_map(|section| numbered::rows(&self.language, section, &none, None, cx));
@@ -221,8 +222,8 @@ impl Render for DiffPreview {
             .occlude()
             .rounded(px(10.))
             .border_1()
-            .border_color(theme.input)
-            .bg(theme.popover)
+            .border_color(colors.control_edge)
+            .bg(colors.popover)
             .font_family(theme.mono_font_family.clone())
             .text_size(theme.mono_font_size)
             // It has nothing to hand the wheel on to, so GPUI scrolls it, holding a gesture to the way it started until

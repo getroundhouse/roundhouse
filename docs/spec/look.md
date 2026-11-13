@@ -1,19 +1,97 @@
 # Look
 
-The rules every screen follows: surfaces, type, space, buttons, the pointer, colour, and the status mark, with the app icon that's made from the mark. Each area's file shows its own screens. `crates/look` holds the theme, the colours the kit has no name for, the mark, the icon, plan mode's texture, the pointing hand and the baseline text of different sizes shares.
+The foundations of the app's design system, the rules every screen follows: colour, type, space and shape, buttons, the pointer, and the status mark, with the app icon that's made from the mark. Each area's file shows its own screens. `crates/look` holds them in code: every colour by what it's for, the theme made from them, the mark, the icon, plan mode's texture, the pointing hand and the baseline text of different sizes shares.
 
 It's meant to feel familiar to the people Roundhouse is for, and it sets itself apart with a motif of its own, the status mark.
 
-## Surfaces and type
+## Colour
+
+Each colour means one thing.
 
 - **Three warm near-black surfaces,** so the app reads as one calm field with a few raised things on it. The pane is `#151312`, the sidebar `#1a1715`, and anything raised, such as a card or a popover, is `#24201e`. The composer and code blocks are `#1e1b19`. A prompt is a wash of the brand's copper, `#37281f`, so what was asked is easy to find when scrolling.
 - **One thin edge colour, `#2a2624`, and no shadows.** Edges separate, and nothing floats.
 - **A field on the sidebar, such as Settings' search, has a lighter edge, `#434140`,** since it's something to type in rather than something that separates. *Unconfirmed.* So does the button back down to a chat's end, which sits over the chat's text, as `chats.md` says.
 - **A dialog dims everything behind it to 40% of its brightness,** under 60% black, so it's plainly the one thing to deal with, and what's behind it reads as out of reach. *Unconfirmed.*
+- **Three text colours:** foreground `#ebe7e3`, muted `#a39d97`, and faint `#6f6964` for meta, line numbers and hints.
+- **Copper, `#d08a5c`, is the brand.** It's for empty states, the app icon, keyboard focus, the edge of a comment being written, the wash behind a prompt and, quieter, a composer that's planning, and never a status.
+- **Pale copper, `#d8c2b3`, marks the chat showing,** as the line under its tab. It's the brand's hue, paled toward the text, so it says where you are without reading as a status.
+- **A composer that's planning is in a quieter copper.** Its surface takes a tenth of copper, its edge is copper at a little over half strength over that, and its texture's dots are copper. It's the brand's own colour, so plan mode reads as a way of working you chose rather than a status, and its edge stays quieter than keyboard focus, which the composer also shows while files are dragged over it. `chats.md` has the texture. *Unconfirmed.*
+- **Amber is for the card that needs you, and red means the agent stopped short.** A plan waiting to be approved gets a thin amber edge and a faint amber background, and a failed request's card the same in red, as `chats.md` says. A question isn't a card, and neither is a request to use a tool, since each takes the composer's place, and has the thin edge colour on the pane's own surface, as `chats.md` says. Amber isn't on the mark, where the merge queue's yellow would be taken for it.
+- **The diff uses the colours review tools do,** because they're about a file rather than about you or the agent: lines added and removed are green and red, and a modified file's icon is yellow.
+- **A file's icon is in its kind's colours,** as Catppuccin's Mocha flavour draws them, in thin lines, which editors have made familiar, and a folder's is the plain folder in the muted text colour, whatever it holds, as is the plain file's, for a file with no icon of its own. They say what a file is, never how anything stands, so they sit beside a name and nowhere a status would.
+- **A pull request's state is shown in GitHub's colours,** which the people Roundhouse is for already know: green when it's open, purple when it's merged, a muted red when it's closed, and a grey of its own when it's a draft.
+- **The pull request's bar says more with the same colours.** It's green only once nothing is in the way of merging, and on the theme's raised surface, in the text colour, while there's something to do first. A place in the merge queue is GitHub's yellow, which GitHub uses for what's waiting on it, and the bar always says in words what it's waiting for, so it isn't taken for amber's turn of yours. The fan is yellow there too, and green for every other open pull request, since it's too small to say what's in the way of merging. Amber is never on the mark, so the queue's yellow isn't taken for it. `look::Work` chooses them from `look::Colors`, so a workspace's fan and the bar can't disagree. *Unconfirmed.*
+- **Every colour the app draws with has a name for what it's for,** so a colour means the same wherever it's drawn, and two that look alike and mean different things, such as an approval's amber and a warning's, can change apart. What's drawn takes one of them by its name, or one of them at a strength chosen where it's drawn, such as a removed line's wash, which is `removed` at 12%, rather than a colour by its value. The app is dark only, and a light theme would be a second set of values for the same names. `look::Colors` holds them, and the kit's theme is made from them, so the kit's own parts, such as its buttons and menus, draw with the same ones. The few that only the kit's own parts draw with, such as the text on its danger button, are given where the theme is made. Code's colours, a file's icon and an image's pixels are their own, as above. *Unconfirmed.*
+
+**Every colour, by its name.** Each is the field of that name in `look::Colors`. *Unconfirmed.*
+
+| Name | Colour | For |
+|---|---|---|
+| **Surfaces** | | |
+| `pane` | `#151312` | The workspace's pane, Home's and Settings' pages, and the window's ground |
+| `sidebar` | `#1a1715` | The sidebars |
+| `inset` | `#1e1b19` | What's set into a surface: the composer, a prompt waiting in the queue, a call's output, a code block |
+| `raised` | `#24201e` | Something raised in place: a pill, a file's header, the update card, an open pull request's bar with something to do |
+| `popover` | `#221f1d` | Something that opens over the rest: a card, a menu, a tooltip, what a hover shows |
+| `prompt` | `#37281f` | A prompt's bubble |
+| `icon_tile_top` | `#211d1b` | The top of the app icon's tile |
+| **Under the pointer, pressed or chosen** | | |
+| `row_hover` | `#211e1c` | A row in a list under the pointer, such as Home's or a file's |
+| `line_hover` | `#1e1b19` | A call's line under the pointer, and the compaction's |
+| `menu_hover` | `#262220` | A menu's row under the pointer, a page in Settings' sidebar, under the pointer or open, and behind code within a line of text, which the kit draws in the grey of its menus' rows |
+| `raised_hover` | `#2b2724` | Something raised, under the pointer |
+| `raised_pressed` | `#322d2a` | Something raised, pressed, and the sidebar's selected row |
+| **Edges** | | |
+| `edge` | `#2a2624` | The thin edge that separates: around a card, along a header, between rows |
+| `control_edge` | `#353130` | Something to use: the composer, a chip, a key, a button that opens something |
+| `field_edge` | `#434140` | A field on the sidebar, and the button back down to a chat's end |
+| **Text** | | |
+| `text` | `#ebe7e3` | What to read |
+| `text_muted` | `#a39d97` | What's secondary, and a name that needs nothing from you |
+| `text_faint` | `#6f6964` | Line numbers, meta, hints, and a mark with no pull request |
+| **Buttons** | | |
+| `button` | `#211e1c` | A button with an edge, such as a dialog's Cancel |
+| `main` | `#f2eee9` | An area's one main action, such as Send |
+| `main_hover` | `#ffffff` | The main action under the pointer |
+| `main_pressed` | `#ddd8d2` | The main action pressed |
+| `on_main` | `#1d1a18` | What's on the main action, and on any other light fill |
+| **The brand** | | |
+| `brand` | `#d08a5c` | Copper: empty states, the icon, keyboard focus, the caret, a comment being written, a composer that's planning |
+| `current` | `#d8c2b3` | Pale copper: the chat showing, and, faint, what's found |
+| `link` | `#dba27c` | A link |
+| `link_hover` | `#e8b896` | A link under the pointer |
+| **What happened** | | |
+| `needs_you` | `#e9b24c` | The card that needs you, such as an approval |
+| `warning` | `#e9b24c` | A warning, such as setup that failed |
+| `stopped` | `#ee6f64` | The agent stopped short: its mark's turntable, and a turn that failed |
+| `error` | `#ee6f64` | Something else that went wrong, such as a call that failed |
+| `added` | `#6cc488` | Lines and counts added to a file |
+| `removed` | `#ee6f64` | Lines and counts removed from a file |
+| `modified` | `#e9b24c` | A file that's changed, and what changed in an image |
+| **A pull request** | | |
+| `pr_open` | `#3fb950` | Open |
+| `pr_merged` | `#a371f7` | Merged |
+| `pr_closed` | `#b9605a` | Closed |
+| `pr_draft` | `#8b949e` | A draft |
+| `pr_queued` | `#d29922` | Waiting on GitHub, such as in the merge queue |
+| **The window** | | |
+| `dim` | `#00000099` | Over everything behind a dialog |
+| `scroll_thumb` | `#ffffff1f` | A scrollbar's thumb |
+| `scroll_thumb_hover` | `#ffffff33` | A scrollbar's thumb under the pointer |
+| `windows_close` | `#c42b1c` | Windows' close button under the pointer |
+| `on_windows_close` | `#ffffff` | Its glyph |
+
+Three strengths have names of their own, since several places draw with them: what's selected in text is `brand` at 30%, the most the kit lets a selection show, every match of what's found is `current` at 22%, and the match being shown is `brand` at 55%. *Unconfirmed.*
+
+**Every colour by its name, as the app draws it.** *Unconfirmed.*
+
+![Every colour by its name](screens/colours.png)
+
+## Type
+
 - **The system font, at 14px for body text,** which is the kit's small size. Secondary text is muted, at the same size or at the kit's extra-small size, 12px, for small details. The kit's sizes are measured from 16px, as the web's are, so its spacing comes out as the web's does. It's dense enough to watch many agents, and still easy to read. A tool call's line is at body size, since what it did is the main thing it says. *Unconfirmed.*
 - **Emphasis is medium weight, never bold,** for what should stand out from what's around it, such as the title that names what a card or section is about. Bold shouts in a dense layout. Medium is drawn as regular, since the text system gives a request for medium the system font's regular face. *Not built.*
 - **In a list of one kind of thing, such as the workspaces in the sidebar or the chat tabs, a name's colour and weight change only for state that needs you,** such as a reply you haven't read. Which one is selected or open shows in its background or underline instead, and its name looks as it does when it isn't. Names are read side by side, so any change to one reads as news, and macOS's font smoothing thickens brighter text, so a name that brightened would look heavier too.
-- **Three text colours:** foreground `#ebe7e3`, muted `#a39d97`, and faint `#6f6964` for meta, line numbers and hints.
 - **Code is Menlo at 12px,** set once in the theme.
 - **Text in different sizes or fonts along one line sits on one baseline,** as the words of a sentence do, such as the workspace header's title beside its branch, in the code font, and where that started, both smaller. Centred one by one, smaller text would ride higher than what's beside it. An icon stays centred, and so does text on a shape, such as a pill, a chip or a button, since it's the shape that's lined up. `look::LineText` sets them. *Unconfirmed.*
 
@@ -51,19 +129,6 @@ It's meant to feel familiar to the people Roundhouse is for, and it sets itself 
 - **It's an open hand over what can be dragged to another place, such as a project's row in the sidebar, and a closed one while it's dragged,** even where a press does something too, since a hand that points would say nothing of the drag. *Unconfirmed.*
 - **A menu's rows keep the arrow, as the system's menus do,** since an open menu is nothing but things to click, and the row under the pointer is lit. *Unconfirmed.*
 - **It's an I-beam over text that can be typed in or selected,** such as the composer and what the agent wrote, as it is everywhere else on a Mac, so it's plain that dragging there selects. *Unconfirmed.*
-
-## Colour
-
-Each colour means one thing.
-
-- **Copper, `#d08a5c`, is the brand.** It's for empty states, the app icon, keyboard focus, the edge of a comment being written, the wash behind a prompt and, quieter, a composer that's planning, and never a status.
-- **Pale copper, `#d8c2b3`, marks the chat showing,** as the line under its tab. It's the brand's hue, paled toward the text, so it says where you are without reading as a status.
-- **A composer that's planning is in a quieter copper.** Its surface takes a tenth of copper, its edge is copper at a little over half strength over that, and its texture's dots are copper. It's the brand's own colour, so plan mode reads as a way of working you chose rather than a status, and its edge stays quieter than keyboard focus, which the composer also shows while files are dragged over it. `chats.md` has the texture. *Unconfirmed.*
-- **Amber is for the card that needs you, and red means the agent stopped short.** A plan waiting to be approved gets a thin amber edge and a faint amber background, and a failed request's card the same in red, as `chats.md` says. A question isn't a card, and neither is a request to use a tool, since each takes the composer's place, and has the thin edge colour on the pane's own surface, as `chats.md` says. Amber isn't on the mark, where the merge queue's yellow would be taken for it.
-- **The diff uses the colours review tools do,** because they're about a file rather than about you or the agent: lines added and removed are green and red, and a modified file's icon is yellow.
-- **A file's icon is in its kind's colours,** as Catppuccin's Mocha flavour draws them, in thin lines, which editors have made familiar, and a folder's is the plain folder in the muted text colour, whatever it holds, as is the plain file's, for a file with no icon of its own. They say what a file is, never how anything stands, so they sit beside a name and nowhere a status would.
-- **A pull request's state is shown in GitHub's colours,** which the people Roundhouse is for already know: green when it's open, purple when it's merged, a muted red when it's closed, and a grey of its own when it's a draft.
-- **The pull request's bar says more with the same colours.** It's green only once nothing is in the way of merging, and on the theme's raised surface, in the text colour, while there's something to do first. A place in the merge queue is GitHub's yellow, which GitHub uses for what's waiting on it, and the bar always says in words what it's waiting for, so it isn't taken for amber's turn of yours. The fan is yellow there too, and green for every other open pull request, since it's too small to say what's in the way of merging. Amber is never on the mark, so the queue's yellow isn't taken for it. `look::Work` holds these colours, so a workspace's fan and the bar can't disagree. *Unconfirmed.*
 
 ## The status mark
 

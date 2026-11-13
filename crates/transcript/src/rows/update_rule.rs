@@ -17,7 +17,7 @@ use crate::item_key::ItemKey;
 /// The rule for the agent's start at `seq`, on `build`, after its chat's agent last ran on `from`.
 pub(super) fn line(seq: Seq, from: &str, build: &str, cx: &App) -> AnyElement {
     let said = format!("Roundhouse chat worker updated from {from} to {build}");
-    let middle = rule_middle(ItemKey::Event(seq, 0).element("updated"))
+    let middle = rule_middle(ItemKey::Event(seq, 0).element("updated"), cx)
         .role(Role::Label)
         .aria_label(said.clone())
         .child(Icon::new(IconName::CircleFadingArrowUp).size(px(RULE_ICON)))

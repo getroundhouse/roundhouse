@@ -20,7 +20,7 @@ use gpui_kit::base::motion::transition;
 use gpui_kit::base::{ScrollBounce, ScrollbarHandle};
 use gpui_kit::component::button::{Button, ButtonCustomVariant, ButtonVariants as _};
 use gpui_kit::component::scroll::ScrollableElement as _;
-use gpui_kit::component::{ActiveTheme as _, IconName, Sizable as _};
+use gpui_kit::component::{IconName, Sizable as _};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, Bounds, Context, ElementId, EntityId, InteractiveElement as _, IntoElement, ParentElement as _,
@@ -267,12 +267,12 @@ impl TranscriptList {
         if shown <= 0. {
             return None;
         }
-        let (theme, edge) = (cx.theme(), look::field_edge());
+        let colors = look::colors(cx);
+        let edge = colors.field_edge;
         // Its edge is lighter than a line, so it reads as something to press over whatever is under it rather than as
         // a divider. A custom button's edge is its colour whatever state it's in, so the edge stays as the pointer
         // lights it, where a secondary one's would turn to a line's.
-        let style =
-            ButtonCustomVariant::new(cx).color(edge).hover(theme.secondary_hover).active(theme.secondary_active);
+        let style = ButtonCustomVariant::new(cx).color(edge).hover(colors.raised_hover).active(colors.raised_pressed);
         let list = self.clone();
         // A small button's icon, on a square a little bigger, so it's easy to hit over the chat. The kit draws a custom
         // button's colour faintly as its fill, so the pane's colour is set on the button itself, which hover and press
@@ -287,8 +287,8 @@ impl TranscriptList {
             .size(LATEST_BUTTON_SIDE)
             .border_1()
             .border_color(edge)
-            .bg(theme.background)
-            .text_color(theme.foreground)
+            .bg(colors.pane)
+            .text_color(colors.text)
             .on_click(move |_, _, cx| {
                 list.scroll_to_latest(cx);
                 cx.notify(list.view);

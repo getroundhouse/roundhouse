@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use gpui_kit::component::{ActiveTheme as _, h_flex};
+use gpui_kit::component::h_flex;
 use gpui_kit::{
     Anchor, AnyElement, App, InteractiveElement as _, IntoElement, ParentElement, SharedString, Styled,
     TestSupportExt as _, div,
@@ -30,18 +30,19 @@ pub(super) fn line(
     find: &FindLook,
     cx: &App,
 ) -> AnyElement {
+    let colors = look::colors(cx);
     let EventBody::TurnEnded { outcome, result, errors, duration_ms, started_at_ms, models, tokens, .. } = &ended.body
     else {
         return empty();
     };
     match outcome {
-        TurnOutcome::Cancelled => muted_line("Stopped"),
+        TurnOutcome::Cancelled => muted_line("Stopped", cx),
         TurnOutcome::Error => match errors.first() {
             Some(error) => {
                 let marks = find.marks(&(ItemKey::Event(ended.seq, 0), Part::TurnError), error);
-                marked_line(error.clone(), &marks, cx.theme().danger)
+                marked_line(error.clone(), &marks, colors.stopped)
             }
-            None => marked_line("The turn failed".to_string(), &Marks::default(), cx.theme().danger),
+            None => marked_line("The turn failed".to_string(), &Marks::default(), colors.stopped),
         },
         TurnOutcome::Success | TurnOutcome::Unknown => {
             let (started_at_ms, took_ms) = timed(ended.ts_ms, *started_at_ms, *duration_ms);
@@ -101,7 +102,7 @@ fn finished(
         );
         div().flex().items_center().h_0().child(copy)
     });
-    let line = h_flex().gap_1().text_xs().text_color(look::faint()).child(said).children(copy);
+    let line = h_flex().gap_1().text_xs().text_color(look::colors(cx).text_faint).child(said).children(copy);
     row().child(line).into_any_element()
 }
 

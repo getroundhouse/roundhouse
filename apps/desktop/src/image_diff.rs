@@ -7,8 +7,7 @@
 use std::rc::Rc;
 
 use client_core::ClientError;
-use gpui_kit::component::ActiveTheme as _;
-use gpui_kit::{App, AppContext as _, Context, Entity, Global, Hsla, SharedString, Subscription, Task};
+use gpui_kit::{App, AppContext as _, Context, Entity, Global, SharedString, Subscription, Task};
 use protocol::model::{CommitId, FileContents};
 
 use crate::file_image::{self, FileImage};
@@ -72,11 +71,6 @@ pub fn comparison(cx: &App) -> Comparison {
 
 fn choose(comparison: Comparison, cx: &mut App) {
     cx.set_global(Chosen(comparison));
-}
-
-/// The colour of what changed, which is a modified file's, as Changes marks one.
-fn changed_colour(cx: &App) -> Hsla {
-    cx.theme().yellow
 }
 
 /// One side of the change.
@@ -253,7 +247,7 @@ impl ImageDiff {
         if comparison(cx) != Comparison::Difference || made || comparing {
             return;
         }
-        let (before, after, colour) = (before.clone(), after.clone(), difference::colour(changed_colour(cx)));
+        let (before, after, colour) = (before.clone(), after.clone(), difference::colour(look::colors(cx).modified));
         let task = cx.spawn(async move |this, cx| {
             let difference = cx.background_spawn(async move { Difference::between(&before, &after, colour) }).await;
             let _ = this.update(cx, |t, cx| {

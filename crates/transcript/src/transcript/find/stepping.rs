@@ -96,7 +96,7 @@ impl Transcript {
             for (key, fold) in &found.opens {
                 m.folds.choose(key.clone(), *fold, true);
             }
-            m.find = Rc::new(FindLook::new(Some(needle), Some(spot), reveal.clone()));
+            m.find = Rc::new(FindLook::new(Some(needle), Some(spot), reveal.clone(), look::colors(cx)));
         }
         // What it opened makes its row taller.
         self.list.out_of_date(at.row..at.row + 1);

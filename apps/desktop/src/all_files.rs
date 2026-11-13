@@ -313,7 +313,7 @@ impl AllFiles {
 
 impl Render for AllFiles {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let muted = cx.theme().muted_foreground;
+        let muted = look::colors(cx).text_muted;
         let truncated = matches!(&self.listing, Listing::Listed(listed) if listed.truncated);
         let body = match &self.listing {
             Listing::Loading => placeholder("Loading…".into(), muted),

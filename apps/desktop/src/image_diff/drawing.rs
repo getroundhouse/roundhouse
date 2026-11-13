@@ -5,14 +5,14 @@
 //! kind of image it is and how big, and in Difference how much changed.
 
 use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::{ActiveTheme as _, Selectable as _, Sizable as _, h_flex, v_flex};
+use gpui_kit::component::{Selectable as _, Sizable as _, h_flex, v_flex};
 use gpui_kit::{
     AnyElement, App, Context, Div, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Render,
     SharedString, Styled as _, TestSupportExt as _, WeakEntity, Window, div, px,
 };
 use look::Hand as _;
 
-use super::{Comparison, ImageDiff, Outcome, Shown, Side, changed_colour, choose, comparison, stacked};
+use super::{Comparison, ImageDiff, Outcome, Shown, Side, choose, comparison, stacked};
 use crate::file_image::{FileImage, Placed, fitted};
 use crate::file_view::{HEADER_HEIGHT, placeholder};
 
@@ -128,27 +128,27 @@ impl ImageDiff {
 /// its column, the same width, with the same room around and between them, and otherwise they start at the path's
 /// start. What's said of each is cut short with an ellipsis when there isn't room.
 fn strip(told: Told, cx: &App) -> Div {
-    let theme = cx.theme();
+    let colors = look::colors(cx);
     let sides = told.sides.into_iter().map(|(name, about)| {
         let about =
             about.map(|about| div().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(about));
-        h_flex().min_w_0().gap_1p5().child(div().flex_none().text_color(theme.foreground).child(name)).children(about)
+        h_flex().min_w_0().gap_1p5().child(div().flex_none().text_color(colors.text).child(name)).children(about)
     });
     let strip = h_flex()
         .flex_none()
         .w_full()
         .h(STRIP_HEIGHT)
         .border_b_1()
-        .border_color(theme.border)
+        .border_color(colors.edge)
         .text_xs()
-        .text_color(theme.muted_foreground);
+        .text_color(colors.text_muted);
     if told.over_columns {
         let columns = sides.map(|side| h_flex().flex_1().min_w_0().justify_center().child(side));
         return strip.px_6().gap_6().children(columns);
     }
     // After a swatch of the colour what changed is tinted.
     let changed = told.changed.map(|changed| {
-        let swatch = div().flex_none().size(px(8.)).rounded(px(2.)).bg(changed_colour(cx));
+        let swatch = div().flex_none().size(px(8.)).rounded(px(2.)).bg(colors.modified);
         h_flex().flex_none().ml_auto().pl_4().gap_2().child(swatch).child(changed)
     });
     strip.px_4().gap_5().children(sides).children(changed)
@@ -162,7 +162,8 @@ const FOLDERS_LEAST: Pixels = px(16.);
 
 /// Its path, as its folders, muted, and its name, and the choices of what to show, while there are two images.
 fn header(path: Option<SharedString>, choices: Option<Div>, cx: &App) -> Div {
-    let muted = cx.theme().muted_foreground;
+    let colors = look::colors(cx);
+    let muted = colors.text_muted;
     let path = path.unwrap_or_default();
     let (within, name) = path.rsplit_once('/').map_or(("", path.as_ref()), |(within, name)| (within, name));
     // Cut from the start, so the folder it's in shows longest, and never to less than `…/`, which a sliver of `…` would
@@ -179,7 +180,7 @@ fn header(path: Option<SharedString>, choices: Option<Div>, cx: &App) -> Div {
         .h(HEADER_HEIGHT)
         .px_4()
         .border_b_1()
-        .border_color(cx.theme().border)
+        .border_color(colors.edge)
         .text_sm()
         .child(folders)
         .child(div().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(name.to_string()))

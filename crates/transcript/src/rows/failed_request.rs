@@ -1,7 +1,7 @@
 //! The card that says one of the agent's requests to its model failed, and why, with a way to try again.
 
 use gpui_kit::component::button::Button;
-use gpui_kit::component::{ActiveTheme as _, Icon, IconName, h_flex};
+use gpui_kit::component::{Icon, IconName, h_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, ClickEvent, ElementId, FontWeight, IntoElement, ParentElement, Styled, Window, div, px,
@@ -31,22 +31,22 @@ pub(super) fn card(
     find: &FindLook,
     cx: &App,
 ) -> AnyElement {
-    let theme = cx.theme();
-    let danger = theme.danger;
+    let colors = look::colors(cx);
+    let stopped = colors.stopped;
     let resets = failure.resets_at_ms.and_then(|at_ms| look::day_and_time(at_ms, cx));
     let head = h_flex()
         .gap_2()
-        .child(Icon::new(IconName::CircleX).flex_none().size(px(ICON)).text_color(danger))
+        .child(Icon::new(IconName::CircleX).flex_none().size(px(ICON)).text_color(stopped))
         .child(div().text_sm().font_weight(FontWeight::MEDIUM).child(title(failure.kind)))
         .children(
-            resets.map(|when| div().ml_auto().text_xs().text_color(look::faint()).child(format!("Resets {when}"))),
+            resets.map(|when| div().ml_auto().text_xs().text_color(colors.text_faint).child(format!("Resets {when}"))),
         );
     let id = (ItemKey::Event(seq, 0), Part::FailedRequest);
     let said = from_blocks(&Written::found(TextAt::only(seq, 0), &id, find, &failure.message), None, shared);
-    let card = card::tinted(Some(danger), cx)
+    let card = card::tinted(Some(stopped), cx)
         .gap_1p5()
         .child(head)
-        .child(div().text_sm().text_color(theme.muted_foreground).child(said))
+        .child(div().text_sm().text_color(colors.text_muted).child(said))
         .when(retry, |d| d.child(h_flex().pt_1().child(retry_button(seq, shared))));
     row().child(card).into_any_element()
 }

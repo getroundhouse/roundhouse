@@ -2,7 +2,7 @@
 
 use gpui_kit::base::ElementExt as _;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::{ActiveTheme as _, Sizable as _, h_flex, v_flex};
+use gpui_kit::component::{Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, Context, Div, FontWeight, InteractiveElement as _, IntoElement, ParentElement, RenderOnce,
@@ -51,7 +51,7 @@ impl RenderOnce for UpdateCard {
         let shown = window.use_keyed_state("update-details-shown", cx, |_, _| Shown::default());
         let details = self.details.shown(shown.read(cx), cx);
         let mark = Details::mark(&shown, cx);
-        let theme = cx.theme();
+        let colors = look::colors(cx);
         v_flex()
             .id("update-card")
             .w_full()
@@ -59,9 +59,9 @@ impl RenderOnce for UpdateCard {
             .p_2p5()
             .gap_2p5()
             .rounded(px(10.))
-            .bg(theme.secondary)
+            .bg(colors.raised)
             .border_1()
-            .border_color(theme.border)
+            .border_color(colors.edge)
             .child(
                 h_flex()
                     .items_start()
@@ -83,7 +83,7 @@ fn card_text(title: &str, detail: impl IntoElement, cx: &App) -> Stateful<Div> {
         .id("update-about")
         .min_w_0()
         .child(div().text_sm().font_weight(FontWeight::MEDIUM).child(title.to_string()))
-        .child(div().text_xs().text_color(cx.theme().muted_foreground).child(detail))
+        .child(div().text_xs().text_color(look::colors(cx).text_muted).child(detail))
 }
 
 /// Where a version's changes are linked from: beside the version of an update that's waiting to be installed, which
@@ -93,7 +93,7 @@ fn whats_new(cx: &App) -> Stateful<Div> {
     div()
         .id("whats-new")
         .text_xs()
-        .text_color(cx.theme().link)
+        .text_color(look::colors(cx).link)
         .hand()
         .hover(gpui_kit::Styled::underline)
         .child("What's new")
@@ -140,7 +140,7 @@ fn asking(
     go_ahead: fn(&mut AppView, &mut Context<AppView>),
     cx: &mut Context<AppView>,
 ) -> AnyElement {
-    let muted = cx.theme().muted_foreground;
+    let muted = look::colors(cx).text_muted;
     let stay = Button::new("update-not-now")
         .hand()
         .ghost()

@@ -7,7 +7,7 @@
 
 use std::sync::Arc;
 
-use gpui_kit::component::{ActiveTheme as _, h_flex, v_flex};
+use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::{
     Context, Div, IntoElement, ParentElement as _, PlatformTextSystem, Render, Styled as _, Window, div, px, size,
 };
@@ -63,8 +63,8 @@ struct Sheet;
 
 impl Render for Sheet {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = cx.theme();
-        let muted = theme.muted_foreground;
+        let colors = look::colors(cx);
+        let muted = colors.text_muted;
         let label = |text: &'static str| div().w(px(LABEL)).text_sm().text_color(muted).child(text);
         let cell = || h_flex().w(px(CELL)).h(px(ROW)).gap_3();
         let heads: Vec<Div> =
@@ -86,7 +86,7 @@ impl Render for Sheet {
         let robot = h_flex().child(label("A subagent at work")).child(cell().child(look::robot_at_work(cx)));
         v_flex()
             .size_full()
-            .bg(theme.sidebar)
+            .bg(colors.sidebar)
             .p(px(MARGIN))
             .child(h_flex().child(label("Its pull request")).children(heads))
             .children(marks.collect::<Vec<_>>())

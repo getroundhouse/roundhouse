@@ -1,13 +1,14 @@
 [package]
 name = "look"
-description = "How the app looks: its theme, the colours the kit has no name for, code's colours, the words that changed in a diff's lines, the status mark, the app icon, and the parts of the window tests find."
+description = "How the app looks: every colour it draws with, by what it's for, the theme made from them, code's colours, the words that changed in a diff's lines, the status mark, the app icon, and the parts of the window tests find."
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
 license.workspace = true
 
 [features]
-# What only tests use: holding the marks and the time still for pictures, and setting off a scroll by a test's clock.
+# What only tests use: holding the marks and the time still for pictures, setting off a scroll by a test's clock, and
+# the list of the colours, for the sheet that shows them.
 testing = []
 
 [dependencies]
@@ -22,6 +23,8 @@ syntect = { workspace = true, features = ["default-fancy", "regex-onig"] }
 two-face = { workspace = true, features = ["syntect-onig"] }
 
 [dev-dependencies]
+# For a test that installs the theme in an app and reads it back.
+gpui-kit = { workspace = true, features = ["test-support"] }
 proptest.workspace = true
 
 [lints]

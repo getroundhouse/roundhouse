@@ -12,7 +12,7 @@ use client_core::calls::agent::{self, Agent};
 use client_core::calls::count;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::button::Button;
-use gpui_kit::component::{ActiveTheme as _, Sizable as _, v_flex};
+use gpui_kit::component::{Sizable as _, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, Div, ElementId, FontWeight, InteractiveElement as _, IntoElement, ParentElement, Styled,
@@ -150,16 +150,16 @@ pub(in crate::rows) fn prompt_block(
     drags: &Selection,
     cx: &App,
 ) -> AnyElement {
-    let theme = cx.theme();
+    let colors = look::colors(cx);
     let id = Text::Asked.element(key);
-    let text = div().id(id.clone()).text_sm().text_color(theme.muted_foreground).child(text(block::scroll_id(&id)));
+    let text = div().id(id.clone()).text_sm().text_color(colors.text_muted).child(text(block::scroll_id(&id)));
     v_flex()
         .mt_1()
         .gap_1()
         .pl_3()
         .border_l_2()
-        .border_color(theme.border)
-        .child(div().text_xs().text_color(look::faint()).child("Asked"))
+        .border_color(colors.edge)
+        .child(div().text_xs().text_color(colors.text_faint).child("Asked"))
         .child(block::scrolling(find, drags, &id, text.test_support()))
         .into_any_element()
 }
@@ -174,14 +174,14 @@ fn asked(call: &Agent, toggle: &Toggle, cx: &App) -> Option<AnyElement> {
 /// What it reported, `text`, once it's done, as the subagent's answer, as the item `key`'s: the agent's own prose, in
 /// full, under a rule and a heading, so it carries more weight than what it was asked.
 pub(in crate::rows) fn report_block(key: &ItemKey, text: impl IntoElement, cx: &App) -> Div {
-    let theme = cx.theme();
-    let heading = div().text_sm().font_weight(FontWeight::SEMIBOLD).text_color(theme.foreground).child("Report");
+    let colors = look::colors(cx);
+    let heading = div().text_sm().font_weight(FontWeight::SEMIBOLD).text_color(colors.text).child("Report");
     v_flex()
         .mt_1()
         .gap_2()
         .pt_3()
         .border_t_1()
-        .border_color(theme.border)
+        .border_color(colors.edge)
         .child(heading)
         .child(div().id(key.element("report")).child(text).test_support())
 }
@@ -208,8 +208,12 @@ fn page(call: &Agent, answer: Option<&Answer>, subagent: &Subagent, toggle: &Tog
             render_block(toggle.seq, toggle.in_row.nesting(), block, drawing, toggle.shared, &unfound, cx)
         })
         .collect();
-    let lately = (!drawn.is_empty())
-        .then(|| v_flex().gap_1().child(div().text_xs().text_color(look::faint()).child("Working on")).children(drawn));
+    let lately = (!drawn.is_empty()).then(|| {
+        v_flex()
+            .gap_1()
+            .child(div().text_xs().text_color(look::colors(cx).text_faint).child("Working on"))
+            .children(drawn)
+    });
     v_flex()
         .mt_1()
         .mb_2()
@@ -245,7 +249,7 @@ fn gathered(
     toggle: &Toggle,
     cx: &App,
 ) -> AnyElement {
-    let theme = cx.theme();
+    let colors = look::colors(cx);
     let events = subagent.and_then(|s| s.events.as_deref()).unwrap_or_default();
     // Made in the order they're shown, which is the order a call nested in another's row has its texts placed in.
     let asked = asked(call, toggle, cx);
@@ -265,7 +269,7 @@ fn gathered(
         .mb_2()
         .gap_2()
         .border_l_1()
-        .border_color(theme.border)
+        .border_color(colors.edge)
         .children(asked)
         .children(work)
         // A call's result names no images, so only one written into the report is drawn.

@@ -2,14 +2,14 @@
 //! out as it flips, or as what changed, with an outline around each place. Both sides take the place of the bigger,
 //! from its top left, so a pixel stays where it is as they flip.
 
-use gpui_kit::component::{ActiveTheme as _, v_flex};
+use gpui_kit::component::v_flex;
 use gpui_kit::{
     AnyElement, App, InteractiveElement as _, IntoElement as _, ParentElement as _, StatefulInteractiveElement as _,
     Styled as _, TestSupportExt as _, WeakEntity, div, pattern_slash, px,
 };
 use look::{Hand as _, pixels};
 
-use super::{ImageDiff, Outcome, Shown, changed_colour};
+use super::{ImageDiff, Outcome, Shown};
 use crate::file_image::{FileImage, Placed, edged, fitted, on_checkerboard};
 use crate::file_view::placeholder;
 
@@ -50,7 +50,8 @@ pub(super) fn difference(outcome: Outcome<'_>, cx: &App) -> AnyElement {
         Outcome::Failed => return placeholder("These images couldn't be compared".into(), cx),
         Outcome::Made(difference) => difference.clone(),
     };
-    let (colour, apart) = (changed_colour(cx), cx.theme().muted_foreground.opacity(STRIPES));
+    let colors = look::colors(cx);
+    let (colour, apart) = (colors.modified, colors.text_muted.opacity(STRIPES));
     let covers = (difference.width, difference.height);
     let drawn = fitted(covers, Placed::Top, move |scale, cx| {
         let at = |side: u32| px(pixels(side) * scale);

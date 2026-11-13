@@ -23,12 +23,13 @@ const WIDTH: f32 = 720.;
 /// the lines around it are in the code's.
 fn band(column: Div, cx: &App) -> AnyElement {
     let theme = cx.theme();
+    let colors = look::colors(cx);
     div()
         .w_full()
         .px_6()
         .pt(rems(0.75 + 0.625))
         .pb(rems(0.75 + 0.125))
-        .bg(theme.secondary)
+        .bg(colors.raised)
         .font_family(theme.font_family.clone())
         .text_sm()
         .child(column.w_full().max_w(px(WIDTH)).gap_3())
@@ -43,7 +44,7 @@ pub(super) fn draft_card(
     view: WeakEntity<FileDiff>,
     cx: &App,
 ) -> AnyElement {
-    let theme = cx.theme();
+    let colors = look::colors(cx);
     let empty = input.read(cx).text().to_string().trim().is_empty();
     let (cancel, save) = (view.clone(), view);
     let field = div()
@@ -51,8 +52,8 @@ pub(super) fn draft_card(
         .p_1()
         .rounded_md()
         .border_1()
-        .border_color(theme.ring.opacity(0.6))
-        .bg(theme.background)
+        .border_color(colors.brand.opacity(0.6))
+        .bg(colors.pane)
         .child(Textarea::new(input).appearance(false));
     let actions = h_flex()
         .w_full()

@@ -52,8 +52,8 @@ impl List {
 
 /// A row, indented to its depth, raised while what it stands for is showing, for its caller to fill and to click.
 pub(crate) fn row_frame(id: String, list: List, depth: usize, showing: bool, cx: &App) -> Stateful<gpui_kit::Div> {
-    let theme = cx.theme();
-    let (border, hover, raised) = (theme.border, theme.list_hover, theme.secondary);
+    let colors = look::colors(cx);
+    let (border, hover, raised) = (colors.edge, colors.row_hover, colors.raised);
     let guides = (0..depth).map(move |level| {
         div().absolute().top_0().bottom_0().left(px(list.inset(level) + list.guide())).w(px(1.)).bg(border)
     });
@@ -91,10 +91,11 @@ pub(crate) fn folder_row(
     cx: &App,
 ) -> Stateful<gpui_kit::Div> {
     let theme = cx.theme();
-    let (muted, mono) = (theme.muted_foreground, theme.mono_font_family.clone());
+    let colors = look::colors(cx);
+    let (muted, mono) = (colors.text_muted, theme.mono_font_family.clone());
     let chevron = if open { IconName::ChevronDown } else { IconName::ChevronRight };
     row_frame(id, list, depth, false, cx)
-        .when(list == List::Changes, |d| d.child(Icon::new(chevron).size(px(CHEVRON)).text_color(look::faint())))
+        .when(list == List::Changes, |d| d.child(Icon::new(chevron).size(px(CHEVRON)).text_color(colors.text_faint)))
         .child(icon)
         .child(
             div()

@@ -22,10 +22,10 @@ pub(super) fn line(seq: Seq, idle_ms: u64, read_tokens: u64, written_tokens: u64
         let parts = ["Cache expired".to_string(), format!("{} idle", idle(idle_ms)), written(written_tokens)];
         parts.join(between)
     };
-    let middle = rule_middle(ItemKey::Event(seq, 0).element("cache-expired"))
+    let middle = rule_middle(ItemKey::Event(seq, 0).element("cache-expired"), cx)
         .role(Role::Label)
         .aria_label(said(", "))
-        .child(look::cache_mark(CacheMark::Clock, look::faint()))
+        .child(look::cache_mark(CacheMark::Clock, look::colors(cx).text_faint))
         .child(said(" · "))
         .test_support();
     rule_row(middle, cx)

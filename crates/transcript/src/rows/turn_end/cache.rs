@@ -2,7 +2,7 @@
 //! chat big enough for that to cost something, and in the card, how long it has left, when it expires, and how long it
 //! lasts, whatever the chat's size. `docs/spec/chats.md` has the rules.
 
-use gpui_kit::component::{ActiveTheme as _, h_flex, v_flex};
+use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::{
     App, Div, InteractiveElement as _, IntoElement, ParentElement as _, StatefulInteractiveElement as _, Styled as _,
     div,
@@ -27,7 +27,7 @@ pub(super) fn on_the_line(cache: &IdleCache, cx: &App) -> Option<impl IntoElemen
         CacheState::Expired { .. } => (CacheMark::Clock, "Cache expired".to_string()),
     };
     // Centred on the line without making it taller, as the copy button is.
-    let mark = look::cache_mark(mark, cx.theme().muted_foreground);
+    let mark = look::cache_mark(mark, look::colors(cx).text_muted);
     Some(div().id("cache").flex().items_center().h_0().aria_label(said).child(mark))
 }
 
@@ -43,7 +43,7 @@ pub(super) fn in_the_card(cache: &PromptCache, cx: &App) -> Option<Div> {
         }
         CacheState::Expired { .. } => (CacheMark::Clock, "Expired".to_string(), "Expired at"),
     };
-    let muted = cx.theme().muted_foreground;
+    let muted = look::colors(cx).text_muted;
     let when = look::day_and_time(expires_at_ms, cx).map(|at| format!("{when} {at}"));
     let left = card::row("Cache", left, Some(look::cache_mark(mark, muted).into_any_element()), cx);
     let lasts = h_flex()

@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::{Escape, Input, InputEvent, InputState};
-use gpui_kit::component::{ActiveTheme as _, Icon, IconName, Sizable as _, h_flex};
+use gpui_kit::component::{Icon, IconName, Sizable as _, h_flex};
 use gpui_kit::{
     AppContext as _, Context, Entity, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Styled as _,
     Subscription, Task, TestSupportExt as _, Window, div, px,
@@ -83,8 +83,8 @@ impl Transcript {
     /// The bar, over the top right of the chat, if it's open.
     pub(crate) fn find_bar(&self, cx: &mut Context<Self>) -> Option<impl IntoElement + use<>> {
         let finding = self.finding.as_ref()?;
-        let theme = cx.theme();
-        let muted = theme.muted_foreground;
+        let colors = look::colors(cx);
+        let muted = colors.text_muted;
         let everything_held = self.session.read(SessionLog::holds_every_event);
         let says = finding.query.as_ref().map(|query| query.says(everything_held)).unwrap_or_default();
         let none = finding.query.as_ref().is_none_or(|query| query.counts.total() == 0);

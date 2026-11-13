@@ -51,6 +51,7 @@ fn frames_for(drawn: Vec<Drawn>, motion: Motion) -> usize {
     let mut cx =
         HeadlessAppContext::with_platform(text_system, Arc::new(Assets), gpui_kit::platform::current_headless_renderer);
     cx.update(gpui_kit::init);
+    cx.update(look::apply);
     match motion {
         Motion::Allowed => {}
         Motion::Reduced => cx.update(|cx| cx.set_reduce_motion(true)),

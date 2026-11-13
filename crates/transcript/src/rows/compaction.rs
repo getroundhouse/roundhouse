@@ -4,7 +4,7 @@
 use std::time::Duration;
 
 use gpui_kit::assets::IconName;
-use gpui_kit::component::{ActiveTheme as _, Icon, h_flex, v_flex};
+use gpui_kit::component::{Icon, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, Div, InteractiveElement as _, IntoElement, ParentElement, Role, StatefulInteractiveElement as _,
@@ -65,13 +65,13 @@ pub(crate) fn freed(before_tokens: Option<u64>, after_tokens: Option<u64>, to: &
 
 /// The rule, with what it freed and how long it took in the middle. With a summary, the middle opens it.
 fn line(compacted: &Compacted, shared: &Shared, cx: &App) -> AnyElement {
-    let theme = cx.theme();
+    let colors = look::colors(cx);
     let key = ItemKey::Event(compacted.seq, 0);
     let (open, seq) = (compacted.open, compacted.seq);
     let chevron = if open { IconName::ChevronDown } else { IconName::ChevronRight };
     // Only a summary makes it something to open.
     let opens = compacted.summary.is_some();
-    let middle = rule_middle(key.element("compaction"))
+    let middle = rule_middle(key.element("compaction"), cx)
         .role(if opens { Role::Button } else { Role::Label })
         // In words, since a screen reader would read the arrow out as one.
         .aria_label(compacted.said("to", ", "))
@@ -80,7 +80,7 @@ fn line(compacted: &Compacted, shared: &Shared, cx: &App) -> AnyElement {
         .child(compacted.said("→", " · "))
         .when(opens, |d| {
             let (this, key) = (shared.this.clone(), key.clone());
-            let hover = theme.muted;
+            let hover = colors.line_hover;
             let d = d.aria_expanded(open).hand().hover(move |d| d.bg(hover));
             d.child(Icon::new(chevron).size(px(RULE_ICON))).on_click(move |_, _, cx| {
                 let _ = this.update(cx, |t, cx| t.set_open(seq, key.clone(), Fold::Output, !open, cx));
@@ -90,7 +90,7 @@ fn line(compacted: &Compacted, shared: &Shared, cx: &App) -> AnyElement {
     let across = rule_across(middle, cx);
     // In the words of whoever asked, in quotes, since they needn't start with "keep".
     let keeping = compacted.keeping.map(|keeping| {
-        let said = div().max_w(relative(0.8)).text_center().text_sm().text_color(theme.muted_foreground);
+        let said = div().max_w(relative(0.8)).text_center().text_sm().text_color(colors.text_muted);
         h_flex().w_full().justify_center().child(said.child(format!("“{keeping}”")))
     });
     let summary = compacted.summary.filter(|_| open).map(|summary| opened(compacted.seq, summary, shared, cx));
@@ -99,12 +99,12 @@ fn line(compacted: &Compacted, shared: &Shared, cx: &App) -> AnyElement {
 
 /// The summary, under a heading that stays put while it scrolls. The scrollbar sits in the gap on the right.
 fn opened(seq: Seq, summary: &str, shared: &Shared, cx: &App) -> Div {
-    let (theme, key) = (cx.theme(), ItemKey::Event(seq, 0));
+    let (colors, key) = (look::colors(cx), ItemKey::Event(seq, 0));
     // What a compaction says isn't found. A drag from it scrolls on its area, as the wheel does.
     let area = key.element("summary-scroll");
     let written = Written::unfound(TextAt::only(seq, 0), key.element("summary"), summary).in_area(area.clone());
     let text = shared.texts.draw(&shared.selection, &written, None);
-    let text = div().pr_3().text_sm().text_color(theme.muted_foreground).child(text);
+    let text = div().pr_3().text_sm().text_color(colors.text_muted).child(text);
     v_flex()
         .w_full()
         .gap_2()
@@ -113,8 +113,8 @@ fn opened(seq: Seq, summary: &str, shared: &Shared, cx: &App) -> Div {
         .pr_1()
         .rounded_lg()
         .border_1()
-        .border_color(theme.border)
-        .child(div().text_xs().text_color(look::faint()).child("What the agent carries on from"))
+        .border_color(colors.edge)
+        .child(div().text_xs().text_color(colors.text_faint).child("What the agent carries on from"))
         .child(ScrollArea::new(area, px(SUMMARY_HEIGHT), text, &shared.selection))
 }
 
@@ -129,7 +129,7 @@ pub(super) fn of(seq: Seq, body: &EventBody, around: &Around, shared: &Shared, c
         }
         CompactionOutcome::Failed { error } => {
             let why = error.as_deref().map_or_else(String::new, |error| format!(" {error}"));
-            return colored_line(format!("Couldn't compact the conversation.{why}"), cx.theme().danger);
+            return colored_line(format!("Couldn't compact the conversation.{why}"), look::colors(cx).error);
         }
         CompactionOutcome::Unknown => (CompactedBy::Unknown, None, None, None, None),
     };

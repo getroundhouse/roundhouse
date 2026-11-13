@@ -2,7 +2,6 @@
 //! It comes in two styles, and the gallery draws each into its own iconset in `apps/desktop/icons/`, and checks it
 //! there.
 
-use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::{
     App, BorderStyle, Bounds, Corners, Edges, Hsla, IntoElement, Pixels, Styled, Window, canvas, fill,
     linear_color_stop, linear_gradient, point, px, quad, size,
@@ -10,7 +9,6 @@ use gpui_kit::{
 
 use crate::fan::{self, ASPECT, Fan};
 use crate::mark::{LIGHT, light_on};
-use crate::palette::tile_top;
 
 mod pixels;
 
@@ -113,14 +111,9 @@ const TRAIL: f32 = 0.18;
 /// The icon in `style` at `size`, drawn for a Retina display, so it's half as many points wide as its drawing has
 /// pixels.
 pub fn icon(style: IconStyle, size: IconSize, cx: &App) -> impl IntoElement {
-    let theme = cx.theme();
-    let colors = Colors {
-        copper: theme.ring,
-        light: theme.foreground,
-        top: tile_top(),
-        bottom: theme.background,
-        edge: theme.border,
-    };
+    let app = crate::colors::colors(cx);
+    let colors =
+        Colors { copper: app.brand, light: app.text, top: app.icon_tile_top, bottom: app.pane, edge: app.edge };
     let width = px(f32::from(size.pixels()) / 2.0);
     canvas(|_, _, _| {}, move |bounds, (), window, _| paint(bounds, style, &size.drawing(), &colors, window))
         .flex_none()

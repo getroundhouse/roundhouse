@@ -5,7 +5,6 @@
 use std::f32::consts::TAU;
 
 use gpui_kit::base::plot::shape::{Arc, ArcData};
-use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::hover_card::HoverCard;
 use gpui_kit::{
     Anchor, App, Bounds, Context, Div, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Role,
@@ -116,7 +115,7 @@ fn card_over(card: HoverCard, slot: Div) -> HoverCard {
 /// A ring filled clockwise from the top by `used`, from 0 to 1, over a fainter whole ring. It's drawn at once, with
 /// nothing moving, since only a working agent moves anything.
 fn ring(used: f32, cx: &App) -> impl IntoElement {
-    let color = cx.theme().muted_foreground;
+    let color = look::colors(cx).text_muted;
     canvas(
         |bounds: Bounds<Pixels>, _: &mut Window, _: &mut App| bounds,
         move |_, bounds, window, _| {
@@ -135,7 +134,7 @@ fn ring(used: f32, cx: &App) -> impl IntoElement {
 /// the limit is left, from 0 to 1, over a fainter whole bar. So each is its card's bar made small, and empties as
 /// that does. They lie flat because two upright bars beside Send are a pause button.
 fn bars(left: &[f32], cx: &App) -> impl IntoElement {
-    let color = cx.theme().muted_foreground;
+    let color = look::colors(cx).text_muted;
     let bar = move |left: f32| {
         let filled = div().h_full().w(relative(left.clamp(0., 1.))).rounded_full().bg(color);
         div().w(RING).h(LIMIT).rounded_full().bg(color.opacity(0.25)).child(filled)

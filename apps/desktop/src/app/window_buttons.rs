@@ -1,11 +1,11 @@
 //! Windows' minimize, maximize or restore, and close, which the app draws at the right end of the strip along the
 //! window's top. The app hides the system's title bar, and GPUI's Windows backend hides its buttons with it.
 
-use gpui_kit::component::{ActiveTheme as _, Icon, IconName, Sizable as _, h_flex};
+use gpui_kit::component::{Icon, IconName, Sizable as _, h_flex};
 use gpui_kit::{
     AccessibleAction, App, Font, Global, Hsla, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Role,
     StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, Window, WindowControlArea, deferred, div, font,
-    px, rgb, white,
+    px,
 };
 
 use crate::sides::{self, WindowButtons};
@@ -15,8 +15,6 @@ use crate::workspace_pane::HEADER_HEIGHT;
 /// glyphs at the same code points, on Windows 10.
 const ICON_FONTS: [&str; 2] = ["Segoe Fluent Icons", "Segoe MDL2 Assets"];
 const GLYPH_SIZE: Pixels = px(10.);
-/// Windows' red behind the close button under the pointer.
-const CLOSE_RED: u32 = 0x00C4_2B1C;
 /// Over a dialog, which the kit draws from 10 up over a backdrop that's a title bar to Windows, so the buttons still
 /// work while one is open, and under the menus and tooltips it draws at 100 and 200.
 const PRIORITY: usize = 50;
@@ -89,12 +87,12 @@ pub(super) fn of_windows(window: &Window, cx: &mut App) -> Option<impl IntoEleme
         return None;
     }
     let glyphs = Glyphs::of(cx);
-    let theme = cx.theme();
+    let colors = look::colors(cx);
     // Dimmed while another window is active, as Windows dims its own.
-    let colour = if window.is_window_active() { theme.foreground } else { theme.muted_foreground };
-    let faint = Shade { hover: theme.foreground.opacity(0.06), pressed: theme.foreground.opacity(0.04), text: colour };
-    let red: Hsla = rgb(CLOSE_RED).into();
-    let red = Shade { hover: red, pressed: red.opacity(0.9), text: white() };
+    let colour = if window.is_window_active() { colors.text } else { colors.text_muted };
+    let faint = Shade { hover: colors.text.opacity(0.06), pressed: colors.text.opacity(0.04), text: colour };
+    let red = colors.windows_close;
+    let red = Shade { hover: red, pressed: red.opacity(0.9), text: colors.on_windows_close };
     let drawn = |button: Button, shade: Shade| drawn(button, glyphs.as_ref(), colour, shade);
     let maximize = if window.is_maximized() { Button::Restore } else { Button::Maximize };
     // A third of the room `sides` leaves them each.

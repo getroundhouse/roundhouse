@@ -4,9 +4,9 @@
 //! request, with Stop.
 
 use client_core::session_log::By;
+use gpui_kit::component::Sizable as _;
 use gpui_kit::component::button::Button;
 use gpui_kit::component::tooltip::Tooltip;
-use gpui_kit::component::{ActiveTheme as _, Sizable as _};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, Div, ElementId, InteractiveElement as _, IntoElement, ParentElement,
@@ -53,6 +53,7 @@ fn mark(group: TaskGroup, cx: &App) -> (AnyElement, &'static str) {
 /// whether anything is running, how many there are, and while it's closed, what each is for, fainter, as far as the
 /// line has room. Clicking it opens it to their own lines, and closes it again, as a call's line does.
 fn several(group: TaskGroup, tasks: &[&AgentTask], open: bool, shared: &Shared, cx: &App) -> AnyElement {
+    let colors = look::colors(cx);
     let (mark, pointed_at) = mark(group, cx);
     let count = format!("{} {}", tasks.len(), group.name());
     let this = shared.this.clone();
@@ -60,11 +61,11 @@ fn several(group: TaskGroup, tasks: &[&AgentTask], open: bool, shared: &Shared, 
         let _ = this.update(cx, |t, cx| t.set_open_at_end(group.key(), Fold::Tasks, !open, cx));
     };
     opening(group.key().element("several"), count.clone().into(), open, set_open, cx)
-        .text_color(cx.theme().muted_foreground)
+        .text_color(colors.text_muted)
         .tooltip(move |window, cx| Tooltip::element(move |_, _| said(pointed_at)).build(window, cx))
         .child(lead(mark, look::Size::Inline.width(), open, cx))
         .child(div().flex_none().child(count))
-        .when(!open, |line| line.child(clipped(what_for(tasks)).min_w_0().text_color(look::faint())))
+        .when(!open, |line| line.child(clipped(what_for(tasks)).min_w_0().text_color(colors.text_faint)))
         .test_support()
         .into_any_element()
 }

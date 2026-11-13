@@ -2,7 +2,7 @@
 //! lit, and where several can be chosen, it has a check.
 
 use gpui_kit::component::input::{Escape, Textarea, TextareaState};
-use gpui_kit::component::{ActiveTheme as _, Icon, IconName, Sizable as _, h_flex, v_flex};
+use gpui_kit::component::{Icon, IconName, Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, Context, ElementId, Entity, Hsla, InteractiveElement as _, IntoElement, ParentElement,
@@ -31,14 +31,14 @@ pub(super) fn list(
     other: &Entity<TextareaState>,
     cx: &mut Context<QuestionPanel>,
 ) -> AnyElement {
-    let theme = cx.theme();
+    let app = look::colors(cx);
     let colors = Colors {
-        foreground: theme.foreground,
-        muted: theme.muted_foreground,
+        foreground: app.text,
+        muted: app.text_muted,
         // The kit keeps its own colour for a list's chosen row faint, so this takes a raised surface's hover, the
         // nearest opaque step above the pane.
-        chosen: theme.secondary_hover,
-        hovered: theme.list_hover,
+        chosen: app.raised_hover,
+        hovered: app.row_hover,
     };
     let choice = panel.asked.get(panel.showing).map(|asked| asked.choice.clone()).unwrap_or_default();
     let rows: Vec<AnyElement> = question

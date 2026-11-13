@@ -6,7 +6,7 @@
 use std::time::{Duration, Instant};
 
 use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::{ActiveTheme as _, IconName, Sizable as _, h_flex, v_flex};
+use gpui_kit::component::{IconName, Sizable as _, h_flex, v_flex};
 use gpui_kit::{
     App, Context, FocusHandle, Focusable, InteractiveElement as _, IntoElement, KeyDownEvent, ParentElement, Render,
     Styled, WeakEntity, Window, div,
@@ -258,7 +258,7 @@ impl Focusable for QuestionPanel {
 
 impl Render for QuestionPanel {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let edge = cx.theme().border;
+        let edge = look::colors(cx).edge;
         let answered = self.answers_so_far(cx);
         let ready = !self.answered && answered.iter().any(Option::is_some);
         let q = self.showing;

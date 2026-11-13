@@ -4,7 +4,7 @@
 
 use gpui_kit::assets::IconName;
 
-use gpui_kit::component::{ActiveTheme as _, Icon, h_flex, v_flex};
+use gpui_kit::component::{Icon, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, Div, ElementId, Hsla, InteractiveElement as _, IntoElement, ParentElement, SharedString, Styled,
@@ -70,7 +70,7 @@ fn summary(questions: &[Question], settled: &Settled) -> Option<String> {
 /// Each question under its header, and what was answered under it, after an arrow. One nobody answered says so, and
 /// nothing is said where what was answered isn't known.
 fn answers(questions: &[Question], asked: &Asked, toggle: &Toggle, cx: &App) -> AnyElement {
-    let (key, theme) = (toggle.key, cx.theme());
+    let (key, colors) = (toggle.key, look::colors(cx));
     let id = key.element("asked");
     let area = block::scroll_id(&id);
     let mut list = v_flex().id(id.clone());
@@ -87,14 +87,14 @@ fn answers(questions: &[Question], asked: &Asked, toggle: &Toggle, cx: &App) -> 
                 .pb_3()
                 .gap_1p5()
                 .when_some(question.header.clone(), |d, header| {
-                    d.child(div().text_xs().text_color(look::faint()).child(header))
+                    d.child(div().text_xs().text_color(colors.text_faint).child(header))
                 })
                 .child(text(
                     toggle,
                     Text::Question,
                     key.element(&format!("question-{i}")),
                     &question.text,
-                    theme.muted_foreground,
+                    colors.text_muted,
                     &area,
                 ))
                 .children(answered(toggle, &area, i, answer, cx)),
@@ -107,33 +107,25 @@ fn answers(questions: &[Question], asked: &Asked, toggle: &Toggle, cx: &App) -> 
 /// What was answered to the question at `i`, after an arrow, or that nobody answered it, or nothing if that isn't
 /// known.
 fn answered(toggle: &Toggle, area: &ElementId, i: usize, answer: AnswerTo, cx: &App) -> Option<AnyElement> {
-    let key = toggle.key;
+    let (key, colors) = (toggle.key, look::colors(cx));
     let answer = match answer {
         AnswerTo::Said(answer) => answer,
         AnswerTo::Unknown => return None,
         AnswerTo::NotAnswered => {
             let id = key.element(&format!("not-answered-{i}"));
-            let said = div().id(id).text_sm().text_color(look::faint()).child(NOT_ANSWERED);
+            let said = div().id(id).text_sm().text_color(colors.text_faint).child(NOT_ANSWERED);
             return Some(said.test_support().into_any_element());
         }
     };
     let arrow =
-        Icon::new(IconName::CornerDownRight).flex_none().mt(px(ARROW_DROP)).size(px(14.)).text_color(look::faint());
+        Icon::new(IconName::CornerDownRight).flex_none().mt(px(ARROW_DROP)).size(px(14.)).text_color(colors.text_faint);
     let row = h_flex()
         .id(key.element(&format!("answer-{i}")))
         .items_start()
         .gap_2()
         .child(arrow)
         .child(
-            text(
-                toggle,
-                Text::Answered,
-                key.element(&format!("answer-{i}-text")),
-                &answer,
-                cx.theme().foreground,
-                area,
-            )
-            .flex_1(),
+            text(toggle, Text::Answered, key.element(&format!("answer-{i}-text")), &answer, colors.text, area).flex_1(),
         )
         .test_support()
         .into_any_element();

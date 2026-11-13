@@ -5,7 +5,7 @@
 use std::rc::Rc;
 
 use gpui_kit::base::{Tab, Tabs};
-use gpui_kit::component::{ActiveTheme as _, h_flex};
+use gpui_kit::component::h_flex;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, IntoElement as _, ParentElement as _, Pixels, SharedString, Styled as _, Window, div, px,
@@ -131,7 +131,7 @@ pub(crate) fn bar(
         .gap_2()
         // The bar's bottom edge, under the tabs rather than a border, so the line under the tab chosen can cover it,
         // as it does under the chat tabs.
-        .child(div().absolute().left_0().right_0().bottom_0().h(px(1.)).bg(cx.theme().border))
+        .child(div().absolute().left_0().right_0().bottom_0().h(px(1.)).bg(look::colors(cx).edge))
         .child(Tabs::new("sidebar-tabs").flex().h_full().children(tabs))
         .child(div().flex_1())
         .children(controls)
@@ -147,7 +147,8 @@ fn tab_element(
     line_text: &LineText,
     cx: &App,
 ) -> AnyElement {
-    let muted = cx.theme().muted_foreground;
+    let colors = look::colors(cx);
+    let muted = colors.text_muted;
     let id: SharedString = match tab {
         SidebarTab::Changes => "sidebar-tab-changes".into(),
         SidebarTab::AllFiles => "sidebar-tab-all-files".into(),
@@ -170,7 +171,7 @@ fn tab_element(
                 .child(line_text.body.set(div().child(label)))
                 .when_some(count, |d, count| d.child(line_text.small.set(div().text_color(muted).child(count)))),
         )
-        .when(selected, |d| d.child(div().absolute().left_0().right_0().bottom_0().h(px(2.)).bg(look::tab_underline())))
+        .when(selected, |d| d.child(div().absolute().left_0().right_0().bottom_0().h(px(2.)).bg(colors.current)))
         .into_any_element()
 }
 

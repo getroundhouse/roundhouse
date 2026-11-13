@@ -8,7 +8,7 @@ use std::rc::Rc;
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::{InputEvent, InputState};
-use gpui_kit::component::{ActiveTheme as _, Sizable as _, h_flex, v_flex};
+use gpui_kit::component::{Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, AppContext as _, Context, ElementId, Entity, FontWeight, InteractiveElement as _, IntoElement,
@@ -209,8 +209,8 @@ pub(crate) fn page(app: &AppView, rows: Rows, cx: &mut Context<AppView>) -> impl
 /// workspace, as its row in the sidebar does, or brings an archived one back. The repository and what the row says are
 /// smaller, on the name's baseline.
 fn row(app: &AppView, workspace: &Workspace, line_text: &LineText, cx: &mut Context<AppView>) -> AnyElement {
-    let theme = cx.theme();
-    let (border, hover, muted) = (theme.border, theme.list_hover, theme.muted_foreground);
+    let colors = look::colors(cx);
+    let (border, hover, muted) = (colors.edge, colors.row_hover, colors.text_muted);
     let Standing { signal, work, needs_a_look } = standing(app, workspace, cx);
     let repo = app.repo(&workspace.repo_id).map(|r| r.name.clone()).unwrap_or_default();
     let its_chats = app.records().sessions(&workspace.id).iter().filter(|_| prompt_cache::told_of(workspace));
@@ -248,7 +248,7 @@ fn row(app: &AppView, workspace: &Workspace, line_text: &LineText, cx: &mut Cont
 /// The button that archives the workspace or brings it back, or what the row says in its place while it does.
 fn row_button(app: &AppView, workspace: &Workspace, small: &Placed, cx: &mut Context<AppView>) -> AnyElement {
     if let Some(waiting) = crate::busy::doing(workspace.status) {
-        return doing(format!("home-doing-{}", workspace.id), waiting, small).into_any_element();
+        return doing(format!("home-doing-{}", workspace.id), waiting, small, cx).into_any_element();
     }
     let archived = workspace.status == WorkspaceStatus::Archived;
     let (icon, what) = if archived { (Lucide::ArchiveRestore, "Restore") } else { (Lucide::Archive, "Archive") };
@@ -257,7 +257,7 @@ fn row_button(app: &AppView, workspace: &Workspace, small: &Placed, cx: &mut Con
         .ghost()
         .small()
         .icon(icon)
-        .text_color(cx.theme().muted_foreground)
+        .text_color(look::colors(cx).text_muted)
         .tooltip(what)
         .off_while(!app.busy.is_free())
         .on_click(cx.listener(move |t, _, _, cx| {
@@ -279,7 +279,7 @@ fn nothing_listed(cx: &mut Context<AppView>) -> impl IntoElement {
         .flex()
         .items_center()
         .justify_center()
-        .text_color(cx.theme().muted_foreground)
+        .text_color(look::colors(cx).text_muted)
         .child("No workspaces to show")
         .test_support()
 }

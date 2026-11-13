@@ -5,10 +5,10 @@
 use std::f32::consts::FRAC_PI_2;
 
 use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::{ActiveTheme as _, Icon, IconName, Sizable as _, h_flex};
+use gpui_kit::component::{Icon, IconName, Sizable as _, h_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, AppContext as _, Context, Div, ElementId, FontWeight, InteractiveElement as _, IntoElement,
+    AnyElement, App, AppContext as _, Context, Div, ElementId, FontWeight, Hsla, InteractiveElement as _, IntoElement,
     MouseButton, ParentElement, Role, SharedString, StatefulInteractiveElement as _, Styled, TestSupportExt as _, div,
     radians,
 };
@@ -28,10 +28,14 @@ pub(super) fn row(app: &AppView, repo: &Repo, collapsed: bool, out: f32, cx: &mu
     let toggled = repo.id.clone();
     let group = SharedString::from(format!("project-{}", repo.id));
     let empty = !app.records().workspaces().iter().any(|w| w.repo_id == repo.id && has_line(w));
-    let chevron = (!empty).then(|| chevron(collapsed, out, group.clone()));
+    let (text, muted, faint) = {
+        let colors = look::colors(cx);
+        (colors.text, colors.text_muted, colors.text_faint)
+    };
+    let chevron = (!empty).then(|| chevron(collapsed, out, group.clone(), faint));
     let its = app.records().workspaces().iter().filter(|w| w.repo_id == repo.id && lists(w));
     let to_look_at = if collapsed { its.filter(|w| needs_a_look(app, w, cx)).count() } else { 0 };
-    let name_color = if to_look_at > 0 { cx.theme().foreground } else { cx.theme().muted_foreground };
+    let name_color = if to_look_at > 0 { text } else { muted };
     let name = div().min_w_0().truncate().text_sm().font_weight(FontWeight::MEDIUM).text_color(name_color);
     let to_look_at = (to_look_at > 0).then(|| needing_a_look(&repo.id, to_look_at, cx));
     let (dragged, this) = (Dragged(repo.id.clone()), cx.weak_entity());
@@ -58,7 +62,7 @@ pub(super) fn row(app: &AppView, repo: &Repo, collapsed: bool, out: f32, cx: &mu
         .h(REPO_HEIGHT)
         .px_1p5()
         .gap_2()
-        .child(icon_box(IconName::Folder, look::faint()))
+        .child(icon_box(IconName::Folder, faint))
         .child(h_flex().flex_1().min_w_0().gap_1().child(name.child(repo.name.clone())).children(chevron))
         .children(to_look_at)
         .child(new_workspace(app, repo, cx))
@@ -74,7 +78,7 @@ fn new_workspace(app: &AppView, repo: &Repo, cx: &mut Context<AppView>) -> Butto
         .ghost()
         .small()
         .icon(IconName::Plus)
-        .text_color(cx.theme().muted_foreground)
+        .text_color(look::colors(cx).text_muted)
         .tooltip("New workspace")
         .loading(creating)
         .hand_while(!creating)
@@ -95,7 +99,7 @@ fn needing_a_look(repo: &RepoId, count: usize, cx: &App) -> impl IntoElement {
         .flex_none()
         .text_xs()
         .font_weight(FontWeight::MEDIUM)
-        .text_color(cx.theme().foreground)
+        .text_color(look::colors(cx).text)
         .child(count.to_string())
         .test_support()
 }
@@ -103,9 +107,9 @@ fn needing_a_look(repo: &RepoId, count: usize, cx: &App) -> impl IntoElement {
 /// A chevron after the project's name, which shows while the pointer is on the project's row, so it's plain that a
 /// press collapses it, and for as long as it's collapsed, so it isn't taken for a project with no workspaces. It
 /// points down at workspaces that show and right at a collapsed project, and turns with the fold, by how far `out`
-/// the workspaces are.
-fn chevron(collapsed: bool, out: f32, group: SharedString) -> Div {
-    let chevron = Icon::new(IconName::ChevronRight).size_3().text_color(look::faint()).rotate(radians(FRAC_PI_2 * out));
+/// the workspaces are, in `color`.
+fn chevron(collapsed: bool, out: f32, group: SharedString, color: Hsla) -> Div {
+    let chevron = Icon::new(IconName::ChevronRight).size_3().text_color(color).rotate(radians(FRAC_PI_2 * out));
     let chevron = div().flex_none().child(chevron);
     if collapsed { chevron } else { chevron.invisible().group_hover(group, Styled::visible) }
 }

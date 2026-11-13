@@ -40,7 +40,7 @@ impl Transcript {
                 }
                 counted.insert(format!("{:?}", found.id), found.matches);
             }
-            m.find = Rc::new(FindLook::new(Some(needle), None, Reveal::default()));
+            m.find = Rc::new(FindLook::new(Some(needle), None, Reveal::default(), look::colors(cx)));
         }
         let line_text = look::LineText::new(window, cx);
         let shared = Shared {

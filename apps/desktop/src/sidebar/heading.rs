@@ -3,7 +3,7 @@
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::menu::{DropdownMenu as _, PopupMenu, PopupMenuItem};
-use gpui_kit::component::{ActiveTheme as _, IconName, Sizable as _, h_flex};
+use gpui_kit::component::{IconName, Sizable as _, h_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     Anchor, AnyElement, Context, FontWeight, Hsla, InteractiveElement as _, IntoElement, ParentElement, Styled,
@@ -21,7 +21,7 @@ const GROUP: &str = "workspaces-heading";
 /// it isn't taken for a repository's button for a new workspace under it. Greyed out while there's no hub to add to.
 /// Before it, the button that chooses the order, while the pointer is on the heading.
 pub(super) fn heading(app: &AppView, connected: bool, cx: &mut Context<AppView>) -> AnyElement {
-    let faint = cx.theme().muted_foreground.opacity(0.7);
+    let faint = look::colors(cx).text_muted.opacity(0.7);
     h_flex()
         .id(GROUP)
         .group(GROUP)

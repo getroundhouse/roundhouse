@@ -136,9 +136,10 @@ impl FileView {
     }
 
     fn draw_lines(&self, range: std::ops::Range<usize>, cx: &App) -> Vec<AnyElement> {
+        let colors = look::colors(cx);
         let Contents::Lines(lines) = &self.contents else { return Vec::new() };
         let numbers = numbers_width(lines.lines.len());
-        let foreground = cx.theme().foreground;
+        let foreground = colors.text;
         range
             .filter_map(|index| {
                 let line = lines.lines.get(index)?;
@@ -151,7 +152,7 @@ impl FileView {
                             .w(numbers)
                             .pr_4()
                             .text_right()
-                            .text_color(look::faint())
+                            .text_color(colors.text_faint)
                             .child((index + 1).to_string()),
                     )
                     .child(div().flex_none().pr_4().whitespace_nowrap().text_color(foreground).child(text));
@@ -165,7 +166,7 @@ impl FileView {
         let path = self.path.as_ref()?;
         let about = match &self.contents {
             Contents::Image(image) => Some(
-                div().flex_none().text_color(cx.theme().muted_foreground).child(image.describe()).into_any_element(),
+                div().flex_none().text_color(look::colors(cx).text_muted).child(image.describe()).into_any_element(),
             ),
             _ => None,
         };
@@ -222,7 +223,7 @@ pub(crate) fn placeholder(text: SharedString, cx: &App) -> AnyElement {
         .items_center()
         .justify_center()
         .text_center()
-        .text_color(cx.theme().muted_foreground)
+        .text_color(look::colors(cx).text_muted)
         .child(text)
         .into_any_element()
 }

@@ -63,32 +63,33 @@ impl Said {
     /// Raised like the app's other cards: the path and the button that copies it, then under a rule, the rest.
     fn card(&self, cx: &App) -> AnyElement {
         let theme = cx.theme();
+        let colors = look::colors(cx);
         let path = self.path.clone().map(|path| {
             let mono = theme.mono_font_family.clone();
             // Cut at its start, if it's too long, since its end is the workspace's own folder.
             let text = div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis_start();
             let text = text.font_family(mono).text_xs().child(path.clone());
             let copy = look::copy_button("copy-workspace-path", path, "Copy path");
-            let row = h_flex().gap_2().text_color(theme.muted_foreground).child(text).child(copy);
-            v_flex().child(row).child(div().my_2().h(px(1.)).bg(theme.border))
+            let row = h_flex().gap_2().text_color(colors.text_muted).child(text).child(copy);
+            v_flex().child(row).child(div().my_2().h(px(1.)).bg(colors.edge))
         });
         let version = self.version.clone().map(|version| {
             let moving = self.moving_to.clone().map(|to| {
-                div().text_color(look::faint()).child(format!("Moves to {to} once nothing in it is at work"))
+                div().text_color(colors.text_faint).child(format!("Moves to {to} once nothing in it is at work"))
             });
             let said = match &self.moving_to {
                 Some(to) => format!("Version {version}, moves to {to} once nothing in it is at work"),
                 None => format!("Version {version}"),
             };
-            row("Version", said, v_flex().child(version).children(moving))
+            row("Version", said, v_flex().child(version).children(moving), cx)
         });
-        let ports = self.ports.clone().map(|ports| row("Ports", format!("Ports {ports}"), div().child(ports)));
+        let ports = self.ports.clone().map(|ports| row("Ports", format!("Ports {ports}"), div().child(ports), cx));
         let rows = v_flex()
             .gap_1()
             .text_xs()
-            .text_color(theme.muted_foreground)
+            .text_color(colors.text_muted)
             .children(version)
-            .child(row("Runs on", format!("Runs on {}", self.runs_on), div().child(self.runs_on.clone())))
+            .child(row("Runs on", format!("Runs on {}", self.runs_on), div().child(self.runs_on.clone()), cx))
             .children(ports);
         let card = look::raised(cx).region(Region::WorkspaceCard).flex().flex_col().w(WIDTH).px_3().py_2p5();
         card.children(path).child(rows).into_any_element()
@@ -96,9 +97,10 @@ impl Said {
 }
 
 /// A label, faint, and what it says beside it, read out as `said`, since a screen reader would read the two apart.
-fn row(label: &'static str, said: String, value: Div) -> Stateful<Div> {
+fn row(label: &'static str, said: String, value: Div, cx: &App) -> Stateful<Div> {
     let row = h_flex().id(label).role(Role::Label).aria_label(said).items_start().gap_3();
-    row.child(div().flex_none().w(LABEL).text_color(look::faint()).child(label)).child(value.flex_1().min_w_0())
+    row.child(div().flex_none().w(LABEL).text_color(look::colors(cx).text_faint).child(label))
+        .child(value.flex_1().min_w_0())
 }
 
 /// Where the workspace's worker runs. Every hub the app reaches is on this machine, so the local provider's workers

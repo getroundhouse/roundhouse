@@ -3,7 +3,6 @@
 
 use std::ops::Range;
 
-use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::{
     AnyElement, App, HighlightStyle, Hsla, IntoElement as _, ParentElement as _, Styled as _, StyledText, div,
 };
@@ -26,7 +25,7 @@ pub(super) struct Code<'a> {
 pub(super) fn code(code: &Code<'_>, tint: Option<Hsla>, drawing: &Drawing, cx: &App) -> AnyElement {
     let text = code.line.map(|line| {
         let selected = drawing.selection.and_then(|selection| selection.within(code.row, code.old, line.text.len()));
-        let styles = styled(line, code.changed, tint, selected, cx.theme().selection);
+        let styles = styled(line, code.changed, tint, selected, look::colors(cx).selection());
         let text = StyledText::new(line.text.clone()).with_highlights(styles);
         let layout = text.layout().clone();
         drawing.drawn.borrow_mut().push(Drawn { row: code.row, old: code.old, layout });
