@@ -606,6 +606,11 @@ The API keeps what an agent's requests read and write for a while, so the next r
   ![A terminal tab showing a test run](screens/terminal.png)
 
 - **Closing a terminal's tab ends its shell,** and a shell that ends, such as with `exit`, takes its tab with it. Quitting the app doesn't end it, so it's there again when the app opens, and neither does restarting the hub, but archiving the workspace does. `Cmd-W` closes the terminal showing, and `Ctrl-Tab` comes to the terminals after the chats. *Unconfirmed:* a shell's end taking its tab, and `Cmd-W` and `Ctrl-Tab` for a terminal.
+- **What a terminal shows is selected with the pointer, as in terminal apps:** a drag selects from cell to cell, a double click selects a word and a triple click a line, and a drag after either goes on by words or by lines. A cell at either end of a drag is taken in only once the drag covers the point six tenths of the way across it, as in Ghostty, and a click with no drag clears the selection. `Cmd-C` copies it as text, with a line the terminal wrapped joined again and the spaces at the ends of lines left out, and `Cmd-A` selects everything, the history too, as Edit's Copy and Select All do. Typing or pasting clears it, as in Ghostty, and it stays on its text as the terminal scrolls. It's this device's, so it goes whenever the app starts the terminal again from a new screen, as when it attaches again, or falls too far behind. *Unconfirmed.*
+
+  **Lines of the test run selected.** *Unconfirmed.*
+
+  ![Three lines of a test run selected in a terminal](screens/terminal-selection.png)
 
 ## Closing chats, and keys
 

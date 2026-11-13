@@ -1,5 +1,5 @@
-//! The screens about a workspace's terminals: the menu the `+` after the tabs opens, and a terminal in front, in the
-//! chat's place.
+//! The screens about a workspace's terminals: the menu the `+` after the tabs opens, a terminal in front, in the chat's
+//! place, and what's selected in one.
 
 #![cfg(test)]
 
@@ -10,6 +10,7 @@ use super::screens::FOCUS;
 use super::steps::{Screen, Step};
 use super::world::World;
 use super::worlds::{conversation, converse, sidebar};
+use crate::support::Cells;
 
 /// The screens about terminals.
 pub(crate) const SCREENS: &[Screen] = &[
@@ -29,6 +30,20 @@ pub(crate) const SCREENS: &[Screen] = &[
             Step::Select(FOCUS),
             Step::Click("terminal-term-1"),
             Step::WaitFor(terminal_view::SHOWN_ID),
+            Step::MoveAway,
+        ],
+    },
+    Screen {
+        name: "terminal-selection",
+        spec: "chats.md",
+        world: Some(with_a_terminal),
+        frame: TERMINAL,
+        steps: &[
+            Step::Select(FOCUS),
+            Step::Click("terminal-term-1"),
+            Step::WaitFor(terminal_view::SHOWN_ID),
+            // From the name of the first test that ran to partway through the third's.
+            Step::SelectInTerminal { from: Cells { along: 5.1, row: 6 }, to: Cells { along: 40.9, row: 8 } },
             Step::MoveAway,
         ],
     },

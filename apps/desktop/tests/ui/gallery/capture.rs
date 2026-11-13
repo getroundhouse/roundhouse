@@ -21,7 +21,7 @@ use image::RgbaImage;
 
 use super::frame;
 use super::steps::{Screen, Step, Target};
-use crate::support::{first_labelled, menu_item};
+use crate::support::{Cells, first_labelled, in_window, menu_item};
 
 mod files;
 mod finding;
@@ -144,6 +144,7 @@ impl Driver {
             }
             Step::Open(label) => self.open(label),
             Step::Find(query) => self.find_in_chat(query),
+            Step::SelectInTerminal { from, to } => self.select_in_terminal(*from, *to),
             Step::OpenSetupLog => {
                 self.update_pane(WorkspacePane::toggle_setup_log);
                 self.wait("the setup log to load", |view, cx| {
@@ -196,6 +197,22 @@ impl Driver {
             self.cx.update_window(self.handle, |_, window, cx| window.dispatch_event(event, cx)).unwrap();
             self.frame();
         }
+    }
+
+    fn select_in_terminal(&mut self, from: Cells, to: Cells) {
+        self.frame();
+        let in_front = |view: &AppView, cx: &App| selected_pane(view).and_then(|pane| pane.read(cx).terminal());
+        let terminal = self.cx.update(|cx| in_front(self.view.read(cx), cx)).expect("a terminal in front");
+        let cell = self.cx.update(|cx| terminal.read(cx).cell_size());
+        self.cx
+            .update_window(self.handle, |_, window, cx| {
+                let (from, to) = (in_window(window, cell, from), in_window(window, cell, to));
+                window.drag(from, to, cx);
+            })
+            .unwrap();
+        self.wait("the selection to show", |view, cx| {
+            in_front(view, cx).is_some_and(|terminal| terminal.read(cx).shows_a_selection())
+        });
     }
 
     fn right_click(&mut self, id: &'static str) {

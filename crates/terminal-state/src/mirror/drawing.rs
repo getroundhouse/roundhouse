@@ -10,7 +10,7 @@ use libghostty_vt::style::Underline;
 
 use super::{Mirror, MirrorError};
 use crate::Size;
-use crate::drawn::{Background, Cursor, CursorShape, Frame, Glyph, GlyphText, Look, Rgb, Row};
+use crate::drawn::{Background, Cursor, CursorShape, Frame, Glyph, GlyphText, Look, Rgb, Row, Selected};
 
 #[cfg(test)]
 mod tests;
@@ -58,9 +58,17 @@ impl Mirror {
         let mut each = rows_in.update(&snapshot)?;
         let mut y = 0;
         while let Some(row) = each.next() {
+            // Ghostty counts a row whose selected cells changed as changed.
             if y < count && (all || row.dirty()?) {
                 let mut cells = cells_in.update(row)?;
-                rows[y] = Arc::new(copy_row(&mut cells, colors.foreground, colors.background, text)?);
+                let mut copy = copy_row(&mut cells, colors.foreground, colors.background, text)?;
+                // Ghostty moves a selection's start off a wide character's second cell, but leaves its end on the
+                // first, and its own renderer takes in the second. So does this.
+                copy.selected = row.selection()?.map(|range| {
+                    let end = range.end_x + u16::from(copy.wide_at(range.end_x));
+                    Selected { col: range.start_x, cells: end.saturating_sub(range.start_x) + 1 }
+                });
+                rows[y] = Arc::new(copy);
                 row.set_dirty(false)?;
             }
             y += 1;

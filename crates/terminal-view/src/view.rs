@@ -1,5 +1,5 @@
-//! A terminal someone has open, as a view: its grid, which takes the keys while it's focused, pastes, and turns the
-//! wheel through its history.
+//! A terminal someone has open, as a view: its grid, which takes the keys while it's focused, pastes, turns the wheel
+//! through its history, and selects with the pointer, and copies what's selected.
 
 use std::cell::Cell;
 use std::rc::Rc;
@@ -7,27 +7,31 @@ use std::sync::Arc;
 
 use client_core::OpenTerminal;
 use gpui_kit::component::ActiveTheme as _;
-use gpui_kit::component::input::Paste;
+use gpui_kit::component::input::{Copy, Paste, SelectAll};
 use gpui_kit::{
-    App, ClipboardItem, Context, FocusHandle, Focusable, InteractiveElement, IntoElement, KeyBinding, KeyDownEvent,
-    MouseButton, MouseDownEvent, NoAction, OperatingSystem, ParentElement, Pixels, Render, ScrollEvent, Styled, Task,
-    TestSupportExt as _, Window, div, font, px,
+    App, ClipboardItem, Context, FocusHandle, Focusable, Hsla, InteractiveElement, IntoElement, KeyBinding,
+    KeyDownEvent, MouseButton, MouseDownEvent, NoAction, OperatingSystem, ParentElement, Pixels, Render, ScrollEvent,
+    Styled, Task, TestSupportExt as _, Window, div, font, px,
 };
 use terminal_state::Size;
 use terminal_state::drawn::{Frame, Rgb};
 
-use crate::grid::{Glyphs, Grid, Metrics};
+use crate::grid::{Glyphs, Grid, Metrics, Pointing};
 use crate::keys::key_press;
 
-/// Binds a terminal's own keys: paste, with Command on a Mac, and with Control and Shift elsewhere, as terminal apps
-/// there paste, since a terminal's Control keys are its program's. It's the kit's paste, which the text boxes take too,
-/// so the Edit menu's Paste pastes in a terminal as well. And keeps the kit's from keys that are the program's: Tab and
-/// Shift-Tab, which it has move the keys to what's next on screen, and Ctrl-C off the Mac, which it has copy.
+/// Binds a terminal's own keys: copy, paste and select all, with Command on a Mac, and with Control and Shift
+/// elsewhere, as terminal apps there have them, since a terminal's Control keys are its program's. They're the kit's
+/// actions, which the text boxes take too, so the Edit menu's items work in a terminal as well. And keeps the kit's
+/// from keys that are the program's: Tab and Shift-Tab, which it has move the keys to what's next on screen, and Ctrl-C
+/// off the Mac, which it has copy.
 pub fn bind_keys(cx: &mut App) {
     let mac = cx.platform_info().is_mac();
-    let paste = if mac { "cmd-v" } else { "ctrl-shift-v" };
+    let [copy, paste, select_all] =
+        if mac { ["cmd-c", "cmd-v", "cmd-a"] } else { ["ctrl-shift-c", "ctrl-shift-v", "ctrl-shift-a"] };
     cx.bind_keys([
+        KeyBinding::new(copy, Copy, Some(KEY_CONTEXT)),
         KeyBinding::new(paste, Paste, Some(KEY_CONTEXT)),
+        KeyBinding::new(select_all, SelectAll, Some(KEY_CONTEXT)),
         // Deeper than the kit's, so its are passed over, and the key goes on to the view.
         KeyBinding::new("tab", NoAction, Some(KEY_CONTEXT)),
         KeyBinding::new("shift-tab", NoAction, Some(KEY_CONTEXT)),
@@ -47,6 +51,8 @@ pub struct TerminalView {
     open: OpenTerminal,
     frame: Option<Arc<Frame>>,
     background: Rgb,
+    /// The theme's, for what's selected.
+    selection: Hsla,
     metrics: Metrics,
     glyphs: Glyphs,
     focus: FocusHandle,
@@ -56,6 +62,8 @@ pub struct TerminalView {
     wheel: Pixels,
     /// Draws the view again as client-core's copy changes, until the view has gone.
     _changes: Task<()>,
+    /// Whether the pointer's button went down on the grid and hasn't come up.
+    dragging: Rc<Cell<bool>>,
     os: OperatingSystem,
 }
 
@@ -64,7 +72,7 @@ impl TerminalView {
     pub fn new(open: OpenTerminal, window: &mut Window, cx: &mut Context<Self>) -> Self {
         let theme = cx.theme();
         let foreground = rgb_of(theme.foreground);
-        let background = rgb_of(theme.background);
+        let (background, selection) = (rgb_of(theme.background), theme.selection);
         let metrics = Metrics::of(font(theme.mono_font_family.clone()), theme.mono_font_size, window);
         open.set_colors(foreground, background);
         // Draws again once there's a terminal's frame to take, or the shell ends.
@@ -76,16 +84,24 @@ impl TerminalView {
                 }
             }
         });
+        let focus = cx.focus_handle();
+        let dragging = Rc::new(Cell::new(false));
+        // A drag whose button comes up while the grid isn't drawn, as when another tab comes to the front, is over,
+        // and a press on the grid gives it the keys again first.
+        let lost = dragging.clone();
+        cx.on_blur(&focus, window, move |_, _, _| lost.set(false)).detach();
         Self {
             open,
             frame: None,
             background,
+            selection,
             metrics,
             glyphs: Glyphs::default(),
-            focus: cx.focus_handle(),
+            focus,
             fit: Rc::new(Cell::new(None)),
             wheel: px(0.),
             _changes: drawing_again,
+            dragging,
             os: cx.platform_info().os,
         }
     }
@@ -104,6 +120,23 @@ impl TerminalView {
         if let Some(text) = cx.read_from_clipboard().as_ref().and_then(ClipboardItem::text) {
             self.open.paste(text);
         }
+    }
+
+    /// Copies what's selected, which only the thread client-core keeps the terminal's copy on can read, so it goes on
+    /// the clipboard once that thread has said what it is. Nothing selected copies nothing, and leaves the clipboard as
+    /// it was.
+    fn copy(&mut self, _: &Copy, _: &mut Window, cx: &mut Context<Self>) {
+        let selected = self.open.selected_text();
+        cx.spawn(async move |_, cx| {
+            if let Ok(text) = selected.recv_async().await {
+                cx.update(|cx| cx.write_to_clipboard(ClipboardItem::new_string(text)));
+            }
+        })
+        .detach();
+    }
+
+    fn select_all(&mut self, _: &SelectAll, _: &mut Window, _: &mut Context<Self>) {
+        self.open.select_all();
     }
 
     fn scroll_wheel(&mut self, event: &ScrollEvent, _: &mut Window, cx: &mut Context<Self>) {
@@ -137,6 +170,16 @@ impl TerminalView {
         let Some(frame) = &self.frame else { return Vec::new() };
         frame.rows.iter().map(|row| row.text()).collect()
     }
+
+    /// Whether what it last drew has anything selected.
+    pub fn shows_a_selection(&self) -> bool {
+        self.frame.as_ref().is_some_and(|frame| frame.rows.iter().any(|row| row.selected.is_some()))
+    }
+
+    /// How big each cell is, so a test can point at one. The grid's top left is the view's.
+    pub fn cell_size(&self) -> gpui_kit::Size<Pixels> {
+        gpui_kit::size(self.metrics.cell_width, self.metrics.line_height)
+    }
 }
 
 #[expect(clippy::cast_possible_truncation, reason = "whole lines a turn of the wheel scrolls, which are few")]
@@ -163,6 +206,8 @@ impl Render for TerminalView {
             glyphs: self.glyphs.clone(),
             // The window has to be in front too, as the keys go to another app's while it isn't.
             focused: self.focus.is_focused(window) && window.is_window_active(),
+            selection: self.selection,
+            pointing: Pointing { open: self.open.clone(), dragging: self.dragging.clone() },
             fits: Box::new(move |size| {
                 if fit.replace(Some(size)) != Some(size) {
                     open.fit(size);
@@ -179,6 +224,8 @@ impl Render for TerminalView {
             .overflow_hidden()
             .on_key_down(cx.listener(Self::key_down))
             .on_action(cx.listener(Self::paste))
+            .on_action(cx.listener(Self::copy))
+            .on_action(cx.listener(Self::select_all))
             .on_scroll(cx.listener(Self::scroll_wheel))
             .on_mouse_down(MouseButton::Left, cx.listener(Self::mouse_down))
             .child(grid)

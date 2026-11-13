@@ -7,6 +7,7 @@ use gpui_kit::Pixels;
 
 use super::frame::Frame;
 use super::world::World;
+use crate::support::Cells;
 
 pub(crate) struct Screen {
     /// Also the image's file name.
@@ -81,6 +82,11 @@ pub(crate) enum Step {
     /// Opens the bar for finding text in the chat, as `Cmd-F` does, looks for this, and waits for every match to be
     /// counted and the first to be shown.
     Find(&'static str),
+    /// Drags across the terminal in front, from one place to another, and waits for what it selected to show.
+    SelectInTerminal {
+        from: Cells,
+        to: Cells,
+    },
 }
 
 /// An element in the app, by its ID, or by the label it gives assistive apps, for one whose ID is made from data

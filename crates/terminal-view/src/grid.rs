@@ -1,18 +1,21 @@
 //! Paints a terminal's frame as a grid of cells, inside one layer, with each cell's character painted as a glyph at its
-//! column, as `docs/performance.md` says makes a terminal fast to draw.
+//! column, as `docs/performance.md` says makes a terminal fast to draw. It also says where on it the pointer is pressed
+//! and dragged, in cells, which selects.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
 
+use client_core::OpenTerminal;
 use gpui_kit::{
-    App, BorderStyle, Bounds, Element, ElementId, Font, FontId, FontStyle, FontWeight, GlobalElementId, GlyphId, Hsla,
-    InspectorElementId, IntoElement, LayoutId, Pixels, SharedString, Style, TextRun, Window, fill, outline, point, px,
-    relative, rgb, size,
+    App, BorderStyle, Bounds, CursorStyle, DispatchPhase, Element, ElementId, Font, FontId, FontStyle, FontWeight,
+    GlobalElementId, GlyphId, Hitbox, HitboxBehavior, Hsla, InspectorElementId, IntoElement, LayoutId, MouseButton,
+    MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, SharedString, Style, TextRun, Window, fill, outline, point,
+    px, relative, rgb, size,
 };
-use terminal_state::Size;
 use terminal_state::drawn::{Cursor, CursorShape, Frame, Glyph, GlyphText, Rgb};
+use terminal_state::{Pointer, SelectBy, Size};
 
 /// How big a cell is, in the terminal's font.
 #[derive(Clone, Debug)]
@@ -88,8 +91,20 @@ pub(crate) struct Grid {
     pub(crate) glyphs: Glyphs,
     /// Whether the view has the keys, which a block cursor shows by being filled.
     pub(crate) focused: bool,
+    /// What selected cells are painted in, under their text.
+    pub(crate) selection: Hsla,
     /// Told how many cells fit, once the grid is laid out.
     pub(crate) fits: Box<dyn Fn(Size)>,
+    /// Where presses and drags on the grid go.
+    pub(crate) pointing: Pointing,
+}
+
+/// Where a press on the grid, and the drag that follows it, are told.
+#[derive(Clone)]
+pub(crate) struct Pointing {
+    pub(crate) open: OpenTerminal,
+    /// Whether the button went down on the grid and hasn't come up, which a drag past its edges goes on from.
+    pub(crate) dragging: Rc<Cell<bool>>,
 }
 
 impl IntoElement for Grid {
@@ -102,7 +117,7 @@ impl IntoElement for Grid {
 
 impl Element for Grid {
     type RequestLayoutState = ();
-    type PrepaintState = ();
+    type PrepaintState = Hitbox;
 
     fn id(&self) -> Option<ElementId> {
         None
@@ -131,10 +146,11 @@ impl Element for Grid {
         _: Option<&InspectorElementId>,
         bounds: Bounds<Pixels>,
         (): &mut (),
-        _: &mut Window,
+        window: &mut Window,
         _: &mut App,
-    ) {
+    ) -> Hitbox {
         (self.fits)(self.metrics.fit(bounds.size));
+        window.insert_hitbox(bounds, HitboxBehavior::Normal)
     }
 
     fn paint(
@@ -143,10 +159,12 @@ impl Element for Grid {
         _: Option<&InspectorElementId>,
         bounds: Bounds<Pixels>,
         (): &mut (),
-        (): &mut (),
+        hitbox: &mut Hitbox,
         window: &mut Window,
         _: &mut App,
     ) {
+        window.set_cursor_style(CursorStyle::IBeam, hitbox);
+        follow_the_pointer(self.pointing.clone(), hitbox.clone(), bounds.origin, &self.metrics, window);
         // One layer for the grid, so GPUI orders it once rather than searching what each box and glyph is over. Within
         // a layer, boxes are drawn before glyphs, so a background or the cursor is always under the text.
         window.paint_layer(bounds, |window| {
@@ -160,6 +178,9 @@ impl Element for Grid {
                 for back in &cells.backgrounds {
                     window.paint_quad(fill(painter.cells(back.col, row, back.cells), color(back.color)));
                 }
+                if let Some(selected) = cells.selected {
+                    window.paint_quad(fill(painter.cells(selected.col, row, selected.cells), self.selection));
+                }
                 for glyph in &cells.glyphs {
                     let under_cursor =
                         cursor.is_some_and(|at| at.shape == CursorShape::Block && at.row == row && at.col == glyph.col);
@@ -171,6 +192,54 @@ impl Element for Grid {
                 painter.cursor(at, at.color.unwrap_or(frame.foreground), self.focused, window);
             }
         });
+    }
+}
+
+/// Gives client-core's copy of the terminal a left press on the grid, where the pointer goes with the button down after
+/// it, even past the grid's edges, and where the button comes up, each in cells from the grid's top left.
+fn follow_the_pointer(
+    pointing: Pointing,
+    hitbox: Hitbox,
+    origin: gpui_kit::Point<Pixels>,
+    metrics: &Metrics,
+    window: &mut Window,
+) {
+    let (cell_width, line_height) = (metrics.cell_width, metrics.line_height);
+    let at = move |position: gpui_kit::Point<Pixels>| Pointer {
+        col: (position.x - origin.x) / cell_width,
+        row: (position.y - origin.y) / line_height,
+    };
+    let (down, moved, up) = (pointing.clone(), pointing.clone(), pointing);
+    window.on_mouse_event(move |event: &MouseDownEvent, phase, window, _| {
+        if phase == DispatchPhase::Bubble && event.button == MouseButton::Left && hitbox.is_hovered(window) {
+            down.dragging.set(true);
+            down.open.press(at(event.position), select_by(event.click_count));
+        }
+    });
+    window.on_mouse_event(move |event: &MouseMoveEvent, phase, _, _| {
+        if phase == DispatchPhase::Bubble && moved.dragging.get() {
+            if event.pressed_button == Some(MouseButton::Left) {
+                moved.open.drag(at(event.position));
+            } else {
+                // The button came up where the window didn't hear it, such as over another app.
+                moved.dragging.set(false);
+                moved.open.release(at(event.position));
+            }
+        }
+    });
+    window.on_mouse_event(move |event: &MouseUpEvent, phase, _, _| {
+        if phase == DispatchPhase::Bubble && event.button == MouseButton::Left && up.dragging.replace(false) {
+            up.open.release(at(event.position));
+        }
+    });
+}
+
+/// What the `clicks`th press of a run selects by, as the platform counts them. Past the third, it's still the line.
+fn select_by(clicks: usize) -> SelectBy {
+    match clicks {
+        0 | 1 => SelectBy::Cells,
+        2 => SelectBy::Words,
+        _ => SelectBy::Lines,
     }
 }
 
@@ -277,9 +346,9 @@ fn color(rgb_color: Rgb) -> Hsla {
 #[cfg(test)]
 mod tests {
     use gpui_kit::{font, px, size};
-    use terminal_state::Size;
+    use terminal_state::{SelectBy, Size};
 
-    use super::Metrics;
+    use super::{Metrics, select_by};
 
     /// Only whole cells, so the terminal is never bigger than what shows, and one each way however little room there
     /// is.
@@ -295,5 +364,15 @@ mod tests {
 
         assert_eq!(metrics.fit(size(px(752.), px(330.))), Size { cols: 100, rows: 20 });
         assert_eq!(metrics.fit(size(px(0.), px(0.))), Size { cols: 1, rows: 1 });
+    }
+
+    /// A double click selects a word, and a triple click the line, as the platform counts them, which is 0 for a press
+    /// with no count.
+    #[test]
+    fn each_click_of_a_run_selects_by_more() {
+        assert_eq!(
+            [0, 1, 2, 3, 4].map(select_by),
+            [SelectBy::Cells, SelectBy::Cells, SelectBy::Words, SelectBy::Lines, SelectBy::Lines]
+        );
     }
 }
