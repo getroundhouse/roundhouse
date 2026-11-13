@@ -54,6 +54,11 @@ fn an_image_a_text_points_to_is_named_in_its_block_and_sent_with_its_bytes() {
 }
 
 #[test]
+fn a_text_the_parser_panics_on_points_to_no_image() {
+    assert_eq!(addresses::of("![The board](shot.png)\n\na\n===\n---\nb\n==="), Vec::<String>::new());
+}
+
+#[test]
 fn an_address_is_read_once_for_an_event_however_many_texts_point_to_it() {
     let worktree = worktree_with(&[("shot.png", PNG)]);
     let mut body = said(&["![one](shot.png)", "![again](shot.png) and ![twice](shot.png)"]);

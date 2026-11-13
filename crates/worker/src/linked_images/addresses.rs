@@ -22,7 +22,13 @@ pub(super) fn of(text: &str) -> Vec<String> {
     }
     // The text view also parses `$` as math, but draws math nobody claims as Markdown again, so an image inside it is
     // still an image, as it is here.
-    let Ok(root) = markdown::to_mdast(text, &ParseOptions::gfm()) else { return Vec::new() };
+    //
+    // The parser panics on some texts, such as `"a\n===\n---\nb\n==="`, which the agent can write. `super::keep_in`
+    // would carry on past a panic, but send the event without any of its images, so a text it panics on is one it
+    // can't read, which points to none, and the event's other texts keep theirs.
+    let Ok(Ok(root)) = std::panic::catch_unwind(|| markdown::to_mdast(text, &ParseOptions::gfm())) else {
+        return Vec::new();
+    };
     let mut given = HashMap::new();
     walk(&root, &mut |node| {
         if let Node::Definition(definition) = node {

@@ -23,7 +23,10 @@ pub(crate) fn images_apart(text: &str) -> Cow<'_, str> {
     if !an_image_may_follow_another(text) {
         return Cow::Borrowed(text);
     }
-    let Ok(root) = markdown::to_mdast(text, &ParseOptions::gfm()) else { return Cow::Borrowed(text) };
+    // The parser panics on some texts, as `crate::prose::parse` says, and one it can't read is left as it is.
+    let Ok(Ok(root)) = std::panic::catch_unwind(|| markdown::to_mdast(text, &ParseOptions::gfm())) else {
+        return Cow::Borrowed(text);
+    };
     let mut gaps = Vec::new();
     find_gaps(&root, &mut Vec::new(), text, &mut gaps);
     if gaps.is_empty() {

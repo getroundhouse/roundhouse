@@ -25,9 +25,10 @@ pub(crate) struct Parsed {
     pub(super) links: BTreeMap<SharedString, LinkMark>,
 }
 
-/// Parses `source`, and keys each of its leaves by its place in it.
+/// Parses `source`, and keys each of its leaves by its place in it. One the kit's parser can't read is a paragraph, as
+/// it's written.
 pub(super) fn parse(source: String) -> Parsed {
-    let blocks = parse_markdown(&source, Arc::default()).unwrap_or_else(|_| {
+    let blocks = read(&source).unwrap_or_else(|| {
         let mut paragraph = Paragraph::default();
         paragraph.push(InlineNode::new(source.clone()));
         vec![BlockNode::Paragraph(paragraph)]
@@ -37,6 +38,14 @@ pub(super) fn parse(source: String) -> Parsed {
     let mut links = BTreeMap::new();
     defined(&blocks, &mut links);
     Parsed { source, blocks, leaves: leaves.into(), links }
+}
+
+/// `source`'s blocks, as the kit's parser reads them, if it can. The `markdown` crate it parses with panics on some
+/// texts, such as `"a\n===\n---\nb\n==="`, which the agent can write, and which would end the app, so a text it panics
+/// on is one it can't read. Rust's default hook still says so on stderr each time, which a short text drawn again after
+/// its blocks were put away, or counted by find, is.
+fn read(source: &str) -> Option<Vec<BlockNode>> {
+    std::panic::catch_unwind(|| parse_markdown(source, Arc::default())).ok()?.ok()
 }
 
 /// Adds where each reference link defined in `blocks` goes to `links`, unless it's there. As the Markdown standard has
@@ -157,6 +166,13 @@ mod tests {
 
         assert_eq!(links.get("docs").map(|link| link.url.as_ref()), Some("https://example.com/first"));
         assert_eq!(*leaves(source), ["See the docs."], "and a definition is no leaf");
+    }
+
+    #[test]
+    fn a_text_the_parser_panics_on_is_one_paragraph_as_it_is_written() {
+        let source = "a\n===\n---\nb\n===";
+
+        assert_eq!(*leaves(source), [source]);
     }
 
     #[test]
