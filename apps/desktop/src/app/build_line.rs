@@ -1,4 +1,4 @@
-//! What the bottom of the sidebar says about which build is running, and about updating it.
+//! What the bottom of the sidebar says about which build is running, and where updating it has got to.
 
 use client_core::Client;
 use gpui_kit::App;
@@ -19,18 +19,26 @@ impl AppView {
     }
 }
 
-/// One build is all most people need to know about, so the hub only comes up when it isn't the app's build.
+/// Which build is running, and where an update has got to, which the sidebar draws apart: the build in its line, and
+/// the update as a card over it. One build is all most people need to know about, so the hub only comes up when it
+/// isn't the app's build.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum BuildLine {
-    /// The app and its hub are the same build, or there's no hub to compare it with.
-    Current { app: String },
-    /// A newer build is downloaded, which installs when the app restarts or quits.
-    UpdateReady { app: String, next: String },
-    /// The app has updated, and its hub is still the older build, with work on it, such as `agents`. The app restarts
-    /// the hub once that work is done, or sooner if asked.
-    Finishing { app: String, hub: String, agents: Agents },
-    /// The hub is another build that the app leaves alone: one someone started themselves, or a newer one.
-    OtherHub { app: String, hub: String },
+pub struct BuildLine {
+    pub app: String,
+    /// The hub's build, when it's another that the app leaves alone: one someone started themselves, or a newer one.
+    pub other_hub: Option<String>,
+    /// Where an update has got to, while there's something to say about it.
+    pub update: Option<Updating>,
+}
+
+/// Where an update has got to.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Updating {
+    /// A newer build, `next`, is downloaded, which installs when the app restarts or quits.
+    Ready { next: String },
+    /// The app has updated, and its hub is still the older build, `hub`, with work on it, such as `agents`. The app
+    /// restarts the hub once that work is done, or sooner if asked.
+    Finishing { hub: String, agents: Agents },
 }
 
 /// The agents on a turn, which is what keeps an older hub from being replaced. Apart, because an update that waits
@@ -73,16 +81,16 @@ impl Agents {
 impl BuildLine {
     /// `hub` is `None` while there's no connection. `may_restart` says whether the app may restart the hub it's
     /// connected to, `agents` which are on a turn on it, and `ready` is the version of an update that's downloaded.
+    /// A downloaded update comes first, since it's what installs.
     pub(super) fn new(app: &str, hub: Option<&str>, may_restart: bool, agents: Agents, ready: Option<&str>) -> Self {
-        let app = app.to_string();
-        if let Some(next) = ready {
-            return Self::UpdateReady { app, next: next.to_string() };
-        }
-        match hub {
-            Some(hub) if hub != app && may_restart => Self::Finishing { app, hub: hub.to_string(), agents },
-            Some(hub) if hub != app => Self::OtherHub { app, hub: hub.to_string() },
-            Some(_) | None => Self::Current { app },
-        }
+        let another = hub.filter(|hub| *hub != app).map(str::to_string);
+        let other_hub = another.clone().filter(|_| !may_restart);
+        let update = match (ready, another) {
+            (Some(next), _) => Some(Updating::Ready { next: next.to_string() }),
+            (None, Some(hub)) if may_restart => Some(Updating::Finishing { hub, agents }),
+            (None, _) => None,
+        };
+        Self { app: app.to_string(), other_hub, update }
     }
 }
 
@@ -95,35 +103,47 @@ mod tests {
 
     const NONE: Agents = Agents { working: 0, waiting_on_you: 0 };
 
+    fn line(other_hub: Option<&str>, update: Option<Updating>) -> BuildLine {
+        BuildLine { app: "abc".to_string(), other_hub: other_hub.map(str::to_string), update }
+    }
+
+    fn ready() -> Updating {
+        Updating::Ready { next: "ghi".to_string() }
+    }
+
     #[test]
     fn the_same_build_is_only_named_once() {
-        assert_eq!(BuildLine::new("abc", Some("abc"), true, NONE, None), BuildLine::Current { app: "abc".to_string() });
+        assert_eq!(BuildLine::new("abc", Some("abc"), true, NONE, None), line(None, None));
     }
 
     #[test]
     fn with_no_connection_there_is_nothing_to_compare() {
-        assert_eq!(BuildLine::new("abc", None, true, NONE, None), BuildLine::Current { app: "abc".to_string() });
+        assert_eq!(BuildLine::new("abc", None, true, NONE, None), line(None, None));
     }
 
     #[test]
     fn an_older_hub_the_app_may_restart_is_finishing_the_update() {
         let agents = Agents { working: 2, waiting_on_you: 1 };
 
-        let line = BuildLine::new("abc", Some("def"), true, agents, None);
+        let built = BuildLine::new("abc", Some("def"), true, agents, None);
 
-        assert_eq!(line, BuildLine::Finishing { app: "abc".to_string(), hub: "def".to_string(), agents });
+        assert_eq!(built, line(None, Some(Updating::Finishing { hub: "def".to_string(), agents })));
     }
 
     #[test]
     fn a_hub_the_app_leaves_alone_is_named() {
-        let line = BuildLine::new("abc", Some("def"), false, NONE, None);
-        assert_eq!(line, BuildLine::OtherHub { app: "abc".to_string(), hub: "def".to_string() });
+        assert_eq!(BuildLine::new("abc", Some("def"), false, NONE, None), line(Some("def"), None));
     }
 
     #[test]
     fn a_downloaded_update_comes_first() {
-        let line = BuildLine::new("abc", Some("def"), true, NONE, Some("ghi"));
-        assert_eq!(line, BuildLine::UpdateReady { app: "abc".to_string(), next: "ghi".to_string() });
+        assert_eq!(BuildLine::new("abc", Some("def"), true, NONE, Some("ghi")), line(None, Some(ready())));
+    }
+
+    /// The card is over the build line, which still says which hub it is.
+    #[test]
+    fn a_hub_the_app_leaves_alone_is_named_with_an_update_downloaded() {
+        assert_eq!(BuildLine::new("abc", Some("def"), false, NONE, Some("ghi")), line(Some("def"), Some(ready())));
     }
 
     fn task(kind: TaskKind) -> AgentTask {

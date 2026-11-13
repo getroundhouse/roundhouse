@@ -1,5 +1,6 @@
 //! A background task's ring: a small circle of dots around a hub, beside what the agent said it's for. It's the
-//! fan's turntable on its own, so the fan stays the agent's, one to a chat.
+//! fan's turntable on its own, so the fan stays the agent's, one to a chat. The app's own work in the background, such
+//! as a check for updates, has one too.
 
 use gpui_kit::{App, Bounds, Hsla, IntoElement, Pixels, Styled, Window, canvas, point};
 
@@ -8,7 +9,7 @@ use crate::colors::colors;
 use crate::fan::{self, as_f32};
 use crate::mark::{BACKGROUND_S, LIGHT, STILL_S, Size, phase, unlit};
 
-/// Whether a background task is doing something.
+/// Whether a background task, or the app's own work in the background, is doing something.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum TaskRing {
     /// Running, such as a command or a subagent. A white light goes round the ring.
@@ -27,7 +28,8 @@ const TAIL: f32 = 1.0 / 3.0;
 /// How strongly a watching ring's dots show, so its hub is what's seen.
 const WATCHING: f32 = 0.75;
 
-/// The ring for one background task, as wide as a mark beside text, so what follows lines up with the working line's.
+/// The ring for one background task, or a piece of the app's own work, as wide as a mark beside text, so what follows
+/// lines up with the working line's.
 pub fn task_ring(ring: TaskRing, cx: &App) -> impl IntoElement {
     let colors = colors(cx);
     let (light, faint) = (colors.text, colors.text_faint);

@@ -40,10 +40,10 @@ const SAME_IN_A_ROW: usize = 3;
 const BETWEEN_PICTURES: Duration = Duration::from_millis(50);
 /// A tooltip, or the update card's details, shows once the pointer has rested on it for half a second.
 const LONGER_THAN_A_TOOLTIP_WAITS: Duration = Duration::from_secs(1);
-/// Somewhere to move the pointer that has no hover of its own: the line in the sidebar saying which build this is.
-/// It isn't drawn while the sidebar shows an update's card, so a screen with one can't [`Step::Open`] a line or
-/// [`Step::MoveAway`].
-const AWAY: &str = "build-line";
+/// Somewhere to move the pointer that has no hover of its own: the version, at the bottom of the sidebar. It isn't
+/// drawn while what a check for updates says, or a problem updating, is in its place, so a screen with one can't
+/// [`Step::Open`] a line or [`Step::MoveAway`].
+const AWAY: &str = "version";
 
 pub(crate) struct Picture {
     pub(crate) image: RgbaImage,
@@ -139,6 +139,7 @@ impl Driver {
             Step::UpdateReady(version) => self.cx.update(|cx| desktop::updates::show_ready(version, cx)),
             Step::UpdateProblem(kind, detail) => self.show_problem(*kind, detail),
             Step::UpdateChecking => self.cx.update(desktop::updates::show_checking),
+            Step::UpToDate => self.cx.update(desktop::updates::show_up_to_date),
             Step::OpenSettings => {
                 let open = Box::new(desktop::OpenSettings);
                 self.cx.update_window(self.handle, |_, window, cx| window.dispatch_action(open, cx)).unwrap();

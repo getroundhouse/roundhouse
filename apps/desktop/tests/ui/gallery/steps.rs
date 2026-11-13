@@ -72,6 +72,8 @@ pub(crate) enum Step {
     UpdateProblem(Kind, &'static str),
     /// Has the app show a check for updates under way, as Check for Updates… starts one.
     UpdateChecking,
+    /// Has the app show a check as having found nothing newer.
+    UpToDate,
     /// Opens Settings, as its menu item does.
     OpenSettings,
     /// Clicks the transcript's line with this label, such as a tool call, to open it, has the chat go back to its end,

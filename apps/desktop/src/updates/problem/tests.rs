@@ -60,3 +60,26 @@ fn a_refused_update_shows_at_once() {
 
     assert_eq!(shown.problem, Some(refused));
 }
+
+/// Someone who checks while a problem shows is waiting on the check, so it's what shows until the check ends.
+#[test]
+fn a_check_under_way_is_said_over_a_problem_and_then_its_answer() {
+    let problem = Problem { kind: Kind::Unreachable, detail: "connection refused".to_string() };
+    let mut shown = Shown { problem: Some(problem.clone()), ..Shown::default() };
+    assert_eq!(shown.said(), Some(Said::Problem(&problem)));
+
+    shown.checking = true;
+    assert_eq!(shown.said(), Some(Said::Checking));
+
+    shown.checking = false;
+    shown.answer = Some(Answer::UpToDate);
+    assert_eq!(shown.said(), Some(Said::Answer(Answer::UpToDate)), "the answer is said over a problem");
+
+    shown.problem = None;
+    assert_eq!(shown.said(), Some(Said::Answer(Answer::UpToDate)));
+}
+
+#[test]
+fn nothing_is_said_with_nothing_to_say() {
+    assert_eq!(Shown::default().said(), None);
+}

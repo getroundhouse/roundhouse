@@ -112,7 +112,30 @@ pub(super) struct Shown {
 
 impl Global for Shown {}
 
+/// What the sidebar says about updating in the version's place, while it has something to say there. A downloaded
+/// update says it as its card instead, over the version.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Said<'a> {
+    /// A check someone asked for is under way.
+    Checking,
+    /// What a check someone asked for found, for a few seconds.
+    Answer(Answer),
+    Problem(&'a Problem),
+}
+
 impl Shown {
+    /// What's said in the version's place. A check someone asked for comes first, since they're waiting on it, then
+    /// what it found. A problem lasts until a later look works, so a check under way hides it until the check ends.
+    pub(super) fn said(&self) -> Option<Said<'_>> {
+        if self.checking {
+            Some(Said::Checking)
+        } else if let Some(answer) = self.answer {
+            Some(Said::Answer(answer))
+        } else {
+            self.problem.as_ref().map(Said::Problem)
+        }
+    }
+
     /// Takes in how a look went, and how long the update server has been out of reach. Being out of reach only shows
     /// once it has lasted, unless someone checked, and anything else at once. Whoever checked has their answer.
     pub(super) fn record(&mut self, outcome: Result<(), Problem>, out_of_reach: Duration) {

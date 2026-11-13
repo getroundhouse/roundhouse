@@ -10,7 +10,7 @@ use protocol::model::{Seq, SessionStatus};
 
 use super::events::{replied, taken, text, user_prompt};
 use super::fake_hub::BUILD;
-use super::frame::{CHAT, Frame, Part, SIDEBAR, WORKSPACE_CARD};
+use super::frame::{CHAT, Frame, Part, SIDEBAR, SIDEBAR_MENU, WORKSPACE_CARD};
 use super::screens::FOCUS;
 use super::steps::{Screen, Step, Target};
 use super::world::World;
@@ -96,6 +96,20 @@ pub(crate) const UPDATE_SCREENS: &[Screen] = &[
         world: Some(conversation),
         frame: SIDEBAR,
         steps: &[Step::Select(FOCUS), Step::UpdateChecking],
+    },
+    Screen {
+        name: "up-to-date",
+        spec: "updates.md",
+        world: Some(conversation),
+        frame: SIDEBAR,
+        steps: &[Step::Select(FOCUS), Step::UpToDate],
+    },
+    Screen {
+        name: "help-menu",
+        spec: "updates.md",
+        world: Some(conversation),
+        frame: SIDEBAR_MENU,
+        steps: &[Step::Select(FOCUS), Step::Click("help")],
     },
     Screen { name: "updated", spec: "updates.md", world: Some(updated), frame: CHAT, steps: &[Step::Select(FOCUS)] },
     Screen {

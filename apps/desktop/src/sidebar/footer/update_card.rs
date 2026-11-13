@@ -1,4 +1,4 @@
-//! Where an update has got to, as a card in the version's place.
+//! Where an update has got to, as a card over the build line.
 
 use gpui_kit::base::ElementExt as _;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
@@ -12,9 +12,9 @@ use look::{Hand as _, Typeset as _};
 use look::{IconSize, IconStyle};
 
 use super::update_details::{Details, Shown};
-use crate::app::{Agents, AppView, BuildLine, UpdateQuestion};
+use crate::app::{Agents, AppView, BuildLine, UpdateQuestion, Updating};
 
-/// Where an update has got to, when there's something to say, as a card with the app's icon in the version's place,
+/// Where an update has got to, when there's something to say, as a card with the app's icon over the build line,
 /// and a mark in its corner that says which versions, and what happens next, on hover. Installing an update is the
 /// card's main action, and when that would lose what's typed, the card asks first, as its title, in place of its
 /// button. Finishing one happens by itself, and doing it now stops agents, so that's a quiet button under what it's
@@ -24,12 +24,11 @@ pub(super) fn update_card(
     question: Option<&UpdateQuestion>,
     cx: &mut Context<AppView>,
 ) -> Option<AnyElement> {
-    let (about, action) = match line {
-        BuildLine::UpdateReady { next, .. } => {
+    let (about, action) = match line.update.as_ref()? {
+        Updating::Ready { next } => {
             ready_card(next, question.filter(|q| matches!(q, UpdateQuestion::Restart { .. })), cx)
         }
-        BuildLine::Finishing { agents, .. } => (finishing_card(*agents, cx), None),
-        BuildLine::Current { .. } | BuildLine::OtherHub { .. } => return None,
+        Updating::Finishing { agents, .. } => (finishing_card(*agents, cx), None),
     };
     let details = Details::of(line)?;
     Some(UpdateCard { about, details, action }.into_any_element())
@@ -55,7 +54,6 @@ impl RenderOnce for UpdateCard {
         v_flex()
             .id("update-card")
             .w_full()
-            .mt_2()
             .p_2p5()
             .gap_2p5()
             .rounded(px(10.))

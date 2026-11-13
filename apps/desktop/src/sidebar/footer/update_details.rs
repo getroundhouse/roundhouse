@@ -8,7 +8,7 @@ use gpui_kit::{
 
 use look::{InRegion as _, Region, Typeset as _};
 
-use crate::app::{Agents, BuildLine};
+use crate::app::{Agents, BuildLine, Updating};
 
 /// Between the details and the top of the card they sit on.
 const GAP: Pixels = px(6.);
@@ -29,8 +29,9 @@ pub(super) struct Details {
 impl Details {
     /// `None` when there's no update to say anything about.
     pub(super) fn of(line: &BuildLine) -> Option<Self> {
-        let (from, to, what_happens) = match line {
-            BuildLine::UpdateReady { app, next } => (
+        let app = &line.app;
+        let (from, to, what_happens) = match line.update.as_ref()? {
+            Updating::Ready { next } => (
                 app,
                 next,
                 format!(
@@ -38,8 +39,7 @@ impl Details {
                      running. Quitting installs it too."
                 ),
             ),
-            BuildLine::Finishing { app, hub, agents } => (hub, app, finishing(app, hub, *agents)),
-            BuildLine::Current { .. } | BuildLine::OtherHub { .. } => return None,
+            Updating::Finishing { hub, agents } => (hub, app, finishing(app, hub, *agents)),
         };
         Some(Self { from: from.clone(), to: to.clone(), what_happens })
     }
@@ -137,7 +137,7 @@ mod tests {
 
     #[test]
     fn a_downloaded_update_goes_from_this_build_to_the_one_downloaded() {
-        let line = BuildLine::UpdateReady { app: "1.0.0".to_string(), next: "1.0.1".to_string() };
+        let line = updating(Updating::Ready { next: "1.0.1".to_string() });
 
         assert_eq!(versions(&line), Some(("1.0.0".to_string(), "1.0.1".to_string())));
     }
@@ -170,8 +170,12 @@ mod tests {
         assert!(!what_happens.contains("waiting on you"), "{what_happens}");
     }
 
+    fn updating(update: Updating) -> BuildLine {
+        BuildLine { app: "1.0.0".to_string(), other_hub: None, update: Some(update) }
+    }
+
     fn finishing_line(agents: Agents) -> BuildLine {
-        BuildLine::Finishing { app: "1.0.0".to_string(), hub: "0.9.0".to_string(), agents }
+        updating(Updating::Finishing { hub: "0.9.0".to_string(), agents })
     }
 
     fn what_happens(agents: Agents) -> String {
