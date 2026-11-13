@@ -13,9 +13,12 @@ use libghostty_vt::snapshot::Decoder;
 use crate::drawn::Rgb;
 
 mod drawing;
+mod selecting;
 #[cfg(test)]
 mod tests;
 mod typing;
+
+pub use selecting::{Pointer, SelectBy};
 
 /// Abandons any sequence a copy was partway through, then goes back to the shell's screen, as vim does as it quits.
 const TO_SHELL_SCREEN: &[u8] = b"\x18\x1b[?1049l";
@@ -53,6 +56,7 @@ pub struct Mirror {
     terminal: Terminal<'static, 'static>,
     drawing: Option<drawing::Drawing>,
     typing: Option<typing::Typing>,
+    selecting: Option<selecting::Selecting>,
 }
 
 impl Mirror {
@@ -62,7 +66,7 @@ impl Mirror {
         terminal.set_scrollback_max_lines(Some(HISTORY_LINES))?;
         // From the start, since only bytes written after it's on can be carried over by a snapshot.
         terminal.set_continuation_max_bytes(LONGEST_UNFINISHED_BYTES)?;
-        Ok(Self { terminal, drawing: None, typing: None })
+        Ok(Self { terminal, drawing: None, typing: None, selecting: None })
     }
 
     /// A copy that answers what the program asks of its terminal, such as where the cursor is, or what the terminal

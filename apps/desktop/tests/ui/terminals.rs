@@ -5,10 +5,12 @@
 
 use desktop::app::Connection;
 use desktop::workspace_pane::Showing;
-use gpui_kit::{AppContext as _, ClipboardItem, SharedString, TestAppContext, WeakEntity};
+use gpui_kit::test::{ClickOptions, TestWindowExt as _};
+use gpui_kit::{AppContext as _, ClipboardItem, Pixels, Point, SharedString, TestAppContext, WeakEntity, point, px};
+use protocol::model::WorkspaceStatus;
 use terminal_view::TerminalView;
 
-use crate::support::{Stack, Ui};
+use crate::support::{Cells, Stack, Ui, in_window};
 
 /// The app on a new workspace, with a terminal opened in it from the `+`, once its shell is ready.
 fn with_a_terminal<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> Ui<'a> {
@@ -41,6 +43,36 @@ fn type_keys(ui: &mut Ui<'_>, keys: &[&str]) {
 fn rows(ui: &Ui<'_>) -> Vec<String> {
     let Some(terminal) = ui.cx.read_entity(&ui.pane().unwrap(), |p, _| p.terminal()) else { return Vec::new() };
     ui.cx.read_entity(&terminal, |t, _| t.rows())
+}
+
+/// Where in the window `along` cells along row `row` of the terminal in front is.
+fn place(ui: &mut Ui<'_>, along: f32, row: u16) -> Point<Pixels> {
+    ui.frame();
+    let terminal = ui.cx.read_entity(&ui.pane().unwrap(), |p, _| p.terminal()).unwrap();
+    let cell = ui.cx.read_entity(&terminal, |t, _| t.cell_size());
+    ui.cx.update_window(ui.handle, |_, window, _| in_window(window, cell, Cells { along, row })).unwrap()
+}
+
+fn grid_origin(ui: &mut Ui<'_>) -> Point<Pixels> {
+    ui.cx.update_window(ui.handle, |_, window, _| window.find(terminal_view::SHOWN_ID).bounds().origin).unwrap()
+}
+
+/// Prints `text` on a line of its own, and the row it's on.
+fn printed(ui: &mut Ui<'_>, text: &str) -> u16 {
+    // Quoted in what's typed, so the echo of the command doesn't count.
+    let (head, tail) = text.split_at(1);
+    let typed: Vec<String> = format!("echo {head}''{tail}")
+        .chars()
+        .map(|key| if key == ' ' { "space".to_owned() } else { key.to_string() })
+        .collect();
+    type_keys(ui, &typed.iter().map(String::as_str).collect::<Vec<_>>());
+    ui.press("enter");
+    ui.wait("what the shell printed", |ui| rows(ui).iter().any(|row| row.trim_end() == text));
+    u16::try_from(rows(ui).iter().position(|row| row.trim_end() == text).unwrap()).unwrap()
+}
+
+fn clipboard(ui: &Ui<'_>) -> Option<String> {
+    ui.cx.read_from_clipboard().and_then(|item| item.text())
 }
 
 fn showing(ui: &Ui<'_>) -> Showing {
@@ -178,6 +210,93 @@ fn a_tab_brought_to_the_front_as_the_hub_restarts_takes_the_keys(cx: &mut TestAp
     assert_eq!(showing(&ui), Showing::Chat);
     assert_eq!(ui.composer_text(), "kept");
     ui.wait_for_new_hub(&stack, pid);
+}
+
+/// From near the left of its first letter to near the right of its last, as a hand drags over a word. A cell at either
+/// end is taken in only once the drag covers the point six tenths of the way across it, as in Ghostty.
+#[gpui_kit::test]
+fn dragging_over_what_the_shell_printed_selects_it_for_the_copy_key(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = with_a_terminal(cx, &stack);
+    let row = printed(&mut ui, "copied");
+    let (from, to) = (place(&mut ui, 0.1, row), place(&mut ui, 5.9, row));
+
+    ui.cx.update_window(ui.handle, |_, window, cx| window.drag(from, to, cx)).unwrap();
+    ui.press(if cfg!(target_os = "macos") { "cmd-c" } else { "ctrl-shift-c" });
+
+    ui.wait("what was selected on the clipboard", |ui| clipboard(ui).as_deref() == Some("copied"));
+}
+
+/// From the end of a word up past the top of the grid, over the tabs, which takes in everything from the start of the
+/// first row, as a drag goes on wherever the pointer goes once it has started on the grid.
+#[gpui_kit::test]
+fn a_drag_past_the_grids_edge_selects_to_the_nearest_cell(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = with_a_terminal(cx, &stack);
+    let row = printed(&mut ui, "copied");
+    let first = rows(&ui)[0].trim_end().to_owned();
+    let from = place(&mut ui, 5.9, row);
+    let above = grid_origin(&mut ui) - point(px(0.), px(30.));
+
+    ui.cx.update_window(ui.handle, |_, window, cx| window.drag(from, above, cx)).unwrap();
+    crate::menus::choose(&mut ui, "Edit", "Copy");
+
+    ui.wait("from the first row to the word on the clipboard", |ui| {
+        clipboard(ui).is_some_and(|copied| copied.starts_with(&first) && copied.ends_with("\ncopied"))
+    });
+}
+
+#[gpui_kit::test]
+fn a_double_click_selects_a_word(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = with_a_terminal(cx, &stack);
+    // With another word after it, so selecting the line would copy more.
+    let row = printed(&mut ui, "doubled word");
+    let on_it = place(&mut ui, 3.5, row) - grid_origin(&mut ui);
+    let twice = ClickOptions::new().with_offset(on_it).with_count(2);
+
+    ui.cx
+        .update_window(ui.handle, |_, window, cx| window.click_with_options(terminal_view::SHOWN_ID, twice, cx))
+        .unwrap();
+    crate::menus::choose(&mut ui, "Edit", "Copy");
+
+    ui.wait("the word on the clipboard", |ui| clipboard(ui).as_deref() == Some("doubled"));
+}
+
+/// As the Edit menu's items do in a text box.
+#[gpui_kit::test]
+fn the_edit_menus_select_all_and_copy_take_everything_in_a_terminal(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = with_a_terminal(cx, &stack);
+    printed(&mut ui, "everything");
+
+    crate::menus::choose(&mut ui, "Edit", "Select All");
+    crate::menus::choose(&mut ui, "Edit", "Copy");
+
+    ui.wait("all of it on the clipboard", |ui| {
+        clipboard(ui).is_some_and(|all| all.lines().any(|line| line == "everything"))
+    });
+}
+
+/// Off the Mac, Ctrl-Shift-A, which archives the workspace elsewhere in the app, since a terminal there has it for
+/// Select All, as it has Ctrl-Shift-C for Copy.
+#[gpui_kit::test]
+fn the_select_all_key_selects_everything_in_a_terminal_rather_than_archiving(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = with_a_terminal(cx, &stack);
+    printed(&mut ui, "everything");
+
+    let (select_all, copy) =
+        if cfg!(target_os = "macos") { ("cmd-a", "cmd-c") } else { ("ctrl-shift-a", "ctrl-shift-c") };
+    ui.press(select_all);
+    ui.press(copy);
+
+    ui.wait("all of it on the clipboard", |ui| {
+        clipboard(ui).is_some_and(|all| all.lines().any(|line| line == "everything"))
+    });
+    let archived = ui.view().records().workspaces().iter().any(|w| w.status != WorkspaceStatus::Ready);
+    assert!(!archived && !ui.cx.has_pending_prompt(), "the workspace is left as it was");
+    assert_eq!(showing(&ui), Showing::Terminal);
 }
 
 #[gpui_kit::test]

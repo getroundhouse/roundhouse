@@ -8,9 +8,9 @@ use std::sync::Arc;
 use parking_lot::Mutex;
 use protocol::model::TerminalId;
 use protocol::terminal::TerminalUpdate;
-use terminal_state::Size;
 use terminal_state::drawn::{Frame, Rgb};
 use terminal_state::keys::KeyPress;
+use terminal_state::{Pointer, SelectBy, Size};
 
 use self::copy::{TerminalCopy, ToHub};
 use super::follow::{Follow, Source};
@@ -51,6 +51,14 @@ enum Given {
     /// The view has room for this size.
     Fit(Size),
     Colors(Rgb, Rgb),
+    /// The pointer's button went down, to select by what the click of a run it was selects by.
+    Press(Pointer, SelectBy),
+    /// The pointer moved with the button down, since a press on the grid.
+    Drag(Pointer),
+    Release(Pointer),
+    SelectAll,
+    /// What's selected, as text, for the view to copy. Nothing is sent while nothing is.
+    SelectedText(flume::Sender<String>),
 }
 
 impl OpenTerminal {
@@ -117,6 +125,34 @@ impl OpenTerminal {
     /// used until then.
     pub fn set_colors(&self, foreground: Rgb, background: Rgb) {
         self.give(Given::Colors(foreground, background));
+    }
+
+    /// The pointer's button went down at `at`, which starts a selection, or selects the word or the line there, as `by`
+    /// says, which is what the click of a run it was selects by.
+    pub fn press(&self, at: Pointer, by: SelectBy) {
+        self.give(Given::Press(at, by));
+    }
+
+    /// The pointer moved to `at` with the button down, since a press, which takes the selection there.
+    pub fn drag(&self, at: Pointer) {
+        self.give(Given::Drag(at));
+    }
+
+    pub fn release(&self, at: Pointer) {
+        self.give(Given::Release(at));
+    }
+
+    /// Selects everything, the history too.
+    pub fn select_all(&self) {
+        self.give(Given::SelectAll);
+    }
+
+    /// What's selected, as text, once the thread it's followed on has read it, since only that thread can read the
+    /// copy. Nothing comes while nothing is selected.
+    pub fn selected_text(&self) -> flume::Receiver<String> {
+        let (reply, selected) = flume::bounded(1);
+        self.give(Given::SelectedText(reply));
+        selected
     }
 
     fn give(&self, given: Given) {
@@ -204,7 +240,7 @@ impl TerminalSource {
     }
 
     /// Any of these fails only when Ghostty can't allocate, which leaves the copy as it was, so what failed is dropped,
-    /// as a key lost on the way would be, and the next goes on.
+    /// as a key lost on the way would be, a copy copies nothing, and the next goes on.
     fn answer(&mut self, given: Given) -> ToHub {
         let to_hub = match given {
             Given::Key(press) => self.copy.key(&press),
@@ -213,6 +249,16 @@ impl TerminalSource {
             Given::Fit(fit) => self.copy.fit(fit),
             Given::Colors(foreground, background) => {
                 self.copy.set_colors(foreground, background).map(|()| ToHub::default())
+            }
+            Given::Press(at, by) => self.copy.press(at, by).map(|()| ToHub::default()),
+            Given::Drag(at) => self.copy.drag(at).map(|()| ToHub::default()),
+            Given::Release(at) => self.copy.release(at).map(|()| ToHub::default()),
+            Given::SelectAll => self.copy.select_all().map(|()| ToHub::default()),
+            Given::SelectedText(reply) => {
+                if let Ok(Some(text)) = self.copy.selected_text() {
+                    let _ = reply.send(text);
+                }
+                return ToHub::default();
             }
         };
         to_hub.unwrap_or_default()

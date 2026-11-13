@@ -144,3 +144,58 @@ fn colours_told_after_the_screen_are_drawn_in() {
     let frame = copy.frame().unwrap().expect("drawn again in them");
     assert_eq!((frame.foreground, frame.background), (RED, BLUE));
 }
+
+fn at(col: f32, row: f32) -> Pointer {
+    Pointer { col, row }
+}
+
+#[test]
+fn a_drag_selects_what_it_passes_over_until_a_key_is_typed() {
+    let mut copy = TerminalCopy::new();
+    copy.take_in(screen(SMALL, b"$ ls -la")).unwrap();
+    copy.frame().unwrap();
+
+    copy.press(at(2.1, 0.5), SelectBy::Cells).unwrap();
+    copy.drag(at(3.9, 0.5)).unwrap();
+    copy.release(at(3.9, 0.5)).unwrap();
+    let selected = copy.selected_text().unwrap();
+    let frame = copy.frame().unwrap().expect("a new frame, with what's selected");
+    copy.key(&key('x')).unwrap();
+
+    assert_eq!(selected.as_deref(), Some("ls"));
+    assert!(frame.rows[0].selected.is_some());
+    assert_eq!(copy.selected_text().unwrap(), None, "typing clears it");
+}
+
+#[test]
+fn pasting_clears_what_was_selected() {
+    let mut copy = TerminalCopy::new();
+    copy.take_in(screen(SMALL, b"$ ls -la")).unwrap();
+    copy.select_all().unwrap();
+
+    copy.paste("x").unwrap();
+
+    assert_eq!(copy.selected_text().unwrap(), None);
+}
+
+#[test]
+fn select_all_selects_everything_shown() {
+    let mut copy = TerminalCopy::new();
+    copy.take_in(screen(SMALL, b"one\r\ntwo")).unwrap();
+
+    copy.select_all().unwrap();
+
+    assert_eq!(copy.selected_text().unwrap().as_deref(), Some("one\ntwo"));
+}
+
+/// What's selected is this copy's, so a new screen, such as on attaching again, starts with nothing selected.
+#[test]
+fn a_new_screen_has_nothing_selected() {
+    let mut copy = TerminalCopy::new();
+    copy.take_in(screen(SMALL, b"one")).unwrap();
+    copy.select_all().unwrap();
+
+    copy.take_in(screen(SMALL, b"one")).unwrap();
+
+    assert_eq!(copy.selected_text().unwrap(), None);
+}

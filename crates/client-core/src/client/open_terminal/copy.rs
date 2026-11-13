@@ -1,12 +1,13 @@
 //! The client's copy of a terminal, kept from what the hub sends of it, and what that has the client send the hub:
-//! what's typed, by the modes the program set, and the size the view has room for.
+//! what's typed, by the modes the program set, and the size the view has room for. What's selected is the copy's alone,
+//! as it's this device's, so it goes with a new copy.
 
 use std::sync::Arc;
 
 use protocol::terminal::{TerminalSize, TerminalUpdate};
 use terminal_state::drawn::{Frame, Rgb};
 use terminal_state::keys::KeyPress;
-use terminal_state::{Mirror, MirrorError, Size};
+use terminal_state::{Mirror, MirrorError, Pointer, SelectBy, Size};
 
 #[cfg(test)]
 pub(super) mod tests;
@@ -100,13 +101,15 @@ impl TerminalCopy {
         Ok(ToHub { resize: Some(terminal_size(fit)), ..ToHub::default() })
     }
 
-    /// A key. One the program reads anything for also goes back to the screen from wherever the history is scrolled to.
-    /// Nothing is sent before the first screen, since what the program reads for a key depends on the modes it set.
+    /// A key. One the program reads anything for also goes back to the screen from wherever the history is scrolled to,
+    /// and clears what's selected, as typing does in Ghostty. Nothing is sent before the first screen, since what the
+    /// program reads for a key depends on the modes it set.
     pub(super) fn key(&mut self, press: &KeyPress) -> Result<ToHub, MirrorError> {
         let Some(mirror) = &mut self.mirror else { return Ok(ToHub::default()) };
         let input = mirror.key(press)?;
         if !input.is_empty() {
             mirror.scroll_to_screen();
+            mirror.clear_selection()?;
             self.changed = true;
         }
         Ok(ToHub { input, ..ToHub::default() })
@@ -116,8 +119,39 @@ impl TerminalCopy {
         let Some(mirror) = &mut self.mirror else { return Ok(ToHub::default()) };
         let input = mirror.paste(text)?;
         mirror.scroll_to_screen();
+        mirror.clear_selection()?;
         self.changed = true;
         Ok(ToHub { input, ..ToHub::default() })
+    }
+
+    /// A press at `at`, which starts a selection, or selects the word or the line there, as `by` says.
+    pub(super) fn press(&mut self, at: Pointer, by: SelectBy) -> Result<(), MirrorError> {
+        self.select(|mirror| mirror.press(at, by))
+    }
+
+    pub(super) fn drag(&mut self, at: Pointer) -> Result<(), MirrorError> {
+        self.select(|mirror| mirror.drag(at))
+    }
+
+    /// Ghostty's release changes no selection, so nothing has to be drawn again.
+    pub(super) fn release(&mut self, at: Pointer) -> Result<(), MirrorError> {
+        self.mirror.as_mut().map_or(Ok(()), |mirror| mirror.release(at))
+    }
+
+    pub(super) fn select_all(&mut self) -> Result<(), MirrorError> {
+        self.select(Mirror::select_all)
+    }
+
+    /// What's selected, as text to copy.
+    pub(super) fn selected_text(&self) -> Result<Option<String>, MirrorError> {
+        self.mirror.as_ref().map_or(Ok(None), Mirror::selected_text)
+    }
+
+    fn select(&mut self, change: impl FnOnce(&mut Mirror) -> Result<(), MirrorError>) -> Result<(), MirrorError> {
+        let Some(mirror) = &mut self.mirror else { return Ok(()) };
+        change(mirror)?;
+        self.changed = true;
+        Ok(())
     }
 
     /// Turns the wheel by `lines`, up for fewer than none, which scrolls through the history, or is sent to a
