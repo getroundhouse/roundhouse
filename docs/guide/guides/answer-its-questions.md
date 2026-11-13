@@ -29,7 +29,7 @@ In plan mode, an agent asks before it uses a tool, such as running a command. Th
 - **Press `1` to allow it, or `2` to deny it,** then `Enter` to send.
 - **Press `0` to say what to do instead.** What you type denies the request, and the agent is told in your words.
 
-An agent with full access asks only about what its own CLI won't do unasked, such as a command that removes something it can't check. The request says why, and which subagent is asking, when one is.
+An agent with full access asks only about what its own CLI won't do unasked, such as a command that removes something it can't check. The request says why, and which subagent is asking, when one is. **Skip Claude's safety checks**, in Settings, lets these run without asking.
 
 ![A removal waiting to be allowed, asked about with full access](../../spec/screens/approval-full-access.png)
 

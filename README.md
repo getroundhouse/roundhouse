@@ -82,7 +82,7 @@ Then:
 5. `Cmd-Shift-P` asks the agent for a pull request. From then on, the top of that sidebar says where it stands, and offers the next thing to do about it.
 
 > [!WARNING]
-> Every agent has full access. It runs commands and changes files as you, without asking, but for the rare command its CLI asks about in any mode, such as a removal it can't check. A worktree is a directory, not a sandbox. In plan mode, which `Shift-Tab` turns on and off, it asks before changing anything.
+> Every agent has full access. It runs commands and changes files as you, without asking, but for the rare command its CLI asks about in any mode, such as a removal it can't check, which a setting can allow for you. A worktree is a directory, not a sandbox. In plan mode, which `Shift-Tab` turns on and off, it asks before changing anything.
 
 Roundhouse keeps its data in `~/Library/Application Support/roundhouse`, and puts worktrees in `~/roundhouse/workspaces`. The model, and how hard it thinks, are below the composer.
 
