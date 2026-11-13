@@ -173,9 +173,10 @@ pub(crate) fn arrange(app: &mut AppView, window: &mut Window, cx: &App) -> Rows 
     if home.hold.last_showing().is_some_and(|shown| shown.search != showing.search) {
         app.home.places.forget();
     }
-    let Arrangement { drawn, end } = app.home.places.arrange(ids.iter().map(|id| (id.clone(), ROW_HEIGHT)), window, cx);
+    let Arrangement { drawn, end, .. } =
+        app.home.places.arrange(ids.iter().map(|id| (id.clone(), ROW_HEIGHT)), window, cx);
     app.home.hold.showed(showing, ids);
-    let drawn = drawn.iter().map(|&top| Drawn { top, height: ROW_HEIGHT }).collect();
+    let drawn = drawn.iter().map(|&top| Drawn { top, height: ROW_HEIGHT, above: false }).collect();
     Rows { listed: listed.into(), drawn, end }
 }
 

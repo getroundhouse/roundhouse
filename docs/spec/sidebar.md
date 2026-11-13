@@ -32,6 +32,33 @@
 - **While someone is using the list, the order holds still,** so a row doesn't move out from under a click: while the pointer moves over the list and for a second and a half after it stops, and while a row's menu is open, which would go if its row moved. Pressing a key ends it until the pointer moves again, so the order goes on changing while someone types with the pointer resting there. A workspace that comes meanwhile goes after the others until it ends, and so does the note that one is on its way, if it comes meanwhile too. Then each row slides to its place. A note already showing as the order began to hold keeps its place, and the workspace takes it once it's made, so nothing moves, unless it can't be made, when the rows under the note close up. Choosing another order from the heading takes at once. *Unconfirmed.*
 - **When the order changes, or a row comes or goes, each row that moves slides from where it was to its new place,** in a fifth of a second, as the sidebars do, so it's plain where it went. One turned back partway slides from where it had got to, and Reduce Motion skips the slide. *Unconfirmed.*
 
+## Collapsing a project
+
+- **Pressing a project's row collapses it, which puts its workspaces away under the row, and pressing it again brings them back,** so a project nobody is working in takes one line. Its button for a new workspace stays, and pressing that doesn't collapse it. A workspace that's showing goes on showing while its project is collapsed. *Unconfirmed.*
+- **A project with no workspaces has nothing to collapse,** so its row has no chevron, and a press does nothing. *Unconfirmed.*
+- **While the pointer is on a project's row, a chevron shows after its name,** pointing down at the workspaces a press would put away, so it's plain the row can be pressed without a chevron on every project. A collapsed project keeps the chevron, pointing right, wherever the pointer is, so it isn't taken for a project with no workspaces. The project's folder stays where it is throughout, since it's the project's own. *Unconfirmed.*
+- **A collapsed project's name is at full brightness while one of its workspaces needs a look, and says how many do, before its button for a new workspace,** as a workspace's name stands out for its chats, so a reply or a question in a project that's collapsed isn't missed. It has no mark, since what its agents are doing isn't about you. *Unconfirmed.*
+
+  **The first project collapsed, with a reply nobody has read in one of its workspaces, and the pointer on the second project's row.** *Unconfirmed.*
+
+  ![A collapsed project](screens/project-collapsed.png)
+
+- **The workspaces stay where they are while whatever comes after the project slides up over them, in a fifth of a second, and down off them as they come back,** as the sidebars slide, so it's plain where they went. The last project's are covered the same way, from the bottom, with nothing after it to see. The chevron turns as far as they've gone. A fold turned back partway goes on from where it had got to, and Reduce Motion skips it. *Unconfirmed.*
+- **Which projects are collapsed lasts once the app quits,** on this Mac, as the order does. *Unconfirmed.*
+- **`Cmd-[` and `Cmd-]` pass over a collapsed project's workspaces,** since they go in the order shown. From a workspace that's showing in a collapsed project, they go to the nearest one showing below or above where its row would be. *Unconfirmed.*
+- **Opening a workspace in a collapsed project brings the project's workspaces back,** so the workspace showing has its row: from Home, from a notification, by restoring it, or by making a new one in the project. *Unconfirmed.*
+
+## The projects' order
+
+- **Dragging a project's row moves the project, with its workspaces, among the others.** Its row and its workspaces follow the pointer up and down the list as one, on a raised surface over the others, and go no further than either end of the projects. It changes places with the project beside it once it covers half of it, whichever way it's going, and that project slides into the place it left. Held within 24pt of the list's top or bottom, or past it, it scrolls the list on, faster the further it's held toward the edge and past it, as far as the list's end, so a project can be taken past what's in sight. How fast is worked out as it is for a chat's text being selected past its edge, but from 24pt inside the list rather than from its edge. Let go, it slides the rest of the way into its place. *Unconfirmed.*
+
+  **The first project held partway down over the second, on its raised surface. It covers less than half of the second, so its own place is still empty.** *Unconfirmed.*
+
+  ![A project being dragged](screens/project-dragged.png)
+
+- **The pointer is an open hand over a project's row, and a closed one while it's dragged,** as `look.md` says for what can be dragged. A press that doesn't move still collapses the project. *Unconfirmed.*
+- **The order lasts once the app quits,** on this Mac, as which projects are collapsed does. Until a project is dragged, the projects are in the hub's order, and one added later goes after those that have been placed. `Cmd-[` and `Cmd-]` go in the order shown. *Unconfirmed.*
+
 ## Hiding and widening
 
 - **A button in the window's top left corner, beside the window's buttons on a Mac, hides the sidebar, and shows it again,** as the button at the other end of the header does the sidebar of changes. It stays where it is whether the sidebar shows or not, so it's always in the same place, except in full screen, where macOS puts the window's buttons away and it sits where they were. Off the Mac, the button that opens the menus is in the corner too, as `menus.md` says. While the sidebar is hidden, the workspace has its room, and what's in the strip along the top starts after the corner's buttons: the workspace's header, Home's bar, or an error, which sits above the header and leaves it to start at the window's edge. The choice holds until the app quits.

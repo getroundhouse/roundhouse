@@ -2,8 +2,6 @@
 
 #![cfg(test)]
 
-use std::path::PathBuf;
-
 use gpui_kit::{AppContext as _, ElementId, TestAppContext};
 
 use crate::menus::{SETTINGS, choose};
@@ -40,10 +38,6 @@ fn thinking_shown(ui: &mut Ui<'_>) -> Vec<ElementId> {
 /// Opens or closes the thinking line at this position, top to bottom.
 fn click_thinking(ui: &mut Ui<'_>, position: usize) {
     ui.click_labelled("Thinking", position);
-}
-
-fn settings_file(stack: &Stack) -> PathBuf {
-    stack.hub.paths.data_dir.join("settings.json")
 }
 
 /// Opens a workspace, with something typed in its composer.
@@ -153,7 +147,7 @@ fn always_expand_thinking_opens_thinking_and_is_saved(cx: &mut TestAppContext) {
     assert_eq!(thinking_open(&mut ui), [true]);
     assert_eq!(thinking_shown(&mut ui).len(), 1);
     ui.wait("the setting to be saved", |_| {
-        std::fs::read_to_string(settings_file(&stack))
+        std::fs::read_to_string(stack.settings_file())
             .is_ok_and(|saved| saved.contains(r#""always_expand_thinking": true"#))
     });
     open_settings(&mut ui);
@@ -173,7 +167,7 @@ fn a_setting_changed_just_before_quitting_is_saved(cx: &mut TestAppContext) {
     ui.cx.update_window(ui.handle, |_, window, cx| support::click(window, id, cx)).unwrap();
     ui.cx.update(gpui_kit::App::shutdown);
 
-    let saved = std::fs::read_to_string(settings_file(&stack)).unwrap();
+    let saved = std::fs::read_to_string(stack.settings_file()).unwrap();
     assert!(saved.contains(r#""always_expand_thinking": true"#), "{saved}");
 }
 
@@ -198,7 +192,7 @@ fn thinking_closed_by_hand_stays_closed_while_new_thinking_opens(cx: &mut TestAp
 fn a_saved_setting_is_in_force_from_the_start_and_thinking_streams_in_full(cx: &mut TestAppContext) {
     let stack = Stack::new();
     std::fs::create_dir_all(&stack.hub.paths.data_dir).unwrap();
-    std::fs::write(settings_file(&stack), r#"{"always_expand_thinking": true}"#).unwrap();
+    std::fs::write(stack.settings_file(), r#"{"always_expand_thinking": true}"#).unwrap();
     let mut ui = typing(cx, &stack, "think:30:idea");
 
     ui.press("enter");
@@ -238,7 +232,7 @@ fn the_switch_for_keeping_the_computer_awake_changes_the_hubs_own_setting(cx: &m
 
     ui.wait("the hub to be told", |_| !hub_keeps_awake(&stack));
     ui.wait("the switch to show off", |ui| keep_awake_switch(ui) == (false, true));
-    let saved = std::fs::read_to_string(settings_file(&stack)).unwrap_or_default();
+    let saved = std::fs::read_to_string(stack.settings_file()).unwrap_or_default();
     assert!(!saved.contains("keep_awake"), "it's the hub's to keep, not the app's: {saved}");
     ui.click_label(KEEP_AWAKE);
     ui.wait("the hub to be told again", |_| hub_keeps_awake(&stack));

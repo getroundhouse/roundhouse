@@ -272,15 +272,12 @@ fn keep_turning(ui: &mut Ui<'_>, id: &ElementId, y: f32) {
 fn swipe(ui: &mut Ui<'_>, id: &ElementId, phase: TouchPhase, y: f32) {
     ui.hover(id.clone());
     let position = ui.bounds(id.clone()).center();
-    send(
-        ui,
-        ScrollEvent {
-            position,
-            delta: ScrollDelta::Pixels(point(px(0.), px(y))),
-            touch_phase: phase,
-            ..ScrollEvent::default()
-        },
-    );
+    ui.send(ScrollEvent {
+        position,
+        delta: ScrollDelta::Pixels(point(px(0.), px(y))),
+        touch_phase: phase,
+        ..ScrollEvent::default()
+    });
 }
 
 /// Moves the pointer to `at`, and turns the wheel there by `delta` after a pause, so it's a gesture of its own. A wide
@@ -296,12 +293,7 @@ fn turn_at(ui: &mut Ui<'_>, at: Point<Pixels>, delta: Point<Pixels>) {
 
 /// Turns the wheel on at `at` by `delta`, in the same spin as the last turn.
 fn keep_turning_at(ui: &mut Ui<'_>, at: Point<Pixels>, delta: Point<Pixels>) {
-    send(ui, ScrollEvent { position: at, delta: ScrollDelta::Pixels(delta), ..ScrollEvent::default() });
-}
-
-fn send(ui: &mut Ui<'_>, event: ScrollEvent) {
-    ui.cx.update_window(ui.handle, |_, window, cx| window.dispatch_event(event.to_platform_input(), cx)).unwrap();
-    ui.frame();
+    ui.send(ScrollEvent { position: at, delta: ScrollDelta::Pixels(delta), ..ScrollEvent::default() });
 }
 
 /// Where the top of the element is drawn.

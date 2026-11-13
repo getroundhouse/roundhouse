@@ -3,6 +3,7 @@
 #![cfg(test)]
 
 use desktop::updates::Kind;
+use gpui_kit::Pixels;
 
 use super::frame::Frame;
 use super::world::World;
@@ -43,6 +44,9 @@ pub(crate) enum Step {
     HoverTab(usize),
     /// Moves the pointer over the element with this ID, and leaves it there, for what shows only under the pointer.
     Point(&'static str),
+    /// Presses the element with this ID and drags it this far down from where it was pressed, and holds it there, as
+    /// partway through a drag.
+    Drag(&'static str, Pixels),
     /// Types this where focus is, such as the composer.
     Type(&'static str),
     /// Presses these keys where focus is, as GPUI writes them, such as `secondary-f` for `Cmd-F` on a Mac.

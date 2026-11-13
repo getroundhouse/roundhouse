@@ -70,7 +70,9 @@ Each project's workspaces are listed last active first, or oldest first, chosen 
 
 - **Last active goes by what you did, not what agents did:** making the workspace, making a chat in it, sending a prompt, or answering a question. So workspaces at work stay where they are until you turn to one.
 - **The order holds still while the pointer moves over the list,** and for a second and a half after it stops, so a row doesn't move out from under a click.
-- **`Cmd-[` and `Cmd-]` move between workspaces** in the order shown.
+- **`Cmd-[` and `Cmd-]` move between workspaces** in the order shown, passing over a collapsed project's.
+- **Drag a project's row to move the project,** with its workspaces, among the others. Held near the top or bottom of the list, it scrolls the list on. The projects stay in that order once the app quits.
+- **Click a project's row to collapse it,** which puts its workspaces away under it, and click it again to bring them back. Opening one of its workspaces, from Home for instance, brings them back too. It stays collapsed once the app quits.
 
 ## Archiving
 

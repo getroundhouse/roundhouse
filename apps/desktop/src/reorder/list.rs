@@ -1,8 +1,9 @@
 //! A list that scrolls, and builds only the rows drawn in sight in each frame, wherever their places are. It's the
 //! app's own rather than the kit's, which builds the rows whose places it lays out in sight, one under another, so it
 //! can't build a row drawn away from its place, such as one sliding out of sight. Here a row is wherever it's drawn,
-//! so rows can pass each other, a row can be given less room than it takes, and the list is as long as it's said to
-//! be in each frame. Every row's height is known before it's built, which keeps it small: nothing is measured.
+//! so rows can pass each other, a row can be given less room than it takes, one can be drawn over the others, and the
+//! list is as long as it's said to be in each frame. Every row's height is known before it's built, which keeps it
+//! small: nothing is measured.
 
 use std::ops::Range;
 use std::rc::Rc;
@@ -20,6 +21,8 @@ use gpui_kit::{
 pub(crate) struct Drawn {
     pub(crate) top: Pixels,
     pub(crate) height: Pixels,
+    /// Whether it's drawn over the rows that aren't, as one being dragged past them is.
+    pub(crate) above: bool,
 }
 
 /// Builds the rows it's asked for, by their indices in the list, in the order asked.
@@ -48,13 +51,15 @@ struct Rows {
 }
 
 /// Which of the rows `drawn` says show, with the list's top at `top` and what can be seen of it between `sight`'s
-/// ends.
+/// ends, in the order they're drawn: as listed, but for those drawn above the others, which come after them.
 fn in_sight(drawn: &[Drawn], top: Pixels, sight: &Range<Pixels>) -> Vec<usize> {
     let shows = |row: &Drawn| {
         let from = top + row.top;
         row.height > Pixels::ZERO && from < sight.end && from + row.height > sight.start
     };
-    (0..drawn.len()).filter(|&at| shows(&drawn[at])).collect()
+    let (above, under): (Vec<usize>, Vec<usize>) =
+        (0..drawn.len()).filter(|&at| shows(&drawn[at])).partition(|&at| drawn[at].above);
+    [under, above].concat()
 }
 
 impl IntoElement for Rows {
@@ -106,7 +111,7 @@ impl Element for Rows {
         let in_sight = in_sight(&self.drawn, bounds.top(), &(sight.top()..sight.bottom()));
         let mut rows = (self.build)(&in_sight, window, cx);
         for (row, &at) in rows.iter_mut().zip(&in_sight) {
-            let Drawn { top, height } = self.drawn[at];
+            let Drawn { top, height, .. } = self.drawn[at];
             let room = size(AvailableSpace::Definite(bounds.size.width), AvailableSpace::Definite(height));
             row.layout_as_root(room, window, cx);
             row.prepaint_at(point(bounds.left(), bounds.top() + top), window, cx);
@@ -137,7 +142,7 @@ mod tests {
     use super::{Drawn, in_sight};
 
     fn drawn(top: f32, height: f32) -> Drawn {
-        Drawn { top: px(top), height: px(height) }
+        Drawn { top: px(top), height: px(height), above: false }
     }
 
     #[test]
@@ -155,5 +160,14 @@ mod tests {
         ];
 
         assert_eq!(in_sight(&drawn, top, &sight), [2, 4]);
+    }
+
+    #[test]
+    fn a_row_above_the_others_is_drawn_after_them_wherever_its_listed() {
+        let sight = px(0.)..px(200.);
+        let above = |top: f32| Drawn { above: true, ..drawn(top, 40.) };
+        let drawn = [drawn(0., 40.), above(20.), above(900.), drawn(40., 40.), above(60.), drawn(80., 40.)];
+
+        assert_eq!(in_sight(&drawn, px(0.), &sight), [0, 3, 5, 1, 4]);
     }
 }

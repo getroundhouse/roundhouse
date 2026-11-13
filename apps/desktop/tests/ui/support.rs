@@ -17,6 +17,7 @@ mod labels;
 mod motion;
 mod new_workspace;
 mod order;
+mod projects;
 mod stand_in;
 mod stand_in_gh;
 mod workspaces;
@@ -53,7 +54,8 @@ pub(crate) use labels::labelled;
 /// For the gallery, which only a Mac draws.
 #[cfg(target_os = "macos")]
 pub(crate) use labels::{first_labelled, menu_item};
-pub(crate) use order::{MORE_THAN_FIT, more_than_fit, order, three_workspaces, top, worked_in};
+pub(crate) use order::{MORE_THAN_FIT, more_than_fit, order, three_workspaces, top, wait_out_setup, worked_in};
+pub(crate) use projects::{project_row, two_projects};
 pub(crate) use stand_in::StandInHub;
 pub(crate) use stand_in_gh::pull_request;
 pub(crate) use workspaces::{home_row, pencil, sidebar_row};
@@ -101,6 +103,11 @@ impl Stack {
     /// A second client, for setting things up and checking them from outside the app.
     pub(crate) fn client(&self) -> Client {
         Client::connect_or_start(&self.hub.paths, &self.hub.daemon, "test").unwrap()
+    }
+
+    /// Where the app keeps its settings.
+    pub(crate) fn settings_file(&self) -> PathBuf {
+        self.hub.paths.data_dir.join("settings.json")
     }
 }
 

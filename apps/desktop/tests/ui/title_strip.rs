@@ -25,7 +25,7 @@ fn a_click_on_the_strip_leaves_the_composer_focused(cx: &mut TestAppContext) {
     ui.input("half");
 
     press(&mut ui, ON_THE_STRIP);
-    send(&mut ui, up(ON_THE_STRIP));
+    ui.send(up(ON_THE_STRIP));
 
     ui.input(" typed");
     assert_eq!(ui.composer_text(), "half typed");
@@ -56,7 +56,7 @@ fn on_windows_a_press_on_a_button_in_the_strip_stays_the_buttons(cx: &mut TestAp
     let on = center(&mut ui, "toggle-diff");
 
     let pressed = press(&mut ui, on);
-    send(&mut ui, up(on));
+    ui.send(up(on));
 
     assert!(!pressed.propagate, "Windows doesn't hear the press");
     assert!(!ui.changes_open(), "the button is clicked");
@@ -73,7 +73,7 @@ fn on_windows_a_press_on_the_button_that_opens_the_menus_opens_them_and_stays_it
     let on = center(&mut ui, "menus");
 
     let pressed = press(&mut ui, on);
-    send(&mut ui, up(on));
+    ui.send(up(on));
 
     assert!(!pressed.propagate, "Windows doesn't hear the press");
     assert!(ui.has(crate::support::MENU), "the menus are open");
@@ -99,7 +99,7 @@ fn on_windows_a_press_on_the_empty_strip_goes_on_to_windows_and_leaves_focus_whe
     ui.input("half");
 
     let pressed = press(&mut ui, ON_THE_STRIP);
-    send(&mut ui, up(ON_THE_STRIP));
+    ui.send(up(ON_THE_STRIP));
 
     assert!(pressed.propagate, "Windows hears the press, and moves the window");
     assert!(pressed.default_prevented, "the window isn't focused for it");
@@ -136,9 +136,9 @@ fn on_windows_a_press_on_a_button_let_go_off_the_window_is_let_go(cx: &mut TestA
     ui.cx.update(|cx| lost_release::the_left_button_is(Button::Up, cx));
 
     // Back over the window from off it, then over the button.
-    send(&mut ui, MouseMoveEvent { position: point(on.x, px(300.)), pressed_button: None, ..Default::default() });
-    send(&mut ui, MouseMoveEvent { position: on, pressed_button: None, ..Default::default() });
-    send(&mut ui, up(on));
+    ui.send(MouseMoveEvent { position: point(on.x, px(300.)), pressed_button: None, ..Default::default() });
+    ui.send(MouseMoveEvent { position: on, pressed_button: None, ..Default::default() });
+    ui.send(up(on));
 
     assert!(ui.changes_open(), "the button wasn't clicked");
 }
@@ -164,10 +164,4 @@ fn press(ui: &mut Ui<'_>, position: Point<Pixels>) -> DispatchEventResult {
 
 fn up(position: Point<Pixels>) -> MouseUpEvent {
     MouseUpEvent { button: MouseButton::Left, position, click_count: 1, ..Default::default() }
-}
-
-/// Sends the window a pointer event, and lets it draw.
-fn send(ui: &mut Ui<'_>, event: impl InputEvent) {
-    ui.cx.update_window(ui.handle, |_, window, cx| window.dispatch_event(event.to_platform_input(), cx)).unwrap();
-    ui.frame();
 }

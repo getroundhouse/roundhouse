@@ -22,7 +22,6 @@ use std::ops::{Range, RangeInclusive};
 use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::Instant;
 
 use gpui_kit::base::TextSelection;
 use gpui_kit::base::input::{Copy, SelectAll};
@@ -31,6 +30,7 @@ use gpui_kit::{
     App, Bounds, ClickEvent, ClipboardItem, Div, ElementId, FocusHandle, InteractiveElement as _, MouseButton, Pixels,
     Point, SharedString, Window, point, px,
 };
+use look::motion::ScrollingOn;
 
 use crate::prose::{Prose, ProseId, TextAt};
 
@@ -102,12 +102,12 @@ struct Drag {
     unit: Unit,
     /// What the press chose, which stays selected however the drag goes.
     chosen: (End, End),
-    /// When the list last moved under the pointer past its edge.
-    moved: Option<Instant>,
+    /// The list scrolling on under the pointer past its edge.
+    scrolling: ScrollingOn,
     /// The area that scrolls the text the press was on, if it's in one.
     area: Option<ElementId>,
-    /// When that area last moved under the pointer past its edge.
-    area_moved: Option<Instant>,
+    /// That area scrolling on under the pointer past its edge.
+    area_scrolling: ScrollingOn,
 }
 
 /// A text drawn in this frame, what it's known by and where it is, what shows of it, the area that scrolls it, if it's
@@ -265,7 +265,8 @@ impl Selection {
             selecting.set(Some(chosen.clone()));
             chosen
         };
-        selecting.drag = Some(Drag { pointer: position, unit, chosen, moved: None, area, area_moved: None });
+        let (scrolling, area_scrolling) = (ScrollingOn::default(), ScrollingOn::default());
+        selecting.drag = Some(Drag { pointer: position, unit, chosen, scrolling, area, area_scrolling });
         true
     }
 

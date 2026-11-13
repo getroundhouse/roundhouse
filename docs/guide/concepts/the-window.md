@@ -13,6 +13,7 @@ On the left. It lists your projects, each with its workspaces under it.
 | Home | Shows every workspace in one list, in place of the workspace |
 | Create | Opens the new-workspace dialog, as `Cmd-N` does |
 | Add project | Adds a repository |
+| A project's row | Its name, with a `+` for a new workspace in it. Click it to put its workspaces away under it, and again to bring them back. Drag it to move the project, with its workspaces, among the others |
 | A workspace's row | Its mark and its title. Click it to show the workspace |
 | The build line | At the bottom: which build is running, and an update's card when there's one |
 

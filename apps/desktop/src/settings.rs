@@ -3,9 +3,11 @@
 //! to a hub, since the app can show several hubs, so they're kept in a file in the app's data directory and read once,
 //! as the app opens. A setting a hub carries out is one of that hub's records, which Settings shows and changes.
 
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use gpui_kit::{App, BorrowAppContext as _, Context, Global, PromptLevel, Subscription};
+use protocol::model::RepoId;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
@@ -30,6 +32,15 @@ pub(crate) struct Settings {
     /// from the sidebar's heading rather than in Settings, and kept here so it lasts.
     #[serde(default)]
     pub(crate) sidebar_sort: Sort,
+    /// The projects the sidebar shows collapsed, with their workspaces put away. Chosen from each project's row, and
+    /// kept here so it lasts. Nothing takes out a project that's no longer listed, since the app can show several
+    /// hubs, and it may be another hub's.
+    #[serde(default)]
+    pub(crate) collapsed_projects: BTreeSet<RepoId>,
+    /// The order of the sidebar's projects, from the top, once one has been dragged. Until then, and for any project
+    /// this doesn't name, it's the hub's. Kept here so it lasts, as which are collapsed is.
+    #[serde(default)]
+    pub(crate) project_order: Vec<RepoId>,
     /// A notification tells of each chat that comes to need the person, unless it's the one being read. On unless
     /// turned off, since an agent finishing while you're elsewhere is what the app is for.
     #[serde(default = "on")]
@@ -49,6 +60,8 @@ impl Default for Settings {
         Self {
             always_expand_thinking: false,
             sidebar_sort: Sort::default(),
+            collapsed_projects: BTreeSet::new(),
+            project_order: Vec::new(),
             notify: on(),
             play_sound: on(),
             sound: Sound::default(),
