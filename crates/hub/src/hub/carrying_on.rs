@@ -149,13 +149,15 @@ impl Hub {
             self.carry_on_session(&agent.session_id, link.id, agent.run, take(&agent.session_id)).await;
         }
         link.release(&self).await;
+        let terminals = self.carry_on_terminals(&workspace_id, &link).await;
         // After what its worker said, so an agent that said it exited isn't said to have gone twice.
         for id in gone {
             self.route(&id, Item::AgentLost { link: link.id, reason: ExitReason::HubRestart }).await;
         }
         let (agents, build) = (running.len(), link.build());
-        info!(%workspace_id, agents, build, "connected again to the worker an earlier hub left");
-        if self.sessions.lock().live.values().any(|session| session.workspace_id == workspace_id) {
+        info!(%workspace_id, agents, terminals, build, "connected again to the worker an earlier hub left");
+        let has_sessions = self.sessions.lock().live.values().any(|session| session.workspace_id == workspace_id);
+        if has_sessions || terminals > 0 {
             link.keep();
             // Its watch of the branches goes on from the earlier hub, but sends only what changes, and what it sent
             // while there was no hub is lost, so asking again has it send what they are now.

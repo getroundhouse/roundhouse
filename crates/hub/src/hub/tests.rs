@@ -70,8 +70,19 @@ pub(super) fn hub_describing(dir: &Path, agents: Vec<AgentDescription>) -> Arc<H
 /// A stand-in for `w`'s worker, which fails every call, as `hub`'s worker.
 pub(crate) fn stand_in_worker(hub: &Hub) -> Arc<WorkerLink> {
     let link = WorkerLink::answering(|_| Some(Err(ApiError::new(ErrorCode::Worker, "a stand-in does nothing"))));
-    hub.workers.lock().insert("w".into(), link.clone());
+    as_worker_of_w(hub, &link);
     link
+}
+
+/// Has `link` be `w`'s worker.
+pub(crate) fn as_worker_of_w(hub: &Hub, link: &Arc<WorkerLink>) {
+    hub.workers.lock().insert("w".into(), link.clone());
+}
+
+/// Asks to open terminal `id` in `w`, at 80 by 24.
+pub(crate) fn terminal_in_w(id: &str) -> protocol::client::terminals::TerminalOpen {
+    let size = protocol::terminal::TerminalSize { cols: 80, rows: 24 };
+    protocol::client::terminals::TerminalOpen { workspace_id: "w".into(), id: id.into(), size }
 }
 
 /// The session `s` of a hub [`hub_in`] made, carried on with from an earlier hub whose agent of `run` is still running
@@ -99,8 +110,9 @@ pub(crate) fn writing(run: RunId, text: &str) -> Tail {
     tail
 }
 
-/// The same, with `w`'s worktree at `/w`, so its pull request can be read through a stand-in for its worker.
-pub(super) fn hub_with_worktree(dir: &Path) -> Arc<Hub> {
+/// The same, with `w`'s worktree at `/w`, so what needs it, such as reading its pull request or opening a terminal, can
+/// go through a stand-in for its worker.
+pub(crate) fn hub_with_worktree(dir: &Path) -> Arc<Hub> {
     let hub = hub_in(dir);
     hub.store.workspace_ready(&"w".into(), "/w", &"alder".into(), "main", None).unwrap();
     hub

@@ -89,8 +89,9 @@ pub(super) async fn read_frames(
             continue;
         }
         let Some(parsed) = hub.branches_frame(&workspace_id, &link, parsed).await else { continue };
-        // No terminal is started by this hub yet, so none has anywhere to go.
-        if let WorkerFrame::Terminal { .. } = parsed {
+        // Taken at once too, since a terminal isn't an agent's.
+        if let WorkerFrame::Terminal { terminal, at, update } = parsed {
+            hub.terminal_update(&link, terminal, at, update);
             continue;
         }
         let mut held = link.held.lock().await;
