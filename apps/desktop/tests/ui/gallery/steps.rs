@@ -43,6 +43,8 @@ pub(crate) enum Step {
     Point(&'static str),
     /// Types this where focus is, such as the composer.
     Type(&'static str),
+    /// Presses these keys where focus is, as GPUI writes them, such as `secondary-f` for `Cmd-F` on a Mac.
+    Press(&'static str),
     /// Rests the pointer on an element, and waits for the one with the ID `shows`, such as its tooltip.
     Hover {
         on: Target,

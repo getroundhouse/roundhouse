@@ -124,6 +124,7 @@ impl Driver {
                 self.frame();
                 self.cx.update_window(self.handle, |_, window, cx| window.input(text, cx)).unwrap();
             }
+            Step::Press(keys) => self.press(keys),
             Step::Hover { on, shows } => self.hover(*on, shows),
             Step::PasteImage(image) => self.paste(ClipboardItem::from(Image::from_bytes(ImageFormat::Png, image()))),
             Step::PasteFile(name, text) => self.paste_file(name, text),
@@ -152,6 +153,11 @@ impl Driver {
                 });
             }
         }
+    }
+
+    fn press(&mut self, keys: &str) {
+        self.frame();
+        self.cx.update_window(self.handle, |_, window, cx| window.press(keys, cx)).unwrap();
     }
 
     fn hover_tab(&mut self, position: usize) {
