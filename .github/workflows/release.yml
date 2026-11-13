@@ -70,6 +70,13 @@ jobs:
           # package.sh counts the commits for the version.
           fetch-depth: 0
           persist-credentials: false
+      # The Zig that builds Ghostty's terminal core for the worker, which its build script runs, as in ci.yml. Its own
+      # cache is off, since the cache below holds Ghostty's source and build, in target/.
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          # renovate: datasource=forgejo-tags depName=ziglang/zig registryUrl=https://codeberg.org
+          version: 0.17.1
+          use-cache: false
       - id: cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -308,6 +315,13 @@ jobs:
           # build.sh counts the commits for the version.
           fetch-depth: 0
           persist-credentials: false
+      # The Zig that builds Ghostty's terminal core for the worker, which its build script runs, as in ci.yml. Its own
+      # cache is off, since the cache below holds Ghostty's source and build, in target/.
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          # renovate: datasource=forgejo-tags depName=ziglang/zig registryUrl=https://codeberg.org
+          version: 0.17.1
+          use-cache: false
       - id: cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -535,12 +549,13 @@ jobs:
         shell: bash
     env:
       DEBIAN_FRONTEND: noninteractive
-      # ci.yml's LINUX_PACKAGES, then what these steps need, with zstd so actions/cache skips gzip.
+      # ci.yml's LINUX_PACKAGES, then what these steps need, with zstd so actions/cache skips gzip, and xz-utils to
+      # unpack Zig.
       PACKAGES: >-
         pkg-config cmake clang libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libx11-xcb-dev libxcb1-dev
         libfontconfig-dev libfreetype-dev libvulkan-dev libssl-dev libzstd-dev
         build-essential ca-certificates curl git jq
-        zstd
+        zstd xz-utils
       # rustup's installer, pinned by version and checksum.
       # renovate: datasource=github-tags depName=rust-lang/rustup
       RUSTUP_VERSION: 1.29.3
@@ -570,6 +585,13 @@ jobs:
           persist-credentials: false
       # The container runs as root, and git won't read a repository another user owns until told to.
       - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      # The Zig that builds Ghostty's terminal core for the worker, which its build script runs, as in ci.yml. Its own
+      # cache is off, since the cache below holds Ghostty's source and build, in target/.
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          # renovate: datasource=forgejo-tags depName=ziglang/zig registryUrl=https://codeberg.org
+          version: 0.17.1
+          use-cache: false
       - id: cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
