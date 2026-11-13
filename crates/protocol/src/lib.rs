@@ -12,6 +12,7 @@
 
 pub mod attachment;
 mod build;
+pub mod capability;
 pub mod client;
 pub mod event;
 pub mod find;
