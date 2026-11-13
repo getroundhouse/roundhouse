@@ -303,7 +303,7 @@ impl Follower {
             }
             SubscriptionItem::Tail(tail) => self.tail = tail,
             SubscriptionItem::Delta(delta) => self.tail.apply(&delta),
-            SubscriptionItem::Notice(_) => {}
+            SubscriptionItem::Notice(_) | SubscriptionItem::Terminal(_) => {}
         }
     }
 
