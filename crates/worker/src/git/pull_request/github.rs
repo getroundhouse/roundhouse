@@ -187,13 +187,13 @@ async fn gh(path: &str, args: &[&str]) -> Option<Vec<u8>> {
 }
 
 /// Why `gh` didn't run to the end.
-enum Unran {
+pub(in crate::git) enum Unran {
     Missing,
     /// It couldn't start for another reason, or took too long.
     Failed(String),
 }
 
-async fn run_gh(path: &str, args: &[&str]) -> Result<Output, Unran> {
+pub(in crate::git) async fn run_gh(path: &str, args: &[&str]) -> Result<Output, Unran> {
     let output = Command::new("gh")
         .args(args)
         .current_dir(path)

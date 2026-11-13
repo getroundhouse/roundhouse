@@ -16,6 +16,7 @@ mod children;
 pub(crate) mod files;
 mod names;
 mod pull_request;
+pub(crate) mod remote_pull_requests;
 mod removal;
 #[cfg(test)]
 pub(crate) mod tests;

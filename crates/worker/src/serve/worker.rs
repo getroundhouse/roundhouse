@@ -212,7 +212,7 @@ pub(super) async fn handle(
             Ok(WorkerResponse::Ok)
         }
         WorkerRequest::RunningAgents => Ok(running_agents(state)),
-        WorkerRequest::ReadRemotePullRequests(_) | WorkerRequest::Unknown => Err(unsupported(None)),
+        WorkerRequest::Unknown => Err(unsupported(None)),
         WorkerRequest::NamesGitHas(asked) => worktrees::names_git_has(state, asked).await,
         WorkerRequest::PrepareWorkspace(asked) => worktrees::prepare(state, asked).await,
         WorkerRequest::RestoreWorkspace(asked) => worktrees::restore(state, asked).await,
@@ -231,6 +231,10 @@ pub(super) async fn handle(
         }
         WorkerRequest::WatchBranches(asked) => worktrees::watch_branches(state, asked.path, Whose::Own).await,
         WorkerRequest::WatchChildBranches(asked) => worktrees::watch_branches(state, asked.path, Whose::Child).await,
+        WorkerRequest::ReadRemotePullRequests(asked) => {
+            let snapshot = git::remote_pull_requests::read(&asked.path, asked.repository, &asked.pull_requests).await;
+            Ok(WorkerResponse::RemotePullRequests(snapshot))
+        }
         WorkerRequest::GithubRateLimit(asked) => {
             Ok(WorkerResponse::GithubRateLimit(git::rate_limit(&asked.path).await?))
         }
