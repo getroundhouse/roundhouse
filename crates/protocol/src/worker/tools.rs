@@ -63,6 +63,9 @@ impl fmt::Debug for ToolsToken {
     }
 }
 
+/// The explicit-target wait tool; legacy calls keep `WAIT_TOOL` for resumed agents.
+pub const WAITS_TOOL: &str = "wait_for_pull_requests";
+
 #[cfg(test)]
 mod tests {
     use super::*;

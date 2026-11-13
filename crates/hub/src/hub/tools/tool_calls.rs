@@ -89,7 +89,9 @@ impl Hub {
                 self.remove_child(workspace_id, link, path, force).await.map(AskReply::from)
             }
             WorkerAsk::ListWorktrees => self.list_worktrees(workspace_id, link).await.map(AskReply::Worktrees),
-            WorkerAsk::Unknown => Err(self.unsupported(None)),
+            WorkerAsk::PullRequests(_) | WorkerAsk::StartPullRequestWait(_) | WorkerAsk::Unknown => {
+                Err(self.unsupported(None))
+            }
         }
     }
 }

@@ -23,15 +23,18 @@ pub use agents::{
 };
 pub use ask::{
     Answer, Ask, AskAnswer, AskId, AskOutcome, AskReply, CancelWait, CreateWorktree, ListWorktrees, ListedChild,
-    NewWorktreeOn, OwnWorktree, PullRequestAnswer, ReadPullRequest, ReadWait, RemoveWorktree, StartWait, ToWorker,
-    WaitAnswer, WorkerAsk, WorktreeCreated, WorktreeRemoval, WorktreeRemoved, Worktrees, WouldLose,
+    NewWorktreeOn, OwnWorktree, PullRequestAnswer, PullRequestWaitUntil, ReadPullRequest, ReadPullRequests, ReadWait,
+    RemoveWorktree, StartPullRequestWait, StartWait, ToWorker, WaitAnswer, WorkerAsk, WorktreeCreated, WorktreeRemoval,
+    WorktreeRemoved, Worktrees, WouldLose,
 };
 pub use children::{AddChildWorktree, ChildBranch, ChildWorktreeAdded, WatchChildBranches};
 pub use connection::{Hello, HelloReply, Received, RunningAgent, RunningAgents, RunningAgentsReply, Stop};
 pub use frames::WorkerFrame;
-pub use github::{GithubRateLimit, PullRequest, PullRequestReply, RateLimit};
+pub use github::{
+    GithubRateLimit, PullRequest, PullRequestReply, RateLimit, ReadRemotePullRequests, RemotePullRequestsReply,
+};
 pub use one_off::{AccountFor, TitleFor, TitleReply};
-pub use tools::{ServeTools, ToolsServing, ToolsToken, WAIT_TOOL};
+pub use tools::{ServeTools, ToolsServing, ToolsToken, WAIT_TOOL, WAITS_TOOL};
 pub use workspaces::{
     ArchiveScript, CancelSetup, NamesGitHas, NamesGitHasReply, PrepareWorkspace, RemoveWorkspace, RestoreWorkspace,
     SetupDone, SetupLog, SetupLogReply, SetupWorkspace, WorkspaceReady, WorktreeThere, WorktreeThereReply,

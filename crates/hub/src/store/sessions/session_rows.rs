@@ -84,6 +84,7 @@ pub(in super::super) fn session_from_row(row: &Row) -> rusqlite::Result<StoredSe
             agent_opened: Some(row.get(10)?),
             // Written by the query, from the waits table, so one it can't read is a query that doesn't match `Wait`.
             wait: row.get::<_, Option<String>>(30)?.map(|json| wait_from(&json)).transpose()?,
+            waits: None,
             rev: rev_of(row, 31)?,
         },
         agent_session_id: row.get::<_, String>(9)?.into(),

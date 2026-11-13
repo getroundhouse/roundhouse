@@ -48,6 +48,7 @@ impl Hub {
             until,
             started_at_ms,
             ended: None,
+            watch: None,
         };
         let seen = rules::seen_in(&pull_request);
         wait.ended = rules::ended(&wait, seen, Some(&pull_request)).map(|how| WaitEnded { at_ms: started_at_ms, how });

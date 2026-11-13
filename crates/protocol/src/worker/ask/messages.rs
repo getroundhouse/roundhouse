@@ -1,4 +1,5 @@
 use super::super::WorkerRequest;
+use super::{ReadPullRequests, StartPullRequestWait};
 use super::{pull_requests, worktrees};
 use crate::client::Outcome;
 use crate::frame;
@@ -102,6 +103,8 @@ pub enum WorkerAsk {
     /// See [`ReadPullRequest`](super::ReadPullRequest).
     PullRequest,
     StartWait(StartWait),
+    PullRequests(ReadPullRequests),
+    StartPullRequestWait(StartPullRequestWait),
     Wait(ReadWait),
     CancelWait(CancelWait),
     CreateWorktree(CreateWorktree),
@@ -117,6 +120,7 @@ pub enum WorkerAsk {
 #[serde(tag = "result", rename_all = "snake_case")]
 pub enum AskReply {
     PullRequest(PullRequestAnswer),
+    PullRequests(crate::model::PullRequestsSnapshot),
     Wait(WaitAnswer),
     WorktreeCreated(WorktreeCreated),
     WorktreeRemoved(WorktreeRemoved),

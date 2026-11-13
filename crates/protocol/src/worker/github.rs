@@ -65,3 +65,37 @@ impl Reply for RateLimit {
         Ok(limit)
     }
 }
+
+/// Reads explicit targets and their dependencies using this worker's credentials. A pinned repository avoids a
+/// changed git remote redirecting an existing wait. `None` resolves the worktree's repository for a new request.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct ReadRemotePullRequests {
+    pub path: String,
+    pub repository: Option<model::GitHubRepository>,
+    pub pull_requests: model::PullRequestSelection,
+}
+
+impl Request for ReadRemotePullRequests {
+    type Reply = RemotePullRequestsReply;
+
+    fn into_request(self) -> WorkerRequest {
+        WorkerRequest::ReadRemotePullRequests(self)
+    }
+}
+
+/// Accounting accompanies failed reads too: pages already fetched still spend GitHub's budget.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct RemotePullRequestsReply {
+    pub observation: Result<model::PullRequestsSnapshot, crate::client::ApiError>,
+    pub rate_limit: Option<RateLimit>,
+    pub cost: u32,
+    /// Failed PR and its dependents; empty for a repository-wide failure.
+    pub affected: Vec<model::PullRequestNumber>,
+}
+
+impl Reply for RemotePullRequestsReply {
+    fn read(response: WorkerResponse) -> Result<Self, WorkerResponse> {
+        let WorkerResponse::RemotePullRequests(snapshot) = response else { return Err(response) };
+        Ok(snapshot)
+    }
+}

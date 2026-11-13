@@ -158,6 +158,10 @@ fn called_off(how: WaitEnd) -> &'static str {
         | WaitEnd::Draft
         | WaitEnd::ChecksPassed
         | WaitEnd::NoPullRequest
+        | WaitEnd::StackChanged
+        | WaitEnd::NeedsRebase
+        | WaitEnd::TimedOut
+        | WaitEnd::Unavailable
         | WaitEnd::Unknown => "The wait was called off.",
     }
 }
@@ -176,6 +180,10 @@ fn how(ended: WaitEnd) -> &'static str {
         WaitEnd::Cancelled => "it was called off.",
         WaitEnd::CalledOffByPerson => "the person stopped it.",
         WaitEnd::Replaced => "the wait started after it replaced it.",
+        WaitEnd::StackChanged => "its stack dependencies or destination changed.",
+        WaitEnd::NeedsRebase => "its stack needs rebasing.",
+        WaitEnd::TimedOut => "the requested deadline was reached.",
+        WaitEnd::Unavailable => "GitHub is no longer accessible for this wait.",
         WaitEnd::Unknown => "for a reason only a newer Roundhouse can name.",
     }
 }

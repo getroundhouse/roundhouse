@@ -12,6 +12,7 @@ pub(in crate::tools) fn waiting() -> Wait {
         number: 605,
         call: Some("toolu_1".into()),
         until: WaitUntil::Done,
+        watch: None,
         started_at_ms: 1_000,
         ended: None,
     }

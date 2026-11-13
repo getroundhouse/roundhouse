@@ -52,6 +52,7 @@ pub(in crate::gallery) fn waiting_on_checks() -> World {
         until: WaitUntil::Checks,
         started_at_ms: 0,
         ended: None,
+        watch: None,
     };
     world
         .sessions

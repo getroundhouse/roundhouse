@@ -110,11 +110,11 @@ pub(super) fn wait_line(wait: &Wait, standing: Option<&PullRequestStanding>, sha
 /// what's said of the one it waits on.
 fn wait_words(wait: &Wait, standing: Option<&PullRequestStanding>) -> (String, &'static str) {
     let (what, pointed_at) = match wait.until {
-        WaitUntil::Checks => (
+        WaitUntil::Checks | WaitUntil::RequiredChecks | WaitUntil::AllChecks => (
             format!("Waiting on #{}'s checks", wait.number),
             "Until its checks have run and none failed, or it needs the agent",
         ),
-        WaitUntil::Done | WaitUntil::Unknown => {
+        WaitUntil::Done | WaitUntil::Merged | WaitUntil::Unknown => {
             (format!("Waiting on #{}", wait.number), "Until it's merged or closed, or needs the agent")
         }
     };
@@ -201,6 +201,7 @@ mod tests {
             until: WaitUntil::Checks,
             started_at_ms: 0,
             ended: None,
+            watch: None,
         };
         let standing = |number| PullRequestStanding { number, words: "2 checks running".to_string() };
         let said = |wait: &Wait, standing: Option<&PullRequestStanding>| wait_words(wait, standing).0;

@@ -11,7 +11,9 @@ use children::{AddChildWorktree, ChildWorktreeAdded, WatchChildBranches};
 use connection::{Hello, HelloReply, Received, RunningAgentsReply};
 #[cfg(test)]
 use connection::{RunningAgents, Stop};
-use github::{GithubRateLimit, PullRequest, PullRequestReply, RateLimit};
+use github::{
+    GithubRateLimit, PullRequest, PullRequestReply, RateLimit, ReadRemotePullRequests, RemotePullRequestsReply,
+};
 use one_off::{AccountFor, TitleFor, TitleReply};
 use serde::{Deserialize, Serialize};
 use tools::{ServeTools, ToolsServing};
@@ -83,6 +85,7 @@ pub enum WorkerRequest {
     GitStatus(GitStatus),
     GitDiff(GitDiff),
     PullRequest(PullRequest),
+    ReadRemotePullRequests(ReadRemotePullRequests),
     WatchBranches(WatchBranches),
     WatchChildBranches(WatchChildBranches),
     GithubRateLimit(GithubRateLimit),
@@ -128,6 +131,7 @@ pub enum WorkerResponse {
     GitStatus(model::GitStatus),
     GitDiff(model::GitDiff),
     PullRequest(PullRequestReply),
+    RemotePullRequests(RemotePullRequestsReply),
     GithubRateLimit(RateLimit),
     SetupDone(SetupDone),
     SetupLog(SetupLogReply),
