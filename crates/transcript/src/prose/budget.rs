@@ -3,7 +3,7 @@
 //! parsed again when they're next drawn. A long one keeps its blocks, since it's parsed on another thread and would
 //! draw nothing meanwhile, and so does one that's hidden, so it shows again at once.
 
-use super::{AT_ONCE, Store, Text, TextAt};
+use super::{AT_ONCE, ProseId, Store, Text};
 
 /// How long the short texts whose blocks are kept can come to, in bytes of what they say, but for those drawn in this
 /// frame. A text's blocks, with the kit's layout of them once they're drawn, take about 20 bytes for each of its own,
@@ -37,22 +37,23 @@ impl Store {
     /// again on another thread would leave it blank meanwhile.
     fn keep_fewer_blocks(&mut self) {
         let frame = self.frame;
-        let mut short: Vec<(u64, TextAt, usize)> = (self.texts.iter())
-            .filter_map(|(at, text)| match text {
-                Text::Parsed { parsed, drawn } if parsed.source.len() <= AT_ONCE && *drawn < frame => {
-                    Some((*drawn, *at, parsed.source.len()))
+        let mut short: Vec<(u64, ProseId, usize)> = (self.texts.iter())
+            .filter_map(|(id, text)| match text {
+                Text::Parsed { parsed } if parsed.source.len() <= AT_ONCE => {
+                    Some((self.places.last_drawn(id)?, id.clone(), parsed.source.len()))
                 }
                 Text::Parsed { .. } | Text::Read { .. } | Text::Parsing { .. } => None,
             })
+            .filter(|(drawn, ..)| *drawn < frame)
             .collect();
         let mut kept: usize = short.iter().map(|(_, _, len)| len).sum();
         short.sort_unstable_by_key(|(drawn, ..)| *drawn);
-        for (_, at, len) in short {
+        for (_, id, len) in short {
             if kept <= BLOCKS_KEPT {
                 break;
             }
-            if let Some(Text::Parsed { parsed, .. }) = self.texts.remove(&at) {
-                self.texts.insert(at, Text::Read { leaves: parsed.leaves.clone() });
+            if let Some(Text::Parsed { parsed, .. }) = self.texts.remove(&id) {
+                self.texts.insert(id, Text::Read { leaves: parsed.leaves.clone() });
             }
             kept -= len;
         }
@@ -61,9 +62,7 @@ impl Store {
 
 #[cfg(test)]
 mod tests {
-    use gpui_kit::WeakEntity;
-
-    use super::super::{Prose, Text, TextAt};
+    use super::super::{Prose, ProseId, Text, TextAt};
     use super::{BLOCKS_KEPT, PARSES_A_LOOK};
 
     fn at(seq: u64) -> TextAt {
@@ -75,40 +74,44 @@ mod tests {
     fn drawn_from_the_last(prose: &Prose, words: &str, texts: u64) -> Vec<u64> {
         for seq in (0..texts).rev() {
             prose.new_frame();
-            prose.parsed(at(seq), words);
+            prose.drawn_at(at(seq), words);
         }
         let texts_now = prose.0.borrow();
-        (0..texts).filter(|seq| matches!(texts_now.texts.get(&at(*seq)), Some(Text::Parsed { .. }))).collect()
+        let parsed = |seq: &u64| matches!(texts_now.texts.get(&ProseId::of(at(*seq))), Some(Text::Parsed { .. }));
+        (0..texts).filter(parsed).collect()
     }
 
     #[test]
     fn the_blocks_of_the_short_texts_drawn_longest_ago_are_put_away_but_not_what_they_show() {
-        let prose = Prose::new(WeakEntity::new_invalid());
+        let prose = Prose::alone();
         let words = "word ".repeat(200);
         let texts = u64::try_from(2 * BLOCKS_KEPT / words.len()).unwrap();
 
         let with_blocks = drawn_from_the_last(&prose, &words, texts);
         prose.new_frame();
-        prose.parsed(at(texts - 1), &words);
+        prose.drawn_at(at(texts - 1), &words);
 
         assert!(with_blocks.contains(&0), "the last drawn keeps them");
         assert!(!with_blocks.contains(&(texts - 1)), "the first drawn doesn't");
         let most = BLOCKS_KEPT / words.len() + usize::try_from(PARSES_A_LOOK).unwrap();
         assert!(with_blocks.len() <= most, "{} of {texts} kept them", with_blocks.len());
-        assert!((0..texts).all(|seq| prose.leaves_of(at(seq)).is_some()), "each still says what it shows");
-        let again = matches!(prose.0.borrow().texts.get(&at(texts - 1)), Some(Text::Parsed { .. }));
+        assert!(
+            (0..texts).all(|seq| prose.leaves_of(&ProseId::of(at(seq))).is_some()),
+            "each still says what it shows"
+        );
+        let again = matches!(prose.0.borrow().texts.get(&ProseId::of(at(texts - 1))), Some(Text::Parsed { .. }));
         assert!(again, "and one drawn again is parsed again");
     }
 
     #[test]
     fn nothing_drawn_in_this_frame_is_put_away() {
-        let prose = Prose::new(WeakEntity::new_invalid());
+        let prose = Prose::alone();
         let words = "word ".repeat(200);
         let texts = u64::try_from(2 * BLOCKS_KEPT / words.len()).unwrap();
 
         prose.new_frame();
         for seq in 0..texts {
-            prose.parsed(at(seq), &words);
+            prose.drawn_at(at(seq), &words);
         }
 
         let texts_now = prose.0.borrow();

@@ -12,7 +12,7 @@ use gpui_kit::{
 };
 
 use super::parsing::Apart;
-use super::{Images, Parsed, Prose, TextAt};
+use super::{Images, Parsed, Prose, ProseId, TextAt};
 use crate::find::Marks;
 use crate::selection::Selection;
 
@@ -23,7 +23,8 @@ pub(super) enum Drawing {
 }
 
 pub(super) struct ProseElement {
-    pub(super) id: ElementId,
+    /// What the text is known by, which its element is too.
+    pub(super) known: ProseId,
     pub(super) at: TextAt,
     /// The area that scrolls it, if it's in one.
     pub(super) area: Option<ElementId>,
@@ -52,7 +53,7 @@ impl Element for ProseElement {
     type PrepaintState = Hitbox;
 
     fn id(&self) -> Option<ElementId> {
-        Some(self.id.clone())
+        Some(self.known.0.clone())
     }
 
     fn source_location(&self) -> Option<&'static std::panic::Location<'static>> {
@@ -95,7 +96,7 @@ impl Element for ProseElement {
             Drawing::Meanwhile(meanwhile) => meanwhile.take().unwrap_or_else(|| div().into_any_element()),
         };
         if let Some(apart) = self.apart.take() {
-            self.prose.parse_apart(self.at, apart, cx);
+            self.prose.parse_apart(self.known.clone(), apart, cx);
         }
         (element.request_layout(window, cx), (element, style.selection()))
     }
@@ -126,7 +127,7 @@ impl Element for ProseElement {
         self.reveal(&leaves);
         // What shows of it, which an area that scrolls it, or the list, can cut short.
         let shows = bounds.intersect(&window.content_mask().bounds);
-        self.selection.drawn(self.at, shows, self.area.clone(), leaves);
+        self.selection.drawn(self.known.clone(), self.at, shows, self.area.clone(), leaves);
         hitbox
     }
 

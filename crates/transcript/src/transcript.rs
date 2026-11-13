@@ -160,7 +160,10 @@ impl Transcript {
         };
         let open = OpenSession::start_view(&client, session, view);
         let (rows, loaded) = open.read(rows_and_loaded);
-        let prose = Prose::new(cx.weak_entity());
+        let this = cx.weak_entity();
+        let prose = Prose::new(move |of, cx| {
+            let _ = this.update(cx, |transcript, cx| transcript.redrawn(of, cx));
+        });
         let selection = Selection::new(prose.clone(), cx.focus_handle());
         let list = TranscriptList::new(selection.clone(), cx);
         list.set_rows(rows, loaded);
@@ -239,7 +242,7 @@ impl Transcript {
         let events_changed = changes.rows.as_ref().is_some_and(|changed| changed.start < events);
         self.list.set_rows(rows, loaded);
         self.session.read(|log| self.texts.let_go(log));
-        self.session.read(|log| self.prose.let_go(log, self.selection.texts().as_ref()));
+        self.session.read(|log| self.prose.let_go(log, self.selection.held().as_ref()));
         if let Some(changed) = changes.rows {
             self.list.out_of_date(changed.clone());
             self.find_in_changes(changed, cx);

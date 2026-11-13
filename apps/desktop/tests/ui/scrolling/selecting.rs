@@ -5,8 +5,8 @@
 use gpui_kit::base::TextSelection;
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{
-    AppContext as _, Bounds, ClipboardItem, ElementId, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
-    Pixels, ScrollDelta, TestAppContext, point, px,
+    AppContext as _, Bounds, ClipboardItem, ElementId, Modifiers, MouseButton, MouseDownEvent, MouseMoveEvent,
+    MouseUpEvent, Pixels, ScrollDelta, TestAppContext, point, px,
 };
 use protocol::event::EventBody;
 use protocol::model::{SessionId, seq_index};
@@ -186,6 +186,31 @@ fn a_word_a_paragraph_or_everything_written_can_be_selected(cx: &mut TestAppCont
     let first = format!("{prompt}\n\nThe first reply\n\n");
     assert!(all.starts_with(&first), "the prompt, then every reply, from the first: {:?}", head(&all));
     assert!(all.ends_with(LAST), "to the last");
+}
+
+/// A shift-click selects from where a press started what's selected to where it's clicked.
+#[gpui_kit::test]
+fn a_shift_click_selects_from_where_a_press_was_to_it(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let session = stack.chat_in_a_new_workspace();
+    let (first, second) = ("Signal boxes keep ledgers of every train.", "The lever frame holds each route clear.");
+    stack.run(&session, &format!("say:{first}; prose:3:1; say:{second}"));
+    let mut ui = open(cx, &stack);
+    let window = settled(&mut ui, &stack, &session);
+    let (from, to) = (on_the_reply_saying(&ui, window, first), on_the_reply_saying(&ui, window, second));
+    let (button, modifiers) = (MouseButton::Left, Modifiers { shift: true, ..Default::default() });
+
+    click(&mut ui, from, 1);
+    let pressed = copy(&mut ui);
+    press(&mut ui, MouseDownEvent { button, position: to, click_count: 1, modifiers, ..Default::default() });
+    press(&mut ui, MouseUpEvent { button, position: to, click_count: 1, modifiers });
+    let extended = copy(&mut ui);
+
+    assert_eq!(pressed, "", "a click selects nothing");
+    let (start, end) = (extended.split("\n\n").next().unwrap(), extended.rsplit("\n\n").next().unwrap());
+    assert!(first.ends_with(start) && start.len() < first.len(), "from where it was: {:?}", head(&extended));
+    assert!(second.starts_with(end) && !end.is_empty(), "to where the shift-click was: {:?}", tail(&extended));
+    assert!(extended.split("\n\n").count() > 2, "with what's between");
 }
 
 /// A click on a link opens it, but a drag that selects some of a reply and ends on a link doesn't.

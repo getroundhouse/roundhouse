@@ -25,24 +25,25 @@
 //! is kept, as any other is, so it's drawn again at once when it's shown again.
 
 use std::cell::RefCell;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{HashMap, HashSet};
 use std::ops::RangeInclusive;
 use std::rc::Rc;
 use std::sync::Arc;
 
 use client_core::session_log::{Row, SessionLog};
-use gpui_kit::{AnyElement, ElementId, ImageSource, IntoElement, SharedUri, Task, WeakEntity};
+use gpui_kit::{AnyElement, App, ElementId, ImageSource, IntoElement, SharedUri, Task};
 use protocol::model::Seq;
 
 use crate::find::{FindLook, Part, TextId, view_id};
 use crate::images_apart::images_apart;
 use crate::selection::Selection;
-use crate::transcript::Transcript;
 use element::{Drawing, ProseElement};
+use moves::Places;
 pub(crate) use parse::{ATOM, Parsed, leaves};
 
 mod budget;
 mod element;
+mod moves;
 mod parse;
 mod parsing;
 
@@ -102,17 +103,26 @@ pub(crate) enum Among {
     Call(Part),
 }
 
-/// The texts drawn this way, parsed, by where they are in the chat. A copy reads the texts between a selection's ends
-/// from here, drawn or not. Cheap to clone.
+/// What a text drawn this way is known by: what its element is known by, which stays the same as it moves, as a reply
+/// does from being written to its record, since `find::view_id` makes it the same.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct ProseId(ElementId);
+
+/// The texts drawn this way, parsed, by what each is known by, and where each is in the chat now. A copy reads the
+/// texts between a selection's ends from here, drawn or not. Cheap to clone.
 #[derive(Clone)]
 pub(crate) struct Prose(Rc<RefCell<Store>>);
 
+/// What's told when a text parsed on another thread is in, to measure the row that draws what it says again.
+type Redrawn = Rc<dyn Fn(Of, &mut App)>;
+
 struct Store {
-    /// Told when a text parsed on another thread is in, to measure its row again.
-    transcript: WeakEntity<Transcript>,
-    texts: BTreeMap<TextAt, Text>,
+    redrawn: Redrawn,
+    texts: HashMap<ProseId, Text>,
+    /// Where each text is now, and where and when it was last drawn, as `moves` says.
+    places: Places,
     /// The texts kept whose rows don't draw them now, such as a thought that's been closed, which a copy leaves out.
-    hidden: BTreeSet<TextAt>,
+    hidden: HashSet<ProseId>,
     /// How many frames the list has drawn, which says which text was drawn longest ago.
     frame: u64,
     /// How many short texts have been parsed since the blocks kept were last looked at.
@@ -122,8 +132,8 @@ struct Store {
 }
 
 enum Text {
-    /// Parsed, with the blocks it's drawn from, and last drawn in the `drawn`th frame.
-    Parsed { parsed: Rc<Parsed>, drawn: u64 },
+    /// Parsed, with the blocks it's drawn from.
+    Parsed { parsed: Rc<Parsed> },
     /// A short text not drawn lately, with what it shows, for a copy, and not its blocks, which it's parsed for again
     /// when it's next drawn.
     Read { leaves: Arc<[String]> },
@@ -193,11 +203,14 @@ impl<'a> Written<'a> {
 pub(crate) type Images = Box<dyn Fn(&SharedUri) -> ImageSource + Send + Sync>;
 
 impl Prose {
-    pub(crate) fn new(transcript: WeakEntity<Transcript>) -> Self {
+    /// The texts of a transcript, which `redrawn` tells when one parsed on another thread is in, so the row drawing
+    /// what it says is measured again.
+    pub(crate) fn new(redrawn: impl Fn(Of, &mut App) + 'static) -> Self {
         Self(Rc::new(RefCell::new(Store {
-            transcript,
-            texts: BTreeMap::new(),
-            hidden: BTreeSet::new(),
+            redrawn: Rc::new(redrawn),
+            texts: HashMap::new(),
+            places: Places::default(),
+            hidden: HashSet::new(),
             frame: 0,
             parses: 0,
             in_row: None,
@@ -217,13 +230,12 @@ impl Prose {
         let drawn = draw();
         let mut texts = self.0.borrow_mut();
         let these = std::mem::replace(&mut texts.in_row, outer).map(|(_, these)| these).unwrap_or_default();
-        let Store { texts, hidden, .. } = &mut *texts;
-        let in_row = texts.range(TextAt::first_of(of)..).take_while(|(at, _)| at.of == of);
-        for at in in_row.map(|(at, _)| *at) {
-            if these.contains(&at) {
-                hidden.remove(&at);
+        let Store { places, hidden, .. } = &mut *texts;
+        for (at, id) in places.within(TextAt::first_of(of)..).take_while(|(at, _)| at.of == of) {
+            if these.contains(at) {
+                hidden.remove(id);
             } else {
-                hidden.insert(at);
+                hidden.insert(id.clone());
             }
         }
         drawn
@@ -247,8 +259,10 @@ impl Prose {
             Some(written.at.of),
             "a text drawn outside what draws it is never hidden once it isn't"
         );
+        let known = ProseId(written.element.clone());
+        self.0.borrow_mut().placed(&known, written.at);
         let source = images_apart(written.text);
-        let (parsed, apart) = self.parsed(written.at, &source);
+        let (parsed, apart) = self.parsed(&known, &source);
         let (text, marks) = match parsed {
             Some(parsed) => {
                 let marks = written.found.map_or_else(Vec::new, |(id, find)| find.marks_in_leaves(id, &parsed.leaves));
@@ -257,43 +271,45 @@ impl Prose {
             None => (Drawing::Meanwhile(until_parsed()), Vec::new()),
         };
         let (prose, selection) = (self.clone(), selection.clone());
-        let (id, at, area) = (written.element.clone(), written.at, written.area.clone());
-        ProseElement { id, at, area, text, apart, marks, images, prose, selection }.into_any_element()
+        let (at, area) = (written.at, written.area.clone());
+        ProseElement { known, at, area, text, apart, marks, images, prose, selection }.into_any_element()
     }
 
     /// What the texts from `from` to `to`, both in, show, leaf by leaf, in order, as far as they've been parsed, but
     /// for those hidden.
     pub(crate) fn between(&self, from: TextAt, to: TextAt) -> Vec<(TextAt, Arc<[String]>)> {
-        let texts = self.0.borrow();
-        let shown = texts.texts.range(from..=to).filter(|(at, _)| !texts.hidden.contains(at));
-        shown.filter_map(|(at, text)| Some((*at, text.leaves()?))).collect()
+        let store = self.0.borrow();
+        let shown = store.places.within(from..=to).filter(|(_, id)| !store.hidden.contains(id));
+        shown.filter_map(|(at, id)| Some((*at, store.texts.get(id)?.leaves()?))).collect()
     }
 
-    /// What the text at `at` shows, leaf by leaf, if it's been parsed.
-    pub(crate) fn leaves_of(&self, at: TextAt) -> Option<Arc<[String]>> {
-        self.0.borrow().texts.get(&at)?.leaves()
+    /// What the text known as `id` shows, leaf by leaf, if it's been parsed.
+    pub(crate) fn leaves_of(&self, id: &ProseId) -> Option<Arc<[String]>> {
+        self.0.borrow().texts.get(id)?.leaves()
     }
 
-    /// Where the first and last texts that aren't hidden are, if there are any.
-    pub(crate) fn ends(&self) -> Option<(TextAt, TextAt)> {
-        let texts = self.0.borrow();
-        let mut shown = texts.texts.keys().filter(|at| !texts.hidden.contains(at));
-        let first = *shown.next()?;
-        Some((first, shown.next_back().copied().unwrap_or(first)))
+    /// The first and last texts that aren't hidden, in the chat's order, if there are any.
+    pub(crate) fn ends(&self) -> Option<(ProseId, ProseId)> {
+        let store = self.0.borrow();
+        let mut shown = store.places.within(..).map(|(_, id)| id).filter(|id| !store.hidden.contains(*id));
+        let first = shown.next()?.clone();
+        let last = shown.next_back().cloned().unwrap_or_else(|| first.clone());
+        Some((first, last))
     }
 
-    /// Lets go of each text whose event isn't loaded, but for those in `selected`, so a copy still has them. The
-    /// subagent tab's head and foot are its subagent's, and kept with the tab.
+    /// Lets go of each text last drawn in an event's row that isn't loaded, but for those in `selected`, so a copy
+    /// still has them. The subagent tab's head and foot are its subagent's, and kept with the tab.
     pub(crate) fn let_go(&self, log: &SessionLog, selected: Option<&RangeInclusive<TextAt>>) {
         let loaded = |at: &TextAt| match at.of {
             Of::Event(seq) => log.row_of(seq).is_some_and(|row| matches!(log.row(row), Row::Event(_))),
             Of::Head | Of::Foot => true,
         };
-        let selected = |at: &TextAt| selected.is_some_and(|selected| selected.contains(at));
-        let mut texts = self.0.borrow_mut();
-        let Store { texts, hidden, .. } = &mut *texts;
-        texts.retain(|at, _| loaded(at) || selected(at));
-        hidden.retain(|at| texts.contains_key(at));
+        let keep = |at: &TextAt| loaded(at) || selected.is_some_and(|selected| selected.contains(at));
+        let mut store = self.0.borrow_mut();
+        let Store { texts, places, hidden, .. } = &mut *store;
+        places.retain(keep);
+        texts.retain(|id, _| places.last_at(id).is_some());
+        hidden.retain(|id| places.last_at(id).is_some());
     }
 
     /// Whether every text drawn has been parsed, so each row has the height it will keep.
@@ -316,11 +332,18 @@ impl Prose {
 }
 
 #[cfg(test)]
+impl Prose {
+    /// Texts in no transcript, for a test, so nothing's told when one parsed on another thread is in.
+    pub(crate) fn alone() -> Self {
+        Self::new(|_, _| {})
+    }
+}
+
+#[cfg(test)]
 mod tests {
-    use gpui_kit::WeakEntity;
     use protocol::event::{ContentBlock, EventBody};
 
-    use super::{Of, Prose, TextAt};
+    use super::{Of, Prose, ProseId, TextAt};
     use crate::fixtures::{event, log};
 
     fn at(seq: u64) -> TextAt {
@@ -337,9 +360,9 @@ mod tests {
 
     #[test]
     fn a_text_whose_event_is_let_go_of_is_kept_while_any_of_it_is_selected() {
-        let prose = Prose::new(WeakEntity::new_invalid());
+        let prose = Prose::alone();
         for seq in 1..=3 {
-            prose.parsed(at(seq), "words");
+            prose.drawn_at(at(seq), "words");
         }
         let blocks = vec![ContentBlock::Text { text: "words".into(), images: Vec::new() }];
         let body =
@@ -347,22 +370,22 @@ mod tests {
         let held = log([event(3, body)]);
 
         prose.let_go(&held, Some(&(at(2)..=at(3))));
-        let kept = [1, 2, 3].map(|seq| prose.leaves_of(at(seq)).is_some());
+        let kept = [1, 2, 3].map(|seq| prose.keeps(&ProseId::of(at(seq))));
         prose.let_go(&held, None);
 
         assert_eq!(kept, [false, true, true], "what's loaded, and what's selected");
-        assert!(prose.leaves_of(at(2)).is_none(), "until it isn't");
+        assert!(!prose.keeps(&ProseId::of(at(2))), "until it isn't");
     }
 
     #[test]
     fn the_subagent_tab_s_head_and_foot_are_kept_whatever_the_log_lets_go_of() {
-        let prose = Prose::new(WeakEntity::new_invalid());
+        let prose = Prose::alone();
         let (head, foot) = (TextAt::first_of(Of::Head), TextAt::first_of(Of::Foot));
-        prose.parsed(head, "What it was asked");
-        prose.parsed(foot, "What it reported");
+        prose.drawn_at(head, "What it was asked");
+        prose.drawn_at(foot, "What it reported");
 
         prose.let_go(&log([]), None);
 
-        assert!(prose.leaves_of(head).is_some() && prose.leaves_of(foot).is_some());
+        assert!(prose.keeps(&ProseId::of(head)) && prose.keeps(&ProseId::of(foot)));
     }
 }
