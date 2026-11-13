@@ -38,6 +38,32 @@ fn work_left_in_the_background_keeps_the_agent_at_work_until_it_finishes() {
     assert_eq!(client.hub_status().unwrap().running_sessions, 0);
 }
 
+/// Each list the agent writes is the whole list, so the last one it writes as several tasks end together is empty,
+/// and the turns they start leave the chat idle.
+#[test]
+fn several_tasks_ending_together_leave_the_chat_idle_with_none_listed() {
+    let stack = Stack::start();
+    let client = stack.client();
+    let (_, session) = stack.workspace(&client);
+    let files: Vec<_> = (0..5).map(|at| stack.path(&format!("done-{at}"))).collect();
+    let each: Vec<_> = files.iter().map(|file| format!("background:{}", file.display())).collect();
+    let now = || client.session_get(&session.id).unwrap();
+    client.session_prompt(&session.id, &each.join("; "), None).unwrap();
+    wait_until("the turn to end with five left going", || {
+        let session = now();
+        session.status == SessionStatus::Background && session.background_tasks.len() == 5
+    });
+
+    for file in &files {
+        std::fs::write(file, "").unwrap();
+    }
+
+    wait_until("the chat to go idle with none listed", || {
+        let session = now();
+        session.status == SessionStatus::Idle && session.background_tasks.is_empty()
+    });
+}
+
 /// Starts work in the background that finishes once `done` exists, waits until the turn has ended with it going, and
 /// then has it finish, with the agent picking up again by itself `pause_ms` after.
 fn finish_and_pause(stack: &Stack, client: &Client, session_id: &SessionId, pause_ms: u64) {
