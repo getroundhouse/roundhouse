@@ -13,6 +13,9 @@
 //! terminal, since they're what its program reads, as Ctrl+W deletes a word in a shell, and Ctrl+[ is Escape. In a
 //! terminal there, Close, New Workspace and Quit take Shift as well, as terminal apps have them, and New Chat and the
 //! workspace before and after are in the menus. Find is a chat's, so it does nothing in a terminal anyway.
+//!
+//! Archive is left out of a terminal too, since Ctrl+Shift+A is a terminal's Select All there, as
+//! `terminal_view::bind_keys` has it, so Archive has no key in a terminal.
 
 use std::rc::Rc;
 
@@ -71,7 +74,9 @@ pub(crate) fn set(cx: &mut App) {
         key("secondary-c", Copy, Some(file_diff::KEY_CONTEXT), cx),
         key("secondary-a", SelectAll, Some(file_diff::KEY_CONTEXT), cx),
         key("secondary-shift-p", CreatePullRequest, None, cx),
-        key("secondary-shift-a", ArchiveWorkspace, None, cx),
+        // Left out of a terminal, whose Select All is Ctrl+Shift+A off the Mac. The terminal's binding is bound last,
+        // so it would win anyway, but this keeps that from hanging on the order they're bound in.
+        key("secondary-shift-a", ArchiveWorkspace, outside_a_terminal, cx),
         key("secondary-shift-u", MarkWorkspace, None, cx),
         key("secondary-.", StopAgent, None, cx),
         key("secondary-]", NextWorkspace, outside_a_terminal, cx),

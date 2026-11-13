@@ -11,7 +11,9 @@ mod tests;
 
 mod drawing;
 mod screen;
+mod selecting;
 mod typing;
 pub use screen::{Mirror, MirrorError, Size};
 #[cfg(test)]
 use screen::{TO_SHELL_SCREEN, screen};
+pub use selecting::{Pointer, SelectBy};

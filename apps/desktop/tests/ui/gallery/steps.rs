@@ -6,6 +6,7 @@ use desktop::updates::Kind;
 use gpui_kit::Pixels;
 
 use super::frame::Frame;
+use crate::support::Cells;
 use client_core::fake_hub::World;
 
 pub(crate) struct Screen {
@@ -96,6 +97,11 @@ pub(crate) enum Step {
     /// Opens the bar for finding text in the chat, as `Cmd-F` does, looks for this, and waits for every match to be
     /// counted and the first to be shown.
     Find(&'static str),
+    /// Drags across the terminal in front, from one place to another, and waits for what it selected to show.
+    SelectInTerminal {
+        from: Cells,
+        to: Cells,
+    },
 }
 
 pub(crate) enum DictationTarget {

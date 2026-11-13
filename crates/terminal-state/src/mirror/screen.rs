@@ -45,6 +45,7 @@ pub struct Mirror {
     pub(super) terminal: Terminal<'static, 'static>,
     pub(super) drawing: Option<super::drawing::Drawing>,
     pub(super) typing: Option<super::typing::Typing>,
+    pub(super) selecting: Option<super::selecting::Selecting>,
 }
 
 impl Mirror {
@@ -54,7 +55,7 @@ impl Mirror {
         terminal.set_scrollback_max_lines(Some(HISTORY_LINES))?;
         // From the start, since only bytes written after it's on can be carried over by a snapshot.
         terminal.set_continuation_max_bytes(LONGEST_UNFINISHED_BYTES)?;
-        Ok(Self { terminal, drawing: None, typing: None })
+        Ok(Self { terminal, drawing: None, typing: None, selecting: None })
     }
 
     /// A copy that answers what the program asks of its terminal, such as where the cursor is, or what the terminal

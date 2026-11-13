@@ -8,7 +8,7 @@ Any of these archives a workspace:
 
 - **Point at its row** in the sidebar, and click the button at its right end. It works on any row, without opening the workspace.
 - **Right-click its row,** and choose Archive.
-- **Press `Cmd-Shift-A`,** for the workspace showing.
+- **Press `Cmd-Shift-A`,** for the workspace showing. On Windows and Linux, a terminal has that key for Select All, as [Keys](../reference/keys.md#a-terminal) says, so archive from its row there.
 - **Click `Archive` on its pull request's bar,** once the pull request is merged or closed.
 
 ![Pointing at a row shows the button that archives it](../../spec/screens/archive-button.png)

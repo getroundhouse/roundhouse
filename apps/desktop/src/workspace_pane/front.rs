@@ -43,7 +43,7 @@ impl WorkspacePane {
 
     /// Copies what's selected in what's in front, wherever focus is, once a text box with nothing selected lets the
     /// action go on. What the kit has selected, such as a command asked about in the composer's place, goes on to the
-    /// window's root, which copies it. Nothing is selected in a terminal yet, so the action goes on there too.
+    /// window's root, which copies it.
     pub fn copy_showing(&self, window: &mut Window, cx: &mut Context<Self>) {
         if !TextSelection::selected_text(window, cx).trim().is_empty() {
             cx.propagate();
@@ -64,7 +64,10 @@ impl WorkspacePane {
                     None => cx.propagate(),
                 }
             }
-            Showing::Terminal => cx.propagate(),
+            Showing::Terminal => match self.view_in_front().cloned() {
+                Some(terminal) => terminal.update(cx, |t, cx| t.copy_selection(cx)),
+                None => cx.propagate(),
+            },
         }
     }
 

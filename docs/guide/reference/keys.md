@@ -33,10 +33,12 @@ What's typed in a terminal goes to its shell, apart from the app's shortcuts.
 
 | Key | Action |
 |---|---|
+| `Cmd-C` | Copy what's selected. `Ctrl-Shift-C` on Windows and Linux |
 | `Cmd-V` | Paste. `Ctrl-Shift-V` on Windows and Linux |
+| `Cmd-A` | Select everything, the history too. `Ctrl-Shift-A` on Windows and Linux |
 | `Cmd-Shift-T` | Another terminal |
 
-On Windows and Linux, `Ctrl` with a letter goes to the shell, as `Ctrl-W` deletes a word there, so in a terminal the app's own keys take `Shift` too: `Ctrl-Shift-W` closes the terminal, `Ctrl-Shift-N` makes a new workspace and `Ctrl-Shift-Q` quits. New chat and the workspace before and after are in the menus there, and Find, which is for a chat, does nothing in a terminal.
+On Windows and Linux, `Ctrl` with a letter goes to the shell, as `Ctrl-W` deletes a word there, so in a terminal the app's own keys take `Shift` too: `Ctrl-Shift-W` closes the terminal, `Ctrl-Shift-N` makes a new workspace and `Ctrl-Shift-Q` quits. New chat and the workspace before and after are in the menus there, and Find, which is for a chat, does nothing in a terminal. `Ctrl-Shift-C`, `Ctrl-Shift-V` and `Ctrl-Shift-A` copy, paste and select all there, so Archive has no key in a terminal.
 
 ## The composer
 

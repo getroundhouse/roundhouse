@@ -25,6 +25,15 @@ pub struct Row {
     pub backgrounds: Vec<Background>,
     /// Each cell that draws something, in order, which leaves out a blank one with no line through or under it.
     pub glyphs: Vec<Glyph>,
+    /// The cells in it that are selected, which are side by side.
+    pub selected: Option<Selected>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Selected {
+    pub col: u16,
+    /// How many cells it covers.
+    pub cells: u16,
 }
 
 impl Row {
