@@ -75,6 +75,8 @@ fn a_tools_use_is_asked_in_the_composers_place_and_denied_in_the_persons_words(c
     assert_eq!(outcomes(&ui), [ApprovalOutcome::Denied]);
     assert!(gone.exists(), "denied, so nothing was removed");
     assert!(ui.has(id("add")), "the composer is back");
+    let denied = "Denied: Remove it by its full path";
+    ui.wait("the call to say so", |ui| ui.shows_label("call-denied", denied));
 }
 
 #[gpui_kit::test]

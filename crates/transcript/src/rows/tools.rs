@@ -9,7 +9,7 @@ use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{AnyElement, App, IntoElement, ParentElement};
 use protocol::model::Seq;
 
-use super::around::{Answer, Reply, Subagent};
+use super::around::{Answer, Outcome, Reply, Subagent};
 use super::shown::Gather;
 use super::{InRow, Shared};
 use crate::find::{FindLook, Marks, Part as Text};
@@ -106,6 +106,7 @@ pub(super) fn shown(
         ToolCall::Advisor => advisor::shown(reply, key, gather),
         ToolCall::Other(other) => other::shown(&other, input, answer, key, gather),
     }
+    line::shown_denial(answer, key, gather);
 }
 
 /// How much came back, such as `10 lines`, `1 image`, or both, or `None` for nothing.
@@ -139,6 +140,7 @@ pub(super) fn shown_result(key: &ItemKey, answer: &Answer, gather: &mut Gather) 
     if let Some(text) = answer.text_beside_images() {
         gather.inside(key, Fold::Output, |gather| gather.plain(key, Text::Output, &block::output_text(text)));
     }
+    line::shown_denial(Some(answer), key, gather);
 }
 
 #[cfg(test)]

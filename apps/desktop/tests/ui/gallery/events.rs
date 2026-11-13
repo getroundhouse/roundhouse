@@ -87,6 +87,11 @@ pub(crate) fn tool_failed(id: &str, text: &str) -> EventBody {
     tool_answer(id, text, true, None)
 }
 
+/// The result of a call the person denied, which tells the agent `text`, with what they `said`, if anything.
+pub(crate) fn tool_denied(id: &str, text: &str, said: Option<&str>) -> EventBody {
+    EventBody::AgentUser { parent_tool_use_id: None, blocks: vec![fixtures::tool_denied(id, text, said)] }
+}
+
 /// A result that says what the call changed in a file, as Claude's edits and writes do.
 pub(crate) fn tool_changed(id: &str, text: &str, change: FileChange) -> EventBody {
     tool_answer(id, text, false, Some(change))

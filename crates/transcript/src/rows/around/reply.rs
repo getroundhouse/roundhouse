@@ -3,7 +3,7 @@
 
 use client_core::calls::{Failure, ResultForm};
 use client_core::session_log::SessionLog;
-use protocol::event::{ContentBlock, EventBody, FileChange, Hunk, SessionEvent};
+use protocol::event::{ContentBlock, Denied, EventBody, FileChange, Hunk, SessionEvent};
 use protocol::model::{Seq, ToolUseId};
 
 use super::{NEAR, blocks_of, nearby};
@@ -58,12 +58,32 @@ pub(in crate::rows) struct Answer {
     pub(in crate::rows) encrypted: bool,
     /// The form it was recorded in, which says how its text is read if it failed.
     form: ResultForm,
+    /// The person wouldn't let the tool be used, which isn't a failure, so it's said apart.
+    denied: Option<Denied>,
+}
+
+/// What became of a call, as its result says.
+pub(in crate::rows) enum Outcome<'a> {
+    /// It ran, and sent back this.
+    Ran(&'a str),
+    /// It failed, as this says.
+    Failed(Failure<'a>),
+    /// The person wouldn't let it be used, which isn't a failure, and it sent back nothing of its own.
+    Denied(&'a Denied),
 }
 
 impl Answer {
+    pub(in crate::rows) fn outcome(&self) -> Outcome<'_> {
+        match (&self.denied, self.is_error) {
+            (Some(denied), _) => Outcome::Denied(denied),
+            (None, true) => Outcome::Failed(Failure::read(&self.text, self.form)),
+            (None, false) => Outcome::Ran(&self.text),
+        }
+    }
+
     /// What it says went wrong, if it failed.
     pub(in crate::rows) fn failure(&self) -> Option<Failure<'_>> {
-        self.is_error.then(|| Failure::read(&self.text, self.form))
+        if let Outcome::Failed(failure) = self.outcome() { Some(failure) } else { None }
     }
 
     /// What it sent back, as it's shown. For one that failed, that's what went wrong without what says how, which the
@@ -72,14 +92,14 @@ impl Answer {
         self.failure().map_or(self.text.as_str(), |failure| failure.output)
     }
 
-    /// What it sent back, if it didn't fail.
+    /// What it sent back, if it ran.
     pub(in crate::rows) fn success(&self) -> Option<&str> {
-        (!self.is_error).then_some(self.text.as_str())
+        if let Outcome::Ran(text) = self.outcome() { Some(text) } else { None }
     }
 
-    /// The images it sent back, if it didn't fail.
+    /// The images it sent back, if it ran.
     pub(in crate::rows) fn images(&self) -> &[Carried] {
-        if self.is_error { &[] } else { &self.images }
+        if self.success().is_some() { &self.images } else { &[] }
     }
 
     /// The text it sent back, unless that's blank and it sent back images too, which are then all there is to show.
@@ -96,7 +116,9 @@ impl Answer {
 
     /// What `block` says, if it's a result.
     fn of(block: &ContentBlock, m: &Model) -> Option<Answer> {
-        let ContentBlock::ToolResult { is_error, text, change, images, encrypted, .. } = block else { return None };
+        let ContentBlock::ToolResult { is_error, text, change, images, encrypted, denied, .. } = block else {
+            return None;
+        };
         Some(Answer {
             is_error: *is_error,
             text: text.clone(),
@@ -104,6 +126,7 @@ impl Answer {
             images: attachments::carried(m, images),
             encrypted: *encrypted,
             form: ResultForm::of(block)?,
+            denied: denied.clone(),
         })
     }
 }

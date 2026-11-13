@@ -56,7 +56,7 @@ Either way, the request takes the composer's place, as a question does, and is a
 
 ![A request with what to do instead typed, and more waiting](../../../spec/screens/approval-denying.png)
 
-Once answered, a request leaves the call's own line in the chat, and a line after it saying `Denied`, if you denied it.
+Once answered, a request leaves the call's own line in the chat. One you denied says `Denied` under it, with what you said, if anything. A subagent's call is in its work, so the chat says what was denied and for whom, such as `Denied Bash for Check 1`.
 
 When its plan is ready, the agent asks you to approve it, on a card in the chat. Approving goes back to full access.
 

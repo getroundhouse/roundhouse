@@ -14,7 +14,7 @@ use gpui_kit::{
 
 use super::highlight::spans;
 use super::line::{Line, Part};
-use super::{Answer, Toggle, block, line};
+use super::{Answer, Outcome, Toggle, block, line};
 use crate::find::Part as Text;
 use crate::find::reveal;
 use crate::folds::Fold;
@@ -51,9 +51,14 @@ pub(super) fn shown(command: &Command, answer: Option<&Answer>, key: &ItemKey, g
     });
 }
 
-/// What the command printed, or what went wrong, once it's back.
+/// What the command printed, or what went wrong, once it's back. One the person denied never ran, so it printed
+/// nothing, and its line says it was denied.
 fn output(answer: Option<&Answer>) -> Option<&str> {
-    answer.map(Answer::shown)
+    match answer?.outcome() {
+        Outcome::Ran(text) => Some(text),
+        Outcome::Failed(failure) => Some(failure.output),
+        Outcome::Denied(_) => None,
+    }
 }
 
 /// The command, and under it what it printed, or a faint line saying it printed nothing, so a command that's done
