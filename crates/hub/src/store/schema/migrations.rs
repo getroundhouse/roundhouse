@@ -349,4 +349,6 @@ pub(super) const MIGRATIONS: &[&str] = &[
     hub_settings::ALLOW_ASKED_IN_FULL_ACCESS,
     // Each model's own week of an account's limits, kept apart by the model, in `limits`.
     limits::BY_MODEL,
+    // When the person last sent something to an agent under each account, in `accounts`.
+    accounts::USED_AT,
 ];

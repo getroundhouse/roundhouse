@@ -1,6 +1,6 @@
 //! Prompts waiting their turn, kept on their session's record.
 
-use protocol::model::{ClientMessageId, QueuedPrompt, SessionId};
+use protocol::model::{Account, ClientMessageId, QueuedPrompt, SessionId};
 use rusqlite::{Connection, OptionalExtension, params};
 
 use super::sessions::queue_from;
@@ -11,10 +11,18 @@ mod tests;
 
 /// What asking to queue a prompt did.
 pub enum Queued {
-    /// It's queued, with the session as that left it, and whether anything changed.
-    Done(Box<Reading>),
+    /// It's queued.
+    Done(Box<Queuing>),
     /// A prompt with its ID has been recorded, so it's been sent and can't change.
     AlreadySent,
+}
+
+/// What queuing a prompt left.
+pub struct Queuing {
+    /// The session as queuing left it, and whether anything changed.
+    pub reading: Reading,
+    /// The record of the account the session names, when queuing it changed when the account was last used.
+    pub account: Option<Account>,
 }
 
 /// What asking to change a queued prompt did.
@@ -43,10 +51,12 @@ impl Store {
         if !queue.iter().any(|queued| queued.client_msg_id == prompt.client_msg_id) {
             queue.push(prompt.clone());
         }
+        let changed = write_queue(&tx, id, &queue)?;
         // Queuing it is when the person sent it, rather than when the hub does.
-        let queued = write_queue(&tx, id, &queue, Some(super::now_ms()))?;
+        let account = if changed { super::sent::note_active(&tx, id, super::now_ms())? } else { None };
+        let session = super::reading::session_on(&tx, id)?;
         tx.commit()?;
-        Ok(Queued::Done(Box::new(queued)))
+        Ok(Queued::Done(Box::new(Queuing { reading: Reading { session, changed }, account })))
     }
 
     /// Changes the text of the prompt queued under `client_msg_id`, which keeps its place and its files. One that's
@@ -70,7 +80,7 @@ impl Store {
         if !queued.prompt.says_or_carries() {
             return Ok(Changed::WouldBeEmpty);
         }
-        Ok(Changed::Done(Box::new(write_queue(&conn, id, &queue, None)?)))
+        Ok(Changed::Done(Box::new(rewrite_queue(&conn, id, &queue)?)))
     }
 
     /// Takes the prompt with this ID out of the queue, if it's there.
@@ -78,7 +88,7 @@ impl Store {
         let conn = lock(&self.writer);
         let mut queue = read_queue(&conn, id)?;
         queue.retain(|queued| queued.client_msg_id != *client_msg_id);
-        write_queue(&conn, id, &queue, None)
+        rewrite_queue(&conn, id, &queue)
     }
 
     /// The prompt to send next, if any.
@@ -141,20 +151,14 @@ fn read_queue(conn: &Connection, id: &SessionId) -> Result<Vec<QueuedPrompt>, St
     Ok(queue_from(&json)?)
 }
 
-/// Saves the queue only if it changed, so the revision moves only then, and reads the session back. `sent_at_ms` is
-/// when the person sent what changed it, which becomes when they were last active, if it did change.
-fn write_queue(
-    conn: &Connection,
-    id: &SessionId,
-    queue: &[QueuedPrompt],
-    sent_at_ms: Option<i64>,
-) -> Result<Reading, StoreError> {
+/// Saves the queue only if it changed, so the revision moves only then, and says whether it did.
+fn write_queue(conn: &Connection, id: &SessionId, queue: &[QueuedPrompt]) -> Result<bool, StoreError> {
     let json = serde_json::to_string(queue)?;
-    let changed =
-        conn.execute("UPDATE sessions SET queued = ?1 WHERE id = ?2 AND queued <> ?1", params![json, id.as_str()])? > 0;
-    if changed && let Some(sent_at_ms) = sent_at_ms {
-        super::sent::note_active(conn, id, sent_at_ms)?;
-    }
-    let session = super::reading::session_on(conn, id)?;
-    Ok(Reading { session, changed })
+    Ok(conn.execute("UPDATE sessions SET queued = ?1 WHERE id = ?2 AND queued <> ?1", params![json, id.as_str()])? > 0)
+}
+
+/// Saves the queue only if it changed, and reads the session back, as a change the person didn't send leaves it.
+fn rewrite_queue(conn: &Connection, id: &SessionId, queue: &[QueuedPrompt]) -> Result<Reading, StoreError> {
+    let changed = write_queue(conn, id, queue)?;
+    Ok(Reading { session: super::reading::session_on(conn, id)?, changed })
 }

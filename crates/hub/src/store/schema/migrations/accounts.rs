@@ -59,3 +59,18 @@ pub(super) const ACCOUNTS: &str = r"
         UPDATE sessions SET rev = (SELECT value FROM counters WHERE name = 'rev') WHERE rowid = NEW.rowid;
     END;
 ";
+
+/// When the person last sent something to an agent under each account, which its record shows, so a client can say
+/// when it was last used. Filled in for what came before from the sessions that name it, each of which names the
+/// account its agent's newest launch ran under. Only an account that gets a time is updated, so only its revision
+/// moves, and a client's next list takes it.
+pub(super) const USED_AT: &str = r"
+    ALTER TABLE accounts ADD COLUMN used_at_ms INTEGER;
+    UPDATE accounts SET used_at_ms = used.at
+        FROM (
+            SELECT account_id, max(user_active_at_ms) AS at FROM sessions
+                WHERE account_id IS NOT NULL AND user_active_at_ms IS NOT NULL
+                GROUP BY account_id
+        ) AS used
+        WHERE used.account_id = accounts.id;
+";

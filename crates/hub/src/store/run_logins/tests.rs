@@ -50,11 +50,41 @@ fn a_run_given_a_login_is_filed_under_its_account_and_one_given_none_stops_the_c
     let named = account_of_s(&store);
     let given_none = store.file_run_login(&s, RunId::new(2)).unwrap();
 
-    assert_eq!(filed, RunLogin { account: Some("given".into()), session_changed: true });
-    assert_eq!(again, RunLogin { account: Some("given".into()), session_changed: false });
+    assert_eq!(filed, RunLogin { account: Some("given".into()), session_changed: true, account_changed: None });
+    assert_eq!(again, RunLogin { account: Some("given".into()), session_changed: false, account_changed: None });
     assert_eq!(named, Some("given".into()));
-    assert_eq!(given_none, RunLogin { account: None, session_changed: true });
+    assert_eq!(given_none, RunLogin { account: None, session_changed: true, account_changed: None });
     assert_eq!(account_of_s(&store), None);
+}
+
+#[test]
+fn a_run_given_a_login_after_the_person_sent_its_agent_something_is_when_the_logins_account_was_last_used() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_a_login(dir.path());
+    let s = SessionId::from("s");
+    let sent = store.append(&s, None, &crate::store::events::tests::prompt("go", 0), None, None, None).unwrap();
+    store.record_run_login(&s, RunId::new(1), &"given".into()).unwrap();
+
+    let filed = store.file_run_login(&s, RunId::new(1)).unwrap();
+    let again = store.file_run_login(&s, RunId::new(1)).unwrap();
+
+    assert_eq!(filed.account_changed.and_then(|account| account.used_at_ms), Some(sent.event.ts_ms));
+    assert_eq!(again.account_changed, None, "filing the same run again changes nothing");
+}
+
+#[test]
+fn a_run_given_a_login_its_account_was_used_after_in_another_chat_leaves_that_later_use() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_a_login(dir.path());
+    let s = SessionId::from("s");
+    store.append(&s, None, &crate::store::events::tests::prompt("go", 0), None, None, None).unwrap();
+    lock(&store.writer).execute("UPDATE accounts SET used_at_ms = ?", [i64::MAX]).unwrap();
+    store.record_run_login(&s, RunId::new(1), &"given".into()).unwrap();
+
+    let filed = store.file_run_login(&s, RunId::new(1)).unwrap();
+
+    assert_eq!(filed.account_changed, None);
+    assert_eq!(store.account(&"given".into()).unwrap().unwrap().used_at_ms, Some(i64::MAX));
 }
 
 #[test]
@@ -67,7 +97,7 @@ fn a_run_given_no_login_leaves_the_chat_naming_the_account_its_worker_said() {
 
     let filed = store.file_run_login(&"s".into(), RunId::new(1)).unwrap();
 
-    assert_eq!(filed, RunLogin { account: None, session_changed: false });
+    assert_eq!(filed, RunLogin { account: None, session_changed: false, account_changed: None });
     assert_eq!(account_of_s(&store), worker_said.id);
 }
 

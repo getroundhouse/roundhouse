@@ -19,7 +19,7 @@ use tracing::{error, warn};
 
 use super::{Command, LiveSession, LiveState};
 use crate::hub::Hub;
-use crate::store::{Changed, Queued, Reading};
+use crate::store::{Changed, Queued, Queuing, Reading};
 
 #[cfg(test)]
 mod tests;
@@ -101,14 +101,19 @@ impl LiveSession {
             })
             .await?
         };
-        let Queued::Done(reading) = queued else {
+        let Queued::Done(queuing) = queued else {
             return Err(ApiError::new(ErrorCode::Conflict, "that prompt has already been sent"));
         };
-        // Queuing it moved when the person last did something in its workspace, if it changed the queue.
+        let Queuing { reading, account } = *queuing;
+        // Queuing it moved when the person last did something in its workspace, if it changed the queue, and maybe
+        // when its account was last used.
         let moved = reading.changed;
-        let session = self.changed_queue(*reading);
+        let session = self.changed_queue(reading);
         if moved {
             hub.announce_workspace(&self.workspace_id).await;
+        }
+        if let Some(account) = account {
+            hub.notify(HubNotice::Account(account));
         }
         // The turn may have ended while this was on its way.
         if self.ready_for_queue() {

@@ -6,7 +6,7 @@ use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 
 use super::approvals::note_approvals;
 use super::prompts::note_prompts;
-use super::sent::note_sent;
+use super::sent::{Sent, note_sent};
 use super::subagents::note_subagents;
 use super::{Appended, Store, StoreError, lock, now_ms, place_column, place_of, seq_column, seq_of, text_of};
 
@@ -108,8 +108,8 @@ fn change_session(
 impl Appended {
     /// The event recorded before under the same `client_msg_id`, which recording it again leaves as it was.
     fn already_recorded(event: SessionEvent) -> Self {
-        let (dequeued, by_the_person, untaken, approvals) = (false, false, None, None);
-        Appended { event, duplicate: true, dequeued, by_the_person, untaken, approvals, subagents: Vec::new() }
+        let (dequeued, by_the_person, account, untaken, approvals) = (false, false, None, None, None);
+        Appended { event, duplicate: true, dequeued, by_the_person, account, untaken, approvals, subagents: Vec::new() }
     }
 }
 
@@ -186,7 +186,7 @@ fn append_in(tx: &Connection, session_id: &SessionId, recording: Recording<'_>) 
         params![seq_column(seq), ts_ms, session_id.as_str()],
     )?;
     change_session(tx, session_id, seq, ts_ms, change.unwrap_or_default())?;
-    let (dequeued, by_the_person) = note_sent(tx, session_id, ts_ms, run, body, client_msg_id)?;
+    let Sent { dequeued, by_the_person, account } = note_sent(tx, session_id, ts_ms, run, body, client_msg_id)?;
     let untaken = note_prompts(tx, session_id, seq, body)?;
     let approvals = note_approvals(tx, session_id, seq, body)?;
     let event = SessionEvent {
@@ -201,7 +201,7 @@ fn append_in(tx: &Connection, session_id: &SessionId, recording: Recording<'_>) 
     };
     let subagents = note_subagents(tx, &event)?;
     clear_answer(tx, session_id, body)?;
-    Ok(Appended { event, duplicate: false, dequeued, by_the_person, untaken, approvals, subagents })
+    Ok(Appended { event, duplicate: false, dequeued, by_the_person, account, untaken, approvals, subagents })
 }
 
 impl Store {
