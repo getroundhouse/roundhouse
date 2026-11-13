@@ -92,11 +92,18 @@ impl Request for RestoreWorkspace {
     }
 }
 
+/// Removes the worktree at `path`, a workspace's own or another made for it, and keeps its branch. Fails with
+/// `NeedsForce` if that would lose work, unless `force`. Stops watching the branches of another made for it.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct RemoveWorkspace {
     pub repo_path: String,
     pub path: String,
     pub force: bool,
+    /// The workspace's own worktree, when `path` is another made for it, which is then moved aside to be deleted
+    /// where the workspace's own would be, since every archive in the repository clears what waits there. Left out
+    /// for the workspace's own.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub own: Option<String>,
 }
 
 impl Request for RemoveWorkspace {

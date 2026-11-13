@@ -94,4 +94,11 @@ pub enum WorkerFrame {
     Branches {
         branches: Branches,
     },
+    /// What the branches of another of the workspace's worktrees are now, whole, as
+    /// [`WatchChildBranches`](super::WatchChildBranches) asked, so a frame replaces every one before it
+    /// for that worktree.
+    ChildBranches {
+        path: String,
+        branches: Branches,
+    },
 }

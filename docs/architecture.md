@@ -245,6 +245,8 @@ A client's copy of a hub's state has to stay correct through lag, reconnects and
 | ID | Chosen by | Unique within |
 |---|---|---|
 | Repository, workspace, session, comment | The hub, as a UUID | Everything, so one sidebar can merge several hubs |
+| Child worktree | The hub, as a UUID, since a path names a new one once the last there is removed. *Unconfirmed.* *Not built* | Everything |
+| Ask key | The worker, for an ask that makes a worktree, as a UUID or the agent's ID for the tool call, so asking each new hub again makes it once. *Unconfirmed.* *Not built* | A session, as a tool use is |
 | `seq`, run | The hub | A session |
 | Place | The hub | The agent's own events, or one subagent's, in a session |
 | Revision | The hub | A hub |

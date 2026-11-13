@@ -100,7 +100,8 @@ impl Writing {
             | WorkerFrame::AgentTail { .. }
             | WorkerFrame::Reply { .. }
             | WorkerFrame::Ask { .. }
-            | WorkerFrame::Branches { .. } => {}
+            | WorkerFrame::Branches { .. }
+            | WorkerFrame::ChildBranches { .. } => {}
         }
     }
 
@@ -144,7 +145,8 @@ fn number_of(frame: &mut WorkerFrame) -> Option<&mut Option<u64>> {
         | WorkerFrame::AgentTail { .. }
         | WorkerFrame::Reply { .. }
         | WorkerFrame::Ask { .. }
-        | WorkerFrame::Branches { .. } => None,
+        | WorkerFrame::Branches { .. }
+        | WorkerFrame::ChildBranches { .. } => None,
     }
 }
 
