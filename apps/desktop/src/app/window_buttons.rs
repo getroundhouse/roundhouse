@@ -161,8 +161,6 @@ impl Glyphs {
 #[cfg(target_os = "windows")]
 mod system {
     use gpui_kit::Window;
-    use raw_window_handle::{HasWindowHandle, RawWindowHandle};
-    use windows_sys::Win32::Foundation::HWND;
     use windows_sys::Win32::UI::WindowsAndMessaging::{
         PostMessageW, SC_CLOSE, SC_MAXIMIZE, SC_MINIMIZE, SC_RESTORE, WM_SYSCOMMAND,
     };
@@ -178,9 +176,7 @@ mod system {
             Button::Restore => SC_RESTORE,
             Button::Close => SC_CLOSE,
         };
-        let Ok(handle) = HasWindowHandle::window_handle(window) else { return };
-        let RawWindowHandle::Win32(handle) = handle.as_raw() else { return };
-        let hwnd = handle.hwnd.get() as HWND;
+        let Some(hwnd) = crate::window_handle::hwnd(window) else { return };
         // SAFETY: it takes this window's handle, which is open while the window is drawn, and a message that carries
         // no pointer.
         unsafe { PostMessageW(hwnd, WM_SYSCOMMAND, command as usize, 0) };
