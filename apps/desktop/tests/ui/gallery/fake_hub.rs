@@ -245,7 +245,9 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         | R::SessionCallOffWait(_)
         | R::SessionMarkRead { .. }
         | R::SessionMarkUnread { .. }
-        | R::SessionRename { .. } => Err(read_only("change anything")),
+        | R::SessionRename { .. }
+        | R::AccountConnect(_)
+        | R::AccountDisconnect(_) => Err(read_only("change anything")),
         // So a screen can show a workspace waiting for its new title. One on its way out is the world's to say.
         R::WorkspaceRegenerateTitle { .. } => Ok(Outcome::Never),
         // The app reads whose account it is from the records, so a screen that asks some other way is wrong.
