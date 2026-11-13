@@ -179,6 +179,8 @@ impl Transcript {
         for seq in rows {
             self.remeasure(seq, cx);
         }
+        // What's asked in the composer's place names the subagent that asks, by its record.
+        self.tell_the_panel(cx);
         // The tab draws what its subagent was asked above its first row, and its report in its last. Its last words go
         // once its report says them, from whichever row they're in.
         if shown {

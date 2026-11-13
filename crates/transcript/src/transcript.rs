@@ -59,7 +59,7 @@ pub(crate) struct Model {
     /// Where the workspace's pull request stands on GitHub, which a line for a wait on it says. `None` until it's
     /// known, and while there's none or nothing to say of it.
     pub pull_request: Option<PullRequestStanding>,
-    /// The approvals the session's record says its agent is waiting on, which the cards and the question asked follow.
+    /// The approvals the session's record says its agent is waiting on, which a plan's card and the panel follow.
     /// None from a hub that doesn't say, whose are found among what's loaded.
     pub approvals: Option<RecordedApprovals>,
     /// Each subagent's record, by the call that started it, as the hub keeps them. None from a hub that doesn't. Each is
@@ -131,9 +131,10 @@ pub struct Transcript {
     /// Draws the time so far again while the agent works, and how long the cache has left while it doesn't.
     ticking: Option<Task<()>>,
     outline: outline::Outline,
-    /// The oldest question waiting on an answer, to be asked in the composer's place.
+    /// The oldest question or tool's use waiting on an answer, asked in the composer's place.
     asking: Option<Entity<QuestionPanel>>,
-    /// Where every question waiting on an answer is in the log. The transcript draws them once they're answered.
+    /// Where each request that's asked in the composer's place while it waits is in the log. The transcript draws a
+    /// question once it's answered.
     waiting: Vec<Seq>,
     /// Finding text in the chat, while its bar is open.
     finding: Option<Finding>,
@@ -240,7 +241,7 @@ impl Transcript {
         let changes = self.session.take_changes();
         let errors = self.session.take_errors();
         let (rows, loaded) = self.session.read(rows_and_loaded);
-        // A question opens and closes with an event, a row of its own rather than the tail, or is fetched alone.
+        // What's asked opens and closes with an event, a row of its own rather than the tail, or is fetched alone.
         let events = self.session.read(SessionLog::row_count);
         let events_changed = changes.rows.as_ref().is_some_and(|changed| changed.start < events);
         self.list.set_rows(rows, loaded);

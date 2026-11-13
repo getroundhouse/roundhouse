@@ -12,6 +12,7 @@ use gpui_kit::{
     SharedString, StatefulInteractiveElement as _, Styled, TestSupportExt as _, Window, div, px,
 };
 
+use client_core::Given;
 use client_core::calls::files::{file_name, numbered_lines};
 use client_core::calls::{EditFile, ReadFile, WriteFile, count};
 use look::{InRegion as _, Region, language};
@@ -137,6 +138,32 @@ fn edited(file: &EditFile, answer: Option<&Answer>) -> Vec<Section> {
     answer
         .and_then(Answer::hunks)
         .map_or_else(|| file.edits.iter().map(|(old, new)| diff::from_text(old, new)).collect(), diff::from_hunks)
+}
+
+/// What an edit or a write would do to its file, worked out from what it was given, for where it's asked about before
+/// it's made.
+pub(crate) struct ChangeAsked {
+    pub(crate) path: String,
+    sections: Rc<Vec<Section>>,
+}
+
+impl ChangeAsked {
+    /// What `given` would change, if it's an edit or a write.
+    pub(crate) fn of(given: &Given) -> Option<Self> {
+        let (path, sections) = match given {
+            Given::Edit(edit) => (edit.path, edited(edit, None)),
+            Given::Write(write) => (write.path, written(write, None)),
+            Given::Command(_) | Given::MainInput(_) => return None,
+        };
+        Some(Self { path: path.to_string(), sections: marks::marked(&Rc::new(sections)) })
+    }
+
+    /// A row for each of its lines, as a diff, as wide as its longest. Nothing in them is found, since what's asked
+    /// isn't in the transcript.
+    pub(crate) fn rows(&self, cx: &App) -> Vec<AnyElement> {
+        let (language, none) = (language(&self.path), Marks::default());
+        self.sections.iter().flat_map(|section| numbered::rows(language, section, &none, None, cx)).collect()
+    }
 }
 
 /// A file's lines in a block, under its path.

@@ -1,6 +1,6 @@
 //! Where focus goes in a workspace: to what's in front under the tabs, and in a chat, to what's in the composer's
-//! place, which is the question the agent is waiting on while there is one. Focus has to stay on something drawn,
-//! since the window's keys, such as `Ctrl-Tab`, reach nothing from what isn't.
+//! place, which is what the agent asks, a question or to use a tool, while it waits on one. Focus has to stay on
+//! something drawn, since the window's keys, such as `Ctrl-Tab`, reach nothing from what isn't.
 
 use gpui_kit::{Context, FocusHandle, Focusable as _, Window};
 
@@ -27,7 +27,7 @@ impl WorkspacePane {
         }
     }
 
-    /// Focuses what's in the composer's place: the question the agent is waiting on, or else the composer.
+    /// Focuses what's in the composer's place: what the agent asks while it waits on the person, or else the composer.
     pub fn focus_composer(&self, window: &mut Window, cx: &mut Context<Self>) {
         match self.transcript().and_then(|t| t.read(cx).question().cloned()) {
             Some(question) => window.focus(&question.focus_handle(cx), cx),
@@ -35,7 +35,7 @@ impl WorkspacePane {
         }
     }
 
-    /// Gives the question focus that's been put back on the composer behind it, such as by closing Settings or a
+    /// Gives what's asked there focus that's been put back on the composer behind it, such as by closing Settings or a
     /// dialog, since the window's keys don't reach anything from what isn't drawn.
     pub(super) fn keep_focus_drawn(&self, window: &mut Window, cx: &mut Context<Self>) {
         let question = self.transcript().and_then(|t| t.read(cx).question().cloned());
@@ -46,8 +46,8 @@ impl WorkspacePane {
         }
     }
 
-    /// Moves focus that was in the composer's place to what's there now, once a question comes or goes. Focus
-    /// anywhere else stays where it is, and it can only be in the composer's place in the pane showing.
+    /// Moves focus that was in the composer's place to what's there now, once something's asked there or answered.
+    /// Focus anywhere else stays where it is, and it can only be in the composer's place in the pane showing.
     pub(super) fn follow_question(&self, left: Option<&FocusHandle>, window: &mut Window, cx: &mut Context<Self>) {
         let was_there = self.composer.focus_handle(cx).contains_focused(window, cx)
             || left.is_some_and(|left| left.contains_focused(window, cx));

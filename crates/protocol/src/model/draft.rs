@@ -108,7 +108,9 @@ pub struct CommentDraft {
 }
 
 /// What's chosen and typed in answer to the question a chat's agent is waiting on, and not sent, kept on the hub so
-/// it's there after the app restarts, and in every client. Like a chat's draft, it's the person's.
+/// it's there after the app restarts, and in every client. Like a chat's draft, it's the person's. A client keeps one
+/// for a request to use a tool too, which it asks as one question whose answers are `client_core::ToolUseAnswer`'s,
+/// in their order, so one chosen in one client is the same one in every other.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct AnswerDraft {
     /// The question it answers, so what was typed for one that's gone is never taken for the next.
@@ -128,7 +130,8 @@ impl AnswerDraft {
 /// What's chosen and typed on one question.
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq, Eq)]
 pub struct AnswerSoFar {
-    /// The options chosen, by their place among the question's options.
+    /// The options chosen, by their place among the question's options. For a request to use a tool, `0` allows it and
+    /// `1` denies it, which a hub keeps for good, so those never change, and an answer added later goes after them.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub picked: Vec<u32>,
     /// What's typed in the row for another answer.

@@ -1,6 +1,6 @@
 # Full access and plan mode
 
-Every agent has full access, and never asks before using a tool, except in plan mode.
+Every agent has full access, and uses its tools without asking, except in plan mode, and for the few things its own CLI asks about whatever the mode.
 
 ## Why full access
 
@@ -15,7 +15,7 @@ When you'd rather see the route first, turn on plan mode. The agent works out a 
 
 - **`Shift-Tab` turns it on and off,** in the composer and in the new-workspace dialog. So does `Plan mode` in the menu the composer's `+` opens.
 - **The composer turns copper while it's on,** so it's plain which way a chat is working.
-- **A command waits for you.** In plan mode, an agent that wants to run something asks, in a card with `Allow` and `Deny`.
+- **A command waits for you.** In plan mode, an agent that wants to run something asks, in the composer's place, with `Allow` and `Deny`.
 - **Approving the plan goes back to full access,** and the agent carries it out.
 
 ![The composer in plan mode, with a prompt typed](../../spec/screens/plan-mode.png)
@@ -24,6 +24,10 @@ Plan mode belongs to the task at hand. A new chat keeps the model and effort of 
 
 A chat that's planning when its agent stops is still planning when the agent comes back, so a restart never lets through a change nobody approved.
 
-## Questions aren't approvals
+## What an agent with full access still asks
 
-An agent with full access can still ask you something, when it needs a decision only you can make. A question takes the composer's place until it's answered. [Answer its questions](../guides/answer-its-questions.md) says how.
+An agent with full access can still ask you something, when it needs a decision only you can make. A question takes the composer's place until it's answered.
+
+It also asks about what its own CLI won't do unasked in any mode. Claude asks before a command that removes something it can't check, such as an `rm -rf` whose target is only known once the command runs, and says why. One of its subagents' commands is asked about the same way.
+
+[Answer its questions](../guides/answer-its-questions.md) says how to answer each.

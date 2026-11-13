@@ -1,5 +1,6 @@
 //! A dot for each question, between arrows to the one before and after. A filled dot has an answer, and a ring
-//! goes round the one showing.
+//! goes round the one showing. In its place, where what's asked is one question, how many more requests wait behind
+//! it.
 
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::{ActiveTheme as _, IconName, Sizable as _, h_flex};
@@ -12,6 +13,16 @@ use look::{Hand as _, Off as _};
 use protocol::event::QuestionAnswer;
 
 use super::QuestionPanel;
+use super::heading::said;
+
+/// How many more requests wait to be asked once this one is answered, as a small detail, or nothing with none. It
+/// starts where the rows' numbers do.
+pub(super) fn more_waiting(more: usize, cx: &mut Context<QuestionPanel>) -> Option<AnyElement> {
+    let muted = cx.theme().muted_foreground;
+    let waiting =
+        |more| said("question-more-waiting", format!("{more} more waiting")).pl_2().text_xs().text_color(muted);
+    (more > 0).then(|| waiting(more).test_support().into_any_element())
+}
 
 /// Nothing when there's only one question, since there's nowhere to go.
 pub(super) fn pager(

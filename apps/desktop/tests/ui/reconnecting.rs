@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 use client_core::Client;
 use desktop::app::Connection;
 use desktop::busy::Busy;
-use gpui_kit::{AppContext as _, ElementId, SharedString, TestAppContext};
+use gpui_kit::{AppContext as _, SharedString, TestAppContext};
 use protocol::model::SessionStatus;
 
 use crate::support::{Diff, Stack, TIMEOUT, Ui};
@@ -224,8 +224,7 @@ fn an_approval_waiting_when_the_app_opens_can_be_answered(cx: &mut TestAppContex
     // The app opens after the question was asked, so it has to learn about it from history.
     let mut ui = Ui::open(cx, &stack);
     ui.wait("the workspace", |ui| ui.transcript().is_some());
-    let seq = ui.next_open_approval();
-    ui.click(ElementId::NamedInteger("allow".into(), seq));
+    ui.allow_tool_use();
     ui.wait("the tool to run", |ui| {
         ui.session_status() == Some(SessionStatus::Idle)
             && PathBuf::from(workspace.path.clone().unwrap()).join("answered.txt").exists()

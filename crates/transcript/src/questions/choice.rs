@@ -34,6 +34,11 @@ impl Choice {
         self.other = has_text;
     }
 
+    /// Takes back every option chosen, and leaves what's typed as it is.
+    pub(crate) fn take_back_options(&mut self) {
+        self.picked.clear();
+    }
+
     /// Where several answers are allowed, takes back what's typed, or chooses it again if there's any.
     pub(crate) fn toggle_typed(&mut self, has_text: bool) {
         self.other = !self.other && has_text;

@@ -49,7 +49,7 @@
 
   ![Working with work in the background](screens/working-background.png)
 
-- **The working line goes while the agent waits on you,** since the card says so, and when it comes back its time counts the wait too.
+- **The working line goes while the agent waits on you,** since what it asks says so, in the composer's place or on a plan's card, and when it comes back its time counts the wait too.
 - **A thought the agent is still writing is a muted line above the working line, with the icon its line will have once it's recorded and no mark of its own,** since the working line under it has one. A call it's still writing doesn't show until it's recorded, since it isn't running yet, and the working line says the agent is at work.
 
   **A thought still being written, above the working line.** *Unconfirmed.*
@@ -77,7 +77,7 @@
 
   ![A card across midnight](screens/turn-card-midnight.png)
 
-- **When one of the agent's requests to its model fails, a red card says so where it failed,** since that's where the agent stopped short, as an approval's card is amber since it waits on you. It's titled with what kind of failure it was, as the agent's CLI says apart from its words, which can change, such as `Usage limit reached`, `Couldn't sign in` or `The model's API is overloaded`. For a limit it says when the limit resets, as `Resets Thu 9:00 PM`, said as a turn's end says a time. Under that are the CLI's own words, which say what to do, with an address in them a link. A turn that ended on the card has no line of its own, since the card says why. A subagent's is in its tab, since the agent goes on without it.
+- **When one of the agent's requests to its model fails, a red card says so where it failed,** since that's where the agent stopped short, as a plan's card is amber since it waits on you. It's titled with what kind of failure it was, as the agent's CLI says apart from its words, which can change, such as `Usage limit reached`, `Couldn't sign in` or `The model's API is overloaded`. For a limit it says when the limit resets, as `Resets Thu 9:00 PM`, said as a turn's end says a time. Under that are the CLI's own words, which say what to do, with an address in them a link. A turn that ended on the card has no line of its own, since the card says why. A subagent's is in its tab, since the agent goes on without it.
 
   **A turn that failed on the account's usage limit, after the CLI said its model was changed.**
 
@@ -201,7 +201,7 @@
 - **Each file goes in the workspace's `.context/attachments/`, and the agent is told where, so it can open it then or later.** Git is told to ignore the folder, so the files never show as changes. Images up to 32 MB between them, and a text file up to 32 KB, also go in the prompt itself, so the agent sees them without opening anything. A longer text file is opened from where it is, so the agent can search it rather than read all of it.
 - **A file is known by its bytes rather than its name,** so the agent is never sent an image labelled as something it isn't, and a pasted TIFF, which some apps copy, goes as a PNG.
 - **What's typed and attached in a chat's composer is kept until it's sent,** by the hub, so it's there when the app opens again, whether it quit, restarted to update or stopped without quitting, and in any other client, so something started on one device can be finished on another. A change made in another client shows in the composer as it reaches the hub, with its files, unless something typed or attached here hasn't reached the hub yet. Then what's here goes on and replaces it, so nothing is undone as it's typed, and the last change to reach the hub wins. Typing that goes on is kept every half second, so an app that stops without quitting loses at most that much. Closing the chat lets go of it, files and all, so the chat's composer is empty if it's opened again. *Unconfirmed:* the half second, that closing the chat lets go of what's in its composer, and that what's on its way from here replaces a change made elsewhere meanwhile.
-- **Files stay with their chat until they're sent,** the way what's typed does, and a prompt that can't be sent comes back to its chat's composer, files and all. While the agent waits on a question, the question takes the composer's place, and what's typed and attached waits for it to go.
+- **Files stay with their chat until they're sent,** the way what's typed does, and a prompt that can't be sent comes back to its chat's composer, files and all. While the agent waits on a question, or on a request to use a tool, that takes the composer's place, and what's typed and attached waits for it to go.
 - **In the transcript, a prompt's images show small above its text, and a click opens one over the window, as big as it is, up to what fits.** Opening one moves nothing in the chat, so it shows wherever its prompt is, even at the bottom of the window, where a prompt jumped to from the outline goes. Escape or a click closes it. Other files show their name and size. The hub keeps each image, so every client shows it, and it's still there after the workspace is archived. Other files are only in the workspace, so archiving takes them with it.
 
   **The screenshot, opened.** *Unconfirmed.*
@@ -365,13 +365,13 @@ Every call is drawn the same way, as `look.md` says, and each kind fills in what
 
 ## Questions and approvals
 
-- **A question from the agent takes the composer's place until it's answered,** so it's answered where a reply would be typed, and the transcript keeps what was asked and what was answered. What's typed and attached in the composer waits for it to go, and so does any other question waiting, since they're asked in turn, oldest first. A plain Allow button would throw the question away. *Unconfirmed.*
+- **A question from the agent takes the composer's place until it's answered,** so it's answered where a reply would be typed, and the transcript keeps what was asked and what was answered. What's typed and attached in the composer waits for it to go, and so does any other question or request to use a tool waiting, since they're asked in turn, oldest first. A plain Allow button would throw the question away. *Unconfirmed.*
 
   **A question from the agent, with choices.** *Unconfirmed.*
 
   ![A question with choices](screens/question.png)
 
-- **What's chosen and typed in answer is kept until the question is answered,** by the hub, as what's in the composer is, so it's there when the app opens again, and in any other client, where a change made to it shows as it reaches the hub, unless something chosen or typed here hasn't reached the hub yet. The hub lets go of it as the question is answered, so it's still there if the answer can't be sent. Which question shows, and where the focus is, stay this app's. *Unconfirmed.*
+- **What's chosen and typed in answer is kept until the question is answered,** by the hub, as what's in the composer is, so it's there when the app opens again, and in any other client, where a change made to it shows as it reaches the hub, unless something chosen or typed here hasn't reached the hub yet. A choice that changes that way makes the panel ignore keys for the half second it does when it's just come, so an Enter meant for what was chosen here can't send what was chosen elsewhere. The hub lets go of it as the question is answered, so it's still there if the answer can't be sent. Which question shows, and where the focus is, stay this app's. *Unconfirmed.*
 - **It asks one question at a time:** its header and text, then each option on a numbered row, with what it means under it, and a last row, `0`, to type another answer into. A chosen row is lit, and where several can be chosen, a check marks each, and the typing row's checkbox takes back what's typed there. *Unconfirmed.*
 - **On the right under the options is the arrow that sends, and with more than one question, on the left, a dot for each, filled once it has an answer and ringed while it shows,** between arrows to the one before and after. Choosing the one answer a question takes goes on to the next without one. *Unconfirmed.*
 
@@ -394,14 +394,38 @@ Every call is drawn the same way, as `look.md` says, and each kind fills in what
 
 - **A question nobody answered says `Not answered` in the block,** whether it was skipped, left out when others were answered, or the turn stopped before anyone could. The line leaves out a question nobody answered, and says `Not answered` only when none of them was. *Unconfirmed.*
 - **What was answered is on the hub's record,** kept as the answers are passed to the agent, so every client shows the same, after a restart too. One answered before the hub kept answers shows only what was asked. *Unconfirmed.*
+- **A request to use a tool is asked in the composer's place too, as a question with two answers,** `Allow` and `Deny`, on numbered rows, so it's answered where the person is already looking, by the same keys, rather than on a card that has scrolled away. Its header is the tool, then what the subagent that asks is for, when one does, or its kind, or `Subagent` where its record says neither or hasn't come. Its text is what the request says the use is for, which for a command is the agent's own line about it, and `Run this command?`, `Make this edit?` or `Write this file?` where it says nothing, or `Use this tool?` for any other tool with nothing to say it by. It has no `×`, since denying it is one of its answers. *Unconfirmed.*
 
-**A command waiting to be allowed, in a chat that's planning,** since only an agent in plan mode asks before using a tool. *Unconfirmed.*
+  **A command waiting to be allowed, in a chat that's planning, with Allow chosen.** *Unconfirmed.*
 
-![A command waiting to be allowed, in a chat that's planning](screens/approval.png)
+  ![A command waiting to be allowed, in a chat that's planning](screens/approval.png)
+
+- **Under its text is the command, whole,** in the code font on the composer's surface, scrolling once it's taller than seven lines or so, since what's allowed is the command and not what the agent says it's for. An edit or a file to write shows what it would change, as a diff under the file's path, scrolling both ways as an edit's diff does in the chat, since what's allowed is the change. Any other tool shows what its call's line says of it, such as a URL, and where nothing says what the use is for, that is its text. Then why the agent asks, in its own words, as a small detail, when it says: an agent with full access asks only about what it won't do unasked in any mode, so the reason is what there is to judge. *Unconfirmed.*
+
+  **A removal one of the agent's subagents wants to run, which the agent asks about even with full access, and says why.** *Unconfirmed.*
+
+  ![A removal waiting to be allowed, asked about with full access](screens/approval-full-access.png)
+
+  **An edit to a file waiting to be allowed, which says nothing of what it's for: its file, and what it would change.** *Unconfirmed.*
+
+  ![An edit waiting to be allowed, with its diff](screens/approval-edit.png)
+
+- **Its `0` row takes what the agent should do instead,** which denies the request and tells the agent in those words, so a no can say what would be a yes. Enter in that row sends only what's typed there: with nothing typed it leaves the row, as Escape does, so a row that says it denies never allows. *Unconfirmed.*
+
+  **The removal again, with what to do instead typed, which denies it in those words, and two more requests waiting behind it.** *Unconfirmed.*
+
+  ![A request with what to do instead typed, and more waiting](screens/approval-denying.png)
+
+- **A chosen row waits for the arrow or Enter, as a question's does, and typing anything but a row's number takes it back,** so neither one key pressed by mistake nor the end of a sentence meant for the composer allows anything. The panel then ignores keys again for the half second it does when it's just come. *Unconfirmed.*
+- **The hub keeps which row is chosen and what's typed there,** as it does for a question, so both are there when the app opens again, and in any other client, and a row chosen in another client makes the panel ignore keys for half a second, as a question's does, so an Enter meant for `Deny` can't allow. *Unconfirmed.*
+- **When what's asked is one question, as a tool's use always is, and more requests wait behind it, the bottom left says how many,** such as `2 more waiting`, where the dots would be, since several subagents can ask at once, and each is asked in turn. *Unconfirmed.*
+- **Once it's no longer waiting, a request to use a tool leaves no row of its own.** The call's line is what the transcript keeps of it, where the agent made it, wherever that's drawn, in the chat or in a subagent's work, and the line after it says what became of the request, `Denied` or `Approval cancelled`, as it did when the request was a card. *Unconfirmed.*
+
+- **A plan waiting to be approved is a card in the transcript,** in amber, with the plan and its two buttons, since the plan is what's read, and it's too long for the composer's place. *Unconfirmed.*
 
 ## The model and plan mode
 
-- **Every agent has full access, and never asks before using a tool, except in plan mode.** Agents run side by side, and one that stopped to ask before each step would hold up its work until someone came back to it.
+- **Every agent has full access, and never asks before using a tool, except in plan mode.** Agents run side by side, and one that stopped to ask before each step would hold up its work until someone came back to it. An agent still asks about what its own CLI won't do unasked in any mode, such as Claude's check for a removal it can't rule out as dangerous, and says why. *Unconfirmed:* what it still asks about.
 - **`Shift-Tab` in the composer turns plan mode on and off, and so does Plan mode in the menu the composer's `+` opens,** with no menu of modes. In plan mode the agent works out a plan and asks before changing anything, and approving its plan goes back to full access.
 
   **A plan waiting to be approved.** *Unconfirmed.*

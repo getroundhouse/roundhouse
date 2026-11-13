@@ -51,6 +51,7 @@ mod subagents;
 mod support;
 mod title_strip;
 mod titles;
+mod tool_use;
 mod tools;
 mod turn_card;
 mod unread;
