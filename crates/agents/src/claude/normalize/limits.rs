@@ -18,8 +18,9 @@ pub(super) fn rate_limit_event(value: &Value) -> Parsed {
 }
 
 /// Each window the line says how much is used of, shortest first. It names every window under `unifiedWindows`, and
-/// a line without that names one, as `rateLimitType`. A window with no name here is left out, such as the one for
-/// use past the plan's limit, which repeats the week's.
+/// a line without that names one, as `rateLimitType`. A window with no name here is left out. That includes a model's
+/// own week, such as `seven_day_overage_included`, which the CLI's code calls Fable's: the line names no model, and
+/// what `get_usage` answers says whose each is, as its provider labels it.
 fn limits(info: &Value) -> Vec<UsageLimit> {
     let mut limits: Vec<UsageLimit> = match info.get("unifiedWindows").and_then(Value::as_object) {
         Some(windows) => windows.iter().filter_map(|(name, window)| limit(name, window)).collect(),
@@ -82,7 +83,7 @@ mod tests {
             "status": "allowed", "resetsAt": 1_794_891_600, "rateLimitType": "seven_day",
             "unifiedWindows": {
                 "seven_day": {"utilization": 0.04, "resetsAt": 1_794_891_600, "status": "allowed"},
-                "seven_day_overage_included": {"utilization": 0.04, "resetsAt": 1_794_891_600, "status": "allowed"},
+                "seven_day_overage_included": {"utilization": 0.75, "resetsAt": 1_794_800_000, "status": "allowed_warning"},
                 "five_hour": {"utilization": 0.615, "resetsAt": 1_794_300_000, "status": "allowed"},
             },
         });

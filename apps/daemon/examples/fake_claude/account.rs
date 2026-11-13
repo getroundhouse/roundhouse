@@ -51,14 +51,15 @@ pub(crate) fn context_usage(conversation: &Path) -> Value {
 }
 
 /// The line the real CLI writes once its first turn has asked the model for something, saying how much of the
-/// account's week is used. It writes it once a process, so a later turn has to ask with `get_usage`.
+/// account's week is used, and of Fable's own week, which it names `seven_day_overage_included`, naming no model. It
+/// writes it once a process, so a later turn has to ask with `get_usage`.
 pub(crate) fn rate_limit_event(session_id: &str) -> Value {
     json!({"type": "rate_limit_event", "session_id": session_id, "rate_limit_info": {
         "status": "allowed", "resetsAt": RESETS_AT_S, "rateLimitType": "seven_day", "overageStatus": "allowed",
         "isUsingOverage": false,
         "unifiedWindows": {
             "seven_day": {"utilization": 0.04, "resetsAt": RESETS_AT_S, "status": "allowed"},
-            "seven_day_overage_included": {"utilization": 0.04, "resetsAt": RESETS_AT_S, "status": "allowed"},
+            "seven_day_overage_included": {"utilization": 0.12, "resetsAt": RESETS_AT_S, "status": "allowed"},
         },
     }})
 }
@@ -75,11 +76,15 @@ pub(crate) fn says_limits(conversation: &Path) -> bool {
 }
 
 /// What `get_usage` answers: the week's limit, as `rate_limit_event` says it but as a whole percent and an ISO time, and
-/// more that the worker doesn't keep, such as what the account was used for. A login with no limits says so.
+/// the usage endpoint's own rows, of the week and of Fable's own week by the model's label, and more that the worker
+/// doesn't keep, such as what the account was used for. A login with no limits says so. The label is whatever
+/// `$FAKE_CLAUDE_STATE/model-label` holds, if it's there, so a test can have the provider label the model anew.
 pub(crate) fn usage(conversation: &Path) -> Value {
     if in_state(conversation, "no-limits") {
         return json!({"subscription_type": null, "rate_limits_available": false, "rate_limits": null});
     }
+    let label = conversation.parent().and_then(|state| std::fs::read_to_string(state.join("model-label")).ok());
+    let label = label.as_deref().unwrap_or("Fable");
     json!({
         "session": {"total_cost_usd": 0.0, "model_usage": {}},
         "subscription_type": "max",
@@ -87,7 +92,15 @@ pub(crate) fn usage(conversation: &Path) -> Value {
         "rate_limits": {
             "five_hour": null,
             "seven_day": {"utilization": 4, "resets_at": "2100-01-01T00:00:00.000000+00:00", "limit_dollars": null},
-            "model_scoped": [],
+            "model_scoped": [{"display_name": label, "utilization": 12, "resets_at": "2100-01-01T00:00:00.000000+00:00"}],
+            "limits": [
+                {"kind": "weekly_all", "group": "weekly", "percent": 4, "resets_at": "2100-01-01T00:00:00.000000+00:00",
+                 "scope": null, "severity": "normal", "is_active": true},
+                {"kind": "weekly_scoped", "group": "weekly", "percent": 12,
+                 "resets_at": "2100-01-01T00:00:00.000000+00:00",
+                 "scope": {"model": {"display_name": label, "id": null}, "surface": null}, "severity": "normal",
+                 "is_active": false},
+            ],
         },
         "behaviors": {"day": {"request_count": 1, "session_count": 1, "skills": [{"name": "deploy"}]}},
     })
