@@ -210,7 +210,8 @@ impl Hub {
         }
     }
 
-    /// Asks the workspace's worker, and keeps the answer only as a [`Title`], since a model can answer anything.
+    /// Asks the workspace's worker, under the login a launch there would get, and keeps the answer only as a [`Title`],
+    /// since a model can answer anything.
     async fn title_for(
         self: &Arc<Self>,
         workspace: &WorkspaceId,
@@ -219,7 +220,8 @@ impl Hub {
         images: Vec<NewAttachment>,
     ) -> Result<Title, ApiError> {
         let link = self.ensure_worker(workspace).await?;
-        let title = link.call(TitleFor { agent, prompt, images, login: None }).await?.title;
+        let login = self.login_for(&self.workspace(workspace).await?, agent).await?.map(|handed| handed.login);
+        let title = link.call(TitleFor { agent, prompt, images, login }).await?.title;
         Title::from_first_line(&title).ok_or_else(|| ApiError::new(ErrorCode::Worker, "the worker gave an empty title"))
     }
 

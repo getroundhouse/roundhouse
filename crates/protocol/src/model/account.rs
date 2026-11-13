@@ -42,8 +42,8 @@ impl AgentAccount {
 }
 
 /// An account agents run under, as a record the hub keeps, so every client shows the same of it and it's there once
-/// the agents have gone. Who it is comes from the worker, read each time an agent under it launches, and for a login
-/// the hub holds, from the hub's record of that login too, since a token doesn't say whose it is. What's left of its
+/// the agents have gone. Who it is comes from the worker, read each time an agent under it launches, or for a login
+/// the hub holds, from the hub's record of that login alone, since a token doesn't say whose it is. What's left of its
 /// limits is what any agent under it last heard, in whichever workspace, since a limit is the account's rather than a
 /// session's. An adapter's account has a record only for a login that can be told from another, and the hub's has one
 /// for each login it was given, which stays once the login is disconnected. Who it is, from `model_provider` to

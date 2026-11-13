@@ -394,4 +394,6 @@ pub(super) const MIGRATIONS: &[&str] = &[
     workspaces::CHILD_WORKTREES,
     // How each session's newest turn ended, which its record shows, in `replies`.
     replies::REPLY_OUTCOME,
+    // The account whose login the hub gave each run it launched under one, in `logins`.
+    logins::RUNS,
 ];

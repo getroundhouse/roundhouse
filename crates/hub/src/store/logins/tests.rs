@@ -12,18 +12,31 @@ fn connecting<'a>(id: &'a AccountId, agent: AgentKind, file: &'a LoginFile) -> C
 }
 
 #[test]
-fn the_logins_held_for_a_kind_are_only_those_held_and_of_that_kind() {
+fn the_logins_held_for_a_kind_are_only_those_held_and_of_that_kind_the_newest_first() {
     let dir = tempfile::tempdir().unwrap();
     let store = open_in(dir.path());
-    let (held, gone, other) = (LoginFile::new(), LoginFile::new(), LoginFile::new());
-    store.connect_login(&connecting(&"held".into(), AgentKind::Claude, &held)).unwrap();
+    let (gone, other) = (LoginFile::new(), LoginFile::new());
+    // So the newest first is neither the rows' order, nor its reverse, nor the IDs' either way.
+    let held = [("a", 300), ("m", 500), ("z", 100)].map(|(id, connected_at_ms)| {
+        let file = LoginFile::new();
+        store
+            .connect_login(&Connecting { connected_at_ms, ..connecting(&id.into(), AgentKind::Claude, &file) })
+            .unwrap();
+        (AccountId::from(id), file, connected_at_ms)
+    });
     store.connect_login(&connecting(&"gone".into(), AgentKind::Claude, &gone)).unwrap();
     store.clear_login(&"gone".into()).unwrap();
     store.connect_login(&connecting(&"other".into(), AgentKind::Unknown, &other)).unwrap();
 
-    let listed = store.held_logins(AgentKind::Claude).unwrap();
+    let listed: Vec<_> = store
+        .held_logins(AgentKind::Claude)
+        .unwrap()
+        .into_iter()
+        .map(|held| (held.account, held.file, held.login.connected_at_ms))
+        .collect();
 
-    assert_eq!(listed, [("held".into(), held)]);
+    let [a, m, z] = held;
+    assert_eq!(listed, [m, a, z]);
 }
 
 #[test]
@@ -43,7 +56,7 @@ fn a_row_naming_a_file_the_hub_doesnt_make_or_with_no_connect_time_holds_no_logi
 
     assert_eq!(held, [None, None]);
     assert!(rows.iter().all(|row| *row == LoginRow { id_from: IdFrom::Hub(AgentKind::Claude), file: None }));
-    assert_eq!(store.held_logins(AgentKind::Claude).unwrap(), []);
+    assert!(store.held_logins(AgentKind::Claude).unwrap().is_empty());
     assert_eq!(store.login_files().unwrap().len(), 2);
     assert!(store.login_files().unwrap().iter().all(|(_, file)| file.is_none()));
 }
