@@ -32,8 +32,7 @@ pub struct AgentDescription {
     /// The login a hub can hold for an account of this kind and hand to the workers it launches agents on. `None` for a
     /// kind a hub can hold none for, whose agents run under the login on their worker's machine, and from a hub older
     /// than this. It describes the kind's login, and doesn't say this hub keeps logins: one that doesn't refuses
-    /// `account_connect` as `Unsupported`, which a client still has to expect. Nothing reads it yet: "Agent accounts"
-    /// in `docs/architecture.md` plans the hub that does.
+    /// `account_connect` as `Unsupported`, which a client still has to expect.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub login: Option<LoginDescription>,
 }

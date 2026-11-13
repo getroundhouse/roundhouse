@@ -7,6 +7,7 @@ mod comments;
 mod drafts;
 mod first;
 mod hub_settings;
+mod logins;
 mod providers;
 mod subagents;
 mod tools;
@@ -386,4 +387,6 @@ pub(super) const MIGRATIONS: &[&str] = &[
     drafts::NEW_WORKSPACE_DRAFT,
     // About how many tokens each subagent's conversation holds, which its record shows.
     subagents::CONTEXT_TOKENS,
+    // The logins the hub holds for agents' accounts, on the accounts' rows, in `logins`.
+    logins::HELD,
 ];

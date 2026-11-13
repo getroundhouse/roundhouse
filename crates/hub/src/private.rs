@@ -1,7 +1,7 @@
 //! Files and directories that only this user can open, as the data directory and what's in it are. Windows has no
 //! modes: what's created there gets its directory's permissions, which under a user's profile keep other users out.
 
-use std::fs::{DirBuilder, OpenOptions};
+use std::fs::{DirBuilder, File, OpenOptions};
 use std::io;
 use std::path::Path;
 
@@ -26,4 +26,23 @@ pub(crate) fn file_options() -> OpenOptions {
     }
     #[cfg(windows)]
     OpenOptions::new()
+}
+
+/// Makes a name given or taken in `dir` last through a power cut. Not on Windows, which has no way to ask for that
+/// through std: a directory can't be opened as a file there, so this would fail.
+pub(crate) fn sync_dir(dir: &Path) -> io::Result<()> {
+    if cfg!(windows) {
+        return Ok(());
+    }
+    File::open(dir).and_then(|handle| handle.sync_all())
+}
+
+/// Creates `dir`, as [`create_dir_all`] does, and has its name last through a power cut, or what's kept in it would go
+/// with it. Nothing for one that's there.
+pub(crate) fn create_dir_lasting(dir: &Path) -> io::Result<()> {
+    if dir.is_dir() {
+        return Ok(());
+    }
+    create_dir_all(dir)?;
+    dir.parent().map_or(Ok(()), sync_dir)
 }

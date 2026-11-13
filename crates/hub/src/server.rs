@@ -7,8 +7,8 @@ use std::sync::atomic::Ordering;
 use parking_lot::Mutex;
 use protocol::Build;
 use protocol::client::{
-    ApiError, ClientRequest, ClientResponse, ErrorCode, Hello, HelloReply, HubFrame, ReplyOutcome, admin, agent,
-    attachments, comments, drafts, files, log, new_workspace, queue, records, sessions, subscriptions, waits,
+    ApiError, ClientRequest, ClientResponse, ErrorCode, Hello, HelloReply, HubFrame, ReplyOutcome, accounts, admin,
+    agent, attachments, comments, drafts, files, log, new_workspace, queue, records, sessions, subscriptions, waits,
     workspaces,
 };
 use protocol::frame::{self, Call};
@@ -324,9 +324,8 @@ async fn handle(
             C::NewWorkspaceMade(Box::new(hub.new_workspace_create(made_of, client_request_id).await?))
         }
         R::SessionAccount(sessions::SessionAccount { id }) => C::SessionAccount(hub.session_account(id).await?),
-        R::AccountConnect(_) | R::AccountDisconnect(_) => {
-            return Err(ApiError::new(ErrorCode::Unsupported, "this hub doesn't hold agents' logins yet"));
-        }
+        R::AccountConnect(asked) => C::Account(hub.account_connect(asked).await?),
+        R::AccountDisconnect(accounts::AccountDisconnect { id }) => C::Account(hub.account_disconnect(id).await?),
         R::SessionQueue(queue::SessionQueue { id, client_msg_id, prompt }) => {
             C::Session(hub.session_queue(id, client_msg_id, prompt).await?)
         }

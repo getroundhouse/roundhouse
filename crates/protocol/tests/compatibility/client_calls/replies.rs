@@ -61,13 +61,14 @@ fn every_reply_of_the_hub_itself_or_listing_its_records_keeps_its_form() {
         login: None,
         email: None,
         name: Some("Work".into()),
+        login_agent: None,
         limits: vec![],
         held_login: None,
         rev: Rev::new(2),
     };
     answered(
         ClientResponse::Account(account),
-        r#"{"result":"account","id":"claude-1","model_provider":null,"plan":null,"login":null,"email":null,"name":"Work","limits":[],"held_login":null,"rev":2}"#,
+        r#"{"result":"account","id":"claude-1","model_provider":null,"plan":null,"login":null,"email":null,"name":"Work","login_agent":null,"limits":[],"held_login":null,"rev":2}"#,
     );
     let repo = Repo { id: "r".into(), name: "r".into(), path: "/r".into(), created_at_ms: 1, rev: Rev::new(2) };
     answered(

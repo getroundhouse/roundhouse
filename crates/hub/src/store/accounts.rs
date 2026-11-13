@@ -5,6 +5,7 @@
 use protocol::model::{Account, AccountId, AgentAccount, LimitWindow, Rev, SessionId, UsageLimit};
 use rusqlite::{Connection, OptionalExtension as _, params};
 
+use super::logins::{IdFrom, LOGIN_COLUMNS, login_at};
 use super::{Store, StoreError, from_text, lock, rev_of, text_of};
 
 #[cfg(test)]
@@ -29,22 +30,28 @@ pub(super) fn accounts(conn: &Connection) -> rusqlite::Result<Vec<Account>> {
 }
 
 /// The record of `id`, with what's left of its limits. `None` for an account with none.
-fn account(conn: &Connection, id: &AccountId) -> rusqlite::Result<Option<Account>> {
+pub(super) fn account(conn: &Connection, id: &AccountId) -> rusqlite::Result<Option<Account>> {
     let Some(mut account) = conn
         .query_row(
-            "SELECT id, model_provider, plan, login, email, rev FROM accounts WHERE id = ?",
+            &format!(
+                "SELECT id, model_provider, plan, login, email, rev, name, {LOGIN_COLUMNS} FROM accounts WHERE id = ?"
+            ),
             [id.as_str()],
             |row| {
+                let (id_from, held) = login_at(row, 7)?;
                 Ok(Account {
                     id: row.get::<_, String>(0)?.into(),
                     model_provider: row.get(1)?,
                     plan: row.get(2)?,
                     login: row.get(3)?,
                     email: row.get(4)?,
-                    // The hub holds no logins yet, so nobody has named an account.
-                    name: None,
+                    name: row.get(6)?,
+                    login_agent: match id_from {
+                        IdFrom::Hub(agent) => Some(agent),
+                        IdFrom::Adapter => None,
+                    },
                     limits: Vec::new(),
-                    held_login: None,
+                    held_login: held.map(|(_, held)| held),
                     rev: rev_of(row, 5)?,
                 })
             },
@@ -146,14 +153,13 @@ impl Store {
         Ok(limits_of(&lock(&self.reader), account)?)
     }
 
-    /// The record of `account`. `None` for an account with none.
-    #[cfg(test)]
+    /// The record of `id`. `None` for an account with none.
     pub fn account(&self, id: &AccountId) -> Result<Option<Account>, StoreError> {
         Ok(account(&lock(&self.reader), id)?)
     }
 }
 
 /// The record of an account that was just written in the same transaction, so it's there.
-fn account_or_missing(conn: &Connection, id: &AccountId) -> rusqlite::Result<Account> {
+pub(super) fn account_or_missing(conn: &Connection, id: &AccountId) -> rusqlite::Result<Account> {
     account(conn, id)?.ok_or(rusqlite::Error::QueryReturnedNoRows)
 }

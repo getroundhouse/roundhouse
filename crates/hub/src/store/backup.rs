@@ -3,7 +3,7 @@
 
 use std::cmp::Reverse;
 use std::fmt;
-use std::fs::{self, File};
+use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
@@ -36,11 +36,7 @@ pub(crate) fn back_up(conn: &Connection, version: usize, dir: &Path) -> Result<P
 /// Only this user can open it, like the data directory. Making it syncs the data directory, so it's still
 /// there, with the copies in it, after a power cut.
 fn create_dir(dir: &Path) -> Result<(), BackupError> {
-    if dir.is_dir() {
-        return Ok(());
-    }
-    private::create_dir_all(dir).map_err(|e| BackupError::io("creating the directory", e))?;
-    dir.parent().map_or(Ok(()), |data_dir| sync_dir(data_dir, "syncing the data directory"))
+    private::create_dir_lasting(dir).map_err(|e| BackupError::io("creating the directory", e))
 }
 
 /// Writes the copy under [`UNFINISHED`], then gives it its name, and syncs that before anything migrates.
@@ -62,7 +58,7 @@ fn write(conn: &Connection, dir: &Path, name: Name) -> Result<(), BackupError> {
         let _ = fs::remove_file(&unfinished);
     }
     named?;
-    sync_dir(dir, "syncing the directory")
+    private::sync_dir(dir).map_err(|e| BackupError::io("syncing the directory", e))
 }
 
 /// Copies through `conn`, so the copy has what's still in the WAL, which copying `hub.db` wouldn't.
@@ -81,15 +77,6 @@ fn copy_into(conn: &Connection, unfinished: &Path) -> Result<(), BackupError> {
     // SQLite syncs the copy as `synchronous` says, which on macOS is an `fsync` that can leave it in the
     // drive's cache. `sync_all` is `F_FULLFSYNC` there, so the copy is on disk before anything migrates.
     file.sync_all().map_err(|e| BackupError::io(format!("syncing {UNFINISHED}"), e))
-}
-
-/// Makes a name given or taken in `dir` last through a power cut. Not on Windows, which has no way to ask for
-/// that through std: a directory can't be opened as a file there, so this would fail and stop the hub.
-fn sync_dir(dir: &Path, what: &str) -> Result<(), BackupError> {
-    if cfg!(windows) {
-        return Ok(());
-    }
-    File::open(dir).and_then(|handle| handle.sync_all()).map_err(|e| BackupError::io(what, e))
 }
 
 /// Keeps the newest copy of each of the [`KEPT`] versions copied most recently, and removes the rest. Each

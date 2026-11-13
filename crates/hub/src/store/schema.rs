@@ -15,9 +15,9 @@ mod migrations;
 #[cfg(test)]
 pub(crate) use before::{
     BEFORE_ACCOUNTS, BEFORE_CHOSEN_MODELS, BEFORE_CONTEXT, BEFORE_EFFORT, BEFORE_FULL_ACCESS, BEFORE_HUB_SETTINGS,
-    BEFORE_INSTANCES, BEFORE_NEW_WORKSPACE_DRAFT_NAMES, BEFORE_PULL_REQUESTS, BEFORE_RECENT_WORK, BEFORE_RUNS,
-    BEFORE_SUBAGENT_CONTEXT_TOKENS, BEFORE_SUBAGENT_MODELS, BEFORE_SUBAGENT_RECORDS, BEFORE_SUBAGENTS, BEFORE_TITLES,
-    BEFORE_UNUSED_DELETED, BEFORE_USER_ACTIVITY, BEFORE_WAITING_ON, BEFORE_WORKSPACE_ACTIVITY,
+    BEFORE_INSTANCES, BEFORE_LOGINS, BEFORE_NEW_WORKSPACE_DRAFT_NAMES, BEFORE_PULL_REQUESTS, BEFORE_RECENT_WORK,
+    BEFORE_RUNS, BEFORE_SUBAGENT_CONTEXT_TOKENS, BEFORE_SUBAGENT_MODELS, BEFORE_SUBAGENT_RECORDS, BEFORE_SUBAGENTS,
+    BEFORE_TITLES, BEFORE_UNUSED_DELETED, BEFORE_USER_ACTIVITY, BEFORE_WAITING_ON, BEFORE_WORKSPACE_ACTIVITY,
 };
 use migrations::MIGRATIONS;
 
@@ -27,6 +27,11 @@ pub(crate) fn open_connection(path: &Path) -> rusqlite::Result<Connection> {
     // With WAL this can lose the last few commits in a power cut, but not corrupt the database.
     // The agent's own session file holds the conversation regardless.
     conn.pragma_update(None, "synchronous", "NORMAL")?;
+    // A checkpoint copies the log into the database and starts the log again, and on a Mac only a full sync keeps
+    // those writes in order on the drive. Without one, a power cut can take back a commit that had reached the disk,
+    // such as one `Store::lasting` made, or corrupt the database. Every connection, since whichever closes last
+    // checkpoints. It costs one full sync for each checkpoint, not each commit.
+    conn.pragma_update(None, "checkpoint_fullfsync", true)?;
     conn.pragma_update(None, "foreign_keys", "ON")?;
     conn.busy_timeout(std::time::Duration::from_secs(5))?;
     Ok(conn)

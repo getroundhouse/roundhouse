@@ -12,6 +12,7 @@ use protocol::worker::{
 use providers::local::{LocalConfig, LocalProvider};
 
 use super::*;
+use crate::hub::HubDirs;
 use crate::provider_set::ProviderSet;
 use crate::store::tests::store_with_session;
 
@@ -35,7 +36,7 @@ fn hub_using(dir: &Path, provider: &Arc<dyn Provider>) -> Arc<Hub> {
     let store = Arc::new(store_with_session(dir));
     store.workspace_ready(&"w".into(), "/w", &"alder".into(), "main", None).unwrap();
     let providers = ProviderSet::only(provider.clone());
-    Arc::new(Hub::new(Build::UNSTAMPED, store, dir.join("attachments"), dir.join("logs"), providers, Vec::new(), false))
+    Arc::new(Hub::new(Build::UNSTAMPED, store, HubDirs::in_dir(dir), providers, Vec::new(), false))
 }
 
 /// Writes each frame to a file in `dir` by its name, for a script to send.

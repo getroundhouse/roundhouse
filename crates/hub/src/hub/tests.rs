@@ -7,22 +7,22 @@ use parking_lot::Mutex;
 use protocol::Build;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{
-    AgentDescription, AgentFeature, AgentKind, Checks, Effort, Local, MergeState, ModelChoice, ModelName,
-    PermissionMode, PrState, PullRequest, Review, RunId, SessionId, SessionSettings,
+    AgentDescription, AgentFeature, AgentKind, Checks, Effort, Local, LoginDescription, MergeState, ModelChoice,
+    ModelName, PermissionMode, PrState, PullRequest, Review, RunId, SessionId, SessionSettings,
 };
 use protocol::tail::{DeltaChange, StreamDelta, Tail};
 use protocol::worker::{PullRequestReply, RateLimit, WorkerRequest, WorkerResponse};
 use providers::local::{LocalConfig, LocalProvider};
 use tokio::sync::oneshot;
 
-use super::Hub;
+use super::{Hub, HubDirs};
 use crate::provider_set::ProviderSet;
 use crate::session::{CarriedOver, Item, LiveSession};
 use crate::store::tests::store_with_session;
 use crate::worker_link::WorkerLink;
 
 /// Claude as a hub's tests describe it, which a chat nobody has chosen for runs on Sonnet at High, so a test can tell
-/// what the description gave a chat from what anything else would have.
+/// what the description gave a chat from what anything else would have, and whose token lasts [`A_TOKEN_LASTS_MS`].
 pub(super) fn described() -> AgentDescription {
     AgentDescription {
         kind: AgentKind::Claude,
@@ -37,9 +37,15 @@ pub(super) fn described() -> AgentDescription {
             effort: Effort::High,
         },
         features: vec![AgentFeature::Compacts],
-        login: None,
+        login: Some(LoginDescription {
+            made_with: "claude make-a-token".to_string(),
+            lasts_ms: Some(A_TOKEN_LASTS_MS),
+        }),
     }
 }
+
+/// How long a token lasts as the hub's tests describe Claude, a day, which no real CLI's is.
+pub(crate) const A_TOKEN_LASTS_MS: i64 = 24 * 60 * 60 * 1000;
 
 /// A hub whose store has the workspace `w` and its session `s`, with nothing sent in it, and that never starts a
 /// worker. Its agents are as [`described`] says.
@@ -58,15 +64,7 @@ pub(super) fn hub_describing(dir: &Path, agents: Vec<AgentDescription>) -> Arc<H
         path: None,
     };
     let providers = ProviderSet::only(Arc::new(LocalProvider::new(config)));
-    Arc::new(Hub::new(
-        Build::UNSTAMPED,
-        store,
-        dir.join("attachments"),
-        dir.join("worker-logs"),
-        providers,
-        agents,
-        false,
-    ))
+    Arc::new(Hub::new(Build::UNSTAMPED, store, HubDirs::in_dir(dir), providers, agents, false))
 }
 
 /// A stand-in for `w`'s worker, which fails every call, as `hub`'s worker.

@@ -236,6 +236,7 @@ fn account(id: &str, used_percent: u8, rev: u64) -> Account {
         login: None,
         email: Some(format!("{id}@example.com")),
         name: None,
+        login_agent: None,
         limits: vec![limit],
         held_login: None,
         rev: Rev::new(rev),
