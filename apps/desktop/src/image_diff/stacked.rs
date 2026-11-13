@@ -7,7 +7,7 @@ use gpui_kit::{
     AnyElement, App, InteractiveElement as _, IntoElement as _, ParentElement as _, StatefulInteractiveElement as _,
     Styled as _, TestSupportExt as _, WeakEntity, div, pattern_slash, px,
 };
-use look::{Hand as _, pixels};
+use look::{Hand as _, Shaped as _, pixels};
 
 use super::{ImageDiff, Outcome, Shown};
 use crate::file_image::{FileImage, Placed, edged, fitted, on_checkerboard};
@@ -75,7 +75,7 @@ pub(super) fn difference(outcome: Outcome<'_>, cx: &App) -> AnyElement {
                 .top(off(place.y))
                 .w(across(place.width))
                 .h(across(place.height))
-                .rounded(px(3.))
+                .corners(look::Corner::Glyph)
                 .border_1()
                 .border_color(colour.opacity(OUTLINE))
                 .bg(colour.opacity(WASH))

@@ -9,7 +9,7 @@ use gpui_kit::component::{Icon, IconName, Sizable as _};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, Context, InteractiveElement as _, IntoElement as _, ParentElement as _, SharedString,
-    StatefulInteractiveElement as _, Styled, Window, div, px, relative,
+    StatefulInteractiveElement as _, Styled, Window, div, relative,
 };
 use look::{Hand as _, Typeset as _};
 
@@ -177,7 +177,9 @@ impl WorkspacePane {
                     // Hidden rather than left out, so the name doesn't move when it shows.
                     .child(div().flex_none().invisible().group_hover(TAB_GROUP, Styled::visible).child(close)),
             )
-            .when(selected, |d| d.child(div().absolute().left_0().right_0().bottom_0().h(px(2.)).bg(colors.current)));
+            .when(selected, |d| {
+                d.child(div().absolute().left_0().right_0().bottom_0().h(look::TAB_LINE).bg(colors.current))
+            });
         Some(tab.into_any_element())
     }
 }

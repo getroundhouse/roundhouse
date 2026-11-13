@@ -3,11 +3,7 @@
 use gpui_kit::{App, BoxShadow, Div, Pixels, Styled as _, div, point, px};
 
 use crate::colors::{Colors, colors};
-
-/// A card's corners, as `docs/spec/look.md` gives them.
-const CORNER: Pixels = px(10.);
-/// How wide its edge is: the one thin edge.
-pub const RAISED_EDGE: Pixels = px(1.);
+use crate::shape::{Corner, EDGE, Shaped as _};
 
 /// The shadow, as `docs/spec/look.md` gives it: a soft one well below, and a tighter one just under the edge.
 const SHADOW: [Layer; 2] =
@@ -26,8 +22,8 @@ struct Layer {
 pub fn raised(cx: &App) -> Div {
     let colors = colors(cx);
     div()
-        .rounded(CORNER)
-        .border(RAISED_EDGE)
+        .corners(Corner::Card)
+        .border(EDGE)
         .border_color(colors.edge)
         .bg(colors.raised)
         .text_color(colors.text)

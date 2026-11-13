@@ -8,7 +8,7 @@ use gpui_kit::{
     AnyElement, App, Div, ElementId, HighlightStyle, Hsla, InteractiveElement, IntoElement, ParentElement,
     SharedString, Styled, TestSupportExt as _, div, px,
 };
-use look::Typeset as _;
+use look::{Shaped as _, Typeset as _};
 
 use super::Toggle;
 use super::highlight::spans;
@@ -39,7 +39,7 @@ pub(in crate::rows) fn frame(cx: &App) -> Div {
         .mb_2()
         .flex()
         .flex_col()
-        .rounded(px(8.))
+        .corners(look::Corner::Card)
         .border_1()
         .border_color(colors.edge)
         .bg(colors.inset)
@@ -48,7 +48,7 @@ pub(in crate::rows) fn frame(cx: &App) -> Div {
 
 /// A line between the parts of a block, such as a command and its output.
 pub(in crate::rows) fn separator(cx: &App) -> Div {
-    div().h(px(1.)).bg(look::colors(cx).edge)
+    div().h(look::EDGE).bg(look::colors(cx).edge)
 }
 
 /// A faint name for the part of a block below it, such as "Input".

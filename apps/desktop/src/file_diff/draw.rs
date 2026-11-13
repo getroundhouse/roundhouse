@@ -6,14 +6,14 @@ use std::sync::Arc;
 
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::TextareaState;
-use gpui_kit::component::{ActiveTheme as _, Icon, IconName, Sizable as _, h_flex};
+use gpui_kit::component::{Icon, IconName, Sizable as _, h_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, Div, ElementId, Entity, Hsla, InteractiveElement as _, IntoElement, MouseButton,
     ParentElement as _, Pixels, SharedString, StatefulInteractiveElement as _, Styled, TestSupportExt as _, WeakEntity,
     div, px,
 };
-use look::{Hand as _, Typeset as _};
+use look::{Hand as _, Shaped as _, Typeset as _};
 use protocol::model::{DiffComment, DiffSide};
 
 use super::FileDiff;
@@ -185,7 +185,6 @@ fn number(line: Option<u32>, width: Pixels, cx: &App) -> Div {
 /// The button that starts a comment on a line, which shows while the line is hovered, and while it's `marked` as the
 /// one being commented on.
 fn add_button((side, line): (DiffSide, u32), marked: bool, drawing: &Drawing, cx: &App) -> AnyElement {
-    let theme = cx.theme();
     let colors = look::colors(cx);
     let (view, at) = (drawing.view.clone(), LineAt { path: drawing.path.clone(), side, line });
     let name = match side {
@@ -202,7 +201,7 @@ fn add_button((side, line): (DiffSide, u32), marked: bool, drawing: &Drawing, cx
         .flex()
         .items_center()
         .justify_center()
-        .rounded(theme.radius)
+        .corners(look::Corner::Control)
         .bg(colors.main)
         .text_color(colors.on_main)
         .hand()

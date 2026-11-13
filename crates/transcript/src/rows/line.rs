@@ -12,7 +12,7 @@ use gpui_kit::{
     AnyElement, AnyView, App, Div, ElementId, Hsla, InteractiveElement, IntoElement, ParentElement, Pixels, Role,
     SharedString, Stateful, StatefulInteractiveElement, Styled, TestSupportExt as _, Window, div, px, relative,
 };
-use look::{Hand as _, LineText, Typeset as _};
+use look::{Hand as _, LineText, Shaped as _, Typeset as _};
 use protocol::event::Denied;
 
 use super::shown::Gather;
@@ -151,7 +151,7 @@ impl Part {
             Part::Chip(text) => div()
                 .flex_none()
                 .px_2()
-                .rounded(px(6.))
+                .corners(look::Corner::Control)
                 .border_1()
                 .border_color(colors.control_edge)
                 .typeset(look::Type::Body)
@@ -204,7 +204,7 @@ pub(super) fn opening(
         .mx(px(-8.))
         .px(px(8.))
         .gap_2()
-        .rounded(px(6.))
+        .corners(look::Corner::Control)
         .overflow_hidden()
         .whitespace_nowrap()
         .hand()
@@ -244,7 +244,7 @@ fn pill(text: SharedString, marks: &Marks, color: Hsla, background: Hsla) -> Any
         .min_w_0()
         .px_2()
         .py(px(1.))
-        .rounded(px(6.))
+        .corners(look::Corner::Control)
         .bg(background)
         .overflow_hidden()
         .text_ellipsis()

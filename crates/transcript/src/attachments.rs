@@ -18,7 +18,7 @@ use gpui_kit::{
 };
 use image::ImageDecoder as _;
 use image::metadata::Orientation;
-use look::{Typeset as _, pixels};
+use look::{Shaped as _, Typeset as _, pixels};
 use protocol::attachment::{Attachment, MediaType, describe_size};
 use protocol::model::Seq;
 
@@ -154,7 +154,7 @@ fn frame(file: &Carried, cx: &App) -> Stateful<Div> {
     div()
         .id(file.key.element("picture"))
         .flex_none()
-        .rounded(px(6.))
+        .corners(look::Corner::Control)
         .overflow_hidden()
         .border_1()
         .border_color(colors.edge)

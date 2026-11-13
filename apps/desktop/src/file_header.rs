@@ -5,7 +5,7 @@
 use gpui_kit::component::h_flex;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{AnyElement, App, IntoElement, ParentElement as _, Styled as _, div, px};
-use look::Typeset as _;
+use look::{Shaped as _, Typeset as _};
 
 use crate::file_tree::split;
 use crate::file_view::HEADER_HEIGHT;
@@ -23,7 +23,7 @@ pub(crate) fn file_header(path: &str, note: Option<String>, end: Option<AnyEleme
         .min_w_0()
         .h(px(24.))
         .px_2()
-        .rounded(px(6.))
+        .corners(look::Corner::Control)
         .bg(colors.raised)
         .whitespace_nowrap()
         .when(!folders.is_empty(), |pill| {

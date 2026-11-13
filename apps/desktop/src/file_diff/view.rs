@@ -5,7 +5,7 @@ use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::{Selectable as _, Sizable as _, h_flex};
 use gpui_kit::{AnyElement, App, Global, IntoElement as _, ParentElement as _, Styled as _, px};
-use look::Hand as _;
+use look::{Hand as _, Shaped as _};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum DiffView {
@@ -75,7 +75,7 @@ pub(super) fn switch(cx: &App) -> AnyElement {
         .flex_none()
         .p(px(2.))
         .gap(px(2.))
-        .rounded(px(6.))
+        .corners(look::Corner::Control)
         .bg(look::colors(cx).raised)
         .children(DiffView::ALL.map(|view| {
             Button::new(view.id())

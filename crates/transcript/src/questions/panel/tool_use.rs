@@ -10,7 +10,7 @@ use gpui_kit::{
     AnyElement, App, InteractiveElement as _, IntoElement, ParentElement, Role, StatefulInteractiveElement as _,
     Styled, TestSupportExt as _, div, px,
 };
-use look::Typeset as _;
+use look::{Shaped as _, Typeset as _};
 use protocol::event::{ApprovalDecision, EventBody, Question, QuestionAnswer, QuestionOption};
 
 use super::heading::said;
@@ -104,7 +104,7 @@ impl ToolUse {
                 .w_full()
                 .max_h(px(GIVEN_MOST_HEIGHT))
                 .py_2()
-                .rounded_md()
+                .corners(look::Corner::Control)
                 .bg(colors.inset)
                 .typeset(look::Type::Code)
         };

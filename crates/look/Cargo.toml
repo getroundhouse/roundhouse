@@ -1,6 +1,6 @@
 [package]
 name = "look"
-description = "How the app looks: every colour it draws with and every kind of text it sets, by what each is for, the theme made from them, code's colours, the words that changed in a diff's lines, the status mark, the app icon, and the parts of the window tests find."
+description = "How the app looks: every colour it draws with, every kind of text it sets and every corner it rounds, by what each is for, the width of an edge, the theme made from them, code's colours, the words that changed in a diff's lines, the status mark, the app icon, and the parts of the window tests find."
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
@@ -8,7 +8,7 @@ license.workspace = true
 
 [features]
 # What only tests use: holding the marks and the time still for pictures, setting off a scroll by a test's clock, and
-# the lists of the colours and the kinds of text, for the sheets that show them.
+# the lists of the colours, the kinds of text and the corners, for the sheets that show them.
 testing = []
 
 [dependencies]

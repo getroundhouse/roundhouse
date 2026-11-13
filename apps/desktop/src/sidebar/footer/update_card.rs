@@ -8,7 +8,7 @@ use gpui_kit::{
     AnyElement, App, Context, Div, InteractiveElement as _, IntoElement, ParentElement, RenderOnce, Stateful,
     Styled as _, TestSupportExt as _, Window, div, px,
 };
-use look::{Hand as _, Typeset as _};
+use look::{Hand as _, Shaped as _, Typeset as _};
 use look::{IconSize, IconStyle};
 
 use super::update_details::{Details, Shown};
@@ -56,7 +56,7 @@ impl RenderOnce for UpdateCard {
             .w_full()
             .p_2p5()
             .gap_2p5()
-            .rounded(px(10.))
+            .corners(look::Corner::Card)
             .bg(colors.raised)
             .border_1()
             .border_color(colors.edge)

@@ -10,7 +10,7 @@ use gpui_kit::{
     AnyElement, App, Div, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Role, SharedString,
     StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, div, px,
 };
-use look::{Hand as _, Off as _, Typeset as _};
+use look::{Hand as _, Off as _, Shaped as _, Typeset as _};
 
 use super::Drawing;
 use super::kept::{Panel, To};
@@ -125,7 +125,7 @@ fn command(made_with: &str, cx: &App) -> Div {
         .pr_1()
         .py_1()
         .gap_2()
-        .rounded_md()
+        .corners(look::Corner::Control)
         .border_1()
         .border_color(colors.edge)
         .bg(colors.inset)

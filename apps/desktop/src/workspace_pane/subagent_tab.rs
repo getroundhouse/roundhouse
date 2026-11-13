@@ -19,7 +19,7 @@ use gpui_kit::{
     ParentElement as _, Role, StatefulInteractiveElement as _, Styled, Subscription, TestSupportExt as _, div, px,
     relative,
 };
-use look::{Hand as _, Typeset as _};
+use look::{Hand as _, Shaped as _, Typeset as _};
 use protocol::model::{SessionId, Subagent, ToolUseId};
 use transcript::{Transcript, TranscriptEvent, shown_kind, subagent_standing};
 
@@ -209,7 +209,9 @@ impl WorkspacePane {
                     .child(name.child(title))
                     .child(div().flex_none().invisible().group_hover(TAB_GROUP, Styled::visible).child(close)),
             )
-            .when(selected, |d| d.child(div().absolute().left_0().right_0().bottom_0().h(px(2.)).bg(colors.current)));
+            .when(selected, |d| {
+                d.child(div().absolute().left_0().right_0().bottom_0().h(look::TAB_LINE).bg(colors.current))
+            });
         Some(tab.into_any_element())
     }
 
@@ -266,7 +268,7 @@ fn band(
         div()
             .flex_none()
             .px_2()
-            .rounded(px(6.))
+            .corners(look::Corner::Control)
             .border_1()
             .border_color(colors.control_edge)
             .typeset(look::Type::Body)

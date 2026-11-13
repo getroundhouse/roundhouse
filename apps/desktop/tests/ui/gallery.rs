@@ -4,8 +4,9 @@
 //! `gallery/update_screens.rs`, and the real app connects to it, so what's drawn is exactly what the app draws. Each picture shows only the part of
 //! the window its screen is about, as `gallery/frame.rs` says. What each screen looks like now goes in
 //! `.context/gallery/` at the repo's root, for looking at. The app icon is drawn and checked the same way, in
-//! `gallery/icon.rs`, as are every state of a pull request's bar and of the status mark, every colour and every kind
-//! of text. Text of each kind is drawn the same way at several scales, in `gallery/baselines.rs`, to check it lines up.
+//! `gallery/icon.rs`, as are every state of a pull request's bar and of the status mark, every colour, every kind
+//! of text and every corner. Text of each kind is drawn the same way at several scales, in `gallery/baselines.rs`, to
+//! check it lines up.
 
 #![cfg(test)]
 
@@ -20,6 +21,7 @@ mod chats;
 mod colours;
 mod compaction_chats;
 mod context_screens;
+mod corners;
 mod diff_screens;
 mod events;
 mod failure_chats;
@@ -111,6 +113,15 @@ fn every_kind_of_text_looks_as_approved() {
 }
 
 #[test]
+fn every_corner_looks_as_approved() {
+    let text_system: Arc<dyn PlatformTextSystem> = Arc::new(gpui_apple::AppleTextSystem::new());
+
+    let picture = corners::draw(&text_system);
+
+    report(&look_at(corners::NAME, corners::SPEC, &picture));
+}
+
+#[test]
 fn text_of_every_kind_sits_on_body_texts_baseline_at_every_scale() {
     let text_system: Arc<dyn PlatformTextSystem> = Arc::new(gpui_apple::AppleTextSystem::new());
     let mut problems = Vec::new();
@@ -144,7 +155,7 @@ fn every_screen_looks_as_approved() {
     }
     let names: Vec<&str> = screens()
         .map(|s| s.name)
-        .chain([pull_requests::NAME, mark_states::NAME, colours::NAME, kinds_of_text::NAME])
+        .chain([pull_requests::NAME, mark_states::NAME, colours::NAME, kinds_of_text::NAME, corners::NAME])
         .collect();
     problems.extend(approved::without_a_screen(&names).into_iter().map(|name| format!("{name}.png has no screen")));
     report(&problems);

@@ -12,8 +12,6 @@ use crate::app::{Agents, BuildLine, Updating};
 
 /// Between the details and the top of the card they sit on.
 const GAP: Pixels = px(6.);
-/// What `border_1` draws around the card, outside where it's measured and where its corner is.
-const BORDER: Pixels = px(1.);
 /// Over everything else in the window, as a tooltip is.
 const PRIORITY: usize = 1;
 
@@ -79,15 +77,17 @@ impl Details {
             .gap_1()
             .child(div().typeset(look::Type::Body).emphasis().child(format!("{} → {}", self.from, self.to)))
             .child(div().typeset(look::Type::Detail).text_color(colors.text_muted).child(self.what_happens.clone()));
+        // The card's edge is drawn outside where its width is measured and where its corner is, so the details reach
+        // past it by an edge on each side.
         let details = look::raised(cx)
             .region(Region::UpdateDetails)
-            .w(shown.card_width + BORDER * 2.)
+            .w(shown.card_width + look::EDGE * 2.)
             .px_3()
             .py_2p5()
             .child(text);
         let above = anchored()
             .position_mode(AnchoredPositionMode::Local)
-            .position(point(-BORDER, -(BORDER + GAP)))
+            .position(point(-look::EDGE, -(look::EDGE + GAP)))
             .anchor(Anchor::BottomLeft)
             .child(details);
         // From the card's corner inside its border, which is on a whole point, as GPUI rounds where it puts them to.

@@ -131,7 +131,7 @@ pub(crate) fn bar(
         .gap_2()
         // The bar's bottom edge, under the tabs rather than a border, so the line under the tab chosen can cover it,
         // as it does under the chat tabs.
-        .child(div().absolute().left_0().right_0().bottom_0().h(px(1.)).bg(look::colors(cx).edge))
+        .child(div().absolute().left_0().right_0().bottom_0().h(look::EDGE).bg(look::colors(cx).edge))
         .child(Tabs::new("sidebar-tabs").flex().h_full().children(tabs))
         .child(div().flex_1())
         .children(controls)
@@ -171,7 +171,9 @@ fn tab_element(
                 .child(line_text.body.set(div().child(label)))
                 .when_some(count, |d, count| d.child(line_text.detail.set(div().text_color(muted).child(count)))),
         )
-        .when(selected, |d| d.child(div().absolute().left_0().right_0().bottom_0().h(px(2.)).bg(colors.current)))
+        .when(selected, |d| {
+            d.child(div().absolute().left_0().right_0().bottom_0().h(look::TAB_LINE).bg(colors.current))
+        })
         .into_any_element()
 }
 

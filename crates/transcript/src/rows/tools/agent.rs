@@ -158,7 +158,7 @@ pub(in crate::rows) fn prompt_block(
         .mt_1()
         .gap_1()
         .pl_3()
-        .border_l_2()
+        .border_l(look::QUOTE_RULE)
         .border_color(colors.edge)
         .child(div().typeset(look::Type::Detail).text_color(colors.text_faint).child("Asked"))
         .child(block::scrolling(find, drags, &id, text.test_support()))

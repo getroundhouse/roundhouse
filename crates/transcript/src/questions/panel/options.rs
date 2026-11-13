@@ -8,7 +8,7 @@ use gpui_kit::{
     AnyElement, Context, ElementId, Entity, Hsla, InteractiveElement as _, IntoElement, ParentElement,
     StatefulInteractiveElement as _, Styled, TestSupportExt as _, div, px,
 };
-use look::{Hand as _, Typeset as _};
+use look::{Hand as _, Shaped as _, Typeset as _};
 use protocol::event::{Question, QuestionOption};
 
 use super::QuestionPanel;
@@ -91,7 +91,7 @@ fn row(id: ElementId, chosen: bool, colors: Colors) -> gpui_kit::Stateful<gpui_k
         .gap_3()
         .px_2()
         .py_1p5()
-        .rounded_md()
+        .corners(look::Corner::Control)
         .typeset(look::Type::Body)
         .line_height(px(LINE))
         .hand()
@@ -145,7 +145,7 @@ fn other_row(
         .flex()
         .items_center()
         .justify_center()
-        .rounded(px(4.))
+        .corners(look::Corner::InlineControl)
         .border_1()
         .border_color(colors.foreground)
         .hand()
