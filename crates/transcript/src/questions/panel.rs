@@ -1,25 +1,33 @@
-//! A question waiting on an answer, asked in the composer's place: one question at a time, each option a numbered row,
-//! a row to type another answer into, and under them a dot for each question and the arrow that sends.
+//! What the agent is waiting on the person for, asked in the composer's place: its questions, one at a time, each
+//! option a numbered row, a row to type another answer into, and under them a dot for each question and the arrow that
+//! sends. A request to use a tool is asked the same way, as one question that's allowed or denied. [`Asks`] says which
+//! it is, and each way they differ.
 
 use std::time::{Duration, Instant};
 
-use client_core::Approval;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::input::{InputEvent, TextareaState};
-use gpui_kit::component::{ActiveTheme as _, Icon, IconName, Sizable as _, h_flex, v_flex};
+use gpui_kit::component::{ActiveTheme as _, IconName, Sizable as _, h_flex, v_flex};
 use gpui_kit::{
-    AnyElement, App, AppContext as _, Context, Entity, FocusHandle, Focusable, InteractiveElement as _, IntoElement,
-    KeyDownEvent, ParentElement, Render, Styled, Subscription, WeakEntity, Window, div, px,
+    App, Context, FocusHandle, Focusable, InteractiveElement as _, IntoElement, KeyDownEvent, ParentElement, Render,
+    Styled, WeakEntity, Window, div,
 };
-use look::{Hand as _, InRegion as _, Off as _, Region};
+use look::{InRegion as _, Off as _, Region};
 use protocol::event::{ApprovalDecision, Question, QuestionAnswer};
-use protocol::model::{AnswerDraft, AnswerSoFar, ApprovalId};
+use protocol::model::{ApprovalId, ToolUseId};
 
 use super::choice::{Choice, next_unanswered};
-use crate::transcript::{Transcript, TranscriptEvent};
+use crate::transcript::Transcript;
 
+mod asks;
+mod heading;
+mod kept;
 mod options;
 mod pager;
+mod tool_use;
+mod typing;
+
+pub(crate) use asks::Asks;
+use typing::Other;
 
 /// How long a question that's just come ignores its keys, and goes on ignoring them while they keep coming. It's longer
 /// than the gap between keys while typing, so the end of something typed in the composer as the question came can't
@@ -29,8 +37,14 @@ pub(crate) const SETTLE: Duration = Duration::from_millis(500);
 pub struct QuestionPanel {
     transcript: WeakEntity<Transcript>,
     approval_id: ApprovalId,
-    /// What it asks, which says how an answer is sent.
-    approval: Approval<'static>,
+    /// What it asks, which says what it shows and how an answer is sent.
+    asks: Asks,
+    /// The subagent that asks, as the call that started it, or `None` for the agent itself.
+    asked_by: Option<ToolUseId>,
+    /// What that subagent is for, as its record says, which the transcript passes on as the record comes or changes.
+    asker: Option<String>,
+    /// How many more requests wait behind this one, to be asked in turn.
+    more_waiting: usize,
     asked: Vec<Asked>,
     showing: usize,
     focus: FocusHandle,
@@ -49,11 +63,6 @@ struct Asked {
     other: Option<Other>,
 }
 
-struct Other {
-    input: Entity<TextareaState>,
-    _events: Subscription,
-}
-
 impl Asked {
     fn typed(&self, cx: &App) -> String {
         self.other.as_ref().map(|other| other.input.read(cx).text().to_string()).unwrap_or_default()
@@ -65,18 +74,23 @@ impl Asked {
 }
 
 impl QuestionPanel {
+    /// Asks what `asks` says, for the subagent `asked_by` started, or for the agent itself.
     pub(crate) fn new(
         transcript: WeakEntity<Transcript>,
         approval_id: ApprovalId,
-        approval: Approval<'static>,
+        asks: Asks,
+        asked_by: Option<ToolUseId>,
         cx: &mut Context<Self>,
     ) -> Self {
-        let questions = approval.questions().unwrap_or_default().iter().cloned();
+        let questions = asks.questions().into_iter();
         let asked = questions.map(|question| Asked { question, choice: Choice::default(), other: None }).collect();
         Self {
             transcript,
             approval_id,
-            approval,
+            asks,
+            asked_by,
+            asker: None,
+            more_waiting: 0,
             asked,
             showing: 0,
             focus: cx.focus_handle(),
@@ -89,60 +103,24 @@ impl QuestionPanel {
         &self.approval_id
     }
 
+    /// The subagent that asks, as the call that started it.
+    pub(crate) fn asked_by(&self) -> Option<&ToolUseId> {
+        self.asked_by.as_ref()
+    }
+
+    /// Says what's around the request: what the subagent that asks is for, and how many more requests wait behind
+    /// this one.
+    pub(crate) fn set_around(&mut self, asker: Option<String>, more_waiting: usize, cx: &mut Context<Self>) {
+        if self.asker != asker || self.more_waiting != more_waiting {
+            (self.asker, self.more_waiting) = (asker, more_waiting);
+            cx.notify();
+        }
+    }
+
     /// The hub didn't take the answer, so it can be given again.
     pub(crate) fn not_answered(&mut self, cx: &mut Context<Self>) {
         self.answered = false;
         cx.notify();
-    }
-
-    /// Something's typed in a row for another answer, which would be lost with the question.
-    pub fn has_typed(&self, cx: &App) -> bool {
-        self.asked.iter().any(|asked| !asked.typed(cx).trim().is_empty())
-    }
-
-    /// What's chosen and typed so far, as the hub keeps it, or `None` with nothing, or once it's answered.
-    pub fn so_far(&self, cx: &App) -> Option<AnswerDraft> {
-        if self.answered {
-            return None;
-        }
-        let answers: Vec<AnswerSoFar> = self
-            .asked
-            .iter()
-            .map(|asked| {
-                let (picked, other) = asked.choice.kept();
-                let picked = picked.iter().map(|&option| u32::try_from(option).unwrap_or(u32::MAX)).collect();
-                AnswerSoFar { picked, typed: asked.typed(cx), other }
-            })
-            .collect();
-        let draft = AnswerDraft { approval_id: self.approval_id.clone(), answers };
-        draft.says_anything().then_some(draft)
-    }
-
-    /// Takes what was chosen and typed as the hub kept it, from before the app last stopped or from another client, in
-    /// place of what's here, or clears it for `None`. The hub has it already, so it isn't kept again, and the focus
-    /// stays where it is.
-    pub fn take_so_far(&mut self, kept: Option<&AnswerDraft>, window: &mut Window, cx: &mut Context<Self>) {
-        for q in 0..self.asked.len() {
-            let so_far = kept.and_then(|kept| kept.answers.get(q)).cloned().unwrap_or_default();
-            let Some(asked) = self.asked.get_mut(q) else { continue };
-            let picked = so_far.picked.iter().filter_map(|&option| usize::try_from(option).ok());
-            asked.choice = Choice::from_kept(picked, so_far.other, asked.question.options.len());
-            if so_far.typed.is_empty() && asked.other.is_none() {
-                continue;
-            }
-            let input = self.other(q, window, cx);
-            let end = so_far.typed.len();
-            input.update(cx, |input, cx| {
-                input.set_value(so_far.typed, window, cx);
-                input.set_selected_range(end..end, cx);
-            });
-        }
-        cx.notify();
-    }
-
-    /// Asks for what's chosen and typed to be kept, as [`TranscriptEvent::Answering`] says.
-    fn answering(&self, at_once: bool, cx: &mut Context<Self>) {
-        let _ = self.transcript.update(cx, |_, cx| cx.emit(TranscriptEvent::Answering { at_once }));
     }
 
     /// Each question's answer, if it has one yet.
@@ -203,12 +181,14 @@ impl QuestionPanel {
             return;
         }
         let answers = answered.into_iter().map(Option::unwrap_or_default).collect();
-        self.answer(self.approval.answered(answers), cx);
+        if let Some(decision) = self.asks.decision(answers) {
+            self.answer(decision, cx);
+        }
     }
 
     fn skip(&mut self, cx: &mut Context<Self>) {
-        if !self.answered {
-            self.answer(self.approval.refused(), cx);
+        if let Some(skipped) = self.asks.skipped().filter(|_| !self.answered) {
+            self.answer(skipped, cx);
         }
     }
 
@@ -238,48 +218,34 @@ impl QuestionPanel {
             "left" => self.step(-1, window, cx),
             "right" => self.step(1, window, cx),
             "0" => self.type_other(window, cx),
-            key => match key.parse::<usize>() {
-                Ok(number @ 1..=9) => self.pick(number - 1, window, cx),
-                _ => return,
-            },
+            key => {
+                let rows = self.asked.get(self.showing).map_or(0, |asked| asked.question.options.len());
+                match key.parse::<usize>() {
+                    Ok(number @ 1..=9) if number <= rows => self.pick(number - 1, window, cx),
+                    // A number with no row chooses nothing, and is still the panel's key.
+                    Ok(1..=9) => self.typed_past(cx),
+                    // A key that types a character is one character long, or the space bar. Tab and the like aren't.
+                    _ if key.chars().count() == 1 || key == "space" => return self.typed_past(cx),
+                    _ => return,
+                }
+            }
         }
         cx.stop_propagation();
     }
 
-    fn type_other(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let input = self.other(self.showing, window, cx);
-        input.update(cx, |input, cx| input.focus(window, cx));
-    }
-
-    /// The question's row for typing another answer. What's typed there is chosen while there's any, and Enter goes on.
-    fn other(&mut self, q: usize, window: &mut Window, cx: &mut Context<Self>) -> Entity<TextareaState> {
-        if let Some(other) = self.asked.get(q).and_then(|asked| asked.other.as_ref()) {
-            return other.input.clone();
+    /// A key that types something and isn't one of the panel's, which is someone typing who may not have seen what's
+    /// asked. Where [`Asks`] says, it takes back the option that's chosen, and the panel goes quiet again as it does
+    /// when it's just come. What's typed in the typing row stays chosen, since that was typed here.
+    fn typed_past(&mut self, cx: &mut Context<Self>) {
+        if !self.asks.typing_takes_back_what_is_chosen() {
+            return;
         }
-        let input =
-            cx.new(|cx| TextareaState::new(window, cx).auto_grow(1, 6).submit_on_enter(true).placeholder("Other…"));
-        let events = cx.subscribe_in(&input, window, move |this, input, event: &InputEvent, window, cx| match event {
-            // Going back to what's typed chooses it again.
-            InputEvent::Change | InputEvent::Focus => {
-                let has_text = !input.read(cx).text().to_string().trim().is_empty();
-                let chosen = this.asked.get_mut(q).is_some_and(|asked| {
-                    let before = asked.choice.clone();
-                    asked.choice.typed(has_text, asked.question.multiple);
-                    asked.choice != before
-                });
-                // Only what changes is kept, so going back to the row doesn't hold back a change made elsewhere.
-                if chosen || matches!(event, InputEvent::Change) {
-                    this.answering(false, cx);
-                }
-                cx.notify();
-            }
-            InputEvent::PressEnter { shift: false, .. } => this.go_on(window, cx),
-            InputEvent::PressEnter { .. } | InputEvent::Blur => {}
-        });
-        if let Some(asked) = self.asked.get_mut(q) {
-            asked.other = Some(Other { input: input.clone(), _events: events });
+        if let Some(asked) = self.asked.get_mut(self.showing) {
+            asked.choice.take_back_options();
         }
-        input
+        self.quiet_until = cx.background_executor().now() + SETTLE;
+        self.answering(true, cx);
+        cx.notify();
     }
 }
 
@@ -289,49 +255,6 @@ impl Focusable for QuestionPanel {
     }
 }
 
-impl QuestionPanel {
-    /// The question's header, a small detail, with the button that skips it across from it, then its text, at body
-    /// size.
-    fn heading(question: Option<&Question>, cx: &mut Context<Self>) -> AnyElement {
-        let muted = cx.theme().muted_foreground;
-        let header = question.and_then(|question| question.header.clone()).unwrap_or_default();
-        // A small control's square around an icon as big as the text's line, standing out past the line rather than
-        // pushing the question down, so the icon lines up with the edges inside the panel.
-        let skip = Button::new("question-skip")
-            .hand()
-            .ghost()
-            .small()
-            .size_6()
-            .p_0()
-            .my(px(-4.))
-            .mr(px(-4.))
-            .child(Icon::new(IconName::Close).size_4().text_color(muted))
-            .tooltip("Skip")
-            .on_click(cx.listener(|this, _, _, cx| this.skip(cx)));
-        let text = question
-            .map(|question| div().w_full().text_sm().line_height(px(QUESTION_LINE)).child(question.text.clone()));
-        v_flex()
-            .w_full()
-            .gap_1()
-            .child(
-                h_flex()
-                    .w_full()
-                    .h(px(HEADER_LINE))
-                    .gap_2()
-                    .child(div().flex_1().min_w_0().truncate().text_xs().text_color(muted).child(header))
-                    .child(skip),
-            )
-            .children(text)
-            .into_any_element()
-    }
-}
-
-/// The height of the header's line, at the kit's extra-small size.
-const HEADER_LINE: f32 = 16.;
-
-/// The height of a line of the question, at body size.
-const QUESTION_LINE: f32 = 20.;
-
 impl Render for QuestionPanel {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let edge = cx.theme().border;
@@ -339,7 +262,9 @@ impl Render for QuestionPanel {
         let ready = !self.answered && answered.iter().any(Option::is_some);
         let q = self.showing;
         let question = self.asked.get(q).map(|asked| asked.question.clone());
-        let heading = Self::heading(question.as_ref(), cx);
+        let heading = heading::heading(self, question.as_ref(), cx);
+        let detail = self.asks.detail(cx);
+        let pager = pager::pager(self, &answered, cx).or_else(|| pager::more_waiting(self.more_waiting, cx));
         let options = question.map(|question| {
             let other = self.other(q, window, cx);
             options::list(self, &question, &other, cx)
@@ -365,14 +290,8 @@ impl Render for QuestionPanel {
             .border_1()
             .border_color(edge)
             .child(heading)
+            .children(detail)
             .children(options)
-            .child(
-                h_flex()
-                    .w_full()
-                    .items_center()
-                    .gap_2()
-                    .child(div().flex_1().min_w_0().children(pager::pager(self, &answered, cx)))
-                    .child(send),
-            )
+            .child(h_flex().w_full().items_center().gap_2().child(div().flex_1().min_w_0().children(pager)).child(send))
     }
 }

@@ -40,18 +40,32 @@ An answered question is a line in the chat where the agent asked it: `Asked`, ea
 
 ## Approvals
 
-Only an agent in plan mode asks before using a tool. The request is a card in the chat, in amber, with `Allow` and `Deny`.
+An agent in plan mode asks before using a tool. An agent with full access asks only about what its own CLI won't do unasked in any mode, such as a command that removes something it can't check.
 
-![A command waiting to be allowed, in a chat that's planning](../../../spec/screens/approval.png)
+Either way, the request takes the composer's place, as a question does, and is answered by the same keys.
 
-When its plan is ready, the agent asks you to approve it. Approving goes back to full access.
+![A removal waiting to be allowed, asked about with full access](../../../spec/screens/approval-full-access.png)
+
+- **Its header is the tool,** then what the subagent that asks is for, when one does.
+- **Under what the agent says it's for is the command, whole.** A long one scrolls. An edit, or a file to write, shows what it would change, under the file's path. Another tool shows its main input, such as a URL.
+- **Under that is why the agent asks,** in its own words, when it says.
+- **`1` allows it and `2` denies it,** and `Enter` or the arrow sends what's chosen.
+- **`0` goes to the row for saying what to do instead.** What's typed there denies the request, and the agent is told in those words. `Enter` there sends only what's typed, so it never allows.
+- **Typing anything else takes back what's chosen,** so a sentence meant for the composer can't allow a command.
+- **With more requests waiting, the bottom left says how many,** and each is asked in turn.
+
+![A request with what to do instead typed, and more waiting](../../../spec/screens/approval-denying.png)
+
+Once answered, a request leaves the call's own line in the chat, and a line after it saying `Denied`, if you denied it.
+
+When its plan is ready, the agent asks you to approve it, on a card in the chat. Approving goes back to full access.
 
 ## While an agent waits
 
 - **Its title is bright,** in its chat's tab and on its workspace's row, until it's answered, whether or not it's showing.
-- **Its mark holds still,** and the working line goes, since the question says it's your turn.
+- **Its mark holds still,** and the working line goes, since what it asks says it's your turn.
 - **A notification says `Waiting on you`,** if you're elsewhere.
-- **What you've chosen and typed in answer is kept by the hub,** so it's there when the app opens again.
+- **What you've chosen and typed in answer is kept by the hub,** so it's there when the app opens again, and wherever else the chat is open. A choice made there makes the panel here ignore keys for half a second, so an Enter you meant for your own choice can't send it.
 
 ## From the command line
 

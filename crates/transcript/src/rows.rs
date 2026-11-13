@@ -27,7 +27,6 @@ use crate::selection::Selection;
 use crate::transcript::{Model, Transcript};
 
 mod alone;
-mod approval;
 mod around;
 mod asked;
 mod cache_rule;
@@ -38,6 +37,7 @@ mod failed_request;
 mod line;
 mod mode;
 mod notices;
+mod plan_card;
 mod prompt;
 mod shown;
 mod tail;
@@ -54,12 +54,13 @@ pub(crate) use around::{NEAR, REACH, retry_at};
 pub(crate) use column::room_under;
 pub use column::{ABOVE_THE_COMPOSER, around_column, in_column};
 pub(crate) use shown::{Found, of_row as found_in_row, rows_drawing, rows_to_count};
+pub(crate) use tools::ChangeAsked;
 
-use approval::approval_card;
 pub(crate) use around::SubagentCalls;
 use around::{Around, BlockAround, asks_questions, drawn_in_its_call, drawn_in_row};
 use column::column;
 use notices::{agent_exited, exit_output, notice};
+use plan_card::plan_card;
 use prompt::{Prompt, prompt_bubble};
 use tail::{EndOfChat, Waiting, render_tail};
 use text::{from_blocks, written};
@@ -292,7 +293,9 @@ fn render_event(
             message(seq, blocks, around, shared, find, cx)
         }
         EventBody::TurnEnded { .. } => turn_end::line(event, around.agent.clone(), around.cache.as_ref(), find, cx),
-        EventBody::ApprovalRequested { .. } => approval_card(seq, body, around.approval_open, shared, cx),
+        // A plan's card. A tool's use is asked in the composer's place too, and its call's own line is what the
+        // transcript keeps of it, with what became of it after.
+        EventBody::ApprovalRequested { .. } => plan_card(seq, body, around.approval_open, shared, cx),
         // A question's line says what became of it.
         EventBody::ApprovalResolved { .. } if around.closes_a_question => empty(),
         EventBody::ApprovalResolved { outcome: ApprovalOutcome::Cancelled, .. } => muted_line("Approval cancelled"),

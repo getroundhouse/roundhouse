@@ -38,6 +38,6 @@ pub use rows::{ABOVE_THE_COMPOSER, around_column, in_column, subagent_standing};
 pub use selection::KEY_CONTEXT;
 pub use transcript::{PullRequestStanding, Transcript, TranscriptEvent};
 
-/// How long a new question ignores keys, which a test can wait out.
+/// How long what's just been asked in the composer's place ignores keys, which a test can wait out.
 #[cfg(feature = "testing")]
 pub const QUESTION_SETTLES: std::time::Duration = questions::SETTLE;

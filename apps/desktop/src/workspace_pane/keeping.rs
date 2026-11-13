@@ -1,7 +1,8 @@
-//! What's typed and attached in each chat and not sent, what's chosen and typed in answer to each chat's question, and
-//! the comment being written on the diff. The hub keeps each, so it's there after the app restarts, and in every
-//! client: the pane starts with what the hub has, reads back the files it kept, has it keep each change, and shows a
-//! change made elsewhere, such as in another client. Quitting loses only what the hub hasn't had yet.
+//! What's typed and attached in each chat and not sent, what's chosen and typed in answer to what each chat's agent
+//! asks in the composer's place, and the comment being written on the diff. The hub keeps each, so it's there after
+//! the app restarts, and in every client: the pane starts with what the hub has, reads back the files it kept, has it
+//! keep each change, and shows a change made elsewhere, such as in another client. Quitting loses only what the hub
+//! hasn't had yet.
 
 use std::collections::HashSet;
 
@@ -157,7 +158,7 @@ impl WorkspacePane {
         self.with_window(cx, move |_, window, cx| panel.update(cx, |p, cx| p.take_so_far(kept.as_ref(), window, cx)));
     }
 
-    /// The question the chat's agent is waiting on, as its transcript asks it.
+    /// What the chat's agent is waiting on, a question or a tool's use, as its transcript asks it.
     fn question(&self, chat: &SessionId, cx: &App) -> Option<Entity<QuestionPanel>> {
         let (transcript, _) = self.chats.get(chat)?.transcript.as_ref()?;
         transcript.read(cx).question().cloned()

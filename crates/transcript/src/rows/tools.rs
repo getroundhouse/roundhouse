@@ -30,6 +30,7 @@ mod search;
 mod web;
 
 use super::line::{self, Line, Part};
+pub(crate) use files::ChangeAsked;
 
 /// Where a call is drawn and whether it's open, which its line needs to open and close it, and what every row is drawn
 /// with, which a subagent's work, drawn in its call, needs too.

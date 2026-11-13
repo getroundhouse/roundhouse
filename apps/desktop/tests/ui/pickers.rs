@@ -43,8 +43,7 @@ fn shift_tab_turns_plan_mode_on_and_off_and_the_model_picker_changes_a_running_c
     ui.input("tool:echo two > two.txt");
     ui.press("enter");
     ui.wait("the question", |ui| ui.session_status() == Some(SessionStatus::WaitingApproval));
-    let seq = ui.next_open_approval();
-    ui.click(ElementId::NamedInteger("allow".into(), seq));
+    ui.allow_tool_use();
     ui.wait("the second tool", |ui| ui.session_status() == Some(SessionStatus::Idle) && path.join("two.txt").exists());
 
     // Out of plan mode, and another model, on the same agent.

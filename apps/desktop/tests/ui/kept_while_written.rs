@@ -3,10 +3,10 @@
 
 #![cfg(test)]
 
-use gpui_kit::{AppContext as _, SharedString, TestAppContext};
+use gpui_kit::{AppContext as _, TestAppContext};
 use protocol::model::{AnswerDraft, AnswerSoFar, CommentDraft, DiffSide, SessionStatus, WorkspaceId};
 
-use crate::support::{Diff, Stack, Ui};
+use crate::support::{Diff, Stack, Ui, id};
 
 /// The comment the hub keeps as being written on the workspace's diff.
 fn kept_comment(stack: &Stack, id: &WorkspaceId) -> Option<CommentDraft> {
@@ -28,10 +28,6 @@ fn open_a_diff(ui: &mut Ui<'_>) -> Diff {
     diff
 }
 
-fn id(name: &str) -> SharedString {
-    SharedString::from(name.to_string())
-}
-
 /// What's chosen and typed in answer to the question showing.
 fn so_far(ui: &Ui<'_>) -> Option<AnswerDraft> {
     let transcript = ui.transcript()?;
@@ -43,13 +39,7 @@ fn typed_in_answer(draft: Option<&AnswerDraft>) -> Option<&str> {
 }
 
 /// Has the agent ask a question with two options and a row to type another answer.
-fn ask(ui: &mut Ui<'_>) {
-    ui.input("ask:Which day?=Monday/Tuesday");
-    ui.press("enter");
-    ui.wait("the question", |ui| ui.session_status() == Some(SessionStatus::WaitingApproval));
-    ui.next_open_approval();
-    ui.wait("the question to show", |ui| ui.has(id("question")));
-}
+const A_QUESTION: &str = "ask:Which day?=Monday/Tuesday";
 
 #[gpui_kit::test]
 fn a_comment_being_written_is_there_when_the_app_opens_again_until_its_saved(cx: &mut TestAppContext) {
@@ -170,7 +160,7 @@ fn going_to_the_typing_row_doesnt_undo_an_answer_changed_elsewhere(cx: &mut Test
     let mut ui = Ui::open_with_a_repository(cx, &stack);
     ui.new_workspace();
     let chat = ui.active_chat();
-    ask(&mut ui);
+    ui.ask(A_QUESTION);
     let transcript = ui.transcript().unwrap();
     let question = ui.cx.read_entity(&transcript, |t, cx| t.question().unwrap().read(cx).approval_id().clone());
     // Choosing nothing, so there's nothing to keep.
@@ -192,7 +182,7 @@ fn whats_typed_in_answer_is_there_when_the_app_opens_again_until_its_sent(cx: &m
     let mut ui = Ui::open_with_a_repository(cx, &stack);
     ui.new_workspace();
     let chat = ui.active_chat();
-    ask(&mut ui);
+    ui.ask(A_QUESTION);
     ui.click(id("question-other"));
     ui.input("Friday");
     let kept = || stack.client().session_get(&chat).unwrap().answer_draft;
@@ -206,13 +196,47 @@ fn whats_typed_in_answer_is_there_when_the_app_opens_again_until_its_sent(cx: &m
     ui.wait("sending it to clear what's kept", |_| kept().is_none());
 }
 
+/// A tool's use is asked as a question whose rows are `client_core::ToolUseAnswer::ALL`, in the order every client
+/// shows them, so the row chosen is kept by its place there, as a question's option is, and means the same elsewhere.
+#[gpui_kit::test]
+fn whats_chosen_and_typed_for_a_tools_use_is_kept_and_shows_wherever_its_asked(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = Ui::open_with_a_repository(cx, &stack);
+    ui.new_workspace();
+    let chat = ui.active_chat();
+    let kept = |stack: &Stack| stack.client().session_get(&chat).unwrap().answer_draft;
+    ui.ask(r#"tool:rm -rf "$(cat nothing-here)""#);
+
+    ui.click(id("question-answer-0"));
+    ui.wait("Allow to be kept", |_| kept(&stack).is_some_and(|draft| draft.answers[0].picked == [0]));
+
+    ui.click(id("question-other"));
+    ui.input("Use its full path");
+    ui.wait("what's typed to be kept", |_| typed_in_answer(kept(&stack).as_ref()) == Some("Use its full path"));
+
+    // Chosen elsewhere, it's chosen here, and an Enter as it comes, meant for what was chosen here, sends nothing.
+    ui.press("escape");
+    let approval_id = kept(&stack).unwrap().approval_id;
+    let deny = AnswerSoFar { picked: vec![1], typed: String::new(), other: false };
+    let denied_elsewhere = AnswerDraft { approval_id, answers: vec![deny] };
+    stack.client().session_answer_draft(&chat, Some(&denied_elsewhere)).unwrap();
+    ui.wait("Deny to be chosen here", |ui| so_far(ui).as_ref() == Some(&denied_elsewhere));
+    ui.press("enter");
+    ui.frame();
+    assert_eq!(ui.session_status(), Some(SessionStatus::WaitingApproval), "nothing was sent");
+
+    // Cleared elsewhere, it goes here too.
+    stack.client().session_answer_draft(&chat, None).unwrap();
+    ui.wait("it to go here", |ui| so_far(ui).is_none());
+}
+
 #[gpui_kit::test]
 fn an_answer_changed_elsewhere_shows_in_the_question(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = Ui::open_with_a_repository(cx, &stack);
     ui.new_workspace();
     let chat = ui.active_chat();
-    ask(&mut ui);
+    ui.ask(A_QUESTION);
     ui.click(id("question-answer-0"));
     ui.view().drafts().unwrap().flushed().recv().unwrap();
     let question = so_far(&ui).unwrap().approval_id;

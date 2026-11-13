@@ -14,11 +14,11 @@ pub enum TranscriptEvent {
     NotSent { message: String, prompt: Prompt<FileToSend> },
     /// The agent finished a turn, so anything derived from the worktree may be out of date.
     TurnEnded,
-    /// The question in the composer's place changed: one came, or the one there was answered. `left` is the focus of
-    /// the one that went, if one did, so focus that was in it can move to what's drawn now.
+    /// What's asked in the composer's place changed: a question or a tool's use came, or the one there was answered.
+    /// `left` is the focus of the one that went, if one did, so focus that was in it can move to what's drawn now.
     Asking { left: Option<FocusHandle> },
-    /// What's chosen or typed in answer to the question changed, so the hub can keep it: within a moment while it's
-    /// typed, or at once as something's chosen or it's answered. `QuestionPanel::so_far` says what it is now.
+    /// What's chosen or typed in answer to what's asked there changed, so the hub can keep it: within a moment while
+    /// it's typed, or at once as something's chosen or it's answered. `QuestionPanel::so_far` says what it is now.
     Answering { at_once: bool },
     /// Someone asked to see the work of the subagent the call `call` started, in the subagent tab. `title` is what the
     /// call says it's for, for a subagent whose record hasn't come.

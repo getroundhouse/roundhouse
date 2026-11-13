@@ -42,7 +42,7 @@ A web client isn't a target, since nothing depends on one, but nothing rules one
 - **One task, one workspace.** A worktree, a branch, ten ports and chats of its own, so agents never share files. You describe the task as you create the workspace, and the agent starts on it at once. A prompt sent while the workspace is setting up waits, then sends.
 - **Quiet until it needs you.** Every workspace has a mark: a light while its agent works, red when it stopped short, and its pull request's colour. A name turns bright when there's a reply you haven't read, or an agent is waiting on you. Nothing else moves.
 - **From the prompt to the merge.** Read the diff beside the chat, comment on a changed line, and send the comments to the agent. A bar above the changes says the first thing in the way of merging the pull request, and offers the one thing to do about it, such as Push, Fix checks, Resolve or Merge. Every row in the sidebar shows where its pull request stands.
-- **Hand over the work.** Agents have full access, so one doesn't stall on a question while you're with another. When you'd rather see the route first, plan mode has an agent work out a plan, and ask before it changes anything. A question from an agent takes the composer's place until it's answered.
+- **Hand over the work.** Agents have full access, so one doesn't stall on a question while you're with another. When you'd rather see the route first, plan mode has an agent work out a plan, and ask before it changes anything. A question from an agent, or a request to use a tool, takes the composer's place until it's answered.
 - **Steer or queue.** `Enter` while the agent works sends a prompt it reads at its next chance. `Cmd-Enter` queues one for when it finishes. Stopping the agent holds the queue until you say go.
 - **Agents outlive the app.** A hub, in a process of its own, owns every workspace and chat and runs the agents. Quit the app and they keep working, and queued prompts still send. An update restarts the hub at once, and running agents carry on, on the version they started with. On Windows an update still waits for them, since agents there stop with the hub.
 - **Your agent, your login.** It runs the Claude CLI on your Mac, with your login and settings. There's no Roundhouse account, and nothing is sent to us: the app's only request of its own is its check for updates.
@@ -82,7 +82,7 @@ Then:
 5. `Cmd-Shift-P` asks the agent for a pull request. From then on, the top of that sidebar says where it stands, and offers the next thing to do about it.
 
 > [!WARNING]
-> Every agent has full access. It runs commands and changes files as you, without asking, and a worktree is a directory, not a sandbox. In plan mode, which `Shift-Tab` turns on and off, it asks before changing anything.
+> Every agent has full access. It runs commands and changes files as you, without asking, but for the rare command its CLI asks about in any mode, such as a removal it can't check. A worktree is a directory, not a sandbox. In plan mode, which `Shift-Tab` turns on and off, it asks before changing anything.
 
 Roundhouse keeps its data in `~/Library/Application Support/roundhouse`, and puts worktrees in `~/roundhouse/workspaces`. The model, and how hard it thinks, are below the composer.
 

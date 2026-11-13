@@ -160,12 +160,6 @@ pub(super) fn planning() -> World {
     in_plan_mode(conversation())
 }
 
-/// The screen's chat in plan mode, waiting for a command to be allowed, since only an agent that's planning asks
-/// before using a tool.
-pub(super) fn approval() -> World {
-    in_plan_mode(chat_world(SessionStatus::WaitingApproval, chats::approval()))
-}
-
 /// `world`, with the screen's chat in plan mode.
 pub(super) fn in_plan_mode(mut world: World) -> World {
     let focus = world.workspaces.iter().find(|w| w.name == FOCUS).unwrap().id.clone();

@@ -31,7 +31,7 @@ pub enum Region {
     FindBar,
     /// The button back down to the chat's latest row, which shows once the chat is scrolled away from it.
     LatestButton,
-    /// A question the agent asked, in the composer's place.
+    /// What the agent asks in the composer's place: a question, or to use a tool.
     Question,
     /// What an edit changed, shown while the pointer is on its line.
     EditPreview,

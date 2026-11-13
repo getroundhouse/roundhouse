@@ -13,7 +13,7 @@ use super::frame::{
 use super::steps::{Screen, Step, Target};
 use super::world::World;
 use super::worlds::{
-    approval, archiving, attachments, chat_tabs, chat_world, closed_chats, conversation, planning, queue_held, queued,
+    archiving, attachments, chat_tabs, chat_world, closed_chats, conversation, planning, queue_held, queued,
     setup_failed, steered, streaming, titled, unread, unread_titled, waiting_on_checks, working_background,
 };
 use super::{chats, long_chats, pictures, question_chats};
@@ -85,7 +85,6 @@ pub(crate) const SCREENS: &[Screen] = &[
         frame: Frame::Dialog,
         steps: &[Step::Select(FOCUS), Step::Click("picture/attachment/shot-1")],
     },
-    Screen { name: "approval", spec: "chats.md", world: Some(approval), frame: CHAT, steps: &[Step::Select(FOCUS)] },
     Screen {
         name: "background",
         spec: "chats.md",

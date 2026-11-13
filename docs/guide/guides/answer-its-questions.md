@@ -1,6 +1,6 @@
 # Answer its questions
 
-An agent asks you something in two cases: it needs a decision only you can make, or it's in plan mode and wants to do something. Either way, its workspace's title turns bright until you've answered.
+An agent asks you something when it needs a decision only you can make, when it's in plan mode and wants to do something, and before the few things its own CLI asks about whatever the mode. Each time, its workspace's title turns bright until you've answered.
 
 ## A question
 
@@ -22,19 +22,28 @@ What you were typing in the composer isn't lost. It waits behind the question, a
 
 ## An approval
 
-In plan mode, an agent asks before it uses a tool, such as running a command. The request is a card in the chat, with `Allow` and `Deny`.
+In plan mode, an agent asks before it uses a tool, such as running a command. The request takes the composer's place, as a question does, with the command itself under what the agent says it's for.
 
 ![A command waiting to be allowed, in a chat that's planning](../../spec/screens/approval.png)
 
-When the agent has worked out its plan, it asks you to approve it. Approving goes back to full access, and the agent carries the plan out.
+- **Press `1` to allow it, or `2` to deny it,** then `Enter` to send.
+- **Press `0` to say what to do instead.** What you type denies the request, and the agent is told in your words.
 
-Outside plan mode, agents don't ask before using tools. [Full access and plan mode](../concepts/full-access-and-plan-mode.md) says why.
+An agent with full access asks only about what its own CLI won't do unasked, such as a command that removes something it can't check. The request says why, and which subagent is asking, when one is.
+
+![A removal waiting to be allowed, asked about with full access](../../spec/screens/approval-full-access.png)
+
+When several agents ask at once, each is asked in turn, and the bottom left says how many are waiting.
+
+When the agent has worked out its plan, it asks you to approve it, on a card in the chat. Approving goes back to full access, and the agent carries the plan out.
+
+[Full access and plan mode](../concepts/full-access-and-plan-mode.md) says why agents otherwise don't ask.
 
 ## While it waits
 
 An agent waiting on you holds still, and so does its mark. Nothing else is held up: other chats and workspaces carry on.
 
-The answer you've started is kept by the hub, so it's there if you quit the app and come back.
+The answer you've started is kept by the hub, so it's there if you quit the app and come back, and wherever else the chat is open.
 
 ## Afterwards
 

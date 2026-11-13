@@ -203,7 +203,8 @@ impl WorkspacePane {
     /// What's attached, what's typed, and below them the bar, over plan mode's texture while the agent is planning.
     /// Files dropped anywhere on it are attached, and so is a paste that holds images or files. It's centred under the
     /// transcript's column and a little wider, so the transcript's text sits inside its edges. While the agent waits on
-    /// a question, the question is asked here instead, and what's typed and attached waits for it to go.
+    /// a question, or to be allowed to use a tool, that's asked here instead, and what's typed and attached waits for
+    /// it to go.
     pub(super) fn composer_row(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let queue = self.queue_card(cx);
         let around = |inside: AnyElement| transcript::around_column(v_flex().w_full().children(queue).child(inside));
