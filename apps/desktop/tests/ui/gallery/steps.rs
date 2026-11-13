@@ -2,6 +2,8 @@
 
 #![cfg(test)]
 
+use desktop::updates::Kind;
+
 use super::frame::Frame;
 use super::world::World;
 
@@ -62,8 +64,10 @@ pub(crate) enum Step {
     ClickItem(&'static str),
     /// Has the app show this version as downloaded, as if an update had come.
     UpdateReady(&'static str),
-    /// Has the app show that it couldn't reach the update server.
-    UpdateProblem,
+    /// Has the app show this problem updating, with this detail for when the pointer rests on it.
+    UpdateProblem(Kind, &'static str),
+    /// Has the app show a check for updates under way, as Check for Updates… starts one.
+    UpdateChecking,
     /// Opens Settings, as its menu item does.
     OpenSettings,
     /// Clicks the transcript's line with this label, such as a tool call, to open it, has the chat go back to its end,

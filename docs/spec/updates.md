@@ -12,46 +12,77 @@ What someone using the desktop app sees when it or its hub updates, or when ther
 - **An older hub keeps working.** The app hides or disables what it doesn't support, and only a real protocol break stops it.
 - **A hub someone runs themselves is left alone,** even on the same Mac. The app says when it's older, and only its admins stop it.
 - **A problem updating says so under the build in the sidebar,** with the detail on hover, until a later check works. A feed or package that isn't the one the release workflow signed says "Update refused" at once. Not reaching the update server only shows once it has lasted a day, since being offline for a while is ordinary, unless you check for updates yourself. An app that can't replace itself where it is says so when it opens, and one that macOS runs from where it was downloaded asks to be moved to Applications. *Unconfirmed.*
+
+  **An app that macOS runs from where it was downloaded, asking to be moved to Applications. Its words are cut off at the sidebar's edge, as the app draws them now.** *Unconfirmed.*
+
+  ![Asking to be moved to Applications](screens/update-translocated.png)
+
+  **An update refused, in red, since it isn't what the release workflow signed. Its words are cut off at the sidebar's edge, as the app draws them now.** *Unconfirmed.*
+
+  ![An update refused](screens/update-refused.png)
+
 - **Nothing about updating is a native dialog.** Checking for updates answers in the sidebar, and an update you asked for shows as the same card as one that downloaded by itself. Before restarting the app would lose what's typed, the update's card asks, in its own place. Before restarting now would stop agents, a dialog of the app's own asks, over the window.
 - **Check for Updates… in the app menu looks right away,** rather than waiting for the next look, which comes when the app opens and every hour. The sidebar says it's checking, under the build, until the look finishes. A newer version shows as its card. What went wrong shows as a problem at once, even not reaching the update server, because you asked. Otherwise "Up to date" shows under the build for a few seconds. A build that doesn't update itself says so the same way, and one that can't update where it is already says why. *Unconfirmed.*
+
+  **The sidebar saying it's checking, under the build.** *Unconfirmed.*
+
+  ![Checking for updates](screens/checking-for-updates.png)
 
 ## The build line
 
 The bottom of the sidebar shows which build is running, faint, and only brings up the hub when it isn't the app's build. While an update has something to say, a card with the app's icon takes the version's place, saying where it's got to and what to do next. An info mark in its corner says more on hover, in a box just above the card and as wide as it: which version it's updating from and to, as its heading, then what that means for what's running. Nothing about an update arriving or finishing by itself is a modal or a notification, since every merge publishes one. The one dialog is the one you ask for, before `Restart now` stops something. *Unconfirmed:* all of this section, and each screen in it.
 
-**An update is downloaded.** The card says "Update ready" with the version, and `What's new` beside it, a link to a page of what the version changes. It's only on this card, since that's when someone is deciding to take the update. *Not built:* the page, so the link opens nothing. `Restart to update` is the card's main action. That installs it and opens the app again, and agents keep running, since the hub outlives the app. Quitting installs it too. What's typed and attached in a composer isn't lost, since the hub keeps it, as `chats.md` says, and nor is an answer being typed to a question, or a comment being written, as `diff.md` says, or what's in the new-workspace dialog, as `workspaces.md` says. So restarting first waits up to two seconds for what's still on its way there, such as a file just attached, as quitting does. Anything else not sent would be lost, such as what the hub didn't take in time, like a prompt still on its way, so the card asks first when there is: its title becomes "Restart to update?", it says how many chats and comments have something it would lose, and `Keep working` and `Restart` take its button's place. The question holds nothing else up, so more can be typed while it asks, and `Restart` asks again if more would be lost than it said.
+- **An update is downloaded.** The card says "Update ready" with the version, and `What's new` beside it, a link to a page of what the version changes. It's only on this card, since that's when someone is deciding to take the update. *Not built:* the page, so the link opens nothing. `Restart to update` is the card's main action. That installs it and opens the app again, and agents keep running, since the hub outlives the app. Quitting installs it too. What's typed and attached in a composer isn't lost, since the hub keeps it, as `chats.md` says, and nor is an answer being typed to a question, or a comment being written, as `diff.md` says, or what's in the new-workspace dialog, as `workspaces.md` says. So restarting first waits up to two seconds for what's still on its way there, such as a file just attached, as quitting does. Anything else not sent would be lost, such as what the hub didn't take in time, like a prompt still on its way, so the card asks first when there is: its title becomes "Restart to update?", it says how many chats and comments have something it would lose, and `Keep working` and `Restart` take its button's place. The question holds nothing else up, so more can be typed while it asks, and `Restart` asks again if more would be lost than it said.
 
-![Update ready](screens/update-ready.png)
+  **The card once an update is downloaded, with What's new and Restart to update.** *Unconfirmed.*
 
-![Asking before restarting to update](screens/restart-to-update-question.png)
+  ![Update ready](screens/update-ready.png)
 
-**The app has updated, and a hub from before agents could outlive it is still running them.** Any other local hub has restarted by then, so the update is done, and no card shows, unless it's waiting for a setup script to finish. Then the card says "Finishing update" and "Waiting on other work", and the app goes on using that hub until it has gone. *Unconfirmed.* For one of these, the card says "Finishing update" and how many agents it's waiting on, or "Waiting on other work" when what's left is a setup script or something else connected to it, such as the command line, and the app restarts the hub as soon as that's done. An agent waiting on its pull request doesn't hold the update up, and isn't counted, since the new hub goes on with the wait and starts the agent again once it ends. *Unconfirmed.* An agent that asked you something, or wants an approval, holds the update up too, and never finishes by itself, so the card says that apart, as "1 agent is waiting on you", or after the rest, as "Waiting on 1 agent. 1 more is waiting on you." Otherwise the update looks stuck, since nothing in the sidebar shows as working.
+  **The card asking first, when restarting would lose a comment that hasn't been sent.** *Unconfirmed.*
 
-`Restart now` is a quiet button, since it stops them, and a dialog asks first, over the window: "Restart now?", what that stops, such as "This stops the 1 agent still running on the previous version. The agent picks up its conversation at its next prompt.", and `Not now` and `Restart now`. `Not now` closes it and changes nothing, so the update still finishes by itself. More can start while it asks, so `Restart now` asks again if more would stop than it said. When what's left is something else connected to it, the dialog says that restarting cuts that off, rather than that it stops agents. With nothing using the hub at all, `Restart now` restarts at once, without asking. The dialog doesn't hold up the update finishing by itself, and closes if it does.
+  ![Asking before restarting to update](screens/restart-to-update-question.png)
 
-![Finishing the update](screens/finishing-update.png)
+- **The app has updated, and a hub from before agents could outlive it is still running them.** Any other local hub has restarted by then, so the update is done, and no card shows, unless it's waiting for a setup script to finish. Then the card says "Finishing update" and "Waiting on other work", and the app goes on using that hub until it has gone. *Unconfirmed.* For one of these, the card says "Finishing update" and how many agents it's waiting on, or "Waiting on other work" when what's left is a setup script or something else connected to it, such as the command line, and the app restarts the hub as soon as that's done. An agent waiting on its pull request doesn't hold the update up, and isn't counted, since the new hub goes on with the wait and starts the agent again once it ends. *Unconfirmed.* An agent that asked you something, or wants an approval, holds the update up too, and never finishes by itself, so the card says that apart, as "1 agent is waiting on you", or after the rest, as "Waiting on 1 agent. 1 more is waiting on you." Otherwise the update looks stuck, since nothing in the sidebar shows as working.
 
-![What the update's info mark says](screens/update-details.png)
+  `Restart now` is a quiet button, since it stops them, and a dialog asks first, over the window: "Restart now?", what that stops, such as "This stops the 1 agent still running on the previous version. The agent picks up its conversation at its next prompt.", and `Not now` and `Restart now`. `Not now` closes it and changes nothing, so the update still finishes by itself. More can start while it asks, so `Restart now` asks again if more would stop than it said. When what's left is something else connected to it, the dialog says that restarting cuts that off, rather than that it stops agents. With nothing using the hub at all, `Restart now` restarts at once, without asking. The dialog doesn't hold up the update finishing by itself, and closes if it does.
 
-![Asking before restarting now](screens/finish-update-question.png)
+  **The card while the update waits on an agent still running, with one more waiting on you.** *Unconfirmed.*
 
-**A hub someone runs themselves is another build.** The version says so, as "1.0.0 · hub 0.9.0", and the app leaves it alone.
+  ![Finishing the update](screens/finishing-update.png)
 
-![A hub someone runs themselves](screens/own-hub.png)
+  **What the card's info mark says, in a box just above it.** *Unconfirmed.*
 
-**A problem updating** shows under the version, muted, as the rule above says. A download that isn't what the release workflow signed is red, since it may be someone tampering with the update.
+  ![What the update's info mark says](screens/update-details.png)
 
-![A problem updating](screens/update-problem.png)
+  **The dialog that asks before `Restart now` stops the agents still running.** *Unconfirmed.*
+
+  ![Asking before restarting now](screens/finish-update-question.png)
+
+- **A hub someone runs themselves is another build.** The version says so, as "1.0.0 · hub 0.9.0", and the app leaves it alone.
+
+  **The build line with a hub someone runs themselves, on another version.** *Unconfirmed.*
+
+  ![A hub someone runs themselves](screens/own-hub.png)
+
+- **A problem updating** shows under the version, muted, as the rule above says. A download that isn't what the release workflow signed is red, since it may be someone tampering with the update.
+
+  **Not reaching the update server, under the version.** *Unconfirmed.*
+
+  ![A problem updating](screens/update-problem.png)
 
 ## A chat on a new version
 
-**A chat says where its agent moved to a new version,** with a rule across it, drawn as a compaction's is, with an arrow rising out of a circle: `Roundhouse chat worker updated from 0.9.0 to 1.0.0`. It names Roundhouse, so it isn't taken for the agent's CLI or its model updating, and says both versions on one line. A new version brings the worker's new tools and fixes, so that's where they reach the agent, and a bug report has to say which version a turn ran on. What the agent was told when the chat began stays as it was, since its CLI keeps that with the conversation. The rule is where the agent next starts, above the prompt that started it, which is drawn where the agent read it, so everything under the rule ran on the new version, and a chat nobody goes back to says nothing. However many updates came before then, there's one rule, from the version the agent last ran on, and an agent started again on the same version, as after the Mac restarts, has none. An update leaves the API's cache of the conversation as it was, so the rule says nothing of it. A prompt that found it expired after all says so with its own rule, as `chats.md` says, since then it's the wait that cost it. *Unconfirmed:* the rule's mark, where it goes, and that it says nothing of the cache.
+- **A chat says where its agent moved to a new version,** with a rule across it, drawn as a compaction's is, with an arrow rising out of a circle: `Roundhouse chat worker updated from 0.9.0 to 1.0.0`. It names Roundhouse, so it isn't taken for the agent's CLI or its model updating, and says both versions on one line. A new version brings the worker's new tools and fixes, so that's where they reach the agent, and a bug report has to say which version a turn ran on. What the agent was told when the chat began stays as it was, since its CLI keeps that with the conversation. The rule is where the agent next starts, above the prompt that started it, which is drawn where the agent read it, so everything under the rule ran on the new version, and a chat nobody goes back to says nothing. However many updates came before then, there's one rule, from the version the agent last ran on, and an agent started again on the same version, as after the Mac restarts, has none. An update leaves the API's cache of the conversation as it was, so the rule says nothing of it. A prompt that found it expired after all says so with its own rule, as `chats.md` says, since then it's the wait that cost it. *Unconfirmed:* the rule's mark, where it goes, and that it says nothing of the cache.
 
-![A prompt sent once the app had updated, whose agent started on the new version](screens/updated.png)
+  **A prompt sent once the app had updated, under the rule saying its agent started on the new version.** *Unconfirmed.*
 
-**A workspace still on the version before the app's,** whose name's card says which version it's on, and that it moves to the app's once nothing in it is at work, as `workspaces.md` says of the card. It's the only place that shows a workspace waiting to move. *Unconfirmed.*
+  ![A prompt sent once the app had updated, whose agent started on the new version](screens/updated.png)
 
-![The card of a workspace still on the version before the app's](screens/workspace-card-moving.png)
+- **A workspace still on the version before the app's,** whose name's card says which version it's on, and that it moves to the app's once nothing in it is at work, as `workspaces.md` says of the card. It's the only place that shows a workspace waiting to move. *Unconfirmed.*
+
+  **The card of a workspace still on the version before the app's.** *Unconfirmed.*
+
+  ![The card of a workspace still on the version before the app's](screens/workspace-card-moving.png)
 
 ## When there's no hub
 

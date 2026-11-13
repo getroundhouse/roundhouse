@@ -3,6 +3,7 @@
 
 #![cfg(test)]
 
+use desktop::updates::{Kind, Refusal};
 use look::Region;
 use protocol::event::EventBody;
 use protocol::model::SessionStatus;
@@ -70,7 +71,31 @@ pub(crate) const UPDATE_SCREENS: &[Screen] = &[
         spec: "updates.md",
         world: Some(conversation),
         frame: SIDEBAR,
-        steps: &[Step::Select(FOCUS), Step::UpdateProblem],
+        steps: &[Step::Select(FOCUS), Step::UpdateProblem(Kind::Unreachable, "connection refused")],
+    },
+    Screen {
+        name: "update-refused",
+        spec: "updates.md",
+        world: Some(conversation),
+        frame: SIDEBAR,
+        steps: &[
+            Step::Select(FOCUS),
+            Step::UpdateProblem(Kind::Refused(Refusal::Unsigned), "the update feed's signature doesn't match it"),
+        ],
+    },
+    Screen {
+        name: "update-translocated",
+        spec: "updates.md",
+        world: Some(conversation),
+        frame: SIDEBAR,
+        steps: &[Step::Select(FOCUS), Step::UpdateProblem(Kind::Translocated, "opened where it was downloaded")],
+    },
+    Screen {
+        name: "checking-for-updates",
+        spec: "updates.md",
+        world: Some(conversation),
+        frame: SIDEBAR,
+        steps: &[Step::Select(FOCUS), Step::UpdateChecking],
     },
     Screen { name: "updated", spec: "updates.md", world: Some(updated), frame: CHAT, steps: &[Step::Select(FOCUS)] },
     Screen {

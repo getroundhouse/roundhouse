@@ -135,10 +135,8 @@ impl Driver {
             Step::RightClick(id) => self.right_click(id),
             Step::ClickItem(label) => self.click_item(label),
             Step::UpdateReady(version) => self.cx.update(|cx| desktop::updates::show_ready(version, cx)),
-            Step::UpdateProblem => {
-                let problem = Problem { kind: Kind::Unreachable, detail: "connection refused".to_string() };
-                self.cx.update(|cx| desktop::updates::show_problem(problem, cx));
-            }
+            Step::UpdateProblem(kind, detail) => self.show_problem(*kind, detail),
+            Step::UpdateChecking => self.cx.update(desktop::updates::show_checking),
             Step::OpenSettings => {
                 let open = Box::new(desktop::OpenSettings);
                 self.cx.update_window(self.handle, |_, window, cx| window.dispatch_action(open, cx)).unwrap();
@@ -158,6 +156,11 @@ impl Driver {
     fn press(&mut self, keys: &str) {
         self.frame();
         self.cx.update_window(self.handle, |_, window, cx| window.press(keys, cx)).unwrap();
+    }
+
+    fn show_problem(&mut self, kind: Kind, detail: &str) {
+        let problem = Problem { kind, detail: detail.to_string() };
+        self.cx.update(|cx| desktop::updates::show_problem(problem, cx));
     }
 
     fn hover_tab(&mut self, position: usize) {
