@@ -13,7 +13,7 @@ Two things belong in neither place. Why a piece of code is the way it is goes in
 | Product | What this is, who it's for, and why it exists |
 | Spec | What the product does for the person using it, how fast, how it looks, and why |
 | Architecture | How the system fits together, and why it's built that way |
-| Standards | How code, tests, docs and pull requests are written |
+| Standards | How code, tests, docs and pull requests are written and reviewed |
 | Reference | Facts to look up: what words mean, how an outside system behaves, the bars to hit, what a person checks by hand |
 | Instructions | How to build, test, run and install |
 
@@ -30,6 +30,7 @@ A doc describes how things are. It leaves out what was removed or replaced, and 
 | `docs/gpui.md` | Standards | Owner | How code that uses GPUI is written |
 | `docs/testing.md` | Standards | Owner | Where each kind of test goes |
 | `docs/pull-requests.md` | Standards | Owner | How a pull request and its commit are written |
+| `docs/reviews.md` | Standards | Owner | How agents review a change before it's a pull request |
 | `docs/manual-checks.md` | Reference | Owner | What a person has to judge by hand |
 | `docs/terms.md` | Reference | Agents | What the project's words mean, and which to write |
 | `docs/claude-cli.md` | Reference | Agents | How the Claude CLI behaves, and how the worker drives it |
