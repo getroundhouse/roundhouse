@@ -1,8 +1,12 @@
 use std::time::{Duration, Instant};
 
+use protocol::worker::RemoveWorkspace;
+
 use super::*;
 use crate::git::tests::{new_repo, run};
 use crate::git::{prepare_workspace, restore_workspace, worktree_there};
+
+mod other_worktrees;
 
 /// Long enough to delete a few files on a busy machine.
 const DELETE_TIMEOUT: Duration = Duration::from_secs(30);
@@ -46,7 +50,13 @@ impl Archived {
     }
 
     async fn remove_with(&self, force: bool, deleter: &Deleter) -> Result<(), ApiError> {
-        remove_workspace(self.repo.to_str().unwrap(), self.path.to_str().unwrap(), force, deleter).await
+        remove_workspace(&self.removing(&self.path, force, None), deleter).await
+    }
+
+    /// The request to remove the worktree at `path`, the workspace's own or, with `own`, another made for it.
+    fn removing(&self, path: &Path, force: bool, own: Option<&Path>) -> RemoveWorkspace {
+        let text = |path: &Path| path.to_str().unwrap().to_string();
+        RemoveWorkspace { repo_path: text(&self.repo), path: text(path), force, own: own.map(text) }
     }
 
     async fn restore(&self) -> Result<(), ApiError> {
@@ -165,7 +175,7 @@ async fn a_worktree_git_forgot_while_it_was_aside_is_deleted_rather_than_put_bac
     // As restoring a workspace beside it would, or `git gc`.
     run(&archived.repo, &["worktree", "prune"]);
 
-    forget(&archived.repo, &archived.path, false, &record, &moved).await.unwrap();
+    forget(&archived.repo, &archived.path, Force::No, &record, &moved).await.unwrap();
 
     assert!(!archived.path.exists(), "a worktree git has forgotten would be broken");
     assert_eq!(archived.waiting(), [moved]);
@@ -180,7 +190,7 @@ async fn a_refused_worktree_that_cant_go_back_is_kept_where_nothing_deletes_it()
     // Such as a build writing to its absolute path.
     std::fs::create_dir_all(archived.path.join("target")).unwrap();
 
-    let refused = forget(&archived.repo, &archived.path, false, &record, &moved).await.err().unwrap();
+    let refused = forget(&archived.repo, &archived.path, Force::No, &record, &moved).await.err().unwrap();
 
     let parent = archived.path.parent().unwrap();
     let kept: Vec<PathBuf> = std::fs::read_dir(parent)
@@ -200,9 +210,9 @@ async fn nothing_is_moved_aside_while_another_archive_holds_the_lock() {
     std::fs::create_dir_all(archived.deleting()).unwrap();
     let other = File::create(archived.deleting().join(LOCK)).unwrap();
     other.lock().unwrap();
-    let (repo, path) = (archived.repo.to_str().unwrap().to_string(), archived.path.to_str().unwrap().to_string());
+    let removing = archived.removing(&archived.path, false, None);
 
-    let mut archiving = tokio::spawn(async move { remove_workspace(&repo, &path, false, &deleter()).await });
+    let mut archiving = tokio::spawn(async move { remove_workspace(&removing, &deleter()).await });
 
     // Something that mustn't happen has no condition to wait on, so this is a bound. Right code never gets past it.
     let early = tokio::time::timeout(Duration::from_millis(500), &mut archiving).await;
@@ -220,7 +230,7 @@ async fn a_locked_worktree_is_refused_and_left_where_it_was() {
     run(&archived.repo, &["worktree", "lock", archived.path.to_str().unwrap()]);
 
     let refused = archived.remove(false).await.err().unwrap();
-    // Git asks for a second --force, which nothing here gives.
+    // Git asks for a second --force, which only one it was stopped part way through making is given.
     let forced = archived.remove(true).await.err().unwrap();
 
     assert_eq!((refused.code, forced.code), (ErrorCode::Worker, ErrorCode::Worker));
@@ -334,19 +344,19 @@ async fn restoring_brings_back_committed_work_once() {
 async fn a_worktree_is_there_only_while_git_reads_one_at_its_path() {
     let archived = Archived::ready().await;
     let path = archived.path.to_str().unwrap();
-    assert!(worktree_there(path).await);
+    assert!(worktree_there(path).await.unwrap());
     // A folder inside it is in a worktree, and isn't one.
-    assert!(!worktree_there(archived.path.join("ignored").to_str().unwrap()).await);
+    assert!(!worktree_there(archived.path.join("ignored").to_str().unwrap()).await.unwrap());
 
     archived.remove(true).await.unwrap();
-    assert!(!worktree_there(path).await);
+    assert!(!worktree_there(path).await.unwrap());
     // Nor is a folder left where it was, which restoring refuses to write over.
     std::fs::create_dir_all(archived.path.join("left")).unwrap();
-    assert!(!worktree_there(path).await);
+    assert!(!worktree_there(path).await.unwrap());
     std::fs::remove_dir_all(&archived.path).unwrap();
 
     archived.restore().await.unwrap();
-    assert!(worktree_there(path).await);
+    assert!(worktree_there(path).await.unwrap());
     archived.wait_until_deleted().await;
 }
 
@@ -360,4 +370,17 @@ async fn a_worktree_deleted_by_hand_can_still_be_archived_and_restored() {
     assert_eq!(archived.worktrees(), 1);
     archived.restore().await.unwrap();
     assert!(archived.path.join("a.txt").exists());
+}
+
+/// A `git worktree add` stopped part way leaves git's own lock on what it made, which nothing takes off, and a forced
+/// removal goes past, as it doesn't a lock a person put there.
+#[tokio::test]
+async fn one_git_was_stopped_part_way_through_making_is_removed_when_forced() {
+    let archived = Archived::ready().await;
+    run(&archived.repo, &["worktree", "lock", "--reason", "initializing", archived.path.to_str().unwrap()]);
+
+    archived.remove(true).await.unwrap();
+
+    assert!(!archived.path.exists());
+    assert!(!run(&archived.repo, &["worktree", "list"]).contains("alder"), "git forgot it");
 }

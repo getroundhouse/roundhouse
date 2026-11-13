@@ -17,22 +17,24 @@ use protocol::worker::{
     AccountFor, AgentApproval, AgentCancel, AgentCompact, AgentConfigure, AgentPrompt, AgentStop, AttachmentWrite,
     AttachmentWritten, FileOpenAt, FilePages, FileRead, FileReadAt, FolderRead, GitDiff, GitStatus, HelloReply,
     PullRequest, PullRequestReply, Received, RunningAgentsReply, ServeTools, SetupLog, SetupLogReply, TitleFor,
-    ToolsServing, WORKER_PROTOCOL_VERSION, WatchBranches, WorkerFrame, WorkerRequest, WorkerResponse,
+    ToolsServing, WORKER_PROTOCOL_VERSION, WorkerFrame, WorkerRequest, WorkerResponse,
 };
 use tokio::io::{AsyncRead, AsyncWrite};
-use tokio::sync::{mpsc, oneshot, watch};
-use tokio::task::{AbortHandle, JoinSet};
+use tokio::sync::{mpsc, watch};
+use tokio::task::JoinSet;
 use tracing::info;
 
 use crate::asks::Asks;
+use crate::branch_watch::Whose;
 use crate::deleting::Deleter;
 use crate::tools::Tools;
-use crate::{branch_watch, git, setup};
+use crate::{git, setup};
 
 mod agent;
 mod connection;
 #[cfg(unix)]
 mod listen;
+mod moves;
 mod outbox;
 mod scripts;
 mod worktrees;
@@ -42,8 +44,10 @@ pub use listen::listen;
 
 use agent::{account_for, configure_agent, start_agent, stop_agent, title_for};
 use connection::Closing;
+use moves::Moves;
 pub(crate) use outbox::Outbox;
 use scripts::{Setup, run_archive_script, run_setup, stop_setup_script};
+use worktrees::Watches;
 
 /// Enough to see what went wrong, without sending a whole install log across.
 const SETUP_LOG_TAIL_BYTES: u64 = 256 * 1024;
@@ -92,11 +96,11 @@ struct State {
     stopping: watch::Sender<bool>,
     /// How many one-off calls have started, which numbers their records.
     calls: AtomicU64,
-    /// Held while a worktree is removed or put back, which goes on when the hub that asked has gone. The next hub's
-    /// question of whether the worktree is there waits for it, so the answer is how that ended.
-    moving: tokio::sync::Mutex<()>,
-    /// What's watching the worktree's branches, so a later watch can replace it.
-    watching: Mutex<Option<AbortHandle>>,
+    /// One at a time for each worktree: making another of the workspace's, removing any, or putting the workspace's
+    /// own back, each of which goes on when the hub that asked has gone, and the next hub's question of whether one is
+    /// there, so the answer is how that ended.
+    moves: Moves,
+    watches: Mutex<Watches>,
     /// What agents say, what the worker asks, and the branches it watches, on its way to the hub.
     outbox: Arc<Outbox>,
     /// What the worker has asked its hub and waits to hear.
@@ -136,8 +140,8 @@ impl Worker {
             setup: Arc::new(Mutex::new(Setup::Idle)),
             stopping: watch::Sender::new(false),
             calls: AtomicU64::new(0),
-            moving: tokio::sync::Mutex::new(()),
-            watching: Mutex::new(None),
+            moves: Moves::default(),
+            watches: Mutex::new(Watches::default()),
             outbox,
             tools: Arc::new(Tools::new(asks.clone(), config.build)),
             config,
@@ -187,10 +191,7 @@ async fn stop_everything(state: &State, forwarders: &tokio::sync::Mutex<JoinSet<
     }
     state.stopping.send_replace(true);
     state.asks.close();
-    // So it stops now, rather than once whatever it's reading is done.
-    if let Some(watching) = state.watching.lock().take() {
-        watching.abort();
-    }
+    state.watches.lock().stop_all();
     stop_setup_script(state);
     let agents: Vec<_> = state.agents.lock().values().map(|agent| agent.process.clone()).collect();
     let mut stops = JoinSet::new();
@@ -226,16 +227,13 @@ async fn handle(
             Ok(WorkerResponse::Ok)
         }
         WorkerRequest::RunningAgents => Ok(running_agents(state)),
-        // This worker makes and watches no worktree but its workspace's own, so it refuses these as it does a
-        // request it doesn't know.
-        WorkerRequest::AddChildWorktree(_) | WorkerRequest::WatchChildBranches(_) | WorkerRequest::Unknown => {
-            Err(unsupported(None))
-        }
+        WorkerRequest::Unknown => Err(unsupported(None)),
         WorkerRequest::NamesGitHas(asked) => worktrees::names_git_has(state, asked).await,
         WorkerRequest::PrepareWorkspace(asked) => worktrees::prepare(state, asked).await,
         WorkerRequest::RestoreWorkspace(asked) => worktrees::restore(state, asked).await,
         WorkerRequest::RemoveWorkspace(asked) => worktrees::remove(state, asked).await,
         WorkerRequest::WorktreeThere(asked) => worktrees::there(state, asked).await,
+        WorkerRequest::AddChildWorktree(asked) => worktrees::add_child(state, asked).await,
         WorkerRequest::GitStatus(GitStatus { path }) => Ok(WorkerResponse::GitStatus(git::status(&path).await?)),
         WorkerRequest::GitDiff(GitDiff { path, base_ref }) => {
             Ok(WorkerResponse::GitDiff(git::diff(&path, base_ref.as_deref()).await?))
@@ -245,16 +243,8 @@ async fn handle(
             let branch = git::branches::checked_out(Path::new(&path)).await;
             Ok(WorkerResponse::PullRequest(PullRequestReply { pull_request: git::pull_request(&path).await?, branch }))
         }
-        WorkerRequest::WatchBranches(WatchBranches { path }) => {
-            let (first, sent) = oneshot::channel();
-            let watching = branch_watch::watch(path.into(), state.outbox.clone(), state.stopping.subscribe(), first);
-            if let Some(earlier) = state.watching.lock().replace(tokio::spawn(watching).abort_handle()) {
-                earlier.abort();
-            }
-            // The first frame is queued by then, ahead of this reply, on the same stream.
-            let _ = sent.await;
-            Ok(WorkerResponse::Ok)
-        }
+        WorkerRequest::WatchBranches(asked) => worktrees::watch_branches(state, asked.path, Whose::Own).await,
+        WorkerRequest::WatchChildBranches(asked) => worktrees::watch_branches(state, asked.path, Whose::Child).await,
         WorkerRequest::GithubRateLimit(asked) => {
             Ok(WorkerResponse::GithubRateLimit(git::rate_limit(&asked.path).await?))
         }

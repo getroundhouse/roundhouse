@@ -32,7 +32,12 @@ pub(crate) fn new_repo(dir: &Path) -> PathBuf {
 }
 
 /// On the branch the hub starts a workspace on.
-async fn prepare(root: &Path, repo: &Path, name: &str, base: Option<&str>) -> Result<WorkspaceReady, ApiError> {
+pub(crate) async fn prepare(
+    root: &Path,
+    repo: &Path,
+    name: &str,
+    base: Option<&str>,
+) -> Result<WorkspaceReady, ApiError> {
     let branch = BranchName::from(format!("{name}/start"));
     prepare_workspace(root, "repo", repo.to_str().unwrap(), name, &branch, base).await
 }
