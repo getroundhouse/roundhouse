@@ -13,6 +13,7 @@ testing = []
 async-trait.workspace = true
 fastrand.workspace = true
 parking_lot.workspace = true
+private-files.workspace = true
 process.workspace = true
 protocol.workspace = true
 providers.workspace = true

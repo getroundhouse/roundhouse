@@ -95,6 +95,7 @@ fn a_token_connected_is_kept_in_a_file_of_its_own_and_the_record_says_the_hub_ho
     assert_eq!(tokens_kept(dir.path()), ["a-made-up-token"]);
     let file = std::fs::read_dir(dir.path().join("logins")).unwrap().next().unwrap().unwrap();
     assert_eq!(file.metadata().unwrap().permissions().mode() & 0o777, 0o600);
+    assert_eq!(std::fs::metadata(dir.path().join("logins")).unwrap().permissions().mode() & 0o777, 0o700);
     assert_eq!(store.account(&account.id).unwrap(), Some(account), "the record a client is given is the one kept");
 }
 

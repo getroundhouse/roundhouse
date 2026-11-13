@@ -207,6 +207,19 @@ async fn a_hub_that_didnt_ask_the_worker_to_keep_running_stops_it_by_going() {
     worker.stopped().await;
 }
 
+/// So no other user can tell the worker what to run.
+#[tokio::test]
+async fn only_this_user_can_connect_to_the_worker() {
+    let worker = Listening::start(WAIT);
+    let (hub, _, _) = Hub::greet(&worker.socket, false).await;
+
+    let mode = std::fs::metadata(&worker.socket).unwrap().permissions().mode() & 0o777;
+
+    assert_eq!(mode, 0o600);
+    hub.go().await;
+    worker.stopped().await;
+}
+
 /// So a hub that asks twice for its connection to the worker learns there's one already, rather than taking the worker
 /// from itself.
 #[tokio::test]

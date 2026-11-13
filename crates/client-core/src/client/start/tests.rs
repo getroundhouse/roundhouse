@@ -160,6 +160,20 @@ fn a_hub_leads_a_session_of_its_own() {
     assert_eq!(session, pid, "the hub isn't the leader of a session");
 }
 
+/// So no other user can read the hub's data, or what it logs, from the start: the client makes both before the hub.
+#[cfg(unix)]
+#[test]
+fn the_data_directory_and_the_log_a_client_makes_are_only_its_users() {
+    let dir = tempfile::tempdir().unwrap();
+    let paths = paths_in(dir.path());
+    let original = install(dir.path(), "app", &daemon_script(VERSION, "exit 0"));
+
+    start_hub(&paths, &Daemon::in_place(&original)).unwrap();
+
+    assert_eq!(std::fs::metadata(&paths.data_dir).unwrap().mode() & 0o777, 0o700);
+    assert_eq!(std::fs::metadata(&paths.log).unwrap().mode() & 0o777, 0o600);
+}
+
 /// A hub outlives the client that starts it, so it runs in its data directory rather than the client's, which can be a
 /// workspace that gets archived, or on Linux the mount of an `AppImage` that an update has replaced. Each path it's
 /// handed is whole, so a relative one still names what it did where the client is.

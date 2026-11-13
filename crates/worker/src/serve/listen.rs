@@ -2,7 +2,6 @@
 //! the hub asked it to.
 
 use std::io;
-use std::os::unix::fs::PermissionsExt as _;
 use std::path::Path;
 use std::time::Duration;
 
@@ -76,7 +75,7 @@ pub async fn listen(socket: &Path, config: Config, idle_limit: Duration) -> io::
 fn bind(socket: &Path) -> io::Result<UnixListener> {
     let _ = std::fs::remove_file(socket);
     let listener = UnixListener::bind(socket)?;
-    std::fs::set_permissions(socket, std::fs::Permissions::from_mode(0o600))?;
+    private_files::restrict(socket)?;
     Ok(listener)
 }
 

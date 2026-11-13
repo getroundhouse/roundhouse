@@ -105,19 +105,8 @@ impl Daemon {
 }
 
 fn start_hub(paths: &Paths, daemon: &Daemon) -> io::Result<()> {
-    // Only sets the mode if it creates the directory, because ROUNDHOUSE_HOME can point anywhere. Windows has no
-    // modes: what's created there gets its directory's permissions.
-    let mut dir = std::fs::DirBuilder::new();
-    dir.recursive(true);
-    let mut log = OpenOptions::new();
-    log.create(true).append(true);
-    #[cfg(unix)]
-    {
-        std::os::unix::fs::DirBuilderExt::mode(&mut dir, 0o700);
-        std::os::unix::fs::OpenOptionsExt::mode(&mut log, 0o600);
-    }
-    dir.create(&paths.data_dir)?;
-    let log = log.open(&paths.log)?;
+    private_files::create_dir_all(&paths.data_dir)?;
+    let log = private_files::file_options().create(true).append(true).open(&paths.log)?;
     // Whole paths, since the hub doesn't run where this client does. A bare name is looked up on `PATH` instead.
     let exe = daemon.to_start(paths)?;
     let exe = if exe.components().count() > 1 { whole(&exe)? } else { exe };

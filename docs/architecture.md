@@ -109,6 +109,7 @@ crates/
   worker/          Git, worktrees, running agents
   agents/          Claude adapter, raw event capture
   process/         Signalling a process group, recording a PID with its start time, keeping a process's own input and output from what it starts, and marking the file a process runs from
+  private-files/   Making files, directories and sockets that only their user can open, such as the data directory and what's in it, for the crates that make them. Unconfirmed
   providers/       The trait a provider adapter written in Rust implements, the loop that serves it over the provider protocol, and the local provider
   client-core/     Connection, and each hub's records and open sessions, kept in sync. Shared by every Rust client. No UI
   transcript/      A session's history and live output, in a list of its own, on the kit's Markdown blocks
@@ -152,7 +153,8 @@ apps/daemon ──> hub ──> protocol
 apps/daemon ──> providers ──> protocol
 apps/daemon ──> worker ──> agents ──> protocol
 apps/daemon ──> agents, for their descriptions
-agents, providers, worker, client-core, apps/daemon ──> process
+hub, agents, providers, worker, client-core, apps/daemon ──> process
+hub, agents, worker, client-core ──> private-files
 ```
 
 1. **Clients only talk to hubs.** They never touch git, terminals or agents directly. The hub fetches or proxies live data from the worker.

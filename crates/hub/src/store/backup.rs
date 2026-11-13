@@ -11,7 +11,7 @@ use rusqlite::Connection;
 use tracing::warn;
 
 use super::error::BackupError;
-use crate::private;
+use crate::lasting;
 
 /// How many schema versions keep a copy. Each copy is a whole database, so they can't pile up, and three
 /// steps back through the last three updates that migrated.
@@ -23,7 +23,7 @@ const UNFINISHED: &str = "unfinished.db";
 /// Saves a copy of the database, which is at schema `version`, into `dir`, and then prunes the older ones.
 /// Returns where the copy is.
 pub(crate) fn back_up(conn: &Connection, version: usize, dir: &Path) -> Result<PathBuf, BackupError> {
-    create_dir(dir)?;
+    create_dir_all(dir)?;
     let mut names = list(dir)?;
     let number = names.iter().map(|name| name.number).max().map_or(1, |last| last.saturating_add(1));
     let name = Name { version, number };
@@ -35,8 +35,8 @@ pub(crate) fn back_up(conn: &Connection, version: usize, dir: &Path) -> Result<P
 
 /// Only this user can open it, like the data directory. Making it syncs the data directory, so it's still
 /// there, with the copies in it, after a power cut.
-fn create_dir(dir: &Path) -> Result<(), BackupError> {
-    private::create_dir_lasting(dir).map_err(|e| BackupError::io("creating the directory", e))
+fn create_dir_all(dir: &Path) -> Result<(), BackupError> {
+    lasting::create_dir_all(dir).map_err(|e| BackupError::io("creating the directory", e))
 }
 
 /// Writes the copy under [`UNFINISHED`], then gives it its name, and syncs that before anything migrates.
@@ -58,7 +58,7 @@ fn write(conn: &Connection, dir: &Path, name: Name) -> Result<(), BackupError> {
         let _ = fs::remove_file(&unfinished);
     }
     named?;
-    private::sync_dir(dir).map_err(|e| BackupError::io("syncing the directory", e))
+    lasting::sync_dir(dir).map_err(|e| BackupError::io("syncing the directory", e))
 }
 
 /// Copies the database, with what's still in its WAL, which a copy of `hub.db` alone wouldn't have. Once the WAL is
@@ -97,7 +97,7 @@ fn copy_file(file: &Path, unfinished: &Path) -> Result<(), BackupError> {
     fs::copy(file, unfinished)
         .map_err(|e| BackupError::io(format!("copying {} to {UNFINISHED}", file.display()), e))?;
     // A copy takes the mode of the file it copies, and a backup is only this user's, whatever that is.
-    private::restrict(unfinished).map_err(|e| BackupError::io(format!("making {UNFINISHED} private"), e))?;
+    private_files::restrict(unfinished).map_err(|e| BackupError::io(format!("making {UNFINISHED} private"), e))?;
     // `sync_all` is `F_FULLFSYNC` on macOS, so the copy is on disk before anything migrates. Windows only flushes a
     // file through a handle that can write it.
     OpenOptions::new()
@@ -111,7 +111,7 @@ fn copy_file(file: &Path, unfinished: &Path) -> Result<(), BackupError> {
 fn vacuum_into(conn: &Connection, unfinished: &Path) -> Result<(), BackupError> {
     // Only this user can read it, like the database. SQLite would make a file others can read, but
     // `VACUUM INTO` writes into an empty one as it finds it.
-    let file = private::file_options()
+    let file = private_files::file_options()
         .write(true)
         .create_new(true)
         .open(unfinished)
