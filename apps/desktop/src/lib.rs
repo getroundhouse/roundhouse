@@ -1,6 +1,5 @@
 //! The desktop app. It only talks to a hub, through `client-core`, the same way the CLI does.
 
-#[cfg(target_os = "macos")]
 mod accessibility_focus;
 mod ago;
 mod alert;
@@ -122,7 +121,6 @@ pub fn open_main_window(
     // Before any notification, which Windows shows only for an app that has said what it's called.
     cx.set_app_identity(notifications::APP_ID, "Roundhouse");
     settings::load(&hub.paths.data_dir, cx);
-    #[cfg(target_os = "macos")]
     accessibility_focus::install();
     keys::set(cx);
     menus::set(hub.build_version, cx);

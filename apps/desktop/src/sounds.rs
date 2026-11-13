@@ -4,10 +4,6 @@
 use gpui_kit::{App, AppContext as _, Global};
 use serde::{Deserialize, Deserializer, Serialize};
 
-/// Chime, which `tools/sounds/chime.py` makes. It's the project's own, synthesized there.
-#[cfg(target_os = "macos")]
-const CHIME: &[u8] = include_bytes!("../sounds/chime.wav");
-
 /// A sound to play, as the settings keep it.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -113,11 +109,15 @@ pub fn played(cx: &App) -> Vec<String> {
     cx.try_global::<Played>().map(|played| played.0.clone()).unwrap_or_default()
 }
 
-/// The names of this computer's alert sounds. Only a Mac has them, in each `Library/Sounds`.
+/// The names of this computer's alert sounds, in each `Library/Sounds`.
+#[cfg(target_os = "macos")]
 fn computers() -> Vec<String> {
-    #[cfg(target_os = "macos")]
-    return mac::sounds();
-    #[cfg(not(target_os = "macos"))]
+    mac::sounds()
+}
+
+/// None elsewhere, since only a Mac has them.
+#[cfg(not(target_os = "macos"))]
+fn computers() -> Vec<String> {
     Vec::new()
 }
 
@@ -133,7 +133,10 @@ mod mac {
         NSData, NSSearchPathDirectory, NSSearchPathDomainMask, NSSearchPathForDirectoriesInDomains, NSString,
     };
 
-    use super::{CHIME, Sound};
+    use super::Sound;
+
+    /// Chime, which `tools/sounds/chime.py` makes. It's the project's own, synthesized there.
+    const CHIME: &[u8] = include_bytes!("../sounds/chime.wav");
 
     /// The kinds of file `AppKit` plays that alert sounds come as.
     const KINDS: [&str; 7] = ["aiff", "aif", "aifc", "caf", "wav", "mp3", "m4a"];
