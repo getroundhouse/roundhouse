@@ -169,7 +169,7 @@ pub(super) fn in_plan_mode(mut world: World) -> World {
 }
 
 /// The finished turn in the screen's own workspace, on a branch with a pull request open.
-fn converse(world: &mut World, focus: &WorkspaceId) {
+pub(super) fn converse(world: &mut World, focus: &WorkspaceId) {
     world.workspace_mut(focus).branch = "sidebar-pr-state".into();
     finished_chat(world, focus);
     world.pull_requests.insert(

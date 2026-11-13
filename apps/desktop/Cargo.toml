@@ -23,6 +23,7 @@ testing = []
 protocol.workspace = true
 client-core.workspace = true
 transcript.workspace = true
+terminal-view.workspace = true
 gpui-kit.workspace = true
 look.workspace = true
 anyhow.workspace = true
@@ -60,6 +61,7 @@ desktop = { workspace = true, features = ["testing"] }
 look = { workspace = true, features = ["testing"] }
 protocol = { workspace = true, features = ["testing"] }
 transcript = { workspace = true, features = ["testing"] }
+terminal-view = { workspace = true, features = ["testing"] }
 gpui-kit = { workspace = true, features = ["test-support"] }
 image = { workspace = true, features = ["png"] }
 tempfile.workspace = true

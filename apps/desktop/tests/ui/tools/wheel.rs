@@ -244,7 +244,7 @@ fn an_edit_s_diff_stays_while_the_pointer_is_on_it_and_scrolls(cx: &mut TestAppC
     turn_at(&mut ui, over, point(px(-100.), px(0.)));
     assert_eq!(ui.bounds("edit-preview-lines").origin, lines - point(px(100.), px(60.)), "and sideways");
 
-    ui.hover("new-chat");
+    ui.hover("new-tab");
     ui.wait_out_a_tooltip();
 
     assert!(!ui.visible("edit-preview"), "the diff goes once the pointer leaves it");

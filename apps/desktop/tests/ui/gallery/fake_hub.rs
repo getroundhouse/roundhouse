@@ -22,6 +22,7 @@ use protocol::model::{
     GitDiff, GitStatus, ModelChoice, ModelName, OpenedText, PageLine, PermissionMode, Place, PromptLine, Rev,
     SessionId, SessionSettings, SessionStatus, ToolUseId, WorkspaceStatus,
 };
+use protocol::terminal::TerminalUpdate;
 
 use super::world::World;
 
@@ -271,12 +272,18 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         R::SessionAccount(_) | R::Unknown => {
             Err(ApiError::new(ErrorCode::Unsupported, "the gallery's hub doesn't know that request"))
         }
-        // No screen shows a terminal yet, so the gallery's hub runs none, as a hub from before terminals.
-        R::TerminalOpen(_)
-        | R::TerminalAttach(_)
-        | R::TerminalInput(_)
-        | R::TerminalResize(_)
-        | R::TerminalClose(_) => Err(ApiError::new(ErrorCode::Unsupported, "the gallery's hub doesn't run terminals")),
+        // What a terminal shows, which never changes, at the size it has, which a view can't change.
+        R::TerminalAttach(attach) => {
+            let (_, screen) =
+                world.terminals.iter().find(|(terminal, _)| terminal.id == attach.id).ok_or_else(|| {
+                    ApiError::new(ErrorCode::NotFound, format!("the gallery's hub has no terminal {}", attach.id))
+                })?;
+            let update = TerminalUpdate::Screen(screen.clone());
+            Ok(Outcome::Reply(C::Ok, vec![HubFrame::Terminal { subscription_id: attach.subscription_id, update }]))
+        }
+        R::TerminalOpen(_) | R::TerminalInput(_) | R::TerminalResize(_) | R::TerminalClose(_) => {
+            Err(read_only("change a terminal"))
+        }
     }
 }
 
@@ -357,7 +364,7 @@ fn status(world: &World) -> HubStatus {
         keeping_awake: false,
         keeps_workers: false,
         oldest_protocol_version: None,
-        open_terminals: 0,
+        open_terminals: u32::try_from(world.terminals.len()).unwrap(),
     }
 }
 

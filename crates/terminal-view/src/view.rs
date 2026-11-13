@@ -9,8 +9,9 @@ use client_core::OpenTerminal;
 use gpui_kit::component::ActiveTheme as _;
 use gpui_kit::component::input::Paste;
 use gpui_kit::{
-    App, ClipboardItem, Context, FocusHandle, Focusable, InteractiveElement, IntoElement, KeyDownEvent, MouseButton,
-    MouseDownEvent, OperatingSystem, ParentElement, Pixels, Render, ScrollEvent, Styled, Task, Window, div, font, px,
+    App, ClipboardItem, Context, FocusHandle, Focusable, InteractiveElement, IntoElement, KeyBinding, KeyDownEvent,
+    MouseButton, MouseDownEvent, NoAction, OperatingSystem, ParentElement, Pixels, Render, ScrollEvent, Styled, Task,
+    TestSupportExt as _, Window, div, font, px,
 };
 use terminal_state::Size;
 use terminal_state::drawn::{Frame, Rgb};
@@ -18,9 +19,28 @@ use terminal_state::drawn::{Frame, Rgb};
 use crate::grid::{Glyphs, Grid, Metrics};
 use crate::keys::key_press;
 
-/// The key context of a terminal's view, which takes the kit's `Paste`, as the text boxes do, so the Edit menu's Paste
-/// pastes in a terminal too. The app binds its key in it.
+/// Binds a terminal's own keys: paste, with Command on a Mac, and with Control and Shift elsewhere, as terminal apps
+/// there paste, since a terminal's Control keys are its program's. It's the kit's paste, which the text boxes take too,
+/// so the Edit menu's Paste pastes in a terminal as well. And keeps the kit's from keys that are the program's: Tab and
+/// Shift-Tab, which it has move the keys to what's next on screen, and Ctrl-C off the Mac, which it has copy.
+pub fn bind_keys(cx: &mut App) {
+    let mac = cx.platform_info().is_mac();
+    let paste = if mac { "cmd-v" } else { "ctrl-shift-v" };
+    cx.bind_keys([
+        KeyBinding::new(paste, Paste, Some(KEY_CONTEXT)),
+        // Deeper than the kit's, so its are passed over, and the key goes on to the view.
+        KeyBinding::new("tab", NoAction, Some(KEY_CONTEXT)),
+        KeyBinding::new("shift-tab", NoAction, Some(KEY_CONTEXT)),
+    ]);
+    if !mac {
+        cx.bind_keys([KeyBinding::new("ctrl-c", NoAction, Some(KEY_CONTEXT))]);
+    }
+}
+
+/// The context a terminal's keys are bound in, which the app leaves some of its own shortcuts out of.
 pub const KEY_CONTEXT: &str = "Terminal";
+/// The view's ID once it has drawn what its terminal shows.
+pub const SHOWN_ID: &str = "terminal-shown";
 
 /// A terminal someone has open, drawn from client-core's copy of what it shows.
 pub struct TerminalView {
@@ -110,6 +130,15 @@ fn turned(rest: &mut Pixels, delta_y: Pixels, line: Pixels) -> isize {
     whole_lines(lines)
 }
 
+#[cfg(feature = "testing")]
+impl TerminalView {
+    /// Each row it last drew, as text, with a space for each cell that draws nothing.
+    pub fn rows(&self) -> Vec<String> {
+        let Some(frame) = &self.frame else { return Vec::new() };
+        frame.rows.iter().map(|row| row.text()).collect()
+    }
+}
+
 #[expect(clippy::cast_possible_truncation, reason = "whole lines a turn of the wheel scrolls, which are few")]
 fn whole_lines(lines: f32) -> isize {
     lines as isize
@@ -140,7 +169,10 @@ impl Render for TerminalView {
                 }
             }),
         };
+        // Says once it has drawn what the terminal shows, which a picture of it waits for.
         div()
+            .id(if self.frame.is_some() { SHOWN_ID } else { "terminal-waiting" })
+            .test_support()
             .key_context(KEY_CONTEXT)
             .track_focus(&self.focus)
             .size_full()

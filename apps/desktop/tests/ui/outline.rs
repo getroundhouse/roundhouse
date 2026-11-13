@@ -145,7 +145,7 @@ fn the_list_stays_while_the_pointer_is_on_it_and_goes_once_it_leaves(cx: &mut Te
     wait_out_the_list(&mut ui);
 
     assert!(ui.has("outline-list"), "the pointer moved onto the list");
-    ui.hover("new-chat");
+    ui.hover("new-tab");
     wait_out_the_list(&mut ui);
     assert!(!ui.has("outline-list"), "and once it's left, the list goes");
 }
@@ -192,7 +192,7 @@ fn a_list_left_open_in_a_chat_that_stopped_showing_is_closed_when_it_shows_again
     // Without the pointer or a key, as when another client closes the chat, so the list never sees the pointer go.
     ui.activate_chat(&other);
     ui.wait("the second chat", |ui| !ui.has("outline"));
-    ui.hover("new-chat");
+    ui.hover("new-tab");
     ui.activate_chat(&session);
     ui.wait("the first chat again", |ui| ui.has("outline"));
     wait_out_the_list(&mut ui);

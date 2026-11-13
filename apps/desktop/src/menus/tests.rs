@@ -67,7 +67,18 @@ fn off_the_mac_the_menus_are_arranged_as_windows_arranges_them() {
 
         let names: Vec<&str> = menus.iter().map(|(name, _)| name.as_str()).collect();
         assert_eq!(names, ["File", "Edit", "View", "Help"], "{system:?}");
-        let file = ["New Workspace", "New Chat", "Add Project…", "-", "Close Chat", "-", "Settings…", "-", quits];
+        let file = [
+            "New Workspace",
+            "New Chat",
+            "New Terminal",
+            "Add Project…",
+            "-",
+            "Close Chat",
+            "-",
+            "Settings…",
+            "-",
+            quits,
+        ];
         assert_eq!(menus[0].1, file, "{system:?}");
         assert_eq!(menus[1].1, arranged(System::Mac)[2].1, "Edit is as a Mac has it, Find and all");
         assert_eq!(
@@ -100,7 +111,7 @@ fn a_mac_has_its_app_menu_and_its_window_menu() {
         "Quit Roundhouse",
     ];
     assert_eq!(menus[0].1, app_menu);
-    assert_eq!(menus[1].1, ["New Workspace", "New Chat", "Add Project…", "-", "Close Chat"]);
+    assert_eq!(menus[1].1, ["New Workspace", "New Chat", "New Terminal", "Add Project…", "-", "Close Chat"]);
     assert_eq!(menus[3].1, ["Show Diff", "-", "Previous Workspace", "Next Workspace", "-"], "for Enter Full Screen");
     assert_eq!(menus[4].1, ["-", "Minimize", "Zoom"]);
 }

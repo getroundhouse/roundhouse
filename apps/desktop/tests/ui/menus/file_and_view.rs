@@ -11,15 +11,17 @@ fn the_file_menu_makes_things_and_closes_a_chat(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let ui = Ui::open(cx, &stack);
 
-    let made = ["New Workspace", "New Chat", "Add Project…", "-", "Close Chat"];
+    let made = ["New Workspace", "New Chat", "New Terminal", "Add Project…", "-", "Close Chat"];
     // Off the Mac, what a Mac has in its app menu ends it, as `menus::tests` checks for each system.
     assert_eq!(items(&ui, "File")[..made.len()], made);
     assert!(action(&ui, "File", "New Workspace").partial_eq(&desktop::NewWorkspace));
     assert!(action(&ui, "File", "New Chat").partial_eq(&desktop::NewChat));
+    assert!(action(&ui, "File", "New Terminal").partial_eq(&desktop::NewTerminal));
     assert!(action(&ui, "File", "Add Project…").partial_eq(&desktop::AddRepository));
     assert!(action(&ui, "File", "Close Chat").partial_eq(&desktop::CloseChat));
     assert_eq!(key(&ui, "File", "New Workspace"), Some(keyed(&ui, "secondary-n")));
     assert_eq!(key(&ui, "File", "New Chat"), Some(keyed(&ui, "secondary-t")));
+    assert_eq!(key(&ui, "File", "New Terminal"), Some(keyed(&ui, "secondary-shift-t")));
     assert_eq!(key(&ui, "File", "Add Project…"), None);
     assert_eq!(key(&ui, "File", "Close Chat"), Some(keyed(&ui, "secondary-w")));
 }
@@ -68,13 +70,13 @@ fn close_chat_is_close_file_tab_while_the_file_tab_shows(cx: &mut TestAppContext
     std::fs::write(ui.worktree(&workspace).join("a.txt"), "one\ntwo\n").unwrap();
     let diff = ui.open_changes();
     ui.open_diff_of(&diff, "a.txt");
-    assert_eq!(items(&ui, "File")[4], "Close File Tab");
+    assert_eq!(items(&ui, "File")[5], "Close File Tab");
     assert_eq!(key(&ui, "File", "Close File Tab"), Some(keyed(&ui, "secondary-w")));
 
     choose(&mut ui, "File", "Close File Tab");
 
     assert!(ui.cx.read_entity(&ui.pane().unwrap(), |p, _| p.file_tab().is_none()));
-    assert_eq!(items(&ui, "File")[4], "Close Chat");
+    assert_eq!(items(&ui, "File")[5], "Close Chat");
 }
 
 /// macOS greys out an item when nothing where focus is takes its action, so the window takes each only where it can
@@ -83,8 +85,13 @@ fn close_chat_is_close_file_tab_while_the_file_tab_shows(cx: &mut TestAppContext
 fn file_and_view_items_are_greyed_out_until_they_can_act(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = Ui::open(cx, &stack);
-    let needs_a_workspace =
-        [("File", "New Chat"), ("File", "Close Chat"), ("View", "Show Diff"), ("View", "Next Workspace")];
+    let needs_a_workspace = [
+        ("File", "New Chat"),
+        ("File", "New Terminal"),
+        ("File", "Close Chat"),
+        ("View", "Show Diff"),
+        ("View", "Next Workspace"),
+    ];
     assert!(enabled(&mut ui, "File", "Add Project…"));
     assert!(!enabled(&mut ui, "File", "New Workspace"), "there's no repository to put it in");
     for (menu, item) in needs_a_workspace {

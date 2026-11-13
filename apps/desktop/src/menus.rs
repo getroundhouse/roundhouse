@@ -10,7 +10,8 @@ use crate::workspace_pane::Showing;
 
 use crate::{
     About, AddRepository, CheckForUpdates, CloseChat, FindInChat, FindNext, FindPrevious, Hide, HideOthers, Minimize,
-    NewChat, NewWorkspace, NextWorkspace, OpenSettings, PreviousWorkspace, Quit, ShowAll, ToggleDiff, Zoom,
+    NewChat, NewTerminal, NewWorkspace, NextWorkspace, OpenSettings, PreviousWorkspace, Quit, ShowAll, ToggleDiff,
+    Zoom,
 };
 
 mod drawn;
@@ -115,10 +116,12 @@ fn file_menu(system: System, says: Says) -> Menu {
         Showing::Chat => "Close Chat",
         Showing::File => "Close File Tab",
         Showing::Subagent => "Close Subagent Tab",
+        Showing::Terminal => "Close Terminal",
     };
     let mut items = vec![
         MenuItem::action("New Workspace", NewWorkspace),
         MenuItem::action("New Chat", NewChat),
+        MenuItem::action("New Terminal", NewTerminal),
         MenuItem::action("Add Project…", AddRepository),
         MenuItem::separator(),
         MenuItem::action(close, CloseChat),

@@ -1573,6 +1573,7 @@ dependencies = [
  "serde_json",
  "similar",
  "tempfile",
+ "terminal-view",
  "thiserror 2.0.21",
  "transcript",
  "ureq",

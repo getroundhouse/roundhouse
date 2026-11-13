@@ -45,6 +45,7 @@ mod sidebar_screens;
 mod steps;
 mod subagent_chats;
 mod subagent_records;
+mod terminal_screens;
 mod tool_chats;
 mod tool_screens;
 mod turn_screens;
@@ -153,6 +154,7 @@ fn screens() -> impl Iterator<Item = &'static steps::Screen> {
         .chain(compaction_chats::SCREENS)
         .chain(failure_chats::SCREENS)
         .chain(cache_screens::SCREENS)
+        .chain(terminal_screens::SCREENS)
         .chain(UPDATE_SCREENS)
         .chain(workspace_screens::SCREENS)
         .chain(turn_screens::SCREENS)
