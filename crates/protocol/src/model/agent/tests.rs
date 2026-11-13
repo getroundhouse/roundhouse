@@ -18,6 +18,7 @@ fn described() -> AgentDescription {
         modes: vec![PermissionMode::FullAccess, PermissionMode::Plan],
         defaults: SessionSettings { model: OPUS, permission_mode: PermissionMode::FullAccess, effort: Effort::High },
         features: vec![AgentFeature::Compacts],
+        login: None,
     }
 }
 
@@ -87,4 +88,17 @@ fn a_feature_left_out_is_one_the_agent_doesnt_have() {
     let read: AgentDescription = serde_json::from_value(wire).unwrap();
 
     assert!(!read.has(AgentFeature::Compacts));
+}
+
+#[test]
+fn a_login_reads_as_it_was_written_and_one_that_doesnt_say_how_long_it_lasts_still_reads() {
+    let login = LoginDescription { made_with: "agent make-token".to_string(), lasts_ms: Some(86_400_000) };
+    let agent = AgentDescription { login: Some(login.clone()), ..described() };
+
+    let wire = serde_json::to_value(&agent).unwrap();
+    assert_eq!(wire["login"], json!({ "made_with": "agent make-token", "lasts_ms": 86_400_000 }));
+    assert_eq!(serde_json::from_value::<AgentDescription>(wire).unwrap().login, Some(login));
+
+    let unsaid: LoginDescription = serde_json::from_value(json!({ "made_with": "agent make-token" })).unwrap();
+    assert_eq!(unsaid.lasts_ms, None);
 }

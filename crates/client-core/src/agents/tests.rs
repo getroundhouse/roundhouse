@@ -22,6 +22,7 @@ fn described(kind: AgentKind) -> AgentDescription {
             effort: Effort::High,
         },
         features: Vec::new(),
+        login: None,
     }
 }
 

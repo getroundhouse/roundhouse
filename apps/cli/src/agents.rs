@@ -69,6 +69,7 @@ mod tests {
                 effort: Effort::Xhigh,
             },
             features: vec![AgentFeature::Compacts],
+            login: None,
         };
 
         let said = described(&agent, true);

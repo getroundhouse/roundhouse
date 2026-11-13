@@ -184,6 +184,7 @@ mod tests {
                 effort: Effort::High,
             },
             features: Vec::new(),
+            login: None,
         }
     }
 
