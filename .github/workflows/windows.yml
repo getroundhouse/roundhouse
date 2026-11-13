@@ -65,7 +65,7 @@ jobs:
       - run: cargo clippy --workspace --locked -- -D warnings
       # Tests of what Windows does differently below the hub, and of Ghostty's terminal core, built by Zig for MSVC,
       # which only a Windows machine can build.
-      - run: cargo test --locked -p process -p protocol -p terminal-state
+      - run: cargo test --locked -p process -p private-files -p protocol -p terminal-state
       - run: cargo build --locked -p daemon -p cli --bins
       # Short, since a hub a failed step left running could hold it open.
       - name: Run the CLI and a hub it starts

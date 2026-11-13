@@ -10,7 +10,7 @@ use std::path::PathBuf;
 
 use protocol::model::LoginToken;
 
-use crate::private;
+use crate::lasting;
 
 /// The name of the file a login's token is in, which the hub makes as the login is connected and keeps on the
 /// account's row: a UUID, lowercase and with its hyphens.
@@ -45,11 +45,12 @@ impl LoginFiles {
     /// Writes `token` as `file`, which is new, and has it last through a power cut before this returns, so a row that
     /// names it never names a file that isn't there.
     pub(crate) fn write(&self, file: &LoginFile, token: &LoginToken) -> io::Result<()> {
-        private::create_dir_lasting(&self.dir)?;
-        let mut handle = private::file_options().write(true).create_new(true).open(self.dir.join(file.as_str()))?;
+        lasting::create_dir_all(&self.dir)?;
+        let mut handle =
+            private_files::file_options().write(true).create_new(true).open(self.dir.join(file.as_str()))?;
         handle.write_all(token.as_str().as_bytes())?;
         handle.sync_all()?;
-        private::sync_dir(&self.dir)
+        lasting::sync_dir(&self.dir)
     }
 
     /// The token in `file`. `None` when it's gone, empty, as one a hub stopped part way through writing can be, or not
@@ -69,7 +70,7 @@ impl LoginFiles {
             Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(()),
             removed => removed?,
         }
-        private::sync_dir(&self.dir)
+        lasting::sync_dir(&self.dir)
     }
 
     /// Removes every file but those in `kept`, such as one a hub stopped before its row named it, or one of a login
@@ -89,7 +90,7 @@ impl LoginFiles {
             }
         }
         if removed {
-            private::sync_dir(&self.dir)?;
+            lasting::sync_dir(&self.dir)?;
         }
         Ok(())
     }

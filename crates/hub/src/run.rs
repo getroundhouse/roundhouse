@@ -13,7 +13,6 @@ use tracing::{info, warn};
 use crate::error::HubError;
 use crate::hub::{Hub, HubDirs, LeftAtWork};
 use crate::listener::{self, Listener};
-use crate::private;
 use crate::provider_set::ProviderSet;
 use crate::store::{Move, RecordedInstance, Store, StoreError};
 use crate::terminate::Terminate;
@@ -107,12 +106,12 @@ fn load_providers(
 /// Runs until asked to stop or signalled. Returns an error if another hub is using these paths.
 pub async fn run(config: HubConfig) -> Result<(), HubError> {
     let paths = config.paths;
-    private::create_dir_all(&paths.data_dir)
+    private_files::create_dir_all(&paths.data_dir)
         .map_err(|e| HubError::io(format!("creating {}", paths.data_dir.display()), e))?;
     let lock_file = take_lock(&paths)?;
 
     // Made here so it has its mode before SQLite opens it, which gives its -wal and -shm files the same one.
-    private::file_options()
+    private_files::file_options()
         .create(true)
         .append(true)
         .open(&paths.database)

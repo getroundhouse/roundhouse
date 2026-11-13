@@ -2,7 +2,7 @@
 //! command line, where any process on the machine can read it.
 
 use std::ffi::OsString;
-use std::fs::{File, OpenOptions};
+use std::fs::File;
 use std::io::{self, Write as _};
 use std::path::Path;
 
@@ -51,19 +51,14 @@ fn write(tools: &ToolServer) -> io::Result<()> {
     open_for_its_user(&tools.config)?.write_all(&serde_json::to_vec(&config)?)
 }
 
-/// Made anew, since one left from before may have been readable by others, or opened by something before it held the
-/// token, which would read it once it's written. On Unix only its user can read it. On Windows a new file takes the
-/// permissions of its folder, which in the default data directory are the user's alone.
+/// Made anew, only its user's, since one left from before may have been readable by others, or opened by something
+/// before it held the token, which would read it once it's written.
 fn open_for_its_user(path: &Path) -> io::Result<File> {
     match std::fs::remove_file(path) {
         Err(e) if e.kind() != io::ErrorKind::NotFound => return Err(e),
         Ok(()) | Err(_) => {}
     }
-    let mut options = OpenOptions::new();
-    options.write(true).create_new(true);
-    #[cfg(unix)]
-    std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
-    options.open(path)
+    private_files::file_options().write(true).create_new(true).open(path)
 }
 
 /// Removes the file at `config`, once nothing will read it again. One that can't be removed leaves the token on disk,

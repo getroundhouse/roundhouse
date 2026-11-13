@@ -14,6 +14,7 @@ testing = []
 chrono.workspace = true
 process.workspace = true
 parking_lot.workspace = true
+private-files.workspace = true
 protocol.workspace = true
 thiserror.workspace = true
 async-trait.workspace = true

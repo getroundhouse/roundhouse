@@ -116,6 +116,7 @@ dependencies = [
  "async-trait",
  "chrono",
  "parking_lot",
+ "private-files",
  "process",
  "protocol",
  "serde_json",
@@ -1075,6 +1076,7 @@ dependencies = [
  "flume 0.11.1",
  "libc",
  "parking_lot",
+ "private-files",
  "process",
  "proptest",
  "protocol",
@@ -3628,6 +3630,7 @@ dependencies = [
  "async-trait",
  "fastrand",
  "parking_lot",
+ "private-files",
  "process",
  "proptest",
  "protocol",
@@ -5844,6 +5847,13 @@ name = "presser"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e8cf8e6a8aa66ce33f63993ffc4ea4271eb5b0530a9002db8455ea6050c77bfa"
+
+[[package]]
+name = "private-files"
+version = "0.1.0"
+dependencies = [
+ "tempfile",
+]
 
 [[package]]
 name = "proc-macro-crate"
@@ -9507,6 +9517,7 @@ dependencies = [
  "notify",
  "parking_lot",
  "percent-encoding",
+ "private-files",
  "process",
  "proptest",
  "protocol",

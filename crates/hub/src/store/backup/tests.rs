@@ -154,7 +154,7 @@ fn a_copy_that_fails_leaves_nothing_behind() {
     assert_eq!(files_in(&backups), Vec::<String>::new());
 }
 
-/// Windows has no modes, as `private` says.
+/// Windows has no modes, as `private_files` says.
 #[cfg(unix)]
 #[test]
 fn only_its_owner_can_read_a_backup_however_its_copied() {
@@ -172,4 +172,5 @@ fn only_its_owner_can_read_a_backup_however_its_copied() {
     for path in copies {
         assert_eq!(fs::metadata(&path).unwrap().permissions().mode() & 0o777, 0o600, "{}", path.display());
     }
+    assert_eq!(fs::metadata(&backups).unwrap().permissions().mode() & 0o777, 0o700, "nor list what's kept");
 }

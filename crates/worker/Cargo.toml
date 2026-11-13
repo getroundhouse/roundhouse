@@ -12,6 +12,7 @@ testing = []
 [dependencies]
 process.workspace = true
 parking_lot.workspace = true
+private-files.workspace = true
 protocol.workspace = true
 agents.workspace = true
 base64.workspace = true

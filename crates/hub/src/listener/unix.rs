@@ -12,7 +12,7 @@ impl Listener {
     pub(crate) fn bind(path: &Path) -> io::Result<Self> {
         let _ = std::fs::remove_file(path);
         let listener = UnixListener::bind(path)?;
-        crate::private::restrict(path)?;
+        private_files::restrict(path)?;
         Ok(Self(listener))
     }
 

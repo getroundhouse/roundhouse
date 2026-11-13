@@ -2,6 +2,7 @@
 resolver = "3"
 members = [
     "crates/process",
+    "crates/private-files",
     "crates/protocol",
     "crates/agents",
     "crates/providers",
@@ -22,6 +23,7 @@ members = [
 # `--workspace` for the window too.
 default-members = [
     "crates/process",
+    "crates/private-files",
     "crates/protocol",
     "crates/agents",
     "crates/providers",
@@ -46,6 +48,7 @@ license = "Apache-2.0"
 
 [workspace.dependencies]
 process = { path = "crates/process" }
+private-files = { path = "crates/private-files" }
 protocol = { path = "crates/protocol" }
 agents = { path = "crates/agents" }
 providers = { path = "crates/providers" }

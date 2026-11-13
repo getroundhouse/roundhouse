@@ -11,6 +11,7 @@ testing = []
 
 [dependencies]
 parking_lot.workspace = true
+private-files.workspace = true
 protocol.workspace = true
 flume.workspace = true
 process.workspace = true
