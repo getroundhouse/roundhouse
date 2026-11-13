@@ -220,6 +220,7 @@ fn track_approval(shared: &Shared, body: &EventBody) {
         | EventBody::Notice { .. }
         | EventBody::AgentMode { .. }
         | EventBody::SubagentStarted { .. }
+        | EventBody::SubagentContext { .. }
         | EventBody::SubagentEnded { .. }
         | EventBody::AgentOther { .. }
         | EventBody::AgentCompacting { .. }

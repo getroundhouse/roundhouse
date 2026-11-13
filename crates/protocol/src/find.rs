@@ -186,6 +186,7 @@ fn any_text(body: &EventBody, found: &mut impl FnMut(&str) -> bool) -> bool {
         | EventBody::AgentState { .. }
         | EventBody::AgentTasks { .. }
         | EventBody::AgentLimits { .. }
+        | EventBody::SubagentContext { .. }
         | EventBody::ToolCallDropped { .. }
         | EventBody::ApprovalResolved { .. }
         | EventBody::AgentMode { .. }

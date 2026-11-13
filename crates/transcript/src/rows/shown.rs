@@ -197,6 +197,7 @@ fn of_event(event: &SessionEvent, around: &Around, gather: &mut Gather) {
         | EventBody::AgentTasks { .. }
         | EventBody::AgentLimits { .. }
         | EventBody::SubagentStarted { .. }
+        | EventBody::SubagentContext { .. }
         | EventBody::SubagentEnded { .. }
         | EventBody::AgentOther { .. }
         // What a compaction says, and the summary it opens to, aren't found.

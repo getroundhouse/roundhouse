@@ -8,8 +8,8 @@ use protocol::model::SessionStatus;
 use serde_json::json;
 
 use super::events::{
-    on, replied, subagent_ended, subagent_started, subagents_listed, taken, text, tool_result, tool_use, user_prompt,
-    within,
+    on, replied, subagent_context, subagent_ended, subagent_started, subagents_listed, taken, text, tool_result,
+    tool_use, user_prompt, within,
 };
 use super::frame::{CHAT, TABS_AND_CHAT};
 use super::screens::FOCUS;
@@ -184,7 +184,7 @@ pub(crate) fn subagents(working: bool) -> Vec<EventBody> {
     ];
     events.extend(finding("toolu-1"));
     events.extend([
-        subagent_ended("toolu-1", REPORT),
+        subagent_ended("toolu-1", REPORT, 18_240),
         subagents_listed(&[]),
         text("msg-4", "It found two. I'll change both to use `may_pass`, and have them checked."),
         tool_use("msg-5", "toolu-3", "Agent", review),
@@ -193,6 +193,7 @@ pub(crate) fn subagents(working: bool) -> Vec<EventBody> {
         tool_result("toolu-3", LAUNCHED),
     ]);
     events.extend(reviewing("toolu-3"));
+    events.push(subagent_context("toolu-3", 24_610));
     if working {
         return events;
     }
@@ -201,7 +202,7 @@ pub(crate) fn subagents(working: bool) -> Vec<EventBody> {
     events.extend([
         within("toolu-3", tool_result("toolu-s4", "test result: ok. 5 passed; 0 failed")),
         within("toolu-3", text("sub-9", checked)),
-        subagent_ended("toolu-3", checked),
+        subagent_ended("toolu-3", checked, 26_130),
         subagents_listed(&[]),
         text("msg-6", reply),
         replied(reply, 94, 0.41),

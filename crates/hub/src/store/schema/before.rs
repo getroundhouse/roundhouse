@@ -57,3 +57,6 @@ pub(crate) const BEFORE_WAITING_ON: usize = 41;
 
 /// How many migrations there were before the new-workspace dialog's tables were named for it.
 pub(crate) const BEFORE_NEW_WORKSPACE_DRAFT_NAMES: usize = 43;
+
+/// How many migrations there were before subagents' records kept how many tokens each one's conversation holds.
+pub(crate) const BEFORE_SUBAGENT_CONTEXT_TOKENS: usize = 44;

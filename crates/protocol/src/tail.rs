@@ -211,6 +211,7 @@ impl Tail {
             | EventBody::Notice { .. }
             | EventBody::AgentMode { .. }
             | EventBody::SubagentStarted { in_background: false, .. }
+            | EventBody::SubagentContext { .. }
             | EventBody::AgentOther { .. }
             | EventBody::CacheExpired { .. }
             | EventBody::Unknown => {}

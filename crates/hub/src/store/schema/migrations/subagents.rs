@@ -137,3 +137,22 @@ pub(super) const MODELS: &str = r"
             FROM subagents s) AS found
         WHERE found.model IS NOT NULL AND found.session_id = subagents.session_id AND found.call = subagents.call;
 ";
+
+/// About how many tokens each subagent's conversation holds, as its agent last counted them, which its record shows.
+/// One from before this whose end the hub recorded as its end has the count filled in from the CLI's line for that,
+/// which the log kept whole, and only one whose end counted is changed, so the rest keep their revisions. One whose
+/// end is in the log only as the CLI's line, from before the adapter read it, gets none. The line is read only where
+/// it's JSON, and its count only where the line has a whole number that isn't below zero, as the adapter reads it, and
+/// SQLite reads one out of it: `true` comes out of the line as 1, and a number too large for SQLite's integers as a
+/// real, which the record couldn't be read with.
+pub(super) const CONTEXT_TOKENS: &str = r"
+    ALTER TABLE subagents ADD COLUMN context_tokens INTEGER;
+    UPDATE subagents SET context_tokens = found.tokens
+        FROM (SELECT session_id, body ->> '$.call' AS call, raw ->> '$.usage.total_tokens' AS tokens
+            FROM events
+            WHERE kind = 'subagent_ended' AND CASE WHEN json_valid(raw)
+                THEN json_type(raw, '$.usage.total_tokens') = 'integer'
+                    AND typeof(raw ->> '$.usage.total_tokens') = 'integer' AND raw ->> '$.usage.total_tokens' >= 0
+                ELSE 0 END) AS found
+        WHERE found.session_id = subagents.session_id AND found.call = subagents.call;
+";

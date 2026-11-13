@@ -39,7 +39,13 @@ fn a_subagent_starts_with_what_it_was_asked_and_ends_with_its_report() {
         }
     );
     let report = Some("They're in tests/.".into());
-    assert_eq!(end, EventBody::SubagentEnded { call: "agent".into(), outcome: SubagentOutcome::Finished, report });
+    let ended = EventBody::SubagentEnded {
+        call: "agent".into(),
+        outcome: SubagentOutcome::Finished,
+        report,
+        context_tokens: None,
+    };
+    assert_eq!(end, ended);
     assert!(
         matches!(event(&mut normalizer, &notification("t1", "completed")), EventBody::AgentOther { .. }),
         "it ended once"
@@ -53,7 +59,55 @@ fn a_stopped_subagent_reports_nothing() {
 
     let end = event(&mut normalizer, &notification("t1", "stopped"));
 
-    assert_eq!(end, EventBody::SubagentEnded { call: "agent".into(), outcome: SubagentOutcome::Stopped, report: None });
+    let ended = EventBody::SubagentEnded {
+        call: "agent".into(),
+        outcome: SubagentOutcome::Stopped,
+        report: None,
+        context_tokens: None,
+    };
+    assert_eq!(end, ended);
+}
+
+/// What it says as a task works, with the fields 2.1.319 to 2.1.322 sent for a subagent's.
+fn progress(task: &str, tokens: u64) -> Value {
+    json!({"type":"system","subtype":"task_progress","task_id":task,"run_id":"r","tool_use_id":"agent",
+        "description":"Reading docs/gpui.md","subagent_type":"Explore",
+        "usage":{"total_tokens":tokens,"tool_uses":9,"duration_ms":7328},"last_tool_name":"Read","session_id":"s",
+        "uuid":"u"})
+}
+
+#[test]
+fn a_subagent_says_how_many_tokens_its_conversation_holds_as_it_works_and_as_it_ends() {
+    let mut normalizer = Normalizer::default();
+    event(&mut normalizer, &started("t1", "local_agent", true));
+
+    let working = event(&mut normalizer, &progress("t1", 37_386));
+    let mut ending = notification("t1", "completed");
+    ending["usage"] = json!({"total_tokens":41_020,"tool_uses":9,"duration_ms":9000});
+    let end = event(&mut normalizer, &ending);
+
+    assert_eq!(working, EventBody::SubagentContext { call: "agent".into(), tokens: 37_386 });
+    assert!(matches!(end, EventBody::SubagentEnded { context_tokens: Some(41_020), .. }), "{end:?}");
+    assert!(
+        matches!(event(&mut normalizer, &progress("t1", 41_020)), EventBody::AgentOther { .. }),
+        "it's ended, so nothing is working"
+    );
+}
+
+#[test]
+fn progress_that_counts_no_tokens_or_isnt_a_subagents_stays_as_it_was() {
+    let mut normalizer = Normalizer::default();
+    event(&mut normalizer, &started("t1", "local_agent", true));
+    // A tool's task says how far it's got too, counting 0.
+    event(&mut normalizer, &started("t2", "mcp_task", true));
+    let mut uncounted = progress("t1", 0);
+    uncounted["usage"] = json!({"tool_uses":9});
+
+    let uncounted = event(&mut normalizer, &uncounted);
+    let a_tools = event(&mut normalizer, &progress("t2", 0));
+
+    assert!(matches!(uncounted, EventBody::AgentOther { kind, .. } if kind == "system/task_progress"));
+    assert!(matches!(a_tools, EventBody::AgentOther { kind, .. } if kind == "system/task_progress"));
 }
 
 #[test]

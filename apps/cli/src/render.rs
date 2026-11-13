@@ -114,6 +114,7 @@ impl Printer {
             EventBody::PromptTaken { .. }
             | EventBody::AgentState { .. }
             | EventBody::AgentLimits { .. }
+            | EventBody::SubagentContext { .. }
             | EventBody::AgentOther { .. }
             | EventBody::Unknown => {}
         }

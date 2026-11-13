@@ -10,7 +10,7 @@ use super::{Store, StoreError, current_rev, from_text, json_at, lock, rev_of, te
 mod recent;
 
 const SUBAGENT_COLUMNS: &str = "session_id, call, kind, description, prompt, in_background, status, started_at_ms, \
-     ended_at_ms, calls, latest_call, report, rev, recent, model";
+     ended_at_ms, calls, latest_call, report, rev, recent, model, context_tokens";
 
 impl Store {
     /// The session's subagents, oldest first, read in one transaction with the revision they're as of.
@@ -38,14 +38,21 @@ impl Store {
 const STARTED: &str = "INSERT OR IGNORE INTO subagents
      (session_id, call, kind, description, prompt, in_background, status, started_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
 
-// What it's done lately is only shown while it works.
-const ENDED: &str = "UPDATE subagents SET status = ?, ended_at_ms = ?, report = ?, recent = NULL
+// What it's done lately is only shown while it works. An end that counts no tokens leaves the count it had.
+const ENDED: &str = "UPDATE subagents SET status = ?, ended_at_ms = ?, report = ?, recent = NULL,
+         context_tokens = coalesce(?, context_tokens)
      WHERE session_id = ? AND call = ? AND status = ?";
+
+// Only while it works, since its end has the last word, and only a count that differs, so its record keeps its
+// revision and isn't sent again for one that says the same.
+const CONTEXT: &str = "UPDATE subagents SET context_tokens = ?1
+     WHERE session_id = ?2 AND call = ?3 AND status = ?4 AND context_tokens IS NOT ?1";
 
 /// Changes the records of the subagents `event` says something about, in the transaction that records it, and says
 /// which. A subagent's record starts with the agent's word that it started, ends with its word that it ended, or with
 /// the agent, which takes its subagents with it, and counts the calls in between from the subagent's own events,
-/// which also say what it's done lately, and its replies the model it runs on.
+/// which also say what it's done lately, and its replies the model it runs on. How many tokens its conversation
+/// holds is the agent's word too, as it works and as it ends.
 pub(super) fn note_subagents(tx: &Connection, event: &SessionEvent) -> Result<Vec<ToolUseId>, StoreError> {
     let (session, at) = (event.session_id.as_str(), event.ts_ms);
     let working = text_of(&SubagentStatus::Working);
@@ -54,9 +61,15 @@ pub(super) fn note_subagents(tx: &Connection, event: &SessionEvent) -> Result<Ve
             let row = params![session, call.as_str(), kind, description, prompt, in_background, working, at];
             Ok(changed(tx.execute(STARTED, row)?, call))
         }
-        EventBody::SubagentEnded { call, outcome, report } => {
+        EventBody::SubagentContext { call, tokens } => {
+            let row = params![tokens.cast_signed(), session, call.as_str(), working];
+            Ok(changed(tx.prepare_cached(CONTEXT)?.execute(row)?, call))
+        }
+        EventBody::SubagentEnded { call, outcome, report, context_tokens } => {
             let status = text_of(&SubagentStatus::ended(*outcome));
-            Ok(changed(tx.execute(ENDED, params![status, at, report, session, call.as_str(), working])?, call))
+            let tokens = context_tokens.map(u64::cast_signed);
+            let row = params![status, at, report, tokens, session, call.as_str(), working];
+            Ok(changed(tx.execute(ENDED, row)?, call))
         }
         EventBody::AgentExited { .. } => {
             let mut statement = tx.prepare_cached(
@@ -166,6 +179,7 @@ fn subagent_from_row(row: &Row<'_>) -> rusqlite::Result<Subagent> {
         status: from_text(row.get(6)?)?,
         started_at_ms: row.get(7)?,
         ended_at_ms: row.get(8)?,
+        context_tokens: row.get::<_, Option<i64>>(15)?.map(i64::cast_unsigned),
         calls: row.get(9)?,
         // Written only by this hub, as JSON. One it can't read is none it knows of.
         latest_call: json_at(row, 10)?,

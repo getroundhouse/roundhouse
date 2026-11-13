@@ -295,6 +295,7 @@ fn render_event(
         | EventBody::AgentTasks { .. }
         | EventBody::AgentLimits { .. }
         | EventBody::SubagentStarted { .. }
+        | EventBody::SubagentContext { .. }
         | EventBody::SubagentEnded { .. }
         | EventBody::AgentOther { .. }
         | EventBody::AgentCompacting { .. }

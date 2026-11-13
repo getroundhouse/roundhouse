@@ -33,6 +33,11 @@ pub struct Subagent {
     pub started_at_ms: i64,
     #[serde(default)]
     pub ended_at_ms: Option<i64>,
+    /// About how many tokens its conversation holds, as its agent last counted them, as a context's `used_tokens` is,
+    /// and not what its requests took in all. So it can fall, as when the subagent compacts. `None` until the agent
+    /// says, from an agent that can't say what it holds, and from a hub from before this was kept.
+    #[serde(default)]
+    pub context_tokens: Option<u64>,
     /// How many calls it's made.
     #[serde(default)]
     pub calls: u32,
@@ -158,6 +163,7 @@ mod tests {
         let subagent: Subagent = serde_json::from_value(older()).unwrap();
 
         assert_eq!(subagent.recent, RecentWork::default());
+        assert_eq!(subagent.context_tokens, None);
         assert_eq!(subagent.latest_call.map(|call| call.name), Some("Read".to_string()));
     }
 
