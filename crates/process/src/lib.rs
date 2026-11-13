@@ -25,7 +25,9 @@ use unix as sys;
 #[cfg(windows)]
 use windows as sys;
 
-pub use environment::Environment;
+pub use environment::{Environment, TakesEnvironment};
+#[cfg(unix)]
+pub use group::group_running;
 pub use group::{Signal, detach, own_group, signal_group};
 pub use record::{ProcessRecord, start_time};
 pub use running_from::{Claimed, RunningFrom, claim_unused};

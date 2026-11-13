@@ -1,4 +1,4 @@
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::process::Command;
 
 /// What a process is given beyond the environment it inherits: variables set, and variables taken out. It goes on a
@@ -29,13 +29,30 @@ impl Environment {
     }
 
     /// Puts it on `command`.
-    pub fn apply(&self, command: &mut Command) {
+    pub fn apply(&self, command: &mut impl TakesEnvironment) {
         for name in &self.taken_out {
-            command.env_remove(name);
+            command.take_out(name);
         }
         for (name, value) in &self.set {
-            command.env(name, value);
+            command.give(name, value);
         }
+    }
+}
+
+/// A command an [`Environment`] goes on, which starts its process with what it inherits and these changes to it: a
+/// standard library's, or another, such as the one a PTY's program is started with.
+pub trait TakesEnvironment {
+    fn take_out(&mut self, name: &OsStr);
+    fn give(&mut self, name: &OsStr, value: &OsStr);
+}
+
+impl TakesEnvironment for Command {
+    fn take_out(&mut self, name: &OsStr) {
+        self.env_remove(name);
+    }
+
+    fn give(&mut self, name: &OsStr, value: &OsStr) {
+        self.env(name, value);
     }
 }
 
