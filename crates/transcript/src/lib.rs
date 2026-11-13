@@ -1,7 +1,7 @@
 //! One session's transcript: its history by range and its live output, in a list of its own, with its Markdown drawn
-//! from the kit's Markdown blocks, and the rest by the kit's selectable text. `docs/ui.md` has why it's built on
-//! those. Everything GPUI about a transcript is in here, and the data is in `client_core::session_log`, which knows
-//! nothing about rendering.
+//! from the kit's Markdown blocks, and the rest laid out as plain text, with a selection the transcript keeps over its
+//! Markdown and most of the plain text its calls show. `docs/ui.md` has why it's built on those. Everything GPUI about
+//! a transcript is in here, and the data is in `client_core::session_log`, which knows nothing about rendering.
 
 #![warn(clippy::wildcard_enum_match_arm)]
 
@@ -21,13 +21,10 @@ mod model_names;
 mod questions;
 mod rows;
 mod scroll_area;
-mod selectable_layout;
-mod selectable_lines;
 mod selection;
 mod task_lines;
 mod texts;
 mod transcript;
-mod window_selection;
 
 pub use attachments::{file_card, image_format};
 pub use client_core::calls::agent::shown_kind;

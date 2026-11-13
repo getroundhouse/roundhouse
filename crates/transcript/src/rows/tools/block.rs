@@ -12,12 +12,13 @@ use gpui_kit::{
 use super::Toggle;
 use super::highlight::spans;
 use crate::attachments::{self, Carried};
-use crate::find::{FindLook, Marks, Part, marked};
+use crate::find::{self, FindLook, Part, marked};
 use crate::log_block::{self, LogBlock, LogText};
+use crate::rows::text::place;
 use crate::rows::written;
 use crate::scroll_area::ScrollArea;
-use crate::selectable_lines::SelectableLines;
-use crate::window_selection::SelectableText;
+use crate::selection::{Pieces, Selection};
+use crate::texts::Plain;
 
 /// Above this, output goes through [`LogBlock`], which can hold anything but has no text selection yet.
 const LOG_BLOCK_ABOVE: usize = 16 * 1024;
@@ -76,13 +77,16 @@ pub(in crate::rows) fn output(toggle: &Toggle, part: Part, text: &str, color: Hs
     let area = scroll_id(&id);
     let shown = output_text(text);
     let marks = toggle.marks(part, &shown);
-    let body = if text.len() > LOG_BLOCK_ABOVE {
+    let drags = &toggle.shared.selection;
+    if text.len() > LOG_BLOCK_ABOVE {
         let font = cx.theme().mono_font_family.clone();
-        LogBlock { log: LogText::new(&shown), color, font, marks, area: Some(area) }.into_any_element()
-    } else {
-        selectable(id.clone(), shown.into_owned(), &marks, area)
-    };
-    printed(toggle.find, &id, body, color, cx)
+        let log = LogBlock { log: LogText::new(&shown), color, font, marks, area: Some(area) };
+        return scrolling(toggle.find, drags, &id, printed(&id, log.into_any_element(), color, cx)).into_any_element();
+    }
+    let said: SharedString = shown.into_owned().into();
+    let (drawn, layout) = find::marked_with_layout(said.clone(), &marks, &[], Some(area));
+    let selectable = selectable(toggle, part, &id, printed(&id, drawn, color, cx), said, Pieces::whole(layout));
+    scrolling(toggle.find, drags, &id, selectable).into_any_element()
 }
 
 /// What a command printed, the call's `part`, in the foreground colour, with a little space between its lines, so one
@@ -92,18 +96,42 @@ pub(super) fn lines(toggle: &Toggle, part: Part, text: &str, cx: &App) -> AnyEle
     let color = cx.theme().foreground;
     let Some(runs) = spaced(text) else { return output(toggle, part, text, color, cx) };
     let id = part.element(toggle.key);
-    // Its lines a line apart are what [`output_text`] draws of it, which its matches are found in.
-    let marks = toggle.marks(part, &output_text(text));
-    let lines = runs.into_iter().map(|run| SharedString::from(run.to_string())).collect();
-    let body = SelectableLines::new((id.clone(), "lines"), lines, px(LINE_GAP)).marked(marks, scroll_id(&id));
-    printed(toggle.find, &id, body.into_any_element(), color, cx)
+    // Its runs a line apart are what [`output_text`] draws of it, which its matches are found in. Nothing found has a
+    // line break in it, so no match runs from one line into the next.
+    let said: SharedString = output_text(text).into_owned().into();
+    let (marks, area) = (toggle.marks(part, &said), scroll_id(&id));
+    let mut lines = Vec::new();
+    let pieces = Pieces::lines(runs, |within, run| {
+        let marks = marks.within(within.start, within.end);
+        let (line, layout) = find::marked_with_layout(run.to_string().into(), &marks, &[], Some(area.clone()));
+        lines.push(line);
+        layout
+    });
+    let lines = v_flex().id(ElementId::from((id.clone(), "lines"))).gap(px(LINE_GAP)).children(lines);
+    let selectable =
+        selectable(toggle, part, &id, printed(&id, lines.test_support().into_any_element(), color, cx), said, pieces);
+    scrolling(toggle.find, &toggle.shared.selection, &id, selectable).into_any_element()
 }
 
-/// Text that came back, in `color` and the code font, in the space a block gives it, scrolling past a dozen lines or
-/// so.
-fn printed(find: &FindLook, id: &ElementId, body: AnyElement, color: Hsla, cx: &App) -> AnyElement {
+/// Plain text, the call's `part`, drawn in the part `id` of its block, which scrolls it: what `drawn` lays out of
+/// `said`, in `pieces`. All of what `drawn` takes up is selectable, such as the space a block gives what came back, so
+/// a press beside a line, or above the first, is on it.
+pub(super) fn selectable(
+    toggle: &Toggle,
+    part: Part,
+    id: &ElementId,
+    drawn: AnyElement,
+    said: SharedString,
+    pieces: Pieces,
+) -> AnyElement {
+    let (at, element, area) = (place(toggle, part), ElementId::from((id.clone(), "text")), scroll_id(id));
+    toggle.shared.texts.draw_plain(&toggle.shared.selection, Plain { at, element, area, drawn, said, pieces })
+}
+
+/// Text that came back, `body`, in `color` and the code font, in the space a block gives it.
+fn printed(id: &ElementId, body: AnyElement, color: Hsla, cx: &App) -> AnyElement {
     let theme = cx.theme();
-    let part = div()
+    div()
         .id(id.clone())
         .px_3()
         .py_2()
@@ -111,21 +139,7 @@ fn printed(find: &FindLook, id: &ElementId, body: AnyElement, color: Hsla, cx: &
         .text_size(theme.mono_font_size)
         .text_color(color)
         .child(body)
-        .test_support();
-    scrolling(find, id, part).into_any_element()
-}
-
-/// Text that can be selected, with its matches drawn behind it. The kit's selectable text draws no backgrounds, so
-/// the same text is laid out under it, unseen but for them.
-fn selectable(id: ElementId, text: String, marks: &Marks, area: ElementId) -> AnyElement {
-    if marks.is_empty() {
-        return SelectableText::new(id, text).into_any_element();
-    }
-    let under = marked(text.clone().into(), marks, &[], Some(area));
-    div()
-        .relative()
-        .child(div().absolute().top_0().left_0().w_full().text_color(gpui_kit::transparent_black()).child(under))
-        .child(SelectableText::new(id, text))
+        .test_support()
         .into_any_element()
 }
 
@@ -185,7 +199,7 @@ pub(super) fn code(toggle: &Toggle, part: Part, language: &str, prompt: &str, te
         .text_color(theme.foreground)
         .child(marked(shown, &marks.moved(at), &styles, Some(scroll_id(&id))))
         .test_support();
-    scrolling(toggle.find, &id, part).into_any_element()
+    scrolling(toggle.find, &toggle.shared.selection, &id, part).into_any_element()
 }
 
 /// What [`code`] draws of `text`, after its prompt.
@@ -199,18 +213,25 @@ pub(super) fn prose(toggle: &Toggle, part: Part, text: &str) -> AnyElement {
     let id = part.element(toggle.key);
     let view = written(toggle, part, text, Some(scroll_id(&id)), None);
     let shown = div().id(id.clone()).px_3().py_2().text_sm().child(view).test_support();
-    scrolling(toggle.find, &id, shown).follows_drags(&toggle.shared.selection).into_any_element()
+    scrolling(toggle.find, &toggle.shared.selection, &id, shown).into_any_element()
 }
 
 /// A part of a block, such as its output, which keeps its own ID, in an area that scrolls it once it's taller than a
-/// dozen lines or so, and scrolls to the match being shown in it. The area's ID comes from the part's, so each block
-/// keeps its own place. At either end of the part, and over a part that fits, the wheel scrolls the transcript instead.
-pub(in crate::rows) fn scrolling(find: &FindLook, id: &ElementId, part: impl IntoElement) -> ScrollArea {
-    ScrollArea::new(scroll_id(id), px(MAX_HEIGHT), part).follows(find.reveal())
+/// dozen lines or so, scrolls to the match being shown in it, and scrolls on under a drag of `drags` that started in a
+/// text in it, held past its top or bottom. The area's ID comes from the part's, so each block keeps its own place, and
+/// a text in it says it's in it by [`scroll_id`]. At either end of the part, and over a part that fits, the wheel
+/// scrolls the transcript instead.
+pub(in crate::rows) fn scrolling(
+    find: &FindLook,
+    drags: &Selection,
+    id: &ElementId,
+    part: impl IntoElement,
+) -> ScrollArea {
+    ScrollArea::new(scroll_id(id), px(MAX_HEIGHT), part, drags).follows(find.reveal())
 }
 
 /// The ID of the area that scrolls the part `id`.
-pub(super) fn scroll_id(id: &ElementId) -> ElementId {
+pub(in crate::rows) fn scroll_id(id: &ElementId) -> ElementId {
     ElementId::from((id.clone(), "scroll"))
 }
 

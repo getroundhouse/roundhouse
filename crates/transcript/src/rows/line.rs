@@ -256,12 +256,13 @@ fn pill(text: SharedString, marks: &Marks, color: Hsla, background: Hsla, cx: &A
         .into_any_element()
 }
 
-/// A call's line, then a line saying it failed if its result says so, or that the person denied it, then what it opens
-/// to while it's open.
+/// A call's line, then a line saying it failed if its result says so, or that the person denied it, then what `opened`
+/// makes of what it opens to, which it's asked only while the call's open. That's made after what went wrong, as it's
+/// shown after it, since a call nested in another's row has its texts placed in the order they're made.
 pub(super) fn drawn(
     line: Line,
     answer: Option<&Answer>,
-    opened: Option<AnyElement>,
+    opened: impl FnOnce() -> Option<AnyElement>,
     toggle: &Toggle,
     cx: &App,
 ) -> AnyElement {
@@ -269,14 +270,16 @@ pub(super) fn drawn(
     // The line under a failed call has room for the start of what went wrong, so opened, the call shows all of it.
     let whole =
         failed.map(|failed| failed.output).filter(|text| toggle.open && !line.shows_output && !text.trim().is_empty());
+    let whole = whole.map(|text| {
+        let output = block::output(toggle, Text::Error, text, cx.theme().muted_foreground, cx);
+        block::frame(cx).child(output)
+    });
+    let opened = if toggle.open { opened() } else { None };
     v_flex()
         .child(line.render(toggle, cx))
         .when_some(failed, |d, failed| d.child(failure(&failed, cx)))
         .when_some(answer.and_then(denied), |d, denied| d.child(denial(denied, toggle, cx)))
-        .when_some(whole, |d, text| {
-            let output = block::output(toggle, Text::Error, text, cx.theme().muted_foreground, cx);
-            d.child(block::frame(cx).child(output))
-        })
+        .children(whole)
         .children(opened)
         .into_any_element()
 }

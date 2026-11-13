@@ -15,8 +15,8 @@ use super::reveal::Reveal;
 use crate::item_key::ItemKey;
 
 /// Which of an item's texts one is, such as a call's output, or the third link a search found. Ordered as declared,
-/// which orders the texts a call draws of its own after what it nests, in `crate::texts`, if it draws more than one
-/// there, so those are declared in the order it draws them.
+/// which orders the texts a call draws of its own on either side of what it nests, in `crate::texts`, if it draws more
+/// than one there, so those are declared in the order it draws them.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) enum Part {
     /// What the person wrote.
@@ -67,6 +67,10 @@ pub(crate) enum Part {
     FailedRequest,
     /// What the agent last printed before it stopped unexpectedly.
     Exit,
+    /// A question the agent asked, as its row shows it once it's no longer waiting.
+    Question,
+    /// What was answered to a question, under it. After it, since a call's texts go in the order of their parts.
+    Answered,
 }
 
 impl Part {
@@ -109,6 +113,8 @@ impl Part {
             Part::TurnError => "turn-error",
             Part::FailedRequest => "failed-request",
             Part::Exit => "exit",
+            Part::Question => "question",
+            Part::Answered => "answered",
         })
     }
 }

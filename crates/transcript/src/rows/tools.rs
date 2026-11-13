@@ -41,7 +41,7 @@ pub(super) struct Toggle<'a> {
     pub(super) shared: &'a Shared,
     /// What's being found, which the call draws the matches of.
     pub(super) find: &'a FindLook,
-    /// The row it's drawn in, which says where its prose is placed among the texts that row draws.
+    /// The row it's drawn in, which says where its texts are placed among those that row draws.
     pub(super) in_row: InRow,
 }
 
@@ -117,13 +117,13 @@ pub(super) fn result(toggle: &Toggle, answer: &Answer, cx: &App) -> AnyElement {
     let lines = text.map_or(0, |text| text.lines().count());
     let size = amount(lines, images.len()).unwrap_or_else(|| count(0, "line", "lines"));
     let line = Line::new(IconName::CornerDownRight, "Output").part(Part::Note(size.into())).shows_output(true);
-    let opened = toggle.open.then(|| {
+    let opened = || {
         let color = cx.theme().muted_foreground;
-        block::frame(cx)
+        let shown = block::frame(cx)
             .when_some(text, |d, text| d.child(block::output(toggle, Text::Output, text, color, cx)))
-            .when(!images.is_empty(), |d| d.child(block::images(images, cx)))
-            .into_any_element()
-    });
+            .when(!images.is_empty(), |d| d.child(block::images(images, cx)));
+        Some(shown.into_any_element())
+    };
     line::drawn(line, Some(answer), opened, toggle, cx)
 }
 

@@ -20,7 +20,7 @@ fn at(seq: Seq) -> TextAt {
 fn parse_of(texts: &Texts, id: &TextKey) -> Option<Rc<super::super::Parsed>> {
     match texts.0.borrow().texts.get(id)? {
         Text::Parsed { parsed } => Some(parsed.clone()),
-        Text::Read { .. } | Text::Parsing { .. } => None,
+        Text::Read { .. } | Text::Parsing { .. } | Text::Plain { .. } => None,
     }
 }
 
@@ -54,7 +54,10 @@ fn a_text_drawn_somewhere_new_is_there_with_what_it_was_parsed_as() {
     assert_eq!(texts.place_of(&reply), Some(at(2)));
     assert_eq!((texts.known_at(at(2)), texts.known_at(at(1))), (Some(reply.clone()), None));
     assert!(parse_of(&texts, &reply).zip(parsed).is_some_and(|(now, was)| Rc::ptr_eq(&now, &was)), "not parsed again");
-    assert_eq!(texts.leaves_of(&reply).as_deref(), Some(&["What it said".to_owned()][..]));
+    assert_eq!(
+        texts.leaves_of(&reply).map(|leaves| leaves.each().collect::<Vec<_>>().join("\n")).as_deref(),
+        Some("What it said")
+    );
 }
 
 /// The list draws the end of the chat before the rows above it, so a prompt waiting there can take the place of one

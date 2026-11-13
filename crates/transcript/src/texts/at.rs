@@ -77,7 +77,8 @@ impl Of {
 pub(crate) enum Among {
     /// The only text the block draws, such as a reply's.
     Only,
-    /// One of a call's own texts that it shows before what it nests: what a subagent was asked.
+    /// One of a call's own texts that it shows before what it nests: what went wrong, under its line, and what a
+    /// subagent was asked.
     Before(Part),
     /// The `n`th text of what a call nests, such as a subagent's words in its call's row, as `Texts::draw` counts them
     /// for a text at [`Place::NextNested`]. A row makes its nested texts in the order it shows them, which a debug

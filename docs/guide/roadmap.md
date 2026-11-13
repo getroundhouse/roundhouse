@@ -31,6 +31,7 @@ These are part of the design, and the app is built to take them. None is built.
 - **A sound on Windows and Linux,** when an agent needs you.
 - **Updates on Windows that don't wait for agents.**
 - **Alt opening the menus on Windows and Linux,** as `F10` does.
+- **Selecting all of what an opened call shows,** such as a file's lines, a diff, and output over 16 KB.
 
 ## Say what's missing
 

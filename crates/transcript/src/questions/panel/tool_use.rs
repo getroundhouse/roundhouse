@@ -13,9 +13,9 @@ use gpui_kit::{
 use protocol::event::{ApprovalDecision, EventBody, Question, QuestionAnswer, QuestionOption};
 
 use super::heading::said;
+use super::selectable::SelectableText;
 use crate::rows::ChangeAsked;
 use crate::scroll_area::holding_wide;
-use crate::window_selection::SelectableText;
 
 /// What the typing row says while it's empty.
 pub(super) const INSTEAD: &str = "Deny, and say what to do instead…";

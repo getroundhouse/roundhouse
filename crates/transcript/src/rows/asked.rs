@@ -7,7 +7,7 @@ use gpui_kit::assets::IconName;
 use gpui_kit::component::{ActiveTheme as _, Icon, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, Div, ElementId, Hsla, InteractiveElement as _, IntoElement, ParentElement, Styled,
+    AnyElement, App, Div, ElementId, Hsla, InteractiveElement as _, IntoElement, ParentElement, SharedString, Styled,
     TestSupportExt as _, div, px,
 };
 use protocol::event::Question;
@@ -15,13 +15,14 @@ use protocol::model::Seq;
 
 use super::around::{AnswerTo, Asked, Settled};
 use super::line::{self, Line, Part};
+use super::text::place;
 use super::tools::{Toggle, block};
 use super::{InRow, Shared, row};
 use crate::calls::first_line;
-use crate::find::FindLook;
+use crate::find::{self, FindLook, Part as Text};
 use crate::folds::Fold;
-use crate::item_key::ItemKey;
-use crate::window_selection::SelectableText;
+use crate::selection::Pieces;
+use crate::texts::Plain;
 
 const ICON: IconName = IconName::MessageCircleQuestionMark;
 /// What's said for a question nobody answered.
@@ -36,7 +37,8 @@ pub(super) fn draw(seq: Seq, asked: &Asked, shared: &Shared, cx: &App) -> AnyEle
     // Nothing's found in a question, so nothing it draws is marked.
     let find = FindLook::default();
     let (key, open) = (&asked.key, asked.open);
-    // It's in the approval's own row, though nothing a question draws is placed by its block.
+    // It's in the approval's own row, where each question's texts are placed in a block of their own, by where the
+    // question is among them.
     let toggle = Toggle { seq, key, fold: Fold::Output, open, shared, find: &find, in_row: InRow::Own(0) };
     let title = if questions.len() > 1 { format!("Asked {} questions", questions.len()) } else { "Asked".to_string() };
     let mut line = Line::new(ICON, title);
@@ -46,7 +48,7 @@ pub(super) fn draw(seq: Seq, asked: &Asked, shared: &Shared, cx: &App) -> AnyEle
     // Opened, the block says what was answered, so the line doesn't say it twice.
     let said = summary(questions, &asked.settled).filter(|_| !asked.open);
     let line = line.part(said.map(|said| Part::Summary(said.into())));
-    let opened = (asked.open && !questions.is_empty()).then(|| answers(questions, asked, cx));
+    let opened = || (!questions.is_empty()).then(|| answers(questions, asked, &toggle, cx));
     // On its own row, spaced as a row of calls is, so it reads as one of them.
     row().pb_2().child(line::drawn(line, None, opened, &toggle, cx)).into_any_element()
 }
@@ -67,15 +69,17 @@ fn summary(questions: &[Question], settled: &Settled) -> Option<String> {
 
 /// Each question under its header, and what was answered under it, after an arrow. One nobody answered says so, and
 /// nothing is said where what was answered isn't known.
-fn answers(questions: &[Question], asked: &Asked, cx: &App) -> AnyElement {
-    let (key, theme) = (&asked.key, cx.theme());
+fn answers(questions: &[Question], asked: &Asked, toggle: &Toggle, cx: &App) -> AnyElement {
+    let (key, theme) = (toggle.key, cx.theme());
     let id = key.element("asked");
+    let area = block::scroll_id(&id);
     let mut list = v_flex().id(id.clone());
     for (i, question) in questions.iter().enumerate() {
         if i > 0 {
             list = list.child(block::separator(cx));
         }
         let answer = asked.settled.answer_to(i, question);
+        let toggle = &Toggle { in_row: InRow::Own(i), ..*toggle };
         list = list.child(
             v_flex()
                 .px_3()
@@ -85,16 +89,25 @@ fn answers(questions: &[Question], asked: &Asked, cx: &App) -> AnyElement {
                 .when_some(question.header.clone(), |d, header| {
                     d.child(div().text_xs().text_color(look::faint()).child(header))
                 })
-                .child(text(key.element(&format!("question-{i}")), &question.text, theme.muted_foreground))
-                .children(answered(key, i, answer, cx)),
+                .child(text(
+                    toggle,
+                    Text::Question,
+                    key.element(&format!("question-{i}")),
+                    &question.text,
+                    theme.muted_foreground,
+                    &area,
+                ))
+                .children(answered(toggle, &area, i, answer, cx)),
         );
     }
-    block::frame(cx).child(block::scrolling(&FindLook::default(), &id, list.test_support())).into_any_element()
+    let scrolling = block::scrolling(toggle.find, &toggle.shared.selection, &id, list.test_support());
+    block::frame(cx).child(scrolling).into_any_element()
 }
 
 /// What was answered to the question at `i`, after an arrow, or that nobody answered it, or nothing if that isn't
 /// known.
-fn answered(key: &ItemKey, i: usize, answer: AnswerTo, cx: &App) -> Option<AnyElement> {
+fn answered(toggle: &Toggle, area: &ElementId, i: usize, answer: AnswerTo, cx: &App) -> Option<AnyElement> {
+    let key = toggle.key;
     let answer = match answer {
         AnswerTo::Said(answer) => answer,
         AnswerTo::Unknown => return None,
@@ -111,15 +124,30 @@ fn answered(key: &ItemKey, i: usize, answer: AnswerTo, cx: &App) -> Option<AnyEl
         .items_start()
         .gap_2()
         .child(arrow)
-        .child(text(key.element(&format!("answer-{i}-text")), &answer, cx.theme().foreground).flex_1())
+        .child(
+            text(
+                toggle,
+                Text::Answered,
+                key.element(&format!("answer-{i}-text")),
+                &answer,
+                cx.theme().foreground,
+                area,
+            )
+            .flex_1(),
+        )
         .test_support()
         .into_any_element();
     Some(row)
 }
 
-/// Text at body size that can be selected and copied, as a call's output can.
-fn text(id: ElementId, text: &str, color: Hsla) -> Div {
-    div().min_w_0().text_sm().text_color(color).child(SelectableText::new(id, text.to_string()))
+/// Text at body size that can be selected and copied, as a call's output can, the question's `part`, known as `id`, in
+/// the area `area`, which scrolls it.
+fn text(toggle: &Toggle, part: Text, id: ElementId, text: &str, color: Hsla, area: &ElementId) -> Div {
+    let said: SharedString = text.to_string().into();
+    let (drawn, layout) = find::marked_with_layout(said.clone(), &toggle.marks(part, &said), &[], Some(area.clone()));
+    let (at, area) = (place(toggle, part), area.clone());
+    let plain = Plain { at, element: id, area, drawn, said, pieces: Pieces::whole(layout) };
+    div().min_w_0().text_sm().text_color(color).child(toggle.shared.texts.draw_plain(&toggle.shared.selection, plain))
 }
 
 #[cfg(test)]

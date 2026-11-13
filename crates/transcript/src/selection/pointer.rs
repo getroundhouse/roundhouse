@@ -19,8 +19,10 @@ impl Selection {
     ///
     /// A press is heard after what's drawn over the list, such as the scrollbar, and what's in its rows, so one that
     /// takes a press keeps it, and before the kit's selection, which lets go of what it had selected as a press goes
-    /// down. One on a text has the kit select nothing from there, so the two are never both selecting. Where the
-    /// pointer goes and the button coming up are heard before anything else, so a drag goes on over whatever it's on.
+    /// down. No text in the transcript is the kit's, but a kit component can draw a text view of its own, such as an
+    /// input's popover, so one on a text has the kit select nothing from there, and the two are never both selecting.
+    /// Where the pointer goes and the button coming up are heard before anything else, so a drag goes on over whatever
+    /// it's on.
     pub(crate) fn hear_the_pointer(&self, hitbox: &Hitbox, bounds: Bounds<Pixels>, window: &mut Window) {
         let (pressed, hitbox) = (self.clone(), hitbox.clone());
         window.on_mouse_event(move |event: &MouseDownEvent, phase, window, cx| {

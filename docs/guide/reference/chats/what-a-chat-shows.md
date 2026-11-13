@@ -36,7 +36,8 @@ Each call is a line: what it is, and what it's about. Click it to open it.
 
 - **A call that failed says so on a red line under it,** such as `Exit 1`, with the first line of what went wrong. It shows while the call is closed, so a failure is never hidden.
 - **Hovering an edit shows its diff,** without opening it.
-- **A command is text to select,** and a button copies all of it.
+- **An opened call's text is selected with the rest of the chat,** such as a command and what it printed, what went wrong, and a question and its answer. So a drag from one reply into the next takes in a call opened between them, and `Cmd-A` takes in every opened call. A tool's input, a file's numbered lines, a diff, a search's matching lines, a web search's pages, what a fetch asked, what you told the agent when you denied a call, and output over 16 KB aren't selected.
+- **A command has a button that copies all of it,** to run elsewhere.
 - **An image a call sent back, such as one it read, opens with a click,** as big as it is, up to what fits in the window. Escape or a click closes it.
 
 ![File calls, an edit opened to its diff](../../../spec/screens/tool-files.png)

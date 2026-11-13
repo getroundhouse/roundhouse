@@ -9,15 +9,14 @@
 //! says what it's known by and where its leaves are, so a point in the window can be turned into a place in it. A
 //! press on a text starts a selection, a drag moves its far end, and with the pointer past the top or bottom of the
 //! list, the list scrolls on, faster the further past it is, for as long as the button is held. A copy reads the texts
-//! between the ends as they were parsed, drawn or not, which is each the chat has loaded, and each it loaded as the
-//! selection was made, since the texts from one end to the other are kept, as is the one a press was on, for a
-//! shift-click to extend from. `crate::texts` draws them.
+//! between the ends as they were parsed, or what a plain text said when it was drawn, drawn now or not, which is each
+//! the chat has loaded, and each it loaded as the selection was made, since the texts from one end to the other are
+//! kept, as is the one a press was on, for a shift-click to extend from. `crate::texts` draws them.
 //!
 //! It's the mouse's: a press, a drag and a release. The kit's selection also takes a touch screen's long press and
 //! handles, which a transcript on a phone will need here.
 
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::ops::{Range, RangeInclusive};
 use std::rc::Rc;
 use std::sync::Arc;
@@ -25,21 +24,26 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use gpui_kit::base::TextSelection;
 use gpui_kit::base::input::{Copy, SelectAll};
-use gpui_kit::base::text::editor_host::LeafGeometry;
 use gpui_kit::{
     App, Bounds, ClickEvent, ClipboardItem, Div, ElementId, FocusHandle, InteractiveElement as _, MouseButton, Pixels,
     Point, SharedString, Window, point, px,
 };
 use look::motion::ScrollingOn;
 
-use crate::texts::{TextAt, TextKey, Texts};
+use crate::texts::{Leaves, TextAt, TextKey, Texts};
 
+mod geometry;
+mod pieces;
 mod places;
 mod pointer;
 #[cfg(test)]
+mod test_layouts;
+#[cfg(test)]
 mod tests;
 
-use places::{copied, leaf_text, selected, spot_at, word_around};
+pub(crate) use geometry::Geometry;
+pub(crate) use pieces::Pieces;
+use places::{copied, line_around, selected, spot_at, text_under, word_around};
 
 /// Where the keys that copy what's selected and select everything are bound, which is the transcript once a press in it
 /// has focused it.
@@ -68,13 +72,13 @@ impl End {
     }
 }
 
-/// What a press selects, and a drag from it goes by: a character, a word for a double click, or a whole paragraph,
-/// heading, cell or code block for a triple.
+/// What a press selects, and a drag from it goes by: a character, a word for a double click, or for a triple, a whole
+/// paragraph, heading, cell or code block of Markdown, or a line of plain text.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Unit {
     Character,
     Word,
-    Leaf,
+    Paragraph,
 }
 
 /// The selection in one transcript. Cheap to clone.
@@ -117,7 +121,7 @@ struct Drawn {
     at: TextAt,
     bounds: Bounds<Pixels>,
     area: Option<ElementId>,
-    leaves: Vec<(u64, LeafGeometry)>,
+    leaves: Vec<(u64, Geometry)>,
 }
 
 impl Selecting {
@@ -158,10 +162,10 @@ impl Selection {
         at: TextAt,
         bounds: Bounds<Pixels>,
         area: Option<ElementId>,
-        leaves: HashMap<u64, LeafGeometry>,
+        leaves: impl IntoIterator<Item = (u64, Geometry)>,
     ) {
-        let showing = leaves.into_iter().filter(|(_, geometry)| geometry.bounds().intersects(&bounds));
-        let mut leaves: Vec<(u64, LeafGeometry)> = showing.collect();
+        let showing = leaves.into_iter().filter(|(_, geometry)| geometry.shows(bounds));
+        let mut leaves: Vec<(u64, Geometry)> = showing.collect();
         leaves.sort_by_key(|(key, _)| *key);
         let mut selecting = self.inner.borrow_mut();
         debug_assert!(
@@ -173,8 +177,12 @@ impl Selection {
         selecting.drawn.push(Drawn { text, at, bounds, area, leaves });
     }
 
-    /// What's selected of the text at `at`, whose leaves are `leaves`, by leaf.
-    pub(crate) fn selected_in(&self, at: TextAt, leaves: &[String]) -> Vec<(u64, Range<usize>)> {
+    /// What's selected of the text at `at`, whose leaves say `leaves`, by leaf.
+    pub(crate) fn selected_in<'a>(
+        &self,
+        at: TextAt,
+        leaves: impl IntoIterator<Item = &'a str> + 'a,
+    ) -> Vec<(u64, Range<usize>)> {
         let Some((start, end)) = self.ordered() else { return Vec::new() };
         selected(start, end, at, leaves).filter(|(_, range)| !range.is_empty()).collect()
     }
@@ -247,7 +255,7 @@ impl Selection {
     /// `extend`, moves the far end of the one there is to there, and says so. Anywhere else, nothing's selected.
     fn press(&self, position: Point<Pixels>, clicks: usize, extend: bool) -> bool {
         let mut selecting = self.inner.borrow_mut();
-        let on = selecting.drawn.iter().find(|drawn| drawn.bounds.contains(&position));
+        let on = text_under(&selecting.drawn, position);
         let (on_text, area) = (on.is_some(), on.and_then(|drawn| drawn.area.clone()));
         let Some((spot, text)) = spot_at(&selecting.drawn, position).filter(|_| on_text) else {
             selecting.set(None);
@@ -258,7 +266,7 @@ impl Selection {
         let unit = match clicks {
             0 | 1 => Unit::Character,
             2 => Unit::Word,
-            _ => Unit::Leaf,
+            _ => Unit::Paragraph,
         };
         // Extending from where what's selected starts, if its text still has a place, and otherwise starting afresh.
         let anchor = (selecting.ends.as_ref().map(|(anchor, _)| anchor.clone()))
@@ -309,6 +317,12 @@ impl Selection {
             .map_or_else(String::new, |(start, end)| self.between(start, end))
     }
 
+    /// What a copy would hold now, for a test of what a drag selects as it goes.
+    #[cfg(feature = "testing")]
+    pub(crate) fn as_copied(&self) -> String {
+        self.text()
+    }
+
     /// The ends of everything: the start of the first text that's shown and the end of the last, if there are any.
     fn whole(&self) -> Option<(End, End)> {
         let (first, last) = self.texts.ends()?;
@@ -350,12 +364,17 @@ impl Selection {
     /// The `unit` that `spot`, in the text known as `text`, is in, as two places.
     fn around(&self, spot: Spot, text: &TextKey, unit: Unit) -> (Spot, Spot) {
         let leaves = self.texts.leaves_of(text);
-        let text = leaves.as_deref().and_then(|leaves| leaf_text(leaves, spot.leaf));
-        let range = match (unit, text) {
-            (Unit::Character, _) | (Unit::Word | Unit::Leaf, None) => spot.byte..spot.byte,
-            (Unit::Word, Some(text)) => word_around(text, spot.byte),
-            (Unit::Leaf, Some(text)) => 0..text.len(),
-        };
+        let range = leaves.as_ref().and_then(|leaves| {
+            let text = leaves.leaf(spot.leaf)?;
+            match (unit, leaves) {
+                (Unit::Character, _) => None,
+                (Unit::Word, _) => Some(word_around(text, spot.byte)),
+                // A leaf of Markdown is a paragraph, a heading, a cell or a code block.
+                (Unit::Paragraph, Leaves::Markdown(_)) => Some(0..text.len()),
+                (Unit::Paragraph, Leaves::Plain(_)) => Some(line_around(text, spot.byte)),
+            }
+        });
+        let range = range.unwrap_or(spot.byte..spot.byte);
         (Spot { byte: range.start, ..spot }, Spot { byte: range.end, ..spot })
     }
 }

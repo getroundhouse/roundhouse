@@ -35,8 +35,7 @@ pub(super) fn draw(reply: &Reply, toggle: &Toggle, cx: &App) -> AnyElement {
     let start = advice.filter(|_| !toggle.open).map(Part::start_of);
     let dropped = matches!(reply, Reply::Dropped).then(|| Part::Note(DROPPED_NOTE.into()));
     let line = Line::new(IconName::Lightbulb, "Ask the advisor").part(start).part(dropped);
-    let said = if toggle.open { said(reply, advice, toggle, cx) } else { None };
-    let opened = said.map(|said| block::frame(cx).child(said).into_any_element());
+    let opened = || said(reply, advice, toggle, cx).map(|said| block::frame(cx).child(said).into_any_element());
     line::drawn(line, answer, opened, toggle, cx)
 }
 

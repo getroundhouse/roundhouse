@@ -37,20 +37,20 @@ pub(super) fn read(file: &ReadFile, answer: Option<&Answer>, toggle: &Toggle, cx
     let title = amount(read.lines.len(), read.images.len()).map_or_else(|| "Read".to_string(), |n| format!("Read {n}"));
     let line = Line::new(IconName::FileText, title).part(chip(file.path));
     let output = |text| block::output(toggle, Text::Output, text, cx.theme().muted_foreground, cx);
-    let opened = if !toggle.open {
-        None
-    } else if read.lines.is_empty() && read.images.is_empty() {
-        read.text.map(|text| block::frame(cx).child(output(text)).into_any_element())
-    } else {
-        // Its lines, or what else came back, then any images, such as a notebook's.
-        let shown = block::frame(cx)
-            .child(block::found_label(toggle, Text::Label, file.path, cx))
-            .when(!read.lines.is_empty(), |d| {
-                d.child(numbered::lines(toggle, Text::File, language(file.path), &[read.section()], cx))
-            })
-            .when_some(read.text, |d, text| d.child(output(text)))
-            .when(!read.images.is_empty(), |d| d.child(block::images(read.images, cx)));
-        Some(shown.into_any_element())
+    let opened = || {
+        if read.lines.is_empty() && read.images.is_empty() {
+            read.text.map(|text| block::frame(cx).child(output(text)).into_any_element())
+        } else {
+            // Its lines, or what else came back, then any images, such as a notebook's.
+            let shown = block::frame(cx)
+                .child(block::found_label(toggle, Text::Label, file.path, cx))
+                .when(!read.lines.is_empty(), |d| {
+                    d.child(numbered::lines(toggle, Text::File, language(file.path), &[read.section()], cx))
+                })
+                .when_some(read.text, |d, text| d.child(output(text)))
+                .when(!read.images.is_empty(), |d| d.child(block::images(read.images, cx)));
+            Some(shown.into_any_element())
+        }
     };
     line::drawn(line, answer, opened, toggle, cx)
 }
@@ -103,8 +103,7 @@ pub(super) fn write(file: &WriteFile, answer: Option<&Answer>, toggle: &Toggle, 
     let line = Line::new(icon, title)
         .part(chip(file.path))
         .part(replaced.map(|hunks| Part::Counts(diff::change_counts(hunks))));
-    let opened =
-        toggle.open.then(|| shown_file(toggle, file.path, &marks::marked(&Rc::new(written(file, answer))), cx));
+    let opened = || Some(shown_file(toggle, file.path, &marks::marked(&Rc::new(written(file, answer))), cx));
     line::drawn(line, answer, opened, toggle, cx)
 }
 
@@ -124,7 +123,7 @@ pub(super) fn edit(file: &EditFile, answer: Option<&Answer>, toggle: &Toggle, cx
         .part(chip(file.path))
         .part(Part::Counts(diff::counts(&sections)))
         .preview(preview(language(file.path), sections.clone()));
-    let opened = toggle.open.then(|| shown_file(toggle, file.path, &marks::marked(&sections), cx));
+    let opened = || Some(shown_file(toggle, file.path, &marks::marked(&sections), cx));
     line::drawn(line, answer, opened, toggle, cx)
 }
 

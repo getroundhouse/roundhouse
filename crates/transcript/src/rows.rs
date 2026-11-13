@@ -326,7 +326,8 @@ fn marked_line(text: String, marks: &Marks, color: Hsla) -> AnyElement {
 }
 
 /// Which row a block is drawn in: its event's own, as the `n`th of the event's blocks, or a call's, as a subagent's
-/// words are, nested in the `n`th block of that row's event. Either way, `n` is the block its texts are placed in.
+/// words are, nested in the `n`th block of that row's event. Either way, `n` is the block its texts are placed in. The
+/// questions the agent asked are each drawn as a block of their own, in their order, so each one's texts are together.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(in crate::rows) enum InRow {
     Own(usize),

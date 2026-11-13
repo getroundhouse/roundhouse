@@ -45,7 +45,7 @@ impl Store {
                 Text::Parsed { parsed } if parsed.source.len() <= AT_ONCE => {
                     Some((self.places.last_drawn(id)?, id.clone(), parsed.source.len()))
                 }
-                Text::Parsed { .. } | Text::Read { .. } | Text::Parsing { .. } => None,
+                Text::Parsed { .. } | Text::Read { .. } | Text::Parsing { .. } | Text::Plain { .. } => None,
             })
             .filter(|(drawn, ..)| *drawn < frame)
             .collect();

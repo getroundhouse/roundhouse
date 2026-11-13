@@ -16,7 +16,7 @@ use super::parsing::Apart;
 use super::{Parsed, TextAt, TextKey, Texts};
 use crate::find::Marks;
 use crate::linked_images::Images;
-use crate::selection::Selection;
+use crate::selection::{Geometry, Selection};
 
 pub(super) struct ProseElement {
     /// What the text is known by, which its element is too.
@@ -117,13 +117,14 @@ impl Element for ProseElement {
         for (leaf, marks) in (0u64..).zip(&self.marks).filter(|(_, marks)| !marks.is_empty()) {
             behind.entry(leaf).or_default().extend(marks.backgrounds());
         }
-        for (leaf, range) in self.selection.selected_in(self.at, &parsed.leaves) {
+        for (leaf, range) in self.selection.selected_in(self.at, parsed.leaves.iter().map(String::as_str)) {
             behind.entry(leaf).or_default().push((range, *selection_color));
         }
         let (_, leaves) = collect_leaf_geometry(behind, || element.prepaint(window, cx));
         self.reveal(&leaves);
         // What shows of it, which an area that scrolls it, or the list, can cut short.
         let shows = bounds.intersect(&window.content_mask().bounds);
+        let leaves = leaves.into_iter().map(|(leaf, geometry)| (leaf, Geometry::Markdown(geometry)));
         self.selection.drawn(self.known.clone(), self.at, shows, self.area.clone(), leaves);
         hitbox
     }

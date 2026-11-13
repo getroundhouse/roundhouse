@@ -19,7 +19,7 @@ use super::highlight::{Spans, spans};
 use super::{Toggle, block};
 use crate::calls::count;
 use crate::calls::lines::{Mark, NumberedLine, Section};
-use crate::find::{self, FindLook, Marks, Part, behind};
+use crate::find::{self, Marks, Part, behind};
 use crate::log_block::{TAB, tabbed};
 use crate::scroll_area::ScrollArea;
 
@@ -58,7 +58,7 @@ pub(super) fn lines(toggle: &Toggle, part: Part, language: &str, sections: &[Sec
         .children(drawn)
         .when_some(more, |d, more| d.child(block::label(more, cx).pb_2()))
         .test_support();
-    scrolling(toggle.find, &id, part).into_any_element()
+    scrolling(toggle, &id, part).into_any_element()
 }
 
 /// What [`lines`] draws of `sections`, for finding: each line it shows, one after another.
@@ -94,8 +94,8 @@ fn fitted(sections: &[Section], room: usize) -> (Vec<usize>, usize) {
 }
 
 /// A block's numbered lines, `part`, scrolling past a dozen, and sideways along a line too long for it.
-pub(super) fn scrolling(find: &FindLook, id: &ElementId, part: impl IntoElement) -> ScrollArea {
-    block::scrolling(find, id, part).max_height(px(MAX_HEIGHT)).both_ways()
+pub(super) fn scrolling(toggle: &Toggle, id: &ElementId, part: impl IntoElement) -> ScrollArea {
+    block::scrolling(toggle.find, &toggle.shared.selection, id, part).max_height(px(MAX_HEIGHT)).both_ways()
 }
 
 /// A row for each of these lines, without a block around them, with `marks`, which are where the matches are in
