@@ -56,7 +56,7 @@ impl LiveSession {
             change.recorded = Some((run, through));
         }
         let announce = !change.is_none();
-        let turn_ended = change.status.as_ref().is_some_and(|status| status.turn == TurnEdge::Ends);
+        let turn_ended = change.status.as_ref().is_some_and(|status| matches!(status.turn, TurnEdge::Ends(_)));
         let id = self.id.clone();
         let client_msg_id = sent_as(&body).cloned();
         let for_store = body.clone();

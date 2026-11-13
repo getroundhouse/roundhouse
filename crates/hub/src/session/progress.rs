@@ -94,7 +94,7 @@ impl Progress {
         }
         let open = Open { approvals: approvals.len(), tasks: background_tasks.len(), agent };
         let status = next_status(self.status, &body, open, self.queue.idle_is_stale());
-        let turn = turn_edge(self.status, status);
+        let turn = turn_edge(self.status, status, &body);
         let changed_tasks = (background_tasks != self.background_tasks).then(|| background_tasks.clone());
         let changed = status != self.status || changed_tasks.is_some();
         let held = self.queue.held_after(&body, self.status, status);

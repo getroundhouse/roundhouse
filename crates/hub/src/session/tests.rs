@@ -120,8 +120,8 @@ fn a_turn_that_leaves_work_in_the_background_keeps_the_agent_at_work() {
     assert_eq!(next_status(Running, &state(AgentRunState::Idle), ONE_TASK, false), Background);
     assert_eq!(next_status(Background, &state(AgentRunState::Idle), ONE_TASK, false), Background);
     // It's still the end of a turn, so what the agent said is its reply.
-    assert_eq!(turn_edge(Running, Background), TurnEdge::Ends);
-    assert_eq!(turn_edge(Background, Idle), TurnEdge::Neither);
+    assert_eq!(turn_edge(Running, Background, &turn_ended()), TurnEdge::Ends(Some(TurnOutcome::Success)));
+    assert_eq!(turn_edge(Background, Idle, &state(AgentRunState::Idle)), TurnEdge::Neither);
 }
 
 /// It picks up again by itself once that work is done, so it's still at work until it does, as the real CLI showed
@@ -175,7 +175,7 @@ fn a_monitor_timing_out_between_turns_leaves_the_agent_at_work_until_it_picks_up
 #[test]
 fn the_agent_taken_to_be_idle_once_it_hasnt_picked_up_again_is_idle() {
     assert_eq!(next_status(Background, &state(AgentRunState::Idle), NOTHING, false), Idle);
-    assert_eq!(turn_edge(Background, Idle), TurnEdge::Neither);
+    assert_eq!(turn_edge(Background, Idle, &state(AgentRunState::Idle)), TurnEdge::Neither);
 }
 
 #[test]
@@ -230,7 +230,10 @@ fn an_idle_from_before_a_prompt_the_agent_has_yet_to_take_changes_nothing() {
 
 #[test]
 fn a_turn_starts_when_the_agent_starts_working_and_ends_when_it_comes_to_rest() {
-    use TurnEdge::{Ends, Neither, Starts};
+    use TurnEdge::{Neither, Starts};
+    // What moves the status, which here says nothing of how a turn ended.
+    let turn_edge = |from, to| turn_edge(from, to, &EventBody::Unknown);
+    let ends = TurnEdge::Ends(None);
 
     for from in [Idle, Interrupted, Unknown] {
         assert_eq!(turn_edge(from, Running), Starts, "from {from:?}");
@@ -243,11 +246,21 @@ fn a_turn_starts_when_the_agent_starts_working_and_ends_when_it_comes_to_rest() 
         "a prompt taken after the turn it came in has ended starts its own"
     );
     assert_eq!(turn_edge(Idle, WaitingApproval), Starts);
-    assert_eq!(turn_edge(Running, Idle), Ends);
-    assert_eq!(turn_edge(WaitingApproval, Idle), Ends);
+    assert_eq!(turn_edge(Running, Idle), ends);
+    assert_eq!(turn_edge(WaitingApproval, Idle), ends);
     assert_eq!(turn_edge(Running, WaitingApproval), Neither, "asking is part of the turn");
     assert_eq!(turn_edge(WaitingApproval, Running), Neither);
     assert_eq!(turn_edge(Running, Interrupted), Neither, "a turn the agent was cut off from doesn't end");
+}
+
+#[test]
+fn a_turn_ended_by_its_end_ended_as_that_says() {
+    let mut failed = turn_ended();
+    let EventBody::TurnEnded { outcome, .. } = &mut failed else { unreachable!() };
+    *outcome = TurnOutcome::Error;
+
+    assert_eq!(turn_edge(Running, Idle, &failed), TurnEdge::Ends(Some(TurnOutcome::Error)));
+    assert_eq!(turn_edge(Running, Idle, &state(AgentRunState::Idle)), TurnEdge::Ends(None), "one that didn't say");
 }
 
 fn context(used_tokens: u64) -> ContextUsage {

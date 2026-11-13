@@ -10,7 +10,7 @@ use serde_json::{Value, json};
 
 use crate::tools::{ask_questions, edit_file, present_plan, run_tool};
 use crate::{Config, Input, Out, Prompt, current_mode, current_model, emit, lifecycle, pause};
-use crate::{advisor, background, cache, mcp, read, subagent};
+use crate::{advisor, background, cache, fail, mcp, read, subagent};
 
 mod prose;
 
@@ -165,18 +165,18 @@ pub(crate) fn run_turn(
     begin(config, out);
 
     let mut turn = Turn { config, out, parent: None };
-    let mut interrupted = false;
+    let mut stopped = false;
     let mut pending: VecDeque<String> = VecDeque::from([first.text.clone()]);
     let mut taken = vec![first];
     while let Some(next) = pending.pop_front() {
         for command in next.split(';') {
-            interrupted = run_command(&mut turn, command.trim(), rx, queued, eof);
-            if interrupted {
+            stopped = run_command(&mut turn, command.trim(), rx, queued, eof);
+            if stopped {
                 break;
             }
         }
         // A prompt that arrived mid-turn folds into this turn, with no result of its own.
-        if interrupted {
+        if stopped {
             break;
         }
         while let Some(prompt) = queued.pop_front() {
@@ -187,7 +187,9 @@ pub(crate) fn run_turn(
         }
     }
 
-    if interrupted {
+    if let Some(failed) = fail::ended(&config.session_id) {
+        emit(out, failed);
+    } else if stopped {
         // Stop means stop, as the worker asks with `cancel_queued`: what hadn't been taken goes unread.
         for prompt in queued.drain(..) {
             lifecycle(out, &prompt, "cancelled");
@@ -206,7 +208,7 @@ pub(crate) fn run_turn(
     } else {
         emit(out, crate::result::success(&config.session_id));
     }
-    let ended = if interrupted { "cancelled" } else { "completed" };
+    let ended = if stopped { "cancelled" } else { "completed" };
     for prompt in &taken {
         lifecycle(out, prompt, ended);
     }
@@ -258,7 +260,7 @@ fn answer(turn: &Turn, command: &str) -> Option<String> {
     Some(format!("{name}={}", std::env::var(name).unwrap_or_else(|_| "<unset>".to_string())))
 }
 
-/// Returns true if the turn was interrupted.
+/// Returns true if the turn goes no further: it was interrupted, or a request to the model failed.
 pub(crate) fn run_command(
     turn: &mut Turn,
     command: &str,
@@ -322,7 +324,7 @@ pub(crate) fn run_command(
 }
 
 /// The commands that do something rather than write: calls, questions, plans, subagents, work in the background,
-/// and ways to misbehave.
+/// and ways to misbehave. Returns true if the turn goes no further, as [`run_command`] does.
 fn act(turn: &mut Turn, command: &str, rx: &Receiver<Input>, queued: &mut VecDeque<Prompt>, eof: &mut bool) -> bool {
     if let Some(command) = command.strip_prefix("tool:") {
         return run_tool(turn, command, rx, queued, eof);
@@ -332,6 +334,9 @@ fn act(turn: &mut Turn, command: &str, rx: &Receiver<Input>, queued: &mut VecDeq
     }
     if let Some(ms) = command.strip_prefix("hang:") {
         return hang(turn, ms.parse().unwrap(), rx, queued, eof);
+    }
+    if let Some(error) = command.strip_prefix("fail:") {
+        return fail::request(turn, error);
     }
     if let Some(code) = command.strip_prefix("crash:") {
         std::process::exit(code.parse().unwrap());

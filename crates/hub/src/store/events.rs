@@ -1,6 +1,6 @@
 //! Each session's event log.
 
-use protocol::event::{AgentTask, ApprovalOutcome, EventBody, SessionEvent};
+use protocol::event::{AgentTask, ApprovalOutcome, EventBody, SessionEvent, TurnOutcome};
 use protocol::model::{ApprovalId, ClientMessageId, Place, RunId, Seq, SessionId, SessionStatus, ToolUseId};
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 
@@ -24,8 +24,8 @@ pub struct StatusChange {
 pub enum TurnEdge {
     /// The event starts a turn, so its time becomes when the newest turn started.
     Starts,
-    /// The event ends a turn, so it becomes the session's newest reply.
-    Ends,
+    /// The event ends a turn, so it becomes the session's newest reply, which ended as it says, if it says.
+    Ends(Option<TurnOutcome>),
     /// It does neither, such as the agent stopping to ask, or going away mid-turn.
     Neither,
 }
@@ -96,9 +96,10 @@ fn change_session(
             "UPDATE sessions SET status = ?, turn_started_at_ms = ? WHERE id = ?",
             params![status, ts_ms, id],
         )?,
-        TurnEdge::Ends => {
-            tx.execute("UPDATE sessions SET status = ?, reply_seq = ? WHERE id = ?", params![status, seq, id])?
-        }
+        TurnEdge::Ends(outcome) => tx.execute(
+            "UPDATE sessions SET status = ?, reply_seq = ?, reply_outcome = ? WHERE id = ?",
+            params![status, seq, outcome.as_ref().map(text_of), id],
+        )?,
         TurnEdge::Neither => tx.execute("UPDATE sessions SET status = ? WHERE id = ?", params![status, id])?,
     };
     Ok(())

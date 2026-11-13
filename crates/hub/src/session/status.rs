@@ -130,14 +130,18 @@ pub(crate) fn works_unattended(status: SessionStatus, background_tasks: usize) -
     }
 }
 
-/// What going from `current` to `next` does to the session's turns. A turn starts when the agent starts working from
-/// anything else, including picking up again by itself after work in the background. It ends when the agent is
-/// between turns, idle or with that work still going, which makes what it said its newest reply. A turn the agent was
-/// cut off from doesn't end, since the session shows it as interrupted instead.
-pub(crate) fn turn_edge(current: SessionStatus, next: SessionStatus) -> TurnEdge {
+/// What going from `current` to `next`, by recording `body`, does to the session's turns. A turn starts when the agent
+/// starts working from anything else, including picking up again by itself after work in the background. It ends when
+/// the agent is between turns, idle or with that work still going, which makes what it said its newest reply, and it
+/// ended as the turn's end says, when that's what ends it. A turn the agent was cut off from doesn't end, since the
+/// session shows it as interrupted instead.
+pub(crate) fn turn_edge(current: SessionStatus, next: SessionStatus, body: &EventBody) -> TurnEdge {
     match (current.in_turn(), next.in_turn()) {
         (false, true) => TurnEdge::Starts,
-        (true, false) if next.between_turns() => TurnEdge::Ends,
+        (true, false) if next.between_turns() => {
+            let outcome = if let EventBody::TurnEnded { outcome, .. } = body { Some(*outcome) } else { None };
+            TurnEdge::Ends(outcome)
+        }
         _ => TurnEdge::Neither,
     }
 }

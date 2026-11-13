@@ -18,6 +18,7 @@ mod context;
 mod core_loop;
 mod drafts;
 mod effort;
+mod failing;
 mod feed;
 mod finding_a_hub;
 mod hub_copies;
