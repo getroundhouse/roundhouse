@@ -350,7 +350,7 @@ fn only_a_line_from_a_subagent_names_it() {
 }
 
 #[test]
-fn a_reply_names_the_model_it_came_from_and_one_the_cli_wrote_itself_names_none() {
+fn a_reply_names_the_model_it_came_from() {
     let model = |model: &str| {
         let line =
             json!({"type":"assistant","parent_tool_use_id":"agent","message":{"id":"m","model":model,"content":[]}});
@@ -360,5 +360,4 @@ fn a_reply_names_the_model_it_came_from_and_one_the_cli_wrote_itself_names_none(
     };
 
     assert_eq!(model("claude-haiku-5-5").as_deref(), Some("claude-haiku-5-5"));
-    assert_eq!(model("<synthetic>"), None, "such as a message saying the API failed");
 }

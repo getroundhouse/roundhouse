@@ -1,11 +1,17 @@
-//! A `user` line: what the agent's tool calls sent back, with any images among it, or something written for the model.
+//! A `user` line: what the agent's tool calls sent back, with any images among it, something written for the model, or
+//! what a command the CLI ran printed.
 
 use protocol::event::{ContentBlock, EventBody};
 use serde_json::Value;
 
-use super::{Parsed, blocks, file_change, id_of, images};
+use super::{Parsed, blocks, file_change, id_of, images, said};
 
 pub(super) fn line(value: &Value) -> Parsed {
+    // What a command the CLI ran printed is the CLI's, not the agent's. What a typed `/compact` printed is read first,
+    // since the compaction says it better.
+    if let Some((stream, text)) = said::printed(value) {
+        return Parsed::Event(said::printed_notice(stream, text));
+    }
     let content = value.get("message").and_then(|message| message.get("content"));
     let mut blocks = blocks::read(content);
     // Written for the model rather than the person, such as an image's size once the CLI has shrunk it. A compaction's

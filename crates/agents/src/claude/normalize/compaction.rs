@@ -6,6 +6,7 @@ use protocol::event::{CompactedBy, CompactionOutcome, EventBody};
 use serde_json::Value;
 use tracing::warn;
 
+use super::said::{self, Stream, text_of};
 use super::{Parsed, other, str_of, string_of};
 
 /// Before what the summary says, and after it, the CLI writes to the model rather than the person.
@@ -70,9 +71,8 @@ fn summary_line(value: &Value) -> Option<String> {
 
 /// What the CLI says to a typed `/compact`, which the compaction's own event says better.
 fn replayed(value: &Value) -> Option<Parsed> {
-    let text = text_of(value.get("message").and_then(|message| message.get("content")));
-    let said = text.trim().strip_prefix("<local-command-stdout>")?.strip_suffix("</local-command-stdout>")?;
-    (flag(value, "isReplay") && said.trim() == "Compacted").then(|| other("user/compacted"))
+    let (stream, said) = said::printed(value)?;
+    (stream == Stream::Out && said == "Compacted").then(|| other("user/compacted"))
 }
 
 fn flag(value: &Value, key: &str) -> bool {
@@ -121,15 +121,6 @@ fn status(value: &Value) -> Option<Parsed> {
     }
     let outcome = CompactionOutcome::Failed { error: str_of(value, "compact_error").map(str::to_string) };
     Some(Parsed::Event(EventBody::AgentCompacted { asked: None, keeping: None, outcome }))
-}
-
-/// A message's text, whether it came as a string or as blocks.
-fn text_of(content: Option<&Value>) -> String {
-    match content {
-        Some(Value::String(text)) => text.clone(),
-        Some(Value::Array(blocks)) => blocks.iter().filter_map(|block| str_of(block, "text")).collect(),
-        _ => String::new(),
-    }
 }
 
 /// What the summary says, without what's around it for the model. All of it, if the CLI wrote it some other way.
@@ -261,6 +252,6 @@ mod tests {
         let model = parsed(&mut normalizer, &replayed("Set model to `haiku`"));
 
         assert!(matches!(compacted, Parsed::Event(EventBody::AgentOther { .. })), "{compacted:?}");
-        assert!(matches!(model, Parsed::Event(EventBody::AgentUser { .. })), "{model:?}");
+        assert!(matches!(model, Parsed::Event(EventBody::Notice { .. })), "what any other command printed: {model:?}");
     }
 }

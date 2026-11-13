@@ -23,7 +23,10 @@ pub(super) enum Work {
 pub(super) fn work(body: &EventBody) -> Work {
     match body {
         EventBody::AgentInit { .. } => Work::Started,
-        EventBody::Assistant { parent_tool_use_id, .. } => Work::Wrote { subagent: parent_tool_use_id.is_some() },
+        // A failed request is said in the model's place, as what it wrote would have been.
+        EventBody::Assistant { parent_tool_use_id, .. } | EventBody::RequestFailed { parent_tool_use_id, .. } => {
+            Work::Wrote { subagent: parent_tool_use_id.is_some() }
+        }
         // A compaction empties most of the context, so it's news as much as something written.
         EventBody::AgentCompacted { .. } => Work::Wrote { subagent: false },
         EventBody::TurnEnded { .. } => Work::TurnEnded,
@@ -37,7 +40,6 @@ pub(super) fn work(body: &EventBody) -> Work {
         | EventBody::AgentState { .. }
         | EventBody::AgentTasks { .. }
         | EventBody::AgentUser { .. }
-        | EventBody::RequestFailed { .. }
         | EventBody::ApprovalRequested { .. }
         | EventBody::ApprovalResolved { .. }
         | EventBody::AgentExited { .. }

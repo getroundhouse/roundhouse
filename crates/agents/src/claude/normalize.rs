@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 
 use protocol::attachment::NewAttachment;
-use protocol::event::{AgentRunState, ApprovalOutcome, EventBody};
+use protocol::event::{AgentRunState, ApprovalOutcome, EventBody, TurnOutcome};
 use protocol::model::{CacheRequest, MessageId, ToolUseId};
 use protocol::tail::{BlockKind, DeltaChange, StreamDelta};
 use serde_json::Value;
@@ -17,6 +17,7 @@ use compaction::Compactions;
 pub(super) use limits::{whole_percent, window_named};
 use pending::PendingCalls;
 pub(crate) use prompt::PromptProgress;
+use said::FailedRequests;
 use subagents::Subagents;
 use surrogates::repair_lone_surrogates;
 use tasks::Tasks;
@@ -33,6 +34,7 @@ mod pending;
 mod prompt;
 mod request;
 mod result_text;
+mod said;
 mod subagents;
 mod surrogates;
 mod tasks;
@@ -94,6 +96,7 @@ pub struct Normalizer {
     models: TurnModels,
     subagents: Subagents,
     compactions: Compactions,
+    failed: FailedRequests,
 }
 
 impl Normalizer {
@@ -143,11 +146,13 @@ impl Normalizer {
         }
         if let Parsed::Event(body) = &parsed {
             self.models.note(body);
+            self.failed.note(body);
         }
         // Whatever a turn left streaming, such as when it was cancelled, is over, but for what a subagent in the
         // background is writing, since it carries on.
-        if let Parsed::Event(EventBody::TurnEnded { models, .. }) = &mut parsed {
+        if let Parsed::Event(EventBody::TurnEnded { models, outcome, request_failed, .. }) = &mut parsed {
             *models = self.models.take();
+            *request_failed = self.failed.ended_on_one() && *outcome == TurnOutcome::Error;
             let subagents = &self.subagents;
             self.streaming.retain(|_, (_, writer)| writer.as_ref().is_some_and(|call| subagents.in_background(call)));
             self.pending_calls.turn_ended();
@@ -187,7 +192,7 @@ fn unparsed() -> Parsed {
 fn parse_value(value: &Value) -> Parsed {
     let kind = str_of(value, "type").unwrap_or("unknown");
     match kind {
-        "assistant" => Parsed::Event(assistant(value)),
+        "assistant" => Parsed::Event(said::message(value).unwrap_or_else(|| assistant(value))),
         "user" => user::line(value),
         "result" => Parsed::Event(turn_ended(value)),
         "system" => system(value),
@@ -282,16 +287,12 @@ fn system(value: &Value) -> Parsed {
     }
 }
 
-/// The CLI's name for the model of a message it wrote itself, such as one saying the API failed. No model wrote it, so
-/// it's recorded as naming none, and a turn or a subagent isn't taken to have run on it.
-const NO_MODEL: &str = "<synthetic>";
-
 fn assistant(value: &Value) -> EventBody {
     let message = value.get("message").unwrap_or(&Value::Null);
     EventBody::Assistant {
         message_id: id_of(message, "id"),
         parent_tool_use_id: id_of(value, "parent_tool_use_id"),
-        model: str_of(message, "model").filter(|model| *model != NO_MODEL).map(str::to_string),
+        model: string_of(message, "model"),
         blocks: blocks::read(message.get("content")),
         // A Normalizer knows it from the deltas before.
         first_index: None,
