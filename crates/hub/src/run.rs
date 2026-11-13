@@ -126,7 +126,7 @@ pub async fn run(config: HubConfig) -> Result<(), HubError> {
     let dirs = HubDirs {
         attachments: paths.attachments_dir.clone(),
         worker_logs: paths.worker_logs_dir.clone(),
-        logins: paths.logins_dir.clone(),
+        data: paths.data_dir.clone(),
     };
     let hub = Arc::new(Hub::new(config.build, store, dirs, providers, config.agents, config.on_demand));
     // Before clients are served, so none is told the hub holds a login whose token is gone.

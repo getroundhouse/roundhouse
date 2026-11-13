@@ -20,6 +20,10 @@ pub const DAEMON_NAME: &str = "roundhoused";
 /// wherever a process is named for its file. "Updating the app" in `docs/architecture.md` says why it's a plain file.
 const HUB_COPY_NAME: &str = "Roundhouse Hub";
 
+/// The directory in the data directory where the hub keeps the token of each login it holds for an agent's account,
+/// as [`Paths::logins_dir`].
+pub const LOGINS_DIR: &str = "logins";
+
 /// What a worker locks in its instance's state directory while it serves the instance, so the instance has one
 /// worker at a time.
 pub const WORKER_LOCK_FILE: &str = "worker.lock";
@@ -142,7 +146,7 @@ pub fn resolve(env: impl Fn(&str) -> Option<String>) -> Result<Paths, String> {
         log: data_dir.join("hub.log"),
         instances_dir: data_dir.join("instances"),
         worker_logs_dir: data_dir.join("worker-logs"),
-        logins_dir: data_dir.join("logins"),
+        logins_dir: data_dir.join(LOGINS_DIR),
         providers: data_dir.join("providers.json"),
         daemons_dir: data_dir.join("daemons"),
         workspaces_root,
