@@ -70,7 +70,7 @@ impl OpenSession {
             placed: false,
             read_from: client.hub_version().to_string(),
         };
-        let follow = Follow::start(client, Arc::new(log), source);
+        let follow = Follow::start(client, Arc::new(log), move || source);
         follow.wake();
         OpenSession { follow, session_id: session.id.clone(), view, searches: Arc::default() }
     }

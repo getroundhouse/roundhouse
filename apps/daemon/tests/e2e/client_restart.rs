@@ -174,7 +174,7 @@ fn clients_attaching_during_a_burst_never_see_a_chunk_twice_or_miss_one() {
                                 tail = snapshot;
                             }
                             SubscriptionItem::Event(event) => tail.on_event(event.seq, event.run, &event.body),
-                            SubscriptionItem::Notice(_) => {}
+                            SubscriptionItem::Notice(_) | SubscriptionItem::Terminal(_) => {}
                         }
                     }
                     let held: String = tail.messages.iter().flat_map(|m| &m.blocks).map(|b| b.text.as_str()).collect();
