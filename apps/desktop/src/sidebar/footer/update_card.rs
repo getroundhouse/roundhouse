@@ -28,7 +28,7 @@ pub(super) fn update_card(
         BuildLine::UpdateReady { next, .. } => {
             ready_card(next, question.filter(|q| matches!(q, UpdateQuestion::Restart { .. })), cx)
         }
-        BuildLine::Finishing { agents, .. } => (finishing_card(*agents, cx), None),
+        BuildLine::Finishing { agents, terminals, .. } => (finishing_card(*agents, *terminals, cx), None),
         BuildLine::Current { .. } | BuildLine::OtherHub { .. } => return None,
     };
     let details = Details::of(line)?;
@@ -125,10 +125,10 @@ fn ready_card(
 }
 
 /// The app has updated, and the older hub is still busy, so it finishes by itself once it isn't, or now if asked.
-fn finishing_card(agents: Agents, cx: &mut Context<AppView>) -> Stateful<Div> {
+fn finishing_card(agents: Agents, terminals: usize, cx: &mut Context<AppView>) -> Stateful<Div> {
     // Under the text, and in line with it, past the button's own padding.
     let now = h_flex().pt_1().ml(px(-3.5)).child(restart_now(cx));
-    card_text("Finishing update", waiting_on(agents), cx).child(now)
+    card_text("Finishing update", waiting_on(agents, terminals), cx).child(now)
 }
 
 /// What the card asks before going ahead: what that loses, then a quiet button that leaves things as they are, and
@@ -165,20 +165,31 @@ fn asking(
 }
 
 /// What finishing an update is waiting on. An agent that's waiting on you is said apart, since the update waits on
-/// you then, and reads as stuck otherwise: nothing in the sidebar shows as working.
-fn waiting_on(agents: Agents) -> String {
+/// you then, and reads as stuck otherwise: nothing in the sidebar shows as working. So are the terminals restarting
+/// the hub would end, since a terminal never ends by itself, so it's clear what to close.
+fn waiting_on(agents: Agents, terminals: usize) -> String {
     let working = match agents.working {
         0 => None,
         1 => Some("Waiting on 1 agent".to_string()),
         n => Some(format!("Waiting on {n} agents")),
     };
-    match (working, agents.waiting_on_you) {
-        (None, 0) => "Waiting on other work".to_string(),
-        (Some(working), 0) => working,
-        (None, 1) => "1 agent is waiting on you".to_string(),
-        (None, n) => format!("{n} agents are waiting on you"),
-        (Some(working), 1) => format!("{working}. 1 more is waiting on you."),
-        (Some(working), n) => format!("{working}. {n} more are waiting on you."),
+    let on_you = match (agents.waiting_on_you, working.is_some()) {
+        (0, _) => None,
+        (1, false) => Some("1 agent is waiting on you".to_string()),
+        (n, false) => Some(format!("{n} agents are waiting on you")),
+        (1, true) => Some("1 more is waiting on you".to_string()),
+        (n, true) => Some(format!("{n} more are waiting on you")),
+    };
+    let open = match terminals {
+        0 => None,
+        1 => Some("1 terminal is open".to_string()),
+        n => Some(format!("{n} terminals are open")),
+    };
+    let said: Vec<String> = [working, on_you, open].into_iter().flatten().collect();
+    match said.as_slice() {
+        [] => "Waiting on other work".to_string(),
+        [one] => one.clone(),
+        more => format!("{}.", more.join(". ")),
     }
 }
 
@@ -193,7 +204,7 @@ mod tests {
     use super::*;
 
     fn says(working: usize, waiting_on_you: usize) -> String {
-        waiting_on(Agents { working, waiting_on_you })
+        waiting_on(Agents { working, waiting_on_you }, 0)
     }
 
     #[test]
@@ -214,5 +225,15 @@ mod tests {
     #[test]
     fn with_no_agents_it_waits_on_other_work() {
         assert_eq!(says(0, 0), "Waiting on other work");
+    }
+
+    /// A terminal never ends by itself, so "Waiting on other work" would have the update wait for good, with nothing
+    /// to say what to close.
+    #[test]
+    fn the_terminals_restarting_would_end_are_said_to_be_open() {
+        let (none, working) = (Agents::default(), Agents { working: 2, waiting_on_you: 1 });
+        assert_eq!(waiting_on(none, 1), "1 terminal is open");
+        assert_eq!(waiting_on(none, 3), "3 terminals are open");
+        assert_eq!(waiting_on(working, 1), "Waiting on 2 agents. 1 more is waiting on you. 1 terminal is open.");
     }
 }

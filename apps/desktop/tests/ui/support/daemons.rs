@@ -68,6 +68,10 @@ pub(crate) fn point_daemons_at_the_fake_agent() {
             std::env::set_var("FAKE_CLAUDE_STATE", scratch.join("ui-agent-state"));
             // So a real ~/.conductor/settings.toml can't change what these tests do.
             std::env::set_var("HOME", scratch.join("ui-home"));
+            // So a terminal runs the same shell for everyone, rather than whichever one whoever runs the tests uses,
+            // with its own prompt and greeting.
+            #[cfg(unix)]
+            std::env::set_var("SHELL", "/bin/sh");
             // So `gh` can't reach GitHub as whoever runs the tests.
             for name in GH_LOGINS {
                 std::env::remove_var(name);

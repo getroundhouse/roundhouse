@@ -74,7 +74,7 @@ fn a_subagent_s_call_shows_none_of_its_work_which_opens_in_the_subagent_tab(cx: 
     ui.wait("the subagent's work", |ui| ui.labelled(SUBAGENT_CALL).len() == 1);
     assert_eq!(showing(&ui), Showing::Subagent);
     assert!(ui.has("show-subagent-tab"));
-    assert_eq!(items(&ui, "File")[4], "Close Subagent Tab", "⌘W closes the tab, not the chat behind it");
+    assert_eq!(items(&ui, "File").last().unwrap(), "Close Subagent Tab", "⌘W closes the tab, not the chat behind it");
 }
 
 /// The button that opens the subagent tab shows on a closed call's line before the pointer is over it, so the way to

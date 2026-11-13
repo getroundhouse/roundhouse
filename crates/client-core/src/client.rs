@@ -43,7 +43,7 @@ use protocol::terminal::TerminalUpdate;
 use stream::Stream;
 
 pub use admin::{HubAdmin, IdleStop, Restart, restart_hub, stop_hub, stop_hub_if_idle, stop_hub_if_still};
-pub use api::{new_attachment_id, new_message_id, new_request_id};
+pub use api::{new_attachment_id, new_message_id, new_request_id, new_terminal_id};
 pub use commands::{Commands, Reply};
 pub use feed::RecordsFeed;
 pub use follow::FollowError;

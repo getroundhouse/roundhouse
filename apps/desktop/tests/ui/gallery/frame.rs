@@ -43,6 +43,8 @@ pub(crate) const TABS: Frame = Frame::Exactly(Part::Region(Region::TabBar), NOTH
 pub(crate) const TABS_MENU: Frame = Frame::Exactly(Part::Region(Region::TabBar), &[Part::Menu]);
 /// The chat's tabs, and what's drawn in the tab that shows, such as a subagent's work, with the band between.
 pub(crate) const TABS_AND_CHAT: Frame = Frame::Transcript(&[Part::Region(Region::TabBar)]);
+/// The chat's tabs, and the terminal in front.
+pub(crate) const TERMINAL: Frame = Frame::Exactly(Part::Region(Region::TabBar), &[Part::Region(Region::Terminal)]);
 /// The chat's tabs, and the file the file tab shows.
 pub(crate) const FILE: Frame = Frame::Exactly(Part::Region(Region::TabBar), &[Part::Region(Region::OpenFile)]);
 /// The composer, and what's written in it.
@@ -135,6 +137,7 @@ fn region_in_the_column(region: Region) -> bool {
         | Region::Header
         | Region::TabBar
         | Region::OpenFile
+        | Region::Terminal
         | Region::SetupLog
         | Region::Transcript
         | Region::Outline

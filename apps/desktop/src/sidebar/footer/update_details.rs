@@ -38,7 +38,9 @@ impl Details {
                      running. Quitting installs it too."
                 ),
             ),
-            BuildLine::Finishing { app, hub, agents } => (hub, app, finishing(app, hub, *agents)),
+            BuildLine::Finishing { app, hub, agents, terminals } => {
+                (hub, app, finishing(app, hub, *agents, *terminals))
+            }
             BuildLine::Current { .. } | BuildLine::OtherHub { .. } => return None,
         };
         Some(Self { from: from.clone(), to: to.clone(), what_happens })
@@ -98,9 +100,19 @@ impl Details {
 }
 
 /// What finishing an update waits for. Agents waiting on you don't get done by themselves, so it says what does it.
-fn finishing(app: &str, hub: &str, agents: Agents) -> String {
+fn finishing(app: &str, hub: &str, agents: Agents, terminals: usize) -> String {
     let start = format!("You're on version {app} of the app, and");
-    match (agents.working, agents.waiting_on_you) {
+    let (open, its_open, closed) = match terminals {
+        1 => ("a terminal open".to_string(), "its open terminal".to_string(), "that terminal is closed"),
+        _ => (format!("{terminals} terminals open"), format!("its {terminals} open terminals"), "they're closed"),
+    };
+    let agents = match (agents.working, agents.waiting_on_you) {
+        (0, 0) if terminals > 0 => {
+            return format!(
+                "{start} a previous version, {hub}, has {open}, which restarting it would end. The update finishes \
+                 by itself once {closed}."
+            );
+        }
         (0, 0) => format!(
             "{start} a previous version, {hub}, is still busy, such as with a setup script or the command line \
              connected to it. The update finishes by itself once it's free."
@@ -117,6 +129,11 @@ fn finishing(app: &str, hub: &str, agents: Agents) -> String {
             "{start} agents are still running on a previous version, {hub}. Some are waiting on you, for an answer \
              or an approval. The update finishes by itself once they're all done."
         ),
+    };
+    match terminals {
+        0 => agents,
+        1 => format!("{agents} It waits for {its_open} too, since restarting the hub would end it."),
+        _ => format!("{agents} It waits for {its_open} too, since restarting the hub would end them."),
     }
 }
 
@@ -170,8 +187,32 @@ mod tests {
         assert!(!what_happens.contains("waiting on you"), "{what_happens}");
     }
 
+    /// A terminal never ends by itself, so the details say what to close.
+    #[test]
+    fn open_terminals_are_said_to_hold_it_up() {
+        let line = |agents, terminals| BuildLine::Finishing {
+            app: "1.0.0".to_string(),
+            hub: "0.9.0".to_string(),
+            agents,
+            terminals,
+        };
+        let what_happens = |agents, terminals| Details::of(&line(agents, terminals)).unwrap().what_happens;
+        let working = Agents { working: 1, waiting_on_you: 0 };
+
+        let one = what_happens(Agents::default(), 1);
+        let two = what_happens(Agents::default(), 2);
+        let (one_with_agents, two_with_agents) = (what_happens(working, 1), what_happens(working, 2));
+
+        assert!(one.contains("has a terminal open") && one.contains("once that terminal is closed"), "{one}");
+        assert!(two.contains("has 2 terminals open") && two.contains("once they're closed"), "{two}");
+        let (one_waits, two_waits) =
+            ("its open terminal too, since restarting the hub would end it.", "its 2 open terminals");
+        assert!(one_with_agents.ends_with(one_waits), "{one_with_agents}");
+        assert!(two_with_agents.contains(two_waits) && two_with_agents.ends_with("end them."), "{two_with_agents}");
+    }
+
     fn finishing_line(agents: Agents) -> BuildLine {
-        BuildLine::Finishing { app: "1.0.0".to_string(), hub: "0.9.0".to_string(), agents }
+        BuildLine::Finishing { app: "1.0.0".to_string(), hub: "0.9.0".to_string(), agents, terminals: 0 }
     }
 
     fn what_happens(agents: Agents) -> String {

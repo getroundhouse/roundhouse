@@ -50,10 +50,11 @@ Every tab is the same width, with its mark and as much of its title as fits. The
 | Key | What it does |
 |---|---|
 | `Cmd-T` | A new chat |
-| `Cmd-W` | Closes the chat showing, or the file tab or subagent tab if that's showing |
+| `Cmd-Shift-T` | A new terminal |
+| `Cmd-W` | Closes the chat showing, or the file tab, subagent tab or terminal if that's showing |
 | `Ctrl-Tab`, `Ctrl-Shift-Tab` | Move between tabs |
 
-The file tab and the subagent tab sit at the far left, before the chats.
+The file tab and the subagent tab sit at the far left, before the chats, and the terminals come after them. The `+` after the tabs opens a new chat or a new terminal.
 
 Right-clicking a tab also marks its chat read, or unread again.
 

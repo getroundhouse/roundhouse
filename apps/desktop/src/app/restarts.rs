@@ -195,9 +195,9 @@ impl AppView {
     /// Finishes the update now, as the dialog asked when it `said` what that stops, unless more is running on the
     /// older hub than that, which it asks about instead.
     pub fn finish_update_now(&mut self, said: &HubStatus, cx: &mut Context<Self>) {
-        let (agents, setups) = (said.running_sessions, said.running_setups);
+        let said = said.clone();
         self.read_the_older_hub(cx, move |t, now, cx| {
-            if now.running_sessions > agents || now.running_setups > setups {
+            if super::hub_source::runs_more_than(&now, &said) {
                 return t.ask_to_restart_now(now, cx);
             }
             t.restart_hub(now.pid, cx);

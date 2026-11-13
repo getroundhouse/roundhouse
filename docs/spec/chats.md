@@ -592,6 +592,21 @@ The API keeps what an agent's requests read and write for a while, so the next r
 
 - **Every tab is 200px wide,** with its mark and as much of its title as fits, so the row doesn't shift when a chat gets its title. *Unconfirmed.*
 
+- **The `+` after the tabs opens a menu of a new chat and a new terminal,** since a workspace's tabs hold both. Each item is New Chat's and New Terminal's own, so it shows their key, and does what the key does. *Unconfirmed:* the menu.
+
+  **The menu the `+` opens.** *Unconfirmed.*
+
+  ![The new chat and new terminal menu](screens/new-tab-menu.png)
+
+- **`Cmd-Shift-T` opens a new terminal,** as `Cmd-T` opens a new chat.
+- **A terminal is a shell in the workspace's worktree, in a tab after the chats',** named Terminal, and Terminal 2 and on by their place among those open, so closing one renumbers the ones after it, with a terminal's icon in place of a chat's mark. Its tab is built as a chat's is, with the same width, underline and close button, so the row reads as one row of tabs. It shows at once when it's opened, and takes the keys while it shows. Its lines are 1.3 times its font's size apart, about as a terminal app spaces them. *Unconfirmed.*
+
+  **A terminal in front, after a test run.** *Unconfirmed.*
+
+  ![A terminal tab showing a test run](screens/terminal.png)
+
+- **Closing a terminal's tab ends its shell,** and a shell that ends, such as with `exit`, takes its tab with it. Quitting the app doesn't end it, so it's there again when the app opens, and neither does restarting the hub, but archiving the workspace does. `Cmd-W` closes the terminal showing, and `Ctrl-Tab` comes to the terminals after the chats. *Unconfirmed:* a shell's end taking its tab, and `Cmd-W` and `Ctrl-Tab` for a terminal.
+
 ## Closing chats, and keys
 
 - **Closing a chat stops its agent and keeps its history.** Closing the last one starts a new one rather than leaving nothing, and a workspace's first chat is found or made by the hub, so two clients opening a workspace at once share one chat. *Unconfirmed.*

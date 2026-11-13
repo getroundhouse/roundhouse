@@ -17,6 +17,8 @@ pub enum Region {
     TabBar,
     /// What the file tab shows, in the chat's place.
     OpenFile,
+    /// The terminal in front, in the chat's place.
+    Terminal,
     /// Where a prompt is written.
     Composer,
     /// The prompts waiting to be sent, above the composer.
@@ -59,6 +61,7 @@ impl Region {
             Region::Header => "workspace-header",
             Region::TabBar => "tab-bar",
             Region::OpenFile => "open-file",
+            Region::Terminal => "terminal",
             Region::Composer => "composer",
             Region::Queue => "queue",
             Region::SetupLog => "setup-log-text",

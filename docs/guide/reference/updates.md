@@ -35,12 +35,12 @@ Check for Updates…, in the app menu, or in Help on Windows and Linux, looks ri
 
 ## When the card says Finishing update
 
-A hub from before agents could outlive a restart still has to wait for its agents, and so does a hub on Windows. Then the card says `Finishing update`, and how many agents it's waiting on.
+A hub from before agents could outlive a restart still has to wait for its agents, and so does a hub on Windows, which waits for its terminals too, since restarting it ends their shells. Then the card says `Finishing update`, and how many agents it's waiting on and how many terminals are open, such as `1 terminal is open`, or `Waiting on other work` when what it waits for is a setup script.
 
 ![The card while an update finishes](../../spec/screens/finishing-update.png)
 
 - **An agent waiting on you never finishes by itself,** so the card says that apart, as `1 agent is waiting on you`.
-- **`Restart now` restarts the hub without waiting,** which stops those agents. A dialog asks first, and says how many. Each stopped agent picks up its conversation at its next prompt.
+- **`Restart now` restarts the hub without waiting,** which stops those agents, and ends those terminals. A dialog asks first, and says how many. Each stopped agent picks up its conversation at its next prompt.
 
 ## Problems
 

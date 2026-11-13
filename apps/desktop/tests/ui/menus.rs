@@ -7,7 +7,9 @@
 use gpui_kit::component::input::{
     Copy, Cut, DeleteToPreviousWordStart, MoveToPreviousWord, Paste, Redo, SelectAll, Undo,
 };
-use gpui_kit::{Action, AppContext as _, Keystroke, OperatingSystem, OwnedMenu, OwnedMenuItem, TestAppContext};
+use gpui_kit::{
+    Action, AppContext as _, KeyContext, Keystroke, OperatingSystem, OwnedMenu, OwnedMenuItem, TestAppContext,
+};
 
 use crate::support::{Stack, Ui};
 
@@ -66,13 +68,20 @@ fn key(ui: &Ui<'_>, menu_name: &str, name: &str) -> Option<String> {
 }
 
 /// The key shown beside an item that does `action`: on a Mac the first bound to it, which macOS shows, and elsewhere
-/// the last, which the kit shows.
+/// the one the kit shows, which is the last bound that works where focus is, or else the last that works anywhere.
 fn key_for(ui: &Ui<'_>, action: &dyn Action) -> Option<String> {
     let os = ui.cx.update(|cx| cx.platform_info().os);
-    let keymap = ui.cx.update(|cx| cx.key_bindings());
-    let keymap = keymap.borrow();
-    let mut bindings = keymap.bindings_for_action(action);
-    let binding = if os == OperatingSystem::Mac { bindings.next() } else { bindings.next_back() }?;
+    let binding = if os == OperatingSystem::Mac {
+        let keymap = ui.cx.update(|cx| cx.key_bindings());
+        keymap.borrow().bindings_for_action(action).next().cloned()
+    } else {
+        let found = |window: &gpui_kit::Window| {
+            window
+                .highest_precedence_binding_for_action(action)
+                .or_else(|| window.highest_precedence_binding_for_action_in_context(action, KeyContext::default()))
+        };
+        ui.cx.update(|cx| ui.handle.update(cx, |_, window, _| found(window))).unwrap()
+    }?;
     let keystrokes = binding.keystrokes().iter().map(|keystroke| keystroke.unparse(os));
     Some(keystrokes.collect::<Vec<_>>().join(" "))
 }

@@ -6,11 +6,11 @@ use client_core::ClientError;
 use client_core::records::InWorkspace;
 use gpui_kit::{AppContext, Context, PromptLevel, Result, Window};
 use protocol::client::ErrorCode;
-use protocol::model::{Effort, Record, Session, SessionId, SessionSettingsChange};
+use protocol::model::{Effort, Record, Session, SessionId, SessionSettingsChange, TerminalId};
 use transcript::{Transcript, TranscriptEvent};
 
 use super::attaching::Composed;
-use super::{Chat, PaneEvent, Showing, WorkspacePane};
+use super::{Chat, Next, PaneEvent, Showing, WorkspacePane};
 use crate::prompt_cache;
 use crate::rename::{self, Renaming};
 
@@ -29,6 +29,7 @@ enum Stop {
     File,
     Subagent,
     Chat(SessionId),
+    Terminal(TerminalId),
 }
 
 impl WorkspacePane {
@@ -188,16 +189,21 @@ impl WorkspacePane {
     }
 
     /// Moves to the tab before or after this one, in the order they're drawn, wrapping around: the file tab, the
-    /// subagent tab, then the chats.
+    /// subagent tab, the chats, then the terminals.
     pub fn step_chat(&mut self, step: isize, cx: &mut Context<Self>) {
         let chats = self.open_sessions().map(|session| Stop::Chat(session.id.clone()));
         let stops: Vec<Stop> = (self.file_tab().map(|_| Stop::File).into_iter())
             .chain(self.subagents.tab_session().map(|_| Stop::Subagent))
             .chain(chats)
+            .chain(self.shown.terminals().iter().map(|terminal| Stop::Terminal(terminal.id.clone())))
             .collect();
         let here = match (self.showing(), self.active.clone()) {
             (Showing::File, _) => Stop::File,
             (Showing::Subagent, _) => Stop::Subagent,
+            (Showing::Terminal, _) => match self.terminal_in_front() {
+                Some(id) => Stop::Terminal(id.clone()),
+                None => return,
+            },
             (Showing::Chat, Some(id)) => Stop::Chat(id),
             (Showing::Chat, None) => return,
         };
@@ -206,6 +212,7 @@ impl WorkspacePane {
             Stop::File => self.show_file_tab(cx),
             Stop::Subagent => self.bring_to_front(Showing::Subagent, cx),
             Stop::Chat(id) => self.activate(id, cx),
+            Stop::Terminal(id) => self.show_terminal(id, cx),
         }
     }
 
@@ -286,7 +293,7 @@ impl WorkspacePane {
 
     /// The same, and the chat becomes the one showing once client-core's copy has it open.
     fn took_chat_to_show(&mut self, session: Session, cx: &mut Context<Self>) {
-        self.showing_next = Some(session.id.clone());
+        self.showing_next = Some(Next::Chat(session.id.clone()));
         self.took_reply(session, cx);
     }
 
@@ -305,7 +312,6 @@ impl WorkspacePane {
         self.keep_active_valid(&was_open, cx);
         self.keep_subagent_tab_valid(cx);
         self.keep_edit_valid(cx);
-        self.show_next(cx);
         self.read_showing(cx);
         self.wind_cache_clock(cx);
         cx.notify();
@@ -325,14 +331,6 @@ impl WorkspacePane {
                 });
             })
         });
-    }
-
-    /// Shows the chat waiting to be shown, once client-core's copy has it open.
-    fn show_next(&mut self, cx: &mut Context<Self>) {
-        let ready = self.showing_next.as_ref().is_some_and(|id| self.open_sessions().any(|s| &s.id == id));
-        if ready && let Some(id) = self.showing_next.take() {
-            self.activate(id, cx);
-        }
     }
 
     /// Lets go of every chat's subagents' records, as the pane goes, such as when its workspace is archived.
