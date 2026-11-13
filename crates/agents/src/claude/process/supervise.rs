@@ -63,6 +63,7 @@ pub(super) async fn supervise(
                 message: "Claude's saved conversation for this session was not found, so it started a new one. \
                           The history here is intact, but the agent can't see it."
                     .to_string(),
+                parent_tool_use_id: None,
             };
             let _ = output.send(AgentOutput::event(notice, None)).await;
         }

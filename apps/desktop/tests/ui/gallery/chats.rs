@@ -213,6 +213,7 @@ pub(crate) fn stopped() -> Vec<EventBody> {
         models: Vec::new(),
         tokens: None,
         only_compacted: false,
+        request_failed: false,
     });
     events
 }

@@ -100,7 +100,11 @@ fn images_past_what_an_event_can_carry_are_left_out() {
 #[test]
 fn an_event_without_text_is_left_as_it_was() {
     let worktree = worktree_with(&[("shot.png", PNG)]);
-    let mut body = EventBody::Notice { level: protocol::event::NoticeLevel::Info, message: "![a](shot.png)".into() };
+    let mut body = EventBody::Notice {
+        level: protocol::event::NoticeLevel::Info,
+        message: "![a](shot.png)".into(),
+        parent_tool_use_id: None,
+    };
     let before = body.clone();
 
     let kept = keep(worktree.path(), &mut body, u64::MAX);

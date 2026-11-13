@@ -283,10 +283,11 @@ fn render_event(
         EventBody::ApprovalResolved { outcome: ApprovalOutcome::Denied, .. } => muted_line("Denied"),
         EventBody::AgentMode { permission_mode } => muted_line(mode::mode_change(around.mode_before, *permission_mode)),
         EventBody::AgentExited { reason, stderr_tail, .. } => agent_exited(seq, *reason, stderr_tail, find, cx),
-        EventBody::Notice { level, message } => notice(seq, *level, message, find, cx),
+        EventBody::Notice { level, message, .. } => notice(seq, *level, message, find, cx),
         // These tell the hub things, and there's nothing here for a person. An agent's start says something only when
         // it's on another build than the chat's agent last was, above.
-        EventBody::PromptTaken { .. }
+        EventBody::RequestFailed { .. }
+        | EventBody::PromptTaken { .. }
         | EventBody::PromptDropped { .. }
         | EventBody::ToolCallDropped { .. }
         | EventBody::AgentStarted { .. }

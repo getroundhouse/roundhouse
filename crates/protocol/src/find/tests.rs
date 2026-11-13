@@ -82,7 +82,11 @@ fn json_that_cant_hold_a_needle_is_passed_over() {
 
 #[test]
 fn a_phrase_across_a_line_is_found_as_a_paragraph_shows_it() {
-    let says = |text: &str| EventBody::Notice { level: crate::event::NoticeLevel::Info, message: text.into() };
+    let says = |text: &str| EventBody::Notice {
+        level: crate::event::NoticeLevel::Info,
+        message: text.into(),
+        parent_tool_use_id: None,
+    };
     let wrapped = says("The parser\nis fixed");
 
     assert!(needle("parser is").is_in_event(&wrapped));

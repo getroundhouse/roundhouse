@@ -22,6 +22,7 @@ pub use call::CallKind;
 pub use compaction::{CompactedBy, CompactionOutcome};
 pub use content::{ContentBlock, LinkedImage};
 pub use ending::{ExitReason, SubagentOutcome, TurnOutcome};
+pub use failure::{FailureKind, RequestFailure};
 pub use file_change::{FileChange, Hunk, HunkLine, LineMark};
 pub use task::{AgentTask, TaskKind};
 pub use tokens::TokenUsage;
@@ -32,7 +33,9 @@ mod call;
 mod compaction;
 mod content;
 mod ending;
+mod failure;
 mod file_change;
+mod filing;
 mod task;
 mod tokens;
 
@@ -211,6 +214,19 @@ pub enum EventBody {
         /// agent's adapter says, since how a compaction is asked, and whether it's a turn of its own, is the agent's.
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         only_compacted: bool,
+        /// The turn failed because one of the agent's own requests to its model did, which the
+        /// [`EventBody::RequestFailed`] before it says, so the turn's end has nothing to add. The agent's adapter says,
+        /// since only it knows that its agent ends a turn there.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        request_failed: bool,
+    },
+    /// One of the agent's requests to its model failed, and its CLI said why in a message of its own, in the place of
+    /// the model's reply. The agent's turn mostly ends there, failed, but a subagent's failing leaves the agent going.
+    RequestFailed {
+        /// The call that started the subagent whose request it was, or `None` for the agent's own.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        parent_tool_use_id: Option<ToolUseId>,
+        failure: RequestFailure,
     },
     ApprovalRequested {
         approval_id: ApprovalId,
@@ -245,10 +261,14 @@ pub enum EventBody {
         #[serde(default)]
         stderr_tail: Vec<String>,
     },
-    /// Something the user should see that isn't from the agent.
+    /// Something the user should see that isn't the agent's words: the hub's, or the agent's CLI's, such as what a
+    /// command it ran for the person printed. Its message can hold Markdown, as the CLI's can.
     Notice {
         level: NoticeLevel,
         message: String,
+        /// The call that started the subagent the CLI said it of, or `None`. The hub's are never a subagent's.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        parent_tool_use_id: Option<ToolUseId>,
     },
     /// The agent's approval mode changed, whoever changed it. It changes by itself too: approving a plan leaves plan
     /// mode. The hub records one when the mode is changed with no agent running, for the next agent to start in.
@@ -307,73 +327,6 @@ pub enum EventBody {
     },
     #[serde(other)]
     Unknown,
-}
-
-impl EventBody {
-    /// Stored beside the event, so the hub can find events by kind without parsing the log.
-    pub fn kind(&self) -> &'static str {
-        match self {
-            EventBody::UserPrompt { .. } => "user_prompt",
-            EventBody::PromptTaken { .. } => "prompt_taken",
-            EventBody::PromptDropped { .. } => "prompt_dropped",
-            EventBody::AgentStarted { .. } => "agent_started",
-            EventBody::AgentInit { .. } => "agent_init",
-            EventBody::AgentState { .. } => "agent_state",
-            EventBody::AgentTasks { .. } => "agent_tasks",
-            EventBody::AgentLimits { .. } => "agent_limits",
-            EventBody::SubagentStarted { .. } => "subagent_started",
-            EventBody::SubagentContext { .. } => "subagent_context",
-            EventBody::SubagentEnded { .. } => "subagent_ended",
-            EventBody::Assistant { .. } => "assistant",
-            EventBody::AgentUser { .. } => "agent_user",
-            EventBody::ToolCallDropped { .. } => "tool_call_dropped",
-            EventBody::TurnEnded { .. } => "turn_ended",
-            EventBody::ApprovalRequested { .. } => "approval_requested",
-            EventBody::ApprovalResolved { .. } => "approval_resolved",
-            EventBody::AgentExited { .. } => "agent_exited",
-            EventBody::Notice { .. } => "notice",
-            EventBody::AgentMode { .. } => "agent_mode",
-            EventBody::AgentOther { .. } => "agent_other",
-            EventBody::CompactionAsked { .. } => "compaction_asked",
-            EventBody::AgentCompacting { .. } => "agent_compacting",
-            EventBody::AgentCompacted { .. } => "agent_compacted",
-            EventBody::CacheExpired { .. } => "cache_expired",
-            EventBody::Unknown => "unknown",
-        }
-    }
-
-    /// The subagent it's from, as the call that started it, or `None` for the agent's own. Only what the agent sends
-    /// can come from a subagent, and only these say which.
-    pub fn subagent(&self) -> Option<&ToolUseId> {
-        match self {
-            EventBody::Assistant { parent_tool_use_id, .. }
-            | EventBody::AgentUser { parent_tool_use_id, .. }
-            | EventBody::AgentOther { parent_tool_use_id, .. } => parent_tool_use_id.as_ref(),
-            EventBody::UserPrompt { .. }
-            | EventBody::CompactionAsked { .. }
-            | EventBody::PromptTaken { .. }
-            | EventBody::PromptDropped { .. }
-            | EventBody::AgentStarted { .. }
-            | EventBody::AgentInit { .. }
-            | EventBody::AgentState { .. }
-            | EventBody::AgentTasks { .. }
-            | EventBody::AgentLimits { .. }
-            | EventBody::ToolCallDropped { .. }
-            | EventBody::SubagentStarted { .. }
-            | EventBody::SubagentContext { .. }
-            | EventBody::SubagentEnded { .. }
-            | EventBody::TurnEnded { .. }
-            | EventBody::ApprovalRequested { .. }
-            | EventBody::ApprovalResolved { .. }
-            | EventBody::AgentExited { .. }
-            | EventBody::Notice { .. }
-            | EventBody::AgentMode { .. }
-            | EventBody::AgentCompacting { .. }
-            | EventBody::AgentCompacted { .. }
-            | EventBody::CacheExpired { .. }
-            | EventBody::Unknown => None,
-        }
-    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]

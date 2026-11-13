@@ -102,6 +102,7 @@ mod tests {
             models: Vec::new(),
             tokens: None,
             only_compacted: false,
+            request_failed: false,
         }
     }
 

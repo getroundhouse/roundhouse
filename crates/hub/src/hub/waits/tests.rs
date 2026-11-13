@@ -241,7 +241,7 @@ async fn closing_its_chat_or_archiving_its_workspace_ends_a_wait() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_with_worktree(dir.path());
     let link = reading(&hub, &says(Some(open())));
-    let said = EventBody::Notice { level: NoticeLevel::Info, message: "x".into() };
+    let said = EventBody::Notice { level: NoticeLevel::Info, message: "x".into(), parent_tool_use_id: None };
     // A chat that's been used, which closing keeps.
     hub.store.append(&"s".into(), None, &said, None, None, None).unwrap();
     let (in_chat, _) = ask(&hub, &link, start("toolu_1")).await.unwrap();
@@ -300,7 +300,7 @@ async fn a_wait_ending_starts_the_agent_of_a_chat_waiting_on_nothing_else() {
         let dir = tempfile::tempdir().unwrap();
         let hub = hub_with_worktree(dir.path());
         let change = SessionChange { status: Some(status.into()), queue_held: Some(queue_held), recorded: None };
-        let said = EventBody::Notice { level: NoticeLevel::Info, message: "x".into() };
+        let said = EventBody::Notice { level: NoticeLevel::Info, message: "x".into(), parent_tool_use_id: None };
         hub.store.append(&"s".into(), None, &said, None, None, Some(change)).unwrap();
         let says = says(Some(open()));
         let starts = Arc::new(parking_lot::Mutex::new(0));

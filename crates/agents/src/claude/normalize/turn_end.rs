@@ -35,6 +35,7 @@ pub(super) fn turn_ended(result: &Value) -> EventBody {
         models: Vec::new(),
         tokens: tokens(result),
         only_compacted: false,
+        request_failed: false,
     }
 }
 

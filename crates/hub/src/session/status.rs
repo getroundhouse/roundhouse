@@ -95,6 +95,7 @@ pub(crate) fn next_status(current: SessionStatus, body: &EventBody, open: Open, 
         | EventBody::ApprovalResolved { .. }
         | EventBody::AgentExited { .. }
         | EventBody::Notice { .. }
+        | EventBody::RequestFailed { .. }
         | EventBody::AgentMode { .. }
         | EventBody::SubagentStarted { .. }
         | EventBody::SubagentContext { .. }
@@ -175,6 +176,7 @@ pub(crate) fn open_after(
         | EventBody::AgentUser { .. }
         | EventBody::TurnEnded { .. }
         | EventBody::Notice { .. }
+        | EventBody::RequestFailed { .. }
         | EventBody::AgentMode { .. }
         | EventBody::SubagentStarted { .. }
         | EventBody::SubagentContext { .. }

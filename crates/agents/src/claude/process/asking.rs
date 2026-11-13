@@ -37,6 +37,7 @@ pub(super) fn work(body: &EventBody) -> Work {
         | EventBody::AgentState { .. }
         | EventBody::AgentTasks { .. }
         | EventBody::AgentUser { .. }
+        | EventBody::RequestFailed { .. }
         | EventBody::ApprovalRequested { .. }
         | EventBody::ApprovalResolved { .. }
         | EventBody::AgentExited { .. }

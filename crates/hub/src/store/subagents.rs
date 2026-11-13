@@ -99,6 +99,7 @@ pub(super) fn note_subagents(tx: &Connection, event: &SessionEvent) -> Result<Ve
         | EventBody::ApprovalRequested { .. }
         | EventBody::ApprovalResolved { .. }
         | EventBody::Notice { .. }
+        | EventBody::RequestFailed { .. }
         | EventBody::AgentMode { .. }
         | EventBody::AgentOther { .. }
         | EventBody::AgentCompacting { .. }

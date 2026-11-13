@@ -245,6 +245,7 @@ fn only_compacted(duration_ms: u64) -> EventBody {
         models: Vec::new(),
         tokens: None,
         only_compacted: true,
+        request_failed: false,
     }
 }
 
