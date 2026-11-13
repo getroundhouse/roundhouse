@@ -3,19 +3,10 @@
 
 use std::fmt::Write as _;
 
-use gpui_kit::{Context, SharedString};
-use protocol::model::{CommentId, DiffComment, DiffSide, Record};
+use gpui_kit::Context;
+use protocol::model::{CommentDraft, CommentId, DiffComment, DiffSide, Record};
 
 use super::{Review, ReviewEvent};
-
-/// What saving a comment does.
-#[derive(Clone, Debug)]
-pub enum Saving {
-    /// Adds one on a line.
-    New { path: SharedString, side: DiffSide, line: u32 },
-    /// Replaces this one's text, keeping its place.
-    Edit(CommentId),
-}
 
 /// What the agent reads for a set of comments. It says which side matters, because a comment on a
 /// removed line refers to a line that's no longer in the file.
@@ -58,21 +49,38 @@ impl Review {
         self.show_comments(cx);
     }
 
-    /// Adds a comment, or replaces the text of one. It shows once client-core's copy has it, like any other change.
-    pub fn save_comment(&mut self, saving: Saving, text: String, cx: &mut Context<Self>) {
-        let id = self.workspace_id.clone();
-        let saved = self.client.start(move |client| match &saving {
-            Saving::Edit(comment) => client.comment_edit(comment, &text),
-            Saving::New { path, side, line } => {
-                client.comment_add(&id, path, *side, *line, &text, Some(client_core::new_request_id()))
+    /// Saves the comment being written, as a new one on its line, or as the text of the one it changes, once `kept`
+    /// answers. It shows once client-core's copy has it, like any other change, and says whether it was saved, giving
+    /// it back if it wasn't.
+    pub fn save_comment(&mut self, saving: CommentDraft, kept: flume::Receiver<()>, cx: &mut Context<Self>) {
+        let (id, draft) = (self.workspace_id.clone(), saving.clone());
+        let saved = self.client.start(move |client| {
+            // An answer, whether it's kept or as far as it could get, so a hub that's gone can't hold the save forever.
+            let _ = kept.recv();
+            match &draft.editing {
+                Some(comment) => client.comment_edit(comment, &draft.text),
+                None => client.comment_add(
+                    &id,
+                    &draft.path,
+                    draft.side,
+                    draft.line,
+                    &draft.text,
+                    Some(client_core::new_request_id()),
+                ),
             }
         });
         cx.spawn(async move |this, cx| {
             let saved = saved.recv().await;
             let _ = this.update(cx, |t, cx| {
                 match saved {
-                    Ok(comment) => t.records.take_reply(Record::Comment(comment)),
-                    Err(e) => cx.emit(ReviewEvent::Error(format!("couldn't save that comment: {e}"))),
+                    Ok(comment) => {
+                        t.records.take_reply(Record::Comment(comment));
+                        cx.emit(ReviewEvent::Saved);
+                    }
+                    Err(e) => {
+                        cx.emit(ReviewEvent::Error(format!("couldn't save that comment: {e}")));
+                        cx.emit(ReviewEvent::NotSaved(saving));
+                    }
                 }
                 cx.notify();
             });

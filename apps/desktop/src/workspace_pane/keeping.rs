@@ -8,7 +8,7 @@ use std::collections::HashSet;
 use client_core::{CameBack, DraftChange, DraftKey, FilesFor, KeptDraft, ReadBack};
 use gpui_kit::{App, Context, Entity};
 use protocol::attachment::Attachment;
-use protocol::model::{AttachmentId, Draft, DraftToKeep, Session, SessionId};
+use protocol::model::{AttachmentId, CommentDraft, Draft, DraftToKeep, Session, SessionId};
 use protocol::prompt::says_or_carries;
 use transcript::QuestionPanel;
 
@@ -172,6 +172,23 @@ impl WorkspacePane {
         } else {
             self.keeper.typed(writing);
         }
+    }
+
+    /// Saves the comment that was being written, once the hub has it as what's being written, so a keep of it from here
+    /// can't arrive after the save that lets go of it there, and bring it back. Until the save arrives, the hub keeps
+    /// it, so one that fails loses nothing.
+    pub(super) fn save_writing(&self, saving: CommentDraft, cx: &mut Context<Self>) {
+        let Some(diff) = &self.diff else { return };
+        self.keeper.set(DraftChange::Comment(self.workspace().id.clone(), Some(saving.clone())));
+        let kept = self.keeper.flushed();
+        diff.review.update(cx, |review, cx| review.save_comment(saving, kept, cx));
+    }
+
+    /// Opens the box again with a comment that couldn't be saved.
+    pub(super) fn give_back_writing(&self, saving: CommentDraft, cx: &mut Context<Self>) {
+        let Some(diff) = &self.diff else { return };
+        let file = diff.file.clone();
+        self.with_window(cx, move |_, window, cx| file.update(cx, |f, cx| f.give_back_writing(saving, window, cx)));
     }
 
     /// Has the hub keep what's chosen and typed in answer to the chat's question, as its transcript asks.

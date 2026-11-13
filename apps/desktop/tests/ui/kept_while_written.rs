@@ -72,6 +72,33 @@ fn a_comment_being_written_is_there_when_the_app_opens_again_until_its_saved(cx:
     ui.wait("saving it to clear what's kept", |_| kept_comment(&stack, &workspace).is_none());
 }
 
+/// Here the box changes a comment the hub doesn't have, so the save is refused. The hub keeps it until a save reaches
+/// it, so nothing typed is lost, even if the app quits.
+#[gpui_kit::test]
+fn a_comment_that_couldnt_be_saved_comes_back_in_its_box_and_the_hub_still_keeps_it(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = Ui::open_with_a_repository(cx, &stack);
+    let workspace = ui.new_workspace();
+    let diff = open_a_diff(&mut ui);
+    let kept = CommentDraft {
+        path: "a.txt".to_string(),
+        side: DiffSide::New,
+        line: 2,
+        editing: Some("gone".into()),
+        text: "Why?".to_string(),
+    };
+    stack.client().workspace_comment_draft(&workspace, Some(&kept)).unwrap();
+    ui.wait("the box the comment was left in", |ui| writing(ui, &diff).as_ref() == Some(&kept));
+
+    ui.cx.update_window(ui.handle, |_, window, cx| diff.file.update(cx, |f, cx| f.save_draft(window, cx))).unwrap();
+
+    ui.wait("the refusal", |ui| ui.view().error.is_some());
+    assert!(ui.view().error.clone().unwrap().contains("couldn't save that comment"));
+    ui.wait("the box to come back", |ui| writing(ui, &diff).as_ref() == Some(&kept));
+    ui.view().drafts().unwrap().flushed().recv().unwrap();
+    assert_eq!(kept_comment(&stack, &workspace), Some(kept));
+}
+
 #[gpui_kit::test]
 fn a_comment_changed_elsewhere_shows_in_the_box_and_goes_when_its_put_away_there(cx: &mut TestAppContext) {
     let stack = Stack::new();

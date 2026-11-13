@@ -149,10 +149,15 @@ impl WorkspacePane {
                     this.tell_tab(|tab| tab.read(files), cx);
                 }
             }
+            // A hub from before saving took the comment being written with it still has it, so it's told what's
+            // here now.
+            ReviewEvent::Saved => this.keep_writing(true, cx),
+            ReviewEvent::NotSaved(saving) => this.give_back_writing(saving.clone(), cx),
         });
         let file_events = cx.subscribe(&file, |this, _, event: &FileDiffEvent, cx| match event {
             FileDiffEvent::AddToChat(text) => this.add_to_composer(text.clone(), cx),
             FileDiffEvent::Writing { at_once } => this.keep_writing(*at_once, cx),
+            FileDiffEvent::Save(saving) => this.save_writing(saving.clone(), cx),
         });
         let changes_events = cx.subscribe(&changes, |this, _, event: &ChangesEvent, cx| match event {
             ChangesEvent::Open(path) => this.open_diff(path.clone(), cx),

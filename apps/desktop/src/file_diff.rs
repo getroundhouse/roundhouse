@@ -18,6 +18,7 @@ use gpui_kit::{
     InteractiveElement as _, IntoElement, MouseButton, MouseMoveEvent, MouseUpEvent, ParentElement, Render,
     SharedString, Styled, Subscription, Window, canvas, div, font, px,
 };
+use protocol::model::CommentDraft;
 
 use crate::FlipImage;
 use crate::file_header::file_header;
@@ -52,8 +53,10 @@ pub enum FileDiffEvent {
     /// Put this in the chat's composer.
     AddToChat(String),
     /// The comment being written changed, so the hub can keep it: within a moment while it's typed, or at once as it's
-    /// started, saved or cancelled. [`FileDiff::writing`] says what it is now.
+    /// started or cancelled. [`FileDiff::writing`] says what it is now.
     Writing { at_once: bool },
+    /// Save this, the comment that was being written, whose box has gone.
+    Save(CommentDraft),
 }
 
 pub struct FileDiff {

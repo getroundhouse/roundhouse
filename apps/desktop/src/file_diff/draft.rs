@@ -10,7 +10,7 @@ use gpui_kit::{
 use protocol::model::{CommentDraft, CommentId, DiffSide};
 
 use super::{FileDiff, FileDiffEvent};
-use crate::review::{Saving, comment_line};
+use crate::review::comment_line;
 
 /// A line of a file's diff, on one side.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -20,10 +20,11 @@ pub struct LineAt {
     pub line: u32,
 }
 
-/// Who puts the box away: whoever's here, saving or cancelling it, or another client, through the hub.
+/// Who puts the box away, and why: whoever's here, cancelling it or saving it, or another client, through the hub.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Away {
-    Here,
+    Cancelled,
+    Saved,
     Taken,
 }
 
@@ -129,33 +130,44 @@ impl FileDiff {
     }
 
     pub fn cancel_draft(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.put_away_draft(Away::Here, window, cx);
+        self.put_away_draft(Away::Cancelled, window, cx);
     }
 
+    /// Takes the box away and asks for what's in it to be saved. The hub goes on keeping it until the save reaches it,
+    /// which lets go of it there, so a save that fails loses nothing.
     pub fn save_draft(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let typed = self.draft.as_ref().map(|draft| draft.input.read(cx).text().to_string());
-        let Some(text) = typed.filter(|text| !text.trim().is_empty()) else { return };
-        let Some(draft) = self.put_away_draft(Away::Here, window, cx) else { return };
-        let saving = match draft.editing {
-            Some(id) => Saving::Edit(id),
-            None => Saving::New { path: draft.position.path, side: draft.position.side, line: draft.position.line },
-        };
-        self.review.update(cx, |r, cx| r.save_comment(saving, text, cx));
+        let Some(saving) = self.writing(cx).filter(|writing| !writing.text.trim().is_empty()) else { return };
+        self.put_away_draft(Away::Saved, window, cx);
+        cx.emit(FileDiffEvent::Save(saving));
+    }
+
+    /// Opens the box again with a comment that couldn't be saved, unless another has opened since, such as one started
+    /// here or taken from the hub. The hub still keeps it, so nothing is kept again. It takes the focus back only from
+    /// the diff, where saving left it.
+    pub fn give_back_writing(&mut self, saving: CommentDraft, window: &mut Window, cx: &mut Context<Self>) {
+        if self.draft.is_some() {
+            return;
+        }
+        let refocus = self.focus.is_focused(window);
+        let position = LineAt { path: saving.path.into(), side: saving.side, line: saving.line };
+        self.write(position, saving.editing, saving.text, window, cx);
+        if refocus {
+            window.focus(&self.draft_focus(cx), cx);
+        }
     }
 
     /// Takes the box away. Put away here, it takes the focus it had with it, which comes back to the diff so the window's
-    /// keys still work, and the hub is told. Taken from the hub, which has it already, the focus moves only if the box
-    /// had it.
-    fn put_away_draft(&mut self, away: Away, window: &mut Window, cx: &mut Context<Self>) -> Option<Draft> {
-        let draft = self.draft.take()?;
-        if away == Away::Here || draft.input.focus_handle(cx).is_focused(window) {
+    /// keys still work. Cancelled, the hub is told, and saved, the save tells it. Taken from the hub, which has it
+    /// already, the focus moves only if the box had it.
+    fn put_away_draft(&mut self, away: Away, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(draft) = self.draft.take() else { return };
+        if away != Away::Taken || draft.input.focus_handle(cx).is_focused(window) {
             window.focus(&self.focus, cx);
         }
-        if away == Away::Here {
+        if away == Away::Cancelled {
             cx.emit(FileDiffEvent::Writing { at_once: true });
         }
         self.lay_out_again(cx);
-        Some(draft)
     }
 
     pub fn delete_comment(&self, id: CommentId, cx: &mut Context<Self>) {

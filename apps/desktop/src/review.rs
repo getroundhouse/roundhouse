@@ -5,13 +5,13 @@ use std::collections::HashSet;
 
 use client_core::{Client, RecordsFeed};
 use gpui_kit::{AppContext as _, Context, EventEmitter};
-use protocol::model::{CommentId, CommitId, DiffComment, WorkspaceId};
+use protocol::model::{CommentDraft, CommentId, CommitId, DiffComment, WorkspaceId};
 
 use crate::patch::{self, FilePatch};
 
 mod comments;
 
-pub use comments::{Saving, comment_line, comments_prompt};
+pub use comments::{comment_line, comments_prompt};
 
 #[derive(Clone, Debug)]
 pub enum ReviewEvent {
@@ -20,6 +20,10 @@ pub enum ReviewEvent {
     Loaded,
     /// Send this to the agent, in the chat showing.
     SendToAgent(String),
+    /// The comment being written was saved, which took it off the hub.
+    Saved,
+    /// The comment being written couldn't be saved, so here it is back, which the hub still keeps.
+    NotSaved(CommentDraft),
 }
 
 pub struct Review {
