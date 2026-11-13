@@ -6,10 +6,9 @@ use std::io::Cursor;
 
 use client_core::FileToSend;
 use gpui_kit::component::TITLE_BAR_HEIGHT;
-use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{
-    AppContext as _, Bounds, ClipboardEntry, ClipboardItem, ElementId, ExternalPaths, Image, ImageFormat, Pixels,
-    SharedString, TestAppContext, point, px, size,
+    AppContext as _, Bounds, ClipboardEntry, ClipboardItem, ElementId, ExternalPaths, Image, ImageFormat, SharedString,
+    TestAppContext, point, px, size,
 };
 use protocol::attachment::MediaType;
 use protocol::event::EventBody;
@@ -206,12 +205,12 @@ fn a_prompts_image_opens_over_the_window_as_big_as_fits_and_a_click_or_escape_cl
         _ => None,
     });
     let thumbnail = ElementId::Name(format!("picture/attachment/{}", carried.unwrap().id).into());
-    let before = bounds(&mut ui, thumbnail.clone());
+    let before = ui.bounds(thumbnail.clone());
 
     ui.click(thumbnail.clone());
 
     assert!(ui.has_dialog(), "it opens over the window");
-    let (opened, dialog) = (bounds(&mut ui, "opened-picture"), bounds(&mut ui, "surface"));
+    let (opened, dialog) = (ui.bounds("opened-picture"), ui.bounds("surface"));
     let window = ui.cx.update_window(ui.handle, |_, window, _| window.viewport_size()).unwrap();
     let clear = TITLE_BAR_HEIGHT * 2.;
     let room =
@@ -222,7 +221,7 @@ fn a_prompts_image_opens_over_the_window_as_big_as_fits_and_a_click_or_escape_cl
     assert_eq!(dialog, opened.dilate(px(1.)), "the dialog is the image and its edge");
     let off_middle = opened.center() - point(window.width / 2., window.height / 2.);
     assert!(off_middle.x.abs() < px(1.) && off_middle.y.abs() < px(1.), "{opened:?} is in the middle of {window:?}");
-    assert_eq!(bounds(&mut ui, thumbnail.clone()), before, "nothing in the chat moves");
+    assert_eq!(ui.bounds(thumbnail.clone()), before, "nothing in the chat moves");
     ui.press("escape");
     assert!(!ui.has_dialog(), "Escape closes it");
 
@@ -233,10 +232,4 @@ fn a_prompts_image_opens_over_the_window_as_big_as_fits_and_a_click_or_escape_cl
     ui.click(thumbnail);
     ui.click_at(point(opened.center().x, opened.bottom() + px(20.)));
     assert!(!ui.has_dialog(), "or around it");
-}
-
-fn bounds(ui: &mut Ui<'_>, id: impl Into<ElementId>) -> Bounds<Pixels> {
-    let id = id.into();
-    ui.frame();
-    ui.cx.update_window(ui.handle, |_, window, _| window.find(id).bounds()).unwrap()
 }

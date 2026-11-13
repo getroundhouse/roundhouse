@@ -73,5 +73,6 @@ The app's keyboard shortcuts. They're written as a Mac's. On Windows and Linux, 
 | `Cmd-Option-H` | On a Mac, hide the other apps |
 | `Cmd-M` | On a Mac, minimize the window |
 | `Cmd-Q` | Quit. Agents keep running |
+| `F10` | On Windows and Linux, open the menus, or close them |
 
-Every key with a menu item shows beside it in the menu bar.
+Each menu item shows its key beside it.

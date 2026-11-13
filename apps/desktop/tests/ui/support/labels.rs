@@ -22,15 +22,22 @@ pub(crate) fn labelled(window: &Window, label: &str) -> ElementId {
     window.find_by_label(label).path().last().unwrap().clone()
 }
 
-/// The ID of the one item labelled `label` in the menu that's open, even if something outside it has the same label,
-/// such as the button a picker's menu opened from.
-pub(crate) fn menu_item(window: &Window, label: &str) -> ElementId {
+/// The one item labelled `label` in the menus that are open, even if something outside them has the same label, such
+/// as the button a picker's menu opened from. An item's ID is its place in its menu, which a submenu has again, so it's
+/// found by its label.
+fn open_menu_item(window: &Window, label: &str) -> ElementSnapshot {
     let menu = ElementId::Name(MENU.into());
-    let found = window.find_all_by_label(label);
-    let mut items = found.iter().filter(|found| found.path().contains(&menu));
+    let mut items = window.find_all_by_label(label).into_iter().filter(|found| found.path().contains(&menu));
     let item = items.next().unwrap_or_else(|| panic!("the open menu has nothing labelled {label}"));
     assert!(items.next().is_none(), "the open menu has more than one item labelled {label}");
-    item.path().last().unwrap().clone()
+    item
+}
+
+/// The ID of the one item labelled `label` in the menu that's open, as [`open_menu_item`] finds it. For the gallery,
+/// which only a Mac draws.
+#[cfg(target_os = "macos")]
+pub(crate) fn menu_item(window: &Window, label: &str) -> ElementId {
+    open_menu_item(window, label).path().last().unwrap().clone()
 }
 
 impl Ui<'_> {
@@ -47,12 +54,13 @@ impl Ui<'_> {
         self.click(id);
     }
 
-    /// Clicks the item labelled `label` in the menu that's open, rather than anything else with that label, such as
-    /// the pull request's button of the same name.
+    /// Clicks the item labelled `label` in the menus that are open, rather than anything else with that label, such as
+    /// the pull request's button of the same name. It's clicked where it's drawn, as [`open_menu_item`] finds it.
     pub(crate) fn click_menu_item(&mut self, label: &str) {
         self.frame();
-        let id = self.cx.update_window(self.handle, |_, window, _| menu_item(window, label)).unwrap();
-        self.click(id);
+        let item = self.cx.update_window(self.handle, |_, window, _| open_menu_item(window, label)).unwrap();
+        assert!(item.visible(), "{label} can't be seen, so it can't be clicked");
+        self.click_at(item.bounds().center());
     }
 
     /// Whether the last frame labelled the element with ID `id`, or something inside it, `label`.

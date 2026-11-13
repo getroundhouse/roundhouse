@@ -1,5 +1,6 @@
-//! The menu bar: what each menu holds, the key beside each item, and what the items do. Hiding, minimizing and
-//! zooming happen in macOS, which a headless window doesn't have, so for those the tests stop at the action.
+//! The menus: what each holds, the key beside each item, and what the items do. Hiding, minimizing and zooming happen
+//! in macOS, which a headless window doesn't have, so for those the tests stop at the action. On a Mac the menus are
+//! the menu bar, and elsewhere the app draws them, behind the button `drawn.rs` tests.
 
 #![cfg(test)]
 
@@ -10,7 +11,26 @@ use gpui_kit::{Action, AppContext as _, Keystroke, OperatingSystem, OwnedMenu, O
 
 use crate::support::{Stack, Ui};
 
+#[cfg(not(target_os = "macos"))]
+mod drawn;
 mod file_and_view;
+
+/// Where the items a Mac has in its app menu are on the system the tests run on, as the menu and the item: in the
+/// app menu on a Mac, and elsewhere in File, or in Help.
+pub(crate) const ABOUT: (&str, &str) =
+    if ON_A_MAC { ("Roundhouse", "About Roundhouse") } else { ("Help", "About Roundhouse") };
+pub(crate) const SETTINGS: (&str, &str) =
+    if ON_A_MAC { ("Roundhouse", "Settings…") } else { ("File", "Settings…") };
+pub(crate) const CHECK_FOR_UPDATES: (&str, &str) =
+    if ON_A_MAC { ("Roundhouse", "Check for Updates…") } else { ("Help", "Check for Updates…") };
+pub(crate) const QUIT: (&str, &str) = if ON_A_MAC {
+    ("Roundhouse", "Quit Roundhouse")
+} else if cfg!(target_os = "windows") {
+    ("File", "Exit")
+} else {
+    ("File", "Quit")
+};
+const ON_A_MAC: bool = cfg!(target_os = "macos");
 
 /// A menu from the menu bar, by the name it's given.
 fn menu(ui: &Ui<'_>, name: &str) -> OwnedMenu {
@@ -64,11 +84,6 @@ fn keyed(ui: &Ui<'_>, keys: &str) -> String {
     Keystroke::parse_with_os(keys, os).unwrap().unparse(os)
 }
 
-/// `keys` on a Mac, and no key elsewhere, for what only a Mac does.
-fn keyed_on_a_mac(ui: &Ui<'_>, keys: &str) -> Option<String> {
-    ui.cx.update(|cx| cx.platform_info().is_mac()).then(|| keyed(ui, keys))
-}
-
 /// What pressing a key would do where focus is, without doing it, or `None` for nothing.
 fn bound_where_focus_is(ui: &mut Ui<'_>, key: &str) -> Option<Box<dyn Action>> {
     ui.frame();
@@ -110,6 +125,7 @@ fn typing<'a>(cx: &'a mut TestAppContext, stack: &Stack, typed: &str) -> Ui<'a> 
     ui
 }
 
+#[cfg(target_os = "macos")]
 #[gpui_kit::test]
 fn the_app_menu_has_what_every_mac_app_has_in_the_same_order(cx: &mut TestAppContext) {
     let stack = Stack::new();
@@ -136,13 +152,14 @@ fn the_app_menu_has_what_every_mac_app_has_in_the_same_order(cx: &mut TestAppCon
     assert!(action(&ui, "Roundhouse", "Show All").partial_eq(&desktop::ShowAll));
     assert!(action(&ui, "Roundhouse", "Quit Roundhouse").partial_eq(&desktop::Quit));
     assert!(action(&ui, "Roundhouse", "Settings…").partial_eq(&desktop::OpenSettings));
-    assert_eq!(key(&ui, "Roundhouse", "Hide Roundhouse"), keyed_on_a_mac(&ui, "secondary-h"));
-    assert_eq!(key(&ui, "Roundhouse", "Hide Others"), keyed_on_a_mac(&ui, "alt-secondary-h"));
+    assert_eq!(key(&ui, "Roundhouse", "Hide Roundhouse"), Some(keyed(&ui, "secondary-h")));
+    assert_eq!(key(&ui, "Roundhouse", "Hide Others"), Some(keyed(&ui, "alt-secondary-h")));
     assert_eq!(key(&ui, "Roundhouse", "Show All"), None);
     assert_eq!(key(&ui, "Roundhouse", "Quit Roundhouse"), Some(keyed(&ui, "secondary-q")));
     assert_eq!(key(&ui, "Roundhouse", "Settings…"), Some(keyed(&ui, "secondary-,")));
 }
 
+#[cfg(target_os = "macos")]
 #[gpui_kit::test]
 fn the_window_menu_has_minimize_and_zoom(cx: &mut TestAppContext) {
     let stack = Stack::new();
@@ -152,7 +169,7 @@ fn the_window_menu_has_minimize_and_zoom(cx: &mut TestAppContext) {
     assert_eq!(items(&ui, "Window"), ["-", "Minimize", "Zoom"]);
     assert!(action(&ui, "Window", "Minimize").partial_eq(&desktop::Minimize));
     assert!(action(&ui, "Window", "Zoom").partial_eq(&desktop::Zoom));
-    assert_eq!(key(&ui, "Window", "Minimize"), keyed_on_a_mac(&ui, "secondary-m"));
+    assert_eq!(key(&ui, "Window", "Minimize"), Some(keyed(&ui, "secondary-m")));
     assert_eq!(key(&ui, "Window", "Zoom"), None);
 }
 
@@ -162,19 +179,18 @@ fn the_window_menu_has_minimize_and_zoom(cx: &mut TestAppContext) {
 fn the_app_and_window_keys_work_while_typing(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = typing(cx, &stack, "say:not sent yet");
-    let on_a_mac = cfg!(target_os = "macos");
 
-    for (key, menu_name, name, bound) in [
-        ("secondary-h", "Roundhouse", "Hide Roundhouse", on_a_mac),
-        ("alt-secondary-h", "Roundhouse", "Hide Others", on_a_mac),
-        ("secondary-q", "Roundhouse", "Quit Roundhouse", true),
-        ("secondary-m", "Window", "Minimize", on_a_mac),
-    ] {
+    let keys: [(&str, &dyn Action, bool); 4] = [
+        ("secondary-h", &desktop::Hide, ON_A_MAC),
+        ("alt-secondary-h", &desktop::HideOthers, ON_A_MAC),
+        ("secondary-q", &desktop::Quit, true),
+        ("secondary-m", &desktop::Minimize, ON_A_MAC),
+    ];
+    for (key, item, bound) in keys {
         let pressed = bound_where_focus_is(&mut ui, key);
-        let item = action(&ui, menu_name, name);
-        assert_eq!(pressed.is_some_and(|pressed| pressed.partial_eq(item.as_ref())), bound, "{key} and {name}");
+        assert_eq!(pressed.is_some_and(|pressed| pressed.partial_eq(item)), bound, "{key} and {}", item.name());
     }
-    if !on_a_mac {
+    if !ON_A_MAC {
         assert!(bound_where_focus_is(&mut ui, "cmd-q").is_none(), "the Windows or Super key quits nothing");
     }
 }
@@ -193,7 +209,7 @@ fn the_text_box_keeps_its_own_keys(cx: &mut TestAppContext) {
         ("secondary-z", &Undo),
     ];
     // Keys only the text box off the Mac has, which an app-wide key could take there without a Mac's tests seeing.
-    if !cfg!(target_os = "macos") {
+    if !ON_A_MAC {
         edits.extend([
             ("ctrl-y", &Redo as &dyn Action),
             ("ctrl-left", &MoveToPreviousWord),
@@ -224,7 +240,7 @@ fn the_edit_menu_has_the_text_box_keys(cx: &mut TestAppContext) {
     for (name, kits, shown) in kit {
         assert!(action(&ui, "Edit", name).partial_eq(kits), "{name} isn't the kit's");
         // Elsewhere the kit binds other keys, and there's no menu bar to show them.
-        if cfg!(target_os = "macos") {
+        if ON_A_MAC {
             assert_eq!(key(&ui, "Edit", name).as_deref(), Some(shown), "{name}");
         }
     }
@@ -311,10 +327,25 @@ fn about_says_which_build_this_is(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = Ui::open(cx, &stack);
 
-    choose(&mut ui, "Roundhouse", "About Roundhouse");
+    choose(&mut ui, ABOUT.0, ABOUT.1);
 
     ui.wait("the alert", |ui| ui.cx.has_pending_prompt());
     let (message, detail) = ui.cx.pending_prompt().unwrap();
     assert_eq!(message, "Roundhouse");
     assert_eq!(detail, format!("Version {}", stack.hub.build_version));
+}
+
+/// A Mac's, in its menu bar, and elsewhere as Windows arranges menus, which the app draws. What each holds on every
+/// system is tested beside where they're made, in `menus::tests`.
+#[gpui_kit::test]
+fn the_menus_are_the_ones_this_system_has(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let ui = Ui::open(cx, &stack);
+
+    let menus = ui.cx.update(|cx| cx.get_menus()).unwrap();
+
+    let names: Vec<String> = menus.iter().map(|menu| menu.name.to_string()).collect();
+    let wanted: &[&str] =
+        if ON_A_MAC { &["Roundhouse", "File", "Edit", "View", "Window"] } else { &["File", "Edit", "View", "Help"] };
+    assert_eq!(names, wanted);
 }

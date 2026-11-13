@@ -2,7 +2,7 @@
 //! away from.
 
 use gpui_kit::test::TestWindowExt as _;
-use gpui_kit::{AppContext as _, Bounds, ElementId, Pixels, ScrollDelta, TestAppContext, point, px};
+use gpui_kit::{AppContext as _, ElementId, ScrollDelta, TestAppContext, point, px};
 use look::Region;
 use look::motion::SCROLL;
 use protocol::model::seq_index;
@@ -104,7 +104,7 @@ fn the_button_sits_on_the_composers_left_edge_just_above_it(cx: &mut TestAppCont
     ui.click("toggle-diff");
 
     assert!(shows(&mut ui), "it's still scrolled up");
-    let (pane, composer) = (bounds(&mut ui, Region::Transcript.id()), bounds(&mut ui, Region::Composer.id()));
+    let (pane, composer) = (ui.bounds(Region::Transcript.id()), ui.bounds(Region::Composer.id()));
     assert!(composer.left() - pane.left() > px(16.), "the composer isn't centred, at {:?}", composer.left());
     on_the_composers_edge_just_above_it(&mut ui);
 }
@@ -117,7 +117,7 @@ fn a_click_on_the_button_leaves_the_call_under_it_closed(cx: &mut TestAppContext
     let mut ui = open_on_a_session_of_commands(cx, &stack);
     ui.scroll("transcript", ScrollDelta::Pixels(point(px(0.), px(300.))));
     assert!(shows(&mut ui));
-    let middle = bounds(&mut ui, Region::LatestButton.id()).center();
+    let middle = ui.bounds(Region::LatestButton.id()).center();
     let lines = ui.labelled(COMMAND_LINE);
     let under = lines.iter().find(|line| line.bounds().contains(&middle)).expect("a call's line under the button");
     let line = under.path().last().unwrap().clone();
@@ -146,14 +146,14 @@ fn in_a_subagent_s_tab_the_button_rests_above_the_tab_s_bottom_edge(cx: &mut Tes
     ui.scroll("transcript", ScrollDelta::Pixels(point(px(0.), px(300.))));
 
     ui.settle(A_FRAME);
-    let (tab, button) = (bounds(&mut ui, Region::Transcript.id()), bounds(&mut ui, Region::LatestButton.id()));
+    let (tab, button) = (ui.bounds(Region::Transcript.id()), ui.bounds(Region::LatestButton.id()));
     let room = tab.bottom() - button.bottom();
     assert!((room - px(8.)).abs() < px(0.5), "it rests {room:?} above the tab's bottom edge, not 8px");
 }
 
 /// Checks that the button is on the composer's left edge, and 8px above it.
 fn on_the_composers_edge_just_above_it(ui: &mut Ui<'_>) {
-    let (button, composer) = (bounds(ui, Region::LatestButton.id()), bounds(ui, Region::Composer.id()));
+    let (button, composer) = (ui.bounds(Region::LatestButton.id()), ui.bounds(Region::Composer.id()));
     assert!(
         (button.left() - composer.left()).abs() < px(0.5),
         "it's at {:?}, not on the composer's edge at {:?}",
@@ -176,12 +176,6 @@ fn open_on_a_session_of_commands<'a>(cx: &'a mut TestAppContext, stack: &Stack) 
     ui.wait("the workspace", |ui| ui.transcript().is_some());
     wait_for_the_list_to_settle(&mut ui, total - 1);
     ui
-}
-
-/// Where the element with this ID was drawn.
-fn bounds(ui: &mut Ui<'_>, id: &'static str) -> Bounds<Pixels> {
-    ui.frame();
-    ui.cx.update_window(ui.handle, |_, window, _| window.find(id).bounds()).unwrap()
 }
 
 /// The wheel over the button scrolls the chat under it, as it does anywhere else in it.

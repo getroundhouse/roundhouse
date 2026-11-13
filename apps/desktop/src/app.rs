@@ -20,6 +20,7 @@ mod corner;
 mod drafts;
 mod home;
 mod hub_source;
+mod menu_button;
 mod notifying;
 mod pull_requests;
 mod quitting;
@@ -124,7 +125,9 @@ pub struct AppView {
     _watching_pull_requests: Task<()>,
     /// Draws the window again when what's said of a chat's cache next changes.
     cache_clock: Option<Task<()>>,
-    /// What the menu bar was last given to say.
+    /// The menus off the Mac, while they're open from the button in the corner.
+    menus_open: Option<menu_button::OpenMenus>,
+    /// What the menus were last given to say.
     menus_say: crate::menus::Says,
     /// Which chats have been told of as needing the person, and when that last sounded.
     telling: notifying::Telling,
@@ -183,6 +186,7 @@ impl AppView {
             looking: None,
             _watching_pull_requests: Self::watch_pull_requests(cx),
             cache_clock: None,
+            menus_open: None,
             menus_say: crate::menus::Says::default(),
             telling: notifying::Telling::default(),
             chat_to_show: None,

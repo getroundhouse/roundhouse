@@ -1,4 +1,7 @@
-//! The menu bar, and what its items do that no view does. Each item is an action, so macOS shows its key beside it.
+//! The menus, and what their items do that no view does. Each item is an action, so the key bound to it shows beside
+//! it. On a Mac they're macOS's menu bar. Elsewhere GPUI keeps them for the app to draw, which it does behind a button
+//! in the window's top left corner, as `drawn` says, arranged as Windows arranges menus. Both come from here, so they
+//! can't drift apart.
 
 use gpui_kit::component::input::{Copy, Cut, Paste, Redo, SelectAll, Undo};
 use gpui_kit::{App, Menu, MenuItem, OsAction, PromptLevel, SystemMenuType, Window};
@@ -10,8 +13,41 @@ use crate::{
     NewChat, NewWorkspace, NextWorkspace, OpenSettings, PreviousWorkspace, Quit, ShowAll, ToggleDiff, Zoom,
 };
 
-/// What the menu bar says about the selected workspace. macOS shows only what it was last given, so the window gives
-/// it the bar again when this changes.
+mod drawn;
+#[cfg(test)]
+mod tests;
+
+pub(crate) use drawn::popup;
+
+/// The system whose menus the app has, which is the one it's built for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum System {
+    Mac,
+    Windows,
+    Linux,
+}
+
+impl System {
+    pub(crate) const THIS: Self = if cfg!(target_os = "macos") {
+        Self::Mac
+    } else if cfg!(target_os = "windows") {
+        Self::Windows
+    } else {
+        Self::Linux
+    };
+
+    /// Whether the app draws the menus itself, behind a button in the window's top left corner, as it does wherever
+    /// the system has no menu bar for them.
+    pub(crate) const fn draws_the_menus(self) -> bool {
+        match self {
+            System::Mac => false,
+            System::Windows | System::Linux => true,
+        }
+    }
+}
+
+/// What the menus say about the selected workspace. macOS shows only what it was last given, and the menus the app
+/// draws are drawn from what it last gave GPUI, so the window gives them again when this changes.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) struct Says {
     /// The sidebar of changes is open, so View has Hide Diff rather than Show Diff.
@@ -20,7 +56,7 @@ pub(crate) struct Says {
     pub(crate) showing: Showing,
 }
 
-/// Sets the menu bar, and handles the items no view does, wherever focus is. The window shows Settings itself. macOS
+/// Sets the menus, and handles the items no view does, wherever focus is. The window shows Settings itself. macOS
 /// reads each item's key from the bindings each time the bar is given, so they're bound first. `build_version` is the
 /// app's, which About says.
 pub(crate) fn set(build_version: &'static str, cx: &mut App) {
@@ -35,9 +71,21 @@ pub(crate) fn set(build_version: &'static str, cx: &mut App) {
     cx.on_action(|_: &Zoom, cx| in_front(cx, Window::zoom_window));
 }
 
-/// Gives macOS the menu bar, saying this.
+/// Gives the system the menus, saying this.
 pub(crate) fn show(says: Says, cx: &mut App) {
-    cx.set_menus([app_menu(), file_menu(says), edit_menu(), view_menu(says), window_menu()]);
+    cx.set_menus(menus(System::THIS, says));
+}
+
+/// The menus `system` has. A Mac has its app menu and its Window menu. Elsewhere there's no app menu: its Settings…
+/// and Quit end File, and About and Check for Updates… are in Help, while hiding apps and the Window menu are a Mac's
+/// alone, and the window's own buttons minimize and maximize it.
+fn menus(system: System, says: Says) -> Vec<Menu> {
+    match system {
+        System::Mac => vec![app_menu(), file_menu(system, says), edit_menu(), view_menu(system, says), window_menu()],
+        System::Windows | System::Linux => {
+            vec![file_menu(system, says), edit_menu(), view_menu(system, says), help_menu()]
+        }
+    }
 }
 
 /// The items every Mac app has, in the same order, with the app's own after About. Check for Updates… goes with About,
@@ -55,25 +103,45 @@ fn app_menu() -> Menu {
         MenuItem::action("Hide Others", HideOthers),
         MenuItem::action("Show All", ShowAll),
         MenuItem::separator(),
-        MenuItem::action("Quit Roundhouse", Quit),
+        MenuItem::action(quits(System::Mac), Quit),
     ])
 }
 
 /// Making things, and closing a chat, as a File menu makes and closes documents. The window handles these. ⌘W closes
-/// the file tab or the subagent tab while it shows, so the item says so then.
-fn file_menu(says: Says) -> Menu {
+/// the file tab or the subagent tab while it shows, so the item says so then. Off the Mac, Settings… and quitting end
+/// it, as they do a Windows or Linux app's File menu.
+fn file_menu(system: System, says: Says) -> Menu {
     let close = match says.showing {
         Showing::Chat => "Close Chat",
         Showing::File => "Close File Tab",
         Showing::Subagent => "Close Subagent Tab",
     };
-    Menu::new("File").items([
+    let mut items = vec![
         MenuItem::action("New Workspace", NewWorkspace),
         MenuItem::action("New Chat", NewChat),
         MenuItem::action("Add Project…", AddRepository),
         MenuItem::separator(),
         MenuItem::action(close, CloseChat),
-    ])
+    ];
+    match system {
+        System::Mac => {}
+        System::Windows | System::Linux => items.extend([
+            MenuItem::separator(),
+            MenuItem::action("Settings…", OpenSettings),
+            MenuItem::separator(),
+            MenuItem::action(quits(system), Quit),
+        ]),
+    }
+    Menu::new("File").items(items)
+}
+
+/// What the item that quits is called: Exit on Windows, as its apps say, and Quit on Linux, as GNOME's and KDE's do.
+fn quits(system: System) -> &'static str {
+    match system {
+        System::Mac => "Quit Roundhouse",
+        System::Windows => "Exit",
+        System::Linux => "Quit",
+    }
 }
 
 /// The kit's text boxes handle the first of these, so each works on whichever has focus, and is greyed out where none
@@ -98,18 +166,22 @@ fn edit_menu() -> Menu {
     ])
 }
 
-/// What's on screen: the diff, and which workspace. The window handles these. macOS adds Enter Full Screen at the
-/// bottom, after the separator that keeps it apart. Moving between chats isn't here, because GPUI can't give macOS
-/// Tab as an item's key, so ⌃⇥ would show as ⌃T.
-fn view_menu(says: Says) -> Menu {
+/// What's on screen: the diff, and which workspace. The window handles these. On a Mac, macOS adds Enter Full Screen
+/// at the bottom, after the separator that keeps it apart. Moving between chats isn't here, because GPUI can't give
+/// macOS Tab as an item's key, so ⌃⇥ would show as ⌃T.
+fn view_menu(system: System, says: Says) -> Menu {
     let diff = if says.diff_open { "Hide Diff" } else { "Show Diff" };
-    Menu::new("View").items([
+    let mut items = vec![
         MenuItem::action(diff, ToggleDiff),
         MenuItem::separator(),
         MenuItem::action("Previous Workspace", PreviousWorkspace),
         MenuItem::action("Next Workspace", NextWorkspace),
-        MenuItem::separator(),
-    ])
+    ];
+    match system {
+        System::Mac => items.push(MenuItem::separator()),
+        System::Windows | System::Linux => {}
+    }
+    Menu::new("View").items(items)
 }
 
 /// Named Window, so GPUI makes it the system's window menu, and macOS adds the rest: arranging the window, full
@@ -120,6 +192,16 @@ fn window_menu() -> Menu {
         MenuItem::separator(),
         MenuItem::action("Minimize", Minimize),
         MenuItem::action("Zoom", Zoom),
+    ])
+}
+
+/// What a Mac has at the top of its app menu, at the end of the menus, as Windows and Linux apps have it, with About
+/// last, as theirs have it.
+fn help_menu() -> Menu {
+    Menu::new("Help").items([
+        MenuItem::action("Check for Updates…", CheckForUpdates),
+        MenuItem::separator(),
+        MenuItem::action("About Roundhouse", About),
     ])
 }
 

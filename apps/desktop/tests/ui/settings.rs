@@ -4,8 +4,9 @@
 
 use std::path::PathBuf;
 
-use gpui_kit::{AppContext as _, ElementId, OwnedMenuItem, TestAppContext};
+use gpui_kit::{AppContext as _, ElementId, TestAppContext};
 
+use crate::menus::{SETTINGS, choose};
 use crate::support::{self, Stack, Ui, labelled};
 
 mod search;
@@ -15,14 +16,9 @@ fn settings_showing(ui: &mut Ui<'_>) -> bool {
     ui.has("settings-back")
 }
 
-/// Opens Settings from the app menu, as the menu bar does.
+/// Opens Settings from the menus, as the menu bar does: the app menu on a Mac, and File elsewhere.
 pub(crate) fn open_settings(ui: &mut Ui<'_>) {
-    let menus = ui.cx.update(|cx| cx.get_menus()).unwrap();
-    let action = menus[0].items.iter().find_map(|item| match item {
-        OwnedMenuItem::Action { name, action, .. } if name == "Settings…" => Some(action.boxed_clone()),
-        _ => None,
-    });
-    ui.cx.update(|cx| cx.dispatch_action(action.unwrap().as_ref()));
+    choose(ui, SETTINGS.0, SETTINGS.1);
     ui.wait("Settings", settings_showing);
 }
 

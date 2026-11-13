@@ -7,8 +7,8 @@
 
 use std::io::Cursor;
 
-use gpui_kit::test::{ElementSnapshot, TestWindowExt as _};
-use gpui_kit::{AppContext as _, Bounds, ElementId, Pixels, TestAppContext};
+use gpui_kit::test::ElementSnapshot;
+use gpui_kit::{AppContext as _, ElementId, TestAppContext};
 use image::ImageFormat;
 use protocol::event::EventBody;
 
@@ -123,13 +123,6 @@ fn open_a_call(ui: &mut Ui<'_>, step: &str, line: &str) {
 /// Whether the command's line says it's open, as it tells assistive apps.
 fn command_open(ui: &mut Ui<'_>) -> Option<bool> {
     ui.labelled(COMMAND_LINE).first().and_then(ElementSnapshot::expanded)
-}
-
-/// Where the element is drawn.
-pub(crate) fn bounds(ui: &mut Ui<'_>, id: impl Into<ElementId>) -> Bounds<Pixels> {
-    let id = id.into();
-    ui.frame();
-    ui.cx.update_window(ui.handle, |_, window, _| window.find(id).bounds()).unwrap()
 }
 
 #[gpui_kit::test]

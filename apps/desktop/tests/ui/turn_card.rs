@@ -2,8 +2,7 @@
 
 #![cfg(test)]
 
-use gpui_kit::test::TestWindowExt as _;
-use gpui_kit::{AppContext as _, Bounds, ElementId, Pixels, SharedString, TestAppContext, px};
+use gpui_kit::{SharedString, TestAppContext, px};
 use protocol::event::EventBody;
 
 use crate::support::{Stack, Ui};
@@ -41,7 +40,7 @@ fn resting_on_a_finished_turn_shows_what_it_asked_of_the_model_just_above_its_li
     }
     // The fake's model takes a minute to start answering, so its request was sent a minute before the hub heard.
     assert_eq!(ui.labelled("Cache 59 min left").len(), 1, "what the hub keeps of the turn's request");
-    let (card, line) = (bounds(&mut ui, "turn-card"), bounds(&mut ui, line));
+    let (card, line) = (ui.bounds("turn-card"), ui.bounds(line));
     assert!(card.bottom() <= line.top() && line.top() - card.bottom() < px(8.), "just above: {card:?} {line:?}");
     assert!((card.center().x - line.center().x).abs() < px(1.), "centred on it: {card:?} over {line:?}");
 }
@@ -51,14 +50,8 @@ fn a_card_with_no_room_above_its_line_moves_down_only_as_far_as_it_has_to(cx: &m
     let stack = Stack::new();
     let (mut ui, line) = resting_on_a_turn(cx, &stack, "say:hello");
 
-    let (card, line) = (bounds(&mut ui, "turn-card"), bounds(&mut ui, line));
+    let (card, line) = (ui.bounds("turn-card"), ui.bounds(line));
     assert!(line.top() - card.size.height < px(0.), "this line is too near the top for the card: {line:?}");
     assert!(card.top() >= px(0.) && card.top() < px(8.), "in the window, at its top: {card:?}");
     assert!((card.center().x - line.center().x).abs() < px(1.), "still centred on it: {card:?} over {line:?}");
-}
-
-fn bounds(ui: &mut Ui<'_>, id: impl Into<ElementId>) -> Bounds<Pixels> {
-    let id = id.into();
-    ui.frame();
-    ui.cx.update_window(ui.handle, |_, window, _| window.find(id).bounds()).unwrap()
 }

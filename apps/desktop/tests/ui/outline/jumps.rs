@@ -7,7 +7,7 @@ use gpui_kit::{AppContext as _, ElementId, Pixels, ScrollDelta, TestAppContext, 
 use protocol::model::seq_index;
 
 use super::{
-    bounds, compact, open_the_list, prompt_rows, row_id, scrolled_to, scrolled_to_exactly, selected, wait_out_the_list,
+    compact, open_the_list, prompt_rows, row_id, scrolled_to, scrolled_to_exactly, selected, wait_out_the_list,
 };
 use crate::support::{Stack, Ui};
 
@@ -126,7 +126,7 @@ fn after_a_jump_the_list_opens_again_only_once_the_pointer_moves_over_the_ticks(
     open_the_list(&mut ui);
 
     // Where the row covers the ticks, so once the list has gone the pointer rests on them.
-    let (row, ticks) = (bounds(&mut ui, row_id("outline-prompt", first)), bounds(&mut ui, "outline"));
+    let (row, ticks) = (ui.bounds(row_id("outline-prompt", first)), ui.bounds("outline"));
     let on_the_ticks = point(ticks.origin.x + px(2.), ticks.origin.y + px(8.));
     assert!(row.contains(&on_the_ticks), "the row covers the ticks there: {row:?} {ticks:?}");
     let offset = on_the_ticks - row.origin;
@@ -206,14 +206,14 @@ fn jump_to_line(ui: &mut Ui<'_>, target: ElementId) {
 /// come isn't measured.
 fn assert_at_the_bottom(ui: &mut Ui<'_>, row: usize, what: &str) {
     ui.wait("the rows down to it to be laid out", |ui| laid_out_down_to(ui, row));
-    let (end, tall) = (place_of(ui, row).1, bounds(ui, "transcript").size.height);
+    let (end, tall) = (place_of(ui, row).1, ui.bounds("transcript").size.height);
     assert!((end - tall).abs() < px(1.), "{what} ends {end:?} down a chat {tall:?} tall");
 }
 
 /// The prompt, of those drawn in `rows`, that's the last with more than a pixel of it in the chat, found from the rows
 /// in the window alone, as the last frame measured them.
 fn last_prompt_in_sight(ui: &mut Ui<'_>, rows: &[usize]) -> usize {
-    let tall = bounds(ui, "transcript").size.height - px(1.);
+    let tall = ui.bounds("transcript").size.height - px(1.);
     let (mut row, offset) = scrolled_to_exactly(ui);
     let mut down = -offset;
     while down < tall {

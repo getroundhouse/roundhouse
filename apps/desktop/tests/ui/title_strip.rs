@@ -62,6 +62,23 @@ fn on_windows_a_press_on_a_button_in_the_strip_stays_the_buttons(cx: &mut TestAp
     assert!(!ui.changes_open(), "the button is clicked");
 }
 
+/// The button that opens the menus opens them as it's pressed on Windows too, where the strip is the title bar, and
+/// Windows doesn't hear the press, as it doesn't any button's. That the press goes no further, to what's under the
+/// button, is `menus::drawn`'s to check.
+#[cfg(not(target_os = "macos"))]
+#[gpui_kit::test]
+fn on_windows_a_press_on_the_button_that_opens_the_menus_opens_them_and_stays_its(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = on_windows(cx, &stack);
+    let on = center(&mut ui, "menus");
+
+    let pressed = press(&mut ui, on);
+    send(&mut ui, up(on));
+
+    assert!(!pressed.propagate, "Windows doesn't hear the press");
+    assert!(ui.has(crate::support::MENU), "the menus are open");
+}
+
 /// A greyed-out button stops a press itself, so Windows doesn't move the window from it either.
 #[gpui_kit::test]
 fn on_windows_a_press_on_a_greyed_out_button_in_the_strip_stops_there(cx: &mut TestAppContext) {

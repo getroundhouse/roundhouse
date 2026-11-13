@@ -11,7 +11,7 @@ use gpui_kit::{
 };
 
 use crate::support::{Stack, Ui};
-use crate::tools::{bounds, in_a_new_workspace, open_a_command};
+use crate::tools::{in_a_new_workspace, open_a_command};
 
 /// Moving the pointer over a chat's text went on selecting it, with no button held, until the next click. On Windows
 /// the press is on the window's frame. Here it's on the text, so what a move would select is known.
@@ -20,7 +20,7 @@ fn a_move_after_a_press_whose_release_was_lost_selects_nothing(cx: &mut TestAppC
     let stack = Stack::new();
     let mut ui = in_a_new_workspace(cx, &stack);
     let (_, output) = open_a_command(&mut ui, r"printf 'one\n\nthree\nfour\n'");
-    let printed = bounds(&mut ui, output);
+    let printed = ui.bounds(output);
     // As far apart in what it printed as the test that selects it by dragging.
     let (from, to) = (printed.origin + point(px(14.), px(12.)), printed.bottom_right() - point(px(14.), px(12.)));
     ui.cx.update(|cx| lost_release::the_left_button_is(Button::Up, cx));

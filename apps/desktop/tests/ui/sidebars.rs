@@ -3,7 +3,7 @@
 #![cfg(test)]
 
 use gpui_kit::test::TestWindowExt as _;
-use gpui_kit::{AppContext as _, Bounds, Pixels, TestAppContext, point, px, size};
+use gpui_kit::{AppContext as _, Pixels, TestAppContext, point, px, size};
 
 use crate::support::{Stack, Ui};
 
@@ -21,35 +21,29 @@ fn with_a_workspace<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> Ui<'a> {
     ui
 }
 
-/// Where the last frame drew it.
-fn bounds(ui: &mut Ui, id: &'static str) -> Bounds<Pixels> {
-    ui.frame();
-    ui.cx.update_window(ui.handle, |_, window, _| window.find(id).bounds()).unwrap()
-}
-
 fn window_width(ui: &mut Ui) -> Pixels {
     ui.cx.update_window(ui.handle, |_, window, _| window.viewport_size().width).unwrap()
 }
 
 /// How wide the sidebar on the left is drawn, which starts at the window's left edge.
 fn left_shown(ui: &mut Ui) -> Pixels {
-    bounds(ui, LEFT_EDGE).right()
+    ui.bounds(LEFT_EDGE).right()
 }
 
 /// How wide the sidebar of changes is drawn, which ends at the window's right edge.
 fn right_shown(ui: &mut Ui) -> Pixels {
-    window_width(ui) - bounds(ui, RIGHT_EDGE).left()
+    window_width(ui) - ui.bounds(RIGHT_EDGE).left()
 }
 
 /// Presses on a sidebar's edge, halfway down it, and lets go with the pointer `to` across the window.
 fn drag_edge(ui: &mut Ui, edge: &'static str, to: Pixels) {
-    let down = bounds(ui, edge).center().y;
+    let down = ui.bounds(edge).center().y;
     drag_edge_at(ui, edge, down, to);
 }
 
 /// The same, pressing on the edge `down` from the window's top.
 fn drag_edge_at(ui: &mut Ui, edge: &'static str, down: Pixels, to: Pixels) {
-    let from = point(bounds(ui, edge).center().x, down);
+    let from = point(ui.bounds(edge).center().x, down);
     ui.cx.update_window(ui.handle, |_, window, cx| window.drag(from, point(to, down), cx)).unwrap();
     ui.frame();
 }
@@ -67,7 +61,7 @@ fn slide_on(ui: &mut Ui, part: f32) -> usize {
 }
 
 /// Puts an error in the strip along the top of what's beside the sidebar.
-fn show_an_error(ui: &mut Ui) {
+pub(crate) fn show_an_error(ui: &mut Ui) {
     let view = ui.view.clone();
     ui.cx.update(|cx| {
         view.update(cx, |view, cx| {
@@ -83,8 +77,8 @@ fn the_button_beside_the_windows_buttons_hides_the_sidebar_and_shows_it_again(cx
     let stack = Stack::new();
     let mut ui = with_a_workspace(cx, &stack);
     assert!(ui.has("add-project") && ui.has(LEFT_EDGE));
-    let button = bounds(&mut ui, "toggle-sidebar");
-    let title = bounds(&mut ui, "workspace-title");
+    let button = ui.bounds("toggle-sidebar");
+    let title = ui.bounds("workspace-title");
     ui.input("half");
 
     ui.click("toggle-sidebar");
@@ -92,15 +86,15 @@ fn the_button_beside_the_windows_buttons_hides_the_sidebar_and_shows_it_again(cx
     assert!(!ui.has("add-project") && !ui.has(LEFT_EDGE), "none of the sidebar is drawn");
     ui.input(" typed");
     assert_eq!(ui.composer_text(), "half typed", "the composer still has the keys");
-    assert_eq!(bounds(&mut ui, "toggle-sidebar"), button, "the button stays where it was");
-    let moved = bounds(&mut ui, "workspace-title");
+    assert_eq!(ui.bounds("toggle-sidebar"), button, "the button stays where it was");
+    let moved = ui.bounds("workspace-title");
     assert!(moved.left() > button.right(), "the header starts after the button: {moved:?}");
     assert!(moved.left() < title.left(), "and the workspace has the sidebar's room: {moved:?}");
 
     ui.click("toggle-sidebar");
 
     assert!(ui.has("add-project"));
-    assert_eq!(bounds(&mut ui, "workspace-title"), title);
+    assert_eq!(ui.bounds("workspace-title"), title);
 }
 
 #[gpui_kit::test]
@@ -109,13 +103,13 @@ fn home_starts_after_the_button_while_the_sidebar_is_hidden(cx: &mut TestAppCont
     let mut ui = with_a_workspace(cx, &stack);
     ui.click("home");
     ui.wait("Home", |ui| ui.has("home-page"));
-    let button = bounds(&mut ui, "toggle-sidebar");
-    let search = bounds(&mut ui, "home-search");
+    let button = ui.bounds("toggle-sidebar");
+    let search = ui.bounds("home-search");
     assert_eq!(search.left(), LEFT_USUALLY + px(16.), "beside the sidebar, it starts where a header does");
 
     ui.click("toggle-sidebar");
 
-    let search = bounds(&mut ui, "home-search");
+    let search = ui.bounds("home-search");
     assert_eq!(search.left(), button.right() + px(16.), "the search starts after the button: {search:?}");
     assert!(ui.has("home-page") && !ui.has("add-project"));
 }
@@ -133,7 +127,7 @@ fn dragging_a_sidebars_edge_changes_how_wide_it_is(cx: &mut TestAppContext) {
 
     assert_eq!(left_shown(&mut ui), px(350.));
     assert_eq!(right_shown(&mut ui), px(500.));
-    assert_eq!(bounds(&mut ui, "workspace-title").left(), px(350. + 16.), "the workspace starts where it ends");
+    assert_eq!(ui.bounds("workspace-title").left(), px(350. + 16.), "the workspace starts where it ends");
 }
 
 /// Each edge runs up through the strip along the window's top, where a press that nothing takes moves the window. The
@@ -191,29 +185,29 @@ fn a_sidebar_slides_shut_and_whats_beside_it_moves_with_it(cx: &mut TestAppConte
     let stack = Stack::new();
     let mut ui = with_a_workspace(cx, &stack);
     ui.allow_motion();
-    let button = bounds(&mut ui, "toggle-sidebar");
+    let button = ui.bounds("toggle-sidebar");
 
     ui.click("toggle-sidebar");
     ui.click("toggle-diff");
 
     assert_eq!((left_shown(&mut ui), right_shown(&mut ui)), (LEFT_USUALLY, RIGHT_USUALLY), "each starts where it was");
-    assert_eq!(bounds(&mut ui, "workspace-title").left(), LEFT_USUALLY + px(16.));
+    assert_eq!(ui.bounds("workspace-title").left(), LEFT_USUALLY + px(16.));
     slide_on(&mut ui, 0.5);
 
     let (left, right) = (left_shown(&mut ui), right_shown(&mut ui));
     assert!(px(0.) < left && left < LEFT_USUALLY, "partway shut: {left:?}");
     assert!(px(0.) < right && right < RIGHT_USUALLY, "partway shut: {right:?}");
-    let tab = bounds(&mut ui, "sidebar-tab-changes");
+    let tab = ui.bounds("sidebar-tab-changes");
     assert!(tab.right() > window_width(&mut ui), "the rest of it is past the window's edge: {tab:?}");
     // The window draws the sidebar and the workspace draws its header, each by how far the sidebar has slid.
-    let title = bounds(&mut ui, "workspace-title").left();
+    let title = ui.bounds("workspace-title").left();
     assert_eq!(title, left.max(button.right()) + px(16.), "the header starts where the sidebar ends, or the button");
     let across = window_width(&mut ui);
-    assert_eq!(bounds(&mut ui, "toggle-diff").right(), across - right - px(12.), "and ends where the other starts");
+    assert_eq!(ui.bounds("toggle-diff").right(), across - right - px(12.), "and ends where the other starts");
 
     slide_on(&mut ui, 0.6);
     assert!(!ui.has(LEFT_EDGE) && !ui.has(RIGHT_EDGE), "shut, they're not drawn");
-    assert_eq!(bounds(&mut ui, "workspace-title").left(), button.right() + px(16.));
+    assert_eq!(ui.bounds("workspace-title").left(), button.right() + px(16.));
     assert_eq!(slide_on(&mut ui, 0.1), 0, "and nothing asks for another frame");
 }
 
@@ -252,7 +246,7 @@ fn a_workspace_shown_partway_through_a_slide_starts_its_header_where_the_sidebar
     let view = ui.view.clone();
     ui.cx.update(|cx| view.update(cx, |view, cx| view.select(first, cx)));
 
-    let (left, title) = (left_shown(&mut ui), bounds(&mut ui, "workspace-title").left());
+    let (left, title) = (left_shown(&mut ui), ui.bounds("workspace-title").left());
     assert!(left > px(102.), "the sidebar still covers the button: {left:?}");
     assert_eq!(title, left + px(16.));
 }
@@ -327,16 +321,16 @@ fn under_an_error_the_header_starts_at_the_windows_edge_while_the_sidebar_is_hid
     let stack = Stack::new();
     let mut ui = with_a_workspace(cx, &stack);
     ui.click("toggle-sidebar");
-    let button = bounds(&mut ui, "toggle-sidebar");
-    assert_eq!(bounds(&mut ui, "workspace-title").left(), button.right() + px(16.));
+    let button = ui.bounds("toggle-sidebar");
+    assert_eq!(ui.bounds("workspace-title").left(), button.right() + px(16.));
 
     show_an_error(&mut ui);
 
-    let title = bounds(&mut ui, "workspace-title");
+    let title = ui.bounds("workspace-title");
     assert!(title.top() >= button.bottom(), "the header is below the button: {title:?}");
     assert_eq!(title.left(), px(16.));
     // The error is in the strip, so it's what clears the window's buttons.
-    let error = bounds(&mut ui, "error-text");
+    let error = ui.bounds("error-text");
     assert!(error.left() >= button.right(), "the error starts after the button: {error:?}");
 }
 
@@ -383,5 +377,5 @@ fn settings_stands_in_for_the_sidebar_at_the_width_it_was_dragged_to(cx: &mut Te
 
     ui.press("secondary-,");
 
-    assert_eq!(bounds(&mut ui, "settings-back").right(), px(350. - 12.), "Back is at its top right");
+    assert_eq!(ui.bounds("settings-back").right(), px(350. - 12.), "Back is at its top right");
 }

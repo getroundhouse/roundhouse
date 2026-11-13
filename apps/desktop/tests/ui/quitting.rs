@@ -12,7 +12,7 @@ use gpui_kit::{AppContext as _, TestAppContext, VisualTestContext};
 use protocol::event::EventBody;
 use protocol::prompt::Prompt;
 
-use crate::menus::choose;
+use crate::menus::{QUIT, choose};
 use crate::support::{Frozen, Stack, Ui};
 
 #[gpui_kit::test]
@@ -75,7 +75,7 @@ fn leave_something_in_the_dialog(ui: &mut Ui<'_>, stack: &Stack) -> Frozen {
 }
 
 fn quit_from_the_menu(ui: &mut Ui<'_>) {
-    choose(ui, "Roundhouse", "Quit Roundhouse");
+    choose(ui, QUIT.0, QUIT.1);
 }
 
 #[gpui_kit::test]
