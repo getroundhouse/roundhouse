@@ -25,7 +25,7 @@ mod subagent;
 mod title;
 mod wait;
 
-pub use account::{Account, AgentAccount, LimitWindow, SessionAccount, UsageLimit};
+pub use account::{Account, AgentAccount, AgentLogin, HeldLogin, LimitWindow, LoginToken, SessionAccount, UsageLimit};
 pub use agent::{AgentDescription, AgentFeature, ModelChoice, NotOffered};
 pub use branches::{Branch, Branches, Head, Upstream};
 pub use cache::{CACHE_WORTH_TELLING_TOKENS, CacheRequest, CacheState, CacheTtl, PromptCache};

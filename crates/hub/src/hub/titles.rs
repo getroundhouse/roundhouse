@@ -219,7 +219,7 @@ impl Hub {
         images: Vec<NewAttachment>,
     ) -> Result<Title, ApiError> {
         let link = self.ensure_worker(workspace).await?;
-        let title = link.call(TitleFor { agent, prompt, images }).await?.title;
+        let title = link.call(TitleFor { agent, prompt, images, login: None }).await?.title;
         Title::from_first_line(&title).ok_or_else(|| ApiError::new(ErrorCode::Worker, "the worker gave an empty title"))
     }
 

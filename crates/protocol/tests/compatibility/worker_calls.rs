@@ -7,8 +7,9 @@ use protocol::attachment::{Attachment, AttachmentBytes, MediaType, NewAttachment
 use protocol::event::ApprovalDecision;
 use protocol::frame;
 use protocol::model::{
-    AgentAccount, AgentKind, Branches, Effort, FileContents, FileOpened, FilePage, FilePages, GitDiff, GitStatus, Head,
-    ModelName, PageLine, PermissionMode, RunId, SessionSettings, SessionSettingsChange, WorktreeFiles,
+    AgentAccount, AgentKind, AgentLogin, Branches, Effort, FileContents, FileOpened, FilePage, FilePages, GitDiff,
+    GitStatus, Head, LoginToken, ModelName, PageLine, PermissionMode, RunId, SessionSettings, SessionSettingsChange,
+    WorktreeFiles,
 };
 use protocol::prompt::Prompt;
 use protocol::worker::{
@@ -17,6 +18,11 @@ use protocol::worker::{
 };
 use serde::Serialize;
 use serde::de::DeserializeOwned;
+
+/// A login a hub holds, as it hands it to a worker.
+fn login() -> AgentLogin {
+    AgentLogin { token: LoginToken::new("made-up") }
+}
 
 /// `message` is written as `line`, and `line` reads as `message`.
 fn keeps_its_form<T: Serialize + DeserializeOwned + PartialEq + Debug>(message: &T, line: &str) {
@@ -146,7 +152,13 @@ fn every_request_about_an_agent_keeps_its_form() {
         },
         env: vec![],
         tools_token: Some(ToolsToken::new("t")),
+        login: None,
     };
+    let under_a_login = AgentSpec { tools_token: None, login: Some(login()), ..spec.clone() };
+    asked(
+        WorkerRequest::AgentStart(under_a_login),
+        r#"{"method":"agent_start","session_id":"s","run":4,"agent":"claude","cwd":"/w","agent_session_id":"a","resume":true,"model":"opus","permission_mode":"bypassPermissions","effort":"high","env":[],"login":{"token":"made-up"}}"#,
+    );
     asked(
         WorkerRequest::AgentStart(spec),
         r#"{"method":"agent_start","session_id":"s","run":4,"agent":"claude","cwd":"/w","agent_session_id":"a","resume":true,"model":"opus","permission_mode":"bypassPermissions","effort":"high","env":[],"tools_token":"t"}"#,
@@ -189,15 +201,24 @@ fn every_request_about_an_agent_keeps_its_form() {
 fn every_request_of_an_agents_cli_outside_any_session_keeps_its_form() {
     let shot = Attachment { id: "a1".into(), name: "shot.png".into(), media_type: MediaType::Png, size_bytes: 4 };
     let images = vec![NewAttachment { attachment: shot, data: AttachmentBytes::new(b"\x89PNG".to_vec()) }];
-    let title =
-        WorkerRequest::TitleFor(worker::TitleFor { agent: AgentKind::Claude, prompt: "Fix this".into(), images });
+    let title = worker::TitleFor { agent: AgentKind::Claude, prompt: "Fix this".into(), images, login: None };
+    let under_a_login = worker::TitleFor { images: vec![], login: Some(login()), ..title.clone() };
+    asked(
+        WorkerRequest::TitleFor(under_a_login),
+        r#"{"method":"title_for","agent":"claude","prompt":"Fix this","login":{"token":"made-up"}}"#,
+    );
+    let title = WorkerRequest::TitleFor(title);
     asked(
         title,
         r#"{"method":"title_for","agent":"claude","prompt":"Fix this","images":[{"attachment":{"id":"a1","name":"shot.png","media_type":"image/png","size_bytes":4},"data":"iVBORw=="}]}"#,
     );
     asked(
-        WorkerRequest::AccountFor(worker::AccountFor { agent: AgentKind::Claude }),
+        WorkerRequest::AccountFor(worker::AccountFor { agent: AgentKind::Claude, login: None }),
         r#"{"method":"account_for","agent":"claude"}"#,
+    );
+    asked(
+        WorkerRequest::AccountFor(worker::AccountFor { agent: AgentKind::Claude, login: Some(login()) }),
+        r#"{"method":"account_for","agent":"claude","login":{"token":"made-up"}}"#,
     );
 }
 

@@ -6,12 +6,13 @@ use crate::attachment::{Attachment, AttachmentBytes};
 use crate::event::SessionEvent;
 use crate::find::Found;
 use crate::model::{
-    AgentDescription, CompactionLine, DiffComment, FileContents, FileOpened, FilePages, GitDiff, GitStatus,
+    Account, AgentDescription, CompactionLine, DiffComment, FileContents, FileOpened, FilePages, GitDiff, GitStatus,
     HubSettings, Place, PromptLine, PullRequest, Records, Repo, Rev, Seq, Session, SessionAccount, Subagent,
     TitleError, Workspace, WorkspaceDraft, WorktreeFiles,
 };
 use crate::tail::{StreamDelta, Tail};
 
+pub mod accounts;
 pub mod drafts;
 mod feed;
 pub mod files;
@@ -107,6 +108,7 @@ pub enum ClientResponse {
         data: AttachmentBytes,
     },
     SessionAccount(SessionAccount),
+    Account(Account),
     WorktreeFiles(WorktreeFiles),
     FileContents(FileContents),
     FileOpened(FileOpened),

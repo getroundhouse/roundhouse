@@ -150,6 +150,7 @@ impl LiveSession {
             settings,
             env,
             tools_token,
+            login: None,
         };
         let starting = AgentRun { link: link.id, run: asked };
         self.state.lock().agent = Some(starting);

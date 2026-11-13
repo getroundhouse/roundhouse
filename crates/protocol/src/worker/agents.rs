@@ -7,7 +7,7 @@ use super::{Reply, Request, ToolsToken, WorkerRequest, WorkerResponse};
 use crate::attachment::AttachmentFile;
 use crate::event::ApprovalDecision;
 use crate::model::{
-    AgentKind, AgentSessionId, ApprovalId, RunId, Seq, SessionId, SessionSettings, SessionSettingsChange,
+    AgentKind, AgentLogin, AgentSessionId, ApprovalId, RunId, Seq, SessionId, SessionSettings, SessionSettingsChange,
 };
 use crate::prompt::Prompt;
 
@@ -33,6 +33,11 @@ pub struct AgentSpec {
     /// each session, so every launch of its agent has the same. `None` when the worker isn't serving its tools.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tools_token: Option<ToolsToken>,
+    /// The login the hub holds for the account the agent runs under, which the agent's adapter gives its CLI, and the
+    /// worker keeps only as long as the agent. `None` runs it under this machine's own login. A worker from before
+    /// this ignores it, and runs the agent under its machine's own.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub login: Option<AgentLogin>,
 }
 
 impl Request for AgentSpec {
@@ -170,5 +175,49 @@ impl Reply for Delivery {
         }
         let WorkerResponse::AgentNotRunning = response else { return Err(response) };
         Ok(Self::AgentNotRunning)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::{Effort, LoginToken, ModelName, PermissionMode};
+
+    fn launch(login: Option<AgentLogin>) -> WorkerRequest {
+        AgentSpec {
+            session_id: "s".into(),
+            run: RunId::new(1),
+            agent: AgentKind::Claude,
+            cwd: "/w".into(),
+            agent_session_id: "a".into(),
+            resume: false,
+            settings: SessionSettings {
+                model: ModelName::named("opus"),
+                permission_mode: PermissionMode::FullAccess,
+                effort: Effort::High,
+            },
+            env: vec![],
+            tools_token: None,
+            login,
+        }
+        .into_request()
+    }
+
+    #[test]
+    fn a_launch_without_a_login_is_as_it_was_before_logins() {
+        let sent = serde_json::to_string(&launch(None)).unwrap();
+
+        assert!(!sent.contains("login"), "{sent}");
+        assert_eq!(serde_json::from_str::<WorkerRequest>(&sent).unwrap(), launch(None));
+    }
+
+    #[test]
+    fn a_launch_carries_its_login_and_hides_the_token_from_debug() {
+        let with_login = launch(Some(AgentLogin { token: LoginToken::new("a-made-up-token") }));
+        let sent = serde_json::to_string(&with_login).unwrap();
+
+        assert!(sent.contains(r#""login":{"token":"a-made-up-token"}"#), "{sent}");
+        assert_eq!(serde_json::from_str::<WorkerRequest>(&sent).unwrap(), with_login);
+        assert!(!format!("{with_login:?}").contains("made-up"));
     }
 }
