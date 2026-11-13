@@ -6,11 +6,12 @@ use std::time::Instant;
 
 use tokio::time::sleep_until;
 
-use protocol::client::{ApiError, ErrorCode};
+use protocol::client::{ApiError, ErrorCode, HubNotice};
 use protocol::event::{EventBody, ExitReason};
 use protocol::model::{RunId, SessionStatus};
 use protocol::prompt::Prompt;
 use protocol::worker::{GitStatus, WorkerRequest};
+use tokio::sync::broadcast::error::TryRecvError;
 
 use super::*;
 use crate::hub::setup::SetupGate;
@@ -116,6 +117,9 @@ async fn a_worker_of_another_build_is_replaced_once_two_looks_in_a_row_find_noth
     let halfway_after = |look: u32| start + LOOK_EVERY * look + LOOK_EVERY / 2;
     let current = |hub: &Hub| hub.workers.lock().get(&w()).is_some_and(|current| Arc::ptr_eq(current, &link));
 
+    // As carrying on with it records, before the looks start.
+    hub.store.set_workspace_worker_build(&w(), Some("0.9.0")).unwrap();
+    let mut feed = hub.subscribe_feed();
     hub.replace_once_idle(w(), link.clone());
     sleep_until(halfway_after(1)).await;
     assert!(current(&hub), "replaced after one look");
@@ -133,4 +137,14 @@ async fn a_worker_of_another_build_is_replaced_once_two_looks_in_a_row_find_noth
         assert!(Instant::now() < deadline, "not replaced after two looks in a row that found nothing at work");
         tokio::task::yield_now().await;
     }
+    // The next worker is the hub's own build, so its workspace says so, and every client hears it.
+    loop {
+        match feed.try_recv() {
+            Ok(HubNotice::Workspace(workspace)) if workspace.id == w() && workspace.worker_build.is_none() => break,
+            Ok(_) | Err(TryRecvError::Lagged(_)) => {}
+            Err(e) => assert!(Instant::now() < deadline, "no client heard the workspace move to the hub's build: {e}"),
+        }
+        tokio::task::yield_now().await;
+    }
+    assert_eq!(hub.store.get_workspace(&w()).unwrap().worker_build, None);
 }

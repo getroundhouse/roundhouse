@@ -72,6 +72,7 @@ pub fn workspace(id: &str) -> Workspace {
         comment_draft: None,
         branches: None,
         pull_request_branch: None,
+        worker_build: None,
     }
 }
 

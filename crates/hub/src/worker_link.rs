@@ -203,7 +203,12 @@ impl WorkerLink {
 
     /// The build its hello named, for the log.
     pub(crate) fn build(&self) -> &str {
-        self.build.get().and_then(Option::as_deref).unwrap_or("one from before workers said")
+        self.said_build().unwrap_or("one from before workers said")
+    }
+
+    /// The build its hello named. `None` before its hello, and from a worker from before workers said.
+    pub(crate) fn said_build(&self) -> Option<&str> {
+        self.build.get().and_then(Option::as_deref)
     }
 
     /// How many calls to the worker wait for its reply.

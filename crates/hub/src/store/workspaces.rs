@@ -65,7 +65,7 @@ pub enum Ended {
     PutBack,
 }
 
-pub(super) const WORKSPACE_COLUMNS: &str = "id, repo_id, name, branch, base_ref, path, status, provider, instance_id, created_at_ms, archived_at_ms, setup, port_base, title, title_source, pull_request, user_active_at_ms, comment_draft, branches, pull_request_branch";
+pub(super) const WORKSPACE_COLUMNS: &str = "id, repo_id, name, branch, base_ref, path, status, provider, instance_id, created_at_ms, archived_at_ms, setup, port_base, title, title_source, pull_request, user_active_at_ms, comment_draft, branches, pull_request_branch, worker_build";
 
 /// The workspace's record as `conn` reads it, such as the writer inside a change, so its revision is that change's.
 pub(super) fn workspace_on(conn: &Connection, id: &WorkspaceId) -> Result<Workspace, StoreError> {
@@ -103,7 +103,8 @@ pub(super) fn workspace_from_row(row: &Row) -> rusqlite::Result<Workspace> {
         // Read again by the next worker, so one that no longer reads is only missing until then.
         branches: row.get::<_, Option<String>>(18)?.and_then(|branches| serde_json::from_str(&branches).ok()),
         pull_request_branch: row.get::<_, Option<String>>(19)?.map(BranchName::from),
-        rev: rev_of(row, 20)?,
+        worker_build: row.get(20)?,
+        rev: rev_of(row, 21)?,
     })
 }
 
@@ -128,7 +129,7 @@ impl Store {
         let added = tx.execute(
             &format!(
                 "INSERT INTO workspaces ({WORKSPACE_COLUMNS}, client_request_id)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                      ON CONFLICT (repo_id, name) DO NOTHING"
             ),
             params![
@@ -152,6 +153,7 @@ impl Store {
                 workspace.comment_draft.as_ref().map(serde_json::to_string).transpose()?,
                 workspace.branches.as_ref().map(serde_json::to_string).transpose()?,
                 workspace.pull_request_branch.as_ref().map(BranchName::as_str),
+                workspace.worker_build,
                 client_request_id.map(ClientRequestId::as_str),
             ],
         )?;

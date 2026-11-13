@@ -14,6 +14,7 @@ use protocol::tail::{Compacting, StreamDelta, Tail};
 mod agents;
 mod approvals;
 mod calls;
+mod events;
 mod hellos;
 mod prompts;
 mod refusals;

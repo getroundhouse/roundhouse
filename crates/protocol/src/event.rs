@@ -85,6 +85,14 @@ pub enum EventBody {
     AgentStarted {
         pid: u32,
         resumed: bool,
+        /// Which build the agent runs on, which is its worker's, as the worker's hello said. `None` from a worker from
+        /// before workers said, and from a hub from before it recorded this.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        build: Option<String>,
+        /// The build the chat's agent last ran on, when that's another than `build`, as after an update or a rollback,
+        /// which is where a chat says it moved. `None` when it's the same build, or either isn't known.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        previous_build: Option<String>,
     },
     /// The agent reported its configuration. Claude does this at the start of every turn.
     AgentInit {

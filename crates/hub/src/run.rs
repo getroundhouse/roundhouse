@@ -44,10 +44,12 @@ struct LeftHalfDone {
 }
 
 /// Clears up what the last run left half done: setups that were running, which its workers can't report on to this hub,
-/// and workspaces half-made. Returns what's left for the hub to finish once it's serving. What it left at work, the hub
-/// carries on with as it starts.
+/// and workspaces half-made. It forgets which build each workspace's worker was, too, since only a worker this hub
+/// carries on with can be another build than its own. Returns what's left for the hub to finish once it's serving. What
+/// it left at work, the hub carries on with as it starts.
 fn recover(store: &Store) -> Result<LeftHalfDone, StoreError> {
     store.fail_interrupted_setups()?;
+    store.forget_worker_builds()?;
     let moves = store.moves_left()?;
     for workspace in store.take_unfinished_workspaces()? {
         warn!(workspace = workspace.name, "discarding a workspace left half-made by the last run");

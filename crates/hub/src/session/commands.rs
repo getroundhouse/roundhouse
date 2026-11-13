@@ -140,6 +140,9 @@ impl LiveSession {
         };
         let asked = hub.blocking(Store::next_run).await?;
         let tools_token = hub.tools_for(&self.workspace_id, &self.id, link).await;
+        // Before the launch, so the new agent's first events aren't recorded ahead of its start.
+        let build = link.said_build().map(str::to_string);
+        let previous_build = self.previous_build(hub, build.as_deref()).await;
         let spec = AgentSpec {
             session_id: self.id.clone(),
             run: asked,
@@ -174,10 +177,23 @@ impl LiveSession {
         if !already_running {
             // Whatever is still open was asked by a process that no longer exists.
             self.cancel_approvals(None).await;
-            let started = EventBody::AgentStarted { pid, resumed: resume };
+            let started = EventBody::AgentStarted { pid, resumed: resume, build, previous_build };
             self.record_or_log(Origin::Run { run, current, numbered: None }, started).await;
         }
         Ok(())
+    }
+
+    /// The build the chat's agent last ran on, when it's another than `build`, the one it starts on now. Builds are
+    /// compared by their version, as a hub compares a worker's with its own, so every build that isn't stamped is one.
+    async fn previous_build(&self, hub: &Hub, build: Option<&str>) -> Option<String> {
+        let (build, id) = (build?, self.id.clone());
+        match hub.blocking(move |store| store.last_agent_build(&id)).await {
+            Ok(last) => last.filter(|last| last != build),
+            Err(e) => {
+                warn!(session = %self.id, "couldn't read which build the agent last ran on: {}", e.message);
+                None
+            }
+        }
     }
 
     async fn forward(&self, seq: Seq, asking: Asking) -> Result<(), ApiError> {

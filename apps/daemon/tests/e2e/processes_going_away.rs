@@ -51,7 +51,9 @@ fn an_agent_gone_with_its_hub_is_interrupted_and_the_next_hub_resumes_the_conver
     let events = wait_for_turn_end(&client, &session.id, 1);
     assert_gapless(&events);
     let later = &events[before..];
-    assert!(later.iter().any(|e| matches!(e.body, EventBody::AgentStarted { resumed: true, .. })));
+    // Started again on the same build, so the chat says nothing of a build it moved from.
+    let again = |body: &EventBody| matches!(body, EventBody::AgentStarted { resumed: true, previous_build: None, .. });
+    assert!(later.iter().any(|e| again(&e.body)), "{later:#?}");
     assert!(assistant_text(later).contains("remember mango"), "{}", assistant_text(later));
 }
 
