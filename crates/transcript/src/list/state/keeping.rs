@@ -1,0 +1,347 @@
+use super::super::heights::Heights;
+use super::super::layout::{Anchor, Start};
+use gpui_kit::{Bounds, Pixels, px};
+use look::motion::Scrolling;
+use std::ops::Range;
+
+/// A place in a transcript: a row, and how far into it.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Place {
+    pub row: usize,
+    /// How far below the row's top.
+    pub offset: Pixels,
+}
+
+#[derive(Default)]
+pub(in super::super) struct State {
+    pub(in super::super) heights: Heights,
+    /// The place at the top of what's shown, as the last frame laid it out or as something has since sent it to.
+    pub(super) top: Place,
+    /// How far down the session the top has moved from that place since, by the wheel. The wheel moves it without
+    /// knowing how tall the rows it passes are, and the next frame finds which row it comes to with the heights it
+    /// measures as it lays them out.
+    pub(super) moved: Pixels,
+    /// The row the next frame keeps where it is in the window, as [`Anchor`] says. `None` once something has sent
+    /// the list to a place, until a frame lays it out there.
+    pub(super) anchor: Option<Anchor>,
+    /// What it keeps to between frames.
+    pub(super) keeping: Keeping,
+    /// Where the rows are drawn, as of the last frame.
+    pub(in super::super) viewport: Bounds<Pixels>,
+    /// The rows any of which showed in the last frame.
+    pub(in super::super) shown: Range<usize>,
+    /// The last row in the window in the last frame, as [`Layout`](super::super::layout::Layout) says.
+    pub(in super::super) last_in_sight: usize,
+    /// The runs of rows that are loaded, in order, which are the ones there's anything to measure of.
+    pub(super) loaded: Vec<Range<usize>>,
+    /// Which measuring each row's height is from, by [`State::measuring`], or 0 for one whose height has gone out of
+    /// date by itself. A row whose height isn't from this one keeps it as a guess, and is measured again when it's
+    /// drawn, or a few at a time between.
+    pub(super) measured_at: Vec<u32>,
+    /// Counts the times every row's height has gone out of date at once, from 1: each width the list is drawn at, and
+    /// each change that can alter any row.
+    pub(super) measuring: u32,
+    /// The count as of the last change that can alter any row. A height from this count or later is out of date only
+    /// by the list's width.
+    pub(super) altered_at: u32,
+    /// Whether the last frame was drawn at another width than the one before it.
+    pub(super) width_is_new: bool,
+    /// Every row's height as it was known or guessed when a drag of the scrollbar's thumb began. Until the drag ends,
+    /// the scrollbar goes by these alone, so a place on its track is the same row however long the pointer rests
+    /// there. The heights go on being put right meanwhile, as rows load under the thumb and are measured, and going
+    /// by those would move the page under a pointer that's holding still.
+    pub(super) dragging: Option<Heights>,
+    /// How many times a row has been drawn, for a test to see that few are.
+    #[cfg(feature = "testing")]
+    pub(in super::super) rows_drawn: u64,
+    /// Each height each row has been measured at, in turn, for a test to see a row never went blank.
+    #[cfg(feature = "testing")]
+    pub(in super::super) measures: std::collections::HashMap<usize, Vec<Pixels>>,
+}
+
+impl State {
+    /// A session with nothing in it yet, which keeps to its latest row.
+    pub(in super::super) fn new() -> Self {
+        Self { keeping: Keeping::Latest, measuring: 1, altered_at: 1, ..Self::default() }
+    }
+
+    /// Makes it `rows` rows, of which the runs in `loaded` are loaded, in order. Rows only come and go at the end.
+    ///
+    /// A page of history that loads, or one that's let go, puts every row's height out of date. What a row shows
+    /// can depend on another being loaded: an event of a call is drawn in its call's row while that's loaded, and
+    /// where it is once it isn't. Rows that come and go at the end alter none before them.
+    pub(in super::super) fn set_rows(&mut self, rows: usize, loaded: Vec<Range<usize>>) {
+        self.heights.set_rows(rows);
+        self.measured_at.resize(rows, 0);
+        self.anchor = self.anchor.filter(|anchor| anchor.row < rows);
+        let loaded = joined(loaded);
+        if !same_pages(&self.loaded, &loaded) {
+            self.all_out_of_date();
+        }
+        self.loaded = loaded;
+    }
+
+    pub(in super::super) fn tall(&self) -> Pixels {
+        self.viewport.size.height
+    }
+
+    /// How far the session can be scrolled.
+    pub(in super::super) fn furthest(&self) -> Pixels {
+        (self.heights.total() - self.tall()).max(px(0.))
+    }
+
+    /// The row at the top of what's shown, as of the last frame.
+    pub(in super::super) fn top(&self) -> Place {
+        self.top
+    }
+
+    /// Whether someone has scrolled away from the latest row.
+    pub(in super::super) fn is_scrolled_up(&self) -> bool {
+        self.furthest() > px(0.) && !self.is_following()
+    }
+
+    /// Whether it's keeping to the latest row.
+    pub(super) fn is_following(&self) -> bool {
+        matches!(self.keeping, Keeping::Latest)
+    }
+
+    /// Goes to the latest row, and keeps to it as more arrives.
+    pub(in super::super) fn go_to_latest(&mut self) {
+        self.keeping = Keeping::Latest;
+    }
+
+    /// How far down the session the top of what's shown is.
+    pub(in super::super) fn scrolled(&self) -> Pixels {
+        if self.is_following() {
+            return self.furthest();
+        }
+        self.down(&self.heights).clamp(px(0.), self.furthest())
+    }
+
+    /// How far down the session the top of what's shown is going by `heights`, wherever the session ends.
+    pub(super) fn down(&self, heights: &Heights) -> Pixels {
+        heights.above(self.top.row) + self.top.offset + self.moved
+    }
+
+    /// The wheel turned by `turned`, which is positive to bring earlier rows down into view. On its way down to the
+    /// latest row, it stops there and goes by the wheel.
+    pub(in super::super) fn scroll_by(&mut self, turned: Pixels) {
+        match self.keeping {
+            // There's nothing further down.
+            Keeping::Latest if turned <= px(0.) => return,
+            // From where keeping to the latest row had it.
+            Keeping::Latest => self.go_to(self.furthest()),
+            Keeping::Place | Keeping::ToLatest(_) | Keeping::AtBottom(_) => {}
+        }
+        self.keeping = Keeping::Place;
+        self.moved -= turned;
+    }
+
+    /// Goes to a place `down` the session, by what its rows are known and guessed to come to.
+    pub(super) fn go_to(&mut self, down: Pixels) {
+        let (row, offset) = self.heights.row_at(down.clamp(px(0.), self.furthest()));
+        self.send_to(Place { row, offset });
+    }
+
+    pub(in super::super) fn go_to_row(&mut self, row: usize) {
+        if row < self.heights.rows() {
+            self.send_to(Place { row, offset: px(0.) });
+            self.keeping = Keeping::Place;
+        }
+    }
+
+    /// Puts the end of `row` at the window's bottom, as [`Start::AtBottom`] says, and keeps it there until something
+    /// else moves the list. The rows above it that load or are measured meanwhile grow up, and leave it where it is.
+    pub(in super::super) fn go_to_row_at_bottom(&mut self, row: usize) {
+        if row < self.heights.rows() {
+            // The top where the heights known and guessed put it, until a frame lays the rows out, for whatever
+            // reads it or moves the list from it before then. A row taller than the window is at its top.
+            let (start, end) = (self.heights.above(row), self.heights.above(row + 1));
+            self.go_to((end - self.tall()).min(start));
+            self.keeping = Keeping::AtBottom(row);
+        }
+    }
+
+    /// The row at the window's bottom: the one it's keeping there, from as soon as something sends it there, even near
+    /// the start of the session, where it shows higher up, and otherwise the last row in the window in the last frame.
+    pub(in super::super) fn bottom_row(&self) -> usize {
+        self.kept_at_bottom().unwrap_or(self.last_in_sight)
+    }
+
+    /// The row it's keeping at the window's bottom, from as soon as something sends it there.
+    pub(in super::super) fn kept_at_bottom(&self) -> Option<usize> {
+        match self.keeping {
+            Keeping::AtBottom(row) => Some(row),
+            Keeping::Latest | Keeping::Place | Keeping::ToLatest(_) => None,
+        }
+    }
+
+    /// Puts `top` at the window's top, from which the next frame lays the rows out and chooses which to keep where
+    /// it is.
+    pub(super) fn send_to(&mut self, top: Place) {
+        (self.top, self.moved, self.anchor) = (top, px(0.), None);
+    }
+
+    /// Where to lay the rows out from. A top that's moved more than `walked` is found from what the rows are guessed
+    /// to come to instead, since finding it row by row would measure every row between.
+    pub(in super::super) fn lay_from(&self, walked: Pixels) -> Start {
+        match self.keeping {
+            Keeping::Latest => return Start::Latest,
+            Keeping::AtBottom(row) => return Start::AtBottom { row },
+            Keeping::Place | Keeping::ToLatest(_) => {}
+        }
+        if self.moved.abs() <= walked {
+            return match self.anchor {
+                Some(at) => Start::Anchored { at, moved: self.moved },
+                None => Start::Top { at: self.top, moved: self.moved },
+            };
+        }
+        let (row, offset) = self.heights.row_at(self.down(&self.heights).max(px(0.)));
+        Start::Top { at: Place { row, offset }, moved: px(0.) }
+    }
+
+    /// The rows were laid out with `top` at the top of the window, `anchor` to keep where it is in the next frame,
+    /// and with the latest row's end in sight or not. Whatever it was keeping to, a list laid out with that end in
+    /// sight keeps to it again, as someone does who has scrolled back down to it.
+    pub(in super::super) fn laid_out(&mut self, top: Place, anchor: Option<Anchor>, end_in_sight: bool) {
+        (self.top, self.moved, self.anchor) = (top, px(0.), anchor);
+        if end_in_sight {
+            self.go_to_latest();
+        }
+    }
+
+    /// The list is drawn in `viewport`, which puts every row's height out of date if it's another width than last
+    /// time.
+    pub(in super::super) fn drawn_at(&mut self, viewport: Bounds<Pixels>) {
+        self.width_is_new = self.viewport.size.width != viewport.size.width;
+        if self.width_is_new {
+            self.measuring += 1;
+        }
+        self.viewport = viewport;
+    }
+
+    /// Notes what a row was measured at, as the list is now.
+    pub(in super::super) fn measured(&mut self, row: usize, height: Pixels) {
+        #[cfg(feature = "testing")]
+        self.measures.entry(row).or_default().push(height);
+        self.heights.measure(row, height);
+        self.up_to_date(row);
+    }
+
+    /// There's nothing to measure of `row` until it changes, such as one that's gone since the list was told what's
+    /// loaded. It's marked to measure again when it's back.
+    pub(in super::super) fn up_to_date(&mut self, row: usize) {
+        if let Some(at) = self.measured_at.get_mut(row) {
+            *at = self.measuring;
+        }
+    }
+
+    /// These rows have changed, so each is to be measured again.
+    pub(in super::super) fn out_of_date(&mut self, rows: Range<usize>) {
+        let rows = rows.start.min(self.measured_at.len())..rows.end.min(self.measured_at.len());
+        self.measured_at[rows].fill(0);
+    }
+
+    /// Every row may have changed height.
+    pub(in super::super) fn all_out_of_date(&mut self) {
+        self.measuring += 1;
+        self.altered_at = self.measuring;
+    }
+
+    pub(super) fn is_loaded(&self, row: usize) -> bool {
+        let run = self.loaded.partition_point(|run| run.end <= row);
+        self.loaded.get(run).is_some_and(|run| run.contains(&row))
+    }
+
+    pub(super) fn is_out_of_date(&self, row: usize) -> bool {
+        self.measured_at.get(row).is_some_and(|at| *at != self.measuring)
+    }
+
+    /// How tall a loaded row is, if it's been measured as the list is now and hasn't changed since. Any other row
+    /// is drawn to find out, or to find it isn't there to draw.
+    ///
+    /// A row that showed nothing at another width shows nothing at this one, so that's known too. Most of a
+    /// session's rows show nothing, and a run of them in the window would otherwise be drawn on every frame of a
+    /// sidebar's slide.
+    pub(in super::super) fn kept(&self, row: usize) -> Option<Pixels> {
+        let measured_at = *self.measured_at.get(row)?;
+        if !self.is_loaded(row) {
+            return None;
+        }
+        let height = self.heights.measured(row)?;
+        let only_the_width_since = measured_at >= self.altered_at && height == px(0.);
+        (measured_at == self.measuring || only_the_width_since).then_some(height)
+    }
+
+    /// How many rows are loaded, as the list was last told.
+    #[cfg(feature = "testing")]
+    pub(in super::super) fn loaded_rows(&self) -> usize {
+        self.loaded.iter().map(ExactSizeIterator::len).sum()
+    }
+
+    /// The loaded rows whose heights are out of date, nearest the top of what's shown first, and at most `most` of
+    /// them. Measured a few to a frame, they put the guesses right without holding a frame up, so the scrollbar
+    /// settles on the session's real height a moment after a page loads or the width changes.
+    pub(in super::super) fn out_of_date_near_the_top(&self, most: usize) -> Vec<usize> {
+        let far = |row: &usize| row.abs_diff(self.top.row);
+        let mut rows: Vec<usize> =
+            self.loaded.iter().flat_map(Clone::clone).filter(|row| self.is_out_of_date(*row)).collect();
+        if rows.len() > most && most > 0 {
+            // Only the nearest are put in order, since a new width leaves every loaded row here.
+            rows.select_nth_unstable_by_key(most - 1, far);
+        }
+        rows.truncate(most);
+        rows.sort_by_key(far);
+        rows
+    }
+
+    /// The rows to measure out of sight in this frame, as [`State::out_of_date_near_the_top`] gives them, and
+    /// whether there are more for the frames after.
+    ///
+    /// None are measured in a frame drawn at another width than the last, only the frame after is asked for. A
+    /// sidebar sliding or a window being resized changes the width on every frame, and what was measured in one
+    /// would be out of date in the next.
+    pub(in super::super) fn to_measure_out_of_sight(&self, most: usize) -> (Vec<usize>, bool) {
+        let most = if self.width_is_new { 0 } else { most };
+        let mut rows = self.out_of_date_near_the_top(most + 1);
+        let more = rows.len() > most;
+        rows.truncate(most);
+        (rows, more)
+    }
+}
+
+/// What the list keeps to between frames.
+#[derive(Debug, Default)]
+pub(super) enum Keeping {
+    /// The latest row, which it does until someone scrolls away from it, and again once they're back.
+    #[default]
+    Latest,
+    /// The place at the top, wherever someone scrolled the list or sent it, or the row someone opened or closed
+    /// something in, where it is in the window, as [`State::keep_still`] says.
+    Place,
+    /// The latest row, which it's on its way down to by itself, as the button back to it sends it.
+    ToLatest(Scrolling),
+    /// The end of a row at the window's bottom, as the outline sends it to a prompt, until something else moves it.
+    AtBottom(usize),
+}
+
+/// The runs in order with each that starts where the one before it ends made one with it, such as the streaming
+/// tail's row after the rows recorded, so a row added at the end only lengthens the last run.
+fn joined(runs: Vec<Range<usize>>) -> Vec<Range<usize>> {
+    let mut joined: Vec<Range<usize>> = Vec::with_capacity(runs.len());
+    for run in runs {
+        match joined.last_mut() {
+            Some(last) if last.end == run.start => last.end = run.end,
+            Some(_) | None => joined.push(run),
+        }
+    }
+    joined
+}
+
+/// Whether two lists of joined runs of loaded rows hold the same pages of history, so they differ only in where the
+/// last run ends, which is where rows come and go as an agent works.
+fn same_pages(was: &[Range<usize>], now: &[Range<usize>]) -> bool {
+    let starts = |runs: &[Range<usize>]| runs.iter().map(|run| run.start).collect::<Vec<_>>();
+    let ends_before_the_last = |runs: &[Range<usize>]| runs.iter().rev().skip(1).map(|run| run.end).collect::<Vec<_>>();
+    starts(was) == starts(now) && ends_before_the_last(was) == ends_before_the_last(now)
+}

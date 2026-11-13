@@ -1,0 +1,150 @@
+use crate::saving::{Failure, Saver, write_json};
+use crate::sounds::Sound;
+use crate::workspace_order::Sort;
+use gpui_kit::{App, BorrowAppContext as _, Context, Global, PromptLevel, Subscription};
+use protocol::model::RepoId;
+use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value};
+use std::collections::BTreeSet;
+use std::path::{Path, PathBuf};
+
+/// Every setting that's the app's own, each with the value it has when nobody has chosen. A setting a hub carries
+/// out is the hub's, which keeps it.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub(crate) struct Settings {
+    /// Thinking shows in full, rather than as a line to open.
+    #[serde(default)]
+    pub(crate) always_expand_thinking: bool,
+    /// The order of the sidebar's workspaces, in each project, last active first unless another is chosen. Chosen
+    /// from the sidebar's heading rather than in Settings, and kept here so it lasts.
+    #[serde(default)]
+    pub(crate) sidebar_sort: Sort,
+    /// The projects the sidebar shows collapsed, with their workspaces put away. Chosen from each project's row, and
+    /// kept here so it lasts. Nothing takes out a project that's no longer listed, since the app can show several
+    /// hubs, and it may be another hub's.
+    #[serde(default)]
+    pub(crate) collapsed_projects: BTreeSet<RepoId>,
+    /// The order of the sidebar's projects, from the top, once one has been dragged. Until then, and for any project
+    /// this doesn't name, it's the hub's. Kept here so it lasts, as which are collapsed is.
+    #[serde(default)]
+    pub(crate) project_order: Vec<RepoId>,
+    /// A notification tells of each chat that comes to need the person, unless it's the one being read. On unless
+    /// turned off, since an agent finishing while you're elsewhere is what the app is for.
+    #[serde(default = "on")]
+    pub(crate) notify: bool,
+    /// `sound` plays as a chat comes to need the person, whether or not a notification tells of it.
+    #[serde(default = "on")]
+    pub(crate) play_sound: bool,
+    #[serde(default, deserialize_with = "Sound::or_chime")]
+    pub(crate) sound: Sound,
+    /// Settings this build doesn't know, which a newer one wrote, kept so that saving here doesn't lose them.
+    #[serde(flatten)]
+    pub(super) others: Map<String, Value>,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            always_expand_thinking: false,
+            sidebar_sort: Sort::default(),
+            collapsed_projects: BTreeSet::new(),
+            project_order: Vec::new(),
+            notify: on(),
+            play_sound: on(),
+            sound: Sound::default(),
+            others: Map::new(),
+        }
+    }
+}
+
+/// What a setting that's on unless turned off is when nobody has chosen.
+fn on() -> bool {
+    true
+}
+
+/// The file the settings are kept in.
+#[derive(Clone, Debug)]
+pub(super) struct SettingsFile {
+    pub(super) path: PathBuf,
+}
+
+impl SettingsFile {
+    pub(super) fn in_dir(dir: &Path) -> Self {
+        Self { path: dir.join("settings.json") }
+    }
+
+    /// What's saved, or every setting as nobody has chosen when nothing is, or what is can't be read.
+    pub(super) fn read(&self) -> Settings {
+        let Ok(text) = std::fs::read_to_string(&self.path) else { return Settings::default() };
+        serde_json::from_str(&text).unwrap_or_else(|e| {
+            eprintln!("couldn't read the settings in {}, so they start as nobody has chosen: {e}", self.path.display());
+            Settings::default()
+        })
+    }
+
+    pub(super) fn write(&self, settings: &Settings) -> Result<(), Failure> {
+        write_json(&self.path, settings)
+    }
+}
+
+/// The settings in force, and what saves them.
+struct Current {
+    pub(super) settings: Settings,
+    pub(super) saver: Saver<Settings>,
+}
+
+impl Global for Current {}
+
+/// Reads the settings saved in `data_dir`, once, before anything shows them, and has the app wait for them to be
+/// saved as it quits.
+pub(crate) fn load(data_dir: &Path, cx: &mut App) {
+    if cx.has_global::<Current>() {
+        return;
+    }
+    let file = SettingsFile::in_dir(data_dir);
+    let settings = file.read();
+    let (saver, failed) = Saver::start(move |settings| file.write(settings));
+    cx.set_global(Current { settings, saver });
+    cx.spawn(async move |cx| {
+        while let Ok(failure) = failed.recv_async().await {
+            let detail = format!("They're in force until the app quits. {failure}");
+            cx.update(|cx| crate::alert::show(PromptLevel::Warning, "Couldn't save settings".into(), detail, cx));
+        }
+    })
+    .detach();
+    // Quitting gives this a moment, so a change made just before is saved.
+    cx.on_app_quit(|cx| {
+        let all_saved = cx.try_global::<Current>().map(|current| current.saver.saved());
+        async move {
+            if let Some(all_saved) = all_saved {
+                let _ = all_saved.recv_async().await;
+            }
+        }
+    })
+    .detach();
+}
+
+/// The settings in force. Every setting is as nobody has chosen until they're loaded.
+pub(crate) fn get(cx: &App) -> Settings {
+    cx.try_global::<Current>().map_or_default(|current| current.settings.clone())
+}
+
+/// Changes the settings, and saves them in the background. Whatever shows them draws again.
+pub(crate) fn change(cx: &mut App, change: impl FnOnce(&mut Settings)) {
+    let Some(current) = cx.try_global::<Current>() else { return };
+    let mut settings = current.settings.clone();
+    change(&mut settings);
+    if settings == current.settings {
+        return;
+    }
+    current.saver.save(settings.clone());
+    cx.update_global::<Current, _>(|current, _| current.settings = settings);
+}
+
+/// Has a view hear whenever the settings change.
+pub(crate) fn observe<V: 'static>(
+    cx: &mut Context<V>,
+    changed: impl Fn(&mut V, &mut Context<V>) + 'static,
+) -> Subscription {
+    cx.observe_global::<Current>(changed)
+}

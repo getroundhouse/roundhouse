@@ -156,6 +156,7 @@ unwrap_used = "warn"
 expect_used = "warn"
 dbg_macro = "warn"
 self_named_module_files = "warn"
+definition_in_module_root = "warn"
 undocumented_unsafe_blocks = "warn"
 
 [workspace.lints.cargo]

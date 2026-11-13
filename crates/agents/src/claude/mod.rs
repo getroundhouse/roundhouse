@@ -3,8 +3,6 @@
 
 mod account;
 mod approvals;
-#[cfg(all(feature = "testing", unix))]
-pub mod conformance;
 mod context;
 mod description;
 mod effort;
@@ -22,14 +20,15 @@ pub use context::{ModelWindows, context_usage};
 pub use description::description;
 pub use effort::applied_effort;
 pub use normalize::{Normalized, Normalizer, Parsed};
-#[cfg(feature = "testing")]
-pub use process::spawn_tapped;
 pub use process::{SCRUBBED_ENV, build_args, spawn, spawn_at};
 pub use title::title_for;
 pub use usage::{lists_every_models_week, usage_limits};
 
-/// The name the adapter gives the server of the worker's tools in the CLI's config, which the CLI puts in the name of
-/// each of them, such as
-/// `mcp__roundhouse__get_pull_request`, and in the description of a task one of them answers with, such as
-/// `roundhouse/wait_for_pull_request`.
-const TOOLS_SERVER: &str = "roundhouse";
+mod server_name;
+use server_name::TOOLS_SERVER;
+
+#[cfg(all(feature = "testing", unix))]
+pub mod conformance;
+
+#[cfg(feature = "testing")]
+pub use process::spawn_tapped;

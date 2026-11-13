@@ -1,0 +1,327 @@
+use super::super::{Model, Transcript, TranscriptEvent};
+use super::{bar, count, stepping, stretch};
+use crate::find::FindLook;
+use crate::find::reveal::Reveal;
+use crate::rows::{NEAR, REACH, found_in_row, rows_drawing, rows_to_count};
+use bar::Bar;
+use client_core::session_log::{Position, Row, SessionLog};
+use client_core::{Client, Search, Searched};
+use count::{At, Counts};
+use gpui_kit::{Context, Task, Window};
+use protocol::find::Needle;
+use std::collections::BTreeSet;
+use std::ops::Range;
+use std::rc::Rc;
+use stepping::Revealing;
+
+/// Where finding has got to in one chat, while its bar is open.
+pub(crate) struct Finding {
+    pub(super) bar: Bar,
+    /// What's typed, once it's been looked for.
+    pub(super) query: Option<Query>,
+    /// Where the match being shown was drawn, which rows are drawn with.
+    pub(super) reveal: Reveal,
+    pub(super) revealing: Revealing,
+}
+
+/// Something typed, being looked for. Each is new, so nothing found for one typed before is kept.
+pub(super) struct Query {
+    pub(super) needle: Needle,
+    pub(super) search: Search,
+    pub(super) counts: Counts,
+    /// Where every event known to hold the needle is in the log: those the log holds that do, and those the hub
+    /// named.
+    pub(super) candidates: BTreeSet<Position>,
+    /// The match being shown.
+    pub(super) at: Option<At>,
+    /// A match whose row is loading, to show once it has.
+    pub(super) going_to: Option<At>,
+    /// Whether the first match is still to be shown, once it's known which it is.
+    pub(super) first: bool,
+    /// Counting the last stretch the search read, on another thread, since it can be a thousand events.
+    pub(super) counting: Option<Task<()>>,
+}
+
+impl Query {
+    pub(super) fn new(needle: Needle, client: &Client, session: &client_core::OpenSession) -> Self {
+        Self {
+            search: session.search(client, needle.clone(), NEAR),
+            needle,
+            counts: Counts::default(),
+            candidates: BTreeSet::new(),
+            at: None,
+            going_to: None,
+            first: true,
+            counting: None,
+        }
+    }
+
+    /// Whether every match is counted, with the whole chat in the log if the hub wasn't asked or couldn't say.
+    pub(super) fn complete(&self, everything_held: bool) -> bool {
+        match self.searched() {
+            Searched::Done => true,
+            Searched::Underway => false,
+            Searched::TooShort | Searched::CantFind | Searched::Failed => everything_held,
+        }
+    }
+
+    /// How far the search has got, with what it's read counted.
+    pub(super) fn searched(&self) -> Searched {
+        if self.counting.is_some() { Searched::Underway } else { self.search.searched() }
+    }
+
+    /// What the bar says of the matches.
+    pub(super) fn says(&self, everything_held: bool) -> String {
+        let more = match self.searched() {
+            _ if self.complete(everything_held) => More::No,
+            Searched::Underway => More::Counting,
+            Searched::Done | Searched::TooShort | Searched::CantFind | Searched::Failed => More::Unlooked,
+        };
+        says(self.at.and_then(|at| self.counts.place(at)), self.counts.total(), more)
+    }
+}
+
+/// Whether there may be more matches than are counted.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum More {
+    No,
+    /// They're still being counted.
+    Counting,
+    /// Only what the log holds was looked through.
+    Unlooked,
+}
+
+/// What the bar says of `total` matches, with the one shown at `place`, counting from 0: `…` while there may be more
+/// counted, and `+` when there may be more that weren't looked for.
+pub(super) fn says(place: Option<usize>, total: usize, more: More) -> String {
+    let mark = match more {
+        More::No => "",
+        More::Counting => "…",
+        More::Unlooked => "+",
+    };
+    match (place, more) {
+        (Some(place), _) => format!("{} of {total}{mark}", place + 1),
+        (None, _) if total > 0 => format!("{total} found{mark}"),
+        (None, More::No) => "No matches".to_string(),
+        (None, More::Counting) => "Finding…".to_string(),
+        (None, More::Unlooked) => "No matches loaded".to_string(),
+    }
+}
+
+impl Transcript {
+    /// Opens the bar, or brings focus back to it with what's in it selected.
+    pub fn open_find(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.finding.is_none() {
+            let bar = Bar::new(window, cx);
+            self.finding =
+                Some(Finding { bar, query: None, reveal: Reveal::default(), revealing: Revealing::default() });
+        }
+        if let Some(finding) = &self.finding {
+            finding.bar.focus(window, cx);
+        }
+        cx.notify();
+    }
+
+    /// Whether the bar is open.
+    pub fn is_finding(&self) -> bool {
+        self.finding.is_some()
+    }
+
+    /// What the bar says of the matches, while it's open.
+    pub fn find_says(&self) -> Option<String> {
+        let finding = self.finding.as_ref()?;
+        let everything_held = self.session.read(SessionLog::holds_every_event);
+        Some(finding.query.as_ref().map_or_default(|query| query.says(everything_held)))
+    }
+
+    /// The row the match being shown is in.
+    pub fn found_row(&self) -> Option<usize> {
+        self.query().and_then(|query| query.at).map(|at| at.row)
+    }
+
+    /// Closes the bar, and the matches go. A call opened to show one stays open.
+    pub fn close_find(&mut self, cx: &mut Context<Self>) {
+        if self.finding.take().is_none() {
+            return;
+        }
+        self.model.borrow_mut().find = Rc::default();
+        cx.emit(TranscriptEvent::FindClosed);
+        cx.notify();
+    }
+
+    /// Looks for what's typed in the bar now, from the start.
+    pub(crate) fn find_again(&mut self, cx: &mut Context<Self>) {
+        let Some(finding) = &mut self.finding else { return };
+        let needle = Needle::new(&finding.bar.query(cx)).ok();
+        finding.reveal.done();
+        finding.query = needle.clone().map(|needle| Query::new(needle, &self.client, &self.session));
+        self.model.borrow_mut().find =
+            Rc::new(FindLook::new(needle.clone(), None, finding.reveal.clone(), look::colors(cx)));
+        if let Some(needle) = needle {
+            let (found, rows) = {
+                let m = self.model.borrow();
+                self.session.read(|log| held_to_count(log, &m, &needle))
+            };
+            if let Some(query) = self.query_mut() {
+                query.candidates.extend(found);
+            }
+            self.count_rows(rows, cx);
+        }
+        self.after_counting(cx);
+    }
+
+    /// Carries on on a new connection, asking again of a search that failed, or of a hub that couldn't find, since it
+    /// may be a newer one.
+    pub(crate) fn find_on_new_connection(&mut self) {
+        let (client, session) = (&self.client, &self.session);
+        let Some(query) = self.finding.as_mut().and_then(|finding| finding.query.as_mut()) else { return };
+        if matches!(query.search.searched(), Searched::Failed | Searched::CantFind) {
+            query.search = session.search(client, query.needle.clone(), NEAR);
+        }
+    }
+
+    /// Counts again what each of `rows` the log holds draws, as it draws it. A row the log doesn't hold keeps what it
+    /// was counted as.
+    pub(super) fn count_rows(&mut self, rows: BTreeSet<usize>, cx: &mut Context<Self>) {
+        let Some(needle) = self.query().map(|query| query.needle.clone()) else { return };
+        let counted = {
+            let m = self.model.borrow();
+            self.session.read(|log| count_held(log, &m, &needle, rows))
+        };
+        if let Some(query) = self.query_mut() {
+            for (row, count) in counted {
+                query.counts.set(row, count);
+            }
+        }
+        cx.notify();
+    }
+
+    /// Follows what changed in the log's `changed` rows. Each event there that holds the needle, and each row there
+    /// with matches, is counted again from what's held now, and so is each row there that draws an event after them,
+    /// such as a call whose result has just come, or a subagent's work.
+    pub(crate) fn find_in_changes(&mut self, changed: Range<usize>, cx: &mut Context<Self>) {
+        let Some(query) = self.query() else { return };
+        let (found, rows) = {
+            let m = self.model.borrow();
+            self.session.read(|log| {
+                changed_to_count(log, &m, (&query.needle, &query.candidates, &query.counts), changed.clone())
+            })
+        };
+        if let Some(query) = self.query_mut() {
+            query.candidates.extend(found);
+        }
+        self.count_rows(rows, cx);
+        self.after_counting(cx);
+    }
+
+    /// Counts the next stretch the search has read, unless it's counting one, and says if the search failed.
+    pub(crate) fn find_news(&mut self, cx: &mut Context<Self>) {
+        let model = self.model.clone();
+        let settled = self.session.read(SessionLog::settled_prompts);
+        let Some(query) = self.query_mut() else { return };
+        if query.counting.is_none()
+            && let Some(stretch) = query.search.take()
+        {
+            // The subagents' records, which draw what their calls show.
+            let records = model.borrow().subagents.clone();
+            let known = stretch::Known { records, settled };
+            query.counting = Some(Self::count_stretch(stretch, query.needle.clone(), known, cx));
+        }
+        if let Some(e) = query.search.take_error() {
+            cx.emit(TranscriptEvent::Error(format!("couldn't find in the whole chat: {e}")));
+        }
+        self.after_counting(cx);
+    }
+
+    /// Once counts have changed: shows the first match if it's due and known, keeps the one shown as near as it can
+    /// be, and draws again. The first is the first at or below the top of the chat, once nothing between the top and
+    /// it can hold another: once every row there is held, or the search can't say more.
+    pub(super) fn after_counting(&mut self, cx: &mut Context<Self>) {
+        let top = self.list.top().row;
+        let everything_held = self.session.read(SessionLog::holds_every_event);
+        let session = self.session.clone();
+        let Some(query) = self.query_mut() else { return };
+        if query.first {
+            let settled = query.complete(everything_held) || query.searched() != Searched::Underway;
+            let first = session.read(|log| first_match(&query.counts, top, settled, log));
+            if let Some(first) = first {
+                query.first = false;
+                self.select(first, cx);
+            }
+        } else if let Some(at) = query.at {
+            query.at = query.counts.kept(at);
+        }
+        cx.notify();
+    }
+
+    pub(super) fn query(&self) -> Option<&Query> {
+        self.finding.as_ref().and_then(|finding| finding.query.as_ref())
+    }
+
+    pub(super) fn query_mut(&mut self) -> Option<&mut Query> {
+        self.finding.as_mut().and_then(|finding| finding.query.as_mut())
+    }
+}
+
+/// Where the events the log holds that hold the needle are, and the rows that draw them, to count when something's
+/// typed.
+pub(super) fn held_to_count(log: &SessionLog, m: &Model, needle: &Needle) -> (Vec<Position>, BTreeSet<usize>) {
+    let holding = log.loaded().filter(|event| needle.is_in_event(&event.body));
+    let found: Vec<Position> = holding.map(|event| log.position(event)).collect();
+    let rows = found.iter().flat_map(|position| rows_to_count(log, m, *position)).collect();
+    (found, rows)
+}
+
+/// What to count again once the log's `changed` rows have changed: the events there that hold the needle, and the rows
+/// to count. Those are the rows there with matches, the rows that draw the events there that hold it, and the rows of
+/// any events after them that hold it and are drawn in a row there, such as a subagent's work in the call that started
+/// it.
+pub(super) fn changed_to_count(
+    log: &SessionLog,
+    m: &Model,
+    (needle, candidates, counts): (&Needle, &BTreeSet<Position>, &Counts),
+    changed: Range<usize>,
+) -> (Vec<Position>, BTreeSet<usize>) {
+    let mut rows: BTreeSet<usize> = counts.rows_in(changed.clone()).collect();
+    let mut found = Vec::new();
+    for ix in changed.start..changed.end.min(log.row_count()) {
+        let Row::Event(event) = log.row(ix) else { continue };
+        let position = log.position(event);
+        if candidates.contains(&position) || needle.is_in_event(&event.body) {
+            found.push(position);
+            rows.extend(rows_to_count(log, m, position));
+        }
+    }
+    let after = Position::of_rows(changed.end..changed.end + REACH);
+    for &position in candidates.range(after) {
+        let drawn_here = || rows_drawing(log, m, position).iter().any(|row| changed.contains(row));
+        if position.row().is_some_and(|row| is_loaded(log, row)) && drawn_here() {
+            rows.extend(rows_to_count(log, m, position));
+        }
+    }
+    (found, rows)
+}
+
+/// What each of `rows` the log holds counts to, as it's drawn. A row the log doesn't hold isn't counted here, and keeps
+/// what it was counted as.
+pub(super) fn count_held(log: &SessionLog, m: &Model, needle: &Needle, rows: BTreeSet<usize>) -> Vec<(usize, usize)> {
+    rows.into_iter()
+        .filter(|row| is_loaded(log, *row))
+        .map(|row| (row, found_in_row(log, m, needle, row).iter().map(|found| found.matches).sum()))
+        .collect()
+}
+
+/// The first match to show: the first at or below `top`, once nothing between `top` and it can hold another, because
+/// every row there is held or the count is `settled`, and with none below once it's settled, the first of all.
+pub(super) fn first_match(counts: &Counts, top: usize, settled: bool, log: &SessionLog) -> Option<At> {
+    match counts.rows().find(|row| *row >= top) {
+        Some(row) if settled || log.holds(top..row) => Some(At { row, nth: 0 }),
+        None if settled => counts.first_from(top),
+        Some(_) | None => None,
+    }
+}
+
+/// Whether the row at `ix` is an event the log holds.
+pub(super) fn is_loaded(log: &SessionLog, ix: usize) -> bool {
+    matches!(log.row(ix), Row::Event(_))
+}

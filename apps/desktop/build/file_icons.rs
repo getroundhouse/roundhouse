@@ -3,13 +3,12 @@
 //! and extensions Catppuccin's manifest gives an icon, lowercased and sorted, so the app finds each by a binary search
 //! and never reads the manifest itself.
 
+use serde_json::Value;
 use std::collections::BTreeMap;
 use std::error::Error;
 use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
-
-use serde_json::Value;
 
 /// How big an icon is drawn, in points. Each is embedded with this size set on it, since GPUI draws an SVG picture at
 /// the size it says it is, and a few of Catppuccin's are a point or two taller.
@@ -73,7 +72,7 @@ pub(crate) fn write(dir: &Path, out_dir: &Path) -> Result<(), Box<dyn Error>> {
         icons.push((name.to_string(), copy));
     }
     icons.sort();
-    writeln!(out, "static ICONS: &[(&str, &[u8])] = &[")?;
+    writeln!(out, "pub(super) static ICONS: &[(&str, &[u8])] = &[")?;
     for (name, path) in icons {
         let path = path.to_str().ok_or("the build's folder isn't UTF-8")?;
         writeln!(out, "    ({name:?}, include_bytes!({path:?})),")?;
@@ -89,7 +88,7 @@ pub(crate) fn write(dir: &Path, out_dir: &Path) -> Result<(), Box<dyn Error>> {
     write_table(&mut out, "FILE_EXTENSIONS", &manifest["fileExtensions"])?;
     for (constant, key) in [("FILE", "file"), ("FOLDER", "folder"), ("OPEN_FOLDER", "folderExpanded")] {
         let icon = manifest[key].as_str().ok_or_else(|| format!("the manifest has no {key}"))?;
-        writeln!(out, "const {constant}: &str = {icon:?};")?;
+        writeln!(out, "pub(super) const {constant}: &str = {icon:?};")?;
     }
 
     fs::write(out_dir.join("file_icons.rs"), out)?;
@@ -184,7 +183,7 @@ fn write_table(out: &mut String, table: &str, entries: &Value) -> Result<(), Box
             return Err(format!("{table} gives {name} both {other} and {icon}, whatever its case").into());
         }
     }
-    writeln!(out, "static {table}: &[(&str, &str)] = &[")?;
+    writeln!(out, "pub(super) static {table}: &[(&str, &str)] = &[")?;
     for (name, icon) in lowered {
         writeln!(out, "    ({name:?}, {icon:?}),")?;
     }

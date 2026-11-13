@@ -4,12 +4,8 @@
 #[cfg(target_os = "macos")]
 mod mac;
 
-/// Has GPUI's view answer what has focus with what AccessKit says, for every window.
+mod installing;
 #[cfg(target_os = "macos")]
-pub(crate) fn install() {
-    mac::install();
-}
-
-/// Nothing elsewhere, since what's left out is in GPUI's view on a Mac.
+pub(crate) use installing::install;
 #[cfg(not(target_os = "macos"))]
-pub(crate) fn install() {}
+pub(crate) use installing::install;
