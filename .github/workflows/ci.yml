@@ -136,9 +136,10 @@ jobs:
             target/
           key: ${{ steps.cache.outputs.cache-primary-key }}
 
-  # 16 cores, since PRs and the queue wait for the tests, and nextest runs one per core. A cold run took over 20 minutes
-  # on 2. On RunsOn in our AWS account, since GitHub bills its 16-core runners even on a public repository. A Spot
-  # instance AWS reclaims during a queue run drops the PR from the queue, before RunsOn reruns the job.
+  # 16 cores, since PRs and the queue wait for the tests, and nextest runs two per core, as .config/nextest.toml says.
+  # A cold run took over 20 minutes on 2. On RunsOn in our AWS account, since GitHub bills its 16-core runners even on a
+  # public repository. A Spot instance AWS reclaims during a queue run drops the PR from the queue, before RunsOn reruns
+  # the job.
   test:
     needs: changes
     if: needs.changes.outputs.run == 'true'
