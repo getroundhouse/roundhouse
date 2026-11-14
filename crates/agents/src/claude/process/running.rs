@@ -34,7 +34,6 @@ const STOP_GRACE: Duration = Duration::from_secs(3);
 /// How long to wait for buffered output after the process has exited. A tool that outlives the CLI
 /// can hold the pipe open forever.
 const DRAIN_GRACE: Duration = Duration::from_secs(5);
-pub(super) const STDERR_TAIL_LINES: usize = 20;
 
 /// [`DRAIN_GRACE`], unless a test has set `ENV_DRAIN_GRACE_MS`, which only a `testing` build reads.
 pub(super) fn drain_grace() -> Duration {

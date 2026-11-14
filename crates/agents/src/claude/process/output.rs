@@ -1,35 +1,23 @@
 //! Reading what the CLI writes.
 
-use std::collections::VecDeque;
+use crate::stdio::next_line;
+pub(super) use crate::stdio::read_stderr;
+
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
 use protocol::event::{Asking, EventBody};
 use protocol::model::CacheRequest;
 use serde_json::json;
-use tokio::io::{AsyncBufRead, AsyncBufReadExt, BufReader};
-use tokio::process::{ChildStderr, ChildStdout};
+use tokio::io::BufReader;
+use tokio::process::ChildStdout;
 use tokio::sync::mpsc;
 use tracing::warn;
 
-use super::{STDERR_TAIL_LINES, Shared, context, plan, usage, write_line};
+use super::{Shared, context, plan, usage, write_line};
 use crate::AgentOutput;
 use crate::claude::approvals::Waiting;
 use crate::claude::normalize::{Normalized, Normalizer, Parsed, PromptProgress};
-
-/// Reads bytes rather than text: one line of invalid UTF-8 mustn't end the whole stream, which would
-/// leave the agent blocked and the session stuck.
-async fn next_line<R: AsyncBufRead + Unpin>(reader: &mut R, buffer: &mut Vec<u8>) -> Option<String> {
-    buffer.clear();
-    match reader.read_until(b'\n', buffer).await {
-        Ok(0) => None,
-        Ok(_) => Some(String::from_utf8_lossy(buffer).trim_end_matches(['\n', '\r']).to_string()),
-        Err(e) => {
-            warn!("reading agent output failed: {e}");
-            None
-        }
-    }
-}
 
 pub(super) async fn read_stdout(stdout: ChildStdout, shared: Arc<Shared>, output: mpsc::Sender<AgentOutput>) {
     let mut reader = BufReader::new(stdout);
@@ -232,19 +220,6 @@ fn track_approval(shared: &Shared, body: &EventBody) {
         | EventBody::CacheExpired { .. }
         | EventBody::Unknown => {}
     }
-}
-
-pub(super) async fn read_stderr(stderr: ChildStderr) -> Vec<String> {
-    let mut reader = BufReader::new(stderr);
-    let mut buffer = Vec::new();
-    let mut tail = VecDeque::with_capacity(STDERR_TAIL_LINES);
-    while let Some(line) = next_line(&mut reader, &mut buffer).await {
-        if tail.len() == STDERR_TAIL_LINES {
-            tail.pop_front();
-        }
-        tail.push_back(line);
-    }
-    tail.into()
 }
 
 #[cfg(test)]

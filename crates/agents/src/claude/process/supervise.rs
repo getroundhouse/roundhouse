@@ -16,6 +16,7 @@ use super::launch::launch;
 use super::output::{read_stderr, read_stdout};
 use super::run_files::RunFiles;
 use super::{Shared, drain_grace, plan, write_to};
+use crate::stdio::signal_of;
 use crate::{AgentOptions, AgentOutput};
 
 #[expect(clippy::too_many_arguments, reason = "its one caller hands over the parts of the process it just started")]
@@ -127,18 +128,6 @@ async fn finish(
     shared.usage.lock().close();
     let _ = output.send(AgentOutput::Exited { code, signal, stderr_tail, requested }).await;
     shared.exited.send_replace(true);
-}
-
-/// The signal that ended a process.
-#[cfg(unix)]
-fn signal_of(status: ExitStatus) -> Option<i32> {
-    std::os::unix::process::ExitStatusExt::signal(&status)
-}
-
-/// None on Windows, which has no signals, so a process there ends with a code.
-#[cfg(windows)]
-fn signal_of(_status: ExitStatus) -> Option<i32> {
-    None
 }
 
 #[derive(Debug, PartialEq)]
