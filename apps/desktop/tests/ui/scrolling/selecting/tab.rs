@@ -4,6 +4,7 @@
 use desktop::workspace_pane::Showing;
 use gpui_kit::{TestAppContext, point, px};
 
+use super::super::A_FRAME;
 use super::calls::{ASKED, REPORT, SUBAGENT_LINE, held_past, long};
 use super::{bounds, click, copy};
 use crate::subagents::{a_subagent_for, showing};
@@ -45,8 +46,9 @@ fn in_its_tab(ui: &mut Ui<'_>, what: &str) {
     let open = a_subagent_for(ui, what);
     ui.click(open);
     ui.wait("the subagent tab", |ui| showing(ui) == Showing::Subagent);
-    // What it was asked is the first row's and its report the last's, so a frame can draw one before the other.
-    ui.wait("what it was asked, and its report", |ui| {
-        !ui.shown("prompt/call/").is_empty() && !ui.shown("report/call/").is_empty()
-    });
+    // A long text has its element ID while its empty placeholder waits for parsing. Wait for both texts to have
+    // height, then finish the frames that measure their rows before a drag uses those bounds.
+    let drawn = |ui: &mut Ui<'_>, part| ui.shown(part).into_iter().any(|id| bounds(ui, id).size.height > px(0.));
+    ui.wait("what it was asked, and its report", |ui| drawn(ui, "prompt/call/") && drawn(ui, "report/call/"));
+    ui.settle(A_FRAME);
 }
