@@ -1,3 +1,4 @@
+use super::controls::Askable;
 use super::{commands, ingest, limits, messages, progress};
 use crate::attachment_files::FileFor;
 use crate::error::internal;
@@ -9,14 +10,14 @@ use ingest::run_ingest;
 use messages::{Command, Item};
 use parking_lot::Mutex;
 use progress::Progress;
-use protocol::client::ApiError;
+use protocol::client::{ApiError, ErrorCode};
 use protocol::event::EventBody;
 use protocol::model::{
     AgentKind, AgentSessionId, ApprovalId, ContextUsage, PromptCache, RunId, Seq, Session, SessionId, SessionSettings,
     SessionSettingsChange, SessionStatus, ToolUseId, WorkspaceId,
 };
 use protocol::tail::{StreamDelta, Tail};
-use protocol::worker::{AgentConfigure, Delivery};
+use protocol::worker::Delivery;
 use std::sync::{Arc, Weak};
 use tokio::sync::{broadcast, mpsc};
 use tracing::warn;
@@ -286,16 +287,17 @@ impl LiveSession {
         hub.offered(self.agent, &settings.into())?;
         let mut agent_took_it = false;
         if let Some(link) = hub.existing_worker(&self.workspace_id) {
-            let request = AgentConfigure { session_id: self.id.clone(), options: options.clone() };
-            agent_took_it = if let Some(claims) = self.run_claims() {
-                let settings = options.for_capabilities(&claims).map_err(|e| {
-                    protocol::client::ApiError::new(protocol::client::ErrorCode::Unsupported, e.to_string())
-                })?;
-                self.control_agent(&link, protocol::capability::Control::Change(settings), request).await?
-                    == Delivery::Delivered
-            } else {
-                link.call(request).await? == Delivery::Delivered
+            let delivery = match self.askable(&link)? {
+                Askable::Claimed(claims) => {
+                    let settings = options
+                        .for_capabilities(&claims)
+                        .map_err(|e| ApiError::new(ErrorCode::Unsupported, e.to_string()))?;
+                    self.control_claimed(&link, protocol::capability::Control::Change(settings), &claims).await?
+                }
+                Askable::Unclaimed => self.configure_previous(&link, options.clone()).await?,
+                Askable::NotRunning => Delivery::AgentNotRunning,
             };
+            agent_took_it = delivery == Delivery::Delivered;
         }
         let was = self.state.lock().settings.clone();
         self.keep_options(&hub, options.clone()).await?;

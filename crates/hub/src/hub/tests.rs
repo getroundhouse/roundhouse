@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use parking_lot::Mutex;
 use protocol::Build;
+use protocol::capability::Capabilities;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{
     AgentDescription, AgentFeature, AgentKind, Checks, Effort, Local, LoginDescription, MergeState, ModelChoice,
@@ -23,9 +24,10 @@ use crate::worker_link::WorkerLink;
 
 /// Claude as a hub's tests describe it, which a chat nobody has chosen for runs on Sonnet at High, so a test can tell
 /// what the description gave a chat from what anything else would have, and whose token lasts [`A_TOKEN_LASTS_MS`].
+/// Its claims say what its lists do: full access and plan mode, an effort, and compacting when asked.
 pub(super) fn described() -> AgentDescription {
     AgentDescription {
-        capabilities: None,
+        capabilities: Some(claimed()),
         kind: AgentKind::Claude,
         name: "Claude".to_string(),
         usage_heading: "Claude usage".to_string(),
@@ -42,6 +44,21 @@ pub(super) fn described() -> AgentDescription {
             made_with: "claude make-a-token".to_string(),
             lasts_ms: Some(A_TOKEN_LASTS_MS),
         }),
+    }
+}
+
+/// What Claude claims as a hub's tests describe it, as [`described`] says.
+pub(crate) fn claimed() -> Capabilities {
+    use protocol::capability::approvals::{self, ApprovalMode, Beyond, Modes, Unasked};
+    use protocol::capability::{Claimed, context, settings};
+    let mode = |plan| ApprovalMode { unasked: Unasked::Everything, beyond: Beyond::Asks, sandbox: None, plan };
+    let modes = Modes { default: mode(false), others: vec![mode(true)] };
+    let compaction = context::Compaction { keeping: context::Keeping::Read };
+    Capabilities {
+        approvals: approvals::Claims { modes: Some(modes), ..approvals::Claims::default() },
+        settings: settings::Claims { effort: Some(Claimed {}), ..settings::Claims::default() },
+        context: context::Claims { compaction: Some(compaction), ..context::Claims::default() },
+        ..Capabilities::default()
     }
 }
 
@@ -73,6 +90,11 @@ pub(crate) fn stand_in_worker(hub: &Hub) -> Arc<WorkerLink> {
     let link = WorkerLink::answering(|_| Some(Err(ApiError::new(ErrorCode::Worker, "a stand-in does nothing"))));
     hub.workers.lock().insert("w".into(), link.clone());
     link
+}
+
+/// Has `link` be `w`'s worker.
+pub(crate) fn serving(hub: &Hub, link: &Arc<WorkerLink>) {
+    hub.workers.lock().insert("w".into(), link.clone());
 }
 
 /// A stand-in for `w`'s worker that takes everything it's asked, and what it was asked, in order, as JSON.
@@ -113,7 +135,7 @@ pub(crate) fn writing(run: RunId, text: &str) -> Tail {
 }
 
 /// The same, with `w`'s worktree at `/w`, so its pull request can be read through a stand-in for its worker.
-pub(super) fn hub_with_worktree(dir: &Path) -> Arc<Hub> {
+pub(crate) fn hub_with_worktree(dir: &Path) -> Arc<Hub> {
     let hub = hub_in(dir);
     hub.store.workspace_ready(&"w".into(), "/w", &"alder".into(), "main", None).unwrap();
     hub

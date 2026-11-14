@@ -243,7 +243,8 @@ fn system(value: &Value) -> Parsed {
     let subtype = str_of(value, "subtype").unwrap_or("unknown");
     match subtype {
         "init" => Parsed::Event(EventBody::AgentInit {
-            capabilities: Some(Box::new(super::super::claims::claims())),
+            // The worker says what the run claims as it starts it.
+            capabilities: None,
             agent_session_id: id_of(value, "session_id"),
             model: string_of(value, "model"),
             cwd: string_of(value, "cwd"),

@@ -6,7 +6,7 @@ use protocol::model::{
     AgentDescription, AgentKind, Effort, ModelName, PermissionMode, SessionSettings, SessionSettingsChange, WorkspaceId,
 };
 
-use crate::hub::tests::{described, hub_describing, hub_in};
+use crate::hub::tests::{claimed, described, hub_describing, hub_in};
 
 const W: &str = "w";
 
@@ -80,7 +80,10 @@ async fn an_effort_or_a_mode_the_agent_isnt_offered_is_refused_for_a_new_chat_an
 #[tokio::test]
 async fn only_an_agent_that_compacts_when_asked_is_asked_to() {
     let dir = tempfile::tempdir().unwrap();
-    let doesnt = hub_describing(dir.path(), vec![AgentDescription { features: Vec::new(), ..described() }]);
+    let mut claims = claimed();
+    claims.context.compaction = None;
+    let doesnt = AgentDescription { features: Vec::new(), capabilities: Some(claims), ..described() };
+    let doesnt = hub_describing(dir.path(), vec![doesnt]);
     ready(&doesnt);
 
     let refused = doesnt.session_compact("s".into(), None).await;

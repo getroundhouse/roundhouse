@@ -7,7 +7,9 @@ use protocol::event::{EventBody, FailureKind, RequestFailure};
 #[test]
 fn an_agent_s_start_from_before_builds_were_recorded_says_nothing_of_them() {
     let before: EventBody = serde_json::from_str(r#"{"type":"agent_started","pid":7,"resumed":true}"#).unwrap();
-    let EventBody::AgentStarted { pid: 7, resumed: true, build: None, previous_build: None } = before else {
+    let EventBody::AgentStarted { pid: 7, resumed: true, build: None, previous_build: None, capabilities: None } =
+        before
+    else {
         panic!("{before:?}");
     };
     let updated = EventBody::AgentStarted {
@@ -15,11 +17,24 @@ fn an_agent_s_start_from_before_builds_were_recorded_says_nothing_of_them() {
         resumed: true,
         build: Some("1.0.0".into()),
         previous_build: Some("0.9.0".into()),
+        capabilities: None,
     };
     assert_eq!(
         serde_json::to_string(&updated).unwrap(),
         r#"{"type":"agent_started","pid":7,"resumed":true,"build":"1.0.0","previous_build":"0.9.0"}"#
     );
+    let mut claims = protocol::capability::Capabilities::default();
+    claims.prompts.steer = Some(protocol::capability::Claimed {});
+    let claimed = EventBody::AgentStarted {
+        pid: 7,
+        resumed: false,
+        build: None,
+        previous_build: None,
+        capabilities: Some(Box::new(claims)),
+    };
+    let stored = r#"{"type":"agent_started","pid":7,"resumed":false,"capabilities":{"conversation":{},"prompts":{"steer":{}},"output":{},"calls":{},"approvals":{},"asking":{},"settings":{},"turns":{},"context":{},"account":{},"background":{},"setup":{}}}"#;
+    assert_eq!(serde_json::to_string(&claimed).unwrap(), stored, "a run's claims are kept where it started");
+    assert_eq!(serde_json::from_str::<EventBody>(stored).unwrap(), claimed);
 }
 
 /// A hub stores what an agent says its subagent's conversation holds as this and under this kind, so both have to stay

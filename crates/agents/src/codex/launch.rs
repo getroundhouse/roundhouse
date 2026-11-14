@@ -3,7 +3,7 @@ use std::process::Stdio;
 
 use protocol::capability::conversation::Start;
 use protocol::event::EventBody;
-use protocol::model::PermissionMode;
+use protocol::model::{PermissionMode, SessionSettings};
 use protocol::worker::AgentSpec;
 use serde_json::{Value, json};
 use tokio::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command};
@@ -89,7 +89,8 @@ pub(super) async fn conversation(
     options: &AgentOptions,
     ephemeral: bool,
 ) -> Result<(), AgentError> {
-    let mut params = configuration(spec, options);
+    let settings = shared.state.lock().settings.clone();
+    let mut params = configuration(spec, &settings, options);
     let response = match &spec.start {
         Start::New { conversation: None } => {
             params["ephemeral"] = json!(ephemeral);
@@ -108,7 +109,7 @@ pub(super) async fn conversation(
                 {
                     shared.event(EventBody::Notice { level: protocol::event::NoticeLevel::Warning,
                         message: "Codex could not find this conversation. Starting a new one without its previous context.".into(), parent_tool_use_id: None }, None).await;
-                    shared.rpc.ask("thread/start", configuration(spec, options)).await?
+                    shared.rpc.ask("thread/start", configuration(spec, &settings, options)).await?
                 }
                 Err(error) => return Err(error),
             }
@@ -123,11 +124,12 @@ pub(super) async fn conversation(
     shared
         .event(
             EventBody::AgentInit {
-                capabilities: Some(Box::new(super::claims::claims())),
+                // The worker says what the run claims as it starts it.
+                capabilities: None,
                 agent_session_id: Some(id.into()),
                 model: response["model"].as_str().map(str::to_owned),
                 cwd: Some(spec.cwd.clone()),
-                permission_mode: Some(spec.settings.permission_mode),
+                permission_mode: Some(settings.permission_mode),
                 agent_version: None,
             },
             None,
@@ -136,15 +138,15 @@ pub(super) async fn conversation(
     Ok(())
 }
 
-fn configuration(spec: &AgentSpec, options: &AgentOptions) -> Value {
-    let plan = spec.settings.permission_mode == PermissionMode::Plan;
+fn configuration(spec: &AgentSpec, settings: &SessionSettings, options: &AgentOptions) -> Value {
+    let plan = settings.permission_mode == PermissionMode::Plan;
     let mut config = json!({"features.memories":false,"features.goals":false,"features.default_mode_request_user_input":true,
-        "model_reasoning_effort":spec.settings.effort.as_str(),"model_reasoning_summary":"auto"});
+        "model_reasoning_effort":settings.effort.as_str(),"model_reasoning_summary":"auto"});
     if let Some(tools) = &options.tools {
         config["mcp_servers.roundhouse"] = json!({"url":tools.url,
             "http_headers":{"Authorization":format!("Bearer {}", tools.token.as_str())}});
     }
-    json!({"cwd":spec.cwd,"model":spec.settings.model.as_str(),
+    json!({"cwd":spec.cwd,"model":settings.model.as_str(),
         "approvalPolicy":if plan { "on-request" } else { "never" },
         "sandbox":if plan { "read-only" } else { "danger-full-access" },
         "developerInstructions":options.instructions,"config":config,"experimentalRawEvents":false})

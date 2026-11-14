@@ -8,8 +8,9 @@ use protocol::prompt::Prompt;
 #[async_trait]
 pub trait AgentProcess: Send + Sync {
     fn capabilities(&self) -> protocol::capability::Capabilities;
-    /// The current runtime boundary. Legacy entry points below remain for an older hub's worker requests and the
-    /// conformance driver's existing scenarios; new controls are checked against this run's claims.
+    /// Does what `control` says, which the hub has checked against this run's claims. The methods below are what the
+    /// adapters carry a control out with, and what the conformance driver and the adapters' tests still call, until
+    /// #1275 leaves only this and `stop`, but `resolve_approval`, which answers a legacy request, until #1273.
     async fn control(&self, control: &protocol::capability::Control) -> Result<(), AgentError>;
     fn pid(&self) -> u32;
     /// The process has exited, or can't be reached. A new prompt needs a new process, even though

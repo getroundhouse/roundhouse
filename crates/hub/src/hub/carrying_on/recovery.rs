@@ -5,8 +5,11 @@ use crate::store::{Store, StoreError, cancelled_approval};
 use parking_lot::Mutex;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::event::{EventBody, ExitReason};
-use protocol::model::{InstanceId, ProviderName, RunId, Seq, SessionId, Workspace, WorkspaceId, WorkspaceStatus};
+use protocol::model::{
+    InstanceId, ProviderName, RunCapabilities, RunId, Seq, SessionId, Workspace, WorkspaceId, WorkspaceStatus,
+};
 use protocol::provider::InstanceState;
+use protocol::worker::RunningAgent;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::task::JoinSet;
@@ -58,6 +61,9 @@ impl Hub {
             self.write(move |store| interrupt(store, &id, prompts)).await;
         }
         carrying.join_all().await;
+        // Every agent still running has been carried on with, so whatever the rest claimed is gone with them.
+        let running: Vec<SessionId> = self.sessions.lock().live.keys().cloned().collect();
+        self.write(move |store| store.clear_claims_but(&running)).await;
         // A session that wasn't at work, and whose agent isn't running, never will take these.
         let untaken = std::mem::take(&mut *untaken.lock());
         for (id, prompts) in untaken {
@@ -122,12 +128,13 @@ impl Hub {
         let said = link.held_runs().await;
         let mut gone = Vec::new();
         for id in &at_work {
-            let running_run = running.iter().find(|agent| agent.session_id == *id).map(|agent| agent.run);
-            if let Some(run) = running_run.or_else(|| said.get(id).copied()) {
-                if running_run.is_none() {
+            let running_agent = running.iter().find(|agent| agent.session_id == *id);
+            if let Some(run) = running_agent.map(|agent| agent.run).or_else(|| said.get(id).copied()) {
+                if running_agent.is_none() {
                     gone.push(id.clone());
                 }
-                self.carry_on_session(id, link.id, run, take(id)).await;
+                let claims = running_agent.and_then(RunningAgent::claims);
+                self.carry_on_session(id, link.id, run, take(id), claims).await;
             } else {
                 let (id, prompts) = (id.clone(), take(id));
                 self.write(move |store| interrupt(store, &id, prompts)).await;
@@ -135,7 +142,7 @@ impl Hub {
         }
         // An agent idle as the earlier hub went is still running too.
         for agent in running.iter().filter(|agent| !at_work.contains(&agent.session_id)) {
-            self.carry_on_session(&agent.session_id, link.id, agent.run, take(&agent.session_id)).await;
+            self.carry_on_session(&agent.session_id, link.id, agent.run, take(&agent.session_id), agent.claims()).await;
         }
         link.release(&self).await;
         // After what its worker said, so an agent that said it exited isn't said to have gone twice.
@@ -165,10 +172,22 @@ impl Hub {
         }
     }
 
-    pub(super) async fn carry_on_session(self: &Arc<Self>, id: &SessionId, link: u64, run: RunId, untaken: Vec<Seq>) {
+    /// `claims` are what the agent's worker says its run claims, which a worker of protocol 3 doesn't, whose run said
+    /// them as it initialized, and the record kept them, since a hub that stops records no exit.
+    pub(super) async fn carry_on_session(
+        self: &Arc<Self>,
+        id: &SessionId,
+        link: u64,
+        run: RunId,
+        untaken: Vec<Seq>,
+        claims: Option<RunCapabilities>,
+    ) {
         let owned = id.clone();
         let read = self
             .blocking(move |store| {
+                if let Some(claims) = &claims {
+                    store.set_claims(&owned, claims)?;
+                }
                 Ok((store.get_session(&owned)?, store.open_approvals(&owned)?, store.recorded_from_worker(&owned)?))
             })
             .await;

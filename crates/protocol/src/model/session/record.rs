@@ -127,8 +127,9 @@ pub struct Session {
     pub id: SessionId,
     pub workspace_id: WorkspaceId,
     pub agent: AgentKind,
-    /// The most recent initialized run's claims, for display. Controls use these only when their run is still the
-    /// one running; an idle chat's next launch uses its kind's defaults.
+    /// What the run that's running claims, from when it says until it exits, and nothing when no agent is running, as
+    /// when a hub starts and doesn't find the chat's agent. A client offers what these say, and what the chat's kind
+    /// claims when there are none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent_capabilities: Option<super::super::RunCapabilities>,
     pub model: ModelName,

@@ -7,6 +7,12 @@ pub struct RunCapabilities {
     pub claims: Box<crate::capability::Capabilities>,
 }
 
+impl RunCapabilities {
+    pub fn new(run: super::super::RunId, claims: crate::capability::Capabilities) -> Self {
+        Self { run, claims: Box::new(claims) }
+    }
+}
+
 /// A kind of agent, as its adapter describes it: what the interface calls it, the models, efforts and approval modes a
 /// chat can be given, what a chat runs with until another is chosen, what it does that not every agent does, and what
 /// login a hub can hold for it. The hub serves one for each kind it runs, so a client offers what the agent takes rather
@@ -14,8 +20,7 @@ pub struct RunCapabilities {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct AgentDescription {
     pub kind: AgentKind,
-    /// The adapter's launch defaults. A running agent reports its own in `AgentInit`; absence means a peer from
-    /// before capability claims, whose legacy controls remain available.
+    /// What a run of this kind claims unless it says otherwise as it launches. `None` from a hub from before claims.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub capabilities: Option<crate::capability::Capabilities>,
     /// What answered a turn, as its card says, such as "Opus 5.5 via Claude Code".

@@ -313,3 +313,49 @@ fn each_chats_conversation_is_kept_as_its_id_becomes_one_its_agent_can_report() 
         assert_eq!(kept.session.agent_capabilities, None, "no run has said what it claims");
     }
 }
+
+#[test]
+fn a_runs_claims_leave_the_record_with_its_exit() {
+    use protocol::capability::{Capabilities, Claimed};
+    use protocol::event::{EventBody, ExitReason};
+    use protocol::model::{RunCapabilities, RunId, SessionId};
+
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_session(dir.path());
+    let id = SessionId::from("s");
+    let mut claims = Capabilities::default();
+    claims.prompts.steer = Some(Claimed {});
+    let claimed = RunCapabilities { run: RunId::new(2), claims: Box::new(claims.clone()) };
+    let capabilities = Some(Box::new(claims.clone()));
+    let started = EventBody::AgentStarted { pid: 1, resumed: false, build: None, previous_build: None, capabilities };
+    let claim = || {
+        let change = SessionChange { claims: Some(claimed.clone()), ..SessionChange::default() };
+        store.append(&id, Some(RunId::new(2)), &started, None, None, Some(change)).unwrap();
+    };
+    claim();
+    let on_record = || store.get_session(&id).unwrap().session.agent_capabilities;
+    let exited =
+        EventBody::AgentExited { reason: ExitReason::WorkerLost, code: None, signal: None, stderr_tail: vec![] };
+    let exit = |run| store.append(&id, run, &exited, None, None, None).unwrap();
+
+    assert_eq!(on_record(), Some(claimed.clone()));
+    exit(Some(RunId::new(1)));
+    assert_eq!(on_record(), Some(claimed.clone()), "another run's exit leaves them");
+    exit(Some(RunId::new(2)));
+    assert_eq!(on_record(), None);
+
+    claim();
+    exit(None);
+    assert_eq!(on_record(), None, "an exit the hub records with no run is of whichever ran");
+
+    claim();
+    store.clear_claims_but(std::slice::from_ref(&id)).unwrap();
+    assert_eq!(on_record(), Some(claimed.clone()), "a session whose agent is running keeps them as a hub starts");
+    store.clear_claims_but(&[]).unwrap();
+    assert_eq!(on_record(), None);
+
+    assert_eq!(store.claims_said(&id, RunId::new(2)).unwrap(), Some(claims), "the log keeps them");
+    assert_eq!(store.claims_said(&id, RunId::new(1)).unwrap(), None, "they're the run's that said them");
+    store.set_claims(&id, &claimed).unwrap();
+    assert_eq!(on_record(), Some(claimed), "a run found running has them put back");
+}

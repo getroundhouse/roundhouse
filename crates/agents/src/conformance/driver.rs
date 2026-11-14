@@ -86,8 +86,17 @@ impl Driver {
         let (sender, output) = mpsc::channel(1024);
         let run = RunId::new(self.last_run.get() + 1);
         let agent = self.launcher.launch(run, resume, sender).await?;
-        self.claims.push((run, agent.capabilities()));
-        let started = EventBody::AgentStarted { pid: agent.pid(), resumed: resume, build: None, previous_build: None };
+        let claims = agent.capabilities();
+        self.claims.push((run, claims.clone()));
+        // As the worker reports a launch, with what the run claims, which the hub records.
+        let capabilities = Some(Box::new(claims));
+        let started = EventBody::AgentStarted {
+            pid: agent.pid(),
+            resumed: resume,
+            build: None,
+            previous_build: None,
+            capabilities,
+        };
         self.record(Some(run), started);
         self.last_run = run;
         self.running = Some(Running { agent, output });

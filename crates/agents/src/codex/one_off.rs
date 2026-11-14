@@ -3,6 +3,7 @@ use std::time::Duration;
 
 use protocol::attachment::{AttachmentFile, NewAttachment};
 use protocol::capability::conversation::Start;
+use protocol::capability::settings::Settings;
 use protocol::event::{ContentBlock, EventBody, TurnOutcome};
 use protocol::model::{AgentAccount, AgentKind, RunId, Title};
 use protocol::prompt::Prompt;
@@ -58,7 +59,7 @@ pub async fn title_for(
         agent: AgentKind::Codex,
         cwd: room.path().to_string_lossy().into_owned(),
         start: Start::New { conversation: None },
-        settings: description().defaults,
+        settings: Settings { model: Some(description().defaults.model), ..Settings::default() },
         env: Vec::new(),
         tools_token: None,
         login: None,

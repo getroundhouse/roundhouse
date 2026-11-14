@@ -5,7 +5,7 @@ use crate::deleting::Deleter;
 use crate::tools::Tools;
 use crate::{git, setup};
 use agent::account_for;
-use agent::{configure_agent, start_agent, stop_agent, title_for};
+use agent::{start_agent, stop_agent, title_for};
 use agents::AgentProcess;
 use connection::Closing;
 use moves::Moves;
@@ -17,10 +17,10 @@ use protocol::model::{RunId, SessionId};
 use protocol::prompt::Prompt;
 use protocol::versions::Versions;
 use protocol::worker::{
-    AccountFor, AgentApproval, AgentCancel, AgentCompact, AgentConfigure, AgentPrompt, AgentStop, AttachmentWrite,
-    AttachmentWritten, FileOpenAt, FilePages, FileRead, FileReadAt, FolderRead, GitDiff, GitStatus, HelloReply,
-    PullRequest, PullRequestReply, Received, RunningAgentsReply, ServeTools, SetupLog, SetupLogReply, TitleFor,
-    ToolsServing, WORKER_PROTOCOL_VERSION, WorkerFrame, WorkerRequest, WorkerResponse,
+    AccountFor, AgentApproval, AgentStop, AttachmentWrite, AttachmentWritten, FileOpenAt, FilePages, FileRead,
+    FileReadAt, FolderRead, GitDiff, GitStatus, HelloReply, PullRequest, PullRequestReply, Received,
+    RunningAgentsReply, ServeTools, SetupLog, SetupLogReply, TitleFor, ToolsServing, WORKER_PROTOCOL_VERSION,
+    WorkerFrame, WorkerRequest, WorkerResponse,
 };
 use scripts::{Setup, run_archive_script, run_setup, stop_setup_script};
 use std::collections::HashMap;
@@ -295,16 +295,7 @@ pub(super) async fn handle(
                 Err(e) => Err(e.into()),
             }
         }
-        WorkerRequest::AgentStart(spec) | WorkerRequest::AgentStartUnderLogin(spec) => {
-            start_agent(state, forwarders, spec).await
-        }
-        WorkerRequest::AgentPrompt(AgentPrompt { session_id, seq, prompt }) => {
-            let agent = state.live_agent(&session_id);
-            Ok(delivery(match agent {
-                Some(agent) => agent.send_prompt(seq, &prompt).await.is_ok(),
-                None => false,
-            }))
-        }
+        WorkerRequest::AgentStart(spec) => start_agent(state, forwarders, spec).await,
         WorkerRequest::AgentApproval(AgentApproval { session_id, approval_id, decision }) => {
             let agent = state.live_agent(&session_id);
             Ok(delivery(match agent {
@@ -312,26 +303,8 @@ pub(super) async fn handle(
                 None => false,
             }))
         }
-        WorkerRequest::AgentCancel(AgentCancel { session_id }) => {
-            let agent = state.live_agent(&session_id);
-            Ok(delivery(match agent {
-                Some(agent) => agent.interrupt().await.is_ok(),
-                None => false,
-            }))
-        }
-        WorkerRequest::AgentCompact(AgentCompact { session_id, asked, keeping }) => {
-            let agent = state.live_agent(&session_id);
-            Ok(delivery(match agent {
-                Some(agent) => agent.compact(asked, keeping.as_deref()).await.is_ok(),
-                None => false,
-            }))
-        }
-        WorkerRequest::AgentConfigure(AgentConfigure { session_id, options }) => {
-            configure_agent(state, &session_id, &options).await
-        }
         WorkerRequest::AgentStop(AgentStop { session_id }) => stop_agent(state, &session_id).await,
-        WorkerRequest::TitleFor(TitleFor { agent, prompt, images, login })
-        | WorkerRequest::TitleUnderLogin(TitleFor { agent, prompt, images, login }) => {
+        WorkerRequest::TitleFor(TitleFor { agent, prompt, images, login }) => {
             title_for(state, agent, &Prompt::carrying(prompt, images), login).await
         }
         WorkerRequest::AccountFor(AccountFor { agent, login }) => account_for(state, agent, login).await,
@@ -373,6 +346,7 @@ fn running_agents(state: &State) -> WorkerResponse {
     let listed = |(session_id, agent): (&SessionId, &RunningAgent)| protocol::worker::RunningAgent {
         session_id: session_id.clone(),
         run: agent.run,
+        capabilities: Some(Box::new(agent.process.capabilities())),
     };
     let agents = running.map(listed);
     WorkerResponse::RunningAgents(RunningAgentsReply { agents: agents.collect() })

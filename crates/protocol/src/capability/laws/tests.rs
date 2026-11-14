@@ -81,7 +81,7 @@ fn subagent_ended(call: &str) -> EventBody {
 }
 
 fn started() -> EventBody {
-    EventBody::AgentStarted { pid: 1, resumed: false, build: None, previous_build: None }
+    EventBody::AgentStarted { pid: 1, resumed: false, build: None, previous_build: None, capabilities: None }
 }
 
 fn exited() -> EventBody {

@@ -1,5 +1,5 @@
 //! Run initialization is durable, and a replaced run cannot choose the conversation the next launch resumes.
-use super::{CarriedOver, Item, LiveSession};
+use super::super::{CarriedOver, Item, LiveSession};
 use crate::hub::tests::{carried_on, flushed, hub_in, stand_in_worker, taking_worker};
 use protocol::capability::{Capabilities, Claimed};
 use protocol::event::EventBody;
@@ -127,14 +127,50 @@ fn typed_approval_replies_require_the_runs_claims_even_when_the_answer_is_empty(
     let skipped = protocol::event::ApprovalDecision::Deny { message: None, interrupt: false };
     let mut claims = protocol::capability::Capabilities::default();
 
-    let absent = super::decisions::control(&request, "q".into(), &skipped, None);
-    let unclaimed = super::decisions::control(&request, "q".into(), &skipped, Some(&claims));
+    let absent = super::super::decisions::control(&request, "q".into(), &skipped, None);
+    let unclaimed = super::super::decisions::control(&request, "q".into(), &skipped, Some(&claims));
     claims.asking.questions = Some(protocol::capability::Claimed {});
-    let allowed = super::decisions::control(&request, "q".into(), &skipped, Some(&claims)).unwrap();
+    let allowed = super::super::decisions::control(&request, "q".into(), &skipped, Some(&claims)).unwrap();
 
     assert_eq!(absent.unwrap_err().code, protocol::client::ErrorCode::Unsupported);
     assert_eq!(unclaimed.unwrap_err().code, protocol::client::ErrorCode::Unsupported);
     assert!(matches!(allowed, Some(protocol::capability::Control::Decide {
         decision: protocol::capability::approvals::Decision::Answer { answers }, ..
     }) if answers.is_empty()));
+}
+
+#[tokio::test]
+async fn a_runs_claims_go_from_the_session_with_the_run_and_not_with_another() {
+    let dir = tempfile::tempdir().unwrap();
+    let hub = hub_in(dir.path());
+    let link = stand_in_worker(&hub);
+    let run = RunId::new(2);
+    let live = carried_on(&hub, &link, run);
+    let mut claims = Capabilities::default();
+    claims.prompts.steer = Some(Claimed {});
+    initialized(&live, run, "s", claims).await;
+    let exited = |run| Item::Event {
+        run,
+        body: Box::new(EventBody::AgentExited {
+            reason: protocol::event::ExitReason::Unexpected,
+            code: None,
+            signal: None,
+            stderr_tail: vec![],
+        }),
+        raw: None,
+        attachments: Vec::new(),
+        seq: None,
+    };
+    let on_record = || {
+        let id = live.id.clone();
+        hub.blocking(move |store| store.get_session(&id))
+    };
+
+    live.send_item(exited(RunId::new(1))).await;
+    flushed(&live).await;
+    assert!(on_record().await.unwrap().session.agent_capabilities.is_some(), "an earlier run's exit leaves them");
+
+    live.send_item(exited(run)).await;
+    flushed(&live).await;
+    assert!(on_record().await.unwrap().session.agent_capabilities.is_none());
 }

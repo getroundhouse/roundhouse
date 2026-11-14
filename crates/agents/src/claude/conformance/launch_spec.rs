@@ -1,4 +1,4 @@
-use crate::conformance::scenario::Scenario;
+use crate::conformance::scenario::{Failed, Scenario};
 use protocol::model::{AgentKind, AgentSessionId, Effort, ModelName, RunId, SessionSettings};
 use protocol::worker::AgentSpec;
 use std::path::Path;
@@ -15,9 +15,12 @@ pub(super) fn spec(
     session: &AgentSessionId,
     resume: bool,
     env: Vec<(String, String)>,
-) -> AgentSpec {
+) -> Result<AgentSpec, Failed> {
     let settings = SessionSettings { model: MODEL, permission_mode: scenario.mode, effort: Effort::Low };
-    AgentSpec {
+    // As the hub converts a chat's settings, against what the kind claims.
+    let claims = crate::claude::description().capabilities.unwrap_or_default();
+    let settings = settings.for_capabilities(&claims).map_err(|e| Failed(e.to_string()))?;
+    Ok(AgentSpec {
         session_id: "conformance".into(),
         run,
         agent: AgentKind::Claude,
@@ -31,7 +34,7 @@ pub(super) fn spec(
         env,
         tools_token: None,
         login: None,
-    }
+    })
 }
 
 /// What Claude names the folder it keeps a project's conversations in: its path, with every character but a letter

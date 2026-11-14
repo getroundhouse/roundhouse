@@ -25,6 +25,7 @@ use crate::{AgentOptions, AgentOutput};
 pub(super) async fn supervise(
     bin: PathBuf,
     spec: AgentSpec,
+    mode: protocol::model::PermissionMode,
     options: AgentOptions,
     files: RunFiles,
     mut recovery: super::recovery::Recovery,
@@ -93,7 +94,7 @@ pub(super) async fn supervise(
             process::signal_group(launched.pid, process::Signal::Terminate);
             continue;
         }
-        replay(spec.settings.permission_mode, &shared, &mut stdin, &output).await;
+        replay(mode, &shared, &mut stdin, &output).await;
     };
 
     finish(&shared, files, &output, status, stderr_tail).await;

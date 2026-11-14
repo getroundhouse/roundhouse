@@ -157,6 +157,7 @@ fn updated() -> World {
         resumed,
         build: Some(build.to_string()),
         previous_build: previous_build.map(str::to_string),
+        capabilities: None,
     };
     let answer = "Yes. Each workspace's row has a badge for its pull request, from the workspace's record.";
     let reply = "Yes. The badge reads the state from the workspace's record, so it's right as soon as the feed says.";

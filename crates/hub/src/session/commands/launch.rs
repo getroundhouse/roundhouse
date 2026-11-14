@@ -1,11 +1,13 @@
 //! Starting the session's agent: finding or starting its workspace's worker, and launching the agent there.
 
-use protocol::capability::conversation::Start;
 use std::sync::Arc;
 
+use protocol::capability::Capabilities;
+use protocol::capability::conversation::Start;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::event::{EventBody, ExitReason};
-use protocol::worker::{AgentSpec, AgentStarted};
+use protocol::model::{PermissionMode, RunCapabilities, RunId, SessionSettings};
+use protocol::worker::{AgentSpec, AgentStarted, AgentStop, previous};
 use tracing::warn;
 
 use super::super::{AgentRun, Command, LiveSession, Origin};
@@ -99,7 +101,7 @@ impl LiveSession {
     /// taken for a replaced agent's and dropped.
     async fn start_agent(&self, hub: &Hub, link: &WorkerLink, launch: Launch) -> Result<(), ApiError> {
         let Launch { cwd, env, login } = launch;
-        let (resume, start, settings) = {
+        let (resume, start, mut kept) = {
             let state = self.state.lock();
             let start = match (&state.agent_session_id, state.agent_opened) {
                 (Some(id), true) => Start::Resume { conversation: id.clone() },
@@ -107,6 +109,12 @@ impl LiveSession {
             };
             (state.agent_opened, start, state.settings.clone())
         };
+        // A mode this build has no name for, which the agent went into by itself, can't be asked for, so the agent
+        // starts with full access, as `PermissionMode::Unknown` says, rather than not at all.
+        if kept.permission_mode == PermissionMode::Unknown {
+            kept.permission_mode = PermissionMode::FullAccess;
+        }
+        let settings = hub.launch_settings(self.agent, &kept)?;
         let asked = hub.blocking(Store::next_run).await?;
         if let Some(Handed { account, .. }) = &login {
             // Before the launch is sent, so no agent runs under a login the hub gave it without the hub's record of
@@ -118,25 +126,18 @@ impl LiveSession {
         // Before the launch, so the new agent's first events aren't recorded ahead of its start.
         let build = link.said_build().map(str::to_string);
         let previous_build = self.previous_build(hub, build.as_deref()).await;
-        let spec = AgentSpec {
-            session_id: self.id.clone(),
-            run: asked,
-            agent: self.agent,
-            cwd,
-            start,
-            settings,
-            env,
-            tools_token,
-            login: login.map(|handed| handed.login),
-        };
+        let (session_id, agent, login) = (self.id.clone(), self.agent, login.map(|handed| handed.login));
+        let spec = AgentSpec { session_id, run: asked, agent, cwd, start, settings, env, tools_token, login };
         let starting = AgentRun { link: link.id, run: asked };
         self.state.lock().agent = Some(starting);
-        let AgentStarted { pid, run, already_running } = link.call(spec).await.inspect_err(|_| {
+        let launched = self.launch(hub, link, spec, kept).await;
+        let (AgentStarted { pid, run, already_running, .. }, claims) = launched.inspect_err(|_| {
             let mut state = self.state.lock();
             if state.agent == Some(starting) {
                 state.agent = None;
             }
         })?;
+        let claims = claims.map(|claims| RunCapabilities::new(run, claims));
         let current = {
             let mut state = self.state.lock();
             // An agent that was already running keeps the run it started with. A new one can exit before
@@ -145,24 +146,101 @@ impl LiveSession {
             let current = already_running || state.agent == Some(starting);
             if current {
                 state.agent = Some(AgentRun { link: link.id, run });
+                // With it, so nothing is asked of it that its claims don't allow.
+                if claims.is_some() {
+                    state.capabilities.clone_from(&claims);
+                }
             }
             current
         };
-        // The worker has said which run the session's agent is, so the logins other runs were given are never asked
-        // after. Only on what it says, since a call that failed doesn't say the agent didn't start. One that couldn't be
-        // forgotten is only said: its run doesn't start again, so nothing reads it, and the next launch's reply tries
-        // again.
+        self.forget_other_run_logins(hub, run).await;
+        if already_running {
+            // Its start, which recorded them, may be from before the record let go of them, as when its worker's
+            // connection dropped.
+            if let Some(claims) = claims {
+                self.keep_claims(hub, claims).await;
+            }
+        } else {
+            // Whatever is still open was asked by a process that no longer exists.
+            self.cancel_approvals(None).await;
+            let capabilities = claims.map(|claims| claims.claims);
+            let started = EventBody::AgentStarted { pid, resumed: resume, build, previous_build, capabilities };
+            self.record_or_log(Origin::Run { run, current, numbered: None }, started).await;
+        }
+        Ok(())
+    }
+
+    /// Sends the launch, in the form its worker's protocol has, with the chat's settings as the hub keeps them, `kept`,
+    /// to a worker of protocol 3, and returns the worker's reply with what the run claims, unless they're claims it
+    /// can't be held to. A run of protocol 3 says them as it initializes, so only one found running has them, from the
+    /// log.
+    async fn launch(
+        &self,
+        hub: &Hub,
+        link: &WorkerLink,
+        spec: AgentSpec,
+        kept: SessionSettings,
+    ) -> Result<(AgentStarted, Option<Capabilities>), ApiError> {
+        let started = if link.speaks_previous() {
+            link.call_previous(previous::AgentStart::of(spec, kept).into_request()).await?
+        } else {
+            link.call(spec).await?
+        };
+        let claims = match started.capabilities.as_deref() {
+            Some(claims) => Some(claims.clone()),
+            None if started.already_running && link.speaks_previous() => {
+                self.claims_said_before(hub, started.run).await
+            }
+            None => None,
+        };
+        self.held_to(link, claims.as_ref()).await?;
+        Ok((started, claims))
+    }
+
+    /// The worker has said which run the session's agent is, so the logins other runs were given are never asked
+    /// after. Only on what it says, since a call that failed doesn't say the agent didn't start. One that couldn't be
+    /// forgotten is only said: its run doesn't start again, so nothing reads it, and the next launch's reply tries
+    /// again.
+    async fn forget_other_run_logins(&self, hub: &Hub, run: RunId) {
         let id = self.id.clone();
         if let Err(e) = hub.blocking(move |store| store.forget_other_run_logins(&id, run)).await {
             warn!(session = %self.id, "couldn't forget the logins earlier launches were given: {}", e.message);
         }
-        if !already_running {
-            // Whatever is still open was asked by a process that no longer exists.
-            self.cancel_approvals(None).await;
-            let started = EventBody::AgentStarted { pid, resumed: resume, build, previous_build };
-            self.record_or_log(Origin::Run { run, current, numbered: None }, started).await;
+    }
+
+    /// Refuses a run whose claims it can't be held to, since a claim that needs another without it means nothing, as
+    /// [`Capabilities::unmet_needs`] says, and stops it, so nothing is asked of it or recorded as its.
+    async fn held_to(&self, link: &WorkerLink, claims: Option<&Capabilities>) -> Result<(), ApiError> {
+        let unmet = claims.map_or_else(Vec::new, Capabilities::unmet_needs);
+        if unmet.is_empty() {
+            return Ok(());
         }
-        Ok(())
+        warn!(session = %self.id, ?unmet, "refusing a run that claims what needs claims it doesn't make");
+        // Only said, since the launch fails either way, and the run isn't made current, so nothing it says is taken as
+        // the session's.
+        if let Err(e) = link.call(AgentStop { session_id: self.id.clone() }).await {
+            warn!(session = %self.id, "couldn't stop a run whose claims it can't be held to: {}", e.message);
+        }
+        let message = "the agent said it can do things that need others it didn't say it can do, so it was stopped";
+        Err(ApiError::new(ErrorCode::Worker, message))
+    }
+
+    /// Puts `claims` on the session's record, and tells everyone, for a run found running, unless it has exited since,
+    /// in order with what's recorded, so its exit finds them to take off. One that can't be recorded is only said: the
+    /// run is held to them all the same, and a client offers what its kind claims until the next launch says them.
+    pub(super) async fn keep_claims(&self, hub: &Hub, claims: RunCapabilities) {
+        let _in_order = self.recording.lock().await;
+        if self.state.lock().agent.is_none_or(|agent| agent.run != claims.run) {
+            return;
+        }
+        let id = self.id.clone();
+        if let Err(e) = hub.blocking(move |store| store.set_claims(&id, &claims)).await {
+            warn!(session = %self.id, "couldn't record what a run found running claims: {}", e.message);
+            return;
+        }
+        if let Err(e) = self.announce(hub).await {
+            warn!(session = %self.id, "couldn't say what a run found running claims: {}", e.message);
+        }
     }
 
     /// The build the chat's agent last ran on, when it's another than `build`, the one it starts on now. Builds are

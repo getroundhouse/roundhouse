@@ -50,6 +50,8 @@ pub(crate) struct WorkerLink {
     pub(super) left: AtomicBool,
     /// Which build the worker said it is, once it has said hello: `None` for a worker from before workers said.
     pub(super) build: OnceLock<Option<String>>,
+    /// The version of the protocol its hello chose, once it has said hello.
+    pub(super) version: OnceLock<u32>,
 }
 
 fn lost() -> ApiError {
@@ -84,6 +86,7 @@ impl WorkerLink {
             acks: Acks::default(),
             left: AtomicBool::new(false),
             build: OnceLock::new(),
+            version: OnceLock::new(),
         });
         tokio::spawn(acks::acknowledge(hub.clone(), link.clone()));
         tokio::spawn(reading::read_frames(
@@ -104,6 +107,7 @@ impl WorkerLink {
         let failure = match tokio::time::timeout(HELLO_TIMEOUT, hello).await {
             Ok(Ok(HelloReply { protocol_version, build })) if versions::WORKERS.speaks(protocol_version) => {
                 let _ = link.build.set(build);
+                let _ = link.version.set(protocol_version);
                 return Ok(link);
             }
             Ok(Ok(HelloReply { protocol_version, .. })) => ApiError::new(
@@ -138,11 +142,19 @@ impl WorkerLink {
         request: R,
     ) -> Result<impl Future<Output = Result<R::Reply, ApiError>> + use<R>, ApiError> {
         let request = request.into_request();
-        let replied = self.calls.send(|id| WorkerCall { id, request }).await.map_err(|e| match e {
+        self.send_call(|id| WorkerCall { id, request }).await
+    }
+
+    /// Sends the call `call` makes of its number, and returns once it's queued, with its reply, as `T`, to wait for.
+    pub(super) async fn send_call<C: serde::Serialize, T: Reply, F: FnOnce(u64) -> C>(
+        &self,
+        call: F,
+    ) -> Result<impl Future<Output = Result<T, ApiError>> + use<C, T, F>, ApiError> {
+        let replied = self.calls.send(call).await.map_err(|e| match e {
             NotSent::Closed => lost(),
             NotSent::Encoding(e) => internal(e.to_string()),
         })?;
-        Ok(async move { R::Reply::read(replied.await.map_err(|_| lost())??).map_err(|reply| unexpected(&reply)) })
+        Ok(async move { T::read(replied.await.map_err(|_| lost())??).map_err(|reply| unexpected(&reply)) })
     }
 
     /// Answers what the worker asked. Like a call, it's dropped if the connection has ended, since nobody is left to
@@ -170,6 +182,7 @@ impl WorkerLink {
             acks: Acks::default(),
             left: AtomicBool::new(false),
             build: OnceLock::new(),
+            version: OnceLock::new(),
         })
     }
 

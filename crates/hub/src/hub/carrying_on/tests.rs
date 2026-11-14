@@ -61,7 +61,8 @@ fn a_chat_that_only_waited_is_left_waiting_and_one_at_work_is_interrupted() {
         }
         let listed =
             EventBody::AgentTasks { tasks: status.background_tasks.clone().unwrap_or_default(), stopped: vec![] };
-        let change = SessionChange { status: Some(status), queue_held: None, recorded: None, initialized: None };
+        let change =
+            SessionChange { status: Some(status), queue_held: None, recorded: None, initialized: None, claims: None };
         store.append(&"s".into(), None, &listed, None, None, Some(change)).unwrap();
         interrupt(&store, &"s".into(), Vec::new()).unwrap();
         let session = store.get_session(&"s".into()).unwrap().session;
@@ -91,4 +92,69 @@ fn wait() -> Wait {
         started_at_ms: 1,
         ended: None,
     }
+}
+
+/// Its agent went with the machine, say, and left no exit, so nothing else would take its claims off.
+#[tokio::test]
+async fn a_starting_hub_takes_the_claims_off_every_chat_whose_agent_it_didnt_find() {
+    use protocol::capability::{Capabilities, Claimed};
+    use protocol::model::RunCapabilities;
+
+    let dir = tempfile::tempdir().unwrap();
+    let hub = crate::hub::tests::hub_in(dir.path());
+    let id = SessionId::from("s");
+    let mut claims = Capabilities::default();
+    claims.prompts.steer = Some(Claimed {});
+    let capabilities = Some(Box::new(claims.clone()));
+    let started = EventBody::AgentStarted { pid: 1, resumed: false, build: None, previous_build: None, capabilities };
+    let claimed = RunCapabilities { run: RunId::new(1), claims: Box::new(claims) };
+    let change = SessionChange { claims: Some(claimed), ..SessionChange::default() };
+    hub.store.append(&id, Some(RunId::new(1)), &started, None, None, Some(change)).unwrap();
+    assert!(hub.store.get_session(&id).unwrap().session.agent_capabilities.is_some());
+
+    hub.carry_on(LeftAtWork::read(&hub.store).unwrap()).await;
+
+    assert!(hub.store.get_session(&id).unwrap().session.agent_capabilities.is_none());
+}
+
+/// Its worker, of this protocol, says what the run it kept claims, which the record holds from then on, whatever it held
+/// before. One of protocol 3 doesn't, and the record keeps what the run said as it initialized.
+#[tokio::test]
+async fn a_starting_hub_holds_a_run_it_carries_on_with_to_what_its_worker_says_it_claims() {
+    use crate::hub::tests::{claimed, hub_in, stand_in_worker};
+    use protocol::model::RunCapabilities;
+
+    let dir = tempfile::tempdir().unwrap();
+    let hub = hub_in(dir.path());
+    let link = stand_in_worker(&hub);
+    let (id, run) = (SessionId::from("s"), RunId::new(3));
+    let said = RunCapabilities { run, claims: Box::new(claimed()) };
+    let on_record = || hub.store.get_session(&id).unwrap().session.agent_capabilities;
+
+    let initialized = RunCapabilities { run, claims: Box::default() };
+    hub.store.set_claims(&id, &initialized).unwrap();
+
+    hub.carry_on_session(&id, link.id, run, Vec::new(), None).await;
+    assert_eq!(on_record(), Some(initialized), "a worker of protocol 3 says nothing, and the record keeps them");
+    hub.carry_on_session(&id, link.id, run, Vec::new(), Some(said.clone())).await;
+    assert_eq!(on_record(), Some(said));
+}
+
+/// Its agent is running, which carrying on with it found, so its claims stay, as every other chat's go.
+#[tokio::test]
+async fn a_starting_hub_leaves_the_claims_of_a_chat_it_carried_on_with() {
+    use crate::hub::tests::{carried_on, claimed, hub_in, stand_in_worker};
+    use protocol::model::RunCapabilities;
+
+    let dir = tempfile::tempdir().unwrap();
+    let hub = hub_in(dir.path());
+    let link = stand_in_worker(&hub);
+    let (id, run) = (SessionId::from("s"), RunId::new(1));
+    let held = RunCapabilities::new(run, claimed());
+    hub.store.set_claims(&id, &held).unwrap();
+    carried_on(&hub, &link, run);
+
+    hub.carry_on(LeftAtWork::read(&hub.store).unwrap()).await;
+
+    assert_eq!(hub.store.get_session(&id).unwrap().session.agent_capabilities, Some(held));
 }

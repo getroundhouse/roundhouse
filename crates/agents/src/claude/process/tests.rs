@@ -59,7 +59,9 @@ fn spec(model: Option<&'static str>, mode: PermissionMode) -> AgentSpec {
             model: ModelName::named(model.unwrap_or("sonnet")),
             permission_mode: mode,
             effort: Effort::High,
-        },
+        }
+        .for_capabilities(&crate::claude::claims::claims())
+        .unwrap(),
         env: vec![],
         tools_token: None,
         login: None,
@@ -88,8 +90,13 @@ fn first_launch_names_the_conversation_and_later_ones_resume_it() {
 /// tool, and a chat in a mode of the CLI's own, since a chat can't be given that.
 #[test]
 fn every_launch_has_full_access() {
-    for mode in [PermissionMode::FullAccess, PermissionMode::Plan, PermissionMode::Unknown] {
-        let args = args(&spec(None, mode), false);
+    let full_access = spec(None, PermissionMode::FullAccess);
+    let left_out = AgentSpec {
+        settings: protocol::capability::settings::Settings { mode: None, ..full_access.settings.clone() },
+        ..full_access.clone()
+    };
+    for (mode, spec) in [("full access", full_access), ("plan", spec(None, PermissionMode::Plan)), ("none", left_out)] {
+        let args = args(&spec, false);
 
         assert_eq!(flag_value(&args, "--permission-mode").as_deref(), Some("bypassPermissions"), "{mode:?}");
         assert!(args.iter().any(|a| a == "--allow-dangerously-skip-permissions"));
@@ -101,7 +108,7 @@ fn every_launch_has_full_access() {
 fn every_launch_names_its_model_and_effort() {
     for effort in crate::claude::description().efforts {
         let mut chosen = spec(Some("opus"), PermissionMode::FullAccess);
-        chosen.settings.effort = effort;
+        chosen.settings.effort = Some(effort.into());
 
         let launched = args(&chosen, true);
 
@@ -127,7 +134,7 @@ fn every_launch_adds_roundhouses_instructions_for_the_agent_and_its_subagents() 
 #[test]
 fn a_level_this_build_cant_name_is_refused_rather_than_left_to_the_cli() {
     let mut unknown = spec(None, PermissionMode::FullAccess);
-    unknown.settings.effort = Effort::Unknown;
+    unknown.settings.effort = Some(protocol::capability::settings::Effort::Unknown);
 
     assert!(matches!(build_args(&unknown, false, None), Err(AgentError::UnknownEffort)));
 }

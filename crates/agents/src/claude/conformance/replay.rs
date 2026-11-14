@@ -23,7 +23,7 @@ impl Binding for Claude {
         output: mpsc::Sender<AgentOutput>,
     ) -> Result<Arc<dyn AgentProcess>, Failed> {
         let session = launch.session.ok_or_else(|| Failed("Claude capture has no conversation ID".into()))?;
-        let spec = super::spec(launch.scenario, launch.run, launch.cwd, &session, launch.resume, Vec::new());
+        let spec = super::spec(launch.scenario, launch.run, launch.cwd, &session, launch.resume, Vec::new())?;
         crate::claude::spawn_at(launch.bin, spec, output, AgentOptions::default())
             .await
             .map_err(|e| Failed(e.to_string()))
