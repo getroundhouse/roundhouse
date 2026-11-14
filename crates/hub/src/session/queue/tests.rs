@@ -69,7 +69,7 @@ fn an_idle_with_a_prompt_the_agent_has_yet_to_take_is_from_before_it() {
 
 /// What recording an event that takes the status `from` one `to` another does to the watch, as `record` does it.
 fn record(watch: &mut QueueWatch, body: &EventBody, from: SessionStatus, to: SessionStatus) {
-    if let Some(held) = watch.held_after(body, from, to) {
+    if let Some(held) = watch.held_after(body, from, to, false) {
         watch.hold(held);
     }
 }
@@ -81,9 +81,9 @@ fn a_stop_holds_the_queue_until_the_person_sends_a_prompt() {
     record(&mut watch, &ended(TurnOutcome::Cancelled), Running, Idle);
     assert!(!ready(&watch));
     record(&mut watch, &idle(), Idle, Idle);
-    assert_eq!(watch.held_after(&ended(TurnOutcome::Success), Running, Idle), None, "only a prompt lets it go");
+    assert_eq!(watch.held_after(&ended(TurnOutcome::Success), Running, Idle, false), None, "only a prompt lets it go");
     let compacting = EventBody::CompactionAsked { keeping: None };
-    assert_eq!(watch.held_after(&compacting, Idle, Running), None, "asking to compact isn't asking to go on");
+    assert_eq!(watch.held_after(&compacting, Idle, Running, false), None, "asking to compact isn't asking to go on");
 
     record(&mut watch, &prompt(), Idle, Running);
     record(&mut watch, &EventBody::PromptTaken { prompt: Seq::new(3) }, Running, Running);
@@ -106,6 +106,21 @@ fn a_turn_that_failed_holds_the_queue_until_the_person_sends_a_prompt() {
     assert!(ready(&watch));
 }
 
+/// As when its files couldn't be put in the worktree, or its run refused it, which the next prompt could fail as well.
+#[test]
+fn a_turn_whose_prompt_the_hub_couldnt_give_the_agent_holds_the_queue() {
+    use SessionStatus::{Idle, Running};
+    let mut watch = QueueWatch::default();
+    let dropped = EventBody::PromptDropped { prompt: Seq::new(3) };
+    assert_eq!(watch.held_after(&dropped, Running, Running, false), None, "a prompt that didn't start the turn");
+
+    if let Some(held) = watch.held_after(&dropped, Running, Idle, true) {
+        watch.hold(held);
+    }
+
+    assert!(!ready(&watch));
+}
+
 #[test]
 fn an_agent_gone_mid_turn_holds_the_queue_and_once_let_go_its_sent_to_a_new_one() {
     use SessionStatus::{Interrupted, Running};
@@ -113,7 +128,7 @@ fn an_agent_gone_mid_turn_holds_the_queue_and_once_let_go_its_sent_to_a_new_one(
     let exited = exited(ExitReason::Unexpected);
     record(&mut watch, &exited, Running, Interrupted);
     assert!(!watch.ready(Interrupted, false));
-    assert_eq!(watch.held_after(&exited, Interrupted, Interrupted), None, "only going away holds it");
+    assert_eq!(watch.held_after(&exited, Interrupted, Interrupted, false), None, "only going away holds it");
 
     watch.hold(false);
     assert!(watch.ready(Interrupted, false));

@@ -1,14 +1,14 @@
 use protocol::event::{AgentRunState, AgentTask, ApprovalOutcome, ExitReason, TaskKind, TurnOutcome};
 use protocol::prompt::Prompt;
 
-use super::super::ingest::{heard_before, says_something_new, the_hub_allows};
-use super::super::status::{Open, after_background, next_status, turn_edge, works_unattended};
+use super::super::status::{Known, Open, after_background, next_status, turn_edge, works_unattended};
 use super::super::*;
 use crate::store::TurnEdge;
 
 const NOTHING: Open = Open { approvals: 0, tasks: 0, agent: true };
 const ONE_APPROVAL: Open = Open { approvals: 1, tasks: 0, agent: true };
 const ONE_TASK: Open = Open { approvals: 0, tasks: 1, agent: true };
+const NOTHING_KNOWN: Known = Known { idle_is_stale: false, opening_dropped: false };
 
 fn turn_ended() -> EventBody {
     EventBody::TurnEnded {
@@ -63,7 +63,7 @@ fn notified() -> EventBody {
 
 /// The status after each event in turn, with what's open after each.
 fn after(from: SessionStatus, events: &[(EventBody, Open)]) -> SessionStatus {
-    events.iter().fold(from, |current, (body, open)| next_status(current, body, *open, false))
+    events.iter().fold(from, |current, (body, open)| next_status(current, body, *open, NOTHING_KNOWN))
 }
 
 fn resolved() -> EventBody {
@@ -82,7 +82,7 @@ use SessionStatus::*;
 fn a_prompt_starts_running_from_any_state() {
     let prompt = EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("x") };
     for from in [Idle, Running, WaitingApproval, Interrupted, Background] {
-        assert_eq!(next_status(from, &prompt, NOTHING, false), Running);
+        assert_eq!(next_status(from, &prompt, NOTHING, NOTHING_KNOWN), Running);
     }
 }
 
@@ -90,49 +90,55 @@ fn a_prompt_starts_running_from_any_state() {
 #[test]
 fn asking_to_compact_sets_running_as_a_prompt_does() {
     for from in [Idle, Interrupted, Background] {
-        assert_eq!(next_status(from, &EventBody::CompactionAsked { keeping: None }, NOTHING, false), Running);
+        assert_eq!(next_status(from, &EventBody::CompactionAsked { keeping: None }, NOTHING, NOTHING_KNOWN), Running);
     }
 }
 
 #[test]
 fn the_agents_own_state_decides_idle() {
-    assert_eq!(next_status(Running, &state(AgentRunState::Idle), NOTHING, false), Idle);
-    assert_eq!(next_status(Idle, &state(AgentRunState::Running), NOTHING, false), Running);
+    assert_eq!(next_status(Running, &state(AgentRunState::Idle), NOTHING, NOTHING_KNOWN), Idle);
+    assert_eq!(next_status(Idle, &state(AgentRunState::Running), NOTHING, NOTHING_KNOWN), Running);
 }
 
 #[test]
 fn an_agent_that_needs_something_waits_on_the_person_only_while_a_request_is_open() {
-    assert_eq!(next_status(Running, &state(AgentRunState::RequiresAction), ONE_APPROVAL, false), WaitingApproval);
-    assert_eq!(next_status(Running, &state(AgentRunState::RequiresAction), NOTHING, false), Running);
-    assert_eq!(next_status(Background, &state(AgentRunState::RequiresAction), NOTHING, false), Background);
+    assert_eq!(
+        next_status(Running, &state(AgentRunState::RequiresAction), ONE_APPROVAL, NOTHING_KNOWN),
+        WaitingApproval
+    );
+    assert_eq!(next_status(Running, &state(AgentRunState::RequiresAction), NOTHING, NOTHING_KNOWN), Running);
+    assert_eq!(next_status(Background, &state(AgentRunState::RequiresAction), NOTHING, NOTHING_KNOWN), Background);
 }
 
 #[test]
 fn turn_end_still_goes_idle_if_the_agent_sends_no_state_events() {
-    assert_eq!(next_status(Running, &turn_ended(), NOTHING, false), Idle);
+    assert_eq!(next_status(Running, &turn_ended(), NOTHING, NOTHING_KNOWN), Idle);
 }
 
 #[test]
 fn waiting_only_ends_when_the_last_approval_is_answered() {
-    assert_eq!(next_status(WaitingApproval, &resolved(), ONE_APPROVAL, false), WaitingApproval);
-    assert_eq!(next_status(WaitingApproval, &resolved(), NOTHING, false), Running);
+    assert_eq!(next_status(WaitingApproval, &resolved(), ONE_APPROVAL, NOTHING_KNOWN), WaitingApproval);
+    assert_eq!(next_status(WaitingApproval, &resolved(), NOTHING, NOTHING_KNOWN), Running);
     // A running state event doesn't hide an approval that's still open.
-    assert_eq!(next_status(WaitingApproval, &state(AgentRunState::Running), ONE_APPROVAL, false), WaitingApproval);
+    assert_eq!(
+        next_status(WaitingApproval, &state(AgentRunState::Running), ONE_APPROVAL, NOTHING_KNOWN),
+        WaitingApproval
+    );
 }
 
 #[test]
 fn losing_the_agent_mid_turn_is_an_interruption_but_losing_it_when_idle_is_nothing() {
-    assert_eq!(next_status(Running, &exited(), NOTHING, false), Interrupted);
-    assert_eq!(next_status(WaitingApproval, &exited(), NOTHING, false), Interrupted);
-    assert_eq!(next_status(Idle, &exited(), NOTHING, false), Idle);
-    assert_eq!(next_status(Interrupted, &exited(), NOTHING, false), Interrupted);
+    assert_eq!(next_status(Running, &exited(), NOTHING, NOTHING_KNOWN), Interrupted);
+    assert_eq!(next_status(WaitingApproval, &exited(), NOTHING, NOTHING_KNOWN), Interrupted);
+    assert_eq!(next_status(Idle, &exited(), NOTHING, NOTHING_KNOWN), Idle);
+    assert_eq!(next_status(Interrupted, &exited(), NOTHING, NOTHING_KNOWN), Interrupted);
 }
 
 #[test]
 fn a_turn_that_leaves_work_in_the_background_keeps_the_agent_at_work() {
-    assert_eq!(next_status(Running, &turn_ended(), ONE_TASK, false), Background);
-    assert_eq!(next_status(Running, &state(AgentRunState::Idle), ONE_TASK, false), Background);
-    assert_eq!(next_status(Background, &state(AgentRunState::Idle), ONE_TASK, false), Background);
+    assert_eq!(next_status(Running, &turn_ended(), ONE_TASK, NOTHING_KNOWN), Background);
+    assert_eq!(next_status(Running, &state(AgentRunState::Idle), ONE_TASK, NOTHING_KNOWN), Background);
+    assert_eq!(next_status(Background, &state(AgentRunState::Idle), ONE_TASK, NOTHING_KNOWN), Background);
     // It's still the end of a turn, so what the agent said is its reply.
     assert_eq!(turn_edge(Running, Background, &turn_ended()), TurnEdge::Ends(Some(TurnOutcome::Success)));
     assert_eq!(turn_edge(Background, Idle, &state(AgentRunState::Idle)), TurnEdge::Neither);
@@ -142,14 +148,14 @@ fn a_turn_that_leaves_work_in_the_background_keeps_the_agent_at_work() {
 /// for a command that finished or failed, a monitor whose command ended, and a subagent that reported.
 #[test]
 fn background_work_finishing_between_turns_leaves_the_agent_at_work_until_it_picks_up_again() {
-    assert_eq!(next_status(Background, &tasks(0), NOTHING, false), Background);
+    assert_eq!(next_status(Background, &tasks(0), NOTHING, NOTHING_KNOWN), Background);
     assert!(after_background(Background, Background, 1, 0));
-    assert_eq!(next_status(Background, &tasks(2), Open { tasks: 2, ..NOTHING }, false), Background);
+    assert_eq!(next_status(Background, &tasks(2), Open { tasks: 2, ..NOTHING }, NOTHING_KNOWN), Background);
     assert!(!after_background(Background, Background, 3, 2), "some of it is still going");
     // Listed after the turn ended, rather than before.
-    assert_eq!(next_status(Idle, &tasks(1), ONE_TASK, false), Background);
+    assert_eq!(next_status(Idle, &tasks(1), ONE_TASK, NOTHING_KNOWN), Background);
     // A list said again, with nothing in it, isn't the work going.
-    assert_eq!(next_status(Idle, &tasks(0), NOTHING, false), Idle);
+    assert_eq!(next_status(Idle, &tasks(0), NOTHING, NOTHING_KNOWN), Idle);
     assert!(!after_background(Background, Background, 0, 0));
 }
 
@@ -157,9 +163,9 @@ fn background_work_finishing_between_turns_leaves_the_agent_at_work_until_it_pic
 #[test]
 fn the_last_of_the_work_going_with_no_agent_running_leaves_the_chat_idle() {
     let no_agent = Open { agent: false, ..NOTHING };
-    assert_eq!(next_status(Background, &tasks(0), no_agent, false), Idle);
+    assert_eq!(next_status(Background, &tasks(0), no_agent, NOTHING_KNOWN), Idle);
     assert!(!after_background(Background, Idle, 1, 0));
-    assert_eq!(next_status(Background, &tasks(1), Open { tasks: 1, ..no_agent }, false), Background);
+    assert_eq!(next_status(Background, &tasks(1), Open { tasks: 1, ..no_agent }, NOTHING_KNOWN), Background);
 }
 
 /// The real CLI's lines once a command it left running finishes between turns, each with what's left running after
@@ -170,7 +176,7 @@ fn the_agent_is_at_work_throughout_the_real_clis_picking_up_again() {
         [(notified(), ONE_TASK), (tasks(0), NOTHING), (state(AgentRunState::Running), NOTHING), (init(), NOTHING)];
     let mut status = Background;
     for (body, open) in &lines {
-        status = next_status(status, body, *open, false);
+        status = next_status(status, body, *open, NOTHING_KNOWN);
         assert!(status.is_active(), "{status:?} after {body:?}");
     }
     assert_eq!(status, Running);
@@ -180,7 +186,7 @@ fn the_agent_is_at_work_throughout_the_real_clis_picking_up_again() {
 #[test]
 fn a_monitor_timing_out_between_turns_leaves_the_agent_at_work_until_it_picks_up_again() {
     let timed_out = [(notified(), ONE_TASK), (stopped(), NOTHING), (state(AgentRunState::Running), NOTHING)];
-    assert_eq!(next_status(Background, &stopped(), NOTHING, false), Background);
+    assert_eq!(next_status(Background, &stopped(), NOTHING, NOTHING_KNOWN), Background);
     assert_eq!(after(Background, &timed_out), Running);
 }
 
@@ -188,30 +194,33 @@ fn a_monitor_timing_out_between_turns_leaves_the_agent_at_work_until_it_picks_up
 /// would.
 #[test]
 fn the_agent_taken_to_be_idle_once_it_hasnt_picked_up_again_is_idle() {
-    assert_eq!(next_status(Background, &state(AgentRunState::Idle), NOTHING, false), Idle);
+    assert_eq!(next_status(Background, &state(AgentRunState::Idle), NOTHING, NOTHING_KNOWN), Idle);
     assert_eq!(turn_edge(Background, Idle, &state(AgentRunState::Idle)), TurnEdge::Neither);
 }
 
 #[test]
 fn background_work_changing_mid_turn_leaves_the_turn_alone() {
-    assert_eq!(next_status(Running, &tasks(1), ONE_TASK, false), Running);
-    assert_eq!(next_status(Running, &tasks(0), NOTHING, false), Running);
-    assert_eq!(next_status(WaitingApproval, &tasks(1), Open { tasks: 1, ..ONE_APPROVAL }, false), WaitingApproval);
-    assert_eq!(next_status(Interrupted, &tasks(1), ONE_TASK, false), Interrupted);
+    assert_eq!(next_status(Running, &tasks(1), ONE_TASK, NOTHING_KNOWN), Running);
+    assert_eq!(next_status(Running, &tasks(0), NOTHING, NOTHING_KNOWN), Running);
+    assert_eq!(
+        next_status(WaitingApproval, &tasks(1), Open { tasks: 1, ..ONE_APPROVAL }, NOTHING_KNOWN),
+        WaitingApproval
+    );
+    assert_eq!(next_status(Interrupted, &tasks(1), ONE_TASK, NOTHING_KNOWN), Interrupted);
 }
 
 #[test]
 fn a_prompt_or_the_agent_picking_up_again_starts_a_turn_over_background_work() {
     let prompt = EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("x") };
-    assert_eq!(next_status(Background, &prompt, ONE_TASK, false), Running);
-    assert_eq!(next_status(Background, &state(AgentRunState::Running), ONE_TASK, false), Running);
+    assert_eq!(next_status(Background, &prompt, ONE_TASK, NOTHING_KNOWN), Running);
+    assert_eq!(next_status(Background, &state(AgentRunState::Running), ONE_TASK, NOTHING_KNOWN), Running);
 }
 
 #[test]
 fn losing_the_agent_with_work_in_the_background_is_an_interruption() {
-    assert_eq!(next_status(Background, &exited(), NOTHING, false), Interrupted);
+    assert_eq!(next_status(Background, &exited(), NOTHING, NOTHING_KNOWN), Interrupted);
     // On its way out, it stops that work first, and that isn't the work finishing.
-    assert_eq!(next_status(Background, &stopped(), NOTHING, false), Background);
+    assert_eq!(next_status(Background, &stopped(), NOTHING, NOTHING_KNOWN), Background);
 }
 
 #[test]
@@ -222,7 +231,7 @@ fn a_turn_the_agent_starts_by_itself_once_its_work_finishes_is_running() {
     // The list can come once the turn has started, too.
     assert_eq!(after(Background, &[(init(), ONE_TASK), (tasks(0), NOTHING)]), Running);
     // A turn starting doesn't hide an approval that's still open.
-    assert_eq!(next_status(WaitingApproval, &init(), ONE_APPROVAL, false), WaitingApproval);
+    assert_eq!(next_status(WaitingApproval, &init(), ONE_APPROVAL, NOTHING_KNOWN), WaitingApproval);
 }
 
 #[test]
@@ -230,16 +239,32 @@ fn taking_a_prompt_after_the_turn_ended_is_running_again() {
     // A prompt sent while the agent writes its last reply becomes a turn of its own, with no state event to say so.
     let taken = EventBody::PromptTaken { prompt: Seq::new(7) };
 
-    assert_eq!(next_status(Idle, &taken, NOTHING, false), Running);
-    assert_eq!(next_status(Background, &taken, ONE_TASK, false), Running);
-    assert_eq!(next_status(WaitingApproval, &taken, ONE_APPROVAL, false), WaitingApproval);
-    assert_eq!(next_status(Interrupted, &taken, NOTHING, false), Interrupted);
+    assert_eq!(next_status(Idle, &taken, NOTHING, NOTHING_KNOWN), Running);
+    assert_eq!(next_status(Background, &taken, ONE_TASK, NOTHING_KNOWN), Running);
+    assert_eq!(next_status(WaitingApproval, &taken, ONE_APPROVAL, NOTHING_KNOWN), WaitingApproval);
+    assert_eq!(next_status(Interrupted, &taken, NOTHING, NOTHING_KNOWN), Interrupted);
 }
 
 #[test]
 fn an_idle_from_before_a_prompt_the_agent_has_yet_to_take_changes_nothing() {
-    assert_eq!(next_status(Running, &state(AgentRunState::Idle), NOTHING, true), Running);
-    assert_eq!(next_status(Running, &state(AgentRunState::Idle), NOTHING, false), Idle);
+    assert_eq!(
+        next_status(Running, &state(AgentRunState::Idle), NOTHING, Known { idle_is_stale: true, ..NOTHING_KNOWN }),
+        Running
+    );
+    assert_eq!(next_status(Running, &state(AgentRunState::Idle), NOTHING, NOTHING_KNOWN), Idle);
+}
+
+#[test]
+fn a_turn_whose_prompt_the_hub_dropped_before_the_agent_had_it_never_started() {
+    let dropped = EventBody::PromptDropped { prompt: Seq::new(1) };
+    let opening = Known { opening_dropped: true, ..NOTHING_KNOWN };
+
+    assert_eq!(next_status(Running, &dropped, NOTHING, opening), Idle);
+    assert_eq!(next_status(Running, &dropped, ONE_TASK, opening), Background);
+    assert_eq!(turn_edge(Running, Idle, &dropped), TurnEdge::Neither, "nothing replied");
+    let no_agent = Open { agent: false, ..NOTHING };
+    assert_eq!(next_status(Running, &dropped, no_agent, opening), Running, "its exit ends the turn");
+    assert_eq!(next_status(Running, &dropped, NOTHING, NOTHING_KNOWN), Running, "a prompt that didn't start the turn");
 }
 
 #[test]
@@ -255,7 +280,7 @@ fn a_turn_starts_when_the_agent_starts_working_and_ends_when_it_comes_to_rest() 
     assert_eq!(turn_edge(Background, Running), Starts, "picking up again after work in the background is a new turn");
     let taken = EventBody::PromptTaken { prompt: Seq::new(3) };
     assert_eq!(
-        turn_edge(Idle, next_status(Idle, &taken, NOTHING, false)),
+        turn_edge(Idle, next_status(Idle, &taken, NOTHING, NOTHING_KNOWN)),
         Starts,
         "a prompt taken after the turn it came in has ended starts its own"
     );
@@ -277,30 +302,12 @@ fn a_turn_ended_by_its_end_ended_as_that_says() {
     assert_eq!(turn_edge(Running, Idle, &state(AgentRunState::Idle)), TurnEdge::Ends(None), "one that didn't say");
 }
 
-fn context(used_tokens: u64) -> ContextUsage {
-    ContextUsage { used_tokens, max_tokens: 200_000, model_tokens: None, max_set_by: None, parts: Vec::new() }
-}
-
-#[test]
-fn only_the_run_going_says_how_full_the_context_is_and_only_a_change_counts() {
-    let (going, replaced) = (RunId::new(2), RunId::new(1));
-
-    assert!(says_something_new(Some(going), None, going, &context(1)), "the first report");
-    assert!(says_something_new(Some(going), Some(&context(1)), going, &context(2)));
-    assert!(
-        !says_something_new(Some(going), Some(&context(1)), going, &context(1)),
-        "the feed isn't told what it knows"
-    );
-    assert!(!says_something_new(Some(going), Some(&context(1)), replaced, &context(2)), "a replaced run's");
-    assert!(!says_something_new(None, Some(&context(1)), going, &context(2)), "a run that has exited");
-}
-
 #[test]
 fn hearing_of_the_accounts_limits_changes_no_status() {
     let heard = EventBody::AgentLimits { limits: Vec::new() };
 
     for status in [Idle, Running, WaitingApproval, Background, Interrupted] {
-        assert_eq!(next_status(status, &heard, NOTHING, false), status);
+        assert_eq!(next_status(status, &heard, NOTHING, NOTHING_KNOWN), status);
     }
 }
 
@@ -313,63 +320,4 @@ fn only_what_goes_on_without_a_person_is_working_unattended() {
         assert!(!works_unattended(status, 0), "{status:?}");
     }
     assert!(works_unattended(WaitingApproval, 1), "what it left running before it asked goes on");
-}
-
-/// As a worker sends a hub that connects to it what it sent the last hub, which may have recorded some of it.
-#[test]
-fn what_a_worker_sends_again_is_taken_in_once() {
-    let (first, next) = (RunId::new(3), RunId::new(4));
-    let mut recorded = Some((first, 5));
-    let heard: Vec<_> = [4, 5, 6, 7].into_iter().map(|seq| heard_before(&mut recorded, first, seq)).collect();
-    assert_eq!(heard, [true, true, false, false], "only what came after the last recorded");
-    assert_eq!(recorded, Some((first, 7)));
-    assert!(heard_before(&mut recorded, first, 7), "and each only once");
-    assert!(!heard_before(&mut recorded, next, 2), "another run's is never the same, whatever its number");
-    assert_eq!(recorded, Some((next, 2)));
-    let mut never = None;
-    assert!(!heard_before(&mut never, first, 1), "nothing is before the first");
-}
-
-#[test]
-fn the_hub_allows_only_a_tools_use_asked_about_with_full_access_and_only_when_set_to() {
-    use protocol::capability::approvals::{Asks, Request};
-    use protocol::capability::calls::Call;
-    use protocol::event::{Asking, CallKind};
-    use protocol::model::PermissionMode::{FullAccess, Plan, Unknown};
-
-    let asked = |asking: Option<Asking>| {
-        let mut body: EventBody = protocol::fixtures::approval_request("a", "Bash").into();
-        let EventBody::ApprovalRequested { asking: kept, .. } = &mut body else { unreachable!() };
-        *kept = asking.map(Box::new);
-        body
-    };
-    let typed = |asks: Asks, always: bool| {
-        let mut body = asked(None);
-        let EventBody::ApprovalRequested { request, .. } = &mut body else { unreachable!() };
-        *request = Some(Box::new(Request { asks, suggested: Vec::new(), always, why: None }));
-        body
-    };
-    let tool = asked(Some(Asking::ToolUse { call: Some(CallKind::Command) }));
-    let call = || Asks::Call { call: Call::Other { tool: "t".into(), input: serde_json::Value::Null } };
-    assert!(the_hub_allows(FullAccess, &tool, true));
-    assert!(the_hub_allows(FullAccess, &asked(Some(Asking::ToolUse { call: None })), true), "whatever kind of call");
-    for always in [true, false] {
-        assert!(the_hub_allows(FullAccess, &typed(call(), always), true), "a typed call, asked always or not");
-    }
-    assert!(!the_hub_allows(FullAccess, &tool, false), "only when set to");
-    assert!(!the_hub_allows(FullAccess, &typed(call(), true), false), "a typed one only when set to");
-    for mode in [Plan, Unknown] {
-        assert!(!the_hub_allows(mode, &tool, true), "{mode:?} asks the person");
-        assert!(!the_hub_allows(mode, &typed(call(), true), true), "{mode:?} asks the person of a typed one");
-    }
-    let questions = Asking::Questions { questions: Vec::new() };
-    let plan = Asking::Plan { plan: "Do it".into() };
-    for asking in [Some(questions), Some(plan), Some(Asking::Unknown), None] {
-        assert!(!the_hub_allows(FullAccess, &asked(asking.clone()), true), "{asking:?} is the person's to answer");
-    }
-    for asks in
-        [Asks::Questions { questions: Vec::new() }, Asks::Plan { plan: "Do it".into(), file: None }, Asks::Unknown]
-    {
-        assert!(!the_hub_allows(FullAccess, &typed(asks.clone(), true), true), "{asks:?} is the person's to answer");
-    }
 }

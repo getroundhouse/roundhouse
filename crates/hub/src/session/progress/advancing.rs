@@ -1,6 +1,8 @@
 use super::super::Origin;
 use super::super::queue::QueueWatch;
-use super::super::status::{Approvals, Open, after_background, next_status, open_after, turn_edge};
+use super::super::status::{
+    Approvals, Known, Open, after_background, never_started, next_status, of_the_turn, open_after, turn_edge,
+};
 use crate::store::{SessionChange, StatusChange, Store, StoreError, TurnEdge};
 use protocol::event::{AgentTask, EventBody};
 use protocol::model::{ApprovalId, RunId, Seq, Session, SessionId, SessionStatus};
@@ -23,6 +25,9 @@ pub(crate) struct Progress {
     /// Whether the session's only work is a wait the hub keeps, as this hub stops, so its agent's exit cuts nothing
     /// off.
     pub(in super::super) outlives_this_hub: bool,
+    /// The prompt, or the compaction asked for, that started the turn the session is in, until the agent says anything
+    /// of that turn, as [`of_the_turn`] says, so the hub dropping it before then is a turn that never started.
+    pub(super) opened_by: Option<Seq>,
 }
 
 /// What recording an event does, worked out before it's recorded: the event as it's recorded, what it changes on the
@@ -43,6 +48,10 @@ pub(in super::super) struct Next {
     pub(super) approvals: Approvals,
     pub(super) background_tasks: Vec<AgentTask>,
     pub(super) held: Option<bool>,
+    /// It's a prompt, or a compaction asked for, that starts a turn.
+    pub(super) opens: bool,
+    /// The agent said it of the turn, as [`of_the_turn`] says.
+    pub(super) of_the_turn: bool,
 }
 
 impl Progress {
@@ -63,6 +72,7 @@ impl Progress {
             turn_started_at_ms: session.turn_started_at_ms,
             queue,
             outlives_this_hub: false,
+            opened_by: None,
         }
     }
 
@@ -81,18 +91,34 @@ impl Progress {
             let held = (outlived && self.queue.is_held()).then_some(false);
             let change = SessionChange { queue_held: held, ..SessionChange::default() };
             let background_tasks = self.background_tasks.clone();
-            let next = Next { status: self.status, turn: TurnEdge::Neither, approvals, background_tasks, held };
+            let next = Next {
+                status: self.status,
+                turn: TurnEdge::Neither,
+                approvals,
+                background_tasks,
+                held,
+                opens: false,
+                of_the_turn: false,
+            };
             return Step { body, change, next, waits: false };
         }
         if let EventBody::TurnEnded { started_at_ms, .. } = &mut body {
             *started_at_ms = self.turn_started_at_ms;
         }
         let open = Open { approvals: approvals.len(), tasks: background_tasks.len(), agent };
-        let status = next_status(self.status, &body, open, self.queue.idle_is_stale());
+        let known = Known {
+            idle_is_stale: self.queue.idle_is_stale(),
+            // Only the hub's: an agent that drops a prompt itself says more, such as that it has exited.
+            opening_dropped: origin == Origin::Hub
+                && matches!(&body, EventBody::PromptDropped { prompt } if self.opened_by == Some(*prompt)),
+        };
+        let status = next_status(self.status, &body, open, known);
         let turn = turn_edge(self.status, status, &body);
+        let opens = turn == TurnEdge::Starts
+            && matches!(body, EventBody::UserPrompt { .. } | EventBody::CompactionAsked { .. });
         let changed_tasks = (background_tasks != self.background_tasks).then(|| background_tasks.clone());
         let changed = status != self.status || changed_tasks.is_some();
-        let held = self.queue.held_after(&body, self.status, status);
+        let held = self.queue.held_after(&body, self.status, status, never_started(known, open));
         let change = SessionChange {
             initialized: None,
             claims: None,
@@ -101,7 +127,9 @@ impl Progress {
             recorded: None,
         };
         let waits = after_background(self.status, status, self.background_tasks.len(), background_tasks.len());
-        Step { body, change, next: Next { status, turn, approvals, background_tasks, held }, waits }
+        let of_the_turn = origin.run().is_some() && of_the_turn(&body, known);
+        let next = Next { status, turn, approvals, background_tasks, held, opens, of_the_turn };
+        Step { body, change, next, waits }
     }
 
     /// What recording `request`, from the current agent, does when the hub records its `answer` in the same commit,
@@ -118,18 +146,27 @@ impl Progress {
                 approvals: self.approvals.clone(),
                 background_tasks: self.background_tasks.clone(),
                 held: None,
+                opens: false,
+                of_the_turn: true,
             },
             waits: false,
         };
         [unmoved(request), unmoved(answer)]
     }
 
-    /// Takes the step an event made, once it's committed at `ts_ms`, and the prompts the agent hasn't taken, if it
-    /// changed them. The same step decided what was committed, so this is what the record now says.
-    pub(in super::super) fn take(&mut self, next: Next, ts_ms: i64, untaken: Option<Vec<Seq>>) {
+    /// Takes the step an event made, once it's committed at `seq`, at `ts_ms`, and the prompts the agent hasn't taken,
+    /// if it changed them. The same step decided what was committed, so this is what the record now says.
+    pub(in super::super) fn take(&mut self, next: Next, seq: Seq, ts_ms: i64, untaken: Option<Vec<Seq>>) {
         if next.turn == TurnEdge::Starts {
             self.turn_started_at_ms = Some(ts_ms);
         }
+        self.opened_by = if next.opens {
+            Some(seq)
+        } else if next.of_the_turn || !next.status.in_turn() {
+            None
+        } else {
+            self.opened_by
+        };
         self.status = next.status;
         self.approvals = next.approvals;
         self.background_tasks = next.background_tasks;
@@ -158,7 +195,7 @@ impl Progress {
     pub(crate) fn record_in(&mut self, store: &Store, id: &SessionId, body: EventBody) -> Result<(), StoreError> {
         let Step { body, change, next, .. } = self.step(Origin::Hub, body, false);
         let appended = store.append(id, None, &body, None, None, Some(change))?;
-        self.take(next, appended.event.ts_ms, appended.untaken);
+        self.take(next, appended.event.seq, appended.event.ts_ms, appended.untaken);
         Ok(())
     }
 }

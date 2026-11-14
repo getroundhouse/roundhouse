@@ -41,18 +41,25 @@ impl QueueWatch {
     }
 
     /// Whether the queue is held after an event for the session that takes its status `from` one `to` another, if
-    /// that changes. The agent stopped, went away or failed its turn, and it's for the person to say whether to go
-    /// on, since the next prompt could fail as the turn did, as on a usage limit. A prompt the person sends lets it go
-    /// on once its turn ends.
+    /// that changes, and `never_started` says whether it's a turn that never did, as
+    /// [`super::super::status::never_started`] says. The agent stopped, went away or failed its turn, or the hub
+    /// couldn't give it the prompt that started one, and it's for the person to say whether to go on, since the next
+    /// prompt could fail as the turn did, as on a usage limit. A prompt the person sends lets it go on once its turn
+    /// ends.
     pub(in super::super) fn held_after(
         &self,
         body: &EventBody,
         from: SessionStatus,
         to: SessionStatus,
+        never_started: bool,
     ) -> Option<bool> {
         let stopped = matches!(body, EventBody::TurnEnded { outcome: TurnOutcome::Cancelled | TurnOutcome::Error, .. });
         let went_away = to == SessionStatus::Interrupted && from != SessionStatus::Interrupted;
-        let held = if matches!(body, EventBody::UserPrompt { .. }) { false } else { self.held || stopped || went_away };
+        let held = if matches!(body, EventBody::UserPrompt { .. }) {
+            false
+        } else {
+            self.held || stopped || went_away || never_started
+        };
         (held != self.held).then_some(held)
     }
 

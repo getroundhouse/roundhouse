@@ -1,5 +1,5 @@
-//! A launch in the form its worker's protocol has, the claims the run it starts is held to, and how the session's
-//! record keeps them.
+//! A launch in the form its worker's protocol has, the claims the run it starts is held to, how the session's record
+//! keeps them, and what a prompt the run refuses leaves.
 
 use std::sync::Arc;
 
@@ -292,6 +292,37 @@ async fn a_run_found_running_that_has_exited_since_gets_no_claims_on_the_record(
     live.keep_claims(&hub, RunCapabilities::new(found, claimed())).await;
 
     assert_eq!(on_record(&hub).await, None);
+}
+
+/// Its run refused the prompt, so it never had it, and says nothing more of the turn the prompt started. The queue
+/// waits for the person, as after a failed turn.
+#[tokio::test]
+async fn a_chat_whose_prompt_its_running_agent_never_had_isnt_left_at_work() {
+    let dir = tempfile::tempdir().unwrap();
+    let hub = hub_with_worktree(dir.path());
+    let link = WorkerLink::answering(|request| {
+        if let WorkerRequest::AgentControl(_) = request {
+            return Some(Err(protocol::client::ApiError::new(ErrorCode::Worker, "the agent refused it")));
+        }
+        let WorkerRequest::AgentStart(spec) = request else { return Some(Ok(WorkerResponse::Ok)) };
+        Some(Ok(WorkerResponse::AgentStarted(AgentStarted {
+            pid: 7,
+            run: spec.run,
+            already_running: false,
+            capabilities: Some(Box::new(claimed())),
+        })))
+    });
+    serving(&hub, &link);
+
+    hub.session_prompt("s".into(), None, protocol::prompt::Prompt::new("x")).await.unwrap();
+    // Once the prompt's delivery is done, since a chat carries out what it's asked in turn.
+    let _ = hub.session_cancel("s".into()).await;
+
+    let id = SessionId::from("s");
+    let session = hub.blocking(move |store| store.get_session(&id)).await.unwrap().session;
+    assert_eq!((session.status, session.queue_held), (protocol::model::SessionStatus::Idle, true));
+    let log = hub.blocking(|store| store.read_events(&"s".into(), Seq::FIRST, 100, u64::MAX, false)).await.unwrap();
+    assert!(log.iter().any(|event| matches!(event.body, EventBody::PromptDropped { .. })), "{log:?}");
 }
 
 fn exited() -> EventBody {
