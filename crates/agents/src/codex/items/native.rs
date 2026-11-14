@@ -19,6 +19,8 @@ pub(super) enum Item {
         text: String,
     },
     CommandExecution(CommandExecution),
+    CollabAgentToolCall(super::collaboration::Collaboration),
+    SubAgentActivity(crate::codex::subagents::Activity),
     FileChange {
         id: String,
         changes: Vec<Change>,

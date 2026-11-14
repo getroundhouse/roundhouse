@@ -14,179 +14,202 @@ use super::{
 };
 use crate::{AgentError, AgentOutput, codex::running::Shared};
 
-pub(in crate::codex) async fn item(
-    shared: &Shared,
-    value: &Value,
-    completed: bool,
-    raw: String,
-) -> Result<(), AgentError> {
-    let item: Item = serde_json::from_value(value.clone())?;
-    match item {
-        Item::UserMessage {} => {
-            if completed {
-                let prompt = shared.state.lock().untaken.pop_front();
-                if let Some(prompt) = prompt {
-                    shared.event(EventBody::PromptTaken { prompt }, Some(raw)).await;
+pub(in crate::codex) struct Reader<'a> {
+    pub(in crate::codex) shared: &'a Shared,
+    pub(in crate::codex) scope: &'a crate::codex::subagents::Scope,
+}
+
+impl Reader<'_> {
+    pub(in crate::codex) async fn item(&self, value: &Value, completed: bool, raw: String) -> Result<(), AgentError> {
+        let item: Item = serde_json::from_value(value.clone())?;
+        match item {
+            Item::UserMessage {} => {
+                if completed && self.scope.parent.is_none() {
+                    let prompt = self.shared.state.lock().untaken.pop_front();
+                    if let Some(prompt) = prompt {
+                        self.shared.event(EventBody::PromptTaken { prompt }, Some(raw)).await;
+                    }
                 }
             }
-        }
-        Item::AgentMessage { id, text } | Item::Plan { id, text } => {
-            if value["type"] == "plan" && completed {
-                shared.state.lock().plan = Some(text.clone());
+            Item::AgentMessage { id, text } | Item::Plan { id, text } => {
+                if completed {
+                    self.note_reply(&text, value["type"] == "plan");
+                }
+                self.message(id, text, false, completed, raw).await;
             }
-            if value["type"] == "agentMessage" && completed {
-                shared.state.lock().reply = Some(text.clone());
+            Item::Reasoning { id, summary } => {
+                self.message(id, summary.join("\n\n"), true, completed, raw).await;
             }
-            message(shared, id, text, false, completed, raw).await;
+            Item::CommandExecution(command) => self.command_item(command, completed, raw).await,
+            Item::SubAgentActivity(activity) => {
+                crate::codex::subagents::activity(self.shared, self.scope, activity, raw).await;
+            }
+            Item::CollabAgentToolCall(collaboration) => {
+                let call = collaboration.call(self.shared, value);
+                let output = collaboration.output();
+                self.tool(collaboration.id.to_string(), call, output, collaboration.status, completed, raw).await;
+            }
+            Item::FileChange { id, changes, status } => {
+                let (call, output) = patches::patch(changes);
+                self.tool(id, call, output, status, completed, raw).await;
+            }
+            Item::McpToolCall { id, server, tool: name, arguments, status, result, error } => {
+                let call = Call::Mcp { server: server.into(), tool: name, input: arguments };
+                let output = if let Some(error) = error {
+                    CallOutput::Words { text: error.to_string() }
+                } else {
+                    mcp_result(&result.unwrap_or_default())
+                };
+                self.tool(id, call, output, status, completed, raw).await;
+            }
+            Item::Unknown => {
+                self.shared
+                    .event(
+                        EventBody::AgentOther {
+                            kind: value["type"].as_str().unwrap_or("item").into(),
+                            parent_tool_use_id: self.scope.parent.clone(),
+                        },
+                        Some(raw),
+                    )
+                    .await;
+            }
         }
-        Item::Reasoning { id, summary } => {
-            message(shared, id, summary.join("\n\n"), true, completed, raw).await;
+        Ok(())
+    }
+
+    fn note_reply(&self, text: &str, plan: bool) {
+        let mut state = self.shared.state.lock();
+        if let Some(parent) = &self.scope.parent {
+            if !plan
+                && let Some(run) = state.subagents.runs.get_mut(parent)
+                && !run.ended
+            {
+                run.reply = Some(text.to_owned());
+            }
+        } else if plan {
+            state.plan = Some(text.to_owned());
+        } else {
+            state.reply = Some(text.to_owned());
         }
-        Item::CommandExecution(command) => command_item(shared, command, completed, raw).await,
-        Item::FileChange { id, changes, status } => {
-            let (call, output) = patches::patch(changes);
-            tool(shared, id, call, output, status, completed, raw).await;
+    }
+
+    async fn command_item(&self, command: super::native::CommandExecution, completed: bool, raw: String) {
+        let super::native::CommandExecution {
+            id,
+            command,
+            cwd,
+            process_id,
+            actions,
+            output,
+            exit_code,
+            duration_ms,
+            status,
+        } = command;
+        let call = Call::Command(Command {
+            command,
+            cwd: Some(cwd),
+            description: None,
+            timeout_ms: None,
+            runs: Runs::Waits,
+            parts: actions.into_iter().map(part).collect(),
+            unsandboxed: None,
+        });
+        if let Some(process) = process_id
+            && !completed
+        {
+            self.shared.state.lock().work(self.scope.parent.as_ref()).terminals.insert(id.clone().into(), process);
         }
-        Item::McpToolCall { id, server, tool: name, arguments, status, result, error } => {
-            let call = Call::Mcp { server: server.into(), tool: name, input: arguments };
-            let output = if let Some(error) = error {
-                CallOutput::Words { text: error.to_string() }
+        let output = CallOutput::Command(CommandOutput {
+            output: output.unwrap_or_default(),
+            exit_code,
+            ended: if self.scope.parent.is_none() && self.shared.state.lock().cancelling {
+                Ended::Stopped
             } else {
-                mcp_result(&result.unwrap_or_default())
+                Ended::Exited
+            },
+            took_ms: duration_ms,
+            truncated: None,
+        });
+        self.tool(id, call, output, status, completed, raw).await;
+    }
+
+    async fn message(&self, id: String, text: String, thinking: bool, completed: bool, raw: String) {
+        if completed {
+            let block = if thinking {
+                ContentBlock::Thinking { text }
+            } else {
+                ContentBlock::Text { text, images: Vec::new() }
             };
-            tool(shared, id, call, output, status, completed, raw).await;
-        }
-        Item::Unknown => {
-            shared
+            self.shared
                 .event(
-                    EventBody::AgentOther {
-                        kind: value["type"].as_str().unwrap_or("item").into(),
-                        parent_tool_use_id: None,
+                    EventBody::Assistant {
+                        message_id: Some(id.into()),
+                        parent_tool_use_id: self.scope.parent.clone(),
+                        model: self.scope.model.clone(),
+                        blocks: vec![block],
+                        first_index: Some(0),
+                    },
+                    Some(raw),
+                )
+                .await;
+        } else {
+            self.shared
+                .emit(AgentOutput::Delta(StreamDelta {
+                    run: None,
+                    message_id: id.into(),
+                    parent_tool_use_id: self.scope.parent.clone(),
+                    change: DeltaChange::BlockStart {
+                        index: 0,
+                        kind: if thinking { BlockKind::Thinking } else { BlockKind::Text },
+                        tool_name: None,
+                    },
+                }))
+                .await;
+        }
+    }
+
+    async fn tool(&self, id: String, call: Call, output: CallOutput, status: Status, completed: bool, raw: String) {
+        let id = ToolUseId::from(id);
+        if completed {
+            let existed = {
+                let mut state = self.shared.state.lock();
+                let work = state.work(self.scope.parent.as_ref());
+                work.terminals.remove(&id);
+                work.calls.remove(&id).is_some()
+            };
+            if !existed {
+                return;
+            } // A cancelled call was already settled; its delayed native completion cannot settle it again.
+            let denied = matches!(status, Status::Declined).then_some(Denied { said: None });
+            self.shared
+                .event(
+                    EventBody::AgentUser {
+                        parent_tool_use_id: self.scope.parent.clone(),
+                        blocks: vec![ContentBlock::CallResult {
+                            tool_use_id: id,
+                            output,
+                            is_error: !matches!(status, Status::Completed),
+                            denied,
+                        }],
+                    },
+                    Some(raw),
+                )
+                .await;
+        } else {
+            self.shared.state.lock().work(self.scope.parent.as_ref()).calls.insert(id.clone(), call.clone());
+            self.shared
+                .event(
+                    EventBody::Assistant {
+                        message_id: Some(id.to_string().into()),
+                        parent_tool_use_id: self.scope.parent.clone(),
+                        model: self.scope.model.clone(),
+                        blocks: vec![ContentBlock::Call { id, call }],
+                        first_index: None,
                     },
                     Some(raw),
                 )
                 .await;
         }
-    }
-    Ok(())
-}
-
-async fn command_item(shared: &Shared, command: super::native::CommandExecution, completed: bool, raw: String) {
-    let super::native::CommandExecution {
-        id,
-        command,
-        cwd,
-        process_id,
-        actions,
-        output,
-        exit_code,
-        duration_ms,
-        status,
-    } = command;
-    let call = Call::Command(Command {
-        command,
-        cwd: Some(cwd),
-        description: None,
-        timeout_ms: None,
-        runs: Runs::Waits,
-        parts: actions.into_iter().map(part).collect(),
-        unsandboxed: None,
-    });
-    if let Some(process) = process_id
-        && !completed
-    {
-        shared.state.lock().terminals.insert(id.clone().into(), process);
-    }
-    let output = CallOutput::Command(CommandOutput {
-        output: output.unwrap_or_default(),
-        exit_code,
-        ended: if shared.state.lock().cancelling { Ended::Stopped } else { Ended::Exited },
-        took_ms: duration_ms,
-        truncated: None,
-    });
-    tool(shared, id, call, output, status, completed, raw).await;
-}
-
-async fn message(shared: &Shared, id: String, text: String, thinking: bool, completed: bool, raw: String) {
-    if completed {
-        let block =
-            if thinking { ContentBlock::Thinking { text } } else { ContentBlock::Text { text, images: Vec::new() } };
-        shared
-            .event(
-                EventBody::Assistant {
-                    message_id: Some(id.into()),
-                    parent_tool_use_id: None,
-                    model: None,
-                    blocks: vec![block],
-                    first_index: Some(0),
-                },
-                Some(raw),
-            )
-            .await;
-    } else {
-        shared
-            .emit(AgentOutput::Delta(StreamDelta {
-                run: None,
-                message_id: id.into(),
-                parent_tool_use_id: None,
-                change: DeltaChange::BlockStart {
-                    index: 0,
-                    kind: if thinking { BlockKind::Thinking } else { BlockKind::Text },
-                    tool_name: None,
-                },
-            }))
-            .await;
-    }
-}
-
-async fn tool(
-    shared: &Shared,
-    id: String,
-    call: Call,
-    output: CallOutput,
-    status: Status,
-    completed: bool,
-    raw: String,
-) {
-    let id = ToolUseId::from(id);
-    if completed {
-        let existed = {
-            let mut state = shared.state.lock();
-            state.terminals.remove(&id);
-            state.calls.remove(&id).is_some()
-        };
-        if !existed {
-            return;
-        } // A cancelled call was already settled; its delayed native completion cannot settle it again.
-        let denied = matches!(status, Status::Declined).then_some(Denied { said: None });
-        shared
-            .event(
-                EventBody::AgentUser {
-                    parent_tool_use_id: None,
-                    blocks: vec![ContentBlock::CallResult {
-                        tool_use_id: id,
-                        output,
-                        is_error: !matches!(status, Status::Completed),
-                        denied,
-                    }],
-                },
-                Some(raw),
-            )
-            .await;
-    } else {
-        shared.state.lock().calls.insert(id.clone(), call.clone());
-        shared
-            .event(
-                EventBody::Assistant {
-                    message_id: Some(id.to_string().into()),
-                    parent_tool_use_id: None,
-                    model: None,
-                    blocks: vec![ContentBlock::Call { id, call }],
-                    first_index: None,
-                },
-                Some(raw),
-            )
-            .await;
     }
 }
 

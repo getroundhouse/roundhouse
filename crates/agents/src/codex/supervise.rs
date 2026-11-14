@@ -32,7 +32,12 @@ pub(super) async fn supervise(
     drain(events).await;
     let stderr_tail = drain(err).await.unwrap_or_default();
     shared.state.lock().sending = None;
-    super::control::settle(&shared).await;
+    super::control::settle(&shared, None).await;
+    let children: Vec<_> = shared.state.lock().subagents.runs.keys().cloned().collect();
+    for call in children {
+        super::control::settle(&shared, Some(&call)).await;
+    }
+    shared.state.lock().work.clear();
     if let Some(path) = pid_file {
         let _ = tokio::fs::remove_file(path).await;
     }

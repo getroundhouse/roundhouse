@@ -39,7 +39,7 @@ Everything the app does today, on one page, with where to read more. What's desi
 
 ## Keep long chats in hand
 
-Context, limits, compacting, cache estimates and subagent tabs depend on what the agent reports. Claude provides these; Codex chats show replies, thinking summaries, tool calls, questions and plans.
+Context, limits, compacting and cache estimates depend on what the agent reports. Claude provides these; Codex chats show replies, available thinking summaries, tool calls, subagent tabs, questions and plans.
 
 - **A ring shows how full the context is,** and bars beside it show what's left of your plan's limits. See [Watch context and limits](../guides/watch-context-and-limits.md).
 - **Compact when you choose,** and say what to keep.

@@ -187,7 +187,10 @@ pub(super) async fn turn(shared: &Shared, input: Vec<Value>) -> Result<(), Agent
 async fn cancel(shared: &Shared) -> Result<(), AgentError> {
     let (thread, turn) = {
         let mut state = shared.state.lock();
-        if state.turn.is_none() && state.waiting.is_empty() && state.untaken.is_empty() {
+        if state.turn.is_none()
+            && state.waiting.values().all(|waiting| waiting.parent.is_some())
+            && state.untaken.is_empty()
+        {
             return Ok(());
         }
         state.cancelling = true;
@@ -211,7 +214,7 @@ async fn cancel(shared: &Shared) -> Result<(), AgentError> {
         shared.stop().await;
         return Err(error);
     }
-    settle(shared).await;
+    settle(shared, None).await;
     {
         let mut state = shared.state.lock();
         state.turn = None;
@@ -221,23 +224,34 @@ async fn cancel(shared: &Shared) -> Result<(), AgentError> {
         state.reply = None;
     }
     shared.event(notifications::ended(TurnOutcome::Cancelled, None), None).await;
-    shared.event(EventBody::AgentState { state: AgentRunState::Idle }, None).await;
+    report_state(shared).await;
     Ok(())
 }
 
-pub(super) async fn settle(shared: &Shared) {
+pub(super) async fn settle(shared: &Shared, parent: Option<&protocol::model::ToolUseId>) {
     let (prompts, requests, calls) = {
         let mut state = shared.state.lock();
-        state.terminals.clear();
+        // Child commands can finish after their turn, including after a follow-up begins. Keep their pending
+        // calls until that completion, so its genuine output is recorded once under the old invocation.
+        let calls = if parent.is_none() {
+            state.work.remove(&None).into_iter().flat_map(|work| work.calls.into_keys()).collect::<Vec<_>>()
+        } else {
+            Vec::new()
+        };
         (
             {
                 let sending = state.sending;
-                let prompts: Vec<_> = state.untaken.iter().copied().filter(|seq| Some(*seq) != sending).collect();
-                state.untaken.retain(|seq| Some(*seq) == sending);
+                let prompts: Vec<_> =
+                    state.untaken.iter().copied().filter(|seq| parent.is_none() && Some(*seq) != sending).collect();
+                state.untaken.retain(|seq| parent.is_some() || Some(*seq) == sending);
                 prompts
             },
-            state.waiting.drain().map(|(id, _)| id).collect::<Vec<_>>(),
-            state.calls.drain().map(|(id, _)| id).collect::<Vec<_>>(),
+            state
+                .waiting
+                .extract_if(|_, waiting| waiting.parent.as_ref() == parent)
+                .map(|(id, _)| id)
+                .collect::<Vec<_>>(),
+            calls,
         )
     };
     for prompt in prompts {
@@ -257,7 +271,26 @@ pub(super) async fn settle(shared: &Shared) {
             )
             .await;
     }
-    for tool_use_id in calls {
-        shared.event(EventBody::ToolCallDropped { tool_use_id }, None).await;
+    // SubagentEnded ends a child's unfinished work. ToolCallDropped is a root-only event, used when the
+    // agent went on without a call; inventing child results here would claim output the CLI never supplied.
+    if parent.is_none() {
+        for tool_use_id in calls {
+            shared.event(EventBody::ToolCallDropped { tool_use_id }, None).await;
+        }
     }
+}
+
+/// Reconcile approval changes with the root turn; the hub combines Idle with its background-task list.
+pub(super) async fn report_state(shared: &Shared) {
+    let state = {
+        let state = shared.state.lock();
+        if !state.waiting.is_empty() {
+            AgentRunState::RequiresAction
+        } else if state.turn.is_some() {
+            AgentRunState::Running
+        } else {
+            AgentRunState::Idle
+        }
+    };
+    shared.event(EventBody::AgentState { state }, None).await;
 }

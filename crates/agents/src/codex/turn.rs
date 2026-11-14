@@ -40,7 +40,7 @@ async fn start(shared: &Shared, input: Vec<Value>) -> Result<(), AgentError> {
     };
     let plan = settings.permission_mode == PermissionMode::Plan;
     let response = shared.rpc.ask("turn/start", json!({
-        "threadId":thread,"input":input,"model":settings.model.as_str(),"effort":settings.effort.as_str(),
+        "threadId":thread,"input":input,"model":settings.model.as_str(),"effort":settings.effort.as_str(),"summary":"auto",
         "approvalPolicy":if plan {"on-request"} else {"never"},
         "sandboxPolicy":if plan {json!({"type":"readOnly"})} else {json!({"type":"dangerFullAccess"})},
         "collaborationMode":{"mode":if plan {"plan"} else {"default"},

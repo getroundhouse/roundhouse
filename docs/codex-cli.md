@@ -57,6 +57,18 @@ An `exec_command` can yield a session while its command keeps running. Its `proc
 
 **A command can run before its item is reported.** In a scripted trial, a command wrote a marker and waited, and the client interrupted as soon as the marker existed. The process was stopped, but no `commandExecution` item had arrived. Waiting for a command's marker therefore doesn't guarantee the transcript already contains its call. When the tool yielded first, the start item arrived; the interruption behavior below was different too.
 
+### Reasoning summaries
+
+Sol and Astra's model metadata in Codex 0.169.0 defaults `default_reasoning_summary` to `none`. With that effective setting, completed reasoning items can have empty `summary` and `content` arrays; an encrypted reasoning item in the native history supplies no display text. The adapter requests `model_reasoning_summary: "auto"` in the thread configuration and `summary: "auto"` on each new root turn. This requests whatever summary the model makes available; it does not guarantee every reasoning item contains one. Title-generation threads keep summaries off.
+
+### Subagent threads
+
+Codex 0.169.0 multiplexes subagent notifications over the parent's app-server connection. `threadId` identifies the conversation, and `turnId`, or `turn.id` on a turn notification, identifies an invocation. Child turn starts and completions must not change the root turn, consume its queued native user-message echoes, or settle its calls and requests.
+
+A `subAgentActivity` item of kind `started` identifies the spawn call, child thread, task path, resolved model and effort. Its start and completion notifications describe the same spawn operation; neither completion means the child finished. These activity items do not provide the delegated prompt. The observed child work followed the activity and included commands, reasoning and replies on its own thread. `collabAgentToolCall` items separately describe operations such as waiting for agents.
+
+The adapter associates each child turn with a subagent call and gives its output that call as `parent_tool_use_id`. A child turn's completion supplies its outcome and its last assistant message supplies its report. Activity kinds `interacted`, `interrupted` and `completed` do not identify a child turn, so they cannot close a newer invocation on the same thread. A new child turn gets another call, referring to the preceding invocation with `resumes`; earlier turns keep their associations for late notifications. An unassociated foreign thread is retained as untranslated data without affecting the root. Root cancellation settles root work only; it does not establish that a child stopped. Live children remain in the background-task list until their native turns end or the process exits.
+
 ## Steering and interruption
 
 | What | Observed behavior | What an adapter needs to account for |

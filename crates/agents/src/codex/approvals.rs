@@ -3,7 +3,7 @@ use protocol::capability::{
     asking::{Choose, PlanContext, Question, QuestionOption, TypedAnswer},
 };
 use protocol::event::{AgentRunState, ApprovalDecision, ApprovalOutcome, EventBody, NoticeLevel};
-use protocol::model::{ApprovalId, PermissionMode};
+use protocol::model::{ApprovalId, PermissionMode, ToolUseId};
 use serde_json::{Value, json};
 
 use super::{
@@ -18,12 +18,13 @@ pub(super) async fn requested(
     method: &str,
     native_id: &Value,
     params: &Value,
+    scope: &super::subagents::Scope,
     raw: String,
 ) -> Result<(), AgentError> {
     let (asks, native) = match method {
         "item/commandExecution/requestApproval" | "item/fileChange/requestApproval" => {
             let id = params["itemId"].as_str().unwrap_or_default();
-            let call = shared.state.lock().calls.get(&id.into()).cloned();
+            let call = shared.state.lock().work(scope.parent.as_ref()).calls.get(&id.into()).cloned();
             let Some(call) = call else { return unsupported(shared, native_id, method).await };
             let native = if method.contains("commandExecution") {
                 NativeRequest::Command(native_id.clone())
@@ -60,18 +61,37 @@ pub(super) async fn requested(
     };
     let request =
         Request { asks, suggested: Vec::new(), always: false, why: params["reason"].as_str().map(str::to_owned) };
-    ask(shared, ApprovalId::from(format!("codex-{}", uuid::Uuid::new_v4())), request, native, Some(raw)).await;
+    ask(
+        shared,
+        ApprovalId::from(format!("codex-{}", uuid::Uuid::new_v4())),
+        request,
+        native,
+        scope.parent.clone(),
+        Some(raw),
+    )
+    .await;
     Ok(())
 }
 
 pub(super) async fn plan(shared: &Shared, plan: String) {
     let id = ApprovalId::from(format!("codex-plan-{}", uuid::Uuid::new_v4()));
     let request = Request { asks: Asks::Plan { plan, file: None }, suggested: Vec::new(), always: false, why: None };
-    ask(shared, id, request, NativeRequest::Plan, None).await;
+    ask(shared, id, request, NativeRequest::Plan, None, None).await;
 }
 
-async fn ask(shared: &Shared, id: ApprovalId, request: Request, native: NativeRequest, raw: Option<String>) {
-    shared.state.lock().waiting.insert(id.clone(), Waiting { request: request.clone(), native });
+async fn ask(
+    shared: &Shared,
+    id: ApprovalId,
+    request: Request,
+    native: NativeRequest,
+    parent: Option<ToolUseId>,
+    raw: Option<String>,
+) {
+    shared
+        .state
+        .lock()
+        .waiting
+        .insert(id.clone(), Waiting { request: request.clone(), native, parent: parent.clone() });
     shared
         .event(
             EventBody::ApprovalRequested {
@@ -84,7 +104,7 @@ async fn ask(shared: &Shared, id: ApprovalId, request: Request, native: NativeRe
                 suggestions: Box::new(Value::Null),
                 asking: None,
                 reason: None,
-                asked_by: None,
+                asked_by: parent,
             },
             raw,
         )
@@ -134,6 +154,7 @@ pub(super) async fn decide(shared: &Shared, id: &ApprovalId, decision: &Decision
         shared.stop().await;
         return Err(error);
     }
+    control::report_state(shared).await;
     Ok(())
 }
 
@@ -272,6 +293,7 @@ pub(super) async fn resolved(shared: &Shared, native: &Value) {
                 None,
             )
             .await;
+        control::report_state(shared).await;
     }
 }
 
@@ -288,7 +310,7 @@ fn unsupported_decision() -> AgentError {
     AgentError::Refused("Codex cannot apply that decision to this request".into())
 }
 
-async fn unsupported(shared: &Shared, id: &Value, method: &str) -> Result<(), AgentError> {
+pub(super) async fn unsupported(shared: &Shared, id: &Value, method: &str) -> Result<(), AgentError> {
     shared
         .event(
             EventBody::Notice {

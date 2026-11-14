@@ -46,7 +46,7 @@ Each call is a line: what it is, and what it's about. Click it to open it.
 
 What the agent thought is a line like a call's, saying `Thinking`, with the start of the thought. Click it to read the whole thought.
 
-`Always expand thinking`, in [Settings](../settings.md), shows every thought in full.
+`Always expand thinking`, in [Settings](../settings.md), shows every thought in full. Codex shows the reasoning summaries its model makes available; some thoughts have no summary.
 
 ## Subagents
 
@@ -59,7 +59,7 @@ An agent can hand part of its work to a subagent. Its call says what the subagen
 
 ![Two subagents' calls, opened](../../../spec/screens/tool-subagent.png)
 
-A subagent's work is kept out of the chat, so it doesn't bury the conversation it's part of.
+A subagent's work is kept out of the chat, so it doesn't bury the conversation it's part of. Codex names its subagents by their task paths. Follow-up work on one appears as another call with its own transcript and report; a message to it alone does not start another call. What it was asked appears only when Codex supplies it.
 
 ## Work in the background
 
