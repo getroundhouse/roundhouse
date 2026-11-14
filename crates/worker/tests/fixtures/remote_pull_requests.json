@@ -1,0 +1,68 @@
+{
+  "data": {
+    "repository": {
+      "pullRequest": {
+        "number": 7,
+        "url": "https://example.com/pull/7",
+        "title": "T",
+        "state": "OPEN",
+        "isDraft": false,
+        "headRefOid": "remote-head",
+        "baseRefOid": "remote-base",
+        "baseRefName": "main",
+        "headRefName": "topic",
+        "mergeStateStatus": "CLEAN",
+        "mergeable": "MERGEABLE",
+        "reviewDecision": null,
+        "potentialMergeCommit": null,
+        "mergeQueueEntry": null,
+        "reviews": {
+          "nodes": []
+        },
+        "timelineItems": {
+          "nodes": []
+        },
+        "stackEntry": null,
+        "stack": null,
+        "baseRef": {
+          "compare": {
+            "behindBy": 0,
+            "baseTarget": {
+              "oid": "remote-base"
+            },
+            "headTarget": {
+              "oid": "remote-head"
+            }
+          }
+        },
+        "statusCheckRollup": {
+          "commit": {
+            "oid": "remote-head"
+          },
+          "contexts": {
+            "nodes": [],
+            "pageInfo": {
+              "hasNextPage": false
+            }
+          }
+        }
+      },
+      "ref": {
+        "branchProtectionRule": null,
+        "refUpdateRule": null,
+        "rules": {
+          "nodes": [],
+          "pageInfo": {
+            "hasNextPage": false
+          }
+        }
+      }
+    },
+    "rateLimit": {
+      "cost": 1,
+      "limit": 5000,
+      "remaining": 4900,
+      "resetAt": "2099-01-01T01:00:00Z"
+    }
+  }
+}

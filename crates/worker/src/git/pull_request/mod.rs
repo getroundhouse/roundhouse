@@ -12,3 +12,5 @@ mod github;
 #[cfg(test)]
 use github::{ByUrl, Failing, Viewed, failing, parse_by_url, parse_commits, parse_pull_request, parse_rate_limit};
 pub use github::{pull_request, rate_limit};
+
+pub(super) use github::{Unran, run_gh};

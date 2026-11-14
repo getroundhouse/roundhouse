@@ -333,7 +333,10 @@ A worker's hello names its build, and a hub that carries on with a worker of ano
 
 ## The worker's tools
 
-Explicit pull-request waits use repository-pinned selections, complete stack observations and typed terminal results. The hub owns their durable scope, deadline and observations; workers only read GitHub, and clients draw the hub's open-wait collection. An omitted `waits` collection uses the legacy singular `wait`, while an empty collection means no open waits. New request methods are refused as unsupported until their receiver implements them, so an explicit selection is never interpreted as a checked-out-branch request. *Not built:* explicit reads and waits and their collection in the chat.
+Explicit pull-request waits use repository-pinned selections, complete stack observations and typed terminal results. The hub owns their durable scope, deadline and observations; workers only read GitHub, and clients draw the hub's open-wait collection. An omitted `waits` collection uses the legacy singular `wait`, while an empty collection means no open waits. New request methods are refused as unsupported until their receiver implements them, so an explicit selection is never interpreted as a checked-out-branch request. *Not built:* the agent tools, durable explicit waits and their collection in the chat.
+
+The worker reads explicit PRs and their open lower native GitHub stack dependencies without changing the checkout. It pages stack entries, checks and effective trunk requirements before revalidating heads, bases and topology. Missing requirements remain pending, including names visible only through non-admin branch protection; a visible broad rule cannot satisfy a hidden stricter provider requirement. Only GitHub's original required-check result resolves that fallback. Read failures carry their affected PRs and API cost back to the hub. The agent tools and durable monitoring remain *Not built*.
+
 
 Agents call tools of Roundhouse's own, such as one that says where the workspace's pull request stands, and the hub answers them.
 
