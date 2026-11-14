@@ -20,9 +20,9 @@ Working on it needs Terraform 1.10 or later, SOPS 3.9 or later, and the AWS CLI.
 
 ## Runners
 
-A job names a runner in its label, as in `runs-on: runs-on=${{ github.run_id }}/runner=arm64-16`, and the label can override the runner's settings, as in `/spot=false`. A job that caches runs `runs-on/action` first, so `actions/cache` reaches the stack's bucket rather than GitHub's. A run can save only to its own branch's cache, and reads `main`'s too, as on GitHub.
+A job names a runner in its label, as in `runs-on: runs-on=${{ github.run_id }}/runner=arm64-16-gen8`, and the label can override the runner's settings, as in `/spot=false`. A job that caches runs `runs-on/action` first, so `actions/cache` reaches the stack's bucket rather than GitHub's. A run can save only to its own branch's cache, and reads `main`'s too, as on GitHub.
 
-RunsOn reads `.github/runs-on.yml` only from `main`, since the repository is public, so a change to a runner reaches every job that names it once it merges, without a PR having run on it. To change a runner jobs use, add one under a new name, merge it, and move the jobs to it in a PR of its own, whose CI runs on it.
+RunsOn reads `.github/runs-on.yml` only from `main`, since the repository is public, so a change to a runner reaches every job that names it once it merges, without a PR having run on it. To change a runner jobs use, add one under a new name, merge it, and move the jobs to it in a PR of its own, whose CI runs on it. Delete the old one in a later PR, once no open branch names it: a PR whose base isn't `main` runs the workflows of its merge with that base, and a re-run runs its run's, so either can still ask for the old runner.
 
 A runner says what it is, not what uses it, so nothing in `.github/runs-on.yml` points to a job or a setting. A setting that depends on the runner its job names says so where it's set, and the comment on the job points to it, as the test job's points to how many tests `.config/nextest.toml` runs at once. So a PR that moves a job to another runner finds, from the job, what depends on its runner.
 
@@ -47,7 +47,7 @@ terraform providers lock -platform=darwin_arm64 -platform=linux_amd64
 
 ## Setting it up
 
-A new account can run only 5 vCPUs of Spot instances and 5 of on-demand ones, which is less than one `arm64-16` runner. Quotas are raised by hand. When one passes 80% or 95%, `quotas.tf` has Service Quotas raise an AWS Health event, and AWS Health emails it to the account's root address. Ask for room for 8 runners on Spot and 4 on-demand, which covers Spot when it has no capacity or its quota is full, and the jobs RunsOn reruns when AWS reclaims an instance:
+A new account can run only 5 vCPUs of Spot instances and 5 of on-demand ones, which is less than one `arm64-16-gen8` runner. Quotas are raised by hand. When one passes 80% or 95%, `quotas.tf` has Service Quotas raise an AWS Health event, and AWS Health emails it to the account's root address. Ask for room for 8 runners on Spot and 4 on-demand, which covers Spot when it has no capacity or its quota is full, and the jobs RunsOn reruns when AWS reclaims an instance:
 
 ```sh
 aws service-quotas request-service-quota-increase --region us-east-2 --service-code ec2 --quota-code L-34B43A08 --desired-value 128
