@@ -231,6 +231,14 @@ async fn send(
 
 #[async_trait]
 impl AgentProcess for ClaudeProcess {
+    fn capabilities(&self) -> protocol::capability::Capabilities {
+        super::super::claims::claims()
+    }
+
+    async fn control(&self, control: &protocol::capability::Control) -> Result<(), AgentError> {
+        super::super::controls::apply(self, control).await
+    }
+
     fn pid(&self) -> u32 {
         self.shared.pid.load(Ordering::SeqCst)
     }

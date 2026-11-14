@@ -72,6 +72,7 @@ fn config(dir: &Path) -> Config {
         home: None,
         path: None,
         claude_bin: None,
+        codex_bin: None,
         scratch_dir: dir.to_path_buf(),
         deleter: Deleter::new("/bin/rm", ["-rf", "--"]),
         refused: None,

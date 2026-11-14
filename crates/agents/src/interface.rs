@@ -7,11 +7,15 @@ use protocol::prompt::Prompt;
 
 #[async_trait]
 pub trait AgentProcess: Send + Sync {
+    fn capabilities(&self) -> protocol::capability::Capabilities;
+    /// The current runtime boundary. Legacy entry points below remain for an older hub's worker requests and the
+    /// conformance driver's existing scenarios; new controls are checked against this run's claims.
+    async fn control(&self, control: &protocol::capability::Control) -> Result<(), AgentError>;
     fn pid(&self) -> u32;
     /// The process has exited, or can't be reached. A new prompt needs a new process, even though
     /// its last output may still be on the way.
     fn is_gone(&self) -> bool;
-    /// An error means this process can't take the prompt, and [`AgentProcess::is_gone`] is now true. The prompt can
+    /// An error means this process didn't take the prompt. Only [`AgentProcess::is_gone`] permits restarting it. The prompt can
     /// say nothing when it carries files, which are in the worktree already. `seq` is where the prompt is recorded,
     /// which the process names when it reports taking or dropping it.
     async fn send_prompt(&self, seq: Seq, prompt: &Prompt<AttachmentFile>) -> Result<(), AgentError>;

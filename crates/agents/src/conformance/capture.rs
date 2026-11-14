@@ -14,7 +14,7 @@ use super::lines::{Lines, asked_by_itself};
 #[serde(rename_all = "snake_case")]
 pub enum Entry {
     /// The adapter started the CLI with `args`, as a new conversation or resuming `session`.
-    Launch { resume: bool, session: AgentSessionId, args: Vec<String> },
+    Launch { resume: bool, session: Option<AgentSessionId>, args: Vec<String> },
     /// A line the adapter wrote to the CLI.
     ToCli(Value),
     /// A line the CLI wrote, which the adapter read.
@@ -44,8 +44,8 @@ impl Tap {
         let _ = self.0.send(entry);
     }
 
-    pub(crate) fn launched(&self, resume: bool, session: &AgentSessionId, args: &[String]) {
-        self.note(Entry::Launch { resume, session: session.clone(), args: args.to_vec() });
+    pub(crate) fn launched(&self, resume: bool, session: Option<&AgentSessionId>, args: &[String]) {
+        self.note(Entry::Launch { resume, session: session.cloned(), args: args.to_vec() });
     }
 
     pub(crate) fn wrote(&self, line: &Value) {

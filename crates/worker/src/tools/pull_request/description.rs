@@ -2,8 +2,27 @@ use super::super::mcp::Called;
 use crate::asks::Asks;
 use protocol::model::{Checks, MergeState, PullRequest, QueueState, Review, SessionId, Standing};
 use protocol::worker::{PullRequestAnswer, ReadPullRequest};
+use serde_json::{Value, json};
 
 pub(in super::super) const NAME: &str = "get_pull_request";
+
+// The older MCP envelope still discovers the workspace-only tool; the current envelope lists explicit PR selections.
+const DESCRIPTION: &str = "Says where the pull request of the branch checked out in this workspace stands on \
+    GitHub: open, a draft, merged or closed; whether it's in the merge queue; its checks on its newest commit; its \
+    review; whether it conflicts; and how this worktree differs from it. Roundhouse reads it from GitHub when asked, \
+    waiting a few seconds when it read it just before, within its share of GitHub's hourly limit, and works out \
+    what's in the way of merging it, so use this rather than `gh pr view`, `gh pr checks` or a loop of your own. A \
+    pull request in the merge queue isn't merged until this says it's merged.";
+
+pub(in super::super) fn definition() -> Value {
+    json!({
+        "name": NAME,
+        "title": "Get the pull request",
+        "description": DESCRIPTION,
+        "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false },
+        "annotations": { "readOnlyHint": true, "openWorldHint": true },
+    })
+}
 
 pub(in super::super) async fn call(asks: &Asks, session_id: &SessionId) -> Called {
     match asks.ask(session_id.clone(), ReadPullRequest).await {

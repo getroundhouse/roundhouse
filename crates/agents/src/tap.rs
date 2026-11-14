@@ -10,11 +10,12 @@ use serde_json::Value;
 /// Without `testing` there's no way to make one, so a process's `Option<Tap>` is always `None`, and the calls that would
 /// tell it something compile to nothing.
 #[cfg(not(feature = "testing"))]
+#[derive(Clone)]
 pub(crate) enum Tap {}
 
 #[cfg(not(feature = "testing"))]
 impl Tap {
-    pub(crate) fn launched(&self, _resume: bool, _session: &AgentSessionId, _args: &[String]) {
+    pub(crate) fn launched(&self, _resume: bool, _session: Option<&AgentSessionId>, _args: &[String]) {
         match *self {}
     }
 

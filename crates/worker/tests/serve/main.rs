@@ -176,6 +176,7 @@ fn config(dir: &Path, claude_bin: Option<PathBuf>) -> Config {
         home: None,
         path: None,
         claude_bin,
+        codex_bin: None,
         scratch_dir: dir.to_path_buf(),
         deleter: Deleter::new("/bin/rm", ["-rf", "--"]),
         refused: None,

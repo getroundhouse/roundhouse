@@ -55,6 +55,15 @@ pub static CANCEL_COMMAND: Scenario = Scenario {
             driver.start().await?;
             driver.prompt(&format!("Run exactly `{SLOW}` in a shell. Do nothing else.")).await?;
             driver.made(STARTED).await?;
+            driver
+                .wait("the running command's call", |output| {
+                    matches!(output,
+                crate::AgentOutput::Event { body: EventBody::Assistant { blocks, .. }, .. }
+                    if blocks.iter().any(|block| matches!(block,
+                        ContentBlock::ToolUse { call: Some(CallKind::Command), .. } |
+                        ContentBlock::Call { call: protocol::capability::calls::Call::Command(_), .. })))
+                })
+                .await?;
             driver.interrupt().await?;
             driver.turn_ended().await?;
             driver.mark(CANCELLED);
@@ -168,7 +177,7 @@ pub static PLAN_APPROVED: Scenario = Scenario {
             driver.start().await?;
             driver
                 .prompt(&format!(
-                    "Write exactly this plan to your plan file, then present it for approval, without reading or \
+                    "Present exactly this plan for approval, without reading or \
                      running anything else: {PLAN} Once it's approved, reply with the single word: approved"
                 ))
                 .await?;
@@ -179,11 +188,76 @@ pub static PLAN_APPROVED: Scenario = Scenario {
         Check {
             name: "the agent asked for the plan to be approved",
             check: |trial| {
-                let asked = trial.events().any(|event| {
-                    matches!(event, EventBody::ApprovalRequested { asking: Some(asking), .. }
-                        if matches!(&**asking, Asking::Plan { plan } if plan.contains(PLAN)))
+                let asked = trial.events().any(|event| match event {
+                    EventBody::ApprovalRequested { request: Some(request), .. } => matches!(&request.asks,
+                            protocol::capability::approvals::Asks::Plan { plan, .. } if plan.contains(PLAN)),
+                    EventBody::ApprovalRequested { asking: Some(asking), .. } => {
+                        matches!(&**asking, Asking::Plan { plan } if plan.contains(PLAN))
+                    }
+                    EventBody::UserPrompt { .. }
+                    | EventBody::PromptTaken { .. }
+                    | EventBody::PromptDropped { .. }
+                    | EventBody::AgentStarted { .. }
+                    | EventBody::AgentInit { .. }
+                    | EventBody::AgentState { .. }
+                    | EventBody::AgentTasks { .. }
+                    | EventBody::AgentLimits { .. }
+                    | EventBody::SubagentStarted { .. }
+                    | EventBody::SubagentContext { .. }
+                    | EventBody::SubagentEnded { .. }
+                    | EventBody::Assistant { .. }
+                    | EventBody::AgentUser { .. }
+                    | EventBody::ToolCallDropped { .. }
+                    | EventBody::TurnEnded { .. }
+                    | EventBody::RequestFailed { .. }
+                    | EventBody::ApprovalRequested { .. }
+                    | EventBody::ApprovalResolved { .. }
+                    | EventBody::AgentExited { .. }
+                    | EventBody::Notice { .. }
+                    | EventBody::AgentMode { .. }
+                    | EventBody::AgentOther { .. }
+                    | EventBody::AgentCompacting { .. }
+                    | EventBody::CompactionAsked { .. }
+                    | EventBody::AgentCompacted { .. }
+                    | EventBody::CacheExpired { .. }
+                    | EventBody::Unknown => false,
                 });
-                holds(asked, || "no approval asked of the plan".into())
+                holds(asked, || {
+                    let plans: Vec<_> = trial
+                        .events()
+                        .filter_map(|e| match e {
+                            EventBody::ApprovalRequested { request: Some(r), .. } => Some(format!("{:?}", r.asks)),
+                            EventBody::ApprovalRequested { asking, .. } => Some(format!("{asking:?}")),
+                            EventBody::UserPrompt { .. }
+                            | EventBody::PromptTaken { .. }
+                            | EventBody::PromptDropped { .. }
+                            | EventBody::AgentStarted { .. }
+                            | EventBody::AgentInit { .. }
+                            | EventBody::AgentState { .. }
+                            | EventBody::AgentTasks { .. }
+                            | EventBody::AgentLimits { .. }
+                            | EventBody::SubagentStarted { .. }
+                            | EventBody::SubagentContext { .. }
+                            | EventBody::SubagentEnded { .. }
+                            | EventBody::Assistant { .. }
+                            | EventBody::AgentUser { .. }
+                            | EventBody::ToolCallDropped { .. }
+                            | EventBody::TurnEnded { .. }
+                            | EventBody::RequestFailed { .. }
+                            | EventBody::ApprovalResolved { .. }
+                            | EventBody::AgentExited { .. }
+                            | EventBody::Notice { .. }
+                            | EventBody::AgentMode { .. }
+                            | EventBody::AgentOther { .. }
+                            | EventBody::AgentCompacting { .. }
+                            | EventBody::CompactionAsked { .. }
+                            | EventBody::AgentCompacted { .. }
+                            | EventBody::CacheExpired { .. }
+                            | EventBody::Unknown => None,
+                        })
+                        .collect();
+                    format!("no approval asked of the exact plan; requests: {plans:?}")
+                })
             },
         },
         Check {

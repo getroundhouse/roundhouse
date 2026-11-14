@@ -4,7 +4,7 @@ use protocol::Build;
 use protocol::model::SessionId;
 use serde_json::{Map, Value, json};
 
-/// The one version of MCP these tools speak.
+/// The MCP version with stateless discovery and tasks.
 pub(in super::super) const VERSION: &str = "2026-07-28";
 
 /// Where a request's `_meta` names its version.
@@ -193,9 +193,8 @@ async fn request(
     params: &Map<String, Value>,
 ) -> Result<Value, RpcError> {
     let method = Method::named(name);
-    // From a client that only speaks the versions before, which has no way on, so it's told which this speaks.
-    if method == Method::Initialize {
-        return Err(unsupported(params.get("protocolVersion").and_then(Value::as_str)));
+    if method == Method::Initialize || matches!(&headers.version, Said::Value(v) if v == super::legacy::VERSION) {
+        return super::legacy::request(asks, build, session_id, headers, name, params).await;
     }
     agrees("MCP-Protocol-Version", &headers.version, version(params))?;
     agrees("Mcp-Method", &headers.method, Some(name))?;
@@ -257,7 +256,7 @@ fn takes_tasks(params: &Map<String, Value>) -> bool {
 }
 
 /// Whether a header says what the body does, as Streamable HTTP has every request say it twice.
-fn agrees(header: &str, said: &Said, body: Option<&str>) -> Result<(), RpcError> {
+pub(super) fn agrees(header: &str, said: &Said, body: Option<&str>) -> Result<(), RpcError> {
     let mismatch = |message: String| Err(RpcError::new(Code::HeaderMismatch, message));
     match (said, body) {
         (Said::Value(said), Some(body)) if said == body => Ok(()),
@@ -268,11 +267,11 @@ fn agrees(header: &str, said: &Said, body: Option<&str>) -> Result<(), RpcError>
     }
 }
 
-fn unsupported(requested: Option<&str>) -> RpcError {
+pub(super) fn unsupported(requested: Option<&str>) -> RpcError {
     RpcError {
         code: Code::UnsupportedVersion,
-        message: format!("Unsupported protocol version: this server speaks only {VERSION}"),
-        data: Some(json!({ "supported": [VERSION], "requested": requested })),
+        message: format!("Unsupported protocol version: this server speaks {VERSION} and {}", super::legacy::VERSION),
+        data: Some(json!({ "supported": [VERSION, super::legacy::VERSION], "requested": requested })),
     }
 }
 

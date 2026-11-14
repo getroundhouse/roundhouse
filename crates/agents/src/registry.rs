@@ -1,4 +1,4 @@
-use crate::{AgentError, AgentOptions, AgentOutput, AgentProcess, claude};
+use crate::{AgentError, AgentOptions, AgentOutput, AgentProcess, claude, codex};
 use protocol::attachment::NewAttachment;
 use protocol::model::{AgentAccount, AgentDescription, AgentKind, Title};
 use protocol::prompt::Prompt;
@@ -18,9 +18,16 @@ pub async fn spawn(
     output: mpsc::Sender<AgentOutput>,
     options: AgentOptions,
 ) -> Result<Arc<dyn AgentProcess>, AgentError> {
+    let description = descriptions().into_iter().find(|d| d.kind == spec.agent).ok_or(AgentError::UnknownKind)?;
+    let claims = description.capabilities.as_ref().ok_or(AgentError::UnknownKind)?;
+    let settings = spec.settings.for_capabilities(claims).map_err(|e| AgentError::Refused(e.to_string()))?;
+    if !spec.start.allowed(claims) || !settings.allowed(claims) {
+        return Err(AgentError::Refused("The agent does not offer these launch settings".into()));
+    }
     match spec.agent {
         AgentKind::Claude => claude::spawn(spec, output, options).await,
-        AgentKind::Codex | AgentKind::Unknown => Err(AgentError::UnknownKind),
+        AgentKind::Codex => codex::spawn(spec, output, options).await,
+        AgentKind::Unknown => Err(AgentError::UnknownKind),
     }
 }
 
@@ -29,7 +36,8 @@ pub async fn spawn(
 pub async fn account(kind: AgentKind, options: &AgentOptions, scratch_dir: &Path) -> Result<AgentAccount, AgentError> {
     match kind {
         AgentKind::Claude => claude::account(options, scratch_dir).await,
-        AgentKind::Codex | AgentKind::Unknown => Err(AgentError::UnknownKind),
+        AgentKind::Codex => codex::account(options, scratch_dir).await,
+        AgentKind::Unknown => Err(AgentError::UnknownKind),
     }
 }
 
@@ -43,6 +51,7 @@ pub async fn title_for(
 ) -> Result<Title, AgentError> {
     match kind {
         AgentKind::Claude => claude::title_for(prompt, options, scratch_dir).await,
-        AgentKind::Codex | AgentKind::Unknown => Err(AgentError::UnknownKind),
+        AgentKind::Codex => codex::title_for(prompt, options, scratch_dir).await,
+        AgentKind::Unknown => Err(AgentError::UnknownKind),
     }
 }

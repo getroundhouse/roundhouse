@@ -85,6 +85,7 @@ fn main() -> anyhow::Result<()> {
         .with_ansi(false)
         .init();
     let args = Args::parse();
+    let codex_bin = std::env::var_os("ROUNDHOUSE_CODEX_BIN").filter(|bin| !bin.is_empty()).map(PathBuf::from);
     let claude_bin = std::env::var_os(worker::ENV_CLAUDE_BIN).filter(|bin| !bin.is_empty()).map(PathBuf::from);
     // The command that reaches a worker runs nothing in a workspace, and passes them on to the worker it starts, which
     // forgets them itself.
@@ -120,7 +121,10 @@ fn main() -> anyhow::Result<()> {
                 (_, true) => Transport::Listen,
                 _ => Transport::Stdio,
             };
-            worker_role::run(transport, worker_role::Given { build: BUILD, workspaces_root, state_dir, claude_bin })
+            worker_role::run(
+                transport,
+                worker_role::Given { build: BUILD, workspaces_root, state_dir, claude_bin, codex_bin },
+            )
         }
     }
 }

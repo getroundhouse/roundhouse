@@ -37,6 +37,7 @@ The guide is the one kind written for someone using the product rather than buil
 | `docs/manual-checks.md` | Reference | Owner | What a person has to judge by hand |
 | `docs/terms.md` | Reference | Agents | What the project's words mean, and which to write |
 | `docs/claude-cli.md` | Reference | Agents | How the Claude CLI behaves, and how the worker drives it |
+| `docs/codex-cli.md` | Reference | Agents | How Codex's app-server behaves on the wire, and how to probe it |
 | `docs/performance.md` | Reference | Agents | How to measure the desktop app's speed, and what helps it meet the bars |
 | `docs/inspiration.md` | Reference | Agents | What Conductor does, as a source of ideas |
 | `AGENTS.md` | Instructions | Owner | How to build and test, and the rules for working here |

@@ -33,8 +33,8 @@ use protocol::model::LoginToken;
 /// `env -i`, which would drop what the adapter itself gives the CLI, such as a login's token.
 const SCRIPTED_ONLY: &str = "--scripted-only";
 
-#[derive(Default)]
 struct Args {
+    agent: protocol::model::AgentKind,
     paid: bool,
     save: bool,
     scripted_only: bool,
@@ -45,12 +45,34 @@ struct Args {
     only: Vec<String>,
 }
 
+impl Default for Args {
+    fn default() -> Self {
+        Self {
+            agent: protocol::model::AgentKind::Claude,
+            paid: false,
+            save: false,
+            scripted_only: false,
+            out: None,
+            cli: None,
+            home: None,
+            only: Vec::new(),
+        }
+    }
+}
+
 impl Args {
     fn parse() -> Args {
         let mut args = Args::default();
         let mut given = std::env::args().skip(1);
         while let Some(arg) = given.next() {
             match arg.as_str() {
+                "--agent" => {
+                    args.agent = match given.next().as_deref() {
+                        Some("codex") => protocol::model::AgentKind::Codex,
+                        Some("claude") => protocol::model::AgentKind::Claude,
+                        _ => panic!("--agent takes claude or codex"),
+                    }
+                }
                 "--paid" => args.paid = true,
                 "--save" => args.save = true,
                 SCRIPTED_ONLY => args.scripted_only = true,
@@ -73,7 +95,7 @@ impl Args {
 }
 
 #[tokio::main]
-async fn main() -> ExitCode {
+pub(super) async fn run() -> ExitCode {
     let args = Args::parse();
     if args.scripted_only {
         let held: Vec<_> = std::env::vars_os().filter(|(name, _)| !KEPT_ENV.iter().any(|kept| name == kept)).collect();
@@ -83,9 +105,17 @@ async fn main() -> ExitCode {
     }
     let home = std::env::var_os("HOME").map(PathBuf::from);
     let lookup = BinaryLookup { explicit: args.cli.clone(), path: std::env::var_os("PATH"), home: home.clone() };
-    let cli = find_cli(&lookup).expect("no Claude CLI found");
+    let cli = if args.agent == protocol::model::AgentKind::Codex {
+        agents::codex::conformance::find_cli(&lookup)
+    } else {
+        find_cli(&lookup)
+    }
+    .expect("no agent CLI found");
     let mut scripted = Command::new(std::env::current_exe().unwrap());
     scripted.arg(SCRIPTED_ONLY).arg("--cli").arg(&cli).args(&args.only);
+    if args.agent == protocol::model::AgentKind::Codex {
+        scripted.args(["--agent", "codex"]);
+    }
     if args.save {
         scripted.arg("--save");
     }
@@ -97,7 +127,11 @@ async fn main() -> ExitCode {
     }
     let kept = std::env::vars_os().filter(|(name, _)| KEPT_ENV.iter().any(|kept| name == kept));
     let scripted = scripted.env_clear().envs(kept).status().unwrap().success();
-    let token = std::env::var("ROUNDHOUSE_CONFORMANCE_TOKEN").ok().map(LoginToken::new);
+    let token = if args.agent == protocol::model::AgentKind::Codex {
+        None
+    } else {
+        std::env::var("ROUNDHOUSE_CONFORMANCE_TOKEN").ok().map(LoginToken::new)
+    };
     let options = Options { cli, home, token };
     let paid = !args.paid || play(&args, Against::RealModel, &options).await;
     exit(scripted && paid)
@@ -111,7 +145,14 @@ fn exit(passed: bool) -> ExitCode {
 async fn play(args: &Args, against: Against, options: &Options) -> bool {
     let mut passed = true;
     for scenario in args.scenarios().filter(|scenario| scenario.against.contains(&against)) {
-        let Live { report, fixture, requests } = live(scenario, against, options).await;
+        let Live { report, fixture, requests } = if args.agent == protocol::model::AgentKind::Codex {
+            let options = agents::codex::conformance::Options { cli: options.cli.clone(), home: options.home.clone() };
+            let agents::codex::conformance::Live { report, fixture, requests } =
+                agents::codex::conformance::live(scenario, against, &options).await;
+            Live { report, fixture, requests }
+        } else {
+            live(scenario, against, options).await
+        };
         println!("{report}");
         passed &= report.passed();
         let Some(fixture) = fixture else { continue };
@@ -122,7 +163,11 @@ async fn play(args: &Args, against: Against, options: &Options) -> bool {
             println!("        saved {}", dir.join(&file).display());
         };
         if args.save && report.passed() {
-            keep(&Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/claude"));
+            keep(&Path::new(env!("CARGO_MANIFEST_DIR")).join(if args.agent == protocol::model::AgentKind::Codex {
+                "tests/fixtures/codex"
+            } else {
+                "tests/fixtures/claude"
+            }));
         }
         if let Some(out) = &args.out {
             keep(out);
