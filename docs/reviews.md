@@ -8,15 +8,15 @@ A review is split into lanes. Each lane is one kind of question. A reviewer is a
 
 ## When
 
-The agent the owner gave a change to has it reviewed without being asked to, once the change is built, its tests pass and its PR's description is drafted, and before the full checks and the PR. How much review a change gets follows what it changes:
+The agent the owner gave a change to has it reviewed without being asked to, once the change is built, its tests pass and its PR's description is drafted, and before the full checks and the PR. How much review a change gets follows its weight: what would follow if it were wrong, and how far that reaches, rather than its size or what kind of file it's in, so a rule other work is built to can be heavy in one line. Its weight decides which questions it's asked and whether its fixes are checked, and what's in it, words or code, decides which reviewers ask them:
 
 | Change | Reviewers |
 |---|---|
-| Only Markdown | One, for docs |
-| A small fix in one place, such as a flaky test | One, for correctness and tests |
+| A light one, where a mistake would stay where it is, such as a typo, a broken link, a flaky test's fix or a page of the guide | One: for docs when it's only words, and for correctness and tests otherwise |
+| Any other change in words alone, such as to a rule other work is built to, in `docs/architecture.md`, a standard, the spec or `AGENTS.md`, or to a fact it's built to, in a reference doc | One, for docs and design, which checks the rule against the code, and the docs and tools that apply it |
 | Anything else | Two: one for correctness and tests, and one for architecture, cleanliness and docs |
 
-- **A change whose docs are much of it gets a third reviewer, for docs alone.** One that adds a doc, or rewrites a section of one, is such a change. One that adds rules to the spec beside the code they describe isn't. The reviewer for architecture and cleanliness then leaves docs to the third.
+- **A change of the last row whose docs are much of it gets a third reviewer, for docs alone.** One that adds a doc, or rewrites a section of one, is such a change. One that adds rules to the spec beside the code they describe isn't. The reviewer for architecture and cleanliness then leaves docs to the third.
 - **Each PR of a stack is a change of its own,** and gets the reviewers its own diff calls for.
 - **An agent that another agent starts doesn't have its work reviewed,** whether it builds a change or part of one, and its brief says so. The agent that started it has the work reviewed once it comes back.
 
@@ -50,7 +50,7 @@ After its findings, each reviewer's report has a part headed **For the owner:**,
 ## Until it's done
 
 1. The builder keeps the diff its reviewers saw, and checks each finding against the code, since a reviewer can be wrong. It fixes every one that must or should be fixed, or says in the PR's description why not, with an issue for anything left open. It takes one to consider when that's cheap and clearly better. A finding whose fix would take the change in another direction is the owner's to decide, so the builder leaves it, and its report asks.
-2. Fixes can be wrong too. When the builder fixed anything rated *must fix*, or a fix did more than correct a comment, an item's doc or the description, or delete code, one fresh agent checks the fixes. It gets the findings, the checkout, the diff the reviewers saw and the description as rewritten, and asks three things: whether each finding is fixed, or answered in the description, whether a fix broke anything, and whether the description is still true. It doesn't review the change again, and something it sees outside the fixes is raised only when it must be fixed.
+2. Fixes can be wrong too. When the change isn't a light one, by the table's first row, one fresh agent checks the fixes, whatever their findings were rated, unless each only corrects a typo, a broken link or a sentence of the description, or deletes code nothing reached. A reworded rule is checked, since what agents build to changes with its words, whatever the builder meant. It gets the findings, the checkout, the diff the reviewers saw and the description as rewritten, and asks three things: whether each finding is fixed, or answered in the description, whether a fix broke anything, and whether the description is still true. It doesn't review the change again, and something it sees outside the fixes is raised only when it must be fixed.
 3. The builder fixes what the check finds, and the review is done, as it is when no check was needed. Nothing is checked again unless the owner asks for it.
 4. When the check raised something that must be fixed, the builder's report says so and asks whether to have that fix checked, and the builder waits for the answer before the PR. Findings that keep coming usually mean the design is wrong, not its details.
 
@@ -65,7 +65,7 @@ The owner hears about a review once, when it's done, in one report from the buil
 - **What's the owner's to confirm or decide:** a fix that changed an owner doc, the protocol or what a hub stores, and either thing the builder is waiting on, each with what the builder recommends.
 - **What the reviewers put under For the owner,** passed on whole, with what the builder thinks of each.
 - **What was filed,** as issues, which is where anything from the review that's worth keeping goes, since nothing lives only in a chat.
-- **How much review it took:** how many reviewers ran, and whether the fixes were checked.
+- **How much review it took:** which row of the table the change was put in, how many reviewers ran, and whether the fixes were checked.
 
 ## Workarounds
 
@@ -95,6 +95,8 @@ Before any code is written, the reviewer reads the change's design: parts 2 and 
 - Does something in the repo already do this, or could it be extended to?
 - Does it fit `docs/architecture.md`, including the parts that aren't built, such as workers on other machines and the iPhone app?
 - Does it change what an owner doc says, without saying so?
+
+A rule changed in words alone is read the same way, the rule being its design, and the reviewer also asks where an agent following it would go wrong, on either side of its line.
 
 It ends with a verdict: go ahead, go ahead with changes, or rethink, with the better approach described. A design that needs an owner doc to change follows "Who decides" in `docs/documentation.md`.
 
