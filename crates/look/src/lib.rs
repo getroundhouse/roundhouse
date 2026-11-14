@@ -54,7 +54,7 @@ pub use copy::copy_button;
 pub use fit::{fit, pixels};
 pub use hand::{Hand, Off};
 pub use highlight::{Spans, highlight, language, preload_highlighting, try_highlight};
-pub use hover::{hover_card, hover_card_with_a_button};
+pub use hover::{HoldOpen, HoverCard, hover_card, hover_card_with_a_button};
 pub use icon::{IconSize, IconStyle, icon};
 pub use mark::{Signal, Size, brand, chat_mark, mark};
 pub use plan::{plan_colors, plan_texture};
