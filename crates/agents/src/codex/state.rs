@@ -5,17 +5,25 @@ use protocol::model::{ApprovalId, Seq, SessionSettings, ToolUseId};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-#[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq)]
+#[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Hash)]
 #[serde(transparent)]
 pub(super) struct ThreadId(pub(super) String);
 
-#[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq)]
+#[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, Hash)]
 #[serde(transparent)]
 pub(super) struct TurnId(pub(super) String);
 
 pub(super) struct Waiting {
     pub(super) request: Request,
     pub(super) native: NativeRequest,
+    pub(super) parent: Option<ToolUseId>,
+}
+
+#[derive(Default)]
+pub(super) struct Work {
+    /// Native terminal session IDs for unfinished foreground calls, never OS PIDs.
+    pub(super) terminals: HashMap<ToolUseId, String>,
+    pub(super) calls: HashMap<ToolUseId, protocol::capability::calls::Call>,
 }
 
 pub(super) enum NativeRequest {
@@ -44,9 +52,8 @@ pub(super) struct Conversation {
     /// A native intake call can cross a turn boundary; the old turn cannot settle this prompt.
     pub(super) sending: Option<Seq>,
     pub(super) waiting: HashMap<ApprovalId, Waiting>,
-    /// Native terminal session IDs for unfinished foreground calls, never OS PIDs.
-    pub(super) terminals: HashMap<ToolUseId, String>,
-    pub(super) calls: HashMap<ToolUseId, protocol::capability::calls::Call>,
+    pub(super) work: HashMap<Option<ToolUseId>, Work>,
+    pub(super) subagents: super::subagents::Subagents,
     pub(super) plan: Option<String>,
     pub(super) reply: Option<String>,
     pub(super) cancelling: bool,
@@ -62,12 +69,15 @@ impl Conversation {
             untaken: VecDeque::new(),
             sending: None,
             waiting: HashMap::new(),
-            terminals: HashMap::new(),
-            calls: HashMap::new(),
+            work: HashMap::new(),
+            subagents: super::subagents::Subagents::default(),
             plan: None,
             reply: None,
             cancelling: false,
         }
+    }
+    pub(super) fn work(&mut self, parent: Option<&ToolUseId>) -> &mut Work {
+        self.work.entry(parent.cloned()).or_default()
     }
     pub(super) fn take_plan(&mut self) -> Option<String> {
         let mode = self.turn_mode.take();

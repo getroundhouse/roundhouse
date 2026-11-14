@@ -139,7 +139,7 @@ pub(super) async fn conversation(
 fn configuration(spec: &AgentSpec, options: &AgentOptions) -> Value {
     let plan = spec.settings.permission_mode == PermissionMode::Plan;
     let mut config = json!({"features.memories":false,"features.goals":false,"features.default_mode_request_user_input":true,
-        "model_reasoning_effort":spec.settings.effort.as_str()});
+        "model_reasoning_effort":spec.settings.effort.as_str(),"model_reasoning_summary":"auto"});
     if let Some(tools) = &options.tools {
         config["mcp_servers.roundhouse"] = json!({"url":tools.url,
             "http_headers":{"Authorization":format!("Bearer {}", tools.token.as_str())}});
@@ -169,5 +169,6 @@ async fn title_configuration(shared: &Shared, params: &mut Value, options: &Agen
     params["config"]["features.apps"] = json!(false);
     params["config"]["web_search"] = json!("disabled");
     params["config"]["project_doc_max_bytes"] = json!(0);
+    params["config"]["model_reasoning_summary"] = json!("none");
     Ok(())
 }

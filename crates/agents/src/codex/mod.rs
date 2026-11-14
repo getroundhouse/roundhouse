@@ -11,6 +11,7 @@ mod one_off;
 mod rpc;
 mod running;
 mod state;
+mod subagents;
 mod supervise;
 mod terminals;
 mod turn;

@@ -5,7 +5,7 @@ use serde_json::json;
 use std::time::Duration;
 
 pub(super) async fn stop(shared: &Shared, thread: Option<&ThreadId>) -> Result<(), AgentError> {
-    let mut terminals: Vec<_> = shared.state.lock().terminals.values().cloned().collect();
+    let mut terminals: Vec<_> = shared.state.lock().work(None).terminals.values().cloned().collect();
     terminals.sort();
     for terminal in &terminals {
         shared.rpc.ask("thread/backgroundTerminals/terminate", json!({"threadId":thread,"processId":terminal})).await?;

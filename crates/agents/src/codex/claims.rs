@@ -11,6 +11,7 @@ pub(super) fn claims() -> Capabilities {
         others: Vec::new(),
     });
     claims.output.stream_thinking = Some(Claimed {});
+    claims.background.subagents = Some(Claimed {});
     claims.turns.cancel = Some(turns::Cancel { stops: turns::CancelStops::Nothing });
     claims.approvals.modes = Some(approvals::Modes { default: full_access(), others: vec![plan()] });
     claims.approvals.requests = Some(approvals::Requests {
