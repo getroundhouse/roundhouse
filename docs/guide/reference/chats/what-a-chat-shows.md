@@ -73,7 +73,7 @@ With more than four, each kind with several has one line, such as `6 subagents`,
 
 - **The mark shows something is running:** a slower light on its inner row, or the light still sweeping the whole fan while a subagent is going.
 - **The agent picks up again by itself** when the work finishes.
-- **A wait on the pull request has a line of its own,** such as `Waiting on #182's checks · 2 checks running`, with `Stop` to call it off.
+- **Each wait on pull requests has its own line,** listing the PRs, what it waits for and its progress. `Stop` calls off only that wait. A stack wait includes its lower PRs, and several waits can run together.
 - **Closing the chat asks first,** while something is running.
 
 ## Images in a reply

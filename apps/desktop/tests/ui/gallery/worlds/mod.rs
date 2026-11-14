@@ -7,7 +7,8 @@ mod working;
 
 pub(super) use accounts::{accounts, context_held_login, logins_unkept, none_found};
 pub(super) use working::{
-    queue_held, queued, steered, steered_thinking, streaming, thinking_streaming, waiting_on_checks, working_background,
+    queue_held, queued, steered, steered_thinking, streaming, thinking_streaming, waiting_on_checks, waiting_on_stacks,
+    working_background,
 };
 
 mod scenarios;

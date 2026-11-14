@@ -70,7 +70,7 @@ pub(in super::super) fn render_tail(end: &EndOfChat, shared: &Shared, by: By, cx
     }
     // Left going by a turn, or started during one.
     after.extend(background::lines(&at_work.background, folds, by, shared, cx));
-    let wait = at_work.wait.iter().map(|wait| background::wait_line(wait, pull_request, shared, cx));
+    let wait = at_work.waits.iter().map(|wait| background::wait_line(wait, pull_request, shared, cx));
     after.extend(wait.map(IntoElement::into_any_element));
     if waiting.is_empty() {
         if written.is_empty() && after.is_empty() {

@@ -22,7 +22,7 @@ impl Transcript {
                 return;
             }
             m.pull_request = standing;
-            m.at_work.wait.is_some()
+            !m.at_work.waits.is_empty()
         };
         // Only a wait's line says it, on a line of its own, so no row changes height.
         if waiting {

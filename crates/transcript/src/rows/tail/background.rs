@@ -1,7 +1,6 @@
 //! The lines at the end of the chat for what the agent has in the background: one for each task, with its ring, or a
 //! subagent's robot and the button its call's line has, and past what there's room for, one for each group with
-//! several, which opens to its tasks, as `crate::task_lines` says. Then one for the wait it has open on the pull
-//! request, with Stop.
+//! several, which opens to its tasks, as `crate::task_lines` says. Then one for each open wait on pull requests, with Stop.
 
 use client_core::session_log::By;
 use gpui_kit::component::button::Button;
@@ -109,6 +108,42 @@ pub(super) fn wait_line(wait: &Wait, standing: Option<&PullRequestStanding>, sha
 /// What a wait's line says, and what pointing at it says: what it waits on, and where the pull request stands, from
 /// what's said of the one it waits on.
 fn wait_words(wait: &Wait, standing: Option<&PullRequestStanding>) -> (String, &'static str) {
+    if let Some(watch) = &wait.watch {
+        let numbers = watch
+            .snapshot
+            .pull_requests
+            .iter()
+            .map(|row| format!("#{}", row.pull_request.number))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let what = match wait.until {
+            WaitUntil::RequiredChecks => "required checks",
+            WaitUntil::AllChecks | WaitUntil::Checks => "checks",
+            WaitUntil::Merged | WaitUntil::Done | WaitUntil::Unknown => "merge",
+        };
+        let pending = watch
+            .snapshot
+            .pull_requests
+            .iter()
+            .flat_map(|row| &row.checks)
+            .filter(|check| {
+                (wait.until != WaitUntil::RequiredChecks || check.required)
+                    && matches!(
+                        check.state,
+                        protocol::model::CheckState::Pending | protocol::model::CheckState::Unknown
+                    )
+            })
+            .count();
+        let status = if watch.read_error.is_some() {
+            "couldn't refresh GitHub".to_owned()
+        } else {
+            format!("{pending} {} running", if pending == 1 { "check" } else { "checks" })
+        };
+        return (
+            format!("Waiting on {numbers}: {what} · {status}"),
+            "Until every watched pull request reaches the condition, or one needs the agent; Stop ends only this wait",
+        );
+    }
     let (what, pointed_at) = match wait.until {
         WaitUntil::Checks | WaitUntil::RequiredChecks | WaitUntil::AllChecks => (
             format!("Waiting on #{}'s checks", wait.number),
@@ -199,9 +234,9 @@ mod tests {
             number: 7,
             call: None,
             until: WaitUntil::Checks,
+            watch: None,
             started_at_ms: 0,
             ended: None,
-            watch: None,
         };
         let standing = |number| PullRequestStanding { number, words: "2 checks running".to_string() };
         let said = |wait: &Wait, standing: Option<&PullRequestStanding>| wait_words(wait, standing).0;
