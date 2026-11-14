@@ -12,14 +12,11 @@ use tracing::{error, info, warn};
 
 /// Well within the minute a worker waits for its hub to answer an ask, so a wait is never recorded after the agent that
 /// asked for it has stopped waiting to hear of it, which would leave it for nobody.
-const START_WITHIN: Duration = Duration::from_secs(40);
+pub(super) const START_WITHIN: Duration = Duration::from_secs(40);
 
 impl Hub {
-    /// Starts a wait for the agent in `session_id`, of `workspace_id`'s, on its pull request as it's read now, and
-    /// ends the session's open one, since an agent waits on one at a time. One whose pull request is already done, or
-    /// needs the agent, ends at once, and leaves the open one going. A branch without one is refused, and so is a worktree with commits not pushed,
-    /// and a read that fails, or doesn't finish within [`START_WITHIN`], rather than start from what was known before
-    /// the agent pushed. A call that started one already, as when its CLI asks again, gets that one.
+    /// Starts an independent legacy wait on the workspace's branch from a fresh read. A missing PR, unpushed
+    /// commits or a read that fails or exceeds `START_WITHIN` refuses the start. A repeated tool-call ID reuses its wait.
     pub(crate) async fn start_wait(
         self: &Arc<Self>,
         workspace_id: &WorkspaceId,
@@ -58,12 +55,9 @@ impl Hub {
             return Err(ApiError::new(ErrorCode::Conflict, why));
         }
         let stored = wait.clone();
-        let replaced = self.blocking(move |store| store.start_wait(&stored, seen)).await?;
+        let wait = self.blocking(move |store| store.start_wait(&stored, seen)).await?;
         // Only once it's recorded, so the next read judges it.
         drop(reads_held);
-        if let Some(replaced) = replaced {
-            info!(wait = %replaced, "the agent's next wait replaced its last");
-        }
         info!(wait = %wait.id, session = %wait.session_id, ended = ?wait.ended, "an agent started a wait");
         self.announce_chat_of(&wait).await;
         Ok(WaitAnswer { wait, pull_request: Some(pull_request) })
@@ -144,7 +138,10 @@ impl Hub {
     }
 
     pub(super) async fn with_pull_request(&self, wait: Wait) -> Result<WaitAnswer, ApiError> {
-        let pull_request = self.workspace(&wait.workspace_id).await?.known_pull_request().cloned();
+        let pull_request = match &wait.watch {
+            Some(watch) => watch.snapshot.pull_requests.first().map(|row| row.pull_request.clone()),
+            None => self.workspace(&wait.workspace_id).await?.known_pull_request().cloned(),
+        };
         Ok(WaitAnswer { wait, pull_request })
     }
 

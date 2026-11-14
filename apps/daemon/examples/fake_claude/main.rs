@@ -51,7 +51,7 @@
 //!   advise:TEXT     Same, with TEXT as a reply that can be read.
 //!   advise-failed:CODE  Same, failing with the error CODE, such as `overloaded`.
 //!   advise-unanswered   Same, with no reply at all, as the real CLI's call after one of the agent's own tools gets.
-//!   mcp:TOOL        Call TOOL on the MCP server `--mcp-config` names, as the real CLI does over HTTP, and get back what
+//!   mcp:TOOL JSON   Call TOOL with optional JSON arguments on the MCP server `--mcp-config` names over HTTP, and get what
 //!                   it says. As with the real CLI, a server that refused `server/discover` or `tools/list` as the
 //!                   agent launched has failed. A copy of the file is kept as `last-mcp-config` in `$FAKE_CLAUDE_STATE`.
 //!

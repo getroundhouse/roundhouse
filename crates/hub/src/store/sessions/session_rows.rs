@@ -20,9 +20,9 @@ macro_rules! session_row_columns {
 /// waits table, since a session's waits outlive each other. The waits' triggers move its revision.
 pub(in super::super) const SESSION_COLUMNS: &str = concat!(
     session_row_columns!(),
-    ", (SELECT json_object('id', id, 'session_id', session_id, 'workspace_id', workspace_id, 'number', number,
-        'call', call, 'until', until, 'started_at_ms', started_at_ms)
-        FROM waits WHERE waits.session_id = sessions.id AND ended_at_ms IS NULL)"
+    ", (SELECT json_group_array(json_object('id', id, 'session_id', session_id, 'workspace_id', workspace_id, 'number', number,
+        'call', call, 'until', until, 'started_at_ms', started_at_ms, 'watch', json(watch)))
+        FROM (SELECT * FROM waits WHERE waits.session_id = sessions.id AND ended_at_ms IS NULL ORDER BY started_at_ms, id))"
 );
 
 /// A session's queue, from its column.
@@ -32,7 +32,7 @@ pub(in super::super) fn queue_from(json: &str) -> rusqlite::Result<Vec<QueuedPro
 }
 
 /// The wait a session has open, from the JSON its query writes.
-fn wait_from(json: &str) -> rusqlite::Result<Wait> {
+fn waits_from(json: &str) -> rusqlite::Result<Vec<Wait>> {
     serde_json::from_str(json)
         .map_err(|e| rusqlite::Error::FromSqlConversionFailure(27, rusqlite::types::Type::Text, Box::new(e)))
 }
@@ -43,6 +43,7 @@ pub(in super::super) fn draft_column(draft: &Draft) -> serde_json::Result<Option
 }
 
 pub(in super::super) fn session_from_row(row: &Row) -> rusqlite::Result<StoredSession> {
+    let waits = waits_from(&row.get::<_, String>(30)?)?;
     Ok(StoredSession {
         session: Session {
             id: row.get::<_, String>(0)?.into(),
@@ -83,8 +84,8 @@ pub(in super::super) fn session_from_row(row: &Row) -> rusqlite::Result<StoredSe
             open_approvals: json_at(row, 28)?,
             agent_opened: Some(row.get(10)?),
             // Written by the query, from the waits table, so one it can't read is a query that doesn't match `Wait`.
-            wait: row.get::<_, Option<String>>(30)?.map(|json| wait_from(&json)).transpose()?,
-            waits: None,
+            wait: waits.first().cloned(),
+            waits: Some(waits),
             rev: rev_of(row, 31)?,
         },
         agent_session_id: row.get::<_, String>(9)?.into(),

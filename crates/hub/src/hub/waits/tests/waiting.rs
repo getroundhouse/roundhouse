@@ -18,9 +18,9 @@ pub(in super::super) fn wait(until: WaitUntil) -> Wait {
         number: 7,
         call: None,
         until,
+        watch: None,
         started_at_ms: 1,
         ended: None,
-        watch: None,
     }
 }
 
@@ -141,7 +141,7 @@ async fn a_worktree_with_commits_not_pushed_has_nothing_to_wait_on_yet() {
 }
 
 #[tokio::test(start_paused = true)]
-async fn a_chats_next_wait_replaces_its_last_and_the_same_call_asking_again_gets_the_one_it_started() {
+async fn a_chats_waits_coexist_and_the_same_call_asking_again_gets_the_one_it_started() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_with_worktree(dir.path());
     let link = reading(&hub, &says(Some(open())));
@@ -151,7 +151,7 @@ async fn a_chats_next_wait_replaces_its_last_and_the_same_call_asking_again_gets
     let (second, _) = ask(&hub, &link, start("toolu_2")).await.unwrap();
 
     assert_eq!(again, first, "as when the agent's CLI asks again");
-    assert_eq!(how(&hub.store.wait(&first.id).unwrap()), Some(WaitEnd::Replaced));
+    assert_eq!(how(&hub.store.wait(&first.id).unwrap()), None);
     assert_eq!(how(&hub.store.wait(&second.id).unwrap()), None);
 }
 

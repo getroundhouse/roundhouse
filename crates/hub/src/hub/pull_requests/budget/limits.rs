@@ -81,12 +81,18 @@ impl Budget {
     /// doesn't hold the rest up for long.
     pub(in super::super) fn take(&mut self, calls: u32, asked: Asked, now: Instant) -> Result<(), Instant> {
         self.allows(calls, asked, now)?;
-        self.calls = (self.calls_at(now) - f64::from(calls)).max(-f64::from(BURST));
+        self.spent(calls, now);
+        self.calls = self.calls.max(-f64::from(BURST));
+        Ok(())
+    }
+
+    /// Pages already read are charged even when the read failed. Future reads wait for their points to refill.
+    pub(in crate::hub::pull_requests) fn spent(&mut self, calls: u32, now: Instant) {
+        self.calls = self.calls_at(now) - f64::from(calls);
         self.refilled_at = now;
         if let Some(said) = &mut self.github {
             said.spent_since = said.spent_since.saturating_add(calls);
         }
-        Ok(())
     }
 
     /// Whether to ask GitHub how much of its limit is left before the next read: once what it said is a minute old,

@@ -3,7 +3,8 @@ use protocol::model::{SessionId, ToolUseId, Wait, WaitEnd, WaitEnded, WaitId, Wo
 use rusqlite::{Connection, OptionalExtension, Row, params};
 use std::collections::HashSet;
 
-const COLUMNS: &str = "id, session_id, workspace_id, number, call, until, started_at_ms, ended_at_ms, ended";
+pub(super) const COLUMNS: &str =
+    "id, session_id, workspace_id, number, call, until, started_at_ms, ended_at_ms, ended, watch";
 
 /// What GitHub had recorded of the pull request when a wait started, by GitHub's own clock, so a wait ends only on what
 /// it records after.
@@ -16,12 +17,16 @@ pub struct Seen {
 }
 
 impl Store {
-    /// Starts a wait, in a chat that's open in a ready workspace, from what GitHub had recorded then, and ends the
-    /// chat's open one as replaced, since an agent waits on one at a time. Returns the one it ended. One that ends as it
-    /// starts never waits, so it replaces nothing, and the agent's open one goes on, as the agent hears.
-    pub fn start_wait(&self, wait: &Wait, seen: Seen) -> Result<Option<WaitId>, StoreError> {
+    /// Starts an independent wait in an open chat. Retrying a tool call returns its original wait, even after it ends.
+    pub fn start_wait(&self, wait: &Wait, seen: Seen) -> Result<Wait, StoreError> {
         let mut conn = lock(&self.writer);
         let tx = conn.transaction()?;
+        if let Some(call) = &wait.call {
+            let earlier = wait_by_call(&tx, &wait.session_id, call)?;
+            if let Some(earlier) = earlier {
+                return Ok(earlier);
+            }
+        }
         let open: bool = tx.query_row(
             "SELECT EXISTS (SELECT 1 FROM sessions JOIN workspaces ON workspaces.id = sessions.workspace_id
                  WHERE sessions.id = ? AND workspaces.id = ? AND sessions.closed_at_ms IS NULL AND workspaces.status = ?)",
@@ -34,13 +39,9 @@ impl Store {
                 id: wait.session_id.to_string(),
             });
         }
-        let replaced = match wait.ended {
-            None => call_off(&tx, &wait.session_id, None, wait.started_at_ms, WaitEnd::Replaced)?,
-            Some(_) => None,
-        };
         tx.prepare_cached(&format!(
             "INSERT INTO waits ({COLUMNS}, seen_left_queue_at_ms, seen_changes_requested_at_ms)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
         ))?
         .execute(params![
             wait.id.as_str(),
@@ -52,11 +53,12 @@ impl Store {
             wait.started_at_ms,
             wait.ended.map(|ended| ended.at_ms),
             wait.ended.map(|ended| text_of(&ended.how)),
+            wait.watch.as_ref().map(serde_json::to_string).transpose()?,
             seen.left_queue_at_ms,
             seen.changes_requested_at_ms,
         ])?;
         tx.commit()?;
-        Ok(replaced)
+        Ok(wait.clone())
     }
 
     /// Ends the workspace's open waits as cancelled, as it starts being archived. Returns those it ended.
@@ -90,11 +92,7 @@ impl Store {
 
     /// The session's newest wait that `call` started, whether or not it has ended.
     pub fn wait_of_call(&self, session_id: &SessionId, call: &ToolUseId) -> Result<Option<Wait>, StoreError> {
-        let conn = lock(&self.reader);
-        let mut query = conn.prepare_cached(&format!(
-            "SELECT {COLUMNS} FROM waits WHERE session_id = ? AND call = ? ORDER BY started_at_ms DESC, id DESC LIMIT 1"
-        ))?;
-        Ok(query.query_row([session_id.as_str(), call.as_str()], wait_from_row).optional()?)
+        wait_by_call(&lock(&self.reader), session_id, call)
     }
 
     /// Ends the wait, unless it has ended already, and returns it if this ended it.
@@ -122,12 +120,15 @@ impl Store {
                      WHERE workspace_id = ? AND ended_at_ms IS NULL ORDER BY started_at_ms, id"
             ))?
             .query_map([id.as_str()], |row| {
-                let seen = Seen { left_queue_at_ms: row.get(9)?, changes_requested_at_ms: row.get(10)? };
+                let seen = Seen { left_queue_at_ms: row.get(10)?, changes_requested_at_ms: row.get(11)? };
                 Ok((wait_from_row(row)?, seen))
             })?
             .collect::<rusqlite::Result<Vec<_>>>()?;
         let mut ended = Vec::new();
         for (mut wait, seen) in open {
+            if wait.watch.is_some() {
+                continue;
+            }
             let Some(how) = ends(&wait, seen) else { continue };
             let how = WaitEnded { at_ms, how };
             tx.prepare_cached("UPDATE waits SET ended_at_ms = ?, ended = ? WHERE id = ?")?.execute(params![
@@ -153,7 +154,8 @@ impl Store {
     /// Every workspace with a wait that hasn't ended, whose pull request is read at the soonest.
     pub fn workspaces_waited_on(&self) -> Result<HashSet<WorkspaceId>, StoreError> {
         let conn = lock(&self.reader);
-        let mut query = conn.prepare_cached("SELECT DISTINCT workspace_id FROM waits WHERE ended_at_ms IS NULL")?;
+        let mut query =
+            conn.prepare_cached("SELECT DISTINCT workspace_id FROM waits WHERE ended_at_ms IS NULL AND watch IS NULL")?;
         let ids = query.query_map([], |row| row.get::<_, String>(0))?;
         Ok(ids.map(|id| id.map(WorkspaceId::from)).collect::<rusqlite::Result<_>>()?)
     }
@@ -178,7 +180,7 @@ fn call_off(
     .map(|id| id.map(WaitId::from))
 }
 
-fn wait_from_row(row: &Row<'_>) -> rusqlite::Result<Wait> {
+pub(super) fn wait_from_row(row: &Row<'_>) -> rusqlite::Result<Wait> {
     let ended = match (row.get(7)?, row.get::<_, Option<String>>(8)?) {
         (Some(at_ms), Some(how)) => Some(WaitEnded { at_ms, how: from_text(how)? }),
         _ => None,
@@ -192,6 +194,20 @@ fn wait_from_row(row: &Row<'_>) -> rusqlite::Result<Wait> {
         until: from_text(row.get(5)?)?,
         started_at_ms: row.get(6)?,
         ended,
-        watch: None,
+        watch: row
+            .get::<_, Option<String>>(9)?
+            .map(|s| {
+                serde_json::from_str(&s)
+                    .map_err(|e| rusqlite::Error::FromSqlConversionFailure(9, rusqlite::types::Type::Text, Box::new(e)))
+            })
+            .transpose()?,
     })
+}
+
+/// Historical databases can contain duplicate call IDs, so both retry paths choose the newest recorded one.
+fn wait_by_call(conn: &Connection, session_id: &SessionId, call: &ToolUseId) -> Result<Option<Wait>, StoreError> {
+    let mut query = conn.prepare_cached(&format!(
+        "SELECT {COLUMNS} FROM waits WHERE session_id = ? AND call = ? ORDER BY started_at_ms DESC, id DESC LIMIT 1"
+    ))?;
+    Ok(query.query_row([session_id.as_str(), call.as_str()], wait_from_row).optional()?)
 }

@@ -17,11 +17,11 @@ fn wait(id: &str) -> Wait {
         session_id: "s".into(),
         workspace_id: "w".into(),
         number: 7,
-        call: Some("toolu_1".into()),
+        call: Some(format!("toolu_{id}").into()),
         until: WaitUntil::Checks,
+        watch: None,
         started_at_ms: 1,
         ended: None,
-        watch: None,
     }
 }
 
@@ -58,23 +58,19 @@ fn a_wait_is_kept_as_it_was_asked_for_and_ends_once() {
 }
 
 #[test]
-fn a_chat_waits_on_one_at_a_time_so_its_next_ends_its_last() {
+fn independent_waits_coexist_and_retries_reuse_the_original() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
-
     let first = store.start_wait(&wait("a"), Seen::default()).unwrap();
     let second = store.start_wait(&Wait { started_at_ms: 5, ..wait("b") }, Seen::default()).unwrap();
-    let ended_at_once = WaitEnded { at_ms: 6, how: WaitEnd::Merged };
-    let third =
-        store.start_wait(&Wait { started_at_ms: 6, ended: Some(ended_at_once), ..wait("c") }, Seen::default()).unwrap();
+    let retried = store.start_wait(&Wait { id: "retry".into(), ..first.clone() }, Seen::default()).unwrap();
 
-    assert_eq!((first, second.as_ref().map(WaitId::as_str)), (None, Some("a")));
-    assert_eq!(how(&store, "a"), Some(WaitEnded { at_ms: 5, how: WaitEnd::Replaced }));
-    assert_eq!(third, None, "one that ended as it started never waited, so it replaced nothing");
-    assert_eq!(
-        (how(&store, "b"), store.get_session(&"s".into()).unwrap().session.wait.map(|wait| wait.id)),
-        (None, Some("b".into()))
-    );
+    assert_eq!(retried, first);
+    let session = store.get_session(&"s".into()).unwrap().session;
+    assert_eq!(session.open_waits(), [first.clone(), second]);
+    assert_eq!(session.wait, Some(first));
+    assert_eq!(how(&store, "a"), None);
+    assert_eq!(how(&store, "b"), None);
 }
 
 #[test]
@@ -205,13 +201,10 @@ fn a_wait_is_found_by_the_call_that_started_it_whether_or_not_it_has_ended() {
     store.start_wait(&wait("a"), Seen::default()).unwrap();
     store.start_wait(&Wait { call: Some("toolu_2".into()), started_at_ms: 5, ..wait("b") }, Seen::default()).unwrap();
 
-    let first = store.wait_of_call(&"s".into(), &"toolu_1".into()).unwrap();
+    let first = store.wait_of_call(&"s".into(), &"toolu_a".into()).unwrap();
     let none = store.wait_of_call(&"s".into(), &"toolu_3".into()).unwrap();
 
-    assert_eq!(
-        first.map(|wait| (wait.id, wait.ended.map(|ended| ended.how))),
-        Some(("a".into(), Some(WaitEnd::Replaced)))
-    );
+    assert_eq!(first.map(|wait| (wait.id, wait.ended.map(|ended| ended.how))), Some(("a".into(), None)));
     assert_eq!(none, None);
 }
 
@@ -237,7 +230,7 @@ fn a_chats_record_shows_its_open_wait_and_moves_as_one_starts_or_ends() {
     store.start_wait(&wait("b"), Seen::default()).unwrap();
     moved(Some("b"));
     store.start_wait(&wait("c"), Seen::default()).unwrap();
-    moved(Some("c"));
+    moved(Some("b"));
     store.judge_waits(&"w".into(), 3, |_, _| Some(WaitEnd::Merged)).unwrap();
     moved(None);
     store.start_wait(&wait("d"), Seen::default()).unwrap();
@@ -245,7 +238,7 @@ fn a_chats_record_shows_its_open_wait_and_moves_as_one_starts_or_ends() {
     moved(None);
 
     assert_eq!(read().wait, None);
-    let shown = Wait { id: "e".into(), ..wait("a") };
+    let shown = wait("e");
     store.start_wait(&shown, Seen::default()).unwrap();
     assert_eq!(read().wait, Some(shown), "as it was asked for");
 }

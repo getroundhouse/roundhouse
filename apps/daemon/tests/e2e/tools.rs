@@ -13,6 +13,9 @@ use crate::support::{
     wait_for_turn_end, wait_until,
 };
 
+const READ: &str = r#"mcp:get_pull_requests {"pull_requests":[7]}"#;
+const WAIT: &str = r#"mcp:wait_for_pull_requests {"pull_requests":[7],"until":"merged"}"#;
+
 /// What each of the turn's calls to a tool came back with, and whether it failed, in order.
 fn results(events: &[SessionEvent]) -> Vec<(String, bool)> {
     let blocks = events.iter().filter_map(|event| match &event.body {
@@ -54,10 +57,10 @@ fn an_agent_asking_where_its_pull_request_stands_hears_what_the_hub_read_from_gi
     let client = stack.client();
     let (_, chat) = stack.workspace(&client);
 
-    let answered = run(&client, &chat.id, "mcp:get_pull_request", 1);
+    let answered = run(&client, &chat.id, READ, 1);
 
     let [(text, false)] = answered.as_slice() else { panic!("one call that worked: {answered:?}") };
-    assert!(text.starts_with("Pull request #7, \"T\""), "{text}");
+    assert!(text.contains("#7: T"), "{text}");
     assert!(text.contains("https://example.com/7"), "{text}");
 }
 
@@ -68,7 +71,7 @@ fn an_agent_started_after_the_hub_restarts_reaches_the_tools_where_it_did_with_t
     gh.say(OPEN);
     let client = stack.client();
     let (_, chat) = stack.workspace(&client);
-    let answered = run(&client, &chat.id, "mcp:get_pull_request", 1);
+    let answered = run(&client, &chat.id, READ, 1);
     assert!(!answered[0].1, "{answered:?}");
     let before = last_told(&stack);
     let worker = parent_of(started_pid(&wait_for_turn_end(&client, &chat.id, 1)).unwrap());
@@ -79,11 +82,11 @@ fn an_agent_started_after_the_hub_restarts_reaches_the_tools_where_it_did_with_t
     wait_until("the worker to exit", || !is_alive(worker));
     stack.start_hub();
     let client = stack.client();
-    let answered = run(&client, &chat.id, "mcp:get_pull_request", 2);
+    let answered = run(&client, &chat.id, READ, 2);
 
     assert_eq!(last_told(&stack), before, "the same address and token");
     let [(text, false)] = answered.as_slice() else { panic!("one call that worked: {answered:?}") };
-    assert!(text.starts_with("Pull request #7"), "{text}");
+    assert!(text.contains("#7: T"), "{text}");
 }
 
 /// A hub that crashes leaves its worker serving the tools, so the agent the next hub carries on with reaches them as it
@@ -95,7 +98,7 @@ fn the_agent_the_next_hub_carries_on_with_reaches_the_tools_as_it_did() {
     gh.say(OPEN);
     let client = stack.client();
     let (_, chat) = stack.workspace(&client);
-    let answered = run(&client, &chat.id, "mcp:get_pull_request", 1);
+    let answered = run(&client, &chat.id, READ, 1);
     assert!(!answered[0].1, "{answered:?}");
     let agent = started_pid(&wait_for_turn_end(&client, &chat.id, 1)).unwrap();
     drop(client);
@@ -103,10 +106,10 @@ fn the_agent_the_next_hub_carries_on_with_reaches_the_tools_as_it_did() {
     stack.kill_hub();
     stack.start_hub();
     let client = stack.client();
-    let answered = run(&client, &chat.id, "mcp:get_pull_request", 2);
+    let answered = run(&client, &chat.id, READ, 2);
 
     let [(text, false)] = answered.as_slice() else { panic!("one call that worked: {answered:?}") };
-    assert!(text.starts_with("Pull request #7"), "{text}");
+    assert!(text.contains("#7: T"), "{text}");
     assert_eq!(latest_started_pid(&read_all(&client, &chat.id)), Some(agent), "the agent the last hub started");
 }
 
@@ -119,9 +122,9 @@ fn an_agent_waiting_on_its_pull_request_hears_once_it_has_merged() {
     let gh = StandInGh::start(&mut stack);
     gh.say(OPEN);
     let client = stack.client();
-    let (workspace, chat) = stack.workspace(&client);
+    let (_, chat) = stack.workspace(&client);
 
-    client.session_prompt(&chat.id, "mcp:wait_for_pull_request", None).unwrap();
+    client.session_prompt(&chat.id, WAIT, None).unwrap();
     let mut answered = Vec::new();
     wait_until("the call to come back", || {
         answered = results(&read_all(&client, &chat.id));
@@ -132,16 +135,16 @@ fn an_agent_waiting_on_its_pull_request_hears_once_it_has_merged() {
     wait_for_status(&client, &chat.id, SessionStatus::Background);
     let waiting = client.session_get(&chat.id).unwrap();
     let listed: Vec<_> = waiting.background_tasks.into_iter().map(|t| (t.description, t.kind)).collect();
-    assert_eq!(listed, [(Some("roundhouse/wait_for_pull_request".to_string()), TaskKind::Wait)]);
+    assert_eq!(listed, [(Some("roundhouse/wait_for_pull_requests".to_string()), TaskKind::Wait)]);
     assert_eq!(waiting.wait.map(|wait| wait.number), Some(7), "the chat's record has the hub's wait");
     // The next hub keeps the wait, so it doesn't keep the hub from stopping to update it.
     assert_eq!(client.hub_status().unwrap().running_sessions, 0);
     gh.say(MERGED);
-    client.workspace_pull_request(&workspace.id).unwrap();
+    client.session_prompt(&chat.id, READ, None).unwrap();
 
-    let events = wait_for_turn_end(&client, &chat.id, 2);
+    let events = wait_for_turn_end(&client, &chat.id, 3);
     let said = assistant_text(&events);
-    assert!(said.contains("The wait on pull request #7 has ended: it's merged."), "{said}");
+    assert!(said.contains("every watched PR has merged"), "{said}");
     assert_eq!(client.session_get(&chat.id).unwrap().wait, None, "and none once it has ended");
 }
 
@@ -154,7 +157,7 @@ fn an_agent_whose_wait_the_person_calls_off_hears_and_the_chat_goes_idle() {
     gh.say(OPEN);
     let client = stack.client();
     let (_, chat) = stack.workspace(&client);
-    client.session_prompt(&chat.id, "mcp:wait_for_pull_request", None).unwrap();
+    client.session_prompt(&chat.id, WAIT, None).unwrap();
     wait_for_status(&client, &chat.id, SessionStatus::Background);
     let wait = client.session_get(&chat.id).unwrap().wait.unwrap();
 
@@ -182,7 +185,7 @@ fn a_wait_lasts_across_a_restart(stop: impl FnOnce(&mut Stack), carried_on: bool
     gh.say(OPEN);
     let client = stack.client();
     let (_, chat) = stack.workspace(&client);
-    client.session_prompt(&chat.id, "mcp:wait_for_pull_request", None).unwrap();
+    client.session_prompt(&chat.id, WAIT, None).unwrap();
     wait_for_status(&client, &chat.id, SessionStatus::Background);
     let agent = started_pid(&read_all(&client, &chat.id)).unwrap();
     drop(client);
@@ -202,7 +205,7 @@ fn a_wait_lasts_across_a_restart(stop: impl FnOnce(&mut Stack), carried_on: bool
 
     let events = wait_for_turn_end(&client, &chat.id, 2);
     let said = assistant_text(&events);
-    assert!(said.contains("The wait on pull request #7 has ended: it's merged."), "{said}");
+    assert!(said.contains("every watched PR has merged"), "{said}");
     let went =
         events.iter().any(|event| matches!(event.body, EventBody::AgentExited { reason: ExitReason::HubRestart, .. }));
     let same = latest_started_pid(&events) == Some(agent);

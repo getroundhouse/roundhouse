@@ -1,4 +1,4 @@
-use super::super::{pull_request, wait};
+use super::super::{pull_request, pull_requests, wait};
 use crate::asks::Asks;
 use protocol::Build;
 use protocol::model::SessionId;
@@ -20,9 +20,9 @@ pub(super) const TASKS: &str = "io.modelcontextprotocol/tasks";
 /// them for, since the Claude CLI shows it each tool only by name until it loads that tool, as `docs/claude-cli.md`
 /// says. When to use each, and how, is in its description, so this needn't grow with each tool, as "The worker's
 /// tools" in `docs/architecture.md` says.
-const INSTRUCTIONS: &str = "Roundhouse's tools, for the pull request of the branch checked out in this workspace. For \
-    anything about it, such as where it stands, or waiting in the background until its checks pass or it's merged, \
-    look among these before you use `gh` or write a loop of your own.";
+const INSTRUCTIONS: &str = "Roundhouse's tools, for pull requests in this workspace's repository and their lower stack \
+    dependencies. For reading their current state or waiting in the background until checks pass, they merge or \
+    need attention, look among these before you use `gh` or write a loop of your own.";
 
 /// What one of a request's HTTP headers says, which has to agree with its body.
 #[derive(Debug, PartialEq, Eq)]
@@ -216,7 +216,7 @@ async fn request(
         Method::Ping => Ok(json!({ "resultType": "complete" })),
         Method::ListTools => Ok(json!({
             "resultType": "complete",
-            "tools": [pull_request::definition(), wait::definition()],
+            "tools": [pull_requests::definition(false), pull_requests::definition(true)],
             "ttlMs": 0,
             "cacheScope": "public",
         })),
@@ -294,9 +294,11 @@ async fn call(asks: &Asks, session_id: &SessionId, params: &Map<String, Value>) 
         return Err(RpcError::new(Code::InvalidParams, "a call names its tool"));
     };
     match Tool::named(name) {
+        Some(Tool::PullRequests) => Ok(pull_requests::read(asks, session_id, params).await),
+        Some(Tool::Waits | Tool::Wait) if !takes_tasks(params) => Err(RpcError::needs_tasks()),
+        Some(Tool::Waits) => Ok(pull_requests::start(asks, session_id, params).await),
         Some(Tool::PullRequest) => Ok(pull_request::call(asks, session_id).await.to_json()),
         // A wait is answered with a task, which a client that didn't offer to take one can't be given.
-        Some(Tool::Wait) if !takes_tasks(params) => Err(RpcError::needs_tasks()),
         Some(Tool::Wait) => Ok(wait::call(asks, session_id, params).await),
         None => Err(RpcError::new(Code::InvalidParams, format!("there's no tool called {name}"))),
     }
@@ -307,11 +309,15 @@ async fn call(asks: &Asks, session_id: &SessionId, params: &Map<String, Value>) 
 pub(super) enum Tool {
     PullRequest,
     Wait,
+    PullRequests,
+    Waits,
 }
 
 impl Tool {
     pub(super) fn named(name: &str) -> Option<Self> {
         match name {
+            pull_requests::READ => Some(Tool::PullRequests),
+            pull_requests::WAIT => Some(Tool::Waits),
             pull_request::NAME => Some(Tool::PullRequest),
             wait::NAME => Some(Tool::Wait),
             _ => None,

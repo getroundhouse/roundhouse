@@ -23,10 +23,11 @@ fn a_wait_s_line_says_where_its_pull_request_stands_and_stop_calls_it_off(cx: &m
     let stack = Stack::new();
     let gh = stack.start_hub_with_stand_in_gh();
     gh.report(&open(false));
+    gh.report_remote(include_str!("../../../../crates/worker/tests/fixtures/remote_pull_requests.json"));
     let mut ui = Ui::open_with_a_repository(cx, &stack);
     ui.new_workspace();
     let chat = ui.active_chat();
-    ui.input("mcp:wait_for_pull_request");
+    ui.input(r#"mcp:wait_for_pull_requests {"pull_requests":[7],"until":"merged"}"#);
     ui.press("enter");
     let waiting = || stack.client().session_get(&chat).unwrap().wait;
     ui.wait("the wait to start", |_| waiting().is_some());

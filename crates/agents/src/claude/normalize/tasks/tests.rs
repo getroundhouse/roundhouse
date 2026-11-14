@@ -31,6 +31,7 @@ fn an_mcp_task_of_the_worker_tool_that_waits_is_a_wait() {
     };
 
     assert_eq!(kind("mcp_task", "roundhouse/wait_for_pull_request"), TaskKind::Wait);
+    assert_eq!(kind("mcp_task", "roundhouse/wait_for_pull_requests"), TaskKind::Wait);
     assert_eq!(kind("mcp_task", "roundhouse/get_pull_request"), TaskKind::Command);
     assert_eq!(kind("mcp_task", "elsewhere/wait_for_pull_request"), TaskKind::Command);
     assert_eq!(kind("local_bash", "roundhouse/wait_for_pull_request"), TaskKind::Command);

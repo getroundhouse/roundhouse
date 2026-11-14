@@ -17,6 +17,7 @@ use tokio::net::TcpSocket;
 mod http;
 mod mcp;
 mod pull_request;
+mod pull_requests;
 #[cfg(test)]
 mod tests;
 mod wait;

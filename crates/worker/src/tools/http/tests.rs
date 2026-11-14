@@ -56,7 +56,7 @@ async fn a_request_from_an_agent_of_this_workers_is_answered_as_json() {
 
     assert_eq!(status, StatusCode::OK);
     let body: Value = serde_json::from_slice(&body).unwrap();
-    assert_eq!(body["result"]["tools"][0]["name"], "get_pull_request");
+    assert_eq!(body["result"]["tools"][0]["name"], "get_pull_requests");
 }
 
 /// A body that fails the test if anything reads it.

@@ -1,7 +1,6 @@
 use super::super::Hub;
-use super::super::ready::ReadyWorkspace;
 use super::{budget, schedule};
-use crate::store::{Store, now_ms};
+use crate::store::now_ms;
 use crate::worker_link::WorkerLink;
 use budget::{Budget, calls_to_read};
 use parking_lot::Mutex;
@@ -12,16 +11,9 @@ use protocol::worker::{GithubRateLimit, PullRequestReply};
 use schedule::{Schedule, Went};
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 use tokio::sync::{Mutex as AsyncMutex, OwnedMutexGuard};
 use tracing::debug;
-
-/// How often the hub looks for a pull request to read that nobody asked for, while the budget can spare the calls.
-const PACE: Duration = Duration::from_secs(1);
-
-/// The longest it waits for the budget before looking again, since what's due changes meanwhile.
-const LONGEST_PAUSE: Duration = Duration::from_mins(1);
 
 /// How long after a workspace's last read an agent asking waits before its own. Long enough that an agent asking in a
 /// loop reads at most six times a minute, and short enough that one asking again after it pushes waits little.
@@ -90,12 +82,20 @@ pub(in super::super) struct Reading {
     /// When each workspace's was last read since the hub started, and how long it goes before a read nobody asks for.
     pub(super) schedules: Mutex<HashMap<WorkspaceId, Schedule>>,
     pub(super) budget: Mutex<Budget>,
+    pub(super) remote_read_at: Mutex<HashMap<WorkspaceId, Instant>>,
+    pub(super) remote: Mutex<HashMap<super::remote::GroupKey, super::remote::RemoteSchedule>>,
 }
 
 impl Reading {
     pub(in super::super) fn new() -> Self {
         let budget = Mutex::new(Budget::new(Instant::now()));
-        Self { gates: Mutex::new(HashMap::new()), schedules: Mutex::new(HashMap::new()), budget }
+        Self {
+            gates: Mutex::new(HashMap::new()),
+            schedules: Mutex::new(HashMap::new()),
+            budget,
+            remote_read_at: Mutex::new(HashMap::new()),
+            remote: Mutex::new(HashMap::new()),
+        }
     }
 
     /// For one that couldn't be read in turn.
@@ -107,7 +107,8 @@ impl Reading {
 
     /// Until [`AGENT_SPACING`] after the workspace's last read, for an agent asking.
     pub(super) async fn space_out(&self, id: &WorkspaceId) {
-        let last = self.schedules.lock().get(id).map(|last| last.read_at);
+        let last =
+            self.schedules.lock().get(id).map(|last| last.read_at).max(self.remote_read_at.lock().get(id).copied());
         if let Some(last) = last {
             tokio::time::sleep_until((last + AGENT_SPACING).into()).await;
         }
@@ -305,68 +306,6 @@ impl Hub {
                 debug!(%id, "reading the pull request as it may have changed: {}", e.message);
             }
         });
-    }
-
-    /// Reads the pull requests nobody asks for, one at a time, whichever [`Hub::to_read_in_turn`] says is next, as the
-    /// budget can spare their calls. Runs until the hub stops.
-    pub(crate) async fn watch_pull_requests(self: Arc<Self>) {
-        let mut pause = PACE;
-        loop {
-            tokio::time::sleep(pause).await;
-            pause = PACE;
-            let Some(workspace) = self.to_read_in_turn().await else { continue };
-            if let Err(until) = self.read_in_turn(&workspace).await {
-                pause = until.saturating_duration_since(Instant::now()).clamp(PACE, LONGEST_PAUSE);
-            }
-        }
-    }
-
-    /// The workspace whose pull request is due to be read now that nobody has asked, as [`schedule::due`] says. While
-    /// no client is connected, only one an agent waits on, since nobody would see the rest. Once one connects again,
-    /// whatever has come due meanwhile is read.
-    pub(in super::super) async fn to_read_in_turn(&self) -> Option<Workspace> {
-        // A store that fails says why as it does, and those waited on wait their turn with the rest meanwhile.
-        let waited = self.blocking(Store::workspaces_waited_on).await.unwrap_or_default();
-        let seen = self.clients.load(Ordering::Relaxed) > 0;
-        if !seen && waited.is_empty() {
-            return None;
-        }
-        let mut workspaces = self.workspace_list(false).await.ok()?;
-        if !seen {
-            workspaces.retain(|workspace| waited.contains(&workspace.id));
-        }
-        schedule::due(&workspaces, &self.pull_requests.schedules.lock(), &waited, Instant::now()).cloned()
-    }
-
-    /// Reads one nobody asked for, once the budget can spare its calls, starting its workspace's worker if it has
-    /// none, and stopping it again after if nothing else has wanted it meanwhile. Says when it's worth trying again
-    /// when the budget can't spare them.
-    pub(super) async fn read_in_turn(self: &Arc<Self>, workspace: &Workspace) -> Result<(), Instant> {
-        let id = &workspace.id;
-        let Ok(path) = ReadyWorkspace::new(workspace.clone()).map(|ready| ready.path().to_owned()) else {
-            // So it doesn't come up again at once, ahead of the rest.
-            self.pull_requests.wait_longer(id);
-            return Ok(());
-        };
-        let calls = calls_to_read(workspace.pull_request.as_ref());
-        self.pull_requests.budget.lock().allows(calls, Asked::InTurn, Instant::now())?;
-        let link = match self.worker_to_read(id).await {
-            Ok(link) => link,
-            Err(e) => {
-                debug!(%id, "starting a worker to read the pull request: {}", e.message);
-                self.pull_requests.wait_longer(id);
-                return Ok(());
-            }
-        };
-        let spent = self.spend(&link, &path, calls, Asked::InTurn).await;
-        if spent.is_ok()
-            && let Err(e) =
-                self.read_pull_request(id, path, &link, Asked::InTurn, When::Always).await.and_then(Answer::or_known)
-        {
-            debug!(%id, "reading the pull request in turn: {}", e.message);
-        }
-        self.stop_worker_only_read(workspace, &link).await;
-        spent
     }
 }
 
