@@ -6,6 +6,7 @@
 mod accounts;
 mod allowing_tools;
 mod approvals;
+mod assigned_accounts;
 mod attaching;
 mod attachments;
 mod background;

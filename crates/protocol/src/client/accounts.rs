@@ -1,5 +1,6 @@
-//! The requests about the logins a hub holds for agents' accounts, which it hands to the workers it launches agents on
-//! as the default for their kind. A hub older than one refuses it, as `is_unsupported` says.
+//! The requests about the logins a hub holds for agents' accounts, which it hands to the workers it launches agents on,
+//! for the chats on each account, and the default each kind's chats are put on when they're on none yet. A hub older
+//! than one refuses it, as `is_unsupported` says.
 
 use serde::{Deserialize, Serialize};
 
@@ -7,7 +8,8 @@ use super::{ClientRequest, ClientResponse, Reply, Request};
 use crate::model::{Account, AccountId, AgentKind, HubSettings, LoginToken};
 
 /// Gives the hub a login for agents of `agent`'s kind to run under, which it keeps and hands to the workers it launches
-/// them on, when selected as their kind's default, and answers with the account's record, named `name`.
+/// them on, for the chats on the account, as [`Session::assigned_account`](crate::model::Session::assigned_account)
+/// says, and answers with the account's record, named `name`.
 /// The token is one the agent's own CLI made to last, such as `claude setup-token`'s, which the person made themselves
 /// and gave a client, and the hub never sends it back.
 ///
@@ -53,8 +55,9 @@ impl Reply for Account {
 
 /// Has the hub forget the login it holds for the account, so no agent launched after this runs under it, and answers
 /// with the account's record, which stays, as the sessions that ran under it name it. An agent already running under
-/// it keeps it until it exits. It doesn't revoke the token, which works wherever else it's kept until it ends. Refused
-/// with `NotFound` when there's no such account.
+/// it keeps it until it exits. The chats on it can't launch until it's connected again or they're moved, and nor can
+/// chats on no account yet while it's their kind's default. It doesn't revoke the token, which works wherever else it's
+/// kept until it ends. Refused with `NotFound` when there's no such account.
 /// Disconnecting an account whose login the hub doesn't hold changes nothing, so sending it again does nothing more.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct AccountDisconnect {
@@ -69,8 +72,10 @@ impl Request for AccountDisconnect {
     }
 }
 
-/// Chooses the hub-wide default for new processes of this kind. The account must hold an unexpired
-/// login of the same kind. A disconnected or expired default remains selected and blocks new starts.
+/// Chooses the hub-wide default of this kind, the account a chat is put on when its agent is first launched under a
+/// login the hub holds, as [`Session::assigned_account`](crate::model::Session::assigned_account) says. A chat already
+/// on an account stays on it. The account must hold an unexpired login of the same kind. A disconnected or expired
+/// default remains selected and blocks the chats it would be given to.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct AccountSetDefault {
     pub agent: AgentKind,

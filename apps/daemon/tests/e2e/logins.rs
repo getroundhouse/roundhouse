@@ -149,7 +149,8 @@ fn an_agent_on_this_machine_runs_under_the_login_the_hub_holds_when_the_machine_
     assert_eq!(client.records_list().unwrap().accounts.len(), 1, "no account but the login's");
 }
 
-/// Through a real worker whose machine has its own login. The hub default wins, and only new processes take a changed choice.
+/// Through a real worker whose machine has its own login. The hub default wins, a running agent keeps its login, and a
+/// new chat takes a changed choice.
 #[test]
 fn an_added_default_wins_even_on_a_machine_with_its_own_login() {
     let mut stack = Stack::start();

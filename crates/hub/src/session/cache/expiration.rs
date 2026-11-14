@@ -1,6 +1,6 @@
 use super::super::{LiveSession, Origin};
 use protocol::event::EventBody;
-use protocol::model::{CacheRequest, PromptCache, RunId};
+use protocol::model::{AccountId, CacheRequest, PromptCache, RunId};
 use tracing::error;
 
 /// The longest a request is taken to have waited for its model to start answering, so a wrong number can't put when it
@@ -40,6 +40,17 @@ impl LiveSession {
         }
     }
 
+    /// The conversation goes on under `account` from here, where the session's record named `before`. Another
+    /// account's cache may not hold it, as one in another organization doesn't, so after one, or after a record that
+    /// named none, which can't say whose the cache was, nothing is cached, and the first request under `account` isn't
+    /// taken for one that found the cache expired. Not announced, as [`LiveSession::keep_cache`] says, since what moved
+    /// the conversation announces the record.
+    pub(in super::super) async fn forget_cache_unless_under(&self, before: Option<&AccountId>, account: &AccountId) {
+        if before != Some(account) && self.state.lock().prompt_cache.is_some() {
+            self.keep_cache(None).await;
+        }
+    }
+
     /// The cache holds `cache` of the conversation from here on, or none of it. It isn't announced, so what changed it
     /// can announce it with the rest. False if it couldn't be kept.
     pub(in super::super) async fn keep_cache(&self, cache: Option<PromptCache>) -> bool {
@@ -67,8 +78,12 @@ pub(super) fn after(previous: Option<&PromptCache>, request: &CacheRequest, sent
 /// model, it read less than half of what that one left in the cache, and it wrote more than it read. A cache that
 /// holds the conversation is read at least as far as the request before left it, however much the prompt adds, so one
 /// that has expired is read only for what every chat shares, such as the tools, and written nearly whole. Another
-/// model's cache doesn't hold the conversation either, and the person chose that, so it isn't this. *Unconfirmed:* a
-/// change to the agent's tools, or to how it thinks, would leave the cache unread too, and be taken for this.
+/// model's cache doesn't hold the conversation either, and the person chose that, so it isn't this. Nor is the first
+/// request under another account than the session's record named, when the hub handed the launch that account's login
+/// or the chat was moved to it, since either forgets what was cached first, as
+/// [`LiveSession::forget_cache_unless_under`] and [`Store::move_session`](crate::store::Store::move_session) say.
+/// *Unconfirmed:* a change to the agent's tools, or to how it thinks, or a launch under a machine's own login of
+/// another account, which the hub learns of only after, would leave the cache unread too, and be taken for this.
 pub(super) fn found_expired(
     previous: Option<&PromptCache>,
     request: &CacheRequest,

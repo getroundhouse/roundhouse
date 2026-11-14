@@ -4,7 +4,7 @@ use super::*;
 
 fn handed(logins: &Logins, now: i64) -> Option<(AccountId, String)> {
     logins
-        .to_hand(AgentKind::Claude, now)
+        .to_hand(AgentKind::Claude, None, now)
         .unwrap()
         .map(|handed| (handed.account, handed.login.token.as_str().to_string()))
 }
@@ -36,9 +36,9 @@ fn expiry_disconnect_and_missing_tokens_block_instead_of_changing_identity() {
     let (logins, _) = logins_in(dir.path());
     let first = logins.connect(&connect("Work", "work-token", None)).unwrap().account.id;
     logins.connect(&Connect { ends_at_ms: None, ..connect("Personal", "personal-token", None) }).unwrap();
-    assert_eq!(logins.to_hand(AgentKind::Claude, 2000).unwrap_err().code, ErrorCode::Conflict);
+    assert_eq!(logins.to_hand(AgentKind::Claude, None, 2000).unwrap_err().code, ErrorCode::Conflict);
     logins.disconnect(&first).unwrap();
-    assert_eq!(logins.to_hand(AgentKind::Claude, 1700).unwrap_err().code, ErrorCode::Conflict);
+    assert_eq!(logins.to_hand(AgentKind::Claude, None, 1700).unwrap_err().code, ErrorCode::Conflict);
     logins.connect(&connect("Work", "renewed-token", Some(&first))).unwrap();
     let files = std::fs::read_dir(dir.path().join("logins")).unwrap();
     let path = files
@@ -47,8 +47,8 @@ fn expiry_disconnect_and_missing_tokens_block_instead_of_changing_identity() {
         .unwrap();
     std::fs::remove_file(path).unwrap();
     logins.tidy().unwrap();
-    assert_eq!(logins.to_hand(AgentKind::Claude, 1700).unwrap_err().code, ErrorCode::Conflict);
-    assert!(logins.to_hand(AgentKind::Unknown, 1700).unwrap().is_none());
+    assert_eq!(logins.to_hand(AgentKind::Claude, None, 1700).unwrap_err().code, ErrorCode::Conflict);
+    assert!(logins.to_hand(AgentKind::Unknown, None, 1700).unwrap().is_none());
 }
 
 #[test]
@@ -61,3 +61,60 @@ fn selecting_requires_a_live_held_login_of_the_same_kind() {
     logins.disconnect(&id).unwrap();
     assert_eq!(logins.set_default(AgentKind::Claude, &id, 1000).unwrap_err().code, ErrorCode::Conflict);
 }
+
+/// The account a chat is on is handed, whichever is the default, and doesn't change when it does.
+#[test]
+fn a_chats_assigned_account_is_handed_whatever_the_default_is() {
+    let dir = tempfile::tempdir().unwrap();
+    let (logins, _) = logins_in(dir.path());
+    let work = logins.connect(&connect("Work", "work-token", None)).unwrap().account.id;
+    let personal = logins.connect(&connect("Personal", "personal-token", None)).unwrap().account.id;
+    let assigned =
+        |account: &AccountId| logins.to_hand(AgentKind::Claude, Some(account), 1700).unwrap().unwrap().account;
+
+    assert_eq!(assigned(&personal), personal);
+    logins.set_default(AgentKind::Claude, &personal, 1700).unwrap();
+    assert_eq!(assigned(&work), work);
+    assert_eq!(handed(&logins, 1700).unwrap().0, personal, "a chat on none yet is handed the default");
+}
+
+/// A chat whose account can't be used is blocked, as a new one whose default can't be is, rather than falling back to
+/// the default, and the refusal says it's the chat's account.
+#[test]
+fn a_chats_assigned_account_that_cant_be_used_blocks_it_rather_than_falling_back() {
+    let dir = tempfile::tempdir().unwrap();
+    let (logins, _) = logins_in(dir.path());
+    logins.connect(&connect("Work", "work-token", None)).unwrap();
+    let personal = logins.connect(&connect("Personal", "personal-token", None)).unwrap().account.id;
+
+    logins.disconnect(&personal).unwrap();
+
+    let refused = logins.to_hand(AgentKind::Claude, Some(&personal), 1700).unwrap_err();
+    assert_eq!(refused.code, ErrorCode::Conflict);
+    assert!(refused.message.contains("this chat's account Personal"), "{}", refused.message);
+    assert!(handed(&logins, 1700).is_some(), "the default is still handed to chats on none yet");
+}
+
+/// A move is refused where choosing the account as the default would be, since it would leave the chat unable to
+/// launch, and the refusal names the account alone, since it isn't the chat's yet.
+#[test]
+fn a_move_is_refused_as_choosing_a_default_is() {
+    let dir = tempfile::tempdir().unwrap();
+    let (logins, _) = logins_in(dir.path());
+    logins.connect(&connect("Work", "work-token", None)).unwrap();
+    let personal = logins.connect(&connect("Personal", "personal-token", None)).unwrap().account.id;
+    let move_to = |account: &AccountId, now| logins.can_move_to(AgentKind::Claude, account, now);
+
+    assert!(move_to(&personal, 1000).is_ok());
+    assert_eq!(move_to(&"nobody".into(), 1000).unwrap_err().code, ErrorCode::NotFound);
+    let other_kind = logins.can_move_to(AgentKind::Unknown, &personal, 1000).unwrap_err();
+    assert_eq!(other_kind.code, ErrorCode::InvalidRequest);
+    let ended = move_to(&personal, 2000).unwrap_err();
+    assert_eq!((ended.code, ended.message.as_str()), (ErrorCode::Conflict, PERSONAL_FIRST), "its login has ended");
+    let as_default = logins.set_default(AgentKind::Claude, &personal, 2000).unwrap_err();
+    assert_eq!(as_default.message, PERSONAL_FIRST, "nor is it the default yet");
+    logins.disconnect(&personal).unwrap();
+    assert_eq!(move_to(&personal, 1000).unwrap_err().code, ErrorCode::Conflict, "its login is gone");
+}
+
+const PERSONAL_FIRST: &str = "Personal needs a login; renew or reconnect it in Accounts first";

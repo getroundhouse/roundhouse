@@ -66,17 +66,17 @@ async fn every_client_is_told_of_what_changed_an_accounts_record_and_only_that()
 async fn a_launch_gets_the_chosen_account_without_consulting_any_machine_login() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_in(dir.path());
-    assert!(hub.login_for(AgentKind::Claude).await.unwrap().is_none());
+    assert!(hub.login_for(AgentKind::Claude, None).await.unwrap().is_none());
     let first = hub.account_connect(asking("Work", "work-token")).await.unwrap();
     let other = hub.account_connect(asking("Personal", "personal-token")).await.unwrap();
-    assert_eq!(hub.login_for(AgentKind::Claude).await.unwrap().unwrap().account, first.id);
+    assert_eq!(hub.login_for(AgentKind::Claude, None).await.unwrap().unwrap().account, first.id);
     hub.account_set_default(protocol::client::accounts::AccountSetDefault {
         agent: AgentKind::Claude,
         account: other.id.clone(),
     })
     .await
     .unwrap();
-    assert_eq!(hub.login_for(AgentKind::Claude).await.unwrap().unwrap().account, other.id);
+    assert_eq!(hub.login_for(AgentKind::Claude, None).await.unwrap().unwrap().account, other.id);
     hub.account_disconnect(other.id).await.unwrap();
-    assert_eq!(hub.login_for(AgentKind::Claude).await.unwrap_err().code, ErrorCode::Conflict);
+    assert_eq!(hub.login_for(AgentKind::Claude, None).await.unwrap_err().code, ErrorCode::Conflict);
 }

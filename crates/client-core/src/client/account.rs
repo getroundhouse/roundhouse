@@ -1,18 +1,18 @@
-//! The calls about the accounts agents run under: connecting a login the hub holds for one, disconnecting it, and
-//! whose account a session's agent runs under, as clients asked before accounts were records, which only tests ask now,
-//! to show a hub still answers it, so only the `testing` feature builds it.
+//! The calls about the accounts agents run under: connecting a login the hub holds for one, disconnecting it, choosing
+//! a kind's default, and moving a chat to another. Asking whose account a session's agent runs under, as clients did
+//! before accounts were records, is left only to tests, to show a hub still answers it, so only the `testing` feature
+//! builds that one.
 
-use protocol::client::accounts;
+use protocol::client::{accounts, sessions};
 #[cfg(feature = "testing")]
-use protocol::client::sessions;
-use protocol::model::{Account, AccountId, AgentKind, HubSettings, LoginToken};
-#[cfg(feature = "testing")]
-use protocol::model::{SessionAccount, SessionId};
+use protocol::model::SessionAccount;
+use protocol::model::{Account, AccountId, AgentKind, HubSettings, LoginToken, Session, SessionId};
 
 use super::{Client, Result};
 
 impl Client {
-    /// Chooses the hub's default login for new processes of this agent kind.
+    /// Chooses the account chats of this agent kind are put on while they're on none. See
+    /// [`accounts::AccountSetDefault`].
     pub fn account_set_default(&self, agent: AgentKind, account: &AccountId) -> Result<HubSettings> {
         self.call(accounts::AccountSetDefault { agent, account: account.clone() })
     }
@@ -34,6 +34,13 @@ impl Client {
     /// [`accounts::AccountDisconnect`]. A hub older than this refuses it, as `is_unsupported` says.
     pub fn account_disconnect(&self, id: &AccountId) -> Result<Account> {
         self.call(accounts::AccountDisconnect { id: id.clone() })
+    }
+
+    /// Moves the chat `id` to `account`, and answers with its record. With `force`, an agent that counts as running
+    /// under another account is stopped rather than refused with `NeedsForce`. See [`sessions::SessionAssignAccount`].
+    /// A hub older than this refuses it, as `is_unsupported` says.
+    pub fn session_assign_account(&self, id: &SessionId, account: &AccountId, force: bool) -> Result<Session> {
+        self.call(sessions::SessionAssignAccount { id: id.clone(), account: account.clone(), force })
     }
 
     /// See [`sessions::SessionAccount`]. A hub older than this refuses it, as `is_unsupported` says.

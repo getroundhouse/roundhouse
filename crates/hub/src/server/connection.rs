@@ -162,8 +162,7 @@ async fn handle(
     use ClientResponse as C;
     Ok(match request {
         R::Hello(_) => return Err(ApiError::new(ErrorCode::InvalidRequest, "already said hello")),
-        // Refused until this hub keeps a chat's assigned account, as one from before it does.
-        R::SessionAssignAccount(_) | R::Unknown => return Err(hub.unsupported(None)),
+        R::Unknown => return Err(hub.unsupported(None)),
         R::HubStatus => C::HubStatus(hub.status()),
         R::HubShutdown => {
             hub.request_stop();
@@ -320,6 +319,7 @@ async fn handle(
         }
         R::SessionAccount(sessions::SessionAccount { id }) => C::SessionAccount(hub.session_account(id).await?),
         R::AccountSetDefault(asked) => C::HubSettings(hub.account_set_default(asked).await?),
+        R::SessionAssignAccount(asked) => C::Session(hub.session_assign_account(asked).await?),
         R::AccountConnect(asked) => C::Account(hub.account_connect(asked).await?),
         R::AccountDisconnect(accounts::AccountDisconnect { id }) => C::Account(hub.account_disconnect(id).await?),
         R::SessionQueue(queue::SessionQueue { id, client_msg_id, prompt }) => {

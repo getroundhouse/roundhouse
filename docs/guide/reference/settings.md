@@ -47,7 +47,7 @@ The logins your agents run under: native logins found where agents ran, and Clau
 ![Accounts, with Claude Code's own login and four you've added](../../spec/screens/settings-accounts.png)
 
 - **Found** has Claude Code's own login on a machine, such as this Mac's, once an agent has run under it. Roundhouse reads who it is, and never copies it, so there's nothing to do with it here.
-- **Default accounts** chooses the account each supported agent uses across this hub. Choose Work or Personal for Claude Code. Added defaults take priority over machine credentials, and apply when an agent next starts; running agents keep their current login. With no added default, the agent uses its machine's own login.
+- **Default accounts** chooses the account new chats of each supported agent use across this hub. Choose Work or Personal for Claude Code. A chat is put on the default when its agent first starts, and stays on that account when you choose another default. Added defaults take priority over machine credentials. With no added default, the agent uses its machine's own login, and its chat is put on whichever default you've added by the time its agent next starts. A chat from before you updated is put on the default when its agent next starts too.
 - **Added** has the logins you've given the hub. The chosen account has a default badge. Adding or renewing another account does not change your choice. Logins you've disconnected are listed last.
 - **Each row** says the day you last sent something in a chat under the account, such as yesterday or 3 days ago, once you have, and what's left of its limits, as the chat's limits' card does.
 
@@ -72,7 +72,7 @@ A chat under the account names it by the name you gave it, where a login of the 
 
 ![Renewing a login that ends in nine days](../../spec/screens/settings-accounts-renewing.png)
 
-If your default expires or is disconnected, new agents cannot start until you renew or reconnect it, or choose another default. It stays selected and does not fall back to another account or machine credentials.
+If an account expires or is disconnected, agents in the chats on it cannot start until you renew or reconnect it. If it's your default, new chats can't start either until you do, or choose another default, which the chats already on it don't follow. It stays selected and does not fall back to another account or machine credentials.
 
 A hub from before account defaults cannot change them. Update the hub to choose one. An older worker that cannot enforce the selected account also refuses new launches until it is updated.
 

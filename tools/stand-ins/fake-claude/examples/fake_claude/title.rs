@@ -2,8 +2,8 @@
 //! with what `$FAKE_CLAUDE_STATE/title` holds, as the real CLI's `result` line, between lines like the ones the real
 //! CLI prints around it. It fails if there's no such file, so a test that isn't about titles keeps the prompt's first
 //! line. It keeps the prompt's words in `title-prompt`, and what came with them in `title-images`, as `attached` says
-//! it. A prompt can carry its own title instead, as the rest of the line after `titled:`, for tests that share a state
-//! directory, where a file would title every test's prompts.
+//! it, and the login it was given, if any, in `title-token`. A prompt can carry its own title instead, as the rest of
+//! the line after `titled:`, for tests that share a state directory, where a file would title every test's prompts.
 //!
 //! While `title-held` exists it waits, so a test can act before the title arrives. Meanwhile it runs a process of
 //! its own, as a hook would, and writes its PID and that one's to `title-pids`, so a test can tell that stopping the
@@ -21,6 +21,7 @@ pub(crate) fn answer(state: &Path) {
     let prompt = crate::prompt::read_prompt(&message["message"]["content"]);
     std::fs::write(state.join("title-prompt"), &prompt).unwrap();
     std::fs::write(state.join("title-images"), crate::prompt::attached()).unwrap();
+    std::fs::write(state.join("title-token"), std::env::var("CLAUDE_CODE_OAUTH_TOKEN").unwrap_or_default()).unwrap();
     if state.join("title-held").exists() {
         let mut started = Command::new("sleep").arg("300").spawn().unwrap();
         std::fs::write(state.join("title-pids"), format!("{} {}", std::process::id(), started.id())).unwrap();

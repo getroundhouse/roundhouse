@@ -189,13 +189,16 @@ impl Store {
     }
 }
 
-/// What naming a session's account changed.
-pub(in super::super) struct Named {
+/// What naming a session's account found and changed.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct Named {
+    /// The account the session's record named before, if any.
+    pub(crate) before: Option<AccountId>,
     /// The session's record names another account than it did, or none.
-    pub(in super::super) session: bool,
+    pub(crate) session: bool,
     /// The record of the account it names now, when naming it brought when the account was last used up to the
     /// session's last send, as [`used_by_session`] says.
-    pub(in super::super) account: Option<Account>,
+    pub(crate) account: Option<Account>,
 }
 
 /// Has `session`'s record name `account` as the one its agent runs under, or none, and says what that changed.
@@ -210,16 +213,22 @@ pub(in super::super) fn name_account(
     session: &SessionId,
     account: Option<&AccountId>,
 ) -> rusqlite::Result<Named> {
-    let named_none = conn
-        .query_row("SELECT account_id IS NULL FROM sessions WHERE id = ?", [session.as_str()], |row| row.get(0))
-        .optional()?
-        .unwrap_or(false);
+    let before = named(conn, session)?;
     let changed = conn.execute(
         "UPDATE sessions SET account_id = ?1 WHERE id = ?2 AND account_id IS NOT ?1",
         params![account.map(AccountId::as_str), session.as_str()],
     )? > 0;
-    let account = if changed && named_none && account.is_some() { used_by_session(conn, session)? } else { None };
-    Ok(Named { session: changed, account })
+    let account = if changed && before.is_none() && account.is_some() { used_by_session(conn, session)? } else { None };
+    Ok(Named { before, session: changed, account })
+}
+
+/// The account `session`'s record names as the one its agent runs under.
+pub(in super::super) fn named(conn: &Connection, session: &SessionId) -> rusqlite::Result<Option<AccountId>> {
+    conn.query_row("SELECT account_id FROM sessions WHERE id = ?", [session.as_str()], |row| {
+        row.get::<_, Option<String>>(0)
+    })
+    .optional()
+    .map(|account| account.flatten().map(AccountId::from))
 }
 
 /// Brings when the account `session`'s record names was last used up to when the person last sent the session's agent
