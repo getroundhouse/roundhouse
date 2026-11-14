@@ -26,6 +26,7 @@ fn of_a_record() -> Vec<(HubNotice, RecordKey, Rev)> {
         (HubNotice::Comment(comment), RecordKey::Comment { id: "c".into() }, Rev::new(3)),
         (
             HubNotice::HubSettings(HubSettings {
+                account_defaults: None,
                 keep_awake: true,
                 allow_asked_in_full_access: Some(true),
                 rev: Rev::new(4),

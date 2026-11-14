@@ -4,7 +4,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::{ClientRequest, ClientResponse, Reply, Request};
-use crate::model::{Account, AccountId, AgentKind, LoginToken};
+use crate::model::{Account, AccountId, AgentKind, HubSettings, LoginToken};
 
 /// Gives the hub a login for agents of `agent`'s kind to run under, which it keeps and hands to the workers it launches
 /// them on whose machine has no login of its own for that kind, and answers with the account's record, named `name`.
@@ -66,6 +66,22 @@ impl Request for AccountDisconnect {
 
     fn into_request(self) -> ClientRequest {
         ClientRequest::AccountDisconnect(self)
+    }
+}
+
+/// Chooses the hub-wide default for new processes of this kind. The account must hold an unexpired
+/// login of the same kind. A disconnected or expired default remains selected and blocks new starts.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct AccountSetDefault {
+    pub agent: AgentKind,
+    pub account: AccountId,
+}
+
+impl Request for AccountSetDefault {
+    type Reply = HubSettings;
+
+    fn into_request(self) -> ClientRequest {
+        ClientRequest::AccountSetDefault(self)
     }
 }
 

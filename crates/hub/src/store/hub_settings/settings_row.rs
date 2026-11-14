@@ -4,7 +4,12 @@ use rusqlite::{Connection, params};
 
 pub(in super::super) fn hub_settings(conn: &Connection) -> rusqlite::Result<HubSettings> {
     conn.query_row("SELECT keep_awake, allow_asked_in_full_access, rev FROM hub_settings", [], |row| {
-        Ok(HubSettings { keep_awake: row.get(0)?, allow_asked_in_full_access: Some(row.get(1)?), rev: rev_of(row, 2)? })
+        Ok(HubSettings {
+            account_defaults: None,
+            keep_awake: row.get(0)?,
+            allow_asked_in_full_access: Some(row.get(1)?),
+            rev: rev_of(row, 2)?,
+        })
     })
 }
 

@@ -123,6 +123,7 @@ impl World {
             comments: self.comments.values().flatten().cloned().collect(),
             // As a hub starts out.
             hub_settings: (!self.keeps_no_settings).then(|| protocol::model::HubSettings {
+                account_defaults: None,
                 keep_awake: true,
                 allow_asked_in_full_access: Some(false),
                 rev: Rev::default(),
