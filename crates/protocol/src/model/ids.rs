@@ -34,6 +34,7 @@ macro_rules! ids {
         }
     )+};
 }
+pub(crate) use ids;
 
 ids!(
     /// An account an agent runs under, as its adapter names it. It's opaque, says which kind of agent it's for, and
