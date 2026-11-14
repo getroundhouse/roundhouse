@@ -24,7 +24,7 @@ pub enum ClaimError {
     Io { what: String, source: io::Error },
 }
 
-/// Claims the instance whose state is kept in `state_dir`, or refuses if another worker has it.
+/// Claims the instance for a worker whose state directory is `state_dir`, or refuses if another worker has it.
 pub fn claim_instance(state_dir: &Path) -> Result<InstanceClaim, ClaimError> {
     let io = |what: String| move |source| ClaimError::Io { what, source };
     std::fs::create_dir_all(state_dir).map_err(io(format!("creating {}", state_dir.display())))?;
@@ -40,10 +40,10 @@ pub fn claim_instance(state_dir: &Path) -> Result<InstanceClaim, ClaimError> {
     Ok(InstanceClaim { _lock: lock })
 }
 
-/// Claims the instance whose state is kept in `state_dir`, for a worker that serves it on a socket. `None` if another
-/// worker has it, which this leaves it to: one started at the same time, to serve the same hub, whose socket the
-/// command that started this one waits for. It can't be one that's stopping, since the command starts no worker while
-/// one holds the instance.
+/// Claims the instance for a worker whose state directory is `state_dir`, and that serves it on a socket. `None` if
+/// another worker has it, which this leaves it to: one started at the same time, to serve the same hub, whose socket
+/// the command that started this one waits for. It can't be one that's stopping, since the command starts no worker
+/// while one holds the instance.
 #[cfg(unix)]
 pub fn claim_to_serve(state_dir: &Path) -> Result<Option<InstanceClaim>, ClaimError> {
     match claim_instance(state_dir) {
@@ -52,7 +52,7 @@ pub fn claim_to_serve(state_dir: &Path) -> Result<Option<InstanceClaim>, ClaimEr
     }
 }
 
-/// Whether a worker holds the instance whose state is kept in `state_dir`, as one that's stopping does once it has
+/// Whether a worker whose state directory is `state_dir` holds the instance, as one that's stopping does once it has
 /// removed its socket.
 #[cfg(unix)]
 pub fn instance_claimed(state_dir: &Path) -> io::Result<bool> {

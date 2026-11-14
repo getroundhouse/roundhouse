@@ -4,6 +4,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use protocol::client::{ApiError, ErrorCode};
+use protocol::paths::AGENTS_DIR;
 use protocol::worker::{SetupDone, WorkerResponse};
 
 use super::State;
@@ -41,7 +42,7 @@ pub(crate) async fn run_setup(
     env: &[(String, String)],
 ) -> Result<WorkerResponse, ApiError> {
     let (repo, worktree) = (Path::new(repo), Path::new(path));
-    let log = setup::setup_log_path(state.config.state_dir.as_deref(), worktree);
+    let log = setup::setup_log_path(&state.config.state_dir);
     let _ = std::fs::remove_file(&log);
     let mut warnings = Vec::new();
     let settings = setup::load_settings(repo, worktree, state.config.home.as_deref(), &mut warnings);
@@ -58,7 +59,7 @@ pub(crate) async fn run_setup(
     };
     setup::append_log(&log, "Running the setup script");
     // Recorded like an agent, so the provider can stop it if this worker is killed.
-    let record = state.config.state_dir.as_ref().map(|dir| dir.join("agents/setup.pid"));
+    let record = state.config.state_dir.join(AGENTS_DIR).join("setup.pid");
     let (tracked, for_start) = (state.setup.clone(), record.clone());
     let status = setup::run_script(&script, worktree, env, &log, move |pid| {
         let mut tracked = tracked.lock();
@@ -67,15 +68,11 @@ pub(crate) async fn run_setup(
         }
         *tracked = Setup::Running(pid);
         drop(tracked);
-        if let Some(path) = &for_start {
-            let _ = process::ProcessRecord::write(path, pid);
-        }
+        let _ = process::ProcessRecord::write(&for_start, pid);
     })
     .await;
     *state.setup.lock() = Setup::Idle;
-    if let Some(path) = &record {
-        let _ = std::fs::remove_file(path);
-    }
+    let _ = std::fs::remove_file(&record);
     let code = status?.code();
     match code {
         Some(code) => setup::append_log(&log, &format!("The setup script exited with {code}")),
@@ -96,7 +93,7 @@ pub(crate) async fn run_archive_script(
     }
     let settings = setup::load_settings(repo, worktree, state.config.home.as_deref(), &mut Vec::new());
     let Some(script) = settings.archive else { return Ok(WorkerResponse::Ok) };
-    let log = setup::setup_log_path(state.config.state_dir.as_deref(), worktree);
+    let log = setup::setup_log_path(&state.config.state_dir);
     setup::append_log(&log, "Running the archive script");
     let status = setup::run_script(&script, worktree, env, &log, |_| {}).await?;
     if status.success() {

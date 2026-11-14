@@ -43,8 +43,10 @@ pub struct Config {
     /// Which build this worker is, which its hello tells the hub.
     pub build: Build,
     pub workspaces_root: PathBuf,
-    /// Where to record running agents, so they can be found if this process is killed.
-    pub state_dir: Option<PathBuf>,
+    /// The worker's state directory, where it records what it runs, so it can be stopped if this process is killed, and
+    /// keeps the setup log and each run's files. It's there before the worker serves, as claiming the instance makes
+    /// it.
+    pub state_dir: PathBuf,
     /// Holds the user's own settings, and the places agent CLIs install to.
     pub home: Option<PathBuf>,
     /// Where to search for agent CLIs.
@@ -244,8 +246,8 @@ pub(super) async fn handle(
             stop_setup_script(state);
             Ok(WorkerResponse::Ok)
         }
-        WorkerRequest::SetupLog(SetupLog { path }) => {
-            let log = setup::setup_log_path(state.config.state_dir.as_deref(), Path::new(&path));
+        WorkerRequest::SetupLog(SetupLog { path: _ }) => {
+            let log = setup::setup_log_path(&state.config.state_dir);
             Ok(WorkerResponse::SetupLog(SetupLogReply { text: setup::read_log_tail(&log, SETUP_LOG_TAIL_BYTES) }))
         }
         WorkerRequest::ArchiveScript(asked) => {

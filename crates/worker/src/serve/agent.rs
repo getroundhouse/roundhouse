@@ -37,10 +37,9 @@ pub(crate) async fn title_for(
 /// if this worker is killed, and the login its hub sent with it, which goes with the call.
 fn one_off(state: &State, agent: AgentKind, what: &str, login: Option<AgentLogin>) -> AgentOptions {
     let call = state.calls.fetch_add(1, Ordering::Relaxed);
-    let record = |dir: &std::path::PathBuf| dir.join(AGENTS_DIR).join(format!("{what}-{call}.pid"));
     AgentOptions {
         binary: binary(state, agent),
-        pid_file: state.config.state_dir.as_ref().map(record),
+        pid_file: Some(state.config.state_dir.join(AGENTS_DIR).join(format!("{what}-{call}.pid"))),
         tools: None,
         instructions: None,
         login,
@@ -94,13 +93,12 @@ pub(crate) async fn start_agent(
     let (tx, rx) = mpsc::channel(1024);
     // Named by run, because a replaced agent removes its own files as it finishes, which can be after its replacement
     // has started, and a CLI whose `--mcp-config` file has gone doesn't start at all.
-    let agent_file = |extension: &str| {
-        state.config.state_dir.as_ref().map(|dir| dir.join(AGENTS_DIR).join(format!("{session_id}-{run}.{extension}")))
-    };
+    let agent_file =
+        |extension: &str| state.config.state_dir.join(AGENTS_DIR).join(format!("{session_id}-{run}.{extension}"));
     make_context_folder(&session_id, &worktree).await;
     let options = AgentOptions {
         binary: binary(state, spec.agent),
-        pid_file: agent_file("pid"),
+        pid_file: Some(agent_file("pid")),
         tools: tools_for(state, &mut spec, agent_file("mcp.json")).await,
         instructions: Some(instructions(spec.agent)),
         // Taken out of the launch, as the tools' token is, so it's in one place: what the agent is started with, and
@@ -130,17 +128,13 @@ async fn make_context_folder(session_id: &SessionId, worktree: &Path) {
 }
 
 /// Where the agent reaches the worker's tools: at the address they're served on, with the token its hub gave it, which
-/// lets its calls through from then on. `None` when the hub gave it none, when they aren't served, or when there's no
-/// state directory to tell its CLI in, at `config`, and it goes without them.
-async fn tools_for(state: &State, spec: &mut AgentSpec, config: Option<PathBuf>) -> Option<ToolServer> {
+/// lets its calls through from then on, told to its CLI in `config`. `None` when the hub gave it none, or when they
+/// aren't served, and it goes without them.
+async fn tools_for(state: &State, spec: &mut AgentSpec, config: PathBuf) -> Option<ToolServer> {
     let token = spec.tools_token.take()?;
     let session_id = &spec.session_id;
     let Some(url) = state.tools.url().await else {
         warn!(%session_id, "the agent goes without the worker's tools, which aren't being served");
-        return None;
-    };
-    let Some(config) = config else {
-        warn!(%session_id, "the agent goes without the worker's tools, with no state directory to tell its CLI in");
         return None;
     };
     state.tools.admit(token.clone(), session_id.clone());

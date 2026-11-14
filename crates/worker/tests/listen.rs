@@ -38,10 +38,11 @@ impl Listening {
         let cli = dir.path().join("fake-cli");
         std::fs::write(&cli, "#!/bin/sh\nwhile [ ! -e done ]; do sleep 0.02; done\n").unwrap();
         std::fs::set_permissions(&cli, std::fs::Permissions::from_mode(0o755)).unwrap();
+        std::fs::create_dir(dir.path().join("state")).unwrap();
         let config = Config {
             build: Build::UNSTAMPED,
             workspaces_root: dir.path().to_path_buf(),
-            state_dir: None,
+            state_dir: dir.path().join("state"),
             home: None,
             path: None,
             claude_bin: Some(cli),

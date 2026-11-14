@@ -11,7 +11,7 @@ pub(crate) enum Transport {
     /// Connects stdin and stdout to the instance's worker, and starts it first if none is serving it, so it can
     /// outlive its hub. Not on Windows.
     Attach,
-    /// Serves the instance on a socket in its directory, as `Attach` starts it.
+    /// Serves the instance on a socket in the worker's state directory, as `Attach` starts it.
     Listen,
 }
 
@@ -19,7 +19,7 @@ pub(crate) enum Transport {
 pub(crate) struct Given {
     pub build: protocol::Build,
     pub workspaces_root: PathBuf,
-    pub state_dir: Option<PathBuf>,
+    pub state_dir: PathBuf,
     pub claude_bin: Option<PathBuf>,
     pub codex_bin: Option<PathBuf>,
 }
@@ -34,8 +34,8 @@ pub(crate) fn run(transport: Transport, given: Given) -> anyhow::Result<()> {
 
 fn on_stdio(given: Given) -> anyhow::Result<()> {
     // Held until this process exits, since a provider's `connect` can be asked more than once.
-    let (_claim, refused) = match given.state_dir.as_deref().map(worker::claim_instance).transpose() {
-        Ok(claim) => (claim, None),
+    let (_claim, refused) = match worker::claim_instance(&given.state_dir) {
+        Ok(claim) => (Some(claim), None),
         Err(e @ worker::ClaimError::Taken(_)) => (None, Some(e.to_string())),
         Err(e) => return Err(e.into()),
     };

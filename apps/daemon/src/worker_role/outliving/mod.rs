@@ -1,5 +1,5 @@
-//! A worker that can outlive its hub, which listens on a socket in its instance's directory, and the command a hub runs
-//! to reach it. Only Unix has the socket, so on Windows both refuse.
+//! A worker that can outlive its hub, which listens on a socket in its state directory, and the command a hub runs to
+//! reach it. Only Unix has the socket, so on Windows both refuse.
 
 #[cfg(unix)]
 mod unix;

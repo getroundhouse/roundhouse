@@ -3,7 +3,8 @@
 //! CLI prints around it. It fails if there's no such file, so a test that isn't about titles keeps the prompt's first
 //! line. It keeps the prompt's words in `title-prompt`, and what came with them in `title-images`, as `attached` says
 //! it, and the login it was given, if any, in `title-token`. A prompt can carry its own title instead, as the rest of
-//! the line after `titled:`, for tests that share a state directory, where a file would title every test's prompts.
+//! the line after `titled:`, for tests that share a `$FAKE_CLAUDE_STATE`, where a file would title every test's
+//! prompts.
 //!
 //! While `title-held` exists it waits, so a test can act before the title arrives. Meanwhile it runs a process of
 //! its own, as a hook would, and writes its PID and that one's to `title-pids`, so a test can tell that stopping the
