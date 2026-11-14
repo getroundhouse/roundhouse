@@ -5,7 +5,7 @@ Roundhouse runs on a Mac with Apple silicon. Windows and Linux have first previe
 ## What you need
 
 - **Git, and a repository to work in.**
-- **The Claude CLI, `claude`, installed, and logged in** unless you add a login in [Settings](../reference/settings.md#accounts), which agents run under where the machine has none of its own. Roundhouse runs it as you, with your login and settings. Run `claude` once in a terminal to check.
+- **Your agent's CLI, `claude` or `codex`, installed and signed in.** Run it once in a terminal to check. Claude can also use a login added in [Settings](../reference/settings.md#accounts). Codex uses its own sign-in on the machine running the workspace.
 - **GitHub's CLI, `gh`, logged in,** for pull requests. Everything else works without it.
 
 ## On a Mac

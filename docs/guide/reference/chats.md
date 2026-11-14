@@ -6,8 +6,8 @@ A chat is one conversation with one agent, in a workspace's worktree. This page 
 
 ## What a chat has
 
-- **An agent,** the Claude CLI, started when the chat's first prompt is sent. Closing the chat stops it.
-- **A model and an effort,** which the chat names itself, so your own Claude settings don't decide them.
+- **An agent,** Claude or Codex through its CLI, started when the chat's first prompt is sent. Closing the chat stops it.
+- **A model and an effort,** which the chat names itself, so your own CLI settings don't decide them.
 - **An approval mode:** full access, or plan mode.
 - **A history,** which the hub keeps, so it's there after the agent has gone, in every client.
 - **A queue** of prompts for when the agent finishes.
@@ -21,13 +21,13 @@ A turn runs from a prompt until the agent finishes responding. While it lasts, t
 
 A finished turn ends with how long it took and when it ended, such as `1m, 48s · 2:15 PM`, and a button that copies the agent's final message. A stopped turn says `Stopped`, and one that failed says why, in red.
 
-A turn that failed because the agent's request to its model did, as when you reach your usage limit, ends on a red card instead. It says what went wrong, when a limit resets, and the CLI's own words on what to do. `Retry` asks the agent to carry on, with whatever model the chat runs now, so choosing another model, then `Retry`, gets past one model's limit. It goes once you send anything.
+A Claude turn that failed because its request to the model did, as when you reach your usage limit, ends on a red card instead. It says what went wrong, when a limit resets, and the CLI's own words on what to do. `Retry` asks the agent to carry on, with whatever model the chat runs now, so choosing another model, then `Retry`, gets past one model's limit. It goes once you send anything.
 
 ![A turn that failed on a usage limit, with Retry](../../spec/screens/request-failed.png)
 
 What the agent's CLI says itself, such as `Set model to opus (claude-opus-5-5)`, is a muted line of its own, so it isn't taken for the agent's words.
 
-A turn can end with work still going in the background, such as a test run the agent said it would come back to. When that finishes, the agent picks up again by itself, in a new turn.
+An agent that reports background work can end a turn with it still going, such as a test run the agent said it would come back to. When that finishes, the agent picks up again by itself, in a new turn.
 
 ## The composer
 
@@ -37,8 +37,8 @@ Where you type. Its bottom row has:
 |---|---|
 | `+` | Attaches files, and turns plan mode on and off |
 | The model picker | Chooses the model and its effort |
-| The limits' bars | What's left of your account's limits |
-| The context's ring | How full the agent's context is |
+| The limits' bars | What's left of your account's limits, when the agent reports them |
+| The context's ring | How full the context is, when the agent reports it |
 | Send | Sends what's typed. While the agent is on a turn, it offers to stop it |
 
 What's typed and attached is kept by the hub until it's sent. It's there when the app opens again, and a prompt that can't be sent comes back to it. Closing the chat lets go of it.

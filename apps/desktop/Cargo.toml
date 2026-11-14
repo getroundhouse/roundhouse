@@ -63,6 +63,7 @@ serde_json.workspace = true
 anyhow.workspace = true
 
 [dev-dependencies]
+agents.workspace = true
 client-core = { workspace = true, features = ["testing"] }
 desktop = { workspace = true, features = ["testing"] }
 look = { workspace = true, features = ["testing"] }

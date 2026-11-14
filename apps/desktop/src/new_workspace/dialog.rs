@@ -106,6 +106,7 @@ pub struct NewWorkspaceDialog {
     pub(super) offer: Offer,
     pub(super) prompt: Entity<TextareaState>,
     /// What was picked, or kept by the hub. `None` until then, which is what the first chat's agent starts a chat with.
+    pub(super) chosen_agent: Option<AgentKind>,
     pub(super) model: Option<ModelName>,
     pub(super) effort: Option<Effort>,
     /// The mode the first chat starts in: full access for each new workspace, unless plan mode is turned on, since it
@@ -168,7 +169,18 @@ impl NewWorkspaceDialog {
         });
         let (model, effort, attached) = (None, None, Attachments::default());
         let mode = PermissionMode::FullAccess;
-        Self { repo, offer, prompt, model, effort, mode, attached, keeping, _subscriptions: vec![typed] }
+        Self {
+            repo,
+            offer,
+            prompt,
+            chosen_agent: None,
+            model,
+            effort,
+            mode,
+            attached,
+            keeping,
+            _subscriptions: vec![typed],
+        }
     }
 
     pub(crate) fn set_offer(&mut self, offer: Offer, cx: &mut Context<Self>) {
@@ -213,7 +225,7 @@ impl NewWorkspaceDialog {
         let files = self.attached.take();
         let coming_back = self.stop_bringing_back();
         cx.notify();
-        let agent = self.offer.agents.for_new_chat();
+        let agent = self.chosen_agent.unwrap_or_else(|| self.offer.agents.for_new_chat());
         let prompt = Prompt::carrying(text, files);
         Request { repo, prompt, coming_back, agent, model, effort, permission_mode, made_of, kept }
     }
@@ -280,7 +292,18 @@ impl NewWorkspaceDialog {
 
     /// What the hub says of the agent the first chat runs. `None` from a hub that doesn't describe it.
     pub(super) fn agent(&self) -> Option<&AgentDescription> {
-        self.offer.agents.new_chat()
+        self.chosen_agent.and_then(|kind| self.offer.agents.of(kind)).or_else(|| self.offer.agents.new_chat())
+    }
+
+    pub(super) fn pick_agent(&mut self, agent: AgentKind, cx: &mut Context<Self>) {
+        if self.offer.agents.of(agent).is_none() {
+            return;
+        }
+        self.chosen_agent = Some(agent);
+        self.model = None;
+        self.effort = None;
+        self.keep(true, cx);
+        cx.notify();
     }
 
     /// The model and effort the first chat is to run: what was picked or kept, or else what its agent starts a chat
@@ -314,7 +337,12 @@ impl NewWorkspaceDialog {
     /// on there.
     pub(super) fn pick(&mut self, picked: Picked, cx: &mut Context<Self>) {
         match picked {
-            Picked::Model(model) => self.model = Some(model),
+            Picked::Model(model) => {
+                self.effort = self
+                    .agent()
+                    .map(|agent| agent.effort_when_switching(&model, self.effort.unwrap_or(agent.defaults.effort)));
+                self.model = Some(model);
+            }
             Picked::Effort(effort) => self.effort = Some(effort),
         }
         self.keep(true, cx);

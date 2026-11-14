@@ -27,6 +27,7 @@ const GIVEN_MOST_HEIGHT: f32 = 160.;
 pub(crate) struct ToolUse {
     /// What it asks, which makes the decision that answers it.
     pub(super) approval: Approval<'static>,
+    pub(in super::super) can_type: bool,
     /// The question it's asked as: the tool as its header, what the use is for as its text, and a row for each of
     /// [`ToolUseAnswer::ALL`] as its options.
     pub(super) question: Question,
@@ -46,7 +47,7 @@ pub(super) enum Shown {
 
 impl ToolUse {
     /// What the request `body` asks, where it asks to use a tool, as `approval` says, or `None` for any other.
-    pub(in super::super) fn read(body: &EventBody, approval: Approval<'static>) -> Option<Self> {
+    pub(in super::super) fn read(body: &EventBody, approval: Approval<'static>, can_type: bool) -> Option<Self> {
         let asked = ToolUseAsked::of(body)?;
         let runs_a_command = matches!(asked.given, Some(Given::Command(_)));
         let (text, given) = match (asked.about, asked.given) {
@@ -72,7 +73,7 @@ impl ToolUse {
         };
         let options = ToolUseAnswer::ALL.iter().map(option).collect();
         let question = Question { text, header: Some(asked.tool), options, multiple: false };
-        Some(Self { approval, question, given, reason: asked.reason.map(str::to_string) })
+        Some(Self { approval, can_type, question, given, reason: asked.reason.map(str::to_string) })
     }
 
     pub(in super::super) fn question(&self) -> &Question {

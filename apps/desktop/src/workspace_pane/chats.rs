@@ -50,13 +50,21 @@ impl WorkspacePane {
 
     /// Starts another chat in this workspace and shows it.
     pub fn new_chat(&mut self, cx: &mut Context<Self>) {
+        let agent = self.session().map_or_else(|| self.new_chat_agent(), |s| s.agent);
+        self.new_chat_with(agent, cx);
+    }
+
+    pub(super) fn new_chat_with(&mut self, agent: protocol::model::AgentKind, cx: &mut Context<Self>) {
         if self.creating_chat {
             return;
         }
         self.creating_chat = true;
-        let (id, agent) = (self.workspace().id.clone(), self.new_chat_agent());
+        let id = self.workspace().id.clone();
         // It keeps the model and effort, but not plan mode, which belongs to the task at hand.
-        let (model, effort) = (self.session().map(|s| s.model.clone()), self.session().map(|s| s.effort));
+        let (model, effort) = (
+            self.session().filter(|s| s.agent == agent).map(|s| s.model.clone()),
+            self.session().filter(|s| s.agent == agent).map(|s| s.effort),
+        );
         // A level this app can't name, such as a newer hub's, can't be asked for, so the new chat gets what its agent
         // starts a chat with.
         let options = SessionSettingsChange { model, permission_mode: None, effort: effort.and_then(Effort::known) };

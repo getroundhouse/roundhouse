@@ -57,7 +57,7 @@ pub(crate) fn rows_drawing(log: &SessionLog, m: &Model, position: Position) -> V
     }
     let mut rows = vec![own];
     for block in blocks_of(&event.body) {
-        if let ContentBlock::ToolResult { tool_use_id, .. } = block
+        if let ContentBlock::ToolResult { tool_use_id, .. } | ContentBlock::CallResult { tool_use_id, .. } = block
             && let Some(call) = drawn_with_its_call(log, event.seq, tool_use_id).and_then(row_of)
         {
             rows.push(call);
@@ -179,21 +179,18 @@ pub(in crate::rows) fn of_block(block: &ContentBlock, drawing: &BlockAround, gat
         ContentBlock::Thinking { text } => gather.inside(key, Fold::Thinking, |gather| {
             gather.written(key, Part::Thinking, text);
         }),
-        ContentBlock::ToolUse { .. } => {
+        ContentBlock::ToolUse { .. } | ContentBlock::Call { .. } => {
             // One that asks the person something is drawn from its approval, which has everything that was asked.
             if let Some(recorded) = Recorded::of(block).filter(|call| !call.asks_the_person()) {
                 tools::shown(key, recorded, &drawing.reply, drawing.subagent.as_ref(), gather);
             }
         }
-        ContentBlock::ToolResult { .. } if drawing.with_call => {}
-        ContentBlock::ToolResult { .. } => {
+        ContentBlock::ToolResult { .. } | ContentBlock::CallResult { .. } if drawing.with_call => {}
+        ContentBlock::ToolResult { .. } | ContentBlock::CallResult { .. } => {
             if let Some(answer) = drawing.reply.result() {
                 tools::shown_result(key, answer, gather);
             }
         }
-        ContentBlock::Image { .. }
-        | ContentBlock::Call { .. }
-        | ContentBlock::CallResult { .. }
-        | ContentBlock::Unknown => {}
+        ContentBlock::Image { .. } | ContentBlock::Unknown => {}
     }
 }

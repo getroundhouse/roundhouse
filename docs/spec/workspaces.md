@@ -7,11 +7,15 @@
 ![No projects](screens/first-run.png)
 
 - **New Workspace in the File menu, `Cmd-N`, Create in the sidebar and on Home, and the `+` beside a project open a dialog that asks what to work on,** so the task is given as the workspace is made, and the agent starts on it at once. `Cmd-N` and Create open it for the project `sidebar.md` says, and a `+` for its own. *Unconfirmed.*
-- **The dialog holds the project, the first prompt, the model and its effort, plan mode, and files to go with the prompt.** The project's name at the top opens a menu of the others. Files are pasted or dropped, as in a chat's composer. *Unconfirmed.*
+- **The dialog holds the project, the agent, the first prompt, the model and its effort, plan mode, and files to go with the prompt.** The project's name at the top opens a menu of the others. Files are pasted or dropped, as in a chat's composer. *Unconfirmed.*
 
   **The new-workspace dialog, opened over a workspace.** *Unconfirmed.*
 
-  ![The new-workspace dialog](screens/new-workspace.png)
+  ![The new-workspace dialog with one offered agent](screens/new-workspace.png)
+
+  **With more than one agent, choose the first chat’s agent.** *Unconfirmed.*
+
+  ![Choose the first chat’s agent](screens/new-workspace-agents.png)
 
   **A task described in the dialog, with a screenshot to go with it, for Opus at extra high effort.** *Unconfirmed.*
 
@@ -46,7 +50,8 @@
 
   ![The new-workspace dialog with Create greyed out](screens/new-workspace-waiting.png)
 
-- **The model and effort start as a chat nobody has chosen for would run, Opus at Extra high,** as `chats.md` says. *Unconfirmed.*
+- **The model and effort start as a chat nobody has chosen for would run: Opus at Extra high for Claude, GPT-6.1 Sol at Low for Codex,** as `chats.md` says. *Unconfirmed.*
+- **Changing the agent resets the model and effort to its defaults,** and keeps that choice with the dialog’s shared draft. *Unconfirmed.*
 - **Closing the dialog keeps what's in it for the next time it opens,** whether with Escape or a click outside it. The model and effort stay as chosen for the next workspace too, but plan mode doesn't, since it belongs to the task at hand, as in a new chat. *Unconfirmed.*
 - **The hub keeps what's in the dialog, files and all, until the workspace is made,** so it's there when the app opens again, and in any other client, as a chat's draft is, as `chats.md` says. A change made in another client shows as it reaches the hub, unless something from here is on its way, which then replaces it. The project the dialog is opened for takes the place of the one kept. The hub makes the workspace from what it keeps, so a file it kept goes with the prompt even before the dialog has read it back, and keeps what was in the dialog until the new chat has the prompt, so quitting meanwhile loses nothing. Then it empties the dialog, unless something was typed in it since, here or in another client, which stays. A prompt the hub couldn't give the new chat whole, such as one carrying a file it couldn't copy, stays in the dialog, which opens again to show it. *Unconfirmed.*
 - **The dialog's header also starts a workspace from another branch or a pull request, and links an issue to it.** *Not built.*

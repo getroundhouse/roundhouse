@@ -10,7 +10,7 @@ use tokio::sync::mpsc;
 /// What each kind of agent this build runs is called and offers, as its adapter describes it, for the hub to give each
 /// chat what its agent starts with and to tell clients what to offer.
 pub fn descriptions() -> Vec<AgentDescription> {
-    vec![claude::description()]
+    vec![claude::description(), codex::description()]
 }
 
 pub async fn spawn(

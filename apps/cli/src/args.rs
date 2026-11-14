@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use clap::builder::{PossibleValuesParser, TypedValueParser};
 use clap::{Parser, Subcommand};
-use protocol::model::{ApprovalId, ClientMessageId, Effort, ModelName, PermissionMode, Seq};
+use protocol::model::{AgentKind, ApprovalId, ClientMessageId, Effort, ModelName, PermissionMode, Seq};
 
 #[derive(Parser)]
 #[command(name = "roundhouse", version = crate::BUILD.version(), about = "Run coding agents in parallel, each in its own worktree")]
@@ -152,6 +152,9 @@ pub(crate) enum SessionCmd {
     /// Start a session. Nothing runs until the first prompt.
     New {
         workspace: String,
+        /// The coding agent to run. Leave out to use the hub's default.
+        #[arg(long, value_parser = agent_kind())]
+        agent: Option<AgentKind>,
         /// One the agent is offered, as `roundhouse agents` lists them, or a full model ID. Leave it
         /// out for what the agent starts a chat with.
         #[arg(long, value_parser = model())]
@@ -211,6 +214,11 @@ fn mode() -> impl TypedValueParser<Value = PermissionMode> {
 fn effort() -> impl TypedValueParser<Value = Effort> {
     PossibleValuesParser::new(Effort::ALL.into_iter().filter_map(Effort::as_str))
         .try_map(|name| Effort::parse(&name).ok_or("not a level of effort"))
+}
+
+fn agent_kind() -> impl TypedValueParser<Value = AgentKind> {
+    PossibleValuesParser::new(["claude", "codex"])
+        .map(|name| if name == "codex" { AgentKind::Codex } else { AgentKind::Claude })
 }
 
 #[cfg(test)]

@@ -53,6 +53,8 @@ Every tab is the same width, with its mark and as much of its title as fits. The
 | `Cmd-W` | Closes the chat showing, or the file tab or subagent tab if that's showing |
 | `Ctrl-Tab`, `Ctrl-Shift-Tab` | Move between tabs |
 
+The `+` offers the available agents when there is more than one. `Cmd-T` creates a chat with the current chat's agent, model and effort.
+
 The file tab and the subagent tab sit at the far left, before the chats.
 
 Right-clicking a tab also marks its chat read, or unread again.

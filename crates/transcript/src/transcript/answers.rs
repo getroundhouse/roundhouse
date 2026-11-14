@@ -66,8 +66,8 @@ impl Transcript {
             self.remeasure(seq, cx);
         }
         let oldest = waiting.into_iter().next();
-        let held = self.asking.as_ref().map(|panel| panel.read(cx).approval_id().clone());
-        if oldest.as_ref().map(|oldest| &oldest.approval_id) != held.as_ref() {
+        let held = self.asking.as_ref().map(|panel| (panel.read(cx).approval_id().clone(), panel.read(cx).can_type()));
+        if oldest.as_ref().map(|oldest| (oldest.approval_id.clone(), oldest.asks.can_type(0))) != held {
             let left = self.asking.take().map(|panel| panel.focus_handle(cx));
             let this = cx.weak_entity();
             self.asking = oldest.map(|Waiting { approval_id, asks, asked_by, .. }| {
@@ -98,7 +98,9 @@ impl Transcript {
                     let EventBody::ApprovalRequested { approval_id, .. } = &event.body else { return None };
                     let (seq, approval_id) = (event.seq, approval_id.clone());
                     let asked_by = Asks::asked_by(&event.body).cloned();
-                    Some(Waiting { seq, approval_id, asks: Asks::of(&event.body)?, asked_by })
+                    let claims =
+                        m.claims.as_ref().filter(|claims| Some(claims.run) == event.run).map(|claims| &*claims.claims);
+                    Some(Waiting { seq, approval_id, asks: Asks::of(&event.body, claims)?, asked_by })
                 })
                 .collect()
         })

@@ -20,7 +20,7 @@ When you'd rather see the route first, turn on plan mode. The agent works out a 
 
 ![The composer in plan mode, with a prompt typed](../../spec/screens/plan-mode.png)
 
-Plan mode belongs to the task at hand. A new chat keeps the model and effort of the chat it was opened from, and starts with full access.
+Plan mode belongs to the task at hand. A new chat of the same agent keeps the model and effort of the chat it was opened from, and starts with full access.
 
 A chat that's planning when its agent stops is still planning when the agent comes back, so a restart never lets through a change nobody approved.
 
@@ -28,8 +28,8 @@ A chat that's planning when its agent stops is still planning when the agent com
 
 An agent with full access can still ask you something, when it needs a decision only you can make. A question takes the composer's place until it's answered.
 
-It also asks about what its own CLI won't do unasked in any mode. Claude asks before a command that removes something it can't check, such as an `rm -rf` whose target is only known once the command runs, and says why. One of its subagents' commands is asked about the same way.
+Claude also asks about what its CLI won't do unasked in any mode. It asks before a command that removes something it can't check, such as an `rm -rf` whose target is only known once the command runs, and says why. One of its subagents' commands is asked about the same way.
 
-To have these run without asking, turn on **Skip Claude's safety checks** in [Settings](../reference/settings.md). The hub then allows each one as it's asked, so the chat never waits, whether or not the app is open. It's off to start with, since what Claude asks about is what it couldn't rule out doing harm. Plan mode still asks, and so do questions.
+To have these Claude commands run without asking, turn on **Skip Claude's safety checks** in [Settings](../reference/settings.md). The hub then allows each one as it's asked, so the chat never waits, whether or not the app is open. It's off to start with, since what Claude asks about is what it couldn't rule out doing harm. Plan mode still asks, and so do questions. Codex runs with full access by default; in plan mode it uses a read-only sandbox and its finished plan waits for your approval.
 
 [Answer its questions](../guides/answer-its-questions.md) says how to answer each.

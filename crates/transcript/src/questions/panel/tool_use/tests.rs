@@ -22,7 +22,7 @@ fn asked(tool: &str, kind: CallKind, input: Value, description: Option<&str>, re
         ..approval_request("a", tool)
     }
     .into();
-    ToolUse::read(&body, Approval::of(&body).unwrap().into_owned()).unwrap()
+    ToolUse::read(&body, Approval::of(&body).unwrap().into_owned(), true).unwrap()
 }
 
 fn command(description: Option<&str>) -> ToolUse {

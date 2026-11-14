@@ -42,8 +42,8 @@ Two environment variables move them, for a hub started with them set:
 ## What leaves your machine
 
 - **The app's check for updates,** which is its only request of its own.
-- **What your agent sends,** to its model provider, as the Claude CLI does under your login.
-- **Your prompts' words and their first images, to write a title,** in a separate call to a small model, through the same CLI and login.
+- **What your agent sends,** to its model provider, through the Claude or Codex CLI under its login. Codex keeps its native sign-in and conversation files in its own data directory.
+- **Your prompts' words and their first images, to write a title,** in a separate call through that chat’s CLI and login: Haiku for Claude, Luna at Low effort for Codex.
 - **What `git` and `gh` send,** to your remotes and to GitHub, as you.
 
 ## Going back a version

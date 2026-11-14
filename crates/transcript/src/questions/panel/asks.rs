@@ -18,18 +18,36 @@ pub(crate) enum Asks {
 impl Asks {
     /// What the request `body` asks in the composer's place, or `None` for a plan, whose card is in the transcript
     /// with the plan, and for any other event.
-    pub(crate) fn of(body: &EventBody) -> Option<Self> {
+    pub(crate) fn of(body: &EventBody, claims: Option<&protocol::capability::Capabilities>) -> Option<Self> {
         let approval = Approval::of(body)?.into_owned();
         if approval.questions().is_some() {
             return Some(Asks::Questions(approval));
         }
-        ToolUse::read(body, approval).map(Asks::ToolUse)
+        let typed_request = matches!(body, EventBody::ApprovalRequested { request: Some(_), .. });
+        let words = !typed_request
+            || claims.is_some_and(|claims| {
+                claims.approvals.requests.as_ref().is_some_and(|requests| {
+                    requests.parts.contains(&protocol::capability::approvals::DecisionPart::Words)
+                })
+            });
+        ToolUse::read(body, approval, words).map(Asks::ToolUse)
     }
 
     /// The subagent that asks `body`'s request, as the call that started it, whichever it asks.
     pub(crate) fn asked_by(body: &EventBody) -> Option<&ToolUseId> {
         let EventBody::ApprovalRequested { asked_by, .. } = body else { return None };
         asked_by.as_ref()
+    }
+
+    pub(super) fn secret(&self, question: usize) -> bool {
+        matches!(self, Asks::Questions(approval) if approval.secret(question))
+    }
+
+    pub(crate) fn can_type(&self, question: usize) -> bool {
+        match self {
+            Asks::Questions(approval) => approval.can_type(question),
+            Asks::ToolUse(tool) => tool.can_type,
+        }
     }
 
     /// The questions to show, one at a time.
@@ -86,5 +104,27 @@ impl Asks {
             Asks::Questions(_) => None,
             Asks::ToolUse(tool_use) => tool_use.detail(cx),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Asks;
+    use protocol::capability::{
+        Capabilities,
+        approvals::{DecisionPart, Requests},
+    };
+    use protocol::event::EventBody;
+    #[test]
+    fn a_typed_call_only_offers_a_written_denial_when_the_run_claims_it() {
+        let body: EventBody = serde_json::from_value(serde_json::json!({"type":"approval_requested","approval_id":"q",
+            "request":{"asks":{"asks":"call","call":{"kind":"other","tool":"sample","input":{}}}}}))
+        .unwrap();
+        assert!(!Asks::of(&body, None).unwrap().can_type(0));
+        let mut claims = Capabilities::default();
+        claims.approvals.requests = Some(Requests { parts: Vec::new(), kept: Vec::new() });
+        assert!(!Asks::of(&body, Some(&claims)).unwrap().can_type(0));
+        claims.approvals.requests.as_mut().unwrap().parts.push(DecisionPart::Words);
+        assert!(Asks::of(&body, Some(&claims)).unwrap().can_type(0));
     }
 }

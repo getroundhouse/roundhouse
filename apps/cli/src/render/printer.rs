@@ -31,8 +31,8 @@ impl Printer {
         &mut self,
         seq: Seq,
         outcome: TurnOutcome,
-        duration_ms: u64,
-        cost: f64,
+        duration_ms: Option<u64>,
+        cost: Option<f64>,
         errors: &[String],
     ) {
         let what = match outcome {
@@ -41,8 +41,10 @@ impl Printer {
             TurnOutcome::Error => "turn failed",
             TurnOutcome::Unknown => "turn ended",
         };
-        let seconds = std::time::Duration::from_millis(duration_ms).as_secs_f64();
-        self.line(seq, &format!("{what} in {seconds:.1}s, ${cost:.4}"));
+        let duration =
+            duration_ms.map_or_default(|ms| format!(" in {:.1}s", std::time::Duration::from_millis(ms).as_secs_f64()));
+        let cost = cost.map_or_default(|cost| format!(", ${cost:.4}"));
+        self.line(seq, &format!("{what}{duration}{cost}"));
         for error in errors {
             self.line(seq, &format!("  {error}"));
         }
@@ -93,7 +95,7 @@ impl Printer {
             EventBody::TurnEnded { outcome, duration_ms, cost_usd, errors, .. } => {
                 // Whatever was still streaming, such as when the turn was cancelled, won't finish.
                 self.printed.clear();
-                self.turn_ended(event.seq, *outcome, duration_ms.unwrap_or(0), cost_usd.unwrap_or(0.0), errors);
+                self.turn_ended(event.seq, *outcome, *duration_ms, *cost_usd, errors);
             }
             EventBody::ApprovalRequested { .. } => self.approval_requested(event),
             EventBody::ApprovalResolved { .. } => self.approval_resolved(event),
@@ -187,7 +189,7 @@ impl Printer {
             ContentBlock::Thinking { text } if !text.is_empty() => {
                 self.line(seq, &format!("(thinking) {}", first_line(text)));
             }
-            ContentBlock::ToolUse { .. } => {
+            ContentBlock::ToolUse { .. } | ContentBlock::Call { .. } => {
                 if let Some(call) = Recorded::of(block) {
                     self.line(seq, &format!("tool {}", called(call)));
                 }
@@ -214,11 +216,16 @@ impl Printer {
                     self.line(seq, &format!("  ... {} more lines", lines.len() - RESULT_PREVIEW_LINES));
                 }
             }
-            ContentBlock::Thinking { .. }
-            | ContentBlock::Image { .. }
-            | ContentBlock::Call { .. }
-            | ContentBlock::CallResult { .. }
-            | ContentBlock::Unknown => {}
+            ContentBlock::CallResult { output, denied, is_error, .. } => {
+                if let Some(denied) = denied {
+                    self.line(seq, &denial(denied));
+                } else {
+                    let text = client_core::calls::typed::output(output);
+                    let label = if *is_error { "tool error" } else { "tool result" };
+                    self.line(seq, &format!("{label}: {text}"));
+                }
+            }
+            ContentBlock::Thinking { .. } | ContentBlock::Image { .. } | ContentBlock::Unknown => {}
         }
     }
 

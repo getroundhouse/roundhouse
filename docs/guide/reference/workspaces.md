@@ -8,12 +8,12 @@ Making a workspace, its setup, its name and title, and archiving it. [Workspaces
 
 ![The new-workspace dialog, opened over a workspace](../../spec/screens/new-workspace.png)
 
-- **It holds the project, the first prompt, the model and its effort, plan mode, and files to go with the prompt.**
+- **It holds the project, the first prompt, the agent, the model and its effort, plan mode, and files to go with the prompt.**
 - **Return presses Create,** and `Shift-Return` starts a new line.
 - **Create with nothing typed makes the workspace and sends nothing.**
 - **Create closes the dialog at once,** and the sidebar shows the workspace being made, since it fetches first.
 - **The new workspace is selected once it's made,** unless you went somewhere else meanwhile.
-- **The model and effort start at Opus and Extra high,** and stay as chosen for the next workspace. Plan mode doesn't.
+- **The agent, model and effort stay as chosen for the next workspace.** Choosing another agent resets model and effort to its defaults: Opus and Extra high for Claude, GPT-6.1 Sol and Low for Codex. Plan mode doesn't carry over.
 - **Closing the dialog keeps what's in it.** The hub keeps it, files and all, until the workspace is made.
 - **A workspace that can't be made puts what was typed back in the dialog,** and a prompt that can't be sent goes to the new chat's composer.
 

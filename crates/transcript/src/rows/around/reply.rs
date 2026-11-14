@@ -116,6 +116,46 @@ impl Answer {
 
     /// What `block` says, if it's a result.
     fn of(block: &ContentBlock, m: &Model) -> Option<Answer> {
+        if let ContentBlock::CallResult { is_error, output, denied, .. } = block {
+            use protocol::capability::calls::{CallOutput, output::McpContent};
+            let images = match output {
+                CallOutput::Image { image, .. } => vec![image.clone()],
+                CallOutput::Mcp { content, .. } => content
+                    .iter()
+                    .filter_map(|c| match c {
+                        McpContent::Image { image } => Some(image.clone()),
+                        McpContent::Text { .. } | McpContent::Resource { .. } | McpContent::Unknown => None,
+                    })
+                    .collect(),
+                CallOutput::Command(_)
+                | CallOutput::Lines(_)
+                | CallOutput::Document { .. }
+                | CallOutput::Changed { .. }
+                | CallOutput::Found(_)
+                | CallOutput::Paths { .. }
+                | CallOutput::Page { .. }
+                | CallOutput::WebResults { .. }
+                | CallOutput::Report { .. }
+                | CallOutput::Words { .. }
+                | CallOutput::Unknown => Vec::new(),
+            };
+            let change = if let CallOutput::Changed { files } = output
+                && files.len() == 1
+            {
+                files[0].change.clone()
+            } else {
+                None
+            };
+            return Some(Answer {
+                is_error: *is_error,
+                text: client_core::calls::typed::output(output),
+                change,
+                images: attachments::carried(m, &images),
+                encrypted: false,
+                form: ResultForm::of(block)?,
+                denied: denied.clone(),
+            });
+        }
         let ContentBlock::ToolResult { is_error, text, change, images, encrypted, denied, .. } = block else {
             return None;
         };
@@ -136,6 +176,6 @@ impl Answer {
 fn answer_in(event: &SessionEvent, id: &ToolUseId, m: &Model) -> Option<Answer> {
     let result = blocks_of(&event.body)
         .iter()
-        .find(|block| matches!(block, ContentBlock::ToolResult { tool_use_id, .. } if tool_use_id == id))?;
+        .find(|block| matches!(block, ContentBlock::ToolResult { tool_use_id, .. } | ContentBlock::CallResult { tool_use_id, .. } if tool_use_id == id))?;
     Answer::of(result, m)
 }

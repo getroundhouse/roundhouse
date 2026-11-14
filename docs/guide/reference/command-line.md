@@ -65,7 +65,7 @@ Wherever a command takes a session, give it one of:
 | `roundhouse session close <session>` | Stops its agent and hides it. The history stays |
 | `roundhouse session reopen <session>` | Brings a closed one back |
 
-`--permission-mode` is `plan`, or `bypassPermissions` for full access, which is what leaving it out gives. `roundhouse agents` lists the models and efforts an agent is offered.
+`--permission-mode` is `plan`, or `bypassPermissions` for full access, which is what leaving it out gives. `roundhouse agents` lists the models and efforts an agent is offered. `session new --agent claude` selects Claude; `--agent codex` selects Codex. Leaving out `--agent` uses the hub’s default.
 
 ## Talking to an agent
 

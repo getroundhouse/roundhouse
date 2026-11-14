@@ -31,6 +31,7 @@ pub(crate) const NOW_MS: i64 = START_MS + 60 * MINUTE_MS;
 
 #[derive(Default)]
 pub(crate) struct World {
+    pub(crate) agents: Option<Vec<protocol::model::AgentDescription>>,
     pub(crate) repos: Vec<Repo>,
     pub(crate) workspaces: Vec<Workspace>,
     pub(crate) sessions: Vec<Session>,

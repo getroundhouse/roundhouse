@@ -80,6 +80,29 @@ impl NewWorkspaceDialog {
             })
             .into_any_element()
         });
+        let agents: Vec<_> = self.offer.agents.named().map(|a| (a.kind, a.name.clone())).collect();
+        let agent_picker = (agents.len() > 1).then(|| {
+            let this = cx.weak_entity();
+            let current = self.agent().map(|a| a.kind);
+            let name = self.agent().map_or("Agent", |a| a.name.as_str()).to_string();
+            Button::new("new-workspace-agent")
+                .hand()
+                .ghost()
+                .sized(look::ControlSize::Small)
+                .label(name)
+                .dropdown_caret(true)
+                .dropdown_menu_with_anchor(Anchor::TopLeft, move |mut menu: PopupMenu, _, _| {
+                    for (kind, name) in &agents {
+                        let (kind, this) = (*kind, this.clone());
+                        menu = menu.item(PopupMenuItem::new(name.clone()).checked(current == Some(kind)).on_click(
+                            move |_, _, cx| {
+                                let _ = this.update(cx, |t, cx| t.pick_agent(kind, cx));
+                            },
+                        ));
+                    }
+                    menu
+                })
+        });
         let field = self.prompt.focus_handle(cx);
         let plan = Plan::of(self.planning());
         let plus =
@@ -100,7 +123,7 @@ impl NewWorkspaceDialog {
             .gap_2()
             .child(plus)
             // A row, so the picker keeps its own width and its caret stays beside what it says.
-            .child(h_flex().flex_1().min_w_0().children(picker))
+            .child(h_flex().flex_1().min_w_0().children(agent_picker).children(picker))
             .child(create)
     }
 }

@@ -2,6 +2,12 @@
 
 Which model a chat runs, how hard it thinks, and whether it asks before changing anything.
 
+## Choose the agent
+
+The new-workspace dialog offers Claude and Codex. In an existing workspace, the `+` beside the chat tabs offers a new chat for each agent. A chat keeps its agent; choose another by opening another chat.
+
+Codex offers the native model catalog captured in this Roundhouse build, including each model’s supported effort levels. Changing models keeps the current effort if supported, or selects the new model’s default. Codex starts with **GPT-6.1 Sol at Low effort**, using the Codex CLI’s sign-in on the worker’s machine.
+
 ## The model and its effort
 
 One picker, in the composer's bottom row, chooses both, since how hard the agent thinks is part of choosing what thinks. It shows the model's name and then the effort, such as `Opus Extra high`.
@@ -10,15 +16,16 @@ One picker, in the composer's bottom row, chooses both, since how hard the agent
 
 | | Choices |
 |---|---|
-| **Models** | `fable`, `opus`, `sonnet` and `haiku` |
-| **Effort** | Low, Medium, High, Extra high and Max |
+| **Claude models** | `fable`, `opus`, `sonnet` and `haiku` |
+| **Codex models** | GPT-6.1 Sol and Terra; GPT-6 Astra, Sol and Luna; GPT-5.6 Sol, Terra and Luna |
+| **Effort** | Low, Medium, High, Extra high and Max; Ultra on the Codex models that support it |
 
-- **The models are aliases,** which the Claude CLI resolves to its newest of each, so a new model arrives without an update to Roundhouse.
-- **A chat nobody has chosen for runs Opus at Extra high.**
-- **Every chat names its model and effort itself,** so your own Claude settings and your account don't decide them.
-- **A new chat keeps the model and effort of the chat it was opened from.**
-- **A new effort reaches an agent that's already working without stopping it,** and shows once the agent has said it's using it.
-- **Choosing another model writes the conversation to the prompt cache again,** and the picker says how much before you switch. See [Context, compacting and the cache](context-compacting-and-the-cache.md).
+- **Claude’s models are aliases,** which the Claude CLI resolves to its newest of each, so a new model arrives without an update to Roundhouse.
+- **A Claude chat nobody has chosen for runs Opus at Extra high; Codex runs GPT-6.1 Sol at Low.**
+- **Every chat names its model and effort itself,** so your own CLI settings and your account don't decide them.
+- **A new chat with the same agent keeps the model and effort of the chat it was opened from.** Switching agents uses that agent’s defaults.
+- **A new effort reaches an agent that's already working without stopping it.** Codex accepts model, mode and effort changes for its next turn.
+- **For Claude, choosing another model writes the conversation to the prompt cache again,** and the picker says how much before you switch. See [Context, compacting and the cache](context-compacting-and-the-cache.md).
 
 ## Approval modes
 
@@ -40,6 +47,8 @@ A chat is in one of two:
 - **A chat that's planning when its agent stops is still planning when the agent comes back.**
 
 ![The composer in plan mode](../../../spec/screens/plan-mode.png)
+
+Codex holds its finished plan for approval, including a plan returned as an ordinary final reply. Approve it to start implementation; asking for changes keeps it in plan mode.
 
 ## The `+`'s menu
 

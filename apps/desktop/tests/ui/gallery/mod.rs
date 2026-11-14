@@ -18,6 +18,7 @@ mod cache_screens;
 mod call_screens;
 mod capture;
 mod chats;
+mod codex_screens;
 mod colours;
 mod compaction_chats;
 mod context_screens;
