@@ -33,6 +33,14 @@ env:
   LINUX_PACKAGES: >-
     pkg-config cmake clang libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libx11-xcb-dev libxcb1-dev
     libfontconfig-dev libfreetype-dev libvulkan-dev libssl-dev libzstd-dev
+  # Experiment: sccache in every job that compiles, in the Actions cache, which RunsOn sends to S3. It caches no crate
+  # built incrementally, and CI keeps none of our crates' incremental state anyway.
+  CARGO_INCREMENTAL: "0"
+  SCCACHE_GHA_ENABLED: "true"
+  # Experiment: this PR writes too, so a re-run shows a warm cache. It would be main only.
+  SCCACHE_GHA_RW_MODE: READ_WRITE
+  # So the stats at the end of each job cover all of it.
+  SCCACHE_IDLE_TIMEOUT: "0"
 
 # The ruleset requires only `checks`. `changes` does the skipping, since a required check whose workflow never runs
 # stays pending. Actions are pinned to full commits.
@@ -94,6 +102,8 @@ jobs:
     if: needs.changes.outputs.run == 'true'
     runs-on: ubuntu-26.04-arm
     timeout-minutes: 60
+    env:
+      RUSTC_WRAPPER: sccache
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: .github/install-linux-packages.sh
@@ -117,12 +127,17 @@ jobs:
           key: linux-lint-deps-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', '**/Cargo.toml') }}
           # Main rebuilds from nothing when the key changes, so a cache holds one lockfile's build. PRs take any.
           restore-keys: ${{ github.ref != 'refs/heads/main' && 'linux-lint-deps-' || '' }}
+      - uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
+        with:
+          version: v0.19.0
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       # As shipped, since the tests' `testing` features can hide what only tests use.
       - run: cargo clippy --workspace --locked -- -D warnings
       # Only the binaries may read the build stamp, so each release compiles again only what its commit changed.
       - run: tools/check-stamp.sh
+      - if: always()
+        run: sccache --show-stats
       # Keep only the dependencies, since our crates rebuild after every checkout.
       - if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
         run: cargo clean --workspace
@@ -145,6 +160,8 @@ jobs:
     if: needs.changes.outputs.run == 'true'
     runs-on: runs-on=${{ github.run_id }}/runner=arm64-16
     timeout-minutes: 60
+    env:
+      RUSTC_WRAPPER: sccache
     steps:
       # Sends the cache steps below to the stack's S3 bucket, beside the runner, rather than to GitHub's.
       - uses: runs-on/action@4a3bfc79f21a9b97e972e2ba75a2b0b1e9688670 # v2.7.1
@@ -174,9 +191,14 @@ jobs:
           # target/ fits only the image and path it was built on.
           key: runs-on-arm64-16-test-deps-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', '**/Cargo.toml') }}
           restore-keys: ${{ github.ref != 'refs/heads/main' && 'runs-on-arm64-16-test-deps-' || '' }}
+      - uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
+        with:
+          version: v0.19.0
       # One pool for every binary's tests. It skips doc tests, so they run after.
       - run: cargo nextest run --profile ci --workspace --locked
       - run: cargo test --workspace --doc --locked
+      - if: always()
+        run: sccache --show-stats
       - if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
         run: cargo clean --workspace
       - if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
@@ -205,12 +227,20 @@ jobs:
   guide:
     needs: changes
     # Not for a push to main, which only saves the other jobs' caches: the queue built what landed.
-    if: needs.changes.outputs.guide == 'true' && github.event_name != 'push'
+    # Experiment: every time, to time it.
+    if: github.event_name != 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      RUSTC_WRAPPER: sccache
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
+        with:
+          version: v0.19.0
       - run: cargo run --locked -p guide -- "$RUNNER_TEMP/docs"
+      - if: always()
+        run: sccache --show-stats
 
   # The one required check. It fails if any job failed or was cancelled, and passes if the rest passed or were skipped.
   checks:

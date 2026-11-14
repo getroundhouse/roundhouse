@@ -30,11 +30,18 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   CARGO_PROFILE_DEV_DEBUG: line-tables-only
+  # Experiment: sccache, as in ci.yml.
+  CARGO_INCREMENTAL: "0"
+  SCCACHE_GHA_ENABLED: "true"
+  SCCACHE_GHA_RW_MODE: READ_WRITE
+  SCCACHE_IDLE_TIMEOUT: "0"
 
 jobs:
   mac:
     runs-on: macos-26
     timeout-minutes: 60
+    env:
+      RUSTC_WRAPPER: sccache
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: git config --global user.name ci && git config --global user.email ci@example.com
@@ -55,9 +62,14 @@ jobs:
             target/
           key: mac-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', '**/Cargo.toml') }}
           restore-keys: mac-
+      - uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
+        with:
+          version: v0.19.0
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       # The gallery's images match the Mac that approved them, pixel for pixel.
       - run: cargo test --workspace --locked -- --skip 'gallery::'
+      - if: always()
+        run: sccache --show-stats
       # Only the dependencies are worth keeping, as in ci.yml.
       - if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
         run: cargo clean --workspace
