@@ -54,8 +54,7 @@ fn spec(model: Option<&'static str>, mode: PermissionMode) -> AgentSpec {
         run: RunId::new(1),
         agent: AgentKind::Claude,
         cwd: "/tmp".into(),
-        agent_session_id: "abc".into(),
-        resume: false,
+        start: protocol::capability::conversation::Start::New { conversation: Some("abc".into()) },
         settings: SessionSettings {
             model: ModelName::named(model.unwrap_or("sonnet")),
             permission_mode: mode,
@@ -100,7 +99,7 @@ fn every_launch_has_full_access() {
 
 #[test]
 fn every_launch_names_its_model_and_effort() {
-    for effort in Effort::ALL {
+    for effort in crate::claude::description().efforts {
         let mut chosen = spec(Some("opus"), PermissionMode::FullAccess);
         chosen.settings.effort = effort;
 

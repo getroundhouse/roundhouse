@@ -25,8 +25,7 @@ fn spec(dir: &Path) -> AgentSpec {
         run: RunId::new(1),
         agent: AgentKind::Claude,
         cwd: dir.to_string_lossy().into_owned(),
-        agent_session_id: "s".into(),
-        resume: false,
+        start: protocol::capability::conversation::Start::New { conversation: Some("s".into()) },
         settings: agents::claude::description().defaults,
         env: vec![],
         tools_token: None,
@@ -157,7 +156,7 @@ async fn a_launch_started_again_is_told_of_the_tools_too() {
 {KEEPS_ITS_MCP_CONFIG}"#
     );
     let mut resumed = spec(dir.path());
-    resumed.resume = true;
+    resumed.start = protocol::capability::conversation::Start::Resume { conversation: "s".into() };
 
     let agent = spawn_at(script(dir.path(), &body), resumed, tx, with_tools(&config)).await.unwrap();
 
@@ -247,7 +246,7 @@ async fn an_agent_relaunched_in_plan_mode_is_asked_into_it_again() {
 {READS_TWO_LINES}"#
     );
     let mut resumed = in_plan_mode(dir.path());
-    resumed.resume = true;
+    resumed.start = protocol::capability::conversation::Start::Resume { conversation: "s".into() };
 
     let agent = spawn_at(script(dir.path(), &body), resumed, tx, AgentOptions::default()).await.unwrap();
     agent.send_prompt(Seq::new(1), &Prompt::new("go")).await.unwrap();

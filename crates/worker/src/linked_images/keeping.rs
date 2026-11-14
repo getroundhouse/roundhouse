@@ -82,6 +82,8 @@ fn text_of(block: &ContentBlock) -> Option<&str> {
         | ContentBlock::ToolUse { .. }
         | ContentBlock::ToolResult { .. }
         | ContentBlock::Image { .. }
+        | ContentBlock::Call { .. }
+        | ContentBlock::CallResult { .. }
         | ContentBlock::Unknown => None,
     }
 }
@@ -101,6 +103,8 @@ fn text_and_images(block: &mut ContentBlock) -> Option<(&str, &mut Vec<LinkedIma
         | ContentBlock::ToolUse { .. }
         | ContentBlock::ToolResult { .. }
         | ContentBlock::Image { .. }
+        | ContentBlock::Call { .. }
+        | ContentBlock::CallResult { .. }
         | ContentBlock::Unknown => None,
     }
 }

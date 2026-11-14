@@ -53,6 +53,8 @@ pub(in super::super) fn add(work: &mut RecentWork, blocks: &[ContentBlock], wrot
             ContentBlock::Text { .. }
             | ContentBlock::Thinking { .. }
             | ContentBlock::Image { .. }
+            | ContentBlock::Call { .. }
+            | ContentBlock::CallResult { .. }
             | ContentBlock::Unknown => {}
         }
     }

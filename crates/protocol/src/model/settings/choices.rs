@@ -32,3 +32,13 @@ pub struct SessionSettingsChange {
     #[serde(default)]
     pub effort: Option<Effort>,
 }
+
+impl From<SessionSettings> for SessionSettingsChange {
+    fn from(settings: SessionSettings) -> Self {
+        Self {
+            model: Some(settings.model),
+            permission_mode: Some(settings.permission_mode),
+            effort: Some(settings.effort),
+        }
+    }
+}

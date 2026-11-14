@@ -97,7 +97,14 @@ async fn background_over(live: &LiveSession) {
 
 /// The agent picking up again, as it does by itself once the last of its work in the background has gone.
 fn picked_up() -> EventBody {
-    EventBody::AgentInit { agent_session_id: None, model: None, cwd: None, permission_mode: None, agent_version: None }
+    EventBody::AgentInit {
+        capabilities: None,
+        agent_session_id: None,
+        model: None,
+        cwd: None,
+        permission_mode: None,
+        agent_version: None,
+    }
 }
 
 fn turn_ended() -> EventBody {

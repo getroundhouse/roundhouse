@@ -4,7 +4,7 @@
 //! agent's raw output line, and the hub stores it beside the event, so that this view can be
 //! rebuilt if the normalization turns out to be wrong.
 
-pub use approval::{ApprovalDecision, ApprovalOutcome};
+pub use approval::{ApprovalDecision, ApprovalOutcome, secret_questions};
 pub use asking::{Asking, Question, QuestionAnswer, QuestionOption};
 pub use call::CallKind;
 pub use compaction::{CompactedBy, CompactionOutcome};

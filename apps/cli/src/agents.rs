@@ -54,6 +54,7 @@ mod tests {
     fn each_kind_says_what_a_chat_can_be_given_and_marks_what_it_starts_with() {
         let opus = ModelName::named("opus");
         let agent = AgentDescription {
+            capabilities: None,
             kind: AgentKind::Claude,
             name: "Claude".to_string(),
             usage_heading: "Claude usage".to_string(),

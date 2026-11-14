@@ -44,6 +44,7 @@ fn sent_back(blocks: Vec<ContentBlock>) -> EventBody {
 
 fn asked(id: &str) -> EventBody {
     EventBody::ApprovalRequested {
+        request: None,
         approval_id: id.into(),
         tool_name: "Bash".into(),
         tool_use_id: None,
@@ -319,6 +320,7 @@ fn a_compaction_needs_what_it_reports() {
 fn what_the_agent_says_of_its_mode_limits_and_questions_needs_their_capabilities() {
     let asking = |asking| {
         let EventBody::ApprovalRequested {
+            request: None,
             approval_id,
             tool_name,
             tool_use_id,
@@ -333,6 +335,7 @@ fn what_the_agent_says_of_its_mode_limits_and_questions_needs_their_capabilities
             unreachable!()
         };
         EventBody::ApprovalRequested {
+            request: None,
             approval_id,
             tool_name,
             tool_use_id,
@@ -368,4 +371,22 @@ fn what_the_agent_says_of_its_subagents_needs_them() {
     assert_eq!(needs(&subagent_started("t")), subagents);
     assert_eq!(needs(&EventBody::SubagentContext { call: "t".into(), tokens: 9 }), subagents);
     assert_eq!(needs(&subagent_ended("t")), subagents);
+}
+
+#[test]
+fn typed_requests_need_their_own_capabilities() {
+    let mut body = asked("q");
+    let EventBody::ApprovalRequested { request, .. } = &mut body else { unreachable!() };
+    *request = Some(Box::new(approvals::Request {
+        asks: approvals::Asks::Questions { questions: Vec::new() },
+        suggested: Vec::new(),
+        always: false,
+        why: None,
+    }));
+    let log = [from_run(1, 1, body)];
+    let mut claims = Capabilities::default();
+    claims.approvals.requests = Some(approvals::Requests { parts: Vec::new(), kept: Vec::new() });
+    assert_eq!(check(&log, |_| &claims), [Breach { law: Law::OnlyWhatsClaimed, seq: Seq::FIRST }]);
+    claims.asking.questions = Some(Claimed {});
+    assert!(check(&log, |_| &claims).is_empty());
 }

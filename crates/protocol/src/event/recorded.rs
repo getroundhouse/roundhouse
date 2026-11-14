@@ -77,6 +77,10 @@ pub enum EventBody {
     },
     /// The agent reported its configuration. Claude does this at the start of every turn.
     AgentInit {
+        /// Authoritative for this run, before its conversation output. Older adapters report none. The log keeps
+        /// the claim under its run ID, so a later launch cannot change how earlier output is interpreted.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        capabilities: Option<Box<crate::capability::Capabilities>>,
         agent_session_id: Option<AgentSessionId>,
         /// As the agent said it, which is untrusted. A [`ModelName`] refuses some names as it's read, so one in the log
         /// would fail every read that reached this event. Where a model is kept as one, one that names none is dropped.
@@ -209,8 +213,15 @@ pub enum EventBody {
     },
     ApprovalRequested {
         approval_id: ApprovalId,
+        /// The current request. The fields below it are read compatibility for earlier adapters; a current adapter
+        /// leaves their content empty instead of recording the native input a second time.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        request: Option<Box<crate::capability::approvals::Request>>,
+        // Earlier readers require these legacy fields even when a typed request leaves them empty.
+        #[serde(default)]
         tool_name: String,
         tool_use_id: Option<ToolUseId>,
+        #[serde(default)]
         input: Value,
         description: Option<String>,
         /// Agent-defined options for remembering the decision. Passed back unchanged. Boxed, as `asking` is, since a

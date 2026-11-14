@@ -12,18 +12,19 @@ pub enum Effort {
     High,
     Xhigh,
     Max,
+    Ultra,
     #[serde(other)]
     Unknown,
 }
 
 impl Effort {
     /// Every level, from least to most.
-    pub const ALL: [Effort; 5] = [Effort::Low, Effort::Medium, Effort::High, Effort::Xhigh, Effort::Max];
+    pub const ALL: [Effort; 6] = [Effort::Low, Effort::Medium, Effort::High, Effort::Xhigh, Effort::Max, Effort::Ultra];
 
     /// The level, or `None` for one from a newer peer, which can't be passed on, since this build can't name it.
     pub fn known(self) -> Option<Effort> {
         match self {
-            Effort::Low | Effort::Medium | Effort::High | Effort::Xhigh | Effort::Max => Some(self),
+            Effort::Low | Effort::Medium | Effort::High | Effort::Xhigh | Effort::Max | Effort::Ultra => Some(self),
             Effort::Unknown => None,
         }
     }
@@ -37,6 +38,7 @@ impl Effort {
             Effort::High => Some("high"),
             Effort::Xhigh => Some("xhigh"),
             Effort::Max => Some("max"),
+            Effort::Ultra => Some("ultra"),
             Effort::Unknown => None,
         }
     }
@@ -64,11 +66,11 @@ mod tests {
 
     #[test]
     fn a_level_from_a_newer_peer_reads_as_unknown_and_isnt_known() {
-        let newer = serde_json::from_str::<Effort>("\"ultra\"").unwrap();
+        let newer = serde_json::from_str::<Effort>("\"future\"").unwrap();
 
         assert_eq!(newer, Effort::Unknown);
         assert_eq!(newer.known(), None);
-        assert_eq!(Effort::parse("ultra"), None);
+        assert_eq!(Effort::parse("future"), None);
         assert_eq!(Effort::parse("unknown"), None);
     }
 

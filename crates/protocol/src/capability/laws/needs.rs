@@ -23,7 +23,9 @@ pub fn needs(body: &EventBody) -> Vec<Capability> {
         .into_iter()
         .flatten()
         .collect(),
-        EventBody::ApprovalRequested { asking, .. } => vec![asking_needs(asking.as_deref())],
+        EventBody::ApprovalRequested { asking, request, .. } => {
+            request.as_ref().map_or_else(|| vec![asking_needs(asking.as_deref())], |request| request.needs())
+        }
         EventBody::AgentMode { .. } => vec![approvals::Capability::Modes.into()],
         EventBody::AgentCompacting { written_chars, .. } => {
             written_chars.map(|_| context::Capability::CompactionProgress.into()).into_iter().collect()

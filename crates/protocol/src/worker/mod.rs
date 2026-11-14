@@ -13,13 +13,15 @@ mod children;
 mod connection;
 mod frames;
 mod github;
+mod launch_identity;
 mod one_off;
 mod tools;
 mod workspaces;
 mod worktree;
 
 pub use agents::{
-    AgentApproval, AgentCancel, AgentCompact, AgentConfigure, AgentPrompt, AgentSpec, AgentStarted, AgentStop, Delivery,
+    AgentApproval, AgentCancel, AgentCompact, AgentConfigure, AgentControl, AgentPrompt, AgentSpec, AgentStarted,
+    AgentStop, Delivery,
 };
 pub use ask::{
     Answer, Ask, AskAnswer, AskId, AskOutcome, AskReply, CancelWait, CreateWorktree, ListWorktrees, ListedChild,

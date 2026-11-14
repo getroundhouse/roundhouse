@@ -20,7 +20,7 @@ pub async fn spawn(
 ) -> Result<Arc<dyn AgentProcess>, AgentError> {
     match spec.agent {
         AgentKind::Claude => claude::spawn(spec, output, options).await,
-        AgentKind::Unknown => Err(AgentError::UnknownKind),
+        AgentKind::Codex | AgentKind::Unknown => Err(AgentError::UnknownKind),
     }
 }
 
@@ -29,7 +29,7 @@ pub async fn spawn(
 pub async fn account(kind: AgentKind, options: &AgentOptions, scratch_dir: &Path) -> Result<AgentAccount, AgentError> {
     match kind {
         AgentKind::Claude => claude::account(options, scratch_dir).await,
-        AgentKind::Unknown => Err(AgentError::UnknownKind),
+        AgentKind::Codex | AgentKind::Unknown => Err(AgentError::UnknownKind),
     }
 }
 
@@ -43,6 +43,6 @@ pub async fn title_for(
 ) -> Result<Title, AgentError> {
     match kind {
         AgentKind::Claude => claude::title_for(prompt, options, scratch_dir).await,
-        AgentKind::Unknown => Err(AgentError::UnknownKind),
+        AgentKind::Codex | AgentKind::Unknown => Err(AgentError::UnknownKind),
     }
 }

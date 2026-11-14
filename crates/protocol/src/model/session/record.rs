@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "snake_case")]
 pub enum AgentKind {
     Claude,
+    Codex,
     #[serde(other)]
     Unknown,
 }
@@ -18,6 +19,7 @@ impl AgentKind {
     pub fn as_str(self) -> &'static str {
         match self {
             AgentKind::Claude => "claude",
+            AgentKind::Codex => "codex",
             AgentKind::Unknown => "unknown",
         }
     }
@@ -125,6 +127,10 @@ pub struct Session {
     pub id: SessionId,
     pub workspace_id: WorkspaceId,
     pub agent: AgentKind,
+    /// The most recent initialized run's claims, for display. Controls use these only when their run is still the
+    /// one running; an idle chat's next launch uses its kind's defaults.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_capabilities: Option<super::super::RunCapabilities>,
     pub model: ModelName,
     /// The agent's approval mode, as it last reported it or was told.
     pub permission_mode: PermissionMode,

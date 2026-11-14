@@ -73,6 +73,8 @@ pub(super) fn say(body: &mut EventBody, answered: &[(ToolUseId, String)]) {
                 *call = Some(kind);
             }
             ContentBlock::Text { .. }
+            | ContentBlock::Call { .. }
+            | ContentBlock::CallResult { .. }
             | ContentBlock::Thinking { .. }
             | ContentBlock::Image { .. }
             | ContentBlock::Unknown => {}

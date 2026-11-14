@@ -6,9 +6,7 @@ use serde::{Deserialize, Serialize};
 use super::{Reply, Request, ToolsToken, WorkerRequest, WorkerResponse};
 use crate::attachment::AttachmentFile;
 use crate::event::ApprovalDecision;
-use crate::model::{
-    AgentKind, AgentLogin, AgentSessionId, ApprovalId, RunId, Seq, SessionId, SessionSettings, SessionSettingsChange,
-};
+use crate::model::{AgentKind, AgentLogin, ApprovalId, RunId, Seq, SessionId, SessionSettings, SessionSettingsChange};
 use crate::prompt::Prompt;
 
 /// Starts the session's agent, unless it's running already.
@@ -20,10 +18,8 @@ pub struct AgentSpec {
     pub run: RunId,
     pub agent: AgentKind,
     pub cwd: String,
-    /// The agent's own ID for this conversation, which survives restarts.
-    pub agent_session_id: AgentSessionId,
-    /// Continue that conversation rather than starting it.
-    pub resume: bool,
+    #[serde(flatten, with = "super::launch_identity")]
+    pub start: crate::capability::conversation::Start,
     /// What it runs with.
     #[serde(flatten)]
     pub settings: SessionSettings,
@@ -60,6 +56,22 @@ impl Reply for AgentStarted {
     fn read(response: WorkerResponse) -> Result<Self, WorkerResponse> {
         let WorkerResponse::AgentStarted(started) = response else { return Err(response) };
         Ok(started)
+    }
+}
+
+/// One capability-checked request. Older workers refuse this envelope as `Unsupported`, before acting on it.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct AgentControl {
+    pub session_id: SessionId,
+    #[serde(flatten)]
+    pub control: crate::capability::Control,
+}
+
+impl Request for AgentControl {
+    type Reply = Delivery;
+
+    fn into_request(self) -> WorkerRequest {
+        WorkerRequest::AgentControl(self)
     }
 }
 
@@ -189,8 +201,7 @@ mod tests {
             run: RunId::new(1),
             agent: AgentKind::Claude,
             cwd: "/w".into(),
-            agent_session_id: "a".into(),
-            resume: false,
+            start: crate::capability::conversation::Start::New { conversation: Some("a".into()) },
             settings: SessionSettings {
                 model: ModelName::named("opus"),
                 permission_mode: PermissionMode::FullAccess,

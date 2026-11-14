@@ -141,8 +141,7 @@ fn every_request_about_an_agent_keeps_its_form() {
         run: RunId::new(4),
         agent: AgentKind::Claude,
         cwd: "/w".into(),
-        agent_session_id: "a".into(),
-        resume: true,
+        start: protocol::capability::conversation::Start::Resume { conversation: "a".into() },
         settings: SessionSettings {
             model: ModelName::named("opus"),
             permission_mode: PermissionMode::FullAccess,

@@ -29,7 +29,7 @@ mod worktrees;
 pub use account::{
     Account, AgentAccount, AgentLogin, HeldLogin, LimitWindow, LoginToken, ModelLabel, SessionAccount, UsageLimit,
 };
-pub use agent::{AgentDescription, AgentFeature, LoginDescription, ModelChoice, NotOffered};
+pub use agent::{AgentDescription, AgentFeature, LoginDescription, ModelChoice, NotOffered, RunCapabilities};
 pub use branches::{Branch, Branches, Head, Upstream};
 pub use cache::{CACHE_WORTH_TELLING_TOKENS, CacheRequest, CacheState, CacheTtl, PromptCache};
 pub use compaction_line::CompactionLine;

@@ -91,6 +91,8 @@ pub(crate) fn rows_repeating_report(log: &SessionLog, m: &Model) -> Vec<usize> {
         | ContentBlock::ToolUse { .. }
         | ContentBlock::ToolResult { .. }
         | ContentBlock::Image { .. }
+        | ContentBlock::Call { .. }
+        | ContentBlock::CallResult { .. }
         | ContentBlock::Unknown => None,
     });
     if message.is_empty() || !words.flatten().eq(report.split_whitespace()) {

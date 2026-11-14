@@ -59,7 +59,7 @@ pub fn build_args(spec: &AgentSpec, resume: bool, instructions: Option<&str>) ->
     .map(String::from)
     .to_vec();
     args.push(if resume { "--resume" } else { "--session-id" }.to_string());
-    args.push(spec.agent_session_id.to_string());
+    args.push(conversation(spec)?.to_string());
     args.extend(["--model".to_string(), model.as_str().to_string(), "--effort".to_string(), level.to_string()]);
     // On a resumed launch too. The CLI keeps the text a conversation started with, but once one is compacted it takes
     // what the launch that resumed it gave, as `claude --help` says. A subagent gets none of the agent's own, so it's
@@ -74,6 +74,16 @@ pub fn build_args(spec: &AgentSpec, resume: bool, instructions: Option<&str>) ->
 
 pub(in crate::claude) fn resolve_binary(lookup: &BinaryLookup) -> Option<PathBuf> {
     crate::binary::resolve_binary("claude", &[".claude/local"], lookup)
+}
+
+pub(super) fn conversation(spec: &AgentSpec) -> Result<&protocol::model::AgentSessionId, AgentError> {
+    use protocol::capability::conversation::Start;
+    match &spec.start {
+        Start::New { conversation: Some(id) } | Start::Resume { conversation: id } => Ok(id),
+        Start::New { conversation: None } | Start::Fork { .. } | Start::Import { .. } => {
+            Err(AgentError::Refused("Claude cannot start that conversation".into()))
+        }
+    }
 }
 
 pub(super) struct Launched {
@@ -96,7 +106,7 @@ pub(super) fn launch(
     let mut command = command(bin, cwd);
     let args = build_args(spec, resume, options.instructions.as_deref())?;
     if let Some(tap) = tap {
-        tap.launched(resume, &spec.agent_session_id, &args);
+        tap.launched(resume, conversation(spec)?, &args);
     }
     command
         .args(args)

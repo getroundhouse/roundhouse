@@ -7,4 +7,4 @@ use super::{AgentKind, Effort, ModelName, PermissionMode, SessionSettings, Sessi
 mod tests;
 
 mod description;
-pub use description::{AgentDescription, AgentFeature, LoginDescription, ModelChoice, NotOffered};
+pub use description::{AgentDescription, AgentFeature, LoginDescription, ModelChoice, NotOffered, RunCapabilities};

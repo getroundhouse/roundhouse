@@ -5,7 +5,8 @@ use crate::model::{AgentAccount, FileContents, FileOpened, WorktreeFiles};
 #[cfg(test)]
 use agents::Delivery;
 use agents::{
-    AgentApproval, AgentCancel, AgentCompact, AgentConfigure, AgentPrompt, AgentSpec, AgentStarted, AgentStop,
+    AgentApproval, AgentCancel, AgentCompact, AgentConfigure, AgentControl, AgentPrompt, AgentSpec, AgentStarted,
+    AgentStop,
 };
 use children::{AddChildWorktree, ChildWorktreeAdded, WatchChildBranches};
 use connection::{Hello, HelloReply, Received, RunningAgentsReply};
@@ -102,6 +103,7 @@ pub enum WorkerRequest {
     FileOpenAt(FileOpenAt),
     FilePages(FilePages),
     AgentStart(AgentSpec),
+    AgentControl(AgentControl),
     AgentPrompt(AgentPrompt),
     AgentApproval(AgentApproval),
     AgentCancel(AgentCancel),

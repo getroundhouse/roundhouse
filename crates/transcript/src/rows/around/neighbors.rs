@@ -224,6 +224,8 @@ impl BlockAround {
             | ContentBlock::Text { .. }
             | ContentBlock::Thinking { .. }
             | ContentBlock::Image { .. }
+            | ContentBlock::Call { .. }
+            | ContentBlock::CallResult { .. }
             | ContentBlock::Unknown => (Reply::Nothing, None),
         };
         Self { key, fold, open, reply, subagent, with_call }

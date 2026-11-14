@@ -52,3 +52,18 @@ pub enum ApprovalDecision {
     /// own form.
     AnswerByPosition { answers: Vec<QuestionAnswer> },
 }
+
+/// Questions whose answers must reach only the agent: neither the log nor shared drafts keep them.
+pub fn secret_questions(body: &super::EventBody) -> impl Iterator<Item = (usize, &str)> {
+    let mut questions = &[][..];
+    if let super::EventBody::ApprovalRequested { request: Some(request), .. } = body
+        && let crate::capability::approvals::Asks::Questions { questions: asked } = &request.asks
+    {
+        questions = asked.as_slice();
+    }
+    questions
+        .iter()
+        .enumerate()
+        .filter(|(_, q)| q.typed == crate::capability::asking::TypedAnswer::Secret)
+        .map(|(index, q)| (index, q.text.as_str()))
+}

@@ -22,8 +22,11 @@ pub(super) fn spec(
         run,
         agent: AgentKind::Claude,
         cwd: cwd.to_string_lossy().into_owned(),
-        agent_session_id: session.clone(),
-        resume,
+        start: if resume {
+            protocol::capability::conversation::Start::Resume { conversation: session.clone() }
+        } else {
+            protocol::capability::conversation::Start::New { conversation: Some(session.clone()) }
+        },
         settings,
         env,
         tools_token: None,

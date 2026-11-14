@@ -10,6 +10,7 @@ use crate::stand_in_hub::{self, Does};
 /// A kind of agent as a hub describes it.
 fn described(kind: AgentKind) -> AgentDescription {
     AgentDescription {
+        capabilities: None,
         kind,
         name: "Agent".to_string(),
         usage_heading: "Agent usage".to_string(),

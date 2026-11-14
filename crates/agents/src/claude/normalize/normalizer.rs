@@ -243,6 +243,7 @@ fn system(value: &Value) -> Parsed {
     let subtype = str_of(value, "subtype").unwrap_or("unknown");
     match subtype {
         "init" => Parsed::Event(EventBody::AgentInit {
+            capabilities: None,
             agent_session_id: id_of(value, "session_id"),
             model: string_of(value, "model"),
             cwd: string_of(value, "cwd"),
@@ -290,6 +291,7 @@ fn control_request(value: &Value) -> Parsed {
     let tool_name = string_of(request, "tool_name").unwrap_or_default();
     let input = request.get("input").cloned().unwrap_or(Value::Null);
     Parsed::Event(EventBody::ApprovalRequested {
+        request: None,
         approval_id: request_id.into(),
         asking: Some(Box::new(super::super::approvals::asking(&tool_name, &input))),
         tool_name,

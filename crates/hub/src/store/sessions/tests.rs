@@ -115,7 +115,7 @@ fn a_level_a_newer_hub_wrote_reads_as_unknown() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
 
-    lock(&store.writer).execute("UPDATE sessions SET effort = 'ultra' WHERE id = 's'", []).unwrap();
+    lock(&store.writer).execute("UPDATE sessions SET effort = 'future' WHERE id = 's'", []).unwrap();
 
     assert_eq!(effort(&store), Effort::Unknown, "the session still reads");
 }
