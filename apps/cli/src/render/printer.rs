@@ -291,7 +291,11 @@ pub(super) fn denial(denied: &Denied) -> String {
 
 /// A call, by the agent's name for its tool, with what it's about, as every client says it, if it says anything.
 pub(super) fn called(call: Recorded<'_>) -> String {
-    about(call.name, call.summary())
+    let name = match call {
+        Recorded::Legacy { name, .. } => name.to_string(),
+        Recorded::Typed(call) => client_core::calls::typed::title(call),
+    };
+    about(&name, call.summary())
 }
 
 /// What to call a result, and what it sent back: its `text`, or for one that failed, what `failure` says of it, which

@@ -43,7 +43,7 @@ pub(in super::super) fn call(
     subagent: Option<&Subagent>,
     cx: &App,
 ) -> AnyElement {
-    let (answer, input) = (reply.result(), recorded.input);
+    let (answer, input) = (reply.result(), recorded.input());
     match ToolCall::read(recorded) {
         ToolCall::Command(command) => command::draw(&command, answer, toggle, cx),
         ToolCall::Read(file) => files::read(&file, answer, toggle, cx),
@@ -54,6 +54,7 @@ pub(in super::super) fn call(
         ToolCall::Fetch(fetch) => web::fetch(&fetch, answer, toggle, cx),
         ToolCall::WebSearch(search) => web::search(&search, answer, toggle, cx),
         ToolCall::Advisor => advisor::draw(reply, toggle, cx),
+        ToolCall::Typed(call) => super::typed::draw(call, answer, toggle, cx),
         ToolCall::Other(other) => other::draw(&other, input, answer, toggle, cx),
     }
 }
@@ -66,7 +67,7 @@ pub(in super::super) fn shown(
     subagent: Option<&Subagent>,
     gather: &mut Gather,
 ) {
-    let (answer, input) = (reply.result(), recorded.input);
+    let (answer, input) = (reply.result(), recorded.input());
     match ToolCall::read(recorded) {
         ToolCall::Command(command) => command::shown(&command, answer, key, gather),
         ToolCall::Read(file) => files::shown_read(&file, answer, key, gather),
@@ -77,6 +78,7 @@ pub(in super::super) fn shown(
         ToolCall::Fetch(fetch) => web::shown_fetch(&fetch, answer, key, gather),
         ToolCall::WebSearch(search) => web::shown_search(&search, answer, key, gather),
         ToolCall::Advisor => advisor::shown(reply, key, gather),
+        ToolCall::Typed(call) => super::typed::shown(call, answer, key, gather),
         ToolCall::Other(other) => other::shown(&other, input, answer, key, gather),
     }
     line::shown_denial(answer, key, gather);

@@ -10,16 +10,65 @@ pub struct Approval<'a> {
     /// It's from before adapters said what each asks, so its adapter may take answers only by text, and a refusal only
     /// in a client's words.
     pub(super) from_before: bool,
+    typed: Vec<protocol::capability::asking::TypedAnswer>,
 }
 
 impl<'a> Approval<'a> {
     /// What the request `body` asks, or `None` for any other event.
     pub fn of(body: &'a EventBody) -> Option<Self> {
-        let EventBody::ApprovalRequested { tool_name, input, asking, .. } = body else { return None };
+        let EventBody::ApprovalRequested { tool_name, input, asking, request, .. } = body else { return None };
+        if let Some(request) = request {
+            use protocol::capability::{
+                approvals::Asks,
+                asking::{Choose, TypedAnswer},
+            };
+            let (asking, typed) = match &request.asks {
+                Asks::Plan { plan, .. } => (Asking::Plan { plan: plan.clone() }, Vec::new()),
+                Asks::Questions { questions } => (
+                    Asking::Questions {
+                        questions: questions
+                            .iter()
+                            .map(|q| Question {
+                                text: q.text.clone(),
+                                header: q.header.clone(),
+                                multiple: q.choose == Choose::Several,
+                                options: q
+                                    .options
+                                    .iter()
+                                    .map(|o| protocol::event::QuestionOption {
+                                        label: o.label.clone(),
+                                        description: o.description.clone(),
+                                    })
+                                    .collect(),
+                            })
+                            .collect(),
+                    },
+                    questions.iter().map(|q| q.typed).collect::<Vec<TypedAnswer>>(),
+                ),
+                Asks::Call { .. } => (Asking::ToolUse { call: None }, Vec::new()),
+                Asks::Network { .. } | Asks::Access { .. } | Asks::Server(_) | Asks::Unknown => {
+                    (Asking::Unknown, Vec::new())
+                }
+            };
+            return Some(Approval { asking: Cow::Owned(asking), from_before: false, typed });
+        }
         Some(match asking.as_deref() {
-            Some(asking) => Approval { asking: Cow::Borrowed(asking), from_before: false },
-            None => Approval { asking: Cow::Owned(older::asking(tool_name, input)), from_before: true },
+            Some(asking) => Approval { asking: Cow::Borrowed(asking), from_before: false, typed: Vec::new() },
+            None => {
+                Approval { asking: Cow::Owned(older::asking(tool_name, input)), from_before: true, typed: Vec::new() }
+            }
         })
+    }
+
+    pub fn secret(&self, question: usize) -> bool {
+        self.typed.get(question) == Some(&protocol::capability::asking::TypedAnswer::Secret)
+    }
+
+    pub fn can_type(&self, question: usize) -> bool {
+        !matches!(
+            self.typed.get(question),
+            Some(protocol::capability::asking::TypedAnswer::No | protocol::capability::asking::TypedAnswer::Unknown)
+        )
     }
 
     pub fn asking(&self) -> &Asking {
@@ -63,7 +112,7 @@ impl<'a> Approval<'a> {
 
     /// The same, holding what it asks, for keeping past the event it was read from.
     pub fn into_owned(self) -> Approval<'static> {
-        Approval { asking: Cow::Owned(self.asking.into_owned()), from_before: self.from_before }
+        Approval { asking: Cow::Owned(self.asking.into_owned()), from_before: self.from_before, typed: self.typed }
     }
 }
 

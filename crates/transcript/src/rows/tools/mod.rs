@@ -14,6 +14,7 @@ mod marks;
 mod numbered;
 mod other;
 mod search;
+mod typed;
 mod web;
 
 use super::line;

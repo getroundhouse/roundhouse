@@ -63,7 +63,7 @@ impl<'a> ToolUseAsked<'a> {
     /// What the request `body` asks, where it asks to use a tool, or asks something this build doesn't know, which is
     /// asked about the same way, by its tool and input. `None` for questions, a plan, and any other event.
     pub fn of(body: &'a EventBody) -> Option<Self> {
-        let EventBody::ApprovalRequested { tool_name, description, reason, asked_by, .. } = body else {
+        let EventBody::ApprovalRequested { tool_name, description, reason, asked_by, request, .. } = body else {
             return None;
         };
         let approval = Approval::of(body)?;
@@ -71,6 +71,11 @@ impl<'a> ToolUseAsked<'a> {
             Asking::ToolUse { .. } | Asking::Unknown => {}
             Asking::Questions { .. } | Asking::Plan { .. } => return None,
         }
+        let typed_name = Recorded::asked(body).and_then(|call| match call {
+            Recorded::Typed(call) => Some(crate::calls::typed::title(call)),
+            Recorded::Legacy { .. } => None,
+        });
+        let tool_name = typed_name.as_ref().unwrap_or(tool_name);
         let said = description.as_deref().map(str::trim).filter(|said| !said.is_empty());
         let call = ToolCall::read(Recorded::asked(body)?);
         let summary = call.summary();
@@ -80,6 +85,9 @@ impl<'a> ToolUseAsked<'a> {
             }
             ToolCall::Edit(edit) => (tool_name.clone(), said, Some(Given::Edit(edit))),
             ToolCall::Write(write) => (tool_name.clone(), said, Some(Given::Write(write))),
+            ToolCall::Typed(call) => {
+                (crate::calls::typed::title(call), said, Some(Given::MainInput(crate::calls::typed::input(call))))
+            }
             ToolCall::Other(other) => (other.name().to_string(), said, summary.map(Given::MainInput)),
             ToolCall::Read(_)
             | ToolCall::Search(_)
@@ -90,7 +98,13 @@ impl<'a> ToolUseAsked<'a> {
         };
         // A tool with no usual input says what the agent said it's for as its main input, which is no more to show.
         let given = given.filter(|given| !matches!(given, Given::MainInput(input) if Some(input.as_str()) == about));
-        Some(Self { tool, about, given, reason: reason.as_deref(), asked_by: asked_by.as_ref() })
+        Some(Self {
+            tool,
+            about,
+            given,
+            reason: request.as_ref().and_then(|r| r.why.as_deref()).or(reason.as_deref()),
+            asked_by: asked_by.as_ref(),
+        })
     }
 }
 

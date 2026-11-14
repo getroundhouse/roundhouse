@@ -23,49 +23,86 @@ pub enum ToolCall<'a> {
     /// input.
     Advisor,
     Other(Other),
+    Typed(&'a protocol::capability::calls::Call),
 }
 
 /// A call as it's recorded: what its adapter said it is, if it said, the agent's own name for the tool, and what the
 /// agent gave it. It's made only from the block that makes the call, or the request to make it, so the kind an adapter
 /// said is never left behind, and a call is read from its tool's name only when it was recorded before adapters said.
 #[derive(Clone, Copy, Debug)]
-pub struct Recorded<'a> {
-    pub(super) kind: Option<&'a CallKind>,
-    /// The agent's own name for the tool.
-    pub name: &'a str,
-    pub input: &'a Value,
+pub enum Recorded<'a> {
+    Legacy { kind: Option<&'a CallKind>, name: &'a str, input: &'a Value },
+    Typed(&'a protocol::capability::calls::Call),
 }
 
 impl<'a> Recorded<'a> {
     /// The call `block` makes, or `None` for any other block.
     pub fn of(block: &'a ContentBlock) -> Option<Self> {
-        let ContentBlock::ToolUse { name, input, call, .. } = block else { return None };
-        Some(Self { kind: call.as_ref(), name, input })
+        match block {
+            ContentBlock::ToolUse { name, input, call, .. } => Some(Self::Legacy { kind: call.as_ref(), name, input }),
+            ContentBlock::Call { call, .. } => Some(Self::Typed(call)),
+            ContentBlock::Text { .. }
+            | ContentBlock::Thinking { .. }
+            | ContentBlock::CallResult { .. }
+            | ContentBlock::ToolResult { .. }
+            | ContentBlock::Image { .. }
+            | ContentBlock::Unknown => None,
+        }
     }
 
     /// The call the request for approval `body` asks to make, or `None` for any other event. A request that asks
     /// something else is one too, to the tool that asks it, and what it asks says its kind. Only one that says no
     /// kind, which is one recorded before adapters said, leaves the kind to its tool's name.
     pub fn asked(body: &'a EventBody) -> Option<Self> {
-        let EventBody::ApprovalRequested { tool_name, input, asking, .. } = body else { return None };
-        Some(Self { kind: asking.as_deref().and_then(Asking::call), name: tool_name, input })
+        let EventBody::ApprovalRequested { tool_name, input, asking, request, .. } = body else { return None };
+        if let Some(request) = request {
+            return match &request.asks {
+                protocol::capability::approvals::Asks::Call { call } => Some(Self::Typed(call)),
+                protocol::capability::approvals::Asks::Questions { .. }
+                | protocol::capability::approvals::Asks::Plan { .. }
+                | protocol::capability::approvals::Asks::Network { .. }
+                | protocol::capability::approvals::Asks::Access { .. }
+                | protocol::capability::approvals::Asks::Server(_)
+                | protocol::capability::approvals::Asks::Unknown => None,
+            };
+        }
+        Some(Self::Legacy { kind: asking.as_deref().and_then(Asking::call), name: tool_name, input })
     }
 
     /// What kind of call it is: what its adapter said, or for one recorded before adapters said, what Claude's tool of
     /// that name was.
-    pub(super) fn kind(&self) -> Cow<'a, CallKind> {
-        self.kind.map_or_else(|| Cow::Owned(older::kind_of(self.name)), Cow::Borrowed)
-    }
-
     /// Whether it hands work to a subagent.
     pub fn hands_off(&self) -> bool {
-        *self.kind() == CallKind::Subagent
+        match self {
+            Self::Typed(call) => matches!(call, protocol::capability::calls::Call::Subagent(_)),
+            Self::Legacy { kind, name, .. } => {
+                kind.map_or_else(|| older::kind_of(name), Clone::clone) == CallKind::Subagent
+            }
+        }
     }
 
     /// Whether it asks the person something, questions or to approve a plan, which its request for approval carries
     /// in full, so a client draws that rather than the call.
     pub fn asks_the_person(&self) -> bool {
-        matches!(*self.kind(), CallKind::Questions | CallKind::Plan)
+        match self {
+            Self::Typed(call) => {
+                matches!(call, protocol::capability::calls::Call::Questions | protocol::capability::calls::Call::Plan)
+            }
+            Self::Legacy { kind, name, .. } => {
+                matches!(kind.map_or_else(|| older::kind_of(name), Clone::clone), CallKind::Questions | CallKind::Plan)
+            }
+        }
+    }
+
+    pub fn input(&self) -> &'a Value {
+        match self {
+            Self::Legacy { input, .. } => input,
+            Self::Typed(
+                protocol::capability::calls::Call::Mcp { input, .. }
+                | protocol::capability::calls::Call::Other { input, .. },
+            ) => input,
+            Self::Typed(_) => &Value::Null,
+        }
     }
 
     /// One line saying what it's about, as [`ToolCall::summary`] says.
@@ -83,7 +120,11 @@ pub fn asked_about(body: &EventBody) -> Option<String> {
 
 impl<'a> ToolCall<'a> {
     pub fn read(call: Recorded<'a>) -> Self {
-        let (kind, input) = (call.kind(), call.input);
+        let Recorded::Legacy { kind, name, input } = call else {
+            let Recorded::Typed(call) = call else { unreachable!() };
+            return super::typed::read(call);
+        };
+        let kind = kind.map_or_else(|| Cow::Owned(older::kind_of(name)), Cow::Borrowed);
         let known = match &*kind {
             CallKind::Command => Command::read(input).map(ToolCall::Command),
             CallKind::Read => ReadFile::read(input).map(ToolCall::Read),
@@ -101,7 +142,7 @@ impl<'a> ToolCall<'a> {
             CallKind::Questions | CallKind::Plan | CallKind::Other { .. } | CallKind::Unknown => None,
         };
         // A known kind whose input isn't what it should be is still drawn, as any tool would be.
-        known.unwrap_or_else(|| ToolCall::Other(Other::read(&kind, call.name, input)))
+        known.unwrap_or_else(|| ToolCall::Other(Other::read(&kind, name, input)))
     }
 
     /// One line saying what the call is about, the same wherever it's shown, such as where a client asks whether to
@@ -120,6 +161,7 @@ impl<'a> ToolCall<'a> {
             ToolCall::WebSearch(search) => search.query,
             ToolCall::Advisor => return None,
             ToolCall::Other(other) => return other.summary.clone(),
+            ToolCall::Typed(call) => return Some(super::typed::summary(call)),
         };
         Some(first_line(about).to_string())
     }

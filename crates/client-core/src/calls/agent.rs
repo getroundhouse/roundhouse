@@ -91,7 +91,10 @@ mod tests {
     fn a_hand_off_is_drawn_as_one_whatever_its_input() {
         for input in [json!({}), json!({ "description": "Look" }), json!({ "prompt": 3 })] {
             assert!(
-                matches!(ToolCall::read(Recorded { kind: None, name: "Agent", input: &input }), ToolCall::Agent(_)),
+                matches!(
+                    ToolCall::read(Recorded::Legacy { kind: None, name: "Agent", input: &input }),
+                    ToolCall::Agent(_)
+                ),
                 "{input}"
             );
         }
