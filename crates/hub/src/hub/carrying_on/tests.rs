@@ -87,6 +87,7 @@ fn wait() -> Wait {
         number: 7,
         call: None,
         until: WaitUntil::Done,
+        watch: None,
         started_at_ms: 1,
         ended: None,
     }

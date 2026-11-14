@@ -333,6 +333,8 @@ A worker's hello names its build, and a hub that carries on with a worker of ano
 
 ## The worker's tools
 
+Explicit pull-request waits use repository-pinned selections, complete stack observations and typed terminal results. The hub owns their durable scope, deadline and observations; workers only read GitHub, and clients draw the hub's open-wait collection. An omitted `waits` collection uses the legacy singular `wait`, while an empty collection means no open waits. New request methods are refused as unsupported until their receiver implements them, so an explicit selection is never interpreted as a checked-out-branch request. *Not built:* explicit reads and waits and their collection in the chat.
+
 Agents call tools of Roundhouse's own, such as one that says where the workspace's pull request stands, and the hub answers them.
 
 - **The worker serves them over MCP, on 127.0.0.1,** as protocol `2026-07-28`'s Streamable HTTP, with each request answered as JSON. The CLI reconnects to an HTTP server by itself, and there's no process of its own to die, as `docs/claude-cli.md` says. A server on the CLI's stream ends with the agent's process, and a stdio server that the CLI starts strands what waits on it when it dies. *Unconfirmed.*

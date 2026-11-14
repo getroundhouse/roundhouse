@@ -88,6 +88,7 @@ fn what_a_worker_asks_of_a_wait_and_its_hubs_answer_keep_their_form() {
         number: 12,
         call: None,
         until: WaitUntil::Done,
+        watch: None,
         started_at_ms: 5,
         ended: Some(WaitEnded { at_ms: 9, how: WaitEnd::Merged }),
     };

@@ -26,6 +26,7 @@ mod prompts;
 mod refusals;
 mod restarts;
 mod sessions;
+mod waits;
 mod worker;
 mod worker_calls;
 mod workspaces;

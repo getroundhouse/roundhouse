@@ -14,6 +14,7 @@ mod git;
 mod hub_settings;
 mod model_name;
 mod permission_mode;
+mod pr_watch;
 mod prompt_line;
 mod pull_request;
 mod queue;
@@ -69,3 +70,9 @@ mod comment;
 pub use comment::{DiffComment, DiffSide};
 mod workspace;
 pub use workspace::{PORTS_PER_WORKSPACE, SetupStatus, Workspace, WorkspaceStatus};
+
+pub use pr_watch::{
+    CheckState, GitHubRepository, Mergeability, ObservedCheck, ObservedPullRequest, PullRequestNumber,
+    PullRequestSelection, PullRequestWaitResult, PullRequestWatch, PullRequestsSnapshot, SelectionError, WaitBaseline,
+    WaitOutcome,
+};

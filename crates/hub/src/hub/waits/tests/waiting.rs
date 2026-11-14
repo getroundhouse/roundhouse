@@ -20,6 +20,7 @@ pub(in super::super) fn wait(until: WaitUntil) -> Wait {
         until,
         started_at_ms: 1,
         ended: None,
+        watch: None,
     }
 }
 

@@ -94,9 +94,11 @@ impl Answer for WorktreeRemoval {
         match reply {
             AskReply::WorktreeRemoved(removed) => Ok(Self::Removed(removed)),
             AskReply::WouldLose(lose) => Ok(Self::WouldLose(lose)),
-            AskReply::PullRequest(_) | AskReply::Wait(_) | AskReply::WorktreeCreated(_) | AskReply::Worktrees(_) => {
-                Err(reply)
-            }
+            AskReply::PullRequests(_)
+            | AskReply::PullRequest(_)
+            | AskReply::Wait(_)
+            | AskReply::WorktreeCreated(_)
+            | AskReply::Worktrees(_) => Err(reply),
         }
     }
 }

@@ -192,5 +192,6 @@ fn wait_from_row(row: &Row<'_>) -> rusqlite::Result<Wait> {
         until: from_text(row.get(5)?)?,
         started_at_ms: row.get(6)?,
         ended,
+        watch: None,
     })
 }

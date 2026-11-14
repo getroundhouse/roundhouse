@@ -84,6 +84,8 @@ impl Asks {
             WorkerAsk::CreateWorktree(_) | WorkerAsk::RemoveWorktree(_) => self.patience * SLOW,
             WorkerAsk::PullRequest
             | WorkerAsk::StartWait(_)
+            | WorkerAsk::StartPullRequestWait(_)
+            | WorkerAsk::PullRequests(_)
             | WorkerAsk::Wait(_)
             | WorkerAsk::CancelWait(_)
             | WorkerAsk::ListWorktrees

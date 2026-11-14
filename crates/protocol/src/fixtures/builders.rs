@@ -1,8 +1,3 @@
-//! Made-up records and events, for the tests of every crate. Each is valid from the fewest arguments, and a test sets
-//! what it's about with struct update syntax, so a field added to a record changes its builder here rather than every
-//! test that makes one. A block is an enum's variant, which that syntax can't set, so a block has a builder for each
-//! shape tests make, such as [`of_kind`].
-
 use serde_json::Value;
 
 use crate::event::{Asking, CallKind, ContentBlock, Denied, EventBody, SessionEvent, TurnOutcome};
@@ -37,6 +32,7 @@ pub fn session(id: &str) -> Session {
         read_seq: Seq::default(),
         background_tasks: Vec::new(),
         wait: None,
+        waits: None,
         context: None,
         prompt_cache: None,
         account: None,

@@ -167,12 +167,13 @@ pub struct Session {
     /// takes that work with it.
     #[serde(default)]
     pub background_tasks: Vec<AgentTask>,
-    /// The wait on the pull request the agent has open, as the hub keeps it, which a chat has one of at a time. It's
-    /// the hub's, so it says how a wait stands where the list of tasks only has the CLI's copy of it, which can lag
-    /// behind, and it lasts once the agent has gone. Starting or ending one moves the record, so the feed announces
-    /// it. `None` with none open, and from a hub that doesn't keep them.
+    /// Oldest open wait, for clients predating `waits`. New clients use `open_waits`, which distinguishes an omitted
+    /// collection from an authoritative empty one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub wait: Option<Wait>,
+    /// All open waits. None means an older hub; an empty list means this hub has none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub waits: Option<Vec<Wait>>,
     /// How full the agent's context is, as its newest report said. `None` until it has said, and from a hub that
     /// doesn't keep it. It stays once the agent has gone, since the conversation it resumes is as full.
     #[serde(default)]
@@ -300,5 +301,12 @@ impl Session {
     pub fn last_active_at_ms(&self) -> i64 {
         let sent = self.user_active_at_ms.or(self.turn_started_at_ms);
         sent.map_or(self.created_at_ms, |sent| sent.max(self.created_at_ms))
+    }
+}
+
+impl Session {
+    /// The hub's complete list, falling back only when an older hub omitted it.
+    pub fn open_waits(&self) -> &[Wait] {
+        self.waits.as_deref().unwrap_or(self.wait.as_slice())
     }
 }

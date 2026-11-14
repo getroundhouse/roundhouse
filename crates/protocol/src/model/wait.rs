@@ -10,7 +10,7 @@ pub struct Wait {
     pub id: WaitId,
     pub session_id: SessionId,
     pub workspace_id: WorkspaceId,
-    /// The number of the pull request it waits on, which was the branch's when it started.
+    /// The legacy branch PR, or the first explicitly requested number. `watch` carries an explicit wait's scope.
     pub number: u64,
     /// The agent's call that asked for it, as its CLI names it, so the same call asking again, as a CLI does when it
     /// reconnects, gets the wait it started. `None` when the CLI didn't say.
@@ -21,6 +21,9 @@ pub struct Wait {
     /// `None` while it waits.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ended: Option<WaitEnded>,
+    /// Explicit remote targets; absent for a legacy wait on the checked-out branch.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub watch: Option<Box<super::PullRequestWatch>>,
 }
 
 /// What ends a wait, beyond the pull request being done or needing the agent, which always does.
@@ -32,6 +35,9 @@ pub enum WaitUntil {
     Done,
     /// Also once its checks have run and none failed, so the agent can then queue it. *Unconfirmed*
     Checks,
+    RequiredChecks,
+    AllChecks,
+    Merged,
     /// One this version doesn't know, from a newer worker, which waits as `Done` does.
     #[serde(other)]
     Unknown,
@@ -62,12 +68,15 @@ pub enum WaitEnd {
     ChecksPassed,
     /// The branch has no pull request any more, or has another one.
     NoPullRequest,
+    StackChanged,
+    NeedsRebase,
+    TimedOut,
+    Unavailable,
     /// Called off by its agent, or by closing its chat or archiving its workspace.
     Cancelled,
     /// Called off by the person, with Stop on its line.
     CalledOffByPerson,
-    /// Called off by a wait its agent started after it, which goes on in its place, since an agent waits on one at a
-    /// time.
+    /// Called off by a subsequent wait on a hub that allows one active wait per chat.
     Replaced,
     /// One this version doesn't know, from a newer hub.
     #[serde(other)]
@@ -88,8 +97,36 @@ impl WaitEnd {
             | WaitEnd::Draft
             | WaitEnd::ChecksPassed
             | WaitEnd::NoPullRequest
+            | WaitEnd::StackChanged
+            | WaitEnd::NeedsRebase
+            | WaitEnd::TimedOut
+            | WaitEnd::Unavailable
             | WaitEnd::Unknown => false,
         }
+    }
+}
+
+impl Wait {
+    pub fn result(&self) -> Option<super::PullRequestWaitResult> {
+        let ended = self.ended?;
+        let watch = *self.watch.clone()?;
+        let outcome = match ended.how {
+            WaitEnd::Merged | WaitEnd::ChecksPassed => super::WaitOutcome::Reached,
+            WaitEnd::TimedOut => super::WaitOutcome::TimedOut,
+            WaitEnd::Unavailable => super::WaitOutcome::Unavailable,
+            WaitEnd::Cancelled | WaitEnd::CalledOffByPerson | WaitEnd::Replaced => super::WaitOutcome::Cancelled,
+            WaitEnd::Unknown => super::WaitOutcome::Unknown,
+            WaitEnd::Closed
+            | WaitEnd::Conflicts
+            | WaitEnd::ChecksFailed
+            | WaitEnd::ChangesRequested
+            | WaitEnd::LeftQueue
+            | WaitEnd::Draft
+            | WaitEnd::NoPullRequest
+            | WaitEnd::StackChanged
+            | WaitEnd::NeedsRebase => super::WaitOutcome::NeedsAttention,
+        };
+        Some(super::PullRequestWaitResult { outcome, reason: ended.how, ended_at_ms: ended.at_ms, watch })
     }
 }
 
@@ -107,6 +144,7 @@ mod tests {
             call: Some("toolu_1".into()),
             until: WaitUntil::Checks,
             started_at_ms: 5,
+            watch: None,
             ended: Some(WaitEnded { at_ms: 9, how: WaitEnd::LeftQueue }),
         };
         let json = serde_json::to_string(&wait).unwrap();

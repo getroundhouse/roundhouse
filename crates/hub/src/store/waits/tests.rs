@@ -21,6 +21,7 @@ fn wait(id: &str) -> Wait {
         until: WaitUntil::Checks,
         started_at_ms: 1,
         ended: None,
+        watch: None,
     }
 }
 

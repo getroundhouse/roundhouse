@@ -5,6 +5,7 @@
 //! answer as that, and one of any other kind fails in one place, as a hub reads a worker's replies. On the wire, an
 //! ask's fields sit beside its `method`, and an answer's beside its `result`.
 
+mod pr_watch;
 mod pull_requests;
 mod worktrees;
 
@@ -16,3 +17,5 @@ pub use worktrees::{
 
 mod messages;
 pub use messages::{Answer, Ask, AskAnswer, AskId, AskOutcome, AskReply, ToWorker, WorkerAsk};
+
+pub use pr_watch::{PullRequestWaitUntil, ReadPullRequests, StartPullRequestWait};
