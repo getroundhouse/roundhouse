@@ -8,3 +8,9 @@ retries = 0
 # rather than computing, so at one per core every slot is full while the cores are about half idle. More than two
 # saved only a few seconds, and loaded the tests enough to widen a race in one of them.
 test-threads = 32
+# A test should take under 5s, so the log marks one that takes longer, and the end of the run lists them. One still
+# running after 2 minutes has hung, and is stopped and fails, rather than holding the job until its 60-minute limit.
+# That's over twice the longest any test took on c7g.4xlarge, the slowest instance type the tests have been timed on.
+# `terminate-after` counts periods, so 24 of 5s is 2 minutes.
+slow-timeout = { period = "5s", terminate-after = 24 }
+final-status-level = "slow"
