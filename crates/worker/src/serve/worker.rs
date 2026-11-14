@@ -51,6 +51,7 @@ pub struct Config {
     pub path: Option<OsString>,
     /// An agent CLI to use without searching.
     pub claude_bin: Option<PathBuf>,
+    pub codex_bin: Option<PathBuf>,
     /// Where a one-off call to an agent runs, each in an empty directory of its own. The system's temporary
     /// directory suits, since no project's instructions are above it.
     pub scratch_dir: PathBuf,
@@ -212,7 +213,7 @@ pub(super) async fn handle(
             Ok(WorkerResponse::Ok)
         }
         WorkerRequest::RunningAgents => Ok(running_agents(state)),
-        WorkerRequest::AgentControl(_) | WorkerRequest::Unknown => Err(unsupported(None)),
+        WorkerRequest::Unknown => Err(unsupported(None)),
         WorkerRequest::NamesGitHas(asked) => worktrees::names_git_has(state, asked).await,
         WorkerRequest::PrepareWorkspace(asked) => worktrees::prepare(state, asked).await,
         WorkerRequest::RestoreWorkspace(asked) => worktrees::restore(state, asked).await,
@@ -280,6 +281,19 @@ pub(super) async fn handle(
         WorkerRequest::FilePages(FilePages { path, commit, file, page_lines, pages }) => {
             let pages = crate::files::pages(Path::new(&path), &commit, &file, page_lines, &pages).await?;
             Ok(WorkerResponse::FilePages(pages))
+        }
+        WorkerRequest::AgentControl(request) => {
+            let Some(agent) = state.live_agent(&request.session_id) else {
+                return Ok(WorkerResponse::AgentNotRunning);
+            };
+            if !request.control.allowed(&agent.capabilities()) {
+                return Err(ApiError::new(ErrorCode::Unsupported, "the run does not offer this control"));
+            }
+            match agent.control(&request.control).await {
+                Ok(()) => Ok(WorkerResponse::Ok),
+                Err(_) if agent.is_gone() => Ok(WorkerResponse::AgentNotRunning),
+                Err(e) => Err(e.into()),
+            }
         }
         WorkerRequest::AgentStart(spec) => start_agent(state, forwarders, spec).await,
         WorkerRequest::AgentPrompt(AgentPrompt { session_id, seq, prompt }) => {

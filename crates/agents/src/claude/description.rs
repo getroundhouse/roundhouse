@@ -35,7 +35,7 @@ const A_TOKEN_LASTS_MS: i64 = 365 * 24 * 60 * 60 * 1000;
 pub fn description() -> AgentDescription {
     AgentDescription {
         kind: AgentKind::Claude,
-        capabilities: None,
+        capabilities: Some(super::claims::claims()),
         name: "Claude Code".to_string(),
         usage_heading: "Claude usage".to_string(),
         models: Vec::from(MODELS.map(|(model, label)| ModelChoice { model, label: label.to_string() })),

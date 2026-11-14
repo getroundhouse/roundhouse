@@ -28,7 +28,7 @@ pub(crate) async fn title_for(
     prompt: &Prompt<NewAttachment>,
     login: Option<AgentLogin>,
 ) -> Result<WorkerResponse, ApiError> {
-    let options = one_off(state, "title", login);
+    let options = one_off(state, agent, "title", login);
     let title = agents::title_for(agent, prompt, &options, &state.config.scratch_dir);
     let title = until_stopping(state, title).await?;
     Ok(WorkerResponse::Title(TitleReply { title: title?.to_string() }))
@@ -36,11 +36,11 @@ pub(crate) async fn title_for(
 
 /// What a one-off call to an agent's CLI runs with: a record of its own, numbered, so the provider can stop the call
 /// if this worker is killed, and the login its hub sent with it, which goes with the call.
-fn one_off(state: &State, what: &str, login: Option<AgentLogin>) -> AgentOptions {
+fn one_off(state: &State, agent: AgentKind, what: &str, login: Option<AgentLogin>) -> AgentOptions {
     let call = state.calls.fetch_add(1, Ordering::Relaxed);
     let record = |dir: &std::path::PathBuf| dir.join(AGENTS_DIR).join(format!("{what}-{call}.pid"));
     AgentOptions {
-        binary: binary(state),
+        binary: binary(state, agent),
         pid_file: state.config.state_dir.as_ref().map(record),
         tools: None,
         instructions: None,
@@ -66,7 +66,7 @@ pub(crate) async fn account_for(
     agent: AgentKind,
     login: Option<AgentLogin>,
 ) -> Result<WorkerResponse, ApiError> {
-    let options = one_off(state, "account", login);
+    let options = one_off(state, agent, "account", login);
     let account = agents::account(agent, &options, &state.config.scratch_dir);
     Ok(WorkerResponse::Account(until_stopping(state, account).await??))
 }
@@ -99,7 +99,7 @@ pub(crate) async fn start_agent(
     };
     make_context_folder(&session_id, &worktree).await;
     let options = AgentOptions {
-        binary: binary(state),
+        binary: binary(state, spec.agent),
         pid_file: agent_file("pid"),
         tools: tools_for(state, &mut spec, agent_file("mcp.json")).await,
         instructions: Some(INSTRUCTIONS.to_string()),
@@ -222,9 +222,13 @@ pub(crate) async fn stop_agent(state: &State, session_id: &SessionId) -> Result<
     }
 }
 
-fn binary(state: &State) -> BinaryLookup {
+fn binary(state: &State, agent: AgentKind) -> BinaryLookup {
     BinaryLookup {
-        explicit: state.config.claude_bin.clone(),
+        explicit: match agent {
+            AgentKind::Claude => state.config.claude_bin.clone(),
+            AgentKind::Codex => state.config.codex_bin.clone(),
+            AgentKind::Unknown => None,
+        },
         path: state.config.path.clone(),
         home: state.config.home.clone(),
     }

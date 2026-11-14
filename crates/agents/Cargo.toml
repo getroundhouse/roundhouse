@@ -8,30 +8,33 @@ license.workspace = true
 [features]
 # What only tests use: a longer wait for an agent's last output, and the conformance runner, whose scripted model
 # serves the Messages API over HTTP.
-testing = ["dep:http-body-util", "dep:hyper", "dep:hyper-util", "dep:serde"]
+testing = ["dep:http-body-util", "dep:hyper", "dep:hyper-util"]
 
 [dependencies]
 # Reads when a limit starts again, which `get_usage` says as an ISO time.
 chrono.workspace = true
-# Streams the scripted model's replies as they're made.
-http-body-util = { workspace = true, optional = true, features = ["channel"] }
-hyper = { workspace = true, optional = true }
-hyper-util = { workspace = true, optional = true }
 process.workspace = true
 parking_lot.workspace = true
 private-files.workspace = true
 protocol.workspace = true
-serde = { workspace = true, optional = true }
+serde.workspace = true
 thiserror.workspace = true
 async-trait.workspace = true
 serde_json.workspace = true
 # An empty directory for a one-off call, so the CLI loads no project's instructions.
 tempfile.workspace = true
-tokio.workspace = true
+tokio = { workspace = true, features = ["fs"] }
 tracing.workspace = true
 uuid.workspace = true
 
+[target.'cfg(unix)'.dependencies]
+# The native conformance runner and its scripted model use Unix process isolation.
+http-body-util = { workspace = true, optional = true, features = ["channel"] }
+hyper = { workspace = true, optional = true }
+hyper-util = { workspace = true, optional = true }
+
 [dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
 agents = { workspace = true, features = ["testing"] }
 protocol = { workspace = true, features = ["testing"] }
 

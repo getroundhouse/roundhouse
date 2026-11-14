@@ -7,7 +7,11 @@
 
 pub mod capture;
 pub mod driver;
+#[cfg(unix)]
+pub(crate) mod http;
 pub mod lines;
+#[cfg(unix)]
+pub mod replay;
 pub mod scenario;
 pub mod scenarios;
 #[cfg(unix)]

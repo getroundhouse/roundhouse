@@ -106,7 +106,7 @@ pub(super) fn launch(
     let mut command = command(bin, cwd);
     let args = build_args(spec, resume, options.instructions.as_deref())?;
     if let Some(tap) = tap {
-        tap.launched(resume, conversation(spec)?, &args);
+        tap.launched(resume, Some(conversation(spec)?), &args);
     }
     command
         .args(args)

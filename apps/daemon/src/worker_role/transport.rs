@@ -21,6 +21,7 @@ pub(crate) struct Given {
     pub workspaces_root: PathBuf,
     pub state_dir: Option<PathBuf>,
     pub claude_bin: Option<PathBuf>,
+    pub codex_bin: Option<PathBuf>,
 }
 
 pub(crate) fn run(transport: Transport, given: Given) -> anyhow::Result<()> {
@@ -52,6 +53,7 @@ pub(super) fn config(given: Given, refused: Option<String>) -> anyhow::Result<wo
         home: std::env::var_os(protocol::paths::HOME_VAR).map(PathBuf::from),
         path: std::env::var_os("PATH"),
         claude_bin: given.claude_bin,
+        codex_bin: given.codex_bin,
         scratch_dir: std::env::temp_dir(),
         deleter: worker::Deleter::new(exe, ["delete", "--"]),
         refused,

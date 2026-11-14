@@ -3,7 +3,9 @@
 
 mod account;
 mod approvals;
+mod claims;
 mod context;
+mod controls;
 mod description;
 mod effort;
 mod kinds;

@@ -1,14 +1,15 @@
-//! Agent adapters. Each one runs an agent as a child process and turns its output into normalized
-//! events, while keeping every raw line so those events can be rebuilt later.
+//! Agent adapters: supervised CLI processes, translated into the capability contracts and recorded events.
 
 #![warn(clippy::wildcard_enum_match_arm)]
 
 mod binary;
 pub mod claude;
+pub mod codex;
 #[cfg(feature = "testing")]
 pub mod conformance;
 mod error;
 mod interface;
+mod model_offers;
 mod options;
 mod output;
 mod registry;

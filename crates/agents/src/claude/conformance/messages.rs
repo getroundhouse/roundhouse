@@ -2,23 +2,9 @@
 //! trial on it costs nothing and goes the same way every time. It streams as the API does, answers a count of tokens,
 //! and keeps each request, which holds no credentials, since those come in headers.
 
-use std::convert::Infallible;
-use std::panic::AssertUnwindSafe;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
-
-use http_body_util::combinators::BoxBody;
-use http_body_util::{BodyExt, Channel, Full};
-use hyper::body::{Bytes, Incoming};
-use hyper::header::HeaderValue;
-use hyper::server::conn::http1;
-use hyper::service::service_fn;
-use hyper::{Method, StatusCode};
-use hyper_util::rt::TokioIo;
-use parking_lot::Mutex;
+use crate::conformance::http::{self, Body, Server, json_response};
+use hyper::StatusCode;
 use serde_json::{Value, json};
-use tokio::net::TcpListener;
-use tokio::task::JoinHandle;
 
 /// What the scripted model says to a request, as a scenario's script decides from what the request holds.
 pub type Script = fn(&Request) -> Reply;
@@ -121,98 +107,35 @@ impl Reply {
 }
 
 /// The scripted model, serving on 127.0.0.1 until it's dropped.
-pub struct ScriptedModel {
-    url: String,
-    state: Arc<State>,
-    server: JoinHandle<()>,
-}
-
-struct State {
-    script: Script,
-    requests: Mutex<Vec<Value>>,
-    /// Numbers the IDs it makes, so they're the same every trial.
-    made: AtomicU64,
-}
+pub struct ScriptedModel(Server);
 
 impl ScriptedModel {
-    pub async fn start(script: Script) -> std::io::Result<ScriptedModel> {
-        let listener = TcpListener::bind("127.0.0.1:0").await?;
-        let url = format!("http://{}", listener.local_addr()?);
-        let state = Arc::new(State { script, requests: Mutex::new(Vec::new()), made: AtomicU64::new(0) });
-        let serving = state.clone();
-        let server = tokio::spawn(async move {
-            while let Ok((stream, _)) = listener.accept().await {
-                let state = serving.clone();
-                tokio::spawn(async move {
-                    let service = service_fn(move |request| answer(state.clone(), request));
-                    // A connection the CLI drops ends here, as one to the API would.
-                    let _ = http1::Builder::new().serve_connection(TokioIo::new(stream), service).await;
-                });
+    pub async fn start(script: Script) -> std::io::Result<Self> {
+        Server::start(move |path, body, made| {
+            if path.ends_with("/v1/messages/count_tokens") {
+                return json_response(StatusCode::OK, &json!({"input_tokens":100}));
             }
-        });
-        Ok(ScriptedModel { url, state, server })
+            if !path.ends_with("/v1/messages") || !body.is_object() {
+                return json_response(StatusCode::NOT_FOUND, &json!({"error":"not scripted"}));
+            }
+            stream(made, body, &script(&Request(body)))
+        })
+        .await
+        .map(Self)
     }
-
-    /// Where the CLI is pointed, as `ANTHROPIC_BASE_URL`.
     pub fn url(&self) -> &str {
-        &self.url
+        self.0.url()
     }
-
-    /// The port it listens on, which is all the sandbox lets the CLI reach.
     pub fn port(&self) -> &str {
-        self.url.rsplit(':').next().unwrap_or_default()
+        self.0.port()
     }
-
-    /// Every request so far, in order, as its method, path and body.
     pub fn requests(&self) -> Vec<Value> {
-        self.state.requests.lock().clone()
+        self.0.requests()
     }
-}
-
-impl Drop for ScriptedModel {
-    fn drop(&mut self) {
-        self.server.abort();
-    }
-}
-
-type Body = BoxBody<Bytes, Infallible>;
-
-async fn answer(state: Arc<State>, request: hyper::Request<Incoming>) -> Result<hyper::Response<Body>, Infallible> {
-    let (parts, body) = request.into_parts();
-    let path = parts.uri.path().to_string();
-    let body = body.collect().await.map_or_default(http_body_util::Collected::to_bytes);
-    let body: Value = serde_json::from_slice(&body).unwrap_or(Value::Null);
-    state.requests.lock().push(json!({"method": parts.method.as_str(), "path": path, "body": body}));
-    if parts.method != Method::POST {
-        return Ok(error(StatusCode::NOT_FOUND, "not_found_error", "not scripted"));
-    }
-    if path.ends_with("/v1/messages/count_tokens") {
-        return Ok(json_response(StatusCode::OK, &json!({"input_tokens": 100})));
-    }
-    if !path.ends_with("/v1/messages") || !body.is_object() {
-        return Ok(error(StatusCode::NOT_FOUND, "not_found_error", "not scripted"));
-    }
-    // A script that can't answer is the scenario's mistake, which the CLI hears as the API failing.
-    let Ok(reply) = std::panic::catch_unwind(AssertUnwindSafe(|| (state.script)(&Request(&body)))) else {
-        return Ok(error(StatusCode::INTERNAL_SERVER_ERROR, "api_error", "the scenario's script panicked"));
-    };
-    Ok(stream(&state, &body, &reply))
-}
-
-fn json_response(status: StatusCode, value: &Value) -> hyper::Response<Body> {
-    let mut response = hyper::Response::new(Full::new(Bytes::from(value.to_string())).boxed());
-    *response.status_mut() = status;
-    response.headers_mut().insert("content-type", HeaderValue::from_static("application/json"));
-    response
-}
-
-fn error(status: StatusCode, kind: &str, message: &str) -> hyper::Response<Body> {
-    json_response(status, &json!({"type": "error", "error": {"type": kind, "message": message}}))
 }
 
 /// The reply as the API streams it: the message's start, each block's start, deltas and stop, then why it stopped.
-fn stream(state: &State, request: &Value, reply: &Reply) -> hyper::Response<Body> {
-    let made = state.made.fetch_add(1, Ordering::Relaxed);
+fn stream(made: u64, request: &Value, reply: &Reply) -> hyper::Response<Body> {
     let model = request["model"].as_str().unwrap_or("scripted");
     let usage = json!({"input_tokens": 100, "output_tokens": 1, "cache_creation_input_tokens": 0,
                        "cache_read_input_tokens": 0});
@@ -249,21 +172,5 @@ fn stream(state: &State, request: &Value, reply: &Reply) -> hyper::Response<Body
     events.push(("message_delta", stopped));
     events.push(("message_stop", json!({"type": "message_stop"})));
 
-    let (mut sender, body) = Channel::<Bytes, Infallible>::new(4);
-    tokio::spawn(async move {
-        for (name, data) in events {
-            let event = Bytes::from(format!("event: {name}\ndata: {data}\n\n"));
-            // The CLI gave up on the request, as a cancel does.
-            if sender.send_data(event).await.is_err() {
-                return;
-            }
-        }
-    });
-    let mut response = hyper::Response::new(body.boxed());
-    let headers = response.headers_mut();
-    headers.insert("content-type", HeaderValue::from_static("text/event-stream"));
-    if let Ok(id) = HeaderValue::from_str(&format!("req_scripted_{made}")) {
-        headers.insert("request-id", id);
-    }
-    response
+    http::events(events, made)
 }

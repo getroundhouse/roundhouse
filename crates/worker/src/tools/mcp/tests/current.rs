@@ -12,13 +12,13 @@ use super::*;
 use crate::tools::wait::tests::{ended, waiting};
 
 /// Asks that go nowhere, for requests that don't ask the hub anything.
-fn asks() -> (Asks, mpsc::Receiver<WorkerFrame>) {
+pub(super) fn asks() -> (Asks, mpsc::Receiver<WorkerFrame>) {
     let (frames, sent) = mpsc::channel(8);
     (Asks::new(frames), sent)
 }
 
 /// Headers that agree with a request for `method`, as the CLI sends them.
-fn headers(method: &str, name: Option<&str>) -> Headers {
+pub(super) fn headers(method: &str, name: Option<&str>) -> Headers {
     Headers {
         version: Said::Value(VERSION.into()),
         method: Said::Value(method.into()),
@@ -41,7 +41,7 @@ fn offering_tasks(method: &str, params: &Value) -> Vec<u8> {
 }
 
 /// Answers the next ask as the hub would, with `reply`, and says what was asked.
-async fn hub_answers(
+pub(super) async fn hub_answers(
     asks: &Asks,
     sent: &mut mpsc::Receiver<WorkerFrame>,
     reply: Result<AskReply, ApiError>,
@@ -54,14 +54,14 @@ async fn hub_answers(
     ask
 }
 
-async fn answered(asks: &Asks, headers: &Headers, body: &[u8]) -> Answer {
+pub(super) async fn answered(asks: &Asks, headers: &Headers, body: &[u8]) -> Answer {
     match answer(asks, Build::UNSTAMPED, &"s".into(), headers, body).await {
         Reply::Answer(answer) => answer,
         Reply::Accepted => panic!("a request is answered"),
     }
 }
 
-fn code(answer: &Answer) -> Code {
+pub(super) fn code(answer: &Answer) -> Code {
     answer.outcome.as_ref().map(|_| ()).map_err(|e| e.code).expect_err("it was refused")
 }
 
@@ -106,7 +106,7 @@ async fn a_version_it_doesnt_speak_is_refused_naming_the_one_it_does() {
 
     assert_eq!(code(&answer), Code::UnsupportedVersion);
     let data = &answer.to_json()["error"]["data"];
-    assert_eq!(data["supported"], json!([VERSION]));
+    assert_eq!(data["supported"], json!([VERSION, crate::tools::mcp::legacy::VERSION]));
     assert_eq!(data["requested"], "2025-11-25");
 }
 

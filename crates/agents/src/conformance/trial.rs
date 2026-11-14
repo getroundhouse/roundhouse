@@ -47,16 +47,42 @@ impl Trial {
     /// Each call the adapter said is of `kind`.
     pub fn calls(&self, kind: &CallKind) -> Vec<&ContentBlock> {
         self.blocks()
-            .filter(|block| matches!(block, ContentBlock::ToolUse { call: Some(call), .. } if call == kind))
+            .filter(|block| match block {
+                ContentBlock::ToolUse { call: Some(call), .. } => call == kind,
+                ContentBlock::Call { call: protocol::capability::calls::Call::Command(_), .. } => {
+                    *kind == CallKind::Command
+                }
+                ContentBlock::Text { .. }
+                | ContentBlock::Thinking { .. }
+                | ContentBlock::Call { .. }
+                | ContentBlock::CallResult { .. }
+                | ContentBlock::ToolUse { .. }
+                | ContentBlock::ToolResult { .. }
+                | ContentBlock::Image { .. }
+                | ContentBlock::Unknown => false,
+            })
             .collect()
     }
 
     /// What each tool call gave back.
     pub fn results(&self) -> Vec<&str> {
         self.blocks()
-            .filter_map(
-                |block| if let ContentBlock::ToolResult { text, .. } = block { Some(text.as_str()) } else { None },
-            )
+            .filter_map(|block| match block {
+                ContentBlock::CallResult {
+                    output: protocol::capability::calls::CallOutput::Command(command), ..
+                } => Some(command.output.as_str()),
+                ContentBlock::ToolResult { text, .. }
+                | ContentBlock::CallResult {
+                    output: protocol::capability::calls::CallOutput::Words { text }, ..
+                } => Some(text.as_str()),
+                ContentBlock::Text { .. }
+                | ContentBlock::Thinking { .. }
+                | ContentBlock::Call { .. }
+                | ContentBlock::CallResult { .. }
+                | ContentBlock::ToolUse { .. }
+                | ContentBlock::Image { .. }
+                | ContentBlock::Unknown => None,
+            })
             .collect()
     }
 

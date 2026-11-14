@@ -11,7 +11,7 @@ use protocol::prompt::Prompt;
 use tokio::sync::mpsc;
 
 use super::scenario::Failed;
-use super::trial::{Seen, Trial};
+use super::trial::Seen;
 use crate::{AgentOutput, AgentProcess};
 
 /// What [`Driver::interrupt`] marks, for a check to time from.
@@ -163,8 +163,9 @@ impl Driver {
     }
 
     /// Stops whatever still runs, and hands over what the trial saw, and whether stopping went as it should.
-    pub(crate) async fn finish(mut self) -> (Trial, Result<(), Failed>) {
+    #[cfg(unix)]
+    pub(crate) async fn finish(mut self) -> (super::trial::Trial, Result<(), Failed>) {
         let stopped = self.stop().await;
-        (Trial { seen: self.seen, marks: self.marks }, stopped)
+        (super::trial::Trial { seen: self.seen, marks: self.marks }, stopped)
     }
 }

@@ -1,6 +1,5 @@
-//! MCP's messages for the worker's tools, on protocol `2026-07-28`: what each request asks, and its answer. Only that
-//! version, which has no handshake, so each request is answered alone, from what it says. A wait is an MCP task, of
-//! the tasks extension, for a client that offers to take one.
+//! MCP messages for the worker's tools. The 2026 protocol has stateless discovery and tasks; the 2025 protocol
+//! initializes and offers ordinary tools. Both use the same authenticated HTTP endpoint and hub asks.
 
 #[cfg(test)]
 use super::{pull_request, wait};
@@ -12,6 +11,7 @@ use protocol::Build;
 #[cfg(test)]
 mod tests;
 
+mod legacy;
 mod wire;
 #[cfg(test)]
 pub(super) use wire::{Answer, VERSION};
