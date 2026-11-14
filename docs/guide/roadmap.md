@@ -9,7 +9,7 @@ What's built, and what's designed and not built. The order things are built in, 
 | **Mac** | Built, for Apple silicon |
 | **Windows** | A first preview, for amd64 and ARM64. Unsigned |
 | **Linux** | A first preview, as an AppImage for amd64 and ARM64 |
-| **Agents** | Claude, through the Claude CLI |
+| **Agents** | Claude and Codex, through their CLIs; Codex is exercised on macOS |
 | **The hub** | Runs on your machine |
 
 [Install](get-started/install.md) says what each preview needs, and how it differs from the Mac.
@@ -18,7 +18,8 @@ What's built, and what's designed and not built. The order things are built in, 
 
 These are part of the design, and the app is built to take them. None is built.
 
-- **Other agents.** A chat that runs an agent other than Claude.
+- **More agents,** beyond Claude and Codex.
+- **Codex logins managed by the hub,** rather than its worker machine’s native sign-in.
 - **A hub on your own server, or in the cloud,** with workspaces in VMs or sandboxes rather than on your machine.
 - **An iPhone app,** as another way in to the same hub.
 

@@ -89,7 +89,9 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         R::RecordsList => reply(C::Records(world.records())),
         // As the app's own hub describes its agent, even as an older hub, so a screen of one draws the agent as it
         // would, but for what makes a login, which a hub from before hubs kept them doesn't say.
-        R::AgentList => reply(C::Agents(admin::Agents { agents: vec![claude(world)] })),
+        R::AgentList => {
+            reply(C::Agents(admin::Agents { agents: world.agents.clone().unwrap_or_else(|| vec![claude(world)]) }))
+        }
         R::WorkspaceList(workspaces::WorkspaceList { include_archived }) => {
             reply(C::Workspaces(workspaces::Workspaces {
                 workspaces: world

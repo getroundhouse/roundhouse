@@ -24,7 +24,11 @@ impl QuestionPanel {
         let answers: Vec<AnswerSoFar> = self
             .asked
             .iter()
-            .map(|asked| {
+            .enumerate()
+            .map(|(index, asked)| {
+                if self.asks.secret(index) {
+                    return AnswerSoFar::default();
+                }
                 let (picked, other) = asked.choice.kept();
                 let picked = picked.iter().map(|&option| u32::try_from(option).unwrap_or(u32::MAX)).collect();
                 AnswerSoFar { picked, typed: asked.typed(cx), other }
@@ -40,6 +44,9 @@ impl QuestionPanel {
     /// so an Enter meant for what was chosen here can't send what was chosen elsewhere.
     pub fn take_so_far(&mut self, kept: Option<&AnswerDraft>, window: &mut Window, cx: &mut Context<Self>) {
         for q in 0..self.asked.len() {
+            if self.asks.secret(q) {
+                continue;
+            }
             let so_far = kept.and_then(|kept| kept.answers.get(q)).cloned().unwrap_or_default();
             let Some(asked) = self.asked.get_mut(q) else { continue };
             let picked = so_far.picked.iter().filter_map(|&option| usize::try_from(option).ok());
@@ -52,11 +59,7 @@ impl QuestionPanel {
                 continue;
             }
             let input = self.other(q, window, cx);
-            let end = so_far.typed.len();
-            input.update(cx, |input, cx| {
-                input.set_value(so_far.typed, window, cx);
-                input.set_selected_range(end..end, cx);
-            });
+            input.restore(so_far.typed, window, cx);
         }
         cx.notify();
     }

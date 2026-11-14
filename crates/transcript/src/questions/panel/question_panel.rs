@@ -50,7 +50,7 @@ pub(super) struct Asked {
 
 impl Asked {
     pub(super) fn typed(&self, cx: &App) -> String {
-        self.other.as_ref().map_or_default(|other| other.input.read(cx).text().to_string())
+        self.other.as_ref().map_or_default(|other| other.input.text(cx))
     }
 
     pub(super) fn answer(&self, cx: &App) -> Option<QuestionAnswer> {
@@ -59,6 +59,10 @@ impl Asked {
 }
 
 impl QuestionPanel {
+    pub(crate) fn can_type(&self) -> bool {
+        self.asks.can_type(0)
+    }
+
     /// Asks what `asks` says, for the subagent `asked_by` started, or for the agent itself.
     pub(crate) fn new(
         transcript: WeakEntity<Transcript>,

@@ -23,7 +23,7 @@
 
 Give each task a workspace: a git worktree, a branch and chats of its own, with an agent at work in it. Roundhouse shows which agents are working, which have finished and which are waiting on you, and takes each one's work from the first prompt to a merged pull request. The workspace is the unit of delegation, and the branch and pull request are the unit of integration.
 
-**It's early.** It runs on a Mac with Apple silicon, with first previews for Windows and Linux, and its agent is Claude, through the Claude CLI you already have. Other agents, a hub on your own server or in the cloud, and an iPhone app are designed for and not built. [Where it stands](#where-it-stands) has the rest.
+**It's early.** It runs on a Mac with Apple silicon, with first previews for Windows and Linux, and it runs Claude and Codex through their installed CLIs. More agents, a hub on your own server or in the cloud, and an iPhone app are designed for and not built. [Where it stands](#where-it-stands) has the rest.
 
 Roundhouse is a working name, after the round building where a railway services its locomotives, each in its own stall around one turntable. Rail is the theme for naming, and the mark beside every workspace is a roundhouse seen from above.
 
@@ -45,8 +45,8 @@ A web client isn't a target, since nothing depends on one, but nothing rules one
 - **Hand over the work.** Agents have full access, so one doesn't stall on a question while you're with another. When you'd rather see the route first, plan mode has an agent work out a plan, and ask before it changes anything. A question from an agent, or a request to use a tool, takes the composer's place until it's answered.
 - **Steer or queue.** `Enter` while the agent works sends a prompt it reads at its next chance. `Cmd-Enter` queues one for when it finishes. Stopping the agent holds the queue until you say go.
 - **Agents outlive the app.** A hub, in a process of its own, owns every workspace and chat and runs the agents. Quit the app and they keep working, and queued prompts still send. An update restarts the hub at once, and running agents carry on, on the version they started with. On Windows an update still waits for them, since agents there stop with the hub.
-- **Your agent, your login.** It runs the Claude CLI on your Mac, with your login and settings. There's no Roundhouse account, and nothing is sent to us: the app's only request of its own is its check for updates.
-- **See what's left.** A ring beside Send shows how full the agent's context is, and bars beside it show what's left of your plan's limits.
+- **Your agent, your login.** It runs the Claude or Codex CLI on your Mac, with your login. There's no Roundhouse account, and nothing is sent to us: the app's only request of its own is its check for updates.
+- **See what's left.** For agents that report them, a ring beside Send shows how full the context is, and bars show what's left of your plan's limits.
 - **The small things.** Titles come from a small model, so they cost your agent no context. Archiving keeps the branch, and refuses to throw away uncommitted work. The Mac stays awake while agents work, and can sleep once they're only waiting on you.
 - **Native.** Rust throughout: the app, the hub and the command line. The app is drawn on the GPU with [GPUI](https://www.gpui.rs), the toolkit Zed is built on, and has no web view.
 - **At home in a repository set up for Conductor.** It reads `.conductor/settings.toml`, runs its setup and archive scripts, and sets the `CONDUCTOR_*` variables, so such a repository works unchanged.
@@ -70,14 +70,14 @@ You need:
 
 - A Mac with Apple silicon.
 - Git, and a repository to work in.
-- The Claude CLI, `claude`, installed, and logged in unless you add a login in Settings, which agents run under where the machine has none of its own.
+- The CLI for your agent, `claude` or `codex`, installed and signed in. Claude can also use a login added in Settings. Codex uses the sign-in on the worker's machine.
 - GitHub's CLI, `gh`, logged in, for pull requests. Everything else works without it.
 
 Then:
 
 1. [Download Roundhouse](https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-osx-Portable.zip), unzip it, and move it to Applications. It's signed and notarized, and it updates itself as changes land on `main`.
 2. Click `Add project` at the top of the sidebar, and choose a repository.
-3. Click the `+` beside the project, or press `Cmd-N`, say what to work on, and press Return.
+3. Click the `+` beside the project, or press `Cmd-N`, choose Claude or Codex, say what to work on, and press Return.
 4. To review the changes, click a file in the sidebar on the right. To comment, hover a changed line and click its add button.
 5. `Cmd-Shift-P` asks the agent for a pull request. From then on, the top of that sidebar says where it stands, and offers the next thing to do about it.
 
@@ -119,7 +119,7 @@ roundhouse --help
 | | |
 |---|---|
 | **Mac** | Built, for Apple silicon. |
-| **Agents** | Claude, through the Claude CLI. Others are not built. |
+| **Agents** | Claude and Codex, through their CLIs. Codex starts on GPT-6.1 Sol at Low effort; its integration is exercised on macOS. |
 | **Hub** | Runs on your Mac. One on your own server or in the cloud, with workspaces in VMs or sandboxes, is designed for and not built. |
 | **iPhone** | Not built. `mobile-poc/` is a proof of concept. |
 | **Windows** | A first preview. An installer is published from every merge, for [amd64](https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-win-amd64-Setup.exe) and [ARM64](https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-win-arm64-Setup.exe). It's unsigned, so Windows warns about it, and the only checks that run on Windows are a lint and a hub starting and stopping. |
@@ -137,7 +137,7 @@ What's left is on GitHub: [issues](https://github.com/getroundhouse/roundhouse/i
                    │
                 Workers     One per workspace: git, the worktree, scripts and diffs
                    │
-                Agents      Your own Claude CLI
+                Agents      Your own Claude or Codex CLI
 ```
 
 - **A hub owns the state.** Clients only talk to hubs, and only draw what a hub has recorded, so every client shows the same thing, and agents carry on with none open.

@@ -57,7 +57,7 @@ impl Offered {
             return Offered { models, efforts: effort.known().into_iter().collect() };
         };
         let models = agent.models.iter().map(|choice| (choice.model.clone(), choice.label.clone().into())).collect();
-        Offered { models, efforts: agent.efforts.iter().filter_map(|effort| effort.known()).collect() }
+        Offered { models, efforts: agent.efforts_for(model) }
     }
 }
 

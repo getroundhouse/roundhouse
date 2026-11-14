@@ -9,7 +9,7 @@ A question takes the composer's place, so you answer where you'd have typed.
 ![A question from the agent, with choices](../../spec/screens/question.png)
 
 - **Press a number** to choose that option.
-- **Press `0`** to type an answer of your own.
+- **Press `0`** to type an answer of your own, when the question allows it.
 - **Press `Enter`** to go on to the next question without an answer, and to send once there's none.
 
 When the agent asks several at once, a dot for each shows which have an answer, and the left and right arrow keys move between them. You don't have to answer them all: the send arrow works once any has an answer, and leaves the others out.
@@ -22,14 +22,14 @@ What you were typing in the composer isn't lost. It waits behind the question, a
 
 ## An approval
 
-In plan mode, an agent asks before it uses a tool, such as running a command. The request takes the composer's place, as a question does, with the command itself under what the agent says it's for.
+In plan mode, an agent asks before a tool needs permission, such as a command that changes files. The request takes the composer's place, as a question does, with the command itself under what the agent says it's for.
 
 ![A command waiting to be allowed, in a chat that's planning](../../spec/screens/approval.png)
 
 - **Press `1` to allow it, or `2` to deny it,** then `Enter` to send.
-- **Press `0` to say what to do instead.** What you type denies the request, and the agent is told in your words.
+- **Press `0` to say what to do instead, when offered.** What you type denies the request, and the agent is told in your words.
 
-An agent with full access asks only about what its own CLI won't do unasked, such as a command that removes something it can't check. The request says why, and which subagent is asking, when one is. **Skip Claude's safety checks**, in Settings, lets these run without asking.
+An agent with full access asks only about what its own CLI won't do unasked, such as a command that removes something it can't check. The request says why, and which subagent is asking, when one is. **Skip Claude's safety checks**, in Settings, lets Claude's requests run without asking. Codex offers Allow and Deny for a tool's use; it does not offer a written reason for denial.
 
 ![A removal waiting to be allowed, asked about with full access](../../spec/screens/approval-full-access.png)
 
@@ -43,7 +43,7 @@ When the agent has worked out its plan, it asks you to approve it, on a card in 
 
 An agent waiting on you holds still, and so does its mark. Nothing else is held up: other chats and workspaces carry on.
 
-The answer you've started is kept by the hub, so it's there if you quit the app and come back, and wherever else the chat is open.
+An ordinary answer you've started is kept by the hub, so it's there if you quit the app and come back, and wherever else the chat is open. A secret answer is masked, stays only in this window until submitted, and is omitted from the chat log.
 
 ## Afterwards
 

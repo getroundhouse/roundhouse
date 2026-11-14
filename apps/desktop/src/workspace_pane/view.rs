@@ -4,7 +4,7 @@
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::base::{Tab, Tabs};
 use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::menu::{ContextMenuExt as _, PopupMenu};
+use gpui_kit::component::menu::{ContextMenuExt as _, DropdownMenu as _, PopupMenu, PopupMenuItem};
 use gpui_kit::component::{IconName, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
@@ -142,19 +142,36 @@ impl WorkspacePane {
                     .pr_3()
                     .gap_1()
                     .child(Tabs::new("chat-tabs").flex().h_full().min_w_0().overflow_x_scroll().children(tabs))
-                    .child(
-                        Button::new("new-chat")
-                            .hand()
-                            .ghost()
-                            .sized_square(look::ControlSize::Regular)
-                            .icon(IconName::Plus)
-                            .tooltip("New chat")
-                            .on_click(cx.listener(|t, _, _, cx| t.new_chat(cx))),
-                    )
+                    .child(self.new_chat_button(cx))
                     // Kept to the end of the row, so it stays put as chats open and close.
                     .child(div().flex_1())
                     .children(closed),
             )
+    }
+
+    fn new_chat_button(&self, cx: &mut Context<Self>) -> AnyElement {
+        let button = Button::new("new-chat")
+            .hand()
+            .ghost()
+            .sized_square(look::ControlSize::Regular)
+            .icon(IconName::Plus)
+            .tooltip("New chat");
+        let agents: Vec<_> = self.records.snapshot().agents().named().map(|a| (a.kind, a.name.clone())).collect();
+        if agents.len() < 2 {
+            return button.on_click(cx.listener(|t, _, _, cx| t.new_chat(cx))).into_any_element();
+        }
+        let this = cx.weak_entity();
+        button
+            .dropdown_menu_with_anchor(gpui_kit::Anchor::TopLeft, move |mut menu: PopupMenu, _, _| {
+                for (kind, name) in &agents {
+                    let (kind, this) = (*kind, this.clone());
+                    menu = menu.item(PopupMenuItem::new(format!("New {name} chat")).on_click(move |_, _, cx| {
+                        let _ = this.update(cx, |t, cx| t.new_chat_with(kind, cx));
+                    }));
+                }
+                menu
+            })
+            .into_any_element()
     }
 
     /// Over the chat, beside the sidebar of changes. While the sidebar is hidden, it shows the pull request's number and

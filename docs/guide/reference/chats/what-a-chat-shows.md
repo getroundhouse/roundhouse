@@ -14,7 +14,7 @@ A chat shows your prompts, what the agent wrote, and everything it did on the wa
 
 A finished turn ends with how long it took and when, such as `1m, 48s · 2:15 PM`, and a button that copies the agent's final message.
 
-Rest the pointer on that line for the turn's card: which model answered, when the turn started and ended, and how many tokens its requests took, read, written and cached.
+Rest the pointer on that line for the turn's card: the details its agent reports, such as which model answered and how many tokens its requests took, read, written and cached, alongside when the turn started and ended. Codex does not report those token counts through Roundhouse.
 
 ![A finished turn's card](../../../spec/screens/turn-card.png)
 

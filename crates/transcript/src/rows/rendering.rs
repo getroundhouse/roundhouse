@@ -289,7 +289,14 @@ pub(super) fn render_event(
 
 /// A call, its result or thinking, which read as lines of one list.
 fn is_a_line(block: &ContentBlock) -> bool {
-    matches!(block, ContentBlock::ToolUse { .. } | ContentBlock::ToolResult { .. } | ContentBlock::Thinking { .. })
+    matches!(
+        block,
+        ContentBlock::ToolUse { .. }
+            | ContentBlock::Call { .. }
+            | ContentBlock::ToolResult { .. }
+            | ContentBlock::CallResult { .. }
+            | ContentBlock::Thinking { .. }
+    )
 }
 
 /// A line of `text` in `color`, where nothing's found.
@@ -339,16 +346,18 @@ pub(super) fn render_block(
         ContentBlock::Text { text, images } => written(&toggle, Part::Text, text, None, Some(images)),
         ContentBlock::Thinking { text } if text.is_empty() => return None,
         ContentBlock::Thinking { text } => thinking::draw(text, &toggle, cx),
-        ContentBlock::ToolUse { .. } => {
+        ContentBlock::ToolUse { .. } | ContentBlock::Call { .. } => {
             // One that asks the person something is drawn from its approval, which has everything that was asked.
             let recorded = Recorded::of(block).filter(|call| !call.asks_the_person())?;
             tools::call(&toggle, recorded, &drawing.reply, drawing.subagent.as_ref(), cx)
         }
-        ContentBlock::ToolResult { .. } if drawing.with_call => return None,
-        ContentBlock::ToolResult { .. } => tools::result(&toggle, drawing.reply.result()?, cx),
+        ContentBlock::ToolResult { .. } | ContentBlock::CallResult { .. } if drawing.with_call => return None,
+        ContentBlock::ToolResult { .. } | ContentBlock::CallResult { .. } => {
+            tools::result(&toggle, drawing.reply.result()?, cx)
+        }
         ContentBlock::Image { .. } => {
             div().typeset(look::Type::Detail).text_color(look::colors(cx).text_muted).child("Image").into_any_element()
         }
-        ContentBlock::Call { .. } | ContentBlock::CallResult { .. } | ContentBlock::Unknown => return None,
+        ContentBlock::Unknown => return None,
     })
 }

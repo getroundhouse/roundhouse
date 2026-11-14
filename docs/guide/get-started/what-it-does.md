@@ -39,6 +39,8 @@ Everything the app does today, on one page, with where to read more. What's desi
 
 ## Keep long chats in hand
 
+Context, limits, compacting, cache estimates and subagent tabs depend on what the agent reports. Claude provides these; Codex chats show replies, thinking summaries, tool calls, questions and plans.
+
 - **A ring shows how full the context is,** and bars beside it show what's left of your plan's limits. See [Watch context and limits](../guides/watch-context-and-limits.md).
 - **Compact when you choose,** and say what to keep.
 - **A chat says when its prompt cache is about to expire,** since the next prompt after that costs the most.
@@ -51,4 +53,4 @@ Everything the app does today, on one page, with where to read more. What's desi
 - **Nothing typed is lost.** What's in a composer, files and all, is kept until it's sent, and a prompt that can't send comes back to it.
 - **A command line talks to the same hub.** See [The command line](../reference/command-line.md).
 - **A repository set up for Conductor works unchanged.** See [Coming from Conductor](coming-from-conductor.md).
-- **Your agent, your login.** It runs the Claude CLI you already have. There's no Roundhouse account, and nothing is sent to us. See [Where data is kept](../reference/where-data-is-kept.md).
+- **Your agent, your login.** It runs the Claude or Codex CLI you already have. There's no Roundhouse account, and nothing is sent to us. See [Where data is kept](../reference/where-data-is-kept.md).

@@ -4,15 +4,15 @@ Short answers.
 
 ## Which agents does it run?
 
-Claude, through the Claude CLI you already have. Other agents are designed for and not built. The [roadmap](../roadmap.md) says where each stands.
+Claude and Codex, through their installed CLIs. Choose the agent in the new-workspace dialog, or from the chat tabs’ `+`. Codex starts with GPT-6.1 Sol at Low effort.
 
 ## Do I need an account?
 
-No. There's no Roundhouse account. You need the Claude CLI installed, and logged in unless you add a login in [Settings](../reference/settings.md#accounts), which agents run under where the machine has none of its own. You need `gh` logged in for pull requests.
+No. There's no Roundhouse account. You need your agent's CLI installed and signed in. Claude can also use a login added in [Settings](../reference/settings.md#accounts); Codex uses the sign-in on the worker's machine. You need `gh` logged in for pull requests.
 
 ## What does it cost?
 
-Roundhouse is open source, under Apache-2.0. Your agents run on your own Claude login, as they would in a terminal. Roundhouse adds only the small calls that write titles.
+Roundhouse is open source, under Apache-2.0. Your agents run on your own agent login, as they would in a terminal. Roundhouse adds only the small calls that write titles.
 
 ## What is sent to you?
 

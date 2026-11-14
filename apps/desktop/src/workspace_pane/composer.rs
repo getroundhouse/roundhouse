@@ -183,7 +183,11 @@ impl WorkspacePane {
         let this = cx.weak_entity();
         let models = move |picked, _: &mut Window, cx: &mut gpui_kit::App| {
             let _ = this.update(cx, |t, cx| match picked {
-                Picked::Model(model) => t.configure(Some(model), None, cx),
+                Picked::Model(model) => {
+                    let effort =
+                        t.session().and_then(|s| t.agent().map(|agent| agent.effort_when_switching(&model, s.effort)));
+                    t.configure(Some(model), effort, cx);
+                }
                 Picked::Effort(effort) => t.configure(None, Some(effort), cx),
             });
         };

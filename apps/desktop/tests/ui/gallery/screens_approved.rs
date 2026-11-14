@@ -121,6 +121,7 @@ fn every_screen_has_a_name_of_its_own() {
 fn screens() -> impl Iterator<Item = &'static steps::Screen> {
     SCREENS
         .iter()
+        .chain(super::codex_screens::SCREENS)
         .chain(context_screens::SCREENS)
         .chain(approval_chats::SCREENS)
         .chain(DIFF_SCREENS)

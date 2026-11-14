@@ -94,7 +94,9 @@ impl Transcript {
 
     /// Follows the session's record.
     pub fn set_session(&mut self, session: &Session, cx: &mut Context<Self>) {
+        self.model.borrow_mut().claims.clone_from(&session.agent_capabilities);
         self.follow_approvals(session, cx);
+        self.follow_question(cx);
         let at_work = AtWork::of(session);
         let replies = {
             let mut m = self.model.borrow_mut();

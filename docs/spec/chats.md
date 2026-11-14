@@ -434,6 +434,17 @@ Every call is drawn the same way, as `look.md` says, and each kind fills in what
 
 ## The model and plan mode
 
+- **A workspace can have Claude and Codex chats.** Choose the agent in the new-workspace dialog or from the chat tabs' `+`; a chat keeps the kind it was created with. When only one kind is offered, the tabs' `+` starts its chat directly. The keyboard shortcut starts another of the current chat's kind. *Unconfirmed.*
+- **Codex starts on GPT-6.1 Sol at Low effort, with the worker machine's native Codex sign-in.** Roundhouse leaves those credentials with Codex. Its model, mode and effort changes apply on the next turn. Its completed plan waits for approval even when Codex returns it as ordinary final text, so implementation cannot follow an unapproved plan. *Unconfirmed.*
+  ![Choose the agent for a new chat](screens/new-chat-agents.png)
+
+- **The Codex model picker offers the compiled native catalog and each model’s supported efforts, including Ultra where supported.** Switching to a model that cannot use the current effort selects that model’s default. The catalog is a snapshot; refreshing it ships in a Roundhouse update. *Unconfirmed.*
+
+  ![Codex models and the selected model’s effort levels](screens/codex-models.png)
+
+- **A tool approval offers a written denial only when its run claims that it can take one.** Otherwise the choices are Allow and Deny. *Unconfirmed.*
+- **A secret answer is masked and never kept in shared drafts or the chat log.** It goes to the agent only when submitted. A question that forbids typed answers offers only its choices. *Unconfirmed.*
+
 - **Every agent has full access, and never asks before using a tool, except in plan mode.** Agents run side by side, and one that stopped to ask before each step would hold up its work until someone came back to it. An agent still asks about what its own CLI won't do unasked in any mode, such as Claude's check for a removal it can't rule out as dangerous, and says why, unless Skip Claude's safety checks, in `settings.md`, has the hub allow it for you. *Unconfirmed:* what it still asks about, and the setting.
 - **`Shift-Tab` in the composer turns plan mode on and off, and so does Plan mode in the menu the composer's `+` opens,** with no menu of modes. In plan mode the agent works out a plan and asks before changing anything, and approving its plan goes back to full access.
 
@@ -458,19 +469,21 @@ Every call is drawn the same way, as `look.md` says, and each kind fills in what
   ![The composer in plan mode](screens/plan-mode.png)
 
 - **A chat that's planning when its agent stops is still planning when the agent comes back.** Otherwise an agent that restarted would make changes nobody had approved. *Unconfirmed.*
-- **A new chat keeps the model and its effort, but not plan mode,** which belongs to the task at hand. *Unconfirmed.*
+- **A new chat of the same agent keeps the model and its effort, but not plan mode,** which belongs to the task at hand. *Unconfirmed.*
 - **Every chat names its model and its effort, and never leaves either to the agent's CLI,** so the chat decides which model and level the agent runs, rather than the user's own Claude settings or the account. An alias such as `opus` is still the CLI's to resolve to a model. There's no default model to choose.
-- **The model picker offers aliases:** `fable`, `opus`, `sonnet` and `haiku`. They follow the CLI's newest of each without a release here. *Unconfirmed.*
+- **For Claude, the model picker offers aliases:** `fable`, `opus`, `sonnet` and `haiku`. They follow the CLI's newest of each without a release here. *Unconfirmed.*
 - **The model and its effort are one picker,** since how hard the agent thinks is part of choosing what thinks. It shows the model's name, then the effort in muted text, such as `Opus Extra high`, and its menu lists the models, then the levels: Low, Medium, High, Extra high and Max, which are the CLI's own. *Unconfirmed.*
 
   **The model picker's menu, open, in a chat at Extra high.** *Unconfirmed.*
 
   ![The model picker's menu](screens/model-picker.png)
 
-- **A chat nobody has chosen for runs Opus at Extra high,** the owner's usual choice. *Unconfirmed.*
+- **A Claude chat nobody has chosen for runs Opus at Extra high,** the owner's usual choice. *Unconfirmed.*
 - **A new level reaches an agent that's already working without stopping it,** and shows once the agent has said it's using it, so the picker is never ahead of the agent. *Unconfirmed.*
 
 ## The context and the account
+
+- **An agent reports only what its adapter can establish.** Codex does not supply context, cache, token, cost or account-limit reports through this adapter, and their indicators stay absent. *Unconfirmed.*
 
 - **A ring beside Send shows how full the agent's context is,** filled clockwise from the top. It shows once the agent has said, so a new chat has none until its first turn starts. It follows the agent as it works: the agent says when a turn starts, a few times a minute during one, and when it ends. It's in muted text's colour however full it is, since amber and red already mean something, and it doesn't move by itself, since only a working agent moves anything. *Unconfirmed.*
 - **Resting the pointer on the ring shows a card above it,** with its right edge on the edge of the ring's place in the bar, so it covers neither the ring nor Send. It goes a third of a second after the pointer leaves, so the pointer can cross to its button. *Unconfirmed.*

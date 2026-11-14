@@ -8,7 +8,7 @@ You need:
 
 - **A Mac with Apple silicon.** For the Windows and Linux previews, see [Install](install.md).
 - **Git, and a repository to work in.**
-- **The Claude CLI, `claude`, installed, and logged in** unless you add a login in [Settings](../reference/settings.md#accounts), which agents run under where the machine has none of its own.
+- **Your agent's CLI, `claude` or `codex`, installed and signed in.** Run it once in a terminal to check. Claude can also use a login added in [Settings](../reference/settings.md#accounts). Codex uses its own sign-in on the machine running the workspace.
 - **GitHub's CLI, `gh`, logged in,** for the pull request. Everything before that works without it.
 
 > [!WARNING]

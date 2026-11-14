@@ -2,6 +2,8 @@
 
 What fills up or runs out as a chat goes on, where each shows, and what each costs.
 
+Codex does not supply context usage, account limits or cache estimates through this integration, so those indicators stay absent. `Compact now` is offered only for an agent that supports it.
+
 ## The context's ring
 
 A ring beside Send shows how full the agent's context is, filled clockwise from the top. It shows once the agent has said, so a new chat has none until its first turn starts.

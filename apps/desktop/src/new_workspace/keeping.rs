@@ -61,7 +61,7 @@ impl NewWorkspaceDialog {
     pub(super) fn to_keep(&self, cx: &App) -> NewWorkspaceDraftToKeep {
         let coming_back = self.keeping.restoring.iter().map(|file| file.id.clone());
         NewWorkspaceDraftToKeep {
-            agent: Some(self.offer.agents.for_new_chat()),
+            agent: self.chosen_agent,
             repo_id: Some(self.repo.clone()),
             text: self.prompt.read(cx).text().to_string(),
             files: coming_back.chain(self.attached.ids()).collect(),
@@ -78,7 +78,8 @@ impl NewWorkspaceDialog {
         let (files, there): (HashSet<_>, HashSet<_>) =
             (here.files.into_iter().collect(), kept.files.iter().map(|file| file.id.clone()).collect());
         let repo = kept.repo_id.as_ref().filter(|repo| self.offers(repo));
-        here.text == kept.text
+        here.agent == kept.agent
+            && here.text == kept.text
             && files == there
             && repo.is_none_or(|repo| *repo == self.repo)
             && kept.model.as_ref().is_none_or(|model| Some(model) == self.model.as_ref())
@@ -108,6 +109,11 @@ impl NewWorkspaceDialog {
         let kept = self.keeping.kept.clone();
         if let Some(repo) = kept.repo_id.filter(|repo| self.offers(repo)) {
             self.repo = repo;
+        }
+        if kept.agent != self.chosen_agent {
+            self.chosen_agent = kept.agent.filter(|agent| self.offer.agents.of(*agent).is_some());
+            self.model = None;
+            self.effort = None;
         }
         if let Some(model) = kept.model {
             self.model = Some(model);

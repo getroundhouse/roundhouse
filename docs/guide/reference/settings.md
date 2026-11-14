@@ -42,7 +42,7 @@ On Windows and Linux no sound plays.
 
 ## Accounts
 
-The logins your agents run under: those Claude Code already had where agents ran, and those you've given the hub.
+The logins your agents run under: native logins found where agents ran, and Claude logins you've given the hub. Codex uses `codex login` on the worker's machine. Its credentials stay with Codex; this page doesn't add or move them.
 
 ![Accounts, with Claude Code's own login and four you've added](../../spec/screens/settings-accounts.png)
 

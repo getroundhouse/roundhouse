@@ -211,21 +211,22 @@ impl BlockAround {
         let all = opening == Opening::All;
         let open = all || m.folds.is_open(&key, fold);
         // Drawn with its call when the call is close enough before it to have found it.
-        let with_call = matches!(block, ContentBlock::ToolResult { tool_use_id, .. }
+        let with_call = matches!(block, ContentBlock::ToolResult { tool_use_id, .. } | ContentBlock::CallResult { tool_use_id, .. }
             if nearby::call_before(log, seq, tool_use_id, NEAR).is_some());
         let (reply, subagent) = match block {
-            ContentBlock::ToolUse { id, .. } => {
+            ContentBlock::ToolUse { id, .. } | ContentBlock::Call { id, .. } => {
                 let hands_off = Recorded::of(block).is_some_and(|call| call.hands_off());
                 let subagent = hands_off.then(|| Subagent::read(log, m, seq, id, open, opening));
                 (Reply::to(log, m, seq, id), subagent)
             }
-            ContentBlock::ToolResult { .. } if !with_call => (Reply::of(block, m), None),
+            ContentBlock::ToolResult { .. } | ContentBlock::CallResult { .. } if !with_call => {
+                (Reply::of(block, m), None)
+            }
             ContentBlock::ToolResult { .. }
+            | ContentBlock::CallResult { .. }
             | ContentBlock::Text { .. }
             | ContentBlock::Thinking { .. }
             | ContentBlock::Image { .. }
-            | ContentBlock::Call { .. }
-            | ContentBlock::CallResult { .. }
             | ContentBlock::Unknown => (Reply::Nothing, None),
         };
         Self { key, fold, open, reply, subagent, with_call }

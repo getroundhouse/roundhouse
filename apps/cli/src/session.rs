@@ -14,10 +14,10 @@ use crate::workspace::find_workspace;
 
 pub(crate) fn session_command(client: &Client, command: SessionCmd) -> anyhow::Result<()> {
     match command {
-        SessionCmd::New { workspace, model, permission_mode, effort } => {
+        SessionCmd::New { workspace, agent, model, permission_mode, effort } => {
             let workspace = find_workspace(client, &workspace)?;
             let options = SessionSettingsChange { model, permission_mode, effort };
-            let agent = Agents::read(client)?.for_new_chat();
+            let agent = agent.unwrap_or(Agents::read(client)?.for_new_chat());
             let session = client.session_create(&workspace.id, agent, options, Some(client_core::new_request_id()))?;
             println!("{}", session.id);
         }

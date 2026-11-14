@@ -42,7 +42,7 @@ While it's waiting on GitHub or on someone else, such as checks running or a rev
 
 ## Let the agent wait for you
 
-Ask the agent to wait on the PR numbers you want. It can wait for required checks, all checks currently reported, or merging. A stack's lower PRs are included automatically, so a conflict below your PR wakes the agent while CI is still running. New pushed commits are followed as they arrive.
+Ask Claude to wait on the PR numbers you want. It can wait for required checks, all checks currently reported, or merging. A stack's lower PRs are included automatically, so a conflict below your PR wakes the agent while CI is still running. New pushed commits are followed as they arrive.
 
 Each wait has its own line and `Stop` button in the chat. You can have several at once. Stopping one leaves the others waiting; closing the chat or archiving the workspace stops them all.
 
@@ -51,6 +51,8 @@ Each wait has its own line and `Stop` button in the chat. You can have several a
 The hub keeps the waits, so they go on with the app closed, and through an update. You can ask for a time limit; without one, a wait continues until it reaches its condition or needs attention.
 
 If GitHub temporarily cannot be read, the wait keeps its last observation and says what failed. A changed dependency stack ends the wait so the agent can reconsider what to watch.
+
+Codex can use Roundhouse's tool to read its pull request's status; it does not offer these background waits.
 
 ## Watch them all
 

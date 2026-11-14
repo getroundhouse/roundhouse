@@ -31,6 +31,7 @@ pub(crate) struct Model {
     /// What the agent the chat runs is called, as the hub describes it. `None` until it has, and from a hub that
     /// doesn't.
     pub agent: Option<SharedString>,
+    pub claims: Option<protocol::model::RunCapabilities>,
     pub folds: Folds,
     /// The images prompts carry, by attachment, from the first time a row drew each.
     pub pictures: HashMap<AttachmentId, Picture>,
@@ -64,6 +65,7 @@ impl Model {
     pub(super) fn with(at_work: AtWork) -> Self {
         Model {
             agent: None,
+            claims: None,
             folds: Folds::default(),
             pictures: HashMap::new(),
             subagent_calls: RefCell::default(),
@@ -155,7 +157,11 @@ impl Transcript {
         let linked = LinkedImages::new(client.clone(), session.id.clone(), cx.weak_entity());
         let ticking = tick(&at_work, cx);
         let approvals = RecordedApprovals::of(session);
-        let model = Rc::new(RefCell::new(Model { approvals, ..Model::with(at_work) }));
+        let model = Rc::new(RefCell::new(Model {
+            approvals,
+            claims: session.agent_capabilities.clone(),
+            ..Model::with(at_work)
+        }));
         let signals = open.changed().clone();
         let following = cx.spawn(async move |this, cx| {
             while signals.recv_async().await.is_ok() {

@@ -10,7 +10,7 @@ The app doesn't run your agents. A hub does, in a process of its own, and the ap
              │
           Workers     One per workspace: git, the worktree, scripts and diffs
              │
-          Agents      Your own Claude CLI
+          Agents      Your own Claude or Codex CLI
 ```
 
 The hub starts by itself when the app, or the command line, needs it. It runs on your machine.
@@ -19,13 +19,13 @@ The hub starts by itself when the app, or the command line, needs it. It runs on
 
 - **Agents outlive the app.** Quit the app, and agents keep working. Open it again, and each chat is where its agent has got to.
 - **The queue sends without you.** A prompt queued for when the agent finishes is the hub's, so it sends with the app closed.
-- **Nothing typed is lost.** The hub keeps what's in each composer, files and all, and an answer you were typing to a question. It's there when the app opens again.
+- **Nothing typed is lost.** The hub keeps what's in each composer, files and all, and ordinary answers you were typing to questions. Secret answers stay only in the window until submitted. It's there when the app opens again.
 - **Every client shows the same thing.** What's read, what's queued and where each pull request stands are the hub's record, so the app and [the command line](../reference/command-line.md) agree.
 - **An update doesn't stop anything.** The app restarts the hub on the new version, and running agents carry on. [Updates](../reference/updates.md) says how.
 
 ## Workers
 
-Each workspace has a worker, a process of its own that does the work there: git, the worktree, setup scripts and diffs. The worker runs the agent, which is the Claude CLI you already have, with its machine's own login, or with one you've added in [Settings](../reference/settings.md#accounts) where the machine has none.
+Each workspace has a worker, a process of its own that does the work there: git, the worktree, setup scripts and diffs. The worker runs the installed Claude or Codex CLI with its machine's native sign-in. Claude can also use a login added in [Settings](../reference/settings.md#accounts) where the machine has none. Codex credentials stay with Codex on that machine.
 
 ## Where it runs
 

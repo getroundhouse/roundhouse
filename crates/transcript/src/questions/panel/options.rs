@@ -1,11 +1,11 @@
 //! The question's options, one numbered row each, and the row under them for typing another answer. A chosen row is
 //! lit, and where several can be chosen, it has a check.
 
-use gpui_kit::component::input::{Escape, Textarea, TextareaState};
+use gpui_kit::component::input::{Escape, Input, Textarea};
 use gpui_kit::component::{Icon, IconName, Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, Context, ElementId, Entity, Hsla, InteractiveElement as _, IntoElement, ParentElement,
+    AnyElement, Context, ElementId, Hsla, InteractiveElement as _, IntoElement, ParentElement,
     StatefulInteractiveElement as _, Styled, TestSupportExt as _, div, px,
 };
 use look::{Hand as _, Shaped as _, Typeset as _};
@@ -28,7 +28,7 @@ struct Colors {
 pub(super) fn list(
     panel: &QuestionPanel,
     question: &Question,
-    other: &Entity<TextareaState>,
+    other: &super::typing::Field,
     cx: &mut Context<QuestionPanel>,
 ) -> AnyElement {
     let app = look::colors(cx);
@@ -54,7 +54,9 @@ pub(super) fn list(
         .overflow_y_scroll()
         .gap_0p5()
         .children(rows)
-        .child(other_row(other, choice.other(), question.multiple, colors, cx))
+        .when(panel.asks.can_type(panel.showing), |d| {
+            d.child(other_row(other, choice.other(), question.multiple, colors, cx))
+        })
         .into_any_element()
 }
 
@@ -130,7 +132,7 @@ fn option_row(
 
 /// Clicking anywhere on it but its checkbox goes to its text, and Escape comes back out, so the number keys choose again.
 fn other_row(
-    other: &Entity<TextareaState>,
+    other: &super::typing::Field,
     chosen: bool,
     multiple: bool,
     colors: Colors,
@@ -163,13 +165,14 @@ fn other_row(
         }))
         .child(number(0, colors.muted))
         // Its smallest size has the least padding, which leaves its text where the options' labels start.
-        .child(
-            div()
-                .flex_1()
-                .min_w_0()
-                .ml(px(-TYPING_INSET))
-                .child(Textarea::new(other).appearance(false).xsmall().typeset(look::Type::Body)),
-        )
+        .child(div().flex_1().min_w_0().ml(px(-TYPING_INSET)).child(match other {
+            super::typing::Field::Text(input) => {
+                Textarea::new(input).appearance(false).xsmall().typeset(look::Type::Body).into_any_element()
+            }
+            super::typing::Field::Secret(input) => {
+                Input::new(input).appearance(false).xsmall().typeset(look::Type::Body).into_any_element()
+            }
+        }))
         .when(multiple, |d| d.child(checkbox))
         .test_support()
         .into_any_element()
