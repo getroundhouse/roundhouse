@@ -291,11 +291,15 @@ fn a_prompt_after_a_subagent_s_work_is_in_the_outline_at_its_row(cx: &mut TestAp
 fn a_subagent_s_call_opened_while_it_works_makes_room_for_its_report(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = in_a_new_workspace(cx, &stack);
-    ui.input("agent:Look around; tool:echo after; say:done");
+    let done = stack.dir.path().join("done");
+    ui.input(&format!("agent-until:{}:Look around; tool:echo after; say:done", done.display()));
     ui.press("enter");
-    // The subagent works for a second before its call and its report, so its call is open, and measured, first.
-    ui.wait("the subagent's call", |ui| ui.labelled(AGENT_LINE).len() == 1);
-    ui.click_labelled(AGENT_LINE, 0);
+    // The background line has the same label. Open the only call before releasing the subagent's work.
+    ui.wait("the subagent's call", |ui| ui.shown("call/").len() == 1);
+    let call = ui.shown("call/").remove(0);
+    ui.click(call);
+    ui.wait("the call to open", |ui| ui.labelled(AGENT_LINE).iter().any(|line| line.expanded() == Some(true)));
+    std::fs::write(&done, "").unwrap();
     ui.wait_idle_with("the turn to finish", |text| text.contains("done"));
 
     ui.wait("its report", |ui| ui.shown("report/").len() == 1);
