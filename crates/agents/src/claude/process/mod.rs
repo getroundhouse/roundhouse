@@ -11,24 +11,28 @@ use protocol::worker::AgentSpec;
 use std::path::PathBuf;
 
 mod asking;
+mod capture;
 mod compact;
 mod context;
 mod launch;
 mod output;
 mod plan;
 mod prompt;
+mod recovery;
 mod run_files;
+mod startup;
 mod supervise;
 #[cfg(test)]
 mod tests;
 mod tools;
 mod usage;
+mod verified_launch;
 
-use launch::launch;
 pub use launch::{SCRUBBED_ENV, build_args};
 pub(super) use launch::{command, record, resolve_binary, start};
 pub(super) use prompt::{image_block, user_line_saying};
 use supervise::supervise;
+use verified_launch::launch;
 
 mod running;
 

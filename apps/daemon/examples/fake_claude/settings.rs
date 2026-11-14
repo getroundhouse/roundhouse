@@ -34,6 +34,9 @@ pub(crate) fn current_effort() -> String {
 /// `apply_flag_settings` answers success whatever it's given, as the real CLI does, so only `get_settings` says
 /// whether an effort took.
 pub(crate) fn apply_flag_settings(settings: &Value) {
+    if settings.get("env").is_some() {
+        *LOGIN_SETTINGS.lock() = Some(settings.clone());
+    }
     let level = settings["effortLevel"].as_str().filter(|level| EFFORTS.contains(level));
     if let Some(level) = level.filter(|_| !*KEEPS_EFFORT.lock()) {
         *LIVE_EFFORT.lock() = Some(level.to_string());
@@ -96,4 +99,20 @@ pub(crate) fn start_as_launched(args: &[String]) {
             eprintln!("Warning: Unknown --effort value '{level}' — ignoring it and using the default effort.");
         }
     }
+}
+
+/// The initialization fields observed on the real CLI with a setup-token login.
+pub(crate) fn login_identity() -> Value {
+    json!({"account":{"tokenSource":"CLAUDE_CODE_OAUTH_TOKEN","apiProvider":"firstParty"}})
+}
+
+/// A project can set credentials after process environment removal, as the real CLI can.
+static LOGIN_SETTINGS: Mutex<Option<Value>> = Mutex::new(None);
+
+pub(crate) fn effective() -> Value {
+    if let Some(settings) = LOGIN_SETTINGS.lock().clone() {
+        return settings;
+    }
+    let path = std::path::Path::new(".claude/settings.json");
+    std::fs::read_to_string(path).ok().map_or_else(|| json!({}), |text| serde_json::from_str(&text).unwrap())
 }

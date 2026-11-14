@@ -30,8 +30,8 @@ pub struct AgentSpec {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tools_token: Option<ToolsToken>,
     /// The login the hub holds for the account the agent runs under, which the agent's adapter gives its CLI, and the
-    /// worker keeps only as long as the agent. `None` runs it under this machine's own login. A worker from before
-    /// this ignores it, and runs the agent under its machine's own.
+    /// worker keeps only as long as the agent. `None` runs it under this machine's own login. Requests with a
+    /// login use `agent_start_under_login`, which an older worker refuses before starting anything.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub login: Option<AgentLogin>,
 }
@@ -40,7 +40,7 @@ impl Request for AgentSpec {
     type Reply = AgentStarted;
 
     fn into_request(self) -> WorkerRequest {
-        WorkerRequest::AgentStart(self)
+        if self.login.is_some() { WorkerRequest::AgentStartUnderLogin(self) } else { WorkerRequest::AgentStart(self) }
     }
 }
 
@@ -230,5 +230,33 @@ mod tests {
         assert!(sent.contains(r#""login":{"token":"a-made-up-token"}"#), "{sent}");
         assert_eq!(serde_json::from_str::<WorkerRequest>(&sent).unwrap(), with_login);
         assert!(!format!("{with_login:?}").contains("made-up"));
+    }
+    #[test]
+    fn an_older_worker_refuses_a_required_login_instead_of_starting_under_ambient_credentials() {
+        #[derive(Deserialize, Debug, PartialEq)]
+        #[serde(tag = "method", rename_all = "snake_case")]
+        enum OlderWorker {
+            AgentStart,
+            TitleFor,
+            #[serde(other)]
+            Unknown,
+        }
+        let login = AgentLogin { token: LoginToken::new("made-up") };
+        let requests = [
+            launch(Some(login.clone())),
+            super::super::TitleFor {
+                agent: AgentKind::Claude,
+                prompt: "title".into(),
+                images: vec![],
+                login: Some(login),
+            }
+            .into_request(),
+        ];
+        for request in requests {
+            let wire = serde_json::to_string(&request).unwrap();
+            assert_eq!(serde_json::from_str::<OlderWorker>(&wire).unwrap(), OlderWorker::Unknown);
+        }
+        let wire = serde_json::to_string(&launch(None)).unwrap();
+        assert_eq!(serde_json::from_str::<OlderWorker>(&wire).unwrap(), OlderWorker::AgentStart);
     }
 }

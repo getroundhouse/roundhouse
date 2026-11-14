@@ -103,6 +103,8 @@ pub enum WorkerRequest {
     FileOpenAt(FileOpenAt),
     FilePages(FilePages),
     AgentStart(AgentSpec),
+    /// A held login must be enforced; older workers refuse this method.
+    AgentStartUnderLogin(AgentSpec),
     AgentControl(AgentControl),
     AgentPrompt(AgentPrompt),
     AgentApproval(AgentApproval),
@@ -111,6 +113,8 @@ pub enum WorkerRequest {
     AgentConfigure(AgentConfigure),
     AgentStop(AgentStop),
     TitleFor(TitleFor),
+    /// As `AgentStartUnderLogin`, for the title call.
+    TitleUnderLogin(TitleFor),
     AccountFor(AccountFor),
     ServeTools(ServeTools),
     /// Any request this build doesn't know, from a hub newer than it. A worker answers with

@@ -295,7 +295,9 @@ pub(super) async fn handle(
                 Err(e) => Err(e.into()),
             }
         }
-        WorkerRequest::AgentStart(spec) => start_agent(state, forwarders, spec).await,
+        WorkerRequest::AgentStart(spec) | WorkerRequest::AgentStartUnderLogin(spec) => {
+            start_agent(state, forwarders, spec).await
+        }
         WorkerRequest::AgentPrompt(AgentPrompt { session_id, seq, prompt }) => {
             let agent = state.live_agent(&session_id);
             Ok(delivery(match agent {
@@ -328,7 +330,8 @@ pub(super) async fn handle(
             configure_agent(state, &session_id, &options).await
         }
         WorkerRequest::AgentStop(AgentStop { session_id }) => stop_agent(state, &session_id).await,
-        WorkerRequest::TitleFor(TitleFor { agent, prompt, images, login }) => {
+        WorkerRequest::TitleFor(TitleFor { agent, prompt, images, login })
+        | WorkerRequest::TitleUnderLogin(TitleFor { agent, prompt, images, login }) => {
             title_for(state, agent, &Prompt::carrying(prompt, images), login).await
         }
         WorkerRequest::AccountFor(AccountFor { agent, login }) => account_for(state, agent, login).await,

@@ -13,6 +13,8 @@ use tokio::task::JoinHandle;
 use crate::codex::running::{CodexProcess, start_conversation};
 use crate::{AgentOptions, AgentOutput};
 
+pub(super) static PROGRAM: crate::testing::Example = crate::testing::Example::new("native_standin");
+
 pub(super) struct Harness {
     pub(super) room: tempfile::TempDir,
     pub(super) rx: mpsc::Receiver<AgentOutput>,
@@ -22,7 +24,7 @@ pub(super) struct Harness {
 impl Harness {
     pub(super) fn new(rules: &Value) -> Self {
         let room = tempfile::tempdir().unwrap();
-        let bin = super::program::program();
+        let bin = PROGRAM.path();
         std::fs::write(room.path().join("native-script.json"), serde_json::to_vec(rules).unwrap()).unwrap();
         let mut settings = crate::codex::description().defaults;
         settings.model = protocol::model::ModelName::named("gpt-6-luna");

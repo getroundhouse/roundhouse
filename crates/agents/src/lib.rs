@@ -15,6 +15,8 @@ mod output;
 mod registry;
 mod stdio;
 mod tap;
+#[cfg(any(test, feature = "testing"))]
+pub mod testing;
 
 pub use error::{AgentError, CallFailed, NoAccount, NoTitle};
 pub use interface::AgentProcess;

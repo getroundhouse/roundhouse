@@ -10,6 +10,7 @@ mod description;
 mod effort;
 mod kinds;
 mod login;
+mod login_check;
 mod mode;
 mod normalize;
 mod one_off;

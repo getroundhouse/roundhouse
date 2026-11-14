@@ -40,7 +40,7 @@ async fn cancelling_an_account_call_stops_its_native_process() {
     let room = h.room.path().to_owned();
     let pid_path = room.join("account-pid");
     let options = AgentOptions {
-        binary: BinaryLookup { explicit: Some(super::program::program()), ..Default::default() },
+        binary: BinaryLookup { explicit: Some(super::harness::PROGRAM.path()), ..Default::default() },
         pid_file: Some(pid_path.clone()),
         ..Default::default()
     };

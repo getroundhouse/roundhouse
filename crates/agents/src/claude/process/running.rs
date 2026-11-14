@@ -1,10 +1,11 @@
 use super::super::approvals::Waiting;
-use super::{compact, context, launch, plan, prompt, run_files, supervise, tap, usage};
+use super::launch::resolve_binary;
+use super::startup::begin;
+use super::{compact, context, prompt, tap, usage};
 use crate::{AgentError, AgentOptions, AgentOutput, AgentProcess};
 use async_trait::async_trait;
 use compact::{AskedToCompact, ToCompact};
 use context::ContextWatch;
-use launch::resolve_binary;
 use parking_lot::Mutex;
 use process::{Signal, signal_group};
 use prompt::user_message;
@@ -13,7 +14,6 @@ use protocol::event::ApprovalDecision;
 use protocol::model::{ApprovalId, Effort, Seq, SessionSettingsChange};
 use protocol::prompt::Prompt;
 use protocol::worker::AgentSpec;
-use run_files::RunFiles;
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -70,6 +70,7 @@ pub(super) struct Shared {
     /// Where asking what's left of the account's limits has got to.
     pub(super) usage: Mutex<UsageWatch>,
     pub(super) stop_requested: AtomicBool,
+    pub(super) stopping: tokio::sync::Notify,
     /// Set from asking a launch into plan mode until the CLI next reports its mode, starts a turn or refuses. `plan` says
     /// what each of those means.
     pub(super) entering_plan: AtomicBool,
@@ -309,6 +310,7 @@ impl AgentProcess for ClaudeProcess {
 
     async fn stop(&self) {
         self.shared.stop_requested.store(true, Ordering::SeqCst);
+        self.shared.stopping.notify_one();
         let mut exited = self.shared.exited.subscribe();
         // Already reaped, so its PID may belong to something else by now.
         if *exited.borrow() {
@@ -316,13 +318,17 @@ impl AgentProcess for ClaudeProcess {
         }
         // SIGTERM rather than closing stdin, because on EOF the CLI finishes the whole turn first.
         // It stops its tools itself on SIGTERM. They run in their own groups, out of our reach.
-        signal_group(self.pid(), Signal::Terminate);
+        if self.pid() != 0 {
+            signal_group(self.pid(), Signal::Terminate);
+        }
         let wait = exited.wait_for(|done| *done);
         if tokio::time::timeout(STOP_GRACE, wait).await.is_ok() {
             return;
         }
         warn!("agent {} ignored SIGTERM, sending SIGKILL", self.pid());
-        signal_group(self.pid(), Signal::Kill);
+        if self.pid() != 0 {
+            signal_group(self.pid(), Signal::Kill);
+        }
         let _ = exited.wait_for(|done| *done).await;
     }
 }
@@ -338,52 +344,4 @@ pub async fn spawn_tapped(
     tap: Tap,
 ) -> Result<Arc<dyn AgentProcess>, AgentError> {
     begin(bin, spec, output, options, Some(tap)).await
-}
-
-async fn begin(
-    bin: PathBuf,
-    spec: AgentSpec,
-    output: mpsc::Sender<AgentOutput>,
-    options: AgentOptions,
-    tap: Option<Tap>,
-) -> Result<Arc<dyn AgentProcess>, AgentError> {
-    let files = RunFiles::of(&options);
-    let launched = launch(
-        &bin,
-        &spec,
-        matches!(spec.start, protocol::capability::conversation::Start::Resume { .. }),
-        &options,
-        tap.as_ref(),
-    )?;
-    let shared = Arc::new(Shared {
-        stdin: tokio::sync::Mutex::new(Some(launched.stdin)),
-        pid: AtomicU32::new(launched.pid),
-        confirmed: AtomicBool::new(false),
-        held_output: Mutex::new(Vec::new()),
-        unconfirmed_prompts: Mutex::new(Vec::new()),
-        untaken: Mutex::new(HashMap::new()),
-        compacts: Mutex::new(AskedToCompact::default()),
-        waiting: Mutex::new(HashMap::new()),
-        pending_controls: Mutex::new(HashMap::new()),
-        context: Mutex::new(ContextWatch::default()),
-        usage: Mutex::new(UsageWatch::default()),
-        stop_requested: AtomicBool::new(false),
-        entering_plan: AtomicBool::new(false),
-        gone: AtomicBool::new(false),
-        exited: tokio::sync::watch::channel(false).0,
-        tap,
-    });
-    plan::start_in(spec.settings.permission_mode, &shared, &mut *shared.stdin.lock().await, &output).await;
-    tokio::spawn(supervise(
-        bin,
-        spec,
-        options,
-        files,
-        launched.child,
-        launched.stdout,
-        launched.stderr,
-        shared.clone(),
-        output,
-    ));
-    Ok(Arc::new(ClaudeProcess { shared }))
 }

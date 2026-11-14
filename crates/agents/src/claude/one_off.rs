@@ -6,7 +6,7 @@ use std::process::Output;
 use std::time::Duration;
 
 use process::{Signal, signal_group};
-use tokio::io::AsyncWriteExt as _;
+use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
 
 use protocol::model::AgentLogin;
 
@@ -27,33 +27,61 @@ pub(super) struct OneOff<'a> {
     pub(super) pid_file: Option<PathBuf>,
     /// The login to run it under, rather than this machine's own.
     pub(super) login: Option<&'a AgentLogin>,
+    /// Stream-json calls verify their actual login before sending their prompt.
+    pub(super) verify_login: bool,
 }
 
 /// Runs the call and answers with what it printed and how it exited, which is for the caller to judge. Dropping the
 /// future stops the call and everything it started.
 pub(super) async fn run(call: OneOff<'_>) -> Result<Output, AgentError> {
     let mut command = command(call.bin, call.cwd);
-    command.args(call.args);
+    command.args(&call.args);
     let mut child = start(&mut command, call.bin, call.cwd, call.login)?;
-    let running = Running::new(child.id().unwrap_or_default(), call.pid_file);
+    let running = Running::new(child.id().unwrap_or_default(), call.pid_file.clone());
+    let output = tokio::time::timeout(call.timeout, collect(&mut child, &call))
+        .await
+        .map_err(|_| CallFailed::TimedOut(call.timeout))??;
+    running.finished();
+    Ok(output)
+}
+
+/// Drain both pipes while writing, so an early burst cannot block a prompt or its login check.
+async fn collect(child: &mut tokio::process::Child, call: &OneOff<'_>) -> Result<Output, AgentError> {
     let mut stdin = child.stdin.take().ok_or_else(|| AgentError::NoPipes { bin: call.bin.display().to_string() })?;
-    // Written while what it prints is read, so neither waits on the other, however much there is of each.
+    let stdout = child.stdout.take().ok_or_else(|| AgentError::NoPipes { bin: call.bin.display().to_string() })?;
+    let mut stdout = super::login_check::Output::new(stdout);
+    let mut stderr = child.stderr.take().ok_or_else(|| AgentError::NoPipes { bin: call.bin.display().to_string() })?;
+    let mut reading_errors = tokio::task::JoinSet::new();
+    reading_errors.spawn(async move {
+        let mut bytes = Vec::new();
+        stderr.read_to_end(&mut bytes).await.map(|_| bytes)
+    });
+    if call.verify_login
+        && let Some(login) = call.login
+    {
+        super::login_check::verify(&mut stdin, &mut stdout, login).await?;
+    }
     let writing = async move {
         let written = stdin.write_all(call.stdin).await;
         drop(stdin);
         written
     };
-    let (written, output) =
-        tokio::time::timeout(call.timeout, async { tokio::join!(writing, child.wait_with_output()) })
-            .await
-            .map_err(|_| CallFailed::TimedOut(call.timeout))?;
-    let output = output.map_err(CallFailed::Io)?;
-    running.finished();
-    // A CLI that stops reading, such as one refusing its flags, says why itself, which a broken pipe doesn't.
-    if output.status.success() {
+    let reading = async move {
+        let mut bytes = Vec::new();
+        stdout.read_all(&mut bytes).await.map(|_| bytes)
+    };
+    let (written, status, stdout) = tokio::join!(writing, child.wait(), reading);
+    let status = status.map_err(CallFailed::Io)?;
+    if status.success() {
         written.map_err(CallFailed::Io)?;
     }
-    Ok(output)
+    let stderr = reading_errors
+        .join_next()
+        .await
+        .ok_or(AgentError::Exited)?
+        .map_err(|_| AgentError::Exited)?
+        .map_err(CallFailed::Io)?;
+    Ok::<_, AgentError>(Output { status, stdout: stdout.map_err(CallFailed::Io)?, stderr })
 }
 
 /// A call under way, recorded so the provider can stop it if the worker is killed. Unless it finished, dropping this
@@ -98,7 +126,8 @@ mod tests {
         let args = vec!["-c".to_string(), script.to_string()];
         let timeout = Duration::from_secs(20);
         let bin = Path::new("/bin/sh");
-        run(OneOff { bin, cwd: Path::new("/"), args, stdin, timeout, pid_file: None, login: None }).await
+        run(OneOff { bin, cwd: Path::new("/"), args, stdin, timeout, pid_file: None, login: None, verify_login: false })
+            .await
     }
 
     /// Such as a CLI that prints its first lines before it has read all of a prompt with a big image in it.
