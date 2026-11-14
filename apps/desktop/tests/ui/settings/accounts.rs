@@ -87,6 +87,22 @@ fn files_holding(dir: &Path, text: &str, except: &str) -> Vec<PathBuf> {
 }
 
 #[gpui_kit::test]
+fn choosing_a_default_updates_the_hub_and_other_clients(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let work = connected(&stack, "Work", TOKEN);
+    let personal = connected(&stack, "Personal", "another-made-up-token");
+    let mut ui = in_accounts(cx, &stack);
+    let selected =
+        |ui: &Ui<'_>| ui.view().records().hub_settings().unwrap().account_defaults.as_ref().unwrap()[0].account.clone();
+    assert_eq!(selected(&ui), work);
+    ui.click("account-default-claude");
+    ui.click_menu_item("Personal");
+    ui.wait("the new default", |ui| selected(ui) == personal);
+    let hub = stack.client().records_list().unwrap().hub_settings.unwrap();
+    assert_eq!(hub.account_defaults.unwrap()[0].account, personal);
+}
+
+#[gpui_kit::test]
 fn a_login_connected_here_is_listed_under_added_and_its_token_is_the_hubs_alone(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = in_accounts(cx, &stack);

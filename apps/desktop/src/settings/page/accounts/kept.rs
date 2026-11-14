@@ -25,7 +25,8 @@ pub(super) struct Kept {
     not_disconnected: Option<(AccountId, String)>,
     /// The hub to ask, as of the page's last frame, with client-core's copy of its records, which takes in the record
     /// an answer carries. `None` while there's no hub to ask.
-    asking: Option<Asking>,
+    pub(super) asking: Option<Asking>,
+    pub(super) choosing: super::choosing::Choosing,
     /// Settings' focus, as of the page's last frame, where focus goes back to as the panel goes while it has it, so
     /// keys still reach Settings.
     settings_focus: Option<FocusHandle>,

@@ -6,7 +6,7 @@ use protocol::fixtures::account;
 use protocol::model::{Account, AgentKind, HeldLogin, LimitWindow, UsageLimit};
 
 use super::{context, conversation};
-use crate::gallery::world::{HOUR_MS, NOW_MS, World};
+use crate::gallery::world::{HOUR_MS, LoginSupport, NOW_MS, World};
 
 const DAY_MS: i64 = 24 * HOUR_MS;
 /// How long a token `claude setup-token` makes lasts, as the hub takes it to.
@@ -33,7 +33,7 @@ pub(in crate::gallery) fn none_found() -> World {
 /// The conversation, on a hub from before hubs kept logins, which describes Claude with nothing that makes one.
 pub(in crate::gallery) fn logins_unkept() -> World {
     let mut world = conversation();
-    world.keeps_no_logins = true;
+    world.logins = LoginSupport::None;
     world
 }
 

@@ -23,7 +23,7 @@ use protocol::model::{
     PromptLine, Rev, Seq, SessionId, SessionSettings, SessionStatus, ToolUseId, WorkspaceStatus,
 };
 
-use super::world::World;
+use super::world::{LoginSupport, World};
 
 /// The build the app and its hub both say they are, so the label on every screen stays the same whatever this
 /// checkout's version is.
@@ -127,7 +127,7 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         }
         // As an older hub refuses it. Accounts asks none, since such a hub says nothing of what makes a login, so the
         // refusal itself is tested against a stand-in, with `Kept`.
-        R::AccountConnect(_) if world.keeps_no_logins => {
+        R::AccountConnect(_) if world.logins == LoginSupport::None => {
             Err(ApiError::new(ErrorCode::Unsupported, "an older hub doesn't keep logins"))
         }
         // As a hub too old to keep it, so a comment being written is what restarting would lose.
@@ -331,7 +331,7 @@ fn claude(world: &World) -> AgentDescription {
             effort: Effort::Xhigh,
         },
         features: vec![AgentFeature::Compacts],
-        login: (!world.keeps_no_logins).then(|| LoginDescription {
+        login: (world.logins != LoginSupport::None).then(|| LoginDescription {
             made_with: "claude setup-token".into(),
             lasts_ms: Some(365 * 24 * 60 * 60 * 1000),
         }),
