@@ -25,5 +25,6 @@ pub use web::{Fetch, Link, Results, WebSearch};
 mod tests;
 
 mod recorded;
+pub mod typed;
 pub use recorded::{Recorded, ToolCall, asked_about, count, first_line};
 use recorded::{description, main_input, str_field};

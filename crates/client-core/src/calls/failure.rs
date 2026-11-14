@@ -59,6 +59,24 @@ enum Form {
 impl ResultForm {
     /// The form of the result `block`, or `None` for any other block.
     pub fn of(block: &ContentBlock) -> Option<Self> {
+        if let ContentBlock::CallResult { output, .. } = block {
+            let exit_code = match output {
+                protocol::capability::calls::CallOutput::Command(c) => c.exit_code,
+                protocol::capability::calls::CallOutput::Lines(_)
+                | protocol::capability::calls::CallOutput::Image { .. }
+                | protocol::capability::calls::CallOutput::Document { .. }
+                | protocol::capability::calls::CallOutput::Changed { .. }
+                | protocol::capability::calls::CallOutput::Found(_)
+                | protocol::capability::calls::CallOutput::Paths { .. }
+                | protocol::capability::calls::CallOutput::Page { .. }
+                | protocol::capability::calls::CallOutput::WebResults { .. }
+                | protocol::capability::calls::CallOutput::Report { .. }
+                | protocol::capability::calls::CallOutput::Mcp { .. }
+                | protocol::capability::calls::CallOutput::Words { .. }
+                | protocol::capability::calls::CallOutput::Unknown => None,
+            };
+            return Some(Self(Form::Alone { exit_code }));
+        }
         let ContentBlock::ToolResult { call, exit_code, .. } = block else { return None };
         Some(Self(if call.is_some() { Form::Alone { exit_code: *exit_code } } else { Form::AsSent }))
     }

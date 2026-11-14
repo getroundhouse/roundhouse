@@ -6,7 +6,7 @@ use super::{description, first_line, str_field};
 
 pub struct Command<'a> {
     /// What the agent said it's doing, in its own words.
-    description: Option<&'a str>,
+    pub(super) description: Option<&'a str>,
     pub command: &'a str,
 }
 

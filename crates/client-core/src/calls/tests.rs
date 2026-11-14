@@ -6,7 +6,7 @@ use super::{Recorded, ToolCall, asked_about, count};
 
 /// A call recorded with the kind its adapter said, or with none, as one from before adapters said.
 fn recorded<'a>(kind: Option<&'a CallKind>, name: &'a str, input: &'a Value) -> Recorded<'a> {
-    Recorded { kind, name, input }
+    Recorded::Legacy { kind, name, input }
 }
 
 /// A request to use the tool `tool` with `input`, which says what it asks if `asking` does, and nothing of what it's
