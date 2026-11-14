@@ -34,11 +34,9 @@ mod running;
 
 #[cfg(test)]
 use running::refused;
-use running::{STDERR_TAIL_LINES, Shared, ask, control, drain_grace, write_line, write_to};
+use running::{Shared, ask, control, drain_grace, write_line, write_to};
 pub use running::{spawn, spawn_at};
 
-mod tap;
-
+use crate::tap::{self, Tap};
 #[cfg(feature = "testing")]
 pub use running::spawn_tapped;
-use tap::Tap;

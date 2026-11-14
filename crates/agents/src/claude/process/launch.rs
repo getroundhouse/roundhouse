@@ -72,33 +72,8 @@ pub fn build_args(spec: &AgentSpec, resume: bool, instructions: Option<&str>) ->
     Ok(args)
 }
 
-/// `PATH` first, then the places the installers use. A hub started from Finder may have neither
-/// `~/.local/bin` nor Homebrew on its `PATH`, and it may not be able to read the login shell's.
 pub(in crate::claude) fn resolve_binary(lookup: &BinaryLookup) -> Option<PathBuf> {
-    if let Some(path) = &lookup.explicit {
-        return Some(path.clone());
-    }
-    // On Windows that's the program its installer puts in place, and not the script npm installs.
-    let file = format!("claude{}", std::env::consts::EXE_SUFFIX);
-    let on_path = lookup.path.iter().flat_map(std::env::split_paths).map(|dir| dir.join(&file));
-    let installed = lookup
-        .home
-        .iter()
-        .flat_map(|home| [home.join(".local/bin").join(&file), home.join(".claude/local").join(&file)]);
-    let system = ["/opt/homebrew/bin/claude", "/usr/local/bin/claude"].map(PathBuf::from);
-    on_path.chain(installed).chain(system).find(|path| is_executable(path))
-}
-
-#[cfg(unix)]
-fn is_executable(path: &std::path::Path) -> bool {
-    use std::os::unix::fs::PermissionsExt;
-    std::fs::metadata(path).is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
-}
-
-/// Windows goes by a file's extension, which the names looked for already have.
-#[cfg(windows)]
-fn is_executable(path: &std::path::Path) -> bool {
-    path.is_file()
+    crate::binary::resolve_binary("claude", &[".claude/local"], lookup)
 }
 
 pub(super) struct Launched {
