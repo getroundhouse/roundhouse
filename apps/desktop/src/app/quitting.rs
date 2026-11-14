@@ -18,6 +18,33 @@ use crate::window_place;
 /// *Unconfirmed.*
 pub(super) const KEEPING_WAIT: Duration = Duration::from_secs(2);
 
+/// How long quitting, or restarting to update, waits for what's on its way to the hub: [`KEEPING_WAIT`], unless a test
+/// has said otherwise.
+#[cfg(feature = "testing")]
+fn keeping_wait(cx: &App) -> Duration {
+    cx.try_global::<StandIn>().map_or(KEEPING_WAIT, |StandIn(wait)| *wait)
+}
+
+#[cfg(not(feature = "testing"))]
+fn keeping_wait(_: &App) -> Duration {
+    KEEPING_WAIT
+}
+
+/// What a test has quitting wait in place of [`KEEPING_WAIT`].
+#[cfg(feature = "testing")]
+struct StandIn(Duration);
+
+#[cfg(feature = "testing")]
+impl Global for StandIn {}
+
+/// Has quitting, and restarting to update, wait at most `wait` from now on, for a test whose hub is held still until
+/// they've given up on it. The wait is by the system's clock rather than a GPUI timer, so a test can't move it, and would
+/// otherwise sit through all of [`KEEPING_WAIT`].
+#[cfg(feature = "testing")]
+pub fn the_keeping_wait_is(wait: Duration, cx: &mut App) {
+    cx.set_global(StandIn(wait));
+}
+
 /// How far quitting has got.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Quitting {
@@ -93,11 +120,12 @@ impl AppView {
         self.quitting = Quitting::Waiting;
         let flushed = self.drafts.as_ref().map(Drafts::flushed);
         let finished = self.client().map(|client| client.commands().finished());
+        let wait = keeping_wait(cx);
         cx.spawn(async move |this, cx| {
             // On one of the executor's threads rather than racing a timer, since a test's timers only move when the
             // test moves its clock.
             cx.background_spawn(async move {
-                let by = Instant::now() + KEEPING_WAIT;
+                let by = Instant::now() + wait;
                 let _ = flushed.map(|flushed| flushed.recv_deadline(by));
                 let _ = finished.map(|finished| finished.recv_deadline(by));
             })

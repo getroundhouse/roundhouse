@@ -138,8 +138,9 @@ fn typing_with_an_update_ready<'a>(cx: &'a mut TestAppContext, stack: &Stack, ty
 }
 
 /// Starts a comment on the diff, then stops the hub, so what's typed in it can't reach the hub until this goes, and
-/// restarting would lose it.
+/// restarting would lose it, and restarting gives up on it soon.
 fn start_a_comment(ui: &mut Ui<'_>, stack: &Stack) -> Frozen {
+    ui.give_up_on_a_frozen_hub_soon();
     let workspace = ui.view().selected.clone().unwrap();
     std::fs::write(ui.worktree(&workspace).join("a.txt"), "one\ntwo\n").unwrap();
     let diff = ui.open_changes();
@@ -245,6 +246,7 @@ fn the_dialog_with_an_update_ready<'a>(cx: &'a mut TestAppContext, stack: &Stack
 fn restarting_to_update_counts_what_the_hub_hasnt_had_of_the_new_workspace_dialog(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = the_dialog_with_an_update_ready(cx, &stack);
+    ui.give_up_on_a_frozen_hub_soon();
     let _frozen = Frozen::stop(stack.client().hub_status().unwrap().pid);
     ui.input("half a thought");
     ui.press("escape");

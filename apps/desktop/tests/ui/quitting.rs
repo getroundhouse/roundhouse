@@ -66,8 +66,9 @@ fn whats_typed_just_before_quitting_is_kept(cx: &mut TestAppContext) {
 }
 
 /// Leaves something only the app has, which quitting would lose: what's typed in the new-workspace dialog while the
-/// hub doesn't answer, so it can't keep it until this goes.
+/// hub doesn't answer, so it can't keep it until this goes, and quitting gives up on it soon.
 fn leave_something_in_the_dialog(ui: &mut Ui<'_>, stack: &Stack) -> Frozen {
+    ui.give_up_on_a_frozen_hub_soon();
     ui.open_new_workspace();
     let frozen = Frozen::stop(stack.client().hub_status().unwrap().pid);
     ui.input("half a thought");
@@ -131,6 +132,7 @@ fn quitting_asks_about_whats_typed_once_the_hub_has_had_long_enough_to_take_it(c
     ui.new_workspace();
     ui.input("half");
     ui.view().drafts().unwrap().flushed().recv().unwrap();
+    ui.give_up_on_a_frozen_hub_soon();
     let _frozen = Frozen::stop(stack.client().hub_status().unwrap().pid);
     ui.input(" a thought");
 
@@ -209,6 +211,7 @@ fn quitting_asks_about_a_prompt_the_hub_hasnt_taken_in_time(cx: &mut TestAppCont
     let stack = Stack::new();
     let mut ui = Ui::open_with_a_repository(cx, &stack);
     ui.new_workspace();
+    ui.give_up_on_a_frozen_hub_soon();
     let _frozen = send_to_a_frozen_hub(&mut ui, &stack);
 
     quit_from_the_menu(&mut ui);

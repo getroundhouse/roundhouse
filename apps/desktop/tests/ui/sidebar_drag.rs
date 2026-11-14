@@ -9,11 +9,13 @@ use desktop::app::AppView;
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{
     AppContext as _, ElementId, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point, ScrollDelta,
-    TestAppContext, point, px,
+    TestAppContext, point, px, size,
 };
 use protocol::model::{RepoId, WorkspaceId};
 
-use crate::support::{MORE_THAN_FIT, Stack, Ui, project_row, sidebar_row as row, top, two_projects, wait_out_setup};
+use crate::support::{
+    MORE_THAN_FIT, Stack, Ui, made_one_at_a_time, project_row, sidebar_row as row, top, two_projects, wait_out_setup,
+};
 
 /// Presses in the middle of `from`, and lets go with the pointer in the middle of `to`.
 fn drag(ui: &mut Ui, from: ElementId, to: ElementId) {
@@ -43,16 +45,22 @@ fn saved_order(stack: &Stack) -> Vec<String> {
     order.iter().map(|id| id.as_str().unwrap().to_string()).collect()
 }
 
-/// [`two_projects`], with the first or second as `long` says given more workspaces than the window has room for, and
-/// the newest of those, which is at the top of its project.
+/// How much shorter [`one_long`] makes the window, so the sidebar's list is some 440 points tall rather than 660.
+const SHORTER: Pixels = px(220.);
+
+/// [`two_projects`], with the first or second as `long` says given [`MORE_THAN_FIT`] more workspaces, and the newest
+/// of those, which is at the top of its project. In a window [`SHORTER`] than usual, so the long project is over twice
+/// as tall as what shows of the list. So a project held near the top of the list, once it's scrolled to its end, is
+/// still over the long one's lower half. And one held near either end has a long way to scroll.
 fn one_long<'a>(
     cx: &'a mut TestAppContext,
     stack: &Stack,
     long: usize,
 ) -> (Ui<'a>, [RepoId; 2], [WorkspaceId; 4], WorkspaceId) {
     let (mut ui, projects, four) = two_projects(cx, stack);
-    let client = stack.client();
-    let made = Vec::from_fn(MORE_THAN_FIT, |_| client.workspace_create(&projects[long], None, None, None).unwrap().id);
+    let was = ui.cx.update_window(ui.handle, |_, window, _| window.bounds().size).unwrap();
+    ui.cx.simulate_window_resize(ui.handle, size(was.width, was.height - SHORTER));
+    let made = made_one_at_a_time(stack, &projects[long], MORE_THAN_FIT);
     ui.wait("every workspace", |ui| ui.view().visible_workspaces().len() == MORE_THAN_FIT + 4);
     wait_out_setup(&mut ui);
     (ui, projects, four, made.last().unwrap().clone())

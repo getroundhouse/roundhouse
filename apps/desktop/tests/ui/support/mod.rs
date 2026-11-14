@@ -35,7 +35,9 @@ pub(crate) use labels::{MENU, click_menu_item, labelled};
 pub(crate) use labels::first_labelled;
 #[cfg(target_os = "macos")]
 pub(crate) use labels::menu_item;
-pub(crate) use order::{MORE_THAN_FIT, more_than_fit, order, three_workspaces, top, wait_out_setup, worked_in};
+pub(crate) use order::{
+    MORE_THAN_FIT, made_one_at_a_time, more_than_fit, order, three_workspaces, top, wait_out_setup, worked_in,
+};
 pub(crate) use projects::{project_row, two_projects};
 pub(crate) use stand_in::StandInHub;
 pub(crate) use stand_in_gh::pull_request;
