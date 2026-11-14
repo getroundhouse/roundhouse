@@ -76,13 +76,24 @@ impl Hub {
         workspace: &WorkspaceId,
         made_of: &NewWorkspaceDraftToKeep,
     ) -> Result<(Session, Option<ApiError>), ApiError> {
-        let session = self.session_ensure(workspace.clone(), self.new_chat_kind()).await?;
+        let session =
+            self.session_ensure(workspace.clone(), made_of.agent.unwrap_or_else(|| self.new_chat_kind())).await?;
         let mode = if made_of.plan { PermissionMode::Plan } else { PermissionMode::FullAccess };
-        let as_chosen = made_of.model.as_ref().is_none_or(|model| *model == session.model)
+        let as_chosen = made_of.agent.is_none_or(|agent| agent == session.agent)
+            && made_of.model.as_ref().is_none_or(|model| *model == session.model)
             && made_of.effort.is_none_or(|effort| effort == session.effort)
             && session.permission_mode == mode;
         if as_chosen {
             return Ok((session, None));
+        }
+        if made_of.agent.is_some_and(|agent| agent != session.agent) {
+            return Ok((
+                session,
+                Some(ApiError::new(
+                    protocol::client::ErrorCode::Conflict,
+                    "the workspace already has a chat with another agent",
+                )),
+            ));
         }
         let (model, effort) = (made_of.model.clone(), made_of.effort);
         let chosen = SessionSettingsChange { model, permission_mode: Some(mode), effort };
@@ -154,6 +165,7 @@ impl Hub {
         let now = made_of.clone();
         let emptied = NewWorkspaceDraftToKeep {
             repo_id: made_of.repo_id.clone(),
+            agent: made_of.agent,
             model: made_of.model.clone(),
             effort: made_of.effort,
             ..NewWorkspaceDraftToKeep::default()

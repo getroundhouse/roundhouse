@@ -36,7 +36,7 @@ pub(crate) fn idle_session(now: i64) -> StoredSession {
             agent_opened: Some(false),
             ..protocol::fixtures::session("s")
         },
-        agent_session_id: "s".into(),
+        agent_session_id: Some("s".into()),
         agent_opened: false,
     }
 }

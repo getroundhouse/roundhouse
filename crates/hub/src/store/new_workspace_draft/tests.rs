@@ -1,9 +1,10 @@
 use protocol::attachment::MediaType;
-use protocol::model::{Effort, ModelName, RepoId};
+use protocol::model::{AgentKind, Effort, ModelName, RepoId};
 
 const OPUS: ModelName = ModelName::named("opus");
 
 use super::*;
+use crate::store::Store;
 use crate::store::older::store_from_before;
 use crate::store::schema::BEFORE_NEW_WORKSPACE_DRAFT_NAMES;
 use crate::store::tests::store_with_session;
@@ -14,6 +15,7 @@ fn log_file(id: &str) -> Attachment {
 
 fn typed(text: &str, files: &[&str]) -> NewWorkspaceDraftToKeep {
     NewWorkspaceDraftToKeep {
+        agent: None,
         repo_id: Some(RepoId::from("r")),
         text: text.to_string(),
         files: files.iter().map(|&id| id.into()).collect(),
@@ -173,4 +175,27 @@ fn whats_in_the_dialog_is_replaced_only_if_it_says_what_was_asked() {
     assert!(changed);
     assert_eq!((there.text.as_str(), there.files.as_slice(), there.plan), ("", [].as_slice(), true));
     assert!(there.rev > made.rev);
+}
+
+#[test]
+fn the_selected_agent_survives_reopening_and_an_agent_change_prevents_clearing_the_draft() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_session(dir.path());
+    let codex = NewWorkspaceDraftToKeep { agent: Some(AgentKind::Codex), ..typed("read the code", &[]) };
+    let (kept, changed) = store.set_new_workspace_draft(&codex).unwrap();
+    assert!(changed);
+    assert_eq!(kept.agent, Some(AgentKind::Codex));
+    drop(store);
+
+    let store = Store::open(&dir.path().join("hub.db"), &dir.path().join("backups")).unwrap();
+    assert_eq!(store.new_workspace_draft().unwrap(), kept);
+    let claude = NewWorkspaceDraftToKeep { agent: Some(AgentKind::Claude), ..codex.clone() };
+    let empty = NewWorkspaceDraftToKeep::default();
+    let (still_kept, changed) = store.replace_new_workspace_draft(&claude, &empty).unwrap();
+    assert!(!changed, "an agent-only difference must keep another client's draft");
+    assert_eq!(still_kept, kept);
+    let (cleared, changed) = store.replace_new_workspace_draft(&codex, &empty).unwrap();
+    assert!(changed);
+    assert_eq!(cleared.agent, None);
+    assert!(cleared.text.is_empty());
 }

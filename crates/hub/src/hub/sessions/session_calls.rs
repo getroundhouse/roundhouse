@@ -56,15 +56,16 @@ impl Hub {
         if let Some(made) = self.made_earlier::<StoredSession>(client_request_id.as_ref()).await? {
             return Ok(made.session);
         }
-        self.offered(agent, &options)?;
+        let settings = self.agent(agent)?.defaults.clone().changed(options);
+        self.offered(agent, &settings.clone().into())?;
         self.ready_workspace(&workspace_id).await?;
         let id = new_id();
         let now = now_ms();
-        let SessionSettings { model, permission_mode, effort } = self.agent(agent)?.defaults.clone().changed(options);
+        let SessionSettings { model, permission_mode, effort } = settings;
         let stored = StoredSession {
             session: Session {
-                agent_capabilities: None,
                 account: None,
+                agent_capabilities: None,
                 reply_outcome: None,
                 id: id.clone().into(),
                 workspace_id,
@@ -97,9 +98,7 @@ impl Hub {
                 agent_opened: Some(false),
                 rev: Rev::default(),
             },
-            // The hub's ID doubles as the agent's, so `--resume` works after a crash even if the
-            // agent never reported one.
-            agent_session_id: id.into(),
+            agent_session_id: self.new_conversation_id(agent, &id)?,
             agent_opened: false,
         };
         match self.blocking(move |store| store.insert_session(&stored, client_request_id.as_ref())).await? {
@@ -111,6 +110,21 @@ impl Hub {
             }
             Made::Earlier(made) => Ok(made.session),
         }
+    }
+
+    fn new_conversation_id(
+        &self,
+        agent: AgentKind,
+        id: &str,
+    ) -> Result<Option<protocol::model::AgentSessionId>, ApiError> {
+        let claims = self.agent(agent)?.capabilities.as_ref();
+        let named = claims.map_or(agent == AgentKind::Claude, |claims| {
+            matches!(
+                claims.conversation.resume.as_ref().map(|resume| &resume.ids),
+                Some(protocol::capability::conversation::ConversationIds::Given)
+            )
+        });
+        Ok(named.then(|| id.into()))
     }
 
     pub(crate) async fn session_ensure(

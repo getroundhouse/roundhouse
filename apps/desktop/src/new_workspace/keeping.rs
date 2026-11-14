@@ -61,6 +61,7 @@ impl NewWorkspaceDialog {
     pub(super) fn to_keep(&self, cx: &App) -> NewWorkspaceDraftToKeep {
         let coming_back = self.keeping.restoring.iter().map(|file| file.id.clone());
         NewWorkspaceDraftToKeep {
+            agent: Some(self.offer.agents.for_new_chat()),
             repo_id: Some(self.repo.clone()),
             text: self.prompt.read(cx).text().to_string(),
             files: coming_back.chain(self.attached.ids()).collect(),

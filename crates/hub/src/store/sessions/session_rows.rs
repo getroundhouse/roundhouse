@@ -12,7 +12,7 @@ use rusqlite::{OptionalExtension, Row, TransactionBehavior, params};
 /// What a session's row holds, as it's written.
 macro_rules! session_row_columns {
     () => {
-        "id, workspace_id, agent, model, permission_mode, status, last_seq, created_at_ms, updated_at_ms, agent_session_id, agent_opened, title, closed_at_ms, reply_seq, read_seq, background_tasks, title_source, queued, queue_held, turn_started_at_ms, effort, context, account_id, user_active_at_ms, prompt_cache, draft, answer_draft, untaken, open_approvals, reply_outcome"
+        "id, workspace_id, agent, model, permission_mode, status, last_seq, created_at_ms, updated_at_ms, agent_session_id, agent_opened, title, closed_at_ms, reply_seq, read_seq, background_tasks, title_source, queued, queue_held, turn_started_at_ms, effort, context, account_id, user_active_at_ms, prompt_cache, draft, answer_draft, untaken, open_approvals, reply_outcome, agent_capabilities"
     };
 }
 
@@ -43,10 +43,9 @@ pub(in super::super) fn draft_column(draft: &Draft) -> serde_json::Result<Option
 }
 
 pub(in super::super) fn session_from_row(row: &Row) -> rusqlite::Result<StoredSession> {
-    let waits = waits_from(&row.get::<_, String>(30)?)?;
+    let waits = waits_from(&row.get::<_, String>(31)?)?;
     Ok(StoredSession {
         session: Session {
-            agent_capabilities: None,
             id: row.get::<_, String>(0)?.into(),
             workspace_id: row.get::<_, String>(1)?.into(),
             agent: from_text::<AgentKind>(row.get(2)?)?,
@@ -84,12 +83,13 @@ pub(in super::super) fn session_from_row(row: &Row) -> rusqlite::Result<StoredSe
             untaken: json_at(row, 27)?,
             open_approvals: json_at(row, 28)?,
             agent_opened: Some(row.get(10)?),
+            agent_capabilities: json_at(row, 30)?,
             // Written by the query, from the waits table, so one it can't read is a query that doesn't match `Wait`.
             wait: waits.first().cloned(),
             waits: Some(waits),
-            rev: rev_of(row, 31)?,
+            rev: rev_of(row, 32)?,
         },
-        agent_session_id: row.get::<_, String>(9)?.into(),
+        agent_session_id: row.get::<_, Option<String>>(9)?.map(Into::into),
         agent_opened: row.get(10)?,
     })
 }
@@ -113,7 +113,7 @@ impl Store {
                 "INSERT INTO sessions (",
                 session_row_columns!(),
                 ", client_request_id)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
             ),
             params![
                 session.id.as_str(),
@@ -125,7 +125,7 @@ impl Store {
                 seq_column(session.last_seq),
                 session.created_at_ms,
                 session.updated_at_ms,
-                stored.agent_session_id.as_str(),
+                stored.agent_session_id.as_ref().map(protocol::model::AgentSessionId::as_str),
                 stored.agent_opened,
                 session.title.as_deref(),
                 session.closed_at_ms,
@@ -146,6 +146,7 @@ impl Store {
                 serde_json::to_string(session.untaken.as_deref().unwrap_or_default())?,
                 serde_json::to_string(session.open_approvals.as_deref().unwrap_or_default())?,
                 session.reply_outcome.as_ref().map(text_of),
+                session.agent_capabilities.as_ref().map(serde_json::to_string).transpose()?,
                 client_request_id.map(ClientRequestId::as_str),
             ],
         )?;
@@ -273,11 +274,6 @@ impl Store {
         let rev = current_rev(&tx)?;
         tx.commit()?;
         Ok(Some((stored.session, rev)))
-    }
-
-    pub fn set_agent_opened(&self, id: &SessionId) -> Result<(), StoreError> {
-        lock(&self.writer).execute("UPDATE sessions SET agent_opened = 1 WHERE id = ?", [id.as_str()])?;
-        Ok(())
     }
 
     /// Sessions whose agent was at work when the hub last stopped, in a turn or in the background.

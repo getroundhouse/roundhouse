@@ -47,7 +47,7 @@ pub use accounts::Launched;
 pub use attachments::AddedBy;
 pub use comments::Commented;
 pub use error::{BackupError, StoreError};
-pub use events::{Places, SessionChange, StatusChange, TurnEdge, cancelled_approval};
+pub use events::{Initialized, Places, SessionChange, StatusChange, TurnEdge, cancelled_approval};
 pub use instances::{InstanceStage, RecordedInstance};
 pub(crate) use logins::{Connecting, Held, IdFrom};
 pub use made::{Made, MadeByRequest};

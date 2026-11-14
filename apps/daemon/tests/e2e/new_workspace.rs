@@ -17,6 +17,7 @@ fn kept_in_the_dialog(stack: &Stack, client: &Client, text: &str) -> NewWorkspac
     let notes = FileToSend::checked("notes.txt", MediaType::Text, b"one\n".to_vec()).unwrap();
     client.new_workspace_draft_file_add(&notes.attachment.id, "notes.txt", MediaType::Text, notes.data).unwrap();
     let draft = NewWorkspaceDraftToKeep {
+        agent: None,
         repo_id: Some(repo.id),
         text: text.to_string(),
         files: vec![notes.attachment.id],

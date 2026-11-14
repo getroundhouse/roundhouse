@@ -91,7 +91,7 @@ fn a_workspaces_prompt_images_are_listed_oldest_first_across_its_chats() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
     let mut second = idle_session(1);
-    (second.session.id, second.agent_session_id) = ("second".into(), "second".into());
+    (second.session.id, second.agent_session_id) = ("second".into(), Some("second".into()));
     store.insert_session(&second, None).unwrap();
     let image = |id: &str| Attachment { media_type: MediaType::Png, ..log_file(id, &format!("{id}.png")) };
     let sent = |chat: &str, at_ms: i64, attachments: Vec<Attachment>| {

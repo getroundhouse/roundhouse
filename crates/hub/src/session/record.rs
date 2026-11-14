@@ -54,6 +54,16 @@ impl LiveSession {
             state.progress.step(origin, body, agent)
         };
         note_recorded(origin, &mut change);
+        if let EventBody::AgentInit { agent_session_id, capabilities, .. } = &body
+            && origin.speaks_for_session()
+        {
+            change.initialized = Some(crate::store::Initialized {
+                conversation: agent_session_id.clone(),
+                capabilities: run
+                    .zip(capabilities.as_deref())
+                    .map(|(run, claims)| protocol::model::RunCapabilities { run, claims: Box::new(claims.clone()) }),
+            });
+        }
         let made = Made::of(&change, waits);
         let id = self.id.clone();
         let client_msg_id = sent_as(&body).cloned();
@@ -218,6 +228,18 @@ fn note_recorded(origin: Origin, change: &mut SessionChange) {
 fn take(state: &mut LiveState, origin: Origin, appended: &Appended, next: Next) -> bool {
     let (seq, body, subagent) = (appended.event.seq, &appended.event.body, &appended.event.subagent);
     state.last_seq = seq;
+    if let EventBody::AgentInit { agent_session_id, capabilities, .. } = body
+        && origin.speaks_for_session()
+    {
+        state.agent_opened = true;
+        if let Some(id) = agent_session_id {
+            state.agent_session_id = Some(id.clone());
+        }
+        state.capabilities = origin
+            .run()
+            .zip(capabilities.as_deref())
+            .map(|(run, claims)| protocol::model::RunCapabilities { run, claims: Box::new(claims.clone()) });
+    }
     let others = |tail: &Tail| tail.messages.iter().filter(|message| message.parent_tool_use_id != *subagent).count();
     let others_before = others(&state.tail);
     state.tail.on_event(seq, origin.run(), body);

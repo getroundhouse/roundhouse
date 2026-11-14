@@ -62,6 +62,7 @@ impl Request {
         permission_mode: PermissionMode,
     ) -> Self {
         let made_of = NewWorkspaceDraftToKeep {
+            agent: Some(agent),
             repo_id: Some(repo.clone()),
             text: prompt.text.clone(),
             files: prompt.files.iter().map(|file| file.attachment.id.clone()).collect(),

@@ -121,6 +121,8 @@ pub(super) struct LiveState {
     /// How many waits for the agent to pick up again have begun, so a timer ends only its own.
     pub(super) pickup_waits: u64,
     pub(super) agent_opened: bool,
+    pub(super) agent_session_id: Option<AgentSessionId>,
+    pub(super) capabilities: Option<protocol::model::RunCapabilities>,
     /// What the next agent launches with.
     pub(super) settings: SessionSettings,
     pub(super) closed_at_ms: Option<i64>,
@@ -133,7 +135,6 @@ pub(crate) struct LiveSession {
     pub id: SessionId,
     pub workspace_id: WorkspaceId,
     pub(super) agent: AgentKind,
-    pub(super) agent_session_id: AgentSessionId,
     /// So a failed setup is mentioned once, rather than on every prompt.
     pub(super) warned_about_setup: std::sync::atomic::AtomicBool,
     pub(super) hub: Weak<Hub>,
@@ -187,7 +188,6 @@ impl LiveSession {
             id: stored.session.id.clone(),
             workspace_id: stored.session.workspace_id.clone(),
             agent: stored.session.agent,
-            agent_session_id: stored.agent_session_id,
             warned_about_setup: std::sync::atomic::AtomicBool::new(false),
             hub: Arc::downgrade(hub),
             commands: commands_tx,
@@ -204,6 +204,8 @@ impl LiveSession {
                 recorded,
                 pickup_waits: 0,
                 agent_opened: stored.agent_opened,
+                agent_session_id: stored.agent_session_id,
+                capabilities: stored.session.agent_capabilities.clone(),
                 settings: stored.session.settings(),
                 closed_at_ms: stored.session.closed_at_ms,
                 live: None,
@@ -280,10 +282,20 @@ impl LiveSession {
     pub(crate) async fn configure(&self, options: SessionSettingsChange) -> Result<Session, ApiError> {
         let hub = self.hub()?;
         let _one_at_a_time = self.configuring.lock().await;
+        let settings = self.state.lock().settings.clone().changed(options.clone());
+        hub.offered(self.agent, &settings.into())?;
         let mut agent_took_it = false;
         if let Some(link) = hub.existing_worker(&self.workspace_id) {
             let request = AgentConfigure { session_id: self.id.clone(), options: options.clone() };
-            agent_took_it = link.call(request).await? == Delivery::Delivered;
+            agent_took_it = if let Some(claims) = self.run_claims() {
+                let settings = options.for_capabilities(&claims).map_err(|e| {
+                    protocol::client::ApiError::new(protocol::client::ErrorCode::Unsupported, e.to_string())
+                })?;
+                self.control_agent(&link, protocol::capability::Control::Change(settings), request).await?
+                    == Delivery::Delivered
+            } else {
+                link.call(request).await? == Delivery::Delivered
+            };
         }
         let was = self.state.lock().settings.clone();
         self.keep_options(&hub, options.clone()).await?;

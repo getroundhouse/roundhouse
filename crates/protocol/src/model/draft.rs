@@ -13,6 +13,8 @@ use crate::model::{ApprovalId, AttachmentId, CommentId, DiffSide, Effort, ModelN
 /// time, and like a chat's draft it's the person's, which a hub with several people would keep for each.
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq, Eq)]
 pub struct NewWorkspaceDraft {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent: Option<crate::model::AgentKind>,
     /// The repository it's to be made in, which may have gone since. `None` until something's kept.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub repo_id: Option<RepoId>,
@@ -40,6 +42,8 @@ pub struct NewWorkspaceDraft {
 /// hasn't been given.
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq, Eq)]
 pub struct NewWorkspaceDraftToKeep {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent: Option<crate::model::AgentKind>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub repo_id: Option<RepoId>,
     #[serde(default)]
