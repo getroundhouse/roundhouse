@@ -25,7 +25,16 @@ pub async fn account(options: &AgentOptions, scratch_dir: &Path) -> Result<Agent
     let pid_file: Option<PathBuf> = options.pid_file.clone();
     let args = ["auth", "status", "--json"].map(String::from).to_vec();
     let login = options.login.as_ref();
-    let call = OneOff { bin: &bin, cwd: scratch_dir, args, stdin: b"", timeout: TIMEOUT, pid_file, login };
+    let call = OneOff {
+        bin: &bin,
+        cwd: scratch_dir,
+        args,
+        stdin: b"",
+        timeout: TIMEOUT,
+        pid_file,
+        login,
+        verify_login: false,
+    };
     let output = one_off::run(call).await?;
     // How it exited isn't looked at: what it printed says whether anyone is logged in.
     Ok(account_from(&output.stdout, login.is_some())?)

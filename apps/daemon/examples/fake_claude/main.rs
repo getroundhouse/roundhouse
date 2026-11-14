@@ -251,45 +251,10 @@ fn read_stdin(input: mpsc::Sender<Input>, out: Out, conversation: &Path) {
                 Input::Prompt(prompt)
             }
             Some("control_response") => Input::Approval(value["response"].clone()),
-            Some("control_request") => match value["request"]["subtype"].as_str() {
-                Some("interrupt") => Input::Interrupt,
-                Some("set_permission_mode") => {
-                    let mode = value["request"]["mode"].as_str().unwrap_or_default();
-                    // The real CLI takes `manual` here too, and calls it `default`.
-                    let mode = if mode == "manual" { "default" } else { mode };
-                    if ["acceptEdits", "auto", "bypassPermissions", "default", "dontAsk", "plan"].contains(&mode) {
-                        answer_control(&out, &value["request_id"], Ok(json!({"mode":mode})));
-                        set_mode(&out, mode);
-                    } else {
-                        answer_control(&out, &value["request_id"], Err("Cannot set permission mode".to_string()));
-                    }
-                    continue;
-                }
-                Some("set_model") => {
-                    let model = value["request"]["model"].as_str().unwrap_or_default();
-                    answer_control(&out, &value["request_id"], set_model(model));
-                    continue;
-                }
-                Some("apply_flag_settings") => {
-                    apply_flag_settings(&value["request"]["settings"]);
-                    answer_control(&out, &value["request_id"], Ok(Value::Null));
-                    continue;
-                }
-                Some("get_settings") => {
-                    let applied = json!({"model": current_model(), "effort": current_effort()});
-                    answer_control(&out, &value["request_id"], Ok(json!({"applied": applied})));
-                    continue;
-                }
-                Some("get_context_usage") => {
-                    answer_control(&out, &value["request_id"], Ok(account::context_usage(conversation)));
-                    continue;
-                }
-                Some("get_usage") => {
-                    answer_control(&out, &value["request_id"], Ok(account::usage(conversation)));
-                    continue;
-                }
-                other => panic!("unexpected control request {other:?}"),
-            },
+            Some("control_request") => {
+                let Some(item) = control(&out, &value, conversation) else { continue };
+                item
+            }
             _ => continue,
         };
         if input.send(item).is_err() {
@@ -297,6 +262,51 @@ fn read_stdin(input: mpsc::Sender<Input>, out: Out, conversation: &Path) {
         }
     }
     let _ = input.send(Input::Eof);
+}
+
+/// Answers control requests immediately, forwarding only interrupts to the active turn.
+fn control(out: &Out, value: &Value, conversation: &Path) -> Option<Input> {
+    match value["request"]["subtype"].as_str() {
+        Some("initialize") => {
+            answer_control(out, &value["request_id"], Ok(settings::login_identity()));
+        }
+        Some("interrupt") => return Some(Input::Interrupt),
+        Some("set_permission_mode") => {
+            let mode = value["request"]["mode"].as_str().unwrap_or_default();
+            // The real CLI takes `manual` here too, and calls it `default`.
+            let mode = if mode == "manual" { "default" } else { mode };
+            if ["acceptEdits", "auto", "bypassPermissions", "default", "dontAsk", "plan"].contains(&mode) {
+                answer_control(out, &value["request_id"], Ok(json!({"mode":mode})));
+                set_mode(out, mode);
+            } else {
+                answer_control(out, &value["request_id"], Err("Cannot set permission mode".to_string()));
+            }
+        }
+        Some("set_model") => {
+            let model = value["request"]["model"].as_str().unwrap_or_default();
+            answer_control(out, &value["request_id"], set_model(model));
+        }
+        Some("apply_flag_settings") => {
+            apply_flag_settings(&value["request"]["settings"]);
+            answer_control(out, &value["request_id"], Ok(Value::Null));
+        }
+        Some("get_settings") => {
+            let applied = json!({"model": current_model(), "effort": current_effort()});
+            answer_control(
+                out,
+                &value["request_id"],
+                Ok(json!({"applied": applied, "effective": settings::effective()})),
+            );
+        }
+        Some("get_context_usage") => {
+            answer_control(out, &value["request_id"], Ok(account::context_usage(conversation)));
+        }
+        Some("get_usage") => {
+            answer_control(out, &value["request_id"], Ok(account::usage(conversation)));
+        }
+        other => panic!("unexpected control request {other:?}"),
+    }
+    None
 }
 
 /// Waits without blocking on input, so a turn notices interrupts and later prompts as they arrive.

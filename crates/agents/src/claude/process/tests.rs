@@ -2,7 +2,7 @@ use std::os::unix::fs::PermissionsExt as _;
 
 use protocol::model::{AgentKind, Effort, ModelName, PermissionMode, RunId, SessionSettings};
 
-use super::supervise::{LaunchFailure, classify_launch_failure};
+use super::recovery::{LaunchFailure, classify_launch_failure};
 use super::*;
 use crate::BinaryLookup;
 

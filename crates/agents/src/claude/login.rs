@@ -11,7 +11,7 @@ const TOKEN_ENV: &str = "CLAUDE_CODE_OAUTH_TOKEN";
 /// What the CLI would use before that token, by its own order: another provider's credentials, a bearer token and an
 /// API key. A machine that sets one would otherwise run the agent under it, whatever login its hub chose. Each was
 /// seen to take over from a token, in what `auth status` says.
-const OUTRANKS_THE_TOKEN: &[&str] = &[
+pub(super) const OUTRANKS_THE_TOKEN: &[&str] = &[
     "CLAUDE_CODE_USE_BEDROCK",
     "CLAUDE_CODE_USE_VERTEX",
     "CLAUDE_CODE_USE_FOUNDRY",
@@ -20,6 +20,7 @@ const OUTRANKS_THE_TOKEN: &[&str] = &[
     "CLAUDE_CODE_USE_ANTHROPIC_GOOGLE_CLOUD",
     "ANTHROPIC_AUTH_TOKEN",
     "ANTHROPIC_API_KEY",
+    "ANTHROPIC_CUSTOM_HEADERS",
 ];
 
 /// Where the CLI sends its requests instead of Anthropic's API, which would get the token with them.
@@ -27,8 +28,8 @@ const SENDS_IT_ELSEWHERE: &str = "ANTHROPIC_BASE_URL";
 
 /// Has `command` run the CLI under `login`, at Anthropic's own API, and under nothing that would outrank it. With
 /// none, the command is left as it is, so the CLI uses this machine's own login. [`start`](super::process::start)
-/// calls it just before the CLI starts, so nothing set after it puts back what this takes out. The CLI's own settings
-/// still can, with an `env` of their own or an `apiKeyHelper`, which is why the account read checks.
+/// calls it just before the CLI starts, so nothing set after it puts back what this takes out. The stream startup then pins these settings in the CLI's memory and verifies them with `login_check`,
+/// since settings can otherwise put credentials back after the process starts.
 pub(in crate::claude) fn run_under(command: &mut Command, login: Option<&AgentLogin>) {
     let Some(login) = login else { return };
     for name in OUTRANKS_THE_TOKEN.iter().chain([&SENDS_IT_ELSEWHERE]) {

@@ -9,7 +9,7 @@
 //! its own, as a hook would, and writes its PID and that one's to `title-pids`, so a test can tell that stopping the
 //! call reaches both.
 
-use std::io::Read as _;
+use std::io::BufRead as _;
 use std::path::Path;
 use std::process::Command;
 use std::time::Duration;
@@ -17,9 +17,7 @@ use std::time::Duration;
 use serde_json::{Value, json};
 
 pub(crate) fn answer(state: &Path) {
-    let mut line = String::new();
-    std::io::stdin().read_to_string(&mut line).unwrap();
-    let message: Value = serde_json::from_str(line.trim()).unwrap();
+    let message = prompt_line();
     let prompt = crate::prompt::read_prompt(&message["message"]["content"]);
     std::fs::write(state.join("title-prompt"), &prompt).unwrap();
     std::fs::write(state.join("title-images"), crate::prompt::attached()).unwrap();
@@ -45,4 +43,26 @@ pub(crate) fn answer(state: &Path) {
     });
     println!("{result}");
     println!("{}", json!({"type": "system", "subtype": "session_state_changed", "state": "idle"}));
+}
+
+/// A title uses the same startup controls as a session, before it receives a user line.
+fn prompt_line() -> Value {
+    let out = std::sync::Arc::new(parking_lot::Mutex::new(std::io::stdout()));
+    for line in std::io::stdin().lock().lines() {
+        let value: Value = serde_json::from_str(&line.unwrap()).unwrap();
+        if value["type"] == "user" {
+            return value;
+        }
+        let reply = match value["request"]["subtype"].as_str() {
+            Some("apply_flag_settings") => {
+                crate::settings::apply_flag_settings(&value["request"]["settings"]);
+                Value::Null
+            }
+            Some("initialize") => crate::settings::login_identity(),
+            Some("get_settings") => json!({"effective":crate::settings::effective()}),
+            other => panic!("unexpected title control {other:?}"),
+        };
+        crate::answer_control(&out, &value["request_id"], Ok(reply));
+    }
+    panic!("no title prompt");
 }

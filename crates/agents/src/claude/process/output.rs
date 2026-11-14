@@ -1,16 +1,12 @@
 //! Reading what the CLI writes.
 
-use crate::stdio::next_line;
-pub(super) use crate::stdio::read_stderr;
-
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
+use crate::claude::login_check::Output;
 use protocol::event::{Asking, EventBody};
 use protocol::model::CacheRequest;
 use serde_json::json;
-use tokio::io::BufReader;
-use tokio::process::ChildStdout;
 use tokio::sync::mpsc;
 use tracing::warn;
 
@@ -19,14 +15,13 @@ use crate::AgentOutput;
 use crate::claude::approvals::Waiting;
 use crate::claude::normalize::{Normalized, Normalizer, Parsed, PromptProgress};
 
-pub(super) async fn read_stdout(stdout: ChildStdout, shared: Arc<Shared>, output: mpsc::Sender<AgentOutput>) {
-    let mut reader = BufReader::new(stdout);
+pub(super) async fn read_stdout(mut stdout: Output, shared: Arc<Shared>, output: mpsc::Sender<AgentOutput>) {
     let mut buffer = Vec::new();
     let mut normalizer = Normalizer::default();
     let mut answering = Answering::default();
-    while let Some(line) = next_line(&mut reader, &mut buffer).await {
+    while let Some(line) = stdout.next(&mut buffer).await {
         if let Some(tap) = &shared.tap {
-            tap.read(&line);
+            tap.read(&super::capture::safe_line(&line));
         }
         if line.trim().is_empty() {
             continue;
