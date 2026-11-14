@@ -30,7 +30,17 @@ impl Store {
     /// revision only moves when the draft does.
     pub fn set_answer_draft(&self, id: &SessionId, draft: Option<&AnswerDraft>) -> Result<Reading, StoreError> {
         let conn = lock(&self.writer);
-        let draft = draft.filter(|draft| draft.says_anything());
+        let mut draft = draft.cloned();
+        if let Some(draft) = &mut draft
+            && let Some(request) = super::super::approvals::request_on(&conn, id, &draft.approval_id)?
+        {
+            for (index, _) in protocol::event::secret_questions(&request) {
+                if let Some(answer) = draft.answers.get_mut(index) {
+                    *answer = protocol::model::AnswerSoFar::default();
+                }
+            }
+        }
+        let draft = draft.as_ref().filter(|draft| draft.says_anything());
         let json = draft.map(serde_json::to_string).transpose()?;
         let changed = conn.execute(
             "UPDATE sessions SET answer_draft = ?1 WHERE id = ?2 AND closed_at_ms IS NULL AND answer_draft IS NOT ?1

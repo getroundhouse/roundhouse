@@ -9,4 +9,4 @@ use protocol::model::Seq;
 mod tests;
 
 mod approval_rows;
-pub(super) use approval_rows::note_approvals;
+pub(super) use approval_rows::{note_approvals, request_on};

@@ -3,6 +3,7 @@
 
 mod accounts;
 mod activity;
+mod agent_runs;
 mod cache;
 mod comments;
 mod drafts;

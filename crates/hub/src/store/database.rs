@@ -25,7 +25,7 @@ pub struct Store {
 #[derive(Clone, Debug)]
 pub struct StoredSession {
     pub session: Session,
-    pub agent_session_id: AgentSessionId,
+    pub agent_session_id: Option<AgentSessionId>,
     /// Whether the agent has opened this conversation, which decides how it's launched next.
     pub agent_opened: bool,
 }

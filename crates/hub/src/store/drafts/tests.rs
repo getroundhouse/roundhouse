@@ -294,3 +294,23 @@ fn a_comment_being_written_on_a_workspace_that_isnt_there_is_refused() {
 
     assert!(matches!(refused, Err(StoreError::NotFound { kind: "workspace", .. })), "{refused:?}");
 }
+
+#[test]
+fn secret_answers_never_reach_the_shared_draft_or_recorded_decision() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_session(dir.path());
+    let request: EventBody = serde_json::from_value(serde_json::json!({
+        "type":"approval_requested","approval_id":"q",
+        "request":{"asks":{"asks":"questions","questions":[
+            {"text":"Secret?","typed":"secret"},{"text":"Public?","typed":"yes"}
+        ]}}
+    }))
+    .unwrap();
+    store.append(&id(), None, &request, None, None, None).unwrap();
+    let secret = AnswerSoFar { typed: "synthetic-secret".into(), other: true, picked: Vec::new() };
+    let public = AnswerSoFar { typed: "public".into(), other: true, picked: Vec::new() };
+    let draft = AnswerDraft { approval_id: "q".into(), answers: vec![secret, public.clone()] };
+    store.set_answer_draft(&id(), Some(&draft)).unwrap();
+    let kept = store.get_session(&id()).unwrap().session.answer_draft.unwrap();
+    assert_eq!(kept.answers, [AnswerSoFar::default(), public]);
+}

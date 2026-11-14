@@ -1,6 +1,7 @@
 use super::super::{Command, LiveSession, Origin};
 use crate::hub::Hub;
 use protocol::attachment::Attachment;
+use protocol::capability::Control;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::event::{ApprovalDecision, ApprovalOutcome, EventBody, NoticeLevel};
 use protocol::model::{ApprovalId, AttachmentId, ClientMessageId, Seq, SetupStatus};
@@ -47,18 +48,36 @@ impl LiveSession {
             Asking::Prompt(prompt) => {
                 // Only now, after waiting on setup, since the worktree has to be ready for them.
                 let placed = self.hub()?.place_attachments(&self.id, &self.workspace_id, &prompt.files).await?;
-                self.send_to_agent(AgentPrompt { session_id, seq, prompt: prompt.with_files(placed) }).await
+                {
+                    let prompt = prompt.with_files(placed);
+                    let control = Control::Prompt {
+                        seq,
+                        prompt: prompt.clone(),
+                        extras: protocol::capability::prompts::Extras::default(),
+                    };
+                    self.send_to_agent(control, AgentPrompt { session_id, seq, prompt }).await
+                }
             }
-            Asking::Compact { keeping } => self.send_to_agent(AgentCompact { session_id, asked: seq, keeping }).await,
+            Asking::Compact { keeping } => {
+                self.send_to_agent(
+                    Control::Compact { asked: seq, keeping: keeping.clone() },
+                    AgentCompact { session_id, asked: seq, keeping },
+                )
+                .await
+            }
         }
     }
 
     /// Sends what was recorded to the agent, starting one if it has to.
-    pub(super) async fn send_to_agent<R: Request<Reply = Delivery> + Clone>(&self, request: R) -> Result<(), ApiError> {
+    pub(super) async fn send_to_agent<R: Request<Reply = Delivery> + Clone>(
+        &self,
+        control: Control,
+        request: R,
+    ) -> Result<(), ApiError> {
         // Twice, because the agent can exit between checking on it and sending to it.
         for _ in 0..2 {
             let link = self.ensure_agent().await?;
-            if link.call(request.clone()).await? == Delivery::Delivered {
+            if self.control_agent(&link, control.clone(), request.clone()).await? == Delivery::Delivered {
                 return Ok(());
             }
             let mut state = self.state.lock();
@@ -156,7 +175,15 @@ impl LiveSession {
                 return;
             }
             warn!(session = %self.id, "could not deliver what was asked of the agent: {e}");
-            self.record_start_failed(&e).await;
+            if self.agent_running() {
+                self.record_or_log(
+                    Origin::Hub,
+                    EventBody::Notice { level: NoticeLevel::Error, message: e.message, parent_tool_use_id: None },
+                )
+                .await;
+            } else {
+                self.record_start_failed(&e).await;
+            }
         }
     }
 
@@ -197,7 +224,11 @@ impl LiveSession {
         }
         // The answers are recorded as well as passed on, in the form they came, since the agent's own words for them
         // are its adapter's to choose.
-        let (outcome, answers_by_text, answers_by_position) = match &decision {
+        let request = self.approval_request(&approval_id).await?;
+        let recorded_decision = super::super::decisions::redacted(&request, &decision);
+        // Validate before the log says the decision was made.
+        super::super::decisions::control(&request, approval_id.clone(), &decision, self.run_claims().as_ref())?;
+        let (outcome, answers_by_text, answers_by_position) = match &recorded_decision {
             ApprovalDecision::Allow { .. } => (ApprovalOutcome::Allowed, None, None),
             ApprovalDecision::AnswerByText { answers } => (ApprovalOutcome::Allowed, Some(answers.clone()), None),
             ApprovalDecision::AnswerByPosition { answers } => (ApprovalOutcome::Allowed, None, Some(answers.clone())),
@@ -224,8 +255,15 @@ impl LiveSession {
         let link = hub
             .existing_worker(&self.workspace_id)
             .ok_or_else(|| ApiError::new(ErrorCode::Conflict, "the agent that asked has exited"))?;
-        let request = AgentApproval { session_id: self.id.clone(), approval_id, decision };
-        if link.call(request).await? == Delivery::Delivered {
+        let asked = self.approval_request(&approval_id).await?;
+        let claims = self.run_claims();
+        let request =
+            AgentApproval { session_id: self.id.clone(), approval_id: approval_id.clone(), decision: decision.clone() };
+        let delivered = match super::super::decisions::control(&asked, approval_id, &decision, claims.as_ref())? {
+            Some(control) => self.control_agent(&link, control, request).await?,
+            None => link.call(request).await?,
+        };
+        if delivered == Delivery::Delivered {
             return Ok(());
         }
         self.record_or_log(
@@ -246,7 +284,7 @@ impl LiveSession {
         let Some(link) = hub.existing_worker(&self.workspace_id) else {
             return Ok(());
         };
-        link.call(AgentCancel { session_id: self.id.clone() }).await.map(drop)
+        self.control_agent(&link, Control::Cancel, AgentCancel { session_id: self.id.clone() }).await.map(drop)
     }
 
     pub(crate) async fn handle_stop(&self) -> Result<(), ApiError> {

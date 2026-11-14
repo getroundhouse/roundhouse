@@ -113,9 +113,9 @@ impl Store {
 /// Keeps `draft`, on the writer, as [`Store::set_new_workspace_draft`] says.
 fn keep(conn: &Connection, draft: &NewWorkspaceDraftToKeep) -> Result<(NewWorkspaceDraft, bool), StoreError> {
     let files = named_on(conn, &FileFor::NewWorkspace, &draft.files)?;
-    let NewWorkspaceDraftToKeep { repo_id, text, model, effort, plan, .. } = draft.clone();
+    let NewWorkspaceDraftToKeep { agent, repo_id, text, model, effort, plan, .. } = draft.clone();
     // Without its revision, which is the row's, so the same draft is always the same JSON.
-    let kept = NewWorkspaceDraft { repo_id, text, files, model, effort, plan, rev: Rev::default() };
+    let kept = NewWorkspaceDraft { agent, repo_id, text, files, model, effort, plan, rev: Rev::default() };
     let changed = conn.execute(
         "UPDATE new_workspace_draft SET draft = ?1 WHERE draft IS NOT ?1",
         params![serde_json::to_string(&kept)?],
@@ -126,8 +126,8 @@ fn keep(conn: &Connection, draft: &NewWorkspaceDraftToKeep) -> Result<(NewWorksp
 /// Whether what's kept says what `draft` does, its files in the same order.
 fn says(kept: &NewWorkspaceDraft, draft: &NewWorkspaceDraftToKeep) -> bool {
     let files = kept.files.iter().map(|file| &file.id);
-    (&kept.repo_id, &kept.text, &kept.model, kept.effort, kept.plan)
-        == (&draft.repo_id, &draft.text, &draft.model, draft.effort, draft.plan)
+    (kept.agent, &kept.repo_id, &kept.text, &kept.model, kept.effort, kept.plan)
+        == (draft.agent, &draft.repo_id, &draft.text, &draft.model, draft.effort, draft.plan)
         && files.eq(draft.files.iter())
 }
 

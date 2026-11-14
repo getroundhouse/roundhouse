@@ -336,4 +336,6 @@ pub(in super::super) const MIGRATIONS: &[&str] = &[
     // When the person last sent something to an agent under each account, in `accounts`.
     accounts::USED_AT,
     waits::REMOTE_WAITS,
+    // A run reports its conversation identity and claims in one durable initialization.
+    super::agent_runs::AGENT_RUNS,
 ];

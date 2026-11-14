@@ -13,4 +13,4 @@ use rusqlite::Connection;
 pub(crate) mod tests;
 
 mod recording;
-pub use recording::{Places, SessionChange, StatusChange, TurnEdge, cancelled_approval};
+pub use recording::{Initialized, Places, SessionChange, StatusChange, TurnEdge, cancelled_approval};

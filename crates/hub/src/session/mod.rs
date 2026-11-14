@@ -11,7 +11,11 @@ use protocol::event::EventBody;
 use protocol::model::{ContextUsage, RunId, Seq, SessionStatus};
 
 mod cache;
+#[cfg(test)]
+mod capability_tests;
 mod commands;
+mod controls;
+mod decisions;
 mod ingest;
 mod limits;
 mod messages;

@@ -41,12 +41,20 @@ pub struct SessionChange {
     pub queue_held: Option<bool>,
     /// The run whose worker numbered what's recorded, and its number, which is the last recorded from that worker.
     pub recorded: Option<(RunId, u64)>,
+    /// A current run opened its conversation. Its identity and claims commit with its initialization.
+    pub initialized: Option<Initialized>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Initialized {
+    pub conversation: Option<protocol::model::AgentSessionId>,
+    pub capabilities: Option<protocol::model::RunCapabilities>,
 }
 
 impl SessionChange {
     /// Whether nothing on the session's record changes. Which number from its worker it has recorded isn't there.
     pub fn is_none(&self) -> bool {
-        self.status.is_none() && self.queue_held.is_none()
+        self.status.is_none() && self.queue_held.is_none() && self.initialized.is_none()
     }
 }
 
@@ -71,6 +79,13 @@ fn change_session(
     change: SessionChange,
 ) -> Result<(), StoreError> {
     let id = session_id.as_str();
+    if let Some(init) = change.initialized {
+        tx.execute(
+            "UPDATE sessions SET agent_opened = 1, agent_session_id = coalesce(?, agent_session_id), agent_capabilities = ? WHERE id = ?",
+            params![init.conversation.as_ref().map(protocol::model::AgentSessionId::as_str),
+                init.capabilities.as_ref().map(serde_json::to_string).transpose()?, id],
+        )?;
+    }
     if let Some(held) = change.queue_held {
         tx.execute("UPDATE sessions SET queue_held = ? WHERE id = ?", params![held, id])?;
     }

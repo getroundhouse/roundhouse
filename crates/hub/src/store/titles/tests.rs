@@ -177,7 +177,7 @@ fn retitling_one_record_leaves_the_others_alone() {
     }
     for id in ["t", "u"] {
         let mut chat = idle_session(1);
-        (chat.session.id, chat.agent_session_id) = (id.into(), id.into());
+        (chat.session.id, chat.agent_session_id) = (id.into(), Some(id.into()));
         store.insert_session(&chat, None).unwrap();
     }
     store.retitle_workspace(&"w3".into(), &title("Write the docs"), Retitle::FirstLine).unwrap();

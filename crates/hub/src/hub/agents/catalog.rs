@@ -22,7 +22,7 @@ impl Hub {
     }
 
     /// Refuses what a chat running `kind` can't be given, as [`AgentDescription::takes`] says.
-    pub(in super::super) fn offered(&self, kind: AgentKind, change: &SessionSettingsChange) -> Result<(), ApiError> {
+    pub(crate) fn offered(&self, kind: AgentKind, change: &SessionSettingsChange) -> Result<(), ApiError> {
         let not_offered = |e: protocol::model::NotOffered| ApiError::new(ErrorCode::InvalidRequest, e.to_string());
         self.agent(kind)?.takes(change).map_err(not_offered)
     }

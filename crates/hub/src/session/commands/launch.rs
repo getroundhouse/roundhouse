@@ -1,5 +1,6 @@
 //! Starting the session's agent: finding or starting its workspace's worker, and launching the agent there.
 
+use protocol::capability::conversation::Start;
 use std::sync::Arc;
 
 use protocol::client::{ApiError, ErrorCode};
@@ -98,9 +99,13 @@ impl LiveSession {
     /// taken for a replaced agent's and dropped.
     async fn start_agent(&self, hub: &Hub, link: &WorkerLink, launch: Launch) -> Result<(), ApiError> {
         let Launch { cwd, env, login } = launch;
-        let (resume, settings) = {
+        let (resume, start, settings) = {
             let state = self.state.lock();
-            (state.agent_opened, state.settings.clone())
+            let start = match (&state.agent_session_id, state.agent_opened) {
+                (Some(id), true) => Start::Resume { conversation: id.clone() },
+                (id, _) => Start::New { conversation: id.clone() },
+            };
+            (state.agent_opened, start, state.settings.clone())
         };
         let asked = hub.blocking(Store::next_run).await?;
         if let Some(Handed { account, .. }) = &login {
@@ -118,11 +123,7 @@ impl LiveSession {
             run: asked,
             agent: self.agent,
             cwd,
-            start: if resume {
-                protocol::capability::conversation::Start::Resume { conversation: self.agent_session_id.clone() }
-            } else {
-                protocol::capability::conversation::Start::New { conversation: Some(self.agent_session_id.clone()) }
-            },
+            start,
             settings,
             env,
             tools_token,

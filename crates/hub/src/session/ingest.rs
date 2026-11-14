@@ -87,10 +87,16 @@ async fn ingest_event(
 
 /// The request in `body`, if the hub allows it itself, as [`the_hub_allows`] says.
 fn allowed_by_the_hub(session: &LiveSession, body: &EventBody) -> Option<ApprovalId> {
-    let EventBody::ApprovalRequested { approval_id, asking, .. } = body else { return None };
+    let EventBody::ApprovalRequested { approval_id, asking, request, .. } = body else { return None };
     let mode = session.state.lock().settings.permission_mode;
     let set_to = session.hub().is_ok_and(|hub| hub.allows_asked_in_full_access());
-    the_hub_allows(mode, asking.as_deref(), set_to).then(|| approval_id.clone())
+    let tool =
+        request.as_ref().map(|r| !r.always && matches!(r.asks, protocol::capability::approvals::Asks::Call { .. }));
+    let allowed = tool.map_or_else(
+        || the_hub_allows(mode, asking.as_deref(), set_to),
+        |tool| set_to && mode == PermissionMode::FullAccess && tool,
+    );
+    allowed.then(|| approval_id.clone())
 }
 
 /// Whether the hub allows a request that `asking` says what it asks, in a session in `mode`, itself, when its settings
@@ -138,7 +144,6 @@ async fn follow(session: &Arc<LiveSession>, run: RunId, current: bool, body: &Ev
             if current {
                 session.launched(run);
             }
-            mark_opened(session).await;
         }
         EventBody::AgentMode { permission_mode } if current => session.note_mode(*permission_mode).await,
         // What the cache held is no longer the conversation, and the next request writes the summary.
@@ -188,21 +193,6 @@ pub(super) fn says_something_new(
     said: &ContextUsage,
 ) -> bool {
     current == Some(run) && known != Some(said)
-}
-
-async fn mark_opened(session: &Arc<LiveSession>) {
-    let first_time = {
-        let mut state = session.state.lock();
-        !std::mem::replace(&mut state.agent_opened, true)
-    };
-    if !first_time {
-        return;
-    }
-    let Ok(hub) = session.hub() else { return };
-    let id = session.id.clone();
-    if let Err(e) = hub.blocking(move |store| store.set_agent_opened(&id)).await {
-        error!(session = %session.id, "could not record that the agent opened: {e}");
-    }
 }
 
 impl LiveSession {

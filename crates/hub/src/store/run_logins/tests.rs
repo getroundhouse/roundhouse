@@ -106,7 +106,7 @@ fn once_a_worker_says_which_run_is_going_the_logins_the_chats_other_runs_were_gi
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_a_login(dir.path());
     let mut other = idle_session(now_ms());
-    (other.session.id, other.agent_session_id) = ("t".into(), "t".into());
+    (other.session.id, other.agent_session_id) = ("t".into(), Some("t".into()));
     store.insert_session(&other, None).unwrap();
     for run in 1..=3 {
         store.record_run_login(&"s".into(), RunId::new(run), &"given".into()).unwrap();

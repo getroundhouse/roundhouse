@@ -108,7 +108,7 @@ fn a_workspaces_prompts_are_listed_oldest_first_across_its_chats() {
     let chat = |id: &str, workspace: &str| {
         let mut chat = idle_session(1);
         (chat.session.id, chat.session.workspace_id) = (id.into(), workspace.into());
-        chat.agent_session_id = id.into();
+        chat.agent_session_id = Some(id.into());
         store.insert_session(&chat, None).unwrap();
     };
     let elsewhere = Workspace {
