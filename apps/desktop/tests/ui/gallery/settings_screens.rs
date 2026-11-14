@@ -6,7 +6,7 @@
 use super::frame::Frame;
 use super::screens::FOCUS;
 use super::steps::{Screen, Step};
-use super::world::World;
+use super::world::{LoginSupport, World};
 use super::worlds::{accounts, conversation, logins_unkept, none_found, own_hub};
 
 /// What puts the cursor in Settings' search.
@@ -37,6 +37,27 @@ pub(crate) const SCREENS: &[Screen] = &[
         name: "settings-accounts",
         spec: "settings.md",
         world: Some(accounts),
+        frame: Frame::Layout,
+        steps: &[Step::Select(FOCUS), Step::OpenSettings, ACCOUNTS],
+    },
+    Screen {
+        name: "settings-accounts-default-picker",
+        spec: "settings.md",
+        world: Some(accounts),
+        frame: Frame::Layout,
+        steps: &[Step::Select(FOCUS), Step::OpenSettings, ACCOUNTS, Step::Click("account-default-claude")],
+    },
+    Screen {
+        name: "settings-accounts-default-ended",
+        spec: "settings.md",
+        world: Some(default_ended),
+        frame: Frame::Layout,
+        steps: &[Step::Select(FOCUS), Step::OpenSettings, ACCOUNTS],
+    },
+    Screen {
+        name: "settings-accounts-no-defaults",
+        spec: "settings.md",
+        world: Some(defaults_unkept),
         frame: Frame::Layout,
         steps: &[Step::Select(FOCUS), Step::OpenSettings, ACCOUNTS],
     },
@@ -96,5 +117,17 @@ pub(crate) const SCREENS: &[Screen] = &[
 fn settings_unkept() -> World {
     let mut world = own_hub();
     world.keeps_no_settings = true;
+    world
+}
+
+fn default_ended() -> World {
+    let mut world = accounts();
+    world.account_defaults[0].account = "claude-login-0003".into();
+    world
+}
+
+fn defaults_unkept() -> World {
+    let mut world = accounts();
+    world.logins = LoginSupport::Accounts;
     world
 }

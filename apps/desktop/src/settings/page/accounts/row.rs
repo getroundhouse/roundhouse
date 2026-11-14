@@ -10,7 +10,7 @@ use gpui_kit::{
     AnyElement, App, Div, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Role, SharedString,
     StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, Window, div, px,
 };
-use look::{Off as _, Sizing as _, Typeset as _};
+use look::{Off as _, Shaped as _, Sizing as _, Typeset as _};
 use protocol::model::{Account, AgentKind};
 
 use super::words::{self, Standing};
@@ -36,6 +36,22 @@ pub(super) fn row(drawing: &Drawing<'_>, account: &Account, cx: &App) -> AnyElem
     let dim = standing == Some(Standing::Disconnected);
     let name =
         div().truncate().emphasis().text_color(if dim { colors.text_muted } else { colors.text }).child(called.clone());
+    let badge = drawing
+        .defaults
+        .and_then(|defaults| defaults.iter().find(|choice| choice.account == account.id))
+        .and_then(|choice| drawing.agents.of(choice.agent))
+        .map(|agent| {
+            div()
+                .flex_none()
+                .px_2()
+                .py_0p5()
+                .corners(look::Corner::Control)
+                .bg(colors.raised)
+                .typeset(look::Type::Body)
+                .text_color(colors.text_muted)
+                .child(format!("Default for {}", agent.name))
+        });
+    let name = h_flex().gap_2().min_w_0().child(name).children(badge);
     let used = words::last_used(account, drawing.now_ms, cx);
     let used = used.map(|used| div().typeset(look::Type::Body).text_color(colors.text_faint).child(used));
     let who =

@@ -54,7 +54,12 @@ impl RenderOnce for AccountsPage {
         let defaults = self.records.hub_settings().and_then(|settings| settings.account_defaults.as_deref());
         let drawing =
             Drawing { kept: &kept, agents: self.records.agents(), scroll: &self.within.scroll, now_ms, defaults };
-        v_flex().gap_8().pb_4().child(found_list(&drawing, &found, cx)).child(added_list(&drawing, &added, cx))
+        v_flex()
+            .gap_8()
+            .pb_4()
+            .child(super::defaults::section(&drawing, &added, cx))
+            .child(found_list(&drawing, &found, cx))
+            .child(added_list(&drawing, &added, cx))
     }
 }
 

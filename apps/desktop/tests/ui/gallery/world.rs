@@ -67,9 +67,17 @@ pub(crate) struct World {
     pub(crate) account_defaults: Vec<protocol::model::AccountDefault>,
     /// The hub is from before hubs kept settings, so it sends none.
     pub(crate) keeps_no_settings: bool,
-    /// The hub is from before hubs kept logins, so it says nothing of what makes one, and refuses to connect one.
-    pub(crate) keeps_no_logins: bool,
+    pub(crate) logins: LoginSupport,
     records: i64,
+}
+
+/// The login capabilities of the hub whose version the screen illustrates.
+#[derive(Clone, Copy, Default, Eq, PartialEq)]
+pub(crate) enum LoginSupport {
+    None,
+    Accounts,
+    #[default]
+    Defaults,
 }
 
 /// A hub's build, other than the app's.
@@ -124,7 +132,7 @@ impl World {
             comments: self.comments.values().flatten().cloned().collect(),
             // As a hub starts out.
             hub_settings: (!self.keeps_no_settings).then(|| protocol::model::HubSettings {
-                account_defaults: (!self.keeps_no_logins).then(|| self.account_defaults.clone()),
+                account_defaults: (self.logins == LoginSupport::Defaults).then(|| self.account_defaults.clone()),
                 keep_awake: true,
                 allow_asked_in_full_access: Some(false),
                 rev: Rev::default(),
