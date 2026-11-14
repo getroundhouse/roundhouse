@@ -23,6 +23,10 @@ pub enum AgentError {
     /// The agent understood the request and said no. This is its own wording.
     #[error("{0}")]
     Refused(String),
+    /// The agent took the request and failed on it, or answered it with nothing, so what it did is unknown. This is its
+    /// own wording, or the adapter's when it said nothing.
+    #[error("{0}")]
+    Failed(String),
     /// The agent doesn't know the request, such as one a newer CLI added, so asking again is pointless. This is its
     /// own wording.
     #[error("{0}")]
@@ -93,6 +97,9 @@ pub enum NoTitle {
     Reported(String),
     #[error("it answered with nothing")]
     Empty,
+    /// It asked something, such as a question or for approval, which nothing answers while it makes a title.
+    #[error("it asked something rather than giving a title")]
+    Asked,
 }
 
 impl From<AgentError> for ApiError {

@@ -167,6 +167,15 @@ async fn title_configuration(shared: &Shared, params: &mut Value, options: &Agen
     params["config"]["features.plugins"] = json!(false);
     params["config"]["features.hooks"] = json!(false);
     params["config"]["features.apps"] = json!(false);
+    // Nothing answers a title's questions, and it has no use for subagents, a browser, the computer or making images.
+    // Codex offers its model the same tools with these off, and refuses a call to one that's off, so they keep a title
+    // from asking where Codex honours them, and `read_title` ends one that asks anyway.
+    params["config"]["features.default_mode_request_user_input"] = json!(false);
+    params["config"]["features.multi_agent"] = json!(false);
+    params["config"]["features.browser_use"] = json!(false);
+    params["config"]["features.in_app_browser"] = json!(false);
+    params["config"]["features.computer_use"] = json!(false);
+    params["config"]["features.image_generation"] = json!(false);
     params["config"]["web_search"] = json!("disabled");
     params["config"]["project_doc_max_bytes"] = json!(0);
     params["config"]["model_reasoning_summary"] = json!("none");

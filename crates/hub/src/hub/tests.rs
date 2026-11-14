@@ -75,6 +75,18 @@ pub(crate) fn stand_in_worker(hub: &Hub) -> Arc<WorkerLink> {
     link
 }
 
+/// A stand-in for `w`'s worker that takes everything it's asked, and what it was asked, in order, as JSON.
+pub(crate) fn taking_worker(hub: &Hub) -> (Arc<WorkerLink>, Arc<parking_lot::Mutex<Vec<String>>>) {
+    let asked = Arc::new(parking_lot::Mutex::new(Vec::new()));
+    let kept = asked.clone();
+    let link = WorkerLink::answering(move |request| {
+        kept.lock().push(serde_json::to_string(&request).unwrap());
+        Some(Ok(protocol::worker::WorkerResponse::Ok))
+    });
+    hub.workers.lock().insert("w".into(), link.clone());
+    (link, asked)
+}
+
 /// The session `s` of a hub [`hub_in`] made, carried on with from an earlier hub whose agent of `run` is still running
 /// on `link`.
 pub(crate) fn carried_on(hub: &Arc<Hub>, link: &WorkerLink, run: RunId) -> Arc<LiveSession> {

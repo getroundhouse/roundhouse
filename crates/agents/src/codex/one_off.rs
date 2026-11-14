@@ -113,6 +113,9 @@ async fn read_title(rx: &mut mpsc::Receiver<AgentOutput>) -> Result<Title, Agent
             AgentOutput::Event { body: EventBody::TurnEnded { .. }, .. } | AgentOutput::Exited { .. } => {
                 return Err(NoTitle::NoResult.into());
             }
+            // Nothing answers it, so it would wait out the title's time. Its thread turns questions off, which is
+            // Codex's to honour.
+            AgentOutput::Event { body: EventBody::ApprovalRequested { .. }, .. } => return Err(NoTitle::Asked.into()),
             AgentOutput::Event { .. }
             | AgentOutput::Delta(_)
             | AgentOutput::Context(_)
@@ -126,4 +129,50 @@ async fn read_title(rx: &mut mpsc::Receiver<AgentOutput>) -> Result<Title, Agent
 fn binary(options: &AgentOptions) -> Result<PathBuf, AgentError> {
     crate::binary::resolve_binary("codex", &[], &options.binary)
         .ok_or_else(|| AgentError::Refused("Could not find the Codex CLI".into()))
+}
+
+#[cfg(test)]
+mod tests {
+    use protocol::capability::approvals::{Asks, Request};
+    use protocol::capability::asking::{Choose, Question, TypedAnswer};
+    use protocol::event::EventBody;
+    use serde_json::Value;
+    use tokio::sync::mpsc;
+
+    use crate::{AgentError, AgentOutput, NoTitle};
+
+    #[tokio::test]
+    async fn a_title_that_asks_anything_ends_at_once_without_one() {
+        let question = Question {
+            text: "Which?".into(),
+            header: None,
+            options: Vec::new(),
+            choose: Choose::One,
+            typed: TypedAnswer::Yes,
+        };
+        let request = Request {
+            asks: Asks::Questions { questions: vec![question] },
+            suggested: Vec::new(),
+            always: false,
+            why: None,
+        };
+        let asked = EventBody::ApprovalRequested {
+            approval_id: "codex-1".into(),
+            request: Some(Box::new(request)),
+            tool_name: String::new(),
+            tool_use_id: None,
+            input: Value::Null,
+            description: None,
+            suggestions: Box::new(Value::Null),
+            asking: None,
+            reason: None,
+            asked_by: None,
+        };
+        let (tx, mut rx) = mpsc::channel(4);
+        tx.send(AgentOutput::event(asked, None)).await.unwrap();
+        // The sender stays open, as the process's does while it waits for an answer.
+        let read = tokio::time::timeout(std::time::Duration::from_secs(5), super::read_title(&mut rx)).await;
+        assert!(matches!(read, Ok(Err(AgentError::NoTitle(NoTitle::Asked)))));
+        drop(tx);
+    }
 }

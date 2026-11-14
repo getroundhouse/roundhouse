@@ -1,5 +1,5 @@
 use protocol::attachment::NewAttachment;
-use protocol::event::EventBody;
+use protocol::event::{EventBody, ExitReason};
 use protocol::model::{CacheRequest, ContextUsage, UsageLimit};
 use protocol::tail::StreamDelta;
 
@@ -38,5 +38,24 @@ impl AgentOutput {
     /// An event that names no images.
     pub fn event(body: EventBody, raw: Option<String>) -> Self {
         AgentOutput::Event { body, raw, attachments: Vec::new() }
+    }
+
+    /// How the exit [`AgentOutput::Exited`] reports is recorded.
+    pub fn exit_event(code: Option<i32>, signal: Option<i32>, stderr_tail: Vec<String>, requested: bool) -> EventBody {
+        let reason = if requested { ExitReason::Requested } else { ExitReason::Unexpected };
+        EventBody::AgentExited { reason, code, signal, stderr_tail }
+    }
+
+    /// What's recorded of it: the event as it is, and the exit as `AgentExited`, or nothing, for what isn't an event.
+    pub fn recorded(&self) -> Option<EventBody> {
+        match self {
+            AgentOutput::Event { body, .. } => Some(body.clone()),
+            AgentOutput::Exited { code, signal, stderr_tail, requested } => {
+                Some(Self::exit_event(*code, *signal, stderr_tail.clone(), *requested))
+            }
+            AgentOutput::Delta(_) | AgentOutput::Context(_) | AgentOutput::Cache(_) | AgentOutput::Limits { .. } => {
+                None
+            }
+        }
     }
 }

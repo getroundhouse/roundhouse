@@ -11,6 +11,8 @@ A scenario is the same whatever it's played against: the steps a driver takes, d
 
 A scenario played against both checks that the script does what a real model does, closely enough that the checks hold on both. One only a script can make happen, such as a model that thinks on cue, is played against the scripted model alone.
 
+Every trial whose steps all ran is also checked against the capability laws. The driver keeps a log as a hub would, numbered as a hub numbers it: each prompt and decision, recorded before it's sent, each launch and exit, and each of the agent's events under its run. `capability::laws` then checks that log against what each run claimed, as its `AgentProcess` says, so a trial fails when the adapter settles something twice or records something its run doesn't claim.
+
 ## Playing them
 
 ```sh

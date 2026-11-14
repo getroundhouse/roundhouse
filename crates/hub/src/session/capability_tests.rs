@@ -1,6 +1,6 @@
 //! Run initialization is durable, and a replaced run cannot choose the conversation the next launch resumes.
 use super::{CarriedOver, Item, LiveSession};
-use crate::hub::tests::{carried_on, flushed, hub_in, stand_in_worker};
+use crate::hub::tests::{carried_on, flushed, hub_in, stand_in_worker, taking_worker};
 use protocol::capability::{Capabilities, Claimed};
 use protocol::event::EventBody;
 use protocol::model::{RunCapabilities, RunId};
@@ -32,6 +32,12 @@ async fn only_the_current_run_can_choose_the_resume_id_and_its_claims_survive_re
     assert!(!untouched.agent_opened);
     assert_eq!(untouched.agent_session_id.as_ref().unwrap().as_str(), "s");
     assert!(untouched.session.agent_capabilities.is_none());
+    {
+        let state = live.state.lock();
+        let conversation = state.agent_session_id.as_ref().map(protocol::model::AgentSessionId::as_str);
+        assert_eq!(conversation, Some("s"), "the next launch doesn't resume what a replaced run said");
+        assert!(!state.agent_opened && state.capabilities.is_none(), "nor is a replaced run's opening kept live");
+    }
 
     let mut claims = Capabilities::default();
     claims.prompts.steer = Some(Claimed {});
@@ -66,26 +72,49 @@ async fn only_the_current_run_can_choose_the_resume_id_and_its_claims_survive_re
     );
 }
 
-#[test]
-fn secret_answers_go_to_the_agent_but_not_the_recorded_decision() {
-    let request: EventBody = serde_json::from_value(serde_json::json!({
-        "type":"approval_requested","approval_id":"q",
-        "request":{"asks":{"asks":"questions","questions":[
-            {"text":"Secret?","typed":"secret"},{"text":"Public?","typed":"yes"}
-        ]}}
-    }))
-    .unwrap();
-    let decision = protocol::event::ApprovalDecision::AnswerByPosition {
+#[tokio::test]
+async fn a_secret_answer_goes_to_the_agent_and_not_the_log() {
+    use protocol::event::{ApprovalDecision, QuestionAnswer};
+    let dir = tempfile::tempdir().unwrap();
+    let hub = hub_in(dir.path());
+    let (link, asked) = taking_worker(&hub);
+    let run = RunId::new(1);
+    let live = carried_on(&hub, &link, run);
+    let mut claims = Capabilities::default();
+    claims.asking.questions = Some(Claimed {});
+    initialized(&live, run, "c", claims).await;
+    let by_position = ApprovalDecision::AnswerByPosition {
         answers: vec![
-            protocol::event::QuestionAnswer { typed: Some("synthetic-secret".into()), picked: Vec::new() },
-            protocol::event::QuestionAnswer { typed: Some("public".into()), picked: Vec::new() },
+            QuestionAnswer { typed: Some("synthetic-secret-1".into()), picked: Vec::new() },
+            QuestionAnswer { typed: Some("public-1".into()), picked: Vec::new() },
         ],
     };
-    let safe = crate::session::decisions::redacted(&request, &decision);
-    let json = serde_json::to_string(&safe).unwrap();
-    assert!(!json.contains("synthetic-secret"));
-    assert!(json.contains("public"));
-    assert!(serde_json::to_string(&decision).unwrap().contains("synthetic-secret"), "the agent still gets the answer");
+    let by_text = ApprovalDecision::AnswerByText {
+        answers: [("Secret?".into(), "synthetic-secret-2".into()), ("Public?".into(), "public-2".into())].into(),
+    };
+    for (id, decision) in [("q1", by_position), ("q2", by_text)] {
+        let request: EventBody = serde_json::from_value(serde_json::json!({
+            "type":"approval_requested","approval_id":id,
+            "request":{"asks":{"asks":"questions","questions":[
+                {"text":"Secret?","typed":"secret"},{"text":"Public?","typed":"yes"}
+            ]}}
+        }))
+        .unwrap();
+        live.send_item(Item::Event { run, body: Box::new(request), raw: None, attachments: Vec::new(), seq: None })
+            .await;
+        flushed(&live).await;
+        hub.session_approve(live.id.clone(), id.into(), decision).await.unwrap();
+    }
+
+    let id = live.id.clone();
+    let log = hub.blocking(move |store| store.read_events(&id, protocol::model::Seq::FIRST, 100, u64::MAX, true));
+    let log = serde_json::to_string(&log.await.unwrap()).unwrap();
+    let sent = asked.lock().join("\n");
+    for n in [1, 2] {
+        assert!(log.contains(&format!("public-{n}")), "the rest of the answer is recorded");
+        assert!(!log.contains(&format!("synthetic-secret-{n}")), "the log keeps no secret");
+        assert!(sent.contains(&format!("synthetic-secret-{n}")), "the agent gets it");
+    }
 }
 
 #[test]

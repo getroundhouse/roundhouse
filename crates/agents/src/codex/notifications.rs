@@ -5,7 +5,8 @@ use protocol::tail::{DeltaChange, StreamDelta};
 use serde_json::Value;
 use tokio::sync::mpsc;
 
-use super::{approvals, control, items, running::Shared, state::TurnId, subagents};
+use super::state::{Ended, TurnId};
+use super::{approvals, control, items, running::Shared, subagents};
 use crate::{AgentError, AgentOutput};
 
 pub(super) async fn read(shared: Arc<Shared>, mut input: mpsc::Receiver<(Value, String)>) {
@@ -14,6 +15,9 @@ pub(super) async fn read(shared: Arc<Shared>, mut input: mpsc::Receiver<(Value, 
             shared.rpc.answered(&value);
             continue;
         }
+        // Kept with the notice of a line that can't be read, as every other line is kept with its event, so what it
+        // said can be read again once a newer Codex's shape is known.
+        let line = raw.clone();
         if let Err(error) = notification(&shared, &value, raw).await {
             shared
                 .event(
@@ -22,7 +26,7 @@ pub(super) async fn read(shared: Arc<Shared>, mut input: mpsc::Receiver<(Value, 
                         message: format!("Could not read Codex's message: {error}"),
                         parent_tool_use_id: subagents::scope(&shared, &value["params"]).and_then(|scope| scope.parent),
                     },
-                    None,
+                    Some(line),
                 )
                 .await;
         }
@@ -141,19 +145,30 @@ async fn delta(shared: &Shared, method: &str, params: &Value, scope: &subagents:
 
 async fn complete(shared: &Shared, turn: &Value, raw: String) -> Result<(), AgentError> {
     let id: TurnId = serde_json::from_value(turn["id"].clone())?;
-    let (plan, cancelled) = {
+    let outcome = match turn["status"].as_str() {
+        Some("completed") => TurnOutcome::Success,
+        Some("interrupted") => TurnOutcome::Cancelled,
+        _ => TurnOutcome::Error,
+    };
+    let error = turn["error"]["message"].as_str().map(str::to_owned);
+    let plan = {
         let mut state = shared.state.lock();
         if state.turn.as_ref() != Some(&id) {
             return Ok(());
         }
+        state.turn = None;
+        state.last_ended = Some(id.clone());
         if state.cancelling {
+            // The cancel waiting for this turn records how it ended, since the turn can have finished before Codex
+            // read the interrupt.
+            state.held_end = Some(Ended { outcome, error, raw });
+            drop(state);
             shared.turn_done.send_replace(Some(id));
             return Ok(());
         }
-        state.turn = None;
-        (state.take_plan(), turn["status"] == "interrupted")
+        state.take_plan()
     };
-    if turn["status"] == "completed"
+    if outcome == TurnOutcome::Success
         && let Some(plan) = plan
     {
         approvals::plan(shared, plan).await;
@@ -161,28 +176,18 @@ async fn complete(shared: &Shared, turn: &Value, raw: String) -> Result<(), Agen
         return Ok(());
     }
     control::settle(shared, None).await;
-    let outcome = if cancelled {
-        TurnOutcome::Cancelled
-    } else if turn["status"] == "completed" {
-        TurnOutcome::Success
-    } else {
-        TurnOutcome::Error
-    };
-    let error = turn["error"]["message"].as_str().map(str::to_owned);
-    let mut end = ended(outcome, error);
-    if let EventBody::TurnEnded { result, .. } = &mut end {
-        *result = shared.state.lock().reply.take();
-    }
-    shared.event(end, Some(raw)).await;
-    control::report_state(shared).await;
+    record_end(shared, outcome, error, Some(raw)).await;
     shared.turn_done.send_replace(Some(id));
     Ok(())
 }
 
-pub(super) fn ended(outcome: TurnOutcome, error: Option<String>) -> EventBody {
-    EventBody::TurnEnded {
+/// Records how the agent's own turn ended, with what it last replied, and what the agent's doing now. A cancelled turn
+/// has no reply, since what it last said was cut off.
+pub(super) async fn record_end(shared: &Shared, outcome: TurnOutcome, error: Option<String>, raw: Option<String>) {
+    let reply = shared.state.lock().reply.take();
+    let end = EventBody::TurnEnded {
         outcome,
-        result: None,
+        result: reply.filter(|_| outcome != TurnOutcome::Cancelled),
         errors: error.into_iter().collect(),
         duration_ms: None,
         cost_usd: None,
@@ -192,5 +197,7 @@ pub(super) fn ended(outcome: TurnOutcome, error: Option<String>) -> EventBody {
         tokens: None,
         only_compacted: false,
         request_failed: false,
-    }
+    };
+    shared.event(end, raw).await;
+    control::report_state(shared).await;
 }

@@ -8,7 +8,6 @@ use std::sync::atomic::Ordering;
 use agents::{AgentOptions, AgentOutput, BinaryLookup, ToolServer};
 use protocol::attachment::NewAttachment;
 use protocol::client::{ApiError, ErrorCode};
-use protocol::event::{EventBody, ExitReason};
 use protocol::model::{AgentKind, AgentLogin, RunId, SessionId, SessionSettingsChange};
 use protocol::paths::AGENTS_DIR;
 use protocol::prompt::Prompt;
@@ -179,8 +178,7 @@ async fn forward_output(
                         agents.remove(&session_id);
                     }
                 }
-                let reason = if requested { ExitReason::Requested } else { ExitReason::Unexpected };
-                let body = EventBody::AgentExited { reason, code, signal, stderr_tail };
+                let body = AgentOutput::exit_event(code, signal, stderr_tail, requested);
                 WorkerFrame::AgentEvent {
                     session_id: session_id.clone(),
                     run,

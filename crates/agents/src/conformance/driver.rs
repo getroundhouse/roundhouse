@@ -5,7 +5,8 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use async_trait::async_trait;
-use protocol::event::{ApprovalDecision, EventBody};
+use protocol::capability::Capabilities;
+use protocol::event::{ApprovalDecision, ApprovalOutcome, EventBody, SessionEvent};
 use protocol::model::{RunId, Seq};
 use protocol::prompt::Prompt;
 use tokio::sync::mpsc;
@@ -46,8 +47,12 @@ pub struct Driver {
     launcher: Box<dyn Launcher>,
     running: Option<Running>,
     last_run: RunId,
-    last_prompt: Seq,
     seen: Vec<Seen>,
+    /// What a hub would have recorded, in its order and numbered as it numbers it: what the driver did as a hub does,
+    /// and what the agent said.
+    log: Vec<SessionEvent>,
+    /// What each run claims.
+    claims: Vec<(RunId, Capabilities)>,
     marks: Vec<(&'static str, Instant)>,
 }
 
@@ -57,8 +62,9 @@ impl Driver {
             launcher,
             running: None,
             last_run: RunId::new(0),
-            last_prompt: Seq::default(),
             seen: Vec::new(),
+            log: Vec::new(),
+            claims: Vec::new(),
             marks: Vec::new(),
         }
     }
@@ -80,6 +86,9 @@ impl Driver {
         let (sender, output) = mpsc::channel(1024);
         let run = RunId::new(self.last_run.get() + 1);
         let agent = self.launcher.launch(run, resume, sender).await?;
+        self.claims.push((run, agent.capabilities()));
+        let started = EventBody::AgentStarted { pid: agent.pid(), resumed: resume, build: None, previous_build: None };
+        self.record(Some(run), started);
         self.last_run = run;
         self.running = Some(Running { agent, output });
         Ok(())
@@ -90,9 +99,14 @@ impl Driver {
         Ok(running.agent.clone())
     }
 
+    /// Records it as a hub does, and returns where.
+    fn record(&mut self, run: Option<RunId>, body: EventBody) -> Seq {
+        super::trial::record(&mut self.log, run, body)
+    }
+
+    /// Records the prompt, as a hub does before it sends one, and sends it with where it's recorded.
     pub async fn prompt(&mut self, text: &str) -> Result<(), Failed> {
-        self.last_prompt = self.last_prompt.next();
-        let seq = self.last_prompt;
+        let seq = self.record(None, EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new(text) });
         self.agent()?.send_prompt(seq, &Prompt::new(text)).await.map_err(|e| Failed(format!("prompting: {e}")))
     }
 
@@ -124,16 +138,30 @@ impl Driver {
                 Ok(None) => return Err(Failed(format!("the agent exited before {what}"))),
                 Err(_) => return Err(Failed(format!("timed out waiting for {what}"))),
             };
-            if let AgentOutput::Event { body: EventBody::ApprovalRequested { approval_id, .. }, .. } = &output {
+            let done = matches(&output);
+            let asked =
+                if let AgentOutput::Event { body: EventBody::ApprovalRequested { approval_id, .. }, .. } = &output {
+                    Some(approval_id.clone())
+                } else {
+                    None
+                };
+            self.keep(output);
+            if let Some(approval_id) = asked {
+                // Recorded before it's sent, as the hub records a decision.
+                let allowed = EventBody::ApprovalResolved {
+                    approval_id: approval_id.clone(),
+                    outcome: ApprovalOutcome::Allowed,
+                    answers_by_text: None,
+                    answers_by_position: None,
+                    by_setting: false,
+                };
+                self.record(None, allowed);
                 let allow = ApprovalDecision::Allow { updated_input: None, updated_permissions: None };
-                running
-                    .agent
-                    .resolve_approval(approval_id, &allow)
+                self.agent()?
+                    .resolve_approval(&approval_id, &allow)
                     .await
                     .map_err(|e| Failed(format!("allowing: {e}")))?;
             }
-            let done = matches(&output);
-            self.seen.push(Seen { run: self.last_run, at: Instant::now(), output });
             if done {
                 return Ok(());
             }
@@ -155,17 +183,27 @@ impl Driver {
         let deadline = tokio::time::Instant::now() + self.launcher.patience();
         loop {
             match tokio::time::timeout_at(deadline, running.output.recv()).await {
-                Ok(Some(output)) => self.seen.push(Seen { run: self.last_run, at: Instant::now(), output }),
+                Ok(Some(output)) => self.keep(output),
                 Ok(None) => return Ok(()),
                 Err(_) => return Err(Failed("the agent's output didn't end once it was stopped".into())),
             }
         }
     }
 
+    /// Keeps what the adapter said, and logs it as a hub records it: each event under its run, and the process's exit
+    /// as the hub's record of it, with its run.
+    fn keep(&mut self, output: AgentOutput) {
+        let run = self.last_run;
+        if let Some(body) = output.recorded() {
+            self.record(Some(run), body);
+        }
+        self.seen.push(Seen { run, at: Instant::now(), output });
+    }
+
     /// Stops whatever still runs, and hands over what the trial saw, and whether stopping went as it should.
     #[cfg(unix)]
     pub(crate) async fn finish(mut self) -> (super::trial::Trial, Result<(), Failed>) {
         let stopped = self.stop().await;
-        (super::trial::Trial { seen: self.seen, marks: self.marks }, stopped)
+        (super::trial::Trial { seen: self.seen, log: self.log, claims: self.claims, marks: self.marks }, stopped)
     }
 }
