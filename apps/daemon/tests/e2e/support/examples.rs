@@ -24,12 +24,16 @@ fn recording_adapter() -> &'static Path {
 fn example(name: &str) -> PathBuf {
     let bin_dir = Path::new(env!("CARGO_BIN_EXE_roundhoused")).parent().unwrap();
     let mut build = Command::new(env!("CARGO"));
-    build.args(["build", "--workspace", "--example", name]);
+    build.args(["build", "--workspace", "--example", name, "-v"]);
     if bin_dir.file_name().is_some_and(|name| name == "release") {
         build.arg("--release");
     }
+    let asked = std::time::Instant::now();
     once_per_run(&format!("e2e-{name}"), || {
+        let waited = asked.elapsed();
+        let started = std::time::Instant::now();
         let output = build.output().unwrap();
+        note(&format!("e2e {name}"), waited, started.elapsed(), &output.stderr);
         assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
     });
     bin_dir.join("examples").join(name)
@@ -82,4 +86,21 @@ impl Stack {
         let made = std::fs::read_to_string(self.path("instances-made")).unwrap_or_default();
         made.lines().map(str::to_string).collect()
     }
+}
+
+/// Experiment only: what each helper's build did, for CI to print.
+fn note(what: &str, waited: std::time::Duration, built: std::time::Duration, stderr: &[u8]) {
+    use std::io::Write as _;
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/tmp/helper-builds.log");
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    let mut file = std::fs::OpenOptions::new().create(true).append(true).open(path).unwrap();
+    let kept: Vec<_> = String::from_utf8_lossy(stderr)
+        .lines()
+        .filter(|line| {
+            ["Dirty", "Compiling", "Blocking", "Finished", "Downloaded", "Unpack"].iter().any(|w| line.contains(w))
+        })
+        .map(str::to_string)
+        .collect();
+    writeln!(file, "== {what}: waited {waited:?}, cargo {built:?}, pid {}\n{}", std::process::id(), kept.join("\n"))
+        .unwrap();
 }

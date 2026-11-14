@@ -21,6 +21,7 @@ pub(crate) fn binaries() -> &'static PathBuf {
 /// Builds the hub and the examples, with the whole workspace's features as `docs/rust.md` says, and answers the folder
 /// Cargo says it put the hub in. Naming the examples in the same build is what gives the hub those features too.
 fn build_binaries() -> String {
+    let started = std::time::Instant::now();
     let output = Command::new(env!("CARGO"))
         .args([
             "build",
@@ -32,9 +33,11 @@ fn build_binaries() -> String {
             "--example",
             "stand_in_hub",
             "--message-format=json-render-diagnostics",
+            "-v",
         ])
         .output()
         .unwrap();
+    note("ui binaries", std::time::Duration::ZERO, started.elapsed(), &output.stderr);
     assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
     let hub = output
         .stdout
@@ -89,4 +92,21 @@ pub(crate) fn point_daemons_at_the_fake_agent() {
             }
         }
     });
+}
+
+/// Experiment only: what each helper's build did, for CI to print.
+fn note(what: &str, waited: std::time::Duration, built: std::time::Duration, stderr: &[u8]) {
+    use std::io::Write as _;
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/tmp/helper-builds.log");
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    let mut file = std::fs::OpenOptions::new().create(true).append(true).open(path).unwrap();
+    let kept: Vec<_> = String::from_utf8_lossy(stderr)
+        .lines()
+        .filter(|line| {
+            ["Dirty", "Compiling", "Blocking", "Finished", "Downloaded", "Unpack"].iter().any(|w| line.contains(w))
+        })
+        .map(str::to_string)
+        .collect();
+    writeln!(file, "== {what}: waited {waited:?}, cargo {built:?}, pid {}\n{}", std::process::id(), kept.join("\n"))
+        .unwrap();
 }

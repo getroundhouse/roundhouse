@@ -176,6 +176,9 @@ jobs:
           restore-keys: ${{ github.ref != 'refs/heads/main' && 'runs-on-arm64-16-test-deps-' || '' }}
       # One pool for every binary's tests. It skips doc tests, so they run after.
       - run: cargo nextest run --profile ci --workspace --locked
+      # Experiment only: what each test helper's build did.
+      - if: always()
+        run: cat target/tmp/helper-builds.log || true
       - run: cargo test --workspace --doc --locked
       - if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
         run: cargo clean --workspace
