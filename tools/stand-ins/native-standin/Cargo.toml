@@ -1,0 +1,15 @@
+[package]
+name = "native-standin"
+description = "Stands in for Codex's app-server in the adapter's tests, as the example native_standin."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+# Dev-dependencies, whose features only a build that names an example, test or bench takes in, so a build of the
+# product's code across the workspace, such as `cargo clippy --workspace --locked`, is as it ships.
+[dev-dependencies]
+serde_json.workspace = true
+
+[lints]
+workspace = true

@@ -4,7 +4,8 @@
 //! its tools, and what the tool says comes back as the call's result. With `CLAUDE_AUTO_BACKGROUND_TASKS=1`, a call
 //! offers to take an MCP task, and one answered with a task goes on in the background, as the real CLI's does.
 //!
-//! `crates/worker/tests/serve.rs` writes the same request by hand, so a change to what the real CLI sends goes in both.
+//! `crates/worker/tests/serve/main.rs` writes the same request by hand, so a change to what the real CLI sends goes in
+//! both.
 
 use std::io::{Read as _, Write as _};
 use std::net::{SocketAddr, TcpStream};

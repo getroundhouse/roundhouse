@@ -1,0 +1,17 @@
+[package]
+name = "stand-in-hub"
+description = "Stands in for a hub of another build in tests, as the example stand_in_hub."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+# Dev-dependencies, whose features only a build that names an example, test or bench takes in, so a build of the
+# product's code across the workspace, such as `cargo clippy --workspace --locked`, is as it ships.
+[dev-dependencies]
+clap.workspace = true
+parking_lot.workspace = true
+protocol.workspace = true
+
+[lints]
+workspace = true

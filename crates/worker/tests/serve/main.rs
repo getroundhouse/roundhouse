@@ -299,7 +299,8 @@ async fn reply<R: AsyncRead + Unpin>(frames: &mut Lines<BufReader<R>>, to: u64) 
 }
 
 /// Calls `get_pull_request` as the Claude CLI does, offering tasks, over one connection, and returns the response.
-/// The fake agent, in `apps/daemon/examples/fake_claude/mcp.rs`, writes the same, so a change to it goes in both.
+/// The fake agent, in `tools/stand-ins/fake-claude/examples/fake_claude/mcp.rs`, writes the same, so a change to it
+/// goes in both.
 async fn call_tool(port: u16, token: &str) -> String {
     let meta = r#"{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{"extensions":{"io.modelcontextprotocol/tasks":{}}},"claudecode/toolUseId":"toolu_1"}"#;
     let body = format!(
