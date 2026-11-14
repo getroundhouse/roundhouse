@@ -5,13 +5,18 @@
 use protocol::client::accounts;
 #[cfg(feature = "testing")]
 use protocol::client::sessions;
-use protocol::model::{Account, AccountId, AgentKind, LoginToken};
+use protocol::model::{Account, AccountId, AgentKind, HubSettings, LoginToken};
 #[cfg(feature = "testing")]
 use protocol::model::{SessionAccount, SessionId};
 
 use super::{Client, Result};
 
 impl Client {
+    /// Chooses the hub's default login for new processes of this agent kind.
+    pub fn account_set_default(&self, agent: AgentKind, account: &AccountId) -> Result<HubSettings> {
+        self.call(accounts::AccountSetDefault { agent, account: account.clone() })
+    }
+
     /// Gives the hub a login for agents of `agent`'s kind, as a new account called `name`, or in place of the login of
     /// `account`, as renewing it does, and answers with the account's record. See [`accounts::AccountConnect`]. A hub
     /// older than this refuses it, as `is_unsupported` says.

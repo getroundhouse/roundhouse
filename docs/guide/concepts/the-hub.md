@@ -25,7 +25,7 @@ The hub starts by itself when the app, or the command line, needs it. It runs on
 
 ## Workers
 
-Each workspace has a worker, a process of its own that does the work there: git, the worktree, setup scripts and diffs. The worker runs the installed Claude or Codex CLI with its machine's native sign-in. Claude can also use a login added in [Settings](../reference/settings.md#accounts) where the machine has none. Codex credentials stay with Codex on that machine.
+Each workspace has a worker, a process of its own that does the work there: git, the worktree, setup scripts and diffs. The worker runs the installed Claude or Codex CLI. Claude uses the hub's default account, and uses machine credentials only when no default has been added. Codex credentials stay with Codex on that machine.
 
 ## Where it runs
 

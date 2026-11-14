@@ -2,59 +2,62 @@
 
 use super::*;
 
-/// The login each launch at `now_ms` gets, by its account's ID and its token.
-fn handed_at(logins: &Logins, now_ms: i64) -> Option<(String, String)> {
-    let handed = logins.to_hand(AgentKind::Claude, now_ms).unwrap();
-    handed.map(|Handed { account, login }| (account.to_string(), login.token.as_str().to_string()))
-}
-
-/// What [`handed_at`] says of the login `connect` named `name`, with `token`.
-fn as_connected(name: &str, token: &str) -> (String, String) {
-    (format!("claude-login-{name}"), token.to_string())
+fn handed(logins: &Logins, now: i64) -> Option<(AccountId, String)> {
+    logins
+        .to_hand(AgentKind::Claude, now)
+        .unwrap()
+        .map(|handed| (handed.account, handed.login.token.as_str().to_string()))
 }
 
 #[test]
-fn a_launch_gets_the_login_connected_most_recently_that_hasnt_ended() {
+fn the_first_account_is_default_and_only_an_explicit_choice_changes_it() {
     let dir = tempfile::tempdir().unwrap();
-    let (logins, _) = logins_in(dir.path());
-    logins.connect(&Connect { ends_at_ms: None, ..connect("Lasting", "lasting-token", None) }).unwrap();
-    let newer = Connect { connected_at_ms: 1500, ends_at_ms: Some(1800), ..connect("Newer", "newer-token", None) };
-    logins.connect(&newer).unwrap();
-
-    assert_eq!(handed_at(&logins, 1700), Some(as_connected("Newer", "newer-token")));
-    assert_eq!(handed_at(&logins, 1800), Some(as_connected("Lasting", "lasting-token")), "the newer has ended");
-    assert_eq!(
-        handed_at(&logins, i64::MAX),
-        Some(as_connected("Lasting", "lasting-token")),
-        "one with no end never does"
-    );
-    assert!(logins.to_hand(AgentKind::Unknown, 1700).unwrap().is_none(), "none is another kind's");
+    let (logins, store) = logins_in(dir.path());
+    assert!(handed(&logins, 1000).is_none());
+    let first = logins.connect(&connect("Work", "work-token", None)).unwrap().account.id;
+    let other = logins.connect(&connect("Personal", "personal-token", None)).unwrap().account.id;
+    assert_eq!(handed(&logins, 1700), Some((first.clone(), "work-token".into())));
+    let before = store.hub_settings().unwrap();
+    let changed = logins.set_default(AgentKind::Claude, &other, 1700).unwrap();
+    assert!(changed.rev > before.rev);
+    assert_eq!(logins.set_default(AgentKind::Claude, &other, 1700).unwrap(), changed);
+    logins.connect(&connect("Work", "renewed-token", Some(&first))).unwrap();
+    assert_eq!(handed(&logins, 1700), Some((other.clone(), "personal-token".into())));
+    drop(logins);
+    drop(store);
+    let store = Store::open(&dir.path().join("hub.db"), &dir.path().join("backups")).unwrap();
+    let reopened = Logins::new(Arc::new(store), dir.path().join("logins"));
+    assert_eq!(handed(&reopened, 1700), Some((other, "personal-token".into())));
 }
 
 #[test]
-fn a_login_renewed_after_another_was_connected_is_what_launches_get_from_then_on() {
+fn expiry_disconnect_and_missing_tokens_block_instead_of_changing_identity() {
     let dir = tempfile::tempdir().unwrap();
     let (logins, _) = logins_in(dir.path());
-    let older = logins.connect(&connect("Older", "older-token", None)).unwrap().account.id;
-    logins.connect(&Connect { connected_at_ms: 1500, ..connect("Newer", "newer-token", None) }).unwrap();
-
-    logins.connect(&Connect { connected_at_ms: 1600, ..connect("Older", "renewed-token", Some(&older)) }).unwrap();
-
-    assert_eq!(handed_at(&logins, 1700), Some(as_connected("Older", "renewed-token")));
-    assert_eq!(handed_at(&logins, 2000), None, "both have ended");
+    let first = logins.connect(&connect("Work", "work-token", None)).unwrap().account.id;
+    logins.connect(&Connect { ends_at_ms: None, ..connect("Personal", "personal-token", None) }).unwrap();
+    assert_eq!(logins.to_hand(AgentKind::Claude, 2000).unwrap_err().code, ErrorCode::Conflict);
+    logins.disconnect(&first).unwrap();
+    assert_eq!(logins.to_hand(AgentKind::Claude, 1700).unwrap_err().code, ErrorCode::Conflict);
+    logins.connect(&connect("Work", "renewed-token", Some(&first))).unwrap();
+    let files = std::fs::read_dir(dir.path().join("logins")).unwrap();
+    let path = files
+        .map(|file| file.unwrap().path())
+        .find(|path| std::fs::read_to_string(path).unwrap() == "renewed-token")
+        .unwrap();
+    std::fs::remove_file(path).unwrap();
+    logins.tidy().unwrap();
+    assert_eq!(logins.to_hand(AgentKind::Claude, 1700).unwrap_err().code, ErrorCode::Conflict);
+    assert!(logins.to_hand(AgentKind::Unknown, 1700).unwrap().is_none());
 }
 
 #[test]
-fn a_launch_under_a_login_whose_token_is_gone_fails_rather_than_running_under_another() {
+fn selecting_requires_a_live_held_login_of_the_same_kind() {
     let dir = tempfile::tempdir().unwrap();
     let (logins, _) = logins_in(dir.path());
-    logins.connect(&connect("Older", "older-token", None)).unwrap();
-    logins.connect(&Connect { connected_at_ms: 1500, ..connect("Newer", "newer-token", None) }).unwrap();
-    let newer = std::fs::read_dir(dir.path().join("logins")).unwrap().map(|entry| entry.unwrap().path());
-    let newer = newer.into_iter().find(|path| std::fs::read_to_string(path).unwrap() == "newer-token").unwrap();
-    std::fs::remove_file(newer).unwrap();
-
-    let handed = logins.to_hand(AgentKind::Claude, 1700);
-
-    assert_eq!(handed.unwrap_err().code, ErrorCode::Internal);
+    let id = logins.connect(&connect("Work", "work-token", None)).unwrap().account.id;
+    assert_eq!(logins.set_default(AgentKind::Unknown, &id, 1000).unwrap_err().code, ErrorCode::InvalidRequest);
+    assert_eq!(logins.set_default(AgentKind::Claude, &id, 2000).unwrap_err().code, ErrorCode::Conflict);
+    logins.disconnect(&id).unwrap();
+    assert_eq!(logins.set_default(AgentKind::Claude, &id, 1000).unwrap_err().code, ErrorCode::Conflict);
 }

@@ -6,9 +6,9 @@
 use client_core::{Client, Subscription, SubscriptionItem};
 use protocol::client::HubNotice;
 use protocol::event::EventBody;
-use protocol::model::{Account, AccountId, AgentKind, LoginToken};
+use protocol::model::{Account, AccountId, AgentKind, LoginToken, SessionSettingsChange};
 
-use crate::accounts::{ada, log_out};
+use crate::accounts::log_out;
 use crate::carrying_on::restart;
 use crate::support::{Stack, TIMEOUT, assistant_text, wait_for_turn_end, wait_until};
 
@@ -149,10 +149,9 @@ fn an_agent_on_this_machine_runs_under_the_login_the_hub_holds_when_the_machine_
     assert_eq!(client.records_list().unwrap().accounts.len(), 1, "no account but the login's");
 }
 
-/// Through an adapter, as on another provider's machine the person logged in on, which keeps its own login whatever
-/// the hub holds.
+/// Through a real worker whose machine has its own login. The hub default wins, and only new processes take a changed choice.
 #[test]
-fn an_agent_on_a_machine_with_its_own_login_runs_under_that_though_the_hub_holds_one() {
+fn an_added_default_wins_even_on_a_machine_with_its_own_login() {
     let mut stack = Stack::start();
     stack.make_through_an_adapter();
     let client = stack.client();
@@ -161,11 +160,22 @@ fn an_agent_on_a_machine_with_its_own_login_runs_under_that_though_the_hub_holds
 
     client.session_prompt(&session.id, "env:CLAUDE_CODE_OAUTH_TOKEN", None).unwrap();
     let text = assistant_text(&wait_for_turn_end(&client, &session.id, 1));
-    let adas = ada().id;
-    wait_until("the chat to name the machine's own account", || {
-        client.session_get(&session.id).unwrap().account == adas
+    wait_until("the chat to name the hub's selected account", || {
+        client.session_get(&session.id).unwrap().account == Some(connected.id.clone())
     });
 
-    assert!(text.contains("CLAUDE_CODE_OAUTH_TOKEN=<unset>"), "{text}");
-    assert_eq!(listed(&client, &connected.id).used_at_ms, None, "the login the hub holds wasn't used");
+    assert!(text.contains("CLAUDE_CODE_OAUTH_TOKEN=a-made-up-token"), "{text}");
+    assert!(listed(&client, &connected.id).used_at_ms.is_some());
+    let other = client.account_connect(AgentKind::Claude, "Personal", LoginToken::new("personal-token"), None).unwrap();
+    client.account_set_default(AgentKind::Claude, &other.id).unwrap();
+    client.session_prompt(&session.id, "env:CLAUDE_CODE_OAUTH_TOKEN", None).unwrap();
+    let text = assistant_text(&wait_for_turn_end(&client, &session.id, 2));
+    assert!(text.contains("CLAUDE_CODE_OAUTH_TOKEN=a-made-up-token"), "the running process keeps its login");
+    let fresh = client
+        .session_create(&session.workspace_id, AgentKind::Claude, SessionSettingsChange::default(), None)
+        .unwrap();
+    client.session_prompt(&fresh.id, "env:CLAUDE_CODE_OAUTH_TOKEN", None).unwrap();
+    let text = assistant_text(&wait_for_turn_end(&client, &fresh.id, 1));
+    assert!(text.contains("CLAUDE_CODE_OAUTH_TOKEN=personal-token"), "{text}");
+    assert_eq!(client.session_get(&fresh.id).unwrap().account, Some(other.id));
 }

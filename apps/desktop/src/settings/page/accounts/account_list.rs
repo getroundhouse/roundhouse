@@ -12,7 +12,7 @@ use gpui_kit::{
     Styled as _, TestSupportExt as _, Window, div,
 };
 use look::{Off as _, Sizing as _, Typeset as _};
-use protocol::model::{Account, AgentDescription, AgentKind};
+use protocol::model::{Account, AccountDefault, AgentDescription, AgentKind};
 
 pub(in super::super) fn page(hub: &OfHub) -> Page {
     let (records, asking) = (hub.records.clone(), hub.asking.clone());
@@ -39,6 +39,7 @@ pub(super) struct Drawing<'a> {
     pub(super) scroll: &'a ScrollHandle,
     /// The one moment every row says a time as of.
     pub(super) now_ms: i64,
+    pub(super) defaults: Option<&'a [AccountDefault]>,
 }
 
 impl RenderOnce for AccountsPage {
@@ -50,7 +51,9 @@ impl RenderOnce for AccountsPage {
             row::changes_at_ms(found.iter().chain(&added).copied(), now_ms, look::next_day_at_ms(now_ms, cx));
         let focus = self.within.focus.clone();
         kept.update(cx, |kept, cx| kept.drawn(self.asking, focus, changes_at_ms, cx));
-        let drawing = Drawing { kept: &kept, agents: self.records.agents(), scroll: &self.within.scroll, now_ms };
+        let defaults = self.records.hub_settings().and_then(|settings| settings.account_defaults.as_deref());
+        let drawing =
+            Drawing { kept: &kept, agents: self.records.agents(), scroll: &self.within.scroll, now_ms, defaults };
         v_flex().gap_8().pb_4().child(found_list(&drawing, &found, cx)).child(added_list(&drawing, &added, cx))
     }
 }
@@ -100,7 +103,7 @@ fn added_list(drawing: &Drawing<'_>, added: &[&Account], cx: &App) -> Div {
     let said = said.map(|(id, said)| said_in_the_list(id, said.to_string(), cx));
     let rows = added.iter().map(|account| row::row(drawing, account, cx));
     let list = list(cx).children(panel).children(said).children(rows);
-    v_flex().child(heading("Added", words::added_says(), Some(connect), cx)).child(list)
+    v_flex().child(heading("Added", words::added_says(drawing.defaults.is_some()), Some(connect), cx)).child(list)
 }
 
 /// Connect account, which opens the panel for a new account of the one kind the hub can hold a login for, or a menu

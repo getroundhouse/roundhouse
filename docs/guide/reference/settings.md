@@ -47,8 +47,10 @@ The logins your agents run under: native logins found where agents ran, and Clau
 ![Accounts, with Claude Code's own login and four you've added](../../spec/screens/settings-accounts.png)
 
 - **Found** has Claude Code's own login on a machine, such as this Mac's, once an agent has run under it. Roundhouse reads who it is, and never copies it, so there's nothing to do with it here.
-- **Added** has the logins you've given the hub. The hub hands the newest that hasn't ended to agents on any machine without a login of its own, this Mac included. Newest means connected or renewed most recently, so renewing an older login makes it the one handed out. A machine that has a login of its own keeps using it, so a Mac that's logged in to Claude Code goes on using that. Logins you've disconnected are listed last.
+- **Added** has the logins you've given the hub. The hub's default takes priority over machine credentials for new processes; running agents keep their login. With no added default, agents use their machine's login. Adding or renewing another account does not change the selection. Logins you've disconnected are listed last.
 - **Each row** says the day you last sent something in a chat under the account, such as yesterday or 3 days ago, once you have, and what's left of its limits, as the chat's limits' card does.
+
+The first account you connect becomes its agent's default. When updating a hub that already has accounts, the most recently connected or renewed usable account is selected once. If all have expired, the most recent stays selected until renewed or the selection changes.
 
 ### Connect an account
 
@@ -69,7 +71,9 @@ A chat under the account names it by the name you gave it, where a login of the 
 
 ![Renewing a login that ends in nine days](../../spec/screens/settings-accounts-renewing.png)
 
-A hub from before hubs kept logins can't connect one, and says so. Updating it is the fix.
+If the default expires or is disconnected, new agents cannot start until you renew or reconnect it, or the default is changed. It stays selected and does not fall back to machine credentials.
+
+An older hub may not support defaults. Update it to use added accounts before machine credentials.
 
 ## Whose setting it is
 

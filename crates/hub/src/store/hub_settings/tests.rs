@@ -95,3 +95,29 @@ fn a_hub_is_given_an_id_once_and_keeps_it() {
     assert_eq!(crate::store::Store::open(&path, &backups).unwrap().hub_id().unwrap(), id);
     assert_ne!(store_with_session(second.path()).hub_id().unwrap(), id, "another hub is another");
 }
+
+#[test]
+fn migrating_chooses_the_newest_usable_login_once_and_keeps_an_expired_choice_visible() {
+    use protocol::model::AgentKind;
+    let dir = tempfile::tempdir().unwrap();
+    let rows = r"
+        INSERT INTO accounts (id, login_agent, login_file, login_connected_at_ms, login_ends_at_ms) VALUES
+            ('old', 'claude', '00000000-0000-4000-8000-000000000001', 100, NULL),
+            ('new', 'claude', '00000000-0000-4000-8000-000000000002', 200, NULL),
+            ('expired', 'claude', '00000000-0000-4000-8000-000000000003', 300, 500),
+            ('only-expired', 'codex', '00000000-0000-4000-8000-000000000004', 100, 500);
+    ";
+    let store = older::store_from_before(dir.path(), schema::BEFORE_ACCOUNT_DEFAULTS, rows);
+    let defaults = store.hub_settings().unwrap().account_defaults.unwrap();
+    assert_eq!(
+        defaults.iter().find(|d| d.agent == AgentKind::Claude).map(|d| d.account.as_str()),
+        Some("new"),
+        "{defaults:?}"
+    );
+    assert_eq!(defaults.iter().find(|d| d.agent == AgentKind::Codex).unwrap().account.as_str(), "only-expired");
+    store.set_account_default(AgentKind::Claude, &"old".into()).unwrap();
+    drop(store);
+    let store = crate::store::tests::open_in(dir.path());
+    let defaults = store.hub_settings().unwrap().account_defaults.unwrap();
+    assert_eq!(defaults.iter().find(|d| d.agent == AgentKind::Claude).unwrap().account.as_str(), "old");
+}

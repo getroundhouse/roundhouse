@@ -17,6 +17,7 @@ const YEAR_MS: i64 = 365 * DAY_MS;
 pub(in crate::gallery) fn accounts() -> World {
     let mut world = conversation();
     world.accounts = vec![found(), work(), personal(), side_project(), contractor()];
+    world.account_defaults = vec![protocol::model::AccountDefault { agent: AgentKind::Claude, account: work().id }];
     world
 }
 
@@ -25,6 +26,7 @@ pub(in crate::gallery) fn accounts() -> World {
 pub(in crate::gallery) fn none_found() -> World {
     let mut world = conversation();
     world.accounts = vec![work()];
+    world.account_defaults = vec![protocol::model::AccountDefault { agent: AgentKind::Claude, account: work().id }];
     world
 }
 

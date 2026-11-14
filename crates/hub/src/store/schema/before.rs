@@ -74,3 +74,6 @@ pub(crate) const BEFORE_LIMIT_MODELS: usize = 50;
 
 /// How many migrations there were before accounts kept when they were last used.
 pub(crate) const BEFORE_ACCOUNTS_USED: usize = 51;
+
+/// Before per-agent account defaults were durable hub settings.
+pub(crate) const BEFORE_ACCOUNT_DEFAULTS: usize = 54;

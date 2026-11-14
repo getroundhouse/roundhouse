@@ -1,5 +1,5 @@
 //! The requests about the logins a hub holds for agents' accounts, which it hands to the workers it launches agents on
-//! whose machine has no login of its own. A hub older than one refuses it, as `is_unsupported` says.
+//! as the default for their kind. A hub older than one refuses it, as `is_unsupported` says.
 
 use serde::{Deserialize, Serialize};
 
@@ -7,7 +7,7 @@ use super::{ClientRequest, ClientResponse, Reply, Request};
 use crate::model::{Account, AccountId, AgentKind, HubSettings, LoginToken};
 
 /// Gives the hub a login for agents of `agent`'s kind to run under, which it keeps and hands to the workers it launches
-/// them on whose machine has no login of its own for that kind, and answers with the account's record, named `name`.
+/// them on, when selected as their kind's default, and answers with the account's record, named `name`.
 /// The token is one the agent's own CLI made to last, such as `claude setup-token`'s, which the person made themselves
 /// and gave a client, and the hub never sends it back.
 ///
