@@ -4,7 +4,7 @@ use protocol::model::{AgentKind, Effort, ModelName, PermissionMode, RunId, Sessi
 
 use super::recovery::{LaunchFailure, classify_launch_failure};
 use super::*;
-use crate::BinaryLookup;
+use crate::{BinaryLookup, Instructions};
 
 fn executable(path: &std::path::Path) {
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -69,7 +69,7 @@ fn spec(model: Option<&'static str>, mode: PermissionMode) -> AgentSpec {
 }
 
 fn args(spec: &AgentSpec, resume: bool) -> Vec<String> {
-    build_args(spec, resume, None).unwrap()
+    build_args(spec, resume).unwrap()
 }
 
 fn flag_value(args: &[String], flag: &str) -> Option<String> {
@@ -118,17 +118,16 @@ fn every_launch_names_its_model_and_effort() {
 }
 
 #[test]
-fn every_launch_adds_roundhouses_instructions_for_the_agent_and_its_subagents() {
-    let spec = spec(None, PermissionMode::FullAccess);
-    for resume in [false, true] {
-        let launched = build_args(&spec, resume, Some("Keep scratch in `.context/`.")).unwrap();
+fn the_agent_and_its_subagents_read_roundhouses_instructions_from_their_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("agents/upminster.s-1.instructions.txt");
+    let told = Instructions { text: "Keep scratch in `.context/`.".into(), file: file.clone() };
 
-        for flag in ["--append-system-prompt", "--append-subagent-system-prompt"] {
-            let given = flag_value(&launched, flag);
-            assert_eq!(given.as_deref(), Some("Keep scratch in `.context/`."), "{flag}, resuming: {resume}");
-        }
-    }
-    assert!(!args(&spec, false).iter().any(|a| a.starts_with("--append")), "a launch given none adds none");
+    let given = instructions::args(&told).unwrap();
+
+    let flags = ["--append-system-prompt-file", "--append-subagent-system-prompt-file"];
+    assert_eq!(given, flags.map(|flag| [flag.into(), file.clone().into_os_string()]).concat());
+    assert_eq!(std::fs::read_to_string(&file).unwrap(), "Keep scratch in `.context/`.");
 }
 
 #[test]
@@ -136,7 +135,7 @@ fn a_level_this_build_cant_name_is_refused_rather_than_left_to_the_cli() {
     let mut unknown = spec(None, PermissionMode::FullAccess);
     unknown.settings.effort = Some(protocol::capability::settings::Effort::Unknown);
 
-    assert!(matches!(build_args(&unknown, false, None), Err(AgentError::UnknownEffort)));
+    assert!(matches!(build_args(&unknown, false), Err(AgentError::UnknownEffort)));
 }
 
 #[test]

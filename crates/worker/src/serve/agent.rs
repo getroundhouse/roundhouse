@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
-use agents::{AgentOptions, AgentOutput, BinaryLookup, ToolServer};
+use agents::{AgentOptions, AgentOutput, BinaryLookup, Instructions, ToolServer};
 use protocol::attachment::NewAttachment;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{AgentKind, AgentLogin, RunId, SessionId};
@@ -91,16 +91,15 @@ pub(crate) async fn start_agent(
         }));
     }
     let (tx, rx) = mpsc::channel(1024);
-    // Named by run, because a replaced agent removes its own files as it finishes, which can be after its replacement
-    // has started, and a CLI whose `--mcp-config` file has gone doesn't start at all.
-    let agent_file =
-        |extension: &str| state.config.state_dir.join(AGENTS_DIR).join(format!("{session_id}-{run}.{extension}"));
+    let agent_file = |extension: &str| {
+        state.config.state_dir.join(AGENTS_DIR).join(run_file_name(&worktree, &session_id, run, extension))
+    };
     make_context_folder(&session_id, &worktree).await;
     let options = AgentOptions {
         binary: binary(state, spec.agent),
         pid_file: Some(agent_file("pid")),
         tools: tools_for(state, &mut spec, agent_file("mcp.json")).await,
-        instructions: Some(instructions(spec.agent)),
+        instructions: Some(Instructions { text: instructions(spec.agent), file: agent_file("instructions.txt") }),
         // Taken out of the launch, as the tools' token is, so it's in one place: what the agent is started with, and
         // started again with, which goes when the agent does.
         login: spec.login.take(),
@@ -112,6 +111,18 @@ pub(crate) async fn start_agent(
     state.agents.lock().insert(session_id.clone(), RunningAgent { process, run });
     forwarders.lock().await.spawn(forward_output(state.clone(), session_id, run, worktree, rx));
     Ok(WorkerResponse::AgentStarted(AgentStarted { pid, run, already_running: false, capabilities }))
+}
+
+/// The name of a file a run keeps, ending in `extension`. Named by run, because a replaced agent removes its own files
+/// as it finishes, which can be after its replacement has started, and a CLI whose `--mcp-config` file has gone doesn't
+/// start at all. It starts with the worktree's folder name, so a CLI given the files on its command line, as Claude's is,
+/// says which worktree it works in, and a listing of processes, such as `ps`'s, finds it by that name.
+fn run_file_name(worktree: &Path, session_id: &SessionId, run: RunId, extension: &str) -> String {
+    let name = format!("{session_id}-{run}.{extension}");
+    match worktree.file_name() {
+        Some(folder) => format!("{}.{name}", folder.to_string_lossy()),
+        None => name,
+    }
 }
 
 /// Makes the folder the agent's instructions send it to for what it makes for its own use. An agent can work without

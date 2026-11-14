@@ -83,19 +83,32 @@ pub(super) async fn initialize(shared: &Shared) -> Result<(), AgentError> {
     shared.rpc.write(&json!({"method":"initialized"})).await
 }
 
+/// What a thread is started for, which decides whether it's kept and what it's told.
+#[derive(Clone, Copy, Debug)]
+pub(super) enum Purpose {
+    /// An agent's work, which is kept, so it can be resumed, and told what every agent is told.
+    Agent,
+    /// Naming a task, in a thread that isn't kept, told how in place of Codex's own instructions.
+    Title(&'static str),
+}
+
 pub(super) async fn conversation(
     shared: &Shared,
     spec: &AgentSpec,
     options: &AgentOptions,
-    ephemeral: bool,
+    purpose: Purpose,
 ) -> Result<(), AgentError> {
     let settings = shared.state.lock().settings.clone();
-    let mut params = configuration(spec, &settings, options);
+    let told = match purpose {
+        Purpose::Agent => options.instructions.as_ref().map(|told| told.text.as_str()),
+        Purpose::Title(instructions) => Some(instructions),
+    };
+    let mut params = configuration(spec, &settings, options, told);
     let response = match &spec.start {
         Start::New { conversation: None } => {
-            params["ephemeral"] = json!(ephemeral);
-            if ephemeral {
-                title_configuration(shared, &mut params, options).await?;
+            params["ephemeral"] = json!(matches!(purpose, Purpose::Title(_)));
+            if let Purpose::Title(instructions) = purpose {
+                title_configuration(shared, &mut params, instructions).await?;
             }
             shared.rpc.ask("thread/start", params).await?
         }
@@ -109,7 +122,7 @@ pub(super) async fn conversation(
                 {
                     shared.event(EventBody::Notice { level: protocol::event::NoticeLevel::Warning,
                         message: "Codex could not find this conversation. Starting a new one without its previous context.".into(), parent_tool_use_id: None }, None).await;
-                    shared.rpc.ask("thread/start", configuration(spec, &settings, options)).await?
+                    shared.rpc.ask("thread/start", configuration(spec, &settings, options, told)).await?
                 }
                 Err(error) => return Err(error),
             }
@@ -138,7 +151,13 @@ pub(super) async fn conversation(
     Ok(())
 }
 
-fn configuration(spec: &AgentSpec, settings: &SessionSettings, options: &AgentOptions) -> Value {
+/// A thread's parameters, told `instructions` as its developer's.
+fn configuration(
+    spec: &AgentSpec,
+    settings: &SessionSettings,
+    options: &AgentOptions,
+    instructions: Option<&str>,
+) -> Value {
     let plan = settings.permission_mode == PermissionMode::Plan;
     let mut config = json!({"features.memories":false,"features.goals":false,"features.default_mode_request_user_input":true,
         "model_reasoning_effort":settings.effort.as_str(),"model_reasoning_summary":"auto"});
@@ -149,12 +168,12 @@ fn configuration(spec: &AgentSpec, settings: &SessionSettings, options: &AgentOp
     json!({"cwd":spec.cwd,"model":settings.model.as_str(),
         "approvalPolicy":if plan { "on-request" } else { "never" },
         "sandbox":if plan { "read-only" } else { "danger-full-access" },
-        "developerInstructions":options.instructions,"config":config,"experimentalRawEvents":false})
+        "developerInstructions":instructions,"config":config,"experimentalRawEvents":false})
 }
 
 /// Native config overrides merge tables, so an empty `mcp_servers` table leaves the user's servers enabled. Disable
 /// each named server and plugin loading for title generation without changing the person's configuration on disk.
-async fn title_configuration(shared: &Shared, params: &mut Value, options: &AgentOptions) -> Result<(), AgentError> {
+async fn title_configuration(shared: &Shared, params: &mut Value, instructions: &str) -> Result<(), AgentError> {
     let native = shared.rpc.ask("config/read", json!({"cwd":params["cwd"],"includeLayers":false})).await?;
     let mut servers = serde_json::Map::new();
     if let Some(configured) = native["config"]["mcp_servers"].as_object() {
@@ -162,7 +181,7 @@ async fn title_configuration(shared: &Shared, params: &mut Value, options: &Agen
             servers.insert(name.clone(), json!({"enabled":false}));
         }
     }
-    params["baseInstructions"] = json!(options.instructions);
+    params["baseInstructions"] = json!(instructions);
     params["approvalPolicy"] = json!("never");
     params["sandbox"] = json!("read-only");
     params["config"]["mcp_servers"] = Value::Object(servers);

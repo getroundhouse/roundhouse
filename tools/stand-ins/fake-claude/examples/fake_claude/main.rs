@@ -55,6 +55,10 @@
 //!                   it says. As with the real CLI, a server that refused `server/discover` or `tools/list` as the
 //!                   agent launched has failed. A copy of the file is kept as `last-mcp-config` in `$FAKE_CLAUDE_STATE`.
 //!
+//! What the files it's given to add to its system prompt, and to its subagents', say is kept as `last-system-prompt` and
+//! `last-subagent-system-prompt` in `$FAKE_CLAUDE_STATE`. As with the real CLI, a launch given a file that isn't there
+//! exits with an error before it looks for the conversation.
+//!
 //! A prompt of `/compact`, with what to keep after it or not, is no script: it compacts, as the real CLI does, in a turn
 //! of its own.
 //!
@@ -100,6 +104,7 @@ mod read;
 mod result;
 mod settings;
 mod subagent;
+mod system_prompt;
 mod title;
 mod tools;
 mod turn;
@@ -176,6 +181,7 @@ fn main() {
     }
     let out: Out = Arc::new(Mutex::new(std::io::stdout()));
 
+    system_prompt::keep(&args, &state);
     let session_id = conversation_for(&args, &state, &out);
     keep_launch(&args, &state);
     start_as_launched(&args);

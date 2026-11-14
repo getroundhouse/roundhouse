@@ -20,7 +20,7 @@ pub mod testing;
 
 pub use error::{AgentError, CallFailed, NoAccount, NoTitle};
 pub use interface::AgentProcess;
-pub use options::{AgentOptions, BinaryLookup, ToolServer};
+pub use options::{AgentOptions, BinaryLookup, Instructions, ToolServer};
 pub use output::AgentOutput;
 pub use protocol::paths::ENV_CLAUDE_BIN;
 pub use registry::{account, descriptions, spawn, title_for};

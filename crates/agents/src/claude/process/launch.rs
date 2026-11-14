@@ -32,8 +32,8 @@ pub const SCRUBBED_ENV: &[&str] = &[
 
 /// The CLI's arguments, which always name the model, the approval mode and the effort, so the CLI never picks any of
 /// them for itself. A level this build has no name for is refused rather than left out, which would leave it to the
-/// CLI. `instructions` go after the CLI's own system prompt, the agent's and each of its subagents'.
-pub fn build_args(spec: &AgentSpec, resume: bool, instructions: Option<&str>) -> Result<Vec<String>, AgentError> {
+/// CLI.
+pub fn build_args(spec: &AgentSpec, resume: bool) -> Result<Vec<String>, AgentError> {
     // Every launch has full access, even one for a chat that's planning, which `plan` asks into plan mode once it's
     // running, or one for a chat in a mode of the CLI's own, which can't be chosen. Converted here, where it's used,
     // as the start does, until the adapters take typed settings in #1274.
@@ -62,14 +62,6 @@ pub fn build_args(spec: &AgentSpec, resume: bool, instructions: Option<&str>) ->
     args.push(if resume { "--resume" } else { "--session-id" }.to_string());
     args.push(conversation(spec)?.to_string());
     args.extend(["--model".to_string(), model.as_str().to_string(), "--effort".to_string(), level.to_string()]);
-    // On a resumed launch too. The CLI keeps the text a conversation started with, but once one is compacted it takes
-    // what the launch that resumed it gave, as `claude --help` says. A subagent gets none of the agent's own, so it's
-    // given the text with a flag of its own, which `--help` doesn't list, and a CLI without it would refuse to start.
-    if let Some(instructions) = instructions {
-        for flag in ["--append-system-prompt", "--append-subagent-system-prompt"] {
-            args.extend([flag.to_string(), instructions.to_string()]);
-        }
-    }
     Ok(args)
 }
 
@@ -105,7 +97,7 @@ pub(super) fn launch(
 ) -> Result<Launched, AgentError> {
     let cwd = Path::new(&spec.cwd);
     let mut command = command(bin, cwd);
-    let args = build_args(spec, resume, options.instructions.as_deref())?;
+    let args = build_args(spec, resume)?;
     if let Some(tap) = tap {
         tap.launched(resume, Some(conversation(spec)?), &args);
     }
@@ -115,6 +107,9 @@ pub(super) fn launch(
         // prompt sent mid-turn folds into the running turn and produces no result of its own.
         .env("CLAUDE_CODE_EMIT_SESSION_STATE_EVENTS", "1")
         .envs(spec.env.iter().map(|(k, v)| (k, v)));
+    if let Some(told) = &options.instructions {
+        command.args(super::instructions::args(told)?);
+    }
     if let Some(tools) = options.tools.as_ref().and_then(super::tools::args) {
         command.args(tools).env(super::tools::TAKES_TASKS, "1");
     }

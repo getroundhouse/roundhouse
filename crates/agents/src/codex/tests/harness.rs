@@ -10,6 +10,7 @@ use serde_json::Value;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
+use crate::codex::launch::Purpose;
 use crate::codex::running::{CodexProcess, start_conversation};
 use crate::{AgentOptions, AgentOutput};
 
@@ -42,7 +43,9 @@ impl Harness {
         let options = AgentOptions { pid_file: Some(room.path().join("pid")), ..Default::default() };
         let (tx, rx) = mpsc::channel(1024);
         let launch =
-            tokio::spawn(async move { start_conversation(&bin, &spec, tx, &options, false, None).await.unwrap() });
+            tokio::spawn(
+                async move { start_conversation(&bin, &spec, tx, &options, Purpose::Agent, None).await.unwrap() },
+            );
         Self { room, rx, launch }
     }
 

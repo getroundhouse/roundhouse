@@ -25,7 +25,7 @@ pub struct AgentOptions {
     pub tools: Option<ToolServer>,
     /// What the agent is told about working in Roundhouse, added to its system prompt at every launch. `None` for a
     /// one-off call, which has a system prompt of its own.
-    pub instructions: Option<String>,
+    pub instructions: Option<Instructions>,
     /// The login its hub holds for the account to run under, which the CLI is given for as long as it runs and nothing
     /// keeps afterwards. `None` runs it under this machine's own login.
     pub login: Option<AgentLogin>,
@@ -42,4 +42,14 @@ pub struct ToolServer {
     /// token, so on Unix only its user can read it, and on Windows whoever its folder lets. Kept out of the worktree,
     /// where the agent and git would see it.
     pub config: PathBuf,
+}
+
+/// What an agent is told about working in Roundhouse, and where its CLI reads it from, if it reads it from a file.
+#[derive(Clone, Debug)]
+pub struct Instructions {
+    pub text: String,
+    /// Where a CLI that's given them in a file, as Claude's is, reads them, written at each launch and removed once the
+    /// run ends. A file keeps them off the CLI's command line, where they'd fill every listing of its processes. Kept out
+    /// of the worktree, where the agent and git would see it. Not private, since they're the same for every agent.
+    pub file: PathBuf,
 }

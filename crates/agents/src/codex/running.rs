@@ -93,7 +93,7 @@ pub async fn spawn_at(
     output: mpsc::Sender<AgentOutput>,
     options: AgentOptions,
 ) -> Result<Arc<dyn AgentProcess>, AgentError> {
-    Ok(start_conversation(&bin, &spec, output, &options, false, None).await?)
+    Ok(start_conversation(&bin, &spec, output, &options, launch::Purpose::Agent, None).await?)
 }
 
 #[cfg(feature = "testing")]
@@ -104,7 +104,7 @@ pub async fn spawn_tapped(
     options: AgentOptions,
     tap: crate::conformance::capture::Tap,
 ) -> Result<Arc<dyn AgentProcess>, AgentError> {
-    Ok(start_conversation(&bin, &spec, output, &options, false, Some(tap)).await?)
+    Ok(start_conversation(&bin, &spec, output, &options, launch::Purpose::Agent, Some(tap)).await?)
 }
 
 pub(super) async fn start_conversation(
@@ -112,7 +112,7 @@ pub(super) async fn start_conversation(
     spec: &AgentSpec,
     output: mpsc::Sender<AgentOutput>,
     options: &AgentOptions,
-    ephemeral: bool,
+    purpose: launch::Purpose,
     tap: Option<crate::tap::Tap>,
 ) -> Result<Arc<CodexProcess>, AgentError> {
     if let Some(tap) = &tap {
@@ -126,7 +126,7 @@ pub(super) async fn start_conversation(
     }
     let settings = crate::registry::settings_of(spec)?;
     let process = transport(bin, Path::new(&spec.cwd), &spec.env, settings, output, options, tap).await?;
-    if let Err(error) = launch::conversation(&process.shared, spec, options, ephemeral).await {
+    if let Err(error) = launch::conversation(&process.shared, spec, options, purpose).await {
         process.shared.stop().await;
         return Err(error);
     }
