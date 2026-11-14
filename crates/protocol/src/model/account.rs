@@ -103,6 +103,23 @@ pub struct HeldLogin {
     pub ends_at_ms: Option<i64>,
 }
 
+impl HeldLogin {
+    /// Whether it still works at `now_ms`, as far as the record says: it hasn't ended, or nobody knows when it does.
+    /// When it ends is by the hub's clock, so a client asking by its own is off by however far the two clocks are apart.
+    pub fn works_at(&self, now_ms: i64) -> bool {
+        self.ends_at_ms.is_none_or(|ends_at_ms| ends_at_ms > now_ms)
+    }
+}
+
+impl Account {
+    /// Whether it's a login added for `kind` that still works at `now_ms`, as [`HeldLogin::works_at`] says, so it can
+    /// be chosen as that kind's default, or a chat of that kind moved to it. The hub also needs the login's token,
+    /// which a client can't see, so it can still refuse one.
+    pub fn works_for(&self, kind: AgentKind, now_ms: i64) -> bool {
+        self.login_agent == Some(kind) && self.held_login.is_some_and(|held| held.works_at(now_ms))
+    }
+}
+
 /// A login the hub holds for an account, as it hands it to a worker for an agent or a one-off call to run under, so the
 /// worker's machine needs no login of its own. The hub gives one only to a worker, which keeps it only while the agent
 /// or the call it came with runs. No provider's adapter is given one, though one that carries a worker's stream itself

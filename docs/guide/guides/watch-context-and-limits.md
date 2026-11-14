@@ -33,6 +33,14 @@ Bars left of the ring show your account's limits, one for each, emptying as the 
 
 A limit is your account's, not the chat's, so every chat under the same login shows the same bars. Under them, the card says whose account it is.
 
+## Move a chat to another account
+
+Once you've added a Claude login in [Settings](../reference/settings.md#accounts) that the chat isn't on, `Move` beside whose account it is moves the chat to another, such as when its account is close to a limit. With no bars, it's on the ring's card.
+
+![The menu of accounts to move the chat to](../../spec/screens/usage-move-menu.png)
+
+The chat carries on under the account you chose from its next prompt, and stays on it until you move it again, whatever the default becomes. A chat whose agent is working asks first, since moving stops it. Each chat moves on its own, and a new chat is put on the default.
+
 ## When the prompt cache expires
 
 The model provider keeps what an agent's requests have read for a while, so the next request needn't send it all again. On a Claude account that lasts an hour from the agent's last request.
@@ -48,7 +56,7 @@ So a long chat says when that's coming:
 
 What to do about it is yours to judge. If you'll want the chat again, send its next prompt before the clock runs out. If the cache has already expired and the work has moved on, a new chat is often the cheaper way to carry on.
 
-Choosing another model writes the conversation again too, since a cache belongs to one model. The picker says so before you switch. Running under another account can write it again too, as a chat that ran under the machine's own login does when it first starts under an account you added.
+Choosing another model writes the conversation again too, since a cache belongs to one model. The picker says so before you switch. Running under another account can write it again too, as a chat does when it next starts after you move it, or one that ran under the machine's own login when it first starts under an account you added.
 
 A chat under 50k tokens says nothing of its cache but in its newest turn's card, since writing that again costs little.
 

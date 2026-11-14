@@ -68,9 +68,9 @@ impl RenderOnce for AccountsPage {
 pub(super) fn listed<'a>(accounts: impl Iterator<Item = &'a Account>) -> (Vec<&'a Account>, Vec<&'a Account>) {
     let (mut added, mut found): (Vec<&Account>, Vec<&Account>) =
         accounts.partition(|account| account.login_agent.is_some());
-    found.sort_by_cached_key(|account| (words::called(account).to_lowercase(), account.id.clone()));
+    found.sort_by_cached_key(|account| (crate::names::called(account).to_lowercase(), account.id.clone()));
     added.sort_by_cached_key(|account| {
-        (account.held_login.is_none(), words::called(account).to_lowercase(), account.id.clone())
+        (account.held_login.is_none(), crate::names::called(account).to_lowercase(), account.id.clone())
     });
     (found, added)
 }

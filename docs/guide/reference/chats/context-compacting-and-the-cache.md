@@ -47,6 +47,9 @@ Their card says how much of each is left, such as `96% left` of the `7d limit`, 
 - **A limit is the account's, not the chat's,** so every chat under the same login shows the same.
 - **The bars follow what working agents report,** and are never more than about five minutes behind.
 - **Nothing shows for an account with no limits,** or until an agent under the account has heard of one. Then the ring's card says whose account it is instead.
+- **`Move`, beside whose account it is, moves the chat to another login you've added,** when there's one that works other than the one it's on. The chat runs under it from its next prompt, and stays on it until you move it again, whatever the default becomes. A chat whose agent is working asks first, since moving stops it. A chat on a login that has since ended or been disconnected can't start until you move it or renew the login.
+
+![The menu of accounts to move the chat to](../../../spec/screens/usage-move-menu.png)
 
 ## The prompt cache
 
@@ -55,7 +58,7 @@ The model provider keeps what an agent's requests read and write for a while, so
 ### When it expires
 
 - **A cache expires one lifetime after the agent's newest request,** an hour on a Claude account, since each request starts its time again.
-- **A compaction leaves nothing cached,** and so does choosing another model, or the chat's agent starting again under another account, as one that ran under the machine's own login does once you add an account, since another account's cache may not hold the conversation.
+- **A compaction leaves nothing cached,** and so does choosing another model, or the chat's agent starting again under another account, as it does after you move the chat, or once you add an account when it ran under the machine's own login, since another account's cache may not hold the conversation.
 - **It's about to expire with a quarter of its lifetime left:** 15 minutes for an hour's cache.
 
 ### Where it shows

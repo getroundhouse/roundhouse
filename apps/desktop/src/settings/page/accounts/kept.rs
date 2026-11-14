@@ -152,8 +152,11 @@ impl Kept {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let to =
-            To::Account { id: account.id.clone(), name: words::called(account), held: account.held_login.is_some() };
+        let to = To::Account {
+            id: account.id.clone(),
+            name: crate::names::called(account),
+            held: account.held_login.is_some(),
+        };
         self.open(agent, to, window, cx);
     }
 
