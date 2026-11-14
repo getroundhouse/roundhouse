@@ -34,6 +34,18 @@ fn what_a_sessions_agent_is_waiting_on_keeps_its_form() {
     );
 }
 
+/// A hub from before chats could be moved says nothing of a chat's assigned account, which reads as on no account.
+#[test]
+fn a_chats_assigned_account_keeps_its_form_and_a_hub_from_before_says_none() {
+    let moved = session(r#","account":"claude-1","assigned_account":"claude-1""#);
+    let older = session(r#","account":"claude-1""#);
+
+    assert_eq!(moved.assigned_account, Some("claude-1".into()));
+    assert_eq!(older.assigned_account, None);
+    assert!(serde_json::to_string(&moved).unwrap().contains(r#""assigned_account":"claude-1""#));
+    assert!(!serde_json::to_string(&older).unwrap().contains("assigned_account"));
+}
+
 #[test]
 fn which_way_a_prompt_was_settled_keeps_its_form() {
     let how = |settled: &str| {

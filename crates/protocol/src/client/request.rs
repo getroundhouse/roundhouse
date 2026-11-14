@@ -70,6 +70,7 @@ pub enum ClientRequest {
     AttachmentRead(attachments::AttachmentRead),
     AttachmentRemove(attachments::AttachmentRemove),
     SessionAccount(sessions::SessionAccount),
+    SessionAssignAccount(sessions::SessionAssignAccount),
     AccountConnect(accounts::AccountConnect),
     AccountSetDefault(accounts::AccountSetDefault),
     AccountDisconnect(accounts::AccountDisconnect),
