@@ -124,6 +124,8 @@ async fn an_agents_call_to_the_tools_is_asked_of_the_hub_and_answered_with_its_a
     reply(&mut frames, 2).await;
     let (path, told) = given(dir.path()).await;
     assert_eq!(Path::new(&path), state.join("agents/s-1.mcp.json"));
+    let prompt = prompt(dir.path()).await;
+    assert!(prompt.contains("`roundhouse`") && prompt.contains("`gh run watch`"), "told to wait with them: {prompt}");
     let told: serde_json::Value = serde_json::from_str(&told).unwrap();
     let server = &told["mcpServers"]["roundhouse"];
     assert_eq!(server["url"], format!("http://127.0.0.1:{port}/mcp"));
@@ -214,9 +216,12 @@ fn waiting_cli(dir: &Path) -> PathBuf {
     cli(dir, "exec sleep 100")
 }
 
-/// Writes the path it's given as `--mcp-config` to `given`, in the directory it runs in, with what the file says after
-/// it, or an empty line if it's given none, then waits.
-const KEEPS_ITS_MCP_CONFIG: &str = r#"while [ $# -gt 0 ] && [ "$1" != --mcp-config ]; do shift; done
+/// Writes what it's told with `--append-system-prompt` to `prompt`, then the path it's given as `--mcp-config` to
+/// `given`, in the directory it runs in, with what the file says after it, or an empty line if it's given none, then
+/// waits.
+const KEEPS_ITS_MCP_CONFIG: &str = r#": > prompt; prev=
+for arg in "$@"; do [ "$prev" = --append-system-prompt ] && printf '%s' "$arg" > prompt; prev=$arg; done
+while [ $# -gt 0 ] && [ "$1" != --mcp-config ]; do shift; done
 { printf '%s\n' "$2"; [ $# -gt 0 ] && cat "$2"; } > given.tmp; mv given.tmp given; exec sleep 100"#;
 
 /// The path a CLI running [`KEEPS_ITS_MCP_CONFIG`] in `dir` was given, and what the file said, once it has written them.
@@ -234,9 +239,16 @@ async fn given(dir: &Path) -> (String, String) {
     (path.to_string(), told.to_string())
 }
 
-/// What the agent's CLI is given as `--mcp-config`, as a worker with `config` starts it with a token, after being asked
-/// to serve its tools if `serving`.
-async fn told_at_start(dir: &Path, config: Config, serving: bool) -> String {
+/// What a CLI running [`KEEPS_ITS_MCP_CONFIG`] in `dir` was told with `--append-system-prompt`, once it has said what
+/// it was given.
+async fn prompt(dir: &Path) -> String {
+    given(dir).await;
+    std::fs::read_to_string(dir.join("prompt")).unwrap()
+}
+
+/// What the agent's CLI is given as `--mcp-config`, and told in its system prompt, as a worker with `config` starts it
+/// with a token, after being asked to serve its tools if `serving`.
+async fn told_at_start(dir: &Path, config: Config, serving: bool) -> (String, String) {
     let Worker { read: hub_read, write: mut hub_write, running } = start_worker(config);
     let mut frames = BufReader::new(hub_read).lines();
     let mut calls = vec![hello()];
@@ -247,9 +259,10 @@ async fn told_at_start(dir: &Path, config: Config, serving: bool) -> String {
     let started = reply(&mut frames, last).await;
     assert!(matches!(started, WorkerOutcome::Response(WorkerResponse::AgentStarted(_))), "{started:?}");
     let (path, _) = given(dir).await;
+    let prompt = prompt(dir).await;
     hub_write.shutdown().await.unwrap();
     timeout(Duration::from_secs(10), running).await.expect("the worker didn't exit").unwrap();
-    path
+    (path, prompt)
 }
 
 fn agent_start(session_id: &str, cwd: &Path, tools_token: Option<ToolsToken>) -> AgentSpec {
@@ -328,7 +341,10 @@ async fn an_agent_goes_without_the_tools_when_they_arent_served_or_there_is_nowh
     let untold =
         told_at_start(untold.path(), config(untold.path(), Some(cli(untold.path(), KEEPS_ITS_MCP_CONFIG))), true).await;
 
-    assert_eq!((unserved.as_str(), untold.as_str()), ("", ""), "started without a --mcp-config");
+    assert_eq!((unserved.0.as_str(), untold.0.as_str()), ("", ""), "started without a --mcp-config");
+    // Told of them all the same, as one with them is, since a chat keeps what it was first told.
+    assert_eq!(unserved.1, untold.1);
+    assert!(unserved.1.contains("When Roundhouse serves you tools"), "{}", unserved.1);
 }
 
 /// So a hub that connects to it again carries on with their sessions rather than taking them for stopped.

@@ -18,7 +18,7 @@ use tracing::{info, warn};
 
 use super::{RunningAgent, State};
 use crate::context_dir::Folder;
-use crate::instructions::INSTRUCTIONS;
+use crate::instructions::instructions;
 
 /// Gives up once the worker is stopping, which ends the call, so a title nobody will see can't keep it running.
 pub(crate) async fn title_for(
@@ -102,7 +102,7 @@ pub(crate) async fn start_agent(
         binary: binary(state, spec.agent),
         pid_file: agent_file("pid"),
         tools: tools_for(state, &mut spec, agent_file("mcp.json")).await,
-        instructions: Some(INSTRUCTIONS.to_string()),
+        instructions: Some(instructions(spec.agent)),
         // Taken out of the launch, as the tools' token is, so it's in one place: what the agent is started with, and
         // started again with, which goes when the agent does.
         login: spec.login.take(),

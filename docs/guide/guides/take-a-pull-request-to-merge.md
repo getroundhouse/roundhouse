@@ -42,7 +42,7 @@ While it's waiting on GitHub or on someone else, such as checks running or a rev
 
 ## Let the agent wait for you
 
-Ask Claude to wait on the PR numbers you want. It can wait for required checks, all checks currently reported, or merging. A stack's lower PRs are included automatically, so a conflict below your PR wakes the agent while CI is still running. New pushed commits are followed as they arrive.
+Claude starts a wait on its own when what it does next depends on a pull request, such as merging once its checks pass, since Roundhouse tells it to, so you can go on talking to it meanwhile. You can also ask it to wait on the PR numbers you want. It can wait for required checks, all checks currently reported, or merging. A stack's lower PRs are included automatically, so a conflict below your PR wakes the agent while CI is still running. New pushed commits are followed as they arrive.
 
 Each wait has its own line and `Stop` button in the chat. You can have several at once. Stopping one leaves the others waiting; closing the chat or archiving the workspace stops them all.
 
