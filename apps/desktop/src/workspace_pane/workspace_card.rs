@@ -2,13 +2,12 @@
 //! the path, which build its agents are on, where they run, and the ports set aside for it. One worker does all of a
 //! workspace's work, every chat's included, so this is the workspace's rather than a chat's.
 
-use gpui_kit::component::hover_card::HoverCard;
 use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::{
     Anchor, AnyElement, App, Div, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Role, SharedString,
     Stateful, StatefulInteractiveElement as _, StyleRefinement, Styled as _, div, px,
 };
-use look::{InRegion as _, Region, Typeset as _};
+use look::{HoverCard, InRegion as _, Region, Typeset as _};
 use protocol::model::{PORTS_PER_WORKSPACE, Workspace};
 
 const WIDTH: Pixels = px(380.);

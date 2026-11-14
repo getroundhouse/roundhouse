@@ -2,11 +2,11 @@ use super::super::WorkspacePane;
 use super::super::composer::{Hub, Slot, middle};
 use super::{card, words};
 use gpui_kit::base::plot::shape::{Arc, ArcData};
-use gpui_kit::component::hover_card::HoverCard;
 use gpui_kit::{
     Anchor, App, Bounds, Context, Div, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Role,
     SharedString, StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, Window, canvas, div, px, relative,
 };
+use look::HoverCard;
 use protocol::model::{Account, UsageLimit};
 use std::f32::consts::TAU;
 
