@@ -60,6 +60,8 @@ jobs:
           key: windows-2025-vs2026-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', '**/Cargo.toml') }}
           restore-keys: windows-2025-vs2026-
       # Not --all-targets, since most tests only build on Unix.
+      # Experiment: build Ghostty again, as a cold run would.
+      - run: cargo clean -p libghostty-vt-sys
       - run: cargo clippy --workspace --locked -- -D warnings
       # Tests of what Windows does differently below the hub, and of Ghostty's terminal core, built by Zig for MSVC,
       # which only a Windows machine can build.
@@ -105,7 +107,7 @@ jobs:
       # Zig's global cache, once Zig has built something, which it hasn't when target/ held Ghostty's build. What it
       # built is then listed in h/.
       - if: >-
-          github.ref == 'refs/heads/main' && steps.zig.outputs.cache-hit != 'true' &&
+          steps.zig.outputs.cache-hit != 'true' &&
           hashFiles('.zig-cache/h/**') != ''
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:

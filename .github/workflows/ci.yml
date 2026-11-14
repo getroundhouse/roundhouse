@@ -115,6 +115,8 @@ jobs:
           key: linux-lint-deps-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', '**/Cargo.toml') }}
           # Main rebuilds from nothing when the key changes, so a cache holds one lockfile's build. PRs take any.
           restore-keys: ${{ github.ref != 'refs/heads/main' && 'linux-lint-deps-' || '' }}
+      # Experiment: build Ghostty again, as a cold run would.
+      - run: cargo clean -p libghostty-vt-sys
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       # As shipped, since the tests' `testing` features can hide what only tests use.
@@ -136,7 +138,7 @@ jobs:
       # Zig's global cache, once Zig has built something, which it hasn't when target/ held Ghostty's build. What it
       # built is then listed in h/.
       - if: >-
-          github.ref == 'refs/heads/main' && steps.zig.outputs.cache-hit != 'true' &&
+          steps.zig.outputs.cache-hit != 'true' &&
           hashFiles('.zig-cache/h/**') != ''
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -180,6 +182,8 @@ jobs:
           key: runs-on-arm64-16-test-deps-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', '**/Cargo.toml') }}
           restore-keys: ${{ github.ref != 'refs/heads/main' && 'runs-on-arm64-16-test-deps-' || '' }}
       # One pool for every binary's tests. It skips doc tests, so they run after.
+      # Experiment: build Ghostty again, as a cold run would.
+      - run: cargo clean -p libghostty-vt-sys
       - run: cargo nextest run --profile ci --workspace --locked
       - run: cargo test --workspace --doc --locked
       - if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
@@ -196,7 +200,7 @@ jobs:
       # Zig's global cache, once Zig has built something, which it hasn't when target/ held Ghostty's build. What it
       # built is then listed in h/.
       - if: >-
-          github.ref == 'refs/heads/main' && steps.zig.outputs.cache-hit != 'true' &&
+          steps.zig.outputs.cache-hit != 'true' &&
           hashFiles('.zig-cache/h/**') != ''
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:

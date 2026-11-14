@@ -53,6 +53,8 @@ jobs:
             target/
           key: mac-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', '**/Cargo.toml') }}
           restore-keys: mac-
+      # Experiment: build Ghostty again, as a cold run would.
+      - run: cargo clean -p libghostty-vt-sys
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       # The gallery's images match the Mac that approved them, pixel for pixel.
       - run: cargo test --workspace --locked -- --skip 'gallery::'
@@ -71,7 +73,7 @@ jobs:
       # Zig's global cache, once Zig has built something, which it hasn't when target/ held Ghostty's build. What it
       # built is then listed in h/.
       - if: >-
-          github.ref == 'refs/heads/main' && steps.zig.outputs.cache-hit != 'true' &&
+          steps.zig.outputs.cache-hit != 'true' &&
           hashFiles('.zig-cache/h/**') != ''
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
