@@ -4,7 +4,7 @@ use crate::store::{Connecting, Held, IdFrom, Store, StoreError};
 use parking_lot::Mutex;
 use protocol::client::accounts::AccountConnect;
 use protocol::client::{ApiError, ErrorCode};
-use protocol::model::{Account, AccountId, AgentKind, AgentLogin, LoginDescription, LoginToken};
+use protocol::model::{Account, AccountId, AgentKind, AgentLogin, HubSettings, LoginDescription, LoginToken};
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -31,11 +31,6 @@ pub(crate) struct Logins {
 pub(crate) struct Handed {
     pub(crate) account: AccountId,
     pub(crate) login: AgentLogin,
-}
-
-/// Whether `held` still works at `now_ms`: it ends later, or nothing says when it ends.
-fn not_ended(held: &Held, now_ms: i64) -> bool {
-    held.login.ends_at_ms.is_none_or(|ends_at_ms| ends_at_ms > now_ms)
 }
 
 /// A login to connect, as a client asked: checked, trimmed and given the ID a new account would get.
@@ -86,6 +81,7 @@ impl Connect {
 pub(crate) struct AccountChange {
     pub(crate) account: Account,
     pub(crate) changed: bool,
+    pub(crate) defaults: Option<HubSettings>,
 }
 
 impl Logins {
@@ -128,11 +124,11 @@ impl Logins {
             connected_at_ms: connect.connected_at_ms,
             ends_at_ms: connect.ends_at_ms,
         };
-        let (account, replaced) = self.store.connect_login(&connecting).inspect_err(|_| self.let_go(&file))?;
-        if let Some(replaced) = replaced {
+        let connected = self.store.connect_login(&connecting).inspect_err(|_| self.let_go(&file))?;
+        if let Some(replaced) = connected.replaced {
             self.let_go(&replaced);
         }
-        Ok(AccountChange { account, changed: true })
+        Ok(AccountChange { account: connected.account, changed: true, defaults: connected.defaults })
     }
 
     /// Has the hub forget the login it holds for `id`, as `AccountDisconnect` says. The file goes first, and then the
@@ -142,38 +138,10 @@ impl Logins {
         if let Some(file) = self.store.login_row(id)?.file {
             self.files.remove(&file).map_err(|e| internal(format!("couldn't forget the login's token: {e}")))?;
             if let Some(account) = self.store.clear_login(id)? {
-                return Ok(AccountChange { account, changed: true });
+                return Ok(AccountChange { account, changed: true, defaults: None });
             }
         }
-        Ok(AccountChange { account: self.record(id)?, changed: false })
-    }
-
-    /// Whether the hub holds a login for agents of `agent`'s kind that hasn't ended at `now_ms`, as the accounts' rows
-    /// say, without reading any token. So whether a launch would be handed one is known before its machine is asked
-    /// whether it has its own, and a token that's gone fails only a launch that would be handed it.
-    pub(crate) fn holds(&self, agent: AgentKind, now_ms: i64) -> Result<bool, ApiError> {
-        Ok(self.store.held_logins(agent)?.iter().any(|held| not_ended(held, now_ms)))
-    }
-
-    /// The login to hand an agent of `agent`'s kind launched at `now_ms` on a machine with none of its own: of those
-    /// the hub holds for that kind, the one connected most recently that hasn't ended, or `None` when it holds none
-    /// such. One whose token is gone fails, rather than the agent running under an older login or none. A disconnect
-    /// whose row couldn't be cleared leaves one, until it's tried again or the hub next starts and tidies, as does a
-    /// file something else removed.
-    pub(crate) fn to_hand(&self, agent: AgentKind, now_ms: i64) -> Result<Option<Handed>, ApiError> {
-        let _one_at_a_time = self.one_at_a_time.lock();
-        let held = self.store.held_logins(agent)?;
-        let Some(Held { account, name, file, .. }) = held.into_iter().find(|held| not_ended(held, now_ms)) else {
-            return Ok(None);
-        };
-        let called = name.unwrap_or_else(|| account.to_string());
-        match self.files.read(&file) {
-            Ok(Some(token)) => Ok(Some(Handed { account, login: AgentLogin { token } })),
-            Ok(None) => Err(internal(format!(
-                "the token of the hub's login for {called} is gone, so connect it again, or disconnect it"
-            ))),
-            Err(e) => Err(internal(format!("couldn't read the token of the hub's login for {called}: {e}"))),
-        }
+        Ok(AccountChange { account: self.record(id)?, changed: false, defaults: None })
     }
 
     /// Makes the files and the rows agree, as the hub starts: a row whose file is gone, empty or not a token holds no
@@ -235,7 +203,7 @@ impl Logins {
     pub(super) fn connected_already(&self, holding: &AccountId, name: &str) -> Result<AccountChange, ApiError> {
         let account = self.record(holding)?;
         if account.name.as_deref() == Some(name) {
-            return Ok(AccountChange { account, changed: false });
+            return Ok(AccountChange { account, changed: false, defaults: None });
         }
         let called = account.name.as_deref().unwrap_or(holding.as_str());
         Err(ApiError::new(ErrorCode::Conflict, format!("that token is connected already, as {called}")))
@@ -243,8 +211,8 @@ impl Logins {
 
     pub(super) fn rename(&self, id: &AccountId, name: &str) -> Result<AccountChange, ApiError> {
         Ok(match self.store.rename_account(id, name)? {
-            Some(account) => AccountChange { account, changed: true },
-            None => AccountChange { account: self.record(id)?, changed: false },
+            Some(account) => AccountChange { account, changed: true, defaults: None },
+            None => AccountChange { account: self.record(id)?, changed: false, defaults: None },
         })
     }
 

@@ -70,7 +70,7 @@ You need:
 
 - A Mac with Apple silicon.
 - Git, and a repository to work in.
-- The CLI for your agent, `claude` or `codex`, installed and signed in. Claude can also use a login added in Settings. Codex uses the sign-in on the worker's machine.
+- The CLI for your agent, `claude` or `codex`, installed and signed in. Claude uses the hub's default added account ahead of its machine's login. Codex uses the sign-in on the worker's machine.
 - GitHub's CLI, `gh`, logged in, for pull requests. Everything else works without it.
 
 Then:

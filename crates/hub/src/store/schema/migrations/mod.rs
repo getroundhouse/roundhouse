@@ -1,6 +1,7 @@
 //! The database's migrations, from the first, which `first.rs` has. `before.rs` has how many there were before some of
 //! them, for tests.
 
+mod account_defaults;
 mod accounts;
 mod activity;
 mod agent_runs;

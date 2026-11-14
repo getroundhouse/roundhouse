@@ -43,7 +43,7 @@ impl LiveSession {
         if self.is_closed() {
             return Err(ApiError::new(ErrorCode::Conflict, "this chat is closed"));
         }
-        let login = hub.login_for(&link, self.agent).await?;
+        let login = hub.login_for(self.agent).await?;
         self.start_agent(&hub, &link, Launch { cwd, env, login }).await?;
         Ok(link)
     }

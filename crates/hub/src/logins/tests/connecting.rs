@@ -81,7 +81,7 @@ fn a_token_connected_is_kept_in_a_file_of_its_own_and_the_record_says_the_hub_ho
     let dir = tempfile::tempdir().unwrap();
     let (logins, store) = logins_in(dir.path());
 
-    let AccountChange { account, changed } = logins.connect(&connect("Work", "a-made-up-token", None)).unwrap();
+    let AccountChange { account, changed, .. } = logins.connect(&connect("Work", "a-made-up-token", None)).unwrap();
 
     assert!(changed);
     assert_eq!(account.id, AccountId::from("claude-login-Work"));
@@ -104,7 +104,7 @@ fn the_same_token_again_finds_its_account_and_under_another_name_is_refused() {
     let again = logins.connect(&connect("Work", "a-made-up-token", None)).unwrap();
     let renamed = logins.connect(&Connect { connected_at_ms: 1500, ..connect("Day job", "a-made-up-token", None) });
 
-    assert_eq!(again, AccountChange { account: first.clone(), changed: false });
+    assert_eq!(again, AccountChange { account: first.clone(), changed: false, defaults: None });
     let refused = renamed.unwrap_err();
     assert_eq!(refused.code, ErrorCode::Conflict);
     assert!(refused.message.contains("Work"), "it says which account holds it: {}", refused.message);
@@ -145,7 +145,7 @@ fn renewing_with_the_token_the_account_holds_changes_nothing_but_its_name() {
     let again = logins.connect(&connect("Work", "a-made-up-token", Some(&first.id))).unwrap();
     let renamed = logins.connect(&connect("Day job", "a-made-up-token", Some(&first.id))).unwrap().account;
 
-    assert_eq!(again, AccountChange { account: first.clone(), changed: false });
+    assert_eq!(again, AccountChange { account: first.clone(), changed: false, defaults: None });
     assert_eq!((renamed.name.as_deref(), renamed.held_login), (Some("Day job"), first.held_login));
 }
 
@@ -184,7 +184,7 @@ fn disconnecting_forgets_the_token_and_keeps_the_record_and_again_changes_nothin
     let account = &disconnected.account;
     assert_eq!(account.held_login, None);
     assert_eq!((account.name.as_deref(), account.login_agent), (Some("Work"), Some(AgentKind::Claude)));
-    assert_eq!(again, AccountChange { account: disconnected.account.clone(), changed: false });
+    assert_eq!(again, AccountChange { account: disconnected.account.clone(), changed: false, defaults: None });
     assert_eq!(tokens_kept(dir.path()), Vec::<String>::new());
 }
 

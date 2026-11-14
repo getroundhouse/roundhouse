@@ -20,16 +20,16 @@ pub(super) const OLDER_HUB: &str =
     "This hub is from before hubs kept logins, so it can't connect an account until it's updated.";
 
 /// What Added says while the person has given the hub no login.
-pub(super) const NONE_ADDED: &str = "None yet. Connect an account to run agents on a machine with no login of its own.";
+pub(super) const NONE_ADDED: &str = "None yet. Connect an account to add its login to this hub.";
 
-/// What Added says of itself under its heading: what the hub does with these, as it decides, which nothing here
-/// chooses. This machine is named as the app names it everywhere.
-pub(super) fn added_says() -> String {
-    let machine = crate::names::MACHINE;
-    format!(
-        "Logins you've given the hub. It hands the newest that hasn't ended to agents on any machine without a login \
-         of its own, this {machine} included, and a machine with one keeps using its own."
-    )
+/// What Added says of itself under its heading: the hub applies its selected defaults before machine credentials.
+pub(super) fn added_says(defaults: bool) -> String {
+    if defaults {
+        "Logins kept by this hub. The default for each agent takes priority over machine credentials."
+    } else {
+        "Logins kept by this hub. Update the hub to choose defaults that take priority over machine credentials."
+    }
+    .to_string()
 }
 
 /// What disconnecting the account called `name` asks first.
@@ -40,7 +40,7 @@ pub(super) fn disconnect_asks(name: &str) -> String {
 /// What the question before disconnecting says under it.
 pub(super) const DISCONNECT_SAYS: &str = "The hub forgets its token, so connecting it again takes pasting one again. \
                                           Agents running under it go on until they stop. The token isn't revoked, \
-                                          so it still works wherever else it's kept.";
+                                          so it still works wherever else it's kept. If this is a default account, new agents cannot start until you reconnect it or choose another default.";
 
 /// What's said under an account's row when it was to be disconnected with no hub to ask.
 pub(super) const NO_HUB_TO_DISCONNECT: &str = "Couldn't disconnect it: there's no hub to ask.";

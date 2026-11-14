@@ -1,11 +1,18 @@
-use super::super::{Store, StoreError, lock, rev_of};
-use protocol::model::{HubId, HubSettings, HubSettingsChange};
+use super::super::{Store, StoreError, from_text, lock, rev_of, text_of};
+use protocol::model::{AccountDefault, AccountId, AgentKind, HubId, HubSettings, HubSettingsChange};
 use rusqlite::{Connection, params};
 
 pub(in super::super) fn hub_settings(conn: &Connection) -> rusqlite::Result<HubSettings> {
     conn.query_row("SELECT keep_awake, allow_asked_in_full_access, rev FROM hub_settings", [], |row| {
+        // The outer SELECT remains active while the defaults are read, keeping one SQLite snapshot.
+        let mut defaults = conn.prepare_cached("SELECT agent, account_id FROM account_defaults ORDER BY agent")?;
+        let account_defaults = defaults
+            .query_map([], |row| {
+                Ok(AccountDefault { agent: from_text(row.get(0)?)?, account: row.get::<_, String>(1)?.into() })
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
         Ok(HubSettings {
-            account_defaults: None,
+            account_defaults: Some(account_defaults),
             keep_awake: row.get(0)?,
             allow_asked_in_full_access: Some(row.get(1)?),
             rev: rev_of(row, 2)?,
@@ -14,6 +21,19 @@ pub(in super::super) fn hub_settings(conn: &Connection) -> rusqlite::Result<HubS
 }
 
 impl Store {
+    /// Called with the logins lock held, after checking the account and its token.
+    pub(crate) fn set_account_default(&self, agent: AgentKind, account: &AccountId) -> Result<HubSettings, StoreError> {
+        self.lasting(|tx| {
+            tx.execute(
+                "INSERT INTO account_defaults (agent, account_id) VALUES (?1, ?2)
+                ON CONFLICT (agent) DO UPDATE SET account_id = excluded.account_id
+                WHERE account_id != excluded.account_id",
+                params![text_of(&agent), account.as_str()],
+            )?;
+            hub_settings(tx)
+        })
+    }
+
     /// This hub's ID, made when its database was.
     pub fn hub_id(&self) -> Result<HubId, StoreError> {
         let id: String = lock(&self.reader).query_row("SELECT hub_id FROM hub_identity", [], |row| row.get(0))?;
