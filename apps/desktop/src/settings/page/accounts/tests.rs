@@ -35,10 +35,13 @@ fn added(id: &str, name: &str) -> Account {
 fn an_added_account_is_called_by_its_name_and_a_found_one_by_its_email() {
     let both = |account: Account| Account { email: Some("ada@example.com".to_string()), ..account };
 
-    assert_eq!(words::called(&both(added("a", "Work"))), "Work");
-    assert_eq!(words::called(&both(Account { name: Some("Work".to_string()), ..account("a") })), "ada@example.com");
-    assert_eq!(words::called(&Account { login: Some("API key".to_string()), ..account("a") }), "API key");
-    assert_eq!(words::called(&account("claude-1")), "claude-1", "with nothing else to go by");
+    assert_eq!(crate::names::called(&both(added("a", "Work"))), "Work");
+    assert_eq!(
+        crate::names::called(&both(Account { name: Some("Work".to_string()), ..account("a") })),
+        "ada@example.com"
+    );
+    assert_eq!(crate::names::called(&Account { login: Some("API key".to_string()), ..account("a") }), "API key");
+    assert_eq!(crate::names::called(&account("claude-1")), "claude-1", "with nothing else to go by");
 }
 
 #[test]

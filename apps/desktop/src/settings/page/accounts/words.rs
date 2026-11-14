@@ -41,17 +41,11 @@ pub(super) fn disconnect_asks(name: &str) -> String {
 pub(super) const DISCONNECT_SAYS: &str = "The hub forgets its token, so connecting it again takes pasting one again. \
                                           Agents running under it go on until they stop. The token isn't revoked, \
                                           so it still works wherever else it's kept. Chats on it can't start until \
-                                          you reconnect it, and if it's a default account, new chats can't either \
-                                          until you reconnect it or choose another default.";
+                                          you reconnect it or move them, and if it's a default account, new chats \
+                                          can't either until you reconnect it or choose another default.";
 
 /// What's said under an account's row when it was to be disconnected with no hub to ask.
 pub(super) const NO_HUB_TO_DISCONNECT: &str = "Couldn't disconnect it: there's no hub to ask.";
-
-/// What an account is called on its row: who it is, as the app says it everywhere, such as the name the person gave it
-/// for one whose login they added, and otherwise what else its record says.
-pub(super) fn called(account: &Account) -> String {
-    crate::names::account(account).or_else(|| account.login.clone()).unwrap_or_else(|| account.id.to_string())
-}
 
 /// How a login the person added stands, as its row says, and how loudly.
 #[derive(Clone, Debug, PartialEq, Eq)]

@@ -1,6 +1,7 @@
 //! The screens about the context and the account, beside Send: the ring's card, as it usually is, when a setting caps
 //! the context and when it's the one card to say whose account it is, for a login on the machine and for one the hub
-//! holds, then the limits' card, and with a model's own weekly limit too.
+//! holds, then the limits' card, with a model's own weekly limit too, and with the menu that moves the chat to
+//! another account.
 
 #![cfg(test)]
 
@@ -9,7 +10,9 @@ use look::Region;
 use super::frame::{CONTEXT, Frame, Part};
 use super::screens::FOCUS;
 use super::steps::{Screen, Step, Target};
-use super::worlds::{context, context_capped, context_held_login, context_with_a_models_limit, context_without_limits};
+use super::worlds::{
+    context, context_capped, context_held_login, context_to_move, context_with_a_models_limit, context_without_limits,
+};
 
 /// The screens about the context and the account.
 pub(crate) const SCREENS: &[Screen] = &[
@@ -71,6 +74,29 @@ pub(crate) const SCREENS: &[Screen] = &[
             Step::Select(FOCUS),
             Step::WaitFor("usage"),
             Step::Hover { on: Target::Id("usage"), shows: Region::UsageCard.id() },
+        ],
+    },
+    Screen {
+        name: "usage-move",
+        spec: "chats.md",
+        world: Some(context_to_move),
+        frame: Frame::Around(Part::Region(Region::Composer), &[Part::Region(Region::UsageCard)]),
+        steps: &[
+            Step::Select(FOCUS),
+            Step::WaitFor("usage"),
+            Step::Hover { on: Target::Id("usage"), shows: Region::UsageCard.id() },
+        ],
+    },
+    Screen {
+        name: "usage-move-menu",
+        spec: "chats.md",
+        world: Some(context_to_move),
+        frame: Frame::Around(Part::Region(Region::Composer), &[Part::Region(Region::UsageCard), Part::Menu]),
+        steps: &[
+            Step::Select(FOCUS),
+            Step::WaitFor("usage"),
+            Step::Hover { on: Target::Id("usage"), shows: Region::UsageCard.id() },
+            Step::Click("account-move"),
         ],
     },
 ];

@@ -12,6 +12,7 @@ pub mod busy;
 pub mod changes;
 pub mod checkout;
 mod composing;
+mod failed;
 pub mod file_diff;
 mod file_header;
 mod file_icons;

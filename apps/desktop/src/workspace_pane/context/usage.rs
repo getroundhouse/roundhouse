@@ -1,5 +1,6 @@
 use super::super::WorkspacePane;
 use super::super::composer::{Hub, Slot, middle};
+use super::moving::Moves;
 use super::{card, words};
 use gpui_kit::base::plot::shape::{Arc, ArcData};
 use gpui_kit::{
@@ -25,15 +26,18 @@ const LIMIT: Pixels = px(4.);
 pub(in super::super) struct Usage {
     pub(super) account: Account,
     pub(super) limits: Vec<(SharedString, UsageLimit)>,
+    /// What the menu that moves the chat to another account offers, if there's one to move it to.
+    pub(super) moves: Option<Moves>,
 }
 
 impl WorkspacePane {
     /// The record of the account the chat showing runs under, and which of its limits are shown. `None` until its
     /// agent has launched, when the hub couldn't tell whose account it is, and from a hub that doesn't keep accounts.
-    pub(in super::super) fn usage(&self, cx: &App) -> Option<Usage> {
-        let account = self.shown.all().account(self.session()?.account.as_ref()?)?.clone();
+    pub(in super::super) fn usage(&self, cx: &Context<Self>) -> Option<Usage> {
+        let session = self.session()?;
+        let account = self.shown.all().account(session.account.as_ref()?)?.clone();
         let limits = crate::limits::shown(&account.limits, look::now_ms(cx));
-        Some(Usage { account, limits })
+        Some(Usage { account, limits, moves: self.moves(session, cx) })
     }
 
     /// The ring for the chat showing, once its agent has said how full its context is. Until then there's nothing
@@ -44,7 +48,7 @@ impl WorkspacePane {
     pub(in super::super) fn context_ring(&self, usage: Option<&Usage>, cx: &mut Context<Self>) -> Option<Slot> {
         let session = self.session()?;
         let context = session.context.clone()?;
-        let account = usage.filter(|usage| usage.limits.is_empty()).map(|usage| usage.account.clone());
+        let usage = usage.filter(|usage| usage.limits.is_empty()).cloned();
         let used = context.used_fraction();
         // The whole slot is the ring's to point at, and what the card lines up with, so the ring's own square is as
         // big as the slot.
@@ -55,7 +59,7 @@ impl WorkspacePane {
             (cx.weak_entity(), session.compaction_waits() || self.hub == Hub::Away, self.compacts());
         // It holds a button, so it waits a moment for the pointer to cross the gap between the ring and the card.
         let hover = card_over(look::hover_card_with_a_button("context-hover"), ring)
-            .content(move |_, _, cx| card::context_card(&context, account.as_ref(), &pane, compacts, off, cx));
+            .content(move |hold, _, cx| card::context_card(&context, usage.as_ref(), hold, &pane, compacts, off, cx));
         // Said in words too, since the ring alone says nothing to someone who can't see it.
         let said = format!("Context {} used", words::percent(used));
         Some(Slot::holding(div().id("context").role(Role::Status).aria_label(said).child(hover).test_support()))
@@ -75,8 +79,10 @@ impl WorkspacePane {
         let bars = middle().size(Slot::SIZE).child(bars(&drawn(&left), cx));
         // Said in words too, as the ring is. The least of them is the one that runs out first.
         let said = format!("{called} {} left", words::whole_percent(least));
-        let hover = card_over(look::hover_card("usage-hover"), bars)
-            .content(move |_, _, cx| card::usage_card(&usage, called.clone(), cx));
+        // It holds a button when the chat can be moved to another account, so it waits for the pointer to cross to it.
+        let card = if usage.moves.is_some() { look::hover_card_with_a_button } else { look::hover_card };
+        let hover = card_over(card("usage-hover"), bars)
+            .content(move |hold, _, cx| card::usage_card(&usage, called.clone(), hold, cx));
         Some(Slot::holding(div().id("usage").role(Role::Status).aria_label(said).child(hover).test_support()))
     }
 }

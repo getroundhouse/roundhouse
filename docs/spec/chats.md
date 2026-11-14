@@ -529,6 +529,18 @@ Every call is drawn the same way, as `look.md` says, and each kind fills in what
 
   ![The context's card, naming a login the hub holds](screens/context-held-login.png)
 
+- **Beside whose account it is, `Move` moves the chat to another account the hub holds a login for,** on whichever card says whose it is. It's a chat's, not a workspace's, and a new chat is put on its kind's default, whichever chat it's opened from. Its menu opens above it, and holds the card open while it's open, wherever the pointer goes. A card with `Move` goes a third of a second after the pointer leaves, as the ring's does, so the pointer can cross to the button. The menu lists the logins added for the chat's kind of agent that still work, by the names the person gave them, with a check on the one the chat is on. One whose login has ended or been disconnected isn't listed, but for the one the chat is on, which is listed off. A chat has `Move` only when a login that works isn't the one it's on, since otherwise there's nowhere else for it to go, so a chat on the only one has none, and one that ran under the machine's own login has it once a login is added. From a hub from before account defaults, it has none. One that keeps defaults but is from before moves has it, and refuses the move, and the app says so in the strip along the window's top, as `couldn't move the chat: the hub is older than this app`. `Move` is off while there's no hub. *Unconfirmed:* where the button is, what its menu lists, when `Move` shows or is off, and a hub from before moves having it.
+
+  **The limits' card, on a chat that could move to another account.** *Unconfirmed.*
+
+  ![The limits' card, with Move beside whose account it is](screens/usage-move.png)
+
+  **The menu Move opens, with the chat on Work.** *Unconfirmed.*
+
+  ![The menu of accounts to move the chat to, above the Move button](screens/usage-move-menu.png)
+
+- **A chat that's moved runs under the account it was moved to from its next launch, and stays on it, whatever the default becomes, until it's moved again,** and that launch resumes the conversation there, so its next prompt writes the conversation to the new account's cache again. Its agent, if one is running under another account, is stopped. One that's working asks first, `Move this chat to Personal?`, saying that moving stops it, with `Keep working` and `Move anyway`, and moving anyway stops it short, as `Stop` does. The hub decides whether to ask, since it knows whether the agent is working. A chat whose agent only waits on a pull request isn't asked about, and its agent starts again under the new account and goes on waiting. Once moved, the card names the account it was moved to. A chat on an account whose login ends, or is disconnected, can't start its agent, and its chat says which account needs a login, until it's moved to another or the login is renewed. *Unconfirmed:* the question's words, a chat whose agent only waits on a pull request not being asked about, and its agent starting again at once.
+
 - **How full a context is belongs to its chat's record,** so every client shows the same ring, and it's still there once the agent has gone or the hub has restarted, since the conversation the agent resumes is as full. It isn't in the chat's history: only the newest matters, and it answers the app's own question rather than being something the agent said. *Unconfirmed.*
 
 ## Compacting

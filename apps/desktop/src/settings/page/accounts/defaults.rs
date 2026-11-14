@@ -7,11 +7,11 @@ use gpui_kit::{AnyElement, App, Div, IntoElement, ParentElement as _, SharedStri
 use look::{Off as _, Sizing as _, Typeset as _};
 use protocol::model::{Account, AgentDescription};
 
-use super::{Drawing, words};
+use super::Drawing;
 
 /// What Default accounts says above its rows, on a hub that keeps defaults.
 const INTRO: &str =
-    "Choose which account new chats use across this hub. A chat stays on its account when you choose another.";
+    "Choose which account new chats use across this hub. A chat stays on its account until you move it.";
 
 pub(super) fn section(drawing: &Drawing<'_>, accounts: &[&Account], cx: &App) -> Div {
     let colors = look::colors(cx);
@@ -36,9 +36,9 @@ fn row(drawing: &Drawing<'_>, agent: &AgentDescription, accounts: &[&Account], c
         (None, _, _) => "Unavailable on this hub".to_string(),
         (_, None, _) => "Machine login".to_string(),
         (_, Some(_), None) => "Loading account…".to_string(),
-        (_, _, Some(account)) => words::called(account),
+        (_, _, Some(account)) => crate::names::called(account),
     };
-    let blocked = account.is_some_and(|account| !usable(account, drawing.now_ms));
+    let blocked = account.is_some_and(|account| !account.works_for(agent.kind, drawing.now_ms));
     let says = match (drawing.defaults, selected, account) {
         _ if blocked => Some(
             "Renew or reconnect it. Until then, chats on it can't start, nor can new chats unless you choose another.",
@@ -71,8 +71,8 @@ fn picker(
 ) -> AnyElement {
     let choices: Vec<_> = accounts
         .iter()
-        .filter(|account| account.login_agent == Some(agent.kind) && usable(account, drawing.now_ms))
-        .map(|account| (account.id.clone(), words::called(account)))
+        .filter(|account| account.works_for(agent.kind, drawing.now_ms))
+        .map(|account| (account.id.clone(), crate::names::called(account)))
         .collect();
     let kept = drawing.kept.read(cx);
     let disabled =
@@ -101,8 +101,4 @@ fn picker(
             })
         })
         .into_any_element()
-}
-
-fn usable(account: &Account, now_ms: i64) -> bool {
-    account.held_login.as_ref().is_some_and(|held| held.ends_at_ms.is_none_or(|ends| ends > now_ms))
 }

@@ -32,7 +32,7 @@ pub(super) fn row(drawing: &Drawing<'_>, account: &Account, cx: &App) -> AnyElem
     let standing = account.login_agent.map(|_| words::standing(account.held_login.as_ref(), drawing.now_ms, cx));
     let icon = if account.login_agent.is_some() { Lucide::KeyRound } else { Lucide::CircleUser };
     let icon = div().flex_none().pt_0p5().child(Icon::new(icon).size_4().text_color(colors.text_muted));
-    let called = words::called(account);
+    let called = crate::names::called(account);
     let dim = standing == Some(Standing::Disconnected);
     let name =
         div().truncate().emphasis().text_color(if dim { colors.text_muted } else { colors.text }).child(called.clone());

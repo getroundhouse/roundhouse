@@ -37,13 +37,26 @@ pub(in crate::gallery) fn logins_unkept() -> World {
     world
 }
 
-/// The context's world, with the chat under a login the person gave the hub, which says only the name they gave it,
-/// before any agent under it has heard of a limit.
+/// The context's world, with the chat on a login the person gave the hub, the only one, which says only the name they
+/// gave it, before any agent under it has heard of a limit.
 pub(in crate::gallery) fn context_held_login() -> World {
     let mut world = context();
     let account = Account { limits: Vec::new(), ..work() };
-    world.sessions.last_mut().unwrap().account = Some(account.id.clone());
+    let chat = world.sessions.last_mut().unwrap();
+    (chat.account, chat.assigned_account) = (Some(account.id.clone()), Some(account.id.clone()));
     world.accounts = vec![account];
+    world
+}
+
+/// The context's world, with the chat on Work, the default, and the person's other logins, so its limits' card offers
+/// to move it to Personal. The one that has ended and the one disconnected can't be moved to, so the menu leaves them
+/// out.
+pub(in crate::gallery) fn context_to_move() -> World {
+    let mut world = context();
+    let chat = world.sessions.last_mut().unwrap();
+    (chat.account, chat.assigned_account) = (Some(work().id), Some(work().id));
+    world.accounts = vec![work(), personal(), side_project(), contractor()];
+    world.account_defaults = vec![protocol::model::AccountDefault { agent: AgentKind::Claude, account: work().id }];
     world
 }
 

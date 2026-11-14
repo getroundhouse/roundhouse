@@ -111,7 +111,7 @@ impl Logins {
         let unavailable = || ApiError::new(ErrorCode::Conflict, needs_a_login(called));
         let held = self.store.held_logins(agent)?.into_iter().find(|held| held.account == *account);
         let Some(Held { file, login, .. }) = held else { return Err(unavailable()) };
-        if login.ends_at_ms.is_some_and(|ends| ends <= now_ms) {
+        if !login.works_at(now_ms) {
             return Err(unavailable());
         }
         let token = self

@@ -5,6 +5,7 @@
 
 #![cfg(test)]
 
+mod account_moves;
 mod agent_selection;
 mod all_files;
 mod attachments;

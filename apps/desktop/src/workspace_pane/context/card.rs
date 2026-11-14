@@ -9,9 +9,10 @@ use gpui_kit::{
     AnyElement, App, Div, InteractiveElement as _, IntoElement, ParentElement, Pixels, SharedString, Stateful, Styled,
     TestSupportExt as _, WeakEntity, div, px, relative,
 };
-use look::{InRegion as _, Off as _, Region, Sizing as _, Typeset as _};
+use look::{HoldOpen, InRegion as _, Off as _, Region, Sizing as _, Typeset as _};
 use protocol::model::{Account, ContextPart, ContextPartKind, ContextUsage, UsageLimit};
 
+use super::moving::{self, Moves};
 use super::{Usage, words};
 use crate::workspace_pane::WorkspacePane;
 
@@ -24,18 +25,20 @@ fn surface(region: Region, cx: &App) -> ObservedElement<Stateful<Div>> {
     look::raised(cx).region(region).flex().flex_col().w(WIDTH).px_3().py_2p5().typeset(look::Type::Body)
 }
 
-/// The ring's card: the chat's context. `account` is given only when the bars aren't drawn, since this is then the
-/// one card there is to say whose account it is. Its button is there only for an agent that `compacts` when asked, and
-/// `off` turns it off.
+/// The ring's card: the chat's context. `usage` is given only when the bars aren't drawn, since this is then the one
+/// card there is to say whose account it is, and to move the chat to another, which `hold` keeps the card open for.
+/// Its button is there only for an agent that `compacts` when asked, and `off` turns it off.
 pub(super) fn context_card(
     context: &ContextUsage,
-    account: Option<&Account>,
+    usage: Option<&Usage>,
+    hold: &HoldOpen,
     pane: &WeakEntity<WorkspacePane>,
     compacts: bool,
     off: bool,
     cx: &App,
 ) -> AnyElement {
-    let whose = account.and_then(|account| whose(account, Plan::WithWhose, cx));
+    let whose = usage
+        .and_then(|usage| whose(&usage.account, Plan::WithWhose, usage.moves.as_ref().map(|moves| (moves, hold)), cx));
     let compact = compacts.then(|| compact(pane, off, cx));
     let card = surface(Region::ContextCard, cx).child(room(context, cx)).children(compact);
     card.children(whose).into_any_element()
@@ -64,12 +67,13 @@ fn compact(pane: &WeakEntity<WorkspacePane>, off: bool, cx: &App) -> Div {
 }
 
 /// The bars' card: the plan beside its heading, which is what it's `called`, how much of each limit shown is left, as a
-/// bar that empties, and when it starts again, then whose account it is.
-pub(super) fn usage_card(usage: &Usage, called: SharedString, cx: &App) -> AnyElement {
+/// bar that empties, and when it starts again, then whose account it is, and the menu that moves the chat to another,
+/// which `hold` keeps the card open for.
+pub(super) fn usage_card(usage: &Usage, called: SharedString, hold: &HoldOpen, cx: &App) -> AnyElement {
     let limits = usage.limits.iter().map(|(name, limit)| self::limit(name.clone(), limit, cx));
     let plan = usage.account.plan.clone().map(SharedString::from);
     let limits = v_flex().gap_2p5().child(heading(called, plan, cx)).children(limits);
-    let whose = whose(&usage.account, Plan::BesideHeading, cx);
+    let whose = whose(&usage.account, Plan::BesideHeading, usage.moves.as_ref().map(|moves| (moves, hold)), cx);
     surface(Region::UsageCard, cx).child(limits).children(whose).into_any_element()
 }
 
@@ -152,8 +156,9 @@ enum Plan {
 
 /// Whose account it is, under a rule: who it is, as [`crate::names::account`] says, the email, or the name the person
 /// gave an account whose login they added, then more quietly how it's logged in and who serves the model, after
-/// the plan unless it's beside a heading. `None` when nothing says any of them.
-fn whose(account: &Account, plan: Plan, cx: &App) -> Option<AnyElement> {
+/// the plan unless it's beside a heading. Beside them, the button that `moves` the chat to another account, if there's
+/// one to move it to, with the card's hold. `None` when nothing says any of them.
+fn whose(account: &Account, plan: Plan, moves: Option<(&Moves, &HoldOpen)>, cx: &App) -> Option<AnyElement> {
     let colors = look::colors(cx);
     let who = crate::names::account(account);
     let plan = account.plan.clone().filter(|_| plan == Plan::WithWhose);
@@ -166,7 +171,9 @@ fn whose(account: &Account, plan: Plan, cx: &App) -> Option<AnyElement> {
     let who = who.map(|who| div().truncate().text_color(colors.text_muted).child(who));
     let how = (!how.is_empty())
         .then(|| div().truncate().typeset(look::Type::Detail).text_color(colors.text_faint).child(how.join(" · ")));
-    let said = v_flex().id("account").gap_0p5().children(who).children(how).test_support();
+    let said = v_flex().id("account").flex_1().min_w_0().gap_0p5().children(who).children(how).test_support();
+    let move_button = moves.map(|(moves, hold)| moving::button(moves, hold));
+    let said = h_flex().items_center().gap_3().child(said).children(move_button);
     Some(v_flex().child(div().my_2().h(look::EDGE).bg(colors.edge)).child(said).into_any_element())
 }
 
