@@ -71,6 +71,7 @@ pub enum ClientRequest {
     AttachmentRemove(attachments::AttachmentRemove),
     SessionAccount(sessions::SessionAccount),
     AccountConnect(accounts::AccountConnect),
+    AccountSetDefault(accounts::AccountSetDefault),
     AccountDisconnect(accounts::AccountDisconnect),
     WorkspaceFiles(files::WorkspaceFiles),
     WorkspaceFolderRead(files::WorkspaceFolderRead),

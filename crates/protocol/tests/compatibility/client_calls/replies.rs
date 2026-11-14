@@ -28,14 +28,20 @@ fn event() -> SessionEvent {
 
 #[test]
 fn a_hubs_settings_keep_their_form_and_one_from_a_hub_from_before_says_nothing_of_allowing_tools() {
-    let settings = HubSettings { keep_awake: false, allow_asked_in_full_access: Some(true), rev: Rev::new(3) };
+    let settings = HubSettings {
+        account_defaults: None,
+        keep_awake: false,
+        allow_asked_in_full_access: Some(true),
+        rev: Rev::new(3),
+    };
     answered(
         ClientResponse::HubSettings(settings),
         r#"{"result":"hub_settings","keep_awake":false,"allow_asked_in_full_access":true,"rev":3}"#,
     );
     // From a hub from before it could allow a tool's use itself, which says nothing of it.
     let older: ClientResponse = serde_json::from_str(r#"{"result":"hub_settings","keep_awake":true,"rev":3}"#).unwrap();
-    let settings = HubSettings { keep_awake: true, allow_asked_in_full_access: None, rev: Rev::new(3) };
+    let settings =
+        HubSettings { account_defaults: None, keep_awake: true, allow_asked_in_full_access: None, rev: Rev::new(3) };
     assert_eq!(older, ClientResponse::HubSettings(settings));
 }
 
@@ -224,6 +230,7 @@ fn every_reply_that_holds_a_model_type_keeps_its_result() {
         (ClientResponse::GitStatus(GitStatus::default()), "git_status"),
         (
             ClientResponse::HubSettings(HubSettings {
+                account_defaults: None,
                 keep_awake: true,
                 allow_asked_in_full_access: Some(false),
                 rev: Rev::new(1),

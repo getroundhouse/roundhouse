@@ -3,7 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::Rev;
+use super::{AccountId, AgentKind, Rev};
 
 /// A hub's settings. There's one record of them per hub.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -14,6 +14,9 @@ pub struct HubSettings {
     /// a command it can't check, so nobody waits on it. `None` from a hub from before it could.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub allow_asked_in_full_access: Option<bool>,
+    /// Defaults chosen on this hub, by agent kind. None means the hub predates account defaults.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub account_defaults: Option<Vec<AccountDefault>>,
     pub rev: Rev,
 }
 
@@ -24,4 +27,11 @@ pub struct HubSettingsChange {
     pub keep_awake: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub allow_asked_in_full_access: Option<bool>,
+}
+
+/// The account new processes of one agent kind run under. Running processes keep their login.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct AccountDefault {
+    pub agent: AgentKind,
+    pub account: AccountId,
 }

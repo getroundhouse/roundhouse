@@ -41,7 +41,7 @@ pub use draft::{
 pub use effort::Effort;
 pub use files::{FileContents, FileOpened, FilePage, FilePages, OpenedText, PageLine, WorktreeFiles};
 pub use git::{GitDiff, GitFile, GitStatus};
-pub use hub_settings::{HubSettings, HubSettingsChange};
+pub use hub_settings::{AccountDefault, HubSettings, HubSettingsChange};
 pub use model_name::{ModelName, ModelNameError};
 pub use permission_mode::PermissionMode;
 pub use prompt_line::{PromptLine, SettledAt, Settlement};
