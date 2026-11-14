@@ -1,5 +1,5 @@
 //! The whole stack with real processes: a real hub binary, real workers, real git worktrees and a
-//! real socket. Only the agent is fake. See `examples/fake_claude/`.
+//! real socket. Only the agent is fake. See `tools/stand-ins/fake-claude/`.
 
 #![cfg(test)]
 

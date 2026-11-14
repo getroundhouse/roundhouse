@@ -1484,16 +1484,13 @@ version = "0.1.0"
 dependencies = [
  "agents",
  "anyhow",
- "async-trait",
  "clap",
  "client-core",
  "flume 0.11.1",
  "hub",
  "libc",
- "parking_lot",
  "process",
  "protocol",
- "providers",
  "serde_json",
  "tempfile",
  "tokio",
@@ -1912,6 +1909,16 @@ dependencies = [
  "rayon-core",
  "smallvec",
  "zune-inflate",
+]
+
+[[package]]
+name = "fake-claude"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "parking_lot",
+ "protocol",
+ "serde_json",
 ]
 
 [[package]]
@@ -4361,6 +4368,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "login-standin"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
 name = "look"
 version = "0.1.0"
 dependencies = [
@@ -4708,6 +4722,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6a51313c5820b0b02bd422f4b44776fbf47961755c74ce64afc73bfad10226c3"
 dependencies = [
  "getrandom 0.2.17",
+]
+
+[[package]]
+name = "native-standin"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
 ]
 
 [[package]]
@@ -6369,6 +6390,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "03251193000f4bd3b042892be858ee50e8b3719f2b08e5833ac4353724632430"
 
 [[package]]
+name = "recording-adapter"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "clap",
+ "protocol",
+ "providers",
+ "tokio",
+]
+
+[[package]]
 name = "redox_syscall"
 version = "0.5.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7260,6 +7292,15 @@ name = "stable_deref_trait"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6ce2be8dc25455e1f91df71bfa12ad37d7af1092ae736f3a6cd0e37bc7810596"
+
+[[package]]
+name = "stand-in-hub"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "parking_lot",
+ "protocol",
+]
 
 [[package]]
 name = "static_assertions"

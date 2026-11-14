@@ -1,4 +1,4 @@
-//! A hub of another build, as `examples/stand_in_hub` describes, which says what a test has it say.
+//! A hub of another build, as `tools/stand-ins/stand-in-hub/` describes, which says what a test has it say.
 
 #![cfg(test)]
 

@@ -18,6 +18,11 @@ members = [
     "tools/policy",
     "tools/guide",
     "tools/spec-page",
+    "tools/stand-ins/fake-claude",
+    "tools/stand-ins/login-standin",
+    "tools/stand-ins/native-standin",
+    "tools/stand-ins/recording-adapter",
+    "tools/stand-ins/stand-in-hub",
 ]
 # Everything that builds without GPUI, so `cargo test` stays fast and works on a Linux server. Use
 # `--workspace` for the window too.
@@ -36,6 +41,11 @@ default-members = [
     "tools/policy",
     "tools/guide",
     "tools/spec-page",
+    "tools/stand-ins/fake-claude",
+    "tools/stand-ins/login-standin",
+    "tools/stand-ins/native-standin",
+    "tools/stand-ins/recording-adapter",
+    "tools/stand-ins/stand-in-hub",
 ]
 # The mobile proof of concept is a standalone project with its own lockfiles and pinned GPUI snapshots.
 exclude = ["mobile-poc"]

@@ -1,5 +1,5 @@
 //! A hub of another build: one across a real break, an older one the app replaces or finishes an update on, and one
-//! someone runs themselves. Each is a stand-in, as `examples/stand_in_hub` describes.
+//! someone runs themselves. Each is a stand-in, as `tools/stand-ins/stand-in-hub/` describes.
 
 #![cfg(test)]
 
