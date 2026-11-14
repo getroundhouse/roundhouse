@@ -34,8 +34,9 @@ fn build(name: &str) -> PathBuf {
     {
         return path;
     }
+    // With the whole workspace's features, as `docs/rust.md` says.
     let output = std::process::Command::new(env!("CARGO"))
-        .args(["build", "-p", "agents", "--example", name, "--locked", "--message-format=json"])
+        .args(["build", "--workspace", "--example", name, "--locked", "--message-format=json"])
         .output()
         .unwrap();
     assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));

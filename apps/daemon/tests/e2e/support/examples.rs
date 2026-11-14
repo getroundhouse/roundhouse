@@ -20,11 +20,11 @@ fn recording_adapter() -> &'static Path {
 }
 
 /// `cargo test --test e2e` doesn't build examples, so a plain path could run an out-of-date one without saying so.
-/// Building here means tests always use the current one.
+/// Building here means tests always use the current one. With the whole workspace's features, as `docs/rust.md` says.
 fn example(name: &str) -> PathBuf {
     let bin_dir = Path::new(env!("CARGO_BIN_EXE_roundhoused")).parent().unwrap();
     let mut build = Command::new(env!("CARGO"));
-    build.args(["build", "-p", "daemon", "--example", name]);
+    build.args(["build", "--workspace", "--example", name]);
     if bin_dir.file_name().is_some_and(|name| name == "release") {
         build.arg("--release");
     }
