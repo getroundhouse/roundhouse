@@ -10,6 +10,7 @@ on:
       - rust-toolchain.toml
       - .cargo/**
       - .github/workflows/mac.yml
+      - .github/actions/zig/**
   push:
     branches: [main]
     paths:
@@ -18,6 +19,7 @@ on:
       - rust-toolchain.toml
       - .cargo/**
       - .github/workflows/mac.yml
+      - .github/actions/zig/**
   workflow_dispatch:
 
 permissions:
@@ -38,13 +40,11 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: git config --global user.name ci && git config --global user.email ci@example.com
-      # The Zig that builds Ghostty's terminal core, which its build script runs. Its own cache is off, since it would
-      # hold only the Zig packages Ghostty fetches, and the cache below holds Ghostty's source and build, in target/.
-      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+      # The Zig that builds Ghostty's terminal core, and Zig's global cache, which the last step saves.
+      - id: zig
+        uses: ./.github/actions/zig
         with:
-          # renovate: datasource=forgejo-tags depName=ziglang/zig registryUrl=https://codeberg.org
-          version: 0.17.1
-          use-cache: false
+          cache-name: mac
       - id: cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -70,3 +70,12 @@ jobs:
             ~/.cargo/git/db/
             target/
           key: ${{ steps.cache.outputs.cache-primary-key }}
+      # Zig's global cache, once Zig has built something, which it hasn't when target/ held Ghostty's build. What it
+      # built is then listed in h/.
+      - if: >-
+          github.ref == 'refs/heads/main' && steps.zig.outputs.cache-hit != 'true' &&
+          hashFiles('.zig-cache/h/**') != ''
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .zig-cache
+          key: ${{ steps.zig.outputs.cache-primary-key }}
