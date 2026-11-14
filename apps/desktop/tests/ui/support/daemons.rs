@@ -18,13 +18,13 @@ pub(crate) fn binaries() -> &'static PathBuf {
     })
 }
 
-/// Builds the hub and the examples, and answers the folder Cargo says it put the hub in.
+/// Builds the hub and the examples, with the whole workspace's features as `docs/rust.md` says, and answers the folder
+/// Cargo says it put the hub in. Naming the examples in the same build is what gives the hub those features too.
 fn build_binaries() -> String {
     let output = Command::new(env!("CARGO"))
         .args([
             "build",
-            "-p",
-            "daemon",
+            "--workspace",
             "--bin",
             "roundhoused",
             "--example",
