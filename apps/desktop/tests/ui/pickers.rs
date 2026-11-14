@@ -75,7 +75,7 @@ fn shift_tab_twice_at_once_leaves_plan_mode_off(cx: &mut TestAppContext) {
     ui.new_workspace();
     ui.input("say:ready");
     ui.press("enter");
-    ui.wait("the reply", |ui| ui.session_status() == Some(SessionStatus::Idle));
+    ui.wait_idle_with("the reply", |text| text == "ready");
 
     ui.press_at_once(&["shift-tab", "shift-tab"]);
 
