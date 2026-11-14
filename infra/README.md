@@ -8,7 +8,7 @@ Terraform for Roundhouse's AWS account, in `us-east-2`. It holds [RunsOn](https:
 | `aws.tf` | The AWS provider, which refuses any other account |
 | `runs-on.tf` | RunsOn's stack, and the VPC its runners start in |
 | `state.tf` | The bucket this root's state is kept in |
-| `quotas.tf` | Service Quotas' email when a quota nears its limit |
+| `quotas.tf` | Service Quotas' notice when a quota nears its limit, and the Region notifications are stored in |
 | `secrets.tf` | The KMS key that encrypts `secrets.enc.yaml`, and the values Terraform reads from it |
 | `secrets.enc.yaml` | RunsOn's license key, and the address alerts go to, encrypted with SOPS |
 | `.sops.yaml` | The key SOPS encrypts a new file with |
@@ -45,7 +45,7 @@ terraform providers lock -platform=darwin_arm64 -platform=linux_amd64
 
 ## Setting it up
 
-A new account can run only 5 vCPUs of Spot instances and 5 of on-demand ones, which is less than one `arm64-16` runner. Quotas are raised by hand, and `quotas.tf` emails when one passes 80% or 95%. Ask for room for 8 runners on Spot and 4 on-demand, which covers Spot when it has no capacity or its quota is full, and the jobs RunsOn reruns when AWS reclaims an instance:
+A new account can run only 5 vCPUs of Spot instances and 5 of on-demand ones, which is less than one `arm64-16` runner. Quotas are raised by hand. When one passes 80% or 95%, `quotas.tf` has Service Quotas raise an AWS Health event, and AWS Health emails it to the account's root address. Ask for room for 8 runners on Spot and 4 on-demand, which covers Spot when it has no capacity or its quota is full, and the jobs RunsOn reruns when AWS reclaims an instance:
 
 ```sh
 aws service-quotas request-service-quota-increase --region us-east-2 --service-code ec2 --quota-code L-34B43A08 --desired-value 128
@@ -90,6 +90,6 @@ Set `enable_admin_routes` to `true` in `runs-on.tf`, which turns on RunsOn's set
 terraform apply
 ```
 
-The apply prints `runs_on_getting_started`, which links to the setup page. It creates RunsOn's GitHub App in the `getroundhouse` org, to install there. Confirm the two emails AWS sends to `alert_email`, one for RunsOn's alerts and one with a code for Service Quotas' notices, so both reach it. Then set `enable_admin_routes` back to `false`, and apply again. To make the GitHub App again, turn it on for as long as that takes.
+The apply prints `runs_on_getting_started`, which links to the setup page. It creates RunsOn's GitHub App in the `getroundhouse` org, to install there. Confirm the email AWS sends to `alert_email`, so RunsOn's alerts reach it. Then set `enable_admin_routes` back to `false`, and apply again. To make the GitHub App again, turn it on for as long as that takes.
 
 In a member account of an AWS Organization, AWS can refuse RunsOn's daily budget until the account that pays the bill has turned budgets on. The apply then fails on the budget alone, after making everything else, and a later apply makes it. RunsOn's daily budget and cost reports read costs by the `runs-on-stack-name` tag. Turn it on under cost allocation tags in Billing, in the account that pays the bill, which for a member of an AWS Organization is its management account. Billing lists a key up to a day after the stack first uses it.
