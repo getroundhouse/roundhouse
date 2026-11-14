@@ -4,7 +4,7 @@
 use protocol::model::Effort;
 use serde_json::Value;
 
-/// `None` for a level from a newer peer, which there's no name for here.
+/// `None` for a level Claude does not offer.
 pub(super) fn level(effort: Effort) -> Option<&'static str> {
     match effort {
         Effort::Low => Some("low"),
@@ -12,7 +12,7 @@ pub(super) fn level(effort: Effort) -> Option<&'static str> {
         Effort::High => Some("high"),
         Effort::Xhigh => Some("xhigh"),
         Effort::Max => Some("max"),
-        Effort::Unknown => None,
+        Effort::Ultra | Effort::Unknown => None,
     }
 }
 
@@ -30,7 +30,7 @@ mod tests {
     fn every_level_has_the_name_the_cli_gives_it() {
         let names: Vec<_> = Effort::ALL.into_iter().map(level).collect();
 
-        assert_eq!(names, [Some("low"), Some("medium"), Some("high"), Some("xhigh"), Some("max")]);
+        assert_eq!(names, [Some("low"), Some("medium"), Some("high"), Some("xhigh"), Some("max"), None]);
         assert_eq!(level(Effort::Unknown), None);
     }
 }

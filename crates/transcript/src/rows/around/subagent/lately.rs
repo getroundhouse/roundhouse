@@ -94,7 +94,11 @@ mod tests {
             ContentBlock::Text { text, .. } => format!("text {text}"),
             ContentBlock::ToolUse { id, .. } => format!("call {id}"),
             ContentBlock::ToolResult { text, .. } => text.clone(),
-            other @ (ContentBlock::Thinking { .. } | ContentBlock::Image { .. } | ContentBlock::Unknown) => {
+            other @ (ContentBlock::Thinking { .. }
+            | ContentBlock::Image { .. }
+            | ContentBlock::Unknown
+            | ContentBlock::Call { .. }
+            | ContentBlock::CallResult { .. }) => {
                 format!("{other:?}")
             }
         };

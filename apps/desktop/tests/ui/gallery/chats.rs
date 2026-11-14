@@ -278,6 +278,7 @@ pub(crate) fn looked_around() -> Vec<EventBody> {
         user_prompt(ASK),
         taken(Seq::new(1)),
         EventBody::AgentInit {
+            capabilities: None,
             agent_session_id: None,
             model: Some("claude-opus".to_string()),
             cwd: Some("/workspaces/aspen".to_string()),

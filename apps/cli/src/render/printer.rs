@@ -214,7 +214,11 @@ impl Printer {
                     self.line(seq, &format!("  ... {} more lines", lines.len() - RESULT_PREVIEW_LINES));
                 }
             }
-            ContentBlock::Thinking { .. } | ContentBlock::Image { .. } | ContentBlock::Unknown => {}
+            ContentBlock::Thinking { .. }
+            | ContentBlock::Image { .. }
+            | ContentBlock::Call { .. }
+            | ContentBlock::CallResult { .. }
+            | ContentBlock::Unknown => {}
         }
     }
 

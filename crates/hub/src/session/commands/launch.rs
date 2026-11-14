@@ -118,8 +118,11 @@ impl LiveSession {
             run: asked,
             agent: self.agent,
             cwd,
-            agent_session_id: self.agent_session_id.clone(),
-            resume,
+            start: if resume {
+                protocol::capability::conversation::Start::Resume { conversation: self.agent_session_id.clone() }
+            } else {
+                protocol::capability::conversation::Start::New { conversation: Some(self.agent_session_id.clone()) }
+            },
             settings,
             env,
             tools_token,

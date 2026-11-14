@@ -16,6 +16,7 @@ pub fn session(id: &str) -> Session {
         id: id.into(),
         workspace_id: "w".into(),
         agent: AgentKind::Claude,
+        agent_capabilities: None,
         model: ModelName::named("opus"),
         permission_mode: PermissionMode::FullAccess,
         effort: Effort::Xhigh,
@@ -203,7 +204,9 @@ pub fn of_kind(mut block: ContentBlock, kind: CallKind) -> ContentBlock {
         ContentBlock::Text { .. }
         | ContentBlock::Thinking { .. }
         | ContentBlock::Image { .. }
-        | ContentBlock::Unknown => panic!("only a call or a result says a kind: {block:?}"),
+        | ContentBlock::Unknown
+        | ContentBlock::Call { .. }
+        | ContentBlock::CallResult { .. } => panic!("only a legacy call or result needs its kind set: {block:?}"),
     }
     block
 }
@@ -291,6 +294,7 @@ impl From<ApprovalRequest> for EventBody {
             asked_by,
         } = request;
         EventBody::ApprovalRequested {
+            request: None,
             approval_id,
             tool_name,
             tool_use_id,

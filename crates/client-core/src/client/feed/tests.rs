@@ -14,6 +14,7 @@ const TIMEOUT: Duration = Duration::from_secs(10);
 
 fn claude() -> AgentDescription {
     AgentDescription {
+        capabilities: None,
         kind: AgentKind::Claude,
         name: "Claude".to_string(),
         usage_heading: "Claude usage".to_string(),

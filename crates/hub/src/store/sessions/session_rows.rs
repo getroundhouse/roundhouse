@@ -46,6 +46,7 @@ pub(in super::super) fn session_from_row(row: &Row) -> rusqlite::Result<StoredSe
     let waits = waits_from(&row.get::<_, String>(30)?)?;
     Ok(StoredSession {
         session: Session {
+            agent_capabilities: None,
             id: row.get::<_, String>(0)?.into(),
             workspace_id: row.get::<_, String>(1)?.into(),
             agent: from_text::<AgentKind>(row.get(2)?)?,

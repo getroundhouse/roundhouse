@@ -57,6 +57,7 @@ fn found_and_added_are_apart_each_by_what_its_row_calls_it_with_those_disconnect
 /// Claude as a hub describes it, with what makes a token for it, as `login` says, if anything.
 fn claude(login: Option<LoginDescription>) -> AgentDescription {
     AgentDescription {
+        capabilities: None,
         kind: AgentKind::Claude,
         name: "Claude Code".to_string(),
         usage_heading: "Claude usage".to_string(),

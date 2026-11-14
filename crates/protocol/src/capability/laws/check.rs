@@ -109,10 +109,10 @@ impl Ledger {
     fn calls_and_results(&mut self, blocks: &[ContentBlock]) -> bool {
         let mut kept = true;
         for block in blocks {
-            if let ContentBlock::ToolUse { id, .. } = block {
+            if let ContentBlock::ToolUse { id, .. } | ContentBlock::Call { id, .. } = block {
                 self.calls.insert(id.clone());
             }
-            if let ContentBlock::ToolResult { tool_use_id, .. } = block {
+            if let ContentBlock::ToolResult { tool_use_id, .. } | ContentBlock::CallResult { tool_use_id, .. } = block {
                 kept &= self.calls.contains(tool_use_id) && self.answered.insert(tool_use_id.clone());
             }
         }

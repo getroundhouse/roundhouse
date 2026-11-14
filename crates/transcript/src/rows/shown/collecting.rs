@@ -191,6 +191,9 @@ pub(in crate::rows) fn of_block(block: &ContentBlock, drawing: &BlockAround, gat
                 tools::shown_result(key, answer, gather);
             }
         }
-        ContentBlock::Image { .. } | ContentBlock::Unknown => {}
+        ContentBlock::Image { .. }
+        | ContentBlock::Call { .. }
+        | ContentBlock::CallResult { .. }
+        | ContentBlock::Unknown => {}
     }
 }

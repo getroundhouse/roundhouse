@@ -56,7 +56,7 @@ fn every_line_is_understood_or_deliberately_kept() {
 #[test]
 fn init_reports_what_the_hub_shows_and_relies_on() {
     let init = events().into_iter().find(|e| matches!(e, EventBody::AgentInit { .. })).unwrap();
-    let EventBody::AgentInit { agent_session_id, model, cwd, permission_mode, agent_version } = init else {
+    let EventBody::AgentInit { agent_session_id, model, cwd, permission_mode, agent_version, .. } = init else {
         unreachable!()
     };
     assert!(agent_session_id.is_some_and(|id| !id.as_str().is_empty()));
@@ -256,6 +256,8 @@ fn every_call_says_what_kind_it_is_and_every_result_the_kind_of_the_call_it_answ
             ContentBlock::Text { .. }
             | ContentBlock::Thinking { .. }
             | ContentBlock::Image { .. }
+            | ContentBlock::Call { .. }
+            | ContentBlock::CallResult { .. }
             | ContentBlock::Unknown => {}
         }
     }

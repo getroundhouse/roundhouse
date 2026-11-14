@@ -22,6 +22,8 @@ fn kinds_said(lines: &[String]) -> Vec<Option<CallKind>> {
             ContentBlock::Text { .. }
             | ContentBlock::Thinking { .. }
             | ContentBlock::Image { .. }
+            | ContentBlock::Call { .. }
+            | ContentBlock::CallResult { .. }
             | ContentBlock::Unknown => None,
         }));
     }

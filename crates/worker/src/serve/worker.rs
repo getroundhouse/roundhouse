@@ -212,7 +212,7 @@ pub(super) async fn handle(
             Ok(WorkerResponse::Ok)
         }
         WorkerRequest::RunningAgents => Ok(running_agents(state)),
-        WorkerRequest::Unknown => Err(unsupported(None)),
+        WorkerRequest::AgentControl(_) | WorkerRequest::Unknown => Err(unsupported(None)),
         WorkerRequest::NamesGitHas(asked) => worktrees::names_git_has(state, asked).await,
         WorkerRequest::PrepareWorkspace(asked) => worktrees::prepare(state, asked).await,
         WorkerRequest::RestoreWorkspace(asked) => worktrees::restore(state, asked).await,

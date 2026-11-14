@@ -63,6 +63,7 @@ impl Hub {
         let SessionSettings { model, permission_mode, effort } = self.agent(agent)?.defaults.clone().changed(options);
         let stored = StoredSession {
             session: Session {
+                agent_capabilities: None,
                 account: None,
                 reply_outcome: None,
                 id: id.clone().into(),

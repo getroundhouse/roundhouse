@@ -340,7 +340,13 @@ async fn begin(
     tap: Option<Tap>,
 ) -> Result<Arc<dyn AgentProcess>, AgentError> {
     let files = RunFiles::of(&options);
-    let launched = launch(&bin, &spec, spec.resume, &options, tap.as_ref())?;
+    let launched = launch(
+        &bin,
+        &spec,
+        matches!(spec.start, protocol::capability::conversation::Start::Resume { .. }),
+        &options,
+        tap.as_ref(),
+    )?;
     let shared = Arc::new(Shared {
         stdin: tokio::sync::Mutex::new(Some(launched.stdin)),
         pid: AtomicU32::new(launched.pid),

@@ -7,12 +7,14 @@ use protocol::model::{
 
 /// Aliases, so these stay the newest of each without a release here. There's no `default`, since a chat always says
 /// which model it runs.
-const MODELS: [(ModelName, &str); 4] = [
+pub(super) const MODELS: [(ModelName, &str); 4] = [
     (ModelName::named("fable"), "Fable"),
     (ModelName::named("opus"), "Opus"),
     (ModelName::named("sonnet"), "Sonnet"),
     (ModelName::named("haiku"), "Haiku"),
 ];
+
+pub(super) const EFFORTS: [Effort; 5] = [Effort::Low, Effort::Medium, Effort::High, Effort::Xhigh, Effort::Max];
 
 /// What a chat runs with until another is chosen, with full access. `docs/spec/chats.md` has why it's Opus at Extra
 /// high. An alias, so it stays the newest of its kind without a release here.
@@ -33,11 +35,12 @@ const A_TOKEN_LASTS_MS: i64 = 365 * 24 * 60 * 60 * 1000;
 pub fn description() -> AgentDescription {
     AgentDescription {
         kind: AgentKind::Claude,
+        capabilities: None,
         name: "Claude Code".to_string(),
         usage_heading: "Claude usage".to_string(),
         models: Vec::from(MODELS.map(|(model, label)| ModelChoice { model, label: label.to_string() })),
         // Every level, since the CLI names each, as `effort` says.
-        efforts: Effort::ALL.to_vec(),
+        efforts: EFFORTS.to_vec(),
         modes: PermissionMode::CHOSEN.to_vec(),
         defaults: DEFAULTS,
         // It's asked with `/compact`, as `process` sends it.

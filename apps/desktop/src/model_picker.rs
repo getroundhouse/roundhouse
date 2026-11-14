@@ -35,6 +35,7 @@ pub(crate) fn effort_label(effort: Effort) -> Option<&'static str> {
         Effort::High => Some("High"),
         Effort::Xhigh => Some("Extra high"),
         Effort::Max => Some("Max"),
+        Effort::Ultra => Some("Ultra"),
         Effort::Unknown => None,
     }
 }
@@ -171,6 +172,7 @@ mod tests {
     fn agent() -> AgentDescription {
         let offered = |model, label: &str| ModelChoice { model, label: label.to_string() };
         AgentDescription {
+            capabilities: None,
             kind: AgentKind::Claude,
             name: "Claude Code".to_string(),
             usage_heading: "Claude usage".to_string(),
@@ -217,7 +219,7 @@ mod tests {
     #[test]
     fn every_level_has_a_name_and_one_from_a_newer_hub_has_none() {
         let names: Vec<_> = Effort::ALL.into_iter().map(effort_label).collect();
-        assert_eq!(names, [Some("Low"), Some("Medium"), Some("High"), Some("Extra high"), Some("Max")]);
+        assert_eq!(names, [Some("Low"), Some("Medium"), Some("High"), Some("Extra high"), Some("Max"), Some("Ultra")]);
         assert_eq!(effort_label(Effort::Unknown), None);
     }
 }

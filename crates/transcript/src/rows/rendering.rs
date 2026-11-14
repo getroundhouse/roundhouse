@@ -349,6 +349,6 @@ pub(super) fn render_block(
         ContentBlock::Image { .. } => {
             div().typeset(look::Type::Detail).text_color(look::colors(cx).text_muted).child("Image").into_any_element()
         }
-        ContentBlock::Unknown => return None,
+        ContentBlock::Call { .. } | ContentBlock::CallResult { .. } | ContentBlock::Unknown => return None,
     })
 }

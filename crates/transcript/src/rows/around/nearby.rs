@@ -26,7 +26,9 @@ pub(super) fn call_before(log: &SessionLog, seq: Seq, id: &ToolUseId, reach: usi
     events_before(log, seq, reach).find_map(|event| {
         let EventBody::Assistant { blocks, .. } = &event.body else { return None };
         blocks.iter().find_map(|block| {
-            let ContentBlock::ToolUse { id: made, .. } = block else { return None };
+            let (ContentBlock::ToolUse { id: made, .. } | ContentBlock::Call { id: made, .. }) = block else {
+                return None;
+            };
             (made == id).then(|| (event.seq, Recorded::of(block).is_some_and(|call| call.hands_off())))
         })
     })
@@ -90,6 +92,7 @@ mod tests {
 
     fn turn_started_in(mode: PermissionMode) -> EventBody {
         EventBody::AgentInit {
+            capabilities: None,
             agent_session_id: None,
             model: None,
             cwd: None,

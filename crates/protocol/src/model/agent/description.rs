@@ -1,6 +1,12 @@
 use super::super::{AgentKind, Effort, ModelName, PermissionMode, SessionSettings, SessionSettingsChange};
 use serde::{Deserialize, Serialize};
 
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct RunCapabilities {
+    pub run: super::super::RunId,
+    pub claims: Box<crate::capability::Capabilities>,
+}
+
 /// A kind of agent, as its adapter describes it: what the interface calls it, the models, efforts and approval modes a
 /// chat can be given, what a chat runs with until another is chosen, what it does that not every agent does, and what
 /// login a hub can hold for it. The hub serves one for each kind it runs, so a client offers what the agent takes rather
@@ -8,6 +14,10 @@ use serde::{Deserialize, Serialize};
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct AgentDescription {
     pub kind: AgentKind,
+    /// The adapter's launch defaults. A running agent reports its own in `AgentInit`; absence means a peer from
+    /// before capability claims, whose legacy controls remain available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capabilities: Option<crate::capability::Capabilities>,
     /// What answered a turn, as its card says, such as "Opus 5.5 via Claude Code".
     pub name: String,
     /// What the heading over the limits of the account it runs under says, such as "Claude usage".
@@ -73,10 +83,54 @@ pub enum NotOffered {
     Effort,
     #[error("the agent isn't offered that approval mode, so a chat can't have it")]
     Mode,
+    #[error("the agent does not offer those settings")]
+    Settings,
 }
 
 impl AgentDescription {
+    /// The selected model's levels when its catalog says, otherwise the kind's legacy levels.
+    pub fn efforts_for(&self, model: &ModelName) -> Vec<Effort> {
+        let offered = self
+            .capabilities
+            .as_ref()
+            .and_then(|claims| claims.settings.models.as_ref())
+            .and_then(|models| models.offered.iter().find(|offer| offer.model == *model));
+        self.efforts
+            .iter()
+            .copied()
+            .filter(|effort| {
+                effort.known().is_some() && offered.is_none_or(|offer| offer.efforts.contains(&(*effort).into()))
+            })
+            .collect()
+    }
+
+    /// Keep an effort when the new model takes it, or use that model's default.
+    pub fn effort_when_switching(&self, model: &ModelName, current: Effort) -> Effort {
+        let efforts = self.efforts_for(model);
+        if efforts.contains(&current) {
+            return current;
+        }
+        let default = self
+            .capabilities
+            .as_ref()
+            .and_then(|claims| claims.settings.models.as_ref())
+            .and_then(|models| models.offered.iter().find(|offer| offer.model == *model))
+            .and_then(|offer| offer.default_effort);
+        efforts
+            .iter()
+            .copied()
+            .find(|effort| Some((*effort).into()) == default)
+            .or_else(|| efforts.first().copied())
+            .unwrap_or(self.defaults.effort)
+    }
+
     pub fn has(&self, feature: AgentFeature) -> bool {
+        if let Some(claims) = &self.capabilities {
+            return match feature {
+                AgentFeature::Compacts => claims.context.compaction.is_some(),
+                AgentFeature::Unknown => false,
+            };
+        }
         self.features.contains(&feature)
     }
 
@@ -89,6 +143,17 @@ impl AgentDescription {
     /// has no name for, since neither could be passed on to the agent. Any model is taken, since the agent's CLI takes
     /// full IDs as well as the names offered, and says itself which it doesn't know.
     pub fn takes(&self, change: &SessionSettingsChange) -> Result<(), NotOffered> {
+        if let Some(claims) = &self.capabilities {
+            let settings = change.for_capabilities(claims)?;
+            if !settings.allowed(claims) {
+                return Err(NotOffered::Settings);
+            }
+        }
+        if let (Some(model), Some(effort)) = (&change.model, change.effort)
+            && !self.efforts_for(model).contains(&effort)
+        {
+            return Err(NotOffered::Effort);
+        }
         let offered = |effort: Effort| effort.known().is_some_and(|effort| self.efforts.contains(&effort));
         if change.effort.is_some_and(|effort| !offered(effort)) {
             return Err(NotOffered::Effort);

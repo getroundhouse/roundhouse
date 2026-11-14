@@ -108,6 +108,10 @@ fn note(subagent: &mut Subagent, block: &ContentBlock) {
                 made.result = Some(CallResult { is_error, text, cut, images, encrypted, exit_code, denied });
             }
         }
-        ContentBlock::Thinking { .. } | ContentBlock::Image { .. } | ContentBlock::Unknown => {}
+        ContentBlock::Thinking { .. }
+        | ContentBlock::Image { .. }
+        | ContentBlock::Call { .. }
+        | ContentBlock::CallResult { .. }
+        | ContentBlock::Unknown => {}
     }
 }

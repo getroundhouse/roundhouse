@@ -7,5 +7,6 @@ use super::{Effort, ModelName, PermissionMode};
 #[cfg(test)]
 mod tests;
 
+mod capabilities;
 mod choices;
 pub use choices::{SessionSettings, SessionSettingsChange};

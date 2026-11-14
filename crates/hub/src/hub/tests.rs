@@ -25,6 +25,7 @@ use crate::worker_link::WorkerLink;
 /// what the description gave a chat from what anything else would have, and whose token lasts [`A_TOKEN_LASTS_MS`].
 pub(super) fn described() -> AgentDescription {
     AgentDescription {
+        capabilities: None,
         kind: AgentKind::Claude,
         name: "Claude".to_string(),
         usage_heading: "Claude usage".to_string(),

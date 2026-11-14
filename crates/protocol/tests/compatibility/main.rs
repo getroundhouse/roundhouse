@@ -19,6 +19,7 @@ use serde::de::DeserializeOwned;
 mod agents;
 mod approvals;
 mod calls;
+mod capabilities;
 mod client_calls;
 mod events;
 mod hellos;

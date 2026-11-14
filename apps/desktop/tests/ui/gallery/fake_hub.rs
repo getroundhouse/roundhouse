@@ -310,6 +310,7 @@ fn claude(world: &World) -> AgentDescription {
     let offered =
         |model: &'static str, label: &str| ModelChoice { model: ModelName::named(model), label: label.into() };
     AgentDescription {
+        capabilities: None,
         kind: AgentKind::Claude,
         name: "Claude Code".into(),
         usage_heading: "Claude usage".into(),
@@ -319,7 +320,7 @@ fn claude(world: &World) -> AgentDescription {
             offered("sonnet", "Sonnet"),
             offered("haiku", "Haiku"),
         ],
-        efforts: Effort::ALL.to_vec(),
+        efforts: Effort::ALL.into_iter().filter(|effort| *effort != Effort::Ultra).collect(),
         modes: PermissionMode::CHOSEN.to_vec(),
         defaults: SessionSettings {
             model: ModelName::named("opus"),

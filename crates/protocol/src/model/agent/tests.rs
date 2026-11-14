@@ -7,6 +7,7 @@ const OPUS: ModelName = ModelName::named("opus");
 /// An agent offered two models, two levels and plan mode as well as full access, which compacts when asked.
 fn described() -> AgentDescription {
     AgentDescription {
+        capabilities: None,
         kind: AgentKind::Claude,
         name: "Agent".to_string(),
         usage_heading: "Agent usage".to_string(),
@@ -74,7 +75,7 @@ fn on_the_wire_it_reads_as_it_was_written_and_a_feature_from_a_newer_hub_is_unkn
 
     let mut newer = wire;
     newer["features"] = json!(["compacts", "flies"]);
-    newer["efforts"] = json!(["low", "ultra"]);
+    newer["efforts"] = json!(["low", "future"]);
     let read: AgentDescription = serde_json::from_value(newer).unwrap();
     assert_eq!(read.features, [AgentFeature::Compacts, AgentFeature::Unknown]);
     assert_eq!(read.efforts, [Effort::Low, Effort::Unknown]);

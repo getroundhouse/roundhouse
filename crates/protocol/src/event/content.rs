@@ -22,6 +22,18 @@ pub enum ContentBlock {
     Thinking {
         text: String,
     },
+    /// A current adapter's call. Its native input is kept only in the event's raw line.
+    Call {
+        id: ToolUseId,
+        call: crate::capability::calls::Call,
+    },
+    CallResult {
+        tool_use_id: ToolUseId,
+        output: crate::capability::calls::CallOutput,
+        is_error: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        denied: Option<Denied>,
+    },
     ToolUse {
         id: ToolUseId,
         /// The agent's own name for the tool, and what it gave it.

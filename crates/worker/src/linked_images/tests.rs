@@ -23,6 +23,8 @@ fn named(body: &EventBody) -> Vec<Vec<&str>> {
             | ContentBlock::ToolUse { .. }
             | ContentBlock::ToolResult { .. }
             | ContentBlock::Image { .. }
+            | ContentBlock::Call { .. }
+            | ContentBlock::CallResult { .. }
             | ContentBlock::Unknown => None,
         })
         .collect()
