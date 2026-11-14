@@ -2,8 +2,9 @@ use super::super::{Hub, off_thread};
 use crate::logins::{AccountChange, Connect, Handed, Logins};
 use crate::store::now_ms;
 use protocol::client::accounts::{AccountConnect, AccountSetDefault};
+use protocol::client::sessions::SessionAssignAccount;
 use protocol::client::{ApiError, ErrorCode, HubNotice};
-use protocol::model::{Account, AccountId, AgentKind, HubSettings};
+use protocol::model::{Account, AccountId, AgentKind, HubSettings, LoginDescription, Session};
 use std::sync::Arc;
 use tracing::error;
 
@@ -11,10 +12,8 @@ impl Hub {
     /// Has the hub hold a login, as `AccountConnect` says, and tells every client what that changed of the account's
     /// record.
     pub(crate) async fn account_connect(&self, asked: AccountConnect) -> Result<Account, ApiError> {
-        let Some(login) = &self.agent(asked.agent)?.login else {
-            return Err(ApiError::new(ErrorCode::InvalidRequest, "the hub can hold no login for that kind of agent"));
-        };
-        let connect = Connect::new(asked, login, now_ms())?;
+        let login = self.login_of(asked.agent)?;
+        let connect = Connect::new(asked, &login, now_ms())?;
         let change = self.on_logins(move |logins| logins.connect(&connect)).await?;
         Ok(self.announce_account(change))
     }
@@ -26,6 +25,13 @@ impl Hub {
         Ok(self.announce_account(change))
     }
 
+    /// What makes a login for `agent`'s kind, as its adapter says, which only a kind the hub can hold a login for has.
+    /// Refused with `InvalidRequest` for any other, since nothing about a held login can be asked of it.
+    fn login_of(&self, agent: AgentKind) -> Result<LoginDescription, ApiError> {
+        let refused = || ApiError::new(ErrorCode::InvalidRequest, "the hub can hold no login for that kind of agent");
+        self.agent(agent)?.login.clone().ok_or_else(refused)
+    }
+
     /// Makes the logins' files and the accounts' rows agree, as the hub starts. If it fails, they stay as they are
     /// until the next start, which costs little: a file no row names is never read, and a launch that would be handed a
     /// login whose token is gone fails, saying so. Not starting the hub over it would cost every workspace.
@@ -35,15 +41,35 @@ impl Hub {
         }
     }
 
-    /// The selected hub login wins over machine credentials on every provider.
-    pub(crate) async fn login_for(&self, agent: AgentKind) -> Result<Option<Handed>, ApiError> {
-        self.on_logins(move |logins| logins.to_hand(agent, now_ms())).await
+    /// The login a launch of a chat of `agent`'s kind is handed: that of `assigned`, the account the chat is on, or else
+    /// its kind's default, as [`Logins::to_hand`] says. Either wins over machine credentials on every provider.
+    pub(crate) async fn login_for(
+        &self,
+        agent: AgentKind,
+        assigned: Option<AccountId>,
+    ) -> Result<Option<Handed>, ApiError> {
+        self.on_logins(move |logins| logins.to_hand(agent, assigned.as_ref(), now_ms())).await
+    }
+
+    /// Moves a chat to another account, as `SessionAssignAccount` says. Not through the session's queue, which a prompt
+    /// waiting on setup holds, as `session_configure` says.
+    pub(crate) async fn session_assign_account(
+        self: &Arc<Self>,
+        asked: SessionAssignAccount,
+    ) -> Result<Session, ApiError> {
+        let SessionAssignAccount { id, account, force } = asked;
+        self.live_session(&id).await?.assign_account(account, force).await
+    }
+
+    /// Refuses moving a chat of `agent`'s kind to `account` as choosing it as a default is refused, as
+    /// [`Logins::can_move_to`] says.
+    pub(crate) async fn can_move_to(&self, agent: AgentKind, account: AccountId) -> Result<(), ApiError> {
+        self.login_of(agent)?;
+        self.on_logins(move |logins| logins.can_move_to(agent, &account, now_ms())).await
     }
 
     pub(crate) async fn account_set_default(&self, asked: AccountSetDefault) -> Result<HubSettings, ApiError> {
-        if self.agent(asked.agent)?.login.is_none() {
-            return Err(ApiError::new(ErrorCode::InvalidRequest, "the hub can hold no login for that kind of agent"));
-        }
+        self.login_of(asked.agent)?;
         let settings = self.on_logins(move |logins| logins.set_default(asked.agent, &asked.account, now_ms())).await?;
         self.notify(HubNotice::HubSettings(settings.clone()));
         Ok(settings)

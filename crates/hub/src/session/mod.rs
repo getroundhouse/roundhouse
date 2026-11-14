@@ -10,6 +10,7 @@ use protocol::event::EventBody;
 #[cfg(test)]
 use protocol::model::{ContextUsage, RunId, Seq, SessionStatus};
 
+mod assigned_account;
 mod cache;
 mod commands;
 mod controls;

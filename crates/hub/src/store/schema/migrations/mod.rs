@@ -5,6 +5,7 @@ mod account_defaults;
 mod accounts;
 mod activity;
 mod agent_runs;
+mod assigned_accounts;
 mod cache;
 mod comments;
 mod drafts;

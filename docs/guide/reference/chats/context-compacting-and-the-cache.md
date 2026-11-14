@@ -55,7 +55,7 @@ The model provider keeps what an agent's requests read and write for a while, so
 ### When it expires
 
 - **A cache expires one lifetime after the agent's newest request,** an hour on a Claude account, since each request starts its time again.
-- **A compaction leaves nothing cached,** and so does choosing another model.
+- **A compaction leaves nothing cached,** and so does choosing another model, or the chat's agent starting again under another account, as one that ran under the machine's own login does once you add an account, since another account's cache may not hold the conversation.
 - **It's about to expire with a quarter of its lifetime left:** 15 minutes for an hour's cache.
 
 ### Where it shows

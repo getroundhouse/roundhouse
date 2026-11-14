@@ -23,7 +23,6 @@ use std::sync::Arc;
 mod tests;
 
 mod accounts;
+mod targets;
 
 pub(crate) use accounts::{AccountChange, Connect, Handed, Logins};
-
-mod defaults;

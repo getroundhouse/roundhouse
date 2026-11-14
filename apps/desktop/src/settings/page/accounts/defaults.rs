@@ -9,12 +9,15 @@ use protocol::model::{Account, AgentDescription};
 
 use super::{Drawing, words};
 
+/// What Default accounts says above its rows, on a hub that keeps defaults.
+const INTRO: &str =
+    "Choose which account new chats use across this hub. A chat stays on its account when you choose another.";
+
 pub(super) fn section(drawing: &Drawing<'_>, accounts: &[&Account], cx: &App) -> Div {
     let colors = look::colors(cx);
-    let intro = div()
-        .typeset(look::Type::Body)
-        .text_color(colors.text_muted)
-        .child("Choose which account each agent uses across this hub. Changes apply when an agent next starts.");
+    // A hub that keeps no defaults puts no chat on an account.
+    let intro = if drawing.defaults.is_some() { INTRO } else { "Choose which account new chats use across this hub." };
+    let intro = div().typeset(look::Type::Body).text_color(colors.text_muted).child(intro);
     let rows = drawing.agents.with_logins().map(|agent| row(drawing, agent, accounts, cx));
     let error = drawing
         .kept
@@ -36,17 +39,20 @@ fn row(drawing: &Drawing<'_>, agent: &AgentDescription, accounts: &[&Account], c
         (_, _, Some(account)) => words::called(account),
     };
     let blocked = account.is_some_and(|account| !usable(account, drawing.now_ms));
-    let says = if blocked {
-        "Renew or reconnect this account, or choose another. New agents cannot start."
-    } else if selected.is_none() && drawing.defaults.is_some() {
-        "Used only while no default account has been added."
-    } else {
-        "Running agents keep their current login."
+    let says = match (drawing.defaults, selected, account) {
+        _ if blocked => Some(
+            "Renew or reconnect it. Until then, chats on it can't start, nor can new chats unless you choose another.",
+        ),
+        (Some(_), None, _) => Some("Used only while no default account has been added."),
+        (Some(_), Some(_), Some(_)) => Some("Chats already on another account stay there."),
+        // Nothing to say of a hub that keeps no defaults, or of one whose account is still loading.
+        _ => None,
     };
     let colors = look::colors(cx);
-    let description = v_flex().flex_1().min_w_0().gap_1().child(agent.name.clone()).child(
-        div().typeset(look::Type::Body).text_color(if blocked { colors.error } else { colors.text_muted }).child(says),
-    );
+    let says = says.map(|says| {
+        div().typeset(look::Type::Body).text_color(if blocked { colors.error } else { colors.text_muted }).child(says)
+    });
+    let description = v_flex().flex_1().min_w_0().gap_1().child(agent.name.clone()).children(says);
     h_flex()
         .gap_6()
         .py_3()

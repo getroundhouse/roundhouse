@@ -48,7 +48,7 @@ So a long chat says when that's coming:
 
 What to do about it is yours to judge. If you'll want the chat again, send its next prompt before the clock runs out. If the cache has already expired and the work has moved on, a new chat is often the cheaper way to carry on.
 
-Choosing another model writes the conversation again too, since a cache belongs to one model. The picker says so before you switch.
+Choosing another model writes the conversation again too, since a cache belongs to one model. The picker says so before you switch. Running under another account can write it again too, as a chat that ran under the machine's own login does when it first starts under an account you added.
 
 A chat under 50k tokens says nothing of its cache but in its newest turn's card, since writing that again costs little.
 

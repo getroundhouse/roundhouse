@@ -40,7 +40,9 @@ pub(super) fn disconnect_asks(name: &str) -> String {
 /// What the question before disconnecting says under it.
 pub(super) const DISCONNECT_SAYS: &str = "The hub forgets its token, so connecting it again takes pasting one again. \
                                           Agents running under it go on until they stop. The token isn't revoked, \
-                                          so it still works wherever else it's kept. If this is a default account, new agents cannot start until you reconnect it or choose another default.";
+                                          so it still works wherever else it's kept. Chats on it can't start until \
+                                          you reconnect it, and if it's a default account, new chats can't either \
+                                          until you reconnect it or choose another default.";
 
 /// What's said under an account's row when it was to be disconnected with no hub to ask.
 pub(super) const NO_HUB_TO_DISCONNECT: &str = "Couldn't disconnect it: there's no hub to ask.";

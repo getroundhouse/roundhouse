@@ -13,8 +13,8 @@ use progress::Progress;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::event::EventBody;
 use protocol::model::{
-    AgentKind, AgentSessionId, ApprovalId, ContextUsage, PromptCache, RunId, Seq, Session, SessionId, SessionSettings,
-    SessionSettingsChange, SessionStatus, ToolUseId, WorkspaceId,
+    AccountId, AgentKind, AgentSessionId, ApprovalId, ContextUsage, PromptCache, RunId, Seq, Session, SessionId,
+    SessionSettings, SessionSettingsChange, SessionStatus, ToolUseId, WorkspaceId,
 };
 use protocol::tail::{StreamDelta, Tail};
 use protocol::worker::Delivery;
@@ -126,6 +126,9 @@ pub(super) struct LiveState {
     pub(super) capabilities: Option<protocol::model::RunCapabilities>,
     /// What the next agent launches with.
     pub(super) settings: SessionSettings,
+    /// The account the chat is on, as its record says, whose login the next agent launches under. None until its agent
+    /// first launches under a login the hub holds, when the next takes its kind's default.
+    pub(super) assigned_account: Option<AccountId>,
     pub(super) closed_at_ms: Option<i64>,
     /// Only exists while someone is subscribed. It's a large buffer, and most sessions a long-running
     /// hub has touched have nobody watching.
@@ -208,6 +211,7 @@ impl LiveSession {
                 agent_session_id: stored.agent_session_id,
                 capabilities: stored.session.agent_capabilities.clone(),
                 settings: stored.session.settings(),
+                assigned_account: stored.session.assigned_account.clone(),
                 closed_at_ms: stored.session.closed_at_ms,
                 live: None,
             }),

@@ -29,7 +29,8 @@ pub struct HubSettingsChange {
     pub allow_asked_in_full_access: Option<bool>,
 }
 
-/// The account new processes of one agent kind run under. Running processes keep their login.
+/// The account a chat of one agent kind is put on when its agent is first launched under a login the hub holds. A chat
+/// already on an account stays on it.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct AccountDefault {
     pub agent: AgentKind,
