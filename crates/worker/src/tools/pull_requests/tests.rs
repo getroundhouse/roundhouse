@@ -38,7 +38,7 @@ fn reads_reject_arguments_their_schema_does_not_allow() {
 fn terminal_tasks_include_the_frozen_structured_result_and_human_stop_instruction() {
     let wait = Wait { ended: Some(WaitEnded { at_ms: 9, how: WaitEnd::CalledOffByPerson }), ..pull_request_wait("a") };
 
-    let task = super::super::wait::task(&wait, None);
+    let task = super::super::wait::task(&wait, None, crate::Timers::DEFAULT.wait_poll);
 
     assert_eq!(task["status"], "cancelled");
     assert!(task["statusMessage"].as_str().unwrap().contains("Don't start another"));
@@ -53,7 +53,7 @@ fn required_check_success_does_not_claim_optional_checks_passed() {
     row.checks[0].required = false;
     row.checks[0].state = CheckState::Failed;
 
-    let task = super::super::wait::task(&wait, None);
+    let task = super::super::wait::task(&wait, None, crate::Timers::DEFAULT.wait_poll);
 
     assert!(task["statusMessage"].as_str().unwrap().contains("required checks are satisfied"));
     let text = task["result"]["content"][0]["text"].as_str().unwrap();

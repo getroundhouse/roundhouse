@@ -12,7 +12,7 @@ use tokio::sync::broadcast::error::RecvError;
 
 use super::*;
 use crate::hub::tests::{carried_on, flushed, hub_in, stand_in_worker, writing};
-use crate::session::{Item, LiveItem, LiveSession, Origin, PICKS_UP_WITHIN};
+use crate::session::{Item, LiveItem, LiveSession, Origin};
 use crate::store::cancelled_approval;
 
 const FROM_AGENT: Origin = Origin::Run { run: RunId::new(1), current: true, numbered: None };
@@ -138,7 +138,7 @@ async fn an_agent_that_doesnt_pick_up_again_after_its_work_in_the_background_is_
 
     background_over(&live).await;
     assert_eq!(live.status(), SessionStatus::Background, "it's still at work until it picks up again");
-    tokio::time::sleep(PICKS_UP_WITHIN.checked_sub(Duration::from_secs(1)).unwrap()).await;
+    tokio::time::sleep(hub.timers.picks_up_within.checked_sub(Duration::from_secs(1)).unwrap()).await;
     flushed(&live).await;
     assert_eq!(live.status(), SessionStatus::Background, "it was taken to be idle too soon");
     tokio::time::sleep(Duration::from_secs(2)).await;
@@ -156,7 +156,7 @@ async fn an_agent_that_picks_up_again_isnt_taken_to_be_idle_later() {
 
     background_over(&live).await;
     live.record(FROM_AGENT, picked_up(), None).await.unwrap();
-    tokio::time::sleep(PICKS_UP_WITHIN + Duration::from_secs(1)).await;
+    tokio::time::sleep(hub.timers.picks_up_within + Duration::from_secs(1)).await;
     flushed(&live).await;
 
     assert_eq!(live.status(), SessionStatus::Running);
@@ -172,7 +172,7 @@ async fn the_timer_of_an_earlier_wait_leaves_a_later_one_alone() {
     let live = hub.live_session(&"s".into()).await.unwrap();
     background_over(&live).await;
     live.record(FROM_AGENT, picked_up(), None).await.unwrap();
-    tokio::time::sleep(PICKS_UP_WITHIN.checked_sub(Duration::from_secs(1)).unwrap()).await;
+    tokio::time::sleep(hub.timers.picks_up_within.checked_sub(Duration::from_secs(1)).unwrap()).await;
     live.record(FROM_AGENT, listed(1), None).await.unwrap();
     live.record(FROM_AGENT, EventBody::AgentState { state: AgentRunState::Idle }, None).await.unwrap();
     live.record(FROM_AGENT, listed(0), None).await.unwrap();
@@ -180,7 +180,7 @@ async fn the_timer_of_an_earlier_wait_leaves_a_later_one_alone() {
     tokio::time::sleep(Duration::from_secs(2)).await;
     flushed(&live).await;
     assert_eq!(live.status(), SessionStatus::Background, "the first wait's timer ended the second");
-    tokio::time::sleep(PICKS_UP_WITHIN).await;
+    tokio::time::sleep(hub.timers.picks_up_within).await;
     flushed(&live).await;
 
     assert_eq!(live.status(), SessionStatus::Idle, "the second wait's own timer didn't end it");
@@ -203,7 +203,7 @@ async fn an_agent_carried_on_with_while_it_was_to_pick_up_again_is_taken_to_be_i
     let live = carried_on(&hub, &link, RunId::new(1));
 
     assert_eq!(live.status(), SessionStatus::Background);
-    tokio::time::sleep(PICKS_UP_WITHIN + Duration::from_secs(1)).await;
+    tokio::time::sleep(hub.timers.picks_up_within + Duration::from_secs(1)).await;
     flushed(&live).await;
     assert_eq!(live.status(), SessionStatus::Idle);
     assert_eq!(states_from_the_hub(&hub), 1);
@@ -222,13 +222,13 @@ async fn an_agent_that_drops_the_prompt_it_was_to_take_is_taken_to_be_idle_after
     let (prompt, _) = live.record(Origin::Hub, next, None).await.unwrap();
     live.record(FROM_AGENT, turn_ended(), None).await.unwrap();
     live.record(FROM_AGENT, listed(0), None).await.unwrap();
-    tokio::time::sleep(PICKS_UP_WITHIN + Duration::from_secs(1)).await;
+    tokio::time::sleep(hub.timers.picks_up_within + Duration::from_secs(1)).await;
     flushed(&live).await;
     assert_eq!(live.status(), SessionStatus::Background, "taken to be idle with a prompt still to take");
 
     live.record(FROM_AGENT, EventBody::PromptDropped { prompt: prompt.seq }, None).await.unwrap();
 
-    tokio::time::sleep(PICKS_UP_WITHIN).await;
+    tokio::time::sleep(hub.timers.picks_up_within).await;
     flushed(&live).await;
     assert_eq!(live.status(), SessionStatus::Idle);
     assert_eq!(states_from_the_hub(&hub), 1);

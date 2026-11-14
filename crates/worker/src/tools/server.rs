@@ -32,6 +32,8 @@ pub(crate) struct Tools {
     pub(super) asks: Arc<Asks>,
     /// The worker's, which the server says it is.
     pub(super) build: Build,
+    /// How often the agent's CLI is to ask after a wait, as [`crate::Timers::wait_poll`] says.
+    pub(super) wait_poll: Duration,
     /// Whose each token is, as each agent starts. Kept while the worker runs, since a session's token doesn't change.
     pub(super) tokens: Mutex<HashMap<ToolsToken, SessionId>>,
     /// Held while it starts serving, so two agents starting at once can't start two servers, and one can't start once
@@ -50,8 +52,9 @@ pub(super) enum Serving {
 }
 
 impl Tools {
-    pub(crate) fn new(asks: Arc<Asks>, build: Build) -> Self {
-        Self { asks, build, tokens: Mutex::new(HashMap::new()), serving: tokio::sync::Mutex::new(Serving::NotYet) }
+    pub(crate) fn new(asks: Arc<Asks>, build: Build, wait_poll: Duration) -> Self {
+        let (tokens, serving) = (Mutex::new(HashMap::new()), tokio::sync::Mutex::new(Serving::NotYet));
+        Self { asks, build, wait_poll, tokens, serving }
     }
 
     /// Lets calls carrying `token` through, as the agent in `session_id`'s.

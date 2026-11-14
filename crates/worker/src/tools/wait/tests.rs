@@ -1,7 +1,11 @@
 use protocol::model::WaitEnded;
+use std::time::Duration;
 
 use super::*;
 use crate::tools::pull_request::tests::open_pr;
+
+/// How often a test's CLI is told to ask after a wait.
+const POLL: Duration = crate::Timers::DEFAULT.wait_poll;
 
 /// A wait on [`open_pr`] that hasn't ended, for the tests of the tools that answer one.
 pub(in crate::tools) fn waiting() -> Wait {
@@ -26,13 +30,13 @@ pub(in crate::tools) fn ended(how: WaitEnd) -> Wait {
 fn a_wait_still_waiting_is_a_working_task_saying_where_the_pull_request_stands() {
     let running = PullRequest { checks: protocol::model::Checks { passed: 1, failed: 0, pending: 3 }, ..open_pr() };
 
-    let task = task(&waiting(), Some(&running));
+    let task = task(&waiting(), Some(&running), Duration::from_millis(1_250));
 
     assert_eq!(task["resultType"], "complete");
     assert_eq!((&task["taskId"], &task["status"]), (&json!("w1"), &json!("working")));
     assert_eq!(task["statusMessage"], "Waiting on pull request #605. Its checks are still running: 1 of 4 are done.");
     assert_eq!((&task["createdAt"], &task["lastUpdatedAt"]), (&json!("1970-01-01T00:00:01.000Z"), &task["createdAt"]));
-    assert_eq!((&task["ttlMs"], &task["pollIntervalMs"]), (&Value::Null, &json!(POLL_INTERVAL_MS)));
+    assert_eq!((&task["ttlMs"], &task["pollIntervalMs"]), (&Value::Null, &json!(1_250)), "the poll it was given");
     assert!(task.get("result").is_none(), "{task}");
 }
 
@@ -40,7 +44,7 @@ fn a_wait_still_waiting_is_a_working_task_saying_where_the_pull_request_stands()
 fn an_ended_wait_is_a_completed_task_whose_result_says_how_and_where_the_pull_request_stands() {
     let merged = PullRequest { state: protocol::model::PrState::Merged, ..open_pr() };
 
-    let task = task(&ended(WaitEnd::Merged), Some(&merged));
+    let task = task(&ended(WaitEnd::Merged), Some(&merged), POLL);
 
     assert_eq!((&task["resultType"], &task["status"]), (&json!("complete"), &json!("completed")));
     assert_eq!(task["lastUpdatedAt"], "1970-01-01T00:01:01.000Z");
@@ -57,7 +61,7 @@ fn an_ended_wait_is_a_completed_task_whose_result_says_how_and_where_the_pull_re
 #[test]
 fn a_wait_called_off_is_a_cancelled_task_with_no_result_that_says_who_called_it_off() {
     let said = |how| {
-        let task = task(&ended(how), Some(&open_pr()));
+        let task = task(&ended(how), Some(&open_pr()), POLL);
         assert_eq!(task["status"], "cancelled", "{how:?}");
         assert!(task.get("result").is_none(), "{task}");
         task["statusMessage"].as_str().unwrap().to_string()

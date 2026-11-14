@@ -15,6 +15,7 @@ use super::*;
 use crate::hub::HubDirs;
 use crate::provider_set::ProviderSet;
 use crate::store::tests::store_with_session;
+use crate::timers::Timers;
 
 /// A local provider whose worker is `script`.
 fn provider_running(dir: &Path, script: &str) -> Arc<dyn Provider> {
@@ -36,7 +37,7 @@ fn hub_using(dir: &Path, provider: &Arc<dyn Provider>) -> Arc<Hub> {
     let store = Arc::new(store_with_session(dir));
     store.workspace_ready(&"w".into(), "/w", &"alder".into(), "main", None).unwrap();
     let providers = ProviderSet::only(provider.clone());
-    Arc::new(Hub::new(Build::UNSTAMPED, store, HubDirs::in_dir(dir), providers, Vec::new(), false))
+    Arc::new(Hub::new(Build::UNSTAMPED, store, HubDirs::in_dir(dir), providers, Vec::new(), false, Timers::DEFAULT))
 }
 
 /// Writes each frame to a file in `dir` by its name, for a script to send.
@@ -83,6 +84,7 @@ async fn a_reply_this_hub_cant_read_fails_its_call_rather_than_leaving_it_waitin
     let instance_id: InstanceId = "i".into();
     provider.create(&instance_id, None, None, "i").await.unwrap();
     let hub = hub_using(dir.path(), &provider);
+    let within = hub.timers.hello_within;
     let asked = std::time::Instant::now();
 
     let opened =
@@ -91,7 +93,7 @@ async fn a_reply_this_hub_cant_read_fails_its_call_rather_than_leaving_it_waitin
 
     let Err(e) = opened else { panic!("the hello's reply was read") };
     assert_eq!(e.code, ErrorCode::Worker, "{e:?}");
-    assert!(asked.elapsed() < HELLO_TIMEOUT / 2, "it waited for the time limit");
+    assert!(asked.elapsed() < within / 2, "it waited for the time limit");
 }
 
 /// A call reads its reply as what its request is answered with, so one of another kind fails it here, rather than in

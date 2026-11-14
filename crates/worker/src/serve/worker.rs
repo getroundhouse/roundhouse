@@ -61,6 +61,7 @@ pub struct Config {
     /// by saying so, rather than exiting, so the hub can tell it from a worker that failed to start. The hub cleans up
     /// after one of those by ending the instance, which would end the worker serving it.
     pub refused: Option<String>,
+    pub timers: crate::Timers,
 }
 
 pub(super) struct RunningAgent {
@@ -129,7 +130,7 @@ impl Worker {
             moves: Moves::default(),
             watches: Mutex::new(Watches::default()),
             outbox,
-            tools: Arc::new(Tools::new(asks.clone(), config.build)),
+            tools: Arc::new(Tools::new(asks.clone(), config.build, config.timers.wait_poll)),
             config,
             asks,
         });

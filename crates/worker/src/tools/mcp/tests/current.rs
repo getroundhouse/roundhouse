@@ -55,7 +55,7 @@ pub(super) async fn hub_answers(
 }
 
 pub(super) async fn answered(asks: &Asks, headers: &Headers, body: &[u8]) -> Answer {
-    match answer(asks, Build::UNSTAMPED, &"s".into(), headers, body).await {
+    match answer(asks, Build::UNSTAMPED, crate::Timers::DEFAULT.wait_poll, &"s".into(), headers, body).await {
         Reply::Answer(answer) => answer,
         Reply::Accepted => panic!("a request is answered"),
     }
@@ -163,7 +163,8 @@ async fn a_notification_is_taken_and_what_isnt_json_rpc_is_refused() {
     let said = headers("tools/list", None);
     let notification = br#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#;
 
-    let taken = answer(&asks, Build::UNSTAMPED, &"s".into(), &said, notification).await;
+    let taken =
+        answer(&asks, Build::UNSTAMPED, crate::Timers::DEFAULT.wait_poll, &"s".into(), &said, notification).await;
     let garbled = answered(&asks, &said, b"{not json").await;
     let refused = [
         (&br#"{"jsonrpc":"2.0","id":3}"#[..], json!(3), "no method"),

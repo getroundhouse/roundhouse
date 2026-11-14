@@ -36,7 +36,7 @@ impl Hub {
         let gate = self.pull_requests.gates.lock().entry(id.clone()).or_default().clone();
         let held = gate.lock_owned().await;
         if agent {
-            self.pull_requests.space_out(id).await;
+            self.pull_requests.space_out(id, self.timers.agent_spacing).await;
         }
         self.pull_requests.remote_read_at.lock().insert(id.clone(), Instant::now());
         let path = self.ready_workspace(id).await?.path().to_owned();

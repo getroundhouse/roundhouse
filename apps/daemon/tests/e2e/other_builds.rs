@@ -3,8 +3,6 @@
 
 #![cfg(test)]
 
-use std::time::Duration;
-
 use protocol::event::{EventBody, ExitReason};
 use protocol::model::SessionStatus;
 
@@ -13,6 +11,9 @@ use crate::support::{
     Stack, assistant_text, is_alive, latest_started_pid, parent_of, read_all, started_pid, wait_for_status,
     wait_for_turn_end, wait_until, workspace,
 };
+
+/// What the hub logs as a look at the workspace keeps its worker from another build, since something there is at work.
+const KEPT: &str = "keeping a worker from another build, with something at work";
 
 /// As an update has it: the hub restarts as a newer build than the workers it leaves, and every worker the next hub
 /// starts is its own build.
@@ -24,7 +25,9 @@ fn update(stack: &mut Stack) {
 
 #[test]
 fn a_worker_from_another_build_is_replaced_once_nothing_in_its_workspace_is_at_work() {
-    let mut stack = Stack::start_with(vec![(worker::TEST_BUILD, "older".to_string())]);
+    // With the hub's debug lines, which say each time a look keeps the worker.
+    let log = (protocol::paths::ENV_LOG, "info,hub=debug".to_string());
+    let mut stack = Stack::start_with(vec![(worker::TEST_BUILD, "older".to_string()), log]);
     let client = stack.client();
     let (made, session) = stack.workspace(&client);
     let done = stack.path("done");
@@ -34,9 +37,10 @@ fn a_worker_from_another_build_is_replaced_once_nothing_in_its_workspace_is_at_w
     drop(client);
 
     update(&mut stack);
-    // Its agent has work in the background, so the next hub carries on with the worker the agent is on. Long enough
-    // for the two looks that would have stopped it with nothing at work.
-    std::thread::sleep(Duration::from_secs(12));
+    // Its agent has work in the background, so the next hub carries on with the worker the agent is on, over the two
+    // looks that would have stopped it with nothing at work.
+    let kept = || std::fs::read_to_string(stack.hub_log()).unwrap().matches(KEPT).count();
+    wait_until("two looks to keep the worker from the older build", || kept() >= 2);
     assert!(is_alive(older), "the worker from the older build was stopped while its agent was at work");
     let client = stack.client();
     let build = |client| workspace(client, &made.id).worker_build;

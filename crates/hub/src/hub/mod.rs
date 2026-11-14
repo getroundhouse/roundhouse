@@ -37,6 +37,5 @@ mod worktree;
 use crate::store::now_ms;
 
 mod coordinator;
-pub(super) use coordinator::SHUTDOWN_GRACE;
 pub(crate) use coordinator::{BEFORE_SERVING, Hub, HubDirs};
 use coordinator::{KEEPS_WORKERS, Wanted, new_id, off_thread};

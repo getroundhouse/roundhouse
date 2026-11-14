@@ -17,5 +17,3 @@ use std::time::Duration;
 mod tests;
 
 mod build_records;
-#[cfg(test)]
-use build_records::LOOK_EVERY;

@@ -1556,6 +1556,7 @@ dependencies = [
  "flume 0.11.1",
  "gpui-kit",
  "gpui-pre-apple",
+ "hub",
  "image",
  "libc",
  "look",
@@ -1576,6 +1577,7 @@ dependencies = [
  "ureq",
  "velopack",
  "windows-sys 0.61.2",
+ "worker",
 ]
 
 [[package]]
@@ -3643,6 +3645,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "fastrand",
+ "hub",
  "parking_lot",
  "private-files",
  "process",
@@ -9569,6 +9572,7 @@ dependencies = [
  "process",
  "proptest",
  "protocol",
+ "serde",
  "serde_json",
  "tempfile",
  "thiserror 2.0.21",
@@ -9576,6 +9580,7 @@ dependencies = [
  "toml 0.9.12+spec-1.1.0",
  "tracing",
  "uuid",
+ "worker",
 ]
 
 [[package]]

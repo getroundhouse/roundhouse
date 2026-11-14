@@ -44,5 +44,5 @@ mod tests;
 
 mod connection;
 #[cfg(test)]
-use connection::{HELLO_TIMEOUT, NEXT_LINK_ID};
+use connection::NEXT_LINK_ID;
 pub(crate) use connection::{STOP_GRACE, WorkerLink};

@@ -2,7 +2,10 @@
 
 #![cfg(test)]
 
+use std::time::Duration;
+
 use client_core::Client;
+use hub::Timers;
 use protocol::event::{EventBody, SessionEvent, TaskKind};
 use protocol::model::{SessionId, SessionStatus};
 
@@ -65,15 +68,15 @@ fn several_tasks_ending_together_leave_the_chat_idle_with_none_listed() {
 }
 
 /// Starts work in the background that finishes once `done` exists, waits until the turn has ended with it going, and
-/// then has it finish, with the agent picking up again by itself `pause_ms` after.
-fn finish_and_pause(stack: &Stack, client: &Client, session_id: &SessionId, pause_ms: u64) {
+/// then has it finish, with the agent picking up again by itself `pause` after.
+fn finish_and_pause(stack: &Stack, client: &Client, session_id: &SessionId, pause: Duration) {
     let done = stack.path("done");
     client.session_prompt(session_id, &format!("background:{}", done.display()), None).unwrap();
     wait_for_status(client, session_id, SessionStatus::Background);
     // Moved into place whole, so the agent can't find it before it says how long.
-    let pause = stack.path("pause");
-    std::fs::write(&pause, pause_ms.to_string()).unwrap();
-    std::fs::rename(&pause, &done).unwrap();
+    let said = stack.path("pause");
+    std::fs::write(&said, pause.as_millis().to_string()).unwrap();
+    std::fs::rename(&said, &done).unwrap();
     wait_until("the work in the background to finish", || {
         read_all(client, session_id)
             .iter()
@@ -89,7 +92,7 @@ fn the_agent_is_at_work_from_its_work_in_the_background_finishing_until_it_picks
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
 
-    finish_and_pause(&stack, &client, &session.id, 1500);
+    finish_and_pause(&stack, &client, &session.id, Duration::from_millis(1500));
 
     assert_eq!(client.session_get(&session.id).unwrap().status, SessionStatus::Background);
     assert_eq!(client.hub_status().unwrap().running_sessions, 1);
@@ -102,11 +105,14 @@ fn the_agent_is_at_work_from_its_work_in_the_background_finishing_until_it_picks
 /// agent starts after that is a turn all the same.
 #[test]
 fn an_agent_that_takes_too_long_to_pick_up_again_is_taken_to_be_idle_and_its_turn_is_still_one() {
-    let stack = Stack::start();
+    let within = Duration::from_millis(1500);
+    let stack = Stack::start_with(vec![Timers { picks_up_within: within, ..Timers::FOR_TESTS }.env()]);
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
 
-    finish_and_pause(&stack, &client, &session.id, 18_000);
+    // Twice as long, so the test has as long to see the chat still at work, and then as long to see it idle with one
+    // turn before the agent picks up again, as `the_agent_is_at_work_…` above has.
+    finish_and_pause(&stack, &client, &session.id, within * 2);
     assert_eq!(client.session_get(&session.id).unwrap().status, SessionStatus::Background);
     wait_for_status(&client, &session.id, SessionStatus::Idle);
 

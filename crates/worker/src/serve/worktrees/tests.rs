@@ -76,6 +76,7 @@ fn config(dir: &Path) -> Config {
         scratch_dir: dir.to_path_buf(),
         deleter: Deleter::new("/bin/rm", ["-rf", "--"]),
         refused: None,
+        timers: crate::Timers::DEFAULT,
     }
 }
 

@@ -3,6 +3,7 @@ use crate::asks::Asks;
 use protocol::Build;
 use protocol::model::SessionId;
 use serde_json::{Map, Value, json};
+use std::time::Duration;
 
 /// The MCP version with stateless discovery and tasks.
 pub(in super::super) const VERSION: &str = "2026-07-28";
@@ -155,6 +156,7 @@ impl<'a> Method<'a> {
 pub(in super::super) async fn answer(
     asks: &Asks,
     build: Build,
+    wait_poll: Duration,
     session_id: &SessionId,
     headers: &Headers,
     body: &[u8],
@@ -178,7 +180,8 @@ pub(in super::super) async fn answer(
     };
     let Some(id) = id else { return Reply::Accepted };
     let params = message.get("params").and_then(Value::as_object).cloned().unwrap_or_default();
-    Reply::Answer(Answer { id, outcome: request(asks, build, session_id, headers, method, &params).await })
+    let outcome = request(asks, build, wait_poll, session_id, headers, method, &params).await;
+    Reply::Answer(Answer { id, outcome })
 }
 
 fn refused(id: Value, code: Code, message: impl Into<String>) -> Reply {
@@ -188,6 +191,7 @@ fn refused(id: Value, code: Code, message: impl Into<String>) -> Reply {
 async fn request(
     asks: &Asks,
     build: Build,
+    wait_poll: Duration,
     session_id: &SessionId,
     headers: &Headers,
     name: &str,
@@ -220,11 +224,12 @@ async fn request(
             "ttlMs": 0,
             "cacheScope": "public",
         })),
-        Method::CallTool => call(asks, session_id, params).await,
-        Method::GetTask => wait::get(asks, session_id, task_in(params, name)?).await,
+        Method::CallTool => call(asks, wait_poll, session_id, params).await,
+        Method::GetTask => wait::get(asks, wait_poll, session_id, task_in(params, name)?).await,
         // A wait never asks for input, so there's nothing to update, but the task has to be the chat's.
         Method::UpdateTask => {
-            wait::get(asks, session_id, task_in(params, name)?).await.map(|_| json!({ "resultType": "complete" }))
+            let task = task_in(params, name)?;
+            wait::get(asks, wait_poll, session_id, task).await.map(|_| json!({ "resultType": "complete" }))
         }
         Method::CancelTask => wait::cancel(asks, session_id, task_in(params, name)?).await,
         Method::Initialize | Method::Other(_) => {
@@ -289,17 +294,22 @@ fn discover(build: Build) -> Value {
     })
 }
 
-async fn call(asks: &Asks, session_id: &SessionId, params: &Map<String, Value>) -> Result<Value, RpcError> {
+async fn call(
+    asks: &Asks,
+    wait_poll: Duration,
+    session_id: &SessionId,
+    params: &Map<String, Value>,
+) -> Result<Value, RpcError> {
     let Some(name) = params.get("name").and_then(Value::as_str) else {
         return Err(RpcError::new(Code::InvalidParams, "a call names its tool"));
     };
     match Tool::named(name) {
         Some(Tool::PullRequests) => Ok(pull_requests::read(asks, session_id, params).await),
         Some(Tool::Waits | Tool::Wait) if !takes_tasks(params) => Err(RpcError::needs_tasks()),
-        Some(Tool::Waits) => Ok(pull_requests::start(asks, session_id, params).await),
+        Some(Tool::Waits) => Ok(pull_requests::start(asks, wait_poll, session_id, params).await),
         Some(Tool::PullRequest) => Ok(pull_request::call(asks, session_id).await.to_json()),
         // A wait is answered with a task, which a client that didn't offer to take one can't be given.
-        Some(Tool::Wait) => Ok(wait::call(asks, session_id, params).await),
+        Some(Tool::Wait) => Ok(wait::call(asks, wait_poll, session_id, params).await),
         None => Err(RpcError::new(Code::InvalidParams, format!("there's no tool called {name}"))),
     }
 }

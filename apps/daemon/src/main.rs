@@ -87,6 +87,9 @@ fn main() -> anyhow::Result<()> {
     let args = Args::parse();
     let codex_bin = std::env::var_os("ROUNDHOUSE_CODEX_BIN").filter(|bin| !bin.is_empty()).map(PathBuf::from);
     let claude_bin = std::env::var_os(worker::ENV_CLAUDE_BIN).filter(|bin| !bin.is_empty()).map(PathBuf::from);
+    // Before the hub's variables are forgotten, since a test gives its workers their timers beside its hub's own. A
+    // build without `testing`, as the product's is, takes the defaults whatever the environment says.
+    let worker_timers = worker::Timers::from_env(|name| std::env::var(name).ok());
     // The command that reaches a worker runs nothing in a workspace, and passes them on to the worker it starts, which
     // forgets them itself.
     if matches!(args.role, Role::Worker { attach: false, .. }) {
@@ -103,7 +106,9 @@ fn main() -> anyhow::Result<()> {
             let path = std::env::var("PATH").ok();
             // The hub doesn't depend on the adapters, so it's told what each kind of agent offers from here.
             let agents = agents::descriptions();
-            let config = hub::HubConfig { build: BUILD, paths, worker_exe, shell, path, on_demand, agents };
+            // A build without `testing`, as the product's is, takes the defaults whatever the environment says.
+            let timers = hub::Timers::from_env(|name| std::env::var(name).ok());
+            let config = hub::HubConfig { build: BUILD, paths, worker_exe, shell, path, on_demand, agents, timers };
             run_to_end(hub::run(config))??;
             Ok(())
         }
@@ -123,7 +128,14 @@ fn main() -> anyhow::Result<()> {
             };
             worker_role::run(
                 transport,
-                worker_role::Given { build: BUILD, workspaces_root, state_dir, claude_bin, codex_bin },
+                worker_role::Given {
+                    build: BUILD,
+                    workspaces_root,
+                    state_dir,
+                    claude_bin,
+                    codex_bin,
+                    timers: worker_timers,
+                },
             )
         }
     }

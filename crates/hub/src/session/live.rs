@@ -19,6 +19,7 @@ use protocol::model::{
 use protocol::tail::{StreamDelta, Tail};
 use protocol::worker::Delivery;
 use std::sync::{Arc, Weak};
+use std::time::Duration;
 use tokio::sync::{broadcast, mpsc};
 use tracing::warn;
 
@@ -142,6 +143,8 @@ pub(crate) struct LiveSession {
     /// So a failed setup is mentioned once, rather than on every prompt.
     pub(super) warned_about_setup: std::sync::atomic::AtomicBool,
     pub(super) hub: Weak<Hub>,
+    /// The hub's [`crate::Timers::picks_up_within`], copied as the session starts, since it holds the hub weakly.
+    pub(super) picks_up_within: Duration,
     pub(super) commands: mpsc::Sender<Command>,
     pub(super) ingest: mpsc::Sender<Item>,
     pub(super) state: Mutex<LiveState>,
@@ -194,6 +197,7 @@ impl LiveSession {
             agent: stored.session.agent,
             warned_about_setup: std::sync::atomic::AtomicBool::new(false),
             hub: Arc::downgrade(hub),
+            picks_up_within: hub.timers.picks_up_within,
             commands: commands_tx,
             ingest: ingest_tx,
             state: Mutex::new(LiveState {

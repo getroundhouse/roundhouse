@@ -5,6 +5,7 @@ use crate::listener::Listener;
 use crate::provider_set::ProviderSet;
 use crate::store::{Move, RecordedInstance, Store, StoreError};
 use crate::terminate::Terminate;
+use crate::timers::Timers;
 use protocol::Build;
 use protocol::model::{AgentDescription, WorkspaceId};
 use protocol::paths::Paths;
@@ -29,6 +30,7 @@ pub struct HubConfig {
     /// What each kind of agent this hub runs is called and offers, as its adapter describes it. A kind with none is one
     /// the hub doesn't run.
     pub agents: Vec<AgentDescription>,
+    pub timers: Timers,
 }
 
 /// What the last run left half done, for this one to finish once it's serving.
@@ -125,7 +127,7 @@ pub async fn run(config: HubConfig) -> Result<(), HubError> {
         worker_logs: paths.worker_logs_dir.clone(),
         logins: paths.logins_dir.clone(),
     };
-    let hub = Arc::new(Hub::new(config.build, store, dirs, providers, config.agents, config.on_demand));
+    let hub = Arc::new(Hub::new(config.build, store, dirs, providers, config.agents, config.on_demand, config.timers));
     // Before clients are served, so none is told the hub holds a login whose token is gone.
     hub.tidy_logins().await;
     // Before carrying on with the agents an earlier hub left, since what they asked meanwhile comes in as soon as

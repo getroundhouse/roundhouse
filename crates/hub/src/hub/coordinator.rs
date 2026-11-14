@@ -5,6 +5,7 @@ use crate::logins::Logins;
 use crate::provider_set::ProviderSet;
 use crate::session::{Item, LiveSession};
 use crate::store::{MadeByRequest, Store, StoreError, now_ms};
+use crate::timers::Timers;
 use crate::versions;
 use crate::worker_link::WorkerLink;
 use awake::Awake;
@@ -24,10 +25,6 @@ use std::time::Duration;
 use tokio::sync::{Mutex as AsyncMutex, Notify, broadcast};
 use tracing::warn;
 
-/// Agents get 3 s to stop, then up to 5 s for each of their two streams to end, which something an agent left
-/// running can hold open, and the worker exits within a second of flushing after that. So this is only reached if
-/// something is stuck.
-pub(in super::super) const SHUTDOWN_GRACE: Duration = Duration::from_secs(15);
 /// How long the hub waits for a provider as it starts, before it serves, to list its instances or say how to reach a
 /// worker an earlier hub left running there. One that takes longer has its sessions interrupted, as if their workers had
 /// gone, so a slow one doesn't keep every client waiting.
@@ -78,6 +75,7 @@ pub(crate) struct Hub {
     pub(super) configuring: AsyncMutex<()>,
     pub(super) feed: Feed,
     pub(super) on_demand: bool,
+    pub(crate) timers: Timers,
     pub(super) started_at_ms: i64,
     pub(crate) shutdown: Notify,
     pub(super) shutting_down: AtomicBool,
@@ -112,6 +110,7 @@ impl Hub {
         providers: ProviderSet,
         agents: Vec<AgentDescription>,
         on_demand: bool,
+        timers: Timers,
     ) -> Self {
         Self {
             build,
@@ -120,6 +119,7 @@ impl Hub {
             attachment_files: AttachmentFiles::new(dirs.attachments),
             worker_logs_dir: dirs.worker_logs,
             on_demand,
+            timers,
             providers,
             agents,
             workers: Mutex::new(HashMap::new()),

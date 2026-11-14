@@ -49,6 +49,7 @@ impl Listening {
             scratch_dir: dir.path().to_path_buf(),
             deleter: Deleter::new("/bin/rm", ["-rf", "--"]),
             refused: None,
+            timers: worker::Timers::DEFAULT,
         };
         let socket = dir.path().join("worker.sock");
         let path = socket.clone();

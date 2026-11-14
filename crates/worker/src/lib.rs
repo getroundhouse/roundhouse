@@ -17,6 +17,7 @@ mod instructions;
 mod linked_images;
 mod serve;
 pub mod setup;
+mod timers;
 mod tools;
 mod worktree_file;
 
@@ -32,3 +33,4 @@ pub use serve::TEST_BUILD;
 #[cfg(unix)]
 pub use serve::listen;
 pub use serve::{Config, serve};
+pub use timers::Timers;

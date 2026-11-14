@@ -105,16 +105,17 @@ async fn a_worker_with_a_call_under_way_isnt_replaced() {
     assert!(hub.existing_worker(&w()).is_some());
 }
 
-/// Each look comes [`LOOK_EVERY`] after the last, and this checks halfway between them: idle at the first, at work at
-/// the second, idle at the third, which follows one that wasn't, and replaced at the fourth. A setup script is what's
-/// at work, since recording anything would let paused time run on while the record is written, and there's no session,
-/// whose asking which account its agent runs under would be a call under way now and then.
+/// Each look comes [`crate::Timers::look_every`] after the last, and this checks halfway between them: idle at the
+/// first, at work at the second, idle at the third, which follows one that wasn't, and replaced at the fourth. A setup
+/// script is what's at work, since recording anything would let paused time run on while the record is written, and
+/// there's no session, whose asking which account its agent runs under would be a call under way now and then.
 #[tokio::test(start_paused = true)]
 async fn a_worker_of_another_build_is_replaced_once_two_looks_in_a_row_find_nothing_at_work() {
     let dir = tempfile::tempdir().unwrap();
     let (hub, link) = with_worker(dir.path());
     let start = tokio::time::Instant::now();
-    let halfway_after = |look: u32| start + LOOK_EVERY * look + LOOK_EVERY / 2;
+    let every = hub.timers.look_every;
+    let halfway_after = |look: u32| start + every * look + every / 2;
     let current = |hub: &Hub| hub.workers.lock().get(&w()).is_some_and(|current| Arc::ptr_eq(current, &link));
 
     // As carrying on with it records, before the looks start.

@@ -35,6 +35,13 @@ const TAKES_TASKS: &str = "CLAUDE_AUTO_BACKGROUND_TASKS";
 const POLL_BOUNDS_MS: (u64, u64) = (250, 30_000);
 const POLL_DEFAULT_MS: u64 = 2_000;
 
+/// What the CLI takes for how often to ask after a task when the server hasn't said, as after a `--resume`: the real
+/// CLI's, unless a test has `FAKE_CLAUDE_POLL_DEFAULT_MS` say a shorter one, so it doesn't sit through the CLI's while
+/// it waits on what the server says.
+fn poll_default_ms() -> u64 {
+    std::env::var("FAKE_CLAUDE_POLL_DEFAULT_MS").ok().and_then(|ms| ms.parse().ok()).unwrap_or(POLL_DEFAULT_MS)
+}
+
 /// Longer than the hub takes over an agent's read, which can wait 10 s after another, so a server that's stuck fails
 /// the call that reached it, rather than the test waiting on the turn.
 const PATIENCE: Duration = Duration::from_secs(15);
@@ -174,7 +181,7 @@ pub(crate) fn follow_again(args: &[String], config: &Config, out: &Out) {
     for followed in kept.into_iter().filter(at_the_same) {
         background::started(config, out, &followed.id, "mcp_task", &followed.tool_use_id, &followed.description);
         background::watch_for_sigterm(config, out);
-        follow(config, out, followed, Duration::from_millis(POLL_DEFAULT_MS));
+        follow(config, out, followed, Duration::from_millis(poll_default_ms()));
     }
 }
 
@@ -247,7 +254,7 @@ fn keep(config: &Config, kept: &[Followed]) {
 
 fn poll_interval(task: &Value) -> Duration {
     let (least, most) = POLL_BOUNDS_MS;
-    Duration::from_millis(task["pollIntervalMs"].as_u64().unwrap_or(POLL_DEFAULT_MS).clamp(least, most))
+    Duration::from_millis(task["pollIntervalMs"].as_u64().unwrap_or_else(poll_default_ms).clamp(least, most))
 }
 
 impl Server {

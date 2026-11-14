@@ -11,9 +11,6 @@ use super::{Answer, Asked, Hub, When, calls_to_read, schedule};
 use crate::hub::ready::ReadyWorkspace;
 use crate::store::Store;
 
-/// How often the hub looks for a pull request to read that nobody asked for, while the budget can spare the calls.
-const PACE: Duration = Duration::from_secs(1);
-
 /// The longest it waits for the budget before looking again, since what's due changes meanwhile.
 const LONGEST_PAUSE: Duration = Duration::from_mins(1);
 
@@ -21,14 +18,15 @@ impl Hub {
     /// Reads the pull requests nobody asks for, one at a time, whichever [`Hub::to_read_in_turn`] says is next, as the
     /// budget can spare their calls. Runs until the hub stops.
     pub(crate) async fn watch_pull_requests(self: Arc<Self>) {
-        let mut pause = PACE;
+        let pace = self.timers.read_pace;
+        let mut pause = pace;
         loop {
             tokio::time::sleep(pause).await;
-            pause = PACE;
+            pause = pace;
             self.read_remote_due().await;
             let Some(workspace) = self.to_read_in_turn().await else { continue };
             if let Err(until) = self.read_in_turn(&workspace).await {
-                pause = until.saturating_duration_since(Instant::now()).clamp(PACE, LONGEST_PAUSE);
+                pause = until.saturating_duration_since(Instant::now()).clamp(pace, LONGEST_PAUSE);
             }
         }
     }

@@ -22,7 +22,7 @@ async fn an_agent_asking_again_soon_after_a_read_waits_for_a_read_of_its_own() {
     let again = hub.pull_request_for_agent(&"w".into(), &link).await.unwrap();
 
     assert_eq!(again.unwrap().title, "Pushed", "read again, not what the first read found");
-    assert!(asked_at.elapsed() >= AGENT_SPACING, "after {:?}", asked_at.elapsed());
+    assert!(asked_at.elapsed() >= hub.timers.agent_spacing, "after {:?}", asked_at.elapsed());
 }
 
 #[tokio::test(start_paused = true)]
@@ -76,7 +76,7 @@ async fn a_branch_moving_reads_again_no_sooner_than_an_agent_asking_would() {
     }
 
     assert_eq!(title.as_deref(), Some("Pushed"), "read again");
-    assert!(moved_at.elapsed() >= AGENT_SPACING, "after {:?}", moved_at.elapsed());
+    assert!(moved_at.elapsed() >= hub.timers.agent_spacing, "after {:?}", moved_at.elapsed());
 }
 
 /// A read that began once the worktree had checked out another branch may have found that branch's already, and then

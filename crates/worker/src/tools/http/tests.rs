@@ -16,7 +16,7 @@ const PORT: u16 = 50_123;
 
 fn tools() -> Tools {
     let (frames, _) = mpsc::channel(8);
-    let tools = Tools::new(Arc::new(Asks::new(frames)), Build::UNSTAMPED);
+    let tools = Tools::new(Arc::new(Asks::new(frames)), Build::UNSTAMPED, crate::Timers::DEFAULT.wait_poll);
     tools.admit(ToolsToken::new("token-s"), "s".into());
     tools
 }

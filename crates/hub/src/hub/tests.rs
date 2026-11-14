@@ -20,6 +20,7 @@ use super::{Hub, HubDirs};
 use crate::provider_set::ProviderSet;
 use crate::session::{CarriedOver, Item, LiveSession};
 use crate::store::tests::store_with_session;
+use crate::timers::Timers;
 use crate::worker_link::WorkerLink;
 
 /// Claude as a hub's tests describe it, which a chat nobody has chosen for runs on Sonnet at High, so a test can tell
@@ -82,7 +83,7 @@ pub(super) fn hub_describing(dir: &Path, agents: Vec<AgentDescription>) -> Arc<H
         path: None,
     };
     let providers = ProviderSet::only(Arc::new(LocalProvider::new(config)));
-    Arc::new(Hub::new(Build::UNSTAMPED, store, HubDirs::in_dir(dir), providers, agents, false))
+    Arc::new(Hub::new(Build::UNSTAMPED, store, HubDirs::in_dir(dir), providers, agents, false, Timers::DEFAULT))
 }
 
 /// A stand-in for `w`'s worker, which fails every call, as `hub`'s worker.

@@ -15,10 +15,6 @@ use std::time::{Duration, Instant};
 use tokio::sync::{Mutex as AsyncMutex, OwnedMutexGuard};
 use tracing::debug;
 
-/// How long after a workspace's last read an agent asking waits before its own. Long enough that an agent asking in a
-/// loop reads at most six times a minute, and short enough that one asking again after it pushes waits little.
-pub(super) const AGENT_SPACING: Duration = Duration::from_secs(10);
-
 /// Who a read is for.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Asked {
@@ -27,10 +23,10 @@ pub(super) enum Asked {
     Waiting,
     /// An agent asked, through the worker's tools, or its worktree checked out another branch or pushed the one it's
     /// on, which an agent can do over and over. It goes at once, as a read someone waits on does, but no sooner than
-    /// [`AGENT_SPACING`] after the last, and leaves the part of GitHub's limit kept for everything else, as a read in
-    /// turn does. So an agent asking, switching or pushing in a loop can't spend the limit that the user's own `gh`
-    /// and the other agents share. It's never answered with what was known before, which may be from before the agent
-    /// pushed.
+    /// [`crate::Timers::agent_spacing`] after the last, and leaves the part of GitHub's limit kept for everything else,
+    /// as a read in turn does. So an agent asking, switching or pushing in a loop can't spend the limit that the user's
+    /// own `gh` and the other agents share. It's never answered with what was known before, which may be from before
+    /// the agent pushed.
     Agent,
     /// Nobody asked, and it's this workspace's turn, so it waits for the budget.
     InTurn,
@@ -105,12 +101,12 @@ impl Reading {
         schedules.insert(id.clone(), Schedule::after(last, Instant::now(), Asked::InTurn, Went::Failed));
     }
 
-    /// Until [`AGENT_SPACING`] after the workspace's last read, for an agent asking.
-    pub(super) async fn space_out(&self, id: &WorkspaceId) {
+    /// Until `spacing` after the workspace's last read, for an agent asking.
+    pub(super) async fn space_out(&self, id: &WorkspaceId, spacing: Duration) {
         let last =
             self.schedules.lock().get(id).map(|last| last.read_at).max(self.remote_read_at.lock().get(id).copied());
         if let Some(last) = last {
-            tokio::time::sleep_until((last + AGENT_SPACING).into()).await;
+            tokio::time::sleep_until((last + spacing).into()).await;
         }
     }
 }
@@ -181,7 +177,7 @@ impl Hub {
     ) -> Result<(Answer, ReadsHeld), ApiError> {
         let asked_at = Instant::now();
         if asked == Asked::Agent {
-            self.pull_requests.space_out(id).await;
+            self.pull_requests.space_out(id, self.timers.agent_spacing).await;
         }
         let gate = self.pull_requests.gates.lock().entry(id.clone()).or_default().clone();
         let held = gate.lock_owned().await;

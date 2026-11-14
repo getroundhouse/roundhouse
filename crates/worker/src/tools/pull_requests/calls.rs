@@ -2,6 +2,7 @@ use super::{
     Asks, Called, CheckState, Map, PullRequestSelection, PullRequestWatch, PullRequestsSnapshot, ReadPullRequests,
     SessionId, StartPullRequestWait, Value, Wait, WaitEnd, WaitUntil, json,
 };
+use std::time::Duration;
 
 pub(in crate::tools) const READ: &str = "get_pull_requests";
 pub(in crate::tools) const WAIT: &str = protocol::worker::WAITS_TOOL;
@@ -51,14 +52,19 @@ pub(in crate::tools) async fn read(asks: &Asks, session: &SessionId, params: &Ma
     }
 }
 
-pub(in crate::tools) async fn start(asks: &Asks, session: &SessionId, params: &Map<String, Value>) -> Value {
+pub(in crate::tools) async fn start(
+    asks: &Asks,
+    wait_poll: Duration,
+    session: &SessionId,
+    params: &Map<String, Value>,
+) -> Value {
     let asked = match arguments(params) {
         Ok(asked) => asked,
         Err(error) => return Called::failed(error).to_json(),
     };
     match asks.ask(session.clone(), asked).await {
         Ok(answer) => {
-            let mut task = super::super::wait::task(&answer.wait, answer.pull_request.as_ref());
+            let mut task = super::super::wait::task(&answer.wait, answer.pull_request.as_ref(), wait_poll);
             if answer.wait.ended.is_none() {
                 task["resultType"] = "task".into();
             } else {

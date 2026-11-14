@@ -14,6 +14,7 @@ use crate::hub::HubDirs;
 use crate::provider_set::ProviderSet;
 use crate::store::tests::store_with_session;
 use crate::store::{InstanceStage, Store};
+use crate::timers::Timers;
 
 /// Makes and destroys nothing, and says it has unless it's told to refuse. One that holds its first start says so on
 /// `started`, and waits for `go_on` before refusing it.
@@ -94,7 +95,7 @@ fn hub_with(dir: &Path, fake: Fake) -> (Arc<Hub>, Arc<Fake>) {
     let fake = Arc::new(fake);
     let providers = ProviderSet::only(fake.clone());
     let store = Arc::new(store_with_session(dir));
-    let hub = Hub::new(Build::UNSTAMPED, store, HubDirs::in_dir(dir), providers, Vec::new(), false);
+    let hub = Hub::new(Build::UNSTAMPED, store, HubDirs::in_dir(dir), providers, Vec::new(), false, Timers::DEFAULT);
     (Arc::new(hub), fake)
 }
 
