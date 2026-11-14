@@ -42,6 +42,17 @@ pub(crate) struct Open {
     pub(crate) agent: bool,
 }
 
+/// What the session knows that its status and what's open don't say, which decides what some events do, as
+/// [`next_status`] says.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Known {
+    /// Whether an `idle` would come from before a prompt the agent has yet to take.
+    pub(crate) idle_is_stale: bool,
+    /// Whether the event is the hub dropping the prompt, or the compaction asked for, that started the turn the session
+    /// is in, before the agent has said anything of that turn.
+    pub(crate) opening_dropped: bool,
+}
+
 /// The status after an event. A prompt sent mid-turn folds into that turn and produces no result of
 /// its own, so `AgentState` is what says when the agent is really idle. `TurnEnded` also goes to
 /// idle, in case a future CLI stops sending it, and any state event after that corrects it. Work left
@@ -50,14 +61,16 @@ pub(crate) struct Open {
 /// as [`after_background`] says. `AgentInit` starts every turn, and is the only sign of one the agent starts by
 /// itself, which comes with no prompt and no state event. A prompt sent while the agent writes its last reply
 /// isn't folded in: the turn ends, and the agent takes the prompt as a turn of its own without saying it's running
-/// again, so taking a prompt says it. An `idle` that's `stale` comes from before a prompt the agent has yet to take,
-/// which it will, so it changes nothing. Only a request that's open waits on the person: an agent that says it needs
+/// again, so taking a prompt says it. An `idle` that's stale, as [`Known::idle_is_stale`] says, comes from before a
+/// prompt the agent has yet to take, which it will, so it changes nothing. Only a request that's open waits on the person: an agent that says it needs
 /// something before it asks, as Claude's CLI does, waits on nobody yet, and on nobody at all once the hub has answered
-/// what it asked.
-pub(crate) fn next_status(current: SessionStatus, body: &EventBody, open: Open, stale: bool) -> SessionStatus {
+/// what it asked. A turn whose prompt the hub dropped before the agent said anything of it never started, since the
+/// agent never had it, as [`never_started`] says.
+pub(crate) fn next_status(current: SessionStatus, body: &EventBody, open: Open, known: Known) -> SessionStatus {
     let between = if open.tasks > 0 { SessionStatus::Background } else { SessionStatus::Idle };
     match body {
-        EventBody::AgentState { state: AgentRunState::Idle } if stale => current,
+        EventBody::AgentState { state: AgentRunState::Idle } if known.idle_is_stale => current,
+        EventBody::PromptDropped { .. } if never_started(known, open) => between,
         // Either starts a turn, whose end says the agent is done.
         EventBody::UserPrompt { .. } | EventBody::CompactionAsked { .. } => SessionStatus::Running,
         EventBody::PromptTaken { .. } if current.between_turns() => SessionStatus::Running,
@@ -111,6 +124,20 @@ pub(crate) fn next_status(current: SessionStatus, body: &EventBody, open: Open, 
     }
 }
 
+/// Whether the event is the hub dropping the prompt, or the compaction asked for, that started a turn the agent never
+/// had, so the turn never started, and a running agent is between turns again, which it would otherwise never say. With
+/// no agent running, the exit that says why it couldn't be started cuts the turn off instead.
+pub(crate) fn never_started(known: Known, open: Open) -> bool {
+    known.opening_dropped && open.agent
+}
+
+/// Whether the agent says `body` of the turn it's in, so the prompt that started the turn is one it had, rather than
+/// of its run, as its start and its limits are, or of before the turn, as an `idle` that's stale is.
+pub(crate) fn of_the_turn(body: &EventBody, known: Known) -> bool {
+    let stale = known.idle_is_stale && matches!(body, EventBody::AgentState { state: AgentRunState::Idle });
+    !stale && !matches!(body, EventBody::AgentStarted { .. } | EventBody::AgentLimits { .. })
+}
+
 /// Whether an event that took the session's status `from` one `to` another, and the work in the background from `had`
 /// tasks to `has`, left it waiting for what the agent does once the last of that work has gone between turns. However
 /// that work ended, the CLI says next either that it's running again, in a turn of its own that takes in how the work
@@ -137,11 +164,12 @@ pub(crate) fn works_unattended(status: SessionStatus, background_tasks: usize) -
 /// starts working from anything else, including picking up again by itself after work in the background. It ends when
 /// the agent is between turns, idle or with that work still going, which makes what it said its newest reply, and it
 /// ended as the turn's end says, when that's what ends it. A turn the agent was cut off from doesn't end, since the
-/// session shows it as interrupted instead.
+/// session shows it as interrupted instead, and nor does one whose prompt was dropped, which never started, since
+/// nothing replied, as [`next_status`] says.
 pub(crate) fn turn_edge(current: SessionStatus, next: SessionStatus, body: &EventBody) -> TurnEdge {
     match (current.in_turn(), next.in_turn()) {
         (false, true) => TurnEdge::Starts,
-        (true, false) if next.between_turns() => {
+        (true, false) if next.between_turns() && !matches!(body, EventBody::PromptDropped { .. }) => {
             let outcome = if let EventBody::TurnEnded { outcome, .. } = body { Some(*outcome) } else { None };
             TurnEdge::Ends(outcome)
         }

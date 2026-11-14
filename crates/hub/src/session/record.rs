@@ -253,6 +253,6 @@ fn take(state: &mut LiveState, origin: Origin, appended: &Appended, next: Next) 
     let others_before = others(&state.tail);
     state.tail.on_event(seq, origin.run(), body);
     let ended_others = others(&state.tail) < others_before;
-    state.progress.take(next, appended.event.ts_ms, appended.untaken.clone());
+    state.progress.take(next, seq, appended.event.ts_ms, appended.untaken.clone());
     ended_others
 }
