@@ -37,6 +37,7 @@ pub fn session(id: &str) -> Session {
         context: None,
         prompt_cache: None,
         account: None,
+        assigned_account: None,
         queued: Vec::new(),
         queue_held: false,
         draft: Draft::default(),

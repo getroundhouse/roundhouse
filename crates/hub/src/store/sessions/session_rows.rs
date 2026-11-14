@@ -71,6 +71,8 @@ pub(in super::super) fn session_from_row(row: &Row) -> rusqlite::Result<StoredSe
             // Written only by this hub, as JSON. One it can't read is as good as none, until the agent next says.
             context: json_at(row, 21)?,
             account: row.get::<_, Option<String>>(22)?.map(Into::into),
+            // Not kept until this hub can move a chat.
+            assigned_account: None,
             user_active_at_ms: row.get(23)?,
             // Written only by this hub, as JSON. One it can't read is as good as none, until the agent next asks.
             prompt_cache: json_at(row, 24)?,

@@ -1,10 +1,12 @@
 //! The requests about a session's record: making one, listing and reading them, what it runs with, closing and
-//! reopening it, how far it's been read, its title, and whose account its agent runs under.
+//! reopening it, how far it's been read, its title, whose account its agent runs under, and moving it to another.
 
 use serde::{Deserialize, Serialize};
 
 use super::{ClientRequest, ClientResponse, Reply, Request};
-use crate::model::{self, AgentKind, ClientRequestId, Seq, Session, SessionId, SessionSettingsChange, WorkspaceId};
+use crate::model::{
+    self, AccountId, AgentKind, ClientRequestId, Seq, Session, SessionId, SessionSettingsChange, WorkspaceId,
+};
 
 /// Sending the same `client_request_id` again returns the session it made. It's refused for a kind of agent the hub
 /// doesn't run, and for an effort or an approval mode the agent isn't offered, as
@@ -188,6 +190,40 @@ impl Request for SessionRename {
 
     fn into_request(self) -> ClientRequest {
         ClientRequest::SessionRename(self)
+    }
+}
+
+/// Moves the chat to `account`, an account the person added a login for, so every launch of its agent, resume and title
+/// call takes that login from then on, whatever its kind's default becomes, as [`Session::assigned_account`] says.
+///
+/// A running agent can't change its login, so one running under another account is stopped, and the chat's next
+/// launch resumes the conversation under `account`. While that agent counts as running, as
+/// [`SessionStatus::counts_as_running`](crate::model::SessionStatus::counts_as_running) says, stopping it cuts its
+/// work short, so the move is refused with `NeedsForce`, changing nothing, unless `force` says to stop it anyway,
+/// which leaves the chat stopped short, as closing it would. One that's only waiting on pull requests doesn't count:
+/// it's started again at once under `account`, and goes on waiting, since the hub keeps its waits, unless the chat's
+/// queue is held for the person, as after a turn that failed, when it's started only once they send something, and
+/// hears how its wait ended then. An agent already running under `account` is left alone. The chat's record names
+/// `account` as the one its agent runs under from the move, as [`Session::account`] says.
+///
+/// Refused with `NotFound` when there's no such session or account, with `InvalidRequest` when the hub can hold no
+/// login for the chat's kind of agent or the account isn't a login added for that kind, and with `Conflict` when its
+/// login has ended or been disconnected, as choosing a default is, since the chat couldn't launch under it. The same
+/// again changes nothing more. A hub older than this refuses it as unsupported.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct SessionAssignAccount {
+    pub id: SessionId,
+    pub account: AccountId,
+    /// Stops an agent that counts as running under another account, rather than refusing.
+    #[serde(default)]
+    pub force: bool,
+}
+
+impl Request for SessionAssignAccount {
+    type Reply = Session;
+
+    fn into_request(self) -> ClientRequest {
+        ClientRequest::SessionAssignAccount(self)
     }
 }
 

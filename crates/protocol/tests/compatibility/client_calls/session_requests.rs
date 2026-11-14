@@ -75,6 +75,30 @@ fn every_request_about_a_session_keeps_its_form() {
 }
 
 #[test]
+fn moving_a_chat_to_an_account_keeps_its_form() {
+    let moving = sessions::SessionAssignAccount { id: "s".into(), account: "claude-1".into(), force: true };
+
+    asked(
+        ClientRequest::SessionAssignAccount(moving),
+        r#"{"method":"session_assign_account","id":"s","account":"claude-1","force":true}"#,
+    );
+}
+
+/// So a client that never stops an agent at work can leave `force` out, and one that leaves out where the chat goes
+/// isn't taken to mean anywhere.
+#[test]
+fn moving_a_chat_without_saying_to_force_it_doesnt_and_without_saying_where_is_refused() {
+    let line = br#"{"id":7,"request":{"method":"session_assign_account","id":"s","account":"claude-1"}}"#;
+    let nowhere = br#"{"id":7,"request":{"method":"session_assign_account","id":"s"}}"#;
+
+    let frame: protocol::client::ClientFrame = frame::decode(line).unwrap();
+
+    let ClientRequest::SessionAssignAccount(moved) = frame.request else { panic!("{:?}", frame.request) };
+    assert!(!moved.force);
+    assert!(frame::decode::<protocol::client::ClientFrame>(nowhere).is_err());
+}
+
+#[test]
 fn every_request_that_reads_a_sessions_log_keeps_its_form() {
     let read = ClientRequest::SessionRead(log::SessionRead {
         id: "s".into(),
