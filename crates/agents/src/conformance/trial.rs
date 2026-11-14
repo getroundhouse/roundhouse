@@ -4,8 +4,9 @@
 use std::fmt;
 use std::time::{Duration, Instant};
 
-use protocol::event::{CallKind, ContentBlock, EventBody, TurnOutcome};
-use protocol::model::{AgentSessionId, ModelName, RunId};
+use protocol::capability::{Capabilities, laws};
+use protocol::event::{CallKind, ContentBlock, EventBody, SessionEvent, TurnOutcome};
+use protocol::model::{AgentSessionId, ModelName, Place, RunId, Seq};
 
 use super::scenario::{Against, Failed, Scenario};
 use crate::AgentOutput;
@@ -18,14 +19,42 @@ pub struct Seen {
     pub output: AgentOutput,
 }
 
-/// Everything the adapter said in a trial, and when its steps marked what they did.
+/// Everything the adapter said in a trial, what a hub would have recorded of it, and when its steps marked what they
+/// did.
 #[derive(Debug, Default)]
 pub struct Trial {
     pub seen: Vec<Seen>,
+    /// What a hub would have recorded, numbered as it numbers its log.
+    pub log: Vec<SessionEvent>,
+    /// What each run claims.
+    pub claims: Vec<(RunId, Capabilities)>,
     pub marks: Vec<(&'static str, Instant)>,
 }
 
+/// Records `body` at the end of `log`, under `run`, numbered as a hub numbers its log, and returns where.
+pub(super) fn record(log: &mut Vec<SessionEvent>, run: Option<RunId>, body: EventBody) -> Seq {
+    let (seq, place) = (Seq::new(log.len() as u64 + 1), Place::default());
+    log.push(SessionEvent { session_id: "trial".into(), seq, ts_ms: 0, run, subagent: None, place, body, raw: None });
+    seq
+}
+
 impl Trial {
+    /// Whether the trial's log keeps the capability laws: that it settles each prompt, request, call and subagent
+    /// once, records nothing of a run after it exited, and records nothing its run doesn't claim.
+    pub fn laws(&self) -> Result<(), String> {
+        let none = Capabilities::default();
+        let claims = |run: RunId| self.claims.iter().find(|(of, _)| *of == run).map_or(&none, |(_, claims)| claims);
+        let breaches = laws::check(&self.log, claims);
+        if breaches.is_empty() {
+            return Ok(());
+        }
+        let said = |breach: &laws::Breach| {
+            let body = self.log.iter().find(|event| event.seq == breach.seq).map(|event| &event.body);
+            format!("{:?} at {body:?}", breach.law)
+        };
+        Err(breaches.iter().map(said).collect::<Vec<_>>().join("; "))
+    }
+
     /// Every event, of every run, in order.
     pub fn events(&self) -> impl Iterator<Item = &EventBody> {
         self.seen
@@ -188,6 +217,9 @@ impl Report {
             Err(_) => Vec::new(),
         };
         checks.extend(also);
+        if steps.is_ok() {
+            checks.push(("the log keeps the capability laws", trial.laws()));
+        }
         Report {
             scenario: scenario.name,
             played,
@@ -233,5 +265,44 @@ impl fmt::Display for Report {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use protocol::capability::Capabilities;
+    use protocol::event::EventBody;
+    use protocol::model::{PermissionMode, RunId, Seq};
+    use protocol::prompt::Prompt;
+
+    use super::Trial;
+
+    /// A trial whose one run took its prompt `taken` times, then said it went into plan mode, which it claims to be
+    /// able to do or not.
+    fn trial(taken: usize, claims_modes: bool) -> Trial {
+        let run = Some(RunId::new(1));
+        let mut log = Vec::new();
+        let mut record = |run, body| super::record(&mut log, run, body);
+        record(run, EventBody::AgentStarted { pid: 1, resumed: false, build: None, previous_build: None });
+        record(None, EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("Go") });
+        for _ in 0..taken {
+            record(run, EventBody::PromptTaken { prompt: Seq::new(2) });
+        }
+        record(run, EventBody::AgentMode { permission_mode: PermissionMode::Plan });
+        let claims = if claims_modes {
+            crate::codex::description().capabilities.unwrap_or_default()
+        } else {
+            Capabilities::default()
+        };
+        Trial { log, claims: vec![(RunId::new(1), claims)], ..Trial::default() }
+    }
+
+    #[test]
+    fn a_log_that_keeps_the_laws_passes_and_one_that_breaks_them_says_how() {
+        assert_eq!(trial(1, true).laws(), Ok(()));
+        let twice = trial(2, true).laws().unwrap_err();
+        assert!(twice.contains("PromptSettlesOnce"), "{twice}");
+        let unclaimed = trial(1, false).laws().unwrap_err();
+        assert!(unclaimed.contains("OnlyWhatsClaimed"), "{unclaimed}");
     }
 }

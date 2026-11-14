@@ -42,9 +42,22 @@ impl NativeRequest {
     }
 }
 
+/// How a root turn ended, as Codex said, held while a cancel waits for it, so a turn that finished as it was cancelled
+/// is recorded as it finished.
+pub(super) struct Ended {
+    pub(super) outcome: protocol::event::TurnOutcome,
+    pub(super) error: Option<String>,
+    pub(super) raw: String,
+}
+
 pub(super) struct Conversation {
     pub(super) thread: Option<ThreadId>,
     pub(super) turn: Option<TurnId>,
+    /// The root turn that ended last. It's set under the same lock that clears `turn`, so a turn that `turn/start`
+    /// answered with, but that ended before its caller got the answer, isn't taken back as the active one.
+    pub(super) last_ended: Option<TurnId>,
+    /// The end of the turn a cancel is waiting for, which the cancel records.
+    pub(super) held_end: Option<Ended>,
     pub(super) settings: SessionSettings,
     /// Settings accepted while working belong to the next turn, not the one finishing.
     pub(super) turn_mode: Option<protocol::model::PermissionMode>,
@@ -64,6 +77,8 @@ impl Conversation {
         Self {
             thread: None,
             turn: None,
+            last_ended: None,
+            held_end: None,
             settings,
             turn_mode: None,
             untaken: VecDeque::new(),
@@ -75,6 +90,11 @@ impl Conversation {
             reply: None,
             cancelling: false,
         }
+    }
+    /// Whether the agent itself, rather than one of its subagents, has a request open, which a new turn of its own
+    /// would leave unanswered. A subagent's runs on its own thread, so it holds up nothing of the agent's.
+    pub(super) fn asking(&self) -> bool {
+        self.waiting.values().any(|waiting| waiting.parent.is_none())
     }
     pub(super) fn work(&mut self, parent: Option<&ToolUseId>) -> &mut Work {
         self.work.entry(parent.cloned()).or_default()

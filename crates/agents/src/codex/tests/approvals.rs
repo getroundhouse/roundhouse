@@ -17,7 +17,7 @@ fn native_questions_preserve_choices_open_text_and_secrets() {
 use super::harness::Harness;
 use crate::{AgentOutput, AgentProcess};
 use protocol::capability::{Control, approvals::Decision};
-use protocol::event::EventBody;
+use protocol::event::{EventBody, TurnOutcome};
 use protocol::model::{PermissionMode, Seq, SessionSettingsChange};
 use protocol::prompt::Prompt;
 
@@ -98,5 +98,80 @@ async fn an_unrepresentable_effort_cannot_silently_become_the_native_default() {
     };
     assert!(agent.control(&Control::Change(settings)).await.is_err());
     assert_eq!(agent.shared.state.lock().settings, before);
+    agent.stop().await;
+}
+
+#[tokio::test]
+async fn codex_refusing_the_turn_after_an_approved_plan_ends_the_plans_turn_and_leaves_it_running() {
+    use protocol::capability::asking::PlanContext;
+    let mut h = Harness::new(&json!([{"on":"turn/start","actions":[{"error":{"code":-32600,"message":"busy"}}]}]));
+    let agent = h.started().await;
+    crate::codex::approvals::plan(&agent.shared, "Make the change".into()).await;
+    let id = loop {
+        if let AgentOutput::Event { body: EventBody::ApprovalRequested { approval_id, .. }, .. } = h.next().await {
+            break approval_id;
+        }
+    };
+    let decision = Decision::ApprovePlan { then: crate::codex::claims::full_access(), context: PlanContext::Kept };
+    assert!(agent.control(&Control::Decide { approval: id, decision }).await.is_err());
+    assert!(!agent.is_gone(), "a refusal proves nothing was started, so there's nothing to stop");
+    agent.stop().await;
+    let mut ends = Vec::new();
+    while let Some(output) = h.rx.recv().await {
+        if let AgentOutput::Event { body: EventBody::TurnEnded { outcome, errors, .. }, .. } = output {
+            ends.push((outcome, errors));
+        }
+    }
+    assert_eq!(ends, [(TurnOutcome::Error, vec!["busy".to_owned()])], "the plan's turn ends, with why");
+}
+
+#[tokio::test]
+async fn codex_hears_only_the_answers_each_question_allows() {
+    use protocol::capability::asking::Choose;
+    use protocol::event::QuestionAnswer;
+    let mut h = Harness::new(&json!([{"on":"turn/start","actions":[
+        {"result":{"turn":{"id":"asking"}}},
+        {"method":"turn/started","params":{"turn":{"id":"asking"}}},
+        {"method":"item/completed","params":{"item":{"type":"userMessage"}}},
+        {"id":0,"method":"item/tool/requestUserInput","params":{"questions":[
+            {"id":"color","question":"Color?","options":[{"label":"Blue"},{"label":"Red"}]},
+            {"id":"name","question":"Name?","options":[{"label":"Ann"}],"isOther":true}
+        ]}}
+    ]}]));
+    let agent = h.started().await;
+    agent.send_prompt(Seq::FIRST, &Prompt::new("Ask")).await.unwrap();
+    let id = loop {
+        if let AgentOutput::Event { body: EventBody::ApprovalRequested { approval_id, request, .. }, .. } =
+            h.next().await
+        {
+            let protocol::capability::approvals::Asks::Questions { questions } = request.unwrap().asks else {
+                panic!("not questions")
+            };
+            assert!(questions.iter().all(|question| question.choose == Choose::One));
+            break approval_id;
+        }
+    };
+    // Typed words for a question with only choices, and a second pick where one is asked for, go nowhere.
+    let answers = vec![
+        QuestionAnswer { picked: vec![1, 0], typed: Some("Green".into()) },
+        QuestionAnswer { picked: Vec::new(), typed: Some("Bo".into()) },
+    ];
+    agent.control(&Control::Decide { approval: id, decision: Decision::Answer { answers } }).await.unwrap();
+    agent.shared.rpc.write(&json!({"method":"test/barrier"})).await.unwrap();
+    let mut answered = None;
+    loop {
+        if let AgentOutput::Event { body: EventBody::AgentOther { kind, .. }, raw: Some(raw), .. } = h.next().await
+            && kind == "test/request"
+        {
+            let value: serde_json::Value = serde_json::from_str(&raw).unwrap();
+            if value["params"]["method"] == "test/barrier" {
+                break;
+            }
+            if value["params"]["id"] == 0 {
+                answered = Some(value["params"]["result"]["answers"].clone());
+            }
+        }
+    }
+    assert_eq!(answered, Some(json!({"color":{"answers":["Red"]},"name":{"answers":["Bo"]}})));
     agent.stop().await;
 }

@@ -332,19 +332,44 @@ fn what_a_worker_sends_again_is_taken_in_once() {
 
 #[test]
 fn the_hub_allows_only_a_tools_use_asked_about_with_full_access_and_only_when_set_to() {
+    use protocol::capability::approvals::{Asks, Request};
+    use protocol::capability::calls::Call;
     use protocol::event::{Asking, CallKind};
     use protocol::model::PermissionMode::{FullAccess, Plan, Unknown};
 
-    let tool = Asking::ToolUse { call: Some(CallKind::Command) };
+    let asked = |asking: Option<Asking>| {
+        let mut body: EventBody = protocol::fixtures::approval_request("a", "Bash").into();
+        let EventBody::ApprovalRequested { asking: kept, .. } = &mut body else { unreachable!() };
+        *kept = asking.map(Box::new);
+        body
+    };
+    let typed = |asks: Asks, always: bool| {
+        let mut body = asked(None);
+        let EventBody::ApprovalRequested { request, .. } = &mut body else { unreachable!() };
+        *request = Some(Box::new(Request { asks, suggested: Vec::new(), always, why: None }));
+        body
+    };
+    let tool = asked(Some(Asking::ToolUse { call: Some(CallKind::Command) }));
+    let call = || Asks::Call { call: Call::Other { tool: "t".into(), input: serde_json::Value::Null } };
+    assert!(the_hub_allows(FullAccess, &tool, true));
+    assert!(the_hub_allows(FullAccess, &asked(Some(Asking::ToolUse { call: None })), true), "whatever kind of call");
+    for always in [true, false] {
+        assert!(the_hub_allows(FullAccess, &typed(call(), always), true), "a typed call, asked always or not");
+    }
+    assert!(!the_hub_allows(FullAccess, &tool, false), "only when set to");
+    assert!(!the_hub_allows(FullAccess, &typed(call(), true), false), "a typed one only when set to");
+    for mode in [Plan, Unknown] {
+        assert!(!the_hub_allows(mode, &tool, true), "{mode:?} asks the person");
+        assert!(!the_hub_allows(mode, &typed(call(), true), true), "{mode:?} asks the person of a typed one");
+    }
     let questions = Asking::Questions { questions: Vec::new() };
     let plan = Asking::Plan { plan: "Do it".into() };
-    assert!(the_hub_allows(FullAccess, Some(&tool), true));
-    assert!(the_hub_allows(FullAccess, Some(&Asking::ToolUse { call: None }), true), "whatever kind of call");
-    assert!(!the_hub_allows(FullAccess, Some(&tool), false), "only when set to");
-    for mode in [Plan, Unknown] {
-        assert!(!the_hub_allows(mode, Some(&tool), true), "{mode:?} asks the person");
+    for asking in [Some(questions), Some(plan), Some(Asking::Unknown), None] {
+        assert!(!the_hub_allows(FullAccess, &asked(asking.clone()), true), "{asking:?} is the person's to answer");
     }
-    for asking in [Some(&questions), Some(&plan), Some(&Asking::Unknown), None] {
-        assert!(!the_hub_allows(FullAccess, asking, true), "{asking:?} is the person's to answer");
+    for asks in
+        [Asks::Questions { questions: Vec::new() }, Asks::Plan { plan: "Do it".into(), file: None }, Asks::Unknown]
+    {
+        assert!(!the_hub_allows(FullAccess, &typed(asks.clone(), true), true), "{asks:?} is the person's to answer");
     }
 }

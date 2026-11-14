@@ -97,17 +97,17 @@ async fn resolving_a_child_approval_restores_background_state_when_the_root_is_f
                 .await
                 .unwrap();
         }
+        // Codex withdrawing its request is recorded here. A decision is the hub's to record, before it's sent.
+        let mut resolved = 0;
         loop {
-            if matches!(h.next().await, AgentOutput::Event { body: EventBody::ApprovalResolved { .. }, .. }) {
-                break;
-            }
-        }
-        loop {
-            if let AgentOutput::Event { body: EventBody::AgentState { state }, .. } = h.next().await {
+            let AgentOutput::Event { body, .. } = h.next().await else { continue };
+            if let EventBody::AgentState { state } = body {
                 assert_eq!(state, AgentRunState::Idle);
                 break;
             }
+            resolved += usize::from(matches!(body, EventBody::ApprovalResolved { .. }));
         }
+        assert_eq!(resolved, usize::from(native));
         assert!(agent.shared.state.lock().subagents.runs.values().any(|run| !run.ended));
         agent.stop().await;
     }

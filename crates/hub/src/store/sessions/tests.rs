@@ -294,3 +294,22 @@ fn what_was_last_recorded_from_a_worker_is_kept_with_the_event_and_left_by_other
     store.append(&id, None, &notice("d"), None, None, heard(9)).unwrap();
     assert_eq!(store.recorded_from_worker(&id).unwrap(), Some((RunId::new(2), 9)));
 }
+
+#[test]
+fn each_chats_conversation_is_kept_as_its_id_becomes_one_its_agent_can_report() {
+    let dir = tempfile::tempdir().unwrap();
+    let rows = r"
+        INSERT INTO sessions (id, workspace_id, agent, agent_session_id, model, permission_mode, effort, status,
+            last_seq, created_at_ms, updated_at_ms)
+            VALUES ('s', 'w', 'claude', 'conversation-s', 'opus', 'bypassPermissions', 'xhigh', 'idle', 0, 0, 0),
+                   ('t', 'w', 'claude', 'conversation-t', 'opus', 'plan', 'high', 'idle', 0, 0, 0);
+    ";
+    let store = older::store_from_before(dir.path(), schema::BEFORE_AGENT_RUNS, rows);
+
+    for id in ["s", "t"] {
+        let kept = store.get_session(&id.into()).unwrap();
+        let conversation = kept.agent_session_id.as_ref().map(protocol::model::AgentSessionId::as_str);
+        assert_eq!(conversation, Some(format!("conversation-{id}").as_str()), "the chat resumes what it had");
+        assert_eq!(kept.session.agent_capabilities, None, "no run has said what it claims");
+    }
+}

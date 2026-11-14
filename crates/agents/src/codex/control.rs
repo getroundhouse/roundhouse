@@ -11,6 +11,7 @@ use serde_json::{Value, json};
 use super::{
     approvals, notifications,
     running::{CodexProcess, Shared},
+    state::Ended,
 };
 use crate::{AgentError, AgentProcess};
 
@@ -131,7 +132,7 @@ async fn prompt_to(shared: &Shared, seq: Seq, prompt: &Prompt<AttachmentFile>) -
     }
     {
         let mut state = shared.state.lock();
-        if !state.waiting.is_empty() {
+        if state.asking() {
             return Err(AgentError::Refused("Answer Codex's open request before sending another prompt".into()));
         }
         state.untaken.push_back(seq);
@@ -141,7 +142,7 @@ async fn prompt_to(shared: &Shared, seq: Seq, prompt: &Prompt<AttachmentFile>) -
     {
         let mut state = shared.state.lock();
         state.sending = None;
-        if matches!(result, Err(AgentError::Refused(_) | AgentError::UnknownRequest(_))) {
+        if result.as_ref().is_err_and(super::rpc::refused) {
             state.untaken.retain(|pending| *pending != seq);
         }
     }
@@ -160,7 +161,7 @@ async fn prompt_to(shared: &Shared, seq: Seq, prompt: &Prompt<AttachmentFile>) -
             }
             Ok(())
         }
-        Err(error @ (AgentError::Refused(_) | AgentError::UnknownRequest(_))) => Err(error),
+        Err(error) if super::rpc::refused(&error) => Err(error),
         Err(error) => {
             // A failed write or missing reply does not prove nonacceptance. Stop and drain native observations;
             // supervision settles this delivery once, instead of telling the hub it is safe to send again.
@@ -187,10 +188,7 @@ pub(super) async fn turn(shared: &Shared, input: Vec<Value>) -> Result<(), Agent
 async fn cancel(shared: &Shared) -> Result<(), AgentError> {
     let (thread, turn) = {
         let mut state = shared.state.lock();
-        if state.turn.is_none()
-            && state.waiting.values().all(|waiting| waiting.parent.is_some())
-            && state.untaken.is_empty()
-        {
+        if state.turn.is_none() && !state.asking() && state.untaken.is_empty() {
             return Ok(());
         }
         state.cancelling = true;
@@ -198,11 +196,17 @@ async fn cancel(shared: &Shared) -> Result<(), AgentError> {
     };
     let mut done = shared.turn_done.subscribe();
     if let (Some(thread), Some(turn)) = (&thread, &turn) {
-        if let Err(error) = shared.rpc.ask("turn/interrupt", json!({"threadId":thread,"turnId":turn})).await {
+        let interrupted = shared.rpc.ask("turn/interrupt", json!({"threadId":thread,"turnId":turn})).await;
+        // The turn can have ended before Codex read the interrupt, which it then refuses as having no turn going. Its
+        // end follows or has come, and is waited for as an accepted interrupt's is. Any other error leaves a turn that
+        // may still be going, so the process is stopped.
+        if let Err(error) = interrupted
+            && !super::rpc::no_active_turn(&error)
+        {
             shared.stop().await;
             return Err(error);
         }
-        if tokio::time::timeout(std::time::Duration::from_secs(30), done.wait_for(|ended| ended.as_ref() == Some(turn)))
+        if tokio::time::timeout(super::turn::END_WAIT, done.wait_for(|ended| ended.as_ref() == Some(turn)))
             .await
             .is_err()
         {
@@ -215,16 +219,18 @@ async fn cancel(shared: &Shared) -> Result<(), AgentError> {
         return Err(error);
     }
     settle(shared, None).await;
-    {
+    let held = {
         let mut state = shared.state.lock();
         state.turn = None;
         state.cancelling = false;
         state.turn_mode = None;
         state.plan = None;
-        state.reply = None;
+        state.held_end.take()
+    };
+    match held {
+        Some(Ended { outcome, error, raw }) => notifications::record_end(shared, outcome, error, Some(raw)).await,
+        None => notifications::record_end(shared, TurnOutcome::Cancelled, None, None).await,
     }
-    shared.event(notifications::ended(TurnOutcome::Cancelled, None), None).await;
-    report_state(shared).await;
     Ok(())
 }
 

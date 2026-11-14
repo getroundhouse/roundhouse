@@ -2,12 +2,12 @@ use protocol::capability::{
     approvals::{AfterDenial, Asks, Decision, Remember, Request},
     asking::{Choose, PlanContext, Question, QuestionOption, TypedAnswer},
 };
-use protocol::event::{AgentRunState, ApprovalDecision, ApprovalOutcome, EventBody, NoticeLevel};
+use protocol::event::{AgentRunState, ApprovalDecision, ApprovalOutcome, EventBody, NoticeLevel, TurnOutcome};
 use protocol::model::{ApprovalId, PermissionMode, ToolUseId};
 use serde_json::{Value, json};
 
 use super::{
-    control,
+    control, notifications,
     running::Shared,
     state::{NativeRequest, Waiting},
 };
@@ -112,6 +112,8 @@ async fn ask(
     shared.event(EventBody::AgentState { state: AgentRunState::RequiresAction }, None).await;
 }
 
+/// Passes the person's decision on to Codex. The hub has recorded it already, with any secret answer taken out, so
+/// nothing of it is recorded here.
 pub(super) async fn decide(shared: &Shared, id: &ApprovalId, decision: &Decision) -> Result<(), AgentError> {
     let waiting = shared
         .state
@@ -123,60 +125,29 @@ pub(super) async fn decide(shared: &Shared, id: &ApprovalId, decision: &Decision
         shared.state.lock().waiting.insert(id.clone(), waiting);
         return Err(unsupported_decision());
     }
-    let outcome = match decision {
-        Decision::Deny { .. } | Decision::KeepPlanning { .. } => ApprovalOutcome::Denied,
-        Decision::Allow { .. }
-        | Decision::Answer { .. }
-        | Decision::ApprovePlan { .. }
-        | Decision::Grant { .. }
-        | Decision::Respond(_) => ApprovalOutcome::Allowed,
-    };
-    let answers_by_position = public_answers(decision, &waiting.request.asks);
-    shared
-        .event(
-            EventBody::ApprovalResolved {
-                approval_id: id.clone(),
-                outcome,
-                answers_by_text: None,
-                answers_by_position,
-                by_setting: false,
-            },
-            None,
-        )
-        .await;
     if let Err(error) = answer(shared, &waiting, decision).await {
+        // Codex refusing what answering asked of it, such as the turn after a plan, proves it did nothing. Anything
+        // else may have reached it, so the process is stopped rather than left in a state nobody knows.
+        let refused = super::rpc::refused(&error);
+        if refused && matches!(waiting.native, NativeRequest::Plan) {
+            // The plan's turn was held open for its decision, and nothing will carry it on, so it ends here.
+            notifications::record_end(shared, TurnOutcome::Error, Some(error.to_string()), None).await;
+            return Err(error);
+        }
         shared
             .event(
                 EventBody::Notice { level: NoticeLevel::Error, message: error.to_string(), parent_tool_use_id: None },
                 None,
             )
             .await;
-        shared.stop().await;
+        if !refused {
+            shared.stop().await;
+        }
+        control::report_state(shared).await;
         return Err(error);
     }
     control::report_state(shared).await;
     Ok(())
-}
-
-// Secret answers reach the CLI but never the adapter's output stream.
-fn public_answers(decision: &Decision, asks: &Asks) -> Option<Vec<protocol::event::QuestionAnswer>> {
-    if let (Decision::Answer { answers }, Asks::Questions { questions }) = (decision, asks) {
-        Some(
-            answers
-                .iter()
-                .enumerate()
-                .map(|(i, answer)| {
-                    if questions.get(i).is_some_and(|q| q.typed == TypedAnswer::Secret) {
-                        protocol::event::QuestionAnswer::default()
-                    } else {
-                        answer.clone()
-                    }
-                })
-                .collect(),
-        )
-    } else {
-        None
-    }
 }
 
 fn can_answer(native: &NativeRequest, decision: &Decision) -> bool {
@@ -225,24 +196,22 @@ async fn answer(shared: &Shared, waiting: &Waiting, decision: &Decision) -> Resu
             let Asks::Questions { questions } = &waiting.request.asks else { return Err(unsupported_decision()) };
             let mut result = serde_json::Map::new();
             for (i, (key, question)) in keys.iter().zip(questions).enumerate() {
-                let words: Vec<_> = answers
-                    .get(i)
-                    .into_iter()
-                    .flat_map(|answer| {
-                        answer
-                            .picked
-                            .iter()
-                            .filter_map(|&index| question.options.get(usize::try_from(index).ok()?))
-                            .map(|option| option.label.as_str())
-                            .chain(answer.typed.as_deref())
-                    })
-                    .collect();
+                let words = answers.get(i).map_or_default(|answer| words(question, answer));
                 result.insert(key.clone(), json!({"answers":words}));
             }
             shared.rpc.write(&json!({"id":id,"result":{"answers":result}})).await
         }
         _ => Err(unsupported_decision()),
     }
+}
+
+/// What Codex is told was answered to `question`: the options picked, as many as it lets be picked, and what was typed
+/// where it lets an answer be typed, so nothing it ruled out reaches it.
+fn words<'a>(question: &'a Question, answer: &'a protocol::event::QuestionAnswer) -> Vec<&'a str> {
+    let picked = answer.picked.iter().filter_map(|&index| question.options.get(usize::try_from(index).ok()?));
+    let picked = picked.take(if question.choose == Choose::Several { usize::MAX } else { 1 });
+    let typed = answer.typed.as_deref().filter(|_| matches!(question.typed, TypedAnswer::Yes | TypedAnswer::Secret));
+    picked.map(|option| option.label.as_str()).chain(typed).collect()
 }
 
 pub(super) fn legacy(shared: &Shared, id: &ApprovalId, decision: &ApprovalDecision) -> Result<Decision, AgentError> {

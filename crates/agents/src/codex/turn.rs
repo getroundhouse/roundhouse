@@ -6,6 +6,11 @@ use serde_json::{Value, json};
 use super::{running::Shared, state::TurnId};
 use crate::AgentError;
 
+/// How long a turn's end is waited for once Codex has taken an interrupt of it, or said it's over by refusing a steer or
+/// an interrupt. Codex sends the end as the turn finishes, so it's already on the way, and this only bounds a Codex that
+/// broke that. It's as long as any answer from Codex is waited for, since a busy machine slows both alike.
+pub(super) const END_WAIT: Duration = super::rpc::REPLY_WAIT;
+
 pub(super) async fn send(shared: &Shared, input: Vec<Value>) -> Result<(), AgentError> {
     let (thread, active) = {
         let state = shared.state.lock();
@@ -15,13 +20,15 @@ pub(super) async fn send(shared: &Shared, input: Vec<Value>) -> Result<(), Agent
         let mut done = shared.turn_done.subscribe();
         match shared.rpc.ask("turn/steer", json!({"threadId":thread,"expectedTurnId":active,"input":input})).await {
             Ok(_) => return Ok(()),
-            // Native intake and completion can cross on the wire. This refusal proves the input was not accepted;
-            // finish that boundary before starting its next turn once, without retaining a second prompt queue.
-            Err(AgentError::Refused(message)) if message == "no active turn" => {
-                tokio::time::timeout(Duration::from_secs(30), done.wait_for(|id| id.as_ref() == Some(&active)))
-                    .await
-                    .map_err(|_| AgentError::NoAnswer)?
-                    .map_err(|_| AgentError::Exited)?;
+            // Taking a prompt and ending a turn can cross on the wire, which Codex refuses as having no turn to steer.
+            // The refusal proves the prompt wasn't taken. Once the turn it was for has been heard ending, the prompt
+            // starts the next one, once, without a queue of its own. Any other refusal is the prompt's, at once.
+            Err(refusal) if super::rpc::no_active_turn(&refusal) => {
+                match tokio::time::timeout(END_WAIT, done.wait_for(|id| id.as_ref() == Some(&active))).await {
+                    Ok(Ok(_)) => {}
+                    Ok(Err(_)) => return Err(AgentError::Exited),
+                    Err(_) => return Err(refusal),
+                }
             }
             Err(error) => return Err(error),
         }
@@ -32,7 +39,7 @@ pub(super) async fn send(shared: &Shared, input: Vec<Value>) -> Result<(), Agent
 async fn start(shared: &Shared, input: Vec<Value>) -> Result<(), AgentError> {
     let (thread, settings) = {
         let mut state = shared.state.lock();
-        if !state.waiting.is_empty() {
+        if state.asking() {
             return Err(AgentError::Refused("Answer Codex's open request before sending another prompt".into()));
         }
         state.turn_mode = Some(state.settings.permission_mode);
@@ -49,7 +56,7 @@ async fn start(shared: &Shared, input: Vec<Value>) -> Result<(), AgentError> {
     })).await?;
     let id: TurnId = serde_json::from_value(response["turn"]["id"].clone())?;
     let mut state = shared.state.lock();
-    if shared.turn_done.borrow().as_ref() != Some(&id) {
+    if state.last_ended.as_ref() != Some(&id) {
         state.turn = Some(id);
     }
     Ok(())

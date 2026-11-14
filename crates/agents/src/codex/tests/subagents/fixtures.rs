@@ -43,7 +43,15 @@ pub(super) fn command(thread: &str, turn: &str, call: &str, done: bool) -> Value
     )
 }
 
+/// Plays `actions` as Codex's answer to the prompt, which starts with the root turn. Codex takes the prompt as the turn
+/// starts, which is put in after it when `actions` don't say it, so no test sees the prompt dropped, at whatever point
+/// its answer is read.
 pub(super) async fn play(mut actions: Vec<Value>) -> Vec<AgentOutput> {
+    assert_eq!(actions.first(), Some(&turn("thread", "root-turn", "inProgress")), "the root turn starts first");
+    let taken = item("thread", "root-turn", json!({"type":"userMessage"}), true);
+    if !actions.contains(&taken) {
+        actions.insert(1, taken);
+    }
     actions.insert(0, json!({"result":{"turn":{"id":"root-turn"}}}));
     actions.push(json!({"method":"test/finished","params":{}}));
     let mut h = Harness::new(&json!([{"on":"turn/start","actions":actions}]));
