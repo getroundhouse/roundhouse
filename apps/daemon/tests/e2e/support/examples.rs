@@ -101,6 +101,12 @@ fn note(what: &str, waited: std::time::Duration, built: std::time::Duration, std
         })
         .map(str::to_string)
         .collect();
+    let mut env: Vec<String> = std::env::vars()
+        .filter(|(name, _)| ["CARGO", "RUST", "NEXTEST", "LD_"].iter().any(|p| name.starts_with(p)))
+        .map(|(name, value)| format!("env {name}={value}"))
+        .collect();
+    env.sort();
+    writeln!(file, "{}", env.join("\n")).unwrap();
     writeln!(file, "== {what}: waited {waited:?}, cargo {built:?}, pid {}\n{}", std::process::id(), kept.join("\n"))
         .unwrap();
 }

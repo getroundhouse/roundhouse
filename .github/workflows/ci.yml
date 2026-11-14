@@ -178,7 +178,13 @@ jobs:
       - run: cargo nextest run --profile ci --workspace --locked
       # Experiment only: what each test helper's build did.
       - if: always()
-        run: cat target/tmp/helper-builds.log || true
+        run: |
+          cat target/tmp/helper-builds.log || true
+          echo "== the step's environment"
+          env | grep -E '^(CARGO|RUST|NEXTEST|LD_)' | sort || true
+          RUSTC_BOOTSTRAP=1 cargo test --workspace --no-run --locked --unit-graph -Z unstable-options > "$RUNNER_TEMP/test.json"
+          RUSTC_BOOTSTRAP=1 cargo build --workspace --locked --example native_standin --unit-graph -Z unstable-options > "$RUNNER_TEMP/build.json"
+          python3 .github/experiment/compare_units.py "$RUNNER_TEMP/test.json" "$RUNNER_TEMP/build.json"
       - run: cargo test --workspace --doc --locked
       - if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
         run: cargo clean --workspace
