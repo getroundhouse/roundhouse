@@ -2,6 +2,8 @@
 
 mod compact;
 mod launch;
+#[cfg(test)]
+mod tests;
 
 mod requests;
 use requests::Asking;

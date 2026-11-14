@@ -1,127 +1,30 @@
 use super::super::approvals::note_approvals;
+use super::super::claims::clear_claims;
 use super::super::prompts::note_prompts;
 use super::super::sent::{Sent, note_sent};
 use super::super::subagents::note_subagents;
-use super::super::{Appended, Store, StoreError, lock, now_ms, place_column, place_of, seq_column, seq_of, text_of};
-use protocol::event::{AgentTask, ApprovalOutcome, EventBody, SessionEvent, TurnOutcome};
-use protocol::model::{ApprovalId, ClientMessageId, Place, RunId, Seq, SessionId, SessionStatus, ToolUseId};
+use super::super::{Appended, Store, StoreError, lock, now_ms, place_column, place_of, seq_column, seq_of};
+use super::change::{SessionChange, change_session};
+use protocol::event::{ApprovalOutcome, EventBody, SessionEvent};
+use protocol::model::{ApprovalId, ClientMessageId, Place, RunId, Seq, SessionId, ToolUseId};
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
-
-/// What an event changes about where a session's agent has got to, which commits with the event that brings it.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct StatusChange {
-    pub status: SessionStatus,
-    pub turn: TurnEdge,
-    /// What it's running in the background now, if the event changes that.
-    pub background_tasks: Option<Vec<AgentTask>>,
-}
-
-/// What a change of status does to the session's turns.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum TurnEdge {
-    /// The event starts a turn, so its time becomes when the newest turn started.
-    Starts,
-    /// The event ends a turn, so it becomes the session's newest reply, which ended as it says, if it says.
-    Ends(Option<TurnOutcome>),
-    /// It does neither, such as the agent stopping to ask, or going away mid-turn.
-    Neither,
-}
-
-impl From<SessionStatus> for StatusChange {
-    fn from(status: SessionStatus) -> Self {
-        Self { status, turn: TurnEdge::Neither, background_tasks: None }
-    }
-}
-
-/// What an event changes about its session, which commits with it.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct SessionChange {
-    pub status: Option<StatusChange>,
-    /// Whether the queue is held from here on.
-    pub queue_held: Option<bool>,
-    /// The run whose worker numbered what's recorded, and its number, which is the last recorded from that worker.
-    pub recorded: Option<(RunId, u64)>,
-    /// A current run opened its conversation. Its identity and claims commit with its initialization.
-    pub initialized: Option<Initialized>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Initialized {
-    pub conversation: Option<protocol::model::AgentSessionId>,
-    pub capabilities: Option<protocol::model::RunCapabilities>,
-}
-
-impl SessionChange {
-    /// Whether nothing on the session's record changes. Which number from its worker it has recorded isn't there.
-    pub fn is_none(&self) -> bool {
-        self.status.is_none() && self.queue_held.is_none() && self.initialized.is_none()
-    }
-}
-
-impl From<StatusChange> for SessionChange {
-    fn from(status: StatusChange) -> Self {
-        Self { status: Some(status), ..Self::default() }
-    }
-}
-
-impl From<SessionStatus> for SessionChange {
-    fn from(status: SessionStatus) -> Self {
-        StatusChange::from(status).into()
-    }
-}
-
-/// Makes `change` to the session, as part of the transaction that records the event at `seq`, at `ts_ms`.
-fn change_session(
-    tx: &Connection,
-    session_id: &SessionId,
-    seq: Seq,
-    ts_ms: i64,
-    change: SessionChange,
-) -> Result<(), StoreError> {
-    let id = session_id.as_str();
-    if let Some(init) = change.initialized {
-        tx.execute(
-            "UPDATE sessions SET agent_opened = 1, agent_session_id = coalesce(?, agent_session_id), agent_capabilities = ? WHERE id = ?",
-            params![init.conversation.as_ref().map(protocol::model::AgentSessionId::as_str),
-                init.capabilities.as_ref().map(serde_json::to_string).transpose()?, id],
-        )?;
-    }
-    if let Some(held) = change.queue_held {
-        tx.execute("UPDATE sessions SET queue_held = ? WHERE id = ?", params![held, id])?;
-    }
-    if let Some((run, through)) = change.recorded {
-        tx.execute(
-            "UPDATE sessions SET recorded_run = ?, recorded_through = ? WHERE id = ?",
-            params![run.get().cast_signed(), through.cast_signed(), id],
-        )?;
-    }
-    let Some(StatusChange { status, turn, background_tasks }) = change.status else { return Ok(()) };
-    if let Some(tasks) = background_tasks {
-        tx.execute(
-            "UPDATE sessions SET background_tasks = ? WHERE id = ?",
-            params![serde_json::to_string(&tasks)?, id],
-        )?;
-    }
-    let status = text_of(&status);
-    match turn {
-        TurnEdge::Starts => tx.execute(
-            "UPDATE sessions SET status = ?, turn_started_at_ms = ? WHERE id = ?",
-            params![status, ts_ms, id],
-        )?,
-        TurnEdge::Ends(outcome) => tx.execute(
-            "UPDATE sessions SET status = ?, reply_seq = ?, reply_outcome = ? WHERE id = ?",
-            params![status, seq_column(seq), outcome.as_ref().map(text_of), id],
-        )?,
-        TurnEdge::Neither => tx.execute("UPDATE sessions SET status = ? WHERE id = ?", params![status, id])?,
-    };
-    Ok(())
-}
 
 impl Appended {
     /// The event recorded before under the same `client_msg_id`, which recording it again leaves as it was.
     pub(super) fn already_recorded(event: SessionEvent) -> Self {
         let (dequeued, by_the_person, account, untaken, approvals) = (false, false, None, None, None);
-        Appended { event, duplicate: true, dequeued, by_the_person, account, untaken, approvals, subagents: Vec::new() }
+        let subagents = Vec::new();
+        Appended {
+            event,
+            duplicate: true,
+            dequeued,
+            by_the_person,
+            account,
+            untaken,
+            approvals,
+            subagents,
+            claims_taken_off: None,
+        }
     }
 }
 
@@ -213,7 +116,18 @@ fn append_in(tx: &Connection, session_id: &SessionId, recording: Recording<'_>) 
     };
     let subagents = note_subagents(tx, &event)?;
     clear_answer(tx, session_id, body)?;
-    Ok(Appended { event, duplicate: false, dequeued, by_the_person, account, untaken, approvals, subagents })
+    let claims_taken_off = clear_claims(tx, session_id, run, body)?;
+    Ok(Appended {
+        event,
+        duplicate: false,
+        dequeued,
+        by_the_person,
+        account,
+        untaken,
+        approvals,
+        subagents,
+        claims_taken_off,
+    })
 }
 
 impl Store {

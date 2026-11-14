@@ -5,20 +5,19 @@ use protocol::worker::{AgentControl, AgentSpec, WorkerRequest};
 use serde_json::{Value, json};
 
 #[test]
-fn a_chosen_conversation_starts_without_a_placeholder_and_resumes_the_reported_id() {
+fn a_launch_says_what_it_starts_from_in_its_own_form() {
     let wire = json!({"session_id":"s","run":4,"agent":"codex","cwd":"/w","start":"new",
-        "model":"gpt-6-luna","permission_mode":"bypassPermissions","effort":"low","env":[]});
+        "settings":{"model":"gpt-6-luna"},"env":[]});
     let mut spec: AgentSpec = serde_json::from_value(wire).unwrap();
 
     assert_eq!(spec.agent, AgentKind::Codex);
     assert_eq!(spec.start, Start::New { conversation: None });
-    let sent = serde_json::to_value(&spec).unwrap();
-    assert!(sent.get("agent_session_id").is_none());
-    assert_eq!(serde_json::from_value::<AgentSpec>(sent).unwrap(), spec);
+    assert_eq!(serde_json::from_value::<AgentSpec>(serde_json::to_value(&spec).unwrap()).unwrap(), spec);
 
     spec.start = Start::Resume { conversation: "chosen-by-cli".into() };
     let sent = serde_json::to_value(&spec).unwrap();
-    assert_eq!(sent["agent_session_id"], "chosen-by-cli");
+    assert_eq!((&sent["start"], &sent["conversation"]), (&json!("resume"), &json!("chosen-by-cli")));
+    assert!(sent.get("agent_session_id").is_none(), "only protocol 3 has its ID and whether to resume it");
     assert_eq!(serde_json::from_value::<AgentSpec>(sent).unwrap(), spec);
 }
 
@@ -82,4 +81,69 @@ fn typed_approvals_keep_the_fields_an_older_reader_requires() {
     assert!(input.is_null());
     assert_eq!(sent.get("input"), Some(&Value::Null));
     assert_eq!(serde_json::from_value::<EventBody>(sent).unwrap(), current);
+}
+
+/// Each control a run of this build claims, as a hub sends it to a worker of protocol 4, spelled out, since that
+/// protocol mustn't break again for 30 days, and a worker of this build reads what any hub after it sends.
+#[test]
+fn every_control_a_run_of_this_build_claims_keeps_its_form() {
+    use protocol::capability::approvals::{AfterDenial, ApprovalMode, Beyond, Decision, Remember, Unasked};
+    use protocol::capability::asking::PlanContext;
+    use protocol::capability::prompts::Extras;
+    use protocol::capability::settings::{Effort, Settings};
+    use protocol::event::QuestionAnswer;
+    use protocol::model::{ModelName, Seq};
+    use protocol::prompt::Prompt;
+
+    let full = ApprovalMode { unasked: Unasked::Everything, beyond: Beyond::Asks, sandbox: None, plan: false };
+    let decide = |decision| Control::Decide { approval: "a".into(), decision };
+    let controls = [
+        (
+            Control::Prompt { seq: Seq::new(3), prompt: Prompt::new("go"), extras: Extras::default() },
+            json!({"control":"prompt","seq":3,"prompt":{"text":"go"},"extras":{}}),
+        ),
+        (Control::Cancel, json!({"control":"cancel"})),
+        (
+            Control::Compact { asked: Seq::new(9), keeping: Some("The API".into()) },
+            json!({"control":"compact","asked":9,"keeping":"The API"}),
+        ),
+        (
+            Control::Change(Settings {
+                model: Some(ModelName::named("opus")),
+                effort: Some(Effort::High),
+                ..Settings::default()
+            }),
+            json!({"control":"change","model":"opus","mode":null,"effort":"high","speed":null,"thinking":null,
+                "persona":null,"style":null,"verbosity":null,"advisor":null,"budget":null}),
+        ),
+        (
+            decide(Decision::Allow { edited: None, remember: Remember::Once }),
+            json!({"control":"decide","approval":"a","decision":{"decision":"allow","remember":{"remember":"once"}}}),
+        ),
+        (
+            decide(Decision::Deny { words: Some("No".into()), then: AfterDenial::Stop, keep: None }),
+            json!({"control":"decide","approval":"a","decision":{"decision":"deny","words":"No","then":"stop"}}),
+        ),
+        (
+            decide(Decision::Answer { answers: vec![QuestionAnswer { picked: vec![1], typed: Some("Bo".into()) }] }),
+            json!({"control":"decide","approval":"a","decision":{"decision":"answer","answers":[{"picked":[1],"typed":"Bo"}]}}),
+        ),
+        (
+            decide(Decision::ApprovePlan { then: full, context: PlanContext::Kept }),
+            json!({"control":"decide","approval":"a","decision":{"decision":"approve_plan",
+                "then":{"unasked":"everything","beyond":"asks"},"context":"kept"}}),
+        ),
+        (
+            decide(Decision::KeepPlanning { words: Some("Smaller".into()) }),
+            json!({"control":"decide","approval":"a","decision":{"decision":"keep_planning","words":"Smaller"}}),
+        ),
+    ];
+    for (control, form) in controls {
+        let mut sent = form.clone();
+        sent.as_object_mut().unwrap().insert("method".into(), json!("agent_control"));
+        sent.as_object_mut().unwrap().insert("session_id".into(), json!("s"));
+        let request = WorkerRequest::AgentControl(AgentControl { session_id: "s".into(), control });
+        assert_eq!(serde_json::to_value(&request).unwrap(), sent);
+        assert_eq!(serde_json::from_value::<WorkerRequest>(sent).unwrap(), request, "{form}");
+    }
 }

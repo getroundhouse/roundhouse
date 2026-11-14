@@ -17,7 +17,7 @@ use protocol::client::{ApiError, ErrorCode};
 #[cfg(test)]
 use protocol::model::InstanceId;
 #[cfg(test)]
-use protocol::worker::{AskAnswer, HelloReply, WorkerCall, WorkerFrame, WorkerResponse};
+use protocol::worker::{AskAnswer, HelloReply, WorkerFrame, WorkerResponse};
 #[cfg(test)]
 use providers::Provider;
 #[cfg(test)]
@@ -30,6 +30,7 @@ use std::time::Duration;
 use tokio::sync::{Mutex as AsyncMutex, watch};
 
 mod acks;
+mod previous;
 mod reaching;
 mod reading;
 

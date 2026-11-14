@@ -13,6 +13,7 @@ mod attachments;
 mod backup;
 mod builds;
 mod children;
+mod claims;
 mod comments;
 mod drafts;
 mod error;
@@ -26,6 +27,7 @@ mod made;
 mod new_workspace_draft;
 #[cfg(test)]
 mod older;
+mod previous;
 mod prompts;
 mod queue;
 mod reading;

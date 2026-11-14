@@ -4,7 +4,13 @@ use protocol::model::{SessionId, WorkspaceId};
 use super::super::tests::{notice, store_with_session};
 
 fn started(build: Option<&str>) -> EventBody {
-    EventBody::AgentStarted { pid: 1, resumed: true, build: build.map(str::to_string), previous_build: None }
+    EventBody::AgentStarted {
+        pid: 1,
+        resumed: true,
+        build: build.map(str::to_string),
+        previous_build: None,
+        capabilities: None,
+    }
 }
 
 /// Only a change moves the revision, so the hub announces a worker's build only when it's news.

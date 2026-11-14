@@ -61,12 +61,8 @@ async fn an_agent_a_title_and_an_account_read_each_run_under_the_login_they_came
         images: vec![],
         login: Some(login("for-the-title")),
     };
-    let calls = [
-        hello(),
-        WorkerRequest::AgentStartUnderLogin(start),
-        WorkerRequest::AccountFor(account),
-        WorkerRequest::TitleUnderLogin(title),
-    ];
+    let calls =
+        [hello(), WorkerRequest::AgentStart(start), WorkerRequest::AccountFor(account), WorkerRequest::TitleFor(title)];
 
     let mut answered = Vec::new();
     for (id, request) in calls.into_iter().enumerate() {

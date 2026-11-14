@@ -35,9 +35,10 @@ pub const SCRUBBED_ENV: &[&str] = &[
 /// CLI. `instructions` go after the CLI's own system prompt, the agent's and each of its subagents'.
 pub fn build_args(spec: &AgentSpec, resume: bool, instructions: Option<&str>) -> Result<Vec<String>, AgentError> {
     // Every launch has full access, even one for a chat that's planning, which `plan` asks into plan mode once it's
-    // running, or one for a chat in a mode of the CLI's own, which can't be chosen.
-    let SessionSettings { model, permission_mode: _, effort } = &spec.settings;
-    let level = crate::claude::effort::level(*effort).ok_or(AgentError::UnknownEffort)?;
+    // running, or one for a chat in a mode of the CLI's own, which can't be chosen. Converted here, where it's used,
+    // as the start does, until the adapters take typed settings in #1274.
+    let SessionSettings { model, permission_mode: _, effort } = crate::registry::settings_of(spec)?;
+    let level = crate::claude::effort::level(effort).ok_or(AgentError::UnknownEffort)?;
     let mut args: Vec<String> = [
         "-p",
         "--input-format",

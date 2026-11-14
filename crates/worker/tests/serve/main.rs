@@ -259,11 +259,17 @@ fn agent_start(session_id: &str, cwd: &Path, tools_token: Option<ToolsToken>) ->
         agent: AgentKind::Claude,
         cwd: cwd.to_string_lossy().into_owned(),
         start: protocol::capability::conversation::Start::New { conversation: Some("a".into()) },
-        settings: agents::claude::description().defaults,
+        settings: claude_defaults(),
         env: vec![],
         tools_token,
         login: None,
     }
+}
+
+/// What a Claude chat starts with, as a launch says it.
+fn claude_defaults() -> protocol::capability::settings::Settings {
+    let description = agents::claude::description();
+    description.defaults.for_capabilities(description.capabilities.as_ref().unwrap()).unwrap()
 }
 
 /// Sends each request as a call, numbered from 0.
@@ -343,7 +349,8 @@ async fn a_worker_lists_the_agents_it_is_running() {
     }
 
     assert!(matches!(answered[1], WorkerOutcome::Response(WorkerResponse::AgentStarted(_))), "{answered:?}");
-    let agent = protocol::worker::RunningAgent { session_id: "s".into(), run: RunId::new(4) };
+    let capabilities = Some(Box::new(agents::claude::description().capabilities.unwrap()));
+    let agent = protocol::worker::RunningAgent { session_id: "s".into(), run: RunId::new(4), capabilities };
     assert_eq!(
         answered[2],
         WorkerOutcome::Response(WorkerResponse::RunningAgents(RunningAgentsReply { agents: vec![agent] }))

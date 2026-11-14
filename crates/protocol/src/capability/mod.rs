@@ -22,6 +22,8 @@
 //!   kind's claims, since its run hasn't reported its own.
 //! - `laws`, which only tests build, checks a session's log against the contracts a log can show by itself, such as
 //!   each prompt being settled once and nothing being recorded that its run doesn't claim.
+//! - [`Capabilities::unmet_needs`] says which claims a run makes without another each needs, such as a fork without
+//!   resuming, which the hub can't hold it to.
 //!
 //! Translating can take more than renaming. Codex never asks to have a plan approved: it writes the plan and ends its
 //! turn. Its adapter holds that turn's end back, asks for the plan's approval itself, and on approval starts Codex's
@@ -62,6 +64,7 @@ mod control;
 pub mod conversation;
 #[cfg(feature = "testing")]
 pub mod laws;
+mod needs;
 pub mod output;
 pub mod prompts;
 mod report;

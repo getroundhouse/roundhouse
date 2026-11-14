@@ -16,7 +16,8 @@ pub enum PermissionMode {
     #[serde(rename = "plan")]
     Plan,
     /// A mode this build has no name for: one an agent went into by itself, such as one that asks before every tool,
-    /// or one from a newer peer. A chat can't be given it, and an agent started for a chat in it has full access.
+    /// or one from a newer peer. A chat can't be given it, and the hub starts an agent for a chat in it with full
+    /// access.
     #[serde(other, rename = "unknown")]
     Unknown,
 }

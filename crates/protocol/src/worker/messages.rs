@@ -4,10 +4,7 @@ use crate::model;
 use crate::model::{AgentAccount, FileContents, FileOpened, WorktreeFiles};
 #[cfg(test)]
 use agents::Delivery;
-use agents::{
-    AgentApproval, AgentCancel, AgentCompact, AgentConfigure, AgentControl, AgentPrompt, AgentSpec, AgentStarted,
-    AgentStop,
-};
+use agents::{AgentApproval, AgentControl, AgentSpec, AgentStarted, AgentStop};
 use children::{AddChildWorktree, ChildWorktreeAdded, WatchChildBranches};
 use connection::{Hello, HelloReply, Received, RunningAgentsReply};
 #[cfg(test)]
@@ -31,7 +28,7 @@ use worktree::{
 
 /// The worker protocol's version, apart from the client protocol's, so a break in one doesn't break the other. It
 /// changes only for a real break, as "Changing the protocol" in `docs/architecture.md` says.
-pub const WORKER_PROTOCOL_VERSION: u32 = 3;
+pub const WORKER_PROTOCOL_VERSION: u32 = 4;
 
 /// A request to a worker, which names what the worker answers it with.
 pub trait Request {
@@ -103,18 +100,10 @@ pub enum WorkerRequest {
     FileOpenAt(FileOpenAt),
     FilePages(FilePages),
     AgentStart(AgentSpec),
-    /// A held login must be enforced; older workers refuse this method.
-    AgentStartUnderLogin(AgentSpec),
     AgentControl(AgentControl),
-    AgentPrompt(AgentPrompt),
     AgentApproval(AgentApproval),
-    AgentCancel(AgentCancel),
-    AgentCompact(AgentCompact),
-    AgentConfigure(AgentConfigure),
     AgentStop(AgentStop),
     TitleFor(TitleFor),
-    /// As `AgentStartUnderLogin`, for the title call.
-    TitleUnderLogin(TitleFor),
     AccountFor(AccountFor),
     ServeTools(ServeTools),
     /// Any request this build doesn't know, from a hub newer than it. A worker answers with

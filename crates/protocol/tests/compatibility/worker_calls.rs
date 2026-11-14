@@ -2,14 +2,15 @@
 //! the hub that started it, and the next hub can be of another build.
 
 use protocol::attachment::{Attachment, AttachmentBytes, MediaType, NewAttachment};
+use protocol::capability::approvals::{ApprovalMode, Beyond, Unasked};
+use protocol::capability::settings::{Effort, Settings};
+use protocol::capability::{Capabilities, Claimed};
 use protocol::event::ApprovalDecision;
 use protocol::frame;
 use protocol::model::{
-    AgentAccount, AgentKind, AgentLogin, Branches, Effort, FileContents, FileOpened, FilePage, FilePages, GitDiff,
-    GitStatus, Head, LoginToken, ModelName, PageLine, PermissionMode, RunId, Seq, SessionSettings,
-    SessionSettingsChange, WorktreeFiles,
+    AgentAccount, AgentKind, AgentLogin, Branches, FileContents, FileOpened, FilePage, FilePages, GitDiff, GitStatus,
+    Head, LoginToken, ModelName, PageLine, RunId, WorktreeFiles,
 };
-use protocol::prompt::Prompt;
 use protocol::worker::{
     self, AgentSpec, RateLimit, RunningAgent, ToolsToken, WorkerCall, WorkerFrame, WorkerOutcome, WorkerRequest,
     WorkerResponse,
@@ -20,6 +21,13 @@ use super::keeps_its_form;
 /// A login a hub holds, as it hands it to a worker.
 fn login() -> AgentLogin {
     AgentLogin { token: LoginToken::new("made-up") }
+}
+
+/// Claims of a run that can be steered and nothing else.
+fn steers() -> Box<Capabilities> {
+    let mut claims = Capabilities::default();
+    claims.prompts.steer = Some(Claimed {});
+    Box::new(claims)
 }
 
 /// `request` is written as `{"id":7,"request":<form>}`, and that reads as `request`.
@@ -136,36 +144,38 @@ fn every_request_about_the_worktree_keeps_its_form() {
 
 #[test]
 fn every_request_about_an_agent_keeps_its_form() {
+    let settings = Settings {
+        model: Some(ModelName::named("opus")),
+        mode: Some(ApprovalMode { unasked: Unasked::Everything, beyond: Beyond::Asks, sandbox: None, plan: false }),
+        effort: Some(Effort::High),
+        ..Settings::default()
+    };
     let spec = AgentSpec {
         session_id: "s".into(),
         run: RunId::new(4),
         agent: AgentKind::Claude,
         cwd: "/w".into(),
         start: protocol::capability::conversation::Start::Resume { conversation: "a".into() },
-        settings: SessionSettings {
-            model: ModelName::named("opus"),
-            permission_mode: PermissionMode::FullAccess,
-            effort: Effort::High,
-        },
+        settings,
         env: vec![],
         tools_token: Some(ToolsToken::new("t")),
         login: None,
     };
-    let under_a_login = AgentSpec { tools_token: None, login: Some(login()), ..spec.clone() };
+    asked(
+        WorkerRequest::AgentStart(spec.clone()),
+        r#"{"method":"agent_start","session_id":"s","run":4,"agent":"claude","cwd":"/w","start":"resume","conversation":"a","settings":{"model":"opus","mode":{"unasked":"everything","beyond":"asks"},"effort":"high","speed":null,"thinking":null,"persona":null,"style":null,"verbosity":null,"advisor":null,"budget":null},"env":[],"tools_token":"t"}"#,
+    );
+    let under_a_login = AgentSpec {
+        start: protocol::capability::conversation::Start::New { conversation: None },
+        settings: Settings { model: Some(ModelName::named("opus")), ..Settings::default() },
+        tools_token: None,
+        login: Some(login()),
+        ..spec
+    };
     asked(
         WorkerRequest::AgentStart(under_a_login),
-        r#"{"method":"agent_start","session_id":"s","run":4,"agent":"claude","cwd":"/w","agent_session_id":"a","resume":true,"model":"opus","permission_mode":"bypassPermissions","effort":"high","env":[],"login":{"token":"made-up"}}"#,
+        r#"{"method":"agent_start","session_id":"s","run":4,"agent":"claude","cwd":"/w","start":"new","settings":{"model":"opus","mode":null,"effort":null,"speed":null,"thinking":null,"persona":null,"style":null,"verbosity":null,"advisor":null,"budget":null},"env":[],"login":{"token":"made-up"}}"#,
     );
-    asked(
-        WorkerRequest::AgentStart(spec),
-        r#"{"method":"agent_start","session_id":"s","run":4,"agent":"claude","cwd":"/w","agent_session_id":"a","resume":true,"model":"opus","permission_mode":"bypassPermissions","effort":"high","env":[],"tools_token":"t"}"#,
-    );
-    let prompt = WorkerRequest::AgentPrompt(worker::AgentPrompt {
-        session_id: "s".into(),
-        seq: Seq::new(3),
-        prompt: Prompt::new("go"),
-    });
-    asked(prompt, r#"{"method":"agent_prompt","session_id":"s","prompt":3,"text":"go"}"#);
     let decision = ApprovalDecision::Deny { message: None, interrupt: true };
     let approval = WorkerRequest::AgentApproval(worker::AgentApproval {
         session_id: "s".into(),
@@ -175,21 +185,6 @@ fn every_request_about_an_agent_keeps_its_form() {
     asked(
         approval,
         r#"{"method":"agent_approval","session_id":"s","approval_id":"a","decision":{"decision":"deny","interrupt":true}}"#,
-    );
-    asked(
-        WorkerRequest::AgentCancel(worker::AgentCancel { session_id: "s".into() }),
-        r#"{"method":"agent_cancel","session_id":"s"}"#,
-    );
-    let compact = WorkerRequest::AgentCompact(worker::AgentCompact {
-        session_id: "s".into(),
-        asked: Seq::new(9),
-        keeping: Some("The API".into()),
-    });
-    asked(compact, r#"{"method":"agent_compact","session_id":"s","asked":9,"keeping":"The API"}"#);
-    let options = SessionSettingsChange { model: Some(ModelName::named("opus")), permission_mode: None, effort: None };
-    asked(
-        WorkerRequest::AgentConfigure(worker::AgentConfigure { session_id: "s".into(), options }),
-        r#"{"method":"agent_configure","session_id":"s","model":"opus","permission_mode":null,"effort":null}"#,
     );
     asked(
         WorkerRequest::AgentStop(worker::AgentStop { session_id: "s".into() }),
@@ -234,12 +229,12 @@ fn a_request_with_no_fields_reads_with_fields_it_doesnt_know() {
 
 #[test]
 fn every_reply_about_the_connection_and_the_workspace_keeps_its_form() {
-    let hello = WorkerResponse::Hello(worker::HelloReply { protocol_version: 3, build: Some("0.1.9".into()) });
-    answered(hello, r#"{"result":"hello","protocol_version":3,"build":"0.1.9"}"#);
-    let running = vec![RunningAgent { session_id: "s".into(), run: RunId::new(4) }];
+    let hello = WorkerResponse::Hello(worker::HelloReply { protocol_version: 4, build: Some("0.1.9".into()) });
+    answered(hello, r#"{"result":"hello","protocol_version":4,"build":"0.1.9"}"#);
+    let running = vec![RunningAgent { session_id: "s".into(), run: RunId::new(4), capabilities: Some(steers()) }];
     answered(
         WorkerResponse::RunningAgents(worker::RunningAgentsReply { agents: running }),
-        r#"{"result":"running_agents","agents":[{"session_id":"s","run":4}]}"#,
+        r#"{"result":"running_agents","agents":[{"session_id":"s","run":4,"capabilities":{"conversation":{},"prompts":{"steer":{}},"output":{},"calls":{},"approvals":{},"asking":{},"settings":{},"turns":{},"context":{},"account":{},"background":{},"setup":{}}}]}"#,
     );
     answered(WorkerResponse::Ok, r#"{"result":"ok"}"#);
     let names = WorkerResponse::NamesGitHas(worker::NamesGitHasReply { names: vec!["aspen".into(), "main".into()] });
@@ -313,9 +308,12 @@ fn every_reply_about_the_worktree_keeps_its_form() {
 
 #[test]
 fn every_reply_about_an_agent_keeps_its_form() {
-    let started =
-        WorkerResponse::AgentStarted(worker::AgentStarted { pid: 4242, run: RunId::new(4), already_running: false });
-    answered(started, r#"{"result":"agent_started","pid":4242,"run":4,"already_running":false}"#);
+    let claims = Some(steers());
+    let started = worker::AgentStarted { pid: 4242, run: RunId::new(4), already_running: false, capabilities: claims };
+    answered(
+        WorkerResponse::AgentStarted(started),
+        r#"{"result":"agent_started","pid":4242,"run":4,"already_running":false,"capabilities":{"conversation":{},"prompts":{"steer":{}},"output":{},"calls":{},"approvals":{},"asking":{},"settings":{},"turns":{},"context":{},"account":{},"background":{},"setup":{}}}"#,
+    );
     answered(WorkerResponse::AgentNotRunning, r#"{"result":"agent_not_running"}"#);
     answered(
         WorkerResponse::Title(worker::TitleReply { title: "Fix the login bug".into() }),

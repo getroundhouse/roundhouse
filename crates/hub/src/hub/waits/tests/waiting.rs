@@ -301,6 +301,7 @@ async fn a_wait_ending_starts_the_agent_of_a_chat_waiting_on_nothing_else() {
             queue_held: Some(queue_held),
             recorded: None,
             initialized: None,
+            claims: None,
         };
         let said = EventBody::Notice { level: NoticeLevel::Info, message: "x".into(), parent_tool_use_id: None };
         hub.store.append(&"s".into(), None, &said, None, None, Some(change)).unwrap();
@@ -349,7 +350,8 @@ async fn a_chat_whose_record_lists_only_a_wait_isnt_counted_as_running() {
         let task = AgentTask { id: "t".into(), description: None, kind, call: None };
         let listed = EventBody::AgentTasks { tasks: vec![task.clone()], stopped: vec![] };
         let status = StatusChange { background_tasks: Some(vec![task]), ..SessionStatus::Background.into() };
-        let change = SessionChange { status: Some(status), queue_held: None, recorded: None, initialized: None };
+        let change =
+            SessionChange { status: Some(status), queue_held: None, recorded: None, initialized: None, claims: None };
         hub.store.append(&"s".into(), None, &listed, None, None, Some(change)).unwrap();
 
         hub.live_session(&"s".into()).await.unwrap();

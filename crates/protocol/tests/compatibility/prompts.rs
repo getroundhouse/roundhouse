@@ -2,13 +2,12 @@
 //! with its files as `attachments`, as it was before a prompt had a type of its own. Each form is read and written as
 //! a peer from before reads and writes it.
 
-use protocol::attachment::{Attachment, AttachmentFile, MediaType};
+use protocol::attachment::{Attachment, MediaType};
 use protocol::client::{ClientFrame, ClientRequest, agent, queue::SessionQueue};
 use protocol::event::EventBody;
 use protocol::frame;
-use protocol::model::{AttachmentId, QueuedPrompt, Seq};
+use protocol::model::{AttachmentId, QueuedPrompt};
 use protocol::prompt::Prompt;
-use protocol::worker::{AgentPrompt, WorkerCall, WorkerRequest};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
@@ -19,7 +18,7 @@ fn keeps_its_json_form<T: Serialize + DeserializeOwned + PartialEq + std::fmt::D
     assert_eq!(&serde_json::to_value(value).unwrap(), form, "{value:?} writes as it did");
 }
 
-fn log() -> Attachment {
+pub(super) fn log() -> Attachment {
     Attachment { id: "a1".into(), name: "build.log".into(), media_type: MediaType::Text, size_bytes: 3 }
 }
 
@@ -88,24 +87,4 @@ fn a_recorded_prompt_keeps_its_form() {
     // As a hub from before `client_msg_id` recorded it.
     let oldest: EventBody = frame::decode(br#"{"type":"user_prompt","text":"hi"}"#).unwrap();
     assert_eq!(oldest, EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("hi") });
-}
-
-#[test]
-fn a_prompt_for_the_agent_keeps_its_form() {
-    let call = json!({"id": 4, "request": {
-        "method": "agent_prompt", "session_id": "s", "prompt": 3, "text": "why?",
-        "attachments": [{"attachment": log_form(), "path": "/w/.context/attachments/build.log"}],
-    }});
-    let file = AttachmentFile { attachment: log(), path: "/w/.context/attachments/build.log".into() };
-    let request = WorkerRequest::AgentPrompt(AgentPrompt {
-        session_id: "s".into(),
-        seq: Seq::new(3),
-        prompt: Prompt::carrying("why?", vec![file]),
-    });
-    keeps_its_json_form(&call, &WorkerCall { id: 4, request });
-
-    let bare = json!({"id": 5, "request": {"method": "agent_prompt", "session_id": "s", "prompt": 3, "text": "go"}});
-    let request =
-        WorkerRequest::AgentPrompt(AgentPrompt { session_id: "s".into(), seq: Seq::new(3), prompt: Prompt::new("go") });
-    keeps_its_json_form(&bare, &WorkerCall { id: 5, request });
 }

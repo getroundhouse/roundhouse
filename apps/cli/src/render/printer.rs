@@ -73,7 +73,7 @@ impl Printer {
     pub(crate) fn event(&mut self, event: &SessionEvent) {
         match &event.body {
             EventBody::UserPrompt { prompt, .. } => self.prompt(event.seq, &prompt.text, &prompt.files),
-            EventBody::AgentStarted { pid, resumed, build, previous_build } => {
+            EventBody::AgentStarted { pid, resumed, build, previous_build, .. } => {
                 self.line(event.seq, &started(*pid, *resumed, build.as_deref(), previous_build.as_deref()));
             }
             EventBody::AgentInit { model, permission_mode, cwd, .. } => {

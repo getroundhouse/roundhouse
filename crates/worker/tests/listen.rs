@@ -63,7 +63,7 @@ impl Listening {
             agent: AgentKind::Claude,
             cwd: self.dir.path().to_string_lossy().into_owned(),
             start: protocol::capability::conversation::Start::New { conversation: Some("a".into()) },
-            settings: agents::claude::description().defaults,
+            settings: claude_defaults(),
             env: vec![],
             tools_token: None,
             login: None,
@@ -173,7 +173,9 @@ async fn a_worker_asked_to_keep_running_carries_on_without_its_hub_and_sends_the
     first.go().await;
 
     let (mut second, _, agents) = Hub::greet(&worker.socket, true).await;
-    assert_eq!(agents, [RunningAgent { session_id: "s".into(), run: RunId::new(4) }], "it outlived the first hub");
+    assert_eq!(agents.len(), 1, "it outlived the first hub: {agents:?}");
+    assert_eq!((&agents[0].session_id, agents[0].run), (&"s".into(), RunId::new(4)));
+    assert!(agents[0].capabilities.is_some(), "it says what the run claims, for a hub that didn't hear it start");
     std::fs::write(worker.dir.path().join("done"), "").unwrap();
     // Never recorded, since this hub goes without saying so.
     let missed = second.until_exited().await;
@@ -258,4 +260,10 @@ async fn a_worker_left_without_a_hub_stops_its_agents_in_time() {
         .unwrap()
         .success();
     assert!(!alive, "the agent outlived its worker");
+}
+
+/// What a Claude chat starts with, as a launch says it.
+fn claude_defaults() -> protocol::capability::settings::Settings {
+    let description = agents::claude::description();
+    description.defaults.for_capabilities(description.capabilities.as_ref().unwrap()).unwrap()
 }

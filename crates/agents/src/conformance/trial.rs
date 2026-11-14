@@ -283,7 +283,10 @@ mod tests {
         let run = Some(RunId::new(1));
         let mut log = Vec::new();
         let mut record = |run, body| super::record(&mut log, run, body);
-        record(run, EventBody::AgentStarted { pid: 1, resumed: false, build: None, previous_build: None });
+        record(
+            run,
+            EventBody::AgentStarted { pid: 1, resumed: false, build: None, previous_build: None, capabilities: None },
+        );
         record(None, EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("Go") });
         for _ in 0..taken {
             record(run, EventBody::PromptTaken { prompt: Seq::new(2) });

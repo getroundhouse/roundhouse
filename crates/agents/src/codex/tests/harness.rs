@@ -34,7 +34,7 @@ impl Harness {
             agent: AgentKind::Codex,
             cwd: room.path().to_string_lossy().into_owned(),
             start: Start::New { conversation: None },
-            settings,
+            settings: settings.for_capabilities(&crate::codex::claims::claims()).unwrap(),
             env: Vec::new(),
             tools_token: None,
             login: None,

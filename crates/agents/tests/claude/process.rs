@@ -8,7 +8,7 @@ use std::time::Duration;
 use agents::claude::spawn_at;
 use agents::{AgentOptions, AgentOutput, ToolServer};
 use protocol::event::{CompactedBy, CompactionOutcome, ContentBlock, EventBody, NoticeLevel};
-use protocol::model::{AgentKind, PermissionMode, RunId, Seq};
+use protocol::model::{AgentKind, PermissionMode, RunId, Seq, SessionSettings};
 use protocol::prompt::Prompt;
 use protocol::worker::{AgentSpec, ToolsToken};
 use tokio::sync::mpsc;
@@ -26,7 +26,7 @@ fn spec(dir: &Path) -> AgentSpec {
         agent: AgentKind::Claude,
         cwd: dir.to_string_lossy().into_owned(),
         start: protocol::capability::conversation::Start::New { conversation: Some("s".into()) },
-        settings: agents::claude::description().defaults,
+        settings: typed(&agents::claude::description().defaults),
         env: vec![],
         tools_token: None,
         login: None,
@@ -194,9 +194,13 @@ async fn a_launch_that_cant_start_leaves_no_file() {
 }
 
 fn in_plan_mode(dir: &Path) -> AgentSpec {
-    let mut spec = spec(dir);
-    spec.settings.permission_mode = PermissionMode::Plan;
-    spec
+    let defaults = agents::claude::description().defaults;
+    AgentSpec { settings: typed(&SessionSettings { permission_mode: PermissionMode::Plan, ..defaults }), ..spec(dir) }
+}
+
+/// `settings`, as a hub of this build sends them to a worker.
+fn typed(settings: &SessionSettings) -> protocol::capability::settings::Settings {
+    settings.for_capabilities(&agents::claude::description().capabilities.unwrap()).unwrap()
 }
 
 /// Reads the first two lines the agent is sent into `lines`, then waits to be stopped.

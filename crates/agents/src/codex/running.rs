@@ -124,7 +124,8 @@ pub(super) async fn start_conversation(
         };
         tap.launched(conversation.is_some(), conversation, &launch::ARGS.map(str::to_owned));
     }
-    let process = transport(bin, Path::new(&spec.cwd), &spec.env, spec.settings.clone(), output, options, tap).await?;
+    let settings = crate::registry::settings_of(spec)?;
+    let process = transport(bin, Path::new(&spec.cwd), &spec.env, settings, output, options, tap).await?;
     if let Err(error) = launch::conversation(&process.shared, spec, options, ephemeral).await {
         process.shared.stop().await;
         return Err(error);

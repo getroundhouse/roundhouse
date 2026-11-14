@@ -27,7 +27,7 @@ impl Request for TitleFor {
     type Reply = TitleReply;
 
     fn into_request(self) -> WorkerRequest {
-        if self.login.is_some() { WorkerRequest::TitleUnderLogin(self) } else { WorkerRequest::TitleFor(self) }
+        WorkerRequest::TitleFor(self)
     }
 }
 

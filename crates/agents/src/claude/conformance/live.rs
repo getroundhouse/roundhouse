@@ -291,7 +291,7 @@ impl Launcher for RealCli {
         resume: bool,
         output: mpsc::Sender<AgentOutput>,
     ) -> Result<Arc<dyn AgentProcess>, Failed> {
-        let spec = spec(self.scenario, run, &self.work, &self.session, resume, self.env.clone());
+        let spec = spec(self.scenario, run, &self.work, &self.session, resume, self.env.clone())?;
         let options =
             AgentOptions { login: self.token.clone().map(|token| AgentLogin { token }), ..AgentOptions::default() };
         let spawned = crate::claude::spawn_tapped(self.bin.clone(), spec, output, options, self.tap.clone()).await;

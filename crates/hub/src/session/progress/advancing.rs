@@ -95,6 +95,7 @@ impl Progress {
         let held = self.queue.held_after(&body, self.status, status);
         let change = SessionChange {
             initialized: None,
+            claims: None,
             status: changed.then_some(StatusChange { status, turn, background_tasks: changed_tasks }),
             queue_held: held,
             recorded: None,

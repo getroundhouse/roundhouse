@@ -9,16 +9,16 @@ use protocol::worker::{
     WorkerOutcome, WorkerRequest, WorkerResponse, WorkspaceReady, WorktreeThere, WorktreeThereReply,
 };
 
+/// A worker of protocol 4 reads a launch only in its own form, so one of protocol 3, which a hub sends only to a worker
+/// that agreed on it, is refused rather than started without the settings it would have read.
 #[test]
-fn an_agent_started_by_a_hub_from_before_the_tools_has_no_token_for_them() {
+fn a_worker_refuses_a_launch_of_protocol_3() {
     let line = br#"{"id":4,"request":{"method":"agent_start","session_id":"s","run":1,"agent":"claude","cwd":"/w","agent_session_id":"a","resume":false,"model":"opus","permission_mode":"bypassPermissions","effort":"high","env":[]}}"#;
 
-    let ToWorker::Call(Call { request: Ok(WorkerRequest::AgentStart(spec)), .. }) = ToWorker::decode(line).unwrap()
-    else {
-        panic!("a start reads as a start");
+    let ToWorker::Call(Call { id: 4, request }) = ToWorker::decode(line).unwrap() else {
+        panic!("a call reads as one")
     };
-
-    assert_eq!(spec.tools_token, None);
+    assert!(request.is_err(), "{request:?}");
 }
 
 /// What the worker asks for its tools and the hub's answers, spelled out, since they cross between processes.

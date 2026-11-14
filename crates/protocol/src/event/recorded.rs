@@ -74,11 +74,16 @@ pub enum EventBody {
         /// which is where a chat says it moved. `None` when it's the same build, or either isn't known.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         previous_build: Option<String>,
+        /// What the run claims, as its worker said when it launched it, which the hub holds it to while it runs. `None`
+        /// from a worker of protocol 3, whose run says it as it initializes, and from a hub from before this.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        capabilities: Option<Box<crate::capability::Capabilities>>,
     },
     /// The agent reported its configuration. Claude does this at the start of every turn.
     AgentInit {
-        /// Authoritative for this run, before its conversation output. Older adapters report none. The log keeps
-        /// the claim under its run ID, so a later launch cannot change how earlier output is interpreted.
+        /// What a run of a worker of protocol 3 claims, before its conversation output, which a run of protocol 4
+        /// says on its `AgentStarted` instead. The log keeps the claim under its run ID, so a later launch cannot
+        /// change how earlier output is interpreted.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         capabilities: Option<Box<crate::capability::Capabilities>>,
         agent_session_id: Option<AgentSessionId>,

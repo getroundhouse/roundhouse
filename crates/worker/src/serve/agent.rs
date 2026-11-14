@@ -8,7 +8,7 @@ use std::sync::atomic::Ordering;
 use agents::{AgentOptions, AgentOutput, BinaryLookup, ToolServer};
 use protocol::attachment::NewAttachment;
 use protocol::client::{ApiError, ErrorCode};
-use protocol::model::{AgentKind, AgentLogin, RunId, SessionId, SessionSettingsChange};
+use protocol::model::{AgentKind, AgentLogin, RunId, SessionId};
 use protocol::paths::AGENTS_DIR;
 use protocol::prompt::Prompt;
 use protocol::worker::{AgentSpec, AgentStarted, TitleReply, WorkerFrame, WorkerResponse};
@@ -88,6 +88,7 @@ pub(crate) async fn start_agent(
             pid: agent.process.pid(),
             run: agent.run,
             already_running: true,
+            capabilities: Some(Box::new(agent.process.capabilities())),
         }));
     }
     let (tx, rx) = mpsc::channel(1024);
@@ -107,12 +108,12 @@ pub(crate) async fn start_agent(
         login: spec.login.take(),
     };
     let process = agents::spawn(spec, tx, options).await?;
-    let pid = process.pid();
+    let (pid, capabilities) = (process.pid(), Some(Box::new(process.capabilities())));
     info!(pid, %session_id, %run, "started agent");
     // Replaces an entry whose process has gone. Its forwarder finishes delivering its last output.
     state.agents.lock().insert(session_id.clone(), RunningAgent { process, run });
     forwarders.lock().await.spawn(forward_output(state.clone(), session_id, run, worktree, rx));
-    Ok(WorkerResponse::AgentStarted(AgentStarted { pid, run, already_running: false }))
+    Ok(WorkerResponse::AgentStarted(AgentStarted { pid, run, already_running: false, capabilities }))
 }
 
 /// Makes the folder the agent's instructions send it to for what it makes for its own use. An agent can work without
@@ -190,21 +191,6 @@ async fn forward_output(
             }
         };
         state.outbox.send(frame).await;
-    }
-}
-
-pub(crate) async fn configure_agent(
-    state: &State,
-    session_id: &SessionId,
-    options: &SessionSettingsChange,
-) -> Result<WorkerResponse, ApiError> {
-    let Some(agent) = state.live_agent(session_id) else {
-        return Ok(WorkerResponse::AgentNotRunning);
-    };
-    match agent.configure(options).await {
-        Ok(()) => Ok(WorkerResponse::Ok),
-        Err(_) if agent.is_gone() => Ok(WorkerResponse::AgentNotRunning),
-        Err(e) => Err(e.into()),
     }
 }
 

@@ -24,7 +24,7 @@ fn what_a_hub_asks_of_a_worker_it_reconnects_to_keeps_its_form() {
 
     let reply: WorkerResponse =
         frame::decode(br#"{"result":"running_agents","agents":[{"session_id":"s","run":4}]}"#).unwrap();
-    let running = RunningAgent { session_id: "s".into(), run: RunId::new(4) };
+    let running = RunningAgent { session_id: "s".into(), run: RunId::new(4), capabilities: None };
     assert_eq!(reply, WorkerResponse::RunningAgents(RunningAgentsReply { agents: vec![running] }));
 }
 

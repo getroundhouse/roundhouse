@@ -4,10 +4,11 @@
 use serde::{Deserialize, Serialize};
 
 use super::{Reply, Request, ToolsToken, WorkerRequest, WorkerResponse};
-use crate::attachment::AttachmentFile;
+use crate::capability::Capabilities;
+use crate::capability::conversation::Start;
+use crate::capability::settings::Settings;
 use crate::event::ApprovalDecision;
-use crate::model::{AgentKind, AgentLogin, ApprovalId, RunId, Seq, SessionId, SessionSettings, SessionSettingsChange};
-use crate::prompt::Prompt;
+use crate::model::{AgentKind, AgentLogin, ApprovalId, RunId, SessionId};
 
 /// Starts the session's agent, unless it's running already.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -18,11 +19,11 @@ pub struct AgentSpec {
     pub run: RunId,
     pub agent: AgentKind,
     pub cwd: String,
-    #[serde(flatten, with = "super::launch_identity")]
-    pub start: crate::capability::conversation::Start,
-    /// What it runs with.
+    /// What conversation it starts from.
     #[serde(flatten)]
-    pub settings: SessionSettings,
+    pub start: Start,
+    /// What it runs with: its model, and each other setting its kind claims, as the hub chose for it from the chat's.
+    pub settings: Settings,
     /// Set in the agent's environment, along with the worker's own.
     pub env: Vec<(String, String)>,
     /// What the agent's calls to the worker's tools carry, which tells the worker whose they are. The hub keeps one for
@@ -30,8 +31,7 @@ pub struct AgentSpec {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tools_token: Option<ToolsToken>,
     /// The login the hub holds for the account the agent runs under, which the agent's adapter gives its CLI, and the
-    /// worker keeps only as long as the agent. `None` runs it under this machine's own login. Requests with a
-    /// login use `agent_start_under_login`, which an older worker refuses before starting anything.
+    /// worker keeps only as long as the agent. `None` runs it under this machine's own login.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub login: Option<AgentLogin>,
 }
@@ -40,7 +40,7 @@ impl Request for AgentSpec {
     type Reply = AgentStarted;
 
     fn into_request(self) -> WorkerRequest {
-        if self.login.is_some() { WorkerRequest::AgentStartUnderLogin(self) } else { WorkerRequest::AgentStart(self) }
+        WorkerRequest::AgentStart(self)
     }
 }
 
@@ -50,6 +50,10 @@ pub struct AgentStarted {
     pub pid: u32,
     pub run: RunId,
     pub already_running: bool,
+    /// What the run claims, as its adapter says, which the hub holds it to. `None` from a worker of protocol 3, whose
+    /// runs say it as they initialize.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capabilities: Option<Box<Capabilities>>,
 }
 
 impl Reply for AgentStarted {
@@ -75,25 +79,6 @@ impl Request for AgentControl {
     }
 }
 
-/// Each of the prompt's files has been written into the worktree first. `seq` is where it's recorded, which the
-/// agent's [`crate::event::EventBody::PromptTaken`] names.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-pub struct AgentPrompt {
-    pub session_id: SessionId,
-    #[serde(rename = "prompt")]
-    pub seq: Seq,
-    #[serde(flatten)]
-    pub prompt: Prompt<AttachmentFile>,
-}
-
-impl Request for AgentPrompt {
-    type Reply = Delivery;
-
-    fn into_request(self) -> WorkerRequest {
-        WorkerRequest::AgentPrompt(self)
-    }
-}
-
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct AgentApproval {
     pub session_id: SessionId,
@@ -106,53 +91,6 @@ impl Request for AgentApproval {
 
     fn into_request(self) -> WorkerRequest {
         WorkerRequest::AgentApproval(self)
-    }
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-pub struct AgentCancel {
-    pub session_id: SessionId,
-}
-
-impl Request for AgentCancel {
-    type Reply = Delivery;
-
-    fn into_request(self) -> WorkerRequest {
-        WorkerRequest::AgentCancel(self)
-    }
-}
-
-/// Asks the agent to compact its conversation. `asked` is where that's recorded, which the agent's
-/// [`crate::event::EventBody::PromptTaken`] and its compaction name.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-pub struct AgentCompact {
-    pub session_id: SessionId,
-    pub asked: Seq,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub keeping: Option<String>,
-}
-
-impl Request for AgentCompact {
-    type Reply = Delivery;
-
-    fn into_request(self) -> WorkerRequest {
-        WorkerRequest::AgentCompact(self)
-    }
-}
-
-/// A setting left out is left as it is.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-pub struct AgentConfigure {
-    pub session_id: SessionId,
-    #[serde(flatten)]
-    pub options: SessionSettingsChange,
-}
-
-impl Request for AgentConfigure {
-    type Reply = Delivery;
-
-    fn into_request(self) -> WorkerRequest {
-        WorkerRequest::AgentConfigure(self)
     }
 }
 
@@ -193,7 +131,7 @@ impl Reply for Delivery {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{Effort, LoginToken, ModelName, PermissionMode};
+    use crate::model::{LoginToken, ModelName};
 
     fn launch(login: Option<AgentLogin>) -> WorkerRequest {
         AgentSpec {
@@ -201,12 +139,8 @@ mod tests {
             run: RunId::new(1),
             agent: AgentKind::Claude,
             cwd: "/w".into(),
-            start: crate::capability::conversation::Start::New { conversation: Some("a".into()) },
-            settings: SessionSettings {
-                model: ModelName::named("opus"),
-                permission_mode: PermissionMode::FullAccess,
-                effort: Effort::High,
-            },
+            start: Start::New { conversation: Some("a".into()) },
+            settings: Settings { model: Some(ModelName::named("opus")), ..Settings::default() },
             env: vec![],
             tools_token: None,
             login,
@@ -215,48 +149,15 @@ mod tests {
     }
 
     #[test]
-    fn a_launch_without_a_login_is_as_it_was_before_logins() {
+    fn a_launch_carries_its_login_only_when_it_has_one_and_hides_the_token_from_debug() {
         let sent = serde_json::to_string(&launch(None)).unwrap();
-
         assert!(!sent.contains("login"), "{sent}");
         assert_eq!(serde_json::from_str::<WorkerRequest>(&sent).unwrap(), launch(None));
-    }
 
-    #[test]
-    fn a_launch_carries_its_login_and_hides_the_token_from_debug() {
         let with_login = launch(Some(AgentLogin { token: LoginToken::new("a-made-up-token") }));
         let sent = serde_json::to_string(&with_login).unwrap();
-
         assert!(sent.contains(r#""login":{"token":"a-made-up-token"}"#), "{sent}");
         assert_eq!(serde_json::from_str::<WorkerRequest>(&sent).unwrap(), with_login);
         assert!(!format!("{with_login:?}").contains("made-up"));
-    }
-    #[test]
-    fn an_older_worker_refuses_a_required_login_instead_of_starting_under_ambient_credentials() {
-        #[derive(Deserialize, Debug, PartialEq)]
-        #[serde(tag = "method", rename_all = "snake_case")]
-        enum OlderWorker {
-            AgentStart,
-            TitleFor,
-            #[serde(other)]
-            Unknown,
-        }
-        let login = AgentLogin { token: LoginToken::new("made-up") };
-        let requests = [
-            launch(Some(login.clone())),
-            super::super::TitleFor {
-                agent: AgentKind::Claude,
-                prompt: "title".into(),
-                images: vec![],
-                login: Some(login),
-            }
-            .into_request(),
-        ];
-        for request in requests {
-            let wire = serde_json::to_string(&request).unwrap();
-            assert_eq!(serde_json::from_str::<OlderWorker>(&wire).unwrap(), OlderWorker::Unknown);
-        }
-        let wire = serde_json::to_string(&launch(None)).unwrap();
-        assert_eq!(serde_json::from_str::<OlderWorker>(&wire).unwrap(), OlderWorker::AgentStart);
     }
 }

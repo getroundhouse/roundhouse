@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use protocol::client::{ApiError, HubNotice};
 use protocol::event::{EventBody, SessionEvent};
-use protocol::model::{ClientMessageId, Session, ToolUseId};
+use protocol::model::{ClientMessageId, RunCapabilities, RunId, Session, ToolUseId};
 use protocol::tail::Tail;
 use tracing::error;
 
@@ -44,25 +44,26 @@ impl LiveSession {
         let _in_order = self.recording.lock().await;
         let hub = self.hub()?;
         let run = origin.run();
-        let Step { body, mut change, next, waits } = {
+        let (Step { body, mut change, next, waits }, still_current) = {
             let state = self.state.lock();
             if let Some(refusal) = refused(&state) {
                 return Err(refusal);
             }
             // The current agent saying it, which only a running one can, or the hub with one running.
             let agent = state.agent.is_some() || run.is_some();
-            state.progress.step(origin, body, agent)
+            let still_current = run.is_some() && state.agent.map(|agent| agent.run) == run;
+            (state.progress.step(origin, body, agent), still_current)
         };
         note_recorded(origin, &mut change);
-        if let EventBody::AgentInit { agent_session_id, capabilities, .. } = &body
-            && origin.speaks_for_session()
-        {
-            change.initialized = Some(crate::store::Initialized {
-                conversation: agent_session_id.clone(),
-                capabilities: run
-                    .zip(capabilities.as_deref())
-                    .map(|(run, claims)| protocol::model::RunCapabilities { run, claims: Box::new(claims.clone()) }),
-            });
+        if origin.speaks_for_session() {
+            if let EventBody::AgentInit { agent_session_id, .. } = &body {
+                change.initialized = Some(crate::store::Initialized { conversation: agent_session_id.clone() });
+            }
+            // Only while its run is still the session's, as of now, in order with what's recorded: a run whose exit
+            // was taken in since its caller looked has no claims on the record for its exit to take off.
+            if still_current {
+                change.claims = claims_of(run, &body);
+            }
         }
         let made = Made::of(&change, waits);
         let id = self.id.clone();
@@ -144,7 +145,9 @@ impl LiveSession {
         let waiting_changed =
             appended.iter().any(|appended| appended.untaken.is_some() || appended.approvals.is_some());
         let dequeued = appended.iter().any(|appended| appended.dequeued);
-        if (made.changed || dequeued || by_the_person || answered || waiting_changed)
+        // A run's exit takes its claims off the record whatever else it changes, as when its session had moved on.
+        let claims_cleared = appended.iter().any(|appended| appended.claims_taken_off.is_some());
+        if (made.changed || dequeued || by_the_person || answered || waiting_changed || claims_cleared)
             && let Err(e) = self.announce(hub).await
         {
             error!(session = %self.id, "could not announce a change of status: {e}");
@@ -215,6 +218,11 @@ impl Made {
     }
 }
 
+/// What `body` says its run, `run`, claims, if it says, which the session holds that run to until it exits.
+fn claims_of(run: Option<RunId>, body: &EventBody) -> Option<RunCapabilities> {
+    run.zip(body.claims()).map(|(run, claims)| RunCapabilities::new(run, claims.clone()))
+}
+
 /// Has `change` say which of its worker's numbers the agent of `origin` has had recorded, in the same commit as the
 /// event, so a hub that connects to the worker again knows what it has.
 fn note_recorded(origin: Origin, change: &mut SessionChange) {
@@ -228,17 +236,18 @@ fn note_recorded(origin: Origin, change: &mut SessionChange) {
 fn take(state: &mut LiveState, origin: Origin, appended: &Appended, next: Next) -> bool {
     let (seq, body, subagent) = (appended.event.seq, &appended.event.body, &appended.event.subagent);
     state.last_seq = seq;
-    if let EventBody::AgentInit { agent_session_id, capabilities, .. } = body
-        && origin.speaks_for_session()
-    {
-        state.agent_opened = true;
-        if let Some(id) = agent_session_id {
-            state.agent_session_id = Some(id.clone());
+    if origin.speaks_for_session() {
+        if let EventBody::AgentInit { agent_session_id, .. } = body {
+            state.agent_opened = true;
+            if let Some(id) = agent_session_id {
+                state.agent_session_id = Some(id.clone());
+            }
         }
-        state.capabilities = origin
-            .run()
-            .zip(capabilities.as_deref())
-            .map(|(run, claims)| protocol::model::RunCapabilities { run, claims: Box::new(claims.clone()) });
+        if let Some(claims) =
+            claims_of(origin.run(), body).filter(|claims| state.agent.is_some_and(|a| a.run == claims.run))
+        {
+            state.capabilities = Some(claims);
+        }
     }
     let others = |tail: &Tail| tail.messages.iter().filter(|message| message.parent_tool_use_id != *subagent).count();
     let others_before = others(&state.tail);

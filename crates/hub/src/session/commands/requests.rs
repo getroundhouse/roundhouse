@@ -6,7 +6,7 @@ use protocol::client::{ApiError, ErrorCode};
 use protocol::event::{ApprovalDecision, ApprovalOutcome, EventBody, NoticeLevel};
 use protocol::model::{ApprovalId, AttachmentId, ClientMessageId, Seq, SetupStatus};
 use protocol::prompt::Prompt;
-use protocol::worker::{AgentApproval, AgentCancel, AgentCompact, AgentPrompt, AgentStop, Delivery, Request};
+use protocol::worker::{AgentApproval, AgentStop, Delivery};
 use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot};
 use tracing::warn;
@@ -43,41 +43,24 @@ pub(crate) async fn run_commands(session: Arc<LiveSession>, mut commands: mpsc::
 
 impl LiveSession {
     pub(super) async fn forward(&self, seq: Seq, asking: Asking) -> Result<(), ApiError> {
-        let session_id = self.id.clone();
         match asking {
             Asking::Prompt(prompt) => {
                 // Only now, after waiting on setup, since the worktree has to be ready for them.
                 let placed = self.hub()?.place_attachments(&self.id, &self.workspace_id, &prompt.files).await?;
-                {
-                    let prompt = prompt.with_files(placed);
-                    let control = Control::Prompt {
-                        seq,
-                        prompt: prompt.clone(),
-                        extras: protocol::capability::prompts::Extras::default(),
-                    };
-                    self.send_to_agent(control, AgentPrompt { session_id, seq, prompt }).await
-                }
+                let prompt = prompt.with_files(placed);
+                let extras = protocol::capability::prompts::Extras::default();
+                self.send_to_agent(Control::Prompt { seq, prompt, extras }).await
             }
-            Asking::Compact { keeping } => {
-                self.send_to_agent(
-                    Control::Compact { asked: seq, keeping: keeping.clone() },
-                    AgentCompact { session_id, asked: seq, keeping },
-                )
-                .await
-            }
+            Asking::Compact { keeping } => self.send_to_agent(Control::Compact { asked: seq, keeping }).await,
         }
     }
 
     /// Sends what was recorded to the agent, starting one if it has to.
-    pub(super) async fn send_to_agent<R: Request<Reply = Delivery> + Clone>(
-        &self,
-        control: Control,
-        request: R,
-    ) -> Result<(), ApiError> {
+    pub(super) async fn send_to_agent(&self, control: Control) -> Result<(), ApiError> {
         // Twice, because the agent can exit between checking on it and sending to it.
         for _ in 0..2 {
             let link = self.ensure_agent().await?;
-            if self.control_agent(&link, control.clone(), request.clone()).await? == Delivery::Delivered {
+            if self.control_agent(&link, control.clone()).await? == Delivery::Delivered {
                 return Ok(());
             }
             let mut state = self.state.lock();
@@ -257,11 +240,10 @@ impl LiveSession {
             .ok_or_else(|| ApiError::new(ErrorCode::Conflict, "the agent that asked has exited"))?;
         let asked = self.approval_request(&approval_id).await?;
         let claims = self.run_claims();
-        let request =
-            AgentApproval { session_id: self.id.clone(), approval_id: approval_id.clone(), decision: decision.clone() };
-        let delivered = match super::super::decisions::control(&asked, approval_id, &decision, claims.as_ref())? {
-            Some(control) => self.control_agent(&link, control, request).await?,
-            None => link.call(request).await?,
+        let delivered = match super::super::decisions::control(&asked, approval_id.clone(), &decision, claims.as_ref())?
+        {
+            Some(control) => self.control_agent(&link, control).await?,
+            None => link.call(AgentApproval { session_id: self.id.clone(), approval_id, decision }).await?,
         };
         if delivered == Delivery::Delivered {
             return Ok(());
@@ -284,7 +266,7 @@ impl LiveSession {
         let Some(link) = hub.existing_worker(&self.workspace_id) else {
             return Ok(());
         };
-        self.control_agent(&link, Control::Cancel, AgentCancel { session_id: self.id.clone() }).await.map(drop)
+        self.control_agent(&link, Control::Cancel).await.map(drop)
     }
 
     pub(crate) async fn handle_stop(&self) -> Result<(), ApiError> {
