@@ -4,3 +4,7 @@
 fail-fast = false
 # No retries, since a test that passes on a second try is flaky, and AGENTS.md says to fix one rather than hide it.
 retries = 0
+# Two tests at once per core on CI's 16 cores, rather than nextest's one. The tests spend much of their time waiting
+# rather than computing, so at one per core every slot is full while the cores are about half idle. More than two
+# saved only a few seconds, and loaded the tests enough to widen a race in one of them.
+test-threads = 32

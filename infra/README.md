@@ -24,6 +24,8 @@ A job names a runner in its label, as in `runs-on: runs-on=${{ github.run_id }}/
 
 RunsOn reads `.github/runs-on.yml` only from `main`, since the repository is public, so a change to a runner reaches every job that names it once it merges, without a PR having run on it. To change a runner jobs use, add one under a new name, merge it, and move the jobs to it in a PR of its own, whose CI runs on it.
 
+A runner says what it is, not what uses it, so nothing in `.github/runs-on.yml` points to a job or a setting. A setting that depends on the runner its job names says so where it's set, and the comment on the job points to it, as the test job's points to how many tests `.config/nextest.toml` runs at once. So a PR that moves a job to another runner finds, from the job, what depends on its runner.
+
 A runner that can't get a Spot instance starts on-demand, at several times the price. When it's the account's Spot quota that stops it, RunsOn emails `alert_email`, and for the next 5 minutes starts every runner that quota covers on-demand. So a Spot quota that's too low makes CI cost more, not wait. A job waits for a runner while its runner has to start on-demand and the on-demand quota is full, or while the stack can't start one at all, for up to the 24 hours GitHub lets a job wait for a self-hosted runner. To run CI without the stack, point the job's `runs-on` back at one of GitHub's runners, such as `ubuntu-26.04-arm`.
 
 ## Planning and applying
