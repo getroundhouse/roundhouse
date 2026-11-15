@@ -10,6 +10,7 @@
 
 #![warn(clippy::wildcard_enum_match_arm)]
 
+mod app_icon;
 mod baseline;
 mod cache;
 mod clock;
@@ -22,7 +23,6 @@ mod hand;
 mod heights;
 mod highlight;
 mod hover;
-mod icon;
 mod mark;
 pub mod motion;
 mod named;
@@ -41,6 +41,7 @@ mod typography;
 mod word_changes;
 mod work;
 
+pub use app_icon::{AppIconSize, AppIconStyle, app_icon};
 pub use baseline::{LineText, Placed};
 pub use cache::{CacheMark, cache_mark, expires_in, minutes_left, next_minute_in_ms};
 #[cfg(feature = "testing")]
@@ -58,7 +59,6 @@ pub use hand::{Hand, Off};
 pub use heights::{BarSize, RowSize};
 pub use highlight::{Spans, highlight, language, preload_highlighting, try_highlight};
 pub use hover::{HoldOpen, HoverCard, hover_card, hover_card_with_a_button};
-pub use icon::{IconSize, IconStyle, icon};
 pub use mark::{Signal, Size, brand, chat_mark, mark};
 pub use plan::{plan_colors, plan_texture};
 pub use raised::raised;

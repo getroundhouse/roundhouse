@@ -13,23 +13,23 @@ use gpui_kit::{
     Window, black, div, px, size, white,
 };
 use image::{Rgba, RgbaImage};
-use look::{IconSize, IconStyle};
+use look::{AppIconSize, AppIconStyle};
 
 use super::approved::{self, Verdict};
 use super::{UPDATE, headless};
 
 /// The iconset's files, and the drawing each holds. macOS names them by points and scale, so some share a drawing.
-const FILES: [(&str, IconSize); 10] = [
-    ("icon_16x16.png", IconSize::Px16),
-    ("icon_16x16@2x.png", IconSize::Px32),
-    ("icon_32x32.png", IconSize::Px32),
-    ("icon_32x32@2x.png", IconSize::Px64),
-    ("icon_128x128.png", IconSize::Px128),
-    ("icon_128x128@2x.png", IconSize::Px256),
-    ("icon_256x256.png", IconSize::Px256),
-    ("icon_256x256@2x.png", IconSize::Px512),
-    ("icon_512x512.png", IconSize::Px512),
-    ("icon_512x512@2x.png", IconSize::Px1024),
+const FILES: [(&str, AppIconSize); 10] = [
+    ("icon_16x16.png", AppIconSize::Px16),
+    ("icon_16x16@2x.png", AppIconSize::Px32),
+    ("icon_32x32.png", AppIconSize::Px32),
+    ("icon_32x32@2x.png", AppIconSize::Px64),
+    ("icon_128x128.png", AppIconSize::Px128),
+    ("icon_128x128@2x.png", AppIconSize::Px256),
+    ("icon_256x256.png", AppIconSize::Px256),
+    ("icon_256x256@2x.png", AppIconSize::Px512),
+    ("icon_512x512.png", AppIconSize::Px512),
+    ("icon_512x512@2x.png", AppIconSize::Px1024),
 ];
 /// The one file beside the iconsets, which isn't drawn here: the Windows icon, which `tools/package/ico.py` makes from
 /// `working.iconset`, and `tools/package/test_ico.py` checks is what it makes from the drawings now.
@@ -43,8 +43,8 @@ fn every_size_of_the_icon_looks_as_approved() {
     let text_system: Arc<dyn PlatformTextSystem> = Arc::new(gpui_apple::AppleTextSystem::new());
     let mut cx = headless::app(&text_system);
     let mut problems = Vec::new();
-    for style in IconStyle::ALL {
-        for size in IconSize::ALL {
+    for style in AppIconStyle::ALL {
+        for size in AppIconSize::ALL {
             let drawn = draw(&mut cx, style, size);
             let pixels = u32::from(size.pixels());
             assert_eq!(drawn.dimensions(), (pixels, pixels), "drawn at 2x, so each point is two pixels");
@@ -78,25 +78,25 @@ fn every_size_of_the_icon_looks_as_approved() {
 
 /// The icon over a backdrop of one colour.
 struct Icon {
-    style: IconStyle,
-    size: IconSize,
+    style: AppIconStyle,
+    size: AppIconSize,
     backdrop: Hsla,
 }
 
 impl Render for Icon {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        div().size_full().bg(self.backdrop).child(look::icon(self.style, self.size, cx))
+        div().size_full().bg(self.backdrop).child(look::app_icon(self.style, self.size, cx))
     }
 }
 
 /// Clear around its tile. The renderer only draws opaque pictures, so it's drawn over black and over white, and
 /// the two give back how much of each pixel the icon covers, and in what colour.
-fn draw(cx: &mut HeadlessAppContext, style: IconStyle, icon: IconSize) -> RgbaImage {
+fn draw(cx: &mut HeadlessAppContext, style: AppIconStyle, icon: AppIconSize) -> RgbaImage {
     unblend(&over(cx, style, icon, black()), &over(cx, style, icon, white()))
 }
 
 /// In a window exactly as big as the icon.
-fn over(cx: &mut HeadlessAppContext, style: IconStyle, icon: IconSize, backdrop: Hsla) -> RgbaImage {
+fn over(cx: &mut HeadlessAppContext, style: AppIconStyle, icon: AppIconSize, backdrop: Hsla) -> RgbaImage {
     let points = px(f32::from(icon.pixels()) / 2.0);
     let picture = headless::draw(cx, size(points, points), move |_| Icon { style, size: icon, backdrop });
     assert!(picture.settled, "the {}px {} icon keeps changing", icon.pixels(), name(style));
@@ -124,10 +124,10 @@ fn byte(value: f32) -> u8 {
 }
 
 /// What a style's iconset is called.
-fn name(style: IconStyle) -> &'static str {
+fn name(style: AppIconStyle) -> &'static str {
     match style {
-        IconStyle::Idle => "idle",
-        IconStyle::Working => "working",
+        AppIconStyle::Idle => "idle",
+        AppIconStyle::Working => "working",
     }
 }
 
@@ -135,7 +135,7 @@ fn icons() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("icons")
 }
 
-fn iconset(style: IconStyle) -> PathBuf {
+fn iconset(style: AppIconStyle) -> PathBuf {
     icons().join(format!("{}.iconset", name(style)))
 }
 
@@ -146,10 +146,10 @@ fn unknown_files() -> Vec<String> {
         let entries = std::fs::read_dir(dir).into_iter().flatten().map(|entry| entry.unwrap().file_name());
         entries.map(|name| name.to_string_lossy().into_owned()).collect()
     };
-    let styles: Vec<String> = IconStyle::ALL.iter().map(|style| format!("{}.iconset", name(*style))).collect();
+    let styles: Vec<String> = AppIconStyle::ALL.iter().map(|style| format!("{}.iconset", name(*style))).collect();
     let known = |file: &String| styles.contains(file) || file == WINDOWS_ICON;
     let mut unknown: Vec<String> = names(icons()).into_iter().filter(|file| !known(file)).collect();
-    for style in IconStyle::ALL {
+    for style in AppIconStyle::ALL {
         let files = names(iconset(style)).into_iter().filter(|file| !FILES.iter().any(|(known, _)| known == file));
         unknown.extend(files.map(|file| format!("{}.iconset/{file}", name(style))));
     }

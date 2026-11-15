@@ -10,7 +10,7 @@ use pixels::{Layout, OnPixels};
 
 /// The two ways the icon can look. The app's own is `Working`.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum IconStyle {
+pub enum AppIconStyle {
     /// The fan at rest, as the brand is drawn in an empty state.
     Idle,
     /// The fan caught working, with the agent's white light partway across it, held still where a working mark has
@@ -18,14 +18,14 @@ pub enum IconStyle {
     Working,
 }
 
-impl IconStyle {
-    pub const ALL: [IconStyle; 2] = [IconStyle::Idle, IconStyle::Working];
+impl AppIconStyle {
+    pub const ALL: [AppIconStyle; 2] = [AppIconStyle::Idle, AppIconStyle::Working];
 }
 
 /// The sizes macOS keeps a drawing of the icon for. It mostly picks the smallest with the pixels it needs, so on a
 /// Retina display each is shown at up to half its pixels in points. The Dock is the exception, and uses the 256.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum IconSize {
+pub enum AppIconSize {
     Px16,
     Px32,
     Px64,
@@ -35,26 +35,26 @@ pub enum IconSize {
     Px1024,
 }
 
-impl IconSize {
-    pub const ALL: [IconSize; 7] = [
-        IconSize::Px16,
-        IconSize::Px32,
-        IconSize::Px64,
-        IconSize::Px128,
-        IconSize::Px256,
-        IconSize::Px512,
-        IconSize::Px1024,
+impl AppIconSize {
+    pub const ALL: [AppIconSize; 7] = [
+        AppIconSize::Px16,
+        AppIconSize::Px32,
+        AppIconSize::Px64,
+        AppIconSize::Px128,
+        AppIconSize::Px256,
+        AppIconSize::Px512,
+        AppIconSize::Px1024,
     ];
 
     pub fn pixels(self) -> u16 {
         match self {
-            IconSize::Px16 => 16,
-            IconSize::Px32 => 32,
-            IconSize::Px64 => 64,
-            IconSize::Px128 => 128,
-            IconSize::Px256 => 256,
-            IconSize::Px512 => 512,
-            IconSize::Px1024 => 1024,
+            AppIconSize::Px16 => 16,
+            AppIconSize::Px32 => 32,
+            AppIconSize::Px64 => 64,
+            AppIconSize::Px128 => 128,
+            AppIconSize::Px256 => 256,
+            AppIconSize::Px512 => 512,
+            AppIconSize::Px1024 => 1024,
         }
     }
 
@@ -64,18 +64,18 @@ impl IconSize {
     /// around each.
     pub(super) fn drawing(self) -> Drawing {
         match self {
-            IconSize::Px16 => {
+            AppIconSize::Px16 => {
                 Drawing::OnPixels(OnPixels { inset: 1., rows: 2, dot: 1., spacing: 2.5, hub: 2., ring: None })
             }
-            IconSize::Px32 => {
+            AppIconSize::Px32 => {
                 Drawing::OnPixels(OnPixels { inset: 3., rows: 2, dot: 2., spacing: 3.7, hub: 2., ring: None })
             }
-            IconSize::Px64 => {
+            AppIconSize::Px64 => {
                 Drawing::OnPixels(OnPixels { inset: 6., rows: 3, dot: 2., spacing: 4.2, hub: 2., ring: Some(4.) })
             }
-            IconSize::Px128 => Drawing::Scaled { rows: 3, fan: 0.66 },
-            IconSize::Px256 => Drawing::Scaled { rows: 4, fan: 0.66 },
-            IconSize::Px512 | IconSize::Px1024 => Drawing::Scaled { rows: 9, fan: 0.62 },
+            AppIconSize::Px128 => Drawing::Scaled { rows: 3, fan: 0.66 },
+            AppIconSize::Px256 => Drawing::Scaled { rows: 4, fan: 0.66 },
+            AppIconSize::Px512 | AppIconSize::Px1024 => Drawing::Scaled { rows: 9, fan: 0.62 },
         }
     }
 }
@@ -104,7 +104,7 @@ const TRAIL: f32 = 0.18;
 
 /// The icon in `style` at `size`, drawn for a Retina display, so it's half as many points wide as its drawing has
 /// pixels.
-pub fn icon(style: IconStyle, size: IconSize, cx: &App) -> impl IntoElement {
+pub fn app_icon(style: AppIconStyle, size: AppIconSize, cx: &App) -> impl IntoElement {
     let app = crate::colors::colors(cx);
     let colors =
         Colors { copper: app.brand, light: app.text, top: app.icon_tile_top, bottom: app.pane, edge: app.edge };
@@ -125,7 +125,7 @@ struct Colors {
     pub(super) edge: Hsla,
 }
 
-fn paint(bounds: Bounds<Pixels>, style: IconStyle, drawing: &Drawing, colors: &Colors, window: &mut Window) {
+fn paint(bounds: Bounds<Pixels>, style: AppIconStyle, drawing: &Drawing, colors: &Colors, window: &mut Window) {
     let scale = window.scale_factor();
     let side = bounds.size.width;
     let inset = match drawing {
@@ -146,7 +146,14 @@ fn paint(bounds: Bounds<Pixels>, style: IconStyle, drawing: &Drawing, colors: &C
 }
 
 /// In the middle of the tile, as a fan is in the middle of its box.
-fn scaled(bounds: Bounds<Pixels>, style: IconStyle, rows: usize, width: Pixels, colors: &Colors, window: &mut Window) {
+fn scaled(
+    bounds: Bounds<Pixels>,
+    style: AppIconStyle,
+    rows: usize,
+    width: Pixels,
+    colors: &Colors,
+    window: &mut Window,
+) {
     let fan = Fan::with_rows(Bounds::centered_at(bounds.center(), size(width, width * ASPECT)), rows);
     for dot in fan.dots() {
         fan::disc(window, dot.at, fan.dot, colors.copper);
@@ -162,7 +169,7 @@ fn scaled(bounds: Bounds<Pixels>, style: IconStyle, rows: usize, width: Pixels, 
 }
 
 /// Each dot is a square of whole pixels, which at this size is sharper than a circle's soft edge.
-fn on_pixels(bounds: Bounds<Pixels>, style: IconStyle, fan: &OnPixels, colors: &Colors, window: &mut Window) {
+fn on_pixels(bounds: Bounds<Pixels>, style: AppIconStyle, fan: &OnPixels, colors: &Colors, window: &mut Window) {
     let scale = window.scale_factor();
     let layout = Layout::of(fan, bounds.size.width * scale / px(1.));
     let at = |(x, y): (f32, f32)| point(bounds.origin.x + px(x / scale), bounds.origin.y + px(y / scale));
@@ -184,28 +191,31 @@ fn on_pixels(bounds: Bounds<Pixels>, style: IconStyle, fan: &OnPixels, colors: &
 }
 
 /// How much of the agent's light is on a dot `along` the fan in `row`, of `rows`, in an icon in `style`.
-fn light(style: IconStyle, along: f32, row: usize, rows: usize) -> f32 {
+fn light(style: AppIconStyle, along: f32, row: usize, rows: usize) -> f32 {
     match style {
-        IconStyle::Idle => 0.0,
-        IconStyle::Working => light_on(along, row, SWEEP, TRAIL / fan::as_f32(rows - 1)),
+        AppIconStyle::Idle => 0.0,
+        AppIconStyle::Working => light_on(along, row, SWEEP, TRAIL / fan::as_f32(rows - 1)),
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{IconStyle, SWEEP, TRAIL, light};
+    use super::{AppIconStyle, SWEEP, TRAIL, light};
 
     #[test]
     fn the_working_icon_has_the_light_just_right_of_the_middle_with_the_outer_row_trailing() {
         for rows in 2..=9 {
             let outer = rows - 1;
 
-            let at = |along| light(IconStyle::Working, along, 0, rows);
+            let at = |along| light(AppIconStyle::Working, along, 0, rows);
             assert!(at(0.5 + 0.1) > at(0.5), "{rows} rows: brighter just right of the middle");
-            assert!((light(IconStyle::Working, SWEEP, 0, rows) - 1.0).abs() < 1e-6, "{rows} rows: the inner row");
-            assert!((light(IconStyle::Working, SWEEP - TRAIL, outer, rows) - 1.0).abs() < 1e-6, "{rows} rows: outer");
-            assert!(light(IconStyle::Working, SWEEP, outer, rows) < 1.0, "{rows} rows: the outer row trails");
-            assert!(light(IconStyle::Working, 0.0, 0, rows) < 0.01, "{rows} rows: the left end is dark");
+            assert!((light(AppIconStyle::Working, SWEEP, 0, rows) - 1.0).abs() < 1e-6, "{rows} rows: the inner row");
+            assert!(
+                (light(AppIconStyle::Working, SWEEP - TRAIL, outer, rows) - 1.0).abs() < 1e-6,
+                "{rows} rows: outer"
+            );
+            assert!(light(AppIconStyle::Working, SWEEP, outer, rows) < 1.0, "{rows} rows: the outer row trails");
+            assert!(light(AppIconStyle::Working, 0.0, 0, rows) < 0.01, "{rows} rows: the left end is dark");
         }
     }
 
@@ -214,7 +224,7 @@ mod tests {
         for rows in 2..=9 {
             for along in [0.0, 0.25, 0.5, SWEEP, 1.0] {
                 for row in 0..rows {
-                    assert!(light(IconStyle::Idle, along, row, rows).abs() < f32::EPSILON, "{rows} rows, row {row}");
+                    assert!(light(AppIconStyle::Idle, along, row, rows).abs() < f32::EPSILON, "{rows} rows, row {row}");
                 }
             }
         }
