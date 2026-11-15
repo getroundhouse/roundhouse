@@ -1,9 +1,11 @@
-//! What each crate may depend on, from `docs/architecture.md`'s dependency rules, and that the tool that packages the
-//! app is on the version of the crate that reads its packages.
+//! What each crate may depend on, from `docs/architecture.md`'s dependency rules, and the pins that have to agree: the
+//! tool that packages the app and the crate that reads its packages, and the copy of gpui-kit, its tool's pin and the
+//! GPUI the app draws with.
 
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
+use kit_sync::{Pin, Record};
 use serde_json::Value;
 
 use super::workspace::metadata;
@@ -106,17 +108,41 @@ fn the_hub_and_the_worker_stay_apart() {
 #[test]
 fn vpk_is_the_velopack_crate_s_version() {
     let root = Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."));
-    // As `Cargo.lock` has it, which is the version every build takes.
-    let lock: toml::Table = std::fs::read_to_string(root.join("Cargo.lock")).unwrap().parse().unwrap();
-    let crates: Vec<&str> = lock["package"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter(|package| package["name"].as_str() == Some("velopack"))
-        .map(|package| package["version"].as_str().unwrap())
-        .collect();
     let tools = root.join("tools/package/dotnet-tools.json");
     let tools: Value = serde_json::from_str(&std::fs::read_to_string(tools).unwrap()).unwrap();
 
-    assert_eq!(crates, [tools["tools"]["vpk"]["version"].as_str().unwrap()]);
+    assert_eq!(locked("velopack"), [tools["tools"]["vpk"]["version"].as_str().unwrap()]);
+}
+
+/// The versions of `name` that `Cargo.lock` has, which are the versions every build takes.
+fn locked(name: &str) -> Vec<String> {
+    let root = Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."));
+    let lock: toml::Table = std::fs::read_to_string(root.join("Cargo.lock")).unwrap().parse().unwrap();
+    (lock["package"].as_array().unwrap().iter())
+        .filter(|package| package["name"].as_str() == Some(name))
+        .map(|package| package["version"].as_str().unwrap().to_string())
+        .collect()
+}
+
+/// The GPUI the app draws with off the main thread is the GPUI the kit is built on, since each would have types of its
+/// own. `tools/kit-sync` moves both.
+#[test]
+fn gpui_pre_apple_is_the_kit_s_gpui() {
+    let gpui = locked("gpui-pre");
+    assert_eq!(gpui.len(), 1, "the app builds one GPUI: {gpui:?}");
+    assert_eq!(locked("gpui-pre-apple"), gpui, "run `cargo run -p kit-sync`, which moves gpui-pre-apple");
+}
+
+/// The copy of gpui-kit is on the release `tools/kit-sync` pins, with no conflict of its last merge left to settle, so a
+/// change to the pin, such as one Renovate makes, can't merge without the copy it names, which only running the tool
+/// makes.
+#[test]
+fn the_kit_s_copy_is_on_the_release_its_tool_pins() {
+    let root = Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."));
+    let made = Record::read(root).unwrap().expect("there's a record of what the copy was made from");
+    let pin = Pin::ours();
+
+    let run = "run `cargo run -p kit-sync`, which brings the copy to the release it pins";
+    assert_eq!((&made.release, &made.commit, &made.kept), (&pin.release, &pin.commit, &pin.kept), "{run}");
+    assert_eq!(made.unsettled, [], "settle these, then run `cargo run -p kit-sync` again");
 }

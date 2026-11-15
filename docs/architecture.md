@@ -100,7 +100,7 @@ The hub doesn't do the work itself. When a workspace is created, it records it a
 
 ## Layout
 
-A single Cargo workspace in one repo. Directories marked *not built* don't exist.
+A single Cargo workspace in one repo, beside the copy of gpui-kit, which keeps upstream's workspace. Directories marked *not built* don't exist.
 
 ```
 crates/
@@ -135,11 +135,16 @@ tools/
   stand-ins/       The programs tests run in place of others, such as the Claude CLI, each the example of a package of its own that depends only on what it uses. Unconfirmed
   smoke/           Runs the stack against the real Claude CLI, and regenerates its fixture
   file-icons/      Replaces the desktop app's file icons with a pinned, checked release of Catppuccin's icons. Unconfirmed
+  kit-sync/        Brings the copy of gpui-kit to the release it pins, merged with our changes, and prints our changes as a patch to offer upstream
   build.sh         Builds the binaries in release, stamped with which build they are, for `install.sh`, `package/` and the release workflow
   check-stamp.sh   Checks that only the binaries read the build stamp, so the libraries compile the same whatever it is. Unconfirmed
   install.sh       Installs this commit as a version of its own, outside `target/`
   package/         Packages this commit as Roundhouse.app with Velopack, signed and notarized when given the keys, or Windows binaries as an installer, or Linux binaries as an AppImage, and publishes each as an update
   perf/            Performance tests against the real app. Not built, see `docs/performance.md`
+third_party/
+  README.md        What's here, how it's changed, and how a change goes upstream and a release comes in
+  gpui-kit/        Our copy of Longbridge's gpui-kit: the crates the app builds of it at a release, with our changes, in upstream's workspace, cut down to them
+  gpui-kit.toml    The release and commit the copy was made from, which `tools/kit-sync` writes
 infra/             Terraform for the AWS account where RunsOn can run CI's jobs on Spot instances, applied by hand. Unconfirmed
 .github/workflows/ CI: the full checks on Linux for every PR that changes more than Markdown and the marketing site, with the guide built for every PR that changes what it's made of, and on a Mac when dependencies change. On Windows, for every PR that changes Rust, a lint of the product's code as built for it, and a hub started and stopped. The release workflow publishes each merge to `main`
 ```
@@ -169,9 +174,9 @@ hub, agents, worker, client-core ──> private-files
 6. **Exact pins for GPUI and gpui-kit.** They are pre-1.0, so upgrades should be deliberate and in one place.
 7. **Nothing that ships is under GPL, AGPL or LGPL.** MPL-2.0 is allowed when it comes unchanged from crates.io, and everything else is permissive, such as Apache-2.0 or MIT. GPL or AGPL code would put the whole app under its terms, which would decide the project's own license and rule out closed or hosted versions, and GPL is widely seen as incompatible with the App Store. AGPL also reaches the hub over the network. LGPL expects users to be able to relink, which static linking makes awkward. MPL-2.0 only covers its own files (§3.3), and shipping it unchanged only means saying where its source is (§3.2), which goes in the notices every license needs anyway. A changed copy would have to be published, hence crates.io only. The one exception is the AppImage runtime, the program Velopack puts at the front of the Linux app, which mounts the app's files and starts it, and which has libfuse, under LGPL-2.1, built in. Every AppImage runtime uses FUSE, and an AppImage is the only package Velopack updates on Linux. The runtime is a program of its own, MIT and unchanged from upstream, so the LGPL covers only it, and nothing of ours links libfuse. Meeting it means the notices saying where the runtime's and libfuse's sources are.
 
-`tools/policy/tests/policy/` checks rules 1 to 4 and 7 against the real dependency graph, so `cargo test` fails if a new dependency breaks one. The license check covers what actually ships on each platform, not everything in `Cargo.lock`, with one gap. The Mac app also ships `UpdateMac`, the updater Velopack builds from its own Rust and ships prebuilt, so the crates in it aren't in `Cargo.lock` and the check can't see them. The same goes for the `Update.exe` and the installer it ships for Windows, and for `UpdateNix` and the AppImage runtime it ships for Linux. Velopack itself is MIT.
+`tools/policy/tests/policy/` checks rules 1 to 4 and 7 against the real dependency graph, so `cargo test` fails if a new dependency breaks one, and checks that the copy of gpui-kit is on the release `tools/kit-sync` pins. The license check covers what actually ships on each platform, not everything in `Cargo.lock`, with one gap. The Mac app also ships `UpdateMac`, the updater Velopack builds from its own Rust and ships prebuilt, so the crates in it aren't in `Cargo.lock` and the check can't see them. The same goes for the `Update.exe` and the installer it ships for Windows, and for `UpdateNix` and the AppImage runtime it ships for Linux. Velopack itself is MIT.
 
-Someone else's files kept in the repo rather than taken as a crate, such as the desktop app's file icons, aren't in the dependency graph either, so the policy tests list each such folder with its license, and check that its license file says so, and that every license file in the repo is in a folder on the list, apart from those in hidden folders and in folders `.gitignore` leaves out, such as `node_modules`. *Unconfirmed.*
+Someone else's files kept in the repo rather than taken from crates.io, such as the desktop app's file icons and the copy of gpui-kit, whose icons are under licenses its manifests don't name, aren't all in the dependency graph either, so the policy tests list each such folder with its license, and check that its license file says so, and that every license file in the repo is in a folder on the list, apart from those in hidden folders, in folders `.gitignore` leaves out, such as `node_modules`, and links, such as the one from a crate in the copy of gpui-kit to the copy's own license. *Unconfirmed.*
 
 ### Layers
 

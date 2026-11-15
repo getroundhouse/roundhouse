@@ -21,8 +21,9 @@
   semanticCommits: "disabled",
   // In UTC.
   schedule: ["* * * * 1"],
-  // Everything but node_modules, including tests/, whose fixtures say which Claude CLI they came from.
-  ignorePaths: ["**/node_modules/**"],
+  // Everything but node_modules and the copy of gpui-kit's manifests, including tests/, whose fixtures say which
+  // Claude CLI they came from. The copy's manifests are upstream's, and move with each release of it we take.
+  ignorePaths: ["**/node_modules/**", "third_party/gpui-kit/Cargo.toml", "third_party/gpui-kit/crates/**"],
   // docs/documentation.md gives every issue one kind and an area.
   dependencyDashboardLabels: ["kind/task", "area/dev"],
   // Vulnerable direct dependencies, from OSV. Their PRs skip the schedule and approval, but Cargo still waits three
@@ -73,13 +74,22 @@
     },
     {
       description: [
-        "docs/architecture.md: exact pins, upgraded deliberately and together. gpui-pre-apple has to be the version",
-        "gpui-kit's GPUI uses, which may not be its newest.",
+        "tools/kit-sync moves gpui-kit to the version of our copy of it, and gpui-pre-apple to the GPUI the kit pins,",
+        "which may not be its newest, so Renovate leaves both alone.",
       ],
       matchPackageNames: ["gpui-kit", "gpui-pre-apple"],
-      groupName: "GPUI",
-      groupSlug: "gpui",
-      dependencyDashboardApproval: true,
+      enabled: false,
+    },
+    {
+      description: [
+        "docs/architecture.md: the app builds its own copy of gpui-kit, which tools/kit-sync brings to a release,",
+        "merged with our changes. The newest release is taken at least once a week, as third_party/README.md says, so",
+        "its PR opens on the schedule, for a person to finish.",
+      ],
+      matchDepNames: ["longbridge/gpui-kit"],
+      prBodyNotes: [
+        "> [!WARNING]\n> This changes only `RELEASE`. Set `COMMIT` in `tools/kit-sync/src/pin.rs` to the commit the new tag points at, run `cargo run -p kit-sync`, and settle any conflicts, as `third_party/README.md` says, then run the full checks and the gallery, before merging. The policy test fails until the copy is on the release the tool pins.",
+      ],
     },
     {
       description: [
@@ -264,6 +274,19 @@
         "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)(?: packageName=(?<packageName>\\S+))?(?: versioning=(?<versioning>\\S+))?(?: registryUrl=(?<registryUrl>\\S+))?\\s*\\n\\s*[\\w.-]+\\s*[=:]\\s*[\"']?v?(?<currentValue>[^\"'\\s]+)",
       ],
       versioningTemplate: "{{#if versioning}}{{{versioning}}}{{else}}loose{{/if}}",
+      extractVersionTemplate: "^v?(?<version>.+)$",
+    },
+    {
+      customType: "regex",
+      description: [
+        "A version in Rust with a `// renovate:` comment on the line above it, such as",
+        "`// renovate: datasource=github-tags depName=longbridge/gpui-kit` over the line that sets kit-sync's `RELEASE`.",
+      ],
+      managerFilePatterns: ["**/*.rs"],
+      matchStrings: [
+        "// renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s*\\n\\s*(?:pub(?:\\([\\w:]+\\))? )?const \\w+: &str = \"v?(?<currentValue>[^\"]+)\"",
+      ],
+      versioningTemplate: "loose",
       extractVersionTemplate: "^v?(?<version>.+)$",
     },
     {
