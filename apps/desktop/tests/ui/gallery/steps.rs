@@ -85,8 +85,8 @@ pub(crate) enum Step {
     Find(&'static str),
 }
 
-/// An element in the app, by its ID, or by the label it gives assistive apps, for one whose ID is made from data
-/// the screen can't know, such as a tool call's line.
+/// An element in the app, by its ID, or a line in the chat, by the label it gives assistive apps, for one whose ID is
+/// made from data the screen can't know, such as a tool call's line.
 #[derive(Clone, Copy)]
 pub(crate) enum Target {
     Id(&'static str),
