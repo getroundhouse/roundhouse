@@ -2,10 +2,12 @@
 //! texts show.
 
 use client_core::session_log::{By, PromptState, Row};
+use gpui_kit::{Context, Window};
 use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{PromptLine, Seq};
 
 use super::{Transcript, rows_and_loaded};
+use crate::rows::{Item, Shared, render_row};
 
 impl Transcript {
     /// The event at a row, if it's loaded.
@@ -52,8 +54,9 @@ impl Transcript {
         self.session.read(|log| log.tail().messages.iter().flat_map(|m| &m.blocks).map(|b| b.text.as_str()).collect())
     }
 
-    /// How many rows are loaded as the session's log has them now. The list is told of them when the log says it has
-    /// changed, which is after the last of the pages asked for together is in, so this can be ahead of the list.
+    /// How many rows are loaded as the session's log has them now. The list is told of them as each frame starts, and
+    /// when the log says it has changed, which is after the last of the pages asked for together is in, so this can be
+    /// ahead of the list.
     pub fn loaded_rows(&self) -> usize {
         self.session.read(|log| rows_and_loaded(log).1.iter().map(ExactSizeIterator::len).sum())
     }
@@ -74,6 +77,22 @@ impl Transcript {
     /// What a copy would hold now, which a test can read while a drag is still going.
     pub fn as_copied(&self) -> String {
         self.selection.as_copied()
+    }
+
+    /// Draws the list's last row, the end of the chat, as the list was last told of the log's rows, as a frame does
+    /// once the log has gained rows since the frame started, for a test of what it shows then. Nothing else is drawn,
+    /// and the list isn't told.
+    pub fn draw_the_end_as_the_list_has_it(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.texts.new_frame();
+        let shared = Shared {
+            this: cx.weak_entity(),
+            linked: self.linked.clone(),
+            line_text: look::LineText::new(window, cx),
+            texts: self.texts.clone(),
+            selection: self.selection.clone(),
+        };
+        let tail = self.list.row_count().saturating_sub(1);
+        render_row(&self.model, &self.session, &shared, Item { ix: tail, tail }, cx);
     }
 
     /// What each text the transcript keeps the kit's blocks of was parsed from, which is what it shows.

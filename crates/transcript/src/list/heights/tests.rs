@@ -89,6 +89,8 @@ enum Change {
     Rows(usize),
     /// A row is measured. The row is taken modulo how many there are.
     Measured(usize, u16),
+    /// What a row was measured at is forgotten, taken the same way.
+    Forgotten(usize),
 }
 
 fn change() -> impl Strategy<Value = Change> {
@@ -96,6 +98,7 @@ fn change() -> impl Strategy<Value = Change> {
         (0usize..70).prop_map(Change::Rows),
         // Quarters of a pixel, and often none, as many rows show nothing.
         (0usize..70, prop_oneof![Just(0u16), 0u16..2000]).prop_map(|(row, quarters)| Change::Measured(row, quarters)),
+        (0usize..70).prop_map(Change::Forgotten),
     ]
 }
 
@@ -113,7 +116,12 @@ fn after(changes: &[Change]) -> (Heights, Vec<Option<f32>>) {
                 heights.measure(row, px(height));
                 plain[row] = Some(height);
             }
-            Change::Measured(..) => {}
+            Change::Forgotten(row) if !plain.is_empty() => {
+                let row = row % plain.len();
+                heights.forget(row);
+                plain[row] = None;
+            }
+            Change::Measured(..) | Change::Forgotten(_) => {}
         }
     }
     (heights, plain)

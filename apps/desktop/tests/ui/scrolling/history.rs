@@ -107,7 +107,8 @@ struct Step {
     /// How many rows the session's log holds, with the row that shows what's streaming.
     pub(super) in_the_log: usize,
     /// How many of them the list has been told of. A page goes into the log on another thread, and the list is told
-    /// once the pages asked for with it are all in. Rows drawn from the log meanwhile are measured as they're drawn.
+    /// as each frame starts, and once the pages asked for with it are all in. Rows drawn from the log meanwhile are
+    /// measured as they're drawn.
     pub(super) in_the_list: usize,
 }
 

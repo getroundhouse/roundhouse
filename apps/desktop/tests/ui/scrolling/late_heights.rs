@@ -55,7 +55,7 @@ fn a_long_thought_opened_again_has_its_height_at_once(cx: &mut TestAppContext) {
 
     ui.cx.update_entity(&transcript, |t, cx| t.set_thinking_open(true, cx));
     // One frame, with nothing else let run, so a text parsed on another thread wouldn't be in yet.
-    ui.cx.update_window(ui.handle, |_, window, cx| window.render_frame(cx)).unwrap();
+    ui.redraw();
 
     assert_eq!(height(&ui), opened, "it's as tall as it was");
     assert!(ui.cx.read_entity(&transcript, |t, _| t.long_texts_parsed()), "with nothing parsed again");

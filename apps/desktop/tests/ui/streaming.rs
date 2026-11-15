@@ -60,7 +60,8 @@ fn a_reply_shows_all_of_itself_once_it_is_recorded_however_its_end_arrived(cx: &
 }
 
 /// A long reply, which the transcript parses on another thread once it's recorded, goes on showing what it was parsed
-/// as while it streamed while that's done, rather than going blank between.
+/// as while it streamed while that's done, rather than going blank between. So does one drawn once its record has
+/// taken it from the end of the chat, and before the transcript has caught up with its log.
 #[gpui_kit::test]
 fn a_long_reply_never_goes_blank_as_it_is_recorded(cx: &mut TestAppContext) {
     let stack = Stack::new();
@@ -80,6 +81,10 @@ fn a_long_reply_never_goes_blank_as_it_is_recorded(cx: &mut TestAppContext) {
     wait_until("the turn to end", || stack.client().session_get(&session).unwrap().status == SessionStatus::Idle);
     let record = ui.row_of(&stack.newest_event(&session));
     wait_until("the record to reach the app", || ui.cx.read_entity(&transcript, |t, _| t.event_at(record).is_some()));
+    // Before the transcript has caught up with its log, which has taken the reply from the end of the chat.
+    ui.redraw();
+    let (listed, logged) = ui.cx.read_entity(&transcript, |t, _| (t.list().row_count(), t.row_count()));
+    assert_eq!(listed, logged + 1, "the frame told the list of the log's rows, and the end of the chat after them");
     ui.wait_idle_with("the recorded reply", |text| text.contains("part3"));
     ui.settle(Duration::from_millis(16));
 
@@ -92,6 +97,34 @@ fn a_long_reply_never_goes_blank_as_it_is_recorded(cx: &mut TestAppContext) {
     let tall = heights.iter().position(|height| *height > last / 2.).unwrap();
     assert!(tall + 1 < heights.len(), "it was drawn as it streamed, before it was parsed: {heights:?}");
     assert!(heights[tall..].iter().all(|height| *height > last / 2.), "and never went blank after: {heights:?}");
+}
+
+/// A frame tells the list of the log's rows as it starts, and the log can take a reply's record while the frame is
+/// drawn, after that, which takes the reply from the end of the chat. The end of the chat then draws it from its record,
+/// rather than it being drawn in neither.
+#[gpui_kit::test]
+fn a_reply_recorded_while_a_frame_is_drawn_is_drawn_at_the_end_from_its_record(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let session = stack.chat_in_a_new_workspace();
+    let mut ui = Ui::open(cx, &stack);
+    ui.wait("the workspace", |ui| ui.transcript().is_some());
+    let transcript = ui.transcript().unwrap();
+    let done = Gate::new(&stack, "done");
+    stack.client().session_prompt(&session, &format!("slow-until:{done}:word"), None).unwrap();
+    ui.wait("the reply to be drawn", |ui| ui.cx.read_entity(&transcript, |t, _| t.all_as_copied().contains("word2")));
+    done.open();
+    wait_until("the turn to end", || stack.client().session_get(&session).unwrap().status == SessionStatus::Idle);
+    let record = ui.row_of(&stack.newest_event(&session));
+    wait_until("the record to reach the app", || ui.cx.read_entity(&transcript, |t, _| t.event_at(record).is_some()));
+
+    let handle = ui.handle;
+    ui.cx
+        .update_window(handle, |_, window, cx| {
+            transcript.update(cx, |t, cx| t.draw_the_end_as_the_list_has_it(window, cx));
+        })
+        .unwrap();
+    let copied = ui.cx.read_entity(&transcript, |t, _| t.all_as_copied());
+    assert!(copied.contains("word2"), "the reply is still shown: {copied:?}");
 }
 
 /// Whether the agent's words in `body` say `text`.
