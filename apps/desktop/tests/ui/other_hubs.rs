@@ -16,11 +16,11 @@ fn a_hub_across_a_real_break_is_explained_and_can_be_restarted(cx: &mut TestAppC
 
     ui.wait(
         "the app to see the hub",
-        |ui| matches!(&ui.view().connection, Connection::AcrossABreak(status) if status.running_sessions == 2),
+        |ui| matches!(ui.view().connection(), Connection::AcrossABreak(status) if status.running_sessions == 2),
     );
     ui.click("restart-hub");
 
-    ui.wait("a new hub", |ui| matches!(ui.view().connection, Connection::Ready(_)));
+    ui.wait("a new hub", |ui| matches!(ui.view().connection(), Connection::Ready(_)));
     let status = stack.client().hub_status().unwrap();
     assert_ne!(status.pid, other.0.id());
     assert!(status.on_demand);
@@ -98,7 +98,7 @@ fn an_older_hub_that_goes_as_the_app_joins_it_leaves_the_app_on_its_own(cx: &mut
     let mut ui = Ui::open_without_waiting(cx, &stack);
 
     wait_for_the_apps_own_hub(&mut ui, &mut older);
-    ui.wait("the app to connect", |ui| matches!(ui.view().connection, Connection::Ready(_)));
+    ui.wait("the app to connect", |ui| matches!(ui.view().connection(), Connection::Ready(_)));
     assert!(older.restarted(), "asked to restart, rather than to stop");
 }
 
@@ -219,7 +219,7 @@ fn an_older_hub_that_is_busy_once_asked_to_stop_is_kept(cx: &mut TestAppContext)
     ui.wait("the app to be back on the older hub after it refused", |ui| {
         let refused =
             client_core::HubAdmin::connect(&socket).is_ok_and(|hub| hub.status().unwrap().running_sessions == 1);
-        refused && matches!(ui.view().connection, Connection::Ready(_))
+        refused && matches!(ui.view().connection(), Connection::Ready(_))
     });
     assert!(older.0.try_wait().unwrap().is_none());
     assert!(matches!(ui.build_line().update, Some(Updating::Finishing { .. })));
@@ -253,7 +253,7 @@ fn an_update_can_be_finished_from_the_sidebar_while_agents_run_on_the_older_hub(
     ui.click("restart-now-confirm");
 
     ui.wait("a new hub", |ui| {
-        older.0.try_wait().unwrap().is_some() && matches!(ui.view().connection, Connection::Ready(_))
+        older.0.try_wait().unwrap().is_some() && matches!(ui.view().connection(), Connection::Ready(_))
     });
     assert!(stack.client().hub_status().unwrap().on_demand, "the app started this one because it needed it");
     assert!(!ui.has("finish-update"), "the new hub is this app's own build");
@@ -271,7 +271,7 @@ fn not_now_leaves_the_older_hub_running(cx: &mut TestAppContext) {
 
     assert!(!ui.has_dialog());
     assert_eq!(ui.view().update_question, None);
-    assert!(matches!(ui.view().connection, Connection::Ready(_)));
+    assert!(matches!(ui.view().connection(), Connection::Ready(_)));
     assert!(older.0.try_wait().unwrap().is_none());
     assert!(ui.has("finish-update"), "the card is as it was, so it can still be restarted later");
 
@@ -296,14 +296,14 @@ fn finishing_after_the_older_hub_has_gone_leaves_the_new_one_alone(cx: &mut Test
 
     client_core::stop_hub(&stack.hub.paths.socket).unwrap();
     ui.wait("the app's own hub", |ui| {
-        matches!(ui.view().connection, Connection::Ready(_)) && on_its_own_build(&ui.build_line())
+        matches!(ui.view().connection(), Connection::Ready(_)) && on_its_own_build(&ui.build_line())
     });
     let pid = stack.client().hub_status().unwrap().pid;
     assert!(!ui.has_dialog(), "the dialog went with the hub it asked about");
     ui.cx.update(|cx| ui.view.update(cx, |view, cx| view.finish_update_now(&said, cx)));
     ui.frame();
 
-    assert!(matches!(ui.view().connection, Connection::Ready(_)));
+    assert!(matches!(ui.view().connection(), Connection::Ready(_)));
     assert_eq!(stack.client().hub_status().unwrap().pid, pid);
 }
 
@@ -323,7 +323,7 @@ fn finishing_now_asks_again_when_more_has_started_since_it_asked(cx: &mut TestAp
     assert!(older.0.try_wait().unwrap().is_none());
     ui.click("restart-now-confirm");
     ui.wait("a new hub", |ui| {
-        older.0.try_wait().unwrap().is_some() && matches!(ui.view().connection, Connection::Ready(_))
+        older.0.try_wait().unwrap().is_some() && matches!(ui.view().connection(), Connection::Ready(_))
     });
 }
 
@@ -360,14 +360,14 @@ fn a_hub_started_by_hand_is_explained_and_left_alone(cx: &mut TestAppContext) {
     let mut other = stack.start_stand_in_hub(&["--not-on-demand"]);
     let mut ui = Ui::open_without_waiting(cx, &stack);
 
-    ui.wait("the app to see the hub", |ui| matches!(ui.view().connection, Connection::AcrossABreak(_)));
+    ui.wait("the app to see the hub", |ui| matches!(ui.view().connection(), Connection::AcrossABreak(_)));
 
     assert!(!ui.has("restart-hub"));
     assert!(other.0.try_wait().unwrap().is_none());
     // Whoever runs it stops it, and the app can then start one of its own.
     client_core::stop_hub(&stack.hub.paths.socket).unwrap();
     ui.click("try-hub-again");
-    ui.wait("a new hub", |ui| matches!(ui.view().connection, Connection::Ready(_)));
+    ui.wait("a new hub", |ui| matches!(ui.view().connection(), Connection::Ready(_)));
 }
 
 #[gpui_kit::test]
@@ -376,7 +376,7 @@ fn a_hub_newer_than_the_app_is_not_offered_for_restart(cx: &mut TestAppContext) 
     let _newer = stack.start_stand_in_hub(&["--newer"]);
     let mut ui = Ui::open_without_waiting(cx, &stack);
 
-    ui.wait("the app to see the hub", |ui| matches!(ui.view().connection, Connection::AcrossABreak(_)));
+    ui.wait("the app to see the hub", |ui| matches!(ui.view().connection(), Connection::AcrossABreak(_)));
 
     assert!(!ui.has("restart-hub"));
     assert!(ui.has("try-hub-again"));
@@ -387,10 +387,10 @@ fn restarting_a_hub_that_has_already_gone_still_connects(cx: &mut TestAppContext
     let stack = Stack::new();
     let _other = stack.start_stand_in_hub(&[]);
     let mut ui = Ui::open_without_waiting(cx, &stack);
-    ui.wait("the app to see the hub", |ui| matches!(ui.view().connection, Connection::AcrossABreak(_)));
+    ui.wait("the app to see the hub", |ui| matches!(ui.view().connection(), Connection::AcrossABreak(_)));
     client_core::stop_hub(&stack.hub.paths.socket).unwrap();
 
     ui.click("restart-hub");
 
-    ui.wait("a new hub", |ui| matches!(ui.view().connection, Connection::Ready(_)));
+    ui.wait("a new hub", |ui| matches!(ui.view().connection(), Connection::Ready(_)));
 }

@@ -94,7 +94,7 @@ impl WorkspacePane {
         if !self.worktree_readable() {
             return;
         }
-        if self.on_screen() {
+        if self.being_read() {
             self.reread_worktree(cx);
             return;
         }

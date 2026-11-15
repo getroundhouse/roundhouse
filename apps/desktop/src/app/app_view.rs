@@ -39,7 +39,10 @@ pub struct AppView {
     pub(crate) hub: HubSource,
     /// The checkout this build is from, which the sidebar names, with why it's open.
     pub(crate) checkout: Option<Checkout>,
-    pub connection: Connection,
+    /// Set by [`Self::set_connection`], so the panes are told, and by `feed_changed` once a new one is ready.
+    connection: Connection,
+    /// Whether the window was in front when the panes were last told whether they're drawn.
+    pub(super) in_front: bool,
     /// Client-core's copy of the hub's records, which `records` shows.
     pub(super) feed: Option<RecordsFeed>,
     /// Keeps what's typed in each chat on the hub, for every pane, across connections.
@@ -124,6 +127,8 @@ impl AppView {
             hub,
             checkout,
             connection: Connection::Connecting,
+            // Until the window says it's in front, so nothing is read that may not have been seen.
+            in_front: false,
             feed: None,
             drafts: None,
             joining: None,
@@ -165,6 +170,23 @@ impl AppView {
         this
     }
 
+    /// Whether the app is connected to a hub, or connecting, or why it isn't.
+    pub fn connection(&self) -> &Connection {
+        &self.connection
+    }
+
+    /// Has the app be connecting, or without a hub. Each pane holds what it would send until there's one again, and is
+    /// told whether it's still drawn, which it is while connecting, with the window where it was last known to be,
+    /// since this is often in the middle of updating it. A connection that's ready is told of by `refresh`, once the
+    /// records have caught up with it.
+    pub(super) fn set_connection(&mut self, connection: Connection, cx: &mut Context<Self>) {
+        self.connection = connection;
+        for pane in self.panes.values() {
+            pane.update(cx, WorkspacePane::hub_went_away);
+        }
+        self.read_on_screen(self.in_front, cx);
+    }
+
     pub fn client(&self) -> Option<Client> {
         match &self.connection {
             Connection::Ready(client) => Some(client.clone()),
@@ -203,10 +225,11 @@ impl AppView {
                         None
                     };
                     let _ = this.update(cx, |t, cx| {
-                        t.connection = match status {
+                        let connection = match status {
                             Some(status) => Connection::AcrossABreak(status),
                             None => Connection::Failed(format!("{e}")),
                         };
+                        t.set_connection(connection, cx);
                         cx.notify();
                     });
                     return;
@@ -259,7 +282,7 @@ impl AppView {
             if let Some(error) = errors.first() {
                 self.joining = None;
                 self.drop_restart_question(cx);
-                self.connection = Connection::Failed(error.to_string());
+                self.set_connection(Connection::Failed(error.to_string()), cx);
                 cx.notify();
             } else if matches!(self.connection, Connection::Ready(_))
                 || self.joining.as_ref().is_some_and(Client::is_disconnected)

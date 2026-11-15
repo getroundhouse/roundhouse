@@ -46,7 +46,7 @@ pub(super) fn open(
     if wide {
         app.widen();
     }
-    app.wait("the app to connect", |view, _| !matches!(view.connection, Connection::Connecting));
+    app.wait("the app to connect", |view, _| !matches!(view.connection(), Connection::Connecting));
     (dir, app)
 }
 

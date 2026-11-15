@@ -218,11 +218,13 @@ impl WorkspacePane {
         self.chats.entry(id.clone()).or_default()
     }
 
-    /// Carries on on a new connection to the hub, keeping everything shown and typed. What the hub reads from
-    /// the worktree waits for [`Self::catch_up`], so a reconnect doesn't start a worker for every pane at once.
+    /// Carries on on a new connection to the hub, keeping everything shown and typed, and reads the chat showing if
+    /// it's being read. What the hub reads from the worktree waits for [`Self::catch_up`], so a reconnect doesn't
+    /// start a worker for every pane at once.
     pub fn reconnect(&mut self, client: &Client, cx: &mut Context<Self>) {
         self.client = client.clone();
         self.hub = composer::Hub::Here;
+        self.showing_changed(cx);
         for transcript in self.every_transcript() {
             transcript.update(cx, |t, _| t.reconnect(client));
         }

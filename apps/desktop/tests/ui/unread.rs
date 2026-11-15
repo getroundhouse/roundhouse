@@ -2,6 +2,8 @@
 
 #![cfg(test)]
 
+use client_core::Client;
+use desktop::app::Connection;
 use gpui_kit::{AppContext as _, ElementId, SharedString, TestAppContext};
 use protocol::model::{Session, SessionId, WorkspaceId};
 
@@ -162,6 +164,112 @@ fn a_chat_marked_unread_stays_so_until_its_shown_again(cx: &mut TestAppContext) 
     ui.show_chat(&chat);
     assert_ne!(other, chat);
     ui.wait("the hub to have it read", |_| read_at_the_hub(&stack, &chat));
+}
+
+#[gpui_kit::test]
+fn a_chat_marked_unread_stays_so_across_a_hub_restart(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let (mut ui, workspace, chat) = open_with_a_workspace(cx, &stack);
+    ui.input("say:read this later");
+    ui.press("enter");
+    ui.wait("the hub to have it read", |_| read_at_the_hub(&stack, &chat));
+    ui.right_click(SharedString::from(format!("chat-{chat}")));
+    ui.click(ElementId::Integer(0));
+    ui.wait("its tab and row to say so", |ui| tab_unread(ui, &chat) && row_unread(ui, &workspace));
+
+    let pid = stack.client().hub_status().unwrap().pid;
+    client_core::stop_hub(&stack.hub.paths.socket).unwrap();
+    ui.wait_for_new_hub(&stack, pid);
+    for _ in 0..50 {
+        ui.frame();
+    }
+
+    assert!(stack.client().session_get(&chat).unwrap().unread(), "a hub restart doesn't read it");
+    assert!(tab_unread(&ui, &chat) && row_unread(&ui, &workspace));
+    // Going elsewhere and coming back still reads it, so it isn't unread only because nothing is read since.
+    ui.new_chat();
+    ui.show_chat(&chat);
+    ui.wait("the hub to have it read", |_| read_at_the_hub(&stack, &chat));
+}
+
+#[gpui_kit::test]
+fn a_chat_marked_unread_stays_so_when_the_hub_is_lost_and_found_again(cx: &mut TestAppContext) {
+    let mut stack = Stack::new();
+    // The hub is started first, so the app finds it, and can't start one of its own once it goes.
+    stack.client();
+    let daemon = stack.without_a_daemon();
+    let (mut ui, workspace, chat) = open_with_a_workspace(cx, &stack);
+    ui.input("say:read this later");
+    ui.press("enter");
+    ui.wait("the hub to have it read", |_| read_at_the_hub(&stack, &chat));
+    ui.right_click(SharedString::from(format!("chat-{chat}")));
+    ui.click(ElementId::Integer(0));
+    ui.wait("its tab and row to say so", |ui| tab_unread(ui, &chat) && row_unread(ui, &workspace));
+
+    client_core::stop_hub(&stack.hub.paths.socket).unwrap();
+    ui.wait("the app to find no hub", |ui| matches!(ui.view().connection(), Connection::Failed(_)));
+    Client::connect_or_start(&stack.hub.paths, &daemon, "test").unwrap();
+    ui.click("try-hub-again");
+    ui.wait("the hub to be back", |ui| matches!(ui.view().connection(), Connection::Ready(_)));
+    for _ in 0..50 {
+        ui.frame();
+    }
+
+    assert!(stack.client().session_get(&chat).unwrap().unread(), "finding the hub again doesn't read it");
+    ui.new_chat();
+    ui.show_chat(&chat);
+    ui.wait("the hub to have it read", |_| read_at_the_hub(&stack, &chat));
+}
+
+#[gpui_kit::test]
+fn a_chat_shown_while_the_hub_restarts_is_read_once_its_back(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let (mut ui, _, first) = open_with_a_workspace(cx, &stack);
+    let later = ui.new_chat();
+    ui.input("say:read this later");
+    ui.press("enter");
+    ui.wait("the hub to have it read", |_| read_at_the_hub(&stack, &later));
+    ui.right_click(SharedString::from(format!("chat-{later}")));
+    ui.click(ElementId::Integer(0));
+    ui.wait("it to be unread", |_| stack.client().session_get(&later).unwrap().unread());
+    ui.show_chat(&first);
+    let (pane, pid) = (ui.pane().unwrap(), stack.client().hub_status().unwrap().pid);
+
+    // Shown before anything else runs, so the app is surely still connecting, and has no hub to mark it read on.
+    ui.cx.update(|cx| ui.view.update(cx, |view, cx| view.restart_hub(pid, cx)));
+    ui.cx.update(|cx| pane.update(cx, |p, cx| p.activate(later.clone(), cx)));
+    assert!(matches!(ui.view().connection(), Connection::Connecting));
+    assert!(tab_unread(&ui, &later), "nothing is read without a hub");
+
+    ui.wait_for_new_hub(&stack, pid);
+    ui.wait("the hub to have it read", |_| read_at_the_hub(&stack, &later));
+}
+
+#[gpui_kit::test]
+fn going_to_another_chat_and_back_while_the_hub_restarts_reads_a_chat_marked_unread(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let (mut ui, _, first) = open_with_a_workspace(cx, &stack);
+    let later = ui.new_chat();
+    ui.input("say:read this later");
+    ui.press("enter");
+    ui.wait("the hub to have it read", |_| read_at_the_hub(&stack, &later));
+    ui.right_click(SharedString::from(format!("chat-{later}")));
+    ui.click(ElementId::Integer(0));
+    ui.wait("it to be unread", |_| stack.client().session_get(&later).unwrap().unread());
+    let (pane, pid) = (ui.pane().unwrap(), stack.client().hub_status().unwrap().pid);
+
+    // Away and back before anything else runs, so the app is surely still connecting.
+    ui.cx.update(|cx| ui.view.update(cx, |view, cx| view.restart_hub(pid, cx)));
+    ui.cx.update(|cx| {
+        pane.update(cx, |p, cx| {
+            p.activate(first.clone(), cx);
+            p.activate(later.clone(), cx);
+        });
+    });
+    assert!(matches!(ui.view().connection(), Connection::Connecting));
+
+    ui.wait_for_new_hub(&stack, pid);
+    ui.wait("the hub to have it read", |_| read_at_the_hub(&stack, &later));
 }
 
 #[gpui_kit::test]

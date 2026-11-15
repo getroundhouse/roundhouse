@@ -55,7 +55,7 @@ fn main() {
             loop {
                 cx.background_executor().timer(Duration::from_millis(100)).await;
                 let ready = view.update(cx, |v: &mut AppView, cx| {
-                    if !matches!(v.connection, Connection::Ready(_)) {
+                    if !matches!(v.connection(), Connection::Ready(_)) {
                         return false;
                     }
                     if let Some(name) = &wanted

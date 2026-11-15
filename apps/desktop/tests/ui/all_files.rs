@@ -235,7 +235,7 @@ fn what_s_opened_as_the_hub_goes_shows_once_it_s_back(cx: &mut TestAppContext) {
     ui.click_and_leave("all-folder-build");
     ui.click_and_leave("all-file-src/lib.rs");
     client_core::stop_hub(&stack.hub.paths.socket).unwrap();
-    ui.wait("the app to find no hub", |ui| matches!(ui.view().connection, Connection::Failed(_)));
+    ui.wait("the app to find no hub", |ui| matches!(ui.view().connection(), Connection::Failed(_)));
 
     assert_eq!(ui.view().error.as_deref(), None);
     assert!(ui.cx.read_entity(&all_files, |a, _| a.is_open("build")), "the folder stays open");

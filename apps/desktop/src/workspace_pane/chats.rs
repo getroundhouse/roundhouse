@@ -320,7 +320,7 @@ impl WorkspacePane {
         self.keep_subagent_tab_valid(cx);
         self.keep_edit_valid(cx);
         self.show_next(cx);
-        self.read_showing(cx);
+        self.showing_changed(cx);
         self.wind_cache_clock(cx);
         cx.notify();
     }

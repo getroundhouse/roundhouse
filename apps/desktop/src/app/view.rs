@@ -78,7 +78,7 @@ impl AppView {
             return crate::home::page(self, rows, cx).into_any_element();
         }
         let (muted, error_colour) = (colors.text_muted, colors.error);
-        match &self.connection {
+        match self.connection() {
             Connection::Connecting if self.pane_to_draw().is_none() => centered("Connecting…", muted),
             Connection::Failed(reason) => failed(reason, error_colour, cx),
             Connection::AcrossABreak(status) => {
@@ -118,7 +118,7 @@ impl AppView {
     /// one it's restarting to finish an update. Otherwise what's typed for that moment would go nowhere. Unlike
     /// `selected_pane`, which is for acting on one, and so only gives one with a hub to act through.
     pub(super) fn pane_to_draw(&self) -> Option<Entity<WorkspacePane>> {
-        let drawn = matches!(self.connection, Connection::Ready(_) | Connection::Connecting);
+        let drawn = matches!(self.connection(), Connection::Ready(_) | Connection::Connecting);
         self.selected.as_ref().filter(|_| drawn).and_then(|id| self.panes.get(id).cloned())
     }
 

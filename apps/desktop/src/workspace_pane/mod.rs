@@ -3,6 +3,7 @@
 pub use file_tab::Opened;
 pub(crate) use keeping::drafted;
 pub use reading::Mark;
+pub(crate) use reading::OnScreen;
 
 mod agent;
 mod attaching;
