@@ -1,4 +1,5 @@
 use std::io;
+use std::path::PathBuf;
 use std::process::ExitStatus;
 use std::time::Duration;
 
@@ -43,6 +44,11 @@ pub enum AgentError {
     /// The agent said yes to a level of effort, then reported using `applied` instead, or said nothing of one.
     #[error("the agent kept its effort at {}, rather than {asked}", applied.as_deref().unwrap_or("what it was"))]
     NotApplied { asked: &'static str, applied: Option<String> },
+    /// The file the CLI reads Roundhouse's instructions from, as [`crate::Instructions`] says, couldn't be written, so
+    /// the agent can't be told them. A chat keeps what it was first told until it's compacted, so it doesn't start
+    /// without them.
+    #[error("couldn't write the agent's instructions to {}", path.display())]
+    Instructions { path: PathBuf, source: io::Error },
     #[error("couldn't write to the agent")]
     Write(#[from] io::Error),
     #[error("couldn't encode a message for the agent")]

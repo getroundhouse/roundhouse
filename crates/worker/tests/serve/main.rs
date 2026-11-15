@@ -123,8 +123,10 @@ async fn an_agents_call_to_the_tools_is_asked_of_the_hub_and_answered_with_its_a
     };
     reply(&mut frames, 2).await;
     let (path, told) = given(dir.path()).await;
-    assert_eq!(Path::new(&path), state.join("agents/s-1.mcp.json"));
-    let prompt = prompt(dir.path()).await;
+    let (file, prompt) = prompt(dir.path()).await;
+    let worktree = dir.path().file_name().unwrap().to_string_lossy();
+    assert_eq!(Path::new(&path), state.join(format!("agents/{worktree}.s-1.mcp.json")), "named for its worktree");
+    assert_eq!(Path::new(&file), state.join(format!("agents/{worktree}.s-1.instructions.txt")));
     assert!(prompt.contains("`roundhouse`") && prompt.contains("`gh run watch`"), "told to wait with them: {prompt}");
     let told: serde_json::Value = serde_json::from_str(&told).unwrap();
     let server = &told["mcpServers"]["roundhouse"];
@@ -218,11 +220,11 @@ fn waiting_cli(dir: &Path) -> PathBuf {
     cli(dir, "exec sleep 100")
 }
 
-/// Writes what it's told with `--append-system-prompt` to `prompt`, then the path it's given as `--mcp-config` to
-/// `given`, in the directory it runs in, with what the file says after it, or an empty line if it's given none, then
-/// waits.
+/// Writes the path of the file it's told to add to its system prompt to `prompt`, with what the file says after it, then
+/// the path it's given as `--mcp-config` to `given`, in the directory it runs in, with what that file says after it, or
+/// an empty line if it's given none, then waits.
 const KEEPS_ITS_MCP_CONFIG: &str = r#": > prompt; prev=
-for arg in "$@"; do [ "$prev" = --append-system-prompt ] && printf '%s' "$arg" > prompt; prev=$arg; done
+for arg in "$@"; do [ "$prev" = --append-system-prompt-file ] && { printf '%s\n' "$arg"; cat "$arg"; } > prompt; prev=$arg; done
 while [ $# -gt 0 ] && [ "$1" != --mcp-config ]; do shift; done
 { printf '%s\n' "$2"; [ $# -gt 0 ] && cat "$2"; } > given.tmp; mv given.tmp given; exec sleep 100"#;
 
@@ -241,11 +243,13 @@ async fn given(dir: &Path) -> (String, String) {
     (path.to_string(), told.to_string())
 }
 
-/// What a CLI running [`KEEPS_ITS_MCP_CONFIG`] in `dir` was told with `--append-system-prompt`, once it has said what
-/// it was given.
-async fn prompt(dir: &Path) -> String {
+/// The file a CLI running [`KEEPS_ITS_MCP_CONFIG`] in `dir` was told to add to its system prompt, and what it said,
+/// once the CLI has said what it was given.
+async fn prompt(dir: &Path) -> (String, String) {
     given(dir).await;
-    std::fs::read_to_string(dir.join("prompt")).unwrap()
+    let prompt = std::fs::read_to_string(dir.join("prompt")).unwrap();
+    let (file, told) = prompt.split_once('\n').unwrap_or_default();
+    (file.to_string(), told.to_string())
 }
 
 /// What the agent's CLI is given as `--mcp-config`, and told in its system prompt, as a worker in `dir` starts it with a
@@ -262,7 +266,7 @@ async fn told_at_start(dir: &Path, serving: bool) -> (String, String) {
     let started = reply(&mut frames, last).await;
     assert!(matches!(started, WorkerOutcome::Response(WorkerResponse::AgentStarted(_))), "{started:?}");
     let (path, _) = given(dir).await;
-    let prompt = prompt(dir).await;
+    let (_, prompt) = prompt(dir).await;
     hub_write.shutdown().await.unwrap();
     timeout(Duration::from_secs(10), running).await.expect("the worker didn't exit").unwrap();
     (path, prompt)

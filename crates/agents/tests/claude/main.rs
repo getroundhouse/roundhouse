@@ -9,5 +9,6 @@ mod contract;
 mod controls;
 mod process;
 mod results;
+mod run_files;
 
 mod login;
