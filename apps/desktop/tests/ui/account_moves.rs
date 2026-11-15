@@ -7,7 +7,7 @@ use gpui_kit::{AppContext as _, ElementId, TestAppContext};
 use protocol::event::{EventBody, ExitReason};
 use protocol::model::{AccountId, AgentKind, LoginToken, SessionStatus};
 
-use crate::support::{MENU, Stack, Ui};
+use crate::support::{Gate, MENU, Stack, Ui};
 
 /// A login the hub was given from elsewhere, called `name`.
 fn connected(stack: &Stack, name: &str, token: &str) -> AccountId {
@@ -81,7 +81,8 @@ fn the_menu_beside_whose_account_it_is_moves_the_chat_and_back(cx: &mut TestAppC
 fn moving_a_chat_whose_agent_is_working_asks_first_and_moves_it_only_if_told_to(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let (mut ui, work, personal) = under_work(cx, &stack);
-    ui.input("hang:60000");
+    let done = Gate::new(&stack, "done");
+    ui.paste_text(&format!("hang-until:{done}"));
     ui.press("enter");
     ui.wait("the agent to start working", |ui| ui.session_status() == Some(SessionStatus::Running));
 
