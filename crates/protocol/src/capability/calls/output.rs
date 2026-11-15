@@ -35,11 +35,7 @@ pub enum CallOutput {
     /// What a search found.
     Found(Found),
     /// The paths a search for files found.
-    Paths {
-        paths: Vec<String>,
-        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-        truncated: bool,
-    },
+    Paths(Paths),
     /// A page, as the tool sent it back: the page itself, or what the tool's model said of it.
     Page {
         url: String,
@@ -49,6 +45,9 @@ pub enum CallOutput {
     },
     WebResults {
         results: Vec<WebResult>,
+        /// What the agent's search said of them, in words, as Claude's does beside its links.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        summary: Option<String>,
     },
     /// What a subagent reported, once it finished.
     Report {
@@ -57,12 +56,26 @@ pub enum CallOutput {
     /// What an MCP tool sent back, as its blocks, and the structured result it gave beside them.
     Mcp {
         content: Vec<McpContent>,
+        /// `None` where it gave none, or gave `null`, which reads back as none.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         structured: Option<Value>,
     },
-    /// Nothing but words, as the agent was told them.
+    /// Nothing but words: what came back, as the agent was told it, without what the agent's CLI wraps a failure in,
+    /// since `is_error` says it failed. Also what came back for a call the adapter no longer knows, as when the
+    /// agent's own process started again between the call and its result, unless its words say how a command exited,
+    /// which only a command's do, so it's a [`CallOutput::Command`], with its exit code beside what it printed. And a
+    /// search's lines with lines around each match, which [`Found`] doesn't hold, as the agent was told them.
     Words {
         text: String,
+    },
+    /// What came back is for the model alone, so there's nothing to show, as the reply of Claude's advisor can be.
+    Encrypted,
+    /// The call goes on in the background, and how it ends is said elsewhere: as the task the hub lists for it ends,
+    /// or for a subagent, in its record and its report as it ends. `task` is that task, when the agent names one. A
+    /// command says it in [`Ended`] instead, beside what it printed before.
+    Backgrounded {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        task: Option<TaskId>,
     },
     #[serde(other)]
     Unknown,
@@ -162,17 +175,22 @@ pub enum Found {
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         truncated: bool,
     },
-    Files {
-        paths: Vec<String>,
-        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-        truncated: bool,
-    },
+    Files(Paths),
     Count {
         matches: u64,
         files: u64,
     },
     #[serde(other)]
     Unknown,
+}
+
+/// Paths a call found, as a search for files or for the files that hold a match does.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct Paths {
+    pub paths: Vec<String>,
+    /// The agent found more than it listed.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub truncated: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -205,6 +223,12 @@ pub enum McpContent {
         uri: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         text: Option<String>,
+    },
+    /// A block of a kind the adapter doesn't know, kept as the server sent it, so a client can still show it, but with
+    /// each long string cut short, as Claude's adapter cuts an unknown block's, so bytes a block carries as base64
+    /// don't put megabytes into the log and every view of it.
+    Other {
+        value: Value,
     },
     #[serde(other)]
     Unknown,

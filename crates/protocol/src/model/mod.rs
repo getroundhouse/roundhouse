@@ -52,7 +52,9 @@ pub use queue::QueuedPrompt;
 pub use record::{Record, RecordKey, Records};
 pub use session::{AgentKind, OpenApproval, Session, SessionStatus};
 pub use settings::{SessionSettings, SessionSettingsChange};
-pub use subagent::{Call, CallResult, RecentCall, RecentWork, Said, Subagent, SubagentStatus};
+pub use subagent::{
+    Call, CallResult, Lately, LatelyCall, LatelyResult, RecentCall, RecentWork, Said, Subagent, SubagentStatus,
+};
 pub use title::{Title, TitleError, TitleSource};
 pub use wait::{Wait, WaitEnd, WaitEnded, WaitUntil};
 pub use worktrees::{CHILDREN, ChildStatus, ChildWorktree, MadeBy, WorkName, WorkNameError};

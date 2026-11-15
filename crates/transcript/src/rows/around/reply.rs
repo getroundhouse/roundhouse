@@ -124,7 +124,10 @@ impl Answer {
                     .iter()
                     .filter_map(|c| match c {
                         McpContent::Image { image } => Some(image.clone()),
-                        McpContent::Text { .. } | McpContent::Resource { .. } | McpContent::Unknown => None,
+                        McpContent::Text { .. }
+                        | McpContent::Resource { .. }
+                        | McpContent::Other { .. }
+                        | McpContent::Unknown => None,
                     })
                     .collect(),
                 CallOutput::Command(_)
@@ -132,11 +135,13 @@ impl Answer {
                 | CallOutput::Document { .. }
                 | CallOutput::Changed { .. }
                 | CallOutput::Found(_)
-                | CallOutput::Paths { .. }
+                | CallOutput::Paths(_)
                 | CallOutput::Page { .. }
                 | CallOutput::WebResults { .. }
                 | CallOutput::Report { .. }
                 | CallOutput::Words { .. }
+                | CallOutput::Encrypted
+                | CallOutput::Backgrounded { .. }
                 | CallOutput::Unknown => Vec::new(),
             };
             let change = if let CallOutput::Changed { files } = output
