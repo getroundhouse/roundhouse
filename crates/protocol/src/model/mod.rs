@@ -27,7 +27,8 @@ mod wait;
 mod worktrees;
 
 pub use account::{
-    Account, AgentAccount, AgentLogin, HeldLogin, LimitWindow, LoginToken, ModelLabel, SessionAccount, UsageLimit,
+    Account, AccountSource, AgentAccount, AgentLogin, HeldLogin, LimitWindow, LoginToken, ModelLabel, SessionAccount,
+    UsageLimit,
 };
 pub use agent::{AgentDescription, AgentFeature, LoginDescription, ModelChoice, NotOffered, RunCapabilities};
 pub use branches::{Branch, Branches, Head, Upstream};

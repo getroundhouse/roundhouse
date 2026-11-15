@@ -4,7 +4,7 @@
 use protocol::client::HubNotice;
 use protocol::event::TurnOutcome;
 use protocol::frame;
-use protocol::model::{MaxSetBy, OpenApproval, PromptLine, Seq, Session, SessionStatus, Settlement};
+use protocol::model::{AccountSource, MaxSetBy, OpenApproval, PromptLine, Seq, Session, SessionStatus, Settlement};
 
 fn session(more: &str) -> Session {
     let notice = format!(
@@ -32,6 +32,27 @@ fn what_a_sessions_agent_is_waiting_on_keeps_its_form() {
         serde_json::to_value(OpenApproval { seq: Seq::new(3), approval_id: "a".into() }).unwrap(),
         serde_json::json!({ "seq": 3, "approval_id": "a" })
     );
+}
+
+/// A hub from before sources says nothing of where a chat's login comes from, which reads as on none yet, and a source
+/// from a newer peer reads as one this build doesn't know. Only a chat on the hub's is on an account.
+#[test]
+fn a_chats_account_source_keeps_its_form_and_a_hub_from_before_says_none() {
+    let on_the_hubs = session(r#","account":"claude-1","account_source":"hub""#);
+    let ambient = session(r#","account":"claude-1","account_source":"ambient""#);
+    let newer = session(r#","account":"claude-1","account_source":"elsewhere""#);
+    let older = session(r#","account":"claude-1""#);
+
+    assert_eq!(
+        (on_the_hubs.account_source, on_the_hubs.hub_account()),
+        (Some(AccountSource::Hub), Some(&"claude-1".into()))
+    );
+    assert_eq!((ambient.account_source, ambient.hub_account()), (Some(AccountSource::Ambient), None));
+    assert_eq!((newer.account_source, newer.hub_account()), (Some(AccountSource::Unknown), None));
+    assert_eq!((older.account_source, older.hub_account()), (None, None));
+    assert!(serde_json::to_string(&on_the_hubs).unwrap().contains(r#""account_source":"hub""#));
+    assert!(serde_json::to_string(&ambient).unwrap().contains(r#""account_source":"ambient""#));
+    assert!(!serde_json::to_string(&older).unwrap().contains("account_source"));
 }
 
 /// A hub from before chats could be moved says nothing of a chat's assigned account, which reads as on no account.
