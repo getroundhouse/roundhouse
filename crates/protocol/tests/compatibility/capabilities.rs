@@ -83,8 +83,9 @@ fn typed_approvals_keep_the_fields_an_older_reader_requires() {
     assert_eq!(serde_json::from_value::<EventBody>(sent).unwrap(), current);
 }
 
-/// Each control a run of this build claims, as a hub sends it to a worker of protocol 4, spelled out, since that
-/// protocol mustn't break again for 30 days, and a worker of this build reads what any hub after it sends.
+/// Each control a run of this build claims, as a hub sends it to a worker of protocol 4, spelled out, since a worker of
+/// this build has to read what any later hub sends it, and these types are what a hub sends it until the protocol
+/// breaks.
 #[test]
 fn every_control_a_run_of_this_build_claims_keeps_its_form() {
     use protocol::capability::approvals::{AfterDenial, ApprovalMode, Beyond, Decision, Remember, Unasked};
