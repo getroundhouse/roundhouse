@@ -288,6 +288,12 @@ impl Provider for AdapterProvider {
         self.capabilities.lock().clone()
     }
 
+    fn starts_or_stops_within(&self) -> Duration {
+        // Each request to the adapter has as long, which is meant for a cloud's VM starting, since an adapter doesn't
+        // say how long it takes. A start, up to its worker running, is two of them, a start and a connect.
+        REQUEST_TIMEOUT.saturating_mul(2)
+    }
+
     async fn create(
         &self,
         instance_id: &InstanceId,

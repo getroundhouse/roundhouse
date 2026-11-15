@@ -1,10 +1,16 @@
 //! What a hub asks a worker of GitHub, through the `gh` that runs in its worktree: the pull request of the branch
 //! checked out, and how much of GitHub's limit is left.
 
+use std::time::Duration;
+
 use serde::{Deserialize, Serialize};
 
 use super::{Reply, Request, WorkerRequest, WorkerResponse};
 use crate::model::{self, BranchName};
+
+/// How long a worker lets each run of `gh` take before it stops it, and what asked fails. So how long a read of GitHub
+/// through a worker can take follows from how many runs it makes.
+pub const GH_RUNS_WITHIN: Duration = Duration::from_secs(15);
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct PullRequest {

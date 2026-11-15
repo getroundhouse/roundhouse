@@ -30,7 +30,8 @@ pub use children::{AddChildWorktree, ChildBranch, ChildWorktreeAdded, WatchChild
 pub use connection::{Hello, HelloReply, Received, RunningAgent, RunningAgents, RunningAgentsReply, Stop};
 pub use frames::WorkerFrame;
 pub use github::{
-    GithubRateLimit, PullRequest, PullRequestReply, RateLimit, ReadRemotePullRequests, RemotePullRequestsReply,
+    GH_RUNS_WITHIN, GithubRateLimit, PullRequest, PullRequestReply, RateLimit, ReadRemotePullRequests,
+    RemotePullRequestsReply,
 };
 pub use one_off::{AccountFor, TitleFor, TitleReply};
 pub use tools::{ServeTools, ToolsServing, ToolsToken, WAIT_TOOL, WAITS_TOOL};

@@ -24,6 +24,11 @@ pub(super) const PATH_MARKER: &str = "__ROUNDHOUSE_LOGIN_PATH__";
 const TRANSPORT: &str = if cfg!(unix) { "--attach" } else { "--stdio" };
 /// How long a process sent SIGKILL gets to be gone.
 const KILLED_GRACE: Duration = Duration::from_secs(2);
+/// How long starting or stopping an instance takes at most. Either stops each process left there within its
+/// [`ORPHAN_GRACE`] and then [`KILLED_GRACE`], and the first start reads the login shell's `PATH` within
+/// [`LOGIN_SHELL_TIMEOUT`]. So this is that, with three processes left there.
+const STARTS_OR_STOPS_WITHIN: Duration =
+    Duration::from_secs(3 * (ORPHAN_GRACE.as_secs() + KILLED_GRACE.as_secs()) + LOGIN_SHELL_TIMEOUT.as_secs());
 
 pub struct LocalConfig {
     /// The binary that runs a worker, as `worker --attach` or `worker --stdio`.
@@ -233,6 +238,10 @@ impl Provider for LocalProvider {
     /// Its workers run the hub's own executable, so it names no targets to be given workers for.
     fn capabilities(&self) -> Capabilities {
         Capabilities { targets: Vec::new(), features: vec![Feature::FilesystemSurvivesStop] }
+    }
+
+    fn starts_or_stops_within(&self) -> Duration {
+        STARTS_OR_STOPS_WITHIN
     }
 
     async fn create(

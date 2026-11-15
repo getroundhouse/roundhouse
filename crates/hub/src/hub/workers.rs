@@ -13,6 +13,7 @@ use tracing::warn;
 
 use super::ready::ReadyWorkspace;
 use super::{Hub, Wanted};
+use crate::jobs;
 use crate::session::Item;
 use crate::worker_link::{Opening, STOP_GRACE, WorkerLink};
 
@@ -50,6 +51,7 @@ impl Hub {
         self: &Arc<Self>,
         workspace_id: &WorkspaceId,
     ) -> Result<Arc<WorkerLink>, ApiError> {
+        jobs::step("getting the workspace's worker");
         self.worker(workspace_id, Wanted::OnlyToRead).await
     }
 
@@ -61,6 +63,7 @@ impl Hub {
             return Ok(link);
         }
         let workspace = self.workspace(workspace_id).await?;
+        jobs::step("waiting for its turn to start the workspace's worker");
         let gate = self.worker_gate(workspace_id);
         let mut cleared = gate.lock().await;
         if let Some(link) = self.open_worker(workspace_id, wanted) {
@@ -70,13 +73,16 @@ impl Hub {
         // One whose connection has ended, but whose cleanup is waiting for this gate, may still hold the instance.
         let ended = self.workers.lock().get(workspace_id).cloned();
         if let Some(ended) = &ended {
+            jobs::step(format!("stopping {ended}, whose connection ended, before starting another"));
             ended.stop(STOP_GRACE).await;
         }
         // Or what an earlier hub left that this one didn't carry on with, such as a worker that was stopping, or the
         // agents of one that was killed. Or a stop that failed.
         if ended.is_some() || !*cleared {
+            jobs::step("clearing the workspace's instance before starting its worker");
             *cleared = clear_instance(provider.as_ref(), &workspace.instance_id).await;
         }
+        jobs::step("starting the workspace's worker");
         // Whichever provider runs it, what its worker writes to stderr is kept here.
         let log = self.worker_logs_dir.join(format!("{}.log", workspace.instance_id));
         let (id, instance_id) = (workspace.id.clone(), workspace.instance_id.clone());
@@ -97,6 +103,7 @@ impl Hub {
         self.workers.lock().insert(workspace.id.clone(), link.clone());
         // One being made has no worktree to watch yet, so it's watched once it has.
         if let Ok(ready) = ReadyWorkspace::new(workspace) {
+            jobs::step(format!("asking {link} to watch the worktree's branches"));
             self.watch_branches(&ready, &link).await;
         }
         Ok(link)
@@ -145,30 +152,56 @@ impl Hub {
     /// wanted meanwhile starts once it's done.
     pub(super) fn end_left_running(self: &Arc<Self>, workspace_id: WorkspaceId, link: Option<Arc<WorkerLink>>) {
         let hub = self.clone();
-        tokio::spawn(async move {
-            let ended = hub.workspace(&workspace_id).await.and_then(|workspace| {
-                let provider = hub.provider(&workspace.provider)?;
-                Ok((workspace, provider))
-            });
-            let (workspace, provider) = match ended {
-                Ok(ended) => ended,
-                Err(e) => return warn!(%workspace_id, "ending a worker an earlier hub left: {}", e.message),
-            };
-            if let Some(link) = link {
-                return hub.stop_worker_only_read(&workspace, &link).await;
-            }
-            let gate = hub.worker_gate(&workspace.id);
-            let mut cleared = gate.lock().await;
-            if !*cleared {
-                *cleared = clear_instance(provider.as_ref(), &workspace.instance_id).await;
-            }
-        });
+        tokio::spawn(async move { hub.let_go(&workspace_id, link, "ending a worker an earlier hub left").await });
+    }
+
+    /// What a read nobody asked for leaves once it has ended, however it ended, let go of, so a read stopped partway
+    /// leaves no worker running unseen.
+    pub(super) async fn let_go_after_read(&self, workspace_id: &WorkspaceId) {
+        let current = self.workers.lock().get(workspace_id).cloned();
+        self.let_go(workspace_id, current, "letting go of a worker after a read").await;
+    }
+
+    /// Lets go of `link`, the workspace's worker, which is stopped if only reads wanted it, as
+    /// [`Hub::stop_worker_only_read`] says, or with none, of what a start cut short may have left on the instance,
+    /// which is cleared. `doing` says what for, if the workspace can't be found.
+    async fn let_go(&self, workspace_id: &WorkspaceId, link: Option<Arc<WorkerLink>>, doing: &str) {
+        let workspace = match self.workspace(workspace_id).await {
+            Ok(workspace) => workspace,
+            Err(e) => return warn!(%workspace_id, "{doing}: {}", e.message),
+        };
+        match link {
+            Some(link) => self.stop_worker_only_read(&workspace, &link).await,
+            None => self.clear_unclaimed_instance(&workspace).await,
+        }
+    }
+
+    /// Clears the instance of whatever may be left there, unless a worker in the map holds it, or nothing can be, as
+    /// [`Hub::worker_gates`] says.
+    async fn clear_unclaimed_instance(&self, workspace: &Workspace) {
+        let provider = match self.provider(&workspace.provider) {
+            Ok(provider) => provider,
+            Err(e) => return warn!(id = %workspace.id, "clearing an instance: {}", e.message),
+        };
+        jobs::step("waiting for its turn to clear the workspace's instance");
+        let gate = self.worker_gate(&workspace.id);
+        let mut cleared = gate.lock().await;
+        if !*cleared && self.workers.lock().get(&workspace.id).is_none() {
+            jobs::step("clearing the workspace's instance");
+            *cleared = clear_instance(provider.as_ref(), &workspace.instance_id).await;
+        }
+    }
+
+    /// Whether the workspace has a worker running, without keeping it for anything, as a read nobody asked for asks.
+    pub(super) fn has_worker(&self, workspace_id: &WorkspaceId) -> bool {
+        self.workers.lock().get(workspace_id).is_some_and(|link| link.is_open())
     }
 
     /// Stops a worker that only a read nobody asked for has wanted, so a hub with many workspaces doesn't keep one
     /// running for each. Under its gate, so a worker wanted meanwhile starts once this one has gone, rather than
     /// finding its instance still taken.
     pub(super) async fn stop_worker_only_read(&self, workspace: &Workspace, link: &Arc<WorkerLink>) {
+        jobs::step(format!("waiting for its turn to stop {link}"));
         let gate = self.worker_gate(&workspace.id);
         let mut cleared = gate.lock().await;
         {
@@ -194,7 +227,9 @@ impl Hub {
         // It's out of the map, and on the instance until it has stopped, so a stop dropped partway leaves the next
         // worker to clear the instance first.
         *cleared = false;
+        jobs::step(format!("stopping {link}"));
         link.stop(STOP_GRACE).await;
+        jobs::step(format!("clearing the workspace's instance after stopping {link}"));
         *cleared = match self.provider(&workspace.provider) {
             Ok(provider) => clear_instance(provider.as_ref(), &workspace.instance_id).await,
             Err(e) => {

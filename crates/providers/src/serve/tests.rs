@@ -23,6 +23,9 @@ impl Provider for Fake {
     fn name(&self) -> &'static str {
         "fake"
     }
+    fn starts_or_stops_within(&self) -> std::time::Duration {
+        std::time::Duration::from_secs(1)
+    }
     fn capabilities(&self) -> Capabilities {
         Capabilities { targets: vec![], features: vec![Feature::BaseImages] }
     }
