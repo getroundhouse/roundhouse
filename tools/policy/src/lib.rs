@@ -1,1 +1,1 @@
-//! No code here. See `tests/policy.rs`.
+//! No code here. See `tests/policy/`.
