@@ -1,6 +1,7 @@
 //! The one line every tool call is drawn as: an icon for its kind, what it did, and the details that matter.
 //! Clicking it opens and closes what's under it. Each kind of call fills in the parts, and the line is the same for
-//! all of them.
+//! all of them. A line with nothing under it, such as a task's that a turn the agent started by itself took in, is
+//! drawn the same, but doesn't open.
 
 use std::rc::Rc;
 
@@ -105,36 +106,58 @@ impl Line {
         self
     }
 
-    pub(super) fn render(self, toggle: &Toggle, cx: &App) -> AnyElement {
+    pub(super) fn render(mut self, toggle: &Toggle, cx: &App) -> AnyElement {
         let (this, key, seq, fold, open) =
             (toggle.shared.this.clone(), toggle.key.clone(), toggle.seq, toggle.fold, toggle.open);
-        let line_text = &toggle.shared.line_text;
-        let parts = self.parts.into_iter().map(|part| part.render(line_text, cx));
         let set_open = move |cx: &mut App| {
             let _ = this.update(cx, |t, cx| t.set_open(seq, key.clone(), fold, !open, cx));
         };
-        opening(toggle.key.element("call"), self.title.clone(), open, set_open, cx)
-            .when_some(self.preview.filter(|_| !open), |d, preview| {
-                d.hoverable_tooltip(move |window, cx| preview(window, cx))
-            })
-            .child(lead(glyph(self.icon, cx), px(ICON), open, cx))
-            .child(
-                line_text.body.set(
-                    div()
-                        .flex_none()
-                        .max_w(relative(0.7))
-                        .overflow_hidden()
-                        .text_ellipsis()
-                        // A button always shows at the end, so the title gives way to it rather than pushing it off.
-                        .when(self.action.is_some(), |d| d.flex_shrink(1.).min_w_0())
-                        .child(find::marked(self.title, &self.title_marks, &[], None)),
-                ),
-            )
-            .children(parts)
-            .when_some(self.action, |d, action| d.child(div().flex_1()).child(div().flex_none().child(action)))
-            .test_support()
-            .into_any_element()
+        let preview = self.preview.take().filter(|_| !open);
+        let frame = opening(toggle.key.element("call"), self.title.clone(), open, set_open, cx)
+            .when_some(preview, |d, preview| d.hoverable_tooltip(move |window, cx| preview(window, cx)));
+        let title = find::marked(self.title.clone(), &self.title_marks, &[], None);
+        let lead = lead(glyph(self.icon, cx), px(ICON), open, cx);
+        self.fill(frame, lead, title, &toggle.shared.line_text, cx).test_support().into_any_element()
     }
+
+    /// The line with nothing under it to open, named `id`, and `label` to assistive apps, such as a task a turn the
+    /// agent started by itself took in: the same as a call's, but with no way to open it, and nothing lit under the
+    /// pointer.
+    pub(super) fn still(self, id: ElementId, label: String, line_text: &LineText, cx: &App) -> AnyElement {
+        let frame = frame().id(id).role(Role::Label).aria_label(label);
+        let (lead, title) = (still_icon(self.icon, cx), self.title.clone());
+        self.fill(frame, lead, title, line_text, cx).test_support().into_any_element()
+    }
+
+    /// `frame`, holding what every line does after `lead`: the title, which takes at most most of the line and gives
+    /// way to a button at its end rather than pushing it off, since the button always shows, then the parts, then the
+    /// button at the far end.
+    fn fill(
+        self,
+        frame: Stateful<Div>,
+        lead: impl IntoElement,
+        title: impl IntoElement,
+        line_text: &LineText,
+        cx: &App,
+    ) -> Stateful<Div> {
+        let title = div()
+            .flex_none()
+            .max_w(relative(0.7))
+            .overflow_hidden()
+            .text_ellipsis()
+            .when(self.action.is_some(), |d| d.flex_shrink(1.).min_w_0())
+            .child(title);
+        frame
+            .child(lead)
+            .child(line_text.body.set(title))
+            .children(self.parts.into_iter().map(|part| part.render(line_text, cx)))
+            .when_some(self.action, |d, action| d.child(div().flex_1()).child(div().flex_none().child(action)))
+    }
+}
+
+/// What a line is drawn in: as tall as every line, its parts side by side, cut off where it ends.
+fn frame() -> Div {
+    h_flex().h(px(HEIGHT)).gap_2().overflow_hidden().whitespace_nowrap()
 }
 
 impl Part {
@@ -194,19 +217,15 @@ pub(super) fn opening(
     cx: &App,
 ) -> Stateful<Div> {
     let hover = look::colors(cx).line_hover;
-    h_flex()
+    frame()
         .id(id)
         .group(GROUP)
         .role(Role::Button)
         .aria_label(label)
         .aria_expanded(open)
-        .h(px(HEIGHT))
         .mx(px(-8.))
         .px(px(8.))
-        .gap_2()
         .corners(look::Corner::Control)
-        .overflow_hidden()
-        .whitespace_nowrap()
         .hand()
         .hover(move |d| d.bg(hover))
         .on_click(move |_, _, cx| on_click(cx))
@@ -294,11 +313,7 @@ pub(super) fn shown_failure(answer: Option<&Answer>, shows_output: bool, key: &I
 /// The line under a call whose result says it failed, so it shows while the call is closed.
 fn failure(failure: &Failure, cx: &App) -> AnyElement {
     let error_colour = look::colors(cx).error;
-    h_flex()
-        .h(px(HEIGHT))
-        .gap_2()
-        .overflow_hidden()
-        .whitespace_nowrap()
+    frame()
         .child(Icon::new(IconName::CircleX).flex_none().size(px(ICON)).text_color(error_colour))
         .child(div().flex_none().text_color(error_colour).child(failure.label()))
         .when(!failure.message.is_empty(), |d| {
@@ -334,12 +349,8 @@ fn denial(denied: &Denied, toggle: &Toggle, cx: &App) -> AnyElement {
     let colors = look::colors(cx);
     let muted = colors.text_muted;
     let said = said(denied);
-    h_flex()
+    frame()
         .id("call-denied")
-        .h(px(HEIGHT))
-        .gap_2()
-        .overflow_hidden()
-        .whitespace_nowrap()
         .role(Role::Label)
         .aria_label(said.map_or_else(|| "Denied".to_string(), |said| format!("Denied: {said}")))
         .child(Icon::new(IconName::CircleX).flex_none().size(px(ICON)).text_color(colors.text_faint))

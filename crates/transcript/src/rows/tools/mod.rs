@@ -7,14 +7,14 @@ use super::around::{Answer, Outcome, Reply, Subagent};
 mod advisor;
 pub(super) mod agent;
 pub(super) mod block;
-mod command;
+pub(super) mod command;
 mod files;
 mod highlight;
 mod marks;
 mod numbered;
 mod other;
 mod search;
-mod typed;
+pub(super) mod typed;
 mod web;
 
 use super::line;

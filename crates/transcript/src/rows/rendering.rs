@@ -1,6 +1,6 @@
 use super::{
-    alone, around, asked, cache_rule, column, compaction, failed_request, mode, notices, plan_card, prompt, tail, text,
-    thinking, tools, turn_end, update_rule,
+    alone, around, asked, cache_rule, column, compaction, failed_request, mode, notices, own_turn, plan_card, prompt,
+    tail, text, thinking, tools, turn_end, update_rule,
 };
 use crate::find::{FindLook, Marks, Part};
 use crate::item_key::ItemKey;
@@ -22,6 +22,7 @@ use gpui_kit::{
 use look::{LineText, Typeset as _};
 use notices::{agent_exited, notice};
 use prompt::{Prompt, prompt_bubble};
+use protocol::capability::turns::OwnTurn;
 use protocol::event::{ApprovalOutcome, ContentBlock, EventBody, SessionEvent};
 use protocol::model::Seq;
 use protocol::tail::Tail;
@@ -267,6 +268,7 @@ pub(super) fn render_event(
         }
         EventBody::AgentExited { reason, stderr_tail, .. } => agent_exited(seq, *reason, stderr_tail, find, cx),
         EventBody::Notice { level, message, .. } => notice(seq, *level, message, shared, find, cx),
+        EventBody::OwnTurn(OwnTurn::TaskEnded { ended }) => own_turn::lines(event, ended, shared, cx),
         // These tell the hub things, and there's nothing here for a person. An agent's start says something only when
         // it's on another build than the chat's agent last was, above.
         EventBody::PromptTaken { .. }

@@ -27,7 +27,7 @@ A Claude turn that failed because its request to the model did, as when you reac
 
 What the agent's CLI says itself, such as `Set model to opus (claude-opus-5-5)`, is a muted line of its own, so it isn't taken for the agent's words.
 
-An agent that reports background work can end a turn with it still going, such as a test run the agent said it would come back to. When that finishes, the agent picks up again by itself, in a new turn.
+An agent that reports background work can end a turn with it still going, such as a test run the agent said it would come back to. When that finishes, the agent picks up again by itself, in a new turn, which starts with a line for each task that ended, saying how.
 
 ## The composer
 

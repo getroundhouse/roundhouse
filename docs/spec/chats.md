@@ -41,6 +41,12 @@
 
   ![Waiting on stacks](screens/waiting-on-stacks.png)
 
+- **When the agent picks up by itself, the chat says what it picked up after:** a line for each of its tasks in the background it heard had ended, before what it did about them, so a turn nobody asked for doesn't start without a reason. Each has the icon the task's call has, what the agent said the task is for, how it ended and when the agent heard. A wait's line has a pull request's icon instead, since its call's plug says nothing of what it waited on, and says which pull requests it waited on, in the words its line had while it waited, as "Waited on #7: required checks", and why it ended, from the hub's record of it, since the agent hears only that its tool answered. A subagent's line ends with the Open button its call's line has. A turn the agent starts by itself for another reason has no lines: one that what a monitor watches for happening starts, since nothing before it says why, and one a message from another chat starts, since that isn't told apart from a prompt yet. *Unconfirmed.*
+
+  **The agent picked up by itself twice: as the review it gave a subagent finished, and as its wait on #7's checks ended.** *Unconfirmed.*
+
+  ![Turns the agent started by itself](screens/picked-up-by-itself.png)
+
 - **While the agent works, the chat ends with the working line:** its mark with the light sweeping, and how long the turn has taken so far, to a tenth of a second, so the count moving says it's still at it. The time is in the code font, so its digits stay put as they count. It counts from when the turn started, by the hub's clock, so every client counts the same. When the agent picks up again by itself after work in the background, or takes a prompt sent as its last turn ended, that's a new turn, and the count starts again.
 
   **The agent partway through writing a reply, and how long it's been working.** *Unconfirmed.*

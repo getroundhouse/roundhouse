@@ -26,12 +26,15 @@ const STRENGTH: f32 = 0.7;
 /// What the command's area is called for hovering, which shows the button that copies it.
 const GROUP: &str = "command";
 
+/// What a command's call starts with, and any line about a command.
+pub(in crate::rows) const ICON: IconName = IconName::Terminal;
+
 pub(super) fn draw(command: &Command, answer: Option<&Answer>, toggle: &Toggle, cx: &App) -> AnyElement {
     let summary = (!toggle.open).then(|| {
         let summary = command.summary();
         Part::Pill(summary.to_string().into(), toggle.marks(Text::Summary, summary))
     });
-    let line = Line::new(IconName::Terminal, command.title()).part(summary).shows_output(true);
+    let line = Line::new(ICON, command.title()).part(summary).shows_output(true);
     let line = if command.described().is_some() { line.found(toggle) } else { line };
     let opened = || Some(opened(command, answer, toggle, cx).into_any_element());
     line::drawn(line, answer, opened, toggle, cx)
