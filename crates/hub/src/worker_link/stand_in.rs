@@ -15,7 +15,21 @@ impl WorkerLink {
     pub(crate) fn answering(
         answer: impl Fn(WorkerRequest) -> Option<Result<WorkerResponse, ApiError>> + Send + 'static,
     ) -> Arc<WorkerLink> {
-        Self::stand_in(versions::WORKERS.newest, move |request| {
+        Self::answering_as(ChildProcess::already_exited(), answer)
+    }
+
+    /// The same, for a worker whose command exits only once it's killed, so stopping it takes all its grace.
+    pub(crate) fn answering_until_killed(
+        answer: impl Fn(WorkerRequest) -> Option<Result<WorkerResponse, ApiError>> + Send + 'static,
+    ) -> Arc<WorkerLink> {
+        Self::answering_as(ChildProcess::until_killed(), answer)
+    }
+
+    fn answering_as(
+        process: ChildProcess,
+        answer: impl Fn(WorkerRequest) -> Option<Result<WorkerResponse, ApiError>> + Send + 'static,
+    ) -> Arc<WorkerLink> {
+        Self::stand_in(versions::WORKERS.newest, process, move |request| {
             answer(serde_json::from_value(request).expect("the hub sends requests"))
         })
     }
@@ -25,11 +39,12 @@ impl WorkerLink {
     pub(crate) fn answering_previous(
         answer: impl Fn(serde_json::Value) -> Option<Result<WorkerResponse, ApiError>> + Send + 'static,
     ) -> Arc<WorkerLink> {
-        Self::stand_in(protocol::worker::previous::VERSION, answer)
+        Self::stand_in(protocol::worker::previous::VERSION, ChildProcess::already_exited(), answer)
     }
 
     fn stand_in(
         version: u32,
+        process: ChildProcess,
         answer: impl Fn(serde_json::Value) -> Option<Result<WorkerResponse, ApiError>> + Send + 'static,
     ) -> Arc<WorkerLink> {
         let (ours, theirs) = tokio::io::duplex(64 * 1024);
@@ -38,7 +53,7 @@ impl WorkerLink {
             calls: Calls::new(Box::new(ours)),
             closed: watch::channel(false).0,
             kept: AtomicBool::new(false),
-            process: ChildProcess::already_exited(),
+            process,
             tools_unserved: AtomicBool::new(false),
             held: AsyncMutex::new(None),
             acks: Acks::default(),

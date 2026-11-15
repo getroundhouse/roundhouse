@@ -55,8 +55,11 @@ pub(crate) struct Hub {
     pub(super) agents: Vec<AgentDescription>,
     pub(super) workers: Mutex<HashMap<WorkspaceId, Arc<WorkerLink>>>,
     /// Held while a workspace's worker starts or is cleaned up, so an instance never has two. One per
-    /// workspace, because a slow or stuck worker mustn't hold up the others. It guards whether nothing but this hub's
-    /// own worker can be on the instance, which is false until the hub has stopped whatever an earlier one left there.
+    /// workspace, because a slow or stuck worker mustn't hold up the others. It guards whether nothing but the
+    /// workspace's worker in [`Hub::workers`] can be on the instance: false until the hub has stopped whatever an
+    /// earlier one left there, and from the moment a worker is started or let go of until it's in the map or the
+    /// instance has been cleared, so a start or stop dropped partway leaves the next start to clear it. A start that
+    /// fails leaves it false too, but one refused because another worker serves the instance leaves it as it was.
     pub(super) worker_gates: Mutex<HashMap<WorkspaceId, Arc<AsyncMutex<bool>>>>,
     /// Held to read while one of a workspace's other worktrees is made, and to write while one is removed, their
     /// records are settled or the workspace is archived, so nothing is removed or forgotten as it's made, which would

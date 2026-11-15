@@ -80,7 +80,17 @@ impl Hub {
         // Whichever provider runs it, what its worker writes to stderr is kept here.
         let log = self.worker_logs_dir.join(format!("{}.log", workspace.instance_id));
         let (id, instance_id) = (workspace.id.clone(), workspace.instance_id.clone());
-        let link = WorkerLink::open(self.clone(), provider, id, instance_id, &log, Opening::Started).await?;
+        // Its worker is on the instance from the moment it starts, and not in the map until it's opened, so a start
+        // dropped between leaves the next one to clear the instance first, and so does one that failed, which may not
+        // have ended what it started. One refused because another worker serves the instance leaves it as it was,
+        // since clearing it would end that worker.
+        let was_cleared = std::mem::replace(&mut *cleared, false);
+        let opened = WorkerLink::open(self.clone(), provider, id, instance_id, &log, Opening::Started).await;
+        let refused = opened.as_ref().is_err_and(|e| e.code == ErrorCode::Conflict);
+        if opened.is_ok() || refused {
+            *cleared = was_cleared;
+        }
+        let link = opened?;
         if wanted == Wanted::ForAnything {
             link.keep();
         }
@@ -181,6 +191,9 @@ impl Hub {
         cleared: &mut bool,
         doing: &str,
     ) {
+        // It's out of the map, and on the instance until it has stopped, so a stop dropped partway leaves the next
+        // worker to clear the instance first.
+        *cleared = false;
         link.stop(STOP_GRACE).await;
         *cleared = match self.provider(&workspace.provider) {
             Ok(provider) => clear_instance(provider.as_ref(), &workspace.instance_id).await,
@@ -208,6 +221,8 @@ impl Hub {
             let current = link.is_current(&workers, workspace_id);
             if current {
                 workers.remove(workspace_id);
+                // As for a stop: out of the map, the instance isn't clear until it has been cleared.
+                *cleared = false;
             }
             current
         };
@@ -276,5 +291,34 @@ async fn clear_instance(provider: &dyn Provider, instance_id: &InstanceId) -> bo
             warn!(%instance_id, "stopping an instance failed: {}", error_chain(&e));
             false
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use protocol::worker::WorkerResponse;
+
+    use super::*;
+    use crate::hub::tests::{hub_with_worktree, serving};
+
+    #[tokio::test(start_paused = true)]
+    async fn a_stop_dropped_partway_leaves_the_next_worker_to_clear_the_instance() {
+        let dir = tempfile::tempdir().unwrap();
+        let hub = hub_with_worktree(dir.path());
+        let link = WorkerLink::answering_until_killed(|_| Some(Ok(WorkerResponse::Ok)));
+        serving(&hub, &link);
+        let id: WorkspaceId = "w".into();
+        // As once a worker of its own holds the instance.
+        *hub.worker_gate(&id).lock().await = true;
+        let workspace = hub.workspace(&id).await.unwrap();
+
+        // Dropped while it waits for the worker to stop, as by a caller that gives up on it.
+        let stopping = tokio::time::timeout(Duration::from_secs(1), hub.stop_worker_only_read(&workspace, &link)).await;
+
+        assert!(stopping.is_err(), "the stop was still waiting for the worker to exit");
+        assert!(hub.workers.lock().get(&id).is_none(), "it had let go of the worker");
+        assert!(!*hub.worker_gate(&id).lock().await, "the worker may still be on the instance");
     }
 }
