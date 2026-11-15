@@ -14,7 +14,6 @@ use look::{Hand as _, Off as _, Sizing as _};
 use super::{ArchiveFilter, SORTS};
 use crate::app::AppView;
 use crate::sides::{self, AtTheTop};
-use crate::workspace_pane::HEADER_HEIGHT;
 
 /// In the strip, clear of the window's buttons at both ends as the workspace's header is.
 pub(super) fn bar(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
@@ -24,7 +23,7 @@ pub(super) fn bar(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement 
     h_flex()
         .flex_none()
         .w_full()
-        .h(HEADER_HEIGHT)
+        .h(look::BarSize::Regular.height())
         .pl(px(16.) + clear.start)
         .pr(px(8.) + clear.end)
         .gap_1()

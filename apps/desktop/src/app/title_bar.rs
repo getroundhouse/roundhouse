@@ -1,16 +1,20 @@
-//! The window has no title bar, so the strip along its top, as tall as the workspace header, stands in for one:
+//! The window has no title bar, so the strip along its top, as tall as a regular bar, stands in for one:
 //! dragging it moves the window, and double-clicking it does what double-clicking a title bar does, which on a Mac is
 //! what its setting says, and on Windows maximizes or restores the window. A press there that a control took, such as
 //! a button in the header, is the control's. On Windows it also holds the window's buttons.
 
 use gpui_kit::{
     App, Context, Div, InteractiveElement as _, MouseButton, MouseDownEvent, MouseMoveEvent, ParentElement as _,
-    Stateful, Styled as _, Window, WindowControlArea, div,
+    Pixels, Stateful, Styled as _, Window, WindowControlArea, div,
 };
 
 use super::AppView;
 use crate::sides::WindowButtons;
-use crate::workspace_pane::HEADER_HEIGHT;
+
+/// How tall the strip is: a regular bar's, since the bars along the top of the window's panes fill it, the workspace's header,
+/// Home's bar and the pull request's. The window's buttons, the app's own in the corner and Settings' way back sit in
+/// it, and the sidebars' lists and Settings' pages start under it.
+pub(crate) const TOP_STRIP_HEIGHT: Pixels = look::BarSize::Regular.height();
 
 /// Who moves the window from the strip, which goes by the system.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -68,7 +72,7 @@ pub fn the_title_bar_is(title_bar: TitleBar, cx: &mut App) {
 /// sidebar's edge, a dialog's backdrop, and Home's search.
 pub(super) fn stands_in(root: Stateful<Div>, cx: &mut Context<AppView>) -> Stateful<Div> {
     let title_bar = title_bar(cx);
-    let strip = div().absolute().top_0().left_0().w_full().h(HEADER_HEIGHT).on_mouse_down(
+    let strip = div().absolute().top_0().left_0().w_full().h(TOP_STRIP_HEIGHT).on_mouse_down(
         MouseButton::Left,
         cx.listener(move |t, event: &MouseDownEvent, window, cx| t.pressed_the_strip(title_bar, event, window, cx)),
     );

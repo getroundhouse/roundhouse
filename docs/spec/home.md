@@ -3,7 +3,7 @@
 Every workspace in one list, to find one, and to see where they all stand without opening each.
 
 - **Home at the top of the sidebar shows it in place of the workspace, and picking a workspace puts it away.** The workspace stays selected under it. While Home hides it, a reply there isn't read and its keys do nothing, since nobody can see what they'd do. *Unconfirmed.*
-- **A row is a workspace:** its mark, its name, its project, and a button to archive it, or to bring back an archived one, which leaves Home showing. While it's being archived or brought back, the row says Archiving… or Restoring… in place of the button, in every window, wherever that was asked for. Clicking the rest of the row shows the workspace, as its row in the sidebar does, or brings an archived one back. A workspace still being made isn't listed until it's ready, since there's nothing to open yet, and the sidebar says it's on its way. Rows are 44px, with a line between them. *Unconfirmed.*
+- **A row is a workspace:** its mark, its name, its project, and a button to archive it, or to bring back an archived one, which leaves Home showing. While it's being archived or brought back, the row says Archiving… or Restoring… in place of the button, in every window, wherever that was asked for. Clicking the rest of the row shows the workspace, as its row in the sidebar does, or brings an archived one back. A workspace still being made isn't listed until it's ready, since there's nothing to open yet, and the sidebar says it's on its way. Rows are large rows, 44px, with a line between them, as `look.md` says. *Unconfirmed.*
 
   **Every workspace, the one last worked in first.** *Unconfirmed.*
 

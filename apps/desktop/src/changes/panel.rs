@@ -7,16 +7,13 @@ use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::{Icon, IconName, Selectable as _, Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, Context, Entity, EventEmitter, Global, IntoElement, ParentElement, Pixels, Render, SharedString,
+    AnyElement, App, Context, Entity, EventEmitter, Global, IntoElement, ParentElement, Render, SharedString,
     StatefulInteractiveElement, Styled, Subscription, TestSupportExt as _, Window, div, uniform_list,
 };
 use look::{Hand as _, LineText, Placed, Sizing as _, Typeset as _};
 use rows::Layout;
 use std::collections::HashSet;
 use std::ops::Range;
-
-/// As tall as the tabs above it.
-const BAR_HEIGHT: Pixels = crate::sidebar_tabs::HEIGHT;
 
 #[derive(Clone, Debug)]
 pub enum ChangesEvent {
@@ -137,7 +134,7 @@ impl Changes {
         h_flex()
             .flex_none()
             .w_full()
-            .h(BAR_HEIGHT)
+            .h(look::BarSize::Regular.height())
             .px_3()
             .gap_2()
             .justify_between()

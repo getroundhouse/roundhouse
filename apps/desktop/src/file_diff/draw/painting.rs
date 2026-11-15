@@ -21,8 +21,8 @@ use look::{Hand as _, Shaped as _, Sizing as _, Typeset as _};
 use protocol::model::{DiffComment, DiffSide};
 use std::sync::Arc;
 
-/// Taller than a line, so a fold reads as a band across the code rather than as a line of it.
-pub(in super::super) const FOLD_HEIGHT: Pixels = px(28.);
+/// A small row's, taller than a line, so a fold reads as a band across the code rather than as a line of it.
+pub(in super::super) const FOLD_HEIGHT: Pixels = look::RowSize::Small.height();
 /// The column between the line numbers and the code, which says how a line changed.
 pub(in super::super) const SIGN: Pixels = px(16.);
 /// Each line's group, whose hover shows its button to add a comment.

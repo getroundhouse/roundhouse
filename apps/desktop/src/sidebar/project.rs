@@ -15,7 +15,7 @@ use look::{Hand as _, Sizing as _, Typeset as _};
 use protocol::model::{Repo, RepoId, WorkspaceId};
 
 use super::drag::{Dragged, Dragging};
-use super::{REPO_HEIGHT, has_line, icon_box, lists, needs_a_look};
+use super::{ROW_SIZE, has_line, icon_box, lists, needs_a_look};
 use crate::app::AppView;
 
 /// The row of a project that's `collapsed` or not, whose workspaces are `out` from under it, from 0 to 1. Dragging it
@@ -58,7 +58,7 @@ pub(super) fn row(app: &AppView, repo: &Repo, collapsed: bool, out: f32, cx: &mu
                 .on_click(cx.listener(move |t, _, _, cx| t.toggle_project(&toggled, cx)))
         })
         .w_full()
-        .h(REPO_HEIGHT)
+        .h(ROW_SIZE.height())
         .px_1p5()
         .gap_2()
         .child(icon_box(IconName::Folder, faint))

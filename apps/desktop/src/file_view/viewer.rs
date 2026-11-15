@@ -15,9 +15,6 @@ use reading::Unshown;
 
 /// The height of a line of a file, and of a line of a diff, so the two read alike.
 pub(crate) const LINE_HEIGHT: Pixels = px(20.);
-/// The bar with the file's path, as tall as the rows of tabs above it, so the buttons an image's comparison has there
-/// have room around them.
-pub(crate) const HEADER_HEIGHT: Pixels = px(40.);
 
 /// What the file view has to show for its file.
 pub(super) enum Contents {

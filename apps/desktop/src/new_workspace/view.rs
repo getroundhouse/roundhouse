@@ -9,7 +9,7 @@ use gpui_kit::component::menu::{DropdownMenu as _, PopupMenu, PopupMenuItem};
 use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::{
     Anchor, Context, Focusable as _, InteractiveElement as _, IntoElement, Keystroke, ParentElement as _, Render,
-    Styled as _, Window, div, px, transparent_black,
+    Styled as _, Window, div, transparent_black,
 };
 use look::{Hand as _, Off as _, Sizing as _};
 
@@ -49,7 +49,7 @@ impl NewWorkspaceDialog {
             }
             menu
         };
-        h_flex().w_full().h(px(48.)).px_2().border_b_1().border_color(self.colors(cx).1).child(
+        h_flex().w_full().h(look::BarSize::Regular.height()).px_2().border_b_1().border_color(self.colors(cx).1).child(
             Button::new("new-workspace-repo")
                 .sized(look::ControlSize::Regular)
                 .hand()

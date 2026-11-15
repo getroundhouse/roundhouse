@@ -16,7 +16,7 @@ use protocol::model::{Session, SessionStatus};
 
 use super::setup::setup_log_view;
 use super::workspace_card;
-use super::{HEADER_HEIGHT, Mark, Opened, PaneEvent, Showing, WorkspacePane};
+use super::{Mark, Opened, PaneEvent, Showing, WorkspacePane};
 use crate::sides::{self, AtTheTop, Side, Sidebar};
 use crate::{prompt_cache, right_click};
 
@@ -131,7 +131,7 @@ impl WorkspacePane {
             .relative()
             .flex_none()
             .w_full()
-            .h(px(40.))
+            .h(look::BarSize::Regular.height())
             // The bar's bottom edge, drawn under the tabs rather than as a border, so the line under the chat showing
             // can cover it. GPUI draws a border over what's inside it.
             .child(div().absolute().left_0().right_0().bottom_0().h(look::EDGE).bg(border))
@@ -191,7 +191,7 @@ impl WorkspacePane {
             .region(Region::Header)
             .flex_none()
             .w_full()
-            .h(HEADER_HEIGHT)
+            .h(look::BarSize::Regular.height())
             .pl(px(16.) + clear.start)
             .pr(px(12.) + clear.end)
             .gap_2()

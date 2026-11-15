@@ -7,10 +7,10 @@ use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::{Context, Div, IntoElement, ParentElement as _, Pixels, Styled as _, Window, div};
 use look::{Hand as _, Sizing as _};
 
+use super::TOP_STRIP_HEIGHT;
 use super::{AppView, menu_button, title_bar};
 use crate::menus::System;
 use crate::sides::{self, Beside, MenusButton, Side, Sidebar};
-use crate::workspace_pane::HEADER_HEIGHT;
 
 /// Whether the button that opens the menus is in the corner, which it is wherever the app draws them.
 const MENUS: MenusButton = if System::THIS.draws_the_menus() { MenusButton::InTheCorner } else { MenusButton::Absent };
@@ -44,7 +44,7 @@ pub(super) fn menus(app: &AppView, cx: &mut Context<AppView>) -> Option<impl Int
 
 /// A place in the strip along the window's top, as tall as it, starting `starts` from the window's left edge.
 fn in_the_corner(starts: Pixels) -> Div {
-    div().absolute().top_0().left(starts).h(HEADER_HEIGHT).flex().items_center()
+    div().absolute().top_0().left(starts).h(TOP_STRIP_HEIGHT).flex().items_center()
 }
 
 /// Hides and shows the sidebar, as the button at the other end of the workspace's header does the sidebar of

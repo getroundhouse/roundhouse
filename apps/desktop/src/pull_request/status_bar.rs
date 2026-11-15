@@ -7,8 +7,7 @@ use gpui_kit::component::button::{Button, ButtonCustomVariant, ButtonVariants as
 use gpui_kit::component::{Icon, Sizable as _, h_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, Div, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Styled as _, Window, div,
-    px,
+    AnyElement, App, Div, InteractiveElement as _, IntoElement, ParentElement as _, Styled as _, Window, div, px,
 };
 use look::{Hand as _, Off as _, Sizing as _, Typeset as _, Work};
 use protocol::model::{BranchName, Local, PullRequest, Standing, Workspace};
@@ -19,9 +18,6 @@ use words::Action;
 /// How often the pull request showing is read again. Soon enough to see a check finish or the queue merge it within
 /// a minute, and far from GitHub's limits, at two calls to it each time. The hub reads every workspace's less often.
 pub const READ_AGAIN: Duration = Duration::from_secs(30);
-
-/// As tall as the workspace's header, so the bar lines up with it across the window, and the window moves by it too.
-const HEIGHT: Pixels = crate::workspace_pane::HEADER_HEIGHT;
 
 /// What the app knows of a workspace's pull request.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -104,7 +100,7 @@ pub fn bar(
         .id("pull-request-bar")
         .flex_none()
         .w_full()
-        .h(HEIGHT)
+        .h(look::BarSize::Regular.height())
         .pl_3()
         .pr(px(12.) + sides::clearance(AtTheTop::RightSidebar, cx).end)
         .gap_2()

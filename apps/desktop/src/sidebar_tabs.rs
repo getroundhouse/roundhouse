@@ -7,13 +7,8 @@ use std::rc::Rc;
 use gpui_kit::base::{Tab, Tabs};
 use gpui_kit::component::h_flex;
 use gpui_kit::prelude::FluentBuilder as _;
-use gpui_kit::{
-    AnyElement, App, IntoElement as _, ParentElement as _, Pixels, SharedString, Styled as _, Window, div, px,
-};
+use gpui_kit::{AnyElement, App, IntoElement as _, ParentElement as _, SharedString, Styled as _, Window, div};
 use look::{Hand as _, LineText};
-
-/// As tall as the chat tabs, so the two rows of tabs line up across the window.
-pub(crate) const HEIGHT: Pixels = px(40.);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SidebarTab {
@@ -125,7 +120,8 @@ pub(crate) fn bar(
         .relative()
         .flex_none()
         .w_full()
-        .h(HEIGHT)
+        // A regular bar's, as the chat tabs are, so the two rows of tabs line up across the window.
+        .h(look::BarSize::Regular.height())
         .pl_1()
         // As far in as the rows under it, so what's at its right end lines up with what's at theirs.
         .pr_3()

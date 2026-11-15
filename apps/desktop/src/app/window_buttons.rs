@@ -8,8 +8,8 @@ use gpui_kit::{
     px,
 };
 
+use super::TOP_STRIP_HEIGHT;
 use crate::sides::{self, WindowButtons};
-use crate::workspace_pane::HEADER_HEIGHT;
 
 /// Windows' icon fonts, newest first: Segoe Fluent Icons on Windows 11, and Segoe MDL2 Assets, which has the same
 /// glyphs at the same code points, on Windows 10.
@@ -98,7 +98,7 @@ pub(super) fn of_windows(window: &Window, cx: &mut App) -> Option<impl IntoEleme
     // A third of the room `sides` leaves them each.
     let buttons = h_flex()
         .w(sides::WINDOWS_BUTTONS_WIDTH)
-        .h(HEADER_HEIGHT)
+        .h(TOP_STRIP_HEIGHT)
         .child(drawn(Button::Minimize, faint))
         .child(drawn(maximize, faint))
         .child(drawn(Button::Close, red));

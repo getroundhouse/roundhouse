@@ -8,7 +8,6 @@ use gpui_kit::{AnyElement, App, IntoElement, ParentElement as _, Styled as _, di
 use look::{Shaped as _, Typeset as _};
 
 use crate::file_tree::split;
-use crate::file_view::HEADER_HEIGHT;
 
 /// The bar for the file at `path`, with `note` after its pill, such as the path it was renamed from, and `end` at its
 /// right end.
@@ -36,7 +35,7 @@ pub(crate) fn file_header(path: &str, note: Option<String>, end: Option<AnyEleme
     h_flex()
         .flex_none()
         .w_full()
-        .h(HEADER_HEIGHT)
+        .h(look::BarSize::Regular.height())
         .px_3()
         .gap_2()
         .border_b_1()

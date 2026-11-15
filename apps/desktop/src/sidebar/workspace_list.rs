@@ -1,16 +1,16 @@
 use super::{drag, fold, footer, heading, nav, project, row};
+use crate::app::TOP_STRIP_HEIGHT;
 use crate::app::{AppView, Connection};
 use crate::reorder;
 use crate::settings::Settings;
 use crate::workspace_order::Sort;
-use crate::workspace_pane::HEADER_HEIGHT;
 use fold::{Drawn, Fold, Laid};
 use gpui_kit::component::{Icon, IconNamed, v_flex};
 use gpui_kit::{
     AnyElement, App, Context, Div, ElementId, Hsla, InteractiveElement as _, IntoElement, ParentElement, Pixels,
     Styled, TestSupportExt as _, Window, div, px,
 };
-use look::{LineText, Typeset as _};
+use look::{LineText, RowSize, Typeset as _};
 use protocol::model::{RepoId, Workspace, WorkspaceId, WorkspaceStatus};
 use std::ops::Range;
 use std::rc::Rc;
@@ -19,11 +19,12 @@ use std::time::Instant;
 /// The orders the sidebar can list each project's workspaces in, in the order its heading's menu offers them.
 pub(crate) const SORTS: [Sort; 2] = [Sort::LastActive, Sort::Oldest];
 
-/// The heading over the projects, and over Settings' pages.
-pub(crate) const HEADING_HEIGHT: Pixels = px(28.);
-pub(super) const REPO_HEIGHT: Pixels = px(32.);
-/// A workspace's row, and the note in its place while one is on its way.
-pub(super) const ROW_HEIGHT: Pixels = px(36.);
+/// How tall a row in the sidebar is, as a place to go in a sidebar: Home's, Create's and Search's, a project's, a
+/// workspace's, and the note in a workspace's place while one is on its way. The list places each line by its size, so
+/// what's drawn there takes it from here too.
+pub(super) const ROW_SIZE: RowSize = RowSize::Regular;
+/// How tall the heading over the projects is, as the heading over a list is.
+pub(super) const HEADING_SIZE: RowSize = RowSize::Small;
 /// How far a workspace's row sets its mark in from a repository's, so the rows read as the repository's.
 pub(super) const ROW_INSET: Pixels = px(12.);
 /// The space between a mark and the name beside it.
@@ -65,9 +66,8 @@ pub(super) enum LineId {
 impl Line {
     pub(super) fn height(self) -> Pixels {
         match self {
-            Line::Heading => HEADING_HEIGHT,
-            Line::Repo(_) => REPO_HEIGHT,
-            Line::Workspace(_) | Line::Creating(_) => ROW_HEIGHT,
+            Line::Heading => HEADING_SIZE.height(),
+            Line::Repo(_) | Line::Workspace(_) | Line::Creating(_) => ROW_SIZE.height(),
         }
     }
 
@@ -275,7 +275,7 @@ fn creating(workspace: &Workspace, cx: &mut Context<AppView>) -> AnyElement {
     div()
         .id(ElementId::Name(format!("creating-{}", workspace.id).into()))
         .pl(ROW_INSET + look::Size::Row.width() + MARK_GAP)
-        .h(ROW_HEIGHT)
+        .h(ROW_SIZE.height())
         .flex()
         .items_center()
         .typeset(look::Type::Body)
@@ -317,7 +317,7 @@ pub(crate) fn render(app: &AppView, arranged: Arranged, cx: &mut Context<AppView
         .border_color(border)
         // Where the window's buttons sit, level with the workspace header, with the button that hides the sidebar
         // beside them. It stays put, so the list scrolls under its bottom edge rather than under the buttons.
-        .child(div().flex_none().h(HEADER_HEIGHT))
+        .child(div().flex_none().h(TOP_STRIP_HEIGHT))
         .child(nav::nav(app, cx))
         .child(
             reorder::hears_the_pointer(
@@ -355,6 +355,6 @@ mod tests {
             Line::Workspace(3),
         ];
 
-        assert_eq!(sizes(&lines), [px(32.), px(38.), px(40.), px(40.), px(44.), px(40.), px(38.), px(36.)]);
+        assert_eq!(sizes(&lines), [px(32.), px(42.), px(40.), px(40.), px(44.), px(44.), px(42.), px(36.)]);
     }
 }
