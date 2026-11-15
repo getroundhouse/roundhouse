@@ -1,17 +1,23 @@
 //! What the hub asks of the session's run, which its claims allow, as its worker said them as it launched it.
 
-use super::LiveSession;
+use super::{LiveSession, LiveState};
 use crate::worker_link::WorkerLink;
 use protocol::capability::{Capabilities, Control};
 use protocol::client::{ApiError, ErrorCode};
 use protocol::worker::{AgentControl, Delivery};
 
-impl LiveSession {
+impl LiveState {
     /// What the run that's running claims, as it said, and nothing when none is.
+    pub(super) fn run_claims(&self) -> Option<&Capabilities> {
+        let run = self.agent?.run;
+        self.capabilities.as_ref().filter(|reported| reported.run == run).map(|reported| &*reported.claims)
+    }
+}
+
+impl LiveSession {
+    /// What the run that's running claims, as [`LiveState::run_claims`] says, as of now.
     pub(super) fn run_claims(&self) -> Option<Capabilities> {
-        let state = self.state.lock();
-        let run = state.agent?.run;
-        state.capabilities.as_ref().filter(|reported| reported.run == run).map(|reported| (*reported.claims).clone())
+        self.state.lock().run_claims().cloned()
     }
 
     /// How the session's run, on `link`, is asked anything. A run of this protocol says its claims as it launches, so

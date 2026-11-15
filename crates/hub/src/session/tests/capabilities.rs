@@ -137,6 +137,40 @@ fn typed_approval_replies_require_the_runs_claims_even_when_the_answer_is_empty(
     }) if answers.is_empty()));
 }
 
+/// Once the agent that asked has exited, an answer to what it asked is refused as too late, even to a request that
+/// only the claims of a run that's running could say how to answer.
+#[tokio::test]
+async fn an_answer_once_the_agent_that_asked_has_exited_is_refused_as_too_late() {
+    let dir = tempfile::tempdir().unwrap();
+    let hub = hub_in(dir.path());
+    let (link, _asked) = taking_worker(&hub);
+    let run = RunId::new(1);
+    let live = carried_on(&hub, &link, run);
+    let mut claims = Capabilities::default();
+    claims.asking.questions = Some(Claimed {});
+    initialized(&live, run, "c", claims).await;
+    let request: EventBody = serde_json::from_value(serde_json::json!({
+        "type":"approval_requested","approval_id":"q",
+        "request":{"asks":{"asks":"questions","questions":[{"text":"Which?","typed":"yes"}]}}
+    }))
+    .unwrap();
+    let exited = EventBody::AgentExited {
+        reason: protocol::event::ExitReason::Unexpected,
+        code: None,
+        signal: None,
+        stderr_tail: vec![],
+    };
+    for body in [request, exited] {
+        live.send_item(Item::Event { run, body: Box::new(body), raw: None, attachments: Vec::new(), seq: None }).await;
+    }
+    flushed(&live).await;
+
+    let skipped = protocol::event::ApprovalDecision::Deny { message: None, interrupt: false };
+    let refused = hub.session_approve(live.id.clone(), "q".into(), skipped).await.unwrap_err();
+
+    assert_eq!(refused.code, protocol::client::ErrorCode::Conflict, "{}", refused.message);
+}
+
 #[tokio::test]
 async fn a_runs_claims_go_from_the_session_with_the_run_and_not_with_another() {
     let dir = tempfile::tempdir().unwrap();

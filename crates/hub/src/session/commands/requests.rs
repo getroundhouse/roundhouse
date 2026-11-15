@@ -1,4 +1,4 @@
-use super::super::{Command, LiveSession, Origin};
+use super::super::{Command, LiveSession, LiveState, Origin};
 use crate::hub::Hub;
 use protocol::attachment::Attachment;
 use protocol::capability::Control;
@@ -193,24 +193,10 @@ impl LiveSession {
         approval_id: ApprovalId,
         decision: ApprovalDecision,
     ) -> Result<(), ApiError> {
-        {
-            let state = self.state.lock();
-            let Some(asked_by) = state.progress.approvals.get(&approval_id) else {
-                return Err(ApiError::new(
-                    ErrorCode::Conflict,
-                    format!("approval {approval_id} isn't waiting for an answer"),
-                ));
-            };
-            if asked_by.is_none() || state.agent.map(|agent| agent.run) != *asked_by {
-                return Err(ApiError::new(ErrorCode::Conflict, "the agent that asked has exited"));
-            }
-        }
         // The answers are recorded as well as passed on, in the form they came, since the agent's own words for them
         // are its adapter's to choose.
         let request = self.approval_request(&approval_id).await?;
         let recorded_decision = super::super::decisions::redacted(&request, &decision);
-        // Validate before the log says the decision was made.
-        super::super::decisions::control(&request, approval_id.clone(), &decision, self.run_claims().as_ref())?;
         let (outcome, answers_by_text, answers_by_position) = match &recorded_decision {
             ApprovalDecision::Allow { .. } => (ApprovalOutcome::Allowed, None, None),
             ApprovalDecision::AnswerByText { answers } => (ApprovalOutcome::Allowed, Some(answers.clone()), None),
@@ -224,7 +210,22 @@ impl LiveSession {
             answers_by_position,
             by_setting: false,
         };
-        self.record(Origin::Hub, resolved, None).await?;
+        // Whether it's still waiting, and whether the agent that asked can take this answer, are asked as the answer is
+        // recorded, in order with everything recorded before it, since a client can read the request in the log before
+        // the session has taken it in. Both are asked before the log says the decision was made.
+        let refused = |state: &LiveState| {
+            let Some(asked_by) = state.progress.approvals.get(&approval_id) else {
+                return Some(ApiError::new(
+                    ErrorCode::Conflict,
+                    format!("approval {approval_id} isn't waiting for an answer"),
+                ));
+            };
+            if asked_by.is_none() || state.agent.map(|agent| agent.run) != *asked_by {
+                return Some(ApiError::new(ErrorCode::Conflict, "the agent that asked has exited"));
+            }
+            super::super::decisions::control(&request, approval_id.clone(), &decision, state.run_claims()).err()
+        };
+        self.record_unless(Origin::Hub, resolved, None, refused).await?;
         self.pass_on(approval_id, decision).await
     }
 

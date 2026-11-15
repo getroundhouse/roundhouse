@@ -12,11 +12,10 @@ use protocol::model::ApprovalId;
 
 impl LiveSession {
     pub(super) async fn approval_request(&self, approval: &ApprovalId) -> Result<EventBody, ApiError> {
-        let (id, approval) = (self.id.clone(), approval.clone());
-        self.hub()?
-            .blocking(move |store| store.approval_request(&id, &approval))
-            .await?
-            .ok_or_else(|| ApiError::new(ErrorCode::Conflict, "the approval request is missing"))
+        let (id, asked) = (self.id.clone(), approval.clone());
+        self.hub()?.blocking(move |store| store.approval_request(&id, &asked)).await?.ok_or_else(|| {
+            ApiError::new(ErrorCode::Conflict, format!("no approval {approval} was asked for in this chat"))
+        })
     }
 }
 
