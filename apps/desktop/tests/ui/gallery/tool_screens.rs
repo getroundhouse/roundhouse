@@ -10,6 +10,7 @@ use super::frame::{CHAT, Frame, Part};
 use super::image_chats::{AFTER_DRAWN, pointed, pointed_among_words, pointed_on_lines};
 use super::screens::FOCUS;
 use super::steps::{Screen, Step, Target};
+use super::typed_chats;
 use super::worlds::{chat_world, read_image, steered_thinking, thinking_streaming};
 use super::{chats, file_chats, question_chats, tool_chats};
 
@@ -34,6 +35,13 @@ pub(crate) const TOOL_SCREENS: &[Screen] = &[
         world: Some(|| chat_world(SessionStatus::Idle, tool_chats::commands())),
         frame: CHAT,
         steps: &[Step::Select(FOCUS), Step::Open(tool_chats::FORMAT_LINE), Step::Open(tool_chats::SEARCH_LINE)],
+    },
+    Screen {
+        name: "tool-commands-ended",
+        spec: "chats.md",
+        world: Some(|| chat_world(SessionStatus::Idle, typed_chats::commands_that_ended())),
+        frame: CHAT,
+        steps: &[Step::Select(FOCUS), Step::Open(typed_chats::BACKGROUND_LINE)],
     },
     Screen {
         name: "finding",

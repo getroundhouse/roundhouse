@@ -78,9 +78,17 @@ impl Closes {
         if outcome != ApprovalOutcome::Denied {
             return Closes::Unsaid;
         }
-        let denied = |block: &ContentBlock| {
-            let ContentBlock::ToolResult { tool_use_id, denied, .. } = block else { return false };
-            tool_use_id == call && denied.is_some()
+        // Read from the blocks themselves, rather than through `Returned`, which would read every result nearby whole
+        // to find the one that answers the call.
+        let denied = |block: &ContentBlock| match block {
+            ContentBlock::ToolResult { tool_use_id, denied, .. }
+            | ContentBlock::CallResult { tool_use_id, denied, .. } => tool_use_id == call && denied.is_some(),
+            ContentBlock::Text { .. }
+            | ContentBlock::Thinking { .. }
+            | ContentBlock::Call { .. }
+            | ContentBlock::ToolUse { .. }
+            | ContentBlock::Image { .. }
+            | ContentBlock::Unknown => false,
         };
         let said = nearby::events_after(log, seq, NEAR).any(|event| blocks_of(&event.body).iter().any(denied));
         if said { Closes::SaidElsewhere } else { Closes::Unsaid }

@@ -10,14 +10,16 @@ mod failure;
 pub mod files;
 mod older;
 mod other;
+mod returned;
 mod search;
 pub mod web;
 
 pub use agent::Agent;
 pub use command::Command;
-pub use failure::{Failure, ResultForm};
+pub use failure::{Ending, Failure, ResultForm};
 pub use files::{EditFile, ReadFile, WriteFile};
 pub use other::Other;
+pub use returned::{Returned, in_the_background};
 pub use search::{FileLines, Found, Looks, Search};
 pub use web::{Fetch, Link, Results, WebSearch};
 

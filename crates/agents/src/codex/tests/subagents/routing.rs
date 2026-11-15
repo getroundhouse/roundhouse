@@ -2,8 +2,9 @@ use protocol::event::{ContentBlock, EventBody, TaskOutcome, TurnOutcome};
 use protocol::model::Seq;
 use serde_json::json;
 
-use super::fixtures::{activity, bodies, command, item, message, play, turn};
+use super::fixtures::activity;
 use crate::AgentOutput;
+use crate::codex::tests::script::{bodies, command, item, message, play, turn};
 
 #[tokio::test]
 async fn child_output_and_completion_do_not_take_the_roots_prompt_calls_or_reply() {

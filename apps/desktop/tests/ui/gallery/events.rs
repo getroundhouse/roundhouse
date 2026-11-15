@@ -1,8 +1,10 @@
-//! Building the events the screens' chats are made of, as the hub would record them from Claude.
+//! Building the events the screens' chats are made of, as the hub would record them from Claude: as its words, or typed,
+//! as an adapter that types its calls records them.
 
 #![cfg(test)]
 
 use protocol::attachment::Attachment;
+use protocol::capability::calls::{Call, CallOutput};
 use protocol::event::{
     AgentTask, ContentBlock, EventBody, FileChange, LinkedImage, TaskKind, TaskOutcome, TokenUsage, TurnOutcome,
 };
@@ -31,6 +33,16 @@ pub(crate) fn text_pointing(message: &str, text: &str, images: Vec<LinkedImage>)
 
 pub(crate) fn tool_use(message: &str, id: &str, name: &str, input: serde_json::Value) -> EventBody {
     from_the_agent(message, fixtures::tool_use(id, name, input))
+}
+
+/// The typed call `id`, in the agent's message that makes it.
+pub(crate) fn typed_call(message: &str, id: &str, call: Call) -> EventBody {
+    from_the_agent(message, fixtures::typed_call(id, call))
+}
+
+/// What came back for the typed call `id`.
+pub(crate) fn typed_result(id: &str, output: CallOutput, is_error: bool) -> EventBody {
+    EventBody::AgentUser { parent_tool_use_id: None, blocks: vec![fixtures::typed_result(id, output, is_error)] }
 }
 
 /// What the agent thought, as its own message.

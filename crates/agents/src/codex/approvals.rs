@@ -21,17 +21,18 @@ pub(super) async fn requested(
     scope: &super::subagents::Scope,
     raw: String,
 ) -> Result<(), AgentError> {
-    let (asks, native) = match method {
+    // A call's request names the call, as Claude's do, so a client ties the call's result to it.
+    let (asks, native, call_id) = match method {
         "item/commandExecution/requestApproval" | "item/fileChange/requestApproval" => {
-            let id = params["itemId"].as_str().unwrap_or_default();
-            let call = shared.state.lock().work(scope.parent.as_ref()).calls.get(&id.into()).cloned();
+            let id: ToolUseId = params["itemId"].as_str().unwrap_or_default().into();
+            let call = shared.state.lock().work(scope.parent.as_ref()).calls.get(&id).cloned();
             let Some(call) = call else { return unsupported(shared, native_id, method).await };
             let native = if method.contains("commandExecution") {
                 NativeRequest::Command(native_id.clone())
             } else {
                 NativeRequest::File(native_id.clone())
             };
-            (Asks::Call { call }, native)
+            (Asks::Call { call }, native, Some(id))
         }
         "item/tool/requestUserInput" => {
             let mut keys = Vec::new();
@@ -55,50 +56,35 @@ pub(super) async fn requested(
                     typed: typed_answer(question),
                 });
             }
-            (Asks::Questions { questions }, NativeRequest::Questions { id: native_id.clone(), keys })
+            (Asks::Questions { questions }, NativeRequest::Questions { id: native_id.clone(), keys }, None)
         }
         _ => return unsupported(shared, native_id, method).await,
     };
     let request =
         Request { asks, suggested: Vec::new(), always: false, why: params["reason"].as_str().map(str::to_owned) };
-    ask(
-        shared,
-        ApprovalId::from(format!("codex-{}", uuid::Uuid::new_v4())),
-        request,
-        native,
-        scope.parent.clone(),
-        Some(raw),
-    )
-    .await;
+    let id = ApprovalId::from(format!("codex-{}", uuid::Uuid::new_v4()));
+    ask(shared, id, Waiting { request, native, parent: scope.parent.clone() }, call_id, Some(raw)).await;
     Ok(())
 }
 
 pub(super) async fn plan(shared: &Shared, plan: String) {
     let id = ApprovalId::from(format!("codex-plan-{}", uuid::Uuid::new_v4()));
     let request = Request { asks: Asks::Plan { plan, file: None }, suggested: Vec::new(), always: false, why: None };
-    ask(shared, id, request, NativeRequest::Plan, None, None).await;
+    ask(shared, id, Waiting { request, native: NativeRequest::Plan, parent: None }, None, None).await;
 }
 
-async fn ask(
-    shared: &Shared,
-    id: ApprovalId,
-    request: Request,
-    native: NativeRequest,
-    parent: Option<ToolUseId>,
-    raw: Option<String>,
-) {
-    shared
-        .state
-        .lock()
-        .waiting
-        .insert(id.clone(), Waiting { request: request.clone(), native, parent: parent.clone() });
+/// Records the request `waiting`, as `id`, naming the call it asks to make, if it asks to make one, and waits on its
+/// answer.
+async fn ask(shared: &Shared, id: ApprovalId, waiting: Waiting, call: Option<ToolUseId>, raw: Option<String>) {
+    let (request, parent) = (waiting.request.clone(), waiting.parent.clone());
+    shared.state.lock().waiting.insert(id.clone(), waiting);
     shared
         .event(
             EventBody::ApprovalRequested {
                 approval_id: id,
                 request: Some(Box::new(request)),
                 tool_name: String::new(),
-                tool_use_id: None,
+                tool_use_id: call,
                 input: Value::Null,
                 description: None,
                 suggestions: Box::new(Value::Null),

@@ -5,7 +5,6 @@
 
 use client_core::calls::Command;
 use gpui_kit::assets::IconName;
-use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, Div, ElementId, InteractiveElement, IntoElement, ParentElement, Role, SharedString,
     StatefulInteractiveElement as _, Styled, TestSupportExt as _, div, px,
@@ -64,27 +63,34 @@ fn output(answer: Option<&Answer>) -> Option<&str> {
 }
 
 /// The command, and under it what it printed, or a faint line saying it printed nothing, so a command that's done
-/// doesn't look as if it's still waiting. While it runs, there's only the command.
+/// doesn't look as if it's still waiting. One that went on in the background says so last, since what it prints from
+/// then on goes to its task rather than here. While it runs, there's only the command.
 fn opened(command: &Command, answer: Option<&Answer>, toggle: &Toggle, cx: &App) -> Div {
     // In the order they're shown, since a command nested in another call's row has its texts placed in the order
     // they're made.
     let command = command_part(command, toggle, cx);
-    let printed = output(answer).map(|text| match text.trim() {
-        "" => nothing_printed(toggle, cx),
-        _ => block::lines(toggle, Text::Output, text, cx),
+    let in_the_background = answer.is_some_and(Answer::in_the_background);
+    let printed = output(answer).and_then(|text| match text.trim() {
+        "" if in_the_background => None,
+        "" => Some(aside(toggle, "no-output", "No output", cx)),
+        _ => Some(block::lines(toggle, Text::Output, text, cx)),
     });
-    block::frame(cx).child(command).when_some(printed, |d, printed| d.child(block::separator(cx)).child(printed))
+    let went_on = in_the_background.then(|| aside(toggle, "background", "Went on in the background", cx));
+    block::frame(cx)
+        .child(command)
+        .children(printed.into_iter().chain(went_on).flat_map(|part| [block::separator(cx).into_any_element(), part]))
 }
 
-/// Where a command's output goes, saying there wasn't any. It isn't selectable, so a copy never takes it for output.
-fn nothing_printed(toggle: &Toggle, cx: &App) -> AnyElement {
+/// A faint line under a command that isn't what it printed: why it printed nothing, or where what it prints next goes.
+/// It isn't selectable, so a copy never takes it for output.
+fn aside(toggle: &Toggle, id: &'static str, says: &'static str, cx: &App) -> AnyElement {
     div()
-        .id(toggle.key.element("no-output"))
+        .id(toggle.key.element(id))
         .px_3()
         .py_2()
         .typeset(look::Type::Code)
         .text_color(look::colors(cx).text_faint)
-        .child("No output")
+        .child(says)
         .test_support()
         .into_any_element()
 }

@@ -1,8 +1,10 @@
-//! How a tool's result says it failed, for the line under its call: how a command exited, when it was one, and what
-//! went wrong. The agent's adapter says both, and a result that says what kind of call it answers holds what came
-//! back alone. One with no kind was recorded before adapters said, and has both in its text, as Claude wrote it then,
-//! which [`super::older`] reads.
+//! How a tool's result says it failed, for the line under its call: how a command ended, when it was one, and what
+//! went wrong. The agent's adapter says both, and a result that says what kind of call it answers holds what came back
+//! alone. One with no kind was recorded before adapters said, and has both in its text, as Claude wrote it then, which
+//! [`super::older`] reads.
 
+use protocol::capability::calls::CallOutput;
+use protocol::capability::calls::output::Ended;
 use protocol::event::ContentBlock;
 
 use super::older;
@@ -10,91 +12,98 @@ use super::older;
 /// What a failed result says went wrong.
 #[derive(Clone, Copy, Debug)]
 pub struct Failure<'a> {
-    /// The command's exit code, when it was a command that exited.
-    pub exit_code: Option<i32>,
+    /// How the command ended, when it was one and its agent said.
+    pub ended: Option<Ending>,
     /// What went wrong, on one line.
     pub message: &'a str,
-    /// What went wrong, in full, as an opened call shows it: without how a command exited, which the line under the
+    /// What went wrong, in full, as an opened call shows it: without how a command ended, which the line under the
     /// call already says, and without anything the agent put around a tool's own refusal.
     pub output: &'a str,
 }
 
+/// How a failed command ended. It's the client's own, rather than the protocol's [`Ended`], so a [`Failure`] stays a
+/// copy that borrows only its text, and only what a failure's line says is here.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Ending {
+    Exited(i32),
+    TimedOut,
+    /// Someone stopped it, the person or the agent.
+    Stopped,
+}
+
 impl<'a> Failure<'a> {
-    /// What the result `block` says went wrong, or `None` if it isn't a result, or didn't fail. A call the person
-    /// denied didn't fail: it never ran, and its result says what they said rather than what went wrong.
-    pub fn of(block: &'a ContentBlock) -> Option<Self> {
-        let ContentBlock::ToolResult { is_error: true, text, denied: None, .. } = block else { return None };
-        Some(Self::read(text, ResultForm::of(block)?))
-    }
-
-    /// The same, from the text of a failed result and the form it was recorded in, for a view that keeps a copy of
-    /// both rather than the block.
+    /// What a failed result says went wrong, from its text and the form it was recorded in, as
+    /// [`super::Returned::failure`] reads it, for a view that keeps a copy of both rather than the block.
     pub fn read(text: &'a str, form: ResultForm) -> Self {
-        let (exit_code, output) = match form.0 {
-            Form::Alone { exit_code } => (exit_code, text),
-            Form::AsSent => (older::exit_code(text), older::output(text)),
+        let (ended, output) = match form.0 {
+            Form::Alone { ended } => (ended, text),
+            Form::AsSent => (older::exit_code(text).map(Ending::Exited), older::output(text)),
         };
-        Self { exit_code, message: super::first_line(output), output }
+        Self { ended, message: super::first_line(output), output }
     }
 
-    /// What its line says first, such as `Exit 2`.
+    /// What its line says first, such as `Exit 2`, or `Timed out` for a command that didn't exit.
     pub fn label(&self) -> String {
-        self.exit_code.map_or_else(|| "Error".to_string(), |code| format!("Exit {code}"))
+        match self.ended {
+            Some(Ending::Exited(code)) => format!("Exit {code}"),
+            Some(Ending::TimedOut) => "Timed out".to_string(),
+            Some(Ending::Stopped) => "Stopped".to_string(),
+            None => "Error".to_string(),
+        }
     }
 }
 
-/// The form a result was recorded in, which says how its text is read. Only [`ResultForm::of`] makes one, from the
-/// result itself, so no client decides it.
+/// The form a result was recorded in, which says how its text is read. Only the result itself says, so no client
+/// decides it: a client has one from [`super::Returned::form`].
 #[derive(Clone, Copy, Debug)]
 pub struct ResultForm(Form);
 
 #[derive(Clone, Copy, Debug)]
 enum Form {
-    /// Through an adapter that says: its text is what came back alone, and how a command exited is beside it.
-    Alone { exit_code: Option<i32> },
+    /// Through an adapter that says: its text is what came back alone, and how a command ended is beside it.
+    Alone { ended: Option<Ending> },
     /// Before adapters said, as Claude sent it, with how it failed in its text.
     AsSent,
 }
 
 impl ResultForm {
     /// The form of the result `block`, or `None` for any other block.
-    pub fn of(block: &ContentBlock) -> Option<Self> {
-        if let ContentBlock::CallResult { output, .. } = block {
-            let exit_code = match output {
-                protocol::capability::calls::CallOutput::Command(c) => c.exit_code,
-                protocol::capability::calls::CallOutput::Lines(_)
-                | protocol::capability::calls::CallOutput::Image { .. }
-                | protocol::capability::calls::CallOutput::Document { .. }
-                | protocol::capability::calls::CallOutput::Changed { .. }
-                | protocol::capability::calls::CallOutput::Found(_)
-                | protocol::capability::calls::CallOutput::Paths(_)
-                | protocol::capability::calls::CallOutput::Page { .. }
-                | protocol::capability::calls::CallOutput::WebResults { .. }
-                | protocol::capability::calls::CallOutput::Report { .. }
-                | protocol::capability::calls::CallOutput::Mcp { .. }
-                | protocol::capability::calls::CallOutput::Words { .. }
-                | protocol::capability::calls::CallOutput::Encrypted
-                | protocol::capability::calls::CallOutput::Backgrounded { .. }
-                | protocol::capability::calls::CallOutput::Unknown => None,
-            };
-            return Some(Self(Form::Alone { exit_code }));
+    pub(super) fn of(block: &ContentBlock) -> Option<Self> {
+        match block {
+            ContentBlock::CallResult { output, .. } => Some(Self(Form::Alone { ended: ending(output) })),
+            ContentBlock::ToolResult { call: Some(_), exit_code, .. } => {
+                Some(Self(Form::Alone { ended: exit_code.map(Ending::Exited) }))
+            }
+            ContentBlock::ToolResult { call: None, .. } => Some(Self(Form::AsSent)),
+            ContentBlock::Text { .. }
+            | ContentBlock::Thinking { .. }
+            | ContentBlock::Call { .. }
+            | ContentBlock::ToolUse { .. }
+            | ContentBlock::Image { .. }
+            | ContentBlock::Unknown => None,
         }
-        let ContentBlock::ToolResult { call, exit_code, .. } = block else { return None };
-        Some(Self(if call.is_some() { Form::Alone { exit_code: *exit_code } } else { Form::AsSent }))
+    }
+}
+
+/// How a typed command ended, for its failure's line. That it timed out or was stopped says more than any exit code it
+/// has.
+fn ending(output: &CallOutput) -> Option<Ending> {
+    let CallOutput::Command(command) = output else { return None };
+    match command.ended {
+        Ended::TimedOut => Some(Ending::TimedOut),
+        Ended::Stopped => Some(Ending::Stopped),
+        Ended::Exited | Ended::Backgrounded { .. } | Ended::Unknown => command.exit_code.map(Ending::Exited),
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use protocol::event::CallKind;
-    use protocol::fixtures;
-
-    use super::{Failure, Form, ResultForm};
+    use super::{Ending, Failure, Form, ResultForm};
 
     const AS_SENT: ResultForm = ResultForm(Form::AsSent);
 
     fn alone(exit_code: Option<i32>) -> ResultForm {
-        ResultForm(Form::Alone { exit_code })
+        ResultForm(Form::Alone { ended: exit_code.map(Ending::Exited) })
     }
 
     #[test]
@@ -136,20 +145,5 @@ mod tests {
 
         let refused = Failure::read("<tool_use_error>no such tool</tool_use_error>", AS_SENT);
         assert_eq!((refused.label().as_str(), refused.output), ("Error", "no such tool"));
-    }
-
-    /// A result's form is whether it says what kind of call it answers, whatever that kind is.
-    #[test]
-    fn a_recorded_result_is_read_by_whether_it_says_its_kind() {
-        let before = fixtures::tool_result("c", "Exit code 2\nno such file", true);
-        let since = fixtures::of_kind(fixtures::command_failed("c", "no such file", 2), CallKind::Unknown);
-
-        let (before, since) = (Failure::of(&before).unwrap(), Failure::of(&since).unwrap());
-
-        assert_eq!((before.exit_code, before.output), (Some(2), "no such file"));
-        assert_eq!((since.exit_code, since.output), (Some(2), "no such file"));
-        assert!(Failure::of(&fixtures::tool_result("c", "a.rs", false)).is_none(), "it didn't fail");
-        assert!(Failure::of(&fixtures::tool_denied("c", "Not that", Some("Not that"))).is_none(), "it was denied");
-        assert!(Failure::of(&fixtures::tool_use("c", "Bash", serde_json::json!({}))).is_none(), "not a result");
     }
 }

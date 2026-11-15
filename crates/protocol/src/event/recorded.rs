@@ -223,13 +223,15 @@ pub enum EventBody {
     },
     ApprovalRequested {
         approval_id: ApprovalId,
-        /// The current request. The fields below it are read compatibility for earlier adapters; a current adapter
-        /// leaves their content empty instead of recording the native input a second time.
+        /// The current request. The fields below it but `tool_use_id` and `asked_by` are read compatibility for earlier
+        /// adapters; a current adapter leaves their content empty instead of recording the native input a second time.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         request: Option<Box<crate::capability::approvals::Request>>,
         // Earlier readers require these legacy fields even when a typed request leaves them empty.
         #[serde(default)]
         tool_name: String,
+        /// The call it asks to make, when it asks to make one, which a typed request doesn't name, so every adapter
+        /// says it here: the call's result then says whether the person denied it.
         tool_use_id: Option<ToolUseId>,
         #[serde(default)]
         input: Value,

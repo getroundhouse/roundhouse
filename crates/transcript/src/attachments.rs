@@ -87,9 +87,9 @@ pub(crate) struct Carried {
     picture: Option<Picture>,
 }
 
-pub(crate) fn carried(m: &Model, attachments: &[Attachment]) -> Vec<Carried> {
+pub(crate) fn carried<'a>(m: &Model, attachments: impl IntoIterator<Item = &'a Attachment>) -> Vec<Carried> {
     attachments
-        .iter()
+        .into_iter()
         .map(|attachment| Carried {
             picture: m.pictures.get(&attachment.id).cloned(),
             key: ItemKey::Attachment(attachment.id.clone()),

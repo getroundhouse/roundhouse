@@ -2,7 +2,8 @@ use protocol::capability::calls::Call;
 use protocol::event::{AgentRunState, ContentBlock, EventBody};
 use serde_json::json;
 
-use super::fixtures::{activity, bodies, command, message, play, turn};
+use super::fixtures::activity;
+use crate::codex::tests::script::{bodies, command, item, message, play, turn};
 
 #[tokio::test]
 async fn followup_turns_keep_old_output_and_completion_with_the_old_invocation() {
@@ -87,8 +88,8 @@ async fn collaboration_waits_have_typed_calls_and_results() {
     let output = play(vec![
         turn("thread", "root-turn", "inProgress"),
         activity("thread", "root-turn", "child", "spawn", "started", true),
-        super::fixtures::item("thread", "root-turn", wait, false),
-        super::fixtures::item("thread", "root-turn", done, true),
+        item("thread", "root-turn", wait, false),
+        item("thread", "root-turn", done, true),
     ])
     .await;
     let events = bodies(&output);

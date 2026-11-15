@@ -16,6 +16,7 @@ pub(super) struct TurnId(pub(super) String);
 pub(super) struct Waiting {
     pub(super) request: Request,
     pub(super) native: NativeRequest,
+    /// The subagent that asks, as the call that started it, or `None` for the agent itself.
     pub(super) parent: Option<ToolUseId>,
 }
 
