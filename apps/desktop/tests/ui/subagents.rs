@@ -137,14 +137,15 @@ fn a_subagent_s_line_in_the_background_opens_the_subagent_tab(cx: &mut TestAppCo
     let (task, call) = named().unwrap();
     let open = SharedString::from(format!("background-open/{call}"));
     // And its call's line, since the line in the background follows the session's record, which can come before the
-    // call's row is taken in.
-    ui.wait("the button on its line, and its call's line", |ui| ui.has(open.clone()) && !ui.labelled(LONG).is_empty());
+    // call's row is taken in. The background line has the same label, so it's found as the only call.
+    ui.wait("the button on its line, and its call's line", |ui| ui.has(open.clone()) && ui.shown("call/").len() == 1);
 
     let bounds = |ui: &mut Ui<'_>, id: SharedString| {
         ui.cx.update_window(ui.handle, |_, window, _| window.find(id).bounds()).unwrap()
     };
     let (button, words) = (bounds(&mut ui, open.clone()), bounds(&mut ui, format!("background-text/{task}").into()));
-    let its_call = ui.labelled(LONG)[0].bounds();
+    let Some(ElementId::Name(its_call)) = ui.shown("call/").pop() else { panic!("its call's line has a name") };
+    let its_call = bounds(&mut ui, its_call);
     assert!(words.right() <= button.left(), "what it's for, to {:?}, ends before the button", words.right());
     assert!(button.right() <= its_call.right(), "the button, to {:?}, is in the column", button.right());
     ui.click(open);
