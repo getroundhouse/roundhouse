@@ -80,6 +80,7 @@ fn each_request_needs_the_capabilities_it_uses() {
     assert_eq!(needs(Control::StopTask { task: task.clone() }), [background::Capability::StopTasks.into()]);
     assert_eq!(needs(Control::ReadTaskOutput { task }), [background::Capability::TaskOutput.into()]);
     assert_eq!(needs(Control::ReadRules), [approvals::Capability::Rules.into()]);
+    assert_eq!(needs(Control::ListModels), [settings::Capability::DiscoveredModels.into()]);
     assert_eq!(needs(Control::Cancel), [turns::Capability::Cancel.into()]);
     assert_eq!(
         needs(Control::Change(Settings { effort: Some(Effort::High), ..Settings::default() })),

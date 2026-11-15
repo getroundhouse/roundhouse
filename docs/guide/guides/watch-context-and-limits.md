@@ -1,6 +1,6 @@
 # Watch context and limits
 
-Three things run out in a long chat: the agent's context, your plan's limits, and the prompt cache. In a Claude chat, the composer shows the first two, and the chat says when the third is about to cost you. Codex does not report these through Roundhouse, so its indicators stay absent and it has no `Compact now` command.
+Three things run out in a long chat: the agent's context, your plan's limits, and the prompt cache. In a Claude chat, the composer shows the first two, and the chat says when the third is about to cost you. Antigravity shows context usage without plan limits, prompt cache estimates or `Compact now`; Codex does not report any of the three through Roundhouse, so those indicators stay absent too.
 
 ## How full the context is
 

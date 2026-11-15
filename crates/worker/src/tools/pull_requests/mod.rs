@@ -15,7 +15,7 @@ pub(super) use calls::READ;
 pub(super) use calls::WAIT;
 #[cfg(test)]
 use calls::arguments;
-pub(super) use calls::definition;
+pub(super) use calls::definitions;
 pub(super) use calls::ending;
 pub(super) use calls::progress;
 pub(super) use calls::read;

@@ -42,8 +42,9 @@
 //! worker's machine, where Roundhouse has no record of them and an instance that comes and goes loses them, so an
 //! adapter turns them off where its agent lets it.
 //!
-//! What these docs say of Claude is of its CLI at 2.1.323. What they say of Codex at 0.167.0 and opencode at 1.18.30
-//! is read from their source and their servers' schemas, rather than seen running.
+//! What these docs say of Claude is of its CLI at 2.1.323, and of Antigravity is of its CLI at 1.5.9. What they say of
+//! Codex at 0.167.0 and opencode at 1.18.30 is read from their source and their servers' schemas, rather than seen
+//! running.
 //!
 //! "What each kind of agent can do" in `docs/architecture.md` has the plan that puts this in place of
 //! [`AgentFeature`], the efforts and modes in an [`AgentDescription`], [`CallKind`](crate::event::CallKind), the

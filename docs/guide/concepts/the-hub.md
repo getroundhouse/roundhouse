@@ -10,7 +10,7 @@ The app doesn't run your agents. A hub does, in a process of its own, and the ap
              │
           Workers     One per workspace: git, the worktree, scripts and diffs
              │
-          Agents      Your own Claude or Codex CLI
+          Agents      Your own Claude, Codex or Antigravity CLI
 ```
 
 The hub starts by itself when the app, or the command line, needs it. It runs on your machine.
@@ -25,7 +25,7 @@ The hub starts by itself when the app, or the command line, needs it. It runs on
 
 ## Workers
 
-Each workspace has a worker, a process of its own that does the work there: git, the worktree, setup scripts and diffs. The worker runs the installed Claude or Codex CLI. A Claude chat uses the account it's on, which is the default chosen in [Settings](../reference/settings.md#accounts) when its agent first starts, or the one you've [moved it to](../guides/watch-context-and-limits.md#move-a-chat-to-another-account) since. A chat whose agent first starts before you've added a default uses machine credentials, and goes on using them once you add one, until you move it. If nobody was signed in on that machine, or it uses an API key, which Roundhouse can't tell apart, the chat goes on the default once you add one. Codex credentials stay with Codex on that machine.
+Each workspace has a worker, a process of its own that does the work there: git, the worktree, setup scripts and diffs. The worker runs the installed Claude, Codex or Antigravity CLI. A Claude chat uses the account it's on, which is the default chosen in [Settings](../reference/settings.md#accounts) when its agent first starts, or the one you've [moved it to](../guides/watch-context-and-limits.md#move-a-chat-to-another-account) since. A chat whose agent first starts before you've added a default uses machine credentials, and goes on using them once you add one, until you move it. If nobody was signed in on that machine, or it uses an API key, which Roundhouse can't tell apart, the chat goes on the default once you add one. Codex and Antigravity credentials stay with their CLIs on that machine.
 
 ## Where it runs
 

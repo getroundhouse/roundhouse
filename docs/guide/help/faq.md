@@ -4,11 +4,11 @@ Short answers.
 
 ## Which agents does it run?
 
-Claude and Codex, through their installed CLIs. Choose the agent in the new-workspace dialog, or from the chat tabs’ `+`. Codex starts with GPT-6.1 Sol at Low effort.
+Claude, Codex and Antigravity, through their installed CLIs. Choose the agent in the new-workspace dialog, or from the chat tabs’ `+`. Codex starts with GPT-6.1 Sol at Low effort, and Antigravity starts with Gemini 4 Carbon at Medium effort.
 
 ## Do I need an account?
 
-No. There's no Roundhouse account. You need your agent's CLI installed and signed in. Claude can also use a login added in [Settings](../reference/settings.md#accounts); Codex uses the sign-in on the worker's machine. You need `gh` logged in for pull requests.
+No. There's no Roundhouse account. You need your agent's CLI installed and signed in. Claude can also use a login added in [Settings](../reference/settings.md#accounts); Codex and Antigravity use the sign-in on the worker's machine. You need `gh` logged in for pull requests.
 
 ## What does it cost?
 

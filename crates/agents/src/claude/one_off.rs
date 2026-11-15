@@ -5,12 +5,12 @@ use std::path::{Path, PathBuf};
 use std::process::Output;
 use std::time::Duration;
 
-use process::{Signal, signal_group};
 use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
 
 use protocol::model::AgentLogin;
 
-use super::process::{command, record, start};
+use super::process::{command, start};
+use crate::stdio::GroupGuard;
 use crate::{AgentError, CallFailed};
 
 /// What to run, and how long to give it.
@@ -37,7 +37,7 @@ pub(super) async fn run(call: OneOff<'_>) -> Result<Output, AgentError> {
     let mut command = command(call.bin, call.cwd);
     command.args(&call.args);
     let mut child = start(&mut command, call.bin, call.cwd, call.login)?;
-    let running = Running::new(child.id().unwrap_or_default(), call.pid_file.clone());
+    let running = GroupGuard::new(child.id().unwrap_or_default(), call.pid_file.clone());
     let output = tokio::time::timeout(call.timeout, collect(&mut child, &call))
         .await
         .map_err(|_| CallFailed::TimedOut(call.timeout))??;
@@ -82,37 +82,6 @@ async fn collect(child: &mut tokio::process::Child, call: &OneOff<'_>) -> Result
         .map_err(|_| AgentError::Exited)?
         .map_err(CallFailed::Io)?;
     Ok::<_, AgentError>(Output { status, stdout: stdout.map_err(CallFailed::Io)?, stderr })
-}
-
-/// A call under way, recorded so the provider can stop it if the worker is killed. Unless it finished, dropping this
-/// stops its whole process group, which `kill_on_drop` alone doesn't: that reaches only the CLI.
-struct Running {
-    pid: u32,
-    record: Option<PathBuf>,
-    finished: bool,
-}
-
-impl Running {
-    fn new(pid: u32, record_at: Option<PathBuf>) -> Self {
-        record(record_at.as_deref(), pid);
-        Running { pid, record: record_at, finished: false }
-    }
-
-    /// The CLI has exited and been waited for, so its group may be gone and its PID reused.
-    fn finished(mut self) {
-        self.finished = true;
-    }
-}
-
-impl Drop for Running {
-    fn drop(&mut self) {
-        if !self.finished {
-            signal_group(self.pid, Signal::Kill);
-        }
-        if let Some(path) = &self.record {
-            let _ = std::fs::remove_file(path);
-        }
-    }
 }
 
 #[cfg(all(test, unix))]

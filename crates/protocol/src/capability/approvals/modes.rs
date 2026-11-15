@@ -74,6 +74,10 @@ pub enum Beyond {
     Asks,
     /// The agent refuses it without asking, as Claude's `dontAsk` and Codex's `never` do.
     Refused,
+    /// A classifier the agent runs lets safe uses through silently and asks the person before risky ones, as
+    /// [`Requests`](super::Capability::Requests) says, without recording a [`Verdict`](super::Verdict) for each use, as
+    /// Claude's and top-level `agy`'s `auto` modes do.
+    Classifier,
     /// A reviewer the agent runs decides in the person's place, as
     /// [`ReviewVerdicts`](super::Capability::ReviewVerdicts) says.
     Reviewer,

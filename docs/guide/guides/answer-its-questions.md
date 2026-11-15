@@ -29,7 +29,7 @@ In plan mode, an agent asks before a tool needs permission, such as a command th
 - **Press `1` to allow it, or `2` to deny it,** then `Enter` to send.
 - **Press `0` to say what to do instead, when offered.** What you type denies the request, and the agent is told in your words.
 
-An agent with full access asks only about what its own CLI won't do unasked, such as a command that removes something it can't check. The request says why, and which subagent is asking, when one is. **Skip Claude's safety checks**, in Settings, lets Claude's requests run without asking. Codex offers Allow and Deny for a tool's use; it does not offer a written reason for denial.
+An agent with full access asks only about what its own CLI won't do unasked, such as a command that removes something it can't check. The request says why, and which subagent is asking, when one is. **Skip Claude's safety checks**, in Settings, lets Claude's requests run without asking. Codex and Antigravity offer Allow and Deny for a tool's use; they do not offer a written reason for denial.
 
 ![A removal waiting to be allowed, asked about with full access](../../spec/screens/approval-full-access.png)
 

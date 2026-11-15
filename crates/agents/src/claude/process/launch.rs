@@ -154,7 +154,7 @@ pub(in crate::claude) fn start(
 
 /// Records a running process at `pid_file`, so the provider can stop it if this worker is killed. Failing to only
 /// loses that, so it's logged rather than stopping the process.
-pub(in crate::claude) fn record(pid_file: Option<&Path>, pid: u32) {
+fn record(pid_file: Option<&Path>, pid: u32) {
     if let Some(path) = pid_file
         && let Err(e) = ProcessRecord::write(path, pid)
     {

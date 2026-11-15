@@ -1,5 +1,7 @@
 //! Native JSON-RPC captures through the supervised Codex adapter, without a CLI or account.
-#![cfg(unix)]
+
+#![cfg(test)]
+
 use agents::codex::conformance::replay;
 use agents::conformance::scenarios;
 
@@ -16,6 +18,7 @@ macro_rules! scenario {
         }
     };
 }
+
 scenario!(plain_turn, PLAIN_TURN);
 scenario!(cancel_command, CANCEL_COMMAND);
 scenario!(resume, RESUME);

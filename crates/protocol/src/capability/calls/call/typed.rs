@@ -70,7 +70,8 @@ pub enum Call {
         tool: String,
         input: Value,
     },
-    /// A tool with no kind of its own, by the agent's name for it, and what it was given.
+    /// A tool with no kind of its own, by the agent's name for it, or its title when the agent sends no separate tool
+    /// name, as generic ACP does, and what it was given.
     Other {
         tool: String,
         input: Value,

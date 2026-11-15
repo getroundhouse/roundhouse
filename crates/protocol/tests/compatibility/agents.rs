@@ -31,3 +31,18 @@ fn what_each_kind_offers_reads_and_what_a_newer_hub_adds_reads_as_unknown() {
     assert_eq!(claude.login, Some(login));
     assert_eq!(other.login, None, "one left out is a kind the hub can hold no login for");
 }
+
+#[test]
+fn every_known_agent_kind_round_trips_by_name_and_on_the_wire() {
+    for (kind, name) in
+        [(AgentKind::Claude, "claude"), (AgentKind::Codex, "codex"), (AgentKind::Antigravity, "antigravity")]
+    {
+        assert_eq!(kind.as_str(), name);
+        assert_eq!(AgentKind::parse(name), Some(kind));
+        let encoded = serde_json::to_string(&kind).unwrap();
+        assert_eq!(encoded, format!("\"{name}\""));
+        assert_eq!(serde_json::from_str::<AgentKind>(&encoded).unwrap(), kind);
+    }
+    assert_eq!(AgentKind::parse("unknown"), None);
+    assert_eq!(AgentKind::parse("future"), None);
+}

@@ -6,7 +6,7 @@ A chat is one conversation with one agent, in a workspace's worktree. This page 
 
 ## What a chat has
 
-- **An agent,** Claude or Codex through its CLI, started when the chat's first prompt is sent. Closing the chat stops it.
+- **An agent,** Claude, Codex or Antigravity through its CLI, started when the chat's first prompt is sent. Closing the chat stops it.
 - **A model and an effort,** which the chat names itself, so your own CLI settings don't decide them.
 - **An approval mode:** full access, or plan mode.
 - **A history,** which the hub keeps, so it's there after the agent has gone, in every client.

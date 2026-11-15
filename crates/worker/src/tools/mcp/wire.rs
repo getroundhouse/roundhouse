@@ -26,6 +26,11 @@ const INSTRUCTIONS: &str = "Roundhouse's tools, for pull requests in this worksp
     dependencies. For reading their current state or waiting in the background until checks pass, they merge or \
     need attention, look among these before you use `gh` or write a loop of your own.";
 
+/// For a 2026 client that offers no MCP tasks, such as Antigravity's, which is offered no wait tool.
+const READ_ONLY_INSTRUCTIONS: &str = "Roundhouse's tools, for pull requests in this workspace's repository and their \
+    lower stack dependencies. For reading their current state, look among these before you use `gh` or write a loop \
+    of your own.";
+
 /// What one of a request's HTTP headers says, which has to agree with its body.
 #[derive(Debug, PartialEq, Eq)]
 pub(in super::super) enum Said {
@@ -216,11 +221,11 @@ async fn request(
         requested => return Err(unsupported(requested)),
     }
     match method {
-        Method::Discover => Ok(discover(build)),
+        Method::Discover => Ok(discover(build, takes_tasks(params))),
         Method::Ping => Ok(json!({ "resultType": "complete" })),
         Method::ListTools => Ok(json!({
             "resultType": "complete",
-            "tools": [pull_requests::definition(false), pull_requests::definition(true)],
+            "tools": pull_requests::definitions(takes_tasks(params)),
             "ttlMs": 0,
             "cacheScope": "public",
         })),
@@ -282,13 +287,13 @@ pub(super) fn unsupported(requested: Option<&str>) -> RpcError {
 }
 
 /// Never cached for long, since the tools change with the worker's build, which can't say so as it's replaced.
-fn discover(build: Build) -> Value {
+fn discover(build: Build, takes_tasks: bool) -> Value {
     json!({
         "resultType": "complete",
         "supportedVersions": [VERSION],
         "capabilities": { "tools": {}, "extensions": { TASKS: {} } },
         "_meta": { "io.modelcontextprotocol/serverInfo": { "name": "roundhouse", "version": build.version() } },
-        "instructions": INSTRUCTIONS,
+        "instructions": if takes_tasks { INSTRUCTIONS } else { READ_ONLY_INSTRUCTIONS },
         "ttlMs": 0,
         "cacheScope": "public",
     })

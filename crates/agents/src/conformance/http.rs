@@ -102,6 +102,22 @@ pub(crate) fn events(events: Vec<(&'static str, Value)>, made: u64) -> hyper::Re
             }
         }
     });
+    sse_response(body, made)
+}
+
+pub(crate) fn data_events(chunks: Vec<Value>, made: u64) -> hyper::Response<Body> {
+    let (mut sender, body) = Channel::<Bytes, Infallible>::new(4);
+    tokio::spawn(async move {
+        for data in chunks {
+            if sender.send_data(Bytes::from(format!("data: {data}\r\n\r\n"))).await.is_err() {
+                return;
+            }
+        }
+    });
+    sse_response(body, made)
+}
+
+fn sse_response(body: Channel<Bytes, Infallible>, made: u64) -> hyper::Response<Body> {
     let mut response = hyper::Response::new(body.boxed());
     response.headers_mut().insert("content-type", HeaderValue::from_static("text/event-stream"));
     if let Ok(id) = HeaderValue::from_str(&format!("req_scripted_{made}")) {

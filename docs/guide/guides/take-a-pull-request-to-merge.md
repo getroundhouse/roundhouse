@@ -52,7 +52,7 @@ The hub keeps the waits, so they go on with the app closed, and through an updat
 
 If GitHub temporarily cannot be read, the wait keeps its last observation and says what failed. A changed dependency stack ends the wait so the agent can reconsider what to watch.
 
-Codex can use Roundhouse's tool to read its pull request's status; it does not offer these background waits.
+Codex and Antigravity can use Roundhouse's tool to read a pull request's status; they do not offer these background waits.
 
 ## Watch them all
 

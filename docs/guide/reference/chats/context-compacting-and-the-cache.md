@@ -2,7 +2,7 @@
 
 What fills up or runs out as a chat goes on, where each shows, and what each costs.
 
-Codex does not supply context usage, account limits or cache estimates through this integration, so those indicators stay absent. `Compact now` is offered only for an agent that supports it.
+Antigravity supplies context window usage without account limits or cache estimates, and Codex supplies none of the three through this integration; indicators an agent does not supply stay absent. `Compact now` is offered only for an agent that supports it.
 
 ## The context's ring
 

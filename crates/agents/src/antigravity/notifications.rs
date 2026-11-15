@@ -1,0 +1,278 @@
+use std::sync::Arc;
+
+use protocol::event::{AgentRunState, ContentBlock, Denied, EventBody, NoticeLevel};
+use protocol::model::{ContextUsage, MaxSetBy, PermissionMode, ToolUseId};
+use protocol::tail::{BlockKind, DeltaChange, StreamDelta};
+use serde_json::Value;
+use tokio::sync::mpsc;
+
+use super::{approvals, calls, running::Shared, turn};
+use crate::acp::{self, SessionUpdate, ToolCallWire, ToolStatusWire};
+use crate::{AgentError, AgentOutput};
+
+pub(super) async fn read(shared: Arc<Shared>, mut input: mpsc::Receiver<(Value, String)>) {
+    while let Some((value, raw)) = input.recv().await {
+        if value.get("method").is_none() {
+            if let Some((id, reply)) = shared.rpc.decode_reply(&value)
+                && shared.state.lock().has_prompt_rpc(id)
+            {
+                turn::prompt_finished(&shared, id, reply, raw).await;
+            } else {
+                shared.rpc.answered(&value);
+            }
+            continue;
+        }
+        let line = raw.clone();
+        if let Err(error) = incoming(&shared, &value, raw).await {
+            shared
+                .event(
+                    EventBody::Notice {
+                        level: NoticeLevel::Error,
+                        message: format!("Could not read Antigravity's message: {error}"),
+                        parent_tool_use_id: None,
+                    },
+                    Some(line),
+                )
+                .await;
+        }
+    }
+}
+
+async fn incoming(shared: &Shared, value: &Value, raw: String) -> Result<(), AgentError> {
+    let method = value["method"].as_str().unwrap_or_default();
+    let params = &value["params"];
+    if value.get("id").is_some() {
+        note_prompt_taken(shared, None).await;
+        flush_streams(shared).await;
+        return approvals::requested(shared, method, &value["id"], params, raw).await;
+    }
+    if method != "session/update" {
+        shared.event(EventBody::AgentOther { kind: method.into(), parent_tool_use_id: None }, Some(raw)).await;
+        return Ok(());
+    }
+    session_update(shared, acp::parse_session_update(params), raw).await;
+    Ok(())
+}
+
+async fn session_update(shared: &Shared, update: SessionUpdate, raw: String) {
+    match update {
+        SessionUpdate::UserMessageChunk { .. } => note_prompt_taken(shared, Some(raw)).await,
+        SessionUpdate::AgentThoughtChunk { text } => {
+            note_prompt_taken(shared, None).await;
+            flush_text(shared).await;
+            stream_chunk(shared, true, &text).await;
+        }
+        SessionUpdate::AgentMessageChunk { text } => {
+            note_prompt_taken(shared, None).await;
+            flush_thought(shared).await;
+            stream_chunk(shared, false, &text).await;
+        }
+        SessionUpdate::ToolCall(wire) | SessionUpdate::ToolCallUpdate(wire) => {
+            note_prompt_taken(shared, None).await;
+            flush_streams(shared).await;
+            on_tool(shared, wire, raw).await;
+        }
+        SessionUpdate::CurrentModeUpdate { mode_id } => on_mode(shared, &mode_id, raw).await,
+        SessionUpdate::ConfigOptionUpdate { config_options } => {
+            let mut state = shared.state.lock();
+            let matches_model = config_options
+                .iter()
+                .find(|opt| opt.id == "model")
+                .and_then(|opt| opt.current_value.as_deref())
+                .is_none_or(|reported| reported == state.model.as_str());
+            if matches_model {
+                state.config_options = config_options;
+            }
+        }
+        SessionUpdate::UsageUpdate { used, size } => {
+            note_prompt_taken(shared, None).await;
+            shared
+                .emit(AgentOutput::Context(ContextUsage {
+                    used_tokens: used,
+                    max_tokens: size,
+                    model_tokens: Some(size),
+                    max_set_by: Some(MaxSetBy::Model),
+                    parts: Vec::new(),
+                }))
+                .await;
+        }
+        SessionUpdate::Other => {}
+    }
+}
+
+pub(super) async fn note_prompt_taken(shared: &Shared, raw: Option<String>) {
+    let taken = shared.state.lock().take_front_prompt();
+    if let Some(prompt) = taken {
+        shared.event(EventBody::PromptTaken { prompt }, raw).await;
+        shared.event(EventBody::AgentState { state: AgentRunState::Running }, None).await;
+    }
+}
+
+async fn stream_chunk(shared: &Shared, thinking: bool, text: &str) {
+    if text.is_empty() {
+        return;
+    }
+    let (id, started) = {
+        let mut state = shared.state.lock();
+        let slot = if thinking { &mut state.streaming_thought } else { &mut state.streaming_text };
+        if let Some((id, buf)) = slot {
+            buf.push_str(text);
+            (id.clone(), false)
+        } else {
+            let prefix = if thinking { "thought" } else { "msg" };
+            let id = state.next_message_id(prefix);
+            let slot = if thinking { &mut state.streaming_thought } else { &mut state.streaming_text };
+            *slot = Some((id.clone(), text.to_owned()));
+            (id, true)
+        }
+    };
+    if started {
+        let kind = if thinking { BlockKind::Thinking } else { BlockKind::Text };
+        shared
+            .emit(AgentOutput::Delta(StreamDelta {
+                run: None,
+                message_id: id.clone().into(),
+                parent_tool_use_id: None,
+                change: DeltaChange::BlockStart { index: 0, kind, tool_name: None },
+            }))
+            .await;
+    }
+    let change = if thinking {
+        DeltaChange::Thinking { index: 0, text: text.to_owned() }
+    } else {
+        DeltaChange::Text { index: 0, text: text.to_owned() }
+    };
+    shared
+        .emit(AgentOutput::Delta(StreamDelta { run: None, message_id: id.into(), parent_tool_use_id: None, change }))
+        .await;
+}
+
+pub(super) async fn flush_streams(shared: &Shared) {
+    flush_thought(shared).await;
+    flush_text(shared).await;
+}
+
+async fn flush_thought(shared: &Shared) {
+    let flushed = {
+        let mut state = shared.state.lock();
+        state.streaming_thought.take().map(|(id, text)| (id, text, state.model.as_str().to_owned()))
+    };
+    if let Some((id, text, model)) = flushed {
+        shared
+            .event(
+                EventBody::Assistant {
+                    message_id: Some(id.into()),
+                    parent_tool_use_id: None,
+                    model: Some(model),
+                    blocks: vec![ContentBlock::Thinking { text }],
+                    first_index: Some(0),
+                },
+                None,
+            )
+            .await;
+    }
+}
+
+async fn flush_text(shared: &Shared) {
+    let flushed = {
+        let mut state = shared.state.lock();
+        let taken = state.streaming_text.take();
+        if let Some((_, text)) = &taken {
+            state.reply = Some(text.clone());
+        }
+        taken.map(|(id, text)| (id, text, state.model.as_str().to_owned()))
+    };
+    if let Some((id, text, model)) = flushed {
+        shared
+            .event(
+                EventBody::Assistant {
+                    message_id: Some(id.into()),
+                    parent_tool_use_id: None,
+                    model: Some(model),
+                    blocks: vec![ContentBlock::Text { text, images: Vec::new() }],
+                    first_index: Some(0),
+                },
+                None,
+            )
+            .await;
+    }
+}
+
+pub(super) async fn ensure_call_emitted(shared: &Shared, wire: &ToolCallWire, raw: Option<String>) {
+    let id = ToolUseId::from(wire.tool_call_id.as_str());
+    let to_emit = {
+        let mut state = shared.state.lock();
+        if state.emitted_calls.insert(id.clone()) {
+            state.reply = None;
+            let call = calls::translate_call(wire);
+            state.calls.insert(id.clone(), call.clone());
+            Some((call, state.model.as_str().to_owned()))
+        } else {
+            None
+        }
+    };
+    if let Some((call, model)) = to_emit {
+        shared
+            .event(
+                EventBody::Assistant {
+                    message_id: Some(format!("agy-call-{id}").into()),
+                    parent_tool_use_id: None,
+                    model: Some(model),
+                    blocks: vec![ContentBlock::Call { id, call }],
+                    first_index: None,
+                },
+                raw,
+            )
+            .await;
+    }
+}
+
+async fn on_tool(shared: &Shared, wire: ToolCallWire, raw: String) {
+    let completed = matches!(wire.status, Some(ToolStatusWire::Completed | ToolStatusWire::Failed));
+    ensure_call_emitted(shared, &wire, (!completed).then(|| raw.clone())).await;
+    if !completed {
+        return;
+    }
+    let id = ToolUseId::from(wire.tool_call_id.as_str());
+    let settled = {
+        let mut state = shared.state.lock();
+        let was_denied = state.denied_calls.remove(&id);
+        state.calls.remove(&id).map(|call| (call, state.cancelling, was_denied))
+    };
+    let Some((call, cancelling, was_denied)) = settled else { return };
+    let output = calls::translate_output(&call, &wire, cancelling);
+    let is_error = wire.status == Some(ToolStatusWire::Failed);
+    let denied = (is_error && was_denied).then_some(Denied { said: None });
+    shared
+        .event(
+            EventBody::AgentUser {
+                parent_tool_use_id: None,
+                blocks: vec![ContentBlock::CallResult {
+                    tool_use_id: id,
+                    output,
+                    is_error,
+                    denied,
+                    images: Vec::new(),
+                }],
+            },
+            Some(raw),
+        )
+        .await;
+}
+
+async fn on_mode(shared: &Shared, mode_id: &str, raw: String) {
+    let mode = match mode_id {
+        "plan" => PermissionMode::Plan,
+        "accept-edits" | "yolo" => PermissionMode::FullAccess,
+        _ => PermissionMode::Unknown,
+    };
+    let changed = {
+        let mut state = shared.state.lock();
+        let changed = state.mode != mode;
+        state.mode = mode;
+        changed
+    };
+    if changed {
+        shared.event(EventBody::AgentMode { permission_mode: mode }, Some(raw)).await;
+    }
+}

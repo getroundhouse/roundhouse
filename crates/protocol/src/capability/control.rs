@@ -104,6 +104,9 @@ pub enum Control {
         target: ReviewTarget,
     },
     ReadRules,
+    /// Report the models the chat can run as [`Report::Models`](super::Report::Models). An adapter whose agent pushes
+    /// its models when a session starts or updates, rather than answering a query, reports the newest list the session
+    /// gave it.
     ListModels,
     ListOutside,
 }

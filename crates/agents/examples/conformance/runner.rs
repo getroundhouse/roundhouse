@@ -1,8 +1,8 @@
-//! Plays the conformance scenarios on the Claude CLI the hub would find, or the one `--cli` names, through the
+//! Plays the conformance scenarios on the agent CLI the hub would find, or the one `--cli` names, through the
 //! adapter, and says how each went.
 //!
 //! ```sh
-//! cargo run -p agents --example conformance -- [--paid] [--save] [--out DIR] [--cli PATH] [SCENARIO ...]
+//! cargo run -p agents --example conformance -- [--agent KIND] [--paid] [--save] [--out DIR] [--cli PATH] [SCENARIO ...]
 //! ```
 //!
 //! Each plays against the scripted model, which is free, and with `--paid` against the real one too, under this
@@ -25,7 +25,7 @@ use agents::BinaryLookup;
 use agents::claude::conformance::{KEPT_ENV, Live, Options, find_cli, live};
 use agents::conformance::scenario::{Against, Scenario};
 use agents::conformance::scenarios::ALL;
-use protocol::model::LoginToken;
+use protocol::model::{AgentKind, LoginToken};
 
 /// Asks a run of this program to play only the scripted trials, in the environment it was started with, which holds
 /// only [`KEPT_ENV`]. It's a process of its own rather than this one with its environment cleared, which Rust can't
@@ -34,7 +34,7 @@ use protocol::model::LoginToken;
 const SCRIPTED_ONLY: &str = "--scripted-only";
 
 struct Args {
-    agent: protocol::model::AgentKind,
+    agent: AgentKind,
     paid: bool,
     save: bool,
     scripted_only: bool,
@@ -48,7 +48,7 @@ struct Args {
 impl Default for Args {
     fn default() -> Self {
         Self {
-            agent: protocol::model::AgentKind::Claude,
+            agent: AgentKind::Claude,
             paid: false,
             save: false,
             scripted_only: false,
@@ -67,11 +67,8 @@ impl Args {
         while let Some(arg) = given.next() {
             match arg.as_str() {
                 "--agent" => {
-                    args.agent = match given.next().as_deref() {
-                        Some("codex") => protocol::model::AgentKind::Codex,
-                        Some("claude") => protocol::model::AgentKind::Claude,
-                        _ => panic!("--agent takes claude or codex"),
-                    }
+                    let name = given.next().expect("--agent takes claude, codex or antigravity");
+                    args.agent = AgentKind::parse(&name).expect("--agent takes claude, codex or antigravity");
                 }
                 "--paid" => args.paid = true,
                 "--save" => args.save = true,
@@ -105,17 +102,9 @@ pub(super) async fn run() -> ExitCode {
     }
     let home = std::env::var_os("HOME").map(PathBuf::from);
     let lookup = BinaryLookup { explicit: args.cli.clone(), path: std::env::var_os("PATH"), home: home.clone() };
-    let cli = if args.agent == protocol::model::AgentKind::Codex {
-        agents::codex::conformance::find_cli(&lookup)
-    } else {
-        find_cli(&lookup)
-    }
-    .expect("no agent CLI found");
+    let cli = find_agent_cli(args.agent, &lookup).expect("no agent CLI found");
     let mut scripted = Command::new(std::env::current_exe().unwrap());
-    scripted.arg(SCRIPTED_ONLY).arg("--cli").arg(&cli).args(&args.only);
-    if args.agent == protocol::model::AgentKind::Codex {
-        scripted.args(["--agent", "codex"]);
-    }
+    scripted.arg(SCRIPTED_ONLY).args(["--agent", args.agent.as_str()]).arg("--cli").arg(&cli).args(&args.only);
     if args.save {
         scripted.arg("--save");
     }
@@ -127,14 +116,22 @@ pub(super) async fn run() -> ExitCode {
     }
     let kept = std::env::vars_os().filter(|(name, _)| KEPT_ENV.iter().any(|kept| name == kept));
     let scripted = scripted.env_clear().envs(kept).status().unwrap().success();
-    let token = if args.agent == protocol::model::AgentKind::Codex {
-        None
-    } else {
-        std::env::var("ROUNDHOUSE_CONFORMANCE_TOKEN").ok().map(LoginToken::new)
+    let token = match args.agent {
+        AgentKind::Claude => std::env::var("ROUNDHOUSE_CONFORMANCE_TOKEN").ok().map(LoginToken::new),
+        AgentKind::Codex | AgentKind::Antigravity | AgentKind::Unknown => None,
     };
     let options = Options { cli, home, token };
     let paid = !args.paid || play(&args, Against::RealModel, &options).await;
     exit(scripted && paid)
+}
+
+fn find_agent_cli(agent: AgentKind, lookup: &BinaryLookup) -> Option<PathBuf> {
+    match agent {
+        AgentKind::Claude => find_cli(lookup),
+        AgentKind::Codex => agents::codex::conformance::find_cli(lookup),
+        AgentKind::Antigravity => agents::antigravity::conformance::find_cli(lookup),
+        AgentKind::Unknown => None,
+    }
 }
 
 fn exit(passed: bool) -> ExitCode {
@@ -145,14 +142,7 @@ fn exit(passed: bool) -> ExitCode {
 async fn play(args: &Args, against: Against, options: &Options) -> bool {
     let mut passed = true;
     for scenario in args.scenarios().filter(|scenario| scenario.against.contains(&against)) {
-        let Live { report, fixture, requests } = if args.agent == protocol::model::AgentKind::Codex {
-            let options = agents::codex::conformance::Options { cli: options.cli.clone(), home: options.home.clone() };
-            let agents::codex::conformance::Live { report, fixture, requests } =
-                agents::codex::conformance::live(scenario, against, &options).await;
-            Live { report, fixture, requests }
-        } else {
-            live(scenario, against, options).await
-        };
+        let Live { report, fixture, requests } = play_one(args.agent, scenario, against, options).await;
         println!("{report}");
         passed &= report.passed();
         let Some(fixture) = fixture else { continue };
@@ -163,11 +153,7 @@ async fn play(args: &Args, against: Against, options: &Options) -> bool {
             println!("        saved {}", dir.join(&file).display());
         };
         if args.save && report.passed() {
-            keep(&Path::new(env!("CARGO_MANIFEST_DIR")).join(if args.agent == protocol::model::AgentKind::Codex {
-                "tests/fixtures/codex"
-            } else {
-                "tests/fixtures/claude"
-            }));
+            keep(&Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("tests/fixtures/{}", args.agent.as_str())));
         }
         if let Some(out) = &args.out {
             keep(out);
@@ -176,4 +162,24 @@ async fn play(args: &Args, against: Against, options: &Options) -> bool {
         }
     }
     passed
+}
+
+async fn play_one(agent: AgentKind, scenario: &'static Scenario, against: Against, options: &Options) -> Live {
+    match agent {
+        AgentKind::Claude => live(scenario, against, options).await,
+        AgentKind::Codex => {
+            let options = agents::codex::conformance::Options { cli: options.cli.clone(), home: options.home.clone() };
+            let agents::codex::conformance::Live { report, fixture, requests } =
+                agents::codex::conformance::live(scenario, against, &options).await;
+            Live { report, fixture, requests }
+        }
+        AgentKind::Antigravity => {
+            let options =
+                agents::antigravity::conformance::Options { cli: options.cli.clone(), home: options.home.clone() };
+            let agents::antigravity::conformance::Live { report, fixture, requests } =
+                agents::antigravity::conformance::live(scenario, against, &options).await;
+            Live { report, fixture, requests }
+        }
+        AgentKind::Unknown => unreachable!("parsed agent kind is known"),
+    }
 }

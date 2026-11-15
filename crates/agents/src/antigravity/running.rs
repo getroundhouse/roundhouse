@@ -1,0 +1,247 @@
+use std::path::{Path, PathBuf};
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
+use std::time::Duration;
+
+use parking_lot::Mutex;
+use protocol::capability::settings;
+use protocol::event::EventBody;
+use protocol::model::{ModelName, PermissionMode};
+use protocol::paths::ENV_ANTIGRAVITY_BIN;
+use protocol::worker::AgentSpec;
+use tokio::sync::{mpsc, watch};
+
+use super::state::{Conversation, Ending};
+use super::{launch, supervise};
+use crate::jsonrpc::{Dialect, Rpc};
+use crate::{AgentError, AgentOptions, AgentOutput, AgentProcess};
+
+const STOP_GRACE: Duration = Duration::from_secs(3);
+
+pub(super) struct Shared {
+    pub(super) rpc: Rpc,
+    pub(super) state: Mutex<Conversation>,
+    pub(super) controls: tokio::sync::Mutex<()>,
+    pub(super) pid: u32,
+    pub(super) gone: AtomicBool,
+    pub(super) requested: AtomicBool,
+    pub(super) exited: watch::Sender<bool>,
+    /// How many times a turn's end, or its plan, has been recorded, for whatever waits on one. It changes only under
+    /// the lock on `state`, with `Conversation.ending`, by `count_end`.
+    pub(super) turn_done: watch::Sender<u64>,
+    pub(super) tap: Option<crate::tap::Tap>,
+    emission: tokio::sync::Mutex<Option<mpsc::Sender<AgentOutput>>>,
+}
+
+// `emit`, `stop` and `AntigravityProcess`'s drop repeat Codex's `Shared` and `CodexProcess`, as `supervise` says.
+impl Shared {
+    pub(super) async fn emit(&self, output: AgentOutput) {
+        let mut sender = self.emission.lock().await;
+        let closes = matches!(output, AgentOutput::Exited { .. });
+        if let Some(sender) = sender.as_ref() {
+            let _ = sender.send(output).await;
+        }
+        if closes {
+            *sender = None;
+        }
+    }
+
+    pub(super) async fn event(&self, body: EventBody, raw: Option<String>) {
+        self.emit(AgentOutput::event(body, raw)).await;
+    }
+
+    /// Sets how far the turn has got to ending, once its end or its plan is recorded, and counts that for whatever
+    /// waits on it, under the lock `state` is held by, so whoever reads both under it finds them agree.
+    pub(super) fn count_end(&self, state: &mut Conversation, ending: Ending) {
+        state.ending = ending;
+        self.turn_done.send_modify(|n| *n = n.saturating_add(1));
+    }
+
+    pub(super) async fn stop(&self) {
+        self.requested.store(true, Ordering::SeqCst);
+        let mut exited = self.exited.subscribe();
+        if *exited.borrow() {
+            return;
+        }
+        process::signal_group(self.pid, process::Signal::Terminate);
+        if tokio::time::timeout(STOP_GRACE, exited.wait_for(|done| *done)).await.is_err() {
+            process::signal_group(self.pid, process::Signal::Kill);
+            let _ = exited.wait_for(|done| *done).await;
+        }
+    }
+}
+
+pub(super) struct AntigravityProcess {
+    pub(super) shared: Arc<Shared>,
+}
+
+impl Drop for AntigravityProcess {
+    fn drop(&mut self) {
+        if !self.shared.gone.load(Ordering::SeqCst) {
+            self.shared.requested.store(true, Ordering::SeqCst);
+            process::signal_group(self.shared.pid, process::Signal::Kill);
+        }
+    }
+}
+
+pub(super) fn binary(options: &AgentOptions) -> Result<PathBuf, AgentError> {
+    crate::binary::resolve_binary("agy", &[], &options.binary).ok_or_else(|| {
+        AgentError::Refused(format!(
+            "Could not find the Antigravity CLI. Install agy, or set {ENV_ANTIGRAVITY_BIN} to its path"
+        ))
+    })
+}
+
+pub(super) fn mode_id(mode: PermissionMode) -> &'static str {
+    if mode == PermissionMode::Plan { "plan" } else { "accept-edits" }
+}
+
+pub async fn spawn(
+    spec: AgentSpec,
+    output: mpsc::Sender<AgentOutput>,
+    options: AgentOptions,
+) -> Result<Arc<dyn AgentProcess>, AgentError> {
+    spawn_at(binary(&options)?, spec, output, options).await
+}
+
+pub async fn spawn_at(
+    bin: PathBuf,
+    spec: AgentSpec,
+    output: mpsc::Sender<AgentOutput>,
+    options: AgentOptions,
+) -> Result<Arc<dyn AgentProcess>, AgentError> {
+    Ok(start_conversation(&bin, &spec, output, &options, launch::Purpose::Agent, None).await?)
+}
+
+#[cfg(feature = "testing")]
+pub async fn spawn_tapped(
+    bin: PathBuf,
+    spec: AgentSpec,
+    output: mpsc::Sender<AgentOutput>,
+    options: AgentOptions,
+    tap: crate::conformance::capture::Tap,
+) -> Result<Arc<dyn AgentProcess>, AgentError> {
+    Ok(start_conversation(&bin, &spec, output, &options, launch::Purpose::Agent, Some(tap)).await?)
+}
+
+pub(super) async fn start_conversation(
+    bin: &Path,
+    spec: &AgentSpec,
+    output: mpsc::Sender<AgentOutput>,
+    options: &AgentOptions,
+    purpose: launch::Purpose,
+    tap: Option<crate::tap::Tap>,
+) -> Result<Arc<AntigravityProcess>, AgentError> {
+    let claims = super::claims::claims();
+    if !spec.start.allowed(&claims) || !spec.settings.allowed(&claims) {
+        return Err(AgentError::Refused("Antigravity does not offer those launch settings".into()));
+    }
+    let args = purpose.args();
+    if let Some(tap) = &tap {
+        let conversation = match &spec.start {
+            protocol::capability::conversation::Start::Resume { conversation } => Some(conversation),
+            protocol::capability::conversation::Start::New { .. }
+            | protocol::capability::conversation::Start::Fork { .. }
+            | protocol::capability::conversation::Start::Import { .. } => None,
+        };
+        let owned: Vec<String> = args.iter().map(|s| (*s).to_owned()).collect();
+        tap.launched(conversation.is_some(), conversation, &owned);
+    }
+    let (model, mode, effort) = launch_settings(spec)?;
+    let hold_plans = matches!(purpose, launch::Purpose::Agent);
+    let process =
+        transport(bin, args, Path::new(&spec.cwd), &spec.env, (model, mode, effort, hold_plans), output, options, tap)
+            .await?;
+    if let Err(error) = launch::conversation(&process.shared, spec, options, purpose).await {
+        process.shared.stop().await;
+        return Err(error);
+    }
+    Ok(process)
+}
+
+#[expect(clippy::too_many_arguments, reason = "internal process construction passing launch inputs once")]
+async fn transport(
+    bin: &Path,
+    args: &[&str],
+    cwd: &Path,
+    env: &[(String, String)],
+    initial: (ModelName, PermissionMode, settings::Effort, bool),
+    output: mpsc::Sender<AgentOutput>,
+    options: &AgentOptions,
+    tap: Option<crate::tap::Tap>,
+) -> Result<Arc<AntigravityProcess>, AgentError> {
+    let launched = launch::launch(bin, args, cwd, env, options)?;
+    let shared = Arc::new(Shared {
+        rpc: Rpc::new(launched.stdin, Dialect::JsonRpc2, "Antigravity", tap.clone()),
+        state: Mutex::new(Conversation::new(initial.0, initial.1, initial.2, initial.3)),
+        controls: tokio::sync::Mutex::new(()),
+        pid: launched.pid,
+        gone: AtomicBool::new(false),
+        requested: AtomicBool::new(false),
+        exited: watch::channel(false).0,
+        turn_done: watch::channel(0).0,
+        tap,
+        emission: tokio::sync::Mutex::new(Some(output)),
+    });
+    tokio::spawn(supervise::supervise(
+        launched.child,
+        launched.stdout,
+        launched.stderr,
+        shared.clone(),
+        options.pid_file.clone(),
+    ));
+    let process = Arc::new(AntigravityProcess { shared });
+    if let Err(error) = launch::initialize(&process.shared).await {
+        process.shared.stop().await;
+        return Err(error);
+    }
+    Ok(process)
+}
+
+fn launch_settings(spec: &AgentSpec) -> Result<(ModelName, PermissionMode, settings::Effort), AgentError> {
+    let defaults = super::description::description().defaults;
+    let model = spec
+        .settings
+        .model
+        .clone()
+        .ok_or_else(|| AgentError::Refused("A launch names the model its agent runs on".into()))?;
+    let mode = match spec.settings.mode {
+        None => defaults.permission_mode,
+        Some(mode) if mode == super::claims::plan() => PermissionMode::Plan,
+        Some(mode) if mode == super::claims::full_access() => PermissionMode::FullAccess,
+        Some(_) => return Err(AgentError::UnknownMode),
+    };
+    let effort = spec.settings.effort.unwrap_or_else(|| defaults.effort.into());
+    effort_str(effort)?;
+    ensure_model_offers_effort(&model, effort)?;
+    Ok((model, mode, effort))
+}
+
+pub(super) fn ensure_model_offers_effort(model: &ModelName, effort: settings::Effort) -> Result<(), AgentError> {
+    if super::description::models()
+        .offered
+        .iter()
+        .find(|offer| offer.model == *model)
+        .is_some_and(|offer| !offer.efforts.contains(&effort))
+    {
+        return Err(AgentError::Refused("This Antigravity model does not offer that effort".into()));
+    }
+    Ok(())
+}
+
+pub(super) fn effort_str(effort: settings::Effort) -> Result<&'static str, AgentError> {
+    match effort {
+        settings::Effort::Low => Ok("low"),
+        settings::Effort::Medium => Ok("medium"),
+        settings::Effort::High => Ok("high"),
+        settings::Effort::Xhigh => Ok("xhigh"),
+        settings::Effort::None
+        | settings::Effort::Minimal
+        | settings::Effort::Max
+        | settings::Effort::Ultra
+        | settings::Effort::Persistent
+        | settings::Effort::Unknown => Err(AgentError::UnknownEffort),
+    }
+}

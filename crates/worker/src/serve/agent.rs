@@ -216,6 +216,7 @@ fn binary(state: &State, agent: AgentKind) -> BinaryLookup {
         explicit: match agent {
             AgentKind::Claude => state.config.claude_bin.clone(),
             AgentKind::Codex => state.config.codex_bin.clone(),
+            AgentKind::Antigravity => state.config.antigravity_bin.clone(),
             AgentKind::Unknown => None,
         },
         path: state.config.path.clone(),

@@ -10,7 +10,7 @@ Roundhouse runs your agent’s CLI as you. For Claude, run:
 claude
 ```
 
-For Codex, run `codex login` on the machine running the workspace. Roundhouse uses that native sign-in; its Accounts page does not supply a Codex credential. If either CLI asks you to sign in, do, then send the prompt again. A chat whose agent stopped short picks up its conversation at its next prompt.
+For Codex, run `codex login` on the machine running the workspace; for Antigravity, run `agy` there and sign in. Roundhouse uses those native sign-ins; its Accounts page does not supply a Codex or Antigravity credential. If any CLI asks you to sign in, do, then send the prompt again. A chat whose agent stopped short picks up its conversation at its next prompt.
 
 ## An agent reached its usage limit
 
