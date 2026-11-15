@@ -10,8 +10,20 @@ fn background_tasks_are_listed_whole_each_time_they_change() {
         {"task_id":"b1","run_id":"r1","task_type":"local_bash","description":"Run the tests"},
         {"task_id":"a2","run_id":"r2","task_type":"local_agent","subagent_type":"Explore"}]});
     let tasks = vec![
-        AgentTask { id: "b1".into(), description: Some("Run the tests".into()), kind: TaskKind::Command, call: None },
-        AgentTask { id: "a2".into(), description: None, kind: TaskKind::Subagent, call: None },
+        AgentTask {
+            id: "b1".into(),
+            description: Some("Run the tests".into()),
+            kind: TaskKind::Command,
+            call: None,
+            subagent: None,
+        },
+        AgentTask {
+            id: "a2".into(),
+            description: None,
+            kind: TaskKind::Subagent,
+            call: None,
+            subagent: Some("a2".into()),
+        },
     ];
     assert_eq!(parse_line(&line.to_string()), Parsed::Event(EventBody::AgentTasks { tasks, stopped: vec![] }));
     let done = json!({"type":"system","subtype":"background_tasks_changed","tasks":[]}).to_string();
@@ -199,6 +211,42 @@ fn a_subagent_in_the_background_is_listed_with_its_call_once_its_start_names_it(
     normalizer.line(&listed(&[]));
     let reused = normalizer.line(&listed(&["a1"]));
     assert_eq!(calls(Some(event(reused.parsed))), [("a1".into(), subagent, None)], "its ID is free again");
+}
+
+/// A subagent is the task it runs as, so its task names it from the first list, and still does once the agent carries
+/// on with it, though the CLI then names the call that carried on as the task's.
+#[test]
+fn a_subagents_task_names_it_however_it_was_started() {
+    let mut normalizer = Normalizer::default();
+    let call = |id: &str, name: &str| {
+        json!({"type":"assistant","message":{"id":id,"content":[{"type":"tool_use","id":id,"name":name,"input":{}}]}})
+            .to_string()
+    };
+    let listed = |ids: &[&str]| {
+        let tasks: Vec<_> = ids.iter().map(|id| json!({"task_id":id,"task_type":"local_agent"})).collect();
+        json!({"type":"system","subtype":"background_tasks_changed","tasks":tasks}).to_string()
+    };
+    let started = |call: &str| {
+        json!({"type":"system","subtype":"task_started","task_id":"a1","tool_use_id":call,"task_type":"local_agent",
+            "is_backgrounded":true})
+        .to_string()
+    };
+    let ended = json!({"type":"system","subtype":"task_notification","task_id":"a1","status":"completed"}).to_string();
+    let named = |body: Option<EventBody>| {
+        let Some(EventBody::AgentTasks { tasks, .. }) = body else { panic!("{body:?}") };
+        tasks.into_iter().map(|task| (task.call, task.subagent)).collect::<Vec<_>>()
+    };
+
+    normalizer.line(&call("c1", "Agent"));
+    let first = normalizer.line(&listed(&["a1"]));
+    normalizer.line(&started("c1"));
+    for line in [ended, listed(&[]), call("c2", "SendMessage"), listed(&["a1"])] {
+        normalizer.line(&line);
+    }
+    let again = normalizer.line(&started("c2"));
+
+    assert_eq!(named(Some(event(first.parsed))), [(None, Some("a1".into()))], "before its call is known");
+    assert_eq!(named(again.after), [(Some("c2".into()), Some("a1".into()))], "carried on with by another call");
 }
 
 /// Most tasks end without being listed, such as a command in the foreground, so nothing of theirs is kept.

@@ -11,7 +11,7 @@ use serde_json::{Value, json};
 use super::{Printer, called, came_back, denial, own_turn, request_failed, started};
 
 fn task(id: &str, kind: TaskKind) -> AgentTask {
-    AgentTask { id: id.into(), description: Some(format!("Do {id}")), kind, call: None }
+    AgentTask { id: id.into(), description: Some(format!("Do {id}")), kind, call: None, subagent: None }
 }
 
 #[test]
@@ -133,6 +133,7 @@ fn a_turn_the_agent_started_by_itself_says_which_tasks_it_heard_had_ended() {
             description: description.map(String::from),
             kind: TaskKind::Command,
             call: None,
+            subagent: None,
         },
         outcome,
         wait: None,

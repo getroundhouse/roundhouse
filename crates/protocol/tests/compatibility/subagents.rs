@@ -21,6 +21,19 @@ fn an_event_names_its_subagent_as_it_was_stored() {
     }
 }
 
+/// A subagent's background task names its subagent, and one from before tasks named theirs says only its call.
+#[test]
+fn a_subagents_task_names_it_or_only_its_call() {
+    let named = r#"{"id":"t1","description":null,"kind":"subagent","call":"toolu_2","subagent":"task_1"}"#;
+    let before = r#"{"id":"t1","description":null,"kind":"subagent","call":"toolu_1"}"#;
+    for (sent, subagent) in [(named, Some("task_1")), (before, None)] {
+        let task: protocol::event::AgentTask = serde_json::from_str(sent).unwrap();
+
+        assert_eq!(task.subagent.as_ref().map(SubagentId::as_str), subagent, "{sent}");
+        assert_eq!(serde_json::to_string(&task).unwrap(), sent);
+    }
+}
+
 /// What a subagent is writing, and which subagents work in the background, name it as the tail was first sent, so a
 /// peer from before reads whose each message is.
 #[test]

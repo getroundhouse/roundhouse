@@ -33,7 +33,10 @@ fn task(value: &Value) -> Option<AgentTask> {
         // A monitor's is `local_bash` too, as a command's is.
         _ => TaskKind::Command,
     };
-    Some(AgentTask { id: id_of(value, "task_id")?, description: string_of(value, "description"), kind, call: None })
+    let id: TaskId = id_of(value, "task_id")?;
+    // A subagent is named by the task it runs as, as `super::super::subagents::Subagents` names it.
+    let subagent = (kind == TaskKind::Subagent).then(|| id.as_str().into());
+    Some(AgentTask { id, description: string_of(value, "description"), kind, call: None, subagent })
 }
 
 /// Whether an MCP task is a wait on the pull request, which the CLI says by describing it as the tool whose call
@@ -70,8 +73,9 @@ pub(in super::super) struct Tasks {
 impl Tasks {
     /// Notes what this line says of a task. The CLI lists a task that starts in the background one line before
     /// `task_started` names the call that started it, so that line is the first to say which call that was, and
-    /// whether it's a monitor. For a monitor, and for a subagent, whose line opens its tab by its call, this returns
-    /// the newest list to say again. A command's call changes nothing shown, so it waits for the next list.
+    /// whether it's a monitor. For a monitor, and for a subagent, whose line shows its button once its call is known,
+    /// this returns the newest list to say again. A command's call changes nothing shown, so it waits for the next
+    /// list.
     /// [`Tasks::listed`] gives a list its calls and kinds. `task_started` comes before its call's result, so the call
     /// is still among `calls`.
     pub(in super::super) fn note(&mut self, value: &Value, calls: &OpenCalls) -> Option<EventBody> {

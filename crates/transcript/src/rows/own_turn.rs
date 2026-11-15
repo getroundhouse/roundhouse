@@ -26,9 +26,9 @@ pub(super) fn lines(event: &SessionEvent, tasks: &[EndedTask], shared: &Shared, 
     let lines = tasks.iter().enumerate().map(|(ix, ended)| {
         let (line, label) = line(ended, at.as_deref());
         let task = &ended.task;
-        let open = task.call.as_ref().filter(|_| task.kind == TaskKind::Subagent).map(|call| {
+        let open = agent::Opens::task(task).map(|opens| {
             let id = ItemKey::Event(event.seq, ix).element("ended-task-open");
-            agent::open_tab(id, call.clone(), task.description.as_deref().unwrap_or(UNTITLED), &shared.this)
+            agent::open_tab(id, opens, task.description.as_deref().unwrap_or(UNTITLED), &shared.this)
         });
         let line = match open {
             Some(open) => line.action(open),
@@ -92,6 +92,7 @@ mod tests {
             description: description.map(str::to_string),
             kind,
             call: Some("toolu-1".into()),
+            subagent: None,
         };
         EndedTask { task, outcome, wait: None }
     }

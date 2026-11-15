@@ -52,7 +52,13 @@ fn init() -> String {
 }
 
 fn task(id: &str, kind: TaskKind, description: &str, call: &str, outcome: TaskOutcome) -> EndedTask {
-    let task = AgentTask { id: id.into(), description: Some(description.into()), kind, call: Some(call.into()) };
+    let task = AgentTask {
+        id: id.into(),
+        description: Some(description.into()),
+        kind,
+        call: Some(call.into()),
+        subagent: None,
+    };
     EndedTask { task, outcome, wait: None }
 }
 

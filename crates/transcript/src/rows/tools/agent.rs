@@ -19,8 +19,8 @@ use gpui_kit::{
     TestSupportExt as _, WeakEntity, div,
 };
 use look::{Hand as _, Sizing as _, Typeset as _};
-use protocol::event::{ContentBlock, SessionEvent};
-use protocol::model::{SubagentStatus, ToolUseId};
+use protocol::event::{AgentTask, ContentBlock, SessionEvent, TaskKind};
+use protocol::model::{SubagentId, SubagentStatus, ToolUseId};
 
 use super::line::{Line, Part};
 use super::{Answer, Subagent, Toggle, block, line};
@@ -51,7 +51,7 @@ pub(super) fn draw(
     // its record has come, or ever will, as for one recorded before the agent said when its subagents started.
     if let Some(subagent) = subagent.filter(|s| s.apart) {
         let id = ElementId::Name(format!("open-subagent/{}", subagent.call).into());
-        line = line.action(open_tab(id, subagent.call.clone(), call.title(), &toggle.shared.this));
+        line = line.action(open_tab(id, Opens::StartedBy(subagent.call.clone()), call.title(), &toggle.shared.this));
     }
     if call.described().is_some() {
         line = line.found(toggle);
@@ -117,12 +117,28 @@ fn standing(subagent: Option<&Subagent>) -> Option<String> {
 /// its record comes. It says Open, and it's outlined, as a button that opens something is, so it reads as the way in,
 /// apart from the call's line, whose click opens the call where it is. A subagent's line in the background has it
 /// too, so the way to its tab is at the chat's end wherever its call is.
-pub(in crate::rows) fn open_tab(
-    id: ElementId,
-    call: ToolUseId,
-    title: &str,
-    this: &WeakEntity<Transcript>,
-) -> AnyElement {
+/// Which subagent an Open button opens.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum Opens {
+    /// The one named so.
+    Subagent(SubagentId),
+    /// The one a call started, as its record names it once that's come, found as the button's clicked, since its row
+    /// may not be drawn again when the record comes.
+    StartedBy(ToolUseId),
+}
+
+impl Opens {
+    /// The subagent the task `task` is, if it's one, as its agent names it, or else as the one its call started, once
+    /// the agent has said either.
+    pub(in crate::rows) fn task(task: &AgentTask) -> Option<Opens> {
+        if task.kind != TaskKind::Subagent {
+            return None;
+        }
+        task.subagent.clone().map(Opens::Subagent).or_else(|| task.call.clone().map(Opens::StartedBy))
+    }
+}
+
+pub(in crate::rows) fn open_tab(id: ElementId, opens: Opens, title: &str, this: &WeakEntity<Transcript>) -> AnyElement {
     let (this, title) = (this.clone(), title.to_string());
     Button::new(id)
         .hand()
@@ -134,7 +150,7 @@ pub(in crate::rows) fn open_tab(
         .on_click(move |_, _, cx| {
             // The line under it would take the click too, and open or close the call.
             cx.stop_propagation();
-            let _ = this.update(cx, |transcript, cx| transcript.open_subagent_started_by(&call, title.clone(), cx));
+            let _ = this.update(cx, |transcript, cx| transcript.open_subagent(&opens, title.clone(), cx));
         })
         .into_any_element()
 }
@@ -286,9 +302,10 @@ fn gathered(
 mod tests {
     use std::sync::Arc;
 
+    use protocol::event::{AgentTask, TaskKind};
     use protocol::model::{ModelName, Subagent as Record, SubagentStatus};
 
-    use super::{Subagent, standing};
+    use super::{Opens, Subagent, standing};
     use crate::fixtures::record;
 
     /// A subagent as its call's line has it, from its record, from a hub that keeps its work apart.
@@ -318,5 +335,26 @@ mod tests {
         assert_eq!(at(SubagentStatus::Working, &None, 3).as_deref(), Some("3 calls"), "before it's replied");
         assert_eq!(at(SubagentStatus::Working, &None, 0), None);
         assert_eq!(standing(None), None, "no record");
+    }
+
+    /// A subagent's task opens the subagent it names, which outlives the call that started it, as when the agent
+    /// carries on with it by another call. One whose agent names only the call opens the one that started, and a task
+    /// of another kind opens none.
+    #[test]
+    fn a_subagent_s_task_opens_the_subagent_it_names_or_else_the_one_its_call_started() {
+        let task = |kind, call: Option<&str>, subagent: Option<&str>| AgentTask {
+            id: "t".into(),
+            description: None,
+            kind,
+            call: call.map(Into::into),
+            subagent: subagent.map(Into::into),
+        };
+
+        let carried_on = task(TaskKind::Subagent, Some("send"), Some("a1"));
+        assert_eq!(Opens::task(&carried_on), Some(Opens::Subagent("a1".into())));
+        let by_call = task(TaskKind::Subagent, Some("agent"), None);
+        assert_eq!(Opens::task(&by_call), Some(Opens::StartedBy("agent".into())));
+        assert_eq!(Opens::task(&task(TaskKind::Subagent, None, None)), None, "until its agent says");
+        assert_eq!(Opens::task(&task(TaskKind::Command, Some("bash"), Some("a1"))), None);
     }
 }

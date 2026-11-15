@@ -84,8 +84,13 @@ async fn a_question_answered_takes_what_was_typed_in_answer_and_the_feed_tells_o
 
 /// The list of what the agent runs in the background, with `count` tasks in it.
 fn listed(count: usize) -> EventBody {
-    let task =
-        |i: usize| AgentTask { id: format!("t{i}").into(), description: None, kind: TaskKind::Command, call: None };
+    let task = |i: usize| AgentTask {
+        id: format!("t{i}").into(),
+        description: None,
+        kind: TaskKind::Command,
+        call: None,
+        subagent: None,
+    };
     EventBody::AgentTasks { tasks: Vec::from_fn(count, task), stopped: Vec::new() }
 }
 

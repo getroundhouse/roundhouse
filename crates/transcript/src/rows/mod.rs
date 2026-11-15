@@ -36,7 +36,7 @@ use notices::exit_output;
 use plan_card::plan_card;
 pub(crate) use shown::{Found, of_row as found_in_row, rows_drawing, rows_to_count};
 use text::{from_blocks, written};
-pub(crate) use tools::ChangeAsked;
+pub(crate) use tools::{ChangeAsked, agent::Opens};
 
 mod rendering;
 pub(crate) use rendering::{Item, RULE_ICON, Shared, list_row_of, render_row};

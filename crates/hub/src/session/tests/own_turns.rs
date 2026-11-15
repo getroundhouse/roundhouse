@@ -8,7 +8,7 @@ use protocol::event::{AgentTask, EndedTask, EventBody, TaskKind, TaskOutcome};
 use protocol::model::{EndedWait, RunId, Seq, WaitEnd, WaitEnded, WaitUntil, Watching};
 
 fn ended(id: &str, kind: TaskKind, call: &str) -> EndedTask {
-    let task = AgentTask { id: id.into(), description: None, kind, call: Some(call.into()) };
+    let task = AgentTask { id: id.into(), description: None, kind, call: Some(call.into()), subagent: None };
     EndedTask { task, outcome: TaskOutcome::Finished, wait: None }
 }
 

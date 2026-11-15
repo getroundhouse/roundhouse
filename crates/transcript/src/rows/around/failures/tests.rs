@@ -10,7 +10,13 @@ use crate::folds::{Fold, Folds};
 
 /// A turn the agent started by itself as the command `what` finished.
 fn picked_up(what: &str) -> EventBody {
-    let task = AgentTask { id: what.into(), description: Some(what.into()), kind: TaskKind::Command, call: None };
+    let task = AgentTask {
+        id: what.into(),
+        description: Some(what.into()),
+        kind: TaskKind::Command,
+        call: None,
+        subagent: None,
+    };
     EventBody::OwnTurn(OwnTurn::TaskEnded {
         ended: vec![EndedTask { task, outcome: TaskOutcome::Finished, wait: None }],
     })

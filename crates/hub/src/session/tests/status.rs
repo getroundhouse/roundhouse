@@ -35,8 +35,13 @@ fn exited() -> EventBody {
 }
 
 fn tasks(count: usize) -> EventBody {
-    let task =
-        |i: usize| AgentTask { id: format!("t{i}").into(), description: None, kind: TaskKind::Command, call: None };
+    let task = |i: usize| AgentTask {
+        id: format!("t{i}").into(),
+        description: None,
+        kind: TaskKind::Command,
+        call: None,
+        subagent: None,
+    };
     EventBody::AgentTasks { tasks: Vec::from_fn(count, task), stopped: Vec::new() }
 }
 

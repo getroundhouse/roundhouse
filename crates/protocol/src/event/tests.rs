@@ -28,7 +28,7 @@ fn ended_task() -> impl Strategy<Value = EndedTask> {
     let words = prop::option::of("[a-z ]{0,12}");
     (kind, words.clone(), prop::option::of("toolu_[0-9]{1,3}"), outcome, prop::option::of(wait())).prop_map(
         |(kind, description, call, outcome, wait)| EndedTask {
-            task: AgentTask { id: "t".into(), description, kind, call: call.map(Into::into) },
+            task: AgentTask { id: "t".into(), description, kind, call: call.map(Into::into), subagent: None },
             outcome,
             wait,
         },
