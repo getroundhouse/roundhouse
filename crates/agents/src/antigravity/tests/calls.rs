@@ -29,7 +29,9 @@ fn command_read_and_mcp_calls_translate_cleanly_and_strip_agy_wrappers() {
     let Call::Command(cmd) = &call else { panic!("expected command call") };
     assert_eq!(cmd.command, "echo hi");
     assert_eq!(cmd.description.as_deref(), Some("Print hi"));
-    let CallOutput::Command(out) = translate_output(&call, &cmd_wire, false) else { panic!("expected command out") };
+    let CallOutput::Command(out) = translate_output(&call, &cmd_wire, false, false) else {
+        panic!("expected command out")
+    };
     assert_eq!(out.output, "hi\n");
     assert_eq!(out.exit_code, Some(0));
     assert_eq!(out.ended, Ended::Exited);
@@ -42,7 +44,7 @@ fn command_read_and_mcp_calls_translate_cleanly_and_strip_agy_wrappers() {
         ..ToolCallWire::default()
     };
     let rcall = translate_call(&read_wire);
-    let CallOutput::Lines(lines) = translate_output(&rcall, &read_wire, false) else { panic!("expected lines") };
+    let CallOutput::Lines(lines) = translate_output(&rcall, &read_wire, false, false) else { panic!("expected lines") };
     assert_eq!(lines, Lines { first: 2, lines: vec!["two".into(), "three".into()], total: Some(5) });
 
     let mcp_wire = ToolCallWire {
@@ -72,7 +74,9 @@ fn string_command_output_and_underscore_mcp_servers_preserve_their_fields() {
         ..ToolCallWire::default()
     };
     let call = translate_call(&cmd_wire);
-    let CallOutput::Command(out) = translate_output(&call, &cmd_wire, false) else { panic!("expected command out") };
+    let CallOutput::Command(out) = translate_output(&call, &cmd_wire, false, false) else {
+        panic!("expected command out")
+    };
     assert_eq!(out.output, "boom\n");
     assert_eq!(out.exit_code, Some(7));
 
@@ -137,4 +141,60 @@ fn a_command_says_what_it_does_from_its_own_words() {
     assert_eq!(parts(reads), [CommandPart::Read { path: "a.rs".into() }]);
     assert_eq!(parts(deletes), [CommandPart::Other]);
     assert_eq!(parts(titled), [], "a title alone says nothing of what it does");
+}
+
+#[test]
+fn stopped_commands_distinguish_kills_and_cancels_from_exits_denials_and_spawn_errors() {
+    let cmd_wire = |raw_output: Option<serde_json::Value>| ToolCallWire {
+        tool_call_id: "c".into(),
+        status: Some(ToolStatusWire::Failed),
+        name: Some("run_command".into()),
+        args: Some(json!({ "CommandLine": "sleep 30" })),
+        raw_output,
+        ..ToolCallWire::default()
+    };
+    let call = translate_call(&cmd_wire(None));
+    let out = |wire: &ToolCallWire, cancelling: bool, denied: bool| {
+        let out = translate_output(&call, wire, cancelling, denied);
+        let CallOutput::Command(out) = out else { panic!("expected command output, got {out:?}") };
+        out
+    };
+
+    let killed = out(&cmd_wire(Some(json!({ "output": "" }))), false, false);
+    assert_eq!((killed.ended, killed.exit_code), (Ended::Stopped, None), "manage_task kill sends empty output");
+
+    let cancelled = out(&cmd_wire(Some(json!({ "output": "partial\n" }))), true, false);
+    assert_eq!((cancelled.ended, cancelled.exit_code), (Ended::Stopped, None));
+
+    let silent_exit = out(
+        &cmd_wire(Some(json!({
+            "exit_code": 1,
+            "output": "Created At: 2026-11-14T19:00:00Z\nCompleted At: 2026-11-14T19:00:01Z\nCommand exited with code 1.\nNo output from the command."
+        }))),
+        false,
+        false,
+    );
+    assert_eq!((silent_exit.ended, silent_exit.exit_code, silent_exit.output.as_str()), (Ended::Exited, Some(1), ""));
+
+    let exited_during_cancel =
+        out(&cmd_wire(Some(json!("Command exited with code 7.\n\nCommand output:\nboom\n"))), true, false);
+    assert_eq!((exited_during_cancel.ended, exited_during_cancel.exit_code), (Ended::Exited, Some(7)));
+
+    let denied_during_cancel = out(&cmd_wire(Some(json!({ "output": "" }))), true, true);
+    assert_eq!(denied_during_cancel.ended, Ended::Exited);
+
+    let spawn_err = out(&cmd_wire(Some(json!("fork/exec /bin/zsh: resource temporarily unavailable"))), false, false);
+    assert_eq!((spawn_err.ended, spawn_err.exit_code), (Ended::Exited, None));
+
+    let no_payload = out(&cmd_wire(None), false, false);
+    assert_eq!((no_payload.ended, no_payload.exit_code), (Ended::Exited, None));
+
+    let null_payload = out(&cmd_wire(Some(serde_json::Value::Null)), false, false);
+    assert_eq!((null_payload.ended, null_payload.exit_code, null_payload.output.as_str()), (Ended::Exited, None, ""));
+
+    let json_err = out(&cmd_wire(Some(json!({ "error": "invalid arguments" }))), false, false);
+    assert_eq!(
+        (json_err.ended, json_err.exit_code, json_err.output.as_str()),
+        (Ended::Exited, None, "{\"error\":\"invalid arguments\"}")
+    );
 }

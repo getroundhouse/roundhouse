@@ -105,6 +105,13 @@ async fn prompt_to(shared: &Shared, seq: Seq, prompt: &Prompt<AttachmentFile>) -
 }
 
 pub(super) async fn send_prompt_rpc(shared: &Shared, seq: Option<Seq>, blocks: Vec<Value>) -> Result<(), AgentError> {
+    let user_chunks = blocks
+        .iter()
+        .filter(|block| {
+            block.get("type").and_then(Value::as_str) == Some("text")
+                && block.get("text").and_then(Value::as_str).is_some_and(|text| !text.is_empty())
+        })
+        .count();
     let ((session_id, rpc_id), _) = between_endings(shared, |state| {
         if seq.is_some() && !state.waiting.is_empty() {
             return Err(AgentError::Refused("Answer Antigravity's open request before sending another prompt".into()));
@@ -115,7 +122,7 @@ pub(super) async fn send_prompt_rpc(shared: &Shared, seq: Option<Seq>, blocks: V
             state.cancelling = false;
         }
         let rpc_id = shared.rpc.next_id();
-        state.prompts.push_back(InFlightPrompt { rpc_id, seq, taken: false });
+        state.prompts.push_back(InFlightPrompt { rpc_id, seq, taken: false, user_chunks_left: user_chunks });
         Ok((session_id, rpc_id))
     })
     .await?;
@@ -320,6 +327,9 @@ async fn cancel(shared: &Shared) -> Result<(), AgentError> {
 pub(super) async fn settle_all(shared: &Shared) {
     let prompts: Vec<Seq> = {
         let mut state = shared.state.lock();
+        for open in state.calls.values_mut() {
+            open.outlives_turn = false;
+        }
         state.prompts.drain(..).filter(|entry| !entry.taken).filter_map(|entry| entry.seq).collect()
     };
     for prompt in prompts {
@@ -330,10 +340,19 @@ pub(super) async fn settle_all(shared: &Shared) {
 
 pub(super) async fn settle_turn(shared: &Shared) {
     let (requests, calls) = {
-        let mut state = shared.state.lock();
-        let requests: Vec<ApprovalId> = state.waiting.drain().map(|(id, _)| id).collect();
-        let calls: Vec<_> = state.calls.drain().map(|(id, _)| id).collect();
-        state.denied_calls.clear();
+        let mut guard = shared.state.lock();
+        let state = &mut *guard;
+        let requests: Vec<_> = state.waiting.drain().map(|(id, _)| id).collect();
+        let mut calls = Vec::new();
+        state.calls.retain(|id, open| {
+            if open.outlives_turn {
+                true
+            } else {
+                calls.push(id.clone());
+                false
+            }
+        });
+        state.denied_calls.retain(|id| state.calls.contains_key(id));
         (requests, calls)
     };
     for approval_id in requests {
