@@ -1,20 +1,18 @@
 use super::{
-    alone, around, asked, cache_rule, column, compaction, failed_request, mode, notices, own_turn, plan_card, prompt,
-    tail, text, thinking, tools, turn_end, update_rule,
+    alone, around, asked, cache_rule, column, compaction, failed_request, message, mode, notices, own_turn, plan_card,
+    prompt, tail, turn_end, update_rule,
 };
-use crate::find::{FindLook, Marks, Part};
+use crate::find::{FindLook, Marks};
 use crate::item_key::ItemKey;
 use crate::linked_images::LinkedImages;
 use crate::selection::Selection;
 use crate::texts::{Of, TextAt, Texts};
 use crate::transcript::{Model, Transcript};
 use crate::{attachments, find};
-use around::{Around, BlockAround, Closes, asks_questions, drawn_in_its_call, drawn_in_row};
+use around::{Around, Closes, asks_questions, drawn_in_its_call, drawn_in_row};
 use client_core::OpenSession;
-use client_core::calls::Recorded;
 use client_core::session_log::{By, Row, SessionLog};
 use gpui_kit::component::{h_flex, v_flex};
-use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, Div, ElementId, Hsla, InteractiveElement as _, IntoElement, ParentElement, SharedString, Stateful,
     Styled, WeakEntity, div,
@@ -23,14 +21,12 @@ use look::{LineText, Typeset as _};
 use notices::{agent_exited, notice};
 use prompt::{Prompt, prompt_bubble};
 use protocol::capability::turns::OwnTurn;
-use protocol::event::{ApprovalOutcome, ContentBlock, EventBody, SessionEvent};
+use protocol::event::{ApprovalOutcome, EventBody, SessionEvent};
 use protocol::model::Seq;
 use protocol::tail::Tail;
 use std::cell::RefCell;
 use std::rc::Rc;
 use tail::{EndOfChat, Waiting, render_tail};
-use text::written;
-use tools::Toggle;
 
 /// Which of the list's items is drawn, and which is the tail, the list's last.
 #[derive(Clone, Copy)]
@@ -222,29 +218,6 @@ pub(super) fn muted_line(text: impl Into<SharedString>, cx: &App) -> AnyElement 
         .into_any_element()
 }
 
-/// A message of the agent's, or what came back to it, recorded at `seq`: each of its `blocks` as `around` says.
-fn message(
-    seq: Seq,
-    blocks: &[ContentBlock],
-    around: &Around,
-    shared: &Shared,
-    find: &FindLook,
-    cx: &App,
-) -> AnyElement {
-    let rendered: Vec<AnyElement> = blocks
-        .iter()
-        .enumerate()
-        .zip(&around.blocks)
-        .filter_map(|((ix, block), drawing)| render_block(seq, InRow::Own(ix), block, drawing, shared, find, cx))
-        .collect();
-    if rendered.is_empty() {
-        return empty();
-    }
-    // Calls and thinking in a row read as one list, so they sit closer together than paragraphs do.
-    let only_lines = blocks.iter().all(is_a_line);
-    row().when(only_lines, |d| d.pb(look::Space::Small).gap(look::Space::Small)).children(rendered).into_any_element()
-}
-
 /// `event`, drawn in the row of an event, which is its own but for a prompt drawn where the agent took it, or at the
 /// end of the chat. A prompt's text goes at `prompt_at`, and the texts of any other event by its place in the log.
 pub(super) fn render_event(
@@ -281,7 +254,7 @@ pub(super) fn render_event(
             prompt_bubble(&key, text, &around.carried, Some(around.prompt), shared, cx)
         }
         EventBody::Assistant { blocks, .. } | EventBody::AgentUser { blocks, .. } => {
-            message(seq, blocks, around, shared, find, cx)
+            message::draw(seq, blocks, around, shared, find, cx)
         }
         EventBody::TurnEnded { .. } => turn_end::line(event, around.agent.clone(), around.cache.as_ref(), find, cx),
         // A plan's card. A tool's use is asked in the composer's place too, and its call's own line is what the
@@ -321,18 +294,6 @@ pub(super) fn render_event(
     }
 }
 
-/// A call, its result or thinking, which read as lines of one list.
-fn is_a_line(block: &ContentBlock) -> bool {
-    matches!(
-        block,
-        ContentBlock::ToolUse { .. }
-            | ContentBlock::Call { .. }
-            | ContentBlock::ToolResult { .. }
-            | ContentBlock::CallResult { .. }
-            | ContentBlock::Thinking { .. }
-    )
-}
-
 /// A line of `text` in `color`, where nothing's found.
 pub(super) fn colored_line(text: String, color: Hsla) -> AnyElement {
     row().child(div().typeset(look::Type::Body).text_color(color).child(text)).into_any_element()
@@ -343,55 +304,4 @@ pub(super) fn marked_line(text: String, marks: &Marks, color: Hsla) -> AnyElemen
     row()
         .child(div().typeset(look::Type::Body).text_color(color).child(find::marked(text.into(), marks, &[], None)))
         .into_any_element()
-}
-
-/// Which row a block is drawn in: its event's own, as the `n`th of the event's blocks, or a call's, as a subagent's
-/// words are, nested in the `n`th block of that row's event. Either way, `n` is the block its texts are placed in. The
-/// questions the agent asked are each drawn as a block of their own, in their order, so each one's texts are together.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(in crate::rows) enum InRow {
-    Own(usize),
-    Nested(usize),
-}
-
-impl InRow {
-    /// The row what this block nests is drawn in: the same row, nested in the same block of its event, however deep.
-    pub(in crate::rows) fn nesting(self) -> Self {
-        match self {
-            InRow::Own(block) | InRow::Nested(block) => InRow::Nested(block),
-        }
-    }
-}
-
-/// A block of the event at `seq`, drawn in the row `in_row` says.
-pub(super) fn render_block(
-    seq: Seq,
-    in_row: InRow,
-    block: &ContentBlock,
-    drawing: &BlockAround,
-    shared: &Shared,
-    find: &FindLook,
-    cx: &App,
-) -> Option<AnyElement> {
-    let key = &drawing.key;
-    let (fold, open) = (drawing.fold, drawing.open);
-    let toggle = Toggle { seq, key, fold, open, shared, find, in_row };
-    Some(match block {
-        ContentBlock::Text { text, images } => written(&toggle, Part::Text, text, None, Some(images)),
-        ContentBlock::Thinking { text } if text.is_empty() => return None,
-        ContentBlock::Thinking { text } => thinking::draw(text, &toggle, cx),
-        ContentBlock::ToolUse { .. } | ContentBlock::Call { .. } => {
-            // One that asks the person something is drawn from its approval, which has everything that was asked.
-            let recorded = Recorded::of(block).filter(|call| !call.asks_the_person())?;
-            tools::call(&toggle, recorded, &drawing.reply, drawing.subagent.as_ref(), cx)
-        }
-        ContentBlock::ToolResult { .. } | ContentBlock::CallResult { .. } if drawing.with_call => return None,
-        ContentBlock::ToolResult { .. } | ContentBlock::CallResult { .. } => {
-            tools::result(&toggle, drawing.reply.result()?, cx)
-        }
-        ContentBlock::Image { .. } => {
-            div().typeset(look::Type::Detail).text_color(look::colors(cx).text_muted).child("Image").into_any_element()
-        }
-        ContentBlock::Unknown => return None,
-    })
 }
