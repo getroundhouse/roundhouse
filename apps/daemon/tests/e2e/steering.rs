@@ -7,7 +7,9 @@ use protocol::client::HubNotice;
 use protocol::event::{ContentBlock, EventBody, SessionEvent};
 use protocol::model::{Seq, Session, SessionId, SessionStatus};
 
-use crate::support::{Stack, assistant_text, next_notice, parent_of, read_all, signal, wait_for_turn_end, wait_until};
+use crate::support::{
+    Gate, Stack, assistant_text, next_notice, parent_of, read_all, signal, wait_for_turn_end, wait_until,
+};
 
 /// Waits until the agent is running a tool, which is when a prompt sent now has to wait.
 pub(crate) fn wait_for_tool(client: &Client, session_id: &SessionId) {
@@ -52,11 +54,14 @@ fn a_prompt_sent_mid_turn_is_taken_only_once_the_running_tool_has_finished() {
     let stack = Stack::start();
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
-    let (first, _) = client.session_prompt(&session.id, "hang:1500", None).unwrap();
+    let tool = Gate::new(&stack, "tool");
+    let (first, _) = client.session_prompt(&session.id, &format!("hang-until:{tool}"), None).unwrap();
     wait_for_tool(&client, &session.id);
 
     let (steered, _) = client.session_prompt(&session.id, "say:steered", None).unwrap();
+    tool.wait_for_a_prompt();
     let meanwhile = read_all(&client, &session.id);
+    tool.open();
     let events = wait_for_turn_end(&client, &session.id, 1);
 
     let taken =
@@ -76,7 +81,8 @@ fn the_feed_tells_of_a_prompt_sent_mid_turn_until_the_agent_takes_it() {
     let stack = Stack::start();
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
-    client.session_prompt(&session.id, "hang:1500", None).unwrap();
+    let tool = Gate::new(&stack, "tool");
+    client.session_prompt(&session.id, &format!("hang-until:{tool}"), None).unwrap();
     wait_for_tool(&client, &session.id);
     let feed = client.feed_subscribe().unwrap();
 
@@ -92,6 +98,7 @@ fn the_feed_tells_of_a_prompt_sent_mid_turn_until_the_agent_takes_it() {
     };
     let waiting = told("the prompt on its way", &|told| told.untaken.as_deref() == Some(&[steered][..]));
     assert!(waiting.compaction_waits());
+    tool.open_once_the_agent_has_a_prompt();
     let taken = told("the prompt taken", &|told| told.untaken.as_deref() == Some(&[][..]));
     assert_eq!(taken.status, SessionStatus::Running, "before its turn has ended");
 }
@@ -186,7 +193,8 @@ fn a_prompt_the_agent_hadnt_taken_when_its_hub_went_away_is_taken_once_the_next_
     let mut stack = Stack::start();
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
-    let (first, _) = client.session_prompt(&session.id, "hang:1500", None).unwrap();
+    let tool = Gate::new(&stack, "tool");
+    let (first, _) = client.session_prompt(&session.id, &format!("hang-until:{tool}"), None).unwrap();
     wait_for_tool(&client, &session.id);
     let (steered, _) = client.session_prompt(&session.id, "say:steered", None).unwrap();
     wait_until("the agent to read the prompt", || {
@@ -200,6 +208,7 @@ fn a_prompt_the_agent_hadnt_taken_when_its_hub_went_away_is_taken_once_the_next_
     stack.start_hub();
 
     let client = stack.client();
+    tool.open();
     let events = wait_for_turn_end(&client, &session.id, 1);
     let taken = |prompt: Seq| {
         events.iter().filter(|e| matches!(e.body, EventBody::PromptTaken { prompt: p } if p == prompt)).count()
