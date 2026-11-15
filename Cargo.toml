@@ -15,6 +15,7 @@ members = [
     "crates/transcript",
     "crates/look",
     "crates/terminal-state",
+    "crates/fetching",
     "tools/policy",
     "tools/guide",
     "tools/spec-page",
@@ -38,6 +39,7 @@ default-members = [
     "apps/daemon",
     "apps/cli",
     "crates/terminal-state",
+    "crates/fetching",
     "tools/policy",
     "tools/guide",
     "tools/spec-page",
@@ -67,6 +69,7 @@ hub = { path = "crates/hub" }
 client-core = { path = "crates/client-core" }
 transcript = { path = "crates/transcript" }
 look = { path = "crates/look" }
+fetching = { path = "crates/fetching" }
 desktop = { path = "apps/desktop" }
 
 anyhow = "1.0.104"
@@ -139,7 +142,7 @@ tokio = { version = "1.54.1", features = ["io-std", "io-util", "macros", "net", 
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 two-face = { version = "0.4.5", default-features = false }
-# The one Velopack uses, with its TLS, for fetching the update feed.
+# The one Velopack uses, with its TLS, which `fetching` fetches the update feed with.
 ureq = "3.5.1"
 uuid = { version = "1.29.0", features = ["v4"] }
 # Exact, because tools/package/dotnet-tools.json pins vpk, which makes the packages this reads, to the same version.

@@ -25,12 +25,12 @@ client-core.workspace = true
 transcript.workspace = true
 gpui-kit.workspace = true
 look.workspace = true
+fetching.workspace = true
 anyhow.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 velopack.workspace = true
-ureq.workspace = true
 flume.workspace = true
 ring.workspace = true
 # Turns a pasted image an agent can't be given, such as a TIFF, into a PNG, and decodes the images the file tab draws
@@ -66,6 +66,7 @@ anyhow.workspace = true
 agents.workspace = true
 client-core = { workspace = true, features = ["testing"] }
 desktop = { workspace = true, features = ["testing"] }
+fetching = { workspace = true, features = ["testing"] }
 hub = { workspace = true, features = ["testing"] }
 look = { workspace = true, features = ["testing"] }
 protocol = { workspace = true, features = ["testing"] }
@@ -74,8 +75,6 @@ worker = { workspace = true, features = ["testing"] }
 gpui-kit = { workspace = true, features = ["test-support"] }
 image = { workspace = true, features = ["png"] }
 tempfile.workspace = true
-flate2.workspace = true
-parking_lot.workspace = true
 proptest.workspace = true
 similar.workspace = true
 

@@ -1,4 +1,6 @@
 use super::*;
+use crate::updates::source::SourceError;
+use fetching::FetchError;
 
 fn unreachable() -> Result<(), Problem> {
     Err(Problem { kind: Kind::Unreachable, detail: "connection refused".to_string() })
@@ -82,4 +84,25 @@ fn a_check_under_way_is_said_over_a_problem_and_then_its_answer() {
 #[test]
 fn nothing_is_said_with_nothing_to_say() {
     assert_eq!(Shown::default().said(), None);
+}
+
+/// The kind of problem a fetch that failed so shows as.
+fn shown_for(error: SourceError) -> Kind {
+    problem(Step::Download, &velopack::Error::from(error)).kind
+}
+
+/// A server that isn't there, `FetchError::Request`, is `a_server_that_isnt_there_is_out_of_reach` in the updater's
+/// tests.
+#[test]
+fn each_way_a_fetch_fails_shows_as_its_problem() {
+    let (url, io) = (|| "https://example.com/package".to_string(), || std::io::Error::other("gone"));
+    let fetch = |error| shown_for(SourceError::Fetch(error));
+
+    assert_eq!(fetch(FetchError::Status { url: url(), status: 404 }), Kind::Unreachable);
+    assert_eq!(fetch(FetchError::Read { url: url(), source: io() }), Kind::Unreachable);
+    assert_eq!(fetch(FetchError::CutShort { url: url(), expected_bytes: 2, got_bytes: 1 }), Kind::Unreachable);
+    assert_eq!(fetch(FetchError::TooLong { url: url(), limit_bytes: 1 }), Kind::Refused(Refusal::TooLong));
+    assert_eq!(fetch(FetchError::Save { path: "/package".into(), source: io() }), Kind::Failed(Step::Download));
+    let unreadable = serde_json::from_str::<u8>("not a feed").unwrap_err();
+    assert_eq!(shown_for(SourceError::Unreadable(unreadable)), Kind::Failed(Step::Download));
 }

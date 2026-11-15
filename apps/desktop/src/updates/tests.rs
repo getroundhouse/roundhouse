@@ -8,8 +8,8 @@ use ring::signature::Ed25519KeyPair;
 use velopack::locator::VelopackLocatorConfig;
 
 use super::*;
-use crate::updates::serving::{Reply, Server, serve};
 use crate::updates::signing::{key_pair, public};
+use fetching::serving::{Reply, Server, serve};
 
 /// Long enough for a look at a server on this Mac.
 const LOOK_TIMEOUT: Duration = Duration::from_secs(10);
@@ -71,7 +71,7 @@ fn publish(releases: &[(&str, &[u8], Reply)], signer: &Ed25519KeyPair) -> Server
         ("releases.osx.json.sig".to_string(), vec![Reply::file(signature)]),
     ];
     paths.extend(releases.iter().map(|(version, _, reply)| (package_name(version), vec![reply.clone()])));
-    serve(paths)
+    serve(paths).unwrap()
 }
 
 /// The app's updater, set up as `start` sets it up, reading from `base`.
