@@ -150,7 +150,9 @@ pub(crate) struct LiveSession {
     pub(super) ingest: mpsc::Sender<Item>,
     pub(super) state: Mutex<LiveState>,
     /// Held while the session's record changes and is announced, by an event being recorded or by filing which account
-    /// a launch runs under, so they happen one at a time and the feed hears each copy in the order they were made.
+    /// a launch runs under, so they happen one at a time and the feed hears each copy in the order they were made. A
+    /// check of the live state that has to agree with what a client can read is made under it too, since the store has
+    /// each event before the live state takes it in.
     pub(super) recording: tokio::sync::Mutex<()>,
     /// Held while a queued prompt is sent, and while the queue changes, so a change can't land between reading the
     /// prompt and taking it out of the queue, and be lost.
