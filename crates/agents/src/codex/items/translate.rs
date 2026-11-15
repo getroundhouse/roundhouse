@@ -1,6 +1,6 @@
 use protocol::capability::calls::{
     Call, CallOutput,
-    call::{Command, CommandPart, Runs},
+    call::{Command, Runs},
     output::{CommandOutput, Ended, McpContent},
 };
 use protocol::event::{ContentBlock, Denied, EventBody};
@@ -9,7 +9,7 @@ use protocol::tail::{BlockKind, DeltaChange, StreamDelta};
 use serde_json::Value;
 
 use super::{
-    native::{Action, Item, Status},
+    native::{Item, Status},
     patches,
 };
 use crate::{AgentError, AgentOutput, codex::running::Shared};
@@ -94,24 +94,16 @@ impl Reader<'_> {
     }
 
     async fn command_item(&self, command: super::native::CommandExecution, completed: bool, raw: String) {
-        let super::native::CommandExecution {
-            id,
-            command,
-            cwd,
-            process_id,
-            actions,
-            output,
-            exit_code,
-            duration_ms,
-            status,
-        } = command;
+        let super::native::CommandExecution { id, command, cwd, process_id, output, exit_code, duration_ms, status } =
+            command;
+        let parts = crate::command_parts::of(&command);
         let call = Call::Command(Command {
             command,
             cwd: Some(cwd),
             description: None,
             timeout_ms: None,
             runs: Runs::Waits,
-            parts: actions.into_iter().map(part).collect(),
+            parts,
             unsandboxed: None,
         });
         if let Some(process) = process_id
@@ -211,15 +203,6 @@ impl Reader<'_> {
                 )
                 .await;
         }
-    }
-}
-
-fn part(action: Action) -> CommandPart {
-    match action {
-        Action::Read { path } => CommandPart::Read { path },
-        Action::ListFiles { path } => CommandPart::List { path },
-        Action::Search { path, query } => CommandPart::Search { pattern: query, path },
-        Action::Unknown => CommandPart::Other,
     }
 }
 

@@ -40,23 +40,6 @@ pub(super) enum Item {
 }
 
 #[derive(Deserialize)]
-#[serde(tag = "type", rename_all = "camelCase")]
-pub(super) enum Action {
-    Read {
-        path: String,
-    },
-    ListFiles {
-        path: Option<String>,
-    },
-    Search {
-        path: Option<String>,
-        query: Option<String>,
-    },
-    #[serde(other)]
-    Unknown,
-}
-
-#[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) enum Status {
     InProgress,
@@ -93,8 +76,6 @@ pub(super) struct CommandExecution {
     pub(super) cwd: String,
     #[serde(rename = "processId")]
     pub(super) process_id: Option<String>,
-    #[serde(rename = "commandActions")]
-    pub(super) actions: Vec<Action>,
     #[serde(rename = "aggregatedOutput")]
     pub(super) output: Option<String>,
     #[serde(rename = "exitCode")]

@@ -17,8 +17,10 @@ pub struct Command {
     pub timeout_ms: Option<u64>,
     #[serde(default)]
     pub runs: Runs,
-    /// What it does, as the agent read the command itself, as Codex does: the files it reads, lists or searches. A
-    /// client draws a command that does nothing but read one file as reading it. Empty where the agent doesn't say.
+    /// What it does, as the agent's adapter reads the command: the files it reads, lists or searches. They never say
+    /// it does less than it does: each part holds only where the program that does it does nothing else, and they're
+    /// [`CommandPart::Other`] wherever the adapter can't tell. A client draws a command that does nothing but read one
+    /// file as reading it. Empty where the adapter doesn't say.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub parts: Vec<CommandPart>,
     /// It asks to run outside the sandbox, and why, in the agent's words.
@@ -40,20 +42,19 @@ pub enum Runs {
     Unknown,
 }
 
+/// Something a command does, as its agent's adapter reads it, by a program that does nothing else. Its paths are as
+/// the command names them, from where it ran.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 #[serde(tag = "part", rename_all = "snake_case")]
 pub enum CommandPart {
-    Read {
-        path: String,
-    },
-    List {
-        path: Option<String>,
-    },
-    Search {
-        pattern: Option<String>,
-        path: Option<String>,
-    },
-    /// Anything else, which says the command does more than read.
+    /// Printing a file, or part of it, as `cat` and `sed -n` do.
+    Read { path: String },
+    /// Listing files, as `ls` does, in `path`, or where the command ran.
+    List { path: Option<String> },
+    /// Searching what's in files, as `rg` and `grep` do, for `pattern`, where the agent could say what for. A search
+    /// of names, as `find` and `fd` make, is [`CommandPart::Other`], since they can do more with what they find.
+    Search { pattern: Option<String>, path: Option<String> },
+    /// Anything else, which says the command does more than the other parts say.
     #[serde(other)]
     Other,
 }
