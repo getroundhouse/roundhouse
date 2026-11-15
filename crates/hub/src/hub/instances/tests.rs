@@ -5,9 +5,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use async_trait::async_trait;
 use protocol::Build;
-use protocol::model::{Workspace, WorkspaceStatus};
+use protocol::client::ApiError;
+use protocol::model::{Workspace, WorkspaceId, WorkspaceStatus};
 use providers::{Capabilities, Instance, ProviderError, Size, WorkerBinary, WorkerCommand};
 use tokio::sync::Notify;
+use tokio::task::JoinHandle;
 
 use super::*;
 use crate::hub::HubDirs;
@@ -15,6 +17,7 @@ use crate::provider_set::ProviderSet;
 use crate::store::tests::store_with_session;
 use crate::store::{InstanceStage, Store};
 use crate::timers::Timers;
+use crate::worker_link::WorkerLink;
 
 /// Makes and destroys nothing, and says it has unless it's told to refuse. One that holds its first start says so on
 /// `started`, and waits for `go_on` before refusing it.
@@ -179,4 +182,50 @@ async fn an_instance_is_marked_made_once_its_made_and_to_be_destroyed_before_it_
     assert!(made.is_err(), "its worker never started: {made:?}");
     assert_eq!(as_its_worker_starts, Some(InstanceStage::Ready));
     assert_eq!(birch(stages(&hub).await), Some(InstanceStage::Destroying), "its provider couldn't destroy it");
+}
+
+/// Adds the workspace `birch`, on `fake`, whose gate says nothing but its own worker can be on its instance, as once
+/// one has started, and starts its worker, on a task of its own.
+async fn starting_birch(hub: &Arc<Hub>) -> (WorkspaceId, JoinHandle<Result<Arc<WorkerLink>, ApiError>>) {
+    let mut birch: Workspace = hub.workspace(&"w".into()).await.unwrap();
+    (birch.id, birch.name, birch.instance_id, birch.provider) =
+        ("birch".into(), "birch".into(), "birch-vm".into(), "fake".into());
+    birch.created_at_ms += 1;
+    hub.blocking(move |store| store.insert_workspace(&birch, None)).await.unwrap();
+    let id = WorkspaceId::from("birch");
+    *hub.worker_gate(&id).lock().await = true;
+    let starting = tokio::spawn({
+        let (hub, id) = (hub.clone(), id.clone());
+        async move { hub.ensure_worker(&id).await }
+    });
+    (id, starting)
+}
+
+/// A start cut short as its worker starts leaves the next to clear the instance first, since its worker may be there.
+#[tokio::test]
+async fn a_start_dropped_partway_leaves_the_next_to_clear_the_instance() {
+    let dir = tempfile::tempdir().unwrap();
+    let (hub, fake) = hub_with(dir.path(), Fake { holds_start: AtomicBool::new(true), ..Fake::default() });
+    let (id, starting) = starting_birch(&hub).await;
+
+    fake.started.notified().await;
+    starting.abort();
+    let _ = starting.await;
+
+    assert!(!*hub.worker_gate(&id).lock().await, "its worker may be on the instance");
+}
+
+/// A start that fails may not have ended what it started, so it leaves the next to clear the instance first.
+#[tokio::test]
+async fn a_start_that_fails_leaves_the_next_to_clear_the_instance() {
+    let dir = tempfile::tempdir().unwrap();
+    let (hub, fake) = hub_with(dir.path(), Fake { holds_start: AtomicBool::new(true), ..Fake::default() });
+    let (id, starting) = starting_birch(&hub).await;
+
+    fake.started.notified().await;
+    fake.go_on.notify_one();
+    let started = starting.await.unwrap();
+
+    assert!(started.is_err(), "its provider refused to start it");
+    assert!(!*hub.worker_gate(&id).lock().await, "what it started may be on the instance");
 }

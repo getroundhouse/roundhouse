@@ -114,6 +114,19 @@ impl ChildProcess {
         Self { program: "nothing".to_string(), kill: Arc::new(Notify::new()), exited: watch::channel(true).1 }
     }
 
+    /// One that exits only once it's killed, for a stand-in whose stop takes all its grace.
+    #[cfg(test)]
+    pub(crate) fn until_killed() -> Self {
+        let kill = Arc::new(Notify::new());
+        let (exits, exited) = watch::channel(false);
+        let killed = kill.clone();
+        tokio::spawn(async move {
+            killed.notified().await;
+            exits.send_replace(true);
+        });
+        Self { program: "a stand-in".to_string(), kill, exited }
+    }
+
     /// Resolves once it has exited, however that came about.
     pub(crate) fn exited(&self) -> impl Future<Output = ()> + Send + 'static {
         let mut exited = self.exited.clone();
