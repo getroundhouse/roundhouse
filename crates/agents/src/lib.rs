@@ -8,6 +8,7 @@ mod attachments;
 mod binary;
 pub mod claude;
 pub mod codex;
+mod command_parts;
 #[cfg(feature = "testing")]
 pub mod conformance;
 mod error;
