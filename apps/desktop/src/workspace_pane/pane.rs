@@ -15,9 +15,9 @@ use file_tab::FileTab;
 use gpui_kit::component::input::TextareaState;
 use gpui_kit::{AnyWindowHandle, Context, Entity, EventEmitter, Subscription, Task, Window};
 use protocol::attachment::Attachment;
-use protocol::model::{Seq, Session, SessionId, Workspace, WorkspaceId, WorkspaceStatus};
+use protocol::model::{AgentKind, Seq, Session, SessionId, Workspace, WorkspaceId, WorkspaceStatus};
 use reading::Reading;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use transcript::Transcript;
 
 /// What shows under the tabs.
@@ -96,8 +96,11 @@ pub struct WorkspacePane {
     /// What's attached in the chat showing, to go with what's typed.
     pub(super) attached: Attachments,
     pub(super) waiting: Option<Waiting>,
-    /// A new chat is on its way, so another press doesn't make a second.
+    /// A new chat is on its way, so a workspace with none joins it rather than making a second.
     pub(super) creating_chat: bool,
+    /// The agents of the chats asked for while one was on its way, oldest first. Each is made once the one before it
+    /// is, so they open in the order they were asked for.
+    pub(super) chats_asked_for: VecDeque<AgentKind>,
     /// A queued prompt being changed.
     pub(super) queue_edit: Option<queue::Editing>,
     pub(super) closed_menu: closed::Menu,
@@ -159,6 +162,7 @@ impl WorkspacePane {
             attached: Attachments::default(),
             waiting: None,
             creating_chat: false,
+            chats_asked_for: VecDeque::new(),
             queue_edit: None,
             closed_menu: closed::Menu::Shut,
             busy: Busy::Free,

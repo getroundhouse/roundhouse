@@ -105,6 +105,26 @@ fn the_keyboard_opens_moves_between_and_closes_chats(cx: &mut TestAppContext) {
     assert_eq!(ui.composer_text(), "ready");
 }
 
+/// Each `Cmd-T` makes a chat, even one pressed before the hub has answered for the one before it, and they open in the
+/// order they were asked for, with the last showing.
+#[gpui_kit::test]
+fn each_new_chat_asked_for_is_made_even_while_one_is_on_its_way(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
+    let mut ui = Ui::open(cx, &stack);
+    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
+    ui.new_workspace();
+    let first = ui.active_chat();
+
+    ui.press_at_once(&["secondary-t", "secondary-t"]);
+
+    ui.wait("a chat for each", |ui| ui.open_chats().len() == 3);
+    let open = ui.open_chats();
+    ui.wait("the last asked for to show", |ui| ui.active_chat() == open[2]);
+    assert_eq!(open[0], first);
+    assert_eq!(ui.open_chats(), open, "and no more");
+}
+
 #[gpui_kit::test]
 fn a_closed_chat_can_be_reopened_and_the_last_one_is_replaced(cx: &mut TestAppContext) {
     let stack = Stack::new();
