@@ -1,12 +1,13 @@
 use std::fs;
 
 use protocol::event::{AgentTask, TaskKind};
+use protocol::model::AgentAccount;
 
 use super::*;
 use crate::store::backup::files_in;
 use crate::store::older::store_from_before;
 use crate::store::tests::store_with_session;
-use crate::store::{InstanceStage, RecordedInstance};
+use crate::store::{InstanceStage, RecordedInstance, SessionLogin};
 
 /// A database as a build with only the first `version` migrations left it, holding a repo. Keep what
 /// this returns open, and what it wrote stays in the WAL, as it does when a hub is killed.
@@ -232,4 +233,31 @@ fn each_workspaces_instance_from_before_instances_were_recorded_is_recorded() {
     let expected =
         [recorded("w", "local", InstanceStage::Ready, 0), recorded("x-vm", "incus", InstanceStage::Creating, 300)];
     assert_eq!(store.recorded_instances().unwrap(), expected);
+}
+
+/// A chat on an account before chats said where their login comes from is on the hub's login for it, which its record
+/// names, and one on none is still on none, whatever it names, so its next launch takes its kind's default, as it would
+/// have. Putting one on a login moves its revision on, so every client hears it.
+#[test]
+fn a_chat_on_an_account_from_before_sources_is_on_the_hubs_for_it_and_one_on_none_still_on_none() {
+    let dir = tempfile::tempdir().unwrap();
+    let rows = "
+        INSERT INTO accounts (id, login_agent) VALUES ('work', 'claude'), ('machine', NULL);
+        INSERT INTO sessions (id, workspace_id, agent, model, effort, permission_mode, agent_session_id, status,
+            last_seq, created_at_ms, updated_at_ms, account_id, assigned_account_id)
+            VALUES ('on', 'w', 'claude', 'opus', 'high', 'bypassPermissions', 'on', 'idle', 0, 0, 0, 'work', 'work'),
+                ('unfiled', 'w', 'claude', 'opus', 'high', 'bypassPermissions', 'u', 'idle', 0, 0, 0, NULL, 'work'),
+                ('none', 'w', 'claude', 'opus', 'high', 'bypassPermissions', 'n', 'idle', 0, 0, 0, 'machine', NULL);
+    ";
+
+    let store = store_from_before(dir.path(), BEFORE_ACCOUNT_SOURCES, rows);
+
+    let chat = |id: &str| store.get_session(&id.into()).unwrap().session;
+    let (on, unfiled, none) = (chat("on"), chat("unfiled"), chat("none"));
+    let on_work = SessionLogin::Hub("work".into());
+    assert_eq!((SessionLogin::of_record(&on), SessionLogin::of_record(&unfiled)), (on_work.clone(), on_work));
+    assert_eq!((SessionLogin::of_record(&none), none.account), (SessionLogin::NoneYet, Some("machine".into())));
+    let the_machines = AgentAccount { id: Some("machine".into()), logged_in: true, ..Default::default() };
+    assert!(store.launched_under(&"none".into(), &the_machines).unwrap().ambient);
+    assert!(chat("none").rev > none.rev, "only its source changed");
 }

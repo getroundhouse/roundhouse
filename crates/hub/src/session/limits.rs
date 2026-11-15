@@ -6,12 +6,12 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use protocol::client::HubNotice;
 use protocol::model::{AccountId, AgentAccount, RunId, UsageLimit};
 use tracing::{debug, error};
 
 use super::LiveSession;
 use crate::hub::Hub;
+use crate::store::SessionLogin;
 
 /// How long the session waits before asking the worker again, each time it couldn't say, as when the CLI's call timed
 /// out. Until it can, the session goes on naming the account the last launch ran under, which is nearly always the
@@ -134,10 +134,12 @@ impl LiveSession {
         }
     }
 
-    /// Files the account of a run the hub gave a login it holds, from the hub's own record of that, since the worker
-    /// isn't told whose a token is, and its machine's own login, if it has one, is another account. A run it gave none
-    /// has its worker asked, once the session's record no longer names the account an earlier launch was given the
-    /// login of. Under the lock events are recorded under, as filing what the worker says is.
+    /// Learns the account of a run the hub gave a login it holds, from the hub's own record of that, since the worker
+    /// isn't told whose a token is, and its machine's own login, if it has one, is another account. Recording the
+    /// launch named it on the session's record, if the session was on none. A run it gave none has its worker asked,
+    /// once a session that isn't on the hub's login no longer names the account of a login an earlier launch was given,
+    /// as [`Store::file_run_login`](crate::store::Store::file_run_login) says. Under the lock events are recorded
+    /// under, as filing what the worker says is.
     async fn file_given_login(&self, hub: &Hub, run: RunId) -> Filing {
         let (account, waiting) = {
             let _in_order = self.recording.lock().await;
@@ -157,9 +159,6 @@ impl LiveSession {
                 && let Err(e) = self.announce(hub).await
             {
                 error!(session = %self.id, "could not announce which account the agent runs under: {e}");
-            }
-            if let Some(record) = filed.account_changed {
-                hub.notify(HubNotice::Account(record));
             }
             let Some(account) = filed.account else { return Filing::AskTheWorker };
             let Some(waiting) = self.known(run, Some(account.clone())) else { return Filing::Done };
@@ -193,15 +192,20 @@ impl LiveSession {
     }
 
     /// Files that the agent going launched under `account`, on the account's record and the session's, and announces
-    /// the session's if that changed it.
+    /// the session's if that changed it. The session's copy follows the record onto the ambient login, as the store
+    /// puts a session on none there once the worker says whose login it is.
     async fn file_account(&self, hub: &Hub, account: AgentAccount) {
         match hub.launched_under(&self.id, account).await {
-            Ok(true) => {
-                if let Err(e) = self.announce(hub).await {
+            Ok(launched) => {
+                if launched.ambient {
+                    self.state.lock().login = SessionLogin::Ambient;
+                }
+                if launched.session
+                    && let Err(e) = self.announce(hub).await
+                {
                     error!(session = %self.id, "could not announce which account the agent runs under: {e}");
                 }
             }
-            Ok(false) => {}
             Err(e) => error!(session = %self.id, "could not record which account the agent runs under: {e}"),
         }
     }

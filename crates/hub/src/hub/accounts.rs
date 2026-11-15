@@ -10,6 +10,7 @@ use protocol::worker::AccountFor;
 use tracing::error;
 
 use super::Hub;
+use crate::store::Launched;
 
 impl Hub {
     /// The account an agent of this kind runs under in the workspace, as the workspace's worker reads it, when the
@@ -76,14 +77,14 @@ impl Hub {
     }
 
     /// Files that `session`'s agent launched under `under`, as its worker read it, and tells every client what that
-    /// changed of the account's record. Whether the session's record changed is returned, for the session to announce
-    /// itself, since only it knows how.
-    pub(crate) async fn launched_under(&self, session: &SessionId, under: AgentAccount) -> Result<bool, ApiError> {
+    /// changed of the account's record. What it changed of the session's record is returned, for the session to follow
+    /// and announce itself, since only it knows how.
+    pub(crate) async fn launched_under(&self, session: &SessionId, under: AgentAccount) -> Result<Launched, ApiError> {
         let id = session.clone();
-        let launched = self.blocking(move |store| store.launched_under(&id, &under)).await?;
-        if let Some(record) = launched.account {
+        let mut launched = self.blocking(move |store| store.launched_under(&id, &under)).await?;
+        if let Some(record) = launched.account.take() {
             self.notify(HubNotice::Account(record));
         }
-        Ok(launched.session)
+        Ok(launched)
     }
 }

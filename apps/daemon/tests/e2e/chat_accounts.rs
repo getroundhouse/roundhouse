@@ -1,12 +1,15 @@
-//! The account a chat is on, and moving it to another the hub holds a login for, through a real hub, mostly on a
-//! machine with no login of its own, so every launch runs under a login the hub hands out.
+//! Which login a chat is on, the hub's for an account or the ambient one, and moving it to another account the hub
+//! holds a login for, through a real hub, mostly on a machine with no login of its own, so every launch runs under a
+//! login the hub hands out.
 
 #![cfg(test)]
 
 use client_core::{Client, ClientError, Subscription};
 use protocol::client::{ErrorCode, HubNotice};
 use protocol::event::{EventBody, ExitReason, SessionEvent};
-use protocol::model::{Account, AccountId, AgentKind, LoginToken, SessionId, SessionSettingsChange, SessionStatus};
+use protocol::model::{
+    Account, AccountId, AccountSource, AgentKind, LoginToken, SessionId, SessionSettingsChange, SessionStatus,
+};
 
 use crate::accounts::log_out;
 use crate::support::gh::{MERGED, OPEN, StandInGh};
@@ -58,7 +61,7 @@ fn connect(client: &Client, name: &str) -> Account {
 
 /// The account the chat is on, as the hub records it.
 fn on(client: &Client, session: &SessionId) -> Option<AccountId> {
-    client.session_get(session).unwrap().assigned_account
+    client.session_get(session).unwrap().hub_account().cloned()
 }
 
 /// The token the agent runs under, as it says once it has done `then` in the `turn`th turn.
@@ -101,8 +104,8 @@ fn launches(events: &[SessionEvent]) -> Vec<bool> {
 fn announced_on(feed: &Subscription, session: &SessionId) -> AccountId {
     loop {
         match next_notice(feed, "the chat to be announced as on an account") {
-            HubNotice::Session(told) if told.id == *session && told.assigned_account.is_some() => {
-                return told.assigned_account.unwrap();
+            HubNotice::Session(told) if told.id == *session && told.hub_account().is_some() => {
+                return told.hub_account().unwrap().clone();
             }
             _ => {}
         }
@@ -147,11 +150,11 @@ fn a_moved_chat_resumes_under_its_account_and_goes_back_once_moved_back() {
     let back = client.session_assign_account(&chat.session, &chat.work.id, false).unwrap();
     let under_work = token_in_turn(&client, &chat.session, 3, "say:back");
 
-    assert_eq!(moved.assigned_account, Some(chat.personal.id.clone()));
+    assert_eq!(moved.hub_account().cloned(), Some(chat.personal.id.clone()));
     assert_eq!(moved.account, Some(chat.personal.id.clone()), "the record names the account it goes on under");
     assert_eq!(under_personal, "personal-token");
     assert!(recalled.contains(&format!("I have seen: say:hello;{TOKEN}")), "it carried on: {recalled}");
-    assert_eq!((back.assigned_account, back.account), (Some(chat.work.id.clone()), Some(chat.work.id.clone())));
+    assert_eq!((back.hub_account().cloned(), back.account), (Some(chat.work.id.clone()), Some(chat.work.id.clone())));
     assert_eq!(under_work, "work-token");
     assert_eq!(launches(&read_all(&client, &chat.session)), [false, true, true], "each move resumed it");
 }
@@ -177,7 +180,7 @@ fn a_chat_moved_to_the_account_its_on_keeps_its_agent() {
     let moved = client.session_assign_account(&chat.session, &chat.work.id, false).unwrap();
     let kept = token_in_turn(&client, &chat.session, 2, "say:same agent");
 
-    assert_eq!((moved.assigned_account, moved.account), (Some(chat.work.id.clone()), Some(chat.work.id)));
+    assert_eq!((moved.hub_account().cloned(), moved.account), (Some(chat.work.id.clone()), Some(chat.work.id)));
     assert_eq!(kept, "work-token");
     assert_eq!(launches(&read_all(&client, &chat.session)), [false], "nothing relaunched it");
 }
@@ -202,8 +205,8 @@ fn moving_a_chat_whose_agent_is_at_work_needs_force_and_leaves_it_stopped_short(
 
     assert!(matches!(&refused, ClientError::Api(e) if e.code == ErrorCode::NeedsForce), "{refused}");
     let work = Some(chat.work.id.clone());
-    assert_eq!((unmoved.assigned_account, unmoved.account), (work.clone(), work), "nothing changed");
-    assert_eq!((moved.assigned_account, moved.account), (Some(chat.personal.id.clone()), Some(chat.personal.id)));
+    assert_eq!((unmoved.hub_account().cloned(), unmoved.account), (work.clone(), work), "nothing changed");
+    assert_eq!((moved.hub_account().cloned(), moved.account), (Some(chat.personal.id.clone()), Some(chat.personal.id)));
     assert_eq!(launches(&read_all(&client, &chat.session)), [false, true]);
 }
 
@@ -221,7 +224,7 @@ fn a_chat_whose_account_was_disconnected_is_blocked_rather_than_left_to_the_defa
 
     assert!(failed.contains("this chat's account Personal needs a login"), "{failed}");
     assert_eq!(launched_while_blocked, [false], "nothing launched under the default meanwhile");
-    assert_eq!(moved_back.assigned_account, Some(chat.work.id));
+    assert_eq!(moved_back.hub_account().cloned(), Some(chat.work.id));
     assert_eq!(under_work, "work-token");
 }
 
@@ -267,25 +270,63 @@ fn the_first_request_after_a_move_isnt_taken_for_one_that_found_the_cache_expire
     assert!(expired.is_empty(), "{expired:?}");
 }
 
-/// On a machine with its own login, a chat whose agent ran under it is on no account, and once the hub holds a login,
-/// its next launch puts it on that one. That launch's first request isn't taken for one that found the cache expired
-/// either, since the machine's account's cache is another.
+/// On a machine with an ambient login, a chat's first launch while its kind has no default puts it on that login, and
+/// it stays there once the hub holds a login, which a new chat is put on instead. Moving it puts it on the hub's, and
+/// that launch's first request isn't taken for one that found the cache expired, since the ambient account's cache is
+/// another.
 #[test]
-fn a_chat_that_ran_under_the_machines_login_is_put_on_a_held_one_without_its_cache_taken_for_expired() {
+fn a_chat_on_the_ambient_login_stays_on_it_once_a_login_is_added_until_its_moved() {
     let stack = Stack::start();
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
     client.session_prompt(&session.id, "say:hello", None).unwrap();
     wait_for_turn_end(&client, &session.id, 1);
-    // Only the worker says whose a login on its machine is, so the chat names it a moment after its agent launches.
-    wait_until("the chat to name the machine's account", || client.session_get(&session.id).unwrap().account.is_some());
-    let under_the_machine = client.session_get(&session.id).unwrap();
+    // Only the worker says whose an ambient login is, so the chat names it a moment after its agent launches.
+    wait_until("the chat to name the ambient login's account", || {
+        client.session_get(&session.id).unwrap().account.is_some()
+    });
+    let ambient = client.session_get(&session.id).unwrap();
+
+    let work = connect(&client, "Work");
+    crash(&client, &session.id);
+    let still_ambient = token_in_turn(&client, &session.id, 2, "say:again");
+    let repo = client.repo_list().unwrap().remove(0);
+    let other = client.workspace_create(&repo.id, Some("other".into()), None, None).unwrap();
+    let new_chat = client.session_ensure(&other.id, AgentKind::Claude).unwrap();
+    let under_the_default = token_in_turn(&client, &new_chat.id, 1, "say:hello");
+    client.session_assign_account(&session.id, &work.id, false).unwrap();
+    let under_work = token_in_turn(&client, &session.id, 3, "cold");
+
+    assert_eq!((ambient.account_source, ambient.hub_account()), (Some(AccountSource::Ambient), None));
+    assert_eq!(still_ambient, "<unset>", "it was handed no login");
+    assert_eq!(under_the_default, "work-token");
+    assert_eq!(under_work, "work-token");
+    assert_eq!(on(&client, &session.id), Some(work.id));
+    let events = read_all(&client, &session.id);
+    let expired: Vec<_> = events.iter().filter(|e| matches!(e.body, EventBody::CacheExpired { .. })).collect();
+    assert!(expired.is_empty(), "{expired:?}");
+}
+
+/// A chat whose first launch, while its kind has no default, found nobody logged in on its machine isn't put on the
+/// ambient login, since there's no account to show it under, and so nothing to move it off from. So once a login is
+/// added, its next launch puts it on that one. That launch's first request isn't taken for one that found the cache
+/// expired, since the record named no account, so it can't say whose the cache was.
+#[test]
+fn a_chat_whose_first_launch_found_nobody_logged_in_is_put_on_the_default_once_one_is_added() {
+    let stack = Stack::start();
+    log_out(&stack);
+    let client = stack.client();
+    let (_, session) = stack.workspace(&client);
+    client.session_prompt(&session.id, "say:hello", None).unwrap();
+    wait_for_turn_end(&client, &session.id, 1);
+    let nobody = client.session_get(&session.id).unwrap();
 
     let work = connect(&client, "Work");
     crash(&client, &session.id);
     let under_work = token_in_turn(&client, &session.id, 2, "cold");
 
-    assert_eq!(under_the_machine.assigned_account, None, "it names the machine's account and is on none");
+    assert_eq!((nobody.account_source, nobody.account), (None, None));
+    assert!(nobody.prompt_cache.is_some(), "its first turn left something cached");
     assert_eq!(under_work, "work-token");
     assert_eq!(on(&client, &session.id), Some(work.id));
     let events = read_all(&client, &session.id);

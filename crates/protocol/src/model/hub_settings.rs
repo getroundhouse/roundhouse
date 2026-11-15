@@ -29,8 +29,8 @@ pub struct HubSettingsChange {
     pub allow_asked_in_full_access: Option<bool>,
 }
 
-/// The account a chat of one agent kind is put on when its agent is first launched under a login the hub holds. A chat
-/// already on an account stays on it.
+/// The account a chat of one agent kind on none is put on as its agent first launches. A chat already on an account, or
+/// on the ambient login, stays there.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct AccountDefault {
     pub agent: AgentKind,

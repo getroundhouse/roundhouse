@@ -8,8 +8,8 @@ use super::{ClientRequest, ClientResponse, Reply, Request};
 use crate::model::{Account, AccountId, AgentKind, HubSettings, LoginToken};
 
 /// Gives the hub a login for agents of `agent`'s kind to run under, which it keeps and hands to the workers it launches
-/// them on, for the chats on the account, as [`Session::assigned_account`](crate::model::Session::assigned_account)
-/// says, and answers with the account's record, named `name`.
+/// them on, for the chats on the account, as [`Session::account_source`](crate::model::Session::account_source) says,
+/// and answers with the account's record, named `name`.
 /// The token is one the agent's own CLI made to last, such as `claude setup-token`'s, which the person made themselves
 /// and gave a client, and the hub never sends it back.
 ///
@@ -72,9 +72,9 @@ impl Request for AccountDisconnect {
     }
 }
 
-/// Chooses the hub-wide default of this kind, the account a chat is put on when its agent is first launched under a
-/// login the hub holds, as [`Session::assigned_account`](crate::model::Session::assigned_account) says. A chat already
-/// on an account stays on it. The account must hold an unexpired login of the same kind. A disconnected or expired
+/// Chooses the hub-wide default of this kind, the account a chat on none is put on as its agent first launches, as
+/// [`Session::account_source`](crate::model::Session::account_source) says. A chat already on an account, or on the
+/// ambient login, stays there. The account must hold an unexpired login of the same kind. A disconnected or expired
 /// default remains selected and blocks the chats it would be given to.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct AccountSetDefault {

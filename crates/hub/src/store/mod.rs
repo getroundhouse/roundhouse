@@ -55,6 +55,7 @@ pub(crate) use logins::{Connecting, Held, IdFrom};
 pub use made::{Made, MadeByRequest};
 pub use queue::{Changed, Queued, Queuing};
 pub use reading::Reading;
+pub(crate) use sessions::SessionLogin;
 pub use titles::{Retitle, Retitled};
 pub use waits::Seen;
 pub use workspaces::{BranchesSet, Ended, Move};

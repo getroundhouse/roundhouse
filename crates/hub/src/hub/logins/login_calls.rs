@@ -1,6 +1,6 @@
 use super::super::{Hub, off_thread};
 use crate::logins::{AccountChange, Connect, Handed, Logins};
-use crate::store::now_ms;
+use crate::store::{SessionLogin, now_ms};
 use protocol::client::accounts::{AccountConnect, AccountSetDefault};
 use protocol::client::sessions::SessionAssignAccount;
 use protocol::client::{ApiError, ErrorCode, HubNotice};
@@ -41,14 +41,11 @@ impl Hub {
         }
     }
 
-    /// The login a launch of a chat of `agent`'s kind is handed: that of `assigned`, the account the chat is on, or else
-    /// its kind's default, as [`Logins::to_hand`] says. Either wins over machine credentials on every provider.
-    pub(crate) async fn login_for(
-        &self,
-        agent: AgentKind,
-        assigned: Option<AccountId>,
-    ) -> Result<Option<Handed>, ApiError> {
-        self.on_logins(move |logins| logins.to_hand(agent, assigned.as_ref(), now_ms())).await
+    /// The login a launch of a chat of `agent`'s kind that's `on` a login is handed, as [`Logins::to_hand`] says: the
+    /// hub's, for the account it's on or its kind's default, which wins over ambient credentials on every provider, or
+    /// none, for a chat on the ambient login.
+    pub(crate) async fn login_for(&self, agent: AgentKind, on: SessionLogin) -> Result<Option<Handed>, ApiError> {
+        self.on_logins(move |logins| logins.to_hand(agent, &on, now_ms())).await
     }
 
     /// Moves a chat to another account, as `SessionAssignAccount` says. Not through the session's queue, which a prompt

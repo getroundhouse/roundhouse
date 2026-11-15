@@ -1,10 +1,11 @@
 //! Which login the hub gives a launch, of those it holds.
 
 use super::*;
+use crate::store::SessionLogin;
 
 fn handed(logins: &Logins, now: i64) -> Option<(AccountId, String)> {
     logins
-        .to_hand(AgentKind::Claude, None, now)
+        .to_hand(AgentKind::Claude, &SessionLogin::NoneYet, now)
         .unwrap()
         .map(|handed| (handed.account, handed.login.token.as_str().to_string()))
 }
@@ -36,9 +37,9 @@ fn expiry_disconnect_and_missing_tokens_block_instead_of_changing_identity() {
     let (logins, _) = logins_in(dir.path());
     let first = logins.connect(&connect("Work", "work-token", None)).unwrap().account.id;
     logins.connect(&Connect { ends_at_ms: None, ..connect("Personal", "personal-token", None) }).unwrap();
-    assert_eq!(logins.to_hand(AgentKind::Claude, None, 2000).unwrap_err().code, ErrorCode::Conflict);
+    assert_eq!(logins.to_hand(AgentKind::Claude, &SessionLogin::NoneYet, 2000).unwrap_err().code, ErrorCode::Conflict);
     logins.disconnect(&first).unwrap();
-    assert_eq!(logins.to_hand(AgentKind::Claude, None, 1700).unwrap_err().code, ErrorCode::Conflict);
+    assert_eq!(logins.to_hand(AgentKind::Claude, &SessionLogin::NoneYet, 1700).unwrap_err().code, ErrorCode::Conflict);
     logins.connect(&connect("Work", "renewed-token", Some(&first))).unwrap();
     let files = std::fs::read_dir(dir.path().join("logins")).unwrap();
     let path = files
@@ -47,8 +48,8 @@ fn expiry_disconnect_and_missing_tokens_block_instead_of_changing_identity() {
         .unwrap();
     std::fs::remove_file(path).unwrap();
     logins.tidy().unwrap();
-    assert_eq!(logins.to_hand(AgentKind::Claude, None, 1700).unwrap_err().code, ErrorCode::Conflict);
-    assert!(logins.to_hand(AgentKind::Unknown, None, 1700).unwrap().is_none());
+    assert_eq!(logins.to_hand(AgentKind::Claude, &SessionLogin::NoneYet, 1700).unwrap_err().code, ErrorCode::Conflict);
+    assert!(logins.to_hand(AgentKind::Unknown, &SessionLogin::NoneYet, 1700).unwrap().is_none());
 }
 
 #[test]
@@ -62,26 +63,29 @@ fn selecting_requires_a_live_held_login_of_the_same_kind() {
     assert_eq!(logins.set_default(AgentKind::Claude, &id, 1000).unwrap_err().code, ErrorCode::Conflict);
 }
 
-/// The account a chat is on is handed, whichever is the default, and doesn't change when it does.
+/// The account a chat is on is handed, whichever is the default, and doesn't change when it does. A chat on the
+/// ambient login is handed none, whatever the default is.
 #[test]
-fn a_chats_assigned_account_is_handed_whatever_the_default_is() {
+fn a_chats_account_is_handed_whatever_the_default_is_and_a_chat_on_the_ambient_login_none() {
     let dir = tempfile::tempdir().unwrap();
     let (logins, _) = logins_in(dir.path());
     let work = logins.connect(&connect("Work", "work-token", None)).unwrap().account.id;
     let personal = logins.connect(&connect("Personal", "personal-token", None)).unwrap().account.id;
-    let assigned =
-        |account: &AccountId| logins.to_hand(AgentKind::Claude, Some(account), 1700).unwrap().unwrap().account;
+    let on = |account: &AccountId| {
+        logins.to_hand(AgentKind::Claude, &SessionLogin::Hub(account.clone()), 1700).unwrap().unwrap().account
+    };
 
-    assert_eq!(assigned(&personal), personal);
+    assert_eq!(on(&personal), personal);
     logins.set_default(AgentKind::Claude, &personal, 1700).unwrap();
-    assert_eq!(assigned(&work), work);
+    assert_eq!(on(&work), work);
     assert_eq!(handed(&logins, 1700).unwrap().0, personal, "a chat on none yet is handed the default");
+    assert!(logins.to_hand(AgentKind::Claude, &SessionLogin::Ambient, 1700).unwrap().is_none());
 }
 
 /// A chat whose account can't be used is blocked, as a new one whose default can't be is, rather than falling back to
 /// the default, and the refusal says it's the chat's account.
 #[test]
-fn a_chats_assigned_account_that_cant_be_used_blocks_it_rather_than_falling_back() {
+fn a_chats_account_that_cant_be_used_blocks_it_rather_than_falling_back() {
     let dir = tempfile::tempdir().unwrap();
     let (logins, _) = logins_in(dir.path());
     logins.connect(&connect("Work", "work-token", None)).unwrap();
@@ -89,7 +93,7 @@ fn a_chats_assigned_account_that_cant_be_used_blocks_it_rather_than_falling_back
 
     logins.disconnect(&personal).unwrap();
 
-    let refused = logins.to_hand(AgentKind::Claude, Some(&personal), 1700).unwrap_err();
+    let refused = logins.to_hand(AgentKind::Claude, &SessionLogin::Hub(personal), 1700).unwrap_err();
     assert_eq!(refused.code, ErrorCode::Conflict);
     assert!(refused.message.contains("this chat's account Personal"), "{}", refused.message);
     assert!(handed(&logins, 1700).is_some(), "the default is still handed to chats on none yet");

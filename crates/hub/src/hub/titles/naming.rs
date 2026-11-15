@@ -1,10 +1,10 @@
 use super::super::Hub;
 use super::super::ready::ReadyWorkspace;
 use crate::attachment_files::FileFor;
-use crate::store::Retitle;
+use crate::store::{Retitle, SessionLogin};
 use protocol::attachment::{Attachment, AttachmentBytes, NewAttachment};
 use protocol::client::{ApiError, ErrorCode, HubNotice};
-use protocol::model::{AccountId, AgentKind, PromptLine, Session, SessionId, Title, Workspace, WorkspaceId};
+use protocol::model::{AgentKind, PromptLine, Session, SessionId, Title, Workspace, WorkspaceId};
 use protocol::prompt::Prompt;
 use protocol::short_text::start_of;
 use protocol::worker::TitleFor;
@@ -54,7 +54,7 @@ impl Hub {
         let (workspace, chat, prompts, carried) = self
             .blocking(move |store| {
                 let workspace = store.get_workspace(&read)?;
-                let chat = store.list_sessions(&read)?.pop().map(|chat| (chat.agent, chat.assigned_account));
+                let chat = store.list_sessions(&read)?.pop().map(|chat| (chat.agent, SessionLogin::of_record(&chat)));
                 Ok((workspace, chat, store.workspace_prompt_lines(&read)?, store.workspace_prompt_images(&read)?))
             })
             .await?;
@@ -62,12 +62,12 @@ impl Hub {
         let images = self.read_images(chosen_images(carried)).await;
         // Prompts of only images have no words to list, so the model is told only what to make of the images.
         let asked = work_so_far(&prompts).or_else(|| (!images.is_empty()).then(|| WORK_SO_FAR.to_string()));
-        let (Some((agent, assigned)), Some(asked)) = (chat, asked) else {
+        let (Some((agent, on)), Some(asked)) = (chat, asked) else {
             let message =
                 format!("nothing has been asked in {} yet, so there's nothing to title it from", workspace.name);
             return Err(ApiError::new(ErrorCode::Conflict, message));
         };
-        let title = self.title_for(&id, agent, assigned, asked, images).await?;
+        let title = self.title_for(&id, agent, on, asked, images).await?;
         let (over, set) = (workspace.title, workspace.title_source);
         let retitled = self
             .blocking(move |store| {
@@ -126,7 +126,7 @@ impl Hub {
             .await?;
         let titled = Titled {
             agent: chat.record.agent,
-            assigned_account: chat.record.assigned_account.clone(),
+            on: SessionLogin::of_record(&chat.record),
             session: chat.changed.then(|| chat.record.id.clone()),
             workspace: titled_workspace.changed.then(|| workspace.clone()),
         };
@@ -147,7 +147,7 @@ impl Hub {
             let untitled_workspace = store.get_workspace(&workspace)?.title.is_none();
             Ok(Titled {
                 agent: chat.agent,
-                assigned_account: chat.assigned_account.clone(),
+                on: SessionLogin::of_record(&chat),
                 session: chat.title.is_none().then_some(chat.id),
                 workspace: untitled_workspace.then_some(workspace),
             })
@@ -169,7 +169,7 @@ impl Hub {
             warn!(%workspace, "could not generate a title: the hub no longer has the images of a prompt with no words");
             return;
         }
-        let title = match self.title_for(&workspace, titled.agent, titled.assigned_account, prompt, images).await {
+        let title = match self.title_for(&workspace, titled.agent, titled.on, prompt, images).await {
             Ok(title) => title,
             Err(e) => {
                 warn!(%workspace, "could not generate a title: {e}");
@@ -203,19 +203,19 @@ impl Hub {
         }
     }
 
-    /// Asks the workspace's worker, under the login a launch of the chat it's for would get, which is `assigned`, the
-    /// account the chat is on, or else its kind's default, and keeps the answer only as a [`Title`], since a
-    /// model can answer anything.
+    /// Asks the workspace's worker, under the login a launch of the chat it's for would get, as it's `on` a login, as
+    /// [`Hub::login_for`] says, and keeps the answer only as a [`Title`], since a model can answer anything. A title
+    /// call puts the chat on no login, which only its launches, and what its worker says of them, do.
     pub(super) async fn title_for(
         self: &Arc<Self>,
         workspace: &WorkspaceId,
         agent: AgentKind,
-        assigned: Option<AccountId>,
+        on: SessionLogin,
         prompt: String,
         images: Vec<NewAttachment>,
     ) -> Result<Title, ApiError> {
         let link = self.ensure_worker(workspace).await?;
-        let login = self.login_for(agent, assigned).await?.map(|handed| handed.login);
+        let login = self.login_for(agent, on).await?.map(|handed| handed.login);
         let title = link.title(TitleFor { agent, prompt, images, login }).await?.title;
         Title::from_first_line(&title).ok_or_else(|| ApiError::new(ErrorCode::Worker, "the worker gave an empty title"))
     }
@@ -282,8 +282,8 @@ pub(super) fn work_so_far(prompts: &[PromptLine]) -> Option<String> {
 /// under which account.
 pub(super) struct Titled {
     pub(super) agent: AgentKind,
-    /// The account the chat is on, if it's on one.
-    pub(super) assigned_account: Option<AccountId>,
+    /// Which login the chat is on.
+    pub(super) on: SessionLogin,
     pub(super) session: Option<SessionId>,
     pub(super) workspace: Option<WorkspaceId>,
 }

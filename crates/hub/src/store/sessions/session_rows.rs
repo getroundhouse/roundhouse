@@ -4,12 +4,13 @@ use super::super::made::{Made, inserted, made_by};
 use super::super::{
     Store, StoreError, StoredSession, current_rev, from_text, json_at, lock, rev_of, seq_column, seq_of, text_of,
 };
+use super::SessionLogin;
 use protocol::model::{
     Account, AccountId, AccountSource, AgentKind, AttachmentId, ClientRequestId, ContextUsage, Draft, ModelName,
     PromptCache, QueuedPrompt, Rev, RunId, Session, SessionId, SessionSettingsChange, SessionStatus, Title, Wait,
     WorkspaceId,
 };
-use rusqlite::{OptionalExtension, Row, TransactionBehavior, params};
+use rusqlite::{Connection, OptionalExtension, Row, TransactionBehavior, params};
 
 /// What moving a session to another account changed besides it, as [`Store::move_session`] says.
 #[derive(Debug, PartialEq, Eq)]
@@ -24,7 +25,7 @@ pub(crate) struct Moved {
 /// What a session's row holds, as it's written.
 macro_rules! session_row_columns {
     () => {
-        "id, workspace_id, agent, model, permission_mode, status, last_seq, created_at_ms, updated_at_ms, agent_session_id, agent_opened, title, closed_at_ms, reply_seq, read_seq, background_tasks, title_source, queued, queue_held, turn_started_at_ms, effort, context, account_id, user_active_at_ms, prompt_cache, draft, answer_draft, untaken, open_approvals, reply_outcome, agent_capabilities, assigned_account_id"
+        "id, workspace_id, agent, model, permission_mode, status, last_seq, created_at_ms, updated_at_ms, agent_session_id, agent_opened, title, closed_at_ms, reply_seq, read_seq, background_tasks, title_source, queued, queue_held, turn_started_at_ms, effort, context, account_id, user_active_at_ms, prompt_cache, draft, answer_draft, untaken, open_approvals, reply_outcome, agent_capabilities, account_source"
     };
 }
 
@@ -56,8 +57,12 @@ pub(in super::super) fn draft_column(draft: &Draft) -> serde_json::Result<Option
 
 pub(in super::super) fn session_from_row(row: &Row) -> rusqlite::Result<StoredSession> {
     let waits = waits_from(&row.get::<_, String>(32)?)?;
-    let assigned: Option<AccountId> = row.get::<_, Option<String>>(31)?.map(Into::into);
     let account: Option<AccountId> = row.get::<_, Option<String>>(22)?.map(Into::into);
+    let account_source: Option<AccountSource> = row.get::<_, Option<String>>(31)?.map(from_text).transpose()?;
+    let hub_account = match SessionLogin::of(account_source, account.as_ref()) {
+        SessionLogin::Hub(account) => Some(account),
+        SessionLogin::NoneYet | SessionLogin::Ambient => None,
+    };
     Ok(StoredSession {
         session: Session {
             id: row.get::<_, String>(0)?.into(),
@@ -84,11 +89,9 @@ pub(in super::super) fn session_from_row(row: &Row) -> rusqlite::Result<StoredSe
             effort: from_text(row.get(20)?)?,
             // Written only by this hub, as JSON. One it can't read is as good as none, until the agent next says.
             context: json_at(row, 21)?,
-            // Only a chat on a login the hub holds, once its record names that login's account, is on the hub's, as the
-            // protocol has it, so the rest are on none.
-            account_source: (assigned.is_some() && assigned == account).then_some(AccountSource::Hub),
             account,
-            assigned_account: assigned,
+            account_source,
+            assigned_account: hub_account,
             user_active_at_ms: row.get(23)?,
             // Written only by this hub, as JSON. One it can't read is as good as none, until the agent next asks.
             prompt_cache: json_at(row, 24)?,
@@ -165,7 +168,7 @@ impl Store {
                 serde_json::to_string(session.open_approvals.as_deref().unwrap_or_default())?,
                 session.reply_outcome.as_ref().map(text_of),
                 session.agent_capabilities.as_ref().map(serde_json::to_string).transpose()?,
-                session.assigned_account.as_ref().map(AccountId::as_str),
+                session.account_source.as_ref().map(text_of),
                 client_request_id.map(ClientRequestId::as_str),
             ],
         )?;
@@ -249,25 +252,20 @@ impl Store {
         Ok(())
     }
 
-    /// Moves the session to `account`: puts it on it, and has its record name it as the one its agent runs under,
-    /// since no agent under another is left and its next launch runs under it, so the limits shown, and what the person
-    /// sends from here, are that account's. Another account's cache may not hold the conversation, so a record that
-    /// named any other, or none, forgets what was cached. One transaction, so a hub that stops partway leaves the
-    /// session as it was.
+    /// Moves the session to `account`: puts it on the hub's login for it, which its record names, since no agent under
+    /// another is left and its next launch runs under it, so the limits shown, and what the person sends from here, are
+    /// that account's, and forgets another account's cache, as [`forget_cache_unless_under`] says. One transaction, so
+    /// a hub that stops partway leaves the session as it was.
     pub(crate) fn move_session(&self, id: &SessionId, account: &AccountId) -> Result<Moved, StoreError> {
         let mut conn = lock(&self.writer);
         let tx = conn.transaction()?;
         // Only where it changes, since the revision moves on whatever sets it, even to what it was.
         tx.execute(
-            "UPDATE sessions SET assigned_account_id = ?1 WHERE id = ?2 AND assigned_account_id IS NOT ?1",
-            params![account.as_str(), id.as_str()],
+            "UPDATE sessions SET account_source = 'hub' WHERE id = ? AND account_source IS NOT 'hub'",
+            [id.as_str()],
         )?;
         let named = name_account(&tx, id, Some(account))?;
-        let forgot_cache = named.before.as_ref() != Some(account)
-            && tx.execute(
-                "UPDATE sessions SET prompt_cache = NULL WHERE id = ? AND prompt_cache IS NOT NULL",
-                [id.as_str()],
-            )? > 0;
+        let forgot_cache = forget_cache_unless_under(&tx, id, named.before.as_ref(), account)?;
         tx.commit()?;
         Ok(Moved { account: named.account, forgot_cache })
     }
@@ -334,4 +332,22 @@ impl Store {
         }
         Ok(active)
     }
+}
+
+/// Forgets what the API's cache holds of `session`'s conversation, which goes on under `account` from here, where its
+/// record named `before`. Another account's cache may not hold it, as one in another organization doesn't, so after
+/// one, or after a record that named none, which can't say whose the cache was, nothing is cached, and the first
+/// request under `account` isn't taken for one that found the cache expired. Whether it forgot any. Not announced,
+/// since what put the conversation on `account` changed the record, and announces it.
+pub(in super::super) fn forget_cache_unless_under(
+    conn: &Connection,
+    session: &SessionId,
+    before: Option<&AccountId>,
+    account: &AccountId,
+) -> rusqlite::Result<bool> {
+    Ok(before != Some(account)
+        && conn.execute(
+            "UPDATE sessions SET prompt_cache = NULL WHERE id = ? AND prompt_cache IS NOT NULL",
+            [session.as_str()],
+        )? > 0)
 }

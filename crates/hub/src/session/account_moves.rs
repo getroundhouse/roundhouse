@@ -7,6 +7,7 @@ use tokio::sync::broadcast;
 
 use super::{Live, LiveSession};
 use crate::hub::Hub;
+use crate::store::SessionLogin;
 
 /// What a move does to the agent running, once it has decided.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -47,7 +48,7 @@ impl LiveSession {
         let moved = hub.blocking(move |store| store.move_session(&id, &kept)).await?;
         {
             let mut state = self.state.lock();
-            state.assigned_account = Some(account);
+            state.login = SessionLogin::Hub(account);
             if moved.forgot_cache {
                 state.prompt_cache = None;
             }

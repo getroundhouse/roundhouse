@@ -4,11 +4,11 @@ use std::sync::Arc;
 
 use protocol::capability::Capabilities;
 use protocol::capability::conversation::Start;
-use protocol::client::{ApiError, ErrorCode};
+use protocol::client::{ApiError, ErrorCode, HubNotice};
 use protocol::event::{EventBody, ExitReason};
-use protocol::model::{AccountId, PermissionMode, RunCapabilities, RunId, SessionSettings};
+use protocol::model::{PermissionMode, RunCapabilities, RunId, SessionSettings};
 use protocol::worker::{AgentSpec, AgentStarted, AgentStop, previous};
-use tracing::warn;
+use tracing::{error, warn};
 
 use super::super::{AgentRun, Command, LiveSession, Origin};
 use crate::hub::Hub;
@@ -45,8 +45,8 @@ impl LiveSession {
         if self.is_closed() {
             return Err(ApiError::new(ErrorCode::Conflict, "this chat is closed"));
         }
-        let assigned = self.state.lock().assigned_account.clone();
-        let login = hub.login_for(self.agent, assigned).await?;
+        let on = self.state.lock().login.clone();
+        let login = hub.login_for(self.agent, on).await?;
         self.start_agent(&hub, &link, Launch { cwd, env, login }).await?;
         Ok(link)
     }
@@ -117,7 +117,7 @@ impl LiveSession {
         }
         let settings = hub.launch_settings(self.agent, &kept)?;
         let asked = hub.blocking(Store::next_run).await?;
-        let given = self.record_given_login(hub, asked, login.as_ref()).await?;
+        self.record_login(hub, asked, login.as_ref()).await?;
         let tools_token = hub.tools_for(&self.workspace_id, &self.id, link).await;
         // Before the launch, so the new agent's first events aren't recorded ahead of its start.
         let build = link.said_build().map(str::to_string);
@@ -159,10 +159,6 @@ impl LiveSession {
         } else {
             // Whatever is still open was asked by a process that no longer exists.
             self.cancel_approvals(None).await;
-            // Only for a process that started, since one already running is under the login it started with.
-            if let Some((account, before)) = &given {
-                self.forget_cache_unless_under(before.as_ref(), account).await;
-            }
             let capabilities = claims.map(|claims| claims.claims);
             let started = EventBody::AgentStarted { pid, resumed: resume, build, previous_build, capabilities };
             self.record_or_log(Origin::Run { run, current, numbered: None }, started).await;
@@ -170,26 +166,36 @@ impl LiveSession {
         Ok(())
     }
 
-    /// Records whose login the run `asked` is given, if the hub gives it one, and gives back that account and the one
-    /// the session's record named before. Before the launch is sent, so no agent runs under a login the hub gave it
-    /// without the hub's record of whose it is, since the token doesn't say, and a hub that stops after sending it
-    /// can't learn it later.
+    /// Records whose login the run `asked` is given, if the hub gives it one. Before the launch is sent, so no agent
+    /// runs under a login the hub gave it without the hub's record of whose it is, since the token doesn't say, and a
+    /// hub that stops after sending it can't learn it later.
     ///
-    /// A session on no account is put on the launch's, its kind's default, as it's recorded. The session's copy follows
-    /// the row at once, before the launch is sent, so every later launch is under the same account, even once this one
-    /// has failed. It's announced as the launch is filed, with the account the record names, which was another, or,
-    /// for a chat from before chats were put on accounts whose record named this one already, with its next change.
-    async fn record_given_login(
-        &self,
-        hub: &Hub,
-        asked: RunId,
-        login: Option<&Handed>,
-    ) -> Result<Option<(AccountId, Option<AccountId>)>, ApiError> {
-        let Some(Handed { account, .. }) = login else { return Ok(None) };
+    /// A session on no login yet given one is put on the hub's for its kind's default, without another account's cache,
+    /// as a move is. The session's copy follows the row at once, before the launch is sent, so every later launch is
+    /// under the same login, even once this one has failed. Announced if that changed its record, under the lock events
+    /// are recorded under, so the feed hears each copy of the record in the order they were made. One given none is put
+    /// on the ambient login only once its worker says whose that is, as filing the account it runs under does.
+    async fn record_login(&self, hub: &Hub, asked: RunId, login: Option<&Handed>) -> Result<(), ApiError> {
+        let Some(Handed { account, .. }) = login else { return Ok(()) };
+        let _in_order = self.recording.lock().await;
         let (id, filed) = (self.id.clone(), account.clone());
         let recorded = hub.blocking(move |store| store.record_run_login(&id, asked, &filed)).await?;
-        self.state.lock().assigned_account.clone_from(&recorded.on);
-        Ok(Some((account.clone(), recorded.before)))
+        {
+            let mut state = self.state.lock();
+            state.login = recorded.on;
+            if recorded.forgot_cache {
+                state.prompt_cache = None;
+            }
+        }
+        if let Some(record) = recorded.account_changed {
+            hub.notify(HubNotice::Account(record));
+        }
+        if recorded.session_changed
+            && let Err(e) = self.announce(hub).await
+        {
+            error!(session = %self.id, "could not announce which login the chat is on: {e}");
+        }
+        Ok(())
     }
 
     /// Sends the launch, in the form its worker's protocol has, with the chat's settings as the hub keeps them, `kept`,

@@ -193,8 +193,9 @@ impl Request for SessionRename {
     }
 }
 
-/// Moves the chat to `account`, an account the person added a login for, so every launch of its agent, resume and title
-/// call takes that login from then on, whatever its kind's default becomes, as [`Session::assigned_account`] says.
+/// Moves the chat to `account`, an account the person added a login for, from another or from the ambient login, so
+/// every launch of its agent, resume and title call takes that login from then on, whatever its kind's default becomes,
+/// as [`Session::account_source`] says. Nothing moves a chat to the ambient login.
 ///
 /// A running agent can't change its login, so one running under another account is stopped, and the chat's next
 /// launch resumes the conversation under `account`. While that agent counts as running, as
