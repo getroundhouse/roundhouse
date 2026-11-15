@@ -8,7 +8,7 @@ use std::path::Path;
 use gpui_kit::{AppContext as _, Pixels, TestAppContext, px};
 use protocol::event::{ContentBlock, EventBody};
 
-use crate::support::{Stack, Ui};
+use crate::support::{Gate, Stack, Ui};
 
 /// Writes a PNG `height` pixels tall at `path`, so a reply that shows it is at least that tall.
 fn write_png(path: &Path, height: u32) {
@@ -145,7 +145,7 @@ fn a_click_on_a_long_replys_image_opens_it_over_the_window(cx: &mut TestAppConte
     let reply = format!("{}Junctions last\n\n![Alone](shot.png)", "Timetables, sidings and points. ".repeat(140));
     assert!(reply.len() > 4 * 1024, "parsed on another thread: {} bytes", reply.len());
 
-    ui.input(&format!("say:{reply}"));
+    ui.paste_text(&format!("say:{reply}"));
     ui.press("enter");
     ui.wait_idle_with("the turn to finish", |text| text.contains("Junctions last"));
     ui.wait("the reply's image, from the hub", |ui| ui.shown("linked-image/").len() == 1);
@@ -165,15 +165,19 @@ fn a_replys_images_open_once_its_recorded_after_its_written(cx: &mut TestAppCont
     let workspace = ui.new_workspace();
     write_png(&ui.worktree(&workspace).join("shot.png"), 4);
 
-    ui.input("slow:20:![The shot](shot.png) after");
+    // A reply that goes on until the test has seen how it's drawn while it's written.
+    let done = Gate::new(&stack, "done");
+    ui.paste_text(&format!("slow-until:{done}:![The shot](shot.png) after"));
     ui.press("enter");
 
     ui.wait("the reply being written", |ui| {
         ui.transcript().is_some_and(|t| ui.cx.read_entity(&t, |t, _| t.streaming_text().contains("after3")))
     });
     assert!(ui.shown("linked-image/").is_empty(), "the kit draws them while it's written");
-    ui.wait_idle_with("the turn to finish", |text| text.contains("after19"));
-    ui.wait("the reply's images, from the hub", |ui| ui.shown("linked-image/").len() == 20);
+    done.open();
+    ui.wait_idle_with("the turn to finish", |text| text.contains("after3"));
+    let images = ui.assistant_text().matches("](shot.png)").count();
+    ui.wait("the reply's images, from the hub", |ui| ui.shown("linked-image/").len() == images);
     let first = ui.shown("linked-image/").remove(0);
     ui.click(first);
     assert!(ui.has_dialog() && ui.shown("opened-picture").len() == 1, "and a click on one opens it");

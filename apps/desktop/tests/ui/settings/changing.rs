@@ -2,7 +2,7 @@
 
 use crate::menus::{SETTINGS, choose};
 use crate::support;
-use crate::support::{Stack, Ui, labelled};
+use crate::support::{Gate, Stack, Ui, labelled};
 use gpui_kit::{AppContext as _, ElementId, TestAppContext};
 
 /// Whether Settings is showing, by its way back.
@@ -189,7 +189,10 @@ fn a_saved_setting_is_in_force_from_the_start_and_thinking_streams_in_full(cx: &
     let stack = Stack::new();
     std::fs::create_dir_all(&stack.hub.paths.data_dir).unwrap();
     std::fs::write(stack.settings_file(), r#"{"always_expand_thinking": true}"#).unwrap();
-    let mut ui = typing(cx, &stack, "think:30:idea");
+    // Thinking that goes on until the test has seen it shown while it streams.
+    let thought = Gate::new(&stack, "thought");
+    let mut ui = typing(cx, &stack, "");
+    ui.paste_text(&format!("think-until:{thought}:idea"));
 
     ui.press("enter");
     ui.wait("thinking to stream", |ui| {
@@ -198,6 +201,7 @@ fn a_saved_setting_is_in_force_from_the_start_and_thinking_streams_in_full(cx: &
 
     let streaming = thinking_shown(&mut ui);
     assert_eq!(streaming.len(), 1);
+    thought.open();
     ui.wait("the thinking to finish", |ui| ui.session_status() == Some(protocol::model::SessionStatus::Idle));
     assert_eq!(thinking_open(&mut ui), [true]);
     assert_eq!(thinking_shown(&mut ui), streaming, "the same text, recorded");

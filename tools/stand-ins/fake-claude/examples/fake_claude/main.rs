@@ -5,10 +5,17 @@
 //!
 //! A prompt is a script: `;`-separated commands, each run in order.
 //!   say:TEXT        Stream TEXT in chunks, then send the finished message.
-//!   slow:N:TEXT     Same, sending N chunks one per 100 ms, so tests can act mid-stream.
+//!   slow:N:TEXT     Same, sending TEXT N times, numbered from 0, as `TEXT0 TEXT1 `, a chunk every 100 ms, so tests
+//!                   can act mid-stream.
+//!   slow-until:FILE:TEXT  Same, until FILE exists, so a test can act mid-stream for as long as it needs, and then has
+//!                   the message finish at once. A prompt that reaches the agent meanwhile makes `FILE.prompted` once
+//!                   it's queued to be taken into the turn, so a test can wait for that before making FILE. See
+//!                   `waiting.rs`.
 //!   burst:N         Same, sending N numbered chunks as fast as possible.
+//!   whole:TEXT      As `say`, in one chunk, so a test that only needs what was said can say a great deal quickly.
 //!   prose:N:SEED    Say N paragraphs of made-up prose, the same for the same SEED, as fast as possible.
 //!   think:N:TEXT    Think, the way `slow` speaks, as the real CLI does with `--thinking-display summarized`.
+//!   think-until:FILE:TEXT  The same, the way `slow-until` speaks, and says when a prompt has reached it the same way.
 //!   ponder:N:SEED   Think N paragraphs of the same made-up prose, as fast as possible.
 //!   tool:COMMAND    Ask for approval unless in full access, as the real CLI does in plan mode for a call that
 //!                   writes, then run COMMAND with `sh -c`. A COMMAND that removes whatever another prints, with
@@ -17,6 +24,8 @@
 //!                   comes back without a patch, so the edit is drawn from what it replaced.
 //!   edit:N:WIDTH    Same, with each line at least WIDTH characters long.
 //!   hang:MS         A tool that takes MS milliseconds. Cancelling stops it.
+//!   hang-until:FILE The same, until FILE exists, so a test can catch the agent at work for as long as it needs, and
+//!                   says when a prompt has reached it as `slow-until` does.
 //!   partial:TEXT    Start a message and leave it unfinished, so a crash can cut it off.
 //!   late:FILE:TEXT  Leave a process holding stdout open until FILE exists, so an exit takes time to notice,
 //!                   then write TEXT as a delta and a `late_marker` line, as an agent that has been replaced
@@ -43,8 +52,10 @@
 //!   agent:TEXT      Start a subagent for TEXT in the background, asked TEXT with a full stop, which makes a call
 //!                   and reports a second later.
 //!   agent-foreground:TEXT  The same in the foreground, so the call's result waits for its report.
-//!   agent-calls:N:TEXT  The same in the background, making N calls, so its work is long enough to scroll.
-//!   agent-until:FILE:TEXT  The same in the background, working until FILE exists, so a test can catch it at work.
+//!   agent-calls:N:TEXT  The same in the background, making N calls and reporting at once, for a test that needs
+//!                   only a subagent that has finished, or one whose work is long enough to scroll.
+//!   agent-until:FILE:TEXT  The same in the background, working until FILE exists, so a test can catch it at work, and
+//!                   says when a prompt has reached it as `slow-until` does.
 //!   read:FILE       Read FILE, a PNG, as the real CLI reads an image: as an image block in the result, again in its
 //!                   record of the read, and then a line for the model saying how it shrank it.
 //!   advise          Ask the advisor, as the real CLI does, and get back a reply encrypted for the model alone.
@@ -108,6 +119,7 @@ mod system_prompt;
 mod title;
 mod tools;
 mod turn;
+mod waiting;
 
 use prompt::{attached, read_prompt};
 pub(crate) use settings::{BEFORE_PLAN, KEEPS_EFFORT, current_effort, current_mode, current_model, set_mode};
@@ -320,7 +332,13 @@ fn control(out: &Out, value: &Value, conversation: &Path) -> Option<Input> {
 fn pause(rx: &Receiver<Input>, wait: Duration, queued: &mut VecDeque<Prompt>, eof: &mut bool) -> bool {
     match rx.recv_timeout(wait) {
         Ok(Input::Interrupt) => true,
-        Ok(Input::Prompt(prompt) | Input::Resume(prompt)) => {
+        Ok(Input::Prompt(prompt)) => {
+            queued.push_back(prompt);
+            waiting::a_prompt_is_queued();
+            false
+        }
+        // Not a prompt anyone sent, so a test waiting for its own isn't told of it.
+        Ok(Input::Resume(prompt)) => {
             queued.push_back(prompt);
             false
         }

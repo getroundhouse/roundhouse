@@ -20,10 +20,14 @@ use crate::support::{
 #[test]
 fn work_continues_with_no_client_and_a_new_client_catches_up_with_no_gaps() {
     let stack = Stack::start();
+    // The reply goes on until this exists, so it's still streaming once the client has gone, and the next is said
+    // only after.
+    let done = stack.path("done");
     let (session_id, seen, agent_pid) = {
         let client = stack.client();
         let (_, session) = stack.workspace(&client);
-        client.session_prompt(&session.id, "slow:30:chunk", None).unwrap();
+        let script = format!("slow-until:{}:chunk; say:after the client left", done.display());
+        client.session_prompt(&session.id, &script, None).unwrap();
         let subscription = client.session_subscribe(&session.id, Seq::new(1)).unwrap();
         let mut follower = Follower::default();
         follower.drain_until(&subscription, "streaming text", |f| f.tail_text().contains("chunk3"));
@@ -42,11 +46,12 @@ fn work_continues_with_no_client_and_a_new_client_catches_up_with_no_gaps() {
     wait_until("the hub to see the client leave", || watcher.hub_status().unwrap().clients == 1);
     assert_eq!(watcher.session_get(&session_id).unwrap().status, SessionStatus::Running);
     assert!(is_alive(agent_pid), "the agent must outlive its client");
+    std::fs::write(&done, "").unwrap();
 
     let client = stack.client();
     let events = wait_for_turn_end(&client, &session_id, 1);
     assert_gapless(&events);
-    assert!(assistant_text(&events).contains("chunk29"), "the turn finished with nobody attached");
+    assert!(assistant_text(&events).contains("after the client left"), "the agent went on with nobody attached");
 
     // Subscribing from the last seq seen delivers exactly the rest.
     let subscription = client.session_subscribe(&session_id, Seq::new(seen + 1)).unwrap();
@@ -70,7 +75,9 @@ fn a_client_attaching_mid_message_sees_the_partial_text_at_once() {
     let stack = Stack::start();
     let first = stack.client();
     let (_, session) = stack.workspace(&first);
-    first.session_prompt(&session.id, "slow:40:part", None).unwrap();
+    // The reply goes on until this exists, so it's still streaming as the second client attaches.
+    let done = stack.path("done");
+    first.session_prompt(&session.id, &format!("slow-until:{}:part", done.display()), None).unwrap();
     let live = first.session_subscribe(&session.id, Seq::new(1)).unwrap();
     let mut watcher = Follower::default();
     watcher.drain_until(&live, "some streaming", |f| f.tail_text().contains("part5"));
@@ -80,6 +87,7 @@ fn a_client_attaching_mid_message_sees_the_partial_text_at_once() {
     let mut late = Follower::default();
     // Its first tail should already hold what was streamed, without waiting for more.
     late.drain_until(&subscription, "the tail snapshot", |f| f.tail_text().contains("part5"));
+    std::fs::write(&done, "").unwrap();
 
     // And after that, its view stays identical to a client that was there from the start.
     late.drain_until(&subscription, "the turn to end", |f| {

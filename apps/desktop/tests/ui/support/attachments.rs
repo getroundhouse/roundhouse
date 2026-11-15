@@ -14,6 +14,12 @@ impl Ui<'_> {
         self.press("secondary-v");
     }
 
+    /// Pastes this text where focus is, for a script that isn't about typing. Typed, with [`Ui::input`], it would go a
+    /// key at a time, and the kit draws the window again after each.
+    pub(crate) fn paste_text(&mut self, text: &str) {
+        self.paste(ClipboardItem::new_string(text.to_string()));
+    }
+
     /// Copies a file with this in it and pastes it in the composer, and waits for it to be attached.
     pub(crate) fn attach_a_file(&mut self, name: &str, text: &str) {
         let dir = tempfile::tempdir().unwrap();

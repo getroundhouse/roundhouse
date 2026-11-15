@@ -32,13 +32,14 @@ fn cmd_enter_queues_while_the_agent_works_and_the_hub_sends_it_once_the_turn_end
     let stack = Stack::new();
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, &stack);
-    working(&mut ui, 1500);
+    let done = working(&mut ui, &stack);
 
     ui.input("say:from the queue");
     ui.press("secondary-enter");
 
     assert_eq!(ui.composer_text(), "");
     ui.wait("the queue to show it", |ui| queued(ui).len() == 1 && ui.visible("queue"));
+    done.open();
     ui.wait_idle_with("the queued prompt's answer", |text| text.contains("from the queue"));
     let ends = ui.events().iter().filter(|e| matches!(e.body, EventBody::TurnEnded { .. })).count();
     assert_eq!(ends, 2, "a turn of its own");
@@ -65,7 +66,7 @@ fn a_queued_prompt_can_be_changed_or_taken_out_before_its_sent(cx: &mut TestAppC
     let stack = Stack::new();
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, &stack);
-    working(&mut ui, 4000);
+    let done = working(&mut ui, &stack);
     ui.input("say:kept");
     ui.press("secondary-enter");
     ui.input("say:taken out");
@@ -85,6 +86,7 @@ fn a_queued_prompt_can_be_changed_or_taken_out_before_its_sent(cx: &mut TestAppC
         let queue = queued(ui);
         queue.len() == 1 && queue[0].client_msg_id == first.client_msg_id && queue[0].prompt.text == "say:changed"
     });
+    done.open();
     ui.wait_idle_with("the changed prompt's answer", |text| text.contains("changed"));
     assert!(!ui.assistant_text().contains("kept") && !ui.assistant_text().contains("taken out"));
 }
@@ -94,7 +96,7 @@ fn escape_leaves_a_queued_prompt_as_it_was(cx: &mut TestAppContext) {
     let stack = Stack::new();
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, &stack);
-    working(&mut ui, 4000);
+    working(&mut ui, &stack);
     ui.input("say:as it was");
     ui.press("secondary-enter");
     ui.wait("it to be queued", |ui| queued(ui).len() == 1);
@@ -116,7 +118,7 @@ fn a_queue_held_by_a_stop_waits_until_a_prompt_in_it_is_sent(cx: &mut TestAppCon
     let stack = Stack::new();
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, &stack);
-    working(&mut ui, 20000);
+    working(&mut ui, &stack);
     ui.input("say:after the stop");
     ui.press("secondary-enter");
     ui.wait("it to be queued", |ui| queued(ui).len() == 1);
@@ -137,7 +139,7 @@ fn a_long_queue_scrolls_rather_than_pushing_the_composer_out_of_the_window(cx: &
     let stack = Stack::new();
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, &stack);
-    working(&mut ui, 20000);
+    working(&mut ui, &stack);
     let pane = ui.pane().unwrap();
     let session_id = ui.cx.read_entity(&pane, |p, _| p.session().map(|s| s.id.clone())).unwrap();
     let client = stack.client();
@@ -160,7 +162,7 @@ fn the_arrow_on_a_queued_prompt_steers_the_agent_with_it(cx: &mut TestAppContext
     let stack = Stack::new();
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, &stack);
-    working(&mut ui, 3000);
+    let done = working(&mut ui, &stack);
     ui.input("say:steered from the queue");
     ui.press("secondary-enter");
     ui.wait("it to be queued", |ui| queued(ui).len() == 1);
@@ -171,6 +173,7 @@ fn the_arrow_on_a_queued_prompt_steers_the_agent_with_it(cx: &mut TestAppContext
     ui.click(id("send-queued", &prompt));
 
     ui.wait("it to leave the queue", |ui| queued(ui).is_empty());
+    done.open_once_the_agent_has_a_prompt();
     ui.wait_idle_with("the steered answer", |text| text.contains("steered from the queue"));
     // The record can say the agent is idle before the chat has the event that ended its turn, since the two come by
     // different subscriptions.
@@ -189,7 +192,7 @@ fn cmd_enter_queues_a_prompt_with_its_files_and_the_agent_gets_them_with_it(cx: 
     let stack = Stack::new();
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, &stack);
-    working(&mut ui, 4000);
+    let done = working(&mut ui, &stack);
     let mut png = std::io::Cursor::new(Vec::new());
     image::RgbaImage::from_pixel(4, 3, image::Rgba([200, 30, 30, 255]))
         .write_to(&mut png, image::ImageFormat::Png)
@@ -208,6 +211,7 @@ fn cmd_enter_queues_a_prompt_with_its_files_and_the_agent_gets_them_with_it(cx: 
         let queue = queued(ui);
         queue.first().is_some_and(|prompt| prompt.prompt.files.len() == 1 && ui.visible(id("queued-files", prompt)))
     });
+    done.open();
     let said = format!("attached: image/png {len} bytes | Pasted image.png: on disk, {len} bytes");
     ui.wait_idle_with("the agent to get the image", |text| text.ends_with(&said));
     ui.wait("the queue to go", |ui| queued(ui).is_empty() && !ui.has("queue"));
@@ -218,7 +222,7 @@ fn a_prompt_shows_in_the_queue_while_its_files_are_added(cx: &mut TestAppContext
     let stack = Stack::new();
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, &stack);
-    working(&mut ui, 20000);
+    working(&mut ui, &stack);
     let dir = tempfile::tempdir().unwrap();
     let file = dir.path().join("queued.log");
     std::fs::write(&file, b"queued attachment").unwrap();

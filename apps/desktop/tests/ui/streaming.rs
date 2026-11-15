@@ -8,7 +8,7 @@ use gpui_kit::{AppContext as _, TestAppContext};
 use protocol::event::EventBody;
 use protocol::model::SessionStatus;
 
-use crate::support::{Stack, Ui, wait_until};
+use crate::support::{Gate, Stack, Ui, wait_until};
 
 #[gpui_kit::test]
 fn text_streams_in_as_it_is_written(cx: &mut TestAppContext) {
@@ -17,13 +17,16 @@ fn text_streams_in_as_it_is_written(cx: &mut TestAppContext) {
     let mut ui = Ui::open(cx, &stack);
     ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     ui.new_workspace();
-    ui.input("slow:20:word");
+    // A reply that goes on until the test has seen it stream.
+    let done = Gate::new(&stack, "done");
+    ui.paste_text(&format!("slow-until:{done}:word"));
     ui.press("enter");
     ui.wait("streaming text", |ui| {
         ui.transcript().is_some_and(|t| ui.cx.read_entity(&t, |t, _| t.streaming_text().contains("word5")))
     });
     assert_eq!(ui.session_status(), Some(SessionStatus::Running));
-    ui.wait_idle_with("the finished message", |text| text.contains("word19"));
+    done.open();
+    ui.wait_idle_with("the finished message", |text| text.contains("word5"));
     assert!(ui.transcript().is_some_and(|t| ui.cx.read_entity(&t, |t, _| t.streaming_text().is_empty())));
 }
 
@@ -65,19 +68,23 @@ fn a_long_reply_never_goes_blank_as_it_is_recorded(cx: &mut TestAppContext) {
     let mut ui = Ui::open(cx, &stack);
     ui.wait("the workspace", |ui| ui.transcript().is_some());
     let transcript = ui.transcript().unwrap();
-    // About 6 KB over three seconds, which is more than is parsed where it's drawn.
+    // Over 5 KB in pieces of about 800 bytes, which is more than is parsed where it's drawn, going on until the test
+    // has seen that much stream.
     let phrase = "the signal box keeps a ledger of every train that passes, and the lever frame holds each route clear \
         until the train has gone by, so the ledger says which train took which route, and this is part";
-    stack.client().session_prompt(&session, &format!("slow:30:{phrase}"), None).unwrap();
+    let done = Gate::new(&stack, "done");
+    let script = format!("slow-until:{done}:{}{phrase}", format!("{phrase} ").repeat(3));
+    stack.client().session_prompt(&session, &script, None).unwrap();
     ui.wait("the reply to stream", |ui| ui.cx.read_entity(&transcript, |t, _| t.streaming_text().len() > 5 * 1024));
+    done.open();
     wait_until("the turn to end", || stack.client().session_get(&session).unwrap().status == SessionStatus::Idle);
     let record = ui.row_of(&stack.newest_event(&session));
     wait_until("the record to reach the app", || ui.cx.read_entity(&transcript, |t, _| t.event_at(record).is_some()));
-    ui.wait_idle_with("the recorded reply", |text| text.contains("part29"));
+    ui.wait_idle_with("the recorded reply", |text| text.contains("part3"));
     ui.settle(Duration::from_millis(16));
 
     let heights = ui.cx.read_entity(&transcript, |t, _| {
-        let reply = |row: &usize| t.event_at(*row).is_some_and(|event| says(&event.body, "part29"));
+        let reply = |row: &usize| t.event_at(*row).is_some_and(|event| says(&event.body, "part3"));
         let row = (0..t.row_count()).find(reply).expect("the recorded reply");
         t.list().heights_measured(row)
     });
@@ -160,12 +167,15 @@ fn a_turn_says_how_long_its_taken_until_it_ends_and_then_copies_its_reply(cx: &m
     let mut ui = Ui::open(cx, &stack);
     ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     ui.new_workspace();
-    ui.input("slow:20:word");
+    // A reply that goes on until the test has seen the working line.
+    let done = Gate::new(&stack, "done");
+    ui.paste_text(&format!("slow-until:{done}:word"));
     ui.press("enter");
 
     ui.wait("the working line", |ui| ui.has("working-line"));
     assert_eq!(ui.session_status(), Some(SessionStatus::Running));
-    ui.wait_idle_with("the finished message", |text| text.contains("word19"));
+    done.open();
+    ui.wait_idle_with("the turn to end", |_| true);
     assert!(!ui.has("working-line"), "it goes with the turn");
     // The session's status and its log arrive separately, in either order.
     let ended = |ui: &Ui| ui.events().iter().find(|e| matches!(e.body, EventBody::TurnEnded { .. })).map(|e| e.seq);

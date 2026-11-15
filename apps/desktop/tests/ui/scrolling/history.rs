@@ -42,11 +42,15 @@ fn the_scrollbar_s_thumb_goes_up_a_long_session_as_steadily_as_the_wheel_does(cx
     let stack = Stack::new();
     // Replies of a line, a paragraph and several long paragraphs, in no order, since rows alike hide what an
     // estimate gets wrong.
-    let newest = session_saying(&stack, 700, |i| {
-        let paragraphs = [1, 1, 3, 1, 6, 1, 2][i * 5 % 7];
-        let sentences = [1, 2, 12, 1, 5][i * 3 % 5];
+    let script = saying(500, |i| {
+        let paragraphs = [1, 1, 2, 1, 5, 1, 2][i * 5 % 7];
+        let sentences = [1, 2, 4, 1, 3][i * 3 % 5];
         vec!["the signal box keeps a ledger of every train. ".repeat(sentences); paragraphs].join("\n\n")
     });
+    // The long texts the wheel's check below is about.
+    let shortest = script.iter().map(String::len).min().unwrap();
+    assert!(shortest > 4 * 1024, "each prompt parsed on another thread, the shortest {shortest} bytes");
+    let newest = session_of(&stack, &script);
     let mut ui = Ui::open(cx, &stack);
     ui.wait("the workspace", |ui| ui.transcript().is_some());
     let transcript = ui.transcript().unwrap();
@@ -63,8 +67,10 @@ fn the_scrollbar_s_thumb_goes_up_a_long_session_as_steadily_as_the_wheel_does(cx
     };
     let mut steps = vec![read(&ui)];
     let top = |ui: &Ui<'_>| ui.cx.read_entity(&transcript, |t, _| t.list().top());
+    // A quick turn, under half as far as the window is tall, so every row still passes through it.
+    let wheel = px(300.);
     while top(&ui) != Place::default() {
-        ui.scroll("transcript", ScrollDelta::Pixels(point(px(0.), px(150.))));
+        ui.scroll("transcript", ScrollDelta::Pixels(point(px(0.), wheel)));
         let row = top(&ui).row;
         wait_for_the_list_to_settle(&mut ui, row);
         steps.push(read(&ui));
@@ -73,16 +79,16 @@ fn the_scrollbar_s_thumb_goes_up_a_long_session_as_steadily_as_the_wheel_does(cx
 
     // The wheel went as far as the session is tall, so the list passed through every row and jumped over none. A
     // long prompt or reply was once measured before its text had been read, and skipped.
-    let (travelled, tall) = (px(150.) * (steps.len() - 1), steps[steps.len() - 1].tall);
+    let (travelled, tall) = (wheel * (steps.len() - 1), steps[steps.len() - 1].tall);
     assert!(travelled > tall * 0.95 && travelled < tall * 1.05, "{travelled:?} of wheel through {tall:?}");
     assert!(thumb(&ui).abs() < f32::EPSILON, "it ends at the top, not at {}", thumb(&ui));
     let steady = went_up_steadily(&steps);
     assert!(steady > steps.len() / 2, "only {steady} of {} steps had no page arriving to excuse them", steps.len());
 
-    // With every row loaded and measured, back down is as steady as can be.
+    // With every row loaded and measured, back down is as steady as can be, however far a turn goes.
     let mut down = vec![thumb(&ui)];
     while thumb(&ui) < 1. {
-        ui.scroll("transcript", ScrollDelta::Pixels(point(px(0.), px(-150.))));
+        ui.scroll("transcript", ScrollDelta::Pixels(point(px(0.), -wheel * 3.)));
         down.push(thumb(&ui));
         assert!(down.len() < 5000, "the end is never reached");
     }
@@ -201,7 +207,7 @@ fn the_scrollbar_s_thumb_keeps_its_length_through_a_few_very_long_rows(cx: &mut 
 fn dragging_the_scrollbar_s_thumb_goes_through_the_session_only_the_way_the_thumb_goes(cx: &mut TestAppContext) {
     let stack = Stack::new();
     // Short prompts, and replies from a line to a few screens long, more than a transcript loads at once.
-    let newest = session_saying(&stack, 400, |i| format!("prose:{}:{i}", [1, 2, 8, 1, 3, 20][i % 6]));
+    let newest = session_of(&stack, &prompts(400, |i| format!("prose:{}:{i}", [1, 2, 8, 1, 3, 20][i % 6])));
     let mut ui = Ui::open(cx, &stack);
     ui.wait("the workspace", |ui| ui.transcript().is_some());
     let transcript = ui.transcript().unwrap();
@@ -344,11 +350,27 @@ fn long_session(stack: &Stack) -> SessionEvent {
 /// Starts a session and has the agent say `count` things in it, over as many prompts as that takes. Returns the newest
 /// of the agent's own events in it, as the hub recorded it.
 pub(super) fn session_saying(stack: &Stack, count: usize, say: impl Fn(usize) -> String) -> SessionEvent {
+    session_of(stack, &saying(count, say))
+}
+
+/// The prompts that have the agent say `count` things.
+fn saying(count: usize, say: impl Fn(usize) -> String) -> Vec<String> {
+    // Each reply in one piece, since only what's recorded matters here, and streamed it took most of a test's time.
+    prompts(count, |i| format!("whole:{}", say(i)))
+}
+
+/// `count` of the fake agent's commands, a few to a prompt, as a person would ask, so no prompt is itself most of the
+/// session.
+fn prompts(count: usize, step: impl Fn(usize) -> String) -> Vec<String> {
+    Vec::from_fn(count, step).chunks(25).map(|prompt| prompt.join("; ")).collect()
+}
+
+/// Starts a session and runs each of `prompts` in it. Returns the newest of the agent's own events in it, as the hub
+/// recorded it.
+fn session_of(stack: &Stack, prompts: &[String]) -> SessionEvent {
     let session = stack.chat_in_a_new_workspace();
-    // A few to a prompt, as a person would ask, so no prompt is itself most of the session.
-    let script = Vec::from_fn(count, |i| format!("say:{}", say(i)));
-    for prompt in script.chunks(25) {
-        stack.run(&session, &prompt.join("; "));
+    for prompt in prompts {
+        stack.run(&session, prompt);
     }
     stack.newest_event(&session)
 }

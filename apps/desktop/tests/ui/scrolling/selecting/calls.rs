@@ -48,7 +48,7 @@ fn what_a_subagent_was_asked_and_reported_is_selected_with_the_rest_only_while_i
 ) {
     let stack = Stack::new();
     let session = stack.chat_in_a_new_workspace();
-    stack.run(&session, &format!("agent:{SUBAGENT_LINE}; say:{LAST}"));
+    stack.run(&session, &format!("agent-calls:1:{SUBAGENT_LINE}; say:{LAST}"));
     let mut ui = open(cx, &stack);
     settled(&mut ui);
 
@@ -101,7 +101,7 @@ fn a_drag_held_past_a_long_ask_of_a_subagent_scrolls_its_area_on(cx: &mut TestAp
     let session = stack.chat_in_a_new_workspace();
     // It's asked what it's for, which its line says.
     let line = long();
-    stack.run(&session, &format!("agent:{line}; say:{LAST}"));
+    stack.run(&session, &format!("agent-calls:1:{line}; say:{LAST}"));
     let mut ui = open(cx, &stack);
 
     // What it was asked, rather than the prompt that started it, is known by its call's place in the chat.

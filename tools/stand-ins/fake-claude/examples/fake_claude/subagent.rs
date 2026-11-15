@@ -16,6 +16,7 @@ use std::time::Duration;
 use serde_json::json;
 
 use crate::turn::{Block, Turn};
+use crate::waiting::WaitingOn;
 use crate::{Input, Prompt, background, emit, pause};
 
 /// How long a subagent takes before its work arrives, so a test can open its call first.
@@ -36,13 +37,50 @@ pub(crate) struct Asked<'a> {
     description: &'a str,
     in_background: bool,
     calls: usize,
-    /// The file it works until, rather than for a second.
-    until: Option<&'a Path>,
+    pace: Pace<'a>,
+}
+
+/// How long a subagent works before its work arrives, and how its report is written.
+#[derive(Clone, Copy)]
+enum Pace<'a> {
+    /// For [`WORKS_FOR`], and its report in pieces [`WRITES_EVERY`].
+    Timed,
+    /// Until the file exists, and its report as [`Pace::Timed`]'s is.
+    Until(&'a Path),
+    /// Not at all, and its report at once.
+    AtOnce,
+}
+
+impl Pace<'_> {
+    /// Waits as this says before the subagent's work arrives. Whether the turn was interrupted meanwhile.
+    fn works(self, rx: &Receiver<Input>, queued: &mut VecDeque<Prompt>, eof: &mut bool) -> bool {
+        match self {
+            Pace::Timed => pause(rx, WORKS_FOR, queued, eof),
+            Pace::Until(file) => {
+                let waiting = WaitingOn::file(file);
+                while !waiting.made() {
+                    if pause(rx, POLL, queued, eof) {
+                        return true;
+                    }
+                }
+                false
+            }
+            Pace::AtOnce => false,
+        }
+    }
+
+    /// How long between the pieces of its report.
+    fn writes_every(self) -> Duration {
+        match self {
+            Pace::Timed | Pace::Until(_) => WRITES_EVERY,
+            Pace::AtOnce => Duration::ZERO,
+        }
+    }
 }
 
 impl<'a> Asked<'a> {
     pub(crate) fn read(command: &'a str) -> Option<Self> {
-        let asked = |description, in_background, calls| Asked { description, in_background, calls, until: None };
+        let asked = |description, in_background, calls| Asked { description, in_background, calls, pace: Pace::Timed };
         if let Some(description) = command.strip_prefix("agent:") {
             return Some(asked(description, true, 1));
         }
@@ -50,10 +88,10 @@ impl<'a> Asked<'a> {
             return Some(asked(description, false, 1));
         }
         if let Some((file, description)) = command.strip_prefix("agent-until:").and_then(|rest| rest.split_once(':')) {
-            return Some(Asked { until: Some(Path::new(file)), ..asked(description, true, 1) });
+            return Some(Asked { pace: Pace::Until(Path::new(file)), ..asked(description, true, 1) });
         }
         let (calls, description) = command.strip_prefix("agent-calls:")?.split_once(':')?;
-        Some(asked(description, true, calls.parse().unwrap()))
+        Some(Asked { pace: Pace::AtOnce, ..asked(description, true, calls.parse().unwrap()) })
     }
 }
 
@@ -65,7 +103,7 @@ pub(crate) fn start(
     queued: &mut VecDeque<Prompt>,
     eof: &mut bool,
 ) -> bool {
-    let Asked { description, in_background, calls, until } = *asked;
+    let Asked { description, in_background, calls, pace } = *asked;
     // It's asked to do what it's for, as a sentence.
     let prompt = format!("{description}.");
     let input = json!({"description":description,"subagent_type":"Explore","prompt":prompt});
@@ -89,7 +127,7 @@ pub(crate) fn start(
         }
         true
     };
-    if works(until, rx, queued, eof) {
+    if pace.works(rx, queued, eof) {
         return stopped(turn);
     }
     let mut within = Turn { parent: Some(&agent), ..*turn };
@@ -106,7 +144,7 @@ pub(crate) fn start(
         );
     }
     let report = ["There's ", "a README ", "here."].map(String::from).to_vec();
-    if within.say(Block::Text, report, WRITES_EVERY, rx, queued, eof) {
+    if within.say(Block::Text, report, pace.writes_every(), rx, queued, eof) {
         return stopped(turn);
     }
     emit(
@@ -120,18 +158,6 @@ pub(crate) fn start(
         background::unlisted(turn.config, turn.out, &task);
     } else {
         turn.tool_result(&agent, "There's a README here.", false);
-    }
-    false
-}
-
-/// Waits a second, or until `until` exists, before the subagent's work arrives. Whether the turn was interrupted
-/// meanwhile.
-fn works(until: Option<&Path>, rx: &Receiver<Input>, queued: &mut VecDeque<Prompt>, eof: &mut bool) -> bool {
-    let Some(file) = until else { return pause(rx, WORKS_FOR, queued, eof) };
-    while !file.exists() {
-        if pause(rx, POLL, queued, eof) {
-            return true;
-        }
     }
     false
 }

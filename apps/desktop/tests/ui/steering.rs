@@ -9,15 +9,18 @@ use protocol::model::SessionStatus;
 use protocol::prompt::Prompt;
 
 use crate::queue::queued;
-use crate::support::{Stack, Ui, top};
+use crate::support::{Gate, Stack, Ui, top};
 
-/// A workspace whose agent is running a tool for a while.
-pub(crate) fn working(ui: &mut Ui, ms: u64) {
+/// A workspace whose agent is running a tool until the gate this answers is opened. A test that needs the turn to end
+/// opens it or stops the turn, and otherwise the agent works until the stack goes.
+pub(crate) fn working(ui: &mut Ui, stack: &Stack) -> Gate {
+    let done = Gate::new(stack, "working-done");
     ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     ui.new_workspace();
-    ui.input(&format!("hang:{ms}"));
+    ui.paste_text(&format!("hang-until:{done}"));
     ui.press("enter");
     ui.wait("the agent to start working", |ui| ui.session_status() == Some(SessionStatus::Running));
+    done
 }
 
 #[gpui_kit::test]
@@ -25,10 +28,11 @@ fn enter_while_the_agent_works_steers_it_and_the_prompt_waits_until_its_taken(cx
     let stack = Stack::new();
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, &stack);
-    working(&mut ui, 4000);
+    let first = working(&mut ui, &stack);
 
     // Its own tool, so the agent is still working once it has taken this.
-    ui.input("hang:2000; say:steered");
+    let second = Gate::new(&stack, "steered-done");
+    ui.paste_text(&format!("hang-until:{second}; say:steered"));
     ui.press("enter");
 
     let transcript = ui.transcript().unwrap();
@@ -42,9 +46,11 @@ fn enter_while_the_agent_works_steers_it_and_the_prompt_waits_until_its_taken(cx
     let state = |ui: &Ui| ui.cx.read_entity(&transcript, |t, _| t.prompt_state_at(at));
     assert_eq!(state(&ui), Some(PromptState::Waiting));
     assert!(queued(&ui).is_empty(), "steered, not queued");
+    first.open_once_the_agent_has_a_prompt();
     ui.wait("the agent to take it", |ui| state(ui) == Some(PromptState::Taken));
     let ended = ui.events().iter().any(|e| matches!(e.body, EventBody::TurnEnded { .. }));
     assert!(!ended, "taken because the agent said so, not because the turn is over");
+    second.open();
     ui.wait_idle_with("the steered answer", |text| text.contains("steered"));
 }
 
@@ -71,7 +77,8 @@ fn a_prompt_sent_while_the_agent_thinks_is_drawn_under_the_thought(cx: &mut Test
     ui.new_workspace();
     let transcript = ui.transcript().unwrap();
     ui.cx.update_entity(&transcript, |t, cx| t.set_thinking_open(true, cx));
-    ui.input("think:30:idea");
+    let thought = Gate::new(&stack, "thought");
+    ui.paste_text(&format!("think-until:{thought}:idea"));
     ui.press("enter");
     let thinking = |ui: &Ui, so_far: &str| ui.cx.read_entity(&transcript, |t, _| t.streaming_text().contains(so_far));
     ui.wait("the thought to stream", |ui| thinking(ui, "idea3"));
@@ -91,6 +98,7 @@ fn a_prompt_sent_while_the_agent_thinks_is_drawn_under_the_thought(cx: &mut Test
     assert_eq!(recorded(&ui), Some(Some(PromptState::Waiting)));
     assert!(thinking(&ui, "idea"), "still thinking");
     assert!(under_the_thought(&mut ui), "recorded, and waiting under the thought as it streams");
+    thought.open_once_the_agent_has_a_prompt();
     ui.wait("the agent to take it", |ui| recorded(ui) == Some(Some(PromptState::Taken)));
     assert!(under_the_thought(&mut ui), "taken, after the thought");
     ui.wait_idle_with("the steered answer", |text| text.contains("steered"));

@@ -13,7 +13,7 @@ use protocol::model::SessionStatus;
 
 use super::super::{A_FRAME, press};
 use super::{LAST, bounds, click, copy, everything, head, on_the_reply_saying, open, settled, tail};
-use crate::support::{Stack, Ui};
+use crate::support::{Gate, Stack, Ui};
 
 /// What a long summary's list is made of, over and over, in words the reply doesn't have.
 const KEPT: &str = "timetables sidings junctions ";
@@ -208,12 +208,16 @@ fn a_prompt_taken_after_a_thought_is_copied_after_it(cx: &mut TestAppContext) {
     ui.new_workspace();
     let transcript = ui.transcript().unwrap();
     ui.cx.update_entity(&transcript, |t, cx| t.set_thinking_open(true, cx));
-    ui.input("think:30:idea");
+    // A thought that goes on until the agent has the prompt sent during it.
+    let thought_done = Gate::new(&stack, "thought-done");
+    let thinking = format!("think-until:{thought_done}:idea");
+    ui.paste_text(&thinking);
     ui.press("enter");
     ui.wait("the thought to stream", |ui| ui.cx.read_entity(&transcript, |t, _| t.streaming_text().contains("idea3")));
     let steered = format!("say:{LAST}");
     ui.input(&steered);
     ui.press("enter");
+    thought_done.open_once_the_agent_has_a_prompt();
     ui.wait_idle_with("the answer", |text| text.contains(LAST));
 
     let session = ui.active_chat();
@@ -224,11 +228,11 @@ fn a_prompt_taken_after_a_thought_is_copied_after_it(cx: &mut TestAppContext) {
     // Drawn, the thought doesn't end with the space it was recorded with.
     let thought = thought(&ui);
     let thought = thought.trim_end();
-    assert_eq!(copied, format!("think:30:idea\n\n{thought}\n\n{steered}\n\n{LAST}"), "in the order they're drawn");
+    assert_eq!(copied, format!("{thinking}\n\n{thought}\n\n{steered}\n\n{LAST}"), "in the order they're drawn");
 }
 
 /// What the agent thought in the chat `ui` shows.
-fn thought(ui: &Ui<'_>) -> String {
+pub(super) fn thought(ui: &Ui<'_>) -> String {
     let thought = ui.events().into_iter().find_map(|event| match event.body {
         EventBody::Assistant { blocks, .. } => blocks.iter().find_map(|block| match block {
             ContentBlock::Thinking { text, .. } => Some(text.clone()),

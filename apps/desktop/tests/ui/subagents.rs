@@ -14,7 +14,7 @@ use protocol::event::{ContentBlock, EventBody};
 use protocol::model::{SessionId, SettledAt};
 
 use crate::menus::items;
-use crate::support::{Stack, Ui};
+use crate::support::{Gate, Stack, Ui};
 use crate::tools::in_a_new_workspace;
 
 /// What the fake agent says its subagent is for, and the description of the call the subagent makes.
@@ -43,7 +43,7 @@ fn a_finished_subagent(ui: &mut Ui<'_>) -> SharedString {
 /// Has the agent start a subagent for `what` and finish its turn. The ID of the button on its line that opens the
 /// subagent tab, once it's there.
 pub(crate) fn a_subagent_for(ui: &mut Ui<'_>, what: &str) -> SharedString {
-    ui.input(&format!("agent:{what}; tool:echo after; say:done"));
+    ui.paste_text(&format!("agent-calls:1:{what}; tool:echo after; say:done"));
     ui.press("enter");
     ui.wait_idle_with("the turn to finish", |text| text.contains("done"));
     let call = ui
@@ -126,8 +126,8 @@ fn a_subagent_s_line_in_the_background_opens_the_subagent_tab(cx: &mut TestAppCo
     let stack = Stack::new();
     let mut ui = in_a_new_workspace(cx, &stack);
     let chat = ui.active_chat();
-    let done = stack.dir.path().join("done");
-    ui.input(&format!("agent-until:{}:{LONG}; say:done", done.display()));
+    let done = Gate::new(&stack, "done");
+    ui.paste_text(&format!("agent-until:{done}:{LONG}; say:done"));
     ui.press("enter");
     let named = || {
         let tasks = stack.client().session_get(&chat).unwrap().background_tasks;
@@ -150,7 +150,7 @@ fn a_subagent_s_line_in_the_background_opens_the_subagent_tab(cx: &mut TestAppCo
     ui.click(open);
 
     ui.wait("the subagent tab", |ui| showing(ui) == Showing::Subagent);
-    std::fs::write(&done, "").unwrap();
+    done.open();
     ui.wait("the subagent's work, in its tab", |ui| ui.labelled(SUBAGENT_CALL).len() == 1);
 }
 
@@ -291,15 +291,15 @@ fn a_prompt_after_a_subagent_s_work_is_in_the_outline_at_its_row(cx: &mut TestAp
 fn a_subagent_s_call_opened_while_it_works_makes_room_for_its_report(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = in_a_new_workspace(cx, &stack);
-    let done = stack.dir.path().join("done");
-    ui.input(&format!("agent-until:{}:Look around; tool:echo after; say:done", done.display()));
+    let done = Gate::new(&stack, "done");
+    ui.paste_text(&format!("agent-until:{done}:Look around; tool:echo after; say:done"));
     ui.press("enter");
     // The background line has the same label. Open the only call before releasing the subagent's work.
     ui.wait("the subagent's call", |ui| ui.shown("call/").len() == 1);
     let call = ui.shown("call/").remove(0);
     ui.click(call);
     ui.wait("the call to open", |ui| ui.labelled(AGENT_LINE).iter().any(|line| line.expanded() == Some(true)));
-    std::fs::write(&done, "").unwrap();
+    done.open();
     ui.wait_idle_with("the turn to finish", |text| text.contains("done"));
 
     ui.wait("its report", |ui| ui.shown("report/").len() == 1);

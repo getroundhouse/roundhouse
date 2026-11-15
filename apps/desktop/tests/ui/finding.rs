@@ -190,7 +190,7 @@ fn a_match_in_what_a_subagent_was_asked_opens_its_call_and_is_drawn_with_its_mar
     let stack = Stack::new();
     let session = stack.chat_in_a_new_workspace();
     // The fake agent's subagent is asked to "Look around.", which nothing else in the chat says with the full stop.
-    stack.run(&session, &format!("agent:{SUBAGENT_LINE}; say:done"));
+    stack.run(&session, &format!("agent-calls:1:{SUBAGENT_LINE}; say:done"));
     let mut ui = Ui::open(cx, &stack);
     ui.wait("the chat", |ui| ui.transcript().is_some());
     let transcript = ui.transcript().unwrap();

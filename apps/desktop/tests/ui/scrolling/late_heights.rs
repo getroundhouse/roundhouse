@@ -94,7 +94,8 @@ fn a_long_text_parsed_once_it_is_at_the_top_of_the_window_moves_nothing_on_scree
     let stack = Stack::new();
     let session = stack.chat_in_a_new_workspace();
     stack.run(&session, "say:a short reply first");
-    stack.run(&session, "ponder:40:1; prose:40:2");
+    // A reply of a few screens, so the thought starts out of sight, and the way up to it isn't longer than it needs.
+    stack.run(&session, "ponder:40:1; prose:12:2");
     let mut ui = Ui::open(cx, &stack);
     ui.wait("the workspace", |ui| ui.transcript().is_some());
     let transcript = ui.transcript().unwrap();
