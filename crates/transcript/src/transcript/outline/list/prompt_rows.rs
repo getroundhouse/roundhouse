@@ -8,7 +8,7 @@ use gpui_kit::{
     ListState, ParentElement, Pixels, Role, SharedString, StatefulInteractiveElement, Styled, TestSupportExt as _,
     Window, div, list, px,
 };
-use look::{Hand as _, LineText, Shaped as _};
+use look::{Hand as _, IconSizing as _, LineText, Shaped as _};
 use protocol::model::{CompactionLine, PromptLine};
 use std::ops::Range;
 use std::rc::Rc;
@@ -187,7 +187,7 @@ fn compaction_row(
     // In words, since a screen reader would read the arrow out as one.
     let (label, said) = (said("to", ", "), said("→", " · "));
     // The compaction's icon, as its rule in the chat has it.
-    let icon = Icon::new(IconName::FoldVertical).size(px(RULE_ICON)).text_color(colors.text_faint);
+    let icon = Icon::new(IconName::FoldVertical).sized(RULE_ICON).text_color(colors.text_faint);
     let icon = div().w(NUMBER_WIDTH).flex_none().flex().justify_end().items_center().child(icon);
     let text = div().flex_1().min_w_0().truncate().text_color(colors.text_faint).child(said);
     let text = line_text.detail.set(text);

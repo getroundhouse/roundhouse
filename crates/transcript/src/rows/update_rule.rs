@@ -6,9 +6,8 @@
 
 use gpui_kit::assets::IconName;
 use gpui_kit::component::Icon;
-use gpui_kit::{
-    AnyElement, App, ParentElement, Role, StatefulInteractiveElement as _, Styled, TestSupportExt as _, px,
-};
+use gpui_kit::{AnyElement, App, ParentElement, Role, StatefulInteractiveElement as _, TestSupportExt as _};
+use look::IconSizing as _;
 use protocol::model::Seq;
 
 use super::{RULE_ICON, rule_middle, rule_row};
@@ -20,7 +19,7 @@ pub(super) fn line(seq: Seq, from: &str, build: &str, cx: &App) -> AnyElement {
     let middle = rule_middle(ItemKey::Event(seq, 0).element("updated"), cx)
         .role(Role::Label)
         .aria_label(said.clone())
-        .child(Icon::new(IconName::CircleFadingArrowUp).size(px(RULE_ICON)))
+        .child(Icon::new(IconName::CircleFadingArrowUp).sized(RULE_ICON))
         .child(said)
         .test_support();
     rule_row(middle, cx)

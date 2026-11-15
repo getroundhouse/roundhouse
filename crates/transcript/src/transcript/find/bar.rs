@@ -10,7 +10,7 @@ use gpui_kit::{
     AppContext as _, Context, Entity, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Styled as _,
     Subscription, Task, TestSupportExt as _, Window, div, px,
 };
-use look::{Hand as _, InRegion as _, Off as _, Region, Sizing as _, Typeset as _};
+use look::{Hand as _, IconSizing as _, InRegion as _, Off as _, Region, Sizing as _, Typeset as _};
 
 use crate::transcript::Transcript;
 use client_core::session_log::SessionLog;
@@ -119,7 +119,7 @@ impl Transcript {
                 Input::new(&finding.bar.input)
                     .appearance(false)
                     .small()
-                    .prefix(Icon::new(IconName::Search).text_color(muted))
+                    .prefix(Icon::new(IconName::Search).sized(look::IconSize::Regular).text_color(muted))
                     .flex_1(),
             )
             .child(

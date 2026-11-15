@@ -3,8 +3,9 @@ use super::screens::SCREENS;
 use super::{
     approval_chats, approved, background_chats, baselines, cache_screens, call_screens, capture, colours,
     compaction_chats, context_screens, controls, corners, diff_screens, failure_chats, failures_in_a_row, heights,
-    home_screens, kinds_of_text, look_screens, mark_states, own_turn_chats, pull_requests, settings_screens,
-    sidebar_screens, spaces, steps, subagent_chats, tool_screens, turn_screens, update_screens, workspace_screens,
+    home_screens, icon_sizes, kinds_of_text, look_screens, mark_states, own_turn_chats, pull_requests,
+    settings_screens, sidebar_screens, spaces, steps, subagent_chats, tool_screens, turn_screens, update_screens,
+    workspace_screens,
 };
 use approved::Verdict;
 use capture::Picture;
@@ -99,6 +100,7 @@ fn every_screen_looks_as_approved() {
             corners::NAME,
             controls::NAME,
             heights::NAME,
+            icon_sizes::NAME,
             spaces::NAME,
         ])
         .collect();
@@ -209,6 +211,15 @@ fn every_bar_and_row_height_looks_as_approved() {
     let picture = heights::draw(&text_system);
 
     report(&look_at(heights::NAME, heights::SPEC, &picture));
+}
+
+#[test]
+fn every_icon_size_looks_as_approved() {
+    let text_system: Arc<dyn PlatformTextSystem> = Arc::new(gpui_apple::AppleTextSystem::new());
+
+    let picture = icon_sizes::draw(&text_system);
+
+    report(&look_at(icon_sizes::NAME, icon_sizes::SPEC, &picture));
 }
 
 #[test]

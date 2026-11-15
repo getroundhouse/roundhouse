@@ -9,7 +9,7 @@ use gpui_kit::{
     AnyElement, Context, ElementId, Hsla, InteractiveElement as _, IntoElement, ParentElement, SharedString,
     StatefulInteractiveElement as _, Styled, TestSupportExt as _, div, px,
 };
-use look::{Hand as _, InRegion as _, Region, Shaped as _, Sizing as _, Typeset as _};
+use look::{Hand as _, IconSizing as _, InRegion as _, Region, Shaped as _, Sizing as _, Typeset as _};
 use protocol::model::QueuedPrompt;
 use protocol::short_text::one_line;
 
@@ -192,7 +192,7 @@ fn carried(prompt: &QueuedPrompt, muted: Hsla) -> Option<AnyElement> {
             .items_center()
             .typeset(look::Type::Body)
             .text_color(muted)
-            .child(Icon::new(IconName::File).xsmall().flex_none())
+            .child(Icon::new(IconName::File).sized(look::IconSize::Regular).flex_none())
             .child(div().min_w_0().truncate().child(label))
             .test_support()
             .into_any_element(),

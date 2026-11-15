@@ -13,7 +13,7 @@ use gpui_kit::{
     AnyElement, AnyView, App, Div, ElementId, Hsla, InteractiveElement, IntoElement, ParentElement, Pixels, Role,
     SharedString, Stateful, StatefulInteractiveElement, Styled, TestSupportExt as _, Window, div, px, relative,
 };
-use look::{Hand as _, LineText, Shaped as _, Typeset as _};
+use look::{Hand as _, IconSizing as _, LineText, Shaped as _, Typeset as _};
 use protocol::event::Denied;
 
 use super::shown::Gather;
@@ -24,7 +24,8 @@ use crate::folds::Fold;
 use crate::item_key::ItemKey;
 use crate::rows::around::{Answer, Outcome};
 
-const ICON: f32 = look::LINE_ICON;
+/// How big a call's icon is, at the start of its line, and the chevron that takes its place.
+pub(super) const ICON: look::IconSize = look::IconSize::Large;
 /// A small row's, so calls in a row read as a list.
 pub(super) const HEIGHT: Pixels = look::RowSize::Small.height();
 /// The hover group of one line, which turns its icon into the way to open it.
@@ -116,7 +117,7 @@ impl Line {
         let frame = opening(toggle.key.element("call"), self.title.clone(), open, set_open, cx)
             .when_some(preview, |d, preview| d.hoverable_tooltip(move |window, cx| preview(window, cx)));
         let title = find::marked(self.title.clone(), &self.title_marks, &[], None);
-        let lead = lead(glyph(self.icon, cx), px(ICON), open, cx);
+        let lead = lead(glyph(self.icon, cx), look::Size::Inline.width(), open, cx);
         self.fill(frame, lead, title, &toggle.shared.line_text, cx).test_support().into_any_element()
     }
 
@@ -244,17 +245,18 @@ pub(super) fn lead(mark: impl IntoElement, width: Pixels, open: bool, cx: &App) 
             .justify_center()
             .invisible()
             .group_hover(GROUP, Styled::visible)
-            .child(Icon::new(chevron).size(px(ICON)).text_color(look::colors(cx).text)),
+            .child(Icon::new(chevron).sized(ICON).text_color(look::colors(cx).text)),
     )
 }
 
-/// The kind's icon as a line starts with it, for a line that doesn't open, such as one that's still streaming.
+/// The kind's icon as a line starts with it, for a line that doesn't open, such as one that's still streaming. Its
+/// place is as wide as a mark beside text, as the working line's and a task's are, so their words line up.
 pub(super) fn still_icon(kind: IconName, cx: &App) -> Div {
-    div().flex_none().size(px(ICON)).child(glyph(kind, cx))
+    div().flex_none().size(look::Size::Inline.width()).child(glyph(kind, cx))
 }
 
 fn glyph(kind: IconName, cx: &App) -> Icon {
-    Icon::new(kind).size(px(ICON)).text_color(look::colors(cx).text_faint)
+    Icon::new(kind).sized(ICON).text_color(look::colors(cx).text_faint)
 }
 
 /// Code on a pill, cut off with an ellipsis when it doesn't fit, with its matches.
@@ -315,7 +317,7 @@ pub(super) fn shown_failure(answer: Option<&Answer>, shows_output: bool, key: &I
 fn failure(failure: &Failure, cx: &App) -> AnyElement {
     let error_colour = look::colors(cx).error;
     frame()
-        .child(Icon::new(IconName::CircleX).flex_none().size(px(ICON)).text_color(error_colour))
+        .child(Icon::new(IconName::CircleX).flex_none().sized(ICON).text_color(error_colour))
         .child(div().flex_none().text_color(error_colour).child(failure.label()))
         .when(!failure.message.is_empty(), |d| {
             d.child(pill(
@@ -354,7 +356,7 @@ fn denial(denied: &Denied, toggle: &Toggle, cx: &App) -> AnyElement {
         .id("call-denied")
         .role(Role::Label)
         .aria_label(said.map_or_else(|| "Denied".to_string(), |said| format!("Denied: {said}")))
-        .child(Icon::new(IconName::CircleX).flex_none().size(px(ICON)).text_color(colors.text_faint))
+        .child(Icon::new(IconName::CircleX).flex_none().sized(ICON).text_color(colors.text_faint))
         .child(div().flex_none().text_color(muted).child("Denied"))
         .when_some(said, |d, said| {
             let words = find::marked(said.to_string().into(), &toggle.marks(Text::Said, said), &[], None);

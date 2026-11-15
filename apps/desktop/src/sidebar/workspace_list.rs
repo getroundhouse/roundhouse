@@ -7,10 +7,10 @@ use crate::workspace_order::Sort;
 use fold::{Drawn, Fold, Laid};
 use gpui_kit::component::{Icon, IconNamed, v_flex};
 use gpui_kit::{
-    AnyElement, App, Context, Div, ElementId, Hsla, InteractiveElement as _, IntoElement, ParentElement, Pixels,
-    Styled, TestSupportExt as _, Window, div, px,
+    AnyElement, App, Context, ElementId, Hsla, InteractiveElement as _, IntoElement, ParentElement, Pixels, Styled,
+    TestSupportExt as _, Window, div, px,
 };
-use look::{LineText, RowSize, Typeset as _};
+use look::{IconSizing as _, LineText, RowSize, Typeset as _};
 use protocol::model::{RepoId, Workspace, WorkspaceId, WorkspaceStatus};
 use std::ops::Range;
 use std::rc::Rc;
@@ -266,10 +266,9 @@ fn line(
     }
 }
 
-/// An icon centred in a box as wide as a line of body text is tall, as the sidebar's items and repositories have.
-pub(in super::super) fn icon_box(icon: impl IconNamed, color: Hsla) -> Div {
-    let icon = Icon::new(icon).size_3p5().text_color(color);
-    div().flex_none().size(ICON_BOX).flex().items_center().justify_center().child(icon)
+/// The icon at the start of a place's or a project's row, which stands for it.
+pub(in super::super) fn row_icon(icon: impl IconNamed, color: Hsla) -> Icon {
+    Icon::new(icon).sized(look::IconSize::Large).text_color(color)
 }
 
 /// How far a workspace's row sets its mark in from its edge.
@@ -340,9 +339,6 @@ pub(crate) fn render(app: &AppView, arranged: Arranged, cx: &mut Context<AppView
         )
         .child(footer::footer(app, cx))
 }
-
-/// How wide the box an item's or a repository's icon is centred in is: as wide as a line of body text is tall.
-pub(in super::super) const ICON_BOX: Pixels = px(16.);
 
 #[cfg(test)]
 mod tests {

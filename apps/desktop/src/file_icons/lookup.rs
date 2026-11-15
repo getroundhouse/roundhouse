@@ -1,7 +1,12 @@
 use gpui_kit::component::Icon;
-use gpui_kit::{AnyElement, App, IntoElement as _, Styled as _, img, px};
+use gpui_kit::{AnyElement, App, IntoElement as _, Styled as _, img};
+use look::IconSizing as _;
 
 include!(concat!(env!("OUT_DIR"), "/file_icons.rs"));
+
+/// How big a file's or a folder's icon is drawn: a large icon, since it stands for its row. Each is embedded at this
+/// size, as `build/file_icons.rs` has it, which a test holds to it.
+pub(crate) const ICON: look::IconSize = look::IconSize::Large;
 
 /// The icon at `path`, if it's one of these, for the app's asset source.
 pub(crate) fn load(path: &str) -> Option<&'static [u8]> {
@@ -12,7 +17,7 @@ pub(crate) fn load(path: &str) -> Option<&'static [u8]> {
 pub(crate) fn file_icon(path: &str, cx: &App) -> AnyElement {
     match file_kind(path) {
         FILE => plain(FILE, cx).into_any_element(),
-        kind => img(asset(kind)).size(px(ICON_SIZE)).flex_none().into_any_element(),
+        kind => img(asset(kind)).size(ICON.size()).flex_none().into_any_element(),
     }
 }
 
@@ -24,7 +29,7 @@ pub(crate) fn folder_icon(open: bool, cx: &App) -> Icon {
 /// An icon that stands for no kind in particular, the plain file or a folder, in the muted text colour, so it gives way
 /// to those that say what a file is. It's drawn as the kit's icons are, which keeps only its shape.
 fn plain(name: &str, cx: &App) -> Icon {
-    Icon::empty().path(asset(name)).size(px(ICON_SIZE)).flex_none().text_color(look::colors(cx).text_muted)
+    Icon::empty().path(asset(name)).sized(ICON).flex_none().text_color(look::colors(cx).text_muted)
 }
 
 pub(super) fn asset(name: &str) -> String {

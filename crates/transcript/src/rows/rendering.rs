@@ -184,8 +184,8 @@ pub(super) fn empty() -> AnyElement {
     div().into_any_element()
 }
 
-/// How big an icon in the middle of a rule across the chat is.
-pub(crate) const RULE_ICON: f32 = 13.0;
+/// How big an icon in the middle of a rule across the chat is, among its detail's text.
+pub(crate) const RULE_ICON: look::IconSize = look::IconSize::Small;
 
 /// The row of a rule across the chat, with `middle` in its middle and nothing under it.
 pub(super) fn rule_row(middle: impl IntoElement, cx: &App) -> AnyElement {

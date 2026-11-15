@@ -10,7 +10,7 @@ use gpui_kit::{
     AnyElement, App, Div, ElementId, Hsla, InteractiveElement as _, IntoElement, ParentElement, SharedString, Styled,
     TestSupportExt as _, div, px,
 };
-use look::Typeset as _;
+use look::{IconSizing as _, Typeset as _};
 use protocol::event::Question;
 use protocol::model::Seq;
 
@@ -118,8 +118,11 @@ fn answered(toggle: &Toggle, area: &ElementId, i: usize, answer: AnswerTo, cx: &
             return Some(said.test_support().into_any_element());
         }
     };
-    let arrow =
-        Icon::new(IconName::CornerDownRight).flex_none().mt(px(ARROW_DROP)).size(px(14.)).text_color(colors.text_faint);
+    let arrow = Icon::new(IconName::CornerDownRight)
+        .flex_none()
+        .mt(px(ARROW_DROP))
+        .sized(look::IconSize::Regular)
+        .text_color(colors.text_faint);
     let row = h_flex()
         .id(key.element(&format!("answer-{i}")))
         .items_start()

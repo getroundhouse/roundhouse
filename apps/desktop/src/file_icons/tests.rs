@@ -54,6 +54,7 @@ fn every_icon_is_in_its_colours_and_of_the_size_it_s_drawn_at() {
         .map(|(name, _)| *name)
         .collect();
     assert!(wrong_size.is_empty(), "not drawn at {ICON_SIZE}: {wrong_size:?}");
+    assert_eq!(gpui_kit::px(ICON_SIZE), ICON.size(), "embedded at the size they're drawn at");
     // A colour left named, as `var(--vscode-ctp-blue)`, would draw as nothing.
     let unfilled: Vec<&str> = ICONS.iter().filter(|(_, svg)| contains(svg, b"var(")).map(|(name, _)| *name).collect();
     assert!(unfilled.is_empty(), "colours not filled in: {unfilled:?}");

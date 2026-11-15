@@ -10,7 +10,7 @@ use gpui_kit::{
     ParentElement as _, Pixels, Role, StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, Window, div,
     px, rems,
 };
-use look::{Hand as _, Shaped as _, Typeset as _};
+use look::{Hand as _, IconSizing as _, Shaped as _, Typeset as _};
 
 use super::{FIND_KEY, Page, PageId, Section};
 use crate::app::TOP_STRIP_HEIGHT;
@@ -97,7 +97,7 @@ fn search_field(search: &Entity<InputState>, window: &Window, cx: &App) -> impl 
         .on_mouse_down(MouseButton::Left, move |_, window, cx| {
             to_focus.update(cx, |search, cx| search.focus(window, cx));
         })
-        .child(Icon::new(IconName::Search).size_3p5().text_color(colors.text_muted))
+        .child(Icon::new(IconName::Search).sized(look::IconSize::Regular).text_color(colors.text_muted))
         .child(text)
         .child(find_key(cx))
 }
@@ -163,7 +163,7 @@ fn page_row(page: &Page, showing: bool, chosen: &Entity<Option<PageId>>, cx: &Ap
                 cx.notify();
             });
         })
-        .child(Icon::new(page.icon).size_4())
+        .child(Icon::new(page.icon).sized(look::IconSize::Large))
         .child(page.name)
         .test_support()
 }

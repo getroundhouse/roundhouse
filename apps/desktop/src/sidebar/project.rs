@@ -11,11 +11,11 @@ use gpui_kit::{
     AnyElement, App, AppContext as _, Context, Div, ElementId, Hsla, InteractiveElement as _, IntoElement, MouseButton,
     ParentElement, Role, SharedString, StatefulInteractiveElement as _, Styled, TestSupportExt as _, div, radians,
 };
-use look::{Hand as _, Sizing as _, Typeset as _};
+use look::{Hand as _, IconSizing as _, Sizing as _, Typeset as _};
 use protocol::model::{Repo, RepoId, WorkspaceId};
 
 use super::drag::{Dragged, Dragging};
-use super::{ROW_PAD, ROW_SIZE, has_line, icon_box, lists, needs_a_look};
+use super::{ROW_PAD, ROW_SIZE, has_line, lists, needs_a_look, row_icon};
 use crate::app::AppView;
 
 /// The row of a project that's `collapsed` or not, whose workspaces are `out` from under it, from 0 to 1. Dragging it
@@ -61,7 +61,7 @@ pub(super) fn row(app: &AppView, repo: &Repo, collapsed: bool, out: f32, cx: &mu
         .h(ROW_SIZE.height())
         .px(ROW_PAD)
         .gap(look::Space::Small)
-        .child(icon_box(IconName::Folder, faint))
+        .child(row_icon(IconName::Folder, faint))
         .child(
             h_flex().flex_1().min_w_0().gap(look::Space::XSmall).child(name.child(repo.name.clone())).children(chevron),
         )
@@ -110,7 +110,8 @@ fn needing_a_look(repo: &RepoId, count: usize, cx: &App) -> impl IntoElement {
 /// points down at workspaces that show and right at a collapsed project, and turns with the fold, by how far `out`
 /// the workspaces are, in `color`.
 fn chevron(collapsed: bool, out: f32, group: SharedString, color: Hsla) -> Div {
-    let chevron = Icon::new(IconName::ChevronRight).size_3().text_color(color).rotate(radians(FRAC_PI_2 * out));
+    let chevron = Icon::new(IconName::ChevronRight).sized(look::IconSize::Regular).text_color(color);
+    let chevron = chevron.rotate(radians(FRAC_PI_2 * out));
     let chevron = div().flex_none().child(chevron);
     if collapsed { chevron } else { chevron.invisible().group_hover(group, Styled::visible) }
 }

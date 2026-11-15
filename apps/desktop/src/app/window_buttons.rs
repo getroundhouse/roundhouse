@@ -1,7 +1,7 @@
 //! Windows' minimize, maximize or restore, and close, which the app draws at the right end of the strip along the
 //! window's top. The app hides the system's title bar, and GPUI's Windows backend hides its buttons with it.
 
-use gpui_kit::component::{Icon, IconName, Sizable as _, h_flex};
+use gpui_kit::component::{Icon, IconName, h_flex};
 use gpui_kit::{
     AccessibleAction, App, Font, Global, Hsla, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Role,
     StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, Window, WindowControlArea, deferred, div, font,
@@ -10,6 +10,7 @@ use gpui_kit::{
 
 use super::TOP_STRIP_HEIGHT;
 use crate::sides::{self, WindowButtons};
+use look::IconSizing as _;
 
 /// Windows' icon fonts, newest first: Segoe Fluent Icons on Windows 11, and Segoe MDL2 Assets, which has the same
 /// glyphs at the same code points, on Windows 10.
@@ -133,7 +134,7 @@ fn drawn(button: Button, glyphs: Option<&Font>, colour: Hsla, shade: Shade) -> i
         .active(move |style| style.bg(shade.pressed).text_color(shade.text));
     let drawn = match glyphs {
         Some(glyphs) => drawn.font(glyphs.clone()).text_size(GLYPH_SIZE).child(button.glyph()),
-        None => drawn.child(Icon::new(button.icon()).small()),
+        None => drawn.child(Icon::new(button.icon()).sized(look::IconSize::Regular)),
     };
     drawn.test_support()
 }

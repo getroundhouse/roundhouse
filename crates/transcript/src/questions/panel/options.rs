@@ -8,7 +8,7 @@ use gpui_kit::{
     AnyElement, Context, ElementId, Hsla, InteractiveElement as _, IntoElement, ParentElement,
     StatefulInteractiveElement as _, Styled, TestSupportExt as _, div, px,
 };
-use look::{Hand as _, Shaped as _, Typeset as _};
+use look::{Hand as _, IconSizing as _, Shaped as _, Typeset as _};
 use protocol::event::{Question, QuestionOption};
 
 use super::QuestionPanel;
@@ -69,7 +69,8 @@ const DESCRIPTION_LINE: f32 = 16.;
 /// How far the typing row's text sits in from its edge, at its smallest size.
 const TYPING_INSET: f32 = 4.;
 
-/// The typing row's checkbox, as big as a check.
+/// The typing row's checkbox, with a small check inside it. A chosen option's check is centred in a place as wide, so
+/// the two are in line down the rows' ends.
 const CHECKBOX: f32 = 16.;
 
 /// A row's number, which is also its key, as a small detail.
@@ -100,7 +101,9 @@ fn row(id: ElementId, chosen: bool, colors: Colors) -> gpui_kit::Stateful<gpui_k
 }
 
 fn check(muted: Hsla) -> impl IntoElement {
-    div().flex_none().h(px(LINE)).flex().items_center().child(Icon::new(IconName::Check).size_4().text_color(muted))
+    let check = Icon::new(IconName::Check).sized(look::IconSize::Regular).text_color(muted);
+    // As wide as the checkbox of the row to type in, so the two are in line down the rows' ends.
+    div().flex_none().w(px(CHECKBOX)).h(px(LINE)).flex().items_center().justify_center().child(check)
 }
 
 fn option_row(
@@ -154,7 +157,7 @@ fn other_row(
             cx.stop_propagation();
             this.toggle_typed(window, cx);
         }))
-        .when(chosen, |d| d.child(Icon::new(IconName::Check).xsmall()))
+        .when(chosen, |d| d.child(Icon::new(IconName::Check).sized(look::IconSize::Small)))
         .test_support();
     row("question-other".into(), chosen, colors)
         .on_click(cx.listener(|this, _, window, cx| this.type_other(window, cx)))

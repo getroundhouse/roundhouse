@@ -18,7 +18,7 @@ use gpui_kit::{
 };
 use image::ImageDecoder as _;
 use image::metadata::Orientation;
-use look::{Shaped as _, Typeset as _, pixels};
+use look::{IconSizing as _, Shaped as _, Typeset as _, pixels};
 use protocol::attachment::{Attachment, MediaType, describe_size};
 use protocol::model::Seq;
 
@@ -199,7 +199,7 @@ pub fn file_card(id: impl Into<ElementId>, attachment: &Attachment) -> Card {
         .id(id)
         .small()
         .tooltip(name.clone())
-        .media(AttachmentMedia::new().child(Icon::new(IconName::FileText)))
+        .media(AttachmentMedia::new().child(Icon::new(IconName::FileText).sized(look::IconSize::Large)))
         .content(
             AttachmentContent::new()
                 .title(AttachmentTitle::new(name))

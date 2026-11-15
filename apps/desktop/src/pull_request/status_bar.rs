@@ -4,12 +4,12 @@ use crate::sides;
 use crate::sides::AtTheTop;
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::button::{Button, ButtonCustomVariant, ButtonVariants as _};
-use gpui_kit::component::{Icon, Sizable as _, h_flex};
+use gpui_kit::component::{Icon, h_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, Div, InteractiveElement as _, IntoElement, ParentElement as _, Styled as _, Window, div,
 };
-use look::{Hand as _, Off as _, Sizing as _, Typeset as _, Work};
+use look::{Hand as _, IconSizing as _, Off as _, Sizing as _, Typeset as _, Work};
 use protocol::model::{BranchName, Local, PullRequest, Standing, Workspace};
 use std::time::Duration;
 use transcript::PullRequestStanding;
@@ -174,15 +174,16 @@ pub fn controls(
 /// The pull request's number, outlined as a button that opens something is, which opens it on GitHub.
 fn number(pr: &PullRequest, work: Work, cx: &App) -> AnyElement {
     let (url, colors) = (pr.url.clone(), look::colors(cx));
+    let size = look::ControlSize::Regular;
     Button::new("pull-request")
         .hand()
-        .sized(look::ControlSize::Regular)
+        .sized(size)
         .outline()
         .border_color(work.edge(colors))
         .text_color(work.text(colors))
         .tooltip(pr.title.clone())
         .label(format!("#{}", pr.number))
-        .child(Icon::new(Lucide::ArrowUpRight).xsmall())
+        .child(Icon::new(Lucide::ArrowUpRight).sized(size.icon_with_words()))
         .on_click(move |_, _, cx| cx.open_url(&url))
         .into_any_element()
 }

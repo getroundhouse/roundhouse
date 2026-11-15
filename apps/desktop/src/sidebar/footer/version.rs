@@ -3,13 +3,13 @@ use crate::app::{AppView, BuildLine};
 use crate::checkout::Checkout;
 use crate::updates::{Answer, Kind, Said};
 use gpui_kit::component::tooltip::Tooltip;
-use gpui_kit::component::{Icon, IconName, Sizable as _, h_flex, v_flex};
+use gpui_kit::component::{Icon, IconName, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, Context, Hsla, InteractiveElement, IntoElement, ParentElement, Pixels, SharedString,
     StatefulInteractiveElement, Styled, TestSupportExt as _, div,
 };
-use look::{Shaped as _, TaskRing, Typeset as _};
+use look::{IconSizing as _, Shaped as _, TaskRing, Typeset as _};
 use std::path::Path;
 
 /// How tall the build line is, whatever it says, so a check for updates never moves the sidebar above it: a small
@@ -58,7 +58,7 @@ fn about_updating(said: Said<'_>, cx: &App) -> AnyElement {
             let words = answer.text();
             in_the_versions_place(
                 "update-answer",
-                Icon::new(icon).xsmall(),
+                Icon::new(icon).sized(look::IconSize::Small),
                 words,
                 words.to_string(),
                 colors.text_muted,
@@ -66,7 +66,7 @@ fn about_updating(said: Said<'_>, cx: &App) -> AnyElement {
         }
         Said::Problem(problem) => {
             let color = if matches!(problem.kind, Kind::Refused(_)) { colors.error } else { colors.text_muted };
-            let (words, icon) = (problem.summary(), Icon::new(IconName::TriangleAlert).xsmall());
+            let (words, icon) = (problem.summary(), Icon::new(IconName::TriangleAlert).sized(look::IconSize::Small));
             let hover = format!("{words}\n\n{}", problem.detail);
             in_the_versions_place("update-problem", icon, words, hover, color)
         }

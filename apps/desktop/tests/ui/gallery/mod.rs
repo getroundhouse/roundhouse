@@ -68,6 +68,8 @@ mod controls;
 
 mod heights;
 
+mod icon_sizes;
+
 mod spaces;
 
 mod corners;

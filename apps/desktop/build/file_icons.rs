@@ -10,8 +10,9 @@ use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// How big an icon is drawn, in points. Each is embedded with this size set on it, since GPUI draws an SVG picture at
-/// the size it says it is, and a few of Catppuccin's are a point or two taller.
+/// How big an icon is drawn, in points, which is a large icon's in `look::IconSize`, as a test holds it. Each is
+/// embedded with this size set on it, since GPUI draws an SVG picture at the size it says it is, and a few of
+/// Catppuccin's are a point or two taller.
 const SIZE: u32 = 16;
 /// How an icon names a colour, which `palette.json` says the value of.
 const COLOUR: &str = "var(--vscode-ctp-";
@@ -52,7 +53,7 @@ pub(crate) fn write(dir: &Path, out_dir: &Path) -> Result<(), Box<dyn Error>> {
     let mut out = String::from("// Built by build/file_icons.rs from file-icons/.\n\n");
     writeln!(
         out,
-        "/// How big an icon is drawn, which each is embedded at.\npub(crate) const ICON_SIZE: f32 = {SIZE}.;\n"
+        "/// How big each is embedded, which a test holds to the size it's drawn at.\n#[cfg(test)]\npub(crate) const ICON_SIZE: f32 = {SIZE}.;\n"
     )?;
     let mut icons: Vec<(String, PathBuf)> = Vec::new();
     for entry in fs::read_dir(dir)? {

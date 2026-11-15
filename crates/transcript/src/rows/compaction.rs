@@ -10,7 +10,7 @@ use gpui_kit::{
     AnyElement, App, Div, InteractiveElement as _, IntoElement, ParentElement, Role, StatefulInteractiveElement as _,
     Styled, TestSupportExt as _, div, px, relative,
 };
-use look::{Hand as _, Shaped as _, Typeset as _};
+use look::{Hand as _, IconSizing as _, Shaped as _, Typeset as _};
 use protocol::event::{CompactedBy, CompactionOutcome, EventBody};
 use protocol::model::Seq;
 
@@ -76,13 +76,13 @@ fn line(compacted: &Compacted, shared: &Shared, cx: &App) -> AnyElement {
         // In words, since a screen reader would read the arrow out as one.
         .aria_label(compacted.said("to", ", "))
         .corners(look::Corner::Control)
-        .child(Icon::new(IconName::FoldVertical).size(px(RULE_ICON)))
+        .child(Icon::new(IconName::FoldVertical).sized(RULE_ICON))
         .child(compacted.said("→", " · "))
         .when(opens, |d| {
             let (this, key) = (shared.this.clone(), key.clone());
             let hover = colors.line_hover;
             let d = d.aria_expanded(open).hand().hover(move |d| d.bg(hover));
-            d.child(Icon::new(chevron).size(px(RULE_ICON))).on_click(move |_, _, cx| {
+            d.child(Icon::new(chevron).sized(RULE_ICON)).on_click(move |_, _, cx| {
                 let _ = this.update(cx, |t, cx| t.set_open(seq, key.clone(), Fold::Output, !open, cx));
             })
         })

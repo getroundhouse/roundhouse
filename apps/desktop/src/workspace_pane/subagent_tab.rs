@@ -12,14 +12,14 @@ use client_core::records::{Changes, Snapshot};
 use gpui_kit::base::Tab;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::tooltip::Tooltip;
-use gpui_kit::component::{Icon, IconName, Sizable as _, h_flex, v_flex};
+use gpui_kit::component::{Icon, IconName, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, AppContext as _, Context, Entity, FocusHandle, InteractiveElement as _, IntoElement as _,
     ParentElement as _, Role, StatefulInteractiveElement as _, Styled, Subscription, TestSupportExt as _, div, px,
     relative,
 };
-use look::{Hand as _, Shaped as _, Sizing as _, Typeset as _};
+use look::{Hand as _, IconSizing as _, Shaped as _, Sizing as _, Typeset as _};
 use protocol::model::{SessionId, Subagent, ToolUseId};
 use transcript::{Transcript, TranscriptEvent, shown_kind, subagent_standing};
 
@@ -205,7 +205,7 @@ impl WorkspacePane {
                     .line_height(relative(1.25))
                     .text_color(muted)
                     .on_click(cx.listener(|t, _, _, cx| t.bring_to_front(Showing::Subagent, cx)))
-                    .child(Icon::new(IconName::Bot).xsmall())
+                    .child(Icon::new(IconName::Bot).sized(look::IconSize::Large))
                     .child(name.child(title))
                     .child(div().flex_none().invisible().group_hover(TAB_GROUP, Styled::visible).child(close)),
             )
@@ -284,7 +284,7 @@ fn band(
         .gap(look::Space::Small)
         .border_b_1()
         .border_color(colors.edge)
-        .child(Icon::new(IconName::Bot).xsmall().text_color(colors.text_faint))
+        .child(Icon::new(IconName::Bot).sized(look::IconSize::Large).text_color(colors.text_faint))
         .children(from)
         .child(
             div()
