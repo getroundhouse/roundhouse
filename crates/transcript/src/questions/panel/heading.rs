@@ -1,7 +1,7 @@
 //! The top of the panel: the question's header, a small detail, then its text, at body size.
 
 use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::{Icon, IconName, h_flex, v_flex};
+use gpui_kit::component::{IconName, h_flex, v_flex};
 use gpui_kit::{
     AnyElement, Context, Div, InteractiveElement as _, IntoElement, ParentElement, Role, SharedString, Stateful,
     StatefulInteractiveElement as _, Styled, TestSupportExt as _, div, px,
@@ -31,10 +31,9 @@ pub(super) fn heading(
     let named = question.and_then(|question| question.header.as_deref());
     let header = named.into_iter().chain(panel.asker.as_deref()).collect::<Vec<_>>().join(BETWEEN);
     let skips = panel.asks.skipped().is_some();
-    // A small square around an icon as big as the text's line, standing out past the line by the room around the
-    // icon rather than pushing the question down, so the icon lines up with the edges inside the panel.
-    let icon = px(16.);
-    let out = -(look::ControlSize::Small.height() - icon) / 2.;
+    // A small square, standing out past the line by the room around its icon rather than pushing the question down,
+    // so the icon lines up with the edges inside the panel, as the arrows under the question do.
+    let out = -look::ControlSize::Small.inset();
     let skip = skips.then(|| {
         Button::new("question-skip")
             .hand()
@@ -42,7 +41,8 @@ pub(super) fn heading(
             .sized_square(look::ControlSize::Small)
             .my(out)
             .mr(out)
-            .child(Icon::new(IconName::Close).size(icon).text_color(muted))
+            .icon(IconName::Close)
+            .text_color(muted)
             .tooltip("Skip")
             .on_click(cx.listener(|this, _, _, cx| this.skip(cx)))
     });

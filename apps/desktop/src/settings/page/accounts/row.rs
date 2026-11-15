@@ -10,7 +10,7 @@ use gpui_kit::{
     AnyElement, App, Div, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Role, SharedString,
     StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, Window, div, px,
 };
-use look::{Off as _, Shaped as _, Sizing as _, Typeset as _};
+use look::{IconSizing as _, Off as _, Shaped as _, Sizing as _, Typeset as _};
 use protocol::model::{Account, AgentKind};
 
 use super::words::{self, Standing};
@@ -32,7 +32,8 @@ pub(super) fn row(drawing: &Drawing<'_>, account: &Account, cx: &App) -> AnyElem
     let standing = account.login_agent.map(|_| words::standing(account.held_login.as_ref(), drawing.now_ms, cx));
     let icon = if account.login_agent.is_some() { Lucide::KeyRound } else { Lucide::CircleUser };
     // Down to the middle of the name beside it, whose line is taller than the icon.
-    let icon = div().flex_none().pt(px(2.)).child(Icon::new(icon).size_4().text_color(colors.text_muted));
+    let icon =
+        div().flex_none().pt(px(2.)).child(Icon::new(icon).sized(look::IconSize::Large).text_color(colors.text_muted));
     let called = crate::names::called(account);
     let dim = standing == Some(Standing::Disconnected);
     let name =
@@ -109,7 +110,7 @@ fn stands(drawing: &Drawing<'_>, account: &Account, standing: Option<&Standing>,
         Some(Standing::Ended(_)) => Some(colors.error),
         Some(Standing::Held(_) | Standing::Disconnected) | None => None,
     };
-    let sign = warns.map(|_| Icon::new(IconName::TriangleAlert).size_3p5().flex_none());
+    let sign = warns.map(|_| Icon::new(IconName::TriangleAlert).sized(look::IconSize::Regular).flex_none());
     let said = parts.join(" · ");
     let line = h_flex()
         .id(SharedString::from(format!("account-stands-{}", account.id)))

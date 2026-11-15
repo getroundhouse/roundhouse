@@ -6,12 +6,12 @@ use std::cmp::Reverse;
 use gpui_kit::assets::IconName;
 use gpui_kit::component::button::{Button, ButtonCustomVariant, ButtonVariants as _};
 use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
-use gpui_kit::component::{Icon, Sizable as _, h_flex};
+use gpui_kit::component::{Icon, h_flex};
 use gpui_kit::{
     Anchor, AnyElement, App, Context, InteractiveElement as _, IntoElement, ParentElement, Pixels, SharedString,
     Styled, Window, div, px,
 };
-use look::{Hand as _, Sizing as _};
+use look::{Hand as _, IconSizing as _, Sizing as _};
 use protocol::model::SessionId;
 
 use super::WorkspacePane;
@@ -62,7 +62,7 @@ impl WorkspacePane {
         let icon = div()
             .text_color(resting)
             .group_hover(BUTTON_GROUP, move |s| s.text_color(lit))
-            .child(Icon::new(IconName::RotateCcwClock));
+            .child(Icon::new(IconName::RotateCcwClock).sized(look::ControlSize::Regular.icon()));
         let (this, on_open) = (cx.weak_entity(), cx.weak_entity());
         let button = Button::new("closed-chats")
             .hand()
@@ -106,7 +106,7 @@ fn row(title: SharedString, ago: SharedString) -> impl Fn(&mut Window, &mut App)
             .gap(look::Space::Small)
             .child(div().flex_1().min_w_0().truncate().child(title.clone()))
             .child(div().flex_none().text_color(muted).child(ago.clone()))
-            .child(Icon::new(IconName::RotateCcw).xsmall().text_color(muted))
+            .child(Icon::new(IconName::RotateCcw).sized(look::IconSize::Regular).text_color(muted))
             .into_any_element()
     }
 }

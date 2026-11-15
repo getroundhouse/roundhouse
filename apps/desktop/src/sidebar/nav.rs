@@ -6,7 +6,7 @@ use gpui_kit::component::{IconName, IconNamed, Selectable as _, h_flex, v_flex};
 use gpui_kit::{Context, IntoElement, ParentElement, Styled};
 use look::{Hand as _, Off as _, Typeset as _};
 
-use super::{LIST_PAD, ROW_PAD, ROW_SIZE, icon_box};
+use super::{LIST_PAD, ROW_PAD, ROW_SIZE, row_icon};
 use crate::app::AppView;
 
 /// The block of items, with a line under it before the workspaces, and as much room around it as around the list, so
@@ -45,7 +45,7 @@ fn item(id: &'static str, icon: impl IconNamed, label: &'static str, cx: &mut Co
         .gap(look::Space::Small)
         .typeset(look::Type::Body)
         .text_color(muted)
-        .child(icon_box(icon, muted))
+        .child(row_icon(icon, muted))
         .child(label);
     Button::new(id).accessibility_label(label).ghost().w_full().h(ROW_SIZE.height()).px(ROW_PAD).child(content)
 }

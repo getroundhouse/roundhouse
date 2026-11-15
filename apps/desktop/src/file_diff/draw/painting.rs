@@ -10,14 +10,14 @@ use crate::patch::LineKind;
 use code::Code;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::TextareaState;
-use gpui_kit::component::{Icon, IconName, Sizable as _, h_flex};
+use gpui_kit::component::{Icon, IconName, h_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, Div, ElementId, Entity, Hsla, InteractiveElement as _, IntoElement, MouseButton,
     ParentElement as _, Pixels, SharedString, StatefulInteractiveElement as _, Styled, TestSupportExt as _, WeakEntity,
     div, px,
 };
-use look::{Hand as _, Shaped as _, Sizing as _, Typeset as _};
+use look::{Hand as _, IconSizing as _, Shaped as _, Sizing as _, Typeset as _};
 use protocol::model::{DiffComment, DiffSide};
 use std::sync::Arc;
 
@@ -205,7 +205,7 @@ fn add_button((side, line): (DiffSide, u32), marked: bool, drawing: &Drawing, cx
         .text_color(colors.on_main)
         .hand()
         .when(!marked, |button| button.opacity(0.).group_hover(LINE, |button| button.opacity(1.)))
-        .child(Icon::new(IconName::Plus).xsmall())
+        .child(Icon::new(IconName::Plus).sized(look::IconSize::Small))
         .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
         .on_click(move |_, window, cx| {
             let _ = view.update(cx, |t, cx| t.start_comment(at.clone(), window, cx));
@@ -244,7 +244,7 @@ fn fold_row(fold: &Fold, drawing: &Drawing, cx: &App) -> AnyElement {
             .hand()
             .ghost()
             .sized_square(look::ControlSize::Small)
-            .icon(Icon::new(icon))
+            .icon(icon)
             .tooltip(tooltip)
             .on_click(move |_, _, cx| {
                 let _ = view.update(cx, |t, cx| t.open(opens.clone(), cx));

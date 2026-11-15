@@ -1,12 +1,12 @@
 //! The info mark in the update card's corner, and what it says on hover: which versions, and what happens next.
 
-use gpui_kit::component::{Icon, IconName, Sizable as _, v_flex};
+use gpui_kit::component::{Icon, IconName, v_flex};
 use gpui_kit::{
     Anchor, AnchoredPositionMode, AnyElement, App, Entity, InteractiveElement as _, IntoElement as _,
     ParentElement as _, Pixels, Styled as _, TestSupportExt as _, anchored, deferred, div, point, px,
 };
 
-use look::{InRegion as _, Region, Typeset as _};
+use look::{IconSizing as _, InRegion as _, Region, Typeset as _};
 
 use crate::app::{Agents, BuildLine, Updating};
 
@@ -45,7 +45,7 @@ impl Details {
     /// Muted, like the detail under the card's title, since it's for whoever wants to know more. Resting the pointer
     /// on it shows the details, which `shown` keeps.
     pub(super) fn mark(shown: &Entity<Shown>, cx: &App) -> AnyElement {
-        let icon = Icon::new(IconName::Info).small().text_color(look::colors(cx).text_muted);
+        let icon = Icon::new(IconName::Info).sized(look::IconSize::Regular).text_color(look::colors(cx).text_muted);
         let shown = shown.clone();
         // Only for when to show them, so it draws nothing, not even its own box. The kit keeps what a hover card shows
         // clear of the window's edge by more than the card is, so it couldn't line them up with the card.

@@ -4,13 +4,13 @@ use crate::patch::{FilePatch, FileStatus};
 use crate::review::Review;
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::{Icon, IconName, Selectable as _, Sizable as _, h_flex, v_flex};
+use gpui_kit::component::{Icon, IconName, Selectable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, Context, Entity, EventEmitter, Global, IntoElement, ParentElement, Render, SharedString,
     StatefulInteractiveElement, Styled, Subscription, TestSupportExt as _, Window, div, uniform_list,
 };
-use look::{Hand as _, LineText, Placed, Sizing as _, Typeset as _};
+use look::{Hand as _, IconSizing as _, LineText, Placed, Sizing as _, Typeset as _};
 use rows::Layout;
 use std::collections::HashSet;
 use std::ops::Range;
@@ -256,7 +256,7 @@ fn status_icon(status: FileStatus, cx: &App) -> Icon {
         FileStatus::Renamed | FileStatus::Copied => (Lucide::SquareArrowRight, colors.text_muted),
         FileStatus::Modified => (Lucide::SquareDot, colors.modified),
     };
-    Icon::new(icon).xsmall().text_color(color)
+    Icon::new(icon).sized(look::IconSize::Small).text_color(color)
 }
 
 /// A changed file's row: where it is, then its name, and at the right end how many lines it adds and removes, on the
@@ -301,11 +301,11 @@ fn file_row(
         .into_any_element()
 }
 
-/// The kit's small folder, open or closed. Changes leaves a file's or folder's kind to All files, so a row says only
-/// how it changed.
+/// The kit's folder, open or closed, as big as All files' folders, since it stands for its row too. Changes leaves a
+/// file's or folder's kind to All files, so a row says only how it changed.
 fn plain_folder(open: bool, cx: &App) -> Icon {
     let folder = if open { IconName::FolderOpen } else { IconName::FolderClosed };
-    Icon::new(folder).xsmall().text_color(look::colors(cx).text_muted)
+    Icon::new(folder).sized(look::IconSize::Large).text_color(look::colors(cx).text_muted)
 }
 
 fn placeholder(text: &'static str, color: gpui_kit::Hsla) -> AnyElement {

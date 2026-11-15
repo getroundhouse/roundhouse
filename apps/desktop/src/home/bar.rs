@@ -8,7 +8,7 @@ use gpui_kit::component::{Icon, IconName, h_flex};
 use gpui_kit::{
     Context, InteractiveElement as _, IntoElement, ParentElement, Styled, TestSupportExt as _, WeakEntity, Window, div,
 };
-use look::{Hand as _, Off as _, Sizing as _};
+use look::{Hand as _, IconSizing as _, Off as _, Sizing as _};
 
 use super::{ArchiveFilter, SORTS};
 use crate::app::AppView;
@@ -40,7 +40,7 @@ pub(super) fn bar(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement 
                 .child(
                     Input::new(&app.home.search)
                         .appearance(false)
-                        .prefix(Icon::new(IconName::Search).text_color(muted)),
+                        .prefix(Icon::new(IconName::Search).sized(look::IconSize::Regular).text_color(muted)),
                 )
                 .test_support(),
         )

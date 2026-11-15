@@ -11,5 +11,5 @@ mod tests;
 
 mod lookup;
 #[cfg(test)]
-use lookup::{FILE, FILE_EXTENSIONS, FILE_NAMES, FOLDER, ICONS, OPEN_FOLDER, asset, file_kind};
-pub(crate) use lookup::{ICON_SIZE, file_icon, folder_icon, load};
+use lookup::{FILE, FILE_EXTENSIONS, FILE_NAMES, FOLDER, ICON_SIZE, ICONS, OPEN_FOLDER, asset, file_kind};
+pub(crate) use lookup::{ICON, file_icon, folder_icon, load};

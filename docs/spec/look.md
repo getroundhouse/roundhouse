@@ -1,6 +1,6 @@
 # Look
 
-The foundations of the app's design system, the rules every screen follows: colour, type, space and shape, buttons, the pointer, and the status mark, with the app icon that's made from the mark. Each area's file shows its own screens. `crates/look` holds them in code: every colour, kind of text and corner by what it's for, every step of space, and every size a button, a bar and a row come in, the theme made from them, the mark, the icon, plan mode's texture, the pointing hand and the baseline text of different sizes shares.
+The foundations of the app's design system, the rules every screen follows: colour, type, space and shape, buttons, the pointer, and the status mark, with the app icon that's made from the mark. Each area's file shows its own screens. `crates/look` holds them in code: every colour, kind of text and corner by what it's for, every step of space, and every size a button, a bar, a row and an icon come in, the theme made from them, the mark, the icon, plan mode's texture, the pointing hand and the baseline text of different sizes shares.
 
 It's meant to feel familiar to the people Roundhouse is for, and it sets itself apart with a motif of its own, the status mark.
 
@@ -152,7 +152,7 @@ Three strengths have names of their own, since several places draw with them: wh
 - **Every button has a size for where it sits,** so the buttons in the same kind of place are the same size, wherever it is, and each leaves a little room around its words and its icon. A small button is set in a line of text or a row one line tall, a regular one is a bar's or a card's own, set apart from its text, and a large one is on its own. One that's only an icon is a square, as wide as it's tall. `look::ControlSize` holds the sizes. *Unconfirmed.*
 - **A borderless button that's in line with text or marks under it or across from it stands out past its own room,** so its words or its icon line up with them, rather than that room in from them: Restart now under the update card's text, setup's last button across from its message, as far in from the strip's end as the message is from its start, the arrows over a question, on the panel's edge inside, and the button that sets out Changes' files, over the marks of the rows under it. Its fill, as the pointer lights it, then reaches past them by that room. *Unconfirmed.*
 
-**Every size of a button, by its name.** Each is a size in `look::ControlSize`, from the smallest. A button's words are the kind of text its row says, with a 12px icon beside them on a small button, 14px on a regular one and 16px on a large one. A square's own icon is 14px, or 16px on a large one. *Unconfirmed.*
+**Every size of a button, by its name.** Each is a size in `look::ControlSize`, from the smallest. A button's words are the kind of text its row says, with an icon beside them of the size of the same name, as the table of an icon's sizes below has it: a small icon on a small button, a regular one on a regular button and a large one on a large button. A square's own icon is regular, or large on a large one. *Unconfirmed.*
 
 | Name | Tall | Room beside its words | Words | For |
 |---|---|---|---|---|
@@ -186,6 +186,20 @@ Three strengths have names of their own, since several places draw with them: wh
 **Every size of a bar and of a row, as the app draws them.** *Unconfirmed.*
 
 ![Every size of a bar and of a row](screens/heights.png)
+
+- **Every icon has a size for where it's drawn,** so the icons in the same kind of place are the same size, wherever it is. One set among text, as one of its words, is about as big as the text: small among a detail's or code's, and regular among body text. One that stands for what a row, a tab, a bar, a card or a call's line is, at its start, is large, as big as a mark beside text, since that's the place a workspace or a chat has its mark, so a file tab's icon is as big as a chat tab's mark, and a call's as the working line's. A button's icon is sized by the button, as its table says, and one inside a control about as tall as a line of text, such as the check in a checkbox, is small, so it has room inside it. Each is in pixels, so an icon stays as it is whatever size text is set at. `look::IconSize` holds the sizes. *Unconfirmed.* What's drawn rather than an icon, such as the mark, a task's ring or a cache's mark, keeps a size of its own. *Unconfirmed.* *Not built:* the kit's own parts size their icons themselves, so a menu's row has a 12px icon among body text.
+
+**Every size of an icon, by its name.** Each is a size in `look::IconSize`, from the smallest. *Unconfirmed.*
+
+| Name | Size | For |
+|---|---|---|
+| `Small` | 12px | Among a detail's or code's text: a rule's across the chat, such as a compaction's, and the compaction's in the outline; the build line's answer; a changed file's state at its row's end, and a folder's chevron, in Changes; the check in a checkbox; and the `+` that adds a comment to a diff's line, on a button as tall as the line. Beside a small button's words |
+| `Regular` | 14px | Among body text: a warning before the body text it warns of, such as an account's standing; a project's chevron after its name; the arrow before an answer to a question, and the check on an option chosen; a file sent with a prompt waiting in the queue; a draft's pencil at a workspace's row's end; the arrow that reopens a closed chat, in its menu; the glass in a search field; the arrow after a pull request's number; and the update card's details. Beside a regular button's words, and a small or regular button's own, as a square, such as Send, a tab's close or closed chats |
+| `Large` | 16px | Standing for what a row, a tab, a bar, a card or a call's line is, at its start: a file's or a folder's, in All files or Changes; a place's or a project's in the sidebar; a page's in Settings; an account's; a file tab's, and a subagent's, on its tab and its bar; a file's card, sent with a prompt; a failed request's; and a call's kind, or the chevron that takes its place, and the robot of a subagent at work. Beside a large button's words, and a large button's own |
+
+**Every size of an icon, as the app draws it.** *Unconfirmed.*
+
+![Every size of an icon](screens/icons.png)
 
 - **The transcript is a centred column, at most 848px wide,** so lines stay short enough to read in a wide window. *Unconfirmed.*
 - **Everything in the transcript but a prompt starts on the column's left edge:** what the agent wrote, a call's icon, and what a call or a thought opens to, so the eye always goes back to the same place. Something with an edge, such as a code block or the rule down a subagent's work, puts its edge there, and what's inside it sits in from it.

@@ -5,13 +5,13 @@
 use gpui_kit::base::Tab;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::tooltip::Tooltip;
-use gpui_kit::component::{Icon, IconName, Sizable as _};
+use gpui_kit::component::{Icon, IconName};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, Context, InteractiveElement as _, IntoElement as _, ParentElement as _, SharedString,
     StatefulInteractiveElement as _, Styled, Window, div, relative,
 };
-use look::{Hand as _, Sizing as _, Typeset as _};
+use look::{Hand as _, IconSizing as _, Sizing as _, Typeset as _};
 
 use super::view::{TAB_GROUP, TAB_WIDTH};
 use super::{Showing, WorkspacePane};
@@ -163,7 +163,7 @@ impl WorkspacePane {
                     // Muted whether or not it's showing, as the chats' titles are: the underline says which tab is.
                     .text_color(muted)
                     .on_click(cx.listener(|t, _, _, cx| t.show_file_tab(cx)))
-                    .child(Icon::new(IconName::File).xsmall())
+                    .child(Icon::new(IconName::File).sized(look::IconSize::Large))
                     .child(
                         div()
                             .flex_1()

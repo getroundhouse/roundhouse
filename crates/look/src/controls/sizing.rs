@@ -1,3 +1,4 @@
+use crate::icon_sizes::IconSize;
 use crate::named::named;
 use crate::typography::Type;
 use gpui_kit::component::button::Button;
@@ -46,7 +47,7 @@ impl ControlSize {
     /// How far a square's own icon is in from each of its edges. Something that lines the icon up with an edge past
     /// the square, such as the arrows over a question, takes the square out by this.
     pub fn inset(self) -> Pixels {
-        (self.height() - self.icon()) / 2.
+        (self.height() - self.icon().size()) / 2.
     }
 
     /// The kind of text a button's words are: a detail for a small one, since it's set among text, and body text for
@@ -58,17 +59,29 @@ impl ControlSize {
         }
     }
 
-    /// How big a square's own icon is.
-    pub(super) const fn icon(self) -> Pixels {
+    /// How big a square's own icon is, or an icon set in a square of this size, such as the one that opens closed
+    /// chats.
+    pub const fn icon(self) -> IconSize {
         match self {
-            ControlSize::Small | ControlSize::Regular => px(14.),
-            ControlSize::Large => px(16.),
+            ControlSize::Small | ControlSize::Regular => IconSize::Regular,
+            ControlSize::Large => IconSize::Large,
         }
     }
 
-    /// The kit's size whose words, and icon beside them, a button with words takes, which are [`Self::words`], with a
-    /// 12px, 14px or 16px icon. The kit sets a button's words from its size on what it draws inside the button, which
-    /// a style from outside doesn't reach, so the size is the kit's, and a test holds its text to [`Self::words`].
+    /// How big an icon beside a button's words is, or one set among them, such as the arrow after a pull request's
+    /// number.
+    pub const fn icon_with_words(self) -> IconSize {
+        match self {
+            ControlSize::Small => IconSize::Small,
+            ControlSize::Regular => IconSize::Regular,
+            ControlSize::Large => IconSize::Large,
+        }
+    }
+
+    /// The kit's size whose words, and icon beside them, a button with words takes, which are [`Self::words`] and
+    /// [`Self::icon_with_words`]. The kit sets a button's words and icon from its size on what it draws inside the
+    /// button, which a style from outside doesn't reach, so the size is the kit's, and tests hold its text and its icon
+    /// to these.
     pub(crate) const fn kit_words(self) -> Size {
         match self {
             ControlSize::Small => Size::XSmall,
@@ -77,7 +90,7 @@ impl ControlSize {
         }
     }
 
-    /// The kit's size whose icon a button that's only an icon takes, which is [`Self::icon`].
+    /// The kit's size whose icon a button that's only an icon takes, which is [`Self::icon`], as a test holds it.
     pub(crate) const fn kit_icon(self) -> Size {
         match self {
             ControlSize::Small | ControlSize::Regular => Size::Small,

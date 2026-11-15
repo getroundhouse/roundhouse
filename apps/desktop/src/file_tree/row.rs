@@ -1,9 +1,9 @@
 //! How a row of a tree is drawn: indented to its depth, with a line down the side for each folder it's in.
 
 use gpui_kit::component::{Icon, IconName, h_flex};
-use look::{Hand as _, Typeset as _};
+use look::{Hand as _, IconSizing as _, Typeset as _};
 
-use crate::file_icons::{ICON_SIZE, file_icon};
+use crate::file_icons::{ICON, file_icon};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     App, ElementId, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Stateful, Styled as _, div, px,
@@ -12,8 +12,8 @@ use gpui_kit::{
 const PADDING: look::Space = look::Space::Medium;
 /// The space between the things in a row.
 const GAP: look::Space = look::Space::Small;
-/// How big a folder's chevron is in Changes.
-const CHEVRON: Pixels = px(12.);
+/// How big a folder's chevron is in Changes, among the folder's names in code.
+const CHEVRON: look::IconSize = look::IconSize::Small;
 /// How much further in from its left a chevron's drawing starts than a folder's icon's does.
 const CHEVRON_ROOM: Pixels = px(2.);
 
@@ -32,18 +32,18 @@ impl List {
     /// How far a folder's contents sit inside it.
     fn indent(self) -> Pixels {
         match self {
-            List::AllFiles => px(ICON_SIZE) + GAP.size(),
+            List::AllFiles => ICON.size() + GAP.size(),
             // Under the folder's icon, as All files' are under its name, with each chevron's drawing level with the
             // icon's.
-            List::Changes => CHEVRON + GAP.size() - CHEVRON_ROOM,
+            List::Changes => CHEVRON.size() + GAP.size() - CHEVRON_ROOM,
         }
     }
 
     /// Where the line down a folder's contents sits: under the middle of what starts its row.
     fn guide(self) -> Pixels {
         match self {
-            List::AllFiles => px(ICON_SIZE / 2.),
-            List::Changes => CHEVRON / 2.,
+            List::AllFiles => ICON.size() / 2.,
+            List::Changes => CHEVRON.size() / 2.,
         }
     }
 
@@ -97,7 +97,7 @@ pub(crate) fn folder_row(
     let muted = colors.text_muted;
     let chevron = if open { IconName::ChevronDown } else { IconName::ChevronRight };
     row_frame(id, list, depth, false, cx)
-        .when(list == List::Changes, |d| d.child(Icon::new(chevron).size(CHEVRON).text_color(colors.text_faint)))
+        .when(list == List::Changes, |d| d.child(Icon::new(chevron).sized(CHEVRON).text_color(colors.text_faint)))
         .child(icon)
         .child(
             div()

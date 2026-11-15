@@ -7,9 +7,9 @@ use gpui_kit::component::button::Button;
 use gpui_kit::component::{Icon, h_flex, v_flex};
 use gpui_kit::{
     AnyElement, App, ClickEvent, ElementId, InteractiveElement as _, IntoElement, ParentElement, Styled,
-    TestSupportExt as _, Window, div, px,
+    TestSupportExt as _, Window, div,
 };
-use look::{Hand as _, Shaped as _, Sizing as _, Typeset as _};
+use look::{Hand as _, IconSizing as _, Shaped as _, Sizing as _, Typeset as _};
 use protocol::event::{FailureKind, RequestFailure};
 use protocol::model::Seq;
 
@@ -22,8 +22,8 @@ use crate::item_key::ItemKey;
 use crate::texts::{TextAt, Written};
 use crate::transcript::Transcript;
 
-/// How big the card's icon is, beside its title.
-const ICON: f32 = 14.0;
+/// How big the card's icon is, at the start of its title, which it stands for.
+const ICON: look::IconSize = look::IconSize::Large;
 
 /// The card for the failed request recorded at `seq`: what kind of failure it was, how many times in a row, when the
 /// limit that refused it starts again, for a limit, and the CLI's own words, which say what to do, with their matches,
@@ -44,7 +44,7 @@ pub(super) fn card(
     let resets = failure.resets_at_ms.and_then(|at_ms| look::day_and_time(at_ms, cx));
     let head = h_flex()
         .gap(look::Space::Small)
-        .child(Icon::new(IconName::CircleX).flex_none().size(px(ICON)).text_color(stopped))
+        .child(Icon::new(IconName::CircleX).flex_none().sized(ICON).text_color(stopped))
         .child(div().typeset(look::Type::Body).emphasis().child(title(failure.kind)))
         .children(tries.and_then(|tries| count(tries.times, cx)))
         .children(resets.map(|when| {
@@ -154,7 +154,7 @@ fn fold(seq: Seq, tries: &Tries, earlier: usize, shared: &Shared, cx: &App) -> A
     };
     line::opening(id, text.clone().into(), open, toggle, cx)
         .text_color(look::colors(cx).text_muted)
-        .child(Icon::new(chevron).flex_none().size(px(look::LINE_ICON)))
+        .child(Icon::new(chevron).flex_none().sized(line::ICON))
         .child(div().typeset(look::Type::Body).child(text))
         .test_support()
         .into_any_element()

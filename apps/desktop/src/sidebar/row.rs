@@ -8,22 +8,25 @@ use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::base::motion::transition;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::menu::{ContextMenuExt as _, PopupMenu, PopupMenuItem};
-use gpui_kit::component::{Selectable as _, h_flex};
+use gpui_kit::component::{Icon, Selectable as _, h_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     Action, AnyElement, App, Context, ElementId, InteractiveElement as _, IntoElement, MouseButton, ParentElement,
     Pixels, Role, StatefulInteractiveElement as _, Styled, TestSupportExt as _, Window, div, px,
 };
-use look::{Hand as _, LineText, Off as _, Placed, Sizing as _, Typeset as _};
+use look::{Hand as _, IconSizing as _, LineText, Off as _, Placed, Sizing as _, Typeset as _};
 use protocol::model::{Workspace, WorkspaceId};
 
-use super::{ICON_BOX, MARK_GAP, ROW_PAD, ROW_SIZE, Standing, icon_box, row_inset, standing};
+use super::{MARK_GAP, ROW_PAD, ROW_SIZE, Standing, row_inset, standing};
 use crate::app::AppView;
 use crate::{ArchiveWorkspace, MarkWorkspace};
 use crate::{prompt_cache, right_click};
 
 /// As wide as the button that archives a row, a small button's square.
 const BUTTON: Pixels = look::ControlSize::Small.height();
+/// How wide the box each icon at a row's end is centred in: as big as a place's or a project's icon at its row's start,
+/// so the pencil, which is smaller, and the cache's clock sit as the sidebar's icons do.
+const ICON_BOX: Pixels = look::IconSize::Large.size();
 
 pub(super) fn workspace_row(
     app: &AppView,
@@ -168,16 +171,14 @@ fn right_end(
     if !icons && !button && waiting.is_none() {
         return None;
     }
-    let pencil = icon_box(Lucide::Pencil, muted)
+    let pencil = Icon::new(Lucide::Pencil).sized(look::IconSize::Regular).text_color(muted);
+    let pencil = icon_box(pencil)
         .id(ElementId::Name(format!("draft-{}", workspace.id).into()))
         .role(Role::Image)
         .aria_label("Draft")
         .test_support();
-    // In a box as wide as the pencil's, so the two sit as the sidebar's icons do.
-    let clock = expiring.map(|left_ms| {
-        let clock = prompt_cache::clock(format!("row-cache-{}", workspace.id), left_ms, muted);
-        div().flex_none().size_4().flex().items_center().justify_center().child(clock)
-    });
+    let clock =
+        expiring.map(|left_ms| icon_box(prompt_cache::clock(format!("row-cache-{}", workspace.id), left_ms, muted)));
     let icons_drawn = h_flex().gap(look::Space::XSmall).when(drafted, |d| d.child(pencil)).children(clock);
     // With nothing else at the row's end, the room between the name and the button comes and goes with the button.
     let before = if icons || waiting.is_some() { MARK_GAP.size() } else { MARK_GAP.size() * came };
@@ -199,6 +200,11 @@ fn right_end(
         end.relative().child(room).children(button)
     };
     Some(end.into_any_element())
+}
+
+/// `icon` in the middle of a box as wide as the sidebar's icons.
+fn icon_box(icon: impl IntoElement) -> gpui_kit::Div {
+    div().flex_none().size(ICON_BOX).flex().items_center().justify_center().child(icon)
 }
 
 /// What a workspace is waiting on the hub for, such as `Archiving…`, in place of its button to do that. It shows
