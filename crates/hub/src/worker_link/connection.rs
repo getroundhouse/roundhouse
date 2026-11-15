@@ -134,7 +134,8 @@ impl WorkerLink {
     }
 
     /// Returns once the request is queued, with its reply to wait for, read as [`WorkerLink::call`] reads it. Requests
-    /// reach the worker in the order they're queued.
+    /// reach the worker in the order they're queued. Dropping the reply forgets the call, so it no longer counts in
+    /// [`WorkerLink::calls_under_way`], though the worker carries on with it.
     pub(crate) async fn send<R: Request>(
         &self,
         request: R,
