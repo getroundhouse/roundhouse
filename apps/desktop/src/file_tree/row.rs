@@ -6,10 +6,9 @@ use look::{Hand as _, Typeset as _};
 use crate::file_icons::{ICON_SIZE, file_icon};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    App, ElementId, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Stateful, Styled as _, div, px,
+    App, ElementId, InteractiveElement as _, IntoElement, ParentElement as _, Stateful, Styled as _, div, px,
 };
 
-pub(crate) const ROW_HEIGHT: Pixels = px(28.);
 const PADDING: f32 = 12.;
 /// The space between the things in a row.
 const GAP: f32 = 6.;
@@ -62,7 +61,7 @@ pub(crate) fn row_frame(id: String, list: List, depth: usize, showing: bool, cx:
         .relative()
         .flex_none()
         .w_full()
-        .h(ROW_HEIGHT)
+        .h(look::RowSize::Small.height())
         .pl(px(list.inset(depth)))
         .pr_3()
         .gap(px(GAP))

@@ -11,7 +11,7 @@ const LINES: [Line; 6] =
 /// How far the second project's row is from the heading's top with the first project's workspaces showing, and how
 /// much nearer with the first collapsed: their two rows and the space under each, less what the space under their
 /// project's row grows by when the next project comes straight after it.
-const SECOND_OPEN: f32 = 154.;
+const SECOND_OPEN: f32 = 158.;
 const FOLDS_BY: f32 = 82.;
 
 /// What [`Places`](crate::reorder::Places) sends lines whose places are `places`, each `off` from its place in this
@@ -55,8 +55,8 @@ fn out(laid: &Laid) -> f32 {
 fn at_rest_each_line_is_drawn_whole_at_its_place() {
     let laid = laid(Fold::Open, 0.);
 
-    assert_eq!(drawn(&laid), [0., 32., 70., 110., SECOND_OPEN, SECOND_OPEN + 38.].map(px));
-    assert_eq!(laid.end, px(SECOND_OPEN + 74.));
+    assert_eq!(drawn(&laid), [0., 32., 74., 114., SECOND_OPEN, SECOND_OPEN + 42.].map(px));
+    assert_eq!(laid.end, px(SECOND_OPEN + 78.));
     assert!(laid.lines.iter().all(|line| line.cut.is_none()));
     assert!((out(&laid) - 1.).abs() < f32::EPSILON);
     assert!(laid.settled.is_empty());
@@ -67,9 +67,9 @@ fn a_projects_workspaces_stay_where_they_are_and_are_cut_off_at_what_slides_up_o
     let halfway = laid(Fold::Closing, FOLDS_BY / 2.);
 
     let second = SECOND_OPEN - FOLDS_BY / 2.;
-    assert_eq!(drawn(&halfway), [0., 32., 70., 110., second, second + 38.].map(px), "the rows haven't moved");
+    assert_eq!(drawn(&halfway), [0., 32., 74., 114., second, second + 42.].map(px), "the rows haven't moved");
     assert_eq!(cut(&halfway), [Some(px(35.)), Some(px(0.))], "down to the space kept above the next project");
-    assert_eq!(halfway.end, px(second + 74.), "and the list ends where its last line does");
+    assert_eq!(halfway.end, px(second + 78.), "and the list ends where its last line does");
     assert!((out(&halfway) - 35. / 76.).abs() < 0.001, "the chevron has turned as far as the rows show");
     assert!(halfway.settled.is_empty(), "it's still on its way");
 }
@@ -103,11 +103,11 @@ fn the_last_projects_workspaces_fold_away_under_the_lists_end() {
     let lines = [Line::Repo(0), Line::Workspace(0), Line::Workspace(1)];
     let folds = folds(&lines, |_| Fold::Closing);
     // Its row is all that takes room at rest, and the end has half of the two rows' 76px still to come up.
-    let laid = lay(&lines, &folds, &sent(&[px(0.), px(32.)], &[0., 44.]));
+    let laid = lay(&lines, &folds, &sent(&[px(0.), px(36.)], &[0., 44.]));
 
     let cuts: Vec<_> = laid.lines.iter().map(|line| line.cut).collect();
     assert_eq!(cuts, [None, Some(px(36.)), Some(px(0.))], "with no space kept above the end");
-    assert_eq!(laid.end, px(76.), "the list ends where the rows are cut off");
+    assert_eq!(laid.end, px(80.), "the list ends where the rows are cut off");
 }
 
 #[test]
@@ -115,10 +115,10 @@ fn lines_changing_places_are_drawn_where_theyve_got_to() {
     let lines = [Line::Repo(0), Line::Workspace(0), Line::Workspace(1)];
     let folds = folds(&lines, |_| Fold::Open);
     // The two rows have just changed places, so each is still where the other goes.
-    let laid = lay(&lines, &folds, &sent(&[0., 38., 78., 114.].map(px), &[0., 40., -40., 0.]));
+    let laid = lay(&lines, &folds, &sent(&[0., 42., 82., 118.].map(px), &[0., 40., -40., 0.]));
 
-    assert_eq!(drawn(&laid), [0., 78., 38.].map(px));
-    assert_eq!(laid.end, px(114.));
+    assert_eq!(drawn(&laid), [0., 82., 42.].map(px));
+    assert_eq!(laid.end, px(118.));
     assert!(laid.lines.iter().all(|line| line.cut.is_none()), "and nothing is cut off, since nothing folds");
 }
 
@@ -127,7 +127,7 @@ fn lines_changing_places_are_drawn_where_theyve_got_to() {
 #[test]
 fn a_fold_isnt_over_until_both_its_projects_row_and_what_comes_after_are_in_their_places() {
     let folds = folds(&LINES, |repo| if repo == 0 { Fold::Closing } else { Fold::Open });
-    let places = [0., 32., 72., 110., 146.].map(px);
+    let places = [0., 32., 76., 118., 154.].map(px);
 
     let row_still_moving = lay(&LINES, &folds, &sent(&places, &[0., 20., 0., 0., 0.]));
     let after_still_moving = lay(&LINES, &folds, &sent(&places, &[0., 0., 20., 20., 20.]));

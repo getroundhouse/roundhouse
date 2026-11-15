@@ -7,14 +7,14 @@ use gpui_kit::component::{Icon, IconName, Sizable as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, Context, Hsla, InteractiveElement, IntoElement, ParentElement, Pixels, SharedString,
-    StatefulInteractiveElement, Styled, TestSupportExt as _, div, px,
+    StatefulInteractiveElement, Styled, TestSupportExt as _, div,
 };
 use look::{Shaped as _, TaskRing, Typeset as _};
 use std::path::Path;
 
-/// How tall the build line is, whatever it says, so a check for updates never moves the sidebar above it. As tall as
-/// its buttons and a little room around them.
-const HEIGHT: Pixels = px(28.);
+/// How tall the build line is, whatever it says, so a check for updates never moves the sidebar above it: a small
+/// row's.
+const HEIGHT: Pixels = look::RowSize::Small.height();
 
 /// Something said about updating, in the version's place: an icon in a slot as wide as the ring, so the words start
 /// in one place whichever it is, then the words, cut short before the buttons, and on hover `hover`, which has all of

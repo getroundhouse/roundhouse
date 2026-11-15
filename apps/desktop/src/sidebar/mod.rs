@@ -19,6 +19,6 @@ pub(crate) use standing::{Standing, standing};
 mod workspace_list;
 #[cfg(test)]
 use workspace_list::places;
-use workspace_list::{GROUP_GAP, LIST_PAD, Line, LineId, MARK_GAP, REPO_HEIGHT, ROW_HEIGHT, ROW_INSET, has_line};
-pub(crate) use workspace_list::{HEADING_HEIGHT, SORTS, arrange, listed, lists, render, shown};
+use workspace_list::{GROUP_GAP, HEADING_SIZE, LIST_PAD, Line, LineId, MARK_GAP, ROW_INSET, ROW_SIZE, has_line};
 pub(super) use workspace_list::{ICON_BOX, icon_box};
+pub(crate) use workspace_list::{SORTS, arrange, listed, lists, render, shown};

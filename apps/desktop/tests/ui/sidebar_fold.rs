@@ -3,12 +3,18 @@
 
 #![cfg(test)]
 
-use gpui_kit::{SharedString, TestAppContext, px};
-use protocol::model::WorkspaceId;
+use gpui_kit::{Pixels, SharedString, TestAppContext, px};
+use protocol::model::{RepoId, WorkspaceId};
 
 use crate::support::{
     MORE_THAN_FIT, Stack, Ui, home_row, order, project_row, sidebar_row as row, top, two_projects, wait_out_setup,
 };
+
+/// Where the next project's row starts once `project` is collapsed: under its row, as it's drawn, and the 8px between
+/// projects.
+fn after_collapsed(ui: &mut Ui, project: &RepoId) -> Pixels {
+    ui.bounds(project_row(project)).bottom() + px(8.)
+}
 
 #[gpui_kit::test]
 fn pressing_a_projects_row_collapses_it_and_pressing_it_again_brings_its_workspaces_back(cx: &mut TestAppContext) {
@@ -22,7 +28,7 @@ fn pressing_a_projects_row_collapses_it_and_pressing_it_again_brings_its_workspa
     assert!(!ui.has(row(&upper)) && !ui.has(row(&lower)), "its workspaces are put away");
     assert!(ui.has(row(&third)), "and the other project's aren't");
     let closed = top(&mut ui, project_row(&second));
-    assert_eq!(closed, top(&mut ui, project_row(&first)) + px(40.), "the next project comes straight after it");
+    assert_eq!(closed, after_collapsed(&mut ui, &first), "the next project comes straight after it");
     assert_eq!(ui.view().selected, showing, "what's showing is still showing");
     let saved = |stack: &Stack| std::fs::read_to_string(stack.settings_file()).unwrap_or_default();
     ui.wait("it to be saved", |_| saved(&stack).contains(first.as_str()));
@@ -169,7 +175,7 @@ fn a_projects_workspaces_fold_away_under_what_slides_up_over_them_and_come_to_re
     let stack = Stack::new();
     let (mut ui, [first, second], [upper, lower, ..]) = two_projects(cx, &stack);
     let (was, rows) = (top(&mut ui, project_row(&second)), top(&mut ui, row(&upper)));
-    let goes = top(&mut ui, project_row(&first)) + px(40.);
+    let goes = after_collapsed(&mut ui, &first);
     ui.allow_motion();
 
     ui.click(project_row(&first));

@@ -113,7 +113,7 @@ Three strengths have names of their own, since several places draw with them: wh
 
 ## Space and shape
 
-- **A 4px grid.** Sidebar rows are 36px tall, the workspace header 40px, and the chat tabs 40px. *Unconfirmed.* Settings' sidebar has sizes of its own, so it looks familiar: its search is 28px tall, spaced to the point rather than the grid, with a key 16px tall and 4px corners, and its pages' rows are 32px. *Unconfirmed.* The button back down to a chat's end is a 28px square, as `chats.md` says.
+- **A 4px grid.** *Unconfirmed.* Settings' search has sizes of its own, so it looks familiar: it's 28px tall, spaced to the point rather than the grid, with a key 16px tall and 4px corners. *Unconfirmed.* The button back down to a chat's end is a 28px square, as `chats.md` says.
 - **The window has no title bar of its own.** The sidebar and the workspace header run up to its top edge, so the app reads as one field, and on a Mac the window's buttons sit in the sidebar's top corner, level with the header and as far from the top as from the side, or over the start of the header while the sidebar is hidden, as `sidebar.md` says. The strip along the top, as tall as the header, stands in for a title bar: dragging it moves the window and double-clicking it does what double-clicking a title bar does, which on a Mac is what its setting says and on Windows is maximizing or restoring the window, except where a button or a sidebar's edge takes the press, and pressing it leaves focus where it was.
 - **On Windows, the window's buttons are Windows' own three, minimize, maximize or restore, and close, at the right end of the strip and as tall as it,** since Windows puts them there and has no title bar here to hold them. Each is 46px wide and drawn as Windows draws its own, with the glyph from Windows' icon font, Segoe Fluent Icons, or Segoe MDL2 Assets on Windows 10, or the kit's icon where neither is installed, in the text colour, dimmed while another window is active, a faint shade under the pointer, and Windows' red with a white glyph under it for close. They work as Windows' own do, minimizing, maximizing or restoring, or closing the window as the press is let go, and a screen reader can press each. They're over everything, a dialog included, so they work while one is open. What reaches the strip's right end ends before them: the pull request's bar while the sidebar of changes shows, which leaves out its number once the number doesn't fit beside its action, and otherwise the workspace's header, Home's bar or an error. An action longer than all the room the bar has left, at the sidebar's narrowest, still runs under them, and for the moment the sidebar of changes slides in, the bar passes under them, since it slides at its whole width. The top left corner then has the app's own two, the button that opens the menus and then the one that hides the sidebar, each a small button's square, 4px apart and 12px from the window's edge, as it does on Linux, where the strip has no window buttons. *Unconfirmed.*
 - **The window opens where it was left,** at the size it was, on the display it was on, and in full screen if it was, so a window kept filling the screen still fills it after the app restarts to update. On Windows, one snapped to an edge or a corner, or stretched to the display's height, opens there as an ordinary window, since Windows can't be told to snap a window, and one closed while minimized opens as it was before, filling the screen if it did. One whose display has gone, or that would open out of reach, opens at its usual size in the middle of the main display. *Unconfirmed.*
@@ -147,6 +147,29 @@ Three strengths have names of their own, since several places draw with them: wh
 **Every size of a button, as the app draws it.** *Unconfirmed.*
 
 ![Every size of a button](screens/controls.png)
+
+- **Every bar has a size for where it sits.** A bar reaches from one edge of a pane or a card to the other, with an edge under it. A regular bar is along the top of a pane or a card, and every one is as tall, so the bars side by side across the window line up, whichever pane each is in: the workspace's header, the pull request's bar and Home's bar, in the strip along the window's top, which is as tall as they are, both rows of tabs under them, the bar over Changes' files that sends the comments waiting, a file's path, a subagent's tab's bar, and the bar along the top of the new workspace's card. A small bar is under a bar, and says more of what that one shows, in a detail's text, such as what each side of an image's comparison is. A bar holds buttons of its own size, with room above and below them. What else is called a bar, such as the find bar over the chat or the bar along the composer's bottom, isn't one of these. `look::BarSize` holds the sizes. *Unconfirmed.*
+
+**Every size of a bar, by its name.** Each is a size in `look::BarSize`, from the smallest, with the edge under it. *Unconfirmed.*
+
+| Name | Tall | For |
+|---|---|---|
+| `Small` | 32px | Under a bar, saying more of what that one shows, in a detail's text, such as what each side of an image's comparison is |
+| `Regular` | 40px | Along the top of a pane or a card: the workspace's header, the pull request's bar, Home's bar, both rows of tabs, the bar over Changes' files that sends the comments waiting, a file's path, a subagent's tab's bar, and the new workspace's card's |
+
+- **Every row of a list that's one line tall has a size for what the list is,** so the rows of the same kind of list are as tall, wherever it is. A regular row is for most lists, such as the places to go in a sidebar, and a large one is a row of a table. A small row is used sparingly, for a long list to look down, where more room would show less of it at once, such as a file tree or a chat's calls, and whatever the list, for the heading over it, and for a line on its own, set apart from a list, such as a fold among a diff's lines or the build line under the sidebar. Each holds a small button, with room above and below it. A row taller than a line, such as a prompt in the outline or in the queue, is as tall as what it says, with room above and below it. `look::RowSize` holds the sizes. *Unconfirmed.*
+
+**Every size of a row, by its name.** Each is a size in `look::RowSize`, from the smallest. *Unconfirmed.*
+
+| Name | Tall | For |
+|---|---|---|
+| `Small` | 28px | Used sparingly: a long list to look down, where more room would show less of it at once, such as a file in a tree, a call's line in the chat, a page a search found or a closed chat in its menu, and whatever the list, the heading over it, and a line on its own, set apart from a list, such as a fold among a diff's lines or the build line under the sidebar |
+| `Regular` | 36px | Most lists, such as the places to go in a sidebar: the sidebar's own places, its projects and their workspaces, and Settings' pages |
+| `Large` | 44px | A row of a table, with a line between it and the next: Home's workspaces |
+
+**Every size of a bar and of a row, as the app draws them.** *Unconfirmed.*
+
+![Every size of a bar and of a row](screens/heights.png)
 
 - **The transcript is a centred column, at most 848px wide,** so lines stay short enough to read in a wide window. *Unconfirmed.*
 - **Everything in the transcript but a prompt starts on the column's left edge:** what the agent wrote, a call's icon, and what a call or a thought opens to, so the eye always goes back to the same place. Something with an edge, such as a code block or the rule down a subagent's work, puts its edge there, and what's inside it sits in from it.

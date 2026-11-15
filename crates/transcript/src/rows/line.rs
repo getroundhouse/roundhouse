@@ -25,8 +25,8 @@ use crate::item_key::ItemKey;
 use crate::rows::around::{Answer, Outcome};
 
 const ICON: f32 = look::LINE_ICON;
-/// As tall as a line of body text and a little room, so calls in a row read as a list.
-pub(super) const HEIGHT: f32 = 28.0;
+/// A small row's, so calls in a row read as a list.
+pub(super) const HEIGHT: Pixels = look::RowSize::Small.height();
 /// The hover group of one line, which turns its icon into the way to open it.
 const GROUP: &str = "tool-line";
 /// More of prose's start than a line has room for, so a long first line isn't copied to be cut off.
@@ -157,7 +157,7 @@ impl Line {
 
 /// What a line is drawn in: as tall as every line, its parts side by side, cut off where it ends.
 fn frame() -> Div {
-    h_flex().h(px(HEIGHT)).gap_2().overflow_hidden().whitespace_nowrap()
+    h_flex().h(HEIGHT).gap_2().overflow_hidden().whitespace_nowrap()
 }
 
 impl Part {

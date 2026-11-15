@@ -3,14 +3,11 @@
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::{IconName, IconNamed, Selectable as _, h_flex, v_flex};
-use gpui_kit::{Context, IntoElement, ParentElement, Pixels, Styled, px};
+use gpui_kit::{Context, IntoElement, ParentElement, Styled};
 use look::{Hand as _, Off as _, Typeset as _};
 
-use super::icon_box;
+use super::{ROW_SIZE, icon_box};
 use crate::app::AppView;
-
-/// Each item's height, as a row of body text with 6px above and below.
-const ITEM_HEIGHT: Pixels = px(32.);
 
 /// The block of items, with a line under it before the workspaces.
 pub(super) fn nav(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
@@ -44,5 +41,5 @@ fn item(id: &'static str, icon: impl IconNamed, label: &'static str, cx: &mut Co
     let muted = look::colors(cx).text_muted;
     let content =
         h_flex().w_full().gap_2().typeset(look::Type::Body).text_color(muted).child(icon_box(icon, muted)).child(label);
-    Button::new(id).accessibility_label(label).ghost().w_full().h(ITEM_HEIGHT).px_1p5().child(content)
+    Button::new(id).accessibility_label(label).ghost().w_full().h(ROW_SIZE.height()).px_1p5().child(content)
 }

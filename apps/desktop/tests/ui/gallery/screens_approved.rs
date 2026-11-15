@@ -2,9 +2,9 @@
 use super::screens::SCREENS;
 use super::{
     approval_chats, approved, background_chats, baselines, cache_screens, call_screens, capture, colours,
-    compaction_chats, context_screens, controls, corners, diff_screens, failure_chats, home_screens, kinds_of_text,
-    look_screens, mark_states, own_turn_chats, pull_requests, settings_screens, sidebar_screens, steps, subagent_chats,
-    tool_screens, turn_screens, update_screens, workspace_screens,
+    compaction_chats, context_screens, controls, corners, diff_screens, failure_chats, heights, home_screens,
+    kinds_of_text, look_screens, mark_states, own_turn_chats, pull_requests, settings_screens, sidebar_screens, steps,
+    subagent_chats, tool_screens, turn_screens, update_screens, workspace_screens,
 };
 use approved::Verdict;
 use capture::Picture;
@@ -98,6 +98,7 @@ fn every_screen_looks_as_approved() {
             kinds_of_text::NAME,
             corners::NAME,
             controls::NAME,
+            heights::NAME,
         ])
         .collect();
     problems.extend(approved::without_a_screen(&names).into_iter().map(|name| format!("{name}.png has no screen")));
@@ -197,4 +198,13 @@ fn every_control_size_looks_as_approved() {
     let picture = controls::draw(&text_system);
 
     report(&look_at(controls::NAME, controls::SPEC, &picture));
+}
+
+#[test]
+fn every_bar_and_row_height_looks_as_approved() {
+    let text_system: Arc<dyn PlatformTextSystem> = Arc::new(gpui_apple::AppleTextSystem::new());
+
+    let picture = heights::draw(&text_system);
+
+    report(&look_at(heights::NAME, heights::SPEC, &picture));
 }

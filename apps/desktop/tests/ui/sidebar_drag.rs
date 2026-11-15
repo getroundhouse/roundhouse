@@ -93,7 +93,7 @@ fn a_dragged_projects_row_and_workspaces_follow_the_pointer_as_one_and_slide_to_
     press(&mut ui, from);
 
     // The drag starts once the pointer has moved a little way, and the row follows it from there, so it doesn't jump.
-    // Then down past the middle of the other project, which is 57px below where this one's row starts without it.
+    // Then down past the middle of the other project, which is 59px below where this one's row starts without it.
     let started = from + point(px(0.), px(10.));
     hold_at(&mut ui, started);
     hold_at(&mut ui, started + point(px(0.), px(60.)));

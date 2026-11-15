@@ -21,8 +21,6 @@ use super::view::chat_title;
 /// the menu's, because the kit lets a row of an app's own grow to its whole title instead of shortening it to fit
 /// the menu, and the menu fits itself around its rows.
 const ROW_WIDTH: Pixels = px(280.);
-/// A little taller than the kit's own menu items, so a row with an icon at its end isn't cramped.
-const ROW_HEIGHT: Pixels = px(28.);
 /// The button's, so its icon lights up wherever the pointer is over it, not only over the icon.
 const BUTTON_GROUP: &str = "closed-chats";
 
@@ -103,7 +101,8 @@ fn row(title: SharedString, ago: SharedString) -> impl Fn(&mut Window, &mut App)
         let muted = look::colors(cx).text_muted;
         h_flex()
             .w(ROW_WIDTH)
-            .h(ROW_HEIGHT)
+            // A little taller than the kit's own menu's rows, so a row with an icon at its end isn't cramped.
+            .h(look::RowSize::Small.height())
             .gap_2()
             .child(div().flex_1().min_w_0().truncate().child(title.clone()))
             .child(div().flex_none().text_color(muted).child(ago.clone()))

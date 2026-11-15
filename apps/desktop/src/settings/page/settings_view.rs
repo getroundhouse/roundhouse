@@ -1,6 +1,6 @@
 use super::{accounts, general, notifications, rows, sidebar};
 use crate::FindSetting;
-use crate::workspace_pane::HEADER_HEIGHT;
+use crate::app::TOP_STRIP_HEIGHT;
 use client_core::records::Snapshot;
 use client_core::{Client, RecordsFeed};
 use gpui_kit::assets::IconName as Lucide;
@@ -104,7 +104,7 @@ impl RenderOnce for SettingsView {
 /// focus marks a press as taken, and a press on the strip has to reach the window to move it, leaving focus where it
 /// was.
 fn takes_focus(focus: &FocusHandle) -> impl IntoElement {
-    div().absolute().top(HEADER_HEIGHT).left_0().right_0().bottom_0().track_focus(focus)
+    div().absolute().top(TOP_STRIP_HEIGHT).left_0().right_0().bottom_0().track_focus(focus)
 }
 
 /// Whether a setting is on, or `None` for one that can't be read or changed just now, such as a hub's while the hub
@@ -235,7 +235,7 @@ pub(super) fn shown(sections: &[Section], chosen: Option<PageId>) -> Option<&Pag
 /// In the strip along the top, level with the window's buttons at the other end, and muted, since it's not what
 /// Settings is for. A press on it is the button's, so it doesn't move the window.
 fn way_back(width: Pixels, back: Back, cx: &App) -> impl IntoElement {
-    div().absolute().top_0().left_0().w(width).h(HEADER_HEIGHT).flex().items_center().justify_end().pr_3().child(
+    div().absolute().top_0().left_0().w(width).h(TOP_STRIP_HEIGHT).flex().items_center().justify_end().pr_3().child(
         Button::new("settings-back")
             .hand()
             .ghost()
@@ -255,7 +255,7 @@ fn settings_page(page: &Page, within: &Within, cx: &App) -> impl IntoElement {
     let title = div()
         .flex_none()
         .px_8()
-        .pt(HEADER_HEIGHT + px(20.))
+        .pt(TOP_STRIP_HEIGHT + px(20.))
         .pb_2()
         .typeset(look::Type::PageTitle)
         .text_color(look::colors(cx).text)

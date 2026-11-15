@@ -13,13 +13,11 @@ use gpui_kit::{
 use look::{Hand as _, Shaped as _, Typeset as _};
 
 use super::{FIND_KEY, Page, PageId, Section};
-use crate::sidebar::HEADING_HEIGHT;
-use crate::workspace_pane::HEADER_HEIGHT;
+use crate::app::TOP_STRIP_HEIGHT;
 
 /// What the search says while nothing is typed in it, and what it's called to assistive apps.
 const SEARCH_SAYS: &str = "Search settings";
 const SEARCH_HEIGHT: Pixels = px(28.);
-const ROW_HEIGHT: Pixels = px(32.);
 /// How far a page's row sets its icon in from its edge, and a heading its name, so the two line up.
 const ROW_INSET: Pixels = px(8.);
 
@@ -38,7 +36,7 @@ pub(super) fn sidebar(
     let colors = look::colors(cx);
     let headed = sections.iter().map(|section| {
         let heading = div()
-            .h(HEADING_HEIGHT)
+            .h(look::RowSize::Small.height())
             .px(ROW_INSET)
             .flex()
             .items_center()
@@ -53,7 +51,7 @@ pub(super) fn sidebar(
         .flex_none()
         .w(width)
         .h_full()
-        .pt(HEADER_HEIGHT)
+        .pt(TOP_STRIP_HEIGHT)
         .pl_1p5()
         .pr_2()
         .bg(colors.sidebar)
@@ -149,7 +147,7 @@ fn page_row(page: &Page, showing: bool, chosen: &Entity<Option<PageId>>, cx: &Ap
         .aria_label(page.name)
         .aria_selected(showing)
         .w_full()
-        .h(ROW_HEIGHT)
+        .h(look::RowSize::Regular.height())
         .px(ROW_INSET)
         .gap_3()
         .corners(look::Corner::Control)

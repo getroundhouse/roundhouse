@@ -14,10 +14,7 @@ use look::{Hand as _, Shaped as _, Sizing as _, Typeset as _};
 
 use super::{Comparison, ImageDiff, Outcome, Shown, Side, choose, comparison, stacked};
 use crate::file_image::{FileImage, Placed, fitted};
-use crate::file_view::{HEADER_HEIGHT, placeholder};
-
-/// How tall the strip under the bar is, of smaller text than the bar's.
-const STRIP_HEIGHT: Pixels = px(30.);
+use crate::file_view::placeholder;
 
 impl Render for ImageDiff {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -137,7 +134,7 @@ fn strip(told: Told, cx: &App) -> Div {
     let strip = h_flex()
         .flex_none()
         .w_full()
-        .h(STRIP_HEIGHT)
+        .h(look::BarSize::Small.height())
         .border_b_1()
         .border_color(colors.edge)
         .typeset(look::Type::Detail)
@@ -177,7 +174,7 @@ fn header(path: Option<SharedString>, choices: Option<Div>, cx: &App) -> Div {
     h_flex()
         .flex_none()
         .w_full()
-        .h(HEADER_HEIGHT)
+        .h(look::BarSize::Regular.height())
         .px_4()
         .border_b_1()
         .border_color(colors.edge)

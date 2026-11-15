@@ -17,7 +17,7 @@ use gpui_kit::{
 use look::{Hand as _, LineText, Off as _, Placed, Sizing as _, Typeset as _};
 use protocol::model::{Workspace, WorkspaceId};
 
-use super::{ICON_BOX, MARK_GAP, ROW_HEIGHT, ROW_INSET, Standing, icon_box, standing};
+use super::{ICON_BOX, MARK_GAP, ROW_INSET, ROW_SIZE, Standing, icon_box, standing};
 use crate::app::AppView;
 use crate::{ArchiveWorkspace, MarkWorkspace};
 use crate::{prompt_cache, right_click};
@@ -59,7 +59,7 @@ pub(super) fn workspace_row(
         .accessibility_label(label.clone())
         .ghost()
         .w_full()
-        .h(ROW_HEIGHT)
+        .h(ROW_SIZE.height())
         .pl(ROW_INSET)
         .pr_1p5()
         .selected(selected)

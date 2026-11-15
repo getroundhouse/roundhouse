@@ -28,5 +28,4 @@ mod workspace_card;
 
 mod pane;
 use pane::Chat;
-pub(crate) use pane::HEADER_HEIGHT;
 pub use pane::{Diff, PaneEvent, Showing, WorkspacePane};

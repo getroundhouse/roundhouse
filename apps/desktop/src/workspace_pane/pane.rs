@@ -13,7 +13,7 @@ use client_core::records::InWorkspace;
 use client_core::{Client, Drafts, RecordsFeed};
 use file_tab::FileTab;
 use gpui_kit::component::input::TextareaState;
-use gpui_kit::{AnyWindowHandle, Context, Entity, EventEmitter, Pixels, Subscription, Task, Window, px};
+use gpui_kit::{AnyWindowHandle, Context, Entity, EventEmitter, Subscription, Task, Window};
 use protocol::attachment::Attachment;
 use protocol::model::{Seq, Session, SessionId, Workspace, WorkspaceId, WorkspaceStatus};
 use reading::Reading;
@@ -125,10 +125,6 @@ pub struct WorkspacePane {
 }
 
 impl EventEmitter<PaneEvent> for WorkspacePane {}
-
-/// The workspace header's height, which is also the strip along the window's top that moves it. The window's buttons
-/// sit in the sidebar's part of the strip, and the sidebar's list starts level with its bottom edge, so the two line up.
-pub(crate) const HEADER_HEIGHT: Pixels = px(40.);
 
 impl WorkspacePane {
     /// Where the workspace's work stands, as its mark and the pull request's bar show it.

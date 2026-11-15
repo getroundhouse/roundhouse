@@ -279,7 +279,7 @@ fn band(
     h_flex()
         .flex_none()
         .w_full()
-        .h(px(40.))
+        .h(look::BarSize::Regular.height())
         .px_4()
         .gap_2()
         .border_b_1()

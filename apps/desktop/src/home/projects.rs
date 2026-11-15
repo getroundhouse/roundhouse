@@ -13,11 +13,12 @@ use gpui_kit::{
     AnyElement, App, AppContext as _, Context, ElementId, Entity, InteractiveElement as _, IntoElement, ParentElement,
     Pixels, ScrollHandle, StatefulInteractiveElement as _, Styled, Subscription, TestSupportExt as _, Window, div, px,
 };
-use look::{Hand as _, InRegion as _, LineText, Off as _, Placed, Region, Sizing as _};
+use look::{Hand as _, InRegion as _, LineText, Off as _, Placed, Region, RowSize, Sizing as _};
 use protocol::model::{RepoId, Workspace, WorkspaceId, WorkspaceStatus};
 use std::rc::Rc;
 
-const ROW_HEIGHT: Pixels = px(44.);
+/// How tall a row is, as a table's. The list places each row by its size, so what's drawn there takes it from here too.
+const ROW_SIZE: RowSize = RowSize::Large;
 /// The repository's column, wide enough for most names.
 const REPO_WIDTH: Pixels = px(160.);
 
@@ -167,9 +168,9 @@ pub(crate) fn arrange(app: &mut AppView, window: &mut Window, cx: &App) -> Rows 
         app.home.places.forget();
     }
     let Arrangement { drawn, end, .. } =
-        app.home.places.arrange(ids.iter().map(|id| (id.clone(), ROW_HEIGHT)), window, cx);
+        app.home.places.arrange(ids.iter().map(|id| (id.clone(), ROW_SIZE.height())), window, cx);
     app.home.hold.showed(showing, ids);
-    let drawn = drawn.iter().map(|&top| Drawn { top, height: ROW_HEIGHT, above: false }).collect();
+    let drawn = drawn.iter().map(|&top| Drawn { top, height: ROW_SIZE.height(), above: false }).collect();
     Rows { listed: listed.into(), drawn, end }
 }
 
@@ -213,7 +214,7 @@ fn row(app: &AppView, workspace: &Workspace, line_text: &LineText, cx: &mut Cont
     h_flex()
         .id(ElementId::Name(format!("home-{}", workspace.id).into()))
         .w_full()
-        .h(ROW_HEIGHT)
+        .h(ROW_SIZE.height())
         .px_4()
         .gap_3()
         .border_b_1()

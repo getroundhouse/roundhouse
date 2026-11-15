@@ -9,7 +9,7 @@ use gpui_kit::component::h_flex;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, Div, ElementId, InteractiveElement as _, IntoElement, ParentElement, Role, SharedString,
-    StatefulInteractiveElement as _, Styled, div, px,
+    StatefulInteractiveElement as _, Styled, div,
 };
 use look::{Hand as _, LineText, Typeset as _};
 
@@ -19,8 +19,6 @@ use crate::find::{self, Marks, Part as Text};
 use crate::folds::Fold;
 use crate::item_key::ItemKey;
 use crate::rows::shown::Gather;
-
-const LINK_HEIGHT: f32 = 24.0;
 
 pub(super) fn fetch(fetch: &Fetch, answer: Option<&Answer>, toggle: &Toggle, cx: &App) -> AnyElement {
     let line = Line::new(IconName::Globe, "Fetch").part(Part::Chip(site(fetch.url).to_string().into()));
@@ -117,7 +115,7 @@ fn link_row(id: ElementId, link: &Link, marks: &Marks, area: &ElementId, line_te
         .id(id)
         .role(Role::Link)
         .aria_label(title.clone())
-        .h(px(LINK_HEIGHT))
+        .h(look::RowSize::Small.height())
         .px_3()
         .gap_2()
         .hand()
