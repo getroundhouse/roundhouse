@@ -1,0 +1,45 @@
+# The Zig that builds Ghostty's terminal core, which libghostty-vt-sys's build script runs, and Zig's global cache, for
+# the jobs that build Ghostty. A composite action can't run a step when the job ends, so each job saves the cache
+# itself, with the key this gives.
+name: Zig
+description: Installs Zig, and restores Zig's global cache
+inputs:
+  cache-name:
+    description: What the cache is named for, as the job's target/ cache is
+    required: true
+outputs:
+  cache-hit:
+    description: Whether the cache's key matched exactly
+    value: ${{ steps.restore.outputs.cache-hit }}
+  cache-primary-key:
+    description: The key to save the cache under
+    value: ${{ steps.restore.outputs.cache-primary-key }}
+runs:
+  using: composite
+  steps:
+    # It points Zig's global cache at .zig-cache in the checkout. Its own cache of that is off, since it saves after
+    # every run, a PR's too.
+    - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+      with:
+        # renovate: datasource=forgejo-tags depName=ziglang/zig registryUrl=https://codeberg.org
+        version: 0.17.1
+        use-cache: false
+    # The libghostty-rs commit Cargo.lock locks, since it fixes the Ghostty commit the build script fetches.
+    - id: key
+      shell: bash
+      run: |
+        rev=$(grep -om1 'git+https://github.com/Uzaaft/libghostty-rs[^"]*' Cargo.lock | cut -s -d'#' -f2) || true
+        if [ -z "$rev" ]; then
+          echo "::error::Cargo.lock locks no commit of libghostty-rs, which names Zig's cache"
+          exit 1
+        fi
+        echo "key=$(zig version)-$rev" >> "$GITHUB_OUTPUT"
+    # The packages Ghostty fetches, and what Zig builds besides Ghostty itself. Restored on a fresh runner, it halved
+    # building Ghostty when target/ held none of it. Only main saves it, and main starts from nothing when the key
+    # changes, so a cache holds what one Zig built for one Ghostty.
+    - id: restore
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: .zig-cache
+        key: zig-${{ inputs.cache-name }}-${{ steps.key.outputs.key }}
+        restore-keys: ${{ github.ref != 'refs/heads/main' && format('zig-{0}-', inputs.cache-name) || '' }}
