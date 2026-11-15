@@ -150,7 +150,6 @@ fn a_chats_first_launch_under_a_held_login_puts_it_on_the_hubs_for_that_account_
     assert_eq!((before.account_source, before.account), (None, None));
     assert_eq!((&first.on, first.session_changed, first.forgot_cache), (&on_given, true, false));
     assert_eq!((after.account_source, after.account), (Some(AccountSource::Hub), Some("given".into())));
-    assert_eq!(after.assigned_account, Some("given".into()), "for clients from before the source");
     assert!(after.rev > before.rev);
     let left = Recorded { on: on_given, session_changed: false, forgot_cache: false, account_changed: None };
     assert_eq!(later, left);

@@ -4,7 +4,6 @@ use super::super::made::{Made, inserted, made_by};
 use super::super::{
     Store, StoreError, StoredSession, current_rev, from_text, json_at, lock, rev_of, seq_column, seq_of, text_of,
 };
-use super::SessionLogin;
 use protocol::model::{
     Account, AccountId, AccountSource, AgentKind, AttachmentId, ClientRequestId, ContextUsage, Draft, ModelName,
     PromptCache, QueuedPrompt, Rev, RunId, Session, SessionId, SessionSettingsChange, SessionStatus, Title, Wait,
@@ -59,10 +58,6 @@ pub(in super::super) fn session_from_row(row: &Row) -> rusqlite::Result<StoredSe
     let waits = waits_from(&row.get::<_, String>(32)?)?;
     let account: Option<AccountId> = row.get::<_, Option<String>>(22)?.map(Into::into);
     let account_source: Option<AccountSource> = row.get::<_, Option<String>>(31)?.map(from_text).transpose()?;
-    let hub_account = match SessionLogin::of(account_source, account.as_ref()) {
-        SessionLogin::Hub(account) => Some(account),
-        SessionLogin::NoneYet | SessionLogin::Ambient => None,
-    };
     Ok(StoredSession {
         session: Session {
             id: row.get::<_, String>(0)?.into(),
@@ -91,7 +86,6 @@ pub(in super::super) fn session_from_row(row: &Row) -> rusqlite::Result<StoredSe
             context: json_at(row, 21)?,
             account,
             account_source,
-            assigned_account: hub_account,
             user_active_at_ms: row.get(23)?,
             // Written only by this hub, as JSON. One it can't read is as good as none, until the agent next asks.
             prompt_cache: json_at(row, 24)?,
