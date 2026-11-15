@@ -23,6 +23,7 @@ mod previous;
 mod progress;
 mod queue;
 mod record;
+mod starting;
 mod status;
 #[cfg(test)]
 mod tests;
@@ -30,6 +31,7 @@ mod waits;
 
 pub(crate) use messages::{Command, Item};
 pub(crate) use progress::Progress;
+pub(crate) use starting::Starting;
 
 mod live;
 

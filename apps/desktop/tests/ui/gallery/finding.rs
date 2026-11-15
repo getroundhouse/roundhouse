@@ -91,5 +91,5 @@ fn what_went_wrong() -> Vec<EventBody> {
         kind: FailureKind::Limit,
         resets_at_ms: None,
     };
-    vec![notice, EventBody::RequestFailed { parent_tool_use_id: None, failure: limit }, failed, stopped]
+    vec![notice, EventBody::RequestFailed { parent_tool_use_id: None, failure: limit, again: None }, failed, stopped]
 }

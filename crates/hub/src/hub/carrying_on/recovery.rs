@@ -1,6 +1,6 @@
 use super::super::{BEFORE_SERVING, Hub};
 use crate::error::provider_failed;
-use crate::session::{CarriedOver, Item, LiveSession, Progress};
+use crate::session::{CarriedOver, Item, LiveSession, Progress, Starting};
 use crate::store::{Store, StoreError, cancelled_approval};
 use parking_lot::Mutex;
 use protocol::client::{ApiError, ErrorCode};
@@ -188,12 +188,12 @@ impl Hub {
                 if let Some(claims) = &claims {
                     store.set_claims(&owned, claims)?;
                 }
-                Ok((store.get_session(&owned)?, store.open_approvals(&owned)?, store.recorded_from_worker(&owned)?))
+                Ok((Starting::read(store, &owned)?, store.recorded_from_worker(&owned)?))
             })
             .await;
-        let started = read.and_then(|(stored, approvals, recorded)| {
+        let started = read.and_then(|(starting, recorded)| {
             let carried = CarriedOver { link, run, recorded, untaken };
-            self.sessions.lock().keep(id, || LiveSession::start(self, stored, &approvals, Some(carried)))
+            self.sessions.lock().keep(id, || LiveSession::start(self, starting, Some(carried)))
         });
         if let Err(e) = started {
             warn!(session = %id, "carrying on with a session: {}", e.message);
@@ -213,9 +213,12 @@ impl Hub {
 /// session is interrupted, what it ran in the background went with it, and its queue is held. But a session whose only
 /// work was a wait, which the hub keeps, had nothing cut off, as when this hub stops with it, so it's still at work in
 /// the background, with the wait listed and its queue free, and its agent is started again once the wait ends.
+/// It records only the hub's own events, none of which the agent's failures in a row carry on through, so it starts from
+/// none.
 pub(super) fn interrupt(store: &Store, id: &SessionId, untaken: Vec<Seq>) -> Result<(), StoreError> {
     let open_approvals = store.open_approvals(id)?;
-    let mut progress = Progress::recorded(&store.get_session(id)?.session, &open_approvals, None, untaken.clone());
+    let session = store.get_session(id)?.session;
+    let mut progress = Progress::recorded(&session, &open_approvals, None, untaken.clone(), None);
     drop_untaken_in(store, id, &mut progress, untaken)?;
     for approval_id in open_approvals {
         progress.record_in(store, id, cancelled_approval(approval_id))?;
@@ -226,10 +229,11 @@ pub(super) fn interrupt(store: &Store, id: &SessionId, untaken: Vec<Seq>) -> Res
     progress.record_in(store, id, exited)
 }
 
-/// Drops the prompts a session that isn't at work had left untaken, as [`interrupt`] does those of one that is.
+/// Drops the prompts a session that isn't at work had left untaken, as [`interrupt`] does those of one that is, from no
+/// failures in a row, as it does.
 fn drop_untaken(store: &Store, id: &SessionId, untaken: Vec<Seq>) -> Result<(), StoreError> {
-    let mut progress =
-        Progress::recorded(&store.get_session(id)?.session, &store.open_approvals(id)?, None, untaken.clone());
+    let session = store.get_session(id)?.session;
+    let mut progress = Progress::recorded(&session, &store.open_approvals(id)?, None, untaken.clone(), None);
     drop_untaken_in(store, id, &mut progress, untaken)
 }
 

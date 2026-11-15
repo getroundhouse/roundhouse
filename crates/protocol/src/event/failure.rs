@@ -2,6 +2,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::model::Seq;
+
 /// Why one of the agent's requests to its model failed, as the agent's CLI said in a message of its own, in the place
 /// of the model's reply.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -37,4 +39,15 @@ pub enum FailureKind {
     #[default]
     #[serde(other)]
     Unknown,
+}
+
+/// That one of the agent's own failed requests is the same failure as its own failed request before it, with nothing
+/// between them that ended the row, such as a prompt or anything the agent said, so a client shows them as one. The hub
+/// says, as it records the failure, since only it holds the whole log.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Again {
+    /// The failed request this one repeats.
+    pub previous: Seq,
+    /// How many times in a row the request has failed, this one included, so 2 or more.
+    pub times: u32,
 }

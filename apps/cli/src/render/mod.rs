@@ -6,8 +6,11 @@ mod approval;
 mod tests;
 
 mod printer;
+mod turns;
 
 pub(crate) use printer::Printer;
 use printer::about;
 #[cfg(test)]
-use printer::{called, came_back, denial, own_turn, started};
+use printer::{called, came_back, denial, started};
+#[cfg(test)]
+use turns::{own_turn, request_failed};

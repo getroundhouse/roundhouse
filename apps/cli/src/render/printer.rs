@@ -1,15 +1,15 @@
 use client_core::calls::{Recorded, Returned, first_line};
-use client_core::waits::{watched, why_it_ended};
 use protocol::attachment::Attachment;
 use protocol::capability::turns::OwnTurn;
 use protocol::event::{
-    AgentTask, CompactionOutcome, ContentBlock, Denied, EndedTask, EventBody, Question, SessionEvent, TaskKind,
-    TaskOutcome, TurnOutcome,
+    AgentTask, CompactionOutcome, ContentBlock, Denied, EventBody, Question, SessionEvent, TaskOutcome, TurnOutcome,
 };
 use protocol::model::{ApprovalId, MessageId, PermissionMode, Seq, TaskId, ToolUseId};
 use protocol::tail::{DeltaChange, StreamDelta, Tail};
 use std::collections::HashMap;
 use std::io::Write;
+
+use super::turns::{own_turn, request_failed};
 
 /// How much of a tool's result to show. The full text stays in the log.
 const RESULT_PREVIEW_LINES: usize = 6;
@@ -104,9 +104,7 @@ impl Printer {
             EventBody::ApprovalResolved { .. } => self.approval_resolved(event),
             EventBody::AgentExited { .. } => self.exited(event),
             EventBody::Notice { level, message, .. } => self.line(event.seq, &format!("{level:?}: {message}")),
-            EventBody::RequestFailed { failure, .. } => {
-                self.line(event.seq, &format!("request failed: {}", failure.message));
-            }
+            EventBody::RequestFailed { failure, again, .. } => self.line(event.seq, &request_failed(failure, *again)),
             EventBody::AgentMode { permission_mode } => {
                 self.line(event.seq, &format!("approval mode: {}", crate::session::mode_name(*permission_mode)));
             }
@@ -363,33 +361,11 @@ fn compacted(outcome: &CompactionOutcome) -> String {
 }
 
 /// How a task ended, in a word.
-fn how_it_ended(outcome: TaskOutcome) -> &'static str {
+pub(super) fn how_it_ended(outcome: TaskOutcome) -> &'static str {
     match outcome {
         TaskOutcome::Finished => "finished",
         TaskOutcome::Failed => "failed",
         TaskOutcome::Stopped => "stopped",
         TaskOutcome::Unknown => "ended",
     }
-}
-
-/// That the agent picked up by itself, and which of its tasks it heard had ended, each named as its list named it, but
-/// for a wait, which says which pull requests it waited on and why it ended, from the hub's record, as the app does.
-pub(super) fn own_turn(ended: &[EndedTask]) -> String {
-    let each = ended.iter().map(|ended| {
-        if ended.task.kind == TaskKind::Wait {
-            let how = how_it_ended(ended.outcome);
-            let (what, why) = match &ended.wait {
-                Some(wait) => (watched(&wait.watching), wait.ended.map_or(how, |ended| why_it_ended(ended.how))),
-                None => ("a pull request".to_string(), how),
-            };
-            return format!("waited on {what} ({why})");
-        }
-        let what = ended.task.description.as_deref().unwrap_or(ended.task.id.as_str());
-        format!("{what} {}", how_it_ended(ended.outcome))
-    });
-    let each: Vec<String> = each.collect();
-    if each.is_empty() {
-        return "the agent picked up by itself".to_string();
-    }
-    format!("the agent picked up by itself, after: {}", each.join("; "))
 }

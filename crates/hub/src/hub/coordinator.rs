@@ -3,7 +3,7 @@ use crate::attachment_files::AttachmentFiles;
 use crate::error::internal;
 use crate::logins::Logins;
 use crate::provider_set::ProviderSet;
-use crate::session::{Item, LiveSession};
+use crate::session::{Item, LiveSession, Starting};
 use crate::store::{MadeByRequest, Store, StoreError, now_ms};
 use crate::timers::Timers;
 use crate::versions;
@@ -218,14 +218,8 @@ impl Hub {
             return Ok(session.clone());
         }
         let owned = id.clone();
-        let (stored, approvals) = self
-            .blocking(move |store| {
-                let stored = store.get_session(&owned)?;
-                let approvals = store.open_approvals(&owned)?;
-                Ok((stored, approvals))
-            })
-            .await?;
-        self.sessions.lock().keep(id, || LiveSession::start(self, stored, &approvals, None))
+        let starting = self.blocking(move |store| Starting::read(store, &owned)).await?;
+        self.sessions.lock().keep(id, || LiveSession::start(self, starting, None))
     }
 
     // Platform API --------------------------------------------------------------------------------

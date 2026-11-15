@@ -1,5 +1,5 @@
 //! Run initialization is durable, and a replaced run cannot choose the conversation the next launch resumes.
-use super::super::{CarriedOver, Item, LiveSession};
+use super::super::{CarriedOver, Item, LiveSession, Starting};
 use crate::hub::tests::{carried_on, flushed, hub_in, stand_in_worker, taking_worker};
 use protocol::capability::{Capabilities, Claimed};
 use protocol::event::EventBody;
@@ -49,15 +49,13 @@ async fn only_the_current_run_can_choose_the_resume_id_and_its_claims_survive_re
     assert_eq!(kept.session.agent_capabilities, Some(RunCapabilities { run, claims: Box::new(claims.clone()) }));
     let restored = LiveSession::start(
         &hub,
-        kept.clone(),
-        &[],
+        Starting::of(kept.clone()),
         Some(CarriedOver { link: link.id, run, recorded: None, untaken: Vec::new() }),
     );
     assert_eq!(restored.run_claims(), Some(claims));
     let replaced = LiveSession::start(
         &hub,
-        kept,
-        &[],
+        Starting::of(kept),
         Some(CarriedOver { link: link.id, run: RunId::new(3), recorded: None, untaken: Vec::new() }),
     );
     assert!(replaced.run_claims().is_none(), "another run cannot inherit old claims");

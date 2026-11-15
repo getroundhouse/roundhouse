@@ -1,10 +1,10 @@
 use super::controls::Askable;
-use super::{commands, ingest, limits, messages, progress};
+use super::{Starting, commands, ingest, limits, messages, progress};
 use crate::attachment_files::FileFor;
 use crate::error::internal;
 use crate::hub::Hub;
 use crate::store;
-use crate::store::{SessionLogin, StoredSession};
+use crate::store::SessionLogin;
 use commands::run_commands;
 use ingest::run_ingest;
 use messages::{Command, Item};
@@ -13,7 +13,7 @@ use progress::Progress;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::event::EventBody;
 use protocol::model::{
-    AgentKind, AgentSessionId, ApprovalId, ContextUsage, PromptCache, RunId, Seq, Session, SessionId, SessionSettings,
+    AgentKind, AgentSessionId, ContextUsage, PromptCache, RunId, Seq, Session, SessionId, SessionSettings,
     SessionSettingsChange, SessionStatus, ToolUseId, WorkspaceId,
 };
 use protocol::tail::{StreamDelta, Tail};
@@ -173,13 +173,10 @@ pub(super) fn publish(state: &mut LiveState, item: LiveItem) {
 }
 
 impl LiveSession {
-    /// `carried` is what it carries on with from an earlier hub, if its agent is still running.
-    pub(crate) fn start(
-        hub: &Arc<Hub>,
-        stored: StoredSession,
-        open_approvals: &[ApprovalId],
-        carried: Option<CarriedOver>,
-    ) -> Arc<Self> {
+    /// From what it starts from, as [`Starting::read`] reads it. `carried` is what it carries on with from an earlier
+    /// hub, if its agent is still running.
+    pub(crate) fn start(hub: &Arc<Hub>, starting: Starting, carried: Option<CarriedOver>) -> Arc<Self> {
+        let Starting { stored, open_approvals, failing } = starting;
         let has_queue = !stored.session.queued.is_empty();
         let (agent, recorded, untaken) = match carried {
             Some(CarriedOver { link, run, recorded, untaken }) => (Some(AgentRun { link, run }), recorded, untaken),
@@ -189,7 +186,7 @@ impl LiveSession {
         let asked_by = agent.map(|agent| agent.run);
         // What's in the background is as the record lists it: the agent's, if it carries on with one, or else only a
         // wait, which outlives it.
-        let progress = Progress::recorded(&stored.session, open_approvals, asked_by, untaken);
+        let progress = Progress::recorded(&stored.session, &open_approvals, asked_by, untaken, failing);
         let (commands_tx, commands_rx) = mpsc::channel(64);
         let (ingest_tx, ingest_rx) = mpsc::channel(1024);
         let session = Arc::new(LiveSession {

@@ -219,6 +219,18 @@ impl Store {
         Ok((events, last_place(&conn, session_id, subagent)?))
     }
 
+    /// The agent's own newest failed request, a subagent's left out, if it has had one.
+    pub fn newest_own_failure(&self, session_id: &SessionId) -> Result<Option<SessionEvent>, StoreError> {
+        let conn = lock(&self.reader);
+        let mut statement = conn.prepare_cached(&format!(
+            "SELECT {EVENT_COLUMNS}, NULL FROM events
+             WHERE session_id = ? AND kind = 'request_failed' AND subagent IS NULL ORDER BY seq DESC LIMIT 1"
+        ))?;
+        let mut rows = statement.query(params![session_id.as_str()])?;
+        let Some(row) = rows.next()? else { return Ok(None) };
+        Ok(Some(event_in(session_id, row)?.0))
+    }
+
     /// The next run's ID. It's taken before the launch and never handed out again, so a run is
     /// unique even if it never records anything.
     pub fn next_run(&self) -> Result<RunId, StoreError> {

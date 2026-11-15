@@ -18,7 +18,7 @@ use tokio::sync::oneshot;
 
 use super::{Hub, HubDirs};
 use crate::provider_set::ProviderSet;
-use crate::session::{CarriedOver, Item, LiveSession};
+use crate::session::{CarriedOver, Item, LiveSession, Starting};
 use crate::store::tests::store_with_session;
 use crate::timers::Timers;
 use crate::worker_link::WorkerLink;
@@ -114,9 +114,16 @@ pub(crate) fn taking_worker(hub: &Hub) -> (Arc<WorkerLink>, Arc<parking_lot::Mut
 /// on `link`.
 pub(crate) fn carried_on(hub: &Arc<Hub>, link: &WorkerLink, run: RunId) -> Arc<LiveSession> {
     let id: SessionId = "s".into();
-    let stored = hub.store.get_session(&id).unwrap();
+    let starting = Starting::read(&hub.store, &id).unwrap();
     let carried = CarriedOver { link: link.id, run, recorded: None, untaken: Vec::new() };
-    hub.sessions.lock().keep(&id, || LiveSession::start(hub, stored, &[], Some(carried))).unwrap()
+    hub.sessions.lock().keep(&id, || LiveSession::start(hub, starting, Some(carried))).unwrap()
+}
+
+/// The session `s` started again, as when a hub starts again, from what the store holds, as [`carried_on`] starts it,
+/// carrying on with the same agent.
+pub(crate) fn started_again(hub: &Arc<Hub>, link: &WorkerLink, run: RunId) -> Arc<LiveSession> {
+    hub.sessions.lock().live.remove(&SessionId::from("s"));
+    carried_on(hub, link, run)
 }
 
 /// Once everything the session has been sent is dealt with.

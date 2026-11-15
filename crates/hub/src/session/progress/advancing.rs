@@ -3,6 +3,7 @@ use super::super::queue::QueueWatch;
 use super::super::status::{
     Approvals, Known, Open, after_background, never_started, next_status, of_the_turn, open_after, turn_edge,
 };
+use super::failing::{self, Failing, FailingAfter};
 use crate::store::{SessionChange, StatusChange, Store, StoreError, TurnEdge};
 use protocol::event::{AgentTask, EventBody};
 use protocol::model::{ApprovalId, RunId, Seq, Session, SessionId, SessionStatus};
@@ -28,6 +29,8 @@ pub(crate) struct Progress {
     /// The prompt, or the compaction asked for, that started the turn the session is in, until the agent says anything
     /// of that turn, as [`of_the_turn`] says, so the hub dropping it before then is a turn that never started.
     pub(super) opened_by: Option<Seq>,
+    /// The agent's own newest failed request, while nothing since has ended its row, so the next can say it repeats it.
+    pub(super) failing: Option<Failing>,
 }
 
 /// What recording an event does, worked out before it's recorded: the event as it's recorded, what it changes on the
@@ -52,16 +55,18 @@ pub(in super::super) struct Next {
     pub(super) opens: bool,
     /// The agent said it of the turn, as [`of_the_turn`] says.
     pub(super) of_the_turn: bool,
+    pub(super) failing: FailingAfter,
 }
 
 impl Progress {
-    /// As `session`'s record says, with the approvals still open, in the order they were asked, each by `asked_by`, and
-    /// the prompts its agent hasn't taken.
+    /// As `session`'s record says, with the approvals still open, in the order they were asked, each by `asked_by`, the
+    /// prompts its agent hasn't taken, and the failures in a row its log ends in, as [`Failing::recorded`] says.
     pub(crate) fn recorded(
         session: &Session,
         open_approvals: &[ApprovalId],
         asked_by: Option<RunId>,
         untaken: Vec<Seq>,
+        failing: Option<Failing>,
     ) -> Self {
         let mut queue = QueueWatch::starting(session.queue_held);
         queue.set_untaken(untaken);
@@ -73,18 +78,22 @@ impl Progress {
             queue,
             outlives_this_hub: false,
             opened_by: None,
+            failing,
         }
     }
 
     /// What recording `body`, from `origin`, does: to the status, the turns, the approvals open, what's running in the
-    /// background, and whether the queue is held. `agent` says whether an agent is running, so it can pick up again by
-    /// itself. Only the hub and the current agent speak for the session, so what a replaced agent says changes nothing
-    /// but which approvals are open, and one it asks stays open until it's cancelled. As the hub stops, the agent of a
-    /// session whose only work is a wait the next hub keeps cuts nothing off by going, so the session stays at work in
-    /// the background, with the wait listed and its queue free. A turn's end from the agent says when the hub recorded
-    /// that turn's start, which the agent can't know, so anything it said is replaced.
+    /// background, whether the queue is held, and the agent's failures in a row. `agent` says whether an agent is
+    /// running, so it can pick up again by itself. Only the hub and the current agent speak for the session, so what a
+    /// replaced agent says changes nothing but which approvals are open, where one it asks stays open until it's
+    /// cancelled, and the failures in a row, which follow the log whoever said each event, as a session started again
+    /// reads them. As the hub stops, the agent of a session whose only work is a wait the next hub keeps cuts nothing
+    /// off by going, so the session stays at work in the background, with the wait listed and its queue free. A turn's
+    /// end from the agent says when the hub recorded that turn's start, which the agent can't know, so anything it said
+    /// is replaced.
     pub(in super::super) fn step(&self, origin: Origin, mut body: EventBody, agent: bool) -> Step {
         let (approvals, background_tasks) = open_after(&self.approvals, &self.background_tasks, origin.run(), &body);
+        let failing = failing::after(self.failing.as_ref(), &mut body);
         let speaks = origin.speaks_for_session();
         let outlived = speaks && self.outlives_this_hub && matches!(body, EventBody::AgentExited { .. });
         if !speaks || outlived {
@@ -99,6 +108,7 @@ impl Progress {
                 held,
                 opens: false,
                 of_the_turn: false,
+                failing,
             };
             return Step { body, change, next, waits: false };
         }
@@ -128,7 +138,7 @@ impl Progress {
         };
         let waits = after_background(self.status, status, self.background_tasks.len(), background_tasks.len());
         let of_the_turn = origin.run().is_some() && of_the_turn(&body, known);
-        let next = Next { status, turn, approvals, background_tasks, held, opens, of_the_turn };
+        let next = Next { status, turn, approvals, background_tasks, held, opens, of_the_turn, failing };
         Step { body, change, next, waits }
     }
 
@@ -148,6 +158,7 @@ impl Progress {
                 held: None,
                 opens: false,
                 of_the_turn: true,
+                failing: FailingAfter::Ends,
             },
             waits: false,
         };
@@ -175,6 +186,11 @@ impl Progress {
         }
         if let Some(held) = next.held {
             self.queue.hold(held);
+        }
+        match next.failing {
+            FailingAfter::Keeps => {}
+            FailingAfter::Ends => self.failing = None,
+            FailingAfter::Fails { failure, times } => self.failing = Some(Failing { failure, last: seq, times }),
         }
     }
 

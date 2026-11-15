@@ -14,5 +14,5 @@ pub use typed::{
 mod builders;
 pub use builders::{
     ApprovalRequest, account, approval_request, call, call_result, child_worktree, command_failed, event, of_kind,
-    session, subagent, tool_denied, tool_result, tool_use, turn_ended, workspace,
+    request_failed, session, subagent, tool_denied, tool_result, tool_use, turn_ended, workspace,
 };
