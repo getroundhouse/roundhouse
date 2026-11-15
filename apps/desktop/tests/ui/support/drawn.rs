@@ -61,7 +61,7 @@ impl Ui<'_> {
     }
 
     /// Whether the transcript has drawn a turn's end after the last thing the agent said.
-    fn turn_drawn_to_its_end(&self) -> bool {
+    pub(crate) fn turn_drawn_to_its_end(&self) -> bool {
         let events = self.events();
         let last = |is: fn(&EventBody) -> bool| events.iter().rposition(|event| is(&event.body));
         let ended = last(|body| matches!(body, EventBody::TurnEnded { .. }));

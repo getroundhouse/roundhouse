@@ -44,6 +44,11 @@ fn a_wait_s_line_says_where_its_pull_request_stands_and_stop_calls_it_off(cx: &m
     ui.input(r#"mcp:get_pull_requests {"pull_requests":[7]}"#);
     ui.press("enter");
     ui.wait("the line to follow", |ui| ui.shows_label(&text, "Waiting on #7: merge · 0 checks running"));
+    // The agent's read moved the line, in a turn whose end is drawn above the line and moves it down as it comes. So Stop
+    // is pressed once that's drawn, or the press can land where the button no longer is, and be lost.
+    ui.wait("the read's turn to end", |ui| {
+        ui.session_status() == Some(SessionStatus::Background) && ui.turn_drawn_to_its_end()
+    });
 
     let stop = SharedString::from(format!("wait-stop/{}", wait.id));
     ui.click(stop.clone());
