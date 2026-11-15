@@ -1,5 +1,5 @@
 use super::*;
-use crate::event::{ExitReason, SubagentOutcome};
+use crate::event::{ExitReason, TaskOutcome};
 
 fn delta(change: DeltaChange) -> StreamDelta {
     StreamDelta { run: None, message_id: "m1".into(), parent_tool_use_id: None, change }
@@ -136,7 +136,7 @@ fn a_subagents_end_clears_what_it_was_writing_and_the_agents_end_clears_the_rest
 
     let ended = EventBody::SubagentEnded {
         call: "toolu_a".into(),
-        outcome: SubagentOutcome::Stopped,
+        outcome: TaskOutcome::Stopped,
         report: None,
         context_tokens: None,
     };

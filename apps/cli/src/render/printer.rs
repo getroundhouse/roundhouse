@@ -1,7 +1,7 @@
 use client_core::calls::{Failure, Recorded, first_line};
 use protocol::attachment::Attachment;
 use protocol::event::{
-    AgentTask, CompactionOutcome, ContentBlock, Denied, EventBody, Question, SessionEvent, SubagentOutcome, TurnOutcome,
+    AgentTask, CompactionOutcome, ContentBlock, Denied, EventBody, Question, SessionEvent, TaskOutcome, TurnOutcome,
 };
 use protocol::model::{ApprovalId, MessageId, PermissionMode, Seq, TaskId, ToolUseId};
 use protocol::tail::{DeltaChange, StreamDelta, Tail};
@@ -147,19 +147,19 @@ impl Printer {
         self.subagents.insert(call.clone(), what.to_string());
     }
 
-    pub(super) fn subagent_ended(&mut self, seq: Seq, call: &ToolUseId, outcome: SubagentOutcome) {
+    pub(super) fn subagent_ended(&mut self, seq: Seq, call: &ToolUseId, outcome: TaskOutcome) {
         let ended = self.ending(call, outcome);
         self.line(seq, &ended);
     }
 
     /// How the subagent `call` started ended, named as its start was, or by the call if this didn't see it start.
-    pub(super) fn ending(&mut self, call: &ToolUseId, outcome: SubagentOutcome) -> String {
+    pub(super) fn ending(&mut self, call: &ToolUseId, outcome: TaskOutcome) -> String {
         let what = self.subagents.remove(call).unwrap_or_else(|| call.as_str().to_string());
         let how = match outcome {
-            SubagentOutcome::Finished => "finished",
-            SubagentOutcome::Failed => "failed",
-            SubagentOutcome::Stopped => "stopped",
-            SubagentOutcome::Unknown => "ended",
+            TaskOutcome::Finished => "finished",
+            TaskOutcome::Failed => "failed",
+            TaskOutcome::Stopped => "stopped",
+            TaskOutcome::Unknown => "ended",
         };
         format!("a subagent {how}: {what}")
     }

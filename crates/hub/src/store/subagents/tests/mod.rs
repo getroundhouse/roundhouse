@@ -1,5 +1,5 @@
 use super::*;
-use protocol::event::SubagentOutcome;
+use protocol::event::TaskOutcome;
 
 mod migrated;
 

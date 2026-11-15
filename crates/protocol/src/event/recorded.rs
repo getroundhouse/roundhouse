@@ -9,7 +9,7 @@ use approval::ApprovalOutcome;
 use asking::{Asking, QuestionAnswer};
 use compaction::CompactionOutcome;
 use content::ContentBlock;
-use ending::{ExitReason, SubagentOutcome, TurnOutcome};
+use ending::{ExitReason, TaskOutcome, TurnOutcome};
 use failure::RequestFailure;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -138,7 +138,7 @@ pub enum EventBody {
     /// The subagent that `call` started has stopped working.
     SubagentEnded {
         call: ToolUseId,
-        outcome: SubagentOutcome,
+        outcome: TaskOutcome,
         /// What it reported, once it finished.
         #[serde(default)]
         report: Option<String>,

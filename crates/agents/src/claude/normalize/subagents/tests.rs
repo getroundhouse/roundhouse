@@ -1,4 +1,4 @@
-use protocol::event::{EventBody, SubagentOutcome};
+use protocol::event::{EventBody, TaskOutcome};
 use serde_json::{Value, json};
 
 use crate::claude::normalize::{Normalizer, Parsed};
@@ -39,12 +39,8 @@ fn a_subagent_starts_with_what_it_was_asked_and_ends_with_its_report() {
         }
     );
     let report = Some("They're in tests/.".into());
-    let ended = EventBody::SubagentEnded {
-        call: "agent".into(),
-        outcome: SubagentOutcome::Finished,
-        report,
-        context_tokens: None,
-    };
+    let ended =
+        EventBody::SubagentEnded { call: "agent".into(), outcome: TaskOutcome::Finished, report, context_tokens: None };
     assert_eq!(end, ended);
     assert!(
         matches!(event(&mut normalizer, &notification("t1", "completed")), EventBody::AgentOther { .. }),
@@ -61,7 +57,7 @@ fn a_stopped_subagent_reports_nothing() {
 
     let ended = EventBody::SubagentEnded {
         call: "agent".into(),
-        outcome: SubagentOutcome::Stopped,
+        outcome: TaskOutcome::Stopped,
         report: None,
         context_tokens: None,
     };

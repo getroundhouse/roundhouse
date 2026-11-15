@@ -65,7 +65,7 @@ fn a_migrated_log_fills_in_each_subagents_record_as_the_hub_would_have_kept_it()
     let mut failed_start = task_started(14, "t2", "local_agent", &json!("failed"));
     failed_start.body = started("failed");
     let mut failed_end = task_notification(15, "t2", "failed");
-    failed_end.body = ended("failed", SubagentOutcome::Failed, None);
+    failed_end.body = ended("failed", TaskOutcome::Failed, None);
     let lines = [
         at(9, message(Some("finished"), vec![tool_use("before")])),
         task_started(10, "t1", "local_agent", &json!("finished")),
@@ -116,7 +116,7 @@ fn a_migrated_log_fills_in_each_subagents_record_as_the_hub_would_have_kept_it()
     assert!(!subagents[1].in_background);
     assert!(subagents.iter().all(|s| s.rev > Rev::default() && s.rev <= rev));
 
-    assert_eq!(record(&store, &ended("never", SubagentOutcome::Finished, Some("Late."))).1, Vec::<String>::new());
+    assert_eq!(record(&store, &ended("never", TaskOutcome::Finished, Some("Late."))).1, Vec::<String>::new());
     assert_eq!(record(&store, &started("new")).1, ["new"]);
     assert!(subagent(&store, "new").rev > rev, "its revisions go on from the counter's");
 }
@@ -189,7 +189,7 @@ fn a_migrated_record_counts_what_its_end_said_its_conversation_held() {
     let dir = tempfile::tempdir().unwrap();
     let end = |ts, call: &str, raw: &str| Line {
         raw: Some(raw.to_owned()),
-        ..at(ts, ended(call, SubagentOutcome::Finished, None))
+        ..at(ts, ended(call, TaskOutcome::Finished, None))
     };
     let said = |usage: Value| json!({"type":"system","subtype":"task_notification","usage":usage}).to_string();
     let lines = [
@@ -198,7 +198,7 @@ fn a_migrated_record_counts_what_its_end_said_its_conversation_held() {
         end(3, "worded", &said(json!({"total_tokens":"many"}))),
         end(4, "below", &said(json!({"total_tokens":-1}))),
         end(5, "cut", r#"{"usage":{"total_tokens":12"#),
-        at(6, ended("unsaid", SubagentOutcome::Finished, None)),
+        at(6, ended("unsaid", TaskOutcome::Finished, None)),
         end(7, "another", &said(json!({"total_tokens":5}))),
         // More than SQLite's integers hold, which it reads out of the line as a real.
         end(8, "huge", &said(json!({"total_tokens":u64::MAX}))),

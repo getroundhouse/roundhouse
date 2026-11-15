@@ -6,7 +6,7 @@ use serde_json::Value;
 
 use super::{ModelName, Rev, SessionId, ToolUseId};
 use crate::attachment::Attachment;
-use crate::event::{CallKind, ContentBlock, Denied, SubagentOutcome};
+use crate::event::{CallKind, ContentBlock, Denied, TaskOutcome};
 
 /// One subagent, named by its session and the call that started it, which its events name as their parent.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -74,12 +74,12 @@ pub enum SubagentStatus {
 
 impl SubagentStatus {
     /// How it is once it ended with `outcome`.
-    pub fn ended(outcome: SubagentOutcome) -> Self {
+    pub fn ended(outcome: TaskOutcome) -> Self {
         match outcome {
-            SubagentOutcome::Finished => SubagentStatus::Finished,
-            SubagentOutcome::Failed => SubagentStatus::Failed,
-            SubagentOutcome::Stopped => SubagentStatus::Stopped,
-            SubagentOutcome::Unknown => SubagentStatus::Unknown,
+            TaskOutcome::Finished => SubagentStatus::Finished,
+            TaskOutcome::Failed => SubagentStatus::Failed,
+            TaskOutcome::Stopped => SubagentStatus::Stopped,
+            TaskOutcome::Unknown => SubagentStatus::Unknown,
         }
     }
 }

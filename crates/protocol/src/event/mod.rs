@@ -9,7 +9,7 @@ pub use asking::{Asking, Question, QuestionAnswer, QuestionOption};
 pub use call::CallKind;
 pub use compaction::{CompactedBy, CompactionOutcome};
 pub use content::{ContentBlock, Denied, LinkedImage};
-pub use ending::{ExitReason, SubagentOutcome, TurnOutcome};
+pub use ending::{ExitReason, TaskOutcome, TurnOutcome};
 pub use failure::{FailureKind, RequestFailure};
 pub use file_change::{FileChange, Hunk, HunkLine, LineMark};
 pub use task::{AgentTask, TaskKind};

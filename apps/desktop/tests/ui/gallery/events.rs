@@ -4,7 +4,7 @@
 
 use protocol::attachment::Attachment;
 use protocol::event::{
-    AgentTask, ContentBlock, EventBody, FileChange, LinkedImage, SubagentOutcome, TaskKind, TokenUsage, TurnOutcome,
+    AgentTask, ContentBlock, EventBody, FileChange, LinkedImage, TaskKind, TaskOutcome, TokenUsage, TurnOutcome,
 };
 use protocol::fixtures;
 use protocol::model::{MessageId, ModelName, Seq, ToolUseId};
@@ -192,6 +192,6 @@ pub(crate) fn subagent_context(call: &str, tokens: u64) -> EventBody {
 
 /// The agent's word that a subagent finished, with its report and how many tokens its conversation held.
 pub(crate) fn subagent_ended(call: &str, report: &str, tokens: u64) -> EventBody {
-    let (outcome, report) = (SubagentOutcome::Finished, Some(report.into()));
+    let (outcome, report) = (TaskOutcome::Finished, Some(report.into()));
     EventBody::SubagentEnded { call: call.into(), outcome, report, context_tokens: Some(tokens) }
 }

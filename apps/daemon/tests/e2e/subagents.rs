@@ -7,7 +7,7 @@ use std::time::Instant;
 use client_core::session_log::{By, Row, SessionLog};
 use client_core::{Client, OpenSession, RecordsFeed, Subscription, SubscriptionItem, View};
 use protocol::client::HubNotice;
-use protocol::event::{ContentBlock, EventBody, SessionEvent, SubagentOutcome, TaskKind};
+use protocol::event::{ContentBlock, EventBody, SessionEvent, TaskKind, TaskOutcome};
 use protocol::model::{ModelName, Place, SessionId, Subagent, SubagentStatus, ToolUseId};
 use protocol::tail::Tail;
 
@@ -80,7 +80,7 @@ fn the_agents_own_events_and_a_subagents_are_read_and_followed_apart() {
     assert!(matches!(&started.body, EventBody::SubagentStarted { prompt: Some(prompt), in_background: true, .. }
         if prompt == "Look around."));
     assert!(
-        matches!(&ended.body, EventBody::SubagentEnded { outcome: SubagentOutcome::Finished, report: Some(report), .. }
+        matches!(&ended.body, EventBody::SubagentEnded { outcome: TaskOutcome::Finished, report: Some(report), .. }
         if report == "There's a README here.")
     );
     assert_eq!((&agent.events[..read.len()], last), (read.as_slice(), Place::new(u64::try_from(read.len()).unwrap())));

@@ -1,5 +1,5 @@
 use super::super::{id_of, str_of, string_of};
-use protocol::event::{EventBody, SubagentOutcome};
+use protocol::event::{EventBody, TaskOutcome};
 use protocol::model::{TaskId, ToolUseId};
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
@@ -62,13 +62,13 @@ impl Subagents {
                 let call = self.by_task.remove(&id_of::<TaskId>(value, "task_id")?)?;
                 self.in_background.remove(&call);
                 let outcome = match str_of(value, "status") {
-                    Some("completed") => SubagentOutcome::Finished,
-                    Some("failed") => SubagentOutcome::Failed,
-                    Some("stopped") => SubagentOutcome::Stopped,
-                    _ => SubagentOutcome::Unknown,
+                    Some("completed") => TaskOutcome::Finished,
+                    Some("failed") => TaskOutcome::Failed,
+                    Some("stopped") => TaskOutcome::Stopped,
+                    _ => TaskOutcome::Unknown,
                 };
                 // Stopped, it only says so.
-                let report = string_of(value, "summary").filter(|_| outcome == SubagentOutcome::Finished);
+                let report = string_of(value, "summary").filter(|_| outcome == TaskOutcome::Finished);
                 Some(EventBody::SubagentEnded { call, outcome, report, context_tokens: context_tokens(value) })
             }
             _ => None,
