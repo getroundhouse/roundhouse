@@ -53,10 +53,22 @@ const MAX_FILE_LINES: usize = 400;
 /// Files allowed past that limit, as (path from the repo root, why). Empty so far.
 const LONG_FILES: &[(&str, &str)] = &[];
 
+/// The whole dependency graph. Cargo holds the lock on its package cache while it works it out, so the tests that read
+/// it take turns, and a test that needs only the workspace's own packages reads [`workspace`] instead.
 fn metadata() -> Value {
+    cargo_metadata(&[])
+}
+
+/// The workspace's own packages, which Cargo reads without working out the graph or taking its lock.
+fn workspace() -> Value {
+    cargo_metadata(&["--no-deps"])
+}
+
+fn cargo_metadata(args: &[&str]) -> Value {
     let manifest = concat!(env!("CARGO_MANIFEST_DIR"), "/../../Cargo.toml");
     let output = Command::new(env!("CARGO"))
         .args(["metadata", "--format-version", "1", "--locked", "--manifest-path", manifest])
+        .args(args)
         .output()
         .expect("running cargo metadata");
     assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
@@ -136,23 +148,9 @@ fn shipped_packages(metadata: &Value, root: &str) -> BTreeMap<String, (String, O
     shipped
 }
 
+/// The dependency graph as it is on `target`, which [`metadata`] says takes turns with the others.
 fn metadata_for(target: &str) -> Value {
-    let manifest = concat!(env!("CARGO_MANIFEST_DIR"), "/../../Cargo.toml");
-    let output = Command::new(env!("CARGO"))
-        .args([
-            "metadata",
-            "--format-version",
-            "1",
-            "--locked",
-            "--filter-platform",
-            target,
-            "--manifest-path",
-            manifest,
-        ])
-        .output()
-        .expect("running cargo metadata");
-    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
-    serde_json::from_slice(&output.stdout).unwrap()
+    cargo_metadata(&["--filter-platform", target])
 }
 
 /// Checks what ships, on the platforms it ships on, rather than everything in `Cargo.lock`, which also
@@ -163,13 +161,16 @@ fn only_allowed_licenses_ship() {
     const MAC: [&str; 2] = ["aarch64-apple-darwin", "x86_64-apple-darwin"];
     const LINUX: [&str; 2] = ["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"];
     const WINDOWS: [&str; 2] = ["x86_64-pc-windows-msvc", "aarch64-pc-windows-msvc"];
+    let mut read = HashMap::new();
     for (root, targets) in [
         ("desktop", &[MAC[0], MAC[1], LINUX[0], LINUX[1], WINDOWS[0], WINDOWS[1]][..]),
         ("daemon", &[MAC[0], MAC[1], LINUX[0], LINUX[1], WINDOWS[0], WINDOWS[1]][..]),
         ("cli", &[MAC[0], MAC[1], LINUX[0], LINUX[1], WINDOWS[0], WINDOWS[1]][..]),
     ] {
         for target in targets {
-            let shipped = shipped_packages(&metadata_for(target), root);
+            // Each platform's graph is the same for every root, so it's read once.
+            let metadata = read.entry(*target).or_insert_with(|| metadata_for(target));
+            let shipped = shipped_packages(metadata, root);
             assert!(shipped.len() > 1, "{root} on {target} should have dependencies");
             let bad: BTreeMap<_, _> =
                 shipped.into_iter().filter(|(_, (license, source))| !may_ship(license, source.as_deref())).collect();
@@ -247,15 +248,17 @@ fn the_hub_and_the_worker_stay_apart() {
 /// so they stay on one version. `tools/package/dotnet-tools.json` pins `vpk`.
 #[test]
 fn vpk_is_the_velopack_crate_s_version() {
-    let metadata = metadata();
-    let crates: Vec<&str> = metadata["packages"]
+    let root = Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."));
+    // As `Cargo.lock` has it, which is the version every build takes.
+    let lock: toml::Table = std::fs::read_to_string(root.join("Cargo.lock")).unwrap().parse().unwrap();
+    let crates: Vec<&str> = lock["package"]
         .as_array()
         .unwrap()
         .iter()
-        .filter(|package| package["name"] == "velopack")
+        .filter(|package| package["name"].as_str() == Some("velopack"))
         .map(|package| package["version"].as_str().unwrap())
         .collect();
-    let tools = Path::new(metadata["workspace_root"].as_str().unwrap()).join("tools/package/dotnet-tools.json");
+    let tools = root.join("tools/package/dotnet-tools.json");
     let tools: Value = serde_json::from_str(&std::fs::read_to_string(tools).unwrap()).unwrap();
 
     assert_eq!(crates, [tools["tools"]["vpk"]["version"].as_str().unwrap()]);
@@ -287,7 +290,7 @@ fn add_rust_files(dir: &Path, found: &mut Vec<PathBuf>) {
 
 #[test]
 fn every_file_stays_within_the_length_limit() {
-    let metadata = metadata();
+    let metadata = workspace();
     let root = Path::new(metadata["workspace_root"].as_str().unwrap());
     let mut files = Vec::new();
     for dir in covered_crates(&metadata) {
@@ -309,7 +312,7 @@ fn every_file_stays_within_the_length_limit() {
 
 #[test]
 fn every_crate_inherits_the_lints() {
-    let metadata = metadata();
+    let metadata = workspace();
     let crates = covered_crates(&metadata);
     assert!(crates.len() > 10, "found only {} crates, so this isn't looking in the right place", crates.len());
     let missing: Vec<_> = crates
@@ -367,7 +370,7 @@ fn a_license_is_known_by_its_name() {
 
 #[test]
 fn files_kept_from_elsewhere_ship_with_an_allowed_license() {
-    let metadata = metadata();
+    let metadata = workspace();
     let root = Path::new(metadata["workspace_root"].as_str().unwrap());
     for (dir, license, words) in VENDORED {
         assert!(ALLOWED.contains(license), "{dir} is under {license}, which can't ship");
