@@ -13,7 +13,7 @@ use crate::codex::tests::script::{bodies, command, play, turn};
 use crate::{AgentOutput, AgentProcess};
 
 #[tokio::test]
-async fn a_late_child_tool_result_stays_in_its_finished_invocation_and_is_recorded_once() {
+async fn a_late_child_tool_result_is_recorded_once_with_its_subagent() {
     let result = command("child", "first", "old-command", true);
     let output = play(vec![
         turn("thread", "root-turn", "inProgress"),
@@ -38,7 +38,7 @@ async fn a_late_child_tool_result_stays_in_its_finished_invocation_and_is_record
                 .then(|| subagent.as_ref().unwrap().as_str())
         })
         .collect();
-    assert_eq!(results, ["spawn"]);
+    assert_eq!(results, ["child"], "a child is one subagent however many turns it takes");
 }
 
 fn waiting_child() -> Vec<Value> {
