@@ -47,7 +47,7 @@ The parts come in this order. The last four start with their label in bold, writ
    - each new test, and what it covers;
    - what was broken on purpose, and which test failed;
    - anything checked by hand, with the machine, the OS, what was done and what was seen;
-   - any review the owner asked for, as `docs/reviews.md` has it: which lanes it took, whether the fixes were checked, what was found that changed the PR, and any finding rated must fix or should fix that wasn't fixed, with why. The fixes themselves go in part 3, with the rest of the change, rather than as a list of review findings. A stack reviewed whole says what that review found in its top PR.
+   - any review the owner asked for, as `docs/reviews.md` has it: which lanes it took, whether the fixes were checked, what was found that changed the PR, any must fix answered rather than fixed, and the issues filed for bugs passed on. The fixes themselves go in part 3, with the rest of the change, rather than as a list of review findings. A stack reviewed whole says what that review found in its top PR.
 7. **Not checked:** what wasn't verified, and why, so nothing unverified reads as checked. Leave this out only when everything was checked.
 8. **Left open:** anything a reader might expect the PR to do that it doesn't, each with its issue, since `docs/documentation.md` gives everything left open an issue.
 
