@@ -1,3 +1,4 @@
+// Changed in Roundhouse's copy of gpui-kit, as third_party/README.md lists.
 //! Host API for external editors.
 //!
 //! An editor that lives outside gpui-kit keeps its own document model and
@@ -27,7 +28,7 @@ use std::{cell::RefCell, collections::HashMap, ops::Range, rc::Rc, sync::Arc};
 
 use gpui::{
     AnyElement, App, Bounds, ClickEvent, ElementId, HighlightStyle, Hsla, ImageSource,
-    InteractiveElement as _, IntoElement as _, ParentElement as _, Pixels, Point, SharedString,
+    InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Point, SharedString,
     SharedUri, TextLayout, Window, WrappedLineLayout, div, point, px,
 };
 use unicode_segmentation::UnicodeSegmentation as _;
@@ -42,8 +43,8 @@ use super::{
 };
 
 pub use super::node::{
-    BlockNode, BlockState, CodeBlock, ColumnumnAlign as ColumnAlign, ImageNode, InlineNode,
-    LinkMark, Paragraph, Span, Table, TextMark,
+    BlockNode, BlockState, CODE_BLOCK_GROUP, CodeBlock, ColumnumnAlign as ColumnAlign, ImageNode,
+    InlineNode, LinkMark, Paragraph, Span, Table, TextMark,
 };
 
 /// Parses Markdown with the parser [`TextView`](super::TextView) uses,
@@ -61,7 +62,7 @@ pub fn parse_markdown(
 }
 
 /// What [`BlockNode::render`] needs besides the node: the text style, code
-/// highlighter and Markdown extensions.
+/// highlighter, code block actions and Markdown extensions.
 #[derive(Clone)]
 pub struct RenderContext {
     node: NodeContext,
@@ -86,6 +87,22 @@ impl RenderContext {
         F: Fn(&CodeBlock) -> Vec<(Range<usize>, HighlightStyle)> + Send + Sync + 'static,
     {
         self.node.code_block_highlighter = Some(Arc::new(highlighter));
+        self
+    }
+
+    /// Sets the actions each code block draws in its top-right corner, in
+    /// place of its language, as [`TextView::code_block_actions`] does. A
+    /// block with actions is the hover group [`CODE_BLOCK_GROUP`].
+    ///
+    /// [`TextView::code_block_actions`]: super::TextView::code_block_actions
+    pub fn with_code_block_actions<F, E>(mut self, actions: F) -> Self
+    where
+        F: Fn(&CodeBlock, &mut Window, &mut App) -> E + Send + Sync + 'static,
+        E: IntoElement,
+    {
+        self.node.code_block_actions = Some(Arc::new(move |code_block, window, cx| {
+            actions(code_block, window, cx).into_any_element()
+        }));
         self
     }
 

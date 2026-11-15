@@ -84,6 +84,10 @@ With more than four, each kind with several has one line, such as `6 subagents`,
 
 ![The agent picking up by itself, after a subagent finished and after a wait ended](../../../spec/screens/picked-up-by-itself.png)
 
+## Code blocks
+
+Rest the pointer on a code block for a button at its top right that copies its code. Code blocks in your prompts and in the agent's thinking have one too.
+
 ## Images in a reply
 
 An image the agent's reply points to shows in the reply, if it's in the workspace. The hub keeps it as it was when the reply came, so it's still there after the agent changes the file, and after the workspace is archived.

@@ -1,3 +1,4 @@
+// Changed in Roundhouse's copy of gpui-kit, as third_party/README.md lists.
 use std::{
     borrow::Cow,
     collections::HashMap,
@@ -2337,6 +2338,10 @@ impl Paragraph {
     }
 }
 
+/// The hover group a code block with actions is, so an action can show only
+/// while its block is hovered, with `group_hover(CODE_BLOCK_GROUP, ..)`.
+pub const CODE_BLOCK_GROUP: &str = "code-block";
+
 #[derive(Debug, Clone)]
 pub struct CodeBlock {
     lang: Option<SharedString>,
@@ -2613,7 +2618,8 @@ impl CodeBlock {
                 .child(actions(&self, window, cx))
         });
         // The id scopes the caller's action ids per code block, so plain ids
-        // like `"copy"` don't collide across blocks.
+        // like `"copy"` don't collide across blocks, and the group lets them
+        // show only while their block is hovered.
         let id = block_element_id("codeblock", self.span, options.ix);
         let block = if matches!(style.code_block().overflow.y, Some(Overflow::Scroll)) {
             let scroll_handle = window
@@ -2632,6 +2638,7 @@ impl CodeBlock {
             // pinned to the viewport instead of moving with the code.
             div()
                 .id(id.clone())
+                .when(actions.is_some(), |this| this.group(CODE_BLOCK_GROUP))
                 .w_full()
                 .min_w_0()
                 .relative()
@@ -2649,7 +2656,11 @@ impl CodeBlock {
         } else {
             // Without actions nothing under the block needs element state.
             match actions {
-                Some(actions) => block.id(id).child(actions).into_any_element(),
+                Some(actions) => block
+                    .id(id)
+                    .group(CODE_BLOCK_GROUP)
+                    .child(actions)
+                    .into_any_element(),
                 None => block.children(lang_label).into_any_element(),
             }
         };

@@ -1,6 +1,6 @@
 # AGENTS.md's full checks and publish.py's tests, on Linux, for every PR and the queue. The gallery compiles only on
 # macOS, and mac.yml covers the Mac. Changes to only Markdown and the site skip them, and a change to what the guide
-# is made of builds the guide, whatever else it changes.
+# is made of builds the guide, whatever else it changes. A change to the copy of gpui-kit also runs the kit's own checks.
 name: CI
 
 on:
@@ -39,7 +39,8 @@ env:
 # stays pending. Actions are pinned to full commits.
 jobs:
   # Skips the checks when only Markdown and the site differ from the base, or when the queue would check a tree a PR's
-  # run already passed. Says apart whether to build the guide, which is Markdown the checks don't read.
+  # run already passed. Says apart whether to build the guide, which is Markdown the checks don't read, and whether to
+  # run the kit's own checks, which only a change to the copy needs.
   changes:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -50,6 +51,7 @@ jobs:
     outputs:
       run: ${{ steps.diff.outputs.run }}
       guide: ${{ steps.diff.outputs.guide }}
+      kit: ${{ steps.diff.outputs.kit }}
       tree: ${{ steps.diff.outputs.tree }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -63,6 +65,7 @@ jobs:
         run: |
           run=true
           guide=true
+          kit=true
           tree=$(git rev-parse 'HEAD^{tree}')
           # Checking out fetched too, so only a fetch of the base that worked makes FETCH_HEAD the base.
           based=false
@@ -75,6 +78,10 @@ jobs:
             git diff --quiet --no-renames --diff-filter=D FETCH_HEAD HEAD; then
             guide=false
           fi
+          # The copy, and the job that checks it.
+          if $based && git diff --quiet FETCH_HEAD HEAD -- third_party/gpui-kit .github/workflows/ci.yml; then
+            kit=false
+          fi
           if $based &&
             git diff --quiet FETCH_HEAD HEAD -- ':(exclude)*.md' ':(exclude)site' ':(exclude)tools/site'; then
             run=false
@@ -85,9 +92,10 @@ jobs:
             [[ "$passed" =~ ^[0-9]+$ ]]; then
             run=false
             guide=false
+            kit=false
             echo "::notice::$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$passed passed this tree on its PR"
           fi
-          { echo "run=$run"; echo "guide=$guide"; echo "tree=$tree"; } >> "$GITHUB_OUTPUT"
+          { echo "run=$run"; echo "guide=$guide"; echo "kit=$kit"; echo "tree=$tree"; } >> "$GITHUB_OUTPUT"
 
   # The free arm64 runner, on Ubuntu 26.04 as the tests are. It still finishes before them.
   lint:
@@ -234,9 +242,52 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: cargo run --locked -p guide -- "$RUNNER_TEMP/docs"
 
+  # The copy of gpui-kit's own clippy and tests, which our lints and tests don't reach, as third_party/README.md runs
+  # them, on the versions the app ships. Only when the copy changes, since it builds GPUI and the kit's dependencies a
+  # second time, with upstream's settings. On the free arm64 runner, as the lints are.
+  kit:
+    needs: changes
+    if: needs.changes.outputs.kit == 'true'
+    runs-on: ubuntu-26.04-arm
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: .github/install-linux-packages.sh
+      - id: cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/gpui-kit/
+          key: linux-kit-deps-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', 'third_party/gpui-kit/**/Cargo.toml') }}
+          restore-keys: ${{ github.ref != 'refs/heads/main' && 'linux-kit-deps-' || '' }}
+      # Our lockfile, so the kit is checked on the versions the app ships rather than a fresh resolve. Cargo drops what
+      # the copy's workspace doesn't use.
+      - run: cp Cargo.lock third_party/gpui-kit/Cargo.lock
+      - run: >-
+          cargo clippy --manifest-path third_party/gpui-kit/Cargo.toml --target-dir target/gpui-kit
+          -p gpui-base -p gpui-component --all-targets --features test-support -- -D warnings
+      - run: >-
+          cargo test --manifest-path third_party/gpui-kit/Cargo.toml --target-dir target/gpui-kit
+          -p gpui-base -p gpui-component --features test-support
+      # Only the dependencies, as for the lints.
+      - if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
+        run: cargo clean --manifest-path third_party/gpui-kit/Cargo.toml --target-dir target/gpui-kit --workspace
+      - if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/gpui-kit/
+          key: ${{ steps.cache.outputs.cache-primary-key }}
+
   # The one required check. It fails if any job failed or was cancelled, and passes if the rest passed or were skipped.
   checks:
-    needs: [changes, lint, test, publish, guide]
+    needs: [changes, lint, test, publish, guide, kit]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5

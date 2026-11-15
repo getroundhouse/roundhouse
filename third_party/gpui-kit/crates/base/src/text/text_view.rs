@@ -1,3 +1,4 @@
+// Changed in Roundhouse's copy of gpui-kit, as third_party/README.md lists.
 use std::{ops::Range, rc::Rc, sync::Arc};
 
 use gpui::prelude::FluentBuilder as _;
@@ -380,7 +381,9 @@ impl TextView {
     /// Set custom block actions for code blocks.
     ///
     /// The closure receives the [`CodeBlock`],
-    /// and returns an element to display.
+    /// and returns an element to display. A block with actions is the hover
+    /// group [`CODE_BLOCK_GROUP`](super::CODE_BLOCK_GROUP), so an action can
+    /// show only while its block is hovered.
     pub fn code_block_actions<F, E>(mut self, f: F) -> Self
     where
         F: Fn(&CodeBlock, &mut Window, &mut App) -> E + Send + Sync + 'static,

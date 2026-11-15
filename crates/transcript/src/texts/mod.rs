@@ -36,6 +36,7 @@ pub(crate) use plain::Plain;
 
 mod at;
 mod budget;
+mod code_blocks;
 mod element;
 mod moves;
 mod parse;
