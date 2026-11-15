@@ -2,6 +2,8 @@
 
 A chat shows your prompts, what the agent wrote, and everything it did on the way. Every tool call is one line that opens to its detail, so a long turn stays readable.
 
+Rest the pointer on a prompt for a button at its left that copies what it says.
+
 ## While the agent works
 
 - **The working line ends the chat:** the mark with its light sweeping, and how long the turn has taken so far.
