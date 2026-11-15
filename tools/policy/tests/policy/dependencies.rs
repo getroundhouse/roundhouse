@@ -79,6 +79,13 @@ fn needs_none_of_ours_no_async_runtime_and_no_ui(package: &str) {
     }
 }
 
+/// Dictation is the device's alone, with threads rather than a runtime and no UI, so any client on any device can hear
+/// with it.
+#[test]
+fn dictation_needs_none_of_our_other_crates_no_async_runtime_and_no_ui() {
+    needs_none_of_ours_no_async_runtime_and_no_ui("dictation");
+}
+
 /// Fetching knows nothing of what it fetches, and runs on the caller's thread, so any client on any device can fetch
 /// with it.
 #[test]
