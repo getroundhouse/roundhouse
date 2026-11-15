@@ -14,6 +14,7 @@ pub(crate) mod blob;
 pub(crate) mod branches;
 mod children;
 pub(crate) mod files;
+mod making;
 mod names;
 mod pull_request;
 pub(crate) mod remote_pull_requests;
@@ -23,17 +24,19 @@ pub(crate) mod tests;
 mod worktrees;
 
 pub(crate) use children::add_child_worktree;
+pub use making::prepare_workspace;
+use making::{made_there, make_on_branch, make_on_new_branch};
 pub use names::names_git_has;
 use names::no_branch_in_the_way;
 pub use pull_request::{pull_request, rate_limit};
 pub use removal::remove_workspace;
-use worktrees::Worktrees;
+use worktrees::{Changing, Worktrees};
 
 mod commands;
 
 pub(crate) use commands::list_nul_separated;
 use commands::{
-    GH_TIMEOUT, GitOutput, command, commit_of, fetch_if_remote, git, git_error, git_ok, make_parent, off_thread,
-    ref_exists, reject_option_like, run, valid_branch_name,
+    GH_TIMEOUT, GitOutput, command, commit_of, exists, git, git_error, git_ok, off_thread, ref_exists,
+    reject_option_like, run, valid_branch_name,
 };
-pub use commands::{diff, prepare_workspace, restore_workspace, status, worktree_there};
+pub use commands::{diff, restore_workspace, status, worktree_there};

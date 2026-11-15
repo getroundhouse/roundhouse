@@ -1,0 +1,184 @@
+use super::removal::locked_part_made;
+use super::{
+    Changing, GitOutput, Worktrees, branches, commit_of, exists, git, git_error, no_branch_in_the_way, off_thread,
+    ref_exists, reject_option_like, valid_branch_name,
+};
+use protocol::client::{ApiError, ErrorCode};
+use protocol::model::BranchName;
+use protocol::worker::WorkspaceReady;
+use std::path::{Path, PathBuf};
+use std::time::Duration;
+
+/// Long enough for a fetch over a slow connection, and short enough that a hung remote doesn't stall making a worktree.
+const FETCH_TIMEOUT: Duration = Duration::from_secs(15);
+
+pub async fn prepare_workspace(
+    root: &Path,
+    repo_name: &str,
+    repo_path: &str,
+    workspace_name: &str,
+    branch: &BranchName,
+    base_ref: Option<&str>,
+) -> Result<WorkspaceReady, ApiError> {
+    let repo = PathBuf::from(repo_path);
+    let path = root.join(repo_name).join(workspace_name);
+    valid_branch_name(&repo, branch).await?;
+    if exists(&path).await {
+        return Err(ApiError::new(ErrorCode::NameTaken, format!("{} already exists", path.display())));
+    }
+    let base = match base_ref {
+        Some(base) => base.to_string(),
+        None => default_base(&repo).await?,
+    };
+    let mut warnings = Vec::new();
+    make_on_new_branch(&repo, branch, &base, &path, &mut warnings).await?;
+    let branches = branches::read_now(&path).await.ok();
+    let path = path.to_string_lossy().into_owned();
+    Ok(WorkspaceReady { path, branch: branch.clone(), base_ref: base, warnings, branches })
+}
+
+/// Makes a worktree at `path` on a new branch `branch` from `base`, unless git already has a branch in the way. Takes
+/// a worktree git made anyway for made, with a warning, and deletes `branch` if git made it and failed without making
+/// the worktree.
+pub(super) async fn make_on_new_branch(
+    cwd: &Path,
+    branch: &BranchName,
+    base: &str,
+    path: &Path,
+    warnings: &mut Vec<String>,
+) -> Result<(), ApiError> {
+    reject_option_like(base, "a base ref")?;
+    no_branch_in_the_way(cwd, branch).await?;
+    let worktrees = Worktrees::of(cwd).await?;
+    fetch_if_remote(&worktrees, base, warnings).await?;
+    let changing = worktrees.changing().await?;
+    let Some(commit) = commit_of(cwd, base).await? else {
+        return Err(ApiError::new(ErrorCode::InvalidRequest, format!("{base} isn't a branch, tag or commit here")));
+    };
+    // --no-track: otherwise a branch made from origin/main tracks it, and a bare `git push` or `git pull` there acts
+    // on main. From `base` by name so the branch's reflog records which remote branch it started from.
+    let args = ["--no-track", "-b", branch.as_str(), &path.to_string_lossy(), base];
+    let (was_there, added) = add_worktree(&changing, path, &args).await?;
+    let branch_taken = added.stderr.contains("a branch named");
+    let settled = finish_add(cwd, path, branch, was_there, added, warnings).await;
+    // Git makes the branch before it looks at the path or checks the files out, so it's there whenever settling the
+    // worktree failed unless git refused the branch itself. Only at the commit it was made at, so one moved since isn't
+    // deleted.
+    if settled.is_err() && !branch_taken {
+        let _ = git(cwd, &["update-ref", "-d", &format!("refs/heads/{branch}"), commit.as_str()]).await;
+    }
+    settled
+}
+
+/// Makes a worktree at `path` on `branch` as it is. Takes a worktree git made anyway for made, with a warning.
+pub(super) async fn make_on_branch(
+    cwd: &Path,
+    branch: &BranchName,
+    path: &Path,
+    warnings: &mut Vec<String>,
+) -> Result<(), ApiError> {
+    if !ref_exists(cwd, &format!("refs/heads/{branch}")).await? {
+        return Err(ApiError::new(ErrorCode::NotFound, format!("there's no branch {branch}")));
+    }
+    let worktrees = Worktrees::of(cwd).await?;
+    let changing = worktrees.changing().await?;
+    let (was_there, added) = add_worktree(&changing, path, &[&path.to_string_lossy(), branch.as_str()]).await?;
+    finish_add(cwd, path, branch, was_there, added, warnings).await
+}
+
+/// Whether `path` is a finished worktree of the repository at `cwd`, with `branch` checked out.
+pub(super) async fn made_there(cwd: &Path, path: &Path, branch: &BranchName) -> bool {
+    if !exists(&path.join(".git")).await {
+        return false;
+    }
+    let dirs = git(path, &["rev-parse", "--path-format=absolute", "--git-common-dir", "--git-dir"]);
+    let ours = git(cwd, &["rev-parse", "--path-format=absolute", "--git-common-dir"]);
+    let (Ok(dirs), Ok(ours), Some(head)) = tokio::join!(dirs, ours, branches::checked_out(path)) else {
+        return false;
+    };
+    let Some((theirs, record)) = dirs.stdout.trim().split_once('\n').filter(|_| dirs.success && ours.success) else {
+        return false;
+    };
+    theirs == ours.stdout.trim() && head == *branch && !locked_part_made(Path::new(record)).await
+}
+
+/// Makes `path`'s parent directory, prunes missing worktrees, notes whether `path` is already there, and runs
+/// `git worktree add` with `args`.
+async fn add_worktree(changing: &Changing, path: &Path, args: &[&str]) -> Result<(bool, GitOutput), ApiError> {
+    make_parent(path).await?;
+    changing.prune().await?;
+    let was_there = exists(path).await;
+    let added = changing.add(args).await?;
+    Ok((was_there, added))
+}
+
+/// Settles what `git worktree add` did: fine, with a warning, if it made the worktree at `path` anyway, as when a
+/// `post-checkout` hook fails after the checkout, and an error for why git refused otherwise.
+async fn finish_add(
+    cwd: &Path,
+    path: &Path,
+    branch: &BranchName,
+    was_there: bool,
+    added: GitOutput,
+    warnings: &mut Vec<String>,
+) -> Result<(), ApiError> {
+    if added.success {
+        return Ok(());
+    }
+    if !was_there && made_there(cwd, path, branch).await {
+        warnings.push(format!("git made the worktree, but said: {}", added.stderr));
+        return Ok(());
+    }
+    let code = if added.stderr.contains("already exists") || added.stderr.contains("exists; cannot create") {
+        // A path or a branch that wasn't there when this worker looked, made meanwhile by something else.
+        ErrorCode::NameTaken
+    } else if added.stderr.contains("already") {
+        // Git lets a branch be checked out in only one worktree.
+        ErrorCode::Conflict
+    } else {
+        ErrorCode::Worker
+    };
+    let message = if added.stderr.is_empty() { format!("{} failed", added.command) } else { added.stderr };
+    Err(ApiError::new(code, message))
+}
+
+/// Makes the directory a new worktree goes in.
+async fn make_parent(path: &Path) -> Result<(), ApiError> {
+    let Some(parent) = path.parent() else { return Ok(()) };
+    let made = off_thread(parent.to_path_buf(), std::fs::create_dir_all).await;
+    made.map_err(|e| git_error(format!("creating {}: {e}", parent.display())))
+}
+
+/// `origin`'s default branch if there's a remote, otherwise the branch checked out in the repo.
+async fn default_base(repo: &Path) -> Result<String, ApiError> {
+    let head = git(repo, &["symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"]).await?;
+    if head.success && !head.stdout.trim().is_empty() {
+        return Ok(head.stdout.trim().to_string());
+    }
+    for candidate in ["origin/main", "origin/master"] {
+        if ref_exists(repo, candidate).await? {
+            return Ok(candidate.to_string());
+        }
+    }
+    let current = git(repo, &["symbolic-ref", "--quiet", "--short", "HEAD"]).await?;
+    if current.success {
+        return Ok(current.stdout.trim().to_string());
+    }
+    Ok("HEAD".to_string())
+}
+
+/// Fetches `base` first if it's one of `origin`'s branches, so a worktree starts from its latest commit even if the
+/// repository's copy is behind. A failed fetch isn't fatal, and warns: working offline from the last known commit is
+/// better than not working. Holds `worktrees` for reading, since a fetch reads every worktree, and waits for them before
+/// its own time limit starts. Fails only if they can't be held, which would fail the worktree's making next.
+async fn fetch_if_remote(worktrees: &Worktrees, base: &str, warnings: &mut Vec<String>) -> Result<(), ApiError> {
+    let Some(remote_branch) = base.strip_prefix("origin/") else { return Ok(()) };
+    let reading = worktrees.reading().await?;
+    match tokio::time::timeout(FETCH_TIMEOUT, reading.fetch(&["--quiet", "origin", remote_branch])).await {
+        Ok(Ok(output)) if output.success => {}
+        Ok(Ok(output)) => warnings.push(format!("couldn't fetch {base}, using the local copy: {}", output.stderr)),
+        Ok(Err(e)) => warnings.push(format!("couldn't fetch {base}, using the local copy: {}", e.message)),
+        Err(_) => warnings.push(format!("fetching {base} timed out, using the local copy")),
+    }
+    Ok(())
+}

@@ -17,9 +17,9 @@ use std::path::{Path, PathBuf};
 mod tests;
 
 mod deleting;
-pub(super) use deleting::remove_part_made;
 pub use deleting::remove_workspace;
 #[cfg(test)]
 pub(crate) use deleting::{DELETING, LOCK};
 #[cfg(test)]
 use deleting::{Force, forget};
+pub(super) use deleting::{locked_part_made, remove_part_made};

@@ -9,5 +9,3 @@ mod tests;
 
 mod making;
 pub(crate) use making::add_child_worktree;
-#[cfg(test)]
-use making::on_a_new_branch;

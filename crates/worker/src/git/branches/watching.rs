@@ -1,4 +1,4 @@
-use super::super::{commit_of, git, git_error, git_ok};
+use super::super::{commit_of, exists, git, git_error, git_ok};
 use protocol::client::ApiError;
 use protocol::model::{Branch, BranchName, Branches, CommitId, Head, RemoteName, Upstream};
 use std::collections::{BTreeSet, HashMap};
@@ -52,12 +52,16 @@ pub(crate) async fn read_now(worktree: &Path) -> Result<Branches, ApiError> {
     Ok(read(worktree, &places(worktree).await?).await?.branches)
 }
 
-/// The branch checked out, if HEAD isn't detached.
+/// The branch the worktree at `worktree` has checked out, if one is there and HEAD isn't detached.
 pub(crate) async fn checked_out(worktree: &Path) -> Option<BranchName> {
-    match head(worktree).await {
-        Ok(Head::Branch { name }) => Some(name),
-        Ok(Head::Detached { .. } | Head::Unknown) | Err(_) => None,
+    if !exists(&worktree.join(".git")).await {
+        return None;
     }
+    let symbolic = git(worktree, &["symbolic-ref", "--quiet", "HEAD"]).await.ok()?;
+    if !symbolic.success {
+        return None;
+    }
+    symbolic.stdout.trim().strip_prefix("refs/heads/").map(BranchName::from)
 }
 
 pub(crate) async fn read(worktree: &Path, places: &Places) -> Result<Read, ApiError> {

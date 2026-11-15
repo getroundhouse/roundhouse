@@ -1,10 +1,9 @@
 use super::super::removal::remove_part_made;
 use super::super::{
-    GitOutput, Worktrees, commit_of, fetch_if_remote, git, make_parent, no_branch_in_the_way, ref_exists,
-    reject_option_like, valid_branch_name,
+    branches, commit_of, exists, made_there, make_on_branch, make_on_new_branch, ref_exists, valid_branch_name,
 };
 use protocol::client::{ApiError, ErrorCode};
-use protocol::model::{BranchName, CHILDREN, CommitId};
+use protocol::model::{CHILDREN, CommitId};
 use protocol::worker::ChildBranch;
 use std::path::{Component, Path};
 
@@ -25,20 +24,28 @@ pub(crate) async fn add_child_worktree(
     valid_branch_name(own, branch).await?;
     // One a `git worktree add` was stopped part way through, as when the worker went, is nothing git will finish, so
     // it's removed, and made again below.
-    let had = checked_out(path).await;
+    let had = branches::checked_out(path).await;
     let stopped_part_way = remove_part_made(own, path).await?;
     // Its folder being a worktree itself, as one made there by hand would be, would have this one made inside it, and
     // go with it when that one is removed.
-    let inside_another = path.parent().is_some_and(|folder| folder.join(".git").exists());
-    if inside_another || (!stopped_part_way && path.exists() && !made_there(own, path, branch).await) {
+    let inside_another = match path.parent() {
+        Some(folder) => exists(&folder.join(".git")).await,
+        None => false,
+    };
+    if inside_another || (!stopped_part_way && exists(path).await && !made_there(own, path, branch).await) {
         return Err(ApiError::new(ErrorCode::NameTaken, format!("{} is taken", path.display())));
     }
-    if !path.exists() {
-        // On the branch git had checked out in it before it was stopped, if that's the one asked for, rather than
-        // refusing that as a new branch that's taken.
+    if !exists(path).await {
+        // On the branch git had checked out in it before it was stopped, if that's the one asked for and it's still
+        // there, rather than refusing that as a new branch that's taken.
         let its_own = ChildBranch::Existing { branch: branch.clone() };
-        let on_its_own = stopped_part_way && had == Some(format!("refs/heads/{branch}"));
-        make(own, if on_its_own { &its_own } else { on }, path, warnings).await?;
+        let reuse_branch = stopped_part_way
+            && had.as_ref() == Some(branch)
+            && ref_exists(own, &format!("refs/heads/{branch}")).await?;
+        match if reuse_branch { &its_own } else { on } {
+            ChildBranch::New { branch, base } => make_on_new_branch(own, branch, base, path, warnings).await?,
+            ChildBranch::Existing { branch } => make_on_branch(own, branch, path, warnings).await?,
+        }
     }
     commit_of(path, "HEAD")
         .await?
@@ -58,104 +65,4 @@ fn in_its_folder(own: &Path, path: &Path) -> Result<(), ApiError> {
         return Err(ApiError::new(ErrorCode::InvalidRequest, refused));
     }
     Ok(())
-}
-
-/// Runs `git worktree add` for `path`, which is fine, with a warning, if git made the worktree anyway, as when a
-/// `post-checkout` hook fails after it's checked out.
-async fn make(own: &Path, on: &ChildBranch, path: &Path, warnings: &mut Vec<String>) -> Result<(), ApiError> {
-    let worktrees = Worktrees::of(own).await?;
-    let added = match on {
-        ChildBranch::New { branch, base } => on_a_new_branch(own, &worktrees, branch, base, path, warnings).await?,
-        ChildBranch::Existing { branch } => on_a_branch(own, &worktrees, branch, path).await?,
-    };
-    if added.success {
-        return Ok(());
-    }
-    if path.join(".git").exists() {
-        warnings.push(format!("git made the worktree, but said: {}", added.stderr));
-        return Ok(());
-    }
-    let code = if added.stderr.contains("already exists") {
-        // A path or a branch that wasn't there when this worker looked, made meanwhile by something else.
-        ErrorCode::NameTaken
-    } else if added.stderr.contains("already") {
-        // Git lets a branch be checked out in only one worktree.
-        ErrorCode::Conflict
-    } else {
-        ErrorCode::Worker
-    };
-    Err(ApiError::new(code, added.stderr))
-}
-
-/// Whether `path` is a worktree of the repository of the workspace's own at `own`, with `branch` checked out.
-async fn made_there(own: &Path, path: &Path, branch: &BranchName) -> bool {
-    if !path.join(".git").exists() {
-        return false;
-    }
-    let repository = |cwd| git(cwd, &["rev-parse", "--path-format=absolute", "--git-common-dir"]);
-    let said = |output: Result<GitOutput, ApiError>| {
-        output.ok().filter(|output| output.success).map(|output| output.stdout.trim().to_string())
-    };
-    let (theirs, ours, head) = tokio::join!(repository(path), repository(own), checked_out(path));
-    let theirs = said(theirs);
-    theirs.is_some() && theirs == said(ours) && head == Some(format!("refs/heads/{branch}"))
-}
-
-/// The branch the worktree at `path` has checked out, in full, since git shortens one to `heads/x` when a tag is called
-/// `x` too. `None` if no worktree is there, or it's on no branch.
-async fn checked_out(path: &Path) -> Option<String> {
-    if !path.join(".git").exists() {
-        return None;
-    }
-    let head = git(path, &["symbolic-ref", "--quiet", "HEAD"]).await.ok()?;
-    head.success.then(|| head.stdout.trim().to_string())
-}
-
-/// Runs `git worktree add` for `path` on a new branch from `base`, unless git already has a branch in the way.
-pub(super) async fn on_a_new_branch(
-    own: &Path,
-    worktrees: &Worktrees,
-    branch: &BranchName,
-    base: &str,
-    path: &Path,
-    warnings: &mut Vec<String>,
-) -> Result<GitOutput, ApiError> {
-    reject_option_like(base, "a base ref")?;
-    no_branch_in_the_way(own, branch).await?;
-    fetch_if_remote(worktrees, base, warnings).await?;
-    let Some(commit) = commit_of(own, base).await? else {
-        return Err(ApiError::new(ErrorCode::InvalidRequest, format!("{base} isn't a branch, tag or commit here")));
-    };
-    make_parent(path).await?;
-    // From the commit, not the base's name, and --no-track, as for a workspace's own, so the branch tracks nothing,
-    // and a bare `git push` or `git pull` there doesn't act on the base.
-    let added =
-        add(worktrees, &["--no-track", "-b", branch.as_str(), &path.to_string_lossy(), commit.as_str()]).await?;
-    // Git makes the branch before it looks at the path, so it's there unless git refused it as one that was.
-    if !added.success && !path.join(".git").exists() && !added.stderr.contains("a branch named") {
-        // It holds nothing else, unless it's moved since.
-        let _ = git(own, &["update-ref", "-d", &format!("refs/heads/{branch}"), commit.as_str()]).await;
-    }
-    Ok(added)
-}
-
-/// Runs `git worktree add` for `path` on `branch` as it is.
-async fn on_a_branch(
-    own: &Path,
-    worktrees: &Worktrees,
-    branch: &BranchName,
-    path: &Path,
-) -> Result<GitOutput, ApiError> {
-    if !ref_exists(own, &format!("refs/heads/{branch}")).await? {
-        return Err(ApiError::new(ErrorCode::NotFound, format!("there's no branch {branch}")));
-    }
-    make_parent(path).await?;
-    add(worktrees, &[&path.to_string_lossy(), branch.as_str()]).await
-}
-
-/// Runs `git worktree add` with `args`, once git has forgotten the worktrees deleted without it.
-async fn add(worktrees: &Worktrees, args: &[&str]) -> Result<GitOutput, ApiError> {
-    let changing = worktrees.changing().await?;
-    changing.prune().await?;
-    changing.add(args).await
 }
