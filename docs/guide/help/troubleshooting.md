@@ -14,7 +14,7 @@ For Codex, run `codex login` on the machine running the workspace; for Antigravi
 
 ## An agent reached its usage limit
 
-The chat ends on a card saying `Usage limit reached`, and when the limit resets. Choose another model in the composer, then click `Retry`, or wait until it resets. The words under it, which are the CLI's, say where to manage your usage.
+The chat ends on a card saying `Usage limit reached`, and when the limit resets. Choose another model in the composer, then click `Retry`, or wait until it resets. The words under it, which are the CLI's, say where to manage your usage. If the agent had work going in the background, it goes on picking up by itself as each task ends, and each try fails the same way. The card says how many times, and what started each, rather than the chat showing a card for each.
 
 ## The pull request's bar only offers Create PR
 

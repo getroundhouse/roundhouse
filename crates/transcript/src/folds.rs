@@ -1,5 +1,6 @@
 //! Which blocks are open. A block the person opened or closed stays as they left it, and the rest start the way
-//! their kind does. The line for several background tasks at the chat's end opens and closes the same way.
+//! their kind does. The line for several background tasks at the chat's end opens and closes the same way, and so do
+//! the earlier tries of a failed request's card.
 
 use std::collections::HashMap;
 
@@ -15,6 +16,8 @@ pub(crate) enum Fold {
     Output,
     /// The background tasks one line at the chat's end stands for, as `crate::task_lines` says.
     Tasks,
+    /// The earlier tries a failed request's card says, past its newest few.
+    Earlier,
 }
 
 impl Fold {
@@ -37,7 +40,7 @@ impl Folds {
     pub(crate) fn is_open(&self, key: &ItemKey, fold: Fold) -> bool {
         self.chosen.get(&fold).and_then(|chosen| chosen.get(key)).copied().unwrap_or(match fold {
             Fold::Thinking => self.thinking_open,
-            Fold::Output | Fold::Tasks => false,
+            Fold::Output | Fold::Tasks | Fold::Earlier => false,
         })
     }
 

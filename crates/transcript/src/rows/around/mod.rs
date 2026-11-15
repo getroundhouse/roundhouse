@@ -1,11 +1,14 @@
 //! What drawing one event needs from the rest of the log and the model, read while they're held, so nothing is held
 //! while it's drawn.
 
+mod failures;
 mod nearby;
 mod reply;
 mod settled;
 mod subagent;
 
+pub(crate) use failures::redrawn_with;
+pub(super) use failures::{Started, Tries, Try};
 pub(super) use reply::{Answer, Outcome, Reply};
 pub(super) use settled::{AnswerTo, Settled};
 pub(super) use subagent::Subagent;

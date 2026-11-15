@@ -8,6 +8,7 @@ use gpui_kit::{AssetSource, Result, SharedString};
 gpui_kit::assets::icon_assets!(
     Extra,
     [
+        Activity,
         Archive,
         ArchiveRestore,
         ArrowUpDown,
@@ -30,6 +31,7 @@ gpui_kit::assets::icon_assets!(
         Mail,
         MailOpen,
         MessageCircleQuestionMark,
+        MessageSquare,
         MessageSquarePlus,
         NotebookPen,
         Paperclip,

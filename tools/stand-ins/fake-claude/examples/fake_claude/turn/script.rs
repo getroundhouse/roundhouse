@@ -1,6 +1,6 @@
 use super::prose;
 use crate::tools::{ask_questions, edit_file, present_plan, run_tool};
-use crate::waiting::{WaitingOn, hang, until};
+use crate::waiting::{WaitingOn, hang, pause_until, until};
 use crate::{
     Config, Input, Out, Prompt, advisor, asking_subagents, background, cache, current_mode, current_model, emit, fail,
     lifecycle, mcp, pause, read, subagent,
@@ -324,6 +324,10 @@ fn act(turn: &mut Turn, command: &str, rx: &Receiver<Input>, queued: &mut VecDeq
     if let Some(file) = command.strip_prefix("hang-until:") {
         let waiting = WaitingOn::file(Path::new(file));
         return hang(turn, move |_| waiting.made(), rx, queued, eof);
+    }
+    if let Some(file) = command.strip_prefix("request-until:") {
+        let waiting = WaitingOn::file(Path::new(file));
+        return pause_until(|_| waiting.made(), rx, queued, eof);
     }
     if let Some(error) = command.strip_prefix("fail:") {
         return fail::request(turn, error);

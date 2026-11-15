@@ -3,7 +3,7 @@
 
 #![cfg(test)]
 
-use protocol::event::{EventBody, FailureKind, NoticeLevel, RequestFailure, TurnOutcome};
+use protocol::event::{Again, EventBody, FailureKind, NoticeLevel, RequestFailure, TurnOutcome};
 use protocol::model::SessionStatus;
 
 use super::chats::looked_around;
@@ -29,10 +29,30 @@ pub(crate) const LIMIT_REACHED: &str = "You've reached your usage limit. Switch 
 /// The chat, which the hub says stopped short on the turn that failed, so its card offers to try again.
 fn failed_world() -> World {
     let mut world = chat_world(SessionStatus::Idle, failed());
+    stopped_short(&mut world);
+    world
+}
+
+/// Has the hub say the last chat stopped short on the turn its log ends with, which failed.
+pub(super) fn stopped_short(world: &mut World) {
     let chat = world.sessions.last_mut().unwrap();
     chat.reply_seq = chat.last_seq;
     chat.reply_outcome = Some(TurnOutcome::Error);
-    world
+}
+
+/// A request the account's usage limit refused, which resets at `resets_at_ms`, saying it repeats the failure `again`
+/// says, and the end of the turn it failed.
+pub(super) fn refused(resets_at_ms: i64, again: Option<Again>) -> [EventBody; 2] {
+    let failure = RequestFailure {
+        message: LIMIT_REACHED.to_string(),
+        kind: FailureKind::Limit,
+        resets_at_ms: Some(resets_at_ms),
+    };
+    let mut ended = finished_turn(74, 0.18);
+    if let EventBody::TurnEnded { outcome, result, request_failed, .. } = &mut ended {
+        (*outcome, *result, *request_failed) = (TurnOutcome::Error, Some(LIMIT_REACHED.to_string()), true);
+    }
+    [EventBody::RequestFailed { parent_tool_use_id: None, failure, again }, ended]
 }
 
 /// A turn that looked around, had its model changed partway, which the CLI said itself, and then failed on the
@@ -42,16 +62,6 @@ fn failed() -> Vec<EventBody> {
     let model_set = "Set model to `opus (claude-opus-5-5)`".to_string();
     events.push(EventBody::Notice { level: NoticeLevel::Info, message: model_set, parent_tool_use_id: None });
     events.push(text("msg-3", "The sidebar only knows what's in `Workspace`, so I'll add the field there first."));
-    let failure = RequestFailure {
-        message: LIMIT_REACHED.to_string(),
-        kind: FailureKind::Limit,
-        resets_at_ms: Some(NOW_MS + (4 * 24 + 6) * 60 * 60 * 1_000),
-    };
-    events.push(EventBody::RequestFailed { parent_tool_use_id: None, failure, again: None });
-    let mut ended = finished_turn(74, 0.18);
-    if let EventBody::TurnEnded { outcome, result, request_failed, .. } = &mut ended {
-        (*outcome, *result, *request_failed) = (TurnOutcome::Error, Some(LIMIT_REACHED.to_string()), true);
-    }
-    events.push(ended);
+    events.extend(refused(NOW_MS + (4 * 24 + 6) * 60 * 60 * 1_000, None));
     events
 }

@@ -1,3 +1,4 @@
+use super::failures::Failures;
 use super::{nearby, reply, settled, subagent};
 use crate::attachments;
 use crate::attachments::Carried;
@@ -42,6 +43,8 @@ pub(in super::super) struct Around {
     pub(in super::super) open: bool,
     /// For a failed request: whether its card offers Retry, as [`retry_at`] says.
     pub(in super::super) retry: bool,
+    /// Whether it's the card of the agent's failures in a row, or said in a later one's.
+    pub(in super::super) failures: Failures,
 }
 
 /// What says what became of an approval, besides the record that closes it.
@@ -161,6 +164,7 @@ impl Around {
             mode_before: None,
             open: false,
             retry: m.retry_at == Some(seq),
+            failures: Failures::read(log, &m.folds, seq, body),
         };
         if let EventBody::AgentMode { .. } = body {
             around.mode_before = nearby::mode_before(log, seq);

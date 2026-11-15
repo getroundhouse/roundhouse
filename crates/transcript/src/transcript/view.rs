@@ -239,8 +239,10 @@ impl Transcript {
         self.follow_retry();
         self.session.read(|log| self.texts.let_go(log, self.selection.held().as_ref()));
         if let Some(changed) = changes.rows {
-            self.list.out_of_date(changed.clone());
-            self.find_in_changes(changed, cx);
+            // A failure of the agent's own changes how rows around it are drawn.
+            let redrawn = self.session.read(|log| crate::rows::redrawn_with(log, changed));
+            self.list.out_of_date(redrawn.clone());
+            self.find_in_changes(redrawn, cx);
         }
         if events_changed || changes.requests_fetched {
             self.follow_question(cx);
