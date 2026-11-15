@@ -3,7 +3,10 @@
 //! something the other end asked.
 
 use std::collections::HashMap;
+use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Weak};
+use std::task::{Context, Poll};
 
 use parking_lot::Mutex;
 use protocol::frame;
@@ -26,35 +29,63 @@ pub(crate) struct Calls<O> {
     /// Lines for the task that writes them, so a call dropped partway can't leave half of one. Dropping this closes
     /// the stream's write half once they're written, which is how the other end is told to stop.
     lines: Mutex<Option<mpsc::Sender<Vec<u8>>>>,
-    /// `None` once the stream has ended, so a call can't wait for a reply that won't come.
-    waiting: Mutex<Option<HashMap<u64, oneshot::Sender<O>>>>,
+    waiting: Arc<Waiting<O>>,
+}
+
+/// Where each call's reply goes, by its ID. `None` once the stream has ended, so a call can't wait for a reply that
+/// won't come.
+type Waiting<O> = Mutex<Option<HashMap<u64, oneshot::Sender<O>>>>;
+
+/// A call's reply, to wait for. Dropping it forgets the call, so a call nobody waits for any more, such as one its
+/// caller gave up on partway, isn't counted as waiting until a reply that may never come.
+pub(crate) struct Replied<O> {
+    id: u64,
+    answer: oneshot::Receiver<O>,
+    /// Weak, since the list holds the call's own sender, which would then keep a reply waited for after its
+    /// [`Calls`] has gone from ever waking.
+    waiting: Weak<Waiting<O>>,
+}
+
+impl<O> Future for Replied<O> {
+    /// An error once the stream has ended without its reply.
+    type Output = Result<O, oneshot::error::RecvError>;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        Pin::new(&mut self.answer).poll(cx)
+    }
+}
+
+impl<O> Drop for Replied<O> {
+    fn drop(&mut self) {
+        if let Some(waiting) = self.waiting.upgrade()
+            && let Some(waiting) = waiting.lock().as_mut()
+        {
+            waiting.remove(&self.id);
+        }
+    }
 }
 
 impl<O> Calls<O> {
     pub(crate) fn new(writer: Box<dyn AsyncWrite + Send + Unpin>) -> Self {
         let (lines, queued) = mpsc::channel(256);
         tokio::spawn(write_lines(writer, queued));
-        Self { next_id: AtomicU64::new(1), lines: Mutex::new(Some(lines)), waiting: Mutex::new(Some(HashMap::new())) }
+        let waiting = Arc::new(Mutex::new(Some(HashMap::new())));
+        Self { next_id: AtomicU64::new(1), lines: Mutex::new(Some(lines)), waiting }
     }
 
     /// Queues the call `call` makes of its ID, and returns its reply to wait for, which is dropped unsent if the
     /// stream ends first. Calls are written in the order they're queued.
-    pub(crate) async fn send<C: Serialize>(
-        &self,
-        call: impl FnOnce(u64) -> C,
-    ) -> Result<oneshot::Receiver<O>, NotSent> {
+    pub(crate) async fn send<C: Serialize>(&self, call: impl FnOnce(u64) -> C) -> Result<Replied<O>, NotSent> {
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
         let line = frame::encode(&call(id))?;
         let lines = self.lines.lock().clone().ok_or(NotSent::Closed)?;
-        let (reply, replied) = oneshot::channel();
+        let (reply, answer) = oneshot::channel();
         self.waiting.lock().as_mut().ok_or(NotSent::Closed)?.insert(id, reply);
+        // Made before the line is queued, so a call that can't be queued, or is dropped while it waits to be, is forgotten
+        // too.
+        let replied = Replied { id, answer, waiting: Arc::downgrade(&self.waiting) };
         // Not held while the reply is waited for. A long call would otherwise keep the stream open after `close`.
-        if lines.send(line).await.is_err() {
-            if let Some(waiting) = self.waiting.lock().as_mut() {
-                waiting.remove(&id);
-            }
-            return Err(NotSent::Closed);
-        }
+        lines.send(line).await.map_err(|_| NotSent::Closed)?;
         Ok(replied)
     }
 
@@ -130,6 +161,49 @@ mod tests {
         calls.reply(ids[0], "to the first");
 
         assert_eq!((first.await.unwrap(), second.await.unwrap()), ("to the first", "to the second"));
+    }
+
+    #[tokio::test]
+    async fn a_call_nobody_waits_for_any_more_is_forgotten_and_its_late_reply_goes_nowhere() {
+        let (ours, theirs) = tokio::io::duplex(1024);
+        let calls = Calls::<&str>::new(Box::new(ours));
+        let given_up = calls.send(|id| json!({"id": id})).await.unwrap();
+        let waited = calls.send(|id| json!({"id": id})).await.unwrap();
+        let mut sent = FrameReader::new(theirs);
+        let given_up_id = frame::decode::<Value>(sent.next().await.unwrap().unwrap()).unwrap()["id"].as_u64().unwrap();
+        let waited_id = frame::decode::<Value>(sent.next().await.unwrap().unwrap()).unwrap()["id"].as_u64().unwrap();
+
+        drop(given_up);
+
+        assert_eq!(calls.waiting(), 1, "only the call still waited for is waiting");
+        calls.reply(given_up_id, "too late");
+        calls.reply(waited_id, "in time");
+        assert_eq!(waited.await.unwrap(), "in time");
+        assert_eq!(calls.waiting(), 0);
+    }
+
+    #[tokio::test]
+    async fn a_call_that_cant_be_queued_is_forgotten() {
+        let (ours, theirs) = tokio::io::duplex(1024);
+        let calls = Calls::<&str>::new(Box::new(ours));
+        // So writing fails, and what writes the lines stops taking them.
+        drop(theirs);
+
+        let mut refused = false;
+        for _ in 0..1000 {
+            match calls.send(|id| json!({"id": id})).await {
+                Ok(given_up) => drop(given_up),
+                Err(NotSent::Closed) => {
+                    refused = true;
+                    break;
+                }
+                Err(NotSent::Encoding(e)) => panic!("{e}"),
+            }
+            tokio::task::yield_now().await;
+        }
+
+        assert!(refused, "a call was refused once the stream couldn't be written");
+        assert_eq!(calls.waiting(), 0);
     }
 
     #[tokio::test]
