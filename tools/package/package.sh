@@ -60,7 +60,7 @@ stage() {
 
 # Checks the bundle is what this script meant to make, since vpk changes the binaries when it signs them.
 check() {
-  local app=$1 signed=$2 notarized=$3 bin key value file
+  local app=$1 signed=$2 notarized=$3 bin key value file expected
   for key in CFBundleShortVersionString CFBundleVersion; do
     value="$(plutil -extract "$key" raw "$app/Contents/Info.plist")"
     [ "$value" = "$VERSION" ] || die "the bundle's $key is $value, not $VERSION"
@@ -78,14 +78,16 @@ check() {
   grep -qaF "$BUILD" "$app/Contents/MacOS/roundhouse-desktop" || die "roundhouse-desktop doesn't hold its build, $BUILD"
   [ "$signed" = yes ] || return 0
   codesign --verify --deep --strict "$app"
-  # Every executable, Velopack's updater too, has the hardened runtime and none of its exceptions.
+  expected="$(plutil -convert json -o - "$HERE/Roundhouse.entitlements")"
+  # Every executable, Velopack's updater too, has the hardened runtime and only the exceptions Roundhouse.entitlements
+  # gives.
   for file in "${BINARIES[@]/#/$app/Contents/MacOS/}" "$app/Contents/MacOS/UpdateMac"; do
     # Read whole before grep, which stops reading at the first match, so pipefail would count codesign's SIGPIPE.
     value="$(codesign -d --verbose=1 "$file" 2>&1)"
     grep -Eq '^CodeDirectory .*flags=0x[0-9a-f]+\([^)]*runtime' <<< "$value" \
       || die "$(basename "$file") isn't signed with the hardened runtime"
     value="$(codesign -d --entitlements - --xml "$file" 2> /dev/null | plutil -convert json -o - - 2> /dev/null || true)"
-    [ "$value" = "{}" ] || die "$(basename "$file") is signed with entitlements other than Roundhouse.entitlements"
+    [ "$value" = "$expected" ] || die "$(basename "$file") is signed with entitlements other than Roundhouse.entitlements"
   done
   [ "$notarized" = yes ] || return 0
   # Gatekeeper's verdict, as a download gets it. Its `origin=` line names whose certificate it is, so it's left out.
