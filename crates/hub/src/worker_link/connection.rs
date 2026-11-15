@@ -9,7 +9,7 @@ use protocol::Build;
 use protocol::client::{ApiError, ErrorCode, error_chain};
 use protocol::model::{InstanceId, ProviderName, RunId, SessionId, WorkspaceId};
 use protocol::worker::{
-    AskAnswer, Received, Reply, Request, RunningAgent, RunningAgents, Stop, WorkerCall, WorkerFrame, WorkerResponse,
+    AskAnswer, Reply, Request, RunningAgent, RunningAgents, Stop, WorkerCall, WorkerFrame, WorkerResponse,
 };
 use providers::Provider;
 use reaching::{Opening, reach};
@@ -19,6 +19,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 use tokio::sync::{Mutex as AsyncMutex, watch};
+use tokio::time::Instant;
 use tracing::warn;
 
 pub(super) static NEXT_LINK_ID: AtomicU64 = AtomicU64::new(1);
@@ -240,12 +241,14 @@ impl WorkerLink {
         self.calls.close();
     }
 
-    /// Closes its stdin without asking the worker to stop, so it carries on for the next hub, once it has heard what
-    /// this hub has recorded.
-    pub(crate) async fn leave(self: &Arc<Self>, hub: &Arc<Hub>) {
+    /// Closes its stdin without asking the worker to stop, so it carries on for the next hub, once it has let go of
+    /// what this hub has recorded, or `deadline` has passed.
+    pub(crate) async fn leave(self: &Arc<Self>, hub: &Arc<Hub>, deadline: Instant) {
         self.left.store(true, Ordering::SeqCst);
-        if let Some(through) = self.acks.recorded(hub).await {
-            let _ = self.send(Received { through }).await;
+        match tokio::time::timeout_at(deadline, self.acks.tell_and_wait(hub, self)).await {
+            Ok(Ok(())) => {}
+            Ok(Err(e)) => warn!("telling a worker what was recorded as this hub leaves it: {}", e.message),
+            Err(_) => warn!("a worker didn't say in time that it had let go of what this hub recorded"),
         }
         self.calls.close();
     }

@@ -20,6 +20,7 @@ use super::{Hub, HubDirs};
 use crate::github::{Github, GithubConfig};
 use crate::provider_set::ProviderSet;
 use crate::session::{CarriedOver, Item, LiveSession, Starting};
+use crate::store::Store;
 use crate::store::tests::store_with_session;
 use crate::timers::Timers;
 use crate::worker_link::WorkerLink;
@@ -105,6 +106,11 @@ pub(crate) fn stand_in_worker(hub: &Hub) -> Arc<WorkerLink> {
     let link = WorkerLink::answering(|_| Some(Err(ApiError::new(ErrorCode::Worker, "a stand-in does nothing"))));
     hub.workers.lock().insert("w".into(), link.clone());
     link
+}
+
+/// The hub's store, for a test outside the hub's own module.
+pub(crate) fn store_of(hub: &Hub) -> &Arc<Store> {
+    &hub.store
 }
 
 /// Has `link` be `w`'s worker.
