@@ -44,6 +44,20 @@ pub(crate) const TOOL_SCREENS: &[Screen] = &[
         steps: &[Step::Select(FOCUS), Step::Open(typed_chats::BACKGROUND_LINE)],
     },
     Screen {
+        name: "tool-files-typed",
+        spec: "chats.md",
+        world: Some(|| chat_world(SessionStatus::Idle, typed_chats::files_changed())),
+        frame: CHAT,
+        steps: &[Step::Select(FOCUS), Step::Open(typed_chats::PATCH_LINE)],
+    },
+    Screen {
+        name: "tool-patches",
+        spec: "chats.md",
+        world: Some(|| chat_world(SessionStatus::Idle, typed_chats::one_file_patches())),
+        frame: CHAT,
+        steps: &[Step::Select(FOCUS)],
+    },
+    Screen {
         name: "finding",
         spec: "chats.md",
         world: Some(|| chat_world(SessionStatus::Idle, tool_chats::commands())),

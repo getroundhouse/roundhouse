@@ -3,6 +3,7 @@ use agent::Agent;
 use command::Command;
 use files::{EditFile, ReadFile, WriteFile};
 use other::Other;
+use protocol::capability::calls::call::{NotebookEdit, Patch};
 use protocol::event::{Asking, CallKind, ContentBlock, EventBody};
 use search::{Looks, Search};
 use serde_json::Value;
@@ -22,6 +23,10 @@ pub enum ToolCall<'a> {
     /// Asking the advisor, a stronger model that reads the whole conversation and advises the agent. It takes no
     /// input.
     Advisor,
+    /// Changing files with a patch, as Codex does: several at once, each added, deleted, or changed and maybe moved.
+    Patch(&'a Patch),
+    /// Changing one cell of a notebook.
+    NotebookEdit(&'a NotebookEdit),
     Other(Other),
     Typed(&'a protocol::capability::calls::Call),
 }
@@ -160,6 +165,8 @@ impl<'a> ToolCall<'a> {
             ToolCall::Fetch(fetch) => fetch.url,
             ToolCall::WebSearch(search) => search.query,
             ToolCall::Advisor => return None,
+            ToolCall::Patch(patch) => return Some(super::typed::paths(patch)),
+            ToolCall::NotebookEdit(edit) => &edit.path,
             ToolCall::Other(other) => return other.summary.clone(),
             ToolCall::Typed(call) => return Some(super::typed::summary(call)),
         };

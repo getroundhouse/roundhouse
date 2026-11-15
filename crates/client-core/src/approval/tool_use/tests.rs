@@ -112,3 +112,34 @@ fn an_answer_allows_or_denies_by_its_place_and_whats_typed_denies_in_those_words
         assert_eq!(approval.deciding_tool_use(&neither), None, "{neither:?}");
     }
 }
+
+/// What's asked of a command is whether to run it, so one that only reads a file, which the chat draws as reading it,
+/// is asked about as the command it is.
+#[test]
+fn a_typed_command_that_only_reads_is_asked_about_as_a_command() {
+    use protocol::capability::calls::Call;
+    use protocol::capability::calls::call::{Command, CommandPart};
+    let reads = vec![CommandPart::Read { path: "secrets.env".into() }];
+    let call = Call::Command(Command { parts: reads, ..protocol::fixtures::typed_command("cat secrets.env") });
+    let body = protocol::fixtures::typed_request("a", "run-cat", call);
+
+    let asked = ToolUseAsked::of(&body).unwrap();
+
+    assert_eq!(asked.given, Some(Given::Command("cat secrets.env")));
+}
+
+/// A patch is asked about by the files it changes and how, as its typed input says them, which is all the person has
+/// to go on.
+#[test]
+fn a_typed_patch_is_asked_about_by_its_changes() {
+    use protocol::capability::calls::Call;
+    use protocol::capability::calls::call::{FilePatch, Patch, PatchChange};
+    let add = PatchChange::Add { content: "fn may_pass() {}".into() };
+    let call = Call::Patch(Patch { files: vec![FilePatch { path: "src/signal.rs".into(), change: add }] });
+    let body = protocol::fixtures::typed_request("a", "patch-1", call);
+
+    let asked = ToolUseAsked::of(&body).unwrap();
+
+    assert_eq!(asked.tool, "Edit");
+    assert_eq!(asked.given, Some(Given::MainInput("src/signal.rs\n+fn may_pass() {}\n".into())));
+}

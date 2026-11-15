@@ -3,10 +3,12 @@
 
 #![cfg(test)]
 
-use protocol::capability::calls::Call;
-use protocol::capability::calls::call::{Command, Runs};
-use protocol::capability::calls::output::Ended;
-use protocol::event::EventBody;
+use protocol::capability::calls::call::{
+    CellEdit, Command, CommandPart, FilePatch, NotebookEdit, Patch, PatchChange, PatchHunk, Read, Runs,
+};
+use protocol::capability::calls::output::{Ended, FileOutcome, Lines};
+use protocol::capability::calls::{Call, CallOutput};
+use protocol::event::{EventBody, FileChange, Hunk, HunkLine, LineMark};
 use protocol::fixtures::{command_output, typed_command};
 use protocol::model::Seq;
 
@@ -59,3 +61,131 @@ const BENCHMARK: &str = "Benchmarking may_pass: Warming up for 3.0000 s";
 fn command(command: &str, description: &str, runs: Runs) -> Call {
     Call::Command(Command { description: Some(description.into()), runs, ..typed_command(command) })
 }
+
+/// The line of a patch of two files.
+pub(crate) const PATCH_LINE: &str = "Edit 2 files";
+
+const SIGNAL: &str = "/workspaces/aspen/crates/signals/src/signal.rs";
+const DEPOT: &str = "/workspaces/aspen/crates/depot/src/lib.rs";
+
+/// What the depot's new file holds.
+const DEPOT_RS: &str = "use signals::signal::Aspect;
+
+pub fn may_leave(signal: Aspect) -> bool {
+    signal.may_pass()
+}";
+
+/// Calls of files: a command that does nothing but read one, drawn as reading it, a read with its lines' numbers, a
+/// patch of two files, opened to each file's change, and a notebook's cell changed.
+pub(crate) fn files_changed() -> Vec<EventBody> {
+    let reply = "Signals now say whether a train may pass, and the depot asks before it lets one out.";
+    let reads = vec![CommandPart::Read { path: SIGNAL.into() }];
+    let sed = Call::Command(Command { parts: reads, ..typed_command("sed -n 1,9p crates/signals/src/signal.rs") });
+    let read = Call::Read(Read { path: SIGNAL.into(), lines: None, pages: None });
+    let lines = Lines { first: 28, lines: ["        }", "    }", "}"].map(String::from).to_vec(), total: Some(30) };
+    let notebook = NotebookEdit {
+        path: "/workspaces/aspen/notebooks/headways.ipynb".into(),
+        cell: Some("cell-4".into()),
+        source: "plot(headways(trains, may_pass=True))".into(),
+        does: CellEdit::Replace,
+    };
+    vec![
+        user_prompt(ASK),
+        taken(Seq::new(1)),
+        text("msg-1", "I'll read the signal, then add `may_pass` to it and use it in the depot."),
+        typed_call("msg-2", "sed-1", sed),
+        typed_result("sed-1", command_output(SIGNAL_START, Some(0), Ended::Exited), false),
+        typed_call("msg-3", "read-1", read),
+        typed_result("read-1", CallOutput::Lines(lines), false),
+        typed_call("msg-4", "patch-1", Call::Patch(patch())),
+        typed_result(
+            "patch-1",
+            CallOutput::Changed { files: vec![changed(SIGNAL, true), changed(DEPOT, false)] },
+            false,
+        ),
+        typed_call("msg-5", "cell-1", Call::NotebookEdit(notebook)),
+        typed_result("cell-1", CallOutput::Words { text: "Updated cell cell-4".into() }, false),
+        text("msg-6", reply),
+        replied(reply, 96, 0.21),
+    ]
+}
+
+/// What the signal's first lines are.
+const SIGNAL_START: &str = "//! What a signal on the line shows, and what it tells a train to do.
+
+/// What a signal on the line tells a train to do.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Aspect {
+    Clear,
+    Caution,
+    Stop,
+}";
+
+/// The lines `may_pass` adds to the signal, after the end of the function before it, with what's around them.
+fn may_pass() -> Vec<HunkLine> {
+    let same = |text: &str| HunkLine { mark: LineMark::Same, text: text.into() };
+    let added = |text: &str| HunkLine { mark: LineMark::Added, text: text.into() };
+    vec![
+        same("        }"),
+        same("    }"),
+        added(""),
+        added("    pub fn may_pass(self) -> bool {"),
+        added("        self != Self::Stop"),
+        added("    }"),
+        same("}"),
+    ]
+}
+
+/// Adding `may_pass` to the signal, and a depot that uses it.
+fn patch() -> Patch {
+    let update = PatchChange::Update { move_to: None, hunks: vec![PatchHunk { after: None, lines: may_pass() }] };
+    Patch {
+        files: vec![
+            FilePatch { path: SIGNAL.into(), change: update },
+            FilePatch { path: DEPOT.into(), change: PatchChange::Add { content: DEPOT_RS.into() } },
+        ],
+    }
+}
+
+/// What the patch did to the file at `path`: changed it where it `was` there, with the file's own line numbers, or
+/// made it.
+fn changed(path: &str, was: bool) -> FileOutcome {
+    let change = if was {
+        FileChange::Changed { hunks: vec![Hunk { old_start: 28, new_start: 28, lines: may_pass() }] }
+    } else {
+        FileChange::Created
+    };
+    FileOutcome { path: path.into(), change: Some(change), moved_to: None, diagnostics: Vec::new() }
+}
+
+/// Patches of one file each, which say what they did to it as an edit or a write does: a file added, one changed, one
+/// moved, and one deleted.
+pub(crate) fn one_file_patches() -> Vec<EventBody> {
+    let reply = "The depot has its own module now, and the old yard is gone.";
+    let one = |path: &str, change| Call::Patch(Patch { files: vec![FilePatch { path: path.into(), change }] });
+    let moved = PatchChange::Update { move_to: Some(format!("{DEPOT_DIR}/sidings.rs")), hunks: Vec::new() };
+    let update = PatchChange::Update { move_to: None, hunks: vec![PatchHunk { after: None, lines: may_pass() }] };
+    let moved_back = FileOutcome {
+        path: format!("{DEPOT_DIR}/yard/sidings.rs"),
+        change: None,
+        moved_to: Some(format!("{DEPOT_DIR}/sidings.rs")),
+        diagnostics: Vec::new(),
+    };
+    vec![
+        user_prompt(ASK),
+        taken(Seq::new(1)),
+        text("msg-1", "I'll give the depot a module of its own, and tidy the yard away."),
+        typed_call("msg-2", "add-1", one(DEPOT, PatchChange::Add { content: DEPOT_RS.into() })),
+        typed_result("add-1", CallOutput::Changed { files: vec![changed(DEPOT, false)] }, false),
+        typed_call("msg-3", "edit-1", one(SIGNAL, update)),
+        typed_result("edit-1", CallOutput::Changed { files: vec![changed(SIGNAL, true)] }, false),
+        typed_call("msg-4", "move-1", one(&format!("{DEPOT_DIR}/yard/sidings.rs"), moved)),
+        typed_result("move-1", CallOutput::Changed { files: vec![moved_back] }, false),
+        typed_call("msg-5", "delete-1", one(&format!("{DEPOT_DIR}/yard.rs"), PatchChange::Delete)),
+        typed_result("delete-1", CallOutput::Changed { files: Vec::new() }, false),
+        text("msg-6", reply),
+        replied(reply, 41, 0.09),
+    ]
+}
+
+const DEPOT_DIR: &str = "/workspaces/aspen/crates/depot/src";

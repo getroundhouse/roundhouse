@@ -1,5 +1,6 @@
 //! Calls that read, write or edit one file, and what Claude sends back for a read: each line after its number.
 
+use protocol::capability::calls::CallOutput;
 use serde_json::Value;
 
 use super::str_field;
@@ -53,6 +54,15 @@ pub fn file_name(path: &str) -> &str {
     path.rsplit('/').find(|part| !part.is_empty()).unwrap_or(path)
 }
 
+/// The lines a read sent back, each with its number in the file: beside them, as a typed result says them, or in
+/// front of each, in what came back as the agent's words, as [`numbered_lines`] reads them. None for a typed result of
+/// anything else, such as what a command that reads printed, which has no numbers.
+pub fn lines<'a>(text: &'a str, output: Option<&'a CallOutput>) -> Vec<(u32, &'a str)> {
+    let Some(output) = output else { return numbered_lines(text) };
+    let CallOutput::Lines(lines) = output else { return Vec::new() };
+    (lines.first..).zip(lines.lines.iter().map(String::as_str)).collect()
+}
+
 /// The lines of a read, each with its number in the file. Claude puts each line's number in front of it, then a tab,
 /// or an arrow in older versions. Whatever follows the numbered lines, such as a note to the agent, isn't the file.
 pub fn numbered_lines(text: &str) -> Vec<(u32, &str)> {
@@ -70,9 +80,11 @@ fn numbered(line: &str) -> Option<(u32, &str)> {
 
 #[cfg(test)]
 mod tests {
+    use protocol::capability::calls::CallOutput;
+    use protocol::capability::calls::output::Lines;
     use serde_json::json;
 
-    use super::{EditFile, file_name, numbered_lines};
+    use super::{EditFile, file_name, lines, numbered_lines};
 
     #[test]
     fn a_read_s_lines_keep_their_numbers_and_leave_out_what_follows() {
@@ -82,6 +94,17 @@ mod tests {
         assert_eq!(numbered_lines(text), [(11, "impl Aspect {"), (12, "    /// Next."), (13, "")]);
         assert_eq!(numbered_lines("     1→old style"), [(1, "old style")]);
         assert!(numbered_lines("File does not exist.").is_empty());
+    }
+
+    /// A typed read's lines are numbered from where the read started, and anything else typed has no numbers to read.
+    #[test]
+    fn a_typed_read_s_lines_are_numbered_from_where_it_started() {
+        let read = CallOutput::Lines(Lines { first: 28, lines: vec!["a".into(), "b".into()], total: None });
+        let printed = CallOutput::Words { text: "    28\ta".into() };
+
+        assert_eq!(lines("", Some(&read)), [(28, "a"), (29, "b")]);
+        assert!(lines("    28\ta", Some(&printed)).is_empty(), "only a typed read's lines have numbers");
+        assert_eq!(lines("    28\ta", None), [(28, "a")], "as Claude wrote them in its words");
     }
 
     #[test]

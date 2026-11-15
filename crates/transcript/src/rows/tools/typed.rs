@@ -17,21 +17,16 @@ pub(in crate::rows) const ICON: IconName = IconName::Wrench;
 
 pub(super) fn draw(call: &Call, answer: Option<&Answer>, toggle: &Toggle, cx: &App) -> AnyElement {
     let line = Line::new(ICON, typed::title(call)).part(Part::Code(typed::summary(call).into())).shows_output(true);
+    // What came back, if anything: a failure that says nothing of what went wrong shows no more than its line does.
+    let output = answer.and_then(Answer::text_beside_images).filter(|text| !text.trim().is_empty());
     let opened = || {
-        Some(
-            block::frame(cx)
-                .child(block::code(toggle, Text::Input, "", "", &typed::input(call), cx))
-                .when_some(answer.and_then(Answer::text_beside_images), |d, text| {
-                    d.child(block::separator(cx)).child(block::output(
-                        toggle,
-                        Text::Output,
-                        text,
-                        look::colors(cx).text,
-                        cx,
-                    ))
-                })
-                .into_any_element(),
-        )
+        // In the order they're shown, since a call nested in another's row has its texts placed in the order they're
+        // made.
+        let input = block::code(toggle, Text::Input, "", "", &typed::input(call), cx);
+        let output = output.map(|text| block::output(toggle, Text::Output, text, look::colors(cx).text, cx));
+        let shown =
+            block::frame(cx).child(input).when_some(output, |d, output| d.child(block::separator(cx)).child(output));
+        Some(shown.into_any_element())
     };
     line::drawn(line, answer, opened, toggle, cx)
 }

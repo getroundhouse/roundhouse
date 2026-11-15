@@ -36,7 +36,8 @@ impl<'a> Failure<'a> {
     /// [`super::Returned::failure`] reads it, for a view that keeps a copy of both rather than the block.
     pub fn read(text: &'a str, form: ResultForm) -> Self {
         let (ended, output) = match form.0 {
-            Form::Alone { ended } => (ended, text),
+            Form::Alone { ended, says: true } => (ended, text),
+            Form::Alone { ended, says: false } => (ended, ""),
             Form::AsSent => (older::exit_code(text).map(Ending::Exited), older::output(text)),
         };
         Self { ended, message: super::first_line(output), output }
@@ -60,8 +61,10 @@ pub struct ResultForm(Form);
 
 #[derive(Clone, Copy, Debug)]
 enum Form {
-    /// Through an adapter that says: its text is what came back alone, and how a command ended is beside it.
-    Alone { ended: Option<Ending> },
+    /// Through an adapter that says: its text is what came back alone, and how a command ended is beside it. A typed
+    /// result `says` what went wrong when what came back is words, such as what a command printed. Any other, such as
+    /// the files a patch would have changed, doesn't say, so its line says only that it failed.
+    Alone { ended: Option<Ending>, says: bool },
     /// Before adapters said, as Claude sent it, with how it failed in its text.
     AsSent,
 }
@@ -70,9 +73,11 @@ impl ResultForm {
     /// The form of the result `block`, or `None` for any other block.
     pub(super) fn of(block: &ContentBlock) -> Option<Self> {
         match block {
-            ContentBlock::CallResult { output, .. } => Some(Self(Form::Alone { ended: ending(output) })),
+            ContentBlock::CallResult { output, .. } => {
+                Some(Self(Form::Alone { ended: ending(output), says: says_what_went_wrong(output) }))
+            }
             ContentBlock::ToolResult { call: Some(_), exit_code, .. } => {
-                Some(Self(Form::Alone { ended: exit_code.map(Ending::Exited) }))
+                Some(Self(Form::Alone { ended: exit_code.map(Ending::Exited), says: true }))
             }
             ContentBlock::ToolResult { call: None, .. } => Some(Self(Form::AsSent)),
             ContentBlock::Text { .. }
@@ -82,6 +87,30 @@ impl ResultForm {
             | ContentBlock::Image { .. }
             | ContentBlock::Unknown => None,
         }
+    }
+}
+
+/// Whether a typed result's text says what went wrong, when it failed: it's words, as the agent was told them, what a
+/// command printed, what an MCP tool or a subagent said, rather than what the call would have done, as a patch's files
+/// are.
+fn says_what_went_wrong(output: &CallOutput) -> bool {
+    match output {
+        // One this build doesn't know says so, as the protocol asks of a client.
+        CallOutput::Command(_)
+        | CallOutput::Words { .. }
+        | CallOutput::Mcp { .. }
+        | CallOutput::Report { .. }
+        | CallOutput::Unknown => true,
+        CallOutput::Lines(_)
+        | CallOutput::Image { .. }
+        | CallOutput::Document { .. }
+        | CallOutput::Changed { .. }
+        | CallOutput::Found(_)
+        | CallOutput::Paths(_)
+        | CallOutput::Page { .. }
+        | CallOutput::WebResults { .. }
+        | CallOutput::Encrypted
+        | CallOutput::Backgrounded { .. } => false,
     }
 }
 
@@ -103,7 +132,7 @@ mod tests {
     const AS_SENT: ResultForm = ResultForm(Form::AsSent);
 
     fn alone(exit_code: Option<i32>) -> ResultForm {
-        ResultForm(Form::Alone { ended: exit_code.map(Ending::Exited) })
+        ResultForm(Form::Alone { ended: exit_code.map(Ending::Exited), says: true })
     }
 
     #[test]

@@ -2,7 +2,7 @@
 //! worked out from the call's text when there's no patch yet, and the words that changed within the lines it removed
 //! and added.
 
-use protocol::event::{Hunk, LineMark};
+use protocol::event::{Hunk, HunkLine, LineMark};
 use similar::{ChangeTag, TextDiff};
 
 use super::lines::{Counts, Mark, NumberedLine, Section};
@@ -51,6 +51,11 @@ pub(crate) fn from_text(old: &str, new: &str) -> Section {
         NumberedLine::new(mark, None, change.value())
     });
     lines.collect()
+}
+
+/// The lines of a hunk with no line numbers, such as one of a patch, which finds its place by what's around it.
+pub(crate) fn unnumbered(lines: &[HunkLine]) -> Section {
+    lines.iter().filter_map(|line| Some(NumberedLine::new(mark(line.mark)?, None, &line.text))).collect()
 }
 
 /// How many lines a patch added and removed, without copying it.

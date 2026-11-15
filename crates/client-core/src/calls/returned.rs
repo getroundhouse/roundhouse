@@ -169,6 +169,20 @@ mod tests {
         assert_eq!(label(None, Ended::Exited).0, "Error");
     }
 
+    /// A patch that failed says only that it did, rather than the files it would have changed, which aren't what went
+    /// wrong.
+    #[test]
+    fn a_typed_result_that_says_no_words_fails_with_no_message() {
+        let file = FileOutcome { path: "a.rs".into(), change: None, moved_to: None, diagnostics: Vec::new() };
+        let block = fixtures::typed_result("c", CallOutput::Changed { files: vec![file] }, true);
+
+        let returned = Returned::of(&block).unwrap();
+        let failure = returned.failure().unwrap();
+
+        assert_eq!((failure.label().as_str(), failure.message, failure.output), ("Error", "", ""));
+        assert_eq!(returned.text, "a.rs", "what came back is still there to show");
+    }
+
     #[test]
     fn a_typed_call_the_person_denied_did_not_fail() {
         let block = fixtures::typed_denied("c", "The user said no", Some("Not that"));

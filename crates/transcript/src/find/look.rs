@@ -58,7 +58,8 @@ pub(crate) enum Part {
     Found,
     /// The title of the `n`th page a search of the web found.
     Link(u32),
-    /// The path of the `n`th file a search found lines in, and the lines.
+    /// The path of the `n`th of several files, such as those a search found lines in or a patch changed, and their
+    /// lines.
     FoundPath(u32),
     FoundLines(u32),
     /// What went wrong in a turn that failed.

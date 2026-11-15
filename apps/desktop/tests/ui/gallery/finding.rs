@@ -9,7 +9,7 @@ use protocol::model::SessionStatus;
 
 use super::world::World;
 use super::worlds::chat_world;
-use super::{capture, file_chats, subagent_chats, tool_chats};
+use super::{capture, file_chats, subagent_chats, tool_chats, typed_chats};
 
 /// What finding counts in each kind of call is what the call draws, so every match drawn is one that can be gone to,
 /// and the count is of what's there.
@@ -51,6 +51,9 @@ fn every_kind_of_call() -> World {
         file_chats::searches(),
         file_chats::failures(),
         subagent_chats::subagents(false),
+        typed_chats::commands_that_ended(),
+        typed_chats::files_changed(),
+        typed_chats::one_file_patches(),
         what_went_wrong(),
     ];
     chat_world(SessionStatus::Idle, chats.concat())
