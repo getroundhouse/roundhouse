@@ -20,6 +20,11 @@ In it:
 | `logins/` | The tokens of the logins you've added in [Settings](settings.md#accounts), a file each, which only you can open. Disconnecting one removes its file |
 | `hub.log` | The hub's log |
 | `worker-logs/` | Each workspace's worker's log |
+| `instances/` | A directory for each workspace's worker, with the workspace's setup log, which its archive script adds to. While an agent or the setup script runs, the directory also holds a record of it, so it can be stopped if the worker is killed, and while a Claude agent runs, the files its CLI reads, such as the one that tells it where Roundhouse's tools are |
+| `daemons/` | A copy of the hub's program, `Roundhouse Hub`, for each version that has started a hub, which that version's hub and its workers run from. Once the app, or the command line, starts a hub, it removes each copy that nothing runs from anymore and that's more than a day old, except its own version's. A workspace still at work on the version before keeps that version's copy until it [moves to the new one](updates.md#what-an-update-does) |
+| `settings.json` | The app's [settings](settings.md) |
+| `window.json` | Where the app's window was left, so it opens there again |
+| `updates/` | On Linux, the updates the app has downloaded |
 
 ## Worktrees
 
