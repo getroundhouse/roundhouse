@@ -9,9 +9,9 @@ use std::time::Duration;
 
 use gpui_kit::{Context, SharedString, Task};
 use protocol::event::AgentTask;
-use protocol::model::{AgentDescription, PromptCache, Seq, Session, Subagent, SubagentStatus, Wait};
+use protocol::model::{AgentDescription, PromptCache, Seq, Session, Subagent, SubagentStatus, ToolUseId, Wait};
 
-use super::Transcript;
+use super::{Transcript, TranscriptEvent};
 use crate::task_lines;
 use crate::texts::Of;
 
@@ -149,6 +149,13 @@ impl Transcript {
         }
     }
 
+    /// Asks for the work of the subagent `call` started in the subagent tab, named `title` until its record comes, as
+    /// its record names it, since a call's row and a task's line know only the call.
+    pub(crate) fn open_subagent_started_by(&self, call: &ToolUseId, title: String, cx: &mut Context<Self>) {
+        let subagent = self.model.borrow().subagents.subagent_started_by(call);
+        cx.emit(TranscriptEvent::OpenSubagent { subagent, title });
+    }
+
     /// Follows the records of the session's subagents, as client-core's snapshot shares them, and measures again each
     /// row that draws one that changed. A copy that's shared already is the one held.
     pub fn set_subagents(&mut self, subagents: &[Arc<Subagent>], cx: &mut Context<Self>) {
@@ -162,7 +169,7 @@ impl Transcript {
                 return;
             }
             let drawn = m.subagent_rows.borrow();
-            let rows: Vec<_> = changed.iter().filter_map(|subagent| drawn.get(&subagent.id()).copied()).collect();
+            let rows: Vec<_> = changed.iter().filter_map(|subagent| drawn.get(&subagent.call).copied()).collect();
             drop(drawn);
             let shown = changed.iter().find(|subagent| m.alone.as_ref() == Some(&subagent.id())).copied();
             if let Some(subagent) = shown {
@@ -173,7 +180,7 @@ impl Transcript {
                 m.at_work = at_work;
             }
             for subagent in changed {
-                m.subagents.insert(subagent.id(), Arc::clone(subagent));
+                m.subagents.insert(Arc::clone(subagent));
             }
             (rows, shown.is_some())
         };

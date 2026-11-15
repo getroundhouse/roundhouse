@@ -343,4 +343,6 @@ pub(in super::super) const MIGRATIONS: &[&str] = &[
     super::session_accounts::ASSIGNED_ACCOUNTS,
     // Where each chat's login comes from, the hub or ambient, in place of the account it was on, in `session_accounts`.
     super::session_accounts::ACCOUNT_SOURCES,
+    // Each subagent's ID, apart from the call that started it.
+    subagents::IDS,
 ];

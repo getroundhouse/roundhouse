@@ -6,7 +6,7 @@ use rusqlite::types::ValueRef;
 use rusqlite::{Connection, OptionalExtension, Row, params};
 
 const SUBAGENT_COLUMNS: &str = "session_id, call, kind, description, prompt, in_background, status, started_at_ms, \
-     ended_at_ms, calls, latest_call, report, rev, recent, model, context_tokens";
+     ended_at_ms, calls, latest_call, report, rev, recent, model, context_tokens, id";
 
 impl Store {
     /// The session's subagents, oldest first, read in one transaction with the revision they're as of.
@@ -26,37 +26,56 @@ impl Store {
 
     pub fn get_subagent(&self, session_id: &SessionId, subagent: &SubagentId) -> Result<Option<Subagent>, StoreError> {
         let conn = lock(&self.reader);
-        // Each is kept by the call that started it, which is the subagent.
-        let sql = format!("SELECT {SUBAGENT_COLUMNS} FROM subagents WHERE session_id = ? AND call = ?");
+        let sql = format!("SELECT {SUBAGENT_COLUMNS} FROM subagents WHERE session_id = ? AND id = ?");
         Ok(conn.query_row(&sql, params![session_id.as_str(), subagent.as_str()], subagent_from_row).optional()?)
+    }
+
+    /// The subagent `named` names in `session_id`: the one with that ID, or else the one the call it names started,
+    /// since a client from before subagents had IDs of their own names each by its call. One that names neither is
+    /// taken as it is, which reads no events, as it did before.
+    pub fn subagent_named(&self, session_id: &SessionId, named: &SubagentId) -> Result<SubagentId, StoreError> {
+        let conn = lock(&self.reader);
+        let sql = "SELECT id FROM subagents WHERE session_id = ?1 AND (id = ?2 OR call = ?2) ORDER BY id = ?2 DESC";
+        let found = conn.query_row(sql, params![session_id.as_str(), named.as_str()], |row| row.get::<_, String>(0));
+        Ok(found.optional()?.map_or_else(|| named.clone(), SubagentId::from))
     }
 }
 
-const STARTED: &str = "INSERT OR IGNORE INTO subagents
-     (session_id, call, kind, description, prompt, in_background, status, started_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+// One that starts again after it ended, as Claude's does when it's messaged, works again, under the call that first
+// started it, with what it was first asked, and its report is the one it gives next. Another call can't start one
+// that's already a subagent's.
+const STARTED: &str = "INSERT INTO subagents
+     (session_id, id, call, kind, description, prompt, in_background, status, started_at_ms)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT (session_id, id) DO UPDATE SET status = excluded.status, in_background = excluded.in_background,
+         ended_at_ms = NULL, report = NULL
+         WHERE status <> excluded.status
+     ON CONFLICT DO NOTHING";
 
 // What it's done lately is only shown while it works. An end that counts no tokens leaves the count it had.
 const ENDED: &str = "UPDATE subagents SET status = ?, ended_at_ms = ?, report = ?, recent = NULL,
          context_tokens = coalesce(?, context_tokens)
-     WHERE session_id = ? AND call = ? AND status = ?";
+     WHERE session_id = ? AND id = ? AND status = ?";
 
 // Only while it works, since its end has the last word, and only a count that differs, so its record keeps its
 // revision and isn't sent again for one that says the same.
 const CONTEXT: &str = "UPDATE subagents SET context_tokens = ?1
-     WHERE session_id = ?2 AND call = ?3 AND status = ?4 AND context_tokens IS NOT ?1";
+     WHERE session_id = ?2 AND id = ?3 AND status = ?4 AND context_tokens IS NOT ?1";
 
 /// Changes the records of the subagents `event` says something about, in the transaction that records it, and says
 /// which. A subagent's record starts with the agent's word that it started, ends with its word that it ended, or with
-/// the agent, which takes its subagents with it, and counts the calls in between from the subagent's own events,
+/// the agent, which takes its subagents with it, works again if the agent says it started again, and counts the calls in between from the subagent's own events,
 /// which also say what it's done lately, and its replies the model it runs on. How many tokens its conversation
 /// holds is the agent's word too, as it works and as it ends.
 pub(in super::super) fn note_subagents(tx: &Connection, event: &SessionEvent) -> Result<Vec<SubagentId>, StoreError> {
     let (session, at) = (event.session_id.as_str(), event.ts_ms);
     let working = text_of(&SubagentStatus::Working);
     match &event.body {
-        EventBody::SubagentStarted { call, kind, description, prompt, in_background } => {
-            let row = params![session, call.as_str(), kind, description, prompt, in_background, working, at];
-            Ok(changed(tx.execute(STARTED, row)?, &SubagentId::of_call(call)))
+        EventBody::SubagentStarted { call, kind, description, prompt, in_background, .. } => {
+            let Some(subagent) = event.body.subagent_started() else { return Ok(Vec::new()) };
+            let (id, call) = (subagent.as_str(), call.as_str());
+            let row = params![session, id, call, kind, description, prompt, in_background, working, at];
+            Ok(changed(tx.execute(STARTED, row)?, &subagent))
         }
         EventBody::SubagentContext { subagent, tokens } => {
             let row = params![tokens.cast_signed(), session, subagent.as_str(), working];
@@ -71,11 +90,11 @@ pub(in super::super) fn note_subagents(tx: &Connection, event: &SessionEvent) ->
         EventBody::AgentExited { .. } => {
             let mut statement = tx.prepare_cached(
                 "UPDATE subagents SET status = ?, ended_at_ms = ?, recent = NULL WHERE session_id = ? AND status = ?
-                 RETURNING call",
+                 RETURNING id",
             )?;
             let stopped = text_of(&SubagentStatus::Stopped);
-            let calls = statement.query_map(params![stopped, at, session, working], |row| row.get::<_, String>(0))?;
-            Ok(calls.map(|call| call.map(SubagentId::from)).collect::<rusqlite::Result<_>>()?)
+            let ids = statement.query_map(params![stopped, at, session, working], |row| row.get::<_, String>(0))?;
+            Ok(ids.map(|id| id.map(SubagentId::from)).collect::<rusqlite::Result<_>>()?)
         }
         // Its calls and what it wrote come from its side, and what came back for its calls from the user's.
         EventBody::Assistant { blocks, .. } | EventBody::AgentUser { blocks, .. } => match &event.subagent {
@@ -133,7 +152,7 @@ fn note_work(
     let recent = recent.filter(|_| added).map(|work| serde_json::to_string(&work)).transpose()?;
     let rows = tx.execute(
         "UPDATE subagents SET calls = calls + ?, latest_call = coalesce(?, latest_call),
-             recent = coalesce(?, recent) WHERE session_id = ? AND call = ?",
+             recent = coalesce(?, recent) WHERE session_id = ? AND id = ?",
         params![made.len(), latest, recent, session, subagent.as_str()],
     )?;
     Ok(changed(rows + model, subagent))
@@ -145,7 +164,7 @@ fn note_work(
 fn note_model(tx: &Connection, session: &str, subagent: &SubagentId, body: &EventBody) -> Result<usize, StoreError> {
     let EventBody::Assistant { model: Some(model), .. } = body else { return Ok(0) };
     let Ok(model) = ModelName::try_from(model.clone()) else { return Ok(0) };
-    let sql = "UPDATE subagents SET model = ?1 WHERE session_id = ?2 AND call = ?3 AND model IS NOT ?1";
+    let sql = "UPDATE subagents SET model = ?1 WHERE session_id = ?2 AND id = ?3 AND model IS NOT ?1";
     Ok(tx.prepare_cached(sql)?.execute(params![model.as_str(), session, subagent.as_str()])?)
 }
 
@@ -153,7 +172,7 @@ fn note_model(tx: &Connection, session: &str, subagent: &SubagentId, body: &Even
 fn recent_work(tx: &Connection, session: &str, subagent: &SubagentId) -> Result<Option<RecentWork>, StoreError> {
     let working = text_of(&SubagentStatus::Working);
     let recent = tx
-        .prepare_cached("SELECT recent FROM subagents WHERE session_id = ? AND call = ? AND status = ?")?
+        .prepare_cached("SELECT recent FROM subagents WHERE session_id = ? AND id = ? AND status = ?")?
         .query_row(params![session, subagent.as_str(), working], |row| json_at::<RecentWork>(row, 0))
         .optional()?;
     // Written only by this hub, as JSON. What it can't read is nothing it knows of.
@@ -163,6 +182,7 @@ fn recent_work(tx: &Connection, session: &str, subagent: &SubagentId) -> Result<
 fn subagent_from_row(row: &Row<'_>) -> rusqlite::Result<Subagent> {
     Ok(Subagent {
         session_id: row.get::<_, String>(0)?.into(),
+        id: Some(row.get::<_, String>(16)?.into()),
         call: row.get::<_, String>(1)?.into(),
         kind: text_at(row, 2)?,
         description: text_at(row, 3)?,

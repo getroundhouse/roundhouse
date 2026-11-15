@@ -156,11 +156,26 @@ pub fn request_failed(message: &str, subagent: Option<&str>) -> EventBody {
     EventBody::RequestFailed { subagent: subagent.map(Into::into), failure, again: None }
 }
 
-/// The subagent the call `call` started in the session `s`, working in the foreground, with nothing else known of it
-/// yet.
+/// The call `call` starting a subagent named by that call, in the background if `in_background`, saying nothing else of
+/// it, as an adapter that says only that starts one.
+pub fn subagent_started(call: &str, in_background: bool) -> EventBody {
+    let subagent = Some(SubagentId::of_call(&call.into()));
+    EventBody::SubagentStarted {
+        call: call.into(),
+        subagent,
+        kind: None,
+        description: None,
+        prompt: None,
+        in_background,
+    }
+}
+
+/// The subagent the call `call` started in the session `s`, named by that call, working in the foreground, with nothing
+/// else known of it yet.
 pub fn subagent(call: &str) -> Subagent {
     Subagent {
         session_id: "s".into(),
+        id: Some(call.into()),
         call: call.into(),
         kind: None,
         description: None,

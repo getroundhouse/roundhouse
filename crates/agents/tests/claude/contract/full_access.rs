@@ -29,12 +29,7 @@ fn full_access_still_asks_about_a_removal_it_cant_rule_out_and_says_why_and_whic
         EventBody::AgentInit { permission_mode, .. } => Some(*permission_mode),
         _ => None,
     });
-    let started: Vec<SubagentId> = events
-        .iter()
-        .filter_map(|e| {
-            if let EventBody::SubagentStarted { call, .. } = e { Some(SubagentId::of_call(call)) } else { None }
-        })
-        .collect();
+    let started: Vec<SubagentId> = events.iter().filter_map(EventBody::subagent_started).collect();
     let asked: Vec<&EventBody> = events.iter().filter(|e| matches!(e, EventBody::ApprovalRequested { .. })).collect();
     let said = |request: &EventBody| match request {
         EventBody::ApprovalRequested { reason, asked_by, .. } => (reason.clone(), asked_by.clone()),

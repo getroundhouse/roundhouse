@@ -38,6 +38,13 @@ impl EventBody {
         }
     }
 
+    /// The subagent it says started, if it says one did, by the ID its agent gives it, or by its call in one recorded
+    /// before subagents had IDs of their own.
+    pub fn subagent_started(&self) -> Option<SubagentId> {
+        let EventBody::SubagentStarted { call, subagent, .. } = self else { return None };
+        Some(subagent.clone().unwrap_or_else(|| SubagentId::of_call(call)))
+    }
+
     /// The subagent it's from, or `None` for the agent's own. Only what the agent and its CLI send can come from a
     /// subagent, and only these say which.
     pub fn subagent(&self) -> Option<&SubagentId> {

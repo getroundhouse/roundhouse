@@ -83,3 +83,6 @@ pub(crate) const BEFORE_ACCOUNT_DEFAULTS: usize = 54;
 
 /// How many migrations there were before chats said where their login comes from, in place of the account they were on.
 pub(crate) const BEFORE_ACCOUNT_SOURCES: usize = 56;
+
+/// How many migrations there were before each subagent had an ID apart from the call that started it.
+pub(crate) const BEFORE_SUBAGENT_IDS: usize = 57;

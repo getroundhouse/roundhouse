@@ -180,8 +180,10 @@ impl Tail {
                 self.in_background.retain(|b| later(run, b.run));
                 self.compacted(run);
             }
-            EventBody::SubagentStarted { call, in_background: true, .. } => {
-                self.in_background(run, SubagentId::of_call(call));
+            EventBody::SubagentStarted { in_background: true, .. } => {
+                if let Some(subagent) = body.subagent_started() {
+                    self.in_background(run, subagent);
+                }
             }
             EventBody::SubagentEnded { subagent, .. } => {
                 self.messages.retain(|m| m.subagent.as_ref() != Some(subagent));

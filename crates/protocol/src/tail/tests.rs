@@ -1,5 +1,6 @@
 use super::*;
 use crate::event::{ExitReason, TaskOutcome};
+use crate::fixtures::subagent_started;
 
 fn delta(change: DeltaChange) -> StreamDelta {
     StreamDelta { run: None, message_id: "m1".into(), subagent: None, change }
@@ -77,10 +78,6 @@ pub(super) fn turn_ended() -> EventBody {
     }
 }
 
-pub(super) fn started(call: &str, in_background: bool) -> EventBody {
-    EventBody::SubagentStarted { call: call.into(), kind: None, description: None, prompt: None, in_background }
-}
-
 /// Text that `call`'s subagent writes, in its message `message`.
 fn writes(tail: &mut Tail, call: &str, message: &str, text: &str) {
     let change = DeltaChange::Text { index: 0, text: text.into() };
@@ -103,8 +100,8 @@ fn the_end_of_a_turn_clears_what_the_agent_was_writing() {
 #[test]
 fn the_end_of_a_turn_leaves_what_a_subagent_in_the_background_writes_and_clears_one_in_the_foreground() {
     let (mut tail, run) = (Tail::default(), Some(RunId::new(1)));
-    tail.on_event(Seq::new(1), run, &started("toolu_bg", true));
-    tail.on_event(Seq::new(1), run, &started("toolu_fg", false));
+    tail.on_event(Seq::new(1), run, &subagent_started("toolu_bg", true));
+    tail.on_event(Seq::new(1), run, &subagent_started("toolu_fg", false));
     writes(&mut tail, "toolu_bg", "bg", "There's ");
     writes(&mut tail, "toolu_fg", "fg", "Half");
 
@@ -118,8 +115,8 @@ fn the_end_of_a_turn_leaves_what_a_subagent_in_the_background_writes_and_clears_
 #[test]
 fn a_subagents_end_clears_what_it_was_writing_and_the_agents_end_clears_the_rest() {
     let (mut tail, run) = (Tail::default(), Some(RunId::new(1)));
-    tail.on_event(Seq::new(1), run, &started("toolu_a", true));
-    tail.on_event(Seq::new(1), run, &started("toolu_b", true));
+    tail.on_event(Seq::new(1), run, &subagent_started("toolu_a", true));
+    tail.on_event(Seq::new(1), run, &subagent_started("toolu_b", true));
     writes(&mut tail, "toolu_a", "a", "Cut off");
     writes(&mut tail, "toolu_b", "b", "Going on");
 

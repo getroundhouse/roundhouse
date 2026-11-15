@@ -8,6 +8,7 @@ use serde_json::json;
 pub(super) fn started(call: &str) -> EventBody {
     EventBody::SubagentStarted {
         call: call.into(),
+        subagent: None,
         kind: Some("Explore".into()),
         description: Some("Find the tests".into()),
         prompt: Some("Find where the tests live.".into()),
@@ -82,6 +83,8 @@ fn a_subagents_record_starts_with_what_it_was_asked_counts_its_calls_and_ends_wi
     assert_eq!(working.latest_call.as_ref().map(|call| call.id.as_str()), Some("read-2"), "the newest");
     assert_eq!(working.latest_call.unwrap().input, json!({"file_path": "read-2"}));
     assert!(working.rev > first.rev, "a client only takes a newer copy");
+    assert_eq!(record(&store, &started("agent")).1, Vec::<String>::new(), "it's working already");
+    assert_eq!(subagent(&store, "agent").rev, working.rev);
 
     let (end, changed) = record(&store, &ended("agent", TaskOutcome::Finished, Some("They're in tests/.")));
     assert_eq!(changed, ["agent"]);
@@ -91,8 +94,63 @@ fn a_subagents_record_starts_with_what_it_was_asked_counts_its_calls_and_ends_wi
     assert!(finished.rev > working.rev);
 
     assert_eq!(record(&store, &ended("agent", TaskOutcome::Failed, None)).1, Vec::<String>::new(), "ended once");
-    assert_eq!(record(&store, &started("agent")).1, Vec::<String>::new(), "started once");
     assert_eq!(subagent(&store, "agent"), finished);
+}
+
+/// A subagent the agent says started again, as Claude's does when it's messaged after it ended, works again, under the
+/// call that first started it, which its row is drawn for, rather than the call that messaged it.
+#[test]
+fn a_subagent_that_starts_again_after_it_ended_works_again_under_the_call_that_first_started_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_session(dir.path());
+    let start = |call: &str, in_background| {
+        let EventBody::SubagentStarted { kind, description, prompt, .. } = started(call) else { unreachable!() };
+        let subagent = Some("task-1".into());
+        EventBody::SubagentStarted { call: call.into(), subagent, kind, description, prompt, in_background }
+    };
+    record(&store, &start("toolu_agent", false));
+    record(&store, &message(Some("task-1"), vec![tool_use("read")]));
+    record(&store, &ended("task-1", TaskOutcome::Finished, Some("They're in tests/.")));
+    let finished = subagent(&store, "task-1");
+
+    assert_eq!(record(&store, &start("toolu_send", true)).1, ["task-1"]);
+
+    let again = subagent(&store, "task-1");
+    assert_eq!((again.status, again.ended_at_ms, again.report), (Working, None, None), "its next report is its own");
+    assert_eq!((again.call.as_str(), again.calls, again.in_background), ("toolu_agent", 1, true));
+    assert_eq!((again.prompt, again.started_at_ms), (finished.prompt, finished.started_at_ms), "as it first started");
+    assert!(again.rev > finished.rev);
+    let (subagents, _) = store.list_subagents(&"s".into()).unwrap();
+    assert_eq!(subagents.len(), 1, "no record for the call that messaged it");
+    let mut other = started("toolu_agent");
+    if let EventBody::SubagentStarted { subagent, .. } = &mut other {
+        *subagent = Some("task-2".into());
+    }
+    assert_eq!(record(&store, &other).1, Vec::<String>::new(), "a call starts only one");
+}
+
+/// A subagent its agent gives an ID of its own is kept by that ID, which its events and its end name, with the call that
+/// started it beside it. It's found by either, since a client from before subagents had IDs names each by its call.
+#[test]
+fn a_subagent_named_by_its_agent_is_kept_by_that_name_and_found_by_its_call_too() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_session(dir.path());
+    let mut start = started("toolu_9");
+    if let EventBody::SubagentStarted { subagent, .. } = &mut start {
+        *subagent = Some("thread-1".into());
+    }
+
+    assert_eq!(record(&store, &start).1, ["thread-1"]);
+    assert_eq!(record(&store, &message(Some("thread-1"), vec![tool_use("read")])).1, ["thread-1"]);
+    assert_eq!(record(&store, &message(Some("toolu_9"), vec![tool_use("x")])).1, Vec::<String>::new(), "by its call");
+    record(&store, &ended("thread-1", TaskOutcome::Finished, Some("Done.")));
+
+    let kept = subagent(&store, "thread-1");
+    assert_eq!((kept.id(), kept.call.as_str()), ("thread-1".into(), "toolu_9"));
+    assert_eq!((kept.calls, kept.status, kept.report.as_deref()), (1, Finished, Some("Done.")));
+    let named = |name: &str| store.subagent_named(&"s".into(), &name.into()).unwrap();
+    assert_eq!((named("thread-1"), named("toolu_9")), ("thread-1".into(), "thread-1".into()));
+    assert_eq!(named("unknown"), "unknown".into(), "one it doesn't know is taken as it is");
 }
 
 #[test]

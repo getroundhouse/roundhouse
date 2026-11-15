@@ -17,7 +17,7 @@ pub use pull_request::PullRequestStanding;
 pub(crate) use record::{AtWork, IdleCache};
 
 mod view;
-pub(crate) use model::Model;
+pub(crate) use model::{Model, SubagentRecords};
 pub use view::Transcript;
 #[cfg(any(test, feature = "testing"))]
 use view::rows_and_loaded;

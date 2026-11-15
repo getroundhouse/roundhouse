@@ -17,8 +17,10 @@ pub(crate) fn records_of(log: &[SessionEvent]) -> Vec<Subagent> {
     for event in log {
         let rev = Rev::new(event.seq.get());
         match &event.body {
-            EventBody::SubagentStarted { call, kind, description, prompt, in_background } => {
-                held.entry(SubagentId::of_call(call)).or_insert(Subagent {
+            EventBody::SubagentStarted { call, subagent, kind, description, prompt, in_background } => {
+                let id = subagent.clone().unwrap_or_else(|| SubagentId::of_call(call));
+                held.entry(id.clone()).or_insert(Subagent {
+                    id: Some(id),
                     session_id: event.session_id.clone(),
                     kind: kind.clone(),
                     description: description.clone(),

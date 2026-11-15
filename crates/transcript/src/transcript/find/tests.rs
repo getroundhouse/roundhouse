@@ -1,6 +1,6 @@
 //! How what's counted follows what the log holds, and what the bar says of it.
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use client_core::session_log::{Position, SessionLog};
@@ -17,10 +17,10 @@ use protocol::prompt::Prompt;
 use serde_json::json;
 
 use super::count::{At, Counts};
-use super::stretch::{Known, Records, counted_in};
+use super::stretch::{Known, counted_in};
 use super::{More, changed_to_count, count_held, first_match, held_to_count, says};
 use crate::fixtures::{calls_to, event, log, record, within};
-use crate::transcript::Model;
+use crate::transcript::{Model, SubagentRecords};
 
 fn needle(query: &str) -> Needle {
     Needle::new(query).unwrap()
@@ -56,7 +56,7 @@ fn own(events: impl IntoIterator<Item = SessionEvent>) -> SessionLog {
 }
 
 /// The record of the subagent the call `call` started, done, with `report`.
-fn reported(call: &str, report: &str) -> Records {
+fn reported(call: &str, report: &str) -> SubagentRecords {
     let record = Subagent {
         ended_at_ms: Some(1),
         calls: 1,
@@ -64,7 +64,9 @@ fn reported(call: &str, report: &str) -> Records {
         rev: Rev::default(),
         ..record(call, SubagentStatus::Finished)
     };
-    HashMap::from([(call.into(), Arc::new(record))])
+    let mut records = SubagentRecords::default();
+    records.insert(Arc::new(record));
+    records
 }
 
 /// Whatever else happened, so the events that matter are on pages of their own.
