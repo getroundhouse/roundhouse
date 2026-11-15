@@ -49,4 +49,6 @@ pub use worktree::{
 };
 
 mod messages;
-pub use messages::{Reply, Request, WORKER_PROTOCOL_VERSION, WorkerCall, WorkerOutcome, WorkerRequest, WorkerResponse};
+pub use messages::{
+    HUB_SPEAKS, Reply, Request, WORKER_PROTOCOL_VERSION, WorkerCall, WorkerOutcome, WorkerRequest, WorkerResponse,
+};

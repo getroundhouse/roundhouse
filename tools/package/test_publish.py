@@ -26,6 +26,8 @@ HERE = Path(__file__).resolve().parent
 # A throwaway key, and a feed it signed, which the app's tests check too, so the two sides can't disagree on the form.
 FIXTURE = HERE.parent.parent / "apps" / "desktop" / "src" / "updates" / "source" / "fixture"
 THROWAWAY_KEY = FIXTURE / "throwaway-key.pem"
+# Which versions of the worker protocol a release's hub speaks, unless a test says otherwise.
+SPEAKS = {"oldest": 3, "newest": 4}
 
 
 def feed_signature(*args: str) -> str:
@@ -78,6 +80,13 @@ class Quiet(http.server.SimpleHTTPRequestHandler):
 
 
 class Signature(unittest.TestCase):
+    def test_the_fixture_the_app_reads_names_the_worker_versions_as_this_writes_them(self) -> None:
+        """`crates/update-feed` reads the same file, so the two can't come to call the field different things, which
+        would have every app that steps drop every release."""
+        assets = json.loads((FIXTURE / publish.FEED).read_bytes())["Assets"]
+        full = next(asset for asset in assets if asset["Type"] == "Full")
+        self.assertEqual(full[publish.WORKER_VERSIONS], SPEAKS)
+
     def test_openssl_signs_the_fixture_as_the_app_expects(self) -> None:
         key = (FIXTURE / "throwaway-key.pub").read_text().strip()
         self.assertEqual(feed_signature("public", str(THROWAWAY_KEY)), key)
@@ -105,6 +114,10 @@ class Signature(unittest.TestCase):
 
 
 class Publishing(unittest.TestCase):
+    # Whether this platform's apps step through each break in the worker protocol, since its hubs keep their workers
+    # through an update.
+    APPS_STEP = True
+
     def setUp(self) -> None:
         self.dir = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, self.dir)
@@ -139,13 +152,14 @@ class Publishing(unittest.TestCase):
         subprocess.run([str(HERE / "feed-signature.sh"), "sign", str(feed), str(self.private), self.key], check=True,
                        capture_output=True)
 
-    def release(self, version: str, keep: int = 10, store: DirStore | None = None) -> Path:
-        """One run of the release job."""
+    def release(self, version: str, keep: int = 10, store: DirStore | None = None,
+                speaks: dict[str, int] = SPEAKS) -> Path:
+        """One run of the release job, of a build whose hub speaks the worker versions `speaks`."""
         store = store or self.store
         work = self.work()
         if publish.prepare(store, self.key, version, work) == "new":
             self.pack(work, version)
-            self.assertEqual(publish.merge(version, keep, work), work / "feed" / publish.FEED)
+            self.assertEqual(publish.merge(version, keep, speaks, work), work / "feed" / publish.FEED)
             self.sign(work)
             older = publish.bridge(version, work)
             if older is not None:
@@ -190,7 +204,7 @@ class Publishing(unittest.TestCase):
         self.assertEqual(newest.read_bytes(), (self.bucket / newest.name).read_bytes())
         self.assertEqual((work / "releases" / publish.FEED).read_bytes(), self.store.get(publish.FEED))
         self.pack(work, "0.1.2")
-        publish.merge("0.1.2", 10, work)
+        publish.merge("0.1.2", 10, SPEAKS, work)
         self.sign(work)
         publish.upload(self.store, self.key, "0.1.2", work)
         self.assertEqual(self.published(), [("0.1.1", "Full"), ("0.1.2", "Delta"), ("0.1.2", "Full")])
@@ -204,6 +218,53 @@ class Publishing(unittest.TestCase):
                                             ("0.1.3", "Full")])
         self.assertFalse((self.bucket / package_name("0.1.1", "Full")).exists())
         self.assert_packages_match()
+
+    def test_a_release_s_full_package_says_which_worker_versions_its_hub_speaks(self) -> None:
+        self.release("0.1.1")
+        self.release("0.1.2", speaks={"oldest": 4, "newest": 5})
+
+        said = {(entry["Version"], entry["Type"]): entry.get(publish.WORKER_VERSIONS)
+                for entry in json.loads(self.store.get(publish.FEED))["Assets"]}
+        self.assertEqual(said, {("0.1.1", "Full"): SPEAKS, ("0.1.2", "Delta"): None,
+                                ("0.1.2", "Full"): {"oldest": 4, "newest": 5}})
+
+    def test_the_last_release_before_each_break_stays_as_its_full_package(self) -> None:
+        for version, oldest in (("0.1.1", 3), ("0.1.2", 3), ("0.1.3", 4), ("0.1.4", 4), ("0.1.5", 5), ("0.1.6", 5)):
+            self.release(version, keep=2, speaks={"oldest": oldest, "newest": oldest + 1})
+
+        # 0.1.2's hub is the newest that speaks workers of protocol 3, and 0.1.4's the newest that speaks 4.
+        self.assertEqual(self.published(), [("0.1.2", "Full"), ("0.1.4", "Full"), ("0.1.5", "Delta"),
+                                            ("0.1.5", "Full"), ("0.1.6", "Delta"), ("0.1.6", "Full")])
+        for gone in ("0.1.1", "Full"), ("0.1.2", "Delta"), ("0.1.3", "Full"), ("0.1.4", "Delta"):
+            self.assertFalse((self.bucket / package_name(*gone)).exists(), gone)
+        self.assert_packages_match()
+
+    def test_a_release_whose_hub_cant_talk_to_the_newest_one_s_workers_is_refused_where_apps_step(self) -> None:
+        self.release("0.1.1", speaks={"oldest": 3, "newest": 4})
+        work = self.work()
+        publish.prepare(self.store, self.key, "0.1.2", work)
+        self.pack(work, "0.1.2")
+
+        if self.APPS_STEP:
+            with self.assertRaises(Refused):
+                publish.merge("0.1.2", 10, {"oldest": 5, "newest": 6}, work)
+            self.assertEqual(self.published(), [("0.1.1", "Full")])
+        else:
+            publish.merge("0.1.2", 10, {"oldest": 5, "newest": 6}, work)
+
+    def test_what_a_build_says_it_speaks_is_used_only_as_a_range(self) -> None:
+        path = self.dir / "worker-versions.json"
+        path.write_text('{"oldest":3,"newest":4}\n')
+        self.assertEqual(publish.worker_versions(path), SPEAKS)
+
+        for said in ('{"oldest":4,"newest":3}', '{"newest":4}', '{"oldest":"3","newest":4}',
+                     '{"oldest":true,"newest":4}', '{"oldest":0,"newest":4}', '{"oldest":3,"newest":4,"more":5}',
+                     "[3,4]", ""):
+            path.write_text(said)
+            with self.assertRaises(Refused, msg=said):
+                publish.worker_versions(path)
+        with self.assertRaises(Refused):
+            publish.worker_versions(self.dir / "missing.json")
 
     def test_a_feed_changed_in_the_bucket_is_never_signed(self) -> None:
         self.release("0.1.1")
@@ -297,14 +358,14 @@ class Publishing(unittest.TestCase):
         (work / "releases" / package_name("0.1.1", "Full")).write_bytes(b"changed after vpk")
 
         with self.assertRaisesRegex(Refused, "doesn't match what vpk's feed says"):
-            publish.merge("0.1.1", 10, work)
+            publish.merge("0.1.1", 10, SPEAKS, work)
 
     def test_only_the_feed_as_merged_and_signed_is_uploaded(self) -> None:
         self.release("0.1.1")
         work = self.work()
         publish.prepare(self.store, self.key, "0.1.2", work)
         self.pack(work, "0.1.2")
-        publish.merge("0.1.2", 10, work)
+        publish.merge("0.1.2", 10, SPEAKS, work)
         feed = work / "feed" / publish.FEED
         merged = feed.read_bytes()
 
@@ -411,6 +472,8 @@ class Windows(BesideAnother, Publishing):
     """amd64 Windows' releases, beside macOS's."""
 
     CHANNEL = "win-amd64"
+    # A Windows hub's workers stop with it, so its apps take the newest.
+    APPS_STEP = False
     BESIDE = "osx"
     PACKAGE = "Roundhouse-0.1.1-win-amd64-full.nupkg"
     DOWNLOADS = ("Roundhouse-win-amd64-Setup.exe", "Roundhouse-win-amd64-Portable.zip")
@@ -432,7 +495,7 @@ class Windows(BesideAnother, Publishing):
         work = self.work()
         publish.prepare(self.store, self.key, version, work)
         self.pack(work, version)
-        publish.merge(version, 10, work)
+        publish.merge(version, 10, SPEAKS, work)
         self.sign(work)
         return work
 
@@ -482,6 +545,7 @@ class WindowsOnArm(BesideAnother, Publishing):
 
     CHANNEL = "win-arm64"
     BESIDE = "win-amd64"
+    APPS_STEP = False
     PACKAGE = "Roundhouse-0.1.1-win-arm64-full.nupkg"
     DOWNLOADS = ("Roundhouse-win-arm64-Setup.exe", "Roundhouse-win-arm64-Portable.zip")
 

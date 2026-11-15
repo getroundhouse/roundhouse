@@ -52,6 +52,7 @@ jobs:
       run: ${{ steps.diff.outputs.run }}
       guide: ${{ steps.diff.outputs.guide }}
       kit: ${{ steps.diff.outputs.kit }}
+      steps: ${{ steps.diff.outputs.steps }}
       tree: ${{ steps.diff.outputs.tree }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -66,6 +67,7 @@ jobs:
           run=true
           guide=true
           kit=true
+          steps=true
           tree=$(git rev-parse 'HEAD^{tree}')
           # Checking out fetched too, so only a fetch of the base that worked makes FETCH_HEAD the base.
           based=false
@@ -82,6 +84,12 @@ jobs:
           if $based && git diff --quiet FETCH_HEAD HEAD -- third_party/gpui-kit/vendor .github/workflows/ci.yml; then
             kit=false
           fi
+          # What the worker protocol's versions are defined in, and the check and what it reads them with.
+          if $based && git diff --quiet FETCH_HEAD HEAD -- \
+            crates/protocol/src/worker crates/update-feed tools/update-steps \
+            apps/desktop/src/updates/update-feed.url; then
+            steps=false
+          fi
           if $based &&
             git diff --quiet FETCH_HEAD HEAD -- ':(exclude)*.md' ':(exclude)site' ':(exclude)tools/site'; then
             run=false
@@ -93,9 +101,10 @@ jobs:
             run=false
             guide=false
             kit=false
+            steps=false
             echo "::notice::$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$passed passed this tree on its PR"
           fi
-          { echo "run=$run"; echo "guide=$guide"; echo "kit=$kit"; echo "tree=$tree"; } >> "$GITHUB_OUTPUT"
+          { echo "run=$run"; echo "guide=$guide"; echo "kit=$kit"; echo "steps=$steps"; echo "tree=$tree"; } >> "$GITHUB_OUTPUT"
 
   # The free arm64 runner, on Ubuntu 26.04 as the tests are. It still finishes before them.
   lint:
@@ -285,9 +294,22 @@ jobs:
             target/gpui-kit/
           key: ${{ steps.cache.outputs.cache-primary-key }}
 
+  # Holds a break in the worker protocol back until each platform whose apps step has published a release with the last
+  # one, so an app with that one's workers at work has a release to step to, as "Updating the app" in
+  # docs/architecture.md says. The one check that reads something from outside the repo, the published feeds, so it runs
+  # only for a change to what it reads. A PR's run that passed holds for the queue too, since a feed only gets newer.
+  steps:
+    needs: changes
+    if: needs.changes.outputs.steps == 'true' && github.event_name != 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: cargo run --locked -p update-steps
+
   # The one required check. It fails if any job failed or was cancelled, and passes if the rest passed or were skipped.
   checks:
-    needs: [changes, lint, test, publish, guide, kit]
+    needs: [changes, lint, test, publish, guide, kit, steps]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5

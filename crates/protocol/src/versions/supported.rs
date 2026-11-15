@@ -1,7 +1,10 @@
 use std::fmt;
 
-/// The versions of one protocol that a side speaks, from its oldest to its newest.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+use serde::{Deserialize, Serialize};
+
+/// The versions of one protocol that a side speaks, from its oldest to its newest. Its JSON, `{"oldest":3,"newest":4}`,
+/// is how the update feed says which worker versions a release's hub speaks, as `tools/package/publish.py` says.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Versions {
     pub oldest: u32,
     pub newest: u32,
