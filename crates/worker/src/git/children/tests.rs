@@ -5,8 +5,8 @@ use protocol::model::{BranchName, CommitId};
 use protocol::worker::ChildBranch;
 
 use super::add_child_worktree;
-use crate::git::Worktrees;
-use crate::git::tests::{new_repo, prepare, run};
+use crate::git::make_on_new_branch;
+use crate::git::tests::{new_repo, post_checkout_hook, prepare, run};
 use crate::git::worktrees::tests::while_one_is_made;
 
 /// A repository, and a workspace `alder` with a commit of its own.
@@ -210,20 +210,23 @@ async fn a_branch_git_made_before_failing_is_deleted() {
 }
 
 /// Git makes a new branch before it looks at the path, and leaves the branch when it refuses the path, as it would one
-/// made there meanwhile.
+/// made there meanwhile, even when what's there has a `.git` of its own.
 #[tokio::test]
 async fn a_branch_made_for_a_path_git_then_refuses_is_deleted() {
     let made = workspace().await;
-    let path = children(&made.root).join("alder").join("raced");
-    std::fs::create_dir_all(&path).unwrap();
-    std::fs::write(path.join("made-meanwhile"), "").unwrap();
+    let plain = children(&made.root).join("alder").join("raced");
+    std::fs::create_dir_all(&plain).unwrap();
+    std::fs::write(plain.join("made-meanwhile"), "").unwrap();
+    let other_repo = children(&made.root).join("alder").join("other");
+    run(&made.root, &["init", "-q", "-b", "alder/other", other_repo.to_str().unwrap()]);
 
-    let worktrees = Worktrees::of(&made.alder).await.unwrap();
-    let raced = "alder/raced".into();
-    let added = super::on_a_new_branch(&made.alder, &worktrees, &raced, "HEAD", &path, &mut Vec::new()).await.unwrap();
+    let on_plain = make_on_new_branch(&made.alder, &"alder/raced".into(), "HEAD", &plain, &mut Vec::new()).await;
+    let on_repo = make_on_new_branch(&made.alder, &"alder/other".into(), "HEAD", &other_repo, &mut Vec::new()).await;
 
-    assert!(!added.success, "git made it");
-    assert!(run(&made.repo, &["branch", "--list", "alder/raced"]).is_empty(), "the branch was kept: {}", added.stderr);
+    assert_eq!(code(on_plain), Some(ErrorCode::NameTaken));
+    assert_eq!(code(on_repo), Some(ErrorCode::NameTaken));
+    assert!(run(&made.repo, &["branch", "--list", "alder/raced"]).is_empty());
+    assert!(run(&made.repo, &["branch", "--list", "alder/other"]).is_empty());
 }
 
 /// One an agent deleted without git, which git still has registered, is made again.
@@ -265,22 +268,33 @@ async fn another_repository_s_checkout_at_the_path_isnt_what_was_asked_for() {
 }
 
 /// One a failing `post-checkout` hook leaves made is made, with a warning.
-#[cfg(unix)]
 #[tokio::test]
 async fn one_a_failing_hook_leaves_made_is_made_with_a_warning() {
     let made = workspace().await;
-    let hooks = made.root.join("hooks");
-    std::fs::create_dir_all(&hooks).unwrap();
-    let hook = hooks.join("post-checkout");
-    std::fs::write(&hook, "#!/bin/sh\nexit 1\n").unwrap();
-    std::fs::set_permissions(&hook, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
-    run(&made.repo, &["config", "core.hooksPath", hooks.to_str().unwrap()]);
+    post_checkout_hook(&made.repo, "exit 1");
 
     let hooked = add(&made, "alder/hooked", new("alder/hooked", "HEAD")).await.unwrap();
 
     let warned = hooked.warnings.iter().any(|warning| warning.starts_with("git made the worktree"));
     assert!(warned, "{:?}", hooked.warnings);
     assert_eq!(run(&hooked.path, &["branch", "--show-current"]), "alder/hooked");
+}
+
+/// One left locked as part-made whose branch was cleaned up still has a dangling `HEAD` for that branch; trying again
+/// removes the part-made directory and makes the branch afresh rather than looking for it as existing.
+#[tokio::test]
+async fn one_left_part_made_without_its_branch_is_made_afresh() {
+    let made = workspace().await;
+    post_checkout_hook(&made.repo, "git worktree lock --reason initializing \"$PWD\" && exit 1");
+
+    let failed = add(&made, "alder/x", new("alder/x", "HEAD")).await;
+    assert_eq!(code(failed), Some(ErrorCode::Worker));
+    assert!(run(&made.repo, &["branch", "--list", "alder/x"]).is_empty());
+
+    post_checkout_hook(&made.repo, "exit 0");
+    let retried = add(&made, "alder/x", new("alder/x", "HEAD")).await.unwrap();
+
+    assert_eq!(run(&retried.path, &["branch", "--show-current"]), "alder/x");
 }
 
 /// A base of `origin`'s is fetched first, as a workspace's is, so the worktree starts from its latest commit, on a

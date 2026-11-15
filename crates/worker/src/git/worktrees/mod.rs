@@ -18,4 +18,4 @@ mod locking;
 #[cfg(test)]
 pub(crate) mod tests;
 
-pub(super) use locking::Worktrees;
+pub(super) use locking::{Changing, Worktrees};

@@ -1,14 +1,11 @@
-use super::{Worktrees, branches, names};
-use names::no_branch_in_the_way;
+use super::Worktrees;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{BranchName, CommitId, GitDiff, GitFile, GitStatus};
-use protocol::worker::WorkspaceReady;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::Duration;
 use tokio::process::Command;
 
-const FETCH_TIMEOUT: Duration = Duration::from_secs(15);
 pub(super) const GH_TIMEOUT: Duration = Duration::from_secs(15);
 /// Keeps a diff response bounded when an agent leaves build output untracked and unignored.
 const MAX_UNTRACKED_FILES: usize = 200;
@@ -20,7 +17,7 @@ pub(super) fn git_error(message: impl Into<String>) -> ApiError {
 
 pub(super) struct GitOutput {
     /// `git` and its arguments, which an error names.
-    command: String,
+    pub(super) command: String,
     pub(super) success: bool,
     pub(super) code: Option<i32>,
     pub(super) stdout: String,
@@ -94,24 +91,6 @@ pub(super) async fn ref_exists(repo: &Path, name: &str) -> Result<bool, ApiError
     Ok(commit_of(repo, name).await?.is_some())
 }
 
-/// `origin`'s default branch if there's a remote, otherwise the branch checked out in the repo.
-async fn default_base(repo: &Path) -> Result<String, ApiError> {
-    let head = git(repo, &["symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"]).await?;
-    if head.success && !head.stdout.trim().is_empty() {
-        return Ok(head.stdout.trim().to_string());
-    }
-    for candidate in ["origin/main", "origin/master"] {
-        if ref_exists(repo, candidate).await? {
-            return Ok(candidate.to_string());
-        }
-    }
-    let current = git(repo, &["symbolic-ref", "--quiet", "--short", "HEAD"]).await?;
-    if current.success {
-        return Ok(current.stdout.trim().to_string());
-    }
-    Ok("HEAD".to_string())
-}
-
 pub(super) fn reject_option_like(value: &str, what: &str) -> Result<(), ApiError> {
     if value.starts_with('-') {
         return Err(ApiError::new(ErrorCode::InvalidRequest, format!("{what} can't start with '-': {value}")));
@@ -129,13 +108,6 @@ pub(super) async fn valid_branch_name(cwd: &Path, branch: &BranchName) -> Result
     Ok(())
 }
 
-/// Makes the directory a new worktree goes in.
-pub(super) async fn make_parent(path: &Path) -> Result<(), ApiError> {
-    let Some(parent) = path.parent() else { return Ok(()) };
-    let made = off_thread(parent.to_path_buf(), std::fs::create_dir_all).await;
-    made.map_err(|e| git_error(format!("creating {}: {e}", parent.display())))
-}
-
 /// Filesystem calls block, so they run where that can't hold up other requests.
 pub(super) async fn off_thread<T: Send + 'static>(
     path: PathBuf,
@@ -144,65 +116,8 @@ pub(super) async fn off_thread<T: Send + 'static>(
     tokio::task::spawn_blocking(move || work(path)).await.map_err(std::io::Error::other)?
 }
 
-/// Fetches `base` first if it's one of `origin`'s branches, so a worktree starts from its latest commit even if the
-/// repository's copy is behind. A failed fetch isn't fatal, and warns: working offline from the last known commit is
-/// better than not working. Holds `worktrees` for reading, since a fetch reads every worktree, and waits for them before
-/// its own time limit starts. Fails only if they can't be held, which would fail the worktree's making next.
-pub(super) async fn fetch_if_remote(
-    worktrees: &Worktrees,
-    base: &str,
-    warnings: &mut Vec<String>,
-) -> Result<(), ApiError> {
-    let Some(remote_branch) = base.strip_prefix("origin/") else { return Ok(()) };
-    let reading = worktrees.reading().await?;
-    match tokio::time::timeout(FETCH_TIMEOUT, reading.fetch(&["--quiet", "origin", remote_branch])).await {
-        Ok(Ok(output)) if output.success => {}
-        Ok(Ok(output)) => warnings.push(format!("couldn't fetch {base}, using the local copy: {}", output.stderr)),
-        Ok(Err(e)) => warnings.push(format!("couldn't fetch {base}, using the local copy: {}", e.message)),
-        Err(_) => warnings.push(format!("fetching {base} timed out, using the local copy")),
-    }
-    Ok(())
-}
-
-pub async fn prepare_workspace(
-    root: &Path,
-    repo_name: &str,
-    repo_path: &str,
-    workspace_name: &str,
-    branch: &BranchName,
-    base_ref: Option<&str>,
-) -> Result<WorkspaceReady, ApiError> {
-    let repo = PathBuf::from(repo_path);
-    let path = root.join(repo_name).join(workspace_name);
-    valid_branch_name(&repo, branch).await?;
-    if path.exists() {
-        return Err(ApiError::new(ErrorCode::NameTaken, format!("{} already exists", path.display())));
-    }
-    no_branch_in_the_way(&repo, branch).await?;
-
-    let base = match base_ref {
-        Some(base) => {
-            reject_option_like(base, "a base ref")?;
-            base.to_string()
-        }
-        None => default_base(&repo).await?,
-    };
-
-    let worktrees = Worktrees::of(&repo).await?;
-    let mut warnings = Vec::new();
-    fetch_if_remote(&worktrees, &base, &mut warnings).await?;
-    if !ref_exists(&repo, &base).await? {
-        return Err(ApiError::new(ErrorCode::InvalidRequest, format!("base {base} doesn't exist in {repo_path}")));
-    }
-
-    make_parent(&path).await?;
-    let path_str = path.to_string_lossy().into_owned();
-    // --no-track: otherwise a branch made from origin/main tracks it, and a bare `git push` or
-    // `git pull` from the workspace would act on main.
-    let args = ["--no-track", "-b", branch.as_str(), &path_str, &base];
-    worktrees.changing().await?.add(&args).await?.succeeded()?;
-    let branches = branches::read_now(&path).await.ok();
-    Ok(WorkspaceReady { path: path_str, branch: branch.clone(), base_ref: base, warnings, branches })
+pub(super) async fn exists(path: &Path) -> bool {
+    off_thread(path.to_path_buf(), |path| Ok(path.exists())).await.unwrap_or(false)
 }
 
 pub async fn restore_workspace(repo_path: &str, path: &str, branch: &BranchName) -> Result<(), ApiError> {

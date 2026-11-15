@@ -140,7 +140,7 @@ pub(in super::super) async fn remove_part_made(repo: &Path, worktree: &Path) -> 
 
 /// Whether git's record of a worktree, at `record`, has the lock git holds while it makes one, which it only leaves
 /// behind when it's stopped part way.
-async fn locked_part_made(record: &Path) -> bool {
+pub(in super::super) async fn locked_part_made(record: &Path) -> bool {
     let reason = off_thread(record.join("locked"), std::fs::read_to_string).await;
     reason.is_ok_and(|reason| reason.trim() == "initializing")
 }
