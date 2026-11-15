@@ -44,6 +44,6 @@ async fn cancelling_the_root_does_not_settle_child_work_or_target_its_terminals(
             break;
         }
     }
-    assert!(agent.shared.state.lock().work(Some(&"spawn".into())).calls.contains_key(&"child-command".into()));
+    assert!(agent.shared.state.lock().work(Some(&"child".into())).calls.contains_key(&"child-command".into()));
     agent.stop().await;
 }

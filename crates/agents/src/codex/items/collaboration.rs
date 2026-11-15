@@ -35,8 +35,11 @@ enum Tool {
 
 impl Collaboration {
     pub(super) fn call(&self, shared: &Shared, value: &Value) -> Call {
-        let state = shared.state.lock();
-        let targets: Option<Vec<_>> = self.receiver_thread_ids.iter().map(|id| state.subagents.subagent(id)).collect();
+        // Each subagent is named by its thread, so a call names it whether or not the adapter heard it start, as
+        // before it started again. Only the root's thread isn't a subagent's.
+        let root = shared.state.lock().thread.clone();
+        let subagent = |thread: &ThreadId| (Some(thread) != root.as_ref()).then(|| thread.subagent());
+        let targets: Option<Vec<_>> = self.receiver_thread_ids.iter().map(subagent).collect();
         if let Some(targets) = targets {
             match (&self.tool, targets.as_slice()) {
                 (Tool::Wait, _) => {
@@ -56,8 +59,8 @@ impl Collaboration {
                 _ => {}
             }
         }
-        // Some collaboration items target the root, or refer to an agent whose association wasn't supplied.
-        // Keep the operation visible with its native arguments rather than inventing a subagent call to link to.
+        // Some collaboration items target the root. Keep the operation visible with its native arguments rather than
+        // inventing a subagent call to link to.
         Call::Other { tool: value["tool"].as_str().unwrap_or("collaboration").into(), input: value.clone() }
     }
 

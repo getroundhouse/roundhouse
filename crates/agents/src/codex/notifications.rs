@@ -5,7 +5,7 @@ use protocol::tail::{DeltaChange, StreamDelta};
 use serde_json::Value;
 use tokio::sync::mpsc;
 
-use super::state::{Ended, TurnId};
+use super::state::{Ended, ThreadId, TurnId};
 use super::{approvals, control, items, running::Shared, subagents};
 use crate::{AgentError, AgentOutput};
 
@@ -50,7 +50,8 @@ async fn notification(shared: &Shared, value: &Value, raw: String) -> Result<(),
             .event(
                 EventBody::AgentOther {
                     kind: format!("unassociated Codex thread: {method}"),
-                    subagent: params["threadId"].as_str().map(|id| format!("codex-thread-{id}").into()),
+                    // Named by its thread, as a subagent is, so it's kept apart from the agent's own events.
+                    subagent: params["threadId"].as_str().map(|thread| ThreadId(thread.into()).subagent()),
                 },
                 Some(raw),
             )

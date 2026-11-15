@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use protocol::capability::calls::{
     Call, CallOutput,
     call::{Runs, StartSubagent},
@@ -11,7 +9,7 @@ use serde_json::Value;
 use super::{
     native::{Activity, Kind},
     routing::Scope,
-    tracking::{Child, Run},
+    tracking::Run,
 };
 use crate::{
     AgentError,
@@ -35,29 +33,36 @@ pub(in crate::codex) async fn activity(shared: &Shared, scope: &Scope, activity:
                 runs: Runs::Background,
                 resumes: None,
             };
+            let subagent = activity.agent_thread_id.subagent();
             {
                 let mut state = shared.state.lock();
-                if state.subagents.threads.contains_key(&activity.agent_thread_id) {
+                if state.subagents.runs.contains_key(&subagent) {
                     return;
                 }
-                let subagent = SubagentId::of_call(&call);
-                state
-                    .subagents
-                    .threads
-                    .insert(activity.agent_thread_id, Child { current: subagent.clone(), turns: HashMap::new() });
-                state.subagents.runs.insert(
-                    subagent,
-                    Run {
-                        call: call.clone(),
-                        parent: scope.parent.clone(),
-                        details: details.clone(),
-                        turn: None,
-                        reply: None,
-                        ended: false,
-                    },
-                );
+                let run = Run {
+                    call: call.clone(),
+                    parent: scope.parent.clone(),
+                    details: details.clone(),
+                    turn: None,
+                    reply: None,
+                    ended: false,
+                    answered: false,
+                };
+                state.subagents.runs.insert(subagent.clone(), run);
             }
-            started(shared, call, scope.parent.clone(), details, Some(raw)).await;
+            shared
+                .event(
+                    EventBody::Assistant {
+                        message_id: Some(call.to_string().into()),
+                        subagent: scope.parent.clone(),
+                        model: None,
+                        blocks: vec![ContentBlock::Call { id: call.clone(), call: Call::Subagent(details.clone()) }],
+                        first_index: None,
+                    },
+                    Some(raw),
+                )
+                .await;
+            started(shared, subagent, call, details).await;
         }
         // These describe an operation, not the lifetime of a child turn. In particular a delayed completion
         // activity cannot close a follow-up that has since started on the same thread.
@@ -65,77 +70,38 @@ pub(in crate::codex) async fn activity(shared: &Shared, scope: &Scope, activity:
     }
 }
 
-/// Bind the child turn before routing its notifications. A new turn on a finished child is a new invocation,
-/// since the hub's subagent records are terminal once ended.
+/// Binds the child's turn before routing its notifications. A new turn on a child that had finished is a follow-up,
+/// which starts the same subagent again, under the call that first started it, so its record works again.
 pub(in crate::codex) async fn turn_started(shared: &Shared, params: &Value) -> Result<(), AgentError> {
     let Some(thread) = params["threadId"].as_str() else { return Ok(()) };
-    let thread = ThreadId(thread.into());
+    let subagent = ThreadId(thread.into()).subagent();
     let turn: TurnId = serde_json::from_value(params["turn"]["id"].clone())?;
-    let start = {
+    let again = {
         let mut state = shared.state.lock();
-        let agents = &mut state.subagents;
-        let Some(child) = agents.threads.get_mut(&thread) else { return Ok(()) };
-        if child.turns.contains_key(&turn) {
+        let Some(run) = state.subagents.runs.get_mut(&subagent) else { return Ok(()) };
+        if run.turn.as_ref() == Some(&turn) {
             return Ok(());
         }
-        let Some(previous) = agents.runs.get(&child.current) else { return Ok(()) };
-        let start = if previous.turn.is_some() {
-            let mut details = previous.details.clone();
-            details.resumes = Some(child.current.clone());
-            let call: ToolUseId = format!("codex-subagent-{}-{}", thread.0, turn.0).into();
-            let subagent = SubagentId::of_call(&call);
-            let parent = previous.parent.clone();
-            agents.runs.insert(
-                subagent.clone(),
-                Run {
-                    call: call.clone(),
-                    parent: parent.clone(),
-                    details: details.clone(),
-                    turn: Some(turn.clone()),
-                    reply: None,
-                    ended: false,
-                },
-            );
-            child.current = subagent;
-            Some((call, parent, details))
-        } else {
-            if let Some(run) = agents.runs.get_mut(&child.current) {
-                run.turn = Some(turn.clone());
-            }
-            None
-        };
-        child.turns.insert(turn, child.current.clone());
-        start
+        run.turn = Some(turn);
+        let again = std::mem::replace(&mut run.ended, false);
+        if again {
+            run.reply = None;
+        }
+        again.then(|| (run.call.clone(), run.details.clone()))
     };
-    if let Some((call, parent, details)) = start {
-        started(shared, call, parent, details, None).await;
+    if let Some((call, details)) = again {
+        started(shared, subagent, call, details).await;
     }
     Ok(())
 }
 
-async fn started(
-    shared: &Shared,
-    call: ToolUseId,
-    parent: Option<SubagentId>,
-    details: StartSubagent,
-    raw: Option<String>,
-) {
-    shared
-        .event(
-            EventBody::Assistant {
-                message_id: Some(call.to_string().into()),
-                subagent: parent,
-                model: None,
-                blocks: vec![ContentBlock::Call { id: call.clone(), call: Call::Subagent(details.clone()) }],
-                first_index: None,
-            },
-            raw,
-        )
-        .await;
+/// Says `subagent`, which `call` started, started, or started again for a follow-up, and what works in the background
+/// now.
+async fn started(shared: &Shared, subagent: SubagentId, call: ToolUseId, details: StartSubagent) {
     shared
         .event(
             EventBody::SubagentStarted {
-                subagent: Some(SubagentId::of_call(&call)),
+                subagent: Some(subagent),
                 call,
                 kind: details.persona.map(|name| name.to_string()),
                 description: details.description,
@@ -148,15 +114,20 @@ async fn started(
     tasks(shared).await;
 }
 
+/// Ends `subagent` as the turn `turn` says, if it's the one it's taking. Only its first end answers its call, which
+/// the chat draws it in: a follow-up's report is its record's.
 pub(in crate::codex) async fn complete(shared: &Shared, subagent: &SubagentId, turn: &Value, raw: String) {
     let ended = {
         let mut state = shared.state.lock();
         let Some(run) = state.subagents.runs.get_mut(subagent) else { return };
-        if run.ended {
+        let ending: Option<TurnId> = serde_json::from_value(turn["id"].clone()).ok();
+        let another = ending.is_some() && run.turn.is_some() && ending != run.turn;
+        if run.ended || another {
             return;
         }
         run.ended = true;
-        (run.call.clone(), run.parent.clone(), run.reply.take())
+        let answers = !std::mem::replace(&mut run.answered, true);
+        (run.call.clone(), run.parent.clone(), run.reply.take(), answers)
     };
     control::settle(shared, Some(subagent)).await;
     let outcome = match turn["status"].as_str() {
@@ -165,7 +136,7 @@ pub(in crate::codex) async fn complete(shared: &Shared, subagent: &SubagentId, t
         Some("failed") => TaskOutcome::Failed,
         _ => TaskOutcome::Unknown,
     };
-    let (call, parent, report) = ended;
+    let (call, parent, report, answers) = ended;
     shared
         .event(
             EventBody::SubagentEnded {
@@ -177,21 +148,23 @@ pub(in crate::codex) async fn complete(shared: &Shared, subagent: &SubagentId, t
             Some(raw),
         )
         .await;
-    shared
-        .event(
-            EventBody::AgentUser {
-                subagent: parent,
-                blocks: vec![ContentBlock::CallResult {
-                    tool_use_id: call,
-                    output: CallOutput::Report { report: report.unwrap_or_default() },
-                    is_error: matches!(outcome, TaskOutcome::Failed),
-                    denied: None,
-                    images: Vec::new(),
-                }],
-            },
-            None,
-        )
-        .await;
+    if answers {
+        shared
+            .event(
+                EventBody::AgentUser {
+                    subagent: parent,
+                    blocks: vec![ContentBlock::CallResult {
+                        tool_use_id: call,
+                        output: CallOutput::Report { report: report.unwrap_or_default() },
+                        is_error: matches!(outcome, TaskOutcome::Failed),
+                        denied: None,
+                        images: Vec::new(),
+                    }],
+                },
+                None,
+            )
+            .await;
+    }
     tasks(shared).await;
 }
 
