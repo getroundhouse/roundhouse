@@ -5,9 +5,10 @@ use std::sync::Arc;
 
 use client_core::session_log::{Position, SessionLog};
 use protocol::capability::calls::call::{
-    CellEdit, Command, CommandPart, FilePatch, NotebookEdit, Patch, PatchChange, PatchHunk, Read,
+    CellEdit, Command, CommandPart, Fetch, FilePatch, FindFiles, NotebookEdit, Patch, PatchChange, PatchHunk, Read,
+    Search, Shows, WebSearch,
 };
-use protocol::capability::calls::output::{Ended, FileOutcome, Lines};
+use protocol::capability::calls::output::{Ended, FileOutcome, Found, FoundLine, Lines, Paths, WebResult};
 use protocol::capability::calls::{Call, CallOutput};
 use protocol::event::{ContentBlock, EventBody, FileChange, Hunk, HunkLine, LineMark, SessionEvent};
 use protocol::find::Needle;
@@ -247,6 +248,11 @@ fn came_back(id: &str, output: CallOutput) -> EventBody {
     EventBody::AgentUser { parent_tool_use_id: None, blocks: vec![protocol::fixtures::typed_result(id, output, false)] }
 }
 
+/// What came back for the typed call `id`, which failed.
+fn failed_back(id: &str, output: CallOutput) -> EventBody {
+    EventBody::AgentUser { parent_tool_use_id: None, blocks: vec![protocol::fixtures::typed_result(id, output, true)] }
+}
+
 fn added(text: &str) -> Vec<HunkLine> {
     vec![HunkLine { mark: LineMark::Added, text: text.into() }]
 }
@@ -309,4 +315,55 @@ fn a_typed_file_call_is_found_as_its_row_draws_it() {
     assert_eq!(counted("cat "), [], "a command that only reads is drawn as reading, without the command");
     assert_eq!(counted("replace"), [], "a notebook's cell is drawn as what it holds, not as the call's input");
     assert_eq!(counted("tail -f"), [(7, 1)], "one that went on in the background is drawn as a command, which says so");
+}
+
+/// A typed search, a command that only searches, and a call of the web are found where their rows draw them: a
+/// search's files and lines, what a command that only searches printed, without the command, a page's address, what
+/// was asked of it and what came back, and a web search's pages and what was made of them, or its words alone.
+#[test]
+fn a_typed_search_or_call_of_the_web_is_found_as_its_row_draws_it() {
+    let search = Call::Search(Search { pattern: "may_pass".into(), path: None, files: None, shows: Shows::Lines });
+    let line = FoundLine { path: "src/signal.rs".into(), line: 3, text: "fn may_pass() {".into() };
+    let lines = CallOutput::Found(Found::Lines { lines: vec![line], truncated: false });
+    let find = Call::FindFiles(FindFiles { pattern: "**/may_pass*".into(), path: None });
+    let paths = CallOutput::Paths(Paths { paths: vec!["tests/may_pass.rs".into()], truncated: false });
+    let searches = vec![CommandPart::Search { pattern: Some("may_pass".into()), path: None }];
+    let rg = Call::Command(Command { parts: searches, ..protocol::fixtures::typed_command("rg -n may_pass") });
+    let printed = protocol::fixtures::command_output("src/depot.rs:8:may_pass();\n", Some(0), Ended::Exited);
+    let url = "https://example.org/may_pass";
+    let fetch = Call::Fetch(Fetch { url: url.into(), asking: Some("Does may_pass block?".into()) });
+    let page = CallOutput::Page { url: url.into(), status: Some(200), text: "may_pass never blocks.".into() };
+    let web =
+        |query: &str| Call::WebSearch(WebSearch { query: query.into(), only_domains: vec![], not_domains: vec![] });
+    let found = WebResult { title: "may_pass, explained".into(), url: "https://example.org/a".into(), snippet: None };
+    let pages = CallOutput::WebResults { results: vec![found], summary: Some("It checks may_pass.".into()) };
+    let words = CallOutput::Words { text: "may_pass is the signal's check.".into() };
+    let gone = vec![CommandPart::Search { pattern: Some("may_pass".into()), path: Some("gone".into()) }];
+    let failed = Call::Command(Command { parts: gone, ..protocol::fixtures::typed_command("rg -n may_pass gone") });
+    let missing = protocol::fixtures::command_output("rg: gone: No such file or directory", Some(2), Ended::Exited);
+    let log = own([
+        placed(1, typed("search", search)),
+        placed(2, came_back("search", lines)),
+        placed(3, typed("find", find)),
+        placed(4, came_back("find", paths)),
+        placed(5, typed("rg", rg)),
+        placed(6, came_back("rg", printed)),
+        placed(7, typed("fetch", fetch)),
+        placed(8, came_back("fetch", page)),
+        placed(9, typed("web", web("signals"))),
+        placed(10, came_back("web", pages)),
+        placed(11, typed("said", web("aspects"))),
+        placed(12, came_back("said", words)),
+        placed(13, typed("failed", failed)),
+        placed(14, failed_back("failed", missing)),
+    ]);
+    let counted = |query| {
+        let counts = count_held(&log, &Model::default(), &needle(query), (0..14).collect());
+        counts.into_iter().filter(|(_, count)| *count > 0).collect::<Vec<_>>()
+    };
+
+    assert_eq!(counted("may_pass"), [(0, 2), (2, 2), (4, 2), (6, 3), (8, 2), (10, 1), (12, 1)]);
+    assert_eq!(counted("No such file"), [(12, 1)], "what went wrong, under a search that failed");
+    assert_eq!(counted("signal.rs"), [(0, 1)], "the file a match is in");
+    assert_eq!(counted("rg -n"), [], "a command that only searches is drawn as searching, without the command");
 }

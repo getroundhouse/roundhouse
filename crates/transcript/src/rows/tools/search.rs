@@ -1,5 +1,5 @@
-//! Searching the workspace: the pattern, where, and how much it found. Opened, matching lines grouped by file, or the
-//! files it found.
+//! Searching the workspace, with a search of its own or a command that only searches: the pattern, where, and how much
+//! it found. Opened, matching lines grouped by file, or the files it found.
 
 use client_core::calls::files::file_name;
 use client_core::calls::{FileLines, Found, Search};
@@ -19,7 +19,7 @@ use crate::rows::shown::Gather;
 const LISTED_FILES: usize = 200;
 
 pub(super) fn draw(search: &Search, answer: Option<&Answer>, toggle: &Toggle, cx: &App) -> AnyElement {
-    let found = answer.and_then(Answer::success).map(Found::read);
+    let found = found(answer);
     let line = Line::new(IconName::Search, search.title())
         .part(Part::Pill(search.pattern.to_string().into(), toggle.marks(Text::Pill, search.pattern)))
         .part(search.path.map(|path| Part::Chip(file_name(path).to_string().into())))
@@ -32,7 +32,7 @@ pub(super) fn draw(search: &Search, answer: Option<&Answer>, toggle: &Toggle, cx
 pub(super) fn shown(search: &Search, answer: Option<&Answer>, key: &ItemKey, gather: &mut Gather) {
     gather.plain(key, Text::Pill, search.pattern);
     line::shown_failure(answer, false, key, gather);
-    let Some(found) = answer.and_then(Answer::success).map(Found::read) else { return };
+    let Some(found) = found(answer) else { return };
     gather.inside(key, Fold::Output, |gather| match &found {
         Found::Lines(files) => {
             for (i, file) in files.iter().enumerate() {
@@ -45,8 +45,14 @@ pub(super) fn shown(search: &Search, answer: Option<&Answer>, key: &ItemKey, gat
                 gather.plain(key, Text::Found, &block::output_text(&text));
             }
         }
-        Found::Nothing => {}
+        Found::Count { .. } | Found::Nothing => {}
     });
+}
+
+/// What it found, once it ran.
+fn found(answer: Option<&Answer>) -> Option<Found<'_>> {
+    let answer = answer?;
+    Some(Found::of(answer.success()?, answer.output.as_deref()))
 }
 
 fn opened(found: &Found, toggle: &Toggle, cx: &App) -> Option<AnyElement> {
@@ -69,7 +75,7 @@ fn opened(found: &Found, toggle: &Toggle, cx: &App) -> Option<AnyElement> {
         Found::Files(_) | Found::Raw(_) => {
             block::output(toggle, Text::Found, &listed(found)?, look::colors(cx).text, cx)
         }
-        Found::Nothing => return None,
+        Found::Count { .. } | Found::Nothing => return None,
     };
     Some(block::frame(cx).typeset(look::Type::Code).child(shown).into_any_element())
 }
@@ -84,6 +90,6 @@ fn listed(found: &Found) -> Option<String> {
     match found {
         Found::Files(files) => Some(files.iter().take(LISTED_FILES).copied().collect::<Vec<_>>().join("\n")),
         Found::Raw(text) => Some((*text).to_string()),
-        Found::Lines(_) | Found::Nothing => None,
+        Found::Lines(_) | Found::Count { .. } | Found::Nothing => None,
     }
 }

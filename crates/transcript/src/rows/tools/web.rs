@@ -1,6 +1,7 @@
 //! Reading the web. A search shows what it looked for and how many pages it found, and opens to them, each a link
-//! to open in the browser, then what was made of them. A fetch shows the site, and opens to the page's address, what
-//! was asked of it, and the answer.
+//! to open in the browser, then what was made of them. One whose agent says only words, as Antigravity's does, says
+//! no count, and opens to the words. A fetch shows the site, and opens to the page's address, what was asked of it,
+//! and the answer.
 
 use client_core::calls::web::{Link, Results, site};
 use client_core::calls::{Fetch, WebSearch};
@@ -21,7 +22,7 @@ use crate::item_key::ItemKey;
 use crate::rows::shown::Gather;
 
 pub(super) fn fetch(fetch: &Fetch, answer: Option<&Answer>, toggle: &Toggle, cx: &App) -> AnyElement {
-    let line = Line::new(IconName::Globe, "Fetch").part(Part::Chip(site(fetch.url).to_string().into()));
+    let line = Line::new(IconName::Globe, Fetch::TITLE).part(Part::Chip(site(fetch.url).to_string().into()));
     let opened = || Some(fetched(fetch, answer, toggle, cx).into_any_element());
     line::drawn(line, answer, opened, toggle, cx)
 }
@@ -63,52 +64,61 @@ pub(super) fn shown_fetch(fetch: &Fetch, answer: Option<&Answer>, key: &ItemKey,
 pub(super) fn shown_search(search: &WebSearch, answer: Option<&Answer>, key: &ItemKey, gather: &mut Gather) {
     gather.plain(key, Text::Pill, search.query);
     line::shown_failure(answer, false, key, gather);
-    let Some(results) = answer.and_then(Answer::success).map(Results::read) else { return };
+    let Some(results) = results(answer) else { return };
     gather.inside(key, Fold::Output, |gather| {
-        for (i, link) in results.links.iter().enumerate() {
+        for (i, link) in results.links().iter().enumerate() {
             gather.plain(key, Text::nth(Text::Link, i), &link.title);
         }
-        if !results.summary.is_empty() {
-            gather.written(key, Text::Findings, results.summary);
+        if !results.findings().is_empty() {
+            gather.written(key, Text::Findings, results.findings());
         }
     });
 }
 
 pub(super) fn search(search: &WebSearch, answer: Option<&Answer>, toggle: &Toggle, cx: &App) -> AnyElement {
-    let results = answer.and_then(Answer::success).map(Results::read);
-    let line = Line::new(IconName::Globe, "Search the web")
+    let results = results(answer);
+    let line = Line::new(IconName::Globe, WebSearch::TITLE)
         .part(Part::Pill(search.query.to_string().into(), toggle.marks(Text::Pill, search.query)))
-        .part(results.as_ref().map(|results| Part::Note(results.summary().into())));
-    let opened = || {
-        results.map(|results| {
-            let links_area = block::scroll_id(&toggle.key.element("links"));
-            let line_text = &toggle.shared.line_text;
-            let links = results.links.iter().enumerate().map(|(i, link)| {
-                let marks = toggle.marks(Text::nth(Text::Link, i), &link.title);
-                link_row(Text::nth(Text::Link, i).element(toggle.key), link, &marks, &links_area, line_text, cx)
-            });
-            let summary = Some(results.summary).filter(|s| !s.is_empty());
-            block::frame(cx)
-                .when(!results.links.is_empty(), |d| {
-                    let id = toggle.key.element("links");
-                    d.child(block::scrolling(
-                        toggle.find,
-                        &toggle.shared.selection,
-                        &id,
-                        div().id(id.clone()).py(look::Space::XSmall).children(links.collect::<Vec<_>>()),
-                    ))
-                })
-                .when_some(summary, |d, summary| {
-                    d.when(!results.links.is_empty(), |d| d.child(block::separator(cx))).child(block::prose(
-                        toggle,
-                        Text::Findings,
-                        summary,
-                    ))
-                })
-                .into_any_element()
-        })
-    };
+        .part(results.as_ref().and_then(Results::summary).map(|summary| Part::Note(summary.into())));
+    let opened = || results.map(|results| pages(&results, toggle, cx));
     line::drawn(line, answer, opened, toggle, cx)
+}
+
+/// What a search opens to: the pages it found, each a link, then what was made of them.
+fn pages(results: &Results, toggle: &Toggle, cx: &App) -> AnyElement {
+    let links_area = block::scroll_id(&toggle.key.element("links"));
+    let line_text = &toggle.shared.line_text;
+    let links: Vec<_> = results
+        .links()
+        .iter()
+        .enumerate()
+        .map(|(i, link)| {
+            let marks = toggle.marks(Text::nth(Text::Link, i), &link.title);
+            link_row(Text::nth(Text::Link, i).element(toggle.key), link, &marks, &links_area, line_text, cx)
+        })
+        .collect();
+    let linked = !links.is_empty();
+    let findings = Some(results.findings()).filter(|findings| !findings.is_empty());
+    let frame = block::frame(cx).when(linked, |d| {
+        let id = toggle.key.element("links");
+        d.child(block::scrolling(
+            toggle.find,
+            &toggle.shared.selection,
+            &id,
+            div().id(id.clone()).py(look::Space::XSmall).children(links),
+        ))
+    });
+    frame
+        .when_some(findings, |d, findings| {
+            d.when(linked, |d| d.child(block::separator(cx))).child(block::prose(toggle, Text::Findings, findings))
+        })
+        .into_any_element()
+}
+
+/// What it found, once it ran.
+fn results(answer: Option<&Answer>) -> Option<Results<'_>> {
+    let answer = answer?;
+    Some(Results::of(answer.success()?, answer.output.as_deref()))
 }
 
 /// A page it found: its title, with its matches, then its site, faint and smaller, on the title's baseline. Clicking

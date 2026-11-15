@@ -15,7 +15,7 @@ mod search;
 pub mod web;
 
 pub use agent::Agent;
-pub use command::Command;
+pub use command::{Command, Only};
 pub use failure::{Ending, Failure, ResultForm};
 pub use files::{EditFile, ReadFile, WriteFile};
 pub use other::Other;

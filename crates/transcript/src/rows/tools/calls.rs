@@ -6,7 +6,7 @@ use super::{advisor, agent, block, command, files, notebook, other, patch, searc
 use crate::find::{FindLook, Marks, Part as Text};
 use crate::folds::Fold;
 use crate::item_key::ItemKey;
-use client_core::calls::{Command, ReadFile, Recorded, ToolCall, count};
+use client_core::calls::{Command, Only, ReadFile, Recorded, ToolCall, count};
 use gpui_kit::assets::IconName;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{AnyElement, App, IntoElement, ParentElement};
@@ -45,8 +45,9 @@ pub(in super::super) fn call(
 ) -> AnyElement {
     let (answer, input) = (reply.result(), recorded.input());
     match ToolCall::read(recorded) {
-        ToolCall::Command(command) => match reads(&command, answer) {
-            Some(path) => files::read(&ReadFile { path }, answer, toggle, cx),
+        ToolCall::Command(command) => match only(&command, answer) {
+            Some(Only::Reads(path)) => files::read(&ReadFile { path }, answer, toggle, cx),
+            Some(Only::Searches(search)) => search::draw(&search, answer, toggle, cx),
             None => command::draw(&command, answer, toggle, cx),
         },
         ToolCall::Read(file) => files::read(&file, answer, toggle, cx),
@@ -74,8 +75,9 @@ pub(in super::super) fn shown(
 ) {
     let (answer, input) = (reply.result(), recorded.input());
     match ToolCall::read(recorded) {
-        ToolCall::Command(command) => match reads(&command, answer) {
-            Some(path) => files::shown_read(&ReadFile { path }, answer, key, gather),
+        ToolCall::Command(command) => match only(&command, answer) {
+            Some(Only::Reads(path)) => files::shown_read(&ReadFile { path }, answer, key, gather),
+            Some(Only::Searches(search)) => search::shown(&search, answer, key, gather),
             None => command::shown(&command, answer, key, gather),
         },
         ToolCall::Read(file) => files::shown_read(&file, answer, key, gather),
@@ -94,10 +96,10 @@ pub(in super::super) fn shown(
     line::shown_denial(answer, key, gather);
 }
 
-/// The file a command does nothing but read, which it's drawn as reading. One that went on in the background is drawn
-/// as a command, since only a command's row says that.
-fn reads<'a>(command: &Command<'a>, answer: Option<&Answer>) -> Option<&'a str> {
-    command.reads.filter(|_| !answer.is_some_and(Answer::in_the_background))
+/// All a command does, where it's drawn as that kind of call: reading a file, or searching. One that went on in the
+/// background is drawn as a command, since only a command's row says that.
+fn only<'a>(command: &Command<'a>, answer: Option<&Answer>) -> Option<Only<'a>> {
+    command.only.filter(|_| !answer.is_some_and(Answer::in_the_background))
 }
 
 /// How much came back, such as `10 lines`, `1 image`, or both, or `None` for nothing.

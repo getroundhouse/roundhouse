@@ -2,9 +2,12 @@
 
 use std::fmt::Write as _;
 
+use super::command::Only;
+use super::search::{Looks, Search};
+use super::web::{Fetch, WebSearch};
 use super::{Command, EditFile, ReadFile, ToolCall, WriteFile};
 use protocol::capability::calls::call::{CellEdit, CommandPart, FilePatch, NotebookEdit, Patch, PatchChange};
-use protocol::capability::calls::output::{FileOutcome, McpContent};
+use protocol::capability::calls::output::{FileOutcome, Found, McpContent};
 use protocol::capability::calls::{Call, CallOutput};
 
 pub(super) fn read(call: &Call) -> ToolCall<'_> {
@@ -12,7 +15,7 @@ pub(super) fn read(call: &Call) -> ToolCall<'_> {
         Call::Command(command) => ToolCall::Command(Command {
             command: &command.command,
             description: command.description.as_deref(),
-            reads: only_reads(command),
+            only: only(command),
         }),
         Call::Read(file) => ToolCall::Read(ReadFile { path: &file.path }),
         Call::Write(file) => ToolCall::Write(WriteFile { path: &file.path, content: &file.content }),
@@ -22,14 +25,18 @@ pub(super) fn read(call: &Call) -> ToolCall<'_> {
         }),
         Call::Patch(patch) => ToolCall::Patch(patch),
         Call::NotebookEdit(edit) => ToolCall::NotebookEdit(edit),
-        // No agent records these typed yet, so they're drawn as any typed call until one does.
+        Call::Search(search) => {
+            ToolCall::Search(Search { pattern: &search.pattern, path: search.path.as_deref(), looks: Looks::InFiles })
+        }
+        Call::FindFiles(find) => {
+            ToolCall::Search(Search { pattern: &find.pattern, path: find.path.as_deref(), looks: Looks::ForNames })
+        }
+        Call::Fetch(fetch) => ToolCall::Fetch(Fetch { url: &fetch.url, prompt: fetch.asking.as_deref() }),
+        Call::WebSearch(search) => ToolCall::WebSearch(WebSearch { query: &search.query }),
+        // Drawn as any typed call until each is drawn as its kind.
         Call::ViewImage(_)
         | Call::GenerateImage(_)
         | Call::WriteInput(_)
-        | Call::Search(_)
-        | Call::FindFiles(_)
-        | Call::Fetch(_)
-        | Call::WebSearch(_)
         | Call::FindInPage(_)
         | Call::Todos(_)
         | Call::Subagent(_)
@@ -51,15 +58,19 @@ pub(super) fn read(call: &Call) -> ToolCall<'_> {
     }
 }
 
-/// The one file a command does nothing but read, as its agent read the command. None for one that reads several files,
-/// or does anything else, or whose agent didn't say what it does.
-fn only_reads(command: &protocol::capability::calls::call::Command) -> Option<&str> {
-    let mut read = command.parts.iter().map(|part| match part {
-        CommandPart::Read { path } => Some(path.as_str()),
-        CommandPart::List { .. } | CommandPart::Search { .. } | CommandPart::Other => None,
+/// All a command does, as its agent read the command, where that's one kind of call: reading one file, or one search
+/// of what's in files, for a pattern it says. `None` for one that reads several files or searches several ways, or does
+/// anything else, or whose agent didn't say what it does.
+fn only(command: &protocol::capability::calls::call::Command) -> Option<Only<'_>> {
+    let mut does = command.parts.iter().map(|part| match part {
+        CommandPart::Read { path } => Some(Only::Reads(path)),
+        CommandPart::Search { pattern: Some(pattern), path } => {
+            Some(Only::Searches(Search { pattern, path: path.as_deref(), looks: Looks::InFiles }))
+        }
+        CommandPart::Search { pattern: None, .. } | CommandPart::List { .. } | CommandPart::Other => None,
     });
-    let first = read.next()??;
-    read.all(|path| path == Some(first)).then_some(first)
+    let first = does.next()??;
+    does.all(|part| part == Some(first)).then_some(first)
 }
 
 /// What a call is, in words, as the CLI prints it and a request to make it is headed. The chat draws some kinds with
@@ -72,14 +83,14 @@ pub fn title(call: &Call) -> String {
         Call::NotebookEdit(edit) => notebook_title(edit).into(),
         Call::ViewImage(_) => "View an image".into(),
         Call::GenerateImage(_) => "Make an image".into(),
+        Call::Search(_) => Looks::InFiles.title().into(),
+        Call::FindFiles(_) => Looks::ForNames.title().into(),
+        Call::Fetch(_) => Fetch::TITLE.into(),
+        Call::WebSearch(_) => WebSearch::TITLE.into(),
         Call::Mcp { tool, .. } | Call::Other { tool, .. } => tool.clone(),
         Call::Unknown => "Unknown tool".into(),
         Call::Command(_)
         | Call::WriteInput(_)
-        | Call::Search(_)
-        | Call::FindFiles(_)
-        | Call::Fetch(_)
-        | Call::WebSearch(_)
         | Call::FindInPage(_)
         | Call::Todos(_)
         | Call::Subagent(_)
@@ -255,8 +266,27 @@ pub fn output(output: &CallOutput) -> String {
         CallOutput::Image { .. } | CallOutput::Encrypted | CallOutput::Backgrounded { .. } => String::new(),
         CallOutput::Document { pages } => pages.map_or_else(|| "Document".into(), |n| format!("{n} pages")),
         CallOutput::Unknown => "Unknown tool output".into(),
-        CallOutput::Found(_) | CallOutput::WebResults { .. } => {
-            serde_json::to_string_pretty(output).unwrap_or_default()
+        CallOutput::Found(found) => found_text(found),
+        CallOutput::WebResults { results, summary } => {
+            let links = results.iter().map(|result| format!("{} ({})", result.title, result.url));
+            let links = links.collect::<Vec<_>>().join("\n");
+            [links.as_str(), summary.as_deref().unwrap_or_default()]
+                .into_iter()
+                .filter(|part| !part.is_empty())
+                .collect::<Vec<_>>()
+                .join("\n\n")
         }
+    }
+}
+
+/// What a search found, as ripgrep prints it: each matching line as `path:number:text`, or the files, one to a line.
+fn found_text(found: &Found) -> String {
+    match found {
+        Found::Lines { lines, .. } => {
+            lines.iter().map(|line| format!("{}:{}:{}", line.path, line.line, line.text)).collect::<Vec<_>>().join("\n")
+        }
+        Found::Files(paths) => paths.paths.join("\n"),
+        Found::Count { matches, files } => super::Found::Count { matches: *matches, files: *files }.summary(),
+        Found::Unknown => "Unknown search result".into(),
     }
 }
