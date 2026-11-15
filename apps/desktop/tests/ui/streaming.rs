@@ -9,6 +9,7 @@ use protocol::event::{AgentRunState, EventBody, SessionEvent};
 use protocol::model::{SessionId, SessionStatus};
 
 use crate::support::{Gate, Stack, Ui, wait_until};
+use crate::tools::in_a_new_workspace;
 
 #[gpui_kit::test]
 fn text_streams_in_as_it_is_written(cx: &mut TestAppContext) {
@@ -246,4 +247,33 @@ fn a_reply_the_markdown_parser_panics_on_is_drawn_as_it_is_written(cx: &mut Test
     ui.wait("the reply to be drawn", |ui| {
         ui.transcript().is_some_and(|t| ui.cx.read_entity(&t, |t, _| t.kept_texts().iter().any(|text| text == reply)))
     });
+}
+
+/// A prompt has a button at its bubble's left that copies what it says, shown while the prompt is hovered.
+#[gpui_kit::test]
+fn a_prompt_s_copy_button_shows_while_it_s_hovered_and_copies_what_it_says(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = in_a_new_workspace(cx, &stack);
+    ui.paste_text("say:the signal is clear");
+    ui.press("enter");
+    ui.wait_idle_with("the reply", |text| text.contains("the signal is clear"));
+    let shown = |ui: &mut Ui| match &ui.labelled("Copy prompt")[..] {
+        [copy] => copy.visible(),
+        found => panic!("{} buttons to copy a prompt", found.len()),
+    };
+    let [bubble] = &ui.shown("bubble/")[..] else { panic!("one prompt") };
+    let [reply] = &ui.shown("copy-reply/")[..] else { panic!("one finished turn") };
+    let [copy] = &ui.shown("copy-prompt/")[..] else { panic!("one button to copy a prompt") };
+    let (bubble, reply, copy) = (bubble.clone(), reply.clone(), copy.clone());
+
+    ui.hover(reply);
+    assert!(!shown(&mut ui), "hidden while the prompt isn't hovered");
+    ui.hover(bubble);
+    assert!(shown(&mut ui), "shown while it is");
+    ui.hover(copy);
+    assert!(shown(&mut ui), "and while the pointer's on it, outside the bubble");
+    ui.click_labelled("Copy prompt", 0);
+
+    let copied = ui.cx.read_from_clipboard().and_then(|item| item.text());
+    assert_eq!(copied.as_deref(), Some("say:the signal is clear"));
 }

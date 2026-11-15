@@ -18,6 +18,9 @@ use crate::texts::{TextAt, Written};
 /// stands apart from the agent's work, which starts at the left.
 const WIDEST_SHARE: f32 = 0.8;
 
+/// What's hovered to show the button that copies a prompt: the prompt's row.
+const GROUP: &str = "prompt";
+
 /// What a prompt says, what's being found in it, and where it's drawn: at the end of the chat while the agent hasn't
 /// read it, and then in the row of the event that settled it, where the agent took it or dropped it.
 #[derive(Clone, Copy)]
@@ -30,7 +33,7 @@ pub(super) struct Prompt<'a> {
 /// What was sent, on a bubble at the right of the column, with the files it carries above its text, in the order the
 /// agent was given them, and where the agent has it once it's recorded, `state`, which is `None` while it's being sent.
 /// It's faint until the agent has it, so one sent mid-turn reads as not yet seen until the agent takes it, and one the
-/// agent never took says so.
+/// agent never took says so. While it's hovered, a button at the bubble's left, by its last line, copies what it says.
 pub(super) fn prompt_bubble(
     key: &ItemKey,
     text: Prompt,
@@ -44,26 +47,36 @@ pub(super) fn prompt_bubble(
     let typed = !text.trim().is_empty();
     let faint = state != Some(PromptState::Taken);
     let dropped = state == Some(PromptState::Dropped);
+    // Outside the bubble's left edge, as far up from its bottom as its text is, so it's beside the last line. It's out of
+    // the bubble's layout, which is as it would be without it.
+    let copy = typed.then(|| {
+        let copy = look::copy_button(key.element("copy-prompt"), text.to_string(), "Copy prompt");
+        let copy = div().absolute().right_full().bottom(look::Space::Medium).mr(look::Space::XSmall).child(copy);
+        copy.invisible().group_hover(GROUP, Styled::visible)
+    });
+    let bubble = v_flex()
+        .id(key.element("bubble"))
+        .relative()
+        .max_w(relative(WIDEST_SHARE))
+        .gap(look::Space::Medium)
+        .px(look::Space::Large)
+        .py(look::Space::Medium)
+        .corners(look::Corner::Control)
+        .bg(colors.prompt)
+        .when(faint, |d| d.opacity(0.6))
+        .children(attachments::view(carried, cx))
+        .when(typed, |d| {
+            // Drawn from the kit's blocks, and selected by the transcript, from when it's sent.
+            let id = (key.clone(), Part::Prompt);
+            d.child(from_blocks(&Written::found(at, &id, find, text), None, shared))
+        })
+        .children(copy)
+        .test_support();
+    // The row, so the button stays while the pointer moves from the bubble onto it.
     row()
+        .group(GROUP)
         .items_end()
-        .child(
-            v_flex()
-                .id(key.element("bubble"))
-                .max_w(relative(WIDEST_SHARE))
-                .gap(look::Space::Medium)
-                .px(look::Space::Large)
-                .py(look::Space::Medium)
-                .corners(look::Corner::Control)
-                .bg(colors.prompt)
-                .when(faint, |d| d.opacity(0.6))
-                .children(attachments::view(carried, cx))
-                .when(typed, |d| {
-                    // Drawn from the kit's blocks, and selected by the transcript, from when it's sent.
-                    let id = (key.clone(), Part::Prompt);
-                    d.child(from_blocks(&Written::found(at, &id, find, text), None, shared))
-                })
-                .test_support(),
-        )
+        .child(bubble)
         .when(dropped, |d| {
             d.child(
                 div()
