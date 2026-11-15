@@ -33,6 +33,12 @@ pub enum ContentBlock {
         is_error: bool,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         denied: Option<Denied>,
+        /// Images that came back beside what the call did, such as a screenshot a command made, each an attachment of
+        /// the session, as a `ToolResult`'s are. An image that's what the call is about, as a read of one is, is its
+        /// output instead, as [`CallOutput::Image`](crate::capability::calls::CallOutput::Image) and an MCP tool's
+        /// [`McpContent::Image`](crate::capability::calls::output::McpContent::Image) are.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        images: Vec<Attachment>,
     },
     ToolUse {
         id: ToolUseId,

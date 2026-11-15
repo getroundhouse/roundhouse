@@ -47,6 +47,11 @@ pub struct Subagent {
     /// What it's done lately, which its call shows while it works. Only while it works: it's emptied when it ends.
     #[serde(default)]
     pub recent: RecentWork,
+    /// What it's done lately, as `recent` says, with each call typed, as `docs/architecture.md` has calls stored in
+    /// "What each kind of agent can do". `None` from a hub that doesn't keep it, whose client shows `recent`. A client
+    /// from before this reads it as nothing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lately: Option<Lately>,
     /// What it reported, once it finished.
     #[serde(default)]
     pub report: Option<String>,
@@ -121,6 +126,53 @@ pub struct RecentCall {
     /// What came back, once something has.
     #[serde(default)]
     pub result: Option<CallResult>,
+}
+
+/// What a subagent has done lately: its newest calls, each typed, with the text it wrote just before it and what came
+/// back once something has, then what it's written since the newest. Every change to a subagent's record goes to every
+/// client, so the hub keeps only a few calls and cuts what each wrote and what came back short. A call is whole, so a
+/// write's holds the file it wrote.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct Lately {
+    /// Oldest first.
+    #[serde(default)]
+    pub calls: Vec<LatelyCall>,
+    /// What it's written since its newest call.
+    #[serde(default)]
+    pub since: Option<Said>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct LatelyCall {
+    /// What it wrote just before the call.
+    #[serde(default)]
+    pub before: Option<Said>,
+    pub id: ToolUseId,
+    pub call: crate::capability::calls::Call,
+    /// What came back, once something has.
+    #[serde(default)]
+    pub result: Option<LatelyResult>,
+}
+
+/// What came back for a call, as its result block had it, but shorter where it was long. The hub may cut short each
+/// text the output holds, such as a command's `output`, a read's `lines`, a page's `text`, an MCP tool's texts and a
+/// search's lines and paths, keeping each one's start, and says so in `cut`. Everything else is as it came, such as a
+/// read's `first` and `total`, a command's exit code and how it ended, and a search's count. What it changed in a file
+/// is always left off, as `None`, since that can be as long as the file.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct LatelyResult {
+    pub output: crate::capability::calls::CallOutput,
+    #[serde(default)]
+    pub is_error: bool,
+    /// Some text of the output is only its start, which a client draws only when it says what went wrong, since a
+    /// call's line counts what came back, and the start of a long read would say it read fewer lines than it did.
+    #[serde(default)]
+    pub cut: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub images: Vec<Attachment>,
+    /// The person wouldn't let the call be made, as its result block said.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub denied: Option<Denied>,
 }
 
 /// Text a subagent wrote, or its start, if it was long.

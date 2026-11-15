@@ -176,6 +176,7 @@ pub(in crate::codex) async fn complete(shared: &Shared, call: &ToolUseId, turn: 
                     output: CallOutput::Report { report: report.unwrap_or_default() },
                     is_error: matches!(outcome, SubagentOutcome::Failed),
                     denied: None,
+                    images: Vec::new(),
                 }],
             },
             None,

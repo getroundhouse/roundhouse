@@ -190,6 +190,7 @@ impl Reader<'_> {
                             output,
                             is_error: !matches!(status, Status::Completed),
                             denied,
+                            images: Vec::new(),
                         }],
                     },
                     Some(raw),
@@ -222,7 +223,7 @@ fn part(action: Action) -> CommandPart {
     }
 }
 
-fn mcp_result(result: &Value) -> CallOutput {
+pub(super) fn mcp_result(result: &Value) -> CallOutput {
     let content = result["content"]
         .as_array()
         .into_iter()
@@ -235,5 +236,7 @@ fn mcp_result(result: &Value) -> CallOutput {
             }
         })
         .collect();
-    CallOutput::Mcp { content, structured: result.get("structuredContent").cloned() }
+    // A null one is none, which is how it reads back.
+    let structured = result.get("structuredContent").filter(|value| !value.is_null()).cloned();
+    CallOutput::Mcp { content, structured }
 }

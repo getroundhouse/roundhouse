@@ -179,6 +179,8 @@ fn subagent_from_row(row: &Row<'_>) -> rusqlite::Result<Subagent> {
         rev: rev_of(row, 12)?,
         // As in `recent_work`.
         recent: json_at(row, 13)?.unwrap_or_default(),
+        // This hub keeps a record's calls only in the agent's shape, so it sends what a hub from before sends.
+        lately: None,
     })
 }
 

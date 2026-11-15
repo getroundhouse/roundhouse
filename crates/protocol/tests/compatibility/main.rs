@@ -23,6 +23,7 @@ mod capabilities;
 mod client_calls;
 mod events;
 mod hellos;
+mod outputs;
 mod previous;
 mod prompts;
 mod refusals;

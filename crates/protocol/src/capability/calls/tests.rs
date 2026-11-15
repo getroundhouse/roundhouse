@@ -187,10 +187,11 @@ fn every_kind_of_output_reads_back_as_it_was_written() {
         CallOutput::Document { pages: Some(2) },
         CallOutput::Changed { files: vec![file] },
         CallOutput::Found(Found::Lines { lines: vec![], truncated: true }),
-        CallOutput::Paths { paths: vec!["a".into()], truncated: true },
+        CallOutput::Paths(Paths { paths: vec!["a".into()], truncated: true }),
         CallOutput::Page { url: "https://example.com".into(), status: Some(200), text: "hi".into() },
         CallOutput::WebResults {
             results: vec![WebResult { title: "a".into(), url: "b".into(), snippet: Some("c".into()) }],
+            summary: None,
         },
         CallOutput::Report { report: "done".into() },
         CallOutput::Mcp { content: vec![McpContent::Text { text: "x".into() }], structured: Some(json!({"kind": 1})) },
@@ -217,7 +218,7 @@ fn more_outputs() -> Vec<CallOutput> {
     vec![
         CallOutput::Image { image: image.clone(), prompt: Some("a cat".into()) },
         CallOutput::Command(printed),
-        CallOutput::Found(Found::Files { paths: vec!["a".into()], truncated: true }),
+        CallOutput::Found(Found::Files(Paths { paths: vec!["a".into()], truncated: true })),
         CallOutput::Found(Found::Count { matches: 3, files: 1 }),
         CallOutput::Mcp {
             content: vec![

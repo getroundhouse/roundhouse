@@ -165,6 +165,7 @@ pub fn subagent(call: &str) -> Subagent {
         calls: 0,
         latest_call: None,
         recent: RecentWork::default(),
+        lately: None,
         report: None,
         rev: Rev::default(),
     }

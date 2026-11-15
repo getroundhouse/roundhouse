@@ -197,7 +197,7 @@ pub fn output(output: &CallOutput) -> String {
         CallOutput::Words { text } | CallOutput::Page { text, .. } => text.clone(),
         CallOutput::Report { report } => report.clone(),
         CallOutput::Lines(lines) => lines.lines.join("\n"),
-        CallOutput::Paths { paths, .. } => paths.join("\n"),
+        CallOutput::Paths(paths) => paths.paths.join("\n"),
         CallOutput::Changed { files } => files.iter().map(|f| f.path.as_str()).collect::<Vec<_>>().join("\n"),
         CallOutput::Mcp { content, structured } => {
             let mut texts: Vec<String> = content
@@ -205,7 +205,7 @@ pub fn output(output: &CallOutput) -> String {
                 .filter_map(|c| match c {
                     McpContent::Text { text } => Some(text.clone()),
                     McpContent::Resource { uri, text } => Some(text.clone().unwrap_or_else(|| uri.clone())),
-                    McpContent::Image { .. } | McpContent::Unknown => None,
+                    McpContent::Image { .. } | McpContent::Other { .. } | McpContent::Unknown => None,
                 })
                 .collect();
             if let Some(value) = structured {
@@ -213,7 +213,7 @@ pub fn output(output: &CallOutput) -> String {
             }
             texts.join("\n")
         }
-        CallOutput::Image { .. } => String::new(),
+        CallOutput::Image { .. } | CallOutput::Encrypted | CallOutput::Backgrounded { .. } => String::new(),
         CallOutput::Document { pages } => pages.map_or_else(|| "Document".into(), |n| format!("{n} pages")),
         CallOutput::Unknown => "Unknown tool output".into(),
         CallOutput::Found(_) | CallOutput::WebResults { .. } => {

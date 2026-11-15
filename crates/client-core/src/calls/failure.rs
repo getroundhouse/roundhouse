@@ -67,12 +67,14 @@ impl ResultForm {
                 | protocol::capability::calls::CallOutput::Document { .. }
                 | protocol::capability::calls::CallOutput::Changed { .. }
                 | protocol::capability::calls::CallOutput::Found(_)
-                | protocol::capability::calls::CallOutput::Paths { .. }
+                | protocol::capability::calls::CallOutput::Paths(_)
                 | protocol::capability::calls::CallOutput::Page { .. }
                 | protocol::capability::calls::CallOutput::WebResults { .. }
                 | protocol::capability::calls::CallOutput::Report { .. }
                 | protocol::capability::calls::CallOutput::Mcp { .. }
                 | protocol::capability::calls::CallOutput::Words { .. }
+                | protocol::capability::calls::CallOutput::Encrypted
+                | protocol::capability::calls::CallOutput::Backgrounded { .. }
                 | protocol::capability::calls::CallOutput::Unknown => None,
             };
             return Some(Self(Form::Alone { exit_code }));

@@ -19,4 +19,6 @@ pub use kind::CallKind;
 pub use output::CallOutput;
 
 #[cfg(test)]
+mod round_trips;
+#[cfg(test)]
 mod tests;
