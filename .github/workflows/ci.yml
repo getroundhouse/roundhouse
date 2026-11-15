@@ -122,7 +122,8 @@ jobs:
       - run: cargo clippy --workspace --locked -- -D warnings
       # Only the binaries may read the build stamp, so each release compiles again only what its commit changed.
       - run: tools/check-stamp.sh
-      # Keep only the dependencies, since our crates rebuild after every checkout.
+      # Keep only the dependencies, since our crates rebuild after every checkout. The copy of gpui-kit rebuilds too, but
+      # `--workspace` doesn't reach it, so its build is kept, incremental cache and all.
       - if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
         run: cargo clean --workspace
       - if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'

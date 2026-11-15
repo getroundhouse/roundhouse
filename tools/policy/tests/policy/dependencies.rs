@@ -2,7 +2,7 @@
 //! tool that packages the app and the crate that reads its packages, and the copy of gpui-kit, its tool's pin and the
 //! GPUI the app draws with.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::Path;
 
 use kit_sync::{Pin, Record};
@@ -101,6 +101,26 @@ fn the_hub_and_the_worker_stay_apart() {
     assert!(!runtime_closure(&metadata, "hub").contains("worker"));
     assert!(!runtime_closure(&metadata, "hub").contains("agents"));
     assert!(!runtime_closure(&metadata, "worker").contains("hub"));
+}
+
+/// The app builds gpui-kit's crates from its copy, so a change to the copy is what the app gets, and no dependency
+/// brings another kit, whose types wouldn't be the copy's.
+#[test]
+fn the_app_builds_the_kit_from_its_copy() {
+    let metadata = metadata();
+    let copy = Path::new(metadata["workspace_root"].as_str().unwrap()).join("third_party/gpui-kit");
+    let packages = metadata["packages"].as_array().unwrap();
+    let in_copy = |package: &Value| {
+        Path::new(package["manifest_path"].as_str().unwrap()).starts_with(&copy) && package["source"].is_null()
+    };
+    let from_copy: BTreeSet<&str> =
+        packages.iter().filter(|package| in_copy(package)).map(|package| package["name"].as_str().unwrap()).collect();
+    assert!(from_copy.contains("gpui-kit"), "the app builds the kit from the copy, but only these: {from_copy:?}");
+    let elsewhere: Vec<&str> = (packages.iter())
+        .filter(|package| from_copy.contains(package["name"].as_str().unwrap()) && !in_copy(package))
+        .map(|package| package["id"].as_str().unwrap())
+        .collect();
+    assert!(elsewhere.is_empty(), "these aren't the copy's, so the app builds a kit of their own: {elsewhere:?}");
 }
 
 /// `vpk` makes the packages and the feed that the app's `velopack` reads, and Velopack releases the two together,

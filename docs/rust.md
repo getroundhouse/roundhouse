@@ -1,6 +1,6 @@
 # Rust
 
-How Rust is written in this repo, in every crate of the Cargo workspace. `mobile-poc/` is a standalone prototype and is exempt. So is our copy of gpui-kit in `third_party/gpui-kit`, which is upstream's code, in upstream's workspace, with its manifests and lints.
+How Rust is written in this repo, in every crate of the Cargo workspace. `mobile-poc/` is a standalone prototype and is exempt. So is our copy of gpui-kit in `third_party/gpui-kit`, which is upstream's code, in upstream's workspace, with its manifests and lints: a change to it is written as upstream would write it, to upstream's standards, so it can go upstream as it is, as `third_party/README.md` says.
 
 Two ideas sit behind the rules:
 
@@ -11,7 +11,7 @@ Two ideas sit behind the rules:
 
 - `rust-toolchain.toml` pins Rust's version and components, and rustup installs them on first use. There's no `rust-version`: nothing is published, so the pin is the only version to keep.
 - Every crate inherits `[workspace.package]`, sets `[lints] workspace = true`, and takes each dependency from `[workspace.dependencies]`, turning on only the features it uses. A dependency only one platform's code calls goes in that platform's `[target.'cfg(…)'.dependencies]`, since Cargo's `unused_dependencies` fails the build on the others.
-- `[workspace.dependencies]` gives each crate its full version, such as `serde = "1.0.229"` rather than `"1"`, so `Cargo.toml` says which version each is on. Renovate raises them as new ones come out, as `.github/renovate.json5` says, but for `gpui-kit`, which is on the release of our copy of it, and `gpui-pre-apple`, which has to be the kit's GPUI: `tools/kit-sync` moves both to the versions the copy has. The crates under ours are only in `Cargo.lock`.
+- `[workspace.dependencies]` gives each crate its full version, such as `serde = "1.0.229"` rather than `"1"`, so `Cargo.toml` says which version each is on. Renovate raises them as new ones come out, as `.github/renovate.json5` says, but for `gpui-kit`, which is taken from our copy by path, and `gpui-pre-apple`, which has to be the kit's GPUI: `tools/kit-sync` moves both to the versions the copy has. The crates under ours are only in `Cargo.lock`.
 - A crate's version is three days old before Cargo takes it, as `.cargo/config.toml` has it, and before Renovate proposes it: time for scanners to find malware, and, for a new crate, the 72 hours in which crates.io lets its owner delete it. Renovate proposes a security fix at once, but Cargo still waits for it, unless it's taken by hand, as `.cargo/config.toml` says.
 - `Cargo.lock` is committed, and commands that check something use `--locked`.
 - Tests run under `cargo test`, and CI runs them with nextest, which runs every test binary's tests in one pool where `cargo test` runs one binary after another. nextest skips doc tests, so CI runs those with `cargo test --doc`. nextest gives each test a process of its own, and `cargo test` runs a binary's tests in one process, so a test has to pass both ways. So a `OnceLock` in a test runs once per test under nextest. Work that should happen once per run, such as building a helper, needs a file lock in `CARGO_TARGET_TMPDIR`, keyed by `NEXTEST_RUN_ID`.
