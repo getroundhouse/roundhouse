@@ -6,7 +6,8 @@ use protocol::model::{GitHubRepository, PullRequestNumber, PullRequestSelection,
 use protocol::worker::ReadRemotePullRequests;
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
+use tokio::time::Instant;
 mod groups;
 use crate::worker_link::WorkerLink;
 pub(super) use groups::GroupKey;

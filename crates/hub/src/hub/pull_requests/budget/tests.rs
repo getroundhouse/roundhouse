@@ -1,7 +1,8 @@
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use protocol::model::{Checks, Local, MergeState, PrState, PullRequest, PullRequestFound, Review};
 use protocol::worker::RateLimit;
+use tokio::time::Instant;
 
 use super::{Asked, BURST, Budget, GITHUB_SAID_FOR, PER_MINUTE, calls_to_read};
 

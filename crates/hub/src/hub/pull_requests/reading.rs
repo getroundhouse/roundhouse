@@ -11,8 +11,9 @@ use protocol::worker::{GithubRateLimit, PullRequestReply};
 use schedule::{Schedule, Went};
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tokio::sync::{Mutex as AsyncMutex, OwnedMutexGuard};
+use tokio::time::Instant;
 use tracing::debug;
 
 /// Who a read is for.
@@ -106,7 +107,7 @@ impl Reading {
         let last =
             self.schedules.lock().get(id).map(|last| last.read_at).max(self.remote_read_at.lock().get(id).copied());
         if let Some(last) = last {
-            tokio::time::sleep_until((last + spacing).into()).await;
+            tokio::time::sleep_until(last + spacing).await;
         }
     }
 }
