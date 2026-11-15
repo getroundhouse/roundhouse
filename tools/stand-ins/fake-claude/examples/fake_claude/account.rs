@@ -19,12 +19,16 @@ const RESETS_AT_S: u64 = 4_102_444_800;
 /// What `get_context_usage` answers: each part of the context, what's used of how much, and more that the worker
 /// doesn't keep, such as the grid the real CLI draws and the user's skills by path. The conversation's file says how
 /// much has been said, so a resumed conversation is as full as it was. A long one fills the context and goes on,
-/// since nothing here compacts it.
-pub(crate) fn context_usage(conversation: &Path) -> Value {
+/// since nothing here compacts it. Once `$FAKE_CLAUDE_STATE/no-context` exists, it doesn't know the request, as a CLI
+/// from before it could say doesn't, so the adapter stops asking, and nothing comes from the agent after a turn's end.
+pub(crate) fn context_usage(conversation: &Path) -> Result<Value, String> {
+    if in_state(conversation, "no-context") {
+        return Err("Unsupported control request subtype: get_context_usage".to_string());
+    }
     let said = std::fs::read_to_string(conversation).unwrap_or_default();
     let messages = said.lines().count() as u64 * TOKENS_A_LINE;
     let used = BASE_TOKENS + messages;
-    json!({
+    Ok(json!({
         "categories": [
             {"id": "system_prompt", "name": "System prompt", "tokens": 3_000, "color": "promptBorder", "kind": "used"},
             {"id": "system_tools", "name": "System tools", "tokens": 12_000, "color": "inactive", "kind": "used"},
@@ -47,7 +51,7 @@ pub(crate) fn context_usage(conversation: &Path) -> Value {
         "skills": {"totalSkills": 1, "tokens": 90, "skillFrontmatter": [
             {"name": "deploy", "source": "userSettings", "path": "/home/user/.claude/skills/deploy/SKILL.md", "tokens": 90},
         ]},
-    })
+    }))
 }
 
 /// The line the real CLI writes once its first turn has asked the model for something, saying how much of the

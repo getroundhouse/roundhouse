@@ -324,7 +324,7 @@ fn control(out: &Out, value: &Value, conversation: &Path) -> Option<Input> {
             );
         }
         Some("get_context_usage") => {
-            answer_control(out, &value["request_id"], Ok(account::context_usage(conversation)));
+            answer_control(out, &value["request_id"], account::context_usage(conversation));
         }
         Some("get_usage") => {
             answer_control(out, &value["request_id"], Ok(account::usage(conversation)));

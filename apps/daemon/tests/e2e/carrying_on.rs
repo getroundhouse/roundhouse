@@ -4,7 +4,6 @@
 #![cfg(test)]
 
 use std::path::{Path, PathBuf};
-use std::time::Duration;
 
 use client_core::{Client, Restart};
 use protocol::event::{ApprovalDecision, EventBody, SessionEvent};
@@ -262,18 +261,22 @@ fn an_agent_at_work_while_a_restart_waits(stack: &Stack) -> u32 {
     agent
 }
 
-/// So a worker doesn't keep for good what its hub has recorded, and send it all again to the next hub.
+/// So the next hub isn't sent again what the last one recorded: a hub that leaves its worker for the next, as a
+/// restart does, waits for the worker to say it has let go of it. What a running hub says, which is all a crash leaves,
+/// is in the hub's own tests, in `worker_link::acks`.
 #[test]
 fn a_worker_lets_go_of_what_its_hub_said_it_recorded() {
     let mut stack = Stack::start();
+    // Its agent would say how full its context is after its turn ends, which could come after the hub last said what
+    // it recorded, and be kept for the next hub, rightly.
+    std::fs::create_dir_all(stack.agent_state()).unwrap();
+    std::fs::write(stack.agent_state().join("no-context"), "").unwrap();
     let client = stack.client();
     let (workspace, session) = stack.workspace(&client);
     client.session_prompt(&session.id, "say:first", None).unwrap();
     wait_for_turn_end(&client, &session.id, 1);
-    // Longer than the hub gathers what it records before saying so.
-    std::thread::sleep(Duration::from_millis(500));
     drop(client);
-    stack.kill_hub();
+    restart(&mut stack);
 
     let instance = stack.paths().instances_dir.join(workspace.instance_id.to_string());
     let mut next = Attached::next_hub(&stack.path("workspaces"), &instance);
