@@ -230,8 +230,10 @@ fn on_its_own_build(line: &BuildLine) -> bool {
     line.other_hub.is_none() && line.update.is_none()
 }
 
+/// The older hub going, and then the app on its own, apart, so a test that times out says which never came.
 fn wait_for_the_apps_own_hub(ui: &mut Ui<'_>, older: &mut StandInHub) {
-    ui.wait("the app's own hub", |ui| older.0.try_wait().unwrap().is_some() && on_its_own_build(&ui.build_line()));
+    ui.wait("the older hub to go", |_| older.0.try_wait().unwrap().is_some());
+    ui.wait("the app's own hub", |ui| on_its_own_build(&ui.build_line()));
 }
 
 /// Rather than wait for it to be idle, which a busy hub may not be for a long time. The app says what's running then,

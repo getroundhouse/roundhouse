@@ -98,10 +98,10 @@ fn reply(writer: &Writer, id: u64, outcome: ReplyOutcome) {
     send(writer, &HubFrame::Reply { id, outcome });
 }
 
-/// Tells a client following its records that one has changed whenever a test changes how many agents are running, as
-/// a real hub sends the session that started or finished. The record is a repository, which is simpler to make.
-fn notice_agents(writer: &Writer, subscription_id: u64, args: &Args, paths: &Paths) {
-    let mut said = written(paths, RUNNING, args.running);
+/// Tells a client following its records that one has changed whenever a test changes how many agents are running from
+/// `said`, as a real hub sends the session that started or finished. The record is a repository, which is simpler to
+/// make.
+fn notice_agents(writer: &Writer, subscription_id: u64, mut said: u32, args: &Args, paths: &Paths) {
     for rev in 1.. {
         let running = loop {
             std::thread::sleep(Duration::from_millis(10));
@@ -166,9 +166,14 @@ fn serve(stream: UnixStream, args: &Arc<Args>, paths: &Arc<Paths>) {
             ClientRequest::FeedSubscribe(subscriptions::FeedSubscribe { subscription_id })
                 if args.speaks_this_protocol =>
             {
+                // How many it says are running as the client subscribes, before it replies, as a real hub's feed goes
+                // on from its records then. Read by the thread that tells of changes, it would be read whenever that
+                // thread started, which can be after the client has caught up and a test has changed it, and that
+                // change would never be told.
+                let said = written(paths, RUNNING, args.running);
                 reply(&writer, request.id, ReplyOutcome::Response(ClientResponse::Ok));
                 let (writer, args, paths) = (writer.clone(), args.clone(), paths.clone());
-                std::thread::spawn(move || notice_agents(&writer, subscription_id, &args, &paths));
+                std::thread::spawn(move || notice_agents(&writer, subscription_id, said, &args, &paths));
             }
             ClientRequest::RecordsList if args.speaks_this_protocol => {
                 let nothing = ClientResponse::Records(Records::default());
