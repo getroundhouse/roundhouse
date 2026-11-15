@@ -1,4 +1,4 @@
-use super::{branches, names};
+use super::{Worktrees, branches, names};
 use names::no_branch_in_the_way;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{BranchName, CommitId, GitDiff, GitFile, GitStatus};
@@ -19,6 +19,8 @@ pub(super) fn git_error(message: impl Into<String>) -> ApiError {
 }
 
 pub(super) struct GitOutput {
+    /// `git` and its arguments, which an error names.
+    command: String,
     pub(super) success: bool,
     pub(super) code: Option<i32>,
     pub(super) stdout: String,
@@ -50,6 +52,7 @@ pub(super) fn command(cwd: &Path, args: &[&str]) -> Command {
 pub(super) async fn git(cwd: &Path, args: &[&str]) -> Result<GitOutput, ApiError> {
     let output = run(cwd, args).await?;
     Ok(GitOutput {
+        command: format!("git {}", args.join(" ")),
         success: output.status.success(),
         code: output.status.code(),
         stdout: String::from_utf8_lossy_owned(output.stdout),
@@ -58,11 +61,13 @@ pub(super) async fn git(cwd: &Path, args: &[&str]) -> Result<GitOutput, ApiError
 }
 
 pub(super) async fn git_ok(cwd: &Path, args: &[&str]) -> Result<String, ApiError> {
-    let output = git(cwd, args).await?;
-    if output.success {
-        Ok(output.stdout)
-    } else {
-        Err(git_error(format!("git {} failed: {}", args.join(" "), output.stderr)))
+    git(cwd, args).await?.succeeded()
+}
+
+impl GitOutput {
+    /// What git printed, if it succeeded, or an error naming the command, with what git said.
+    pub(super) fn succeeded(self) -> Result<String, ApiError> {
+        if self.success { Ok(self.stdout) } else { Err(git_error(format!("{} failed: {}", self.command, self.stderr))) }
     }
 }
 
@@ -141,16 +146,22 @@ pub(super) async fn off_thread<T: Send + 'static>(
 
 /// Fetches `base` first if it's one of `origin`'s branches, so a worktree starts from its latest commit even if the
 /// repository's copy is behind. A failed fetch isn't fatal, and warns: working offline from the last known commit is
-/// better than not working.
-pub(super) async fn fetch_if_remote(repo: &Path, base: &str, warnings: &mut Vec<String>) {
-    let Some(remote_branch) = base.strip_prefix("origin/") else { return };
-    let args = ["fetch", "--quiet", "origin", remote_branch];
-    match tokio::time::timeout(FETCH_TIMEOUT, git(repo, &args)).await {
+/// better than not working. Holds `worktrees` for reading, since a fetch reads every worktree, and waits for them before
+/// its own time limit starts. Fails only if they can't be held, which would fail the worktree's making next.
+pub(super) async fn fetch_if_remote(
+    worktrees: &Worktrees,
+    base: &str,
+    warnings: &mut Vec<String>,
+) -> Result<(), ApiError> {
+    let Some(remote_branch) = base.strip_prefix("origin/") else { return Ok(()) };
+    let reading = worktrees.reading().await?;
+    match tokio::time::timeout(FETCH_TIMEOUT, reading.fetch(&["--quiet", "origin", remote_branch])).await {
         Ok(Ok(output)) if output.success => {}
         Ok(Ok(output)) => warnings.push(format!("couldn't fetch {base}, using the local copy: {}", output.stderr)),
         Ok(Err(e)) => warnings.push(format!("couldn't fetch {base}, using the local copy: {}", e.message)),
         Err(_) => warnings.push(format!("fetching {base} timed out, using the local copy")),
     }
+    Ok(())
 }
 
 pub async fn prepare_workspace(
@@ -177,8 +188,9 @@ pub async fn prepare_workspace(
         None => default_base(&repo).await?,
     };
 
+    let worktrees = Worktrees::of(&repo).await?;
     let mut warnings = Vec::new();
-    fetch_if_remote(&repo, &base, &mut warnings).await;
+    fetch_if_remote(&worktrees, &base, &mut warnings).await?;
     if !ref_exists(&repo, &base).await? {
         return Err(ApiError::new(ErrorCode::InvalidRequest, format!("base {base} doesn't exist in {repo_path}")));
     }
@@ -187,7 +199,8 @@ pub async fn prepare_workspace(
     let path_str = path.to_string_lossy().into_owned();
     // --no-track: otherwise a branch made from origin/main tracks it, and a bare `git push` or
     // `git pull` from the workspace would act on main.
-    git_ok(&repo, &["worktree", "add", "--no-track", "-b", branch.as_str(), &path_str, &base]).await?;
+    let args = ["--no-track", "-b", branch.as_str(), &path_str, &base];
+    worktrees.changing().await?.add(&args).await?.succeeded()?;
     let branches = branches::read_now(&path).await.ok();
     Ok(WorkspaceReady { path: path_str, branch: branch.clone(), base_ref: base, warnings, branches })
 }
@@ -200,9 +213,10 @@ pub async fn restore_workspace(repo_path: &str, path: &str, branch: &BranchName)
     if !ref_exists(&repo, &format!("refs/heads/{branch}")).await? {
         return Err(ApiError::new(ErrorCode::Conflict, format!("branch {branch} no longer exists")));
     }
+    let changing = Worktrees::of(&repo).await?.changing().await?;
     // A worktree deleted outside this app stays registered, and would block re-adding this path.
-    git_ok(&repo, &["worktree", "prune"]).await?;
-    git_ok(&repo, &["worktree", "add", path, branch.as_str()]).await?;
+    changing.prune().await?;
+    changing.add(&[path, branch.as_str()]).await?.succeeded()?;
     Ok(())
 }
 

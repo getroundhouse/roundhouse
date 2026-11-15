@@ -5,7 +5,9 @@ use protocol::model::{BranchName, CommitId};
 use protocol::worker::ChildBranch;
 
 use super::add_child_worktree;
+use crate::git::Worktrees;
 use crate::git::tests::{new_repo, prepare, run};
+use crate::git::worktrees::tests::while_one_is_made;
 
 /// A repository, and a workspace `alder` with a commit of its own.
 struct Made {
@@ -31,6 +33,7 @@ fn children(root: &Path) -> PathBuf {
 }
 
 /// What adding a worktree gave.
+#[derive(Debug)]
 struct Added {
     path: PathBuf,
     commit: CommitId,
@@ -215,8 +218,9 @@ async fn a_branch_made_for_a_path_git_then_refuses_is_deleted() {
     std::fs::create_dir_all(&path).unwrap();
     std::fs::write(path.join("made-meanwhile"), "").unwrap();
 
-    let added =
-        super::on_a_new_branch(&made.alder, &"alder/raced".into(), "HEAD", &path, &mut Vec::new()).await.unwrap();
+    let worktrees = Worktrees::of(&made.alder).await.unwrap();
+    let raced = "alder/raced".into();
+    let added = super::on_a_new_branch(&made.alder, &worktrees, &raced, "HEAD", &path, &mut Vec::new()).await.unwrap();
 
     assert!(!added.success, "git made it");
     assert!(run(&made.repo, &["branch", "--list", "alder/raced"]).is_empty(), "the branch was kept: {}", added.stderr);
@@ -298,4 +302,17 @@ async fn a_base_of_origin_s_is_fetched_first_and_isnt_tracked() {
     assert_eq!(added.commit.as_str(), latest);
     assert!(added.warnings.is_empty(), "{:?}", added.warnings);
     assert!(tracks_nothing(&added.path));
+}
+
+/// On a new branch and on one that's there, since each has git add the worktree its own way.
+#[tokio::test]
+async fn another_worktree_waits_for_one_of_the_repository_s_being_made() {
+    let made = workspace().await;
+    run(&made.repo, &["branch", "alder/there"]);
+
+    let new = while_one_is_made(&made.repo, add(&made, "alder/next", new("alder/next", "HEAD"))).await.unwrap();
+    let existing = while_one_is_made(&made.repo, add(&made, "alder/there", existing("alder/there"))).await.unwrap();
+
+    assert!(new.path.join("a.txt").exists());
+    assert!(existing.path.join("a.txt").exists());
 }

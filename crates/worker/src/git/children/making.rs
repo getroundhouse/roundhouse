@@ -1,6 +1,6 @@
 use super::super::removal::remove_part_made;
 use super::super::{
-    GitOutput, commit_of, fetch_if_remote, git, git_ok, make_parent, no_branch_in_the_way, ref_exists,
+    GitOutput, Worktrees, commit_of, fetch_if_remote, git, make_parent, no_branch_in_the_way, ref_exists,
     reject_option_like, valid_branch_name,
 };
 use protocol::client::{ApiError, ErrorCode};
@@ -63,12 +63,10 @@ fn in_its_folder(own: &Path, path: &Path) -> Result<(), ApiError> {
 /// Runs `git worktree add` for `path`, which is fine, with a warning, if git made the worktree anyway, as when a
 /// `post-checkout` hook fails after it's checked out.
 async fn make(own: &Path, on: &ChildBranch, path: &Path, warnings: &mut Vec<String>) -> Result<(), ApiError> {
-    // A worktree deleted without git, as by an agent's `rm -rf`, stays registered, and would refuse its path and
-    // its branch.
-    git_ok(own, &["worktree", "prune"]).await?;
+    let worktrees = Worktrees::of(own).await?;
     let added = match on {
-        ChildBranch::New { branch, base } => on_a_new_branch(own, branch, base, path, warnings).await?,
-        ChildBranch::Existing { branch } => on_a_branch(own, branch, path).await?,
+        ChildBranch::New { branch, base } => on_a_new_branch(own, &worktrees, branch, base, path, warnings).await?,
+        ChildBranch::Existing { branch } => on_a_branch(own, &worktrees, branch, path).await?,
     };
     if added.success {
         return Ok(());
@@ -116,6 +114,7 @@ async fn checked_out(path: &Path) -> Option<String> {
 /// Runs `git worktree add` for `path` on a new branch from `base`, unless git already has a branch in the way.
 pub(super) async fn on_a_new_branch(
     own: &Path,
+    worktrees: &Worktrees,
     branch: &BranchName,
     base: &str,
     path: &Path,
@@ -123,7 +122,7 @@ pub(super) async fn on_a_new_branch(
 ) -> Result<GitOutput, ApiError> {
     reject_option_like(base, "a base ref")?;
     no_branch_in_the_way(own, branch).await?;
-    fetch_if_remote(own, base, warnings).await;
+    fetch_if_remote(worktrees, base, warnings).await?;
     let Some(commit) = commit_of(own, base).await? else {
         return Err(ApiError::new(ErrorCode::InvalidRequest, format!("{base} isn't a branch, tag or commit here")));
     };
@@ -131,8 +130,7 @@ pub(super) async fn on_a_new_branch(
     // From the commit, not the base's name, and --no-track, as for a workspace's own, so the branch tracks nothing,
     // and a bare `git push` or `git pull` there doesn't act on the base.
     let added =
-        git(own, &["worktree", "add", "--no-track", "-b", branch.as_str(), &path.to_string_lossy(), commit.as_str()])
-            .await?;
+        add(worktrees, &["--no-track", "-b", branch.as_str(), &path.to_string_lossy(), commit.as_str()]).await?;
     // Git makes the branch before it looks at the path, so it's there unless git refused it as one that was.
     if !added.success && !path.join(".git").exists() && !added.stderr.contains("a branch named") {
         // It holds nothing else, unless it's moved since.
@@ -142,10 +140,22 @@ pub(super) async fn on_a_new_branch(
 }
 
 /// Runs `git worktree add` for `path` on `branch` as it is.
-async fn on_a_branch(own: &Path, branch: &BranchName, path: &Path) -> Result<GitOutput, ApiError> {
+async fn on_a_branch(
+    own: &Path,
+    worktrees: &Worktrees,
+    branch: &BranchName,
+    path: &Path,
+) -> Result<GitOutput, ApiError> {
     if !ref_exists(own, &format!("refs/heads/{branch}")).await? {
         return Err(ApiError::new(ErrorCode::NotFound, format!("there's no branch {branch}")));
     }
     make_parent(path).await?;
-    git(own, &["worktree", "add", &path.to_string_lossy(), branch.as_str()]).await
+    add(worktrees, &[&path.to_string_lossy(), branch.as_str()]).await
+}
+
+/// Runs `git worktree add` with `args`, once git has forgotten the worktrees deleted without it.
+async fn add(worktrees: &Worktrees, args: &[&str]) -> Result<GitOutput, ApiError> {
+    let changing = worktrees.changing().await?;
+    changing.prune().await?;
+    changing.add(args).await
 }

@@ -20,12 +20,14 @@ pub(crate) mod remote_pull_requests;
 mod removal;
 #[cfg(test)]
 pub(crate) mod tests;
+mod worktrees;
 
 pub(crate) use children::add_child_worktree;
 pub use names::names_git_has;
 use names::no_branch_in_the_way;
 pub use pull_request::{pull_request, rate_limit};
 pub use removal::remove_workspace;
+use worktrees::Worktrees;
 
 mod commands;
 
