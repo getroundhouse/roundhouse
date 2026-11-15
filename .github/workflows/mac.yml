@@ -11,6 +11,7 @@ on:
       - .cargo/**
       - .github/workflows/mac.yml
       - .github/actions/zig/**
+      - .github/only-descriptions-changed.py
   push:
     branches: [main]
     paths:
@@ -20,6 +21,7 @@ on:
       - .cargo/**
       - .github/workflows/mac.yml
       - .github/actions/zig/**
+      - .github/only-descriptions-changed.py
   workflow_dispatch:
 
 permissions:
@@ -34,7 +36,34 @@ env:
   CARGO_PROFILE_DEV_DEBUG: line-tables-only
 
 jobs:
+  # Skips the Mac when the only files above that changed are Cargo.toml files that differ from the base's only in a
+  # package's description, comments or layout, since none of those builds differently on a Mac. The crates'
+  # descriptions grow with what each does, so many PRs change nothing else here.
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      run: ${{ steps.diff.outputs.run }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # A PR's base is its base branch, as in ci.yml, and a push's is where main was before it. A dispatch has neither,
+      # and an error runs the Mac.
+      - id: diff
+        env:
+          BASE: ${{ github.base_ref || github.event.before }}
+        run: |
+          run=true
+          if [ -n "$BASE" ] && git fetch --quiet --depth=1 origin "$BASE" &&
+            git diff --quiet FETCH_HEAD HEAD -- Cargo.lock rust-toolchain.toml .cargo .github/workflows/mac.yml \
+              .github/actions/zig .github/only-descriptions-changed.py &&
+            python3 .github/only-descriptions-changed.py FETCH_HEAD; then
+            run=false
+          fi
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+
   mac:
+    needs: changes
+    if: needs.changes.outputs.run == 'true'
     runs-on: macos-26
     timeout-minutes: 60
     steps:
