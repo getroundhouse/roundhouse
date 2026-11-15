@@ -65,32 +65,32 @@ fn clients_only_reach_the_hub_through_the_protocol() {
     }
 }
 
-/// Checks that `package` needs none of our other crates, no async runtime and no UI, so any client on any device can use
-/// it.
-fn needs_none_of_ours_no_async_runtime_and_no_ui(package: &str) {
+/// Checks that `package` needs none of our other crates but those in `but`, no async runtime and no UI, so any client
+/// on any device can use it.
+fn needs_none_of_ours_no_async_runtime_and_no_ui(package: &str, but: &[&str]) {
     let metadata = metadata();
     let closure = runtime_closure(&metadata, package);
     let packages = metadata["packages"].as_array().unwrap();
     let ours: Vec<&str> =
         packages.iter().filter(|p| p["source"].is_null()).filter_map(|p| p["name"].as_str()).collect();
     assert!(ours.contains(&"protocol"), "ours are the packages with no source, which come from paths in the workspace");
-    for banned in ours.into_iter().chain(["tokio", "async-std", "smol", "gpui"]) {
+    for banned in ours.into_iter().filter(|name| !but.contains(name)).chain(["tokio", "async-std", "smol", "gpui"]) {
         assert!(!closure.contains(banned), "{package} depends on {banned}");
     }
 }
 
 /// Dictation is the device's alone, with threads rather than a runtime and no UI, so any client on any device can hear
-/// with it.
+/// with it. It downloads its model with `fetching`, which is free of the same.
 #[test]
-fn dictation_needs_none_of_our_other_crates_no_async_runtime_and_no_ui() {
-    needs_none_of_ours_no_async_runtime_and_no_ui("dictation");
+fn dictation_needs_none_of_our_other_crates_but_fetching_no_async_runtime_and_no_ui() {
+    needs_none_of_ours_no_async_runtime_and_no_ui("dictation", &["fetching"]);
 }
 
 /// Fetching knows nothing of what it fetches, and runs on the caller's thread, so any client on any device can fetch
 /// with it.
 #[test]
 fn fetching_needs_none_of_our_other_crates_no_async_runtime_and_no_ui() {
-    needs_none_of_ours_no_async_runtime_and_no_ui("fetching");
+    needs_none_of_ours_no_async_runtime_and_no_ui("fetching", &[]);
 }
 
 #[test]

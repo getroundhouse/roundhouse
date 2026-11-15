@@ -7,24 +7,36 @@ publish.workspace = true
 license.workspace = true
 
 [features]
+# Downloading the model and deleting it, which brings in `fetching`, and through it HTTP and TLS. A feature, so a client
+# that downloads it another way, as an iPhone app might in the background, needn't build them.
+download = ["dep:fetching"]
 # What only tests use: an engine that stands in for the model, and audio a test feeds a recording itself.
 testing = []
 
 [dependencies]
+fetching = { workspace = true, optional = true }
 flume.workspace = true
 parking_lot.workspace = true
+# The Fourier transform the model's features are made with.
+realfft.workspace = true
+serde_json.workspace = true
 thiserror.workspace = true
 
-# The microphone, through Core Audio, and asking whether the app may use it.
+# The microphone, through Core Audio, and asking whether the app may use it, and the model, on Core ML.
 [target.'cfg(target_os = "macos")'.dependencies]
 block2.workspace = true
 cpal.workspace = true
 objc2.workspace = true
 objc2-av-foundation.workspace = true
+objc2-core-ml.workspace = true
+objc2-foundation = { workspace = true, features = ["NSDictionary", "NSError", "NSProcessInfo", "NSURL", "NSValue"] }
 
 [dev-dependencies]
-dictation = { workspace = true, features = ["testing"] }
+dictation = { workspace = true, features = ["download", "testing"] }
+fetching = { workspace = true, features = ["testing"] }
 proptest.workspace = true
+ring.workspace = true
+tempfile.workspace = true
 
 [lints]
 workspace = true
