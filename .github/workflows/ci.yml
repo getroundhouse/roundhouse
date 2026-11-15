@@ -144,7 +144,8 @@ jobs:
           path: .zig-cache
           key: ${{ steps.zig.outputs.cache-primary-key }}
 
-  # 16 cores, since PRs and the queue wait for the tests, and nextest runs two per core, as .config/nextest.toml says.
+  # 16 cores, since PRs and the queue wait for the tests, and nextest runs two per core, as .config/nextest.toml says,
+  # which also has the 10s a test may take, set for this runner at that many at once.
   # A cold run took over 20 minutes on 2. On RunsOn in our AWS account, since GitHub bills its 16-core runners even on a
   # public repository. A Spot instance AWS reclaims during a queue run drops the PR from the queue, before RunsOn reruns
   # the job. From the 8th generation on, since on c7g and r7g the tests ran about 1.4 times as long as on c9g.
@@ -180,8 +181,13 @@ jobs:
           # target/ fits only the image and path it was built on.
           key: runs-on-arm64-16-gen8-test-deps-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', '**/Cargo.toml') }}
           restore-keys: ${{ github.ref != 'refs/heads/main' && 'runs-on-arm64-16-gen8-test-deps-' || '' }}
-      # One pool for every binary's tests. It skips doc tests, so they run after.
-      - run: cargo nextest run --profile ci --workspace --locked
+      # One pool for every binary's tests. It skips doc tests, so they run after. The report the cache brought back with
+      # target/ goes first, so what reads it next reads only this run's.
+      - run: rm -f target/nextest/ci/junit.xml && cargo nextest run --profile ci --workspace --locked
+      # Fails the job for each test that took longer than 10s, as .config/nextest.toml says, even one that passed. After
+      # a run with a failure too, so both are said.
+      - if: ${{ !cancelled() && hashFiles('target/nextest/ci/junit.xml') != '' }}
+        run: python3 .github/tests-over-limit.py target/nextest/ci/junit.xml
       - run: cargo test --workspace --doc --locked
       - if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
         run: cargo clean --workspace
