@@ -2,10 +2,10 @@
 use super::screens::SCREENS;
 use super::{
     approval_chats, approved, background_chats, baselines, cache_screens, call_screens, capture, colours,
-    compaction_chats, component_screens, context_screens, controls, corners, diff_screens, failure_chats,
-    failures_in_a_row, heights, home_screens, icon_sizes, kinds_of_text, mark_states, own_turn_chats, pull_requests,
-    settings_screens, sidebar_screens, spaces, steps, subagent_chats, tool_screens, turn_screens, update_screens,
-    workspace_screens,
+    compaction_chats, component_screens, context_screens, controls, corners, dictation_screens, diff_screens,
+    failure_chats, failures_in_a_row, heights, home_screens, icon_sizes, kinds_of_text, mark_states, own_turn_chats,
+    pull_requests, settings_screens, sidebar_screens, spaces, steps, subagent_chats, tool_screens, turn_screens,
+    update_screens, workspace_screens,
 };
 use approved::Verdict;
 use capture::Picture;
@@ -148,6 +148,7 @@ fn screens() -> impl Iterator<Item = &'static steps::Screen> {
         .chain(sidebar_screens::SCREENS)
         .chain(home_screens::SCREENS)
         .chain(settings_screens::SCREENS)
+        .chain(dictation_screens::SCREENS)
         .chain(component_screens::SCREENS)
 }
 

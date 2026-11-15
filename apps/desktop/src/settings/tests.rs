@@ -84,6 +84,7 @@ fn saving_keeps_what_a_newer_build_wrote() {
             "notify": true,
             "play_sound": true,
             "sound": "chime",
+            "dictation": "ask_first",
             "from_later": [1, 2],
         })
     );

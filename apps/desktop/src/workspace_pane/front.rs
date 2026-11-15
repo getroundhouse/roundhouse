@@ -23,7 +23,7 @@ impl WorkspacePane {
             tab.in_front = front == Showing::File;
         }
         self.subagents.set_in_front(front == Showing::Subagent);
-        // The chat is read only while it's in front.
+        // The chat is read only while it's in front, and is dictated to only while its composer is.
         self.showing_changed(cx);
         cx.emit(PaneEvent::Showing);
         // Not behind a dialog, where typing meant for it would come here unseen. The app focuses the pane showing once

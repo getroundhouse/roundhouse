@@ -16,6 +16,7 @@ pub(super) fn page(hub: &OfHub) -> Page {
             is_on: Box::new(|cx| Some(get(cx).always_expand_thinking)),
             set: Rc::new(|on, cx| change(cx, |settings| settings.always_expand_thinking = on)),
         },
+        status_box: None,
     };
     let keep_awake = Setting {
         name: "Keep computer awake while agents are working",
@@ -25,6 +26,7 @@ pub(super) fn page(hub: &OfHub) -> Page {
             |settings| Some(settings.keep_awake),
             |on| HubSettingsChange { keep_awake: Some(on), ..HubSettingsChange::default() },
         ),
+        status_box: None,
     };
     let allow_asked = Setting {
         name: "Skip Claude's safety checks",
@@ -34,8 +36,12 @@ pub(super) fn page(hub: &OfHub) -> Page {
             |settings| settings.allow_asked_in_full_access,
             |on| HubSettingsChange { allow_asked_in_full_access: Some(on), ..HubSettingsChange::default() },
         ),
+        status_box: None,
     };
-    let settings = vec![always_expand_thinking, keep_awake, allow_asked];
+    let mut settings = vec![always_expand_thinking, keep_awake, allow_asked];
+    if dictation::HEARS {
+        settings.push(super::dictation_row::setting());
+    }
     Page { id: PageId::General, name: "General", icon: Lucide::Settings2, body: Body::Settings(settings) }
 }
 

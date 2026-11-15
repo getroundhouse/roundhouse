@@ -1,3 +1,4 @@
+use crate::dictating::DictationChoice;
 use crate::saving::{Failure, Saver, write_json};
 use crate::sounds::Sound;
 use crate::workspace_order::Sort;
@@ -37,6 +38,10 @@ pub(crate) struct Settings {
     pub(crate) play_sound: bool,
     #[serde(default, deserialize_with = "Sound::or_chime")]
     pub(crate) sound: Sound,
+    /// Whether the composer can be dictated to, once the model is downloaded and prepared. It asks first until the
+    /// person chooses, since turning it on downloads 2.4 GB.
+    #[serde(default)]
+    pub(crate) dictation: DictationChoice,
     /// Settings this build doesn't know, which a newer one wrote, kept so that saving here doesn't lose them.
     #[serde(flatten)]
     pub(super) others: Map<String, Value>,
@@ -52,6 +57,7 @@ impl Default for Settings {
             notify: on(),
             play_sound: on(),
             sound: Sound::default(),
+            dictation: DictationChoice::default(),
             others: Map::new(),
         }
     }
@@ -139,6 +145,11 @@ pub(crate) fn change(cx: &mut App, change: impl FnOnce(&mut Settings)) {
     }
     current.saver.save(settings.clone());
     cx.update_global::<Current, _>(|current, _| current.settings = settings);
+}
+
+/// Has the app hear whenever the settings change, for what follows a setting outside any view.
+pub(crate) fn observe_in_app(cx: &mut App, changed: impl FnMut(&mut App) + 'static) -> Subscription {
+    cx.observe_global::<Current>(changed)
 }
 
 /// Has a view hear whenever the settings change.

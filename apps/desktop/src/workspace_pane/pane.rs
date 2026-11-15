@@ -1,4 +1,4 @@
-use super::{attaching, closed, composer, file_tab, queue, reading, subagent_tab};
+use super::{attaching, closed, composer, dictating, file_tab, holding_space, queue, reading, subagent_tab};
 use crate::all_files::AllFiles;
 use crate::attached::Attachments;
 use crate::busy::Busy;
@@ -108,6 +108,10 @@ pub struct WorkspacePane {
     /// The app is waiting on the hub for a new title for this workspace.
     pub(super) retitling: bool,
     pub(super) reading: Reading,
+    /// What's being dictated into the composer, which ends with the pane.
+    pub(super) dictation: Option<dictating::Underway>,
+    /// Space, pressed where the prompt is typed and not let go of, which may be about to dictate.
+    pub(super) space_down: Option<holding_space::SpaceDown>,
     pub composer: Entity<TextareaState>,
     pub diff: Option<Diff>,
     pub(super) subagents: subagent_tab::Subagents,
@@ -150,6 +154,10 @@ impl WorkspacePane {
                 transcript.update(cx, |t, cx| t.set_thinking_open(crate::settings::get(cx).always_expand_thinking, cx));
             }
         });
+        // The microphone is as dictation stands.
+        let on_dictation = crate::dictating::observe(cx, |_, cx| cx.notify());
+        // Any other key forgets Space held towards dictating, a binding's too.
+        let on_keys = cx.observe_keystrokes(|this, event, _, _| this.key_pressed(&event.keystroke));
         let pull_request = Lookup::recorded(shown.workspace()).unwrap_or(Lookup::Looking);
         let mut this = Self {
             client,
@@ -168,6 +176,8 @@ impl WorkspacePane {
             busy: Busy::Free,
             retitling: false,
             reading: Reading::default(),
+            dictation: None,
+            space_down: None,
             composer,
             diff: None,
             subagents: subagent_tab::Subagents::default(),
@@ -179,7 +189,7 @@ impl WorkspacePane {
             behind: false,
             hub: composer::Hub::Here,
             window: window.window_handle(),
-            subscriptions: vec![on_enter, on_settings],
+            subscriptions: vec![on_enter, on_settings, on_dictation, on_keys],
         };
         this.take_kept_drafts(cx);
         // The chat last worked in.

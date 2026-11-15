@@ -14,6 +14,7 @@ mod chats;
 mod checkout;
 mod context;
 mod core_loop;
+mod dictation;
 mod diff_lines;
 mod drafts;
 mod finding;

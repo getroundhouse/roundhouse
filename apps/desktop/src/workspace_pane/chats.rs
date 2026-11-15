@@ -185,6 +185,8 @@ impl WorkspacePane {
                 this.turn_ended(cx);
             }
             TranscriptEvent::Asking { left } => {
+                // The question takes the composer's place.
+                this.dictation_follows_its_composer(cx);
                 if this.transcript().as_ref() == Some(&transcript) {
                     let left = left.clone();
                     this.with_window(cx, move |t, window, cx| t.follow_question(left.as_ref(), window, cx));

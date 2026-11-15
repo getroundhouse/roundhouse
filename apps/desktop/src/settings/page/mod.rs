@@ -3,6 +3,7 @@
 //! page with more to show than a setting's row, such as Accounts, draws what's on it itself.
 
 mod accounts;
+mod dictation_row;
 mod general;
 mod notifications;
 mod rows;

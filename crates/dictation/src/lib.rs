@@ -4,7 +4,8 @@
 //!
 //! [`Dictation`] holds the thread. Each [`Recording`] is heard twice: as it's said, for live text, and a sentence at a
 //! time, cut at the pauses where the live text ends one, for each sentence's final text, which can change words the
-//! live text had. An [`Engine`] is the model that does both.
+//! live text had. An [`Engine`] is the model that does both. The desktop app's composer dictates with it, as
+//! `apps/desktop ──> dictation` in `docs/architecture.md` has it.
 
 #![warn(clippy::wildcard_enum_match_arm)]
 

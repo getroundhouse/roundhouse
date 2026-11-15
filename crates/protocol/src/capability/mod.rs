@@ -37,10 +37,10 @@
 //! conversations are named, grouped, archived and marked read, sharing one on the web, worktrees, a subagent's
 //! included, signing in to an account, which the person does with the agent's own CLI and hands the hub, and reading
 //! or running anything in the worktree for a client. An agent's copy of any of them would be a second record of what
-//! the hub already records. Talking with an agent by voice is left out too, since no client has a way to. So are an
-//! agent's memories, and the schedules it keeps past its process, which carry from one conversation to the next on the
-//! worker's machine, where Roundhouse has no record of them and an instance that comes and goes loses them, so an
-//! adapter turns them off where its agent lets it.
+//! the hub already records. Talking with an agent by voice is left out too, since a client that dictates hears the
+//! person on their device and gives the agent only text. So are an agent's memories, and the schedules it keeps past
+//! its process, which carry from one conversation to the next on the worker's machine, where Roundhouse has no record
+//! of them and an instance that comes and goes loses them, so an adapter turns them off where its agent lets it.
 //!
 //! What these docs say of Claude is of its CLI at 2.1.323, and of Antigravity is of its CLI at 1.5.9. What they say of
 //! Codex at 0.167.0 and opencode at 1.18.30 is read from their source and their servers' schemas, rather than seen

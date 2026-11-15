@@ -35,6 +35,9 @@ The app's keyboard shortcuts. They're written as a Mac's. On Windows and Linux, 
 | `Cmd-.` | Stop the agent's turn |
 | `Shift-Tab` | Turn plan mode on or off |
 | `Enter`, Escape | While changing a queued prompt, keep the change, or leave it as it was |
+| Space, held | On a Mac, once dictation is ready, dictate while it's held, after a moment |
+| `Option-Space`, held | The same, at once |
+| Escape, `Option-Escape` | While dictating, stop, and put the composer back as it was |
 
 ## A question from the agent
 

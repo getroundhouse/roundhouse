@@ -3,6 +3,8 @@
 
 #![cfg(test)]
 
+use desktop::dictating::{DELETE, RETRY, STATUS};
+
 use super::frame::Frame;
 use super::screens::FOCUS;
 use super::steps::{Screen, Step};
@@ -14,6 +16,11 @@ const FIND: &str = "secondary-f";
 
 /// Shows Accounts, once Settings is open.
 const ACCOUNTS: Step = Step::Click("settings-page-accounts");
+
+/// Opens Dictation's choices, once Settings is open, for [`ON`] or [`OFF`] to choose from.
+const DICTATION: Step = Step::Click("settings-dictation");
+const ON: Step = Step::ClickItem("On");
+const OFF: Step = Step::ClickItem("Off");
 
 /// A token pasted into the panel, which is plainly made up.
 const TOKEN: &str = "a-made-up-token";
@@ -103,6 +110,62 @@ pub(crate) const SCREENS: &[Screen] = &[
         world: Some(logins_unkept),
         frame: Frame::Layout,
         steps: &[Step::Select(FOCUS), Step::OpenSettings, ACCOUNTS, Step::WaitFor("accounts-older-hub")],
+    },
+    Screen {
+        name: "settings-dictation-downloading",
+        spec: "settings.md",
+        world: Some(conversation),
+        frame: Frame::Layout,
+        steps: &[
+            Step::Select(FOCUS),
+            Step::StallDictationDownload,
+            Step::OpenSettings,
+            DICTATION,
+            ON,
+            Step::WaitFor(STATUS),
+        ],
+    },
+    Screen {
+        name: "settings-dictation-kept",
+        spec: "settings.md",
+        world: Some(conversation),
+        frame: Frame::Layout,
+        steps: &[
+            Step::Select(FOCUS),
+            Step::DictationModelHere,
+            Step::OpenSettings,
+            DICTATION,
+            OFF,
+            Step::WaitFor(DELETE),
+        ],
+    },
+    Screen {
+        name: "settings-dictation-ready",
+        spec: "settings.md",
+        world: Some(conversation),
+        frame: Frame::Layout,
+        steps: &[
+            Step::Select(FOCUS),
+            Step::DictationModelHere,
+            Step::OpenSettings,
+            DICTATION,
+            ON,
+            Step::WaitFor(DELETE),
+        ],
+    },
+    Screen {
+        name: "settings-dictation-failed",
+        spec: "settings.md",
+        world: Some(conversation),
+        frame: Frame::Layout,
+        steps: &[
+            Step::Select(FOCUS),
+            Step::FailDictationDownload,
+            Step::OpenSettings,
+            DICTATION,
+            ON,
+            Step::WaitFor(RETRY),
+        ],
     },
     Screen {
         name: "settings-older-hub",

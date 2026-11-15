@@ -60,7 +60,7 @@ pub(super) struct Driver {
     pub(super) cx: HeadlessAppContext,
     pub(super) handle: AnyWindowHandle,
     pub(super) view: Entity<AppView>,
-    /// The screen's own directory, for files it pastes.
+    /// The screen's own directory, for files it pastes and the made-up models dictation is given.
     pub(super) dir: PathBuf,
     pub(super) chat: ChatScroll,
 }
@@ -85,24 +85,26 @@ fn sidebar_loaded(pane: &WorkspacePane, cx: &App) -> bool {
 }
 
 impl Driver {
+    /// Selects the workspace called `name`, and waits for its chat, its sidebar of changes and its pull request.
+    fn select(&mut self, name: &str) {
+        let view = self.view.clone();
+        self.cx.update(|cx| {
+            view.update(cx, |v, cx| {
+                let id = v.records().workspaces().iter().find(|w| w.name == name).map(|w| w.id.clone()).unwrap();
+                v.select(id, cx);
+            });
+        });
+        self.wait("the chat, the sidebar of changes and the pull request to load", |view, cx| {
+            selected_pane(view).is_some_and(|pane| {
+                let pane = pane.read(cx);
+                chat_loaded(pane, cx) && sidebar_loaded(pane, cx) && pane.pull_request != Lookup::Looking
+            })
+        });
+    }
+
     pub(super) fn step(&mut self, step: &Step) {
         match step {
-            Step::Select(name) => {
-                let view = self.view.clone();
-                self.cx.update(|cx| {
-                    view.update(cx, |v, cx| {
-                        let id =
-                            v.records().workspaces().iter().find(|w| &w.name == name).map(|w| w.id.clone()).unwrap();
-                        v.select(id, cx);
-                    });
-                });
-                self.wait("the chat, the sidebar of changes and the pull request to load", |view, cx| {
-                    selected_pane(view).is_some_and(|pane| {
-                        let pane = pane.read(cx);
-                        chat_loaded(pane, cx) && sidebar_loaded(pane, cx) && pane.pull_request != Lookup::Looking
-                    })
-                });
-            }
+            Step::Select(name) => self.select(name),
             Step::OpenFile(path) => self.open_file(path),
             Step::AllFiles => self.all_files(),
             Step::ViewFile(path) => self.view_file(path),
@@ -119,6 +121,10 @@ impl Driver {
             }
             Step::Press(keys) => self.press(keys),
             Step::Hover { on, shows } => self.hover(*on, shows),
+            Step::Dictate { said, shows } => self.dictate(said, shows),
+            Step::StallDictationDownload => self.stall_dictation_download(),
+            Step::DictationModelHere => self.dictation_model_here(),
+            Step::FailDictationDownload => self.fail_dictation_download(),
             Step::PasteImage(image) => self.paste(ClipboardItem::from(Image::from_bytes(ImageFormat::Png, image()))),
             Step::PasteFile(name, text) => self.paste_file(name, text),
             Step::AskToFinish => {
@@ -213,16 +219,10 @@ impl Driver {
     }
 
     pub(super) fn wait_for(&mut self, id: &gpui_kit::ElementId) {
-        let deadline = Instant::now() + TIMEOUT;
-        loop {
-            self.frame();
+        self.until(&format!("{id:?} to be drawn"), |d| {
             let found = id.clone();
-            if self.cx.update_window(self.handle, |_, window, _| window.try_find(found).is_some()).unwrap() {
-                return;
-            }
-            assert!(Instant::now() < deadline, "timed out waiting for {id:?} to be drawn");
-            std::thread::sleep(Duration::from_millis(10));
-        }
+            d.cx.update_window(d.handle, |_, window, _| window.try_find(found).is_some()).unwrap()
+        });
     }
 
     /// As Cmd-V does, then waits for where it was pasted to have one more file: the new-workspace dialog while it's
@@ -317,11 +317,18 @@ impl Driver {
     }
 
     pub(super) fn wait(&mut self, what: &str, mut done: impl FnMut(&AppView, &App) -> bool) {
+        self.until(what, |d| {
+            let view = d.view.clone();
+            d.cx.update(|cx| done(view.read(cx), cx))
+        });
+    }
+
+    /// Draws until `done`, and fails once the time's up.
+    pub(super) fn until(&mut self, what: &str, mut done: impl FnMut(&mut Self) -> bool) {
         let deadline = Instant::now() + TIMEOUT;
         loop {
             self.frame();
-            let view = self.view.clone();
-            if self.cx.update(|cx| done(view.read(cx), cx)) {
+            if done(self) {
                 return;
             }
             assert!(Instant::now() < deadline, "timed out waiting for {what}");
@@ -336,15 +343,7 @@ impl Driver {
         // The app's clock only moves when told to, and a tooltip waits for it.
         self.cx.run_until_parked();
         self.cx.advance_clock(LONGER_THAN_A_TOOLTIP_WAITS);
-        let deadline = Instant::now() + TIMEOUT;
-        loop {
-            self.frame();
-            if self.cx.update_window(self.handle, |_, window, _| window.try_find(shows).is_some()).unwrap() {
-                return;
-            }
-            assert!(Instant::now() < deadline, "timed out waiting for {shows}");
-            std::thread::sleep(Duration::from_millis(10));
-        }
+        self.until(shows, |d| d.cx.update_window(d.handle, |_, window, _| window.try_find(shows).is_some()).unwrap());
     }
 
     pub(super) fn frame(&mut self) {

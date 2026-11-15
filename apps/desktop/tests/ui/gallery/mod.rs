@@ -25,6 +25,7 @@ mod colours;
 mod compaction_chats;
 mod component_screens;
 mod context_screens;
+mod dictation_screens;
 mod diff_screens;
 mod events;
 mod failure_chats;

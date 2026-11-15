@@ -23,4 +23,4 @@ pub(crate) use page::{Asking, FIND_KEY, KEY_CONTEXT, OfHub, page};
 mod preferences;
 #[cfg(test)]
 use preferences::SettingsFile;
-pub(crate) use preferences::{Settings, change, get, load, observe};
+pub(crate) use preferences::{Settings, change, get, load, observe, observe_in_app};

@@ -18,6 +18,7 @@ pub(super) fn page() -> Page {
             is_on: Box::new(|cx| Some(get(cx).notify)),
             set: Rc::new(|on, cx| change(cx, |settings| settings.notify = on)),
         },
+        status_box: None,
     };
     let play_sound = Setting {
         name: "Play a sound",
@@ -26,6 +27,7 @@ pub(super) fn page() -> Page {
             is_on: Box::new(|cx| Some(get(cx).play_sound)),
             set: Rc::new(|on, cx| change(cx, |settings| settings.play_sound = on)),
         },
+        status_box: None,
     };
     let sound = Setting {
         name: "Sound",
@@ -35,6 +37,7 @@ pub(super) fn page() -> Page {
             chosen: Box::new(|cx| get(cx).sound.name().to_string().into()),
             menu: Rc::new(sounds_menu),
         },
+        status_box: None,
     };
     Page {
         id: PageId::Notifications,

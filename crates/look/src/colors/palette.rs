@@ -120,6 +120,8 @@ colors! {
         needs_you = 0xe9b2_4cff,
         /// A warning, such as setup that failed or one the agent's CLI gave.
         warning = 0xe9b2_4cff,
+        /// Something ready, or done, such as dictation's model once it's prepared.
+        done = 0x6cc4_88ff,
         /// The agent stopped short: the turntable of its mark, and what the chat says of it, such as a turn that
         /// failed.
         stopped = 0xee6f_64ff,

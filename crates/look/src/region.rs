@@ -41,6 +41,8 @@ pub enum Region {
     ContextCard,
     /// What's left of the account's limits, shown from the composer.
     UsageCard,
+    /// What the composer's microphone opens until dictation is ready: the offer to turn it on, or how it stands.
+    DictationCard,
     /// Home, which lists every workspace.
     Home,
     /// The card that says what an update does, above its card in the sidebar.
@@ -71,6 +73,7 @@ impl Region {
             Region::TurnCard => "turn-card",
             Region::ContextCard => "context-card",
             Region::UsageCard => "usage-card",
+            Region::DictationCard => "dictation-card",
             Region::Home => "home-page",
             Region::UpdateDetails => "update-details-card",
             Region::WorkspaceCard => "workspace-card",

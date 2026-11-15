@@ -1634,6 +1634,7 @@ dependencies = [
  "anyhow",
  "client-core",
  "desktop",
+ "dictation",
  "fetching",
  "flume 0.11.1",
  "gpui-kit",

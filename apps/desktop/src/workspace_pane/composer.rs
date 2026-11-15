@@ -1,6 +1,6 @@
 //! Where a prompt is written: what's attached, what's typed, and the bar under them, with the `+` menu and the model
-//! picker at one end, and at the other what the agent says of itself, then Send or Stop. Shift-Tab turns plan mode on
-//! and off, as the `+` menu does, and the composer shows it.
+//! picker at one end, and at the other what the agent says of itself and the microphone, then Send or Stop. Shift-Tab
+//! turns plan mode on and off, as the `+` menu does, and the composer shows it.
 
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::{InputEvent, Textarea, TextareaState};
@@ -14,6 +14,7 @@ use look::{Hand as _, InRegion as _, Off as _, Region, Shaped as _, Sizing as _}
 use protocol::model::{Effort, ModelName, PermissionMode, SessionId, SessionSettingsChange};
 use protocol::prompt::Prompt;
 
+use super::dictating::Then;
 use super::{PaneEvent, WorkspacePane};
 use crate::composing::{self, Plan};
 use crate::model_picker::{Picked, model_picker};
@@ -60,8 +61,12 @@ impl WorkspacePane {
         cx.notify();
     }
 
-    /// Sends what's typed, as Enter and Send do, unless the hub is away, when it stays typed for when it's back.
+    /// Sends what's typed, as Enter and Send do, unless the hub is away, when it stays typed for when it's back. While
+    /// something's being dictated, that's once the last of it has gone in.
     pub fn submit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.once_dictated(Then::Send, cx) {
+            return;
+        }
         if self.hub == Hub::Away {
             return;
         }
@@ -75,17 +80,23 @@ impl WorkspacePane {
         {
             let keeping = (!rest.is_empty()).then(|| rest.to_string());
             transcript.update(cx, |t, cx| t.compact(keeping, Some(text.clone()), cx));
-            self.composer.update(cx, |c, cx| c.set_value("", window, cx));
-            self.keep_typed(true, cx);
+            self.emptied_by_sending(window, cx);
             return cx.notify();
         }
         let files = self.attached.take();
+        // A prompt that fails comes back as a draft.
         if transcript.update(cx, |t, cx| t.send_prompt_with(Prompt::carrying(text, files), cx)) {
-            self.composer.update(cx, |c, cx| c.set_value("", window, cx));
-            // At once, so what was sent can't come back as a draft. A prompt that fails comes back as one.
-            self.keep_typed(true, cx);
+            self.emptied_by_sending(window, cx);
         }
         cx.notify();
+    }
+
+    /// Empties the composer once what was in it has gone, sent or queued: at once, so it can't come back as a draft,
+    /// and ending what's being dictated, which leaves nothing for Esc to put back.
+    pub(super) fn emptied_by_sending(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.end_dictation();
+        self.composer.update(cx, |c, cx| c.set_value("", window, cx));
+        self.keep_typed(true, cx);
     }
 
     /// Changes the showing chat's model or effort. The hub only agrees once a running agent has, so the picker changes
@@ -224,17 +235,19 @@ impl WorkspacePane {
             .on_paste(move |item, _, cx| this.update(cx, |t, cx| t.paste(item, cx)).unwrap_or(false));
         let composer = v_flex().region(Region::Composer).w_full().border_1().border_color(border).bg(surface);
         let composer = composing::place(composer, planning, look::Corner::Card, cx, Self::toggle_plan_mode);
+        let composer = Self::hears_dictation_keys(composer, cx);
         let composer = attached::takes_drops(composer, cx, |t: &mut Self, paths, cx| t.attach_paths(paths, cx))
             .children(attached)
             .child(div().w_full().px(look::Space::Small).pt(look::Space::Small).child(textarea))
+            .children(self.dictation_line(cx))
             .child(bar);
         around(composer.into_any_element()).flex_none().pb(look::Space::Large).pt(transcript::ABOVE_THE_COMPOSER)
     }
 
     /// The row along the composer's bottom, which has two ends. The left one sets up the prompt: the `+` menu, then
-    /// the model picker, which takes whatever room is left. The right one is the agent's: what it says of itself,
-    /// each in a [`Slot`], and last the one main action, twice as far from them as they are from each other, so it
-    /// stands apart.
+    /// the model picker, which takes whatever room is left. The right one has what's beside the main action, each in
+    /// a [`Slot`], and last the one main action, twice as far from them as they are from each other, so it stands
+    /// apart.
     fn bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let field = self.composer.focus_handle(cx);
         let add =
@@ -255,11 +268,13 @@ impl WorkspacePane {
             .child(agents)
     }
 
-    /// What sits beside the main action, in the order it's drawn. Something new for the bar's right end goes here,
-    /// and being a [`Slot`] is what lines it up and spaces it.
+    /// What sits beside the main action, in the order it's drawn: what the agent says of itself, then the microphone,
+    /// nearest Send, unless dictation is off or this Mac can't run its model. Something new for the bar's right end
+    /// goes here, and being a [`Slot`] is what lines it up and spaces it.
     fn beside_the_main_action(&self, cx: &mut Context<Self>) -> Vec<Slot> {
         let usage = self.usage(cx);
-        self.usage_bars(usage.as_ref(), cx).into_iter().chain(self.context_ring(usage.as_ref(), cx)).collect()
+        let agents = self.usage_bars(usage.as_ref(), cx).into_iter().chain(self.context_ring(usage.as_ref(), cx));
+        agents.chain(self.microphone(cx)).collect()
     }
 
     /// Send, or Stop while the agent is in a turn. Work left in the background isn't one, since stopping a turn

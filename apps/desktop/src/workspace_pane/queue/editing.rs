@@ -1,4 +1,5 @@
 use super::super::composer::Hub;
+use super::super::dictating::Then;
 use super::super::{PaneEvent, WorkspacePane};
 use client_core::{ClientError, NotTaken, Written};
 use gpui_kit::component::input::{InputEvent, TextareaState};
@@ -19,17 +20,19 @@ pub(in super::super) struct Editing {
 impl WorkspacePane {
     /// Puts what's typed and attached at the end of the showing chat's queue, for the hub to send once the agent has
     /// finished. It shows at once, faint, until the hub has it, as client-core says, and if the hub can't take it, it
-    /// goes back to its chat's composer, so nothing typed or attached is lost.
+    /// goes back to its chat's composer, so nothing typed or attached is lost. While something's being dictated, that's
+    /// once the last of it has gone in.
     pub fn queue_typed(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.once_dictated(Then::Queue, cx) {
+            return;
+        }
         let text = self.composer.read(cx).text().to_string();
         let Some(session_id) = self.active.clone().filter(|_| self.hub == Hub::Here) else { return };
         if !says_or_carries(&text, self.attached.len()) {
             return;
         }
         let files = self.attached.take();
-        self.composer.update(cx, |c, cx| c.set_value("", window, cx));
-        // At once, so what's queued can't come back as a draft.
-        self.keep_typed(true, cx);
+        self.emptied_by_sending(window, cx);
         let queueing = self.client.start_queueing(&session_id, Written::new(Prompt::carrying(text, files)));
         cx.spawn(async move |this, cx| {
             let queued = queueing.recv().await;

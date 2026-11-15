@@ -19,10 +19,10 @@ use crate::{CloseSettings, OpenSettings, ToggleMenus};
 
 impl Render for AppView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        // Shortcuts only reach this view through whatever has focus, and focus can end up nowhere, as
-        // when what had it goes away. Every shortcut would then do nothing until something is clicked.
+        // Shortcuts only reach this view through whatever has focus, and focus can end up nowhere, as when what had
+        // it goes away. Every shortcut would then do nothing until something is clicked, and nothing could be typed.
         if window.focused(cx).is_none() {
-            window.focus(if self.settings_open() { &self.settings_focus } else { &self.focus }, cx);
+            self.focus_what_shows(window, cx);
         }
         self.keep_menus_current(cx);
         self.keep_dialog_current(cx);

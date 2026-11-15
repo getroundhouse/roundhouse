@@ -20,6 +20,7 @@ use crate::{
     PreviousChat, PreviousWorkspace, Quit, StopAgent, ToggleDiff, ToggleMenus, TogglePlanMode, composing, file_diff,
     image_diff, settings,
 };
+use crate::{CancelDictation, HoldToDictate, dictating};
 
 /// Binds the app's shortcuts, after the kit's.
 pub(crate) fn set(cx: &mut App) {
@@ -75,6 +76,15 @@ pub(crate) fn set(cx: &mut App) {
         key("secondary-a", SelectAll, Some(transcript::KEY_CONTEXT), cx),
     ];
     cx.bind_keys(bindings);
+    if dictation::HEARS {
+        // Held to dictate where a prompt is typed, and Escape there cancels what's being dictated, or does what it
+        // would have if nothing is. With Option still held for the key, Escape comes as Option-Escape.
+        cx.bind_keys([
+            key(dictating::HOLD_TO_DICTATE_KEY, HoldToDictate, Some(&in_a_prompt), cx),
+            key("escape", CancelDictation, Some(&in_a_prompt), cx),
+            key("alt-escape", CancelDictation, Some(&in_a_prompt), cx),
+        ]);
+    }
 }
 
 /// `keys` doing `action` where `context` says, or wherever focus is. GPUI reads `secondary` only in a binding it
