@@ -1,8 +1,8 @@
 use protocol::capability::calls::{
     Call, CallOutput,
     call::{
-        Command, Edit, LineRange, Read, Replace, Replaces, Runs, Schedule, StartSubagent, WebSearch, When, Workflow,
-        Write,
+        Command, Edit, LineRange, MessageSubagent, Read, Replace, Replaces, Runs, Schedule, StartSubagent,
+        StopSubagent, WebSearch, When, Workflow, Write,
     },
     output::{CommandOutput, Ended, FileOutcome, Lines, McpContent},
 };
@@ -80,8 +80,31 @@ fn by_name(name: &str, args: &Value, wire: &ToolCallWire) -> Call {
         "schedule" => schedule_call(args),
         "run_workflow" => Call::Workflow(Workflow { name: str_field(args, &["Description", "ScriptPath"]) }),
         "ask_question" => Call::Questions,
-        // `send_message` and `manage_subagents` among them, since they name a subagent by its conversation's ID, where
-        // `MessageSubagent` and `StopSubagent` name the call that started it, which the adapter can't tell from the ID.
+        "send_message" => message_call(name, args),
+        "manage_subagents" => stop_call(name, args),
+        _ => other(name, args),
+    }
+}
+
+/// A message to the subagent whose conversation `Recipient` names, as `invoke_subagent` gave its ID. One to a name
+/// that starts with `@`, such as `@children`, is to several at once, or none, so it's told as it is.
+fn message_call(name: &str, args: &Value) -> Call {
+    match (str_field(args, &["Recipient"]), str_field(args, &["Message"])) {
+        (Some(recipient), Some(message)) if !recipient.starts_with('@') => {
+            Call::MessageSubagent(MessageSubagent { subagent: recipient.into(), message })
+        }
+        _ => other(name, args),
+    }
+}
+
+/// Stopping the one subagent `kill` names in `ConversationIds`. Listing them, or stopping several, or all, is told as
+/// it is.
+fn stop_call(name: &str, args: &Value) -> Call {
+    let named = args.get("ConversationIds").and_then(Value::as_array).map(Vec::as_slice);
+    match (str_field(args, &["Action"]).as_deref(), named) {
+        (Some("kill"), Some([Value::String(conversation)])) => {
+            Call::StopSubagent(StopSubagent { subagent: conversation.as_str().into() })
+        }
         _ => other(name, args),
     }
 }
