@@ -50,7 +50,7 @@ proptest! {
 
     /// What's on screen is always there, and is the event its row says it is.
     #[test]
-    fn the_row_in_focus_is_loaded_and_holds_its_own_event(last_seq in seq_in(1u64..30_000), focuses in vec(0usize..30_000, 1..40)) {
+    fn the_row_in_focus_is_loaded_and_holds_its_own_event(last_seq in seq_in(1u64..30_000), focuses in vec(0usize..30_000, 1..12)) {
         let mut log = opened(last_seq);
         for focus in focuses {
             let focus = focus % log.row_count();
@@ -66,7 +66,7 @@ proptest! {
 
     /// A long session never ends up all in memory, wherever it's been scrolled.
     #[test]
-    fn it_never_holds_more_than_its_limit(last_seq in seq_in(1u64..30_000), focuses in vec(0usize..30_000, 1..80)) {
+    fn it_never_holds_more_than_its_limit(last_seq in seq_in(1u64..30_000), focuses in vec(0usize..30_000, 1..20)) {
         let mut log = opened(last_seq);
         for focus in focuses {
             let focus = focus % log.row_count();

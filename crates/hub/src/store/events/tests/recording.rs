@@ -221,7 +221,9 @@ fn assert_placed(events: &[SessionEvent], sent: &[Sent]) -> Result<(), TestCaseE
 
 proptest! {
     #![proptest_config(Config {
-        cases: 64,
+        // Each case opens a store of its own, which is nearly all its time. 16 still fail when the migration leaves
+        // out a subagent's results, its other lines or the line's type, or a subagent counts on from the agent's own.
+        cases: 16,
         rng_seed: RngSeed::Fixed(1),
         failure_persistence: None,
         ..Config::default()

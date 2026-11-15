@@ -190,11 +190,12 @@ fn a_wait_lasts_across_a_restart(stop: impl FnOnce(&mut Stack), carried_on: bool
     let agent = started_pid(&read_all(&client, &chat.id)).unwrap();
     drop(client);
 
-    // Held, so no hub reads it until the new one is up, and merged only once the last one has gone, since a read that
-    // one began before the hold, as the turn ended, would find it merged and end the wait. The new hub reads it merged
-    // by itself, as the first it reads, once it's been looked at.
-    gh.hold();
+    // Merged only once the last hub has gone, since a read it began as the turn ended would find it merged and end the
+    // wait. Held from then, so the new hub can't read it until it's been looked at, and then reads it merged by itself,
+    // as the first it reads. Not before the last hub has gone, since that read, held, would keep its worker from
+    // stopping until the read timed out, or the hub gave up on the worker, 15 s on either way.
     stop(&mut stack);
+    gh.hold();
     gh.say(MERGED);
     stack.start_hub();
     let client = stack.client();

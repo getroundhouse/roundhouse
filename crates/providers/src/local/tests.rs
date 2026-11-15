@@ -207,10 +207,13 @@ async fn starting_clears_what_a_killed_worker_left() {
     let instance = dir.path().join("instances/a");
     let mut agent = orphan(dir.path());
     let agent_record = record_agent(&instance, agent.id(), &process::start_time(agent.id()).unwrap());
+    // Reaped as it goes, as in `a_recorded_orphan_is_stopped`, since a child of this test that nobody reaps is still
+    // listed, and the start would wait out the agent's grace for it.
+    let reaper = std::thread::spawn(move || agent.wait().unwrap());
 
     provider.start(&id, &[]).await.unwrap();
 
-    assert!(agent.wait().unwrap().signal().is_some(), "the agent it left behind should have been stopped");
+    assert!(reaper.join().unwrap().signal().is_some(), "the agent it left behind should have been stopped");
     assert!(!agent_record.exists());
 }
 
