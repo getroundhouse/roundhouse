@@ -83,6 +83,17 @@ impl Heights {
         }
     }
 
+    /// Forgets what `row` was measured at, so it counts as a guess until it's measured again.
+    pub(in super::super) fn forget(&mut self, row: usize) {
+        let Some(was) = self.measured.get_mut(row).and_then(Option::take) else { return };
+        let mut at = row + 1;
+        while at < self.tree.len() {
+            self.tree[at].measured -= 1;
+            self.tree[at].height -= was.to_f64();
+            at += lowest_bit(at);
+        }
+    }
+
     /// What a row that hasn't been measured counts as: what the measured ones come to on average.
     pub(in super::super) fn guess(&self) -> Pixels {
         narrow(self.guess_at())

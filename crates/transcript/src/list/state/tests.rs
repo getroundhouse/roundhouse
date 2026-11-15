@@ -221,6 +221,25 @@ fn a_rows_height_is_known_once_its_measured_until_it_changes_or_the_list_does() 
     assert_eq!(state.heights.height_of(3), px(60.), "though it counts as what it was until it's measured again");
 }
 
+/// The last row is the end of the chat, and what it drew goes to the row of the record that takes its place, which
+/// isn't as tall as what the end drew. A chat read by place that has just learned how far it goes has its first row
+/// take the end's place, and that's kept as a guess for as long as the row isn't loaded.
+#[test]
+fn a_row_that_takes_the_last_ones_place_counts_as_a_guess_until_its_measured() {
+    let mut state = session(3, 50.);
+    state.measured(2, px(1000.));
+
+    state.set_rows(4, std::iter::once(0..4).collect());
+    assert_eq!(state.heights.measured(2), None);
+    assert!(state.is_out_of_date(2), "it's measured out of sight too");
+    assert!(!state.is_out_of_date(1), "and no row before it is");
+    assert_eq!(state.heights.total(), px(200.), "two rows at 50, and two at their average");
+    state.measured(2, px(40.));
+
+    state.set_rows(3, std::iter::once(0..3).collect());
+    assert_eq!(state.heights.measured(2), Some(px(40.)), "rows that go, as a prompt taken back does, alter none");
+}
+
 #[test]
 fn a_row_that_showed_nothing_shows_nothing_at_another_width() {
     let mut state = session(4, 50.);

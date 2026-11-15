@@ -70,7 +70,15 @@ impl State {
     /// A page of history that loads, or one that's let go, puts every row's height out of date. What a row shows
     /// can depend on another being loaded: an event of a call is drawn in its call's row while that's loaded, and
     /// where it is once it isn't. Rows that come and go at the end alter none before them.
+    ///
+    /// The last row is the end of the chat, and what it draws goes on to the rows that come after it, such as a reply
+    /// to its record's row, so as rows come, the row that had its place counts as a guess until it's measured, rather
+    /// than as what was measured of the end of the chat.
     pub(in super::super) fn set_rows(&mut self, rows: usize, loaded: Vec<Range<usize>>) {
+        if let Some(last) = self.heights.rows().checked_sub(1).filter(|_| rows > self.heights.rows()) {
+            self.heights.forget(last);
+            self.out_of_date(last..last + 1);
+        }
         self.heights.set_rows(rows);
         self.measured_at.resize(rows, 0);
         self.anchor = self.anchor.filter(|anchor| anchor.row < rows);

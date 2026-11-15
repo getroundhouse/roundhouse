@@ -222,15 +222,20 @@ impl Transcript {
         self.session.read(SessionLog::row_count)
     }
 
+    /// Tells the list how many rows the log has now, and which are loaded.
+    fn tell_the_list(&self) {
+        let (rows, loaded) = self.session.read(rows_and_loaded);
+        self.list.set_rows(rows, loaded);
+    }
+
     /// Shows what changed in the session since this last looked, however much that is.
     pub(super) fn catch_up(&mut self, cx: &mut Context<Self>) {
         let changes = self.session.take_changes();
         let errors = self.session.take_errors();
-        let (rows, loaded) = self.session.read(rows_and_loaded);
         // What's asked opens and closes with an event, a row of its own rather than the tail, or is fetched alone.
         let events = self.session.read(SessionLog::row_count);
         let events_changed = changes.rows.as_ref().is_some_and(|changed| changed.start < events);
-        self.list.set_rows(rows, loaded);
+        self.tell_the_list();
         self.follow_retry();
         self.session.read(|log| self.texts.let_go(log, self.selection.held().as_ref()));
         if let Some(changed) = changes.rows {
@@ -350,8 +355,10 @@ impl Render for Transcript {
             texts: self.texts.clone(),
             selection: self.selection.clone(),
         };
-        // The list's last row is the tail, even while the log has rows it hasn't been told of, such as a log by place
-        // that has just learned how far it goes, whose first row would otherwise be drawn there and fetched.
+        // Before what's drawn reads the log, which may have changed since it was last looked at, so the list's last
+        // row, the end of the chat, takes in only what comes while the frame is drawn, as `rows`' `render_row_inner`
+        // says.
+        self.tell_the_list();
         let tail = self.list.row_count().saturating_sub(1);
         let room_under = crate::rows::room_under(&self.model.borrow());
         let rows = self.list.render(
