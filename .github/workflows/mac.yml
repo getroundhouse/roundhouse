@@ -52,11 +52,20 @@ jobs:
             target/
           key: mac-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', '**/Cargo.toml') }}
           restore-keys: mac-
-      - run: python3 .github/cache-probe.py "$RUNNER_TEMP/kinds"
+      # The Zig that builds Ghostty's terminal core, for a build script that has to run again.
+      - uses: ./.github/actions/zig
+        with:
+          cache-name: mac
+      - run: git config --global user.name ci && git config --global user.email ci@example.com
+      # Every unit the Mac job builds, fresh or not, as JSON.
+      - run: cargo clippy --workspace --all-targets --locked --message-format=json > "$RUNNER_TEMP/clippy.json"
+      - run: cargo test --workspace --locked --no-run --message-format=json > "$RUNNER_TEMP/test.json"
+      # Our crates aren't kept, as `cargo clean --workspace` says, so they're left out of what's measured.
+      - run: cargo clean --workspace
+      - run: python3 .github/cache-probe.py "$RUNNER_TEMP/kinds" "$RUNNER_TEMP/clippy.json" "$RUNNER_TEMP/test.json"
       - run: |
-          cd "$RUNNER_TEMP/kinds"
-          for list in *.txt; do
+          for kind in build-used build-unused target-other cargo-home; do
             start=$(date +%s)
-            bytes=$(sed '/^$/d' "$list" | gtar -cf - -P -T - 2>/dev/null | zstd -T0 --long=30 -q -c | wc -c)
-            echo "$(( bytes / 1000000 )) MB compressed, $(( $(date +%s) - start ))s to pack: ${list%.txt}"
-          done | sort -rn
+            bytes=$(sed '/^$/d' "$RUNNER_TEMP/kinds/$kind.txt" | gtar -cf - -P -T - 2>/dev/null | zstd -T0 --long=30 -q -c | wc -c)
+            echo "$(( bytes / 1000000 )) MB compressed, $(( $(date +%s) - start ))s to pack: $kind"
+          done
