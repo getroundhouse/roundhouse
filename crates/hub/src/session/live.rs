@@ -4,7 +4,7 @@ use crate::attachment_files::FileFor;
 use crate::error::internal;
 use crate::hub::Hub;
 use crate::store;
-use crate::store::StoredSession;
+use crate::store::{SessionLogin, StoredSession};
 use commands::run_commands;
 use ingest::run_ingest;
 use messages::{Command, Item};
@@ -13,8 +13,8 @@ use progress::Progress;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::event::EventBody;
 use protocol::model::{
-    AccountId, AgentKind, AgentSessionId, ApprovalId, ContextUsage, PromptCache, RunId, Seq, Session, SessionId,
-    SessionSettings, SessionSettingsChange, SessionStatus, ToolUseId, WorkspaceId,
+    AgentKind, AgentSessionId, ApprovalId, ContextUsage, PromptCache, RunId, Seq, Session, SessionId, SessionSettings,
+    SessionSettingsChange, SessionStatus, ToolUseId, WorkspaceId,
 };
 use protocol::tail::{StreamDelta, Tail};
 use protocol::worker::Delivery;
@@ -127,9 +127,10 @@ pub(super) struct LiveState {
     pub(super) capabilities: Option<protocol::model::RunCapabilities>,
     /// What the next agent launches with.
     pub(super) settings: SessionSettings,
-    /// The account the chat is on, as its record says, whose login the next agent launches under. None until its agent
-    /// first launches under a login the hub holds, when the next takes its kind's default.
-    pub(super) assigned_account: Option<AccountId>,
+    /// Which login the chat is on, as its record says, which the next agent launches under. On none until a launch is
+    /// handed a login, which puts it on the hub's for that account, or its worker says whose the ambient login an agent
+    /// of it runs under is, which puts it on that.
+    pub(super) login: SessionLogin,
     pub(super) closed_at_ms: Option<i64>,
     /// Only exists while someone is subscribed. It's a large buffer, and most sessions a long-running
     /// hub has touched have nobody watching.
@@ -215,7 +216,7 @@ impl LiveSession {
                 agent_session_id: stored.agent_session_id,
                 capabilities: stored.session.agent_capabilities.clone(),
                 settings: stored.session.settings(),
-                assigned_account: stored.session.assigned_account.clone(),
+                login: SessionLogin::of_record(&stored.session),
                 closed_at_ms: stored.session.closed_at_ms,
                 live: None,
             }),

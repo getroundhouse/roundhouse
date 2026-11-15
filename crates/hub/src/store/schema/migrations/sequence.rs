@@ -339,6 +339,8 @@ pub(in super::super) const MIGRATIONS: &[&str] = &[
     // A run reports its conversation identity and claims in one durable initialization.
     super::agent_runs::AGENT_RUNS,
     super::account_defaults::ACCOUNT_DEFAULTS,
-    // The account each chat is on, whose login its launches take, in `assigned_accounts`.
-    super::assigned_accounts::ASSIGNED_ACCOUNTS,
+    // The account each chat is on, whose login its launches take, in `session_accounts`.
+    super::session_accounts::ASSIGNED_ACCOUNTS,
+    // Where each chat's login comes from, the hub or ambient, in place of the account it was on, in `session_accounts`.
+    super::session_accounts::ACCOUNT_SOURCES,
 ];

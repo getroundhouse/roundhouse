@@ -12,4 +12,4 @@ mod tests;
 
 mod account_rows;
 pub use account_rows::Launched;
-pub(super) use account_rows::{account_or_missing, accounts, name_account, named, used_by_session};
+pub(super) use account_rows::{account_or_missing, accounts, name_account, used_by_session};

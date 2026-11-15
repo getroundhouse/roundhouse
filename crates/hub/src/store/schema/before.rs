@@ -80,3 +80,6 @@ pub(crate) const BEFORE_AGENT_RUNS: usize = 53;
 
 /// Before per-agent account defaults were durable hub settings.
 pub(crate) const BEFORE_ACCOUNT_DEFAULTS: usize = 54;
+
+/// How many migrations there were before chats said where their login comes from, in place of the account they were on.
+pub(crate) const BEFORE_ACCOUNT_SOURCES: usize = 56;

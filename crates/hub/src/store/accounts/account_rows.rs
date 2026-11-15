@@ -1,4 +1,5 @@
 use super::super::logins::{IdFrom, LOGIN_COLUMNS, login_at};
+use super::super::sessions::on_the_hubs;
 use super::super::{Store, StoreError, from_text, lock, rev_of, text_of};
 use protocol::model::{Account, AccountId, AgentAccount, LimitWindow, ModelLabel, Rev, SessionId, UsageLimit};
 use rusqlite::{Connection, OptionalExtension as _, params};
@@ -9,8 +10,11 @@ pub struct Launched {
     /// The account's record, when it's new or says someone else now, or when the session's record came to name it and
     /// that brought when it was last used up to the session's.
     pub account: Option<Account>,
-    /// The session's record names another account than it did.
+    /// The session's record changed: it names another account than it did, or it's on the ambient login now.
     pub session: bool,
+    /// The session was on none, and is on the ambient login now, since the worker said whose login its agent runs
+    /// under.
+    pub ambient: bool,
 }
 
 /// Every account, oldest first, for a list of every record.
@@ -149,33 +153,16 @@ impl Store {
 
     /// Files that `session`'s agent launched under `under`, as its worker read it: who the account is, and that the
     /// session's agent runs under it. A login that can't be told from another, or nobody logged in, leaves the session
-    /// naming none, since there's no record to name.
+    /// naming none, since there's no record to name. A session on the hub's login goes on naming the account it's on,
+    /// as `on_the_hubs` says, whatever an agent under another login says.
+    ///
+    /// A session on none is put on the ambient login once the worker says whose it is, since the hub gave its agent
+    /// none, as a session's first launch while its kind has no default does. One whose login nobody can say, as with
+    /// nobody logged in or a login by API key, stays on none, so a launch once a login is added puts it on the default,
+    /// rather than leave it on a login with no account to show, and so nothing to move it off from. On disk before this
+    /// returns, as a held login's launch is, since a power cut that took it back would leave the session on none.
     pub fn launched_under(&self, session: &SessionId, under: &AgentAccount) -> Result<Launched, StoreError> {
-        let mut conn = lock(&self.writer);
-        let tx = conn.transaction()?;
-        let id = under.logged_in_as();
-        let who_changed = match id {
-            Some(id) => {
-                tx.execute(
-                    "INSERT INTO accounts (id, model_provider, plan, login, email) VALUES (?1, ?2, ?3, ?4, ?5)
-                         ON CONFLICT (id) DO UPDATE
-                         SET model_provider = excluded.model_provider, plan = excluded.plan, login = excluded.login,
-                             email = excluded.email
-                         WHERE model_provider IS NOT excluded.model_provider OR plan IS NOT excluded.plan
-                             OR login IS NOT excluded.login OR email IS NOT excluded.email",
-                    params![id.as_str(), under.model_provider, under.plan, under.login, under.email],
-                )? > 0
-            }
-            None => false,
-        };
-        let named = name_account(&tx, session, id)?;
-        let account = match (named.account, id) {
-            (Some(record), _) => Some(record),
-            (None, Some(id)) if who_changed => Some(account_or_missing(&tx, id)?),
-            (None, _) => None,
-        };
-        tx.commit()?;
-        Ok(Launched { account, session: named.session })
+        self.lasting(|tx| launched_under(tx, session, under))
     }
 
     /// What's been heard of `account`'s limits, shortest window first, each with when it was heard.
@@ -187,6 +174,40 @@ impl Store {
     pub fn account(&self, id: &AccountId) -> Result<Option<Account>, StoreError> {
         Ok(account(&lock(&self.reader), id)?)
     }
+}
+
+/// What [`Store::launched_under`] does, in its transaction.
+fn launched_under(tx: &Connection, session: &SessionId, under: &AgentAccount) -> rusqlite::Result<Launched> {
+    let id = under.logged_in_as();
+    let who_changed = match id {
+        Some(id) => {
+            tx.execute(
+                "INSERT INTO accounts (id, model_provider, plan, login, email) VALUES (?1, ?2, ?3, ?4, ?5)
+                     ON CONFLICT (id) DO UPDATE
+                     SET model_provider = excluded.model_provider, plan = excluded.plan, login = excluded.login,
+                         email = excluded.email
+                     WHERE model_provider IS NOT excluded.model_provider OR plan IS NOT excluded.plan
+                         OR login IS NOT excluded.login OR email IS NOT excluded.email",
+                params![id.as_str(), under.model_provider, under.plan, under.login, under.email],
+            )? > 0
+        }
+        None => false,
+    };
+    let on_the_hubs = on_the_hubs(tx, session)?;
+    let named = if on_the_hubs { None } else { Some(name_account(tx, session, id)?) };
+    let (named_another, named) = named.map_or((false, None), |named| (named.session, named.account));
+    let ambient = !on_the_hubs
+        && id.is_some()
+        && tx.execute(
+            "UPDATE sessions SET account_source = 'ambient' WHERE id = ? AND account_source IS NULL",
+            [session.as_str()],
+        )? > 0;
+    let account = match (named, id) {
+        (Some(record), _) => Some(record),
+        (None, Some(id)) if who_changed => Some(account_or_missing(tx, id)?),
+        (None, _) => None,
+    };
+    Ok(Launched { account, session: named_another || ambient, ambient })
 }
 
 /// What naming a session's account found and changed.
@@ -223,7 +244,7 @@ pub(in super::super) fn name_account(
 }
 
 /// The account `session`'s record names as the one its agent runs under.
-pub(in super::super) fn named(conn: &Connection, session: &SessionId) -> rusqlite::Result<Option<AccountId>> {
+fn named(conn: &Connection, session: &SessionId) -> rusqlite::Result<Option<AccountId>> {
     conn.query_row("SELECT account_id FROM sessions WHERE id = ?", [session.as_str()], |row| {
         row.get::<_, Option<String>>(0)
     })

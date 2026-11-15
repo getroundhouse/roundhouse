@@ -194,25 +194,29 @@ pub struct Session {
     pub prompt_cache: Option<PromptCache>,
     /// The account the chat's agent runs under, and the record of it says who that is and what's left of its limits.
     /// For a chat on a login the hub holds, as `account_source` says, it's the account the chat is on, which every
-    /// launch runs under, so a moved chat names it before its agent launches there. Otherwise it's the account its
-    /// newest launch ran under, as the hub's record of the login it gave says, or the worker, for an ambient login,
-    /// which can be another at each launch, if someone logs in as another on the machine. `None` until an agent has
-    /// launched or the chat has been moved, when nobody was logged in or the login can't be told from another, while
-    /// the worker is asked about a launch the hub gave no login after one it gave one, and from a hub that doesn't keep
-    /// it. It stays once the agent has gone, as the context does.
+    /// launch runs under, from the launch that put it there or the move to it, so a moved chat names it before its
+    /// agent launches there. Otherwise it's the account its newest launch ran under, as the hub's record of the login
+    /// it gave says, or the worker, for an ambient login, which can be another at each launch, if someone logs in as
+    /// another on the machine. `None` until an agent has launched or the chat has been moved, when nobody was logged
+    /// in or the login can't be told from another, while the worker is asked about a launch the hub gave no login
+    /// after one it gave one, and from a hub that doesn't keep it. It stays once the agent has gone, as the context
+    /// does.
     #[serde(default)]
     pub account: Option<AccountId>,
     /// Where the login every launch of the chat's agent, resume and title call takes comes from: the hub, for the
-    /// account `account` names, or the ambient login of the workspace's machine. Once a chat is on the hub's, only
-    /// moving it changes the account, as [`SessionAssignAccount`](crate::client::sessions::SessionAssignAccount) says,
-    /// and changing the default doesn't. A chat on an account whose login has ended or been disconnected can't launch
-    /// until the login is renewed or the chat is moved.
+    /// account `account` names, or the ambient login of the workspace's machine. The chat's first launch takes its
+    /// kind's default, which puts it on the hub's login for an added default, or on the ambient one while its kind has
+    /// none, once the worker says whose that is. One whose ambient login nobody can say, as with nobody logged in there
+    /// or a login by API key, stays on none, so a launch once a login is added puts it on the default. Only moving a
+    /// chat changes where its login comes from after that, to the hub's for the account it's moved to, as
+    /// [`SessionAssignAccount`](crate::client::sessions::SessionAssignAccount) says. Changing the default doesn't, and
+    /// nor does adding a login: a chat on the ambient login stays on it. A chat on an account whose login has ended or
+    /// been disconnected can't launch until the login is renewed or the chat is moved.
     ///
-    /// `None` for a chat on none yet, whose next launch takes its kind's default whatever `account` names. The hub's
+    /// `None` until the chat's agent first launches, and for a chat on none from before sources, such as one that ran
+    /// under the ambient login then, whose next launch takes its kind's default whatever `account` names. The hub's
     /// with no `account` reads as `None` too, so the next launch fills it in. Also `None` from a hub from before
-    /// sources, whatever the chat is on, including one that can't move a chat, which a client learns by being refused,
-    /// and from one that doesn't store them yet, for each chat but one on an account its record names, such as one that
-    /// ran under the ambient login.
+    /// sources, whatever the chat is on, including one that can't move a chat, which a client learns by being refused.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub account_source: Option<AccountSource>,
     /// The account the chat is on, when it's on a login the hub holds, as [`Session::hub_account`] says, for clients
