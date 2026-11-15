@@ -45,7 +45,7 @@ The guide is the one kind written for someone using the product rather than buil
 | `docs/conformance.md` | Instructions | Agents | How a version of an agent's CLI is checked against what Roundhouse needs of it, and how to play the scenarios that check it |
 | `mobile-poc/README.md` | Instructions | Agents | How to build and run the mobile proof of concept |
 | `mobile-poc/test-server/README.md` | Instructions | Agents | The simulated hub for testing clients on a phone |
-| `third_party/README.md` | Instructions | Agents | What the copies of other projects' code are, how a change to one goes upstream, and how a release comes in |
+| `third_party/README.md` | Instructions | Agents | What the copies of other projects' code are, how each is changed, and how a change goes upstream and a release comes in |
 | `site/README.md` | Instructions | Agents | How to preview the marketing site, and how it follows the app's look |
 | `docs/guide/` | Guide | Agents | How to use Roundhouse, a page for each task and each thing, published as the site's `/docs/` pages |
 | `tools/guide/README.md` | Instructions | Agents | How the guide is organized and written, and how it's built and published |

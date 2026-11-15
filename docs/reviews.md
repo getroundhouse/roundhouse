@@ -70,13 +70,13 @@ Each of these needs a reason: in a comment beside it, where `docs/documentation.
 - An error swallowed, or a fallback that hides a failure.
 - A check for a state the code can't reach. If it can reach it, fix what lets it. A state that comes from outside the process can always arrive, such as from the network, storage, another program, or an older hub or client, and handling it is right.
 - Logic copied, or nearly copied, rather than shared.
-- A wrapper around code this repo owns, rather than a change to it.
+- A wrapper around code this repo owns, rather than a change to it. The copy of gpui-kit doesn't count, since what only this app needs is built in the app, as `docs/gpui.md` says.
 - Code that exists only for the middle of a stack, as "Splitting a change" in `docs/pull-requests.md` says.
 - A sleep in the product's code, a retry of what failed, or a longer timeout, added so that a test passes. A fixed sleep in a test isn't let in even with a reason, as "Tests" in `docs/rust.md` says.
 
 A workaround copied from code nearby isn't let in, even with a reason. As `AGENTS.md` says, the change doesn't copy it, and the one it would copy is fixed if it's part of the change, and otherwise given an issue.
 
-Working around the kit has a rule of its own, and signs of its own, in `docs/gpui.md`: the app builds the piece itself instead.
+Working around the kit has a rule of its own, and signs of its own, in `docs/gpui.md`: the kit is changed, or the app builds the piece itself, instead.
 
 ## Lanes
 

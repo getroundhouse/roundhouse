@@ -1,5 +1,5 @@
-# What only a Mac catches, mostly after a dependency changes. The queue doesn't wait for it, and the full checks also
-# run on a Mac before each push.
+# What only a Mac catches, mostly after a dependency changes, the copy of gpui-kit included. The queue doesn't wait
+# for it, and the full checks also run on a Mac before each push.
 name: Mac
 
 on:
@@ -9,6 +9,7 @@ on:
       - "**/Cargo.toml"
       - rust-toolchain.toml
       - .cargo/**
+      - third_party/**
       - .github/workflows/mac.yml
       - .github/actions/zig/**
   push:
@@ -18,6 +19,7 @@ on:
       - "**/Cargo.toml"
       - rust-toolchain.toml
       - .cargo/**
+      - third_party/**
       - .github/workflows/mac.yml
       - .github/actions/zig/**
   workflow_dispatch:

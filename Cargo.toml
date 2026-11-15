@@ -95,9 +95,10 @@ fastrand = "2.5.0"
 flume = "0.11.1"
 # Already under GPUI. Compresses what a test serves, as a web server would.
 flate2 = "1.1.11"
-# Exact, because gpui-kit pins exact GPUI snapshots and upgrades should be deliberate. On the release of our copy of
-# it, in `third_party/gpui-kit`, which `tools/kit-sync` moves the version here with.
-gpui-kit = { version = "=0.9.0", features = ["syntect"] }
+# Our copy of Longbridge's kit, on the release `tools/kit-sync` pins, with our changes, as `third_party/README.md`
+# says. It pins exact GPUI snapshots, so a release is taken deliberately, and `tools/kit-sync` moves the version here
+# with it.
+gpui-kit = { path = "third_party/gpui-kit/crates/kit", version = "=0.9.0", features = ["syntect"] }
 # Moves with gpui-kit, as `tools/kit-sync` moves it: the version its GPUI uses. Only for drawing off the main thread,
 # which tests run on.
 gpui-pre-apple = { version = "=0.3.11", features = ["font-kit"] }

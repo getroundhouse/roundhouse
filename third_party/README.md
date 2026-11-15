@@ -4,9 +4,9 @@ Other projects' code that the app builds from a copy kept here, on a release of 
 
 ## gpui-kit
 
-`gpui-kit/` is our copy of [Longbridge's gpui-kit](https://github.com/longbridge/gpui-kit), the component kit the desktop app is built on, at the release `gpui-kit.toml` names. The app takes the same release from crates.io, as `Cargo.toml` says. *Not built:* the app building the copy.
+`gpui-kit/` is our copy of [Longbridge's gpui-kit](https://github.com/longbridge/gpui-kit), the component kit the desktop app is built on, at the release `gpui-kit.toml` names. The app takes it as a path dependency, as `Cargo.toml` says.
 
-The kit often has nearly what the app needs: a hook it keeps private, an option it doesn't have, a bug in what it draws. The change to it is often a few lines. With a copy, that change goes in the same pull request as the app code that needs it, and the app's tests, the gallery and the merge queue check the two together. Each change is also offered upstream, so the copy stays close to upstream's, and a new release brings less to merge.
+The kit often has nearly what the app needs: a hook it keeps private, an option it doesn't have, a bug in what it draws. The change to it is often a few lines. With a copy, that change goes in the same pull request as the app code that needs it, and the app's tests, the gallery and the merge queue check the two together. Each change is also offered upstream, so the copy stays close to upstream's, and a new release brings less to merge. `docs/gpui.md` says when a change belongs in the kit rather than the app.
 
 ### What's here
 
@@ -23,6 +23,23 @@ Upstream's other crates, its examples outside these crates, its website and its 
 `gpui-kit.toml`, beside the copy, is the release and commit it was made from, and what it kept of them, which the tool writes, and reads to merge the next release with our changes.
 
 The code is under Apache-2.0. The icons in `crates/assets` are Lucide's, under ISC, but for those Lucide took from Feather, which are under MIT, and a few of the kit's own, as `crates/assets/README.md` says. `tools/policy` checks each.
+
+### Changing the kit
+
+- **Write it as upstream would,** as `docs/rust.md` says, so it can go upstream as it is.
+- **Change it in the same pull request as the app code that needs it,** or in a stack with the kit's change at the bottom, as `AGENTS.md` says of layers.
+- **Say in each file it changes that it was changed,** with a comment near the top that holds `Changed in Roundhouse's copy of gpui-kit, as third_party/README.md lists.` as the tool's `NOTICE` has it, since Apache-2.0 asks a changed file to say so. `cargo run -p kit-sync -- diff` leaves the line out. A file that can't hold a comment, such as a JSON theme, is named in its entry under "Our changes" instead.
+- **List it under "Our changes",** with the files it changes, why, and where it was offered upstream.
+- **Leave no warnings.** Our builds show the compiler's warnings in the kit, but `-D warnings` and clippy don't reach it, so nothing fails on them. Run upstream's own checks on the crates it changes, in the copy's workspace:
+
+  ```sh
+  cargo clippy --manifest-path third_party/gpui-kit/Cargo.toml --target-dir target/gpui-kit -p gpui-component --all-targets --features test-support
+  cargo test --manifest-path third_party/gpui-kit/Cargo.toml --target-dir target/gpui-kit -p gpui-component --features test-support
+  ```
+
+  The tests need `test-support`, which upstream's whole workspace turns on for them and the copy's doesn't. They build GPUI and the kit's dependencies a second time, with upstream's settings, under `target/`, where `cargo clean` reaches them, and resolve a `Cargo.lock` in the copy, which git ignores.
+
+  Cargo also warns about upstream's manifests: the workspace's names crates the copy doesn't keep or use, in its dependencies and its profiles, and a `publish` no kept crate inherits, `gpui-kit-assets` has no `[lints]`, and `gpui-component` names two dependencies it doesn't use. Leave those to upstream, since each change to a manifest is one more to merge at every release. The warnings to clear are those in the code a change touches.
 
 ### Offering a change upstream
 
