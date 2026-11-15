@@ -56,7 +56,7 @@ pub(super) fn panel(drawing: &Drawing<'_>, panel: &Panel, cx: &App) -> AnyElemen
         .flex()
         .flex_col()
         .gap_4()
-        .p_5()
+        .p_6()
         .typeset(look::Type::Body)
         .child(
             v_flex()
@@ -142,7 +142,7 @@ fn field(called: &'static str, id: &'static str, input: Input, says: &'static st
     v_flex()
         .w_full()
         .max_w(FIELDS_WIDTH)
-        .gap_1p5()
+        .gap_2()
         .child(div().emphasis().child(called))
         .child(input)
         .child(div().typeset(look::Type::Detail).text_color(colors.text_faint).child(says))

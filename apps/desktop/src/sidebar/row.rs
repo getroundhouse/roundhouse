@@ -17,7 +17,7 @@ use gpui_kit::{
 use look::{Hand as _, LineText, Off as _, Placed, Sizing as _, Typeset as _};
 use protocol::model::{Workspace, WorkspaceId};
 
-use super::{ICON_BOX, MARK_GAP, ROW_INSET, ROW_SIZE, Standing, icon_box, standing};
+use super::{ICON_BOX, MARK_GAP, ROW_PAD, ROW_SIZE, Standing, icon_box, row_inset, standing};
 use crate::app::AppView;
 use crate::{ArchiveWorkspace, MarkWorkspace};
 use crate::{prompt_cache, right_click};
@@ -60,8 +60,8 @@ pub(super) fn workspace_row(
         .ghost()
         .w_full()
         .h(ROW_SIZE.height())
-        .pl(ROW_INSET)
-        .pr_1p5()
+        .pl(row_inset())
+        .pr(ROW_PAD)
         .selected(selected)
         .on_click(cx.listener(move |t, _, _, cx| t.open_workspace(id.clone(), cx)))
         .child(

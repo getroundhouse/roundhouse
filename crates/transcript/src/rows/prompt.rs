@@ -50,7 +50,7 @@ pub(super) fn prompt_bubble(
             v_flex()
                 .id(key.element("bubble"))
                 .max_w(relative(WIDEST_SHARE))
-                .gap_2p5()
+                .gap_3()
                 .px_4()
                 .py_3()
                 .corners(look::Corner::Control)

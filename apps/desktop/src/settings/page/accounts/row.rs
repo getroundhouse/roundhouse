@@ -54,12 +54,11 @@ pub(super) fn row(drawing: &Drawing<'_>, account: &Account, cx: &App) -> AnyElem
     let name = h_flex().gap_2().min_w_0().child(name).children(badge);
     let used = words::last_used(account, drawing.now_ms, cx);
     let used = used.map(|used| div().typeset(look::Type::Body).text_color(colors.text_faint).child(used));
-    let who =
-        v_flex().flex_1().min_w_0().gap_0p5().child(name).children(stands(drawing, account, standing.as_ref(), cx));
+    let who = v_flex().flex_1().min_w_0().gap_1().child(name).children(stands(drawing, account, standing.as_ref(), cx));
     let line = h_flex()
         .items_center()
         .gap_4()
-        .py_3p5()
+        .py_4()
         .child(h_flex().flex_1().min_w_0().items_start().gap_4().child(icon).child(who.children(used)))
         .child(limits(account, drawing.now_ms, cx))
         .child(controls(drawing, account, &called, standing.as_ref(), cx));
@@ -108,7 +107,7 @@ fn stands(drawing: &Drawing<'_>, account: &Account, standing: Option<&Standing>,
         .id(SharedString::from(format!("account-stands-{}", account.id)))
         .role(Role::Label)
         .aria_label(said.clone())
-        .gap_1p5()
+        .gap_2()
         .typeset(look::Type::Body)
         .text_color(warns.unwrap_or(colors.text_muted))
         .children(sign)
@@ -120,8 +119,7 @@ fn stands(drawing: &Drawing<'_>, account: &Account, standing: Option<&Standing>,
 /// them shows. An account no agent has heard a limit of says so.
 fn limits(account: &Account, now_ms: i64, cx: &App) -> Div {
     let colors = look::colors(cx);
-    let column =
-        v_flex().flex_none().w(LIMITS_WIDTH).gap_1p5().typeset(look::Type::Detail).text_color(colors.text_muted);
+    let column = v_flex().flex_none().w(LIMITS_WIDTH).gap_2().typeset(look::Type::Detail).text_color(colors.text_muted);
     if account.limits.is_empty() {
         return column.child(div().text_color(colors.text_faint).child("No limits heard of yet"));
     }

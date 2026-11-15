@@ -129,7 +129,7 @@ fn strip(told: Told, cx: &App) -> Div {
     let sides = told.sides.into_iter().map(|(name, about)| {
         let about =
             about.map(|about| div().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(about));
-        h_flex().min_w_0().gap_1p5().child(div().flex_none().text_color(colors.text).child(name)).children(about)
+        h_flex().min_w_0().gap_2().child(div().flex_none().text_color(colors.text).child(name)).children(about)
     });
     let strip = h_flex()
         .flex_none()
@@ -148,7 +148,7 @@ fn strip(told: Told, cx: &App) -> Div {
         let swatch = div().flex_none().size(px(8.)).corners(look::Corner::Glyph).bg(colors.modified);
         h_flex().flex_none().ml_auto().pl_4().gap_2().child(swatch).child(changed)
     });
-    strip.px_4().gap_5().children(sides).children(changed)
+    strip.px_4().gap_6().children(sides).children(changed)
 }
 
 /// How much faster the folders in its path give up their room than its name, so the name is cut short only once the

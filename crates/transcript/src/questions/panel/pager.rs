@@ -85,7 +85,7 @@ pub(super) fn pager(
             // The arrows' squares stand out past the panel's edge inside, so their icons line up with it.
             .ml(-look::ControlSize::Small.inset())
             .child(back)
-            .child(h_flex().gap_0p5().children(dots))
+            .child(h_flex().gap_1().children(dots))
             .child(next)
             .into_any_element(),
     )

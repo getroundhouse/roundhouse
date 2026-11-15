@@ -11,9 +11,11 @@ use gpui_kit::{
 
 const PADDING: f32 = 12.;
 /// The space between the things in a row.
-const GAP: f32 = 6.;
+const GAP: f32 = 8.;
 /// How big a folder's chevron is in Changes.
 const CHEVRON: f32 = 12.;
+/// How much further in from its left a chevron's drawing starts than a folder's icon's does.
+const CHEVRON_ROOM: f32 = 2.;
 
 /// Which list a row is in, which says what starts a folder's row, how far what it holds sits inside it, and where the
 /// line down that is.
@@ -31,7 +33,9 @@ impl List {
     fn indent(self) -> f32 {
         match self {
             List::AllFiles => ICON_SIZE + GAP,
-            List::Changes => 16.,
+            // Under the folder's icon, as All files' are under its name, with each chevron's drawing level with the
+            // icon's.
+            List::Changes => CHEVRON + GAP - CHEVRON_ROOM,
         }
     }
 

@@ -200,7 +200,7 @@ impl WorkspacePane {
                     .justify_start()
                     .gap_2()
                     .pl_3()
-                    .pr_1p5()
+                    .pr_2()
                     .typeset(look::Type::Body)
                     .line_height(relative(1.25))
                     .text_color(muted)

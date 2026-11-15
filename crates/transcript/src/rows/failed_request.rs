@@ -42,7 +42,7 @@ pub(super) fn card(
     let id = (ItemKey::Event(seq, 0), Part::FailedRequest);
     let said = from_blocks(&Written::found(TextAt::only(seq, 0), &id, find, &failure.message), None, shared);
     let card = card::tinted(Some(stopped), cx)
-        .gap_1p5()
+        .gap_2()
         .child(head)
         .child(div().typeset(look::Type::Body).text_color(colors.text_muted).child(said))
         .when(retry, |d| d.child(h_flex().pt_1().child(retry_button(seq, shared))));

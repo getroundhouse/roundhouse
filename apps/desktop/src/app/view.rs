@@ -307,7 +307,7 @@ fn empty_state(title: &str, body: &str, action: Button, cx: &mut Context<AppView
         .gap_4()
         .child(look::brand(px(72.), cx))
         .child(
-            v_flex().items_center().gap_1p5().child(div().typeset(look::Type::Heading).child(title.to_string())).child(
+            v_flex().items_center().gap_2().child(div().typeset(look::Type::Heading).child(title.to_string())).child(
                 div().max_w(px(400.)).text_center().typeset(look::Type::Body).text_color(muted).child(body.to_string()),
             ),
         )

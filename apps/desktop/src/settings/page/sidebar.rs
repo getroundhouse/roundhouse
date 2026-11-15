@@ -44,20 +44,19 @@ pub(super) fn sidebar(
             .text_color(colors.text_muted)
             .child(section.heading);
         let rows = section.pages.iter().map(|page| page_row(page, shown == Some(page.id), chosen, cx));
-        v_flex().mt_3().child(heading).child(v_flex().gap_0p5().children(rows))
+        v_flex().mt_3().child(heading).child(v_flex().gap_1().children(rows))
     });
-    // The rows reach a little further left than the search, which ends level with them on the right.
+    // The rows' fills and the search line up on both sides.
     v_flex()
         .flex_none()
         .w(width)
         .h_full()
         .pt(TOP_STRIP_HEIGHT)
-        .pl_1p5()
-        .pr_2()
+        .px_2()
         .bg(colors.sidebar)
         .border_r_1()
         .border_color(colors.edge)
-        .child(div().flex_none().pl_0p5().child(search_field(search, window, cx)))
+        .child(search_field(search, window, cx))
         .child(v_flex().id("settings-pages").flex_1().min_h_0().children(headed).overflow_y_scrollbar())
 }
 
@@ -83,6 +82,7 @@ fn search_field(search: &Entity<InputState>, window: &Window, cx: &App) -> impl 
     let to_focus = search.clone();
     h_flex()
         .id("settings-search")
+        .flex_none()
         .w_full()
         .h(SEARCH_HEIGHT)
         .pl(px(9.))

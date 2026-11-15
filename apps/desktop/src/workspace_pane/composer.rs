@@ -194,7 +194,6 @@ impl WorkspacePane {
         h_flex()
             .flex_1()
             .min_w_0()
-            .gap_0p5()
             // Only a chat has a model, so there's none to show while the workspace's first is being made.
             .when_some(model_and_effort, |row, (model, effort, switching)| {
                 row.child(model_picker("model-picker", agent.as_ref(), &model, effort, switching, models))

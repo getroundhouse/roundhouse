@@ -29,7 +29,7 @@ fn in_the_versions_place(
     h_flex()
         .id(id)
         .min_w_0()
-        .gap_1p5()
+        .gap_2()
         .text_color(color)
         .child(h_flex().flex_none().w(look::Size::Inline.width()).justify_center().child(icon))
         .child(div().min_w_0().truncate().child(words.into()))
@@ -101,8 +101,8 @@ fn checkout_card(checkout: &Checkout, data_dir: &Path, cx: &App) -> AnyElement {
     v_flex()
         .id("checkout-card")
         .w_full()
-        .p_2p5()
-        .gap_0p5()
+        .p_3()
+        .gap_1()
         .corners(look::Corner::Card)
         .bg(colors.raised)
         .border_1()
@@ -114,7 +114,9 @@ fn checkout_card(checkout: &Checkout, data_dir: &Path, cx: &App) -> AnyElement {
         .into_any_element()
 }
 
-/// The build line, with what's said about updating in the version's place while there's something to say.
+/// The build line, with what's said about updating in the version's place while there's something to say, and its
+/// two buttons side by side at the end, kept apart by their own room, so they read as a pair, and a message as long as
+/// the update server's being out of reach fits whole before them.
 fn build_line(line: &BuildLine, cx: &mut Context<AppView>) -> impl IntoElement {
     let said = crate::updates::said(cx).map_or_else(|| version(line, cx), |said| about_updating(said, cx));
     h_flex()
@@ -122,11 +124,10 @@ fn build_line(line: &BuildLine, cx: &mut Context<AppView>) -> impl IntoElement {
         .w_full()
         .h(HEIGHT)
         .pl_2()
-        .gap_0p5()
+        .gap_1()
         .typeset(look::Type::Detail)
         .child(div().flex_1().min_w_0().child(said))
-        .child(controls::help(cx))
-        .child(controls::settings(cx))
+        .child(h_flex().flex_none().child(controls::help(cx)).child(controls::settings(cx)))
         .test_support()
 }
 

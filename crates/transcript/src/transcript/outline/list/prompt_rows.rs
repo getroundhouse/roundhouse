@@ -19,7 +19,7 @@ const WIDTH: Pixels = px(360.);
 const INSET: Pixels = px(4.);
 /// The tallest the rows get before they scroll: about eight prompts of two lines.
 const TALLEST: Pixels = px(420.);
-const GAP: Pixels = px(2.);
+const GAP: Pixels = px(4.);
 /// Room for a prompt's number, up to four digits.
 const NUMBER_WIDTH: Pixels = px(28.);
 /// How far past the list's window rows are laid out, so one is ready before it scrolls in.
@@ -201,7 +201,7 @@ fn compaction_row(
         .gap_3()
         .pl_1()
         .pr_3()
-        .py_1p5()
+        .py_2()
         .corners(look::Corner::Control)
         .hand()
         .hover(move |d| d.bg(fill))

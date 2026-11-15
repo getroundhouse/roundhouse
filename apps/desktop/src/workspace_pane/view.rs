@@ -72,7 +72,7 @@ impl WorkspacePane {
                     .justify_start()
                     .gap_2()
                     .pl_3()
-                    .pr_1p5()
+                    .pr_2()
                     .typeset(look::Type::Body)
                     .line_height(relative(1.25))
                     // Only a chat that needs a look stands out: one with a reply that hasn't been read, or a question
@@ -322,7 +322,7 @@ impl WorkspacePane {
             // What the next prompt costs, with a clock as the newest turn's line has.
             .when_some(cache_expired, |d, said| {
                 let clock = look::cache_mark(look::CacheMark::Clock, faint);
-                let line = h_flex().gap_1p5().child(clock).child(said);
+                let line = h_flex().gap_2().child(clock).child(said);
                 d.child(transcript::in_column(line).flex_none().py_1().typeset(look::Type::Detail).text_color(muted))
             })
             .child(composer)

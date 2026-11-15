@@ -51,7 +51,7 @@ pub(super) fn row(setting: &Setting, cx: &App) -> AnyElement {
         .justify_between()
         .gap_6()
         .pt_1()
-        .pb_5()
+        .pb_6()
         .border_b_1()
         .border_color(colors.edge)
         .typeset(look::Type::Body)

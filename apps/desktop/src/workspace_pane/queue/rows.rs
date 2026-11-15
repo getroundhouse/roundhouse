@@ -61,7 +61,7 @@ impl WorkspacePane {
                 .child(
                     div()
                         .px_3()
-                        .py_1p5()
+                        .py_2()
                         .border_b_1()
                         .border_color(border)
                         .typeset(look::Type::Detail)
@@ -96,8 +96,7 @@ impl WorkspacePane {
             .w_full()
             .items_center()
             .gap_2()
-            .px_2()
-            .py_1p5()
+            .p_2()
             .corners(look::Corner::Control)
             .hover(move |style| style.bg(lit))
             .child(queued_line(prompt, text, muted))
@@ -126,7 +125,7 @@ fn queued_buttons(
             .tooltip(tooltip)
     };
     let (edit, remove) = (button("edit", IconName::Pencil, "Edit"), button("remove", IconName::Trash, "Remove"));
-    let buttons = h_flex().flex_none().gap_0p5().invisible();
+    let buttons = h_flex().flex_none().gap_1().invisible();
     let Row::Queued { working } = row else {
         return buttons.child(edit).child(remove).child(button("send", IconName::ArrowUp, "Send now"));
     };

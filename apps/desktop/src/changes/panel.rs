@@ -217,7 +217,7 @@ pub(crate) fn controls(changes: &Entity<Changes>, code: &Placed, cx: &App) -> An
         // Out past the bar's room by the room around the button's icon, so the icon lines up with the rows' marks.
         .mr(-look::ControlSize::Regular.inset())
         // On the baseline of the tabs' names beside it.
-        .child(code.set(h_flex().flex_none().gap_1p5().children(counts(added, removed, cx))))
+        .child(code.set(h_flex().flex_none().gap_2().children(counts(added, removed, cx))))
         .child(
             Button::new("changes-layout")
                 .hand()
@@ -289,9 +289,7 @@ fn file_row(
     let counts = counts(file.added(), file.removed(), cx);
     row_frame(format!("file-{path}"), List::Changes, depth, showing, cx)
         .child(label)
-        .child(
-            h_flex().flex_none().gap_1p5().child(line_text.code.set(h_flex().gap_1p5().children(counts))).child(status),
-        )
+        .child(h_flex().flex_none().gap_2().child(line_text.code.set(h_flex().gap_2().children(counts))).child(status))
         .on_click(cx.listener(move |_, _, _, cx| cx.emit(ChangesEvent::Open(path.clone()))))
         .test_support()
         .into_any_element()

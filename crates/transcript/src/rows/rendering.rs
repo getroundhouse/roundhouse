@@ -209,9 +209,9 @@ pub(super) fn rule_middle(id: impl Into<ElementId>, cx: &App) -> Stateful<Div> {
     h_flex()
         .id(id)
         .flex_none()
-        .gap_1p5()
+        .gap_2()
         .px_2()
-        .py_0p5()
+        .py_1()
         .typeset(look::Type::Detail)
         .text_color(look::colors(cx).text_faint)
 }

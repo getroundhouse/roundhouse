@@ -86,7 +86,7 @@ fn answers(questions: &[Question], asked: &Asked, toggle: &Toggle, cx: &App) -> 
                 .px_3()
                 .pt_2()
                 .pb_3()
-                .gap_1p5()
+                .gap_2()
                 .when_some(question.header.clone(), |d, header| {
                     d.child(div().typeset(look::Type::Detail).text_color(colors.text_faint).child(header))
                 })

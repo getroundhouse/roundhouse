@@ -51,8 +51,7 @@ impl TurnCard {
             .flex()
             .flex_col()
             .min_w(MIN_WIDTH)
-            .px_3()
-            .py_2p5()
+            .p_3()
             .gap_1()
             .typeset(look::Type::Body)
             .children(heading.map(|heading| div().emphasis().child(heading)))
@@ -94,6 +93,6 @@ pub(super) fn row(name: &'static str, said: String, mark: Option<AnyElement>, cx
         .gap_6()
         .aria_label(format!("{name} {said}"))
         .child(div().text_color(look::colors(cx).text_muted).child(name))
-        .child(h_flex().gap_1p5().children(mark).child(div().whitespace_nowrap().child(said)))
+        .child(h_flex().gap_2().children(mark).child(div().whitespace_nowrap().child(said)))
         .test_support()
 }
