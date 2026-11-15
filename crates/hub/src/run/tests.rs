@@ -1,3 +1,5 @@
+use std::time::{Duration, Instant};
+
 use protocol::model::{WorkspaceId, WorkspaceStatus};
 
 use super::*;
@@ -71,5 +73,11 @@ fn letting_go_of_the_lock_stops_the_store_writing() {
     drop(lock);
 
     assert!(store.writer_is_held());
-    std::fs::File::open(&path).unwrap().try_lock().unwrap();
+    // Once a process another test starts has run its program, since until then it has a copy of the lock's file, and
+    // the lock goes with the last copy.
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while let Err(e) = std::fs::File::open(&path).unwrap().try_lock() {
+        assert!(Instant::now() < deadline, "the lock is still held: {e}");
+        std::thread::sleep(Duration::from_millis(1));
+    }
 }
