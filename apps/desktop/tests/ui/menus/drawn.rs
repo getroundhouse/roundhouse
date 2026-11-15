@@ -34,7 +34,11 @@ fn the_button_opens_the_menus_and_an_item_does_what_its_key_does(cx: &mut TestAp
     ui.click_menu_item("File");
     ui.click_menu_item("New Chat");
 
-    ui.wait("the new chat", |ui| ui.open_chats().len() == before + 1);
+    // Showing, once the hub has said it's made, which the app waits for before it makes another. The hub tells the feed
+    // of a new chat before it answers, so the chat can be open before then.
+    ui.wait("the new chat to show", |ui| {
+        ui.open_chats().len() == before + 1 && ui.open_chats().last() == Some(&ui.active_chat())
+    });
     assert!(!open(&mut ui), "choosing an item closes the menus");
     ui.press("secondary-t");
     ui.wait("another, from the key", |ui| ui.open_chats().len() == before + 2);
