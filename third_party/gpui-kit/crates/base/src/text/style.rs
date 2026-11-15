@@ -1,6 +1,7 @@
+// Changed in Roundhouse's copy of gpui-kit, as third_party/README.md lists.
 use std::sync::Arc;
 
-use gpui::{HighlightStyle, Hsla, Rems, StyleRefinement, rems};
+use gpui::{FontWeight, HighlightStyle, Hsla, Rems, StyleRefinement, rems};
 
 use crate::ColorTokens;
 
@@ -24,6 +25,7 @@ pub struct TextViewStyle {
     table: StyleRefinement,
     table_head: StyleRefinement,
     table_cell: StyleRefinement,
+    strong: HighlightStyle,
     inline_code: HighlightStyle,
     /// Explicit inline code refinements, applied after theme and surface colors.
     inline_code_style: StyleRefinement,
@@ -53,6 +55,7 @@ impl PartialEq for TextViewStyle {
             && self.table == other.table
             && self.table_head == other.table_head
             && self.table_cell == other.table_cell
+            && self.strong == other.strong
             && self.inline_code == other.inline_code
             && self.inline_code_style == other.inline_code_style
             && self.list_style == other.list_style
@@ -96,6 +99,10 @@ impl TextViewStyle {
             table: StyleRefinement::default(),
             table_head: StyleRefinement::default(),
             table_cell: StyleRefinement::default(),
+            strong: HighlightStyle {
+                font_weight: Some(FontWeight::BOLD),
+                ..Default::default()
+            },
             inline_code: HighlightStyle {
                 background_color: Some(colors.accent),
                 ..Default::default()
@@ -170,6 +177,19 @@ impl TextViewStyle {
     /// its edge.
     pub fn with_code_block(mut self, style: StyleRefinement) -> Self {
         self.code_block = style;
+        self
+    }
+
+    /// Sets the highlight style for strong emphasis, which defaults to bold.
+    /// This replaces the default highlight rather than refining it, so callers
+    /// can choose another weight, color, or decoration. Italic, strikethrough,
+    /// underline, inline-code, explicit highlight and link marks are applied
+    /// afterward and keep their usual precedence.
+    ///
+    /// An empty style makes strong emphasis inherit the surrounding text's
+    /// appearance without changing the document's marks or other formatting.
+    pub fn with_strong(mut self, style: HighlightStyle) -> Self {
+        self.strong = style;
         self
     }
 
@@ -320,6 +340,11 @@ impl TextViewStyle {
         &self.table_cell
     }
 
+    /// The highlight style for strong emphasis.
+    pub fn strong(&self) -> HighlightStyle {
+        self.strong
+    }
+
     /// The highlight style for inline code, before the code-background
     /// fallback in [`Self::inline_code_highlight`] applies.
     pub fn inline_code(&self) -> HighlightStyle {
@@ -465,6 +490,7 @@ mod tests {
         assert!(base != base.clone().with_table_cell(table));
 
         assert!(base != base.clone().with_dark(true));
+        assert!(base != base.clone().with_strong(HighlightStyle::default()));
         assert!(
             base != base
                 .clone()

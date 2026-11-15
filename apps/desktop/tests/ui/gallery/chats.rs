@@ -219,8 +219,8 @@ pub(crate) fn stopped() -> Vec<EventBody> {
     events
 }
 
-const FIRST_THOUGHT: &str = "The test says a train should slow at caution, not stop. `approach` brakes whenever the \
-                             signal isn't clear, so it treats caution like stop.
+const FIRST_THOUGHT: &str = "**The test says a train should slow at caution, not stop. `approach` brakes whenever the \
+                             signal isn't clear, so it treats caution like stop.**
 
 That's the bug: it should brake only at stop, and slow at caution. I'll check how `brake` and `slow` differ before \
 changing it, since `slow` might need a speed.";

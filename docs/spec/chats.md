@@ -411,6 +411,8 @@ Every call is drawn the same way, as the first rule below says, and each kind fi
 
 - **What the agent thought is a line like a call's,** saying `Thinking`, with the start of the thought, faint, cut off where the line ends. Opened, the whole thought is at body size in muted text, under its line and on the column's left edge, and the line drops the start, so it isn't shown twice. While it streams, its line says `Thinking…` at the same size. *Unconfirmed.*
 
+- **Bold emphasis in thinking keeps the surrounding text's regular weight,** for every agent, while streaming and once recorded, so progress notes stay quieter than the answer. Links, lists, code and other Markdown formatting keep their styles. This is how thoughts are drawn; the agent's original text is kept unchanged.
+
 - **Codex thinking shows the reasoning summaries the model makes available.** Roundhouse requests automatic summaries, since a model's default can leave them off. A model can still return no summary for a thought. *Unconfirmed.*
 
   **Thinking among calls: a long thought opened, and a short one closed.** *Unconfirmed.*

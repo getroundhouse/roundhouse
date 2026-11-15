@@ -140,17 +140,25 @@ pub(crate) struct Written<'a> {
     pub(crate) found: Option<(&'a TextId, &'a FindLook)>,
     pub(crate) text: &'a str,
     pub(crate) area: Option<ElementId>,
+    pub(crate) style: super::Style,
 }
 
 impl<'a> Written<'a> {
     /// A text find looks in, which it knows as `id`, with what it finds drawn as `find` says.
     pub(crate) fn found(at: impl Into<Place>, id: &'a TextId, find: &'a FindLook, text: &'a str) -> Self {
-        Self { at: at.into(), element: view_id(id), found: Some((id, find)), text, area: None }
+        Self {
+            at: at.into(),
+            element: view_id(id),
+            found: Some((id, find)),
+            text,
+            area: None,
+            style: super::Style::for_part(id.1),
+        }
     }
 
     /// A text find doesn't look in, such as a plan, whose element is known as `element`.
     pub(crate) fn unfound(at: TextAt, element: ElementId, text: &'a str) -> Self {
-        Self { at: Place::At(at), element, found: None, text, area: None }
+        Self { at: Place::At(at), element, found: None, text, area: None, style: super::Style::Markdown }
     }
 
     /// In the area `area`, which scrolls it, and scrolls on under a drag that starts in it.
@@ -246,7 +254,8 @@ impl Texts {
             .map_or_default(|(parsed, (id, find))| find.marks_in_leaves(id, &parsed.leaves));
         let (texts, selection) = (self.clone(), selection.clone());
         let area = written.area.clone();
-        ProseElement { known, at, area, text: parsed, apart, marks, images, texts, selection }.into_any_element()
+        let style = written.style;
+        ProseElement { known, at, area, style, text: parsed, apart, marks, images, texts, selection }.into_any_element()
     }
 
     /// What the texts from `from` to `to`, both in, show, leaf by leaf, in order, as far as they've been parsed, but

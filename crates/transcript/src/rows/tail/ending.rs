@@ -7,7 +7,7 @@ use crate::attachments::Carried;
 use crate::find::{FindLook, Part};
 use crate::folds::Folds;
 use crate::item_key::ItemKey;
-use crate::texts::{TextAt, Written};
+use crate::texts::{Style, TextAt, Written};
 use crate::transcript::{AtWork, Model, PullRequestStanding};
 use crate::{attachments, find};
 use client_core::session_log::{By, SessionLog};
@@ -100,7 +100,8 @@ fn still_writing(tail: &Tail, shared: &Shared, thinking_open: bool, cx: &App) ->
             let mut drawn = |part| {
                 let (element, at) = (find::view_id(&(key.clone(), part)), TextAt::at_the_end(placed));
                 placed += 1;
-                from_blocks(&Written::unfound(at, element, &block.text), None, shared)
+                let written = Written { style: Style::for_part(part), ..Written::unfound(at, element, &block.text) };
+                from_blocks(&written, None, shared)
             };
             match block.kind {
                 BlockKind::Text => out.push(drawn(Part::Text)),

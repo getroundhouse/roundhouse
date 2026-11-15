@@ -2771,7 +2771,7 @@ fn mark_text_color(highlight: Hsla, background: Hsla) -> Hsla {
 fn mark_highlight(mark: &TextMark, node_cx: &NodeContext, cx: &App) -> InlineHighlight {
     let mut highlight = HighlightStyle::default();
     if mark.bold {
-        highlight.font_weight = Some(FontWeight::BOLD);
+        highlight = node_cx.style.strong();
     }
     if mark.italic {
         highlight.font_style = Some(FontStyle::Italic);
@@ -4709,6 +4709,57 @@ mod tests {
             // Text that is not marked keeps the inherited color.
             let style = mark_highlight(&TextMark::default().bold(), &node_cx, cx).style;
             assert_eq!(style.color, None);
+        });
+    }
+
+    #[test]
+    fn strong_style_changes_rendering_without_changing_marks_or_other_styles() {
+        use gpui::{Empty, TestApp};
+        let mut app = TestApp::new();
+        let mut window = app.open_window(|_, _| Empty);
+        window.update(|_, _, cx| {
+            cx.set_global(crate::Theme::default());
+            let mark = TextMark::default().bold().italic().code().link(LinkMark {
+                url: "https://example.com".into(),
+                ..Default::default()
+            });
+            let paragraph = Paragraph {
+                children: vec![
+                    InlineNode::new("word").marks(vec![(0..4, mark)]),
+                    InlineNode::new("text").marks(vec![(0..4, TextMark::default().bold())]),
+                ],
+                ..Default::default()
+            };
+            let source = paragraph.to_markdown();
+            let mut context = NodeContext::default();
+            let (_, bold, links) = paragraph.plain_render(&context, cx);
+            assert_eq!(bold[0].1.style.font_weight, Some(FontWeight::BOLD));
+
+            for strong in [
+                HighlightStyle::default(),
+                HighlightStyle {
+                    font_weight: Some(FontWeight::MEDIUM),
+                    color: Some(gpui::red()),
+                    ..Default::default()
+                },
+            ] {
+                context.style = Arc::new(context.style.as_ref().clone().with_strong(strong));
+                let (_, restyled, restyled_links) = paragraph.plain_render(&context, cx);
+
+                let mut expected = bold[0].1.clone();
+                expected.style.font_weight = strong.font_weight;
+                assert_eq!(restyled[0].1, expected, "other marks retain their styling");
+                assert_eq!(
+                    restyled[1].1.style, strong,
+                    "strong alone uses the full style"
+                );
+                assert_eq!(paragraph.inline_highlights(&context, cx)[1].1.style, strong);
+                assert_eq!(restyled_links, links);
+                assert_eq!(paragraph.to_markdown(), source);
+            }
+
+            let (_, bold_again, _) = paragraph.plain_render(&NodeContext::default(), cx);
+            assert_eq!(bold_again, bold);
         });
     }
 

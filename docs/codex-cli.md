@@ -62,6 +62,16 @@ An `exec_command` can yield a session while its command keeps running. Its `proc
 
 Sol and Astra's model metadata in Codex 0.169.0 defaults `default_reasoning_summary` to `none`. With that effective setting, completed reasoning items can have empty `summary` and `content` arrays; an encrypted reasoning item in the native history supplies no display text. The adapter requests `model_reasoning_summary: "auto"` in the thread configuration and `summary: "auto"` on each new root turn. This requests whatever summary the model makes available; it does not guarantee every reasoning item contains one. Title-generation threads keep summaries off.
 
+App-server's reasoning item has separate `summary` and `content` fields; their presence in the schema does not guarantee readable raw reasoning. Roundhouse turns `summary` and `item/reasoning/summaryTextDelta` into thinking text. It does not deserialize `content` into the transcript and ignores `item/reasoning/textDelta`, so readable raw reasoning would not appear even if a model supplied it.
+
+Summary entries can contain Markdown, including entries consisting only of a bold title. The adapter preserves that text and joins a completed item's entries with blank lines. The transcript renders thinking as Markdown in muted text, with bold emphasis at the surrounding text's regular weight, so these titles stay as quiet as other progress notes.
+
+#### Controls and limits
+
+Codex accepts `auto`, `concise`, `detailed` and `none` for `model_reasoning_summary` and a turn's `summary`. OpenAI's [reasoning guide](https://developers.openai.com/api/docs/guides/reasoning#reasoning-summaries) describes `auto` as requesting the most detailed summarizer available for the model, usually equivalent to `detailed`, and says raw reasoning tokens are not exposed. This documents the public API's contract; it does not establish how much summary prose the ChatGPT sign-in route returns. The [CLI's request builder](https://github.com/openai/codex/blob/rust-v0.169.0/codex-rs/core/src/client.rs) passes the requested summary mode to a provider and model that support it; it does not enforce a minimum amount of summary text. Roundhouse explicitly requests `auto` at both thread and turn start, so changing only the person's `model_reasoning_summary` in `config.toml` does not change that request.
+
+`show_raw_agent_reasoning = true` controls displaying raw reasoning that a provider already emits; it does not request or decrypt hidden reasoning. The [Codex configuration guide](https://learn.chatgpt.com/docs/config-file/config-advanced#hide-or-surface-reasoning-events) makes its effect conditional on the model emitting that content. Reasoning effort controls how much the model reasons, and `model_verbosity` controls answer detail; neither is a control for revealing raw reasoning.
+
 ### Subagent threads
 
 Codex 0.169.0 multiplexes subagent notifications over the parent's app-server connection. `threadId` identifies the conversation, and `turnId`, or `turn.id` on a turn notification, identifies an invocation. Child turn starts and completions must not change the root turn, consume its queued native user-message echoes, or settle its calls and requests.
