@@ -1,13 +1,14 @@
-use protocol::capability::calls::Call;
 use protocol::capability::calls::call::{
-    CellEdit, Command as TypedCommand, CommandPart, FilePatch, GenerateImage, NotebookEdit, Patch, PatchChange,
-    ViewImage,
+    CellEdit, Command as TypedCommand, CommandPart, Fetch, FilePatch, FindFiles, GenerateImage, NotebookEdit, Patch,
+    PatchChange, Search as TypedSearch, Shows, ViewImage, WebSearch,
 };
+use protocol::capability::calls::output::{Found, FoundLine, Paths, WebResult};
+use protocol::capability::calls::{Call, CallOutput};
 use protocol::event::{Asking, CallKind, EventBody};
 use protocol::fixtures::{self, ApprovalRequest, approval_request};
 use serde_json::{Value, json};
 
-use super::{Recorded, ToolCall, asked_about, count, typed};
+use super::{Looks, Only, Recorded, Search, ToolCall, asked_about, count, typed};
 
 /// A call recorded with the kind its adapter said, or with none, as one from before adapters said.
 fn recorded<'a>(kind: Option<&'a CallKind>, name: &'a str, input: &'a Value) -> Recorded<'a> {
@@ -186,22 +187,74 @@ fn command_doing(command: &str, parts: Vec<CommandPart>) -> Call {
     Call::Command(TypedCommand { parts, ..fixtures::typed_command(command) })
 }
 
+/// What a typed command does and nothing else, as its agent read it, or `None`.
+fn only(call: &Call) -> Option<Only<'_>> {
+    let ToolCall::Command(command) = ToolCall::read(Recorded::Typed(call)) else { panic!("still a command") };
+    command.only
+}
+
 /// A command its agent says does nothing but read one file says which, so a client can draw it as reading that file.
 /// One that reads more, or does anything else, or whose agent said nothing of what it does, is only a command.
 #[test]
 fn a_typed_command_that_only_reads_one_file_says_which() {
     let read = |path: &str| CommandPart::Read { path: path.into() };
-    let reads = |call: &Call| {
-        let ToolCall::Command(command) = ToolCall::read(Recorded::Typed(call)) else { panic!("still a command") };
-        command.reads.map(str::to_string)
-    };
 
-    assert_eq!(reads(&command_doing("sed -n 1,40p a.rs", vec![read("a.rs")])).as_deref(), Some("a.rs"));
-    assert_eq!(reads(&command_doing("cat a.rs a.rs", vec![read("a.rs"), read("a.rs")])).as_deref(), Some("a.rs"));
-    assert_eq!(reads(&command_doing("cat a.rs b.rs", vec![read("a.rs"), read("b.rs")])), None, "two files");
+    assert_eq!(only(&command_doing("sed -n 1,40p a.rs", vec![read("a.rs")])), Some(Only::Reads("a.rs")));
+    assert_eq!(only(&command_doing("cat a.rs a.rs", vec![read("a.rs"), read("a.rs")])), Some(Only::Reads("a.rs")));
+    assert_eq!(only(&command_doing("cat a.rs b.rs", vec![read("a.rs"), read("b.rs")])), None, "two files");
     let listed = vec![read("a.rs"), CommandPart::List { path: None }];
-    assert_eq!(reads(&command_doing("cat a.rs; ls", listed)), None, "more than reading");
-    assert_eq!(reads(&command_doing("cat a.rs", Vec::new())), None, "its agent didn't say");
+    assert_eq!(only(&command_doing("cat a.rs; ls", listed)), None, "more than reading");
+    assert_eq!(only(&command_doing("cat a.rs", Vec::new())), None, "its agent didn't say");
+}
+
+/// A command its agent says does nothing but search what's in files for one pattern says the search, so a client can
+/// draw it as one. One that searches for something its agent couldn't say, or searches twice, or does more, is only a
+/// command.
+#[test]
+fn a_typed_command_that_only_searches_says_how() {
+    let search = |pattern: Option<&str>, path: Option<&str>| CommandPart::Search {
+        pattern: pattern.map(Into::into),
+        path: path.map(Into::into),
+    };
+    let found = Search { pattern: "fn main", path: Some("src"), looks: Looks::InFiles };
+
+    let searched = command_doing("rg -n 'fn main' src", vec![search(Some("fn main"), Some("src"))]);
+    assert_eq!(only(&searched), Some(Only::Searches(found)));
+    let unsaid = command_doing("rg -f patterns.txt", vec![search(None, None)]);
+    assert_eq!(only(&unsaid), None, "a pattern its agent didn't say");
+    let twice = command_doing("rg a; rg b", vec![search(Some("a"), None), search(Some("b"), None)]);
+    assert_eq!(only(&twice), None, "two searches");
+    let read = CommandPart::Read { path: "a.rs".into() };
+    assert_eq!(only(&command_doing("rg a; cat a.rs", vec![search(Some("a"), None), read])), None, "and a read");
+}
+
+/// A typed search, a find, a fetch and a web search are each read as the kind a client draws, and named in words.
+#[test]
+fn a_typed_search_or_call_of_the_web_is_read_as_its_kind_and_named_in_words() {
+    let searched = Call::Search(TypedSearch {
+        pattern: "fn main".into(),
+        path: Some("src".into()),
+        files: None,
+        shows: Shows::Lines,
+    });
+    let found = Call::FindFiles(FindFiles { pattern: "**/*.rs".into(), path: None });
+    let fetched = Call::Fetch(Fetch { url: "https://example.com/a".into(), asking: Some("What's new?".into()) });
+    let web = Call::WebSearch(WebSearch { query: "signals".into(), only_domains: Vec::new(), not_domains: Vec::new() });
+    let read = |call| ToolCall::read(Recorded::Typed(call));
+
+    assert!(
+        matches!(read(&searched), ToolCall::Search(s) if s == Search { pattern: "fn main", path: Some("src"), looks: Looks::InFiles })
+    );
+    assert!(matches!(read(&found), ToolCall::Search(s) if s.looks == Looks::ForNames && s.path.is_none()));
+    assert!(
+        matches!(read(&fetched), ToolCall::Fetch(f) if f.url == "https://example.com/a" && f.prompt == Some("What's new?"))
+    );
+    assert!(matches!(read(&web), ToolCall::WebSearch(w) if w.query == "signals"));
+    let said = |call| (typed::title(call), Recorded::Typed(call).summary().unwrap_or_default());
+    assert_eq!(said(&searched), ("Search".into(), "fn main".into()));
+    assert_eq!(said(&found), ("Find files".into(), "**/*.rs".into()));
+    assert_eq!(said(&fetched), ("Fetch".into(), "https://example.com/a".into()));
+    assert_eq!(said(&web), ("Search the web".into(), "signals".into()));
 }
 
 /// Each typed call of a file is read as the kind a client draws, and named in words. Looking at an image and making
@@ -232,4 +285,22 @@ fn a_typed_call_of_a_file_is_read_as_its_kind_and_named_in_words() {
     assert_eq!(said(&patch), ("Edit".into(), "src/a.rs, src/b.rs".into()));
     assert_eq!(typed::title(&looked_at), "View an image");
     assert_eq!(typed::title(&made), "Make an image");
+}
+
+/// What a typed search found reads as text, as the CLI prints it: its matches as ripgrep prints them, its files one to
+/// a line, or how many it counted, and a web search's pages, each its title and address, then what was made of them.
+#[test]
+fn what_a_typed_search_found_reads_as_text() {
+    let line = FoundLine { path: "src/a.rs".into(), line: 3, text: "fn a() {".into() };
+    let lines = CallOutput::Found(Found::Lines { lines: vec![line], truncated: false });
+    let files = Paths { paths: vec!["src/a.rs".into(), "src/b.rs".into()], truncated: false };
+    let page = WebResult { title: "Railway signal".into(), url: "https://example.org/signal".into(), snippet: None };
+    let pages = CallOutput::WebResults { results: vec![page], summary: Some("A signal shows stop.".into()) };
+
+    assert_eq!(typed::output(&lines), "src/a.rs:3:fn a() {");
+    assert_eq!(typed::output(&CallOutput::Found(Found::Files(files))), "src/a.rs\nsrc/b.rs");
+    assert_eq!(typed::output(&CallOutput::Found(Found::Count { matches: 3, files: 2 })), "3 matches in 2 files");
+    assert_eq!(typed::output(&pages), "Railway signal (https://example.org/signal)\n\nA signal shows stop.");
+    let words = CallOutput::WebResults { results: Vec::new(), summary: Some("Nothing matched.".into()) };
+    assert_eq!(typed::output(&words), "Nothing matched.", "no pages, then what was made of none");
 }

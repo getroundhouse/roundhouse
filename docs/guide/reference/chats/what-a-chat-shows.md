@@ -29,7 +29,7 @@ Each call is a line: what it is, and what it's about. Click it to open it.
 | An edit | The file, and lines added and removed, such as `+5 −0` | Its diff |
 | A patch of several files, as Codex makes | How many files, such as `Edit 2 files`, the lines added and removed, and the files' names | Each file's path, then its diff |
 | A search | Its pattern, where it looked, and how much it found | The matching lines, under their files |
-| A web search | What it looked for, and how many pages it found | The pages, which open in the browser |
+| A web search | What it looked for, and how many pages it found, where its agent says which | The pages, which open in the browser, then what was made of them |
 | A fetch | The site | The address, what was asked of it, and the answer |
 | Any other tool | Its name made readable, and the MCP server it's from | Its input, then what came back |
 
@@ -37,7 +37,8 @@ Each call is a line: what it is, and what it's about. Click it to open it.
 
 - **A call that failed says so on a red line under it,** such as `Exit 1`, or `Timed out` or `Stopped` for a command that didn't exit, where its agent says, with the first line of what went wrong. It shows while the call is closed, so a failure is never hidden.
 - **A command that went on in the background says so when it's opened,** under what it printed by then, since what it prints from then on isn't the call's.
-- **A Codex command that only reads a file shows as reading it,** with the file's name, and opens to what it printed. That's a command that runs one program to print a file, such as `cat a.rs` or `sed -n '1,40p' a.rs`, so `cd src && cat a.rs` shows as a command. A patch of one file shows as an edit or a write of it does.
+- **A Codex command that only reads a file shows as reading it,** with the file's name, and opens to what it printed. That's a command that runs one program to print a file, such as `cat a.rs` or `sed -n '1,40p' a.rs`, so `cd src && cat a.rs` shows as a command. One that only searches shows as a search, and opens to its matching lines under their files, or to what it printed. A patch of one file shows as an edit or a write of it does.
+- **A web search whose agent says what it found only in words, as Antigravity's does, doesn't say how many pages it found,** and opens to the words.
 - **Hovering an edit shows its diff,** without opening it.
 - **An opened call's text is selected with the rest of the chat,** such as a command and what it printed, what went wrong, and a question and its answer. So a drag from one reply into the next takes in a call opened between them, and `Cmd-A` takes in every opened call. A tool's input, a file's numbered lines, a diff, a search's matching lines, a web search's pages, what a fetch asked, what you told the agent when you denied a call, and output over 16 KB aren't selected.
 - **A command has a button that copies all of it,** to run elsewhere.

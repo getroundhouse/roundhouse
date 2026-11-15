@@ -20,7 +20,8 @@ pub struct Command {
     /// What it does, as the agent's adapter reads the command: the files it reads, lists or searches. They never say
     /// it does less than it does: each part holds only where the program that does it does nothing else, and they're
     /// [`CommandPart::Other`] wherever the adapter can't tell. A client draws a command that does nothing but read one
-    /// file as reading it. Empty where the adapter doesn't say.
+    /// file as reading it, and one that does nothing but one search of what's in files as that search. Empty where the
+    /// adapter doesn't say.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub parts: Vec<CommandPart>,
     /// It asks to run outside the sandbox, and why, in the agent's words.

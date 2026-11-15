@@ -311,6 +311,9 @@ Every call is drawn the same way, as `look.md` says, and each kind fills in what
 
   ![Searches, one opened to its matches](screens/tool-search.png)
 
+- **A command its agent says does nothing but search what's in files, for one pattern, is drawn as searching,** `Search` with its pattern and where it looked, and opens to what it printed, as a search's matching lines under their files when it printed them as ripgrep does, and otherwise as it came. One that also searches for another pattern or in another place, or for something its agent couldn't say, or does anything else, stays a command. It's still asked about as a command, and one that went on in the background draws as one, as a command that only reads does. One that found nothing exits with `1`, as ripgrep and grep do, and where its agent records that as failing, its line says `Exit 1` under it, as a command's does. *Unconfirmed.*
+- **A search that only counted says how many matches it found in how many files,** such as `12 matches in 4 files`, and doesn't open, since that's all it sent back. *Unconfirmed.* *Not built:* an agent recording one. Claude's adapter records a count as the words its search sent back, which show as they came.
+
 - **A block of a file's lines is twelve and a half lines tall at most,** so a dozen fit whole and anything longer shows half a line as a sign that it scrolls. *Unconfirmed.*
 
   **A read of part of a file and a new file, both opened to their lines, one of which is too long to show whole.** *Unconfirmed.*
@@ -345,6 +348,12 @@ Every call is drawn the same way, as `look.md` says, and each kind fills in what
   **The web: a search and a fetch opened, and a fetch the site refused.** *Unconfirmed.*
 
   ![A web search and a fetch, opened](screens/tool-web.png)
+
+- **A web search whose agent says what it found only in words, as Antigravity's does, says no count,** since nothing says how many pages it found, and opens to the words. *Unconfirmed.*
+
+  **A command that only searches, drawn as searching and opened to its matches, a search that only counted, a find of files by name, a web search its agent said in words, opened, and a fetch.** *Unconfirmed.*
+
+  ![Searches, one a command drawn as one, and calls of the web, one said in words](screens/tool-search-typed.png)
 
 - **A fetch shows the site in an outlined chip.** Opened, the page's address, what the agent asked of it, then the answer. *Unconfirmed.*
 

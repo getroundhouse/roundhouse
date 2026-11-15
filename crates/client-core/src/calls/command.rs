@@ -2,21 +2,31 @@
 
 use serde_json::Value;
 
+use super::search::Search;
 use super::{description, first_line, str_field};
 
 pub struct Command<'a> {
     /// What the agent said it's doing, in its own words.
     pub(super) description: Option<&'a str>,
     pub command: &'a str,
-    /// The one file it does nothing but read, where its agent read the command and said so, which a client can draw
-    /// as reading that file. What's asked of a command, though, is still whether to run it.
-    pub reads: Option<&'a str>,
+    /// What it does and nothing else, where its agent read the command and said so, which a client can draw as that
+    /// kind of call. What's asked of a command, though, is still whether to run it.
+    pub only: Option<Only<'a>>,
+}
+
+/// All a command does, where that's a kind of call of its own.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Only<'a> {
+    /// Reads this one file.
+    Reads(&'a str),
+    /// Searches what's in files, as one search.
+    Searches(Search<'a>),
 }
 
 impl<'a> Command<'a> {
     pub(super) fn read(input: &'a Value) -> Option<Self> {
         let command = str_field(input, "command")?;
-        Some(Self { description: description(input), command, reads: None })
+        Some(Self { description: description(input), command, only: None })
     }
 
     /// What its line says it does: the agent's own words when it gave them.

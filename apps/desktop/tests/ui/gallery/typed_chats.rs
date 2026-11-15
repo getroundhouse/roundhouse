@@ -4,9 +4,10 @@
 #![cfg(test)]
 
 use protocol::capability::calls::call::{
-    CellEdit, Command, CommandPart, FilePatch, NotebookEdit, Patch, PatchChange, PatchHunk, Read, Runs,
+    CellEdit, Command, CommandPart, Fetch, FilePatch, FindFiles, NotebookEdit, Patch, PatchChange, PatchHunk, Read,
+    Runs, Search, Shows, WebSearch,
 };
-use protocol::capability::calls::output::{Ended, FileOutcome, Lines};
+use protocol::capability::calls::output::{Ended, FileOutcome, Found, Lines, Paths};
 use protocol::capability::calls::{Call, CallOutput};
 use protocol::event::{EventBody, FileChange, Hunk, HunkLine, LineMark};
 use protocol::fixtures::{command_output, typed_command};
@@ -189,3 +190,56 @@ pub(crate) fn one_file_patches() -> Vec<EventBody> {
 }
 
 const DEPOT_DIR: &str = "/workspaces/aspen/crates/depot/src";
+
+/// The line of a command that does nothing but search, drawn as searching.
+pub(crate) const SEARCH_LINE: &str = "Search";
+
+/// The line of a web search.
+pub(crate) const WEB_LINE: &str = "Search the web";
+
+/// Searches and calls of the web: a command that does nothing but search, drawn as searching, a search that only
+/// counts, a find of files by name, a web search whose agent says only words, as Antigravity's does, and a fetch.
+pub(crate) fn searched() -> Vec<EventBody> {
+    let reply = "Only the train and the depot ask may_pass, and a flashing yellow should let a train pass.";
+    let searches = vec![CommandPart::Search { pattern: Some("may_pass".into()), path: Some("crates".into()) }];
+    let rg = Call::Command(Command { parts: searches, ..typed_command("rg -n may_pass crates") });
+    let counted = Search { pattern: "Aspect::".into(), path: None, files: Some("*.rs".into()), shows: Shows::Count };
+    let find = FindFiles { pattern: "**/*_test.rs".into(), path: None };
+    let tests = ["crates/signals/src/signal_test.rs", "crates/depot/src/depot_test.rs"];
+    let query = "flashing yellow railway signal";
+    let web = WebSearch { query: query.into(), only_domains: Vec::new(), not_domains: Vec::new() };
+    let url = "https://example.org/signals/aspects";
+    vec![
+        user_prompt("Where is may_pass asked, and should a flashing yellow pass?"),
+        taken(Seq::new(1)),
+        typed_call("msg-1", "call-1", rg),
+        typed_result("call-1", command_output(FOUND, Some(0), Ended::Exited), false),
+        typed_call("msg-2", "call-2", Call::Search(counted)),
+        typed_result("call-2", CallOutput::Found(Found::Count { matches: 12, files: 4 }), false),
+        typed_call("msg-3", "call-3", Call::FindFiles(find)),
+        typed_result(
+            "call-3",
+            CallOutput::Paths(Paths { paths: tests.map(Into::into).into(), truncated: false }),
+            false,
+        ),
+        typed_call("msg-4", "call-4", Call::WebSearch(web)),
+        typed_result("call-4", CallOutput::Words { text: WEB_WORDS.into() }, false),
+        typed_call("msg-5", "call-5", Call::Fetch(Fetch { url: url.into(), asking: None })),
+        typed_result("call-5", CallOutput::Page { url: url.into(), status: Some(200), text: PAGE.into() }, false),
+        text("msg-6", reply),
+        replied(reply, 31, 0.12),
+    ]
+}
+
+/// What the command that searched printed, as ripgrep prints its matches.
+const FOUND: &str = "crates/signals/src/train.rs:53:        if signal.may_pass() {
+crates/signals/src/train.rs:61:        debug_assert!(signal.may_pass());
+crates/depot/src/lib.rs:4:    signal.may_pass()
+";
+
+/// What a web search said it found, in words alone.
+const WEB_WORDS: &str = "A flashing yellow is a preliminary caution on most railways: the train may pass, and the \
+                         next signal shows caution. Some railways use it to warn of a diverging route ahead.";
+
+/// The page the fetch sent back.
+const PAGE: &str = "Signal aspects\n\nStop, caution, preliminary caution and clear.";
