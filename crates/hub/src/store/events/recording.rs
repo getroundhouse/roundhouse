@@ -206,17 +206,29 @@ impl Store {
         include_raw: bool,
     ) -> Result<(Vec<SessionEvent>, Place), StoreError> {
         let Places { subagent, from, through } = places;
-        let conn = lock(&self.reader);
+        let mut conn = lock(&self.reader);
+        // One transaction, so the newest place is as of the events read, and an event the agent records between the
+        // two can't put it past them when nothing else does.
+        let tx = conn.transaction()?;
         let raw_column = if include_raw { "raw" } else { "NULL" };
-        let mut statement = conn.prepare_cached(&format!(
-            "SELECT {EVENT_COLUMNS}, {raw_column} FROM events
-             WHERE session_id = ? AND subagent IS ? AND place >= ? AND seq <= ? ORDER BY place LIMIT ?"
-        ))?;
-        let (from, through) = (place_column(from), through.map_or(i64::MAX, seq_column));
-        let rows =
-            statement.query(params![session_id.as_str(), subagent.map(SubagentId::as_str), from, through, limit])?;
-        let events = events_in(session_id, rows, max_bytes)?;
-        Ok((events, last_place(&conn, session_id, subagent)?))
+        let events = {
+            let mut statement = tx.prepare_cached(&format!(
+                "SELECT {EVENT_COLUMNS}, {raw_column} FROM events
+                 WHERE session_id = ? AND subagent IS ? AND place >= ? AND seq <= ? ORDER BY place LIMIT ?"
+            ))?;
+            let (from, through) = (place_column(from), through.map_or(i64::MAX, seq_column));
+            let rows = statement.query(params![
+                session_id.as_str(),
+                subagent.map(SubagentId::as_str),
+                from,
+                through,
+                limit
+            ])?;
+            events_in(session_id, rows, max_bytes)?
+        };
+        let last = last_place(&tx, session_id, subagent)?;
+        tx.commit()?;
+        Ok((events, last))
     }
 
     /// The agent's own newest failed request, a subagent's left out, if it has had one.
