@@ -16,7 +16,7 @@ pub(super) fn row(setting: &Setting, cx: &App) -> AnyElement {
     let said = v_flex()
         .flex_1()
         .min_w_0()
-        .gap_1()
+        .gap(look::Space::XSmall)
         .child(div().emphasis().child(setting.name))
         .child(div().text_color(colors.text_muted).child(setting.does));
     let control = match &setting.control {
@@ -49,9 +49,9 @@ pub(super) fn row(setting: &Setting, cx: &App) -> AnyElement {
         .w_full()
         .items_center()
         .justify_between()
-        .gap_6()
-        .pt_1()
-        .pb_6()
+        .gap(look::Space::XLarge)
+        .pt(look::Space::XSmall)
+        .pb(look::Space::XLarge)
         .border_b_1()
         .border_color(colors.edge)
         .typeset(look::Type::Body)

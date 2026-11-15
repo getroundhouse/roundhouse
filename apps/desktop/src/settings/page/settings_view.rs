@@ -13,7 +13,7 @@ use gpui_kit::component::{IconName, v_flex};
 use gpui_kit::{
     AnyElement, App, ClickEvent, Context, FocusHandle, InteractiveElement as _, IntoElement, ParentElement as _,
     Pixels, RenderOnce, ScrollHandle, SharedString, StatefulInteractiveElement as _, Styled as _, TestSupportExt as _,
-    Window, div, px,
+    Window, div,
 };
 use look::{Hand as _, Sizing as _, Typeset as _};
 use std::rc::Rc;
@@ -235,16 +235,26 @@ pub(super) fn shown(sections: &[Section], chosen: Option<PageId>) -> Option<&Pag
 /// In the strip along the top, level with the window's buttons at the other end, and muted, since it's not what
 /// Settings is for. A press on it is the button's, so it doesn't move the window.
 fn way_back(width: Pixels, back: Back, cx: &App) -> impl IntoElement {
-    div().absolute().top_0().left_0().w(width).h(TOP_STRIP_HEIGHT).flex().items_center().justify_end().pr_3().child(
-        Button::new("settings-back")
-            .hand()
-            .ghost()
-            .sized(look::ControlSize::Regular)
-            .icon(IconName::ArrowLeft)
-            .label("Back")
-            .text_color(look::colors(cx).text_muted)
-            .on_click(move |event, window, cx| back(event, window, cx)),
-    )
+    div()
+        .absolute()
+        .top_0()
+        .left_0()
+        .w(width)
+        .h(TOP_STRIP_HEIGHT)
+        .flex()
+        .items_center()
+        .justify_end()
+        .pr(look::Space::Medium)
+        .child(
+            Button::new("settings-back")
+                .hand()
+                .ghost()
+                .sized(look::ControlSize::Regular)
+                .icon(IconName::ArrowLeft)
+                .label("Back")
+                .text_color(look::colors(cx).text_muted)
+                .on_click(move |event, window, cx| back(event, window, cx)),
+        )
 }
 
 /// The page's name, large, below the strip along the top, which stays clear for moving the window, and what's on it
@@ -254,15 +264,17 @@ fn way_back(width: Pixels, back: Back, cx: &App) -> impl IntoElement {
 fn settings_page(page: &Page, within: &Within, cx: &App) -> impl IntoElement {
     let title = div()
         .flex_none()
-        .px_8()
-        .pt(TOP_STRIP_HEIGHT + px(24.))
-        .pb_2()
+        .px(look::Space::XXLarge)
+        .pt(TOP_STRIP_HEIGHT + look::Space::XLarge.size())
+        .pb(look::Space::Small)
         .typeset(look::Type::PageTitle)
         .text_color(look::colors(cx).text)
         .child(page.name);
-    let on_it = v_flex().flex_none().w_full().px_8().py_4();
+    let on_it = v_flex().flex_none().w_full().px(look::Space::XXLarge).py(look::Space::Large);
     let on_it = match &page.body {
-        Body::Settings(settings) => on_it.gap_4().children(settings.iter().map(|setting| rows::row(setting, cx))),
+        Body::Settings(settings) => {
+            on_it.gap(look::Space::Large).children(settings.iter().map(|setting| rows::row(setting, cx)))
+        }
         Body::Own { draw, .. } => on_it.child(draw(within)),
     };
     let scrolled = div()

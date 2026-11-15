@@ -26,7 +26,9 @@ impl Render for NewWorkspaceDialog {
         attached::takes_drops(target, cx, |_, paths, cx| Self::attach_paths(paths, cx))
             .child(self.header(cx))
             .children(
-                self.attached.tiles("new-workspace-attachments", cx, Self::remove_attached).map(|t| t.px_2().pt_2()),
+                self.attached
+                    .tiles("new-workspace-attachments", cx, Self::remove_attached)
+                    .map(|t| t.px(look::Space::Small).pt(look::Space::Small)),
             )
             .child(self.prompt_field(cx))
             .child(self.footer(cx))
@@ -49,15 +51,21 @@ impl NewWorkspaceDialog {
             }
             menu
         };
-        h_flex().w_full().h(look::BarSize::Regular.height()).px_2().border_b_1().border_color(self.colors(cx).1).child(
-            Button::new("new-workspace-repo")
-                .sized(look::ControlSize::Regular)
-                .hand()
-                .ghost()
-                .dropdown_caret(true)
-                .label(name)
-                .dropdown_menu_with_anchor(Anchor::TopLeft, menu),
-        )
+        h_flex()
+            .w_full()
+            .h(look::BarSize::Regular.height())
+            .px(look::Space::Small)
+            .border_b_1()
+            .border_color(self.colors(cx).1)
+            .child(
+                Button::new("new-workspace-repo")
+                    .sized(look::ControlSize::Regular)
+                    .hand()
+                    .ghost()
+                    .dropdown_caret(true)
+                    .label(name)
+                    .dropdown_menu_with_anchor(Anchor::TopLeft, menu),
+            )
     }
 
     /// What's typed, which takes a paste of images or files as attachments.
@@ -66,7 +74,7 @@ impl NewWorkspaceDialog {
         let field = Textarea::new(&self.prompt)
             .appearance(false)
             .on_paste(move |item, _, cx| this.update(cx, |_, cx| Self::paste(item, cx)).unwrap_or(false));
-        div().w_full().px_2().pt_2().child(field)
+        div().w_full().px(look::Space::Small).pt(look::Space::Small).child(field)
     }
 
     /// The `+` menu and the model and effort on the left, as in the composer's bar, and on the right Create, the
@@ -117,10 +125,10 @@ impl NewWorkspaceDialog {
             .on_click(cx.listener(|t, _, _, cx| t.create(cx)));
         h_flex()
             .w_full()
-            .px_3()
-            .pb_3()
-            .pt_1()
-            .gap_2()
+            .px(look::Space::Medium)
+            .pb(look::Space::Medium)
+            .pt(look::Space::XSmall)
+            .gap(look::Space::Small)
             .child(plus)
             // A row, so the picker keeps its own width and its caret stays beside what it says.
             .child(h_flex().flex_1().min_w_0().children(agent_picker).children(picker))

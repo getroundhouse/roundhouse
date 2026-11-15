@@ -52,7 +52,7 @@ pub(super) fn list(
         .w_full()
         .max_h(px(OPTIONS_MOST_HEIGHT))
         .overflow_y_scroll()
-        .gap_1()
+        .gap(look::Space::XSmall)
         .children(rows)
         .when(panel.asks.can_type(panel.showing), |d| {
             d.child(other_row(other, choice.other(), question.multiple, colors, cx))
@@ -90,8 +90,8 @@ fn row(id: ElementId, chosen: bool, colors: Colors) -> gpui_kit::Stateful<gpui_k
         .id(id)
         .w_full()
         .items_start()
-        .gap_3()
-        .p_2()
+        .gap(look::Space::Medium)
+        .p(look::Space::Small)
         .corners(look::Corner::Control)
         .typeset(look::Type::Body)
         .line_height(px(LINE))
@@ -114,7 +114,7 @@ fn option_row(
     // What the option means, as a small detail under it.
     let description = option.description.clone().map(|description| {
         div()
-            .mt_1()
+            .mt(look::Space::XSmall)
             .typeset(look::Type::Detail)
             .line_height(px(DESCRIPTION_LINE))
             .text_color(colors.muted)

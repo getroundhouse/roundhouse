@@ -6,16 +6,16 @@ use look::{Hand as _, Typeset as _};
 use crate::file_icons::{ICON_SIZE, file_icon};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    App, ElementId, InteractiveElement as _, IntoElement, ParentElement as _, Stateful, Styled as _, div, px,
+    App, ElementId, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Stateful, Styled as _, div, px,
 };
 
-const PADDING: f32 = 12.;
+const PADDING: look::Space = look::Space::Medium;
 /// The space between the things in a row.
-const GAP: f32 = 8.;
+const GAP: look::Space = look::Space::Small;
 /// How big a folder's chevron is in Changes.
-const CHEVRON: f32 = 12.;
+const CHEVRON: Pixels = px(12.);
 /// How much further in from its left a chevron's drawing starts than a folder's icon's does.
-const CHEVRON_ROOM: f32 = 2.;
+const CHEVRON_ROOM: Pixels = px(2.);
 
 /// Which list a row is in, which says what starts a folder's row, how far what it holds sits inside it, and where the
 /// line down that is.
@@ -30,26 +30,26 @@ pub(crate) enum List {
 
 impl List {
     /// How far a folder's contents sit inside it.
-    fn indent(self) -> f32 {
+    fn indent(self) -> Pixels {
         match self {
-            List::AllFiles => ICON_SIZE + GAP,
+            List::AllFiles => px(ICON_SIZE) + GAP.size(),
             // Under the folder's icon, as All files' are under its name, with each chevron's drawing level with the
             // icon's.
-            List::Changes => CHEVRON + GAP - CHEVRON_ROOM,
+            List::Changes => CHEVRON + GAP.size() - CHEVRON_ROOM,
         }
     }
 
     /// Where the line down a folder's contents sits: under the middle of what starts its row.
-    fn guide(self) -> f32 {
+    fn guide(self) -> Pixels {
         match self {
-            List::AllFiles => ICON_SIZE / 2.,
+            List::AllFiles => px(ICON_SIZE / 2.),
             List::Changes => CHEVRON / 2.,
         }
     }
 
     #[expect(clippy::cast_precision_loss, reason = "folders are never nested deep enough to lose precision")]
-    fn inset(self, depth: usize) -> f32 {
-        PADDING + depth as f32 * self.indent()
+    fn inset(self, depth: usize) -> Pixels {
+        PADDING.size() + self.indent() * depth as f32
     }
 }
 
@@ -58,7 +58,7 @@ pub(crate) fn row_frame(id: String, list: List, depth: usize, showing: bool, cx:
     let colors = look::colors(cx);
     let (border, hover, raised) = (colors.edge, colors.row_hover, colors.raised);
     let guides = (0..depth).map(move |level| {
-        div().absolute().top_0().bottom_0().left(px(list.inset(level) + list.guide())).w(look::EDGE).bg(border)
+        div().absolute().top_0().bottom_0().left(list.inset(level) + list.guide()).w(look::EDGE).bg(border)
     });
     h_flex()
         .id(ElementId::Name(id.into()))
@@ -66,9 +66,9 @@ pub(crate) fn row_frame(id: String, list: List, depth: usize, showing: bool, cx:
         .flex_none()
         .w_full()
         .h(look::RowSize::Small.height())
-        .pl(px(list.inset(depth)))
-        .pr_3()
-        .gap(px(GAP))
+        .pl(list.inset(depth))
+        .pr(look::Space::Medium)
+        .gap(GAP)
         .typeset(look::Type::Body)
         .hand()
         .when(showing, |d| d.bg(raised))
@@ -97,7 +97,7 @@ pub(crate) fn folder_row(
     let muted = colors.text_muted;
     let chevron = if open { IconName::ChevronDown } else { IconName::ChevronRight };
     row_frame(id, list, depth, false, cx)
-        .when(list == List::Changes, |d| d.child(Icon::new(chevron).size(px(CHEVRON)).text_color(colors.text_faint)))
+        .when(list == List::Changes, |d| d.child(Icon::new(chevron).size(CHEVRON).text_color(colors.text_faint)))
         .child(icon)
         .child(
             div()

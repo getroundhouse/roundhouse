@@ -19,7 +19,7 @@ use crate::app::TOP_STRIP_HEIGHT;
 const SEARCH_SAYS: &str = "Search settings";
 const SEARCH_HEIGHT: Pixels = px(28.);
 /// How far a page's row sets its icon in from its edge, and a heading its name, so the two line up.
-const ROW_INSET: Pixels = px(8.);
+const ROW_INSET: look::Space = look::Space::Small;
 
 /// `width` wide, as the sidebar it stands in for is, and in its colours, with the search under the strip along the
 /// top, where the main sidebar's items start, and the pages scrolling under it once there are more than fit. `shown`
@@ -44,7 +44,7 @@ pub(super) fn sidebar(
             .text_color(colors.text_muted)
             .child(section.heading);
         let rows = section.pages.iter().map(|page| page_row(page, shown == Some(page.id), chosen, cx));
-        v_flex().mt_3().child(heading).child(v_flex().gap_1().children(rows))
+        v_flex().mt(look::Space::Medium).child(heading).child(v_flex().gap(look::Space::XSmall).children(rows))
     });
     // The rows' fills and the search line up on both sides.
     v_flex()
@@ -52,7 +52,7 @@ pub(super) fn sidebar(
         .w(width)
         .h_full()
         .pt(TOP_STRIP_HEIGHT)
-        .px_2()
+        .px(look::Space::Small)
         .bg(colors.sidebar)
         .border_r_1()
         .border_color(colors.edge)
@@ -85,6 +85,7 @@ fn search_field(search: &Entity<InputState>, window: &Window, cx: &App) -> impl 
         .flex_none()
         .w_full()
         .h(SEARCH_HEIGHT)
+        // Spaced to the point rather than the grid, as `docs/spec/look.md` says Settings' search is.
         .pl(px(9.))
         .pr(px(7.))
         .gap(px(9.))
@@ -113,8 +114,8 @@ fn find_key(cx: &App) -> impl IntoElement {
     h_flex()
         .flex_none()
         .h(px(16.))
-        .px_1()
-        .gap_1()
+        .px(look::Space::XSmall)
+        .gap(look::Space::XSmall)
         .corners(look::Corner::InlineControl)
         .border_1()
         .border_color(colors.control_edge)
@@ -149,7 +150,7 @@ fn page_row(page: &Page, showing: bool, chosen: &Entity<Option<PageId>>, cx: &Ap
         .w_full()
         .h(look::RowSize::Regular.height())
         .px(ROW_INSET)
-        .gap_3()
+        .gap(look::Space::Medium)
         .corners(look::Corner::Control)
         .typeset(look::Type::Body)
         .text_color(colors.text)

@@ -129,7 +129,11 @@ fn strip(told: Told, cx: &App) -> Div {
     let sides = told.sides.into_iter().map(|(name, about)| {
         let about =
             about.map(|about| div().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(about));
-        h_flex().min_w_0().gap_2().child(div().flex_none().text_color(colors.text).child(name)).children(about)
+        h_flex()
+            .min_w_0()
+            .gap(look::Space::Small)
+            .child(div().flex_none().text_color(colors.text).child(name))
+            .children(about)
     });
     let strip = h_flex()
         .flex_none()
@@ -141,14 +145,14 @@ fn strip(told: Told, cx: &App) -> Div {
         .text_color(colors.text_muted);
     if told.over_columns {
         let columns = sides.map(|side| h_flex().flex_1().min_w_0().justify_center().child(side));
-        return strip.px_6().gap_6().children(columns);
+        return strip.px(look::Space::XLarge).gap(look::Space::XLarge).children(columns);
     }
     // After a swatch of the colour what changed is tinted.
     let changed = told.changed.map(|changed| {
         let swatch = div().flex_none().size(px(8.)).corners(look::Corner::Glyph).bg(colors.modified);
-        h_flex().flex_none().ml_auto().pl_4().gap_2().child(swatch).child(changed)
+        h_flex().flex_none().ml_auto().pl(look::Space::Large).gap(look::Space::Small).child(swatch).child(changed)
     });
-    strip.px_4().gap_6().children(sides).children(changed)
+    strip.px(look::Space::Large).gap(look::Space::XLarge).children(sides).children(changed)
 }
 
 /// How much faster the folders in its path give up their room than its name, so the name is cut short only once the
@@ -175,13 +179,13 @@ fn header(path: Option<SharedString>, choices: Option<Div>, cx: &App) -> Div {
         .flex_none()
         .w_full()
         .h(look::BarSize::Regular.height())
-        .px_4()
+        .px(look::Space::Large)
         .border_b_1()
         .border_color(colors.edge)
         .typeset(look::Type::Body)
         .child(folders)
         .child(div().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(name.to_string()))
-        .children(choices.map(|choices| choices.ml_auto().pl_4()))
+        .children(choices.map(|choices| choices.ml_auto().pl(look::Space::Large)))
 }
 
 /// Side by side, Before, After and Difference, of which Before and After flip one image between the two sides.
@@ -190,7 +194,7 @@ fn choices(shown: Shown, view: WeakEntity<ImageDiff>, cx: &App) -> Div {
     let flipped = |side: Shown| chosen == Comparison::Flip && shown == side;
     h_flex()
         .flex_none()
-        .gap_1()
+        .gap(look::Space::XSmall)
         .child(choice("image-side-by-side", "Side by side", chosen == Comparison::SideBySide, view.clone(), |cx| {
             choose(Comparison::SideBySide, cx);
         }))
@@ -230,7 +234,7 @@ fn side(id: &'static str, label: &'static str, this: Shown, selected: bool, view
 fn alone(image: &FileImage) -> AnyElement {
     let (shown, covers) = (image.clone(), (image.width, image.height));
     let picture = fitted(covers, Placed::Top, move |scale, cx| shown.whole(scale, cx));
-    v_flex().flex_1().min_h_0().w_full().p_6().child(picture.flex_1().w_full()).into_any_element()
+    v_flex().flex_1().min_h_0().w_full().p(look::Space::XLarge).child(picture.flex_1().w_full()).into_any_element()
 }
 
 /// Each side in a column of its own, the same width, so both are drawn at one scale.
@@ -241,8 +245,8 @@ fn side_by_side(before: &Side, after: &Side, cx: &App) -> AnyElement {
         .flex_1()
         .min_h_0()
         .w_full()
-        .p_6()
-        .gap_6()
+        .p(look::Space::XLarge)
+        .gap(look::Space::XLarge)
         .child(column(before, covers, cx))
         .child(column(after, covers, cx))
         .test_support()

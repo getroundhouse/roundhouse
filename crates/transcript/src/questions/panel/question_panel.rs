@@ -271,8 +271,8 @@ impl Render for QuestionPanel {
             .track_focus(&self.focus)
             .on_key_down(cx.listener(Self::key_down))
             .w_full()
-            .p_3()
-            .gap_3()
+            .p(look::Space::Medium)
+            .gap(look::Space::Medium)
             // The composer's corners, and the thin edge around the pane's own surface rather than a card's amber, since
             // being in the composer's place already says it's your turn.
             .corners(look::Corner::Card)
@@ -281,6 +281,13 @@ impl Render for QuestionPanel {
             .child(heading)
             .children(detail)
             .children(options)
-            .child(h_flex().w_full().items_center().gap_2().child(div().flex_1().min_w_0().children(pager)).child(send))
+            .child(
+                h_flex()
+                    .w_full()
+                    .items_center()
+                    .gap(look::Space::Small)
+                    .child(div().flex_1().min_w_0().children(pager))
+                    .child(send),
+            )
     }
 }

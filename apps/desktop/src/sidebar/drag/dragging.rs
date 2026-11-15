@@ -14,7 +14,7 @@ use std::ops::Range;
 
 /// How far the surface under a dragged project reaches past its lines, which is into the space around the list at
 /// its sides.
-const AROUND: Pixels = px(4.);
+const AROUND: look::Space = look::Space::XSmall;
 /// How near the top or bottom of the list a dragged project has to be held for the list to scroll on. Inside the
 /// list, since its project is drawn there, and a project held past the edge is out of sight.
 const NEAR_THE_EDGE: Pixels = px(24.);
@@ -62,7 +62,7 @@ pub(in super::super) fn stack(heights: impl IntoIterator<Item = Pixels>, top: Pi
     let mut top = top;
     let below = |height: Pixels| {
         let reach = top..top + height;
-        top = reach.end + GROUP_GAP;
+        top = reach.end + GROUP_GAP.size();
         reach
     };
     heights.into_iter().map(below).collect()
@@ -133,12 +133,16 @@ fn with_its_workspaces<T>(lines: &[T], row: usize, line: impl Fn(&T) -> Line) ->
 /// own, over the other projects and under the dragged one's lines, so it shows wherever they do, even while the row
 /// is out of sight.
 pub(in super::super) fn surface_drawn(reach: &Range<Pixels>) -> reorder::Drawn {
-    reorder::Drawn { top: reach.start - AROUND, height: reach.end - reach.start + AROUND * 2., above: true }
+    reorder::Drawn {
+        top: reach.start - AROUND.size(),
+        height: reach.end - reach.start + AROUND.size() * 2.,
+        above: true,
+    }
 }
 
 /// The surface under a dragged project's lines, into the space around the list at its sides.
 pub(in super::super) fn surface(cx: &App) -> AnyElement {
-    let raised = look::raised(cx).absolute().top_0().bottom_0().left(-AROUND).right(-AROUND);
+    let raised = look::raised(cx).absolute().top_0().bottom_0().left(-AROUND.size()).right(-AROUND.size());
     div().id("dragged-project").size_full().child(raised).test_support().into_any_element()
 }
 
@@ -255,7 +259,7 @@ impl AppView {
         let reaches: Vec<Range<Pixels>> = groups.iter().map(|(_, reach)| reach.clone()).collect();
         let first = reaches[0].start;
         let last = reaches[reaches.len() - 1].end - (reaches[from].end - reaches[from].start);
-        let top = (y - area.top() - LIST_PAD - scrolled - dragging.grip).clamp(first, last.max(first));
+        let top = (y - area.top() - LIST_PAD.size() - scrolled - dragging.grip).clamp(first, last.max(first));
         dragging.top = Some(top);
         let to = slot(&reaches, from, top);
         if to != from {

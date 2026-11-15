@@ -4,6 +4,9 @@
 
 mod asking;
 
+mod said;
+pub(super) use said::{restart_note, unsent_note};
+
 mod older_hub;
 #[cfg(any(test, feature = "testing"))]
 pub(super) use older_hub::LOOK_AGAIN;

@@ -60,9 +60,11 @@ pub(super) fn row(app: &AppView, repo: &Repo, collapsed: bool, out: f32, cx: &mu
         .w_full()
         .h(ROW_SIZE.height())
         .px(ROW_PAD)
-        .gap_2()
+        .gap(look::Space::Small)
         .child(icon_box(IconName::Folder, faint))
-        .child(h_flex().flex_1().min_w_0().gap_1().child(name.child(repo.name.clone())).children(chevron))
+        .child(
+            h_flex().flex_1().min_w_0().gap(look::Space::XSmall).child(name.child(repo.name.clone())).children(chevron),
+        )
         .children(to_look_at)
         .child(new_workspace(app, repo, cx))
         .test_support()

@@ -11,7 +11,7 @@ use look::{InRegion as _, Region, Typeset as _};
 use crate::app::{Agents, BuildLine, Updating};
 
 /// Between the details and the top of the card they sit on.
-const GAP: Pixels = px(8.);
+const GAP: look::Space = look::Space::Small;
 /// Over everything else in the window, as a tooltip is.
 const PRIORITY: usize = 1;
 
@@ -74,16 +74,19 @@ impl Details {
         }
         let colors = look::colors(cx);
         let text = v_flex()
-            .gap_1()
+            .gap(look::Space::XSmall)
             .child(div().typeset(look::Type::Body).emphasis().child(format!("{} → {}", self.from, self.to)))
             .child(div().typeset(look::Type::Detail).text_color(colors.text_muted).child(self.what_happens.clone()));
         // The card's edge is drawn outside where its width is measured and where its corner is, so the details reach
         // past it by an edge on each side.
-        let details =
-            look::raised(cx).region(Region::UpdateDetails).w(shown.card_width + look::EDGE * 2.).p_3().child(text);
+        let details = look::raised(cx)
+            .region(Region::UpdateDetails)
+            .w(shown.card_width + look::EDGE * 2.)
+            .p(look::Space::Medium)
+            .child(text);
         let above = anchored()
             .position_mode(AnchoredPositionMode::Local)
-            .position(point(-look::EDGE, -(look::EDGE + GAP)))
+            .position(point(-look::EDGE, -(look::EDGE + GAP.size())))
             .anchor(Anchor::BottomLeft)
             .child(details);
         // From the card's corner inside its border, which is on a whole point, as GPUI rounds where it puts them to.

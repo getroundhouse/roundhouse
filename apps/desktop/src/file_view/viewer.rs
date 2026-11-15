@@ -147,12 +147,14 @@ impl FileView {
                         div()
                             .flex_none()
                             .w(numbers)
-                            .pr_4()
+                            .pr(look::Space::Large)
                             .text_right()
                             .text_color(colors.text_faint)
                             .child((index + 1).to_string()),
                     )
-                    .child(div().flex_none().pr_4().whitespace_nowrap().text_color(foreground).child(text));
+                    .child(
+                        div().flex_none().pr(look::Space::Large).whitespace_nowrap().text_color(foreground).child(text),
+                    );
                 Some(row.into_any_element())
             })
             .collect()
@@ -191,7 +193,7 @@ impl Render for FileView {
                     .with_width_from_item(Some(lines.widest))
                     .flex_1()
                     .w_full()
-                    .py_1()
+                    .py(look::Space::XSmall)
                     .typeset(look::Type::Code)
                     .into_any_element()
             }
@@ -204,7 +206,7 @@ impl Render for FileView {
 fn picture(image: &FileImage) -> AnyElement {
     let (image, covers) = (image.clone(), (image.width, image.height));
     let room = fitted(covers, Placed::Middle, move |scale, cx| image.whole(scale, cx));
-    div().flex_1().w_full().min_h_0().p_6().child(room.size_full()).into_any_element()
+    div().flex_1().w_full().min_h_0().p(look::Space::XLarge).child(room.size_full()).into_any_element()
 }
 
 /// A line in the middle of the room, muted, saying what's there or why nothing is.
@@ -212,7 +214,7 @@ pub(crate) fn placeholder(text: SharedString, cx: &App) -> AnyElement {
     div()
         .flex_1()
         .w_full()
-        .px_6()
+        .px(look::Space::XLarge)
         .flex()
         .items_center()
         .justify_center()

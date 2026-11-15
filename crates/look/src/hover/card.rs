@@ -12,6 +12,8 @@ use gpui_kit::{
     StyleRefinement, Styled as _, Task, WeakEntity, Window, div,
 };
 
+use crate::Space;
+
 /// How long the pointer rests before a card shows: as long as GPUI waits before any other tooltip in the app shows,
 /// so a card doesn't feel slower than one.
 const OPENS_AFTER: Duration = Duration::from_millis(500);
@@ -240,9 +242,9 @@ impl RenderOnce for HoverCard {
 fn around_content(anchor: Anchor) -> gpui_kit::Stateful<Div> {
     let around = v_flex().id("content").occlude().tab_group();
     match anchor {
-        Anchor::BottomLeft | Anchor::BottomCenter | Anchor::BottomRight => around.bottom_1(),
+        Anchor::BottomLeft | Anchor::BottomCenter | Anchor::BottomRight => around.bottom(Space::XSmall),
         Anchor::TopLeft | Anchor::TopCenter | Anchor::TopRight | Anchor::LeftCenter | Anchor::RightCenter => {
-            around.top_1()
+            around.top(Space::XSmall)
         }
     }
 }

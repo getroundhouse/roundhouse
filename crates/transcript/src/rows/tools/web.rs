@@ -31,7 +31,13 @@ fn fetched(fetch: &Fetch, answer: Option<&Answer>, toggle: &Toggle, cx: &App) ->
     let answer = answer.and_then(Answer::success).filter(|text| !text.trim().is_empty());
     let asked = fetch.prompt.map(|prompt| {
         let marked = find::marked(prompt.to_string().into(), &toggle.marks(Text::Ask, prompt), &[], None);
-        div().px_3().pt_1().pb_2().typeset(look::Type::Body).text_color(look::colors(cx).text_muted).child(marked)
+        div()
+            .px(look::Space::Medium)
+            .pt(look::Space::XSmall)
+            .pb(look::Space::Small)
+            .typeset(look::Type::Body)
+            .text_color(look::colors(cx).text_muted)
+            .child(marked)
     });
     block::frame(cx)
         .child(block::found_label(toggle, Text::Label, fetch.url, cx))
@@ -89,7 +95,7 @@ pub(super) fn search(search: &WebSearch, answer: Option<&Answer>, toggle: &Toggl
                         toggle.find,
                         &toggle.shared.selection,
                         &id,
-                        div().id(id.clone()).py_1().children(links.collect::<Vec<_>>()),
+                        div().id(id.clone()).py(look::Space::XSmall).children(links.collect::<Vec<_>>()),
                     ))
                 })
                 .when_some(summary, |d, summary| {
@@ -116,8 +122,8 @@ fn link_row(id: ElementId, link: &Link, marks: &Marks, area: &ElementId, line_te
         .role(Role::Link)
         .aria_label(title.clone())
         .h(look::RowSize::Small.height())
-        .px_3()
-        .gap_2()
+        .px(look::Space::Medium)
+        .gap(look::Space::Small)
         .hand()
         .hover(move |d| d.bg(hover))
         .on_click(move |_, _, cx| cx.open_url(&url))

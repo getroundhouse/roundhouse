@@ -178,9 +178,9 @@ fn right_end(
         let clock = prompt_cache::clock(format!("row-cache-{}", workspace.id), left_ms, muted);
         div().flex_none().size_4().flex().items_center().justify_center().child(clock)
     });
-    let icons_drawn = h_flex().gap_1().when(drafted, |d| d.child(pencil)).children(clock);
+    let icons_drawn = h_flex().gap(look::Space::XSmall).when(drafted, |d| d.child(pencil)).children(clock);
     // With nothing else at the row's end, the room between the name and the button comes and goes with the button.
-    let before = if icons || waiting.is_some() { MARK_GAP } else { MARK_GAP * came };
+    let before = if icons || waiting.is_some() { MARK_GAP.size() } else { MARK_GAP.size() * came };
     let end = h_flex().flex_none().pl(before).child(icons_drawn);
     // Text has no padding of its own to keep it off the pencil, as the button has.
     let end = if let Some(waiting) = waiting {

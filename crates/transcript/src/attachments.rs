@@ -127,7 +127,16 @@ pub(crate) fn view(carried: &[Carried], cx: &App) -> Option<AnyElement> {
         carried.iter().partition(|file| file.attachment.media_type.is_image());
     let images = images.into_iter().map(|file| thumbnail(file, cx));
     let files = files.into_iter().map(|file| file_card(file.key.element("file"), &file.attachment).into_any_element());
-    Some(h_flex().w_full().flex_wrap().items_start().gap_2().children(images).children(files).into_any_element())
+    Some(
+        h_flex()
+            .w_full()
+            .flex_wrap()
+            .items_start()
+            .gap(look::Space::Small)
+            .children(images)
+            .children(files)
+            .into_any_element(),
+    )
 }
 
 /// An image drawn whole, as wide as it is, up to the column, at its own shape, for a click to open over the window.

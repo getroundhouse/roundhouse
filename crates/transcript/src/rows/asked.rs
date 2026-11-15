@@ -51,7 +51,7 @@ pub(super) fn draw(seq: Seq, asked: &Asked, shared: &Shared, cx: &App) -> AnyEle
     let line = line.part(said.map(|said| Part::Summary(said.into())));
     let opened = || (!questions.is_empty()).then(|| answers(questions, asked, &toggle, cx));
     // On its own row, spaced as a row of calls is, so it reads as one of them.
-    row().pb_2().child(line::drawn(line, None, opened, &toggle, cx)).into_any_element()
+    row().pb(look::Space::Small).child(line::drawn(line, None, opened, &toggle, cx)).into_any_element()
 }
 
 /// What the line says was answered, in the questions' order, or `None` where that isn't known. A typed answer of
@@ -83,10 +83,10 @@ fn answers(questions: &[Question], asked: &Asked, toggle: &Toggle, cx: &App) -> 
         let toggle = &Toggle { in_row: InRow::Own(i), ..*toggle };
         list = list.child(
             v_flex()
-                .px_3()
-                .pt_2()
-                .pb_3()
-                .gap_2()
+                .px(look::Space::Medium)
+                .pt(look::Space::Small)
+                .pb(look::Space::Medium)
+                .gap(look::Space::Small)
                 .when_some(question.header.clone(), |d, header| {
                     d.child(div().typeset(look::Type::Detail).text_color(colors.text_faint).child(header))
                 })
@@ -123,7 +123,7 @@ fn answered(toggle: &Toggle, area: &ElementId, i: usize, answer: AnswerTo, cx: &
     let row = h_flex()
         .id(key.element(&format!("answer-{i}")))
         .items_start()
-        .gap_2()
+        .gap(look::Space::Small)
         .child(arrow)
         .child(
             text(toggle, Text::Answered, key.element(&format!("answer-{i}-text")), &answer, colors.text, area).flex_1(),

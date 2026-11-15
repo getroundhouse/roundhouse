@@ -158,9 +158,9 @@ pub(in crate::rows) fn prompt_block(
     let text =
         div().id(id.clone()).typeset(look::Type::Body).text_color(colors.text_muted).child(text(block::scroll_id(&id)));
     v_flex()
-        .mt_1()
-        .gap_1()
-        .pl_3()
+        .mt(look::Space::XSmall)
+        .gap(look::Space::XSmall)
+        .pl(look::Space::Medium)
         .border_l(look::QUOTE_RULE)
         .border_color(colors.edge)
         .child(div().typeset(look::Type::Detail).text_color(colors.text_faint).child("Asked"))
@@ -184,9 +184,9 @@ pub(in crate::rows) fn report_block(key: &ItemKey, text: impl IntoElement, cx: &
     let heading =
         div().typeset(look::Type::Body).font_weight(FontWeight::SEMIBOLD).text_color(colors.text).child("Report");
     v_flex()
-        .mt_1()
-        .gap_2()
-        .pt_3()
+        .mt(look::Space::XSmall)
+        .gap(look::Space::Small)
+        .pt(look::Space::Medium)
         .border_t_1()
         .border_color(colors.edge)
         .child(heading)
@@ -217,14 +217,14 @@ fn page(call: &Agent, answer: Option<&Answer>, subagent: &Subagent, toggle: &Tog
         .collect();
     let lately = (!drawn.is_empty()).then(|| {
         v_flex()
-            .gap_1()
+            .gap(look::Space::XSmall)
             .child(div().typeset(look::Type::Detail).text_color(look::colors(cx).text_faint).child("Working on"))
             .children(drawn)
     });
     v_flex()
-        .mt_1()
-        .mb_2()
-        .gap_2()
+        .mt(look::Space::XSmall)
+        .mb(look::Space::Small)
+        .gap(look::Space::Small)
         .children(asked)
         .children(lately)
         // A report names no images the hub kept, so only one written into it is drawn, and it loads in the call's row.
@@ -271,10 +271,10 @@ fn gathered(
     let report = gathered_report(answer, events);
     // The rule is on the column's left edge, like everything else, and the work sits in from it to show it's nested.
     v_flex()
-        .pl_3()
-        .mt_1()
-        .mb_2()
-        .gap_2()
+        .pl(look::Space::Medium)
+        .mt(look::Space::XSmall)
+        .mb(look::Space::Small)
+        .gap(look::Space::Small)
         .border_l_1()
         .border_color(colors.edge)
         .children(asked)

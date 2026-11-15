@@ -22,10 +22,10 @@ use std::ops::Range;
 use std::rc::Rc;
 
 /// The space above the first row and below the last.
-const EDGE: Pixels = px(8.);
+const EDGE: look::Space = look::Space::Small;
 
 /// How far the button back to the latest row rests above what's under the chat, such as the composer.
-const LATEST_BUTTON_ROOM: Pixels = px(8.);
+const LATEST_BUTTON_ROOM: look::Space = look::Space::Small;
 /// How far the button back to the latest row rises to where it rests as it fades in.
 const LATEST_BUTTON_RISE: Pixels = px(4.);
 
@@ -185,7 +185,7 @@ impl TranscriptList {
                 .w_full()
                 .when(ix == 0, |d| d.pt(EDGE))
                 .when(ix + 1 == rows, |d| d.pb(EDGE))
-                .child(div().w_full().min_w_0().px_3().child(content));
+                .child(div().w_full().min_w_0().px(look::Space::Medium).child(content));
             Some(spaced.into_any_element())
         };
         let element = ListElement {
@@ -271,7 +271,7 @@ impl TranscriptList {
         // chat. The box is also the button's region, which a picture of it is cut to.
         let button = div().block_mouse_except_scroll().region(Region::LatestButton).child(button);
         // Rising to where it rests, with what the list leaves under it counted in.
-        let bottom = LATEST_BUTTON_ROOM - room_under - LATEST_BUTTON_RISE * (1. - shown);
+        let bottom = LATEST_BUTTON_ROOM.size() - room_under - LATEST_BUTTON_RISE * (1. - shown);
         Some(
             div()
                 .absolute()

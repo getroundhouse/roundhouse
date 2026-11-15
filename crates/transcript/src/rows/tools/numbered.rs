@@ -11,7 +11,7 @@ use std::ops::Range;
 use gpui_kit::component::h_flex;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, ElementId, HighlightStyle, Hsla, InteractiveElement as _, IntoElement, ParentElement,
+    AnyElement, App, ElementId, HighlightStyle, Hsla, InteractiveElement as _, IntoElement, ParentElement, Pixels,
     SharedString, Styled, TestSupportExt as _, div, px,
 };
 use look::Typeset as _;
@@ -27,12 +27,18 @@ use crate::scroll_area::ScrollArea;
 /// More than a block is for. Past this, the rest of a file is left to the diff and the editor.
 const SHOWN_LINES: usize = 300;
 const LINE_HEIGHT: f32 = 20.0;
-/// A dozen lines and half of the next, so a dozen fit whole and anything longer shows that it scrolls.
-const MAX_HEIGHT: f32 = LINE_HEIGHT * 12.5 + 4.0;
+/// The room above and below the lines.
+const AROUND_LINES: look::Space = look::Space::XSmall;
 const NUMBERS_WIDTH: f32 = 44.0;
 const BAR_WIDTH: f32 = 3.0;
 /// Colours for parts of a line, by where they are in it.
 type Styles = Vec<(Range<usize>, HighlightStyle)>;
+
+/// How tall a block gets before it scrolls: a dozen lines and half of the next, and the room above the lines, so a
+/// dozen fit whole and anything longer shows that it scrolls.
+fn max_height() -> Pixels {
+    px(LINE_HEIGHT * 12.5) + AROUND_LINES.size()
+}
 
 /// The lines of `sections`, the call's `part`, in a block that scrolls, with a gap between sections.
 pub(super) fn lines(toggle: &Toggle, part: Part, language: &str, sections: &[Section], cx: &App) -> AnyElement {
@@ -53,10 +59,10 @@ pub(super) fn lines(toggle: &Toggle, part: Part, language: &str, sections: &[Sec
     let more = (more > 0).then(|| format!("and {}", count(more, "more line", "more lines")));
     let part = div()
         .id(id.clone())
-        .py_1()
+        .py(AROUND_LINES)
         .typeset(look::Type::Code)
         .children(drawn)
-        .when_some(more, |d, more| d.child(block::label(more, cx).pb_2()))
+        .when_some(more, |d, more| d.child(block::label(more, cx).pb(look::Space::Small)))
         .test_support();
     scrolling(toggle, &id, part).into_any_element()
 }
@@ -95,7 +101,7 @@ fn fitted(sections: &[Section], room: usize) -> (Vec<usize>, usize) {
 
 /// A block's numbered lines, `part`, scrolling past a dozen, and sideways along a line too long for it.
 pub(super) fn scrolling(toggle: &Toggle, id: &ElementId, part: impl IntoElement) -> ScrollArea {
-    block::scrolling(toggle.find, &toggle.shared.selection, id, part).max_height(px(MAX_HEIGHT)).both_ways()
+    block::scrolling(toggle.find, &toggle.shared.selection, id, part).max_height(max_height()).both_ways()
 }
 
 /// A row for each of these lines, without a block around them, with `marks`, which are where the matches are in
@@ -151,7 +157,7 @@ fn row(
             div()
                 .flex_none()
                 .w(px(NUMBERS_WIDTH))
-                .pr_3()
+                .pr(look::Space::Medium)
                 .text_right()
                 .text_color(numbers)
                 .children(line.number.map(|n| n.to_string())),
@@ -159,7 +165,7 @@ fn row(
         .child(
             div()
                 .flex_none()
-                .pr_3()
+                .pr(look::Space::Medium)
                 .whitespace_nowrap()
                 .text_color(colors.text)
                 .child(find::styled(text, styles, here, area)),
@@ -184,7 +190,14 @@ fn gap(cx: &App) -> AnyElement {
         .h(px(LINE_HEIGHT))
         .border_l(px(BAR_WIDTH))
         .border_color(gpui_kit::transparent_black())
-        .child(div().w(px(NUMBERS_WIDTH)).pr_3().text_right().text_color(look::colors(cx).text_faint).child("⋯"))
+        .child(
+            div()
+                .w(px(NUMBERS_WIDTH))
+                .pr(look::Space::Medium)
+                .text_right()
+                .text_color(look::colors(cx).text_faint)
+                .child("⋯"),
+        )
         .into_any_element()
 }
 

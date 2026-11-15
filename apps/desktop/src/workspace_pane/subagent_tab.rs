@@ -198,9 +198,9 @@ impl WorkspacePane {
                     .tooltip(move |window, cx| Tooltip::new(whole.clone()).build(window, cx))
                     .size_full()
                     .justify_start()
-                    .gap_2()
-                    .pl_3()
-                    .pr_2()
+                    .gap(look::Space::Small)
+                    .pl(look::Space::Medium)
+                    .pr(look::Space::Small)
                     .typeset(look::Type::Body)
                     .line_height(relative(1.25))
                     .text_color(muted)
@@ -262,12 +262,12 @@ fn band(
             .test_support();
         // It gives way well before what the subagent is for does, which is what the page is about.
         let slash = div().flex_none().typeset(look::Type::Body).text_color(colors.text_faint).child("/");
-        h_flex().flex_shrink(100.).min_w(px(56.)).gap_2().child(link).child(slash)
+        h_flex().flex_shrink(100.).min_w(px(56.)).gap(look::Space::Small).child(link).child(slash)
     });
     let chip = subagent.and_then(|s| shown_kind(s.kind.as_deref())).map(|kind| {
         div()
             .flex_none()
-            .px_2()
+            .px(look::Space::Small)
             .corners(look::Corner::Control)
             .border_1()
             .border_color(colors.control_edge)
@@ -280,8 +280,8 @@ fn band(
         .flex_none()
         .w_full()
         .h(look::BarSize::Regular.height())
-        .px_4()
-        .gap_2()
+        .px(look::Space::Large)
+        .gap(look::Space::Small)
         .border_b_1()
         .border_color(colors.edge)
         .child(Icon::new(IconName::Bot).xsmall().text_color(colors.text_faint))

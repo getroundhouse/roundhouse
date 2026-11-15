@@ -38,7 +38,7 @@ pub(super) fn flip(before: &FileImage, after: &FileImage, shown: Shown, view: We
         .flex_1()
         .min_h_0()
         .w_full()
-        .p_6()
+        .p(look::Space::XLarge)
         .child(flipping.child(picture.size_full()).test_support())
         .into_any_element()
 }
@@ -88,7 +88,7 @@ pub(super) fn difference(outcome: Outcome<'_>, cx: &App) -> AnyElement {
         .flex_1()
         .min_h_0()
         .w_full()
-        .p_6()
+        .p(look::Space::XLarge)
         .child(drawn.flex_1().w_full())
         .test_support()
         .into_any_element()

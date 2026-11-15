@@ -26,7 +26,7 @@ const LOG_BLOCK_ABOVE: usize = 16 * 1024;
 /// How tall a block's output gets before it scrolls: about a dozen lines.
 pub(super) const MAX_HEIGHT: f32 = 236.0;
 /// The space between the lines of what a command printed, so a line that wraps reads as one: about a fifth of a line.
-const LINE_GAP: f32 = 4.0;
+const LINE_GAP: look::Space = look::Space::XSmall;
 /// Up to how many lines a command's output is drawn a line at a time, with space between. Each line is a text of its
 /// own, which costs about 3 µs on every frame its row is on screen, so a longer log is drawn as one text, without it.
 const SPACED_UP_TO: usize = 200;
@@ -35,8 +35,8 @@ const SPACED_UP_TO: usize = 200;
 pub(in crate::rows) fn frame(cx: &App) -> Div {
     let colors = look::colors(cx);
     div()
-        .mt_1()
-        .mb_2()
+        .mt(look::Space::XSmall)
+        .mb(look::Space::Small)
         .flex()
         .flex_col()
         .corners(look::Corner::Card)
@@ -63,7 +63,11 @@ pub(super) fn found_label(toggle: &Toggle, part: Part, text: &str, cx: &App) -> 
 }
 
 fn faint(cx: &App) -> Div {
-    div().px_3().pt_2().typeset(look::Type::Code).text_color(look::colors(cx).text_faint)
+    div()
+        .px(look::Space::Medium)
+        .pt(look::Space::Small)
+        .typeset(look::Type::Code)
+        .text_color(look::colors(cx).text_faint)
 }
 
 /// What [`output`] and [`lines`] draw of `text`: a short output without the blank lines at its end, and a long one
@@ -108,7 +112,7 @@ pub(super) fn lines(toggle: &Toggle, part: Part, text: &str, cx: &App) -> AnyEle
         lines.push(line);
         layout
     });
-    let lines = v_flex().id(ElementId::from((id.clone(), "lines"))).gap(px(LINE_GAP)).children(lines);
+    let lines = v_flex().id(ElementId::from((id.clone(), "lines"))).gap(LINE_GAP).children(lines);
     let selectable =
         selectable(toggle, part, &id, printed(&id, lines.test_support().into_any_element(), color), said, pieces);
     scrolling(toggle.find, &toggle.shared.selection, &id, selectable).into_any_element()
@@ -133,8 +137,8 @@ pub(super) fn selectable(
 fn printed(id: &ElementId, body: AnyElement, color: Hsla) -> AnyElement {
     div()
         .id(id.clone())
-        .px_3()
-        .py_2()
+        .px(look::Space::Medium)
+        .py(look::Space::Small)
         .typeset(look::Type::Code)
         .text_color(color)
         .child(body)
@@ -170,7 +174,12 @@ fn runs(text: &str) -> Vec<&str> {
 
 /// Images a tool sent back, each whole, one under another.
 pub(in crate::rows) fn images(images: &[Carried], cx: &App) -> AnyElement {
-    v_flex().px_3().py_2().gap_2().children(images.iter().map(|image| attachments::whole(image, cx))).into_any_element()
+    v_flex()
+        .px(look::Space::Medium)
+        .py(look::Space::Small)
+        .gap(look::Space::Small)
+        .children(images.iter().map(|image| attachments::whole(image, cx)))
+        .into_any_element()
 }
 
 /// Code in a block, the call's `part`, highlighted as `language`, after `prompt` in faint text. Its matches are found
@@ -191,8 +200,8 @@ pub(super) fn code(toggle: &Toggle, part: Part, language: &str, prompt: &str, te
         .collect();
     let part = div()
         .id(id.clone())
-        .px_3()
-        .py_2()
+        .px(look::Space::Medium)
+        .py(look::Space::Small)
         .typeset(look::Type::Code)
         .text_color(colors.text)
         .child(marked(shown, &marks.moved(at), &styles, Some(scroll_id(&id))))
@@ -210,7 +219,13 @@ pub(in crate::rows) fn code_text(text: &str) -> &str {
 pub(super) fn prose(toggle: &Toggle, part: Part, text: &str) -> AnyElement {
     let id = part.element(toggle.key);
     let view = written(toggle, part, text, Some(scroll_id(&id)), None);
-    let shown = div().id(id.clone()).px_3().py_2().typeset(look::Type::Body).child(view).test_support();
+    let shown = div()
+        .id(id.clone())
+        .px(look::Space::Medium)
+        .py(look::Space::Small)
+        .typeset(look::Type::Body)
+        .child(view)
+        .test_support();
     scrolling(toggle.find, &toggle.shared.selection, &id, shown).into_any_element()
 }
 

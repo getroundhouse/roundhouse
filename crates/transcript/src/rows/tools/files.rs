@@ -236,7 +236,7 @@ impl Render for DiffPreview {
             .region(Region::EditPreview)
             .w(px(PREVIEW_WIDTH))
             .max_h(px(PREVIEW_HEIGHT))
-            .py_1()
+            .py(look::Space::XSmall)
             // The wheel scrolls the diff and not the transcript under it, which would carry the line away from it.
             .occlude()
             .typeset(look::Type::Code)

@@ -97,7 +97,7 @@ impl ToolUse {
                 .id(id)
                 .w_full()
                 .max_h(px(GIVEN_MOST_HEIGHT))
-                .py_2()
+                .py(look::Space::Small)
                 .corners(look::Corner::Control)
                 .bg(colors.inset)
                 .typeset(look::Type::Code)
@@ -107,14 +107,14 @@ impl ToolUse {
                 .role(Role::Label)
                 .aria_label(text.clone())
                 .overflow_y_scroll()
-                .px_3()
+                .px(look::Space::Medium)
                 .child(SelectableText::new("question-given-text", text.clone()))
                 .test_support()
                 .into_any_element(),
             // Its file, then its diff, which scrolls both ways, as an edit's does in the transcript.
             Shown::Change(change) => v_flex()
                 .w_full()
-                .gap_1()
+                .gap(look::Space::XSmall)
                 .child(
                     said("question-change-file", change.path.clone())
                         .typeset(look::Type::Detail)
@@ -133,6 +133,6 @@ impl ToolUse {
         let reason = self.reason.clone().map(|reason| {
             said("question-reason", reason).typeset(look::Type::Detail).text_color(colors.text_muted).test_support()
         });
-        Some(v_flex().w_full().gap_3().children(given).children(reason).into_any_element())
+        Some(v_flex().w_full().gap(look::Space::Medium).children(given).children(reason).into_any_element())
     }
 }

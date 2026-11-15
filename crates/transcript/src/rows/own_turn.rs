@@ -40,7 +40,7 @@ pub(super) fn lines(event: &SessionEvent, tasks: &[EndedTask], shared: &Shared, 
         line.still(ItemKey::Event(event.seq, ix).element("ended-task"), label, &shared.line_text, cx)
     });
     // Spaced as a message of only calls is, since they read as calls' lines.
-    row().pb_2().children(lines).into_any_element()
+    row().pb(look::Space::Small).children(lines).into_any_element()
 }
 
 /// A task's icon, what it says the task was, and how it ended. A wait says which pull requests it waited on, and why it

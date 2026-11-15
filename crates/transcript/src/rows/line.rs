@@ -157,7 +157,7 @@ impl Line {
 
 /// What a line is drawn in: as tall as every line, its parts side by side, cut off where it ends.
 fn frame() -> Div {
-    h_flex().h(HEIGHT).gap_2().overflow_hidden().whitespace_nowrap()
+    h_flex().h(HEIGHT).gap(look::Space::Small).overflow_hidden().whitespace_nowrap()
 }
 
 impl Part {
@@ -173,7 +173,7 @@ impl Part {
             Part::Pill(text, marks) => pill(text, &marks, colors.text_muted, colors.raised),
             Part::Chip(text) => div()
                 .flex_none()
-                .px_2()
+                .px(look::Space::Small)
                 .corners(look::Corner::Control)
                 .border_1()
                 .border_color(colors.control_edge)
@@ -197,7 +197,7 @@ impl Part {
                 .set(
                     h_flex()
                         .flex_none()
-                        .gap_1()
+                        .gap(look::Space::XSmall)
                         .child(div().text_color(colors.added).child(format!("+{added}")))
                         .child(div().text_color(colors.removed).child(format!("−{removed}"))),
                 )
@@ -223,8 +223,8 @@ pub(super) fn opening(
         .role(Role::Button)
         .aria_label(label)
         .aria_expanded(open)
-        .mx(px(-8.))
-        .px(px(8.))
+        .mx(-look::Space::Small.size())
+        .px(look::Space::Small)
         .corners(look::Corner::Control)
         .hand()
         .hover(move |d| d.bg(hover))
@@ -261,7 +261,8 @@ fn glyph(kind: IconName, cx: &App) -> Icon {
 fn pill(text: SharedString, marks: &Marks, color: Hsla, background: Hsla) -> AnyElement {
     div()
         .min_w_0()
-        .px_2()
+        .px(look::Space::Small)
+        // A pill's own room above and below its words, so it sits in the line, rather than a space.
         .py(px(1.))
         .corners(look::Corner::Control)
         .bg(background)

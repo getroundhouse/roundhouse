@@ -155,9 +155,9 @@ impl WorkspacePane {
                     .tooltip(move |window, cx| Tooltip::new(path.clone()).build(window, cx))
                     .size_full()
                     .justify_start()
-                    .gap_2()
-                    .pl_3()
-                    .pr_2()
+                    .gap(look::Space::Small)
+                    .pl(look::Space::Medium)
+                    .pr(look::Space::Small)
                     .typeset(look::Type::Body)
                     .line_height(relative(1.25))
                     // Muted whether or not it's showing, as the chats' titles are: the underline says which tab is.

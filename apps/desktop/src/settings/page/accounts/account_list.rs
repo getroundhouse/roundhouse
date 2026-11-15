@@ -55,8 +55,8 @@ impl RenderOnce for AccountsPage {
         let drawing =
             Drawing { kept: &kept, agents: self.records.agents(), scroll: &self.within.scroll, now_ms, defaults };
         v_flex()
-            .gap_8()
-            .pb_4()
+            .gap(look::Space::XXLarge)
+            .pb(look::Space::Large)
             .child(super::defaults::section(&drawing, &added, cx))
             .child(found_list(&drawing, &found, cx))
             .child(added_list(&drawing, &added, cx))
@@ -99,7 +99,7 @@ fn added_list(drawing: &Drawing<'_>, added: &[&Account], cx: &App) -> Div {
     let older = can_ask && older_hub(drawing.agents, kept.refused_as_older);
     let connect = connect_button(drawing, &kinds, can_ask && !older);
     let panel = kept.panel.as_ref().filter(|panel| matches!(panel.to, To::New { .. }));
-    let panel = panel.map(|panel| div().py_4().child(panel::panel(drawing, panel, cx)));
+    let panel = panel.map(|panel| div().py(look::Space::Large).child(panel::panel(drawing, panel, cx)));
     let said = if older {
         Some(("accounts-older-hub", words::OLDER_HUB))
     } else {
@@ -145,10 +145,10 @@ fn heading(name: &'static str, says: String, action: Option<AnyElement>, cx: &Ap
     let said = v_flex()
         .flex_1()
         .min_w_0()
-        .gap_1()
+        .gap(look::Space::XSmall)
         .child(div().emphasis().child(name))
         .child(div().typeset(look::Type::Body).text_color(look::colors(cx).text_muted).child(says));
-    h_flex().items_end().justify_between().gap_6().pb_3().child(said).children(action)
+    h_flex().items_end().justify_between().gap(look::Space::XLarge).pb(look::Space::Medium).child(said).children(action)
 }
 
 /// The rows of a list, under a line, each with a line under it.
@@ -161,7 +161,7 @@ fn said_in_the_list(id: &'static str, said: String, cx: &App) -> impl IntoElemen
     let colors = look::colors(cx);
     div()
         .id(id)
-        .py_4()
+        .py(look::Space::Large)
         .border_b_1()
         .border_color(colors.edge)
         .typeset(look::Type::Body)

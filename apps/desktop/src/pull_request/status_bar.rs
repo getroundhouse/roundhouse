@@ -7,7 +7,7 @@ use gpui_kit::component::button::{Button, ButtonCustomVariant, ButtonVariants as
 use gpui_kit::component::{Icon, Sizable as _, h_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, Div, InteractiveElement as _, IntoElement, ParentElement as _, Styled as _, Window, div, px,
+    AnyElement, App, Div, InteractiveElement as _, IntoElement, ParentElement as _, Styled as _, Window, div,
 };
 use look::{Hand as _, Off as _, Sizing as _, Typeset as _, Work};
 use protocol::model::{BranchName, Local, PullRequest, Standing, Workspace};
@@ -101,9 +101,9 @@ pub fn bar(
         .flex_none()
         .w_full()
         .h(look::BarSize::Regular.height())
-        .pl_3()
-        .pr(px(12.) + sides::clearance(AtTheTop::RightSidebar, cx).end)
-        .gap_2()
+        .pl(look::Space::Medium)
+        .pr(look::Space::Medium.size() + sides::clearance(AtTheTop::RightSidebar, cx).end)
+        .gap(look::Space::Small)
         .bg(work.tint(colors))
         .border_b_1()
         .border_color(colors.edge);
@@ -146,7 +146,7 @@ fn giving_way(number: Option<AnyElement>, title: Div) -> impl IntoElement {
         .flex_row_reverse()
         .flex_wrap()
         .overflow_hidden()
-        .gap_2()
+        .gap(look::Space::Small)
         .child(title)
         .children(number.map(filling))
 }
@@ -165,7 +165,7 @@ pub fn controls(
     let pr = lookup.pull_request();
     let controls = h_flex()
         .id("pull-request-controls")
-        .gap_2()
+        .gap(look::Space::Small)
         .children(pr.map(|pr| number(pr, work, cx)))
         .children(words::action(standing).map(|action| action_button(action, work, (busy, doing), on_action, cx)));
     Some(controls.into_any_element())

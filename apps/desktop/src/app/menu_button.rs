@@ -9,14 +9,14 @@ use gpui_kit::component::menu::PopupMenu;
 use gpui_kit::component::{IconName, Selectable as _};
 use gpui_kit::{
     Anchor, ClickEvent, Context, DismissEvent, Entity, FocusHandle, Focusable as _, InteractiveElement as _,
-    IntoElement, MouseButton, Subscription, Window, px,
+    IntoElement, MouseButton, Subscription, Window,
 };
 use look::{Hand as _, Sizing as _};
 
 use super::AppView;
 
 /// The gap between the button and the menus under it.
-const BELOW: gpui_kit::Pixels = px(4.);
+const BELOW: look::Space = look::Space::XSmall;
 
 /// The menus, while they're open.
 pub(super) struct OpenMenus {
@@ -78,7 +78,7 @@ pub(super) fn button(app: &AppView, cx: &mut Context<AppView>) -> impl IntoEleme
                 t.toggle_menus(window, cx);
             }
         }));
-    let popup = Popup::new("menus-popup", button).anchor(Anchor::TopLeft).offset(BELOW);
+    let popup = Popup::new("menus-popup", button).anchor(Anchor::TopLeft).offset(BELOW.size());
     match open {
         Some(menu) => popup.content(menu),
         None => popup,

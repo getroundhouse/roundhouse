@@ -21,10 +21,13 @@ const PAUSE: Duration = Duration::from_millis(150);
 const WIDTH: Pixels = px(340.);
 /// In from the pane's right, clear of the outline's ticks, and down from the tabs as they are.
 const RIGHT: Pixels = px(32.);
-const TOP: Pixels = px(12.);
+const TOP: look::Space = look::Space::Medium;
 const HEIGHT: Pixels = px(36.);
+
 /// How far down the chat the bar reaches, `TOP` and `HEIGHT`, which hides what's above it.
-pub(super) const BOTTOM: Pixels = px(48.);
+pub(super) fn bottom() -> Pixels {
+    TOP.size() + HEIGHT
+}
 
 pub(crate) struct Bar {
     input: Entity<InputState>,
@@ -109,9 +112,9 @@ impl Transcript {
         let bar = h_flex()
             .w(WIDTH)
             .h(HEIGHT)
-            .pl_2()
-            .pr_1()
-            .gap_1()
+            .pl(look::Space::Small)
+            .pr(look::Space::XSmall)
+            .gap(look::Space::XSmall)
             .child(
                 Input::new(&finding.bar.input)
                     .appearance(false)

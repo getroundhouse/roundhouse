@@ -79,7 +79,11 @@ fn finished(
     // It only shows something while the pointer rests on it, so it keeps the arrow. The card opens centred above it,
     // where it covers neither the line nor the composer, and moves only to stay in the window.
     // The mark is part of what the card opens from, since the card says what it means.
-    let said = h_flex().id(ItemKey::Event(ended.seq, 0).element("turn-end")).gap_1().child(said).children(mark);
+    let said = h_flex()
+        .id(ItemKey::Event(ended.seq, 0).element("turn-end"))
+        .gap(look::Space::XSmall)
+        .child(said)
+        .children(mark);
     let said = said.test_support();
     let said = look::hover_card(ItemKey::Event(ended.seq, 0).element("turn-card"))
         .anchor(Anchor::BottomCenter)
@@ -95,8 +99,12 @@ fn finished(
         );
         div().flex().items_center().h_0().child(copy)
     });
-    let line =
-        h_flex().gap_1().typeset(look::Type::Detail).text_color(look::colors(cx).text_faint).child(said).children(copy);
+    let line = h_flex()
+        .gap(look::Space::XSmall)
+        .typeset(look::Type::Detail)
+        .text_color(look::colors(cx).text_faint)
+        .child(said)
+        .children(copy);
     row().child(line).into_any_element()
 }
 

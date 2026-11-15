@@ -182,7 +182,7 @@ fn in_the_background(
         .flex_1()
         .min_w_0()
         .items_center()
-        .gap_2()
+        .gap(look::Space::Small)
         .child(lead)
         .child(
             clipped(text.clone())

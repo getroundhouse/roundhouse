@@ -54,8 +54,8 @@ impl RenderOnce for UpdateCard {
         v_flex()
             .id("update-card")
             .w_full()
-            .p_3()
-            .gap_3()
+            .p(look::Space::Medium)
+            .gap(look::Space::Medium)
             .corners(look::Corner::Card)
             .bg(colors.raised)
             .border_1()
@@ -63,7 +63,7 @@ impl RenderOnce for UpdateCard {
             .child(
                 h_flex()
                     .items_start()
-                    .gap_3()
+                    .gap(look::Space::Medium)
                     .child(look::icon(IconStyle::Working, IconSize::Px64, cx))
                     .child(self.about.flex_1())
                     .child(mark),
@@ -104,7 +104,7 @@ fn ready_card(
     cx: &mut Context<AppView>,
 ) -> (Stateful<Div>, Option<AnyElement>) {
     let title = question.map_or("Update ready", UpdateQuestion::title);
-    let version = h_flex().gap_1().child(format!("Roundhouse {next} ·")).child(whats_new(cx));
+    let version = h_flex().gap(look::Space::XSmall).child(format!("Roundhouse {next} ·")).child(whats_new(cx));
     let about = card_text(title, version, cx);
     let action = if let Some(question) = question {
         asking(question, "Keep working", "Restart", AppView::restart_to_update_anyway, cx)
@@ -125,7 +125,7 @@ fn ready_card(
 /// The app has updated, and the older hub is still busy, so it finishes by itself once it isn't, or now if asked.
 fn finishing_card(agents: Agents, cx: &mut Context<AppView>) -> Stateful<Div> {
     // Under the text, and in line with it, past the button's own room.
-    let now = h_flex().pt_1().ml(-look::ControlSize::Small.padding()).child(restart_now(cx));
+    let now = h_flex().pt(look::Space::XSmall).ml(-look::ControlSize::Small.padding()).child(restart_now(cx));
     card_text("Finishing update", waiting_on(agents), cx).child(now)
 }
 
@@ -155,9 +155,9 @@ fn asking(
         .on_click(cx.listener(move |t, _, _, cx| go_ahead(t, cx)));
     v_flex()
         .id("update-question")
-        .gap_3()
+        .gap(look::Space::Medium)
         .child(div().typeset(look::Type::Detail).text_color(muted).child(question.detail()))
-        .child(h_flex().gap_2().child(stay).child(go))
+        .child(h_flex().gap(look::Space::Small).child(stay).child(go))
         .test_support()
         .into_any_element()
 }

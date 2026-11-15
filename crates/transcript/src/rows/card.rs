@@ -10,7 +10,7 @@ use look::Shaped as _;
 pub(super) fn tinted(tint: Option<Hsla>, cx: &App) -> Div {
     v_flex()
         .w_full()
-        .p_3()
+        .p(look::Space::Medium)
         .corners(look::Corner::Card)
         .border_1()
         .border_color(tint.map_or(look::colors(cx).edge, |tint| tint.opacity(0.45)))
