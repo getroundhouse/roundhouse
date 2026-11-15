@@ -2,56 +2,63 @@
 
 How agents review a change when the owner asks for a review. What the PR then says about its reviews is in `docs/pull-requests.md`, and what a person has to judge by hand is in `docs/manual-checks.md`.
 
-Agents write this codebase, and each one copies what it finds. A workaround that gets in becomes the pattern for the next change, so a review asks whether a change is built the way it should be, not only whether it works. An agent that didn't build a change sees what its builder can't, because it isn't anchored on the builder's reasoning.
+Agents write this codebase, and each one copies what it finds. A workaround that gets in becomes the pattern for the next change, so a review asks whether a change is built the way it should be, not only whether it works. An agent that didn't build a change sees what its builder can't, because it isn't anchored on the builder's reasoning. So a review is a fresh look at what's complicated, not a check on what the builder can verify itself, such as whether a test fails when the code it covers breaks.
+
+What a review weighs most is the structure: who owns each piece of state, the interfaces and abstractions between parts, and how a failure in one part reaches the others. These cost the most to change later, and a sound structure rules out whole classes of bugs. A bug in one place, in a structure that's right, costs about as much to fix later as now, so a review holds a change for one only when the change doesn't do what it's for, or the bug does harm that can't be undone.
 
 A review is split into lanes. Each lane is one kind of question. A reviewer is a fresh agent that takes one lane or several, since each reviewer has to learn the change before it can judge it, and lanes that share a reviewer share that cost.
 
 ## When
 
-An agent reviews a change, or has one reviewed, only when the owner asks: in the lanes the owner names, or in those that fit the change when the owner names none.
+An agent reviews a change, or has one reviewed, only when the owner asks, in the lanes the owner names. When the owner names none, one fresh reviewer takes docs and design for a change in words alone, and architecture, correctness and tests for any other.
 
 ## How
 
 - **The reviewers run in parallel.**
-- **A reviewer gets the task, the diff, the checkout and the PR's description as drafted,** which holds the design, and the reason for any choice a reviewer might question. The diff is from the commit the change is built on, or from the PR below it in a stack, and the brief names that commit and any new file the diff doesn't show. A reviewer doesn't get the builder's chat, so it judges the change by what the change and its description say. Its brief names its lanes and points it to this doc, rather than retyping it.
+- **A reviewer gets the task, the diff, the checkout, and the PR's description if one is drafted,** which holds the design, and the reason for any choice a reviewer might question. When none is, the brief says what the change is for and why it's built as it is, rather than a description being drafted for the review. The diff is from the commit the change is built on, or from the PR below it in a stack, and the brief names that commit and any new file the diff doesn't show. A reviewer doesn't get the builder's chat, so it judges the change by what the change and its brief say. Its brief names its lanes and points it to this doc, rather than retyping it.
 - **A stack's reviewer gets the diff from the commit the stack is built on to its top,** naming any PR of it that has merged, the issue that holds the stack's plan, each PR's description, and the design review's verdict. It's a fresh agent rather than the design's reviewer, which approved the plan.
-- **Only the reviewer with the docs lane checks the description's claims,** or the only reviewer, when none has docs. The others read it to learn the change. Where the description and the code disagree, a reviewer says which is wrong: code that doesn't do what the description promises is a finding against the code.
-- **A reviewer changes nothing in the builder's checkout.** One that breaks code to see whether a test notices does it in a checkout of its own, with the change in it.
+- **A reviewer reads the description to learn the change,** rather than checking it claim by claim. Where the description and the code disagree about what the change does, it says which is wrong: code that doesn't do what the description promises is a finding against the code, and a description that's wrong is a minor one.
+- **A reviewer changes nothing in the builder's checkout, and makes no checkout of its own.** It judges a test from the code, and from what the builder says it broke on purpose. A test it doubts is a finding that asks the builder to break the code and see.
 - **A reviewer stays in its lanes.** Something it sees outside them gets one line.
-- **Findings go back to the builder,** and nothing is filed, as `docs/documentation.md` says of any local review. The builder tells the owner what came of them, as "What the owner hears" says.
+- **Findings go back to the builder,** and the reviewer files nothing, as `docs/documentation.md` says of any local review.
 
 ## Findings
 
-Each finding says:
+- *Must fix:*
+  - **The structure is wrong,** by what the Architecture lane looks for in a change's structure. A bug is a sign of it when a better structure would have made it impossible to write, when its fix changes something other code relies on, such as a signature, a type, an owner, the protocol or a stored form, or when the same mistake would be easy to make elsewhere. Its fix is the structure, not a patch at the bug. A doubt about the structure is a must fix even when the reviewer isn't sure, so that it gets an answer.
+  - **The change doesn't do what it's for:** the case it was built for doesn't work, or a test of that case can't fail.
+  - **Harm that can't be undone,** of the kinds the Correctness lane lists.
+  - **A rule other work is built to says what isn't true,** since agents copy a rule as they copy code.
+- *Minor:* anything else worth raising, in a line each with where it is: a local slip, which is a bug in one place in a structure that's right, a sentence of a comment or the description that isn't true, or a small break of a standard.
 
-- **How much it matters:**
-  - *Must fix:* the change is wrong. A bug, a state it can leave inconsistent, a test that can't fail, or a doc in `docs/`, `AGENTS.md` or a README that says what isn't true.
-  - *Should fix:* it breaks a rule in a doc, or it costs more to fix later than now, such as state with the wrong owner, logic repeated, or a workaround. A comment, an item's doc or a sentence of the PR's description that isn't true is one of these when the code is right: the words are corrected, and nothing else is wrong.
-  - *Consider:* a judgment call.
+Each must fix says:
+
 - **Where:** the file, and the item or lines.
 - **What's wrong,** and why it matters, in a sentence or two.
+- **What makes it necessary:** the requirement or assumption behind it, and whether dropping that, and accepting what it costs, would be simpler than the fix.
 - **The fix,** concrete enough to act on.
 
-A review that finds nothing worth raising says so. That's a result, and a reviewer doesn't make findings up to look thorough. The bar for *should fix* stays where it is for the same reason: a fresh reviewer can always find one more thing that could be better.
+A review that finds nothing worth raising says so. That's a result, and a reviewer doesn't make findings up to look thorough. The bar for *must fix* stays where it is for the same reason: a fresh reviewer can always find one more thing that could be better.
 
-After its findings, each reviewer's report has a part headed **For the owner:**, which holds what the owner would want to know or decide that isn't a finding against this change: a choice in the design that's worth a second look, a problem in the code nearby that the change didn't cause, or a way to make this part of the product or its code better. A reviewer with nothing to put there says so.
+After its findings, each reviewer's report has a part headed **For the owner:**, which holds what the owner would want to know that isn't a finding against this change: a problem in the code nearby that the change didn't cause, or a way to make this part of the product or its code better. A doubt about this change's structure is a finding, not one of these. A reviewer with nothing to put there says so.
 
 ## Until it's done
 
-1. The builder keeps the diff its reviewers saw, and checks each finding against the code, since a reviewer can be wrong. It fixes every one that must or should be fixed, or says in the PR's description why not, with an issue for anything left open. It takes one to consider when that's cheap and clearly better. A finding whose fix would take the change in another direction is the owner's to decide, so the builder leaves it, and its report asks.
-2. The builder checks its fixes as it checks the rest of its work. A fresh agent checks them only when the owner asks.
+1. The builder keeps the diff its reviewers saw, and checks each finding against the code, since a reviewer can be wrong. It fixes each must fix, or answers it: why the finding is wrong, or which downside the change accepts instead, and why that's better. The answer goes in a paragraph of its own in part 3 of the PR's description if there is one, and otherwise in its report. A must fix whose fix would take the change in another direction is the owner's to decide, so the builder leaves it and asks the owner, with its question tool.
+2. It fixes each minor finding whose fix is a few lines and plainly right. A bug it doesn't fix gets an issue labelled `kind/bug`, so the owner can weigh it later, and the rest it passes on are dropped.
+3. The builder checks its fixes as it checks the rest of its work, such as by breaking one on purpose to see its test fail. A fresh agent checks them only when the owner asks.
 
 A second review of the whole change, by fresh reviewers, is the owner's to ask for. Fresh reviewers find new things each time, so a review that waits for them to find nothing doesn't end.
 
 ## What the owner hears
 
-The owner hears about a review once, when it's done, in one report from the builder, rather than in a note as each reviewer finishes. The builder goes on to the full checks and the PR without waiting for an answer, but for a finding that would take the change in another direction. The report says:
+The owner hears about a review once, when it's done, in one report from the builder, rather than in a note as each reviewer finishes. The builder waits for no answer but the one to the question "Until it's done" has it ask. A review leads to no full checks, commit or PR of its own: the builder goes on with what it was asked to do. The report says:
 
-- **What was found and fixed,** the findings that must be fixed first, in a line or two each.
-- **What wasn't fixed,** and why.
-- **What's the owner's to confirm or decide:** a fix that changed an owner doc, the protocol or what a hub stores, and a finding that would take the change in another direction, each with what the builder recommends.
+- **What was found and fixed,** must fix first, in a line or two each.
+- **What was answered rather than fixed:** each must fix the builder judged wrong, and each downside the change accepts, with why.
+- **What's the owner's to confirm:** a fix that changed an owner doc, with what the builder recommends.
 - **What the reviewers put under For the owner,** passed on whole, with what the builder thinks of each.
-- **What was filed,** as issues, which is where anything from the review that's worth keeping goes, since nothing lives only in a chat.
+- **What was filed,** as issues, including each bug passed on, since nothing lives only in a chat.
 - **How much review it took:** how many reviewers ran, in which lanes, and whether the fixes were checked.
 
 ## Workarounds
@@ -79,6 +86,8 @@ Before any code is written, the reviewer reads the change's design: parts 2 and 
 
 - Is the problem the cause, or a symptom of something deeper?
 - Who owns the state, by the test in "State ownership" in `docs/architecture.md`?
+- How does a failure spread? For each thing the design waits on that can be slow, fail or never answer, what limits the wait, and what else waits behind it?
+- Which requirement makes the design hard, and would dropping it, and accepting what that costs, be simpler?
 - Was the approach that's most structurally right considered? If a smaller one was chosen, is the reason good? A smaller diff isn't a reason on its own.
 - Does something in the repo already do this, or could it be extended to?
 - Does it fit `docs/architecture.md`, including the parts that aren't built, such as workers on other machines and the iPhone app?
@@ -92,66 +101,59 @@ It ends with a verdict: go ahead, go ahead with changes, or rethink, with the be
 
 ### Correctness
 
-Whether the change does what it should, taking for granted that it builds and its tests pass. It looks for:
+Whether the change does what it's for, and whether it can do harm that can't be undone, taking for granted that it builds and its tests pass. It looks for:
 
-- Logic that's wrong: conditions, bounds, and assumptions about input. Input that's empty, repeated or very large.
-- Timing: an answer that arrives late, out of order or twice, two requests at once, a second client, a reconnect, and a restart of the hub, a worker or the app. "Keeping clients in sync" in `docs/architecture.md` says how each kind of state recovers.
-- Versions: a newer client or worker with an older hub, and the reverse, as "Changing the protocol" in `docs/architecture.md` says.
-- Stored data: a migration run on whatever an older build could have stored, and on a large store, and code that reads rows an older build wrote.
-- Failures: whether each one is surfaced, and whether one partway through leaves state consistent.
-- What's never let go of: processes, workers, subscriptions, records and tasks kept after nothing needs them.
-- In the app, more than the mouse: the keyboard, assistive apps, a narrow window, full screen, and what shows while something loads.
-- Comments and docs that say what the code doesn't do.
+- Logic that's wrong in the case the change was built for: conditions, bounds, and assumptions about input.
+- Stored data lost or garbled, including by a migration run on whatever an older build could have stored, and on a large store, and by code that reads rows an older build wrote.
+- A person's work lost, such as a prompt or an agent's output, an action taken on someone's behalf that can't be taken back, such as a push, a merge or a delete, and a credential exposed.
+- A newer client or worker with an older hub, and the reverse, as "Changing the protocol" in `docs/architecture.md` says, since a build can't be changed once it's published.
 
-It leaves style and structure to other lanes, unless they cause a bug.
+It doesn't hunt for edge cases beyond these. One it comes across is a minor finding, unless it's a sign that the structure is wrong, as "Findings" says.
 
 ### Tests
 
 Whether the tests would notice the change breaking. It looks for:
 
-- A test that can't fail: an assertion that holds either way, a wait that passes with no delay, values that happen to match, such as places equal to `seq`s, or a check that something is still there when nothing would have removed it. It can confirm one by breaking the code in a checkout of its own and running the test.
+- A test that can't fail: an assertion that holds either way, a wait that passes with no delay, values that happen to match, such as places equal to `seq`s, or a check that something is still there when nothing would have removed it.
 - A fake that hides what the real program does, such as the fake agent where the Claude CLI behaves otherwise. `docs/claude-cli.md` and the CLI's captured output in `crates/agents/tests/` say how it behaves.
 - A guarantee tested at the wrong one of the levels in `docs/testing.md`, or tested again at a higher one beyond one example of the wiring, which "Tests" in `docs/rust.md` rules out.
-- Tests that break the rules for tests in `docs/rust.md`.
 - A test made to pass rather than fixed: a sleep, retry or longer timeout under "Workarounds" without a reason, or what `AGENTS.md` says isn't a fix for a flaky test, such as loosening what it checks.
-- An important case with no test.
+- No test of the case the change was built for, or of a failure the structure is meant to contain, such as one part that never answers while the rest carry on.
 
 ### Architecture
 
-Whether the change is built the way a strong engineer would build it, not only whether it works. It looks for:
+Whether the change is built the way a strong engineer would build it, not only whether it works, and is as small and clear as it can be. Findings that remove code come first. In the change's structure, it looks for:
 
-- State with the wrong owner, by "State ownership" in `docs/architecture.md`, such as a client keeping or working out what the hub should record.
+- State with the wrong owner, or more than one writer, by "State ownership" in `docs/architecture.md`, such as a client keeping or working out what the hub should record.
+- A failure that spreads: a wait with no limit on something that can be slow or never answer, such as a worker, GitHub, the store or a lock, or something parts meant to be independent share, such as a loop, a task or a budget, so one stuck part holds up the rest.
+- Something with no owner to end it: a process, worker, subscription, task or record kept after nothing needs it.
+- An interface that's easy to call wrong, or an abstraction that leaks what it should hide.
 - A fix in the wrong place, which patches a symptom whose cause is elsewhere.
 - A break in the dependency rules or the layers in `docs/architecture.md`, and new coupling between parts.
-- A second way to do what a mechanism already does, where `docs/rust.md` says to change the mechanism instead.
-- A crate, module or trait that doesn't earn its place, by "Crates and modules" in `docs/rust.md`, or something specific that should be shared. A type for a value that means something specific always earns its place, as "Types" there says.
+- A second way to do what the repo already does: a mechanism, where `docs/rust.md` says to change the mechanism instead, or a helper, type, constant, piece of wording or test fixture. It searches for it and says where it is.
+- A crate, module, file, trait or function that doesn't earn its place, or does more than one job, by "Crates and modules" in `docs/rust.md`. A type for a value that means something specific always earns its place, as "Types" there says.
+- A requirement that makes the change harder than it's worth, where accepting a downside would be simpler.
+- A rule other work is built to that the change adds or rewrites, judged as part of its design, and, when no reviewer has the docs lane, one the change makes untrue.
 - Anything under "Workarounds" without a reason, any workaround copied from code nearby, and any sign of working around the kit that `docs/gpui.md` lists.
 
-When it would have built the change differently, it says how, and what that would take. It separates what has to change now from what's worth an issue.
+In how the change is written, it looks for:
 
-### Cleanliness
-
-Whether the change is as small and clear as it can be. Findings that remove code come first. It looks for:
-
-- What the change adds that the repo already has: a helper, type, constant, piece of wording or test fixture. It searches for it and says where it is.
 - Repetition within the diff.
 - Dead code, unused parameters, debugging left in, and stale comments.
 - Names that don't say what a thing is, or that use a word in a sense `docs/terms.md` doesn't give it.
 - A doc that only repeats an item's name and type, which "Docs" in `docs/rust.md` rules out, and a comment that only repeats the code beside it.
-- Functions and files that should be split by responsibility, even under the limits the lints and policy tests enforce.
-- Code that breaks a rule in `docs/rust.md` or `docs/gpui.md` that the lints don't enforce.
+- Code that breaks a rule in `docs/rust.md` or `docs/gpui.md` that the lints don't enforce. It skips what `rustfmt` and Clippy catch.
 
-It skips what `rustfmt` and Clippy catch.
+When it would have built the change differently, it says how, and what that would take.
 
 ### Docs
 
-Whether every doc is still true after the change, and the PR says only what's true. It looks for:
+Whether every doc is still true after the change. It looks for:
 
 - A doc the change makes untrue, anywhere in `docs/`, `AGENTS.md` and the READMEs, and docs that now contradict each other.
 - A rule in the spec that says more or less than the code does, and *Not built* and *Unconfirmed* marks that are wrong. A choice an agent made in an owner doc is marked *Unconfirmed*.
 - What `docs/documentation.md` keeps out of docs, such as a date, "yet" or an issue number.
 - A new word, or a new sense of one, missing from `docs/terms.md`.
-- The PR's description, when there is one, against `docs/pull-requests.md`: every claim checked, and anything unverified under **Not checked:**.
 
 ### Stack
 
