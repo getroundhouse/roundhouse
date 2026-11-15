@@ -54,8 +54,11 @@ impl WorkspacePane {
         self.new_chat_with(agent, cx);
     }
 
+    /// Every request makes a chat, as `Cmd-T` opens a tab every time elsewhere. One made while another is on its way
+    /// waits for it.
     pub(super) fn new_chat_with(&mut self, agent: protocol::model::AgentKind, cx: &mut Context<Self>) {
         if self.creating_chat {
+            self.chats_asked_for.push_back(agent);
             return;
         }
         self.creating_chat = true;
@@ -83,6 +86,9 @@ impl WorkspacePane {
         match created {
             Ok(session) => self.took_chat_to_show(session, cx),
             Err(e) => cx.emit(PaneEvent::Error(format!("couldn't start a chat: {e}"))),
+        }
+        if let Some(agent) = self.chats_asked_for.pop_front() {
+            self.new_chat_with(agent, cx);
         }
     }
 
