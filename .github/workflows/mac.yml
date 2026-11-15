@@ -36,17 +36,12 @@ env:
   CARGO_PROFILE_DEV_DEBUG: line-tables-only
 
 jobs:
+  # Probe: what the Mac cache holds, by kind, raw and compressed as actions/cache compresses it.
   mac:
     runs-on: macos-26
-    timeout-minutes: 60
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - run: git config --global user.name ci && git config --global user.email ci@example.com
-      # The Zig that builds Ghostty's terminal core, and Zig's global cache, which the last step saves.
-      - id: zig
-        uses: ./.github/actions/zig
-        with:
-          cache-name: mac
       - id: cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -57,27 +52,11 @@ jobs:
             target/
           key: mac-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', '**/Cargo.toml') }}
           restore-keys: mac-
-      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
-      # The gallery's images match the Mac that approved them, pixel for pixel.
-      - run: cargo test --workspace --locked -- --skip 'gallery::'
-      # Only the dependencies are worth keeping, as in ci.yml.
-      - if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
-        run: cargo clean --workspace
-      - if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ steps.cache.outputs.cache-primary-key }}
-      # Zig's global cache, once Zig has built something, which it hasn't when target/ held Ghostty's build. What it
-      # built is then listed in h/.
-      - if: >-
-          github.ref == 'refs/heads/main' && steps.zig.outputs.cache-hit != 'true' &&
-          hashFiles('.zig-cache/h/**') != ''
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: .zig-cache
-          key: ${{ steps.zig.outputs.cache-primary-key }}
+      - run: python3 .github/cache-probe.py "$RUNNER_TEMP/kinds"
+      - run: |
+          cd "$RUNNER_TEMP/kinds"
+          for list in *.txt; do
+            start=$(date +%s)
+            bytes=$(sed '/^$/d' "$list" | gtar -cf - -P -T - 2>/dev/null | zstd -T0 --long=30 -q -c | wc -c)
+            echo "$(( bytes / 1000000 )) MB compressed, $(( $(date +%s) - start ))s to pack: ${list%.txt}"
+          done | sort -rn
