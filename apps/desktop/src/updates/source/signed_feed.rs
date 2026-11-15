@@ -1,9 +1,11 @@
+use super::{WorkersToKeep, only_speaking};
 use fetching::Fetcher;
 use ring::signature::{ED25519, UnparsedPublicKey};
 use std::io;
 use std::path::Path;
 use std::sync::mpsc::Sender;
 use std::time::Duration;
+use update_feed::Feed;
 use velopack::bundle::Manifest;
 use velopack::sources::UpdateSource;
 use velopack::{VelopackAsset, VelopackAssetFeed};
@@ -87,30 +89,37 @@ pub(crate) fn verified(feed: &[u8], signature: &[u8], key: &UpdateFeedKey) -> Re
 }
 
 /// Where Velopack gets updates: the feed only once its signature checks out, and the packages it names from beside
-/// it. Neither follows a redirect, so the feed and the packages come from where the app was built to look.
+/// it. Neither follows a redirect, so the feed and the packages come from where the app was built to look. The feed
+/// it gives Velopack leaves out each release whose hub can't talk to the workers `workers` says to keep.
 pub(crate) struct SignedSource {
     pub(super) base: String,
     pub(super) key: UpdateFeedKey,
+    pub(super) workers: WorkersToKeep,
     pub(super) feeds: Fetcher,
     pub(super) packages: Fetcher,
     pub(super) retry_after: Duration,
 }
 
 impl SignedSource {
-    pub(crate) fn new(base: &str, key: UpdateFeedKey) -> Self {
-        Self::waiting(base, key, RETRY_AFTER)
+    pub(crate) fn new(base: &str, key: UpdateFeedKey, workers: WorkersToKeep) -> Self {
+        Self::waiting(base, key, workers, RETRY_AFTER)
     }
 
     /// A source that waits `retry_after` before reading again a feed whose signature didn't match.
-    pub(crate) fn waiting(base: &str, key: UpdateFeedKey, retry_after: Duration) -> Self {
+    pub(crate) fn waiting(base: &str, key: UpdateFeedKey, workers: WorkersToKeep, retry_after: Duration) -> Self {
         let base = base.trim_end_matches('/').to_string();
-        Self { base, key, feeds: Fetcher::new(FEED_TIMEOUT), packages: Fetcher::new(PACKAGE_TIMEOUT), retry_after }
+        let (feeds, packages) = (Fetcher::new(FEED_TIMEOUT), Fetcher::new(PACKAGE_TIMEOUT));
+        Self { base, key, workers, feeds, packages, retry_after }
     }
 
     pub(super) fn signed_feed(&self, name: &str) -> Result<VelopackAssetFeed, SourceError> {
         let feed = self.fetch(name, FEED_LIMIT_BYTES)?;
         let signature = self.fetch(&format!("{name}.sig"), SIGNATURE_BYTES)?;
-        verified(&feed, &signature, &self.key)
+        let releases = verified(&feed, &signature, &self.key)?;
+        Ok(match self.workers.oldest() {
+            Some(oldest) => only_speaking(releases, &serde_json::from_slice::<Feed>(&feed)?, oldest),
+            None => releases,
+        })
     }
 
     pub(super) fn fetch(&self, name: &str, limit: u64) -> Result<Vec<u8>, SourceError> {

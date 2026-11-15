@@ -1,3 +1,5 @@
+use update_feed::Feed;
+
 use super::*;
 use crate::updates::signing::{key_pair, public};
 use fetching::serving::{Reply, Server, serve};
@@ -18,7 +20,8 @@ fn serve_feed(feed: Vec<Reply>, signature: Vec<Reply>) -> Server {
 
 /// Reads the feed through Velopack's interface, without waiting to read it again.
 fn read_feed(server: &Server, key: UpdateFeedKey) -> Result<VelopackAssetFeed, velopack::Error> {
-    SignedSource::waiting(&server.base, key, Duration::ZERO).get_release_feed("osx", &Manifest::default(), "")
+    let source = SignedSource::waiting(&server.base, key, WorkersToKeep::oldest_at(None), Duration::ZERO);
+    source.get_release_feed("osx", &Manifest::default(), "")
 }
 
 /// The source's own error, which Velopack passes on inside its `Io` variant.
@@ -173,7 +176,7 @@ fn download(size: u64, reply: Reply) -> (Result<(), velopack::Error>, tempfile::
     let server = serve(vec![(name.to_string(), vec![reply])]).unwrap();
     let asset = VelopackAsset { FileName: name.to_string(), Size: size, ..VelopackAsset::default() };
     let dir = tempfile::tempdir().unwrap();
-    let source = SignedSource::new(&server.base, public(&key_pair()));
+    let source = SignedSource::new(&server.base, public(&key_pair()), WorkersToKeep::oldest_at(None));
     (source.download_release_entry(&asset, &dir.path().join("package.partial"), None), dir)
 }
 
@@ -205,4 +208,29 @@ fn a_package_cut_short_is_not_kept() {
         SourceError::Fetch(fetching::FetchError::CutShort { expected_bytes: 6, got_bytes: 5, .. })
     ));
     assert!(!dir.path().join("package.partial").exists());
+}
+
+/// Releases whose hubs speak worker protocols 3 to 4, and 4 to 5, as `tools/package/publish.py` writes them, after one
+/// from before releases said.
+const SPEAKING: &str = r#"{"Assets":[
+    {"PackageId":"Roundhouse","Version":"0.1.5","Type":"Full","FileName":"a","SHA1":"","Size":1},
+    {"PackageId":"Roundhouse","Version":"0.1.6","Type":"Full","FileName":"b","SHA1":"","Size":1,"WorkerVersions":{"oldest":3,"newest":4}},
+    {"PackageId":"Roundhouse","Version":"0.1.7","Type":"Delta","FileName":"c","SHA1":"","Size":1},
+    {"PackageId":"Roundhouse","Version":"0.1.7","Type":"Full","FileName":"d","SHA1":"","Size":1,"WorkerVersions":{"oldest":4,"newest":5}}
+]}"#;
+
+/// What Velopack is given of [`SPEAKING`] while workers as old as `oldest` are kept.
+fn kept_for(oldest: u32) -> Vec<String> {
+    let releases: VelopackAssetFeed = serde_json::from_str(SPEAKING).unwrap();
+    let feed: Feed = serde_json::from_str(SPEAKING).unwrap();
+    let kept = only_speaking(releases, &feed, oldest);
+    kept.Assets.iter().map(|package| format!("{} {}", package.Version, package.Type)).collect()
+}
+
+#[test]
+fn the_feed_keeps_only_releases_whose_hub_speaks_the_workers_to_keep() {
+    assert_eq!(kept_for(3), ["0.1.6 Full"]);
+    assert_eq!(kept_for(4), ["0.1.6 Full", "0.1.7 Delta", "0.1.7 Full"]);
+    assert_eq!(kept_for(5), ["0.1.7 Delta", "0.1.7 Full"]);
+    assert!(kept_for(2).is_empty(), "none speaks workers that old");
 }

@@ -34,8 +34,10 @@ serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 velopack.workspace = true
+update-feed.workspace = true
 flume.workspace = true
 qrcode.workspace = true
+parking_lot.workspace = true
 ring.workspace = true
 # Turns a pasted image an agent can't be given, such as a TIFF, into a PNG, and decodes the images the file tab draws
 # and compares. GPUI already builds these.

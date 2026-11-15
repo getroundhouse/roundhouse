@@ -79,6 +79,7 @@ fn a_status_from_a_hub_older_than_on_demand_reads_as_not_on_demand() {
     .unwrap();
 
     assert!(!status.on_demand);
+    assert_eq!(status.oldest_running_worker_protocol, None, "a hub from before it said");
 }
 
 #[test]

@@ -289,12 +289,13 @@ impl Hub {
 
     pub(crate) fn status(&self) -> HubStatus {
         let running_sessions = self.sessions.lock().live.values().filter(|session| session.counts_as_running()).count();
+        let (workers, oldest_running_worker_protocol) = self.workers_running();
         HubStatus {
             pid: std::process::id(),
             hub_version: self.build.version().to_string(),
             protocol_version: versions::CLIENTS.newest,
             started_at_ms: self.started_at_ms,
-            workers: u32::try_from(self.workers.lock().len()).unwrap_or(u32::MAX),
+            workers,
             running_sessions: u32::try_from(running_sessions).unwrap_or(u32::MAX),
             clients: self.clients.load(Ordering::Relaxed),
             on_demand: self.on_demand,
@@ -304,7 +305,21 @@ impl Hub {
             keeping_awake: self.awake.holding(),
             keeps_workers: KEEPS_WORKERS,
             oldest_protocol_version: Some(versions::CLIENTS.oldest),
+            oldest_running_worker_protocol: Some(oldest_running_worker_protocol),
         }
+    }
+
+    /// How many workers it has, and the oldest version of the worker protocol among those still open, counting its own,
+    /// as [`HubStatus::oldest_running_worker_protocol`] says, from one look at them. A worker joins them once its hello
+    /// has chosen its version, and a closed one is still among them until whatever ends it has given back its instance.
+    fn workers_running(&self) -> (u32, u32) {
+        let workers = self.workers.lock();
+        let oldest = workers
+            .values()
+            .filter(|link| link.is_open())
+            .filter_map(|link| link.version())
+            .fold(versions::WORKERS.newest, u32::min);
+        (u32::try_from(workers.len()).unwrap_or(u32::MAX), oldest)
     }
 
     /// Says that what's at work may have changed, for whatever keeps this machine awake.

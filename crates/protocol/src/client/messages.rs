@@ -139,6 +139,11 @@ pub struct HubStatus {
     /// hub from before this, which speaks only the one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub oldest_protocol_version: Option<u32>,
+    /// The oldest version of the worker protocol among the workers it's running, counting its own, which every worker it
+    /// starts speaks. A hub that doesn't speak it would end those workers as it started, so the app takes no update whose
+    /// hub doesn't, as "Managing a hub" in `docs/architecture.md` says. `None` from a hub from before this.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub oldest_running_worker_protocol: Option<u32>,
 }
 
 impl HubStatus {

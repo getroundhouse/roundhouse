@@ -9,6 +9,8 @@ The app updates itself, and updating never stops a running agent unless you choo
 3. **The new app restarts the hub at once,** even with agents at work. That stops nothing: each agent carries on where it was, on the version it started with.
 4. **Each workspace moves to the new version by itself,** once nothing is at work in it.
 
+Right after two changes close together in how the hub talks to its agents, an update comes in two steps, so neither stops an agent. The first is the version just before the second change, and once every workspace has moved to it, the newest downloads by itself, to install the next time you quit or restart to update.
+
 ![An update, downloaded and ready](../../spec/screens/update-ready.png)
 
 Nothing about an update arriving or finishing by itself is a dialog or a notification, since every merge publishes one. The one dialog is the one you ask for, before `Restart now` stops agents.

@@ -29,6 +29,7 @@ impl AppView {
             pane.update(cx, |p, cx| p.set_records(shown, cx));
         }
         self.records = records;
+        self.keep_workers_as_they_move(cx);
         let still_there =
             self.selected.as_ref().and_then(|id| self.records.workspace(id)).is_some_and(crate::sidebar::lists);
         if !still_there {

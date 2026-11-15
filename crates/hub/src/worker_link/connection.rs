@@ -201,6 +201,11 @@ impl WorkerLink {
         self.said_build().unwrap_or("one from before workers said")
     }
 
+    /// The version of the worker protocol its hello chose. `None` before its hello.
+    pub(crate) fn version(&self) -> Option<u32> {
+        self.version.get().copied()
+    }
+
     /// The build its hello named. `None` before its hello, and from a worker from before workers said.
     pub(crate) fn said_build(&self) -> Option<&str> {
         self.build.get().and_then(Option::as_deref)
