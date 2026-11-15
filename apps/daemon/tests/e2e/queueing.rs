@@ -215,10 +215,16 @@ fn a_stopped_turn_holds_the_queue_until_another_turn_ends() {
     assert!(!client.session_get(&session.id).unwrap().queue_held);
 }
 
-/// Long enough for a hub that was going to send a queue to have sent it.
-fn not_sent_within_a_while(client: &Client, session_id: &SessionId, id: &str) {
-    std::thread::sleep(std::time::Duration::from_millis(500));
-    assert!(sent_at(&read_all(client, session_id), id).is_none(), "held, so not sent");
+/// Sends the second of two queued prompts, as the person does, and checks it went first, once the first has gone after
+/// it. A hub that was going to send the queue itself would have sent the first before this reached the session, since
+/// it decides as it takes the session on, ahead of anything a client asks of it.
+fn send_the_second_and_see_the_first_was_held(client: &Client, session_id: &SessionId, turns: usize) {
+    client.session_send_queued(session_id, "q2".into()).unwrap();
+    let events = wait_for_turn_end(client, session_id, turns);
+    assert!(sent_at(&events, "q2").unwrap() < sent_at(&events, "q1").unwrap(), "held until the person sent from it");
+    assert_eq!(assistant_text(&events), "sent from the queuefirst in line");
+    let sent = client.session_get(session_id).unwrap();
+    assert!(!sent.queue_held && sent.queued.is_empty());
 }
 
 #[test]
@@ -228,7 +234,8 @@ fn a_stopped_queue_stays_held_through_a_restart_until_the_person_sends_from_it()
     let (_, session) = stack.workspace(&client);
     client.session_prompt(&session.id, "hang:20000", None).unwrap();
     wait_for_tool(&client, &session.id);
-    queue(&client, &session.id, "q1", "say:held");
+    queue(&client, &session.id, "q1", "say:first in line");
+    queue(&client, &session.id, "q2", "say:sent from the queue");
     client.session_cancel(&session.id).unwrap();
     wait_for_status(&client, &session.id, SessionStatus::Idle);
     assert!(client.session_get(&session.id).unwrap().queue_held);
@@ -237,15 +244,10 @@ fn a_stopped_queue_stays_held_through_a_restart_until_the_person_sends_from_it()
     stack.start_hub();
     let client = stack.client();
     let found = client.session_get(&session.id).unwrap();
-    assert!(found.queue_held && found.queued.len() == 1);
-    not_sent_within_a_while(&client, &session.id, "q1");
+    assert!(found.queue_held && found.queued.len() == 2);
 
-    client.session_send_queued(&session.id, "q1".into()).unwrap();
-    let events = wait_for_turn_end(&client, &session.id, 2);
-    assert!(sent_at(&events, "q1").is_some());
-    assert_eq!(assistant_text(&events), "held");
-    let sent = client.session_get(&session.id).unwrap();
-    assert!(!sent.queue_held && sent.queued.is_empty());
+    // The stopped turn, then the one the person sent, and the one sent after it.
+    send_the_second_and_see_the_first_was_held(&client, &session.id, 3);
 }
 
 #[test]
@@ -255,7 +257,8 @@ fn a_queue_whose_agent_went_away_mid_turn_is_held_and_sending_from_it_resumes_th
     let (_, session) = stack.workspace(&client);
     client.session_prompt(&session.id, "hang:20000", None).unwrap();
     wait_for_tool(&client, &session.id);
-    queue(&client, &session.id, "q1", "say:after the restart");
+    queue(&client, &session.id, "q1", "say:first in line");
+    queue(&client, &session.id, "q2", "say:sent from the queue");
 
     stack.kill_hub_and_workers();
     stack.start_hub();
@@ -263,12 +266,9 @@ fn a_queue_whose_agent_went_away_mid_turn_is_held_and_sending_from_it_resumes_th
     let found = client.session_get(&session.id).unwrap();
     assert_eq!(found.status, SessionStatus::Interrupted);
     assert!(found.queue_held);
-    not_sent_within_a_while(&client, &session.id, "q1");
 
-    client.session_send_queued(&session.id, "q1".into()).unwrap();
-    let events = wait_for_turn_end(&client, &session.id, 1);
-    assert!(sent_at(&events, "q1").is_some());
-    assert_eq!(assistant_text(&events), "after the restart");
+    // The turn that went away never ended.
+    send_the_second_and_see_the_first_was_held(&client, &session.id, 2);
 }
 
 #[test]

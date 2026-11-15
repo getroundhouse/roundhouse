@@ -9,13 +9,15 @@
 //!                   can act mid-stream.
 //!   slow-until:FILE:TEXT  Same, until FILE exists, so a test can act mid-stream for as long as it needs, and then has
 //!                   the message finish at once. A prompt that reaches the agent meanwhile makes `FILE.prompted` once
-//!                   it's queued to be taken into the turn, so a test can wait for that before making FILE. See
+//!                   it's queued to be taken into the turn, so a test can wait for that before making FILE. Each
+//!                   chunk that has gone adds a line to `FILE.said`, so a test can wait for it to have said more. See
 //!                   `waiting.rs`.
 //!   burst:N         Same, sending N numbered chunks as fast as possible.
 //!   whole:TEXT      As `say`, in one chunk, so a test that only needs what was said can say a great deal quickly.
 //!   prose:N:SEED    Say N paragraphs of made-up prose, the same for the same SEED, as fast as possible.
 //!   think:N:TEXT    Think, the way `slow` speaks, as the real CLI does with `--thinking-display summarized`.
-//!   think-until:FILE:TEXT  The same, the way `slow-until` speaks, and says when a prompt has reached it the same way.
+//!   think-until:FILE:TEXT  The same, the way `slow-until` speaks, and says when a prompt has reached it, and how much
+//!                   it has said, the same way.
 //!   ponder:N:SEED   Think N paragraphs of the same made-up prose, as fast as possible.
 //!   tool:COMMAND    Ask for approval unless in full access, as the real CLI does in plan mode for a call that
 //!                   writes, then run COMMAND with `sh -c`. A COMMAND that removes whatever another prints, with

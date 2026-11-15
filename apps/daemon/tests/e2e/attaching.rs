@@ -2,7 +2,9 @@
 
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
-use std::process::{Child, ChildStdout, Command, Stdio};
+use std::process::{Child, Command, Stdio};
+use std::sync::mpsc;
+use std::time::Instant;
 
 use process::ProcessRecord;
 use protocol::client::ErrorCode;
@@ -12,12 +14,13 @@ use protocol::worker::{
     Hello, WORKER_PROTOCOL_VERSION, WorkerCall, WorkerFrame, WorkerOutcome, WorkerRequest, WorkerResponse,
 };
 
-use crate::support::{is_alive, wait_until};
+use crate::support::{TIMEOUT, is_alive, wait_until};
 
 /// What a hub runs to reach the worker, with the worker's stream on its stdin and stdout.
 pub(crate) struct Attached {
     command: Child,
-    replies: BufReader<ChildStdout>,
+    /// Each line the worker sends, read on a thread of its own, so a wait for one gives up rather than waiting for ever.
+    lines: mpsc::Receiver<String>,
 }
 
 impl Attached {
@@ -37,18 +40,36 @@ impl Attached {
             .stderr(Stdio::null())
             .spawn()
             .unwrap();
-        let replies = BufReader::new(command.stdout.take().unwrap());
-        Self { command, replies }
+        let (read, lines) = mpsc::channel();
+        let sent = BufReader::new(command.stdout.take().unwrap());
+        std::thread::spawn(move || {
+            for line in sent.lines().map_while(Result::ok) {
+                if read.send(line).is_err() {
+                    return;
+                }
+            }
+        });
+        Self { command, lines }
     }
 
     /// The worker's reply, which has to be the next thing it sends.
     pub(crate) fn call(&mut self, id: u64, request: WorkerRequest) -> WorkerOutcome {
         self.command.stdin.as_mut().unwrap().write_all(&frame::encode(&WorkerCall { id, request }).unwrap()).unwrap();
-        let mut line = String::new();
-        self.replies.read_line(&mut line).unwrap();
-        match frame::decode(line.as_bytes()).unwrap() {
+        match self.frame_until(&format!("the reply to {id}"), Some) {
             WorkerFrame::Reply { id: answering, outcome } if answering == id => outcome,
             other => panic!("expected the reply to {id}, got {other:?}"),
+        }
+    }
+
+    /// What `wanted` finds in the first frame it finds anything in, of those the worker sends from now on.
+    pub(crate) fn frame_until<T>(&mut self, what: &str, wanted: impl Fn(WorkerFrame) -> Option<T>) -> T {
+        let deadline = Instant::now() + TIMEOUT;
+        loop {
+            let line = self.lines.recv_timeout(deadline.saturating_duration_since(Instant::now()));
+            let line = line.unwrap_or_else(|e| panic!("timed out waiting for {what}: {e}"));
+            if let Some(found) = wanted(frame::decode(line.as_bytes()).unwrap()) {
+                return found;
+            }
         }
     }
 
