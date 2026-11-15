@@ -1,20 +1,20 @@
-//! Stands in for a hub of another build, which a test can't otherwise get. As a client sees it across a real
-//! protocol break, it refuses every hello, and all that still works is seeing it and stopping it. With
-//! `--speaks-this-protocol` it takes a hello, as an older build would, and serves a hub with nothing in it, so the
-//! app can use it, refuses `agent_list` as unsupported, as a build from before hubs described their agents would, and
-//! refuses anything else. It holds the same lock as a real hub. A test can change how many agents
-//! it says are running, as if some had started or finished, by writing the number to [`RUNNING`] in its data directory,
-//! and how many clients are connected to it, by writing to [`CLIENTS`]. Asked to stop if it's idle, it goes by what it
-//! says then, as a hub does, unless it's told to be from before a hub could decide that, or to turn out busy. With
-//! `--keeps-workers` it says it keeps its workers, and asked to restart, it goes once no setup script is running, as a
-//! hub does, as many as it says are until a test writes another number to [`SETUPS`], unless they're told to end as it's
-//! asked, and leaves [`RESTARTED`] to say it restarted rather than stopped.
+//! Stands in for a hub of another build, which a test can't otherwise get. As a client sees it across a real protocol
+//! break, it refuses every hello, and all that still works is seeing it and stopping it. With `--speaks-this-protocol`
+//! it takes a hello, as an older build would, and serves a hub with nothing in it, so the app can use it, refuses
+//! `agent_list` as unsupported, as a build from before hubs described their agents would, and refuses anything else. It
+//! holds the same lock as a real hub, and lets go of it before it exits, as a real hub does. A test can change how many
+//! agents it says are running, as if some had started or finished, by writing the number to [`RUNNING`] in its data
+//! directory, and how many clients are connected to it, by writing to [`CLIENTS`]. Asked to stop if it's idle, it goes
+//! by what it says then, as a hub does, unless it's told to be from before a hub could decide that, or to turn out
+//! busy. With `--keeps-workers` it says it keeps its workers, and asked to restart, it goes once no setup script is
+//! running, as a hub does, as many as it says are until a test writes another number to [`SETUPS`], unless they're told
+//! to end as it's asked, and leaves [`RESTARTED`] to say it restarted rather than stopped.
 
 #![expect(clippy::unwrap_used, clippy::expect_used, reason = "a test program, so failing loudly is what it should do")]
 
 use std::io::{BufRead as _, BufReader, Write as _};
 use std::os::unix::net::{UnixListener, UnixStream};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use clap::Parser;
@@ -220,19 +220,29 @@ fn serve(stream: UnixStream, args: &Arc<Args>, paths: &Arc<Paths>) {
 }
 
 /// Goes once no setup script is running, as a hub asked to restart does, leaving [`RESTARTED`] behind.
-fn restart(args: &Args, paths: &Paths) {
+fn restart(args: &Args, paths: &Paths) -> ! {
     while !args.setups_end_as_it_restarts && written(paths, SETUPS, args.setups) > 0 {
         std::thread::sleep(Duration::from_millis(10));
     }
     std::fs::write(paths.data_dir.join(RESTARTED), "").unwrap();
-    let _ = std::fs::remove_file(&paths.socket);
-    std::process::exit(0);
+    go(paths);
 }
 
-/// Says it's stopping, lets go of the socket, and exits.
+/// Says it's stopping, and goes.
 fn stop(writer: &Writer, id: u64, paths: &Paths) -> ! {
     reply(writer, id, ReplyOutcome::Response(ClientResponse::Ok));
+    go(paths);
+}
+
+/// The lock a hub holds, which it takes as it starts.
+static LOCK: OnceLock<std::fs::File> = OnceLock::new();
+
+/// Lets go of the socket and the lock, and exits. Of the lock before it exits, as a hub does, since a client that sees
+/// this go starts the next hub at once, which needs the lock, and a process's files close as it exits in no promised
+/// order.
+fn go(paths: &Paths) -> ! {
     let _ = std::fs::remove_file(&paths.socket);
+    LOCK.get().unwrap().unlock().unwrap();
     std::process::exit(0);
 }
 
@@ -240,7 +250,7 @@ fn main() {
     let args = Arc::new(Args::parse());
     let paths = Arc::new(protocol::paths::resolve(|name| std::env::var(name).ok()).expect("find the hub's paths"));
     std::fs::create_dir_all(&paths.data_dir).unwrap();
-    let lock = std::fs::File::create(&paths.lock).unwrap();
+    let lock = LOCK.get_or_init(|| std::fs::File::create(&paths.lock).unwrap());
     lock.try_lock().unwrap();
     let _ = std::fs::remove_file(&paths.socket);
     let listener = UnixListener::bind(&paths.socket).unwrap();
