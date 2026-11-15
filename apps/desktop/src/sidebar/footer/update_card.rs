@@ -8,8 +8,8 @@ use gpui_kit::{
     AnyElement, App, Context, Div, InteractiveElement as _, IntoElement, ParentElement, RenderOnce, Stateful,
     Styled as _, TestSupportExt as _, Window, div,
 };
+use look::{AppIconSize, AppIconStyle};
 use look::{Hand as _, Shaped as _, Sizing as _, Typeset as _};
-use look::{IconSize, IconStyle};
 
 use super::update_details::{Details, Shown};
 use crate::app::{Agents, AppView, BuildLine, UpdateQuestion, Updating};
@@ -64,7 +64,7 @@ impl RenderOnce for UpdateCard {
                 h_flex()
                     .items_start()
                     .gap(look::Space::Medium)
-                    .child(look::icon(IconStyle::Working, IconSize::Px64, cx))
+                    .child(look::app_icon(AppIconStyle::Working, AppIconSize::Px64, cx))
                     .child(self.about.flex_1())
                     .child(mark),
             )

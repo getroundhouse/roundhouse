@@ -67,7 +67,7 @@ fn odd(pixels: f32) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::super::{Drawing, IconSize};
+    use super::super::{AppIconSize, Drawing};
     use super::{Layout, OnPixels, odd};
 
     fn centres(layout: &Layout) -> Vec<(f32, f32)> {
@@ -75,7 +75,7 @@ mod tests {
     }
 
     fn on_pixels() -> Vec<(u16, OnPixels)> {
-        IconSize::ALL
+        AppIconSize::ALL
             .into_iter()
             .filter_map(|size| match size.drawing() {
                 Drawing::OnPixels(fan) => Some((size.pixels(), fan)),
