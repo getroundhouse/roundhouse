@@ -5,16 +5,19 @@ use gpui_kit::{App, Context};
 use protocol::model::{Record, Session, WorkspaceId};
 
 use super::AppView;
-use crate::workspace_pane::Mark;
+use crate::workspace_pane::{Mark, OnScreen};
 
 impl AppView {
-    /// Tells each pane whether it's the one being read: the selected one, with a connection, in the window in front,
-    /// and not hidden by Settings or Home. For after anything that changes one of those.
+    /// Tells each pane whether it's drawn, which only the one `pane_to_draw` gives is, unless Settings or Home is, and
+    /// whether the window is in front, which is kept for telling them again without asking it. For after anything
+    /// that changes one of those.
     pub(super) fn read_on_screen(&mut self, in_front: bool, cx: &mut Context<Self>) {
+        self.in_front = in_front;
         let hidden = self.settings_open() || self.home_showing();
-        let showing = self.selected_pane().filter(|_| in_front && !hidden).map(|pane| pane.entity_id());
+        let drawn = self.pane_to_draw().filter(|_| !hidden).map(|pane| pane.entity_id());
+        let seen = if in_front { OnScreen::InFront } else { OnScreen::Behind };
         for pane in self.panes.values() {
-            let on_screen = Some(pane.entity_id()) == showing;
+            let on_screen = if Some(pane.entity_id()) == drawn { seen } else { OnScreen::No };
             pane.update(cx, |p, cx| p.set_on_screen(on_screen, cx));
         }
         // Every change to the records comes through here too, so this is where a chat that needs the person is told of.

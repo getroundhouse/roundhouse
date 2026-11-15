@@ -113,7 +113,7 @@ fn after_a_reconnect_panes_catch_up_when_shown_and_an_archived_ones_goes(cx: &mu
     ui.click("try-hub-again");
 
     ui.wait("the pane on screen to catch up", |ui| {
-        matches!(ui.view().connection, Connection::Ready(_)) && shows_changes(ui, &shown_diff)
+        matches!(ui.view().connection(), Connection::Ready(_)) && shows_changes(ui, &shown_diff)
     });
     assert!(!ui.view().panes.contains_key(&archived));
     assert!(!shows_changes(&ui, &hidden_diff), "it waits until it's shown");
@@ -137,7 +137,7 @@ fn a_pane_shown_while_the_hub_is_gone_catches_up_once_it_is_back(cx: &mut TestAp
     lose_the_hub(&mut ui, &stack);
     Client::connect_or_start(&stack.hub.paths, &daemon, "test").unwrap();
     ui.click("try-hub-again");
-    ui.wait("the hub to come back", |ui| matches!(ui.view().connection, Connection::Ready(_)));
+    ui.wait("the hub to come back", |ui| matches!(ui.view().connection(), Connection::Ready(_)));
     lose_the_hub(&mut ui, &stack);
     std::fs::write(ui.worktree(&behind).join("a.txt"), "one\nchanged while away\n").unwrap();
 
@@ -148,14 +148,14 @@ fn a_pane_shown_while_the_hub_is_gone_catches_up_once_it_is_back(cx: &mut TestAp
     assert_eq!(ui.view().error.as_deref(), None);
     Client::connect_or_start(&stack.hub.paths, &daemon, "test").unwrap();
     ui.click("try-hub-again");
-    ui.wait("it to catch up", |ui| matches!(ui.view().connection, Connection::Ready(_)) && shows_changes(ui, &diff));
+    ui.wait("it to catch up", |ui| matches!(ui.view().connection(), Connection::Ready(_)) && shows_changes(ui, &diff));
     assert_eq!(ui.view().error.as_deref(), None);
 }
 
 /// Stops the hub, and waits for the app to find it can't start another.
 fn lose_the_hub(ui: &mut Ui<'_>, stack: &Stack) {
     client_core::stop_hub(&stack.hub.paths.socket).unwrap();
-    ui.wait("the app to find no hub", |ui| matches!(ui.view().connection, Connection::Failed(_)));
+    ui.wait("the app to find no hub", |ui| matches!(ui.view().connection(), Connection::Failed(_)));
 }
 
 /// Opens the selected workspace's diff, which has nothing in it yet.
@@ -174,12 +174,12 @@ fn a_failed_connection_can_be_tried_again(cx: &mut TestAppContext) {
     let mut stack = Stack::new();
     let daemon = stack.without_a_daemon();
     let mut ui = Ui::open_without_waiting(cx, &stack);
-    ui.wait("the failure", |ui| matches!(ui.view().connection, Connection::Failed(_)));
+    ui.wait("the failure", |ui| matches!(ui.view().connection(), Connection::Failed(_)));
     let _hub = Client::connect_or_start(&stack.hub.paths, &daemon, "test").unwrap();
 
     ui.click("try-hub-again");
 
-    ui.wait("the connection", |ui| matches!(ui.view().connection, Connection::Ready(_)));
+    ui.wait("the connection", |ui| matches!(ui.view().connection(), Connection::Ready(_)));
 }
 
 #[gpui_kit::test]
@@ -275,7 +275,7 @@ fn whats_typed_while_the_hub_restarts_is_kept_and_waits_to_be_sent(cx: &mut Test
 
     // Typed and sent before anything else runs, so the app is surely still connecting.
     ui.cx.update(|cx| ui.view.update(cx, |view, cx| view.restart_hub(pid, cx)));
-    assert!(matches!(ui.view().connection, Connection::Connecting));
+    assert!(matches!(ui.view().connection(), Connection::Connecting));
     ui.input("fore");
     ui.press("enter");
 

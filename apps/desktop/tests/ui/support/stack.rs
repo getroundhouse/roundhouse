@@ -121,7 +121,7 @@ pub(crate) struct Ui<'a> {
 impl<'a> Ui<'a> {
     pub(crate) fn open(cx: &'a mut TestAppContext, stack: &Stack) -> Self {
         let mut ui = Self::open_without_waiting(cx, stack);
-        ui.wait("the app to connect", |ui| matches!(ui.view().connection, Connection::Ready(_)));
+        ui.wait("the app to connect", |ui| matches!(ui.view().connection(), Connection::Ready(_)));
         ui
     }
 

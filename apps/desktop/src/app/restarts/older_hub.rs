@@ -1,6 +1,5 @@
 use super::super::{AppView, Connection, hub_source};
 use super::{asking, said};
-use crate::workspace_pane::WorkspacePane;
 use gpui_kit::component::WindowExt as _;
 use gpui_kit::{App, AppContext as _, Context, Task};
 use protocol::client::HubStatus;
@@ -108,13 +107,10 @@ impl AppView {
         self.stop_then_connect(cx, move |socket| client_core::stop_hub_if_idle(&client, socket, pid).map(drop));
     }
 
-    /// Has the app be connecting. A workspace already on screen stays there, as `view.rs` draws it, so each is told to
-    /// hold what it would send until the hub is back.
+    /// Has the app be connecting. A workspace already on screen stays there, as `view.rs` draws it, holding what it
+    /// would send until the hub is back.
     pub(in super::super) fn show_connecting(&mut self, cx: &mut Context<Self>) {
-        self.connection = Connection::Connecting;
-        for pane in self.panes.values() {
-            pane.update(cx, WorkspacePane::hub_went_away);
-        }
+        self.set_connection(Connection::Connecting, cx);
         cx.notify();
     }
 
@@ -134,7 +130,7 @@ impl AppView {
             let _ = this.update(cx, |t, cx| match stopped {
                 Ok(()) => t.connect(cx),
                 Err(e) => {
-                    t.connection = Connection::Failed(e.to_string());
+                    t.set_connection(Connection::Failed(e.to_string()), cx);
                     cx.notify();
                 }
             });

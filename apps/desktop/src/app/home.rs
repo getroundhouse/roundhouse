@@ -26,7 +26,7 @@ impl AppView {
     /// workspace stays drawn while the app connects to one again. Otherwise what there is to say about the hub shows
     /// in its place.
     pub(super) fn home_drawn(&self) -> bool {
-        let hub = match &self.connection {
+        let hub = match self.connection() {
             Connection::Ready(_) => true,
             Connection::Connecting => self.pane_to_draw().is_some(),
             Connection::Failed(_) | Connection::AcrossABreak(_) => false,

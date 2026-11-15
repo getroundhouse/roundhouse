@@ -3,6 +3,7 @@
 use gpui_kit::Context;
 use protocol::model::{Seq, Session, SessionId};
 
+use super::composer::Hub;
 use super::{PaneEvent, Showing, WorkspacePane};
 
 /// What marking a chat does.
@@ -14,44 +15,81 @@ pub enum Mark {
     Unread,
 }
 
+/// Whether a pane is drawn, and whether its window is in front. What's drawn in front is read while there's a hub to
+/// mark it read on, which the pane knows as its [`Hub`].
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum OnScreen {
+    /// Not drawn: another workspace's pane is, or Settings or Home is, or what there is to say about the hub.
+    #[default]
+    No,
+    /// Drawn in a window another app is in front of.
+    Behind,
+    /// Drawn in the window in front.
+    InFront,
+}
+
 #[derive(Default)]
 pub(super) struct Reading {
-    /// This is the pane showing, in the window in front, so the chat showing in it is being read.
-    on_screen: bool,
+    on_screen: OnScreen,
     /// The chat read last while on screen, and its newest reply then. A reply that comes while it's still showing is
     /// read too, and one marked unread again stays unread until the chat is shown again.
     shown: Option<(SessionId, Seq)>,
 }
 
 impl WorkspacePane {
-    /// Whether this is the pane showing, in the window in front. A chat that comes on screen is read, and the files
+    /// Whether this pane is drawn, and whether its window is in front. A chat that comes to be read is, and the files
     /// are listed again if a turn ended while it wasn't.
-    pub fn set_on_screen(&mut self, on_screen: bool, cx: &mut Context<Self>) {
+    pub(crate) fn set_on_screen(&mut self, on_screen: OnScreen, cx: &mut Context<Self>) {
         if self.reading.on_screen != on_screen {
             self.reading.on_screen = on_screen;
-            self.read_showing(cx);
-            if on_screen {
+            self.showing_changed(cx);
+            if self.being_read() {
                 self.catch_up_files(cx);
             }
         }
     }
 
-    /// Whether this is the pane showing, in the window in front.
-    pub(super) fn on_screen(&self) -> bool {
-        self.reading.on_screen
+    /// Whether this pane is drawn, whether or not it's read.
+    pub(super) fn drawn(&self) -> bool {
+        self.reading.on_screen != OnScreen::No
     }
 
-    /// The chat being read: the one showing, when this is the pane showing in the window in front, and the file tab
-    /// doesn't cover it.
+    /// Whether this pane is drawn in the window in front, with a hub to mark what it shows read on.
+    pub(super) fn being_read(&self) -> bool {
+        self.reading.on_screen == OnScreen::InFront && self.hub == Hub::Here
+    }
+
+    /// The chat being read: the one showing, when this pane is, and the file tab doesn't cover it.
     pub(crate) fn chat_being_read(&self) -> Option<&SessionId> {
-        self.active.as_ref().filter(|_| self.reading.on_screen && self.showing() == Showing::Chat)
+        self.active.as_ref().filter(|_| self.being_read() && self.showing() == Showing::Chat)
     }
 
-    /// Marks the chat showing read, when it's on screen with a reply that has just come, or that the screen hasn't
-    /// shown it with yet. For after anything that changes which chat is showing, or what it holds.
-    pub(super) fn read_showing(&mut self, cx: &mut Context<Self>) {
+    /// For after anything that changes which chat is showing, or what it holds, or whether it's drawn or read: the
+    /// chat showing is read.
+    pub(super) fn showing_changed(&mut self, cx: &mut Context<Self>) {
+        self.read_showing(cx);
+    }
+
+    /// Marks the chat showing read, when it's being read with a reply that has just come, or that the screen hasn't
+    /// shown it with yet.
+    fn read_showing(&mut self, cx: &mut Context<Self>) {
+        // Without a hub, nothing is read. A chat marked unread while it showed is still unread once the hub is back,
+        // since it's the person going elsewhere and coming back that reads it again, which they can do meanwhile: a
+        // chat that isn't in front any more, because another app or chat is, is forgotten. While this pane isn't drawn,
+        // that's the hub's doing, as when the app says it can't reach one, so nothing is. Another workspace, Settings
+        // or Home shown meanwhile look the same as that, so coming back from those doesn't read it.
+        if self.hub == Hub::Away {
+            let in_front = self
+                .active
+                .as_ref()
+                .filter(|_| self.reading.on_screen == OnScreen::InFront && self.showing() == Showing::Chat);
+            if self.drawn() && self.reading.shown.as_ref().is_some_and(|(id, _)| Some(id) != in_front) {
+                self.reading.shown = None;
+            }
+            return;
+        }
         // The file tab covers the chat while it shows.
-        let showing = self.session().filter(|_| self.reading.on_screen && self.showing() == Showing::Chat).cloned();
+        let showing = self.session().filter(|_| self.being_read() && self.showing() == Showing::Chat).cloned();
         let Some(session) = showing else {
             self.reading.shown = None;
             return;
