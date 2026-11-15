@@ -22,7 +22,7 @@ const BAR: Pixels = px(6.);
 
 /// Raised like the app's other cards, with a card's room around what it holds.
 fn surface(region: Region, cx: &App) -> ObservedElement<Stateful<Div>> {
-    look::raised(cx).region(region).flex().flex_col().w(WIDTH).px_3().py_2p5().typeset(look::Type::Body)
+    look::raised(cx).region(region).flex().flex_col().w(WIDTH).p_3().typeset(look::Type::Body)
 }
 
 /// The ring's card: the chat's context. `usage` is given only when the bars aren't drawn, since this is then the one
@@ -72,7 +72,7 @@ fn compact(pane: &WeakEntity<WorkspacePane>, off: bool, cx: &App) -> Div {
 pub(super) fn usage_card(usage: &Usage, called: SharedString, hold: &HoldOpen, cx: &App) -> AnyElement {
     let limits = usage.limits.iter().map(|(name, limit)| self::limit(name.clone(), limit, cx));
     let plan = usage.account.plan.clone().map(SharedString::from);
-    let limits = v_flex().gap_2p5().child(heading(called, plan, cx)).children(limits);
+    let limits = v_flex().gap_3().child(heading(called, plan, cx)).children(limits);
     let whose = whose(&usage.account, Plan::BesideHeading, usage.moves.as_ref().map(|moves| (moves, hold)), cx);
     surface(Region::UsageCard, cx).child(limits).children(whose).into_any_element()
 }
@@ -171,7 +171,7 @@ fn whose(account: &Account, plan: Plan, moves: Option<(&Moves, &HoldOpen)>, cx: 
     let who = who.map(|who| div().truncate().text_color(colors.text_muted).child(who));
     let how = (!how.is_empty())
         .then(|| div().truncate().typeset(look::Type::Detail).text_color(colors.text_faint).child(how.join(" · ")));
-    let said = v_flex().id("account").flex_1().min_w_0().gap_0p5().children(who).children(how).test_support();
+    let said = v_flex().id("account").flex_1().min_w_0().gap_1().children(who).children(how).test_support();
     let move_button = moves.map(|(moves, hold)| moving::button(moves, hold));
     let said = h_flex().items_center().gap_3().child(said).children(move_button);
     Some(v_flex().child(div().my_2().h(look::EDGE).bg(colors.edge)).child(said).into_any_element())

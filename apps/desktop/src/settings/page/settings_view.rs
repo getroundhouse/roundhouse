@@ -255,7 +255,7 @@ fn settings_page(page: &Page, within: &Within, cx: &App) -> impl IntoElement {
     let title = div()
         .flex_none()
         .px_8()
-        .pt(TOP_STRIP_HEIGHT + px(20.))
+        .pt(TOP_STRIP_HEIGHT + px(24.))
         .pb_2()
         .typeset(look::Type::PageTitle)
         .text_color(look::colors(cx).text)

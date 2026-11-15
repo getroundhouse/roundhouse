@@ -161,7 +161,7 @@ fn tab_element(
                 .accessibility_label(label)
                 .h_full()
                 .px_3()
-                .gap_1p5()
+                .gap_2()
                 .when(!selected, |d| d.text_color(muted))
                 .on_click(move |_, window, cx| on_click(window, cx))
                 // Its count is smaller, so it's set on the name's baseline.

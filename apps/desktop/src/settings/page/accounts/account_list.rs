@@ -145,7 +145,7 @@ fn heading(name: &'static str, says: String, action: Option<AnyElement>, cx: &Ap
     let said = v_flex()
         .flex_1()
         .min_w_0()
-        .gap_0p5()
+        .gap_1()
         .child(div().emphasis().child(name))
         .child(div().typeset(look::Type::Body).text_color(look::colors(cx).text_muted).child(says));
     h_flex().items_end().justify_between().gap_6().pb_3().child(said).children(action)

@@ -87,7 +87,7 @@ impl Said {
             .children(version)
             .child(row("Runs on", format!("Runs on {}", self.runs_on), div().child(self.runs_on.clone()), cx))
             .children(ports);
-        let card = look::raised(cx).region(Region::WorkspaceCard).flex().flex_col().w(WIDTH).px_3().py_2p5();
+        let card = look::raised(cx).region(Region::WorkspaceCard).flex().flex_col().w(WIDTH).p_3();
         card.children(path).child(rows).into_any_element()
     }
 }

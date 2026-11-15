@@ -11,7 +11,7 @@ use gpui_kit::{
 };
 use look::{Hand as _, Off as _, Sizing as _, Typeset as _};
 
-use super::{HEADING_SIZE, SORTS};
+use super::{HEADING_SIZE, ROW_PAD, SORTS};
 use crate::app::AppView;
 
 /// The heading, whose hover shows the button that chooses the order.
@@ -27,7 +27,7 @@ pub(super) fn heading(app: &AppView, connected: bool, cx: &mut Context<AppView>)
         .group(GROUP)
         .w_full()
         .h(HEADING_SIZE.height())
-        .px_1p5()
+        .px(ROW_PAD)
         .child(div().flex_1().typeset(look::Type::Detail).emphasis().text_color(faint).child("Workspaces"))
         .child(sort_button(app, faint, cx))
         .child(

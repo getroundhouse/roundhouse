@@ -157,7 +157,7 @@ impl WorkspacePane {
                     .justify_start()
                     .gap_2()
                     .pl_3()
-                    .pr_1p5()
+                    .pr_2()
                     .typeset(look::Type::Body)
                     .line_height(relative(1.25))
                     // Muted whether or not it's showing, as the chats' titles are: the underline says which tab is.

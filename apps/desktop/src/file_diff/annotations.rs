@@ -6,9 +6,7 @@ use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::{Textarea, TextareaState};
 use gpui_kit::component::{h_flex, v_flex};
-use gpui_kit::{
-    AnyElement, App, Div, ElementId, Entity, IntoElement, ParentElement, Styled, WeakEntity, div, px, rems,
-};
+use gpui_kit::{AnyElement, App, Div, ElementId, Entity, IntoElement, ParentElement, Styled, WeakEntity, div, px};
 use look::{Hand as _, Off as _, Shaped as _, Sizing as _, Typeset as _};
 use protocol::model::DiffComment;
 
@@ -25,8 +23,8 @@ fn band(column: Div, cx: &App) -> AnyElement {
     div()
         .w_full()
         .px_6()
-        .pt(rems(0.75 + 0.625))
-        .pb(rems(0.75 + 0.125))
+        .pt_6()
+        .pb_4()
         .bg(colors.raised)
         .typeset(look::Type::Body)
         .child(column.w_full().max_w(px(WIDTH)).gap_3())

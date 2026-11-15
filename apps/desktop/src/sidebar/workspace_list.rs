@@ -25,18 +25,23 @@ pub(crate) const SORTS: [Sort; 2] = [Sort::LastActive, Sort::Oldest];
 pub(super) const ROW_SIZE: RowSize = RowSize::Regular;
 /// How tall the heading over the projects is, as the heading over a list is.
 pub(super) const HEADING_SIZE: RowSize = RowSize::Small;
-/// How far a workspace's row sets its mark in from a repository's, so the rows read as the repository's.
-pub(super) const ROW_INSET: Pixels = px(12.);
-/// The space between a mark and the name beside it.
-pub(super) const MARK_GAP: Pixels = px(6.);
-/// The space between lines of one repository.
+/// How far a row in the sidebar sets what it shows in from its ends: Home's, Create's and Search's icons, the heading's
+/// name, a repository's folder, and the buttons at a row's right end, which line up under each other.
+pub(super) const ROW_PAD: Pixels = px(8.);
+/// How much further in a workspace's row sets its mark than a repository's row sets its folder, so the rows read as
+/// the repository's.
+const MARK_INDENT: Pixels = px(8.);
+/// The space between a workspace's mark and its name, between its name and what's at its row's end, and between a
+/// draft's pencil and what the agent is doing.
+pub(super) const MARK_GAP: Pixels = px(8.);
+/// The space between lines of one repository, its own row and its workspaces', so they read as one list, and under
+/// the heading, which the list is under.
 const LINE_GAP: Pixels = px(4.);
-/// The space between a repository's name and its first workspace.
-const UNDER_REPO: Pixels = px(6.);
-/// The space between one repository's last line and the next repository.
+/// The space between one repository's last line and the next repository, more than between its own lines, so each
+/// repository's lines read as apart from the next's.
 pub(super) const GROUP_GAP: Pixels = px(8.);
-/// The space around the list, at its sides and above its first line.
-pub(super) const LIST_PAD: Pixels = px(6.);
+/// The space around the list, at its sides and above its first line, and around Home, Create and Search above it.
+pub(super) const LIST_PAD: Pixels = px(8.);
 
 /// One line of the list, by where its record is in the app's lists. The lines are made and drawn in the same frame,
 /// and those lists can't change in between.
@@ -96,11 +101,8 @@ impl Line {
     /// The space between this line and the one after it.
     pub(super) fn gap_before(self, next: Line) -> Pixels {
         match (self, next) {
-            (Line::Heading, _) | (Line::Workspace(_) | Line::Creating(_), Line::Workspace(_) | Line::Creating(_)) => {
-                LINE_GAP
-            }
+            (Line::Heading, _) | (_, Line::Workspace(_) | Line::Creating(_)) => LINE_GAP,
             (_, Line::Repo(_) | Line::Heading) => GROUP_GAP,
-            (Line::Repo(_), Line::Workspace(_) | Line::Creating(_)) => UNDER_REPO,
         }
     }
 }
@@ -270,11 +272,16 @@ pub(in super::super) fn icon_box(icon: impl IconNamed, color: Hsla) -> Div {
     div().flex_none().size(ICON_BOX).flex().items_center().justify_center().child(icon)
 }
 
+/// How far a workspace's row sets its mark in from its edge.
+pub(super) fn row_inset() -> Pixels {
+    ROW_PAD + MARK_INDENT
+}
+
 /// Level with the names of the workspaces above it.
 fn creating(workspace: &Workspace, cx: &mut Context<AppView>) -> AnyElement {
     div()
         .id(ElementId::Name(format!("creating-{}", workspace.id).into()))
-        .pl(ROW_INSET + look::Size::Row.width() + MARK_GAP)
+        .pl(row_inset() + look::Size::Row.width() + MARK_GAP)
         .h(ROW_SIZE.height())
         .flex()
         .items_center()
@@ -355,6 +362,6 @@ mod tests {
             Line::Workspace(3),
         ];
 
-        assert_eq!(sizes(&lines), [px(32.), px(42.), px(40.), px(40.), px(44.), px(44.), px(42.), px(36.)]);
+        assert_eq!(sizes(&lines), [px(32.), px(40.), px(40.), px(40.), px(44.), px(44.), px(40.), px(36.)]);
     }
 }

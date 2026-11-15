@@ -39,12 +39,12 @@ fn the_order_a_drag_saves_keeps_the_projects_it_doesnt_list_after_those_it_does(
 #[test]
 fn each_project_reaches_from_its_row_to_its_last_lines_bottom() {
     let resting = [Line::Heading, Line::Repo(1), Line::Workspace(0), Line::Repo(0), Line::Repo(2), Line::Workspace(1)];
-    let tops = [0., 32., 74., 118., 162., 204., 240.].map(px);
+    let tops = [0., 32., 72., 116., 160., 200., 236.].map(px);
 
     let groups = groups(&resting, &tops, |repo| RepoId::from(format!("r{repo}").as_str()));
 
     let named = |id: &str, reach: Range<f32>| (RepoId::from(id), px(reach.start)..px(reach.end));
-    assert_eq!(groups, [named("r1", 32.0..110.), named("r0", 118.0..154.), named("r2", 162.0..240.)]);
+    assert_eq!(groups, [named("r1", 32.0..108.), named("r0", 116.0..152.), named("r2", 160.0..236.)]);
 }
 
 #[test]

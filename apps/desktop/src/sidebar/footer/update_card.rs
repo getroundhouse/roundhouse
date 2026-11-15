@@ -54,8 +54,8 @@ impl RenderOnce for UpdateCard {
         v_flex()
             .id("update-card")
             .w_full()
-            .p_2p5()
-            .gap_2p5()
+            .p_3()
+            .gap_3()
             .corners(look::Corner::Card)
             .bg(colors.raised)
             .border_1()
@@ -63,7 +63,7 @@ impl RenderOnce for UpdateCard {
             .child(
                 h_flex()
                     .items_start()
-                    .gap_2p5()
+                    .gap_3()
                     .child(look::icon(IconStyle::Working, IconSize::Px64, cx))
                     .child(self.about.flex_1())
                     .child(mark),
@@ -155,7 +155,7 @@ fn asking(
         .on_click(cx.listener(move |t, _, _, cx| go_ahead(t, cx)));
     v_flex()
         .id("update-question")
-        .gap_2p5()
+        .gap_3()
         .child(div().typeset(look::Type::Detail).text_color(muted).child(question.detail()))
         .child(h_flex().gap_2().child(stay).child(go))
         .test_support()
