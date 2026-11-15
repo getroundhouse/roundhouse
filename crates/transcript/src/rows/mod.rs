@@ -11,6 +11,7 @@ mod failed_request;
 mod line;
 mod mode;
 mod notices;
+mod own_turn;
 mod plan_card;
 mod prompt;
 mod shown;

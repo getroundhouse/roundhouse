@@ -21,6 +21,7 @@ gpui_kit::assets::icon_assets!(
         FilePen,
         FilePlus,
         FoldVertical,
+        GitPullRequest,
         House,
         KeyRound,
         Lightbulb,

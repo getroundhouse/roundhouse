@@ -12,10 +12,11 @@ use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{AnyElement, App, IntoElement, ParentElement};
 use protocol::capability::calls::Call;
 
+/// What a typed call starts with, a monitor's among them, and any line about a monitor.
+pub(in crate::rows) const ICON: IconName = IconName::Wrench;
+
 pub(super) fn draw(call: &Call, answer: Option<&Answer>, toggle: &Toggle, cx: &App) -> AnyElement {
-    let line = Line::new(IconName::Wrench, typed::title(call))
-        .part(Part::Code(typed::summary(call).into()))
-        .shows_output(true);
+    let line = Line::new(ICON, typed::title(call)).part(Part::Code(typed::summary(call).into())).shows_output(true);
     let opened = || {
         Some(
             block::frame(cx)

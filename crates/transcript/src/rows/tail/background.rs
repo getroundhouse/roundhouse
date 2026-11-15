@@ -3,6 +3,7 @@
 //! several, which opens to its tasks, as `crate::task_lines` says. Then one for each open wait on pull requests, with Stop.
 
 use client_core::session_log::By;
+use client_core::waits;
 use gpui_kit::component::button::Button;
 use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::prelude::FluentBuilder as _;
@@ -108,19 +109,8 @@ pub(super) fn wait_line(wait: &Wait, standing: Option<&PullRequestStanding>, sha
 /// What a wait's line says, and what pointing at it says: what it waits on, and where the pull request stands, from
 /// what's said of the one it waits on.
 fn wait_words(wait: &Wait, standing: Option<&PullRequestStanding>) -> (String, &'static str) {
+    let what = format!("Waiting on {}", waits::watched(&wait.watching()));
     if let Some(watch) = &wait.watch {
-        let numbers = watch
-            .snapshot
-            .pull_requests
-            .iter()
-            .map(|row| format!("#{}", row.pull_request.number))
-            .collect::<Vec<_>>()
-            .join(", ");
-        let what = match wait.until {
-            WaitUntil::RequiredChecks => "required checks",
-            WaitUntil::AllChecks | WaitUntil::Checks => "checks",
-            WaitUntil::Merged | WaitUntil::Done | WaitUntil::Unknown => "merge",
-        };
         let pending = watch
             .snapshot
             .pull_requests
@@ -140,18 +130,15 @@ fn wait_words(wait: &Wait, standing: Option<&PullRequestStanding>) -> (String, &
             format!("{pending} {} running", if pending == 1 { "check" } else { "checks" })
         };
         return (
-            format!("Waiting on {numbers}: {what} · {status}"),
+            format!("{what} · {status}"),
             "Until every watched pull request reaches the condition, or one needs the agent; Stop ends only this wait",
         );
     }
-    let (what, pointed_at) = match wait.until {
-        WaitUntil::Checks | WaitUntil::RequiredChecks | WaitUntil::AllChecks => (
-            format!("Waiting on #{}'s checks", wait.number),
-            "Until its checks have run and none failed, or it needs the agent",
-        ),
-        WaitUntil::Done | WaitUntil::Merged | WaitUntil::Unknown => {
-            (format!("Waiting on #{}", wait.number), "Until it's merged or closed, or needs the agent")
+    let pointed_at = match wait.until {
+        WaitUntil::Checks | WaitUntil::RequiredChecks | WaitUntil::AllChecks => {
+            "Until its checks have run and none failed, or it needs the agent"
         }
+        WaitUntil::Done | WaitUntil::Merged | WaitUntil::Unknown => "Until it's merged or closed, or needs the agent",
     };
     // What's said of another pull request says nothing of this one, which the branch had as the wait started.
     let text = match standing.filter(|standing| standing.number == wait.number) {
@@ -246,5 +233,16 @@ mod tests {
         assert_eq!(said(&wait, None), "Waiting on #7's checks");
         let done = Wait { until: WaitUntil::Done, ..wait.clone() };
         assert_eq!(said(&done, Some(&standing(7))), "Waiting on #7 \u{b7} 2 checks running");
+    }
+
+    /// A wait asked about pull requests names them and what for, and how many of their checks are still running.
+    #[test]
+    fn a_waits_line_names_the_pull_requests_it_was_asked_about() {
+        let wait = protocol::fixtures::pull_request_wait("w1");
+
+        let (said, _) = wait_words(&wait, None);
+
+        assert!(said.starts_with("Waiting on #7: required checks \u{b7} "), "{said}");
+        assert!(said.ends_with(" running"), "{said}");
     }
 }

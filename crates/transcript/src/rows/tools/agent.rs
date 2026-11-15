@@ -35,6 +35,9 @@ use crate::rows::{render_block, written};
 use crate::selection::Selection;
 use crate::transcript::Transcript;
 
+/// What a subagent's call starts with, and what any line about a subagent does.
+pub(in crate::rows) const ICON: IconName = IconName::Bot;
+
 pub(super) fn draw(
     call: &Agent,
     answer: Option<&Answer>,
@@ -42,7 +45,7 @@ pub(super) fn draw(
     toggle: &Toggle,
     cx: &App,
 ) -> AnyElement {
-    let mut line = Line::new(IconName::Bot, call.title())
+    let mut line = Line::new(ICON, call.title())
         .part(agent::shown_kind(call.kind).map(|kind| Part::Chip(kind.to_string().into())))
         .part(standing(subagent).map(|standing| Part::Note(standing.into())));
     // The tab reads the subagent's work by its call, which only a hub that keeps it apart can, whether or not its
