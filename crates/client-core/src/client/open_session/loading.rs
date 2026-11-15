@@ -5,7 +5,7 @@ use crate::session_log::{By, Changes, Position, RecordedApprovals, SessionLog};
 use parking_lot::{MappedMutexGuard, Mutex, MutexGuard};
 use protocol::event::SessionEvent;
 use protocol::find::Needle;
-use protocol::model::{ClientMessageId, Place, QueuedPrompt, Seq, Session, SessionId, ToolUseId};
+use protocol::model::{ClientMessageId, Place, QueuedPrompt, Seq, Session, SessionId, SubagentId};
 use search::{Search, Searched, Searches};
 use std::sync::Arc;
 
@@ -17,15 +17,15 @@ pub enum View {
     /// The agent's own events, by place. A hub from before places can't read them apart, so from one this is every
     /// event, by `seq`, which [`SessionLog::by`] says.
     Own,
-    /// The events of the subagent the call `call` started, by place.
-    Subagent(ToolUseId),
+    /// The events of one subagent, by place.
+    Subagent(SubagentId),
 }
 
 impl View {
     /// The subagent whose events it follows, or `None` for the agent's own, or every event.
-    pub(super) fn subagent(&self) -> Option<&ToolUseId> {
+    pub(super) fn subagent(&self) -> Option<&SubagentId> {
         match self {
-            View::Subagent(call) => Some(call),
+            View::Subagent(subagent) => Some(subagent),
             View::Whole | View::Own => None,
         }
     }
@@ -177,7 +177,7 @@ pub(super) struct SessionSource {
 }
 
 impl SessionSource {
-    pub(super) fn subagent(&self) -> Option<&ToolUseId> {
+    pub(super) fn subagent(&self) -> Option<&SubagentId> {
         self.view.subagent()
     }
 

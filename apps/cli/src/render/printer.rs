@@ -4,7 +4,7 @@ use protocol::capability::turns::OwnTurn;
 use protocol::event::{
     AgentTask, CompactionOutcome, ContentBlock, Denied, EventBody, Question, SessionEvent, TaskOutcome, TurnOutcome,
 };
-use protocol::model::{ApprovalId, MessageId, PermissionMode, Seq, TaskId, ToolUseId};
+use protocol::model::{ApprovalId, MessageId, PermissionMode, Seq, SubagentId, TaskId};
 use protocol::tail::{DeltaChange, StreamDelta, Tail};
 use std::collections::HashMap;
 use std::io::Write;
@@ -24,7 +24,7 @@ pub(crate) struct Printer {
     /// lists a monitor's task twice, since it only learns it's a monitor after the first.
     pub(super) background: Option<String>,
     /// What each subagent that hasn't ended was started for, so its end can say which it was.
-    pub(super) subagents: HashMap<ToolUseId, String>,
+    pub(super) subagents: HashMap<SubagentId, String>,
     /// The questions each open approval asks, so what was answered can be said by question.
     pub(super) asked: HashMap<ApprovalId, Vec<Question>>,
 }
@@ -111,9 +111,9 @@ impl Printer {
             EventBody::AgentTasks { tasks, stopped } => self.background(event.seq, tasks, stopped),
             EventBody::OwnTurn(OwnTurn::TaskEnded { ended }) => self.line(event.seq, &own_turn(ended)),
             EventBody::SubagentStarted { description, call, .. } => {
-                self.subagent(event.seq, description.as_deref(), call);
+                self.subagent(event.seq, description.as_deref(), &SubagentId::of_call(call));
             }
-            EventBody::SubagentEnded { call, outcome, .. } => self.subagent_ended(event.seq, call, *outcome),
+            EventBody::SubagentEnded { subagent, outcome, .. } => self.subagent_ended(event.seq, subagent, *outcome),
             EventBody::PromptDropped { prompt } => {
                 self.line(event.seq, &format!("the agent stopped before taking what was asked at {prompt}"));
             }
@@ -144,20 +144,20 @@ impl Printer {
     }
 
     /// That the agent started a subagent, by what it's for, or failing that its call.
-    pub(super) fn subagent(&mut self, seq: Seq, description: Option<&str>, call: &ToolUseId) {
-        let what = description.unwrap_or(call.as_str());
+    pub(super) fn subagent(&mut self, seq: Seq, description: Option<&str>, subagent: &SubagentId) {
+        let what = description.unwrap_or(subagent.as_str());
         self.line(seq, &format!("started a subagent: {what}"));
-        self.subagents.insert(call.clone(), what.to_string());
+        self.subagents.insert(subagent.clone(), what.to_string());
     }
 
-    pub(super) fn subagent_ended(&mut self, seq: Seq, call: &ToolUseId, outcome: TaskOutcome) {
-        let ended = self.ending(call, outcome);
+    pub(super) fn subagent_ended(&mut self, seq: Seq, subagent: &SubagentId, outcome: TaskOutcome) {
+        let ended = self.ending(subagent, outcome);
         self.line(seq, &ended);
     }
 
-    /// How the subagent `call` started ended, named as its start was, or by the call if this didn't see it start.
-    pub(super) fn ending(&mut self, call: &ToolUseId, outcome: TaskOutcome) -> String {
-        let what = self.subagents.remove(call).unwrap_or_else(|| call.as_str().to_string());
+    /// How `subagent` ended, named as its start was, or by its ID if this didn't see it start.
+    pub(super) fn ending(&mut self, subagent: &SubagentId, outcome: TaskOutcome) -> String {
+        let what = self.subagents.remove(subagent).unwrap_or_else(|| subagent.as_str().to_string());
         format!("a subagent {}: {what}", how_it_ended(outcome))
     }
 

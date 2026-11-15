@@ -22,7 +22,7 @@ async fn failures(hub: &crate::hub::Hub) -> Vec<(Seq, Option<Again>)> {
     events
         .iter()
         .filter_map(|event| {
-            let EventBody::RequestFailed { parent_tool_use_id: None, again, .. } = &event.body else { return None };
+            let EventBody::RequestFailed { subagent: None, again, .. } = &event.body else { return None };
             Some((event.seq, *again))
         })
         .collect()
@@ -68,13 +68,8 @@ async fn a_session_started_again_after_what_ended_the_row_starts_from_none() {
     let run = RunId::new(1);
     let live = carried_on(&hub, &link, run);
     let said = ContentBlock::Text { text: "Picking up.".into(), images: Vec::new() };
-    let says = EventBody::Assistant {
-        message_id: None,
-        parent_tool_use_id: None,
-        model: None,
-        blocks: vec![said],
-        first_index: None,
-    };
+    let says =
+        EventBody::Assistant { message_id: None, subagent: None, model: None, blocks: vec![said], first_index: None };
     let mut bodies = vec![request_failed("limit", None)];
     bodies.extend(more_than_is_read_at_once());
     bodies.push(says);

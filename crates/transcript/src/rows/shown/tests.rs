@@ -18,7 +18,7 @@ fn prompt(text: &str) -> EventBody {
 }
 
 fn agent(blocks: Vec<ContentBlock>) -> EventBody {
-    EventBody::Assistant { message_id: None, parent_tool_use_id: None, model: None, blocks, first_index: None }
+    EventBody::Assistant { message_id: None, subagent: None, model: None, blocks, first_index: None }
 }
 
 fn says(text: &str) -> EventBody {
@@ -31,7 +31,7 @@ fn call(id: &str, name: &str, input: serde_json::Value) -> EventBody {
 
 /// `block` as what a call sent back to the agent.
 fn came_back(block: ContentBlock) -> EventBody {
-    EventBody::AgentUser { parent_tool_use_id: None, blocks: vec![block] }
+    EventBody::AgentUser { subagent: None, blocks: vec![block] }
 }
 
 fn sent_back(id: &str, text: &str) -> EventBody {

@@ -131,10 +131,7 @@ pub(super) async fn send_prompt_rpc(shared: &Shared, seq: Option<Seq>, blocks: V
         // Some of it may have reached `agy`, so it's stopped rather than left in a state nobody knows, and its exit
         // drops the prompt, as it does any prompt `agy` hadn't taken.
         shared
-            .event(
-                EventBody::Notice { level: NoticeLevel::Error, message: error.to_string(), parent_tool_use_id: None },
-                None,
-            )
+            .event(EventBody::Notice { level: NoticeLevel::Error, message: error.to_string(), subagent: None }, None)
             .await;
         shared.stop().await;
     }

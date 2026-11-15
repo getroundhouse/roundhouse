@@ -64,7 +64,7 @@ impl TurnModels {
     /// Notes the model of one of the agent's own replies. A subagent's is left out, and so is a name that names no
     /// model. One the CLI wrote itself names none by now.
     pub(super) fn note(&mut self, body: &EventBody) {
-        let EventBody::Assistant { parent_tool_use_id: None, model: Some(model), .. } = body else { return };
+        let EventBody::Assistant { subagent: None, model: Some(model), .. } = body else { return };
         let Ok(model) = ModelName::try_from(model.clone()) else { return };
         if !self.0.contains(&model) {
             self.0.push(model);
@@ -79,7 +79,7 @@ impl TurnModels {
 
 #[cfg(test)]
 mod tests {
-    use protocol::model::ToolUseId;
+    use protocol::model::SubagentId;
     use serde_json::json;
 
     use super::*;
@@ -87,7 +87,7 @@ mod tests {
     fn reply(model: &str, parent: Option<&str>) -> EventBody {
         EventBody::Assistant {
             message_id: None,
-            parent_tool_use_id: parent.map(ToolUseId::from),
+            subagent: parent.map(SubagentId::from),
             model: Some(model.to_string()),
             blocks: Vec::new(),
             first_index: None,

@@ -25,7 +25,7 @@ use crate::transcript::{AtWork, Model};
 fn a_recorded_block_is_known_by_its_place_in_its_message() {
     let finished = |first_index| EventBody::Assistant {
         message_id: Some("m".into()),
-        parent_tool_use_id: None,
+        subagent: None,
         model: None,
         blocks: vec![ContentBlock::Text { text: "a".into(), images: Vec::new() }],
         first_index,
@@ -88,7 +88,7 @@ fn asked_to_run(id: &str, call: &str, asked_by: Option<&str>) -> EventBody {
 /// The result of the call `id`, which the person denied.
 fn denied(id: &str) -> EventBody {
     EventBody::AgentUser {
-        parent_tool_use_id: None,
+        subagent: None,
         blocks: vec![protocol::fixtures::tool_denied(id, "The user denied this.", None)],
     }
 }
@@ -136,7 +136,7 @@ fn what_else_says_what_became_of_an_approval_is_a_questions_line_a_denied_calls_
 fn a_typed_calls_result_says_it_was_denied_too() {
     let command = protocol::capability::calls::Call::Command(protocol::fixtures::typed_command("rm -rf build"));
     let closing = closed("c", ApprovalOutcome::Denied, None);
-    let typed = |blocks| EventBody::AgentUser { parent_tool_use_id: None, blocks };
+    let typed = |blocks| EventBody::AgentUser { subagent: None, blocks };
     let log = log([
         event(Seq::new(1), protocol::fixtures::typed_request("c", "run-c", command)),
         event(Seq::new(2), closing.clone()),

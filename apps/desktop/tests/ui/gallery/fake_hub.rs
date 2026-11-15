@@ -20,7 +20,7 @@ use protocol::frame;
 use protocol::model::{
     AgentDescription, AgentFeature, AgentKind, CompactionLine, Effort, FileContents, FileOpened, FilePage, FilePages,
     GitDiff, GitStatus, LoginDescription, ModelChoice, ModelName, OpenedText, PageLine, PermissionMode, Place,
-    PromptLine, Rev, Seq, SessionId, SessionSettings, SessionStatus, ToolUseId, WorkspaceStatus,
+    PromptLine, Rev, Seq, SessionId, SessionSettings, SessionStatus, SubagentId, WorkspaceStatus,
 };
 
 use super::world::{LoginSupport, World};
@@ -296,7 +296,7 @@ fn subscribe(world: &World, id: &SessionId, from_seq: Seq, subscription_id: u64)
 fn subscribe_places(
     world: &World,
     id: &SessionId,
-    subagent: Option<&ToolUseId>,
+    subagent: Option<&SubagentId>,
     from: Place,
     subscription_id: u64,
 ) -> Answer {

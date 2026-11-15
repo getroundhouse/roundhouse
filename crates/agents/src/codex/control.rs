@@ -170,7 +170,7 @@ async fn prompt_to(shared: &Shared, seq: Seq, prompt: &Prompt<AttachmentFile>) -
                     EventBody::Notice {
                         level: protocol::event::NoticeLevel::Error,
                         message: error.to_string(),
-                        parent_tool_use_id: None,
+                        subagent: None,
                     },
                     None,
                 )
@@ -234,7 +234,7 @@ async fn cancel(shared: &Shared) -> Result<(), AgentError> {
     Ok(())
 }
 
-pub(super) async fn settle(shared: &Shared, parent: Option<&protocol::model::ToolUseId>) {
+pub(super) async fn settle(shared: &Shared, parent: Option<&protocol::model::SubagentId>) {
     let (prompts, requests, calls) = {
         let mut state = shared.state.lock();
         // Child commands can finish after their turn, including after a follow-up begins. Keep their pending

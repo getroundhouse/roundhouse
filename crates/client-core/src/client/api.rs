@@ -10,7 +10,7 @@ use protocol::find::Found;
 use protocol::model::{
     AgentKind, ApprovalId, AttachmentId, ClientMessageId, ClientRequestId, CommentId, DiffComment, DiffSide, GitDiff,
     GitStatus, HubSettings, HubSettingsChange, PullRequest, Records, Repo, RepoId, Rev, Seq, Session, SessionId,
-    Subagent, ToolUseId, WaitId, Workspace, WorkspaceId,
+    Subagent, SubagentId, WaitId, Workspace, WorkspaceId,
 };
 
 use super::{Client, Result, Subscription, hub_is_missing, subscription_channel};
@@ -159,7 +159,7 @@ impl Client {
 
     /// Which of the session's events hold `query`, as [`protocol::find::Needle::is_in_event`] says. A hub older than
     /// this refuses it as unsupported.
-    pub fn session_find(&self, id: &SessionId, subagent: Option<&ToolUseId>, query: &str) -> Result<Found> {
+    pub fn session_find(&self, id: &SessionId, subagent: Option<&SubagentId>, query: &str) -> Result<Found> {
         self.call(log::SessionFind { id: id.clone(), subagent: subagent.cloned(), query: query.to_string() })
     }
 

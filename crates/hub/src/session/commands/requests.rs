@@ -161,7 +161,7 @@ impl LiveSession {
             if self.agent_running() {
                 self.record_or_log(
                     Origin::Hub,
-                    EventBody::Notice { level: NoticeLevel::Error, message: e.message, parent_tool_use_id: None },
+                    EventBody::Notice { level: NoticeLevel::Error, message: e.message, subagent: None },
                 )
                 .await;
             } else {
@@ -181,7 +181,7 @@ impl LiveSession {
                 EventBody::Notice {
                     level: NoticeLevel::Warning,
                     message: "This workspace's setup didn't finish, so the agent may find things missing.".to_string(),
-                    parent_tool_use_id: None,
+                    subagent: None,
                 },
             )
             .await;
@@ -254,7 +254,7 @@ impl LiveSession {
             EventBody::Notice {
                 level: NoticeLevel::Warning,
                 message: "The agent had already exited when this approval was answered.".to_string(),
-                parent_tool_use_id: None,
+                subagent: None,
             },
         )
         .await;

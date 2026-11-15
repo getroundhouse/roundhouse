@@ -65,7 +65,7 @@ async fn outages_keep_the_last_snapshot_and_access_loss_ends_with_it() {
             &protocol::event::EventBody::Notice {
                 level: protocol::event::NoticeLevel::Info,
                 message: "held".into(),
-                parent_tool_use_id: None,
+                subagent: None,
             },
             None,
             None,
@@ -113,7 +113,7 @@ async fn a_shared_reads_pr_access_failure_does_not_end_an_unrelated_wait() {
             &protocol::event::EventBody::Notice {
                 level: protocol::event::NoticeLevel::Info,
                 message: "held".into(),
-                parent_tool_use_id: None,
+                subagent: None,
             },
             None,
             None,

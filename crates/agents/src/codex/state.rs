@@ -1,7 +1,7 @@
 use std::collections::{HashMap, VecDeque};
 
 use protocol::capability::approvals::Request;
-use protocol::model::{ApprovalId, Seq, SessionSettings, ToolUseId};
+use protocol::model::{ApprovalId, Seq, SessionSettings, SubagentId, ToolUseId};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -16,8 +16,8 @@ pub(super) struct TurnId(pub(super) String);
 pub(super) struct Waiting {
     pub(super) request: Request,
     pub(super) native: NativeRequest,
-    /// The subagent that asks, as the call that started it, or `None` for the agent itself.
-    pub(super) parent: Option<ToolUseId>,
+    /// The subagent that asks, or `None` for the agent itself.
+    pub(super) parent: Option<SubagentId>,
 }
 
 #[derive(Default)]
@@ -66,7 +66,7 @@ pub(super) struct Conversation {
     /// A native intake call can cross a turn boundary; the old turn cannot settle this prompt.
     pub(super) sending: Option<Seq>,
     pub(super) waiting: HashMap<ApprovalId, Waiting>,
-    pub(super) work: HashMap<Option<ToolUseId>, Work>,
+    pub(super) work: HashMap<Option<SubagentId>, Work>,
     pub(super) subagents: super::subagents::Subagents,
     pub(super) plan: Option<String>,
     pub(super) reply: Option<String>,
@@ -97,7 +97,7 @@ impl Conversation {
     pub(super) fn asking(&self) -> bool {
         self.waiting.values().any(|waiting| waiting.parent.is_none())
     }
-    pub(super) fn work(&mut self, parent: Option<&ToolUseId>) -> &mut Work {
+    pub(super) fn work(&mut self, parent: Option<&SubagentId>) -> &mut Work {
         self.work.entry(parent.cloned()).or_default()
     }
     pub(super) fn take_plan(&mut self) -> Option<String> {

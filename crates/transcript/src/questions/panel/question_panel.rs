@@ -10,7 +10,7 @@ use gpui_kit::{
 };
 use look::{InRegion as _, Off as _, Region, Shaped as _, Sizing as _};
 use protocol::event::{ApprovalDecision, Question, QuestionAnswer};
-use protocol::model::{ApprovalId, ToolUseId};
+use protocol::model::{ApprovalId, SubagentId};
 use std::time::{Duration, Instant};
 use typing::Other;
 
@@ -24,8 +24,8 @@ pub struct QuestionPanel {
     pub(super) approval_id: ApprovalId,
     /// What it asks, which says what it shows and how an answer is sent.
     pub(super) asks: Asks,
-    /// The subagent that asks, as the call that started it, or `None` for the agent itself.
-    pub(super) asked_by: Option<ToolUseId>,
+    /// The subagent that asks, or `None` for the agent itself.
+    pub(super) asked_by: Option<SubagentId>,
     /// What that subagent is for, as its record says, which the transcript passes on as the record comes or changes.
     pub(super) asker: Option<String>,
     /// How many more requests wait behind this one, to be asked in turn.
@@ -68,7 +68,7 @@ impl QuestionPanel {
         transcript: WeakEntity<Transcript>,
         approval_id: ApprovalId,
         asks: Asks,
-        asked_by: Option<ToolUseId>,
+        asked_by: Option<SubagentId>,
         cx: &mut Context<Self>,
     ) -> Self {
         let questions = asks.questions().into_iter();
@@ -92,8 +92,8 @@ impl QuestionPanel {
         &self.approval_id
     }
 
-    /// The subagent that asks, as the call that started it.
-    pub(crate) fn asked_by(&self) -> Option<&ToolUseId> {
+    /// The subagent that asks.
+    pub(crate) fn asked_by(&self) -> Option<&SubagentId> {
         self.asked_by.as_ref()
     }
 

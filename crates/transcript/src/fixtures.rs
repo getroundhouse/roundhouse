@@ -30,28 +30,27 @@ pub(crate) fn calls(ids: &[&str]) -> EventBody {
 /// The agent calling the tool `name` once for each of `ids`, at once.
 pub(crate) fn calls_to(name: &str, ids: &[&str]) -> EventBody {
     let blocks = ids.iter().map(|id| protocol::fixtures::tool_use(id, name, json!({}))).collect();
-    EventBody::Assistant { message_id: None, parent_tool_use_id: None, model: None, blocks, first_index: None }
+    EventBody::Assistant { message_id: None, subagent: None, model: None, blocks, first_index: None }
 }
 
 /// `body` as the subagent started by the call `parent` sends it.
 pub(crate) fn within(parent: &str, mut body: EventBody) -> EventBody {
-    if let EventBody::Assistant { parent_tool_use_id, .. } | EventBody::AgentUser { parent_tool_use_id, .. } = &mut body
-    {
-        *parent_tool_use_id = Some(parent.into());
+    if let EventBody::Assistant { subagent, .. } | EventBody::AgentUser { subagent, .. } = &mut body {
+        *subagent = Some(parent.into());
     }
     body
 }
 
 /// `body`'s blocks as the agent sends them itself, as it does the result of a tool the API runs, such as the advisor.
 pub(crate) fn from_the_agent(body: EventBody) -> EventBody {
-    let EventBody::AgentUser { parent_tool_use_id, blocks } = body else { return body };
-    EventBody::Assistant { message_id: None, parent_tool_use_id, model: None, blocks, first_index: None }
+    let EventBody::AgentUser { subagent, blocks } = body else { return body };
+    EventBody::Assistant { message_id: None, subagent, model: None, blocks, first_index: None }
 }
 
 /// The result of the call `id`.
 pub(crate) fn result(id: &str) -> EventBody {
     let block = protocol::fixtures::tool_result(id, &format!("from {id}"), false);
-    EventBody::AgentUser { parent_tool_use_id: None, blocks: vec![block] }
+    EventBody::AgentUser { subagent: None, blocks: vec![block] }
 }
 
 /// The agent asking to use the tool `tool`, under the approval `id`, as a request recorded before adapters said what

@@ -4,7 +4,7 @@ use crate::transcript::Model;
 use client_core::session_log::{By, MAX_LOADED_EVENTS, SessionLog};
 use lately::Lately;
 use protocol::event::{ContentBlock, EventBody, SessionEvent};
-use protocol::model::{Seq, Subagent as Record, SubagentStatus, ToolUseId};
+use protocol::model::{Seq, Subagent as Record, SubagentId, SubagentStatus, ToolUseId};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
@@ -14,8 +14,10 @@ pub(crate) const REACH: usize = MAX_LOADED_EVENTS;
 
 /// What a subagent has done so far.
 pub(in crate::rows) struct Subagent {
-    /// The call that started it, which its events name.
+    /// The call that started it.
     pub(in crate::rows) call: ToolUseId,
+    /// Which subagent it is, which its events name.
+    pub(in crate::rows) id: SubagentId,
     /// How many calls it's made.
     pub(in crate::rows) calls: usize,
     /// Its events, with what each needs to be drawn. Only gathered while its call is open, and never when its work is
@@ -40,10 +42,11 @@ impl Subagent {
         open: bool,
         opening: Opening,
     ) -> Self {
+        let subagent = SubagentId::of_call(id);
         if log.by() == By::Place {
-            let record = m.subagents.get(id).cloned();
+            let record = m.subagents.get(&subagent).cloned();
             let calls = record.as_ref().map_or(0, |record| usize::try_from(record.calls).unwrap_or(usize::MAX));
-            m.subagent_rows.borrow_mut().insert(id.clone(), seq);
+            m.subagent_rows.borrow_mut().insert(subagent.clone(), seq);
             let working = record.as_ref().filter(|record| record.status == SubagentStatus::Working);
             let lately = working.filter(|_| open).map_or_default(|record| lately::lately(record));
             let lately = lately
@@ -57,25 +60,26 @@ impl Subagent {
                     (block, around)
                 })
                 .collect();
-            return Self { call: id.clone(), calls, events: None, apart: true, record, lately };
+            return Self { call: id.clone(), id: subagent, calls, events: None, apart: true, record, lately };
         }
-        let mut subagent = Self {
+        let its_own = |event: &&SessionEvent| parent_of(&event.body) == Some(&subagent);
+        let mut gathered = Self {
             call: id.clone(),
+            id: subagent.clone(),
             calls: 0,
             events: open.then(Vec::new),
             apart: false,
             record: None,
             lately: Vec::new(),
         };
-        let its_own = |event: &&SessionEvent| parent_of(&event.body) == Some(id);
         for event in nearby::events_after(log, seq, REACH).filter(its_own) {
             let blocks = blocks_of(&event.body);
-            subagent.calls += blocks.iter().filter(|block| matches!(block, ContentBlock::ToolUse { .. })).count();
-            if let Some(events) = &mut subagent.events {
+            gathered.calls += blocks.iter().filter(|block| matches!(block, ContentBlock::ToolUse { .. })).count();
+            if let Some(events) = &mut gathered.events {
                 events.push((event.clone(), Around::read_as(log, m, event.seq, &event.body, opening)));
             }
         }
-        subagent
+        gathered
     }
 }
 
@@ -104,8 +108,9 @@ pub(crate) fn its_call(log: &SessionLog, m: &Model, event: &SessionEvent) -> Opt
 /// screen, each look for theirs on every frame.
 #[derive(Default)]
 pub(crate) struct SubagentCalls {
-    /// Each call found, by its ID. A call never moves, but the log can let go of its page, and then it's forgotten.
-    pub(super) found: HashMap<ToolUseId, Seq>,
+    /// Each call found, by the subagent it started. A call never moves, but the log can let go of its page, and then
+    /// it's forgotten.
+    pub(super) found: HashMap<SubagentId, Seq>,
     /// The events whose call wasn't within reach before them, by seq. The log may have the call once it has more
     /// events, so these are looked at again then.
     pub(super) missed: HashSet<Seq>,
@@ -114,13 +119,13 @@ pub(crate) struct SubagentCalls {
 }
 
 impl SubagentCalls {
-    /// Where the call `id` is, among the events within reach before the one at `seq`.
-    pub(super) fn find(&mut self, log: &SessionLog, seq: Seq, id: &ToolUseId) -> Option<Seq> {
-        match self.found.get(id) {
+    /// Where the call that started `subagent` is, among the events within reach before the one at `seq`.
+    pub(super) fn find(&mut self, log: &SessionLog, seq: Seq, subagent: &SubagentId) -> Option<Seq> {
+        match self.found.get(subagent) {
             Some(&call) if nearby::is_loaded(log, call) => return Some(call),
             // Its page was let go, so it isn't drawn, and its subagent's events have to be drawn where they are.
             Some(_) => {
-                self.found.remove(id);
+                self.found.remove(subagent);
             }
             None => {}
         }
@@ -131,11 +136,13 @@ impl SubagentCalls {
         if self.missed.contains(&seq) {
             return None;
         }
-        let found = nearby::call_before(log, seq, id, REACH);
+        // A log by `seq` is from a hub too old to keep a subagent's events apart, which names each subagent by the
+        // call that started it.
+        let found = nearby::call_before(log, seq, &ToolUseId::from(subagent.as_str()), REACH);
         let found = found.filter(|(_, hands_off)| *hands_off).map(|(call, _)| call);
         match found {
             Some(call) => {
-                self.found.insert(id.clone(), call);
+                self.found.insert(subagent.clone(), call);
             }
             None => {
                 self.missed.insert(seq);
@@ -145,13 +152,12 @@ impl SubagentCalls {
     }
 }
 
-/// The call that started the subagent an event is from, if it's from one.
-fn parent_of(body: &EventBody) -> Option<&ToolUseId> {
-    let (EventBody::Assistant { parent_tool_use_id, .. } | EventBody::AgentUser { parent_tool_use_id, .. }) = body
-    else {
+/// The subagent an event is from, if it's from one.
+fn parent_of(body: &EventBody) -> Option<&SubagentId> {
+    let (EventBody::Assistant { subagent, .. } | EventBody::AgentUser { subagent, .. }) = body else {
         return None;
     };
-    parent_tool_use_id.as_ref()
+    subagent.as_ref()
 }
 
 #[cfg(test)]

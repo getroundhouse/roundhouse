@@ -8,17 +8,17 @@ use std::collections::BTreeMap;
 
 use protocol::event::{ContentBlock, EventBody, SessionEvent};
 use protocol::model::{
-    Call, CallResult, ModelName, RecentCall, RecentWork, Rev, Said, Subagent, SubagentStatus, ToolUseId,
+    Call, CallResult, ModelName, RecentCall, RecentWork, Rev, Said, Subagent, SubagentId, SubagentStatus,
 };
 
-/// The records of the subagents in `log`, by the call that started each.
+/// The records of the subagents in `log`, by subagent.
 pub(crate) fn records_of(log: &[SessionEvent]) -> Vec<Subagent> {
-    let mut held: BTreeMap<ToolUseId, Subagent> = BTreeMap::new();
+    let mut held: BTreeMap<SubagentId, Subagent> = BTreeMap::new();
     for event in log {
         let rev = Rev::new(event.seq.get());
         match &event.body {
             EventBody::SubagentStarted { call, kind, description, prompt, in_background } => {
-                held.entry(call.clone()).or_insert(Subagent {
+                held.entry(SubagentId::of_call(call)).or_insert(Subagent {
                     session_id: event.session_id.clone(),
                     kind: kind.clone(),
                     description: description.clone(),
@@ -29,15 +29,15 @@ pub(crate) fn records_of(log: &[SessionEvent]) -> Vec<Subagent> {
                     ..protocol::fixtures::subagent(call.as_str())
                 });
             }
-            EventBody::SubagentContext { call, tokens } => {
-                let working = held.get_mut(call).filter(|s| s.status == SubagentStatus::Working);
+            EventBody::SubagentContext { subagent, tokens } => {
+                let working = held.get_mut(subagent).filter(|s| s.status == SubagentStatus::Working);
                 if let Some(subagent) = working.filter(|s| s.context_tokens != Some(*tokens)) {
                     subagent.context_tokens = Some(*tokens);
                     subagent.rev = rev;
                 }
             }
-            EventBody::SubagentEnded { call, outcome, report, context_tokens } => {
-                if let Some(subagent) = held.get_mut(call).filter(|s| s.status == SubagentStatus::Working) {
+            EventBody::SubagentEnded { subagent, outcome, report, context_tokens } => {
+                if let Some(subagent) = held.get_mut(subagent).filter(|s| s.status == SubagentStatus::Working) {
                     subagent.status = SubagentStatus::ended(*outcome);
                     subagent.report.clone_from(report);
                     subagent.context_tokens = context_tokens.or(subagent.context_tokens);
@@ -46,8 +46,8 @@ pub(crate) fn records_of(log: &[SessionEvent]) -> Vec<Subagent> {
                     subagent.rev = rev;
                 }
             }
-            EventBody::Assistant { blocks, parent_tool_use_id: Some(parent), .. }
-            | EventBody::AgentUser { blocks, parent_tool_use_id: Some(parent), .. } => {
+            EventBody::Assistant { blocks, subagent: Some(parent), .. }
+            | EventBody::AgentUser { blocks, subagent: Some(parent), .. } => {
                 let Some(subagent) = held.get_mut(parent) else { continue };
                 if let EventBody::Assistant { model: Some(model), .. } = &event.body
                     && let Ok(model) = ModelName::try_from(model.clone())

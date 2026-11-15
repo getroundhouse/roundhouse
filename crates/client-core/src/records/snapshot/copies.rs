@@ -2,7 +2,7 @@ use super::super::Taken;
 use crate::Agents;
 use protocol::model::{
     Account, AccountId, DiffComment, HubSettings, NewWorkspaceDraft, Record, Repo, RepoId, Session, SessionId,
-    Subagent, ToolUseId, Workspace, WorkspaceId,
+    Subagent, SubagentId, Workspace, WorkspaceId,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -41,7 +41,7 @@ pub(in super::super) struct SubagentsListed {
     /// call's whole input, such as all of a file it wrote, and with what each frame draws.
     pub(super) sessions: HashMap<SessionId, Group<Arc<Subagent>>>,
     /// Where each is in its session's.
-    pub(super) at: HashMap<SessionId, HashMap<ToolUseId, usize>>,
+    pub(super) at: HashMap<SessionId, HashMap<SubagentId, usize>>,
 }
 
 /// Some records that go together, such as a workspace's sessions, and which copies of them these are.
@@ -124,7 +124,7 @@ impl SubagentsListed {
         let sessions: HashMap<SessionId, Group<Arc<Subagent>>> =
             held.map(|(session, its)| (session.clone(), Group::of(its, started))).collect();
         let at = sessions.iter().map(|(session, its)| {
-            let at = its.items.iter().enumerate().map(|(at, subagent)| (subagent.call.clone(), at));
+            let at = its.items.iter().enumerate().map(|(at, subagent)| (subagent.id(), at));
             (session.clone(), at.collect())
         });
         SubagentsListed { at: at.collect(), sessions }
@@ -207,9 +207,9 @@ impl Snapshot {
         self.subagents.sessions.get(session).map_or(&[], |its| &its.items)
     }
 
-    /// The subagent `call` started, in `session`.
-    pub fn subagent(&self, session: &SessionId, call: &ToolUseId) -> Option<&Arc<Subagent>> {
-        let at = self.subagents.at.get(session)?.get(call)?;
+    /// The subagent `subagent`, in `session`.
+    pub fn subagent(&self, session: &SessionId, subagent: &SubagentId) -> Option<&Arc<Subagent>> {
+        let at = self.subagents.at.get(session)?.get(subagent)?;
         self.subagents.sessions.get(session).map(|its| &its.items[*at])
     }
 

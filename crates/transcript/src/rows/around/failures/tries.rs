@@ -100,7 +100,7 @@ impl Tries {
 /// One farther back is a card of its own. Each step goes back, so a chain that says otherwise ends.
 fn repeated(log: &SessionLog, seq: Seq, previous: Seq) -> Option<(Seq, Option<Again>)> {
     let event = nearby::events_before(log, seq, NEAR).find(|event| event.seq == previous)?;
-    let EventBody::RequestFailed { parent_tool_use_id: None, again, .. } = &event.body else { return None };
+    let EventBody::RequestFailed { subagent: None, again, .. } = &event.body else { return None };
     Some((previous, *again))
 }
 
@@ -139,8 +139,5 @@ fn started_by(event: &SessionEvent) -> Option<Started> {
 
 /// The agent's own words or calls, or what came back for them.
 fn is_the_agents_own_work(body: &EventBody) -> bool {
-    matches!(
-        body,
-        EventBody::Assistant { parent_tool_use_id: None, .. } | EventBody::AgentUser { parent_tool_use_id: None, .. }
-    )
+    matches!(body, EventBody::Assistant { subagent: None, .. } | EventBody::AgentUser { subagent: None, .. })
 }

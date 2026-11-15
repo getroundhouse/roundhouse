@@ -45,7 +45,7 @@ fn each_page_fetched_is_told_of_as_it_is_put_in_place() {
         let ClientRequest::SessionRead(read) = request else { return answered_simply(request) };
         let from = read.from_seq.get();
         let notice = |seq| {
-            let body = EventBody::Notice { level: NoticeLevel::Info, message: "read".into(), parent_tool_use_id: None };
+            let body = EventBody::Notice { level: NoticeLevel::Info, message: "read".into(), subagent: None };
             protocol::fixtures::event(Seq::new(seq), body)
         };
         let events = (from..from + u64::from(read.limit)).map(notice).collect();

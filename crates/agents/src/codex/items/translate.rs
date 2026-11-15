@@ -67,7 +67,7 @@ impl Reader<'_> {
                     .event(
                         EventBody::AgentOther {
                             kind: value["type"].as_str().unwrap_or("item").into(),
-                            parent_tool_use_id: self.scope.parent.clone(),
+                            subagent: self.scope.parent.clone(),
                         },
                         Some(raw),
                     )
@@ -136,7 +136,7 @@ impl Reader<'_> {
                 .event(
                     EventBody::Assistant {
                         message_id: Some(id.into()),
-                        parent_tool_use_id: self.scope.parent.clone(),
+                        subagent: self.scope.parent.clone(),
                         model: self.scope.model.clone(),
                         blocks: vec![block],
                         first_index: Some(0),
@@ -149,7 +149,7 @@ impl Reader<'_> {
                 .emit(AgentOutput::Delta(StreamDelta {
                     run: None,
                     message_id: id.into(),
-                    parent_tool_use_id: self.scope.parent.clone(),
+                    subagent: self.scope.parent.clone(),
                     change: DeltaChange::BlockStart {
                         index: 0,
                         kind: if thinking { BlockKind::Thinking } else { BlockKind::Text },
@@ -176,7 +176,7 @@ impl Reader<'_> {
             self.shared
                 .event(
                     EventBody::AgentUser {
-                        parent_tool_use_id: self.scope.parent.clone(),
+                        subagent: self.scope.parent.clone(),
                         blocks: vec![ContentBlock::CallResult {
                             tool_use_id: id,
                             output,
@@ -194,7 +194,7 @@ impl Reader<'_> {
                 .event(
                     EventBody::Assistant {
                         message_id: Some(id.to_string().into()),
-                        parent_tool_use_id: self.scope.parent.clone(),
+                        subagent: self.scope.parent.clone(),
                         model: self.scope.model.clone(),
                         blocks: vec![ContentBlock::Call { id, call }],
                         first_index: None,

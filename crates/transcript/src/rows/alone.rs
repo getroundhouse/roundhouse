@@ -160,17 +160,14 @@ mod tests {
 
     /// The tab showing `subagent`.
     fn tab(subagent: Subagent) -> Model {
-        let mut m = Model { alone: Some(subagent.call.clone()), ..Model::default() };
-        m.subagents.insert(subagent.call.clone(), Arc::new(subagent));
+        let mut m = Model { alone: Some(subagent.id()), ..Model::default() };
+        m.subagents.insert(subagent.id(), Arc::new(subagent));
         m
     }
 
     fn assistant(message_id: Option<&str>, blocks: Vec<ContentBlock>) -> EventBody {
         let message_id = message_id.map(Into::into);
-        within(
-            "agent",
-            EventBody::Assistant { message_id, parent_tool_use_id: None, model: None, blocks, first_index: None },
-        )
+        within("agent", EventBody::Assistant { message_id, subagent: None, model: None, blocks, first_index: None })
     }
 
     fn text(text: &str) -> ContentBlock {

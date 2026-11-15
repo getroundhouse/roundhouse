@@ -6,7 +6,7 @@ use std::hash::Hash;
 use super::needs;
 use crate::capability::Capabilities;
 use crate::event::{ContentBlock, EventBody, SessionEvent};
-use crate::model::{ApprovalId, RunId, Seq, ToolUseId};
+use crate::model::{ApprovalId, RunId, Seq, SubagentId, ToolUseId};
 
 /// A contract the log can be checked against.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -51,7 +51,7 @@ pub fn check<'c>(log: &[SessionEvent], claims: impl Fn(RunId) -> &'c Capabilitie
 struct Ledger {
     prompts: Settled<Seq>,
     requests: Settled<ApprovalId>,
-    subagents: Settled<ToolUseId>,
+    subagents: Settled<SubagentId>,
     calls: HashSet<ToolUseId>,
     answered: HashSet<ToolUseId>,
     exited: HashSet<RunId>,
@@ -92,10 +92,10 @@ impl Ledger {
             broken.push(Law::ResultFollowsCall);
         }
         if let EventBody::SubagentStarted { call, .. } = body {
-            self.subagents.record(call.clone());
+            self.subagents.record(SubagentId::of_call(call));
         }
-        if let EventBody::SubagentEnded { call, .. } = body
-            && !self.subagents.settle(call, by_agent)
+        if let EventBody::SubagentEnded { subagent, .. } = body
+            && !self.subagents.settle(subagent, by_agent)
         {
             broken.push(Law::SubagentEndsOnce);
         }

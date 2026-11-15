@@ -8,7 +8,7 @@ use protocol::find::{Found, Needle};
 use protocol::model::{
     AgentKind, AnswerDraft, ApprovalId, AttachmentId, ClientMessageId, ClientRequestId, CompactionLine, Draft,
     DraftToKeep, Place, PromptLine, RecordKey, Rev, Seq, Session, SessionId, SessionSettings, SessionSettingsChange,
-    SessionStatus, TitleSource, ToolUseId, WorkspaceId,
+    SessionStatus, SubagentId, TitleSource, WorkspaceId,
 };
 use protocol::prompt::Prompt;
 use std::collections::{HashMap, HashSet};
@@ -191,7 +191,7 @@ impl Hub {
     pub(crate) async fn session_find(
         &self,
         id: SessionId,
-        subagent: Option<ToolUseId>,
+        subagent: Option<SubagentId>,
         query: &str,
     ) -> Result<Found, ApiError> {
         let needle = Needle::new(query).map_err(|e| ApiError::new(ErrorCode::InvalidRequest, e.to_string()))?;
@@ -220,7 +220,7 @@ impl Hub {
     pub(crate) async fn session_read_places(
         &self,
         id: SessionId,
-        subagent: Option<ToolUseId>,
+        subagent: Option<SubagentId>,
         from_place: Place,
         limit: u32,
         max_bytes: Option<u64>,
@@ -241,7 +241,7 @@ impl Hub {
     pub(crate) async fn read_places_page(
         &self,
         id: SessionId,
-        subagent: Option<ToolUseId>,
+        subagent: Option<SubagentId>,
         from: Place,
         through: Seq,
     ) -> Result<Vec<SessionEvent>, ApiError> {

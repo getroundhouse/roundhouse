@@ -155,16 +155,16 @@ impl Transcript {
         let (rows, shown) = {
             let mut m = self.model.borrow_mut();
             let held = |subagent: &Arc<Subagent>| {
-                m.subagents.get(&subagent.call).is_some_and(|held| Arc::ptr_eq(held, subagent))
+                m.subagents.get(&subagent.id()).is_some_and(|held| Arc::ptr_eq(held, subagent))
             };
             let changed: Vec<&Arc<Subagent>> = subagents.iter().filter(|subagent| !held(subagent)).collect();
             if changed.is_empty() {
                 return;
             }
             let drawn = m.subagent_rows.borrow();
-            let rows: Vec<_> = changed.iter().filter_map(|subagent| drawn.get(&subagent.call).copied()).collect();
+            let rows: Vec<_> = changed.iter().filter_map(|subagent| drawn.get(&subagent.id()).copied()).collect();
             drop(drawn);
-            let shown = changed.iter().find(|subagent| m.alone.as_ref() == Some(&subagent.call)).copied();
+            let shown = changed.iter().find(|subagent| m.alone.as_ref() == Some(&subagent.id())).copied();
             if let Some(subagent) = shown {
                 let at_work = AtWork::of_subagent(subagent);
                 if m.at_work.working != at_work.working {
@@ -173,7 +173,7 @@ impl Transcript {
                 m.at_work = at_work;
             }
             for subagent in changed {
-                m.subagents.insert(subagent.call.clone(), Arc::clone(subagent));
+                m.subagents.insert(subagent.id(), Arc::clone(subagent));
             }
             (rows, shown.is_some())
         };

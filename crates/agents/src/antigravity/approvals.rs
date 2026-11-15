@@ -179,10 +179,7 @@ pub(super) async fn decide(shared: &Shared, id: &ApprovalId, decision: &Decision
             return Err(error);
         }
         shared
-            .event(
-                EventBody::Notice { level: NoticeLevel::Error, message: error.to_string(), parent_tool_use_id: None },
-                None,
-            )
+            .event(EventBody::Notice { level: NoticeLevel::Error, message: error.to_string(), subagent: None }, None)
             .await;
         if !refused {
             shared.stop().await;
@@ -310,7 +307,7 @@ async fn unsupported(shared: &Shared, id: &Value, method: &str) -> Result<(), Ag
             EventBody::Notice {
                 level: NoticeLevel::Warning,
                 message: format!("Antigravity asked for {method}, which this adapter cannot answer"),
-                parent_tool_use_id: None,
+                subagent: None,
             },
             None,
         )

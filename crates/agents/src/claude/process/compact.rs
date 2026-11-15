@@ -60,7 +60,7 @@ impl AskedToCompact {
             return;
         }
         let Some(taken) = &mut self.taken else { return };
-        if let EventBody::Assistant { parent_tool_use_id: None, .. } = body {
+        if let EventBody::Assistant { subagent: None, .. } = body {
             taken.said = true;
         }
         if let EventBody::AgentCompacted { asked, keeping, outcome } = body
@@ -160,7 +160,7 @@ mod tests {
     fn a_turn_the_agent_said_something_in_or_that_never_compacted_wasnt_only_a_compaction() {
         let said = EventBody::Assistant {
             message_id: None,
-            parent_tool_use_id: None,
+            subagent: None,
             model: None,
             blocks: Vec::new(),
             first_index: None,

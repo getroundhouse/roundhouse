@@ -156,7 +156,7 @@ async fn open_session(
                             message: "Antigravity could not find this conversation. Starting a new one without its \
                                 previous context."
                                 .into(),
-                            parent_tool_use_id: None,
+                            subagent: None,
                         },
                         None,
                     )

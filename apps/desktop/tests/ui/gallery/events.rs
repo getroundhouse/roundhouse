@@ -9,7 +9,7 @@ use protocol::event::{
     AgentTask, ContentBlock, EventBody, FileChange, LinkedImage, TaskKind, TaskOutcome, TokenUsage, TurnOutcome,
 };
 use protocol::fixtures;
-use protocol::model::{MessageId, ModelName, Seq, ToolUseId};
+use protocol::model::{MessageId, ModelName, Seq, SubagentId, ToolUseId};
 use protocol::prompt::Prompt;
 
 pub(crate) fn user_prompt(text: &str) -> EventBody {
@@ -42,7 +42,7 @@ pub(crate) fn typed_call(message: &str, id: &str, call: Call) -> EventBody {
 
 /// What came back for the typed call `id`.
 pub(crate) fn typed_result(id: &str, output: CallOutput, is_error: bool) -> EventBody {
-    EventBody::AgentUser { parent_tool_use_id: None, blocks: vec![fixtures::typed_result(id, output, is_error)] }
+    EventBody::AgentUser { subagent: None, blocks: vec![fixtures::typed_result(id, output, is_error)] }
 }
 
 /// What the agent thought, as its own message.
@@ -72,7 +72,7 @@ pub(crate) fn advice_failed(message: &str, id: &str, text: &str) -> EventBody {
 fn from_the_agent(message: &str, block: ContentBlock) -> EventBody {
     EventBody::Assistant {
         message_id: Some(MessageId::from(message)),
-        parent_tool_use_id: None,
+        subagent: None,
         model: Some("claude-opus-5-5".to_string()),
         blocks: vec![block],
         first_index: None,
@@ -101,7 +101,7 @@ pub(crate) fn tool_failed(id: &str, text: &str) -> EventBody {
 
 /// The result of a call the person denied, which tells the agent `text`, with what they `said`, if anything.
 pub(crate) fn tool_denied(id: &str, text: &str, said: Option<&str>) -> EventBody {
-    EventBody::AgentUser { parent_tool_use_id: None, blocks: vec![fixtures::tool_denied(id, text, said)] }
+    EventBody::AgentUser { subagent: None, blocks: vec![fixtures::tool_denied(id, text, said)] }
 }
 
 /// A result that says what the call changed in a file, as Claude's edits and writes do.
@@ -110,7 +110,7 @@ pub(crate) fn tool_changed(id: &str, text: &str, change: FileChange) -> EventBod
 }
 
 fn tool_answer(id: &str, text: &str, is_error: bool, change: Option<FileChange>) -> EventBody {
-    EventBody::AgentUser { parent_tool_use_id: None, blocks: vec![answer(id, text, is_error, change)] }
+    EventBody::AgentUser { subagent: None, blocks: vec![answer(id, text, is_error, change)] }
 }
 
 fn answer(id: &str, text: &str, is_error: bool, changed: Option<FileChange>) -> ContentBlock {
@@ -152,10 +152,8 @@ pub(crate) fn replied(reply: &str, seconds: u64, cost_usd: f64) -> EventBody {
 
 /// `event` as the subagent started by the call `parent` sends it.
 pub(crate) fn within(parent: &str, mut event: EventBody) -> EventBody {
-    if let EventBody::Assistant { parent_tool_use_id, .. } | EventBody::AgentUser { parent_tool_use_id, .. } =
-        &mut event
-    {
-        *parent_tool_use_id = Some(ToolUseId::from(parent));
+    if let EventBody::Assistant { subagent, .. } | EventBody::AgentUser { subagent, .. } = &mut event {
+        *subagent = Some(SubagentId::from(parent));
     }
     event
 }
@@ -199,11 +197,11 @@ pub(crate) fn subagents_listed(subagents: &[(&str, &str)]) -> EventBody {
 
 /// The agent's word on how many tokens the conversation of a subagent at work holds.
 pub(crate) fn subagent_context(call: &str, tokens: u64) -> EventBody {
-    EventBody::SubagentContext { call: call.into(), tokens }
+    EventBody::SubagentContext { subagent: call.into(), tokens }
 }
 
 /// The agent's word that a subagent finished, with its report and how many tokens its conversation held.
 pub(crate) fn subagent_ended(call: &str, report: &str, tokens: u64) -> EventBody {
     let (outcome, report) = (TaskOutcome::Finished, Some(report.into()));
-    EventBody::SubagentEnded { call: call.into(), outcome, report, context_tokens: Some(tokens) }
+    EventBody::SubagentEnded { subagent: call.into(), outcome, report, context_tokens: Some(tokens) }
 }

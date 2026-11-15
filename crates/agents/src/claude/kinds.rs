@@ -110,7 +110,7 @@ mod tests {
     /// to, or `None` when the adapter doesn't know that call.
     fn said(tool: Option<&str>, is_error: bool, text: &str) -> (Option<CallKind>, Option<i32>, String) {
         let mut body =
-            EventBody::AgentUser { parent_tool_use_id: None, blocks: vec![fixtures::tool_result("c", text, is_error)] };
+            EventBody::AgentUser { subagent: None, blocks: vec![fixtures::tool_result("c", text, is_error)] };
         let answered: Vec<_> = tool.map(|tool| ("c".into(), tool.to_string())).into_iter().collect();
         say(&mut body, &answered);
         let EventBody::AgentUser { blocks, .. } = body else { unreachable!() };
@@ -155,7 +155,7 @@ mod tests {
         let made = |id: &str, name: &str| fixtures::tool_use(id, name, json!({}));
         let blocks = vec![made("a", "Grep"), made("b", "mcp__github__list")];
         let mut body =
-            EventBody::Assistant { message_id: None, parent_tool_use_id: None, model: None, blocks, first_index: None };
+            EventBody::Assistant { message_id: None, subagent: None, model: None, blocks, first_index: None };
 
         say(&mut body, &[]);
 
@@ -213,7 +213,7 @@ mod tests {
     #[test]
     fn a_result_says_the_kind_of_its_own_call_among_those_a_line_answers() {
         let blocks = vec![fixtures::tool_result("read", "a.rs", false), fixtures::tool_result("gone", "b.rs", false)];
-        let mut body = EventBody::AgentUser { parent_tool_use_id: None, blocks };
+        let mut body = EventBody::AgentUser { subagent: None, blocks };
 
         say(&mut body, &[("ran".into(), "Bash".to_string()), ("read".into(), "Read".to_string())]);
 

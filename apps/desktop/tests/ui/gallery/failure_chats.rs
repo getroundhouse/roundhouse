@@ -52,7 +52,7 @@ pub(super) fn refused(resets_at_ms: i64, again: Option<Again>) -> [EventBody; 2]
     if let EventBody::TurnEnded { outcome, result, request_failed, .. } = &mut ended {
         (*outcome, *result, *request_failed) = (TurnOutcome::Error, Some(LIMIT_REACHED.to_string()), true);
     }
-    [EventBody::RequestFailed { parent_tool_use_id: None, failure, again }, ended]
+    [EventBody::RequestFailed { subagent: None, failure, again }, ended]
 }
 
 /// A turn that looked around, had its model changed partway, which the CLI said itself, and then failed on the
@@ -60,7 +60,7 @@ pub(super) fn refused(resets_at_ms: i64, again: Option<Again>) -> [EventBody; 2]
 fn failed() -> Vec<EventBody> {
     let mut events = looked_around();
     let model_set = "Set model to `opus (claude-opus-5-5)`".to_string();
-    events.push(EventBody::Notice { level: NoticeLevel::Info, message: model_set, parent_tool_use_id: None });
+    events.push(EventBody::Notice { level: NoticeLevel::Info, message: model_set, subagent: None });
     events.push(text("msg-3", "The sidebar only knows what's in `Workspace`, so I'll add the field there first."));
     events.extend(refused(NOW_MS + (4 * 24 + 6) * 60 * 60 * 1_000, None));
     events

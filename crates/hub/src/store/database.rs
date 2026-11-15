@@ -2,7 +2,7 @@ use super::{error, schema};
 use error::StoreError;
 use parking_lot::{Mutex, MutexGuard};
 use protocol::event::SessionEvent;
-use protocol::model::{Account, AgentSessionId, OpenApproval, Place, Rev, RunId, Seq, Session, ToolUseId};
+use protocol::model::{Account, AgentSessionId, OpenApproval, Place, Rev, RunId, Seq, Session, SubagentId};
 use rusqlite::{Connection, Row, Transaction};
 use schema::{migrate, open_connection};
 use serde::Serialize;
@@ -46,7 +46,7 @@ pub struct Appended {
     /// The approvals the agent is waiting on, oldest first, if the event changed them.
     pub approvals: Option<Vec<OpenApproval>>,
     /// The subagents whose records the event changed.
-    pub subagents: Vec<ToolUseId>,
+    pub subagents: Vec<SubagentId>,
     /// The run whose claims the event, its exit, took off the session's record.
     pub claims_taken_off: Option<RunId>,
 }

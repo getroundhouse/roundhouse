@@ -35,7 +35,7 @@ fn task_notification(ts: i64, task: &str, status: &str) -> Line {
 }
 
 fn rows(lines: &[Line]) -> String {
-    let mut places: HashMap<Option<ToolUseId>, u64> = HashMap::new();
+    let mut places: HashMap<Option<SubagentId>, u64> = HashMap::new();
     let session = format!(
         "INSERT INTO sessions (id, workspace_id, agent, agent_session_id, status, last_seq, created_at_ms, updated_at_ms) \
          VALUES ('s', 'w', 'claude', 's', 'idle', {}, 0, 0);",
@@ -50,7 +50,7 @@ fn rows(lines: &[Line]) -> String {
             "INSERT INTO events (session_id, seq, ts_ms, kind, subagent, place, body, raw) \
              VALUES ('s', {seq}, {ts}, '{}', {}, {place}, '{}', {});",
             body.kind(),
-            quoted(subagent.map(ToolUseId::as_str)),
+            quoted(subagent.map(SubagentId::as_str)),
             serde_json::to_string(body).unwrap(),
             quoted(raw.as_deref()),
         )

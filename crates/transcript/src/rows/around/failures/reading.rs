@@ -25,7 +25,7 @@ pub(in crate::rows) enum Failures {
 impl Failures {
     /// For the event at `seq`, as the log around it says.
     pub(in crate::rows) fn read(log: &SessionLog, folds: &Folds, seq: Seq, body: &EventBody) -> Self {
-        if let EventBody::RequestFailed { parent_tool_use_id: None, again, .. } = body {
+        if let EventBody::RequestFailed { subagent: None, again, .. } = body {
             if repeated_later(log, seq) {
                 return Failures::InALaterCard;
             }
@@ -53,7 +53,7 @@ impl Failures {
 /// one's card.
 fn repeated_later(log: &SessionLog, seq: Seq) -> bool {
     nearby::events_after(log, seq, NEAR).any(|event| {
-        matches!(&event.body, EventBody::RequestFailed { parent_tool_use_id: None, again: Some(again), .. }
+        matches!(&event.body, EventBody::RequestFailed { subagent: None, again: Some(again), .. }
             if again.previous == seq)
     })
 }
@@ -66,7 +66,7 @@ fn refused_first(log: &SessionLog, seq: Seq) -> bool {
 }
 
 fn is_the_agents_own_failure(body: &EventBody) -> bool {
-    matches!(body, EventBody::RequestFailed { parent_tool_use_id: None, .. })
+    matches!(body, EventBody::RequestFailed { subagent: None, .. })
 }
 
 /// Whether the event at `seq` is between two failures of the agent's own in a row, as the next failure after it says,

@@ -13,7 +13,7 @@ use gpui_kit::{
 };
 use look::{Hand as _, Sizing as _, TaskRing};
 use protocol::event::AgentTask;
-use protocol::model::{Wait, WaitId, WaitUntil};
+use protocol::model::{SubagentId, Wait, WaitId, WaitUntil};
 
 use super::{clipped, tail_line};
 use crate::folds::{Fold, Folds};
@@ -92,7 +92,8 @@ fn going(group: TaskGroup, task: &AgentTask, by: By, shared: &Shared, cx: &App) 
     let text = task.description.clone().unwrap_or_else(|| group.one().to_string());
     let open = task.call.as_ref().filter(|_| by == By::Place && group == TaskGroup::Subagents).map(|call| {
         let id = ElementId::Name(format!("background-open/{call}").into());
-        open_tab(id, call.clone(), task.description.as_deref().unwrap_or(agent::UNTITLED), &shared.this)
+        let subagent = SubagentId::of_call(call);
+        open_tab(id, subagent, task.description.as_deref().unwrap_or(agent::UNTITLED), &shared.this)
     });
     in_the_background(("background", task.id.as_str()), mark, text, pointed_at, open, cx)
 }

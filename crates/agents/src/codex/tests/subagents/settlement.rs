@@ -31,11 +31,11 @@ async fn a_late_child_tool_result_stays_in_its_finished_invocation_and_is_record
     let results: Vec<_> = events
         .iter()
         .filter_map(|body| {
-            let EventBody::AgentUser { parent_tool_use_id, blocks } = body else { return None };
+            let EventBody::AgentUser { subagent, blocks } = body else { return None };
             blocks
                 .iter()
                 .any(|b| matches!(b,ContentBlock::CallResult{tool_use_id,..} if tool_use_id.as_str()=="old-command"))
-                .then(|| parent_tool_use_id.as_ref().unwrap().as_str())
+                .then(|| subagent.as_ref().unwrap().as_str())
         })
         .collect();
     assert_eq!(results, ["spawn"]);

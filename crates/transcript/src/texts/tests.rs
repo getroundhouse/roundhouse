@@ -13,7 +13,7 @@ fn at(seq: u64) -> TextAt {
 /// A reply, for a log whose row is loaded.
 fn words() -> EventBody {
     let blocks = vec![ContentBlock::Text { text: "words".into(), images: Vec::new() }];
-    EventBody::Assistant { message_id: None, parent_tool_use_id: None, model: None, blocks, first_index: None }
+    EventBody::Assistant { message_id: None, subagent: None, model: None, blocks, first_index: None }
 }
 
 #[test]

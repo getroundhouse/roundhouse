@@ -37,7 +37,7 @@ fn of_a_record() -> Vec<(HubNotice, RecordKey, Rev)> {
         (HubNotice::NewWorkspaceDraft(draft), RecordKey::NewWorkspaceDraft, Rev::new(5)),
         (
             HubNotice::Subagent(subagent(6)),
-            RecordKey::Subagent { session_id: "s".into(), call: "c".into() },
+            RecordKey::Subagent { session_id: "s".into(), subagent: "c".into() },
             Rev::new(6),
         ),
         (HubNotice::Removed { record: gone.clone(), rev: Rev::new(7) }, gone, Rev::new(7)),

@@ -1,7 +1,7 @@
 use super::super::{Store, StoreError, lock, place_of};
 use protocol::event::EventBody;
 use protocol::find::{Found, Needle};
-use protocol::model::{Place, SessionId, ToolUseId};
+use protocol::model::{Place, SessionId, SubagentId};
 
 impl Store {
     /// Every event of the agent's own, or of the subagent `subagent` started, that holds `needle`, by place, oldest
@@ -12,13 +12,13 @@ impl Store {
     pub fn find_events(
         &self,
         session_id: &SessionId,
-        subagent: Option<&ToolUseId>,
+        subagent: Option<&SubagentId>,
         needle: &Needle,
     ) -> Result<Found, StoreError> {
         let conn = lock(&self.finder);
         let mut statement = conn
             .prepare_cached("SELECT place, body FROM events WHERE session_id = ? AND subagent IS ? ORDER BY place")?;
-        let mut rows = statement.query(rusqlite::params![session_id.as_str(), subagent.map(ToolUseId::as_str)])?;
+        let mut rows = statement.query(rusqlite::params![session_id.as_str(), subagent.map(SubagentId::as_str)])?;
         let mut found = Found { places: Vec::new(), through: Place::default() };
         while let Some(row) = rows.next()? {
             let place = place_of(row, 0)?;

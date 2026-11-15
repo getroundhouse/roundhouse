@@ -5,7 +5,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::{ClientRequest, Request};
-use crate::model::{Place, Seq, SessionId, ToolUseId};
+use crate::model::{Place, Seq, SessionId, SubagentId};
 
 /// Sends every event from `from_seq` on, then keeps streaming as new ones are recorded. To catch up after
 /// reconnecting, subscribe from one past the last `seq` received.
@@ -30,7 +30,7 @@ impl Request for SessionSubscribe {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct SessionSubscribePlaces {
     pub id: SessionId,
-    pub subagent: Option<ToolUseId>,
+    pub subagent: Option<SubagentId>,
     pub from_place: Place,
     pub subscription_id: u64,
 }

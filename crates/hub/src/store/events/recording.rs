@@ -6,7 +6,7 @@ use super::super::subagents::note_subagents;
 use super::super::{Appended, Store, StoreError, lock, now_ms, place_column, place_of, seq_column, seq_of};
 use super::change::{SessionChange, change_session};
 use protocol::event::{ApprovalOutcome, EventBody, SessionEvent};
-use protocol::model::{ApprovalId, ClientMessageId, Place, RunId, Seq, SessionId, ToolUseId};
+use protocol::model::{ApprovalId, ClientMessageId, Place, RunId, Seq, SessionId, SubagentId};
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 
 impl Appended {
@@ -32,7 +32,7 @@ impl Appended {
 /// and none recorded after `through`, if it's set.
 #[derive(Clone, Copy, Debug)]
 pub struct Places<'a> {
-    pub subagent: Option<&'a ToolUseId>,
+    pub subagent: Option<&'a SubagentId>,
     pub from: Place,
     pub through: Option<Seq>,
 }
@@ -90,7 +90,7 @@ fn append_in(tx: &Connection, session_id: &SessionId, recording: Recording<'_>) 
             body.kind(),
             client_msg_id.map(ClientMessageId::as_str),
             run.map(|run| run.get().cast_signed()),
-            subagent.map(ToolUseId::as_str),
+            subagent.map(SubagentId::as_str),
             place_column(place),
             encoded,
             raw
@@ -214,7 +214,7 @@ impl Store {
         ))?;
         let (from, through) = (place_column(from), through.map_or(i64::MAX, seq_column));
         let rows =
-            statement.query(params![session_id.as_str(), subagent.map(ToolUseId::as_str), from, through, limit])?;
+            statement.query(params![session_id.as_str(), subagent.map(SubagentId::as_str), from, through, limit])?;
         let events = events_in(session_id, rows, max_bytes)?;
         Ok((events, last_place(&conn, session_id, subagent)?))
     }
@@ -244,10 +244,10 @@ impl Store {
 }
 
 /// The place of the newest event from the agent itself, or from the subagent `subagent` started, or 0 if there's none.
-fn last_place(conn: &Connection, session_id: &SessionId, subagent: Option<&ToolUseId>) -> rusqlite::Result<Place> {
+fn last_place(conn: &Connection, session_id: &SessionId, subagent: Option<&SubagentId>) -> rusqlite::Result<Place> {
     conn.query_row(
         "SELECT ifnull(max(place), 0) FROM events WHERE session_id = ? AND subagent IS ?",
-        params![session_id.as_str(), subagent.map(ToolUseId::as_str)],
+        params![session_id.as_str(), subagent.map(SubagentId::as_str)],
         |row| place_of(row, 0),
     )
 }
@@ -299,7 +299,7 @@ fn event_in(session_id: &SessionId, row: &rusqlite::Row<'_>) -> Result<(SessionE
         seq: seq_of(row, 0)?,
         ts_ms: row.get(1)?,
         run: row.get::<_, Option<i64>>(2)?.map(|run| RunId::new(run.cast_unsigned())),
-        subagent: row.get::<_, Option<String>>(3)?.map(ToolUseId::from),
+        subagent: row.get::<_, Option<String>>(3)?.map(SubagentId::from),
         place: place_of(row, 4)?,
         body: serde_json::from_str(&body)?,
         raw,

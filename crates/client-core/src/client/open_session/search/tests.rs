@@ -5,7 +5,7 @@ use std::time::Duration;
 use protocol::client::{ClientRequest, ClientResponse, ErrorCode, ReplyOutcome, log};
 use protocol::event::{EventBody, NoticeLevel};
 use protocol::find::Found;
-use protocol::model::{Place, Seq, ToolUseId};
+use protocol::model::{Place, Seq, SubagentId};
 
 use super::super::OpenSession;
 use super::super::tests::{
@@ -44,8 +44,7 @@ fn read(request: &ClientRequest) -> Option<ReplyOutcome> {
     let from = from_place.get();
     let events = (from..(from + u64::from(*limit)).min(LAST_PLACE.get() + 1))
         .map(|place| {
-            let body =
-                EventBody::Notice { level: NoticeLevel::Info, message: format!("{place}"), parent_tool_use_id: None };
+            let body = EventBody::Notice { level: NoticeLevel::Info, message: format!("{place}"), subagent: None };
             SessionEvent {
                 subagent: subagent.clone(),
                 place: Place::new(place),
@@ -61,7 +60,7 @@ fn read(request: &ClientRequest) -> Option<ReplyOutcome> {
 fn reads_from(
     requests: &flume::Receiver<ClientRequest>,
     heard: &mut Vec<ClientRequest>,
-) -> Vec<(u64, Option<ToolUseId>)> {
+) -> Vec<(u64, Option<SubagentId>)> {
     heard.extend(requests.try_iter());
     heard
         .iter()
@@ -75,7 +74,7 @@ fn reads_from(
         .collect()
 }
 
-fn queries_asked(requests: &[ClientRequest]) -> Vec<(&str, Option<&ToolUseId>)> {
+fn queries_asked(requests: &[ClientRequest]) -> Vec<(&str, Option<&SubagentId>)> {
     requests
         .iter()
         .filter_map(|request| {
@@ -102,10 +101,10 @@ fn what_the_hub_names_is_read_with_what_s_around_it_a_stretch_at_a_time() {
         if matches!(request, ClientRequest::SessionFind(_)) { Some(found(&[100, 300, 500])) } else { read(request) }
     });
     let client = connect(&socket);
-    let helper: ToolUseId = "helper".into();
+    let helper: SubagentId = "helper".into();
     let open = OpenSession::start_view(&client, &session(), View::Subagent(helper.clone()));
     let mut heard = Vec::new();
-    let starts = |reads: Vec<(u64, Option<ToolUseId>)>| -> Vec<u64> {
+    let starts = |reads: Vec<(u64, Option<SubagentId>)>| -> Vec<u64> {
         assert!(reads.iter().all(|(_, of)| of.as_ref() == Some(&helper)), "{reads:?}");
         reads.into_iter().map(|(from, _)| from).collect()
     };
@@ -260,7 +259,7 @@ fn a_log_that_holds_every_event_needs_no_hub_once_it_knows_how_far_they_go() {
     });
     let client = connect(&socket);
     let open = own(&client);
-    let parser = EventBody::Notice { level: NoticeLevel::Info, message: "parser".into(), parent_tool_use_id: None };
+    let parser = EventBody::Notice { level: NoticeLevel::Info, message: "parser".into(), subagent: None };
     let only = SessionEvent { place: Place::new(1), ..protocol::fixtures::event(Seq::new(1), parser) };
 
     let before = open.search(&client, needle("parser"), 64);

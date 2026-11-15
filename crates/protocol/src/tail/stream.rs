@@ -1,5 +1,5 @@
 use crate::event::EventBody;
-use crate::model::{MessageId, RunId, Seq, ToolUseId};
+use crate::model::{MessageId, RunId, Seq, SubagentId};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
@@ -19,8 +19,10 @@ pub struct StreamDelta {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub run: Option<RunId>,
     pub message_id: MessageId,
-    #[serde(default)]
-    pub parent_tool_use_id: Option<ToolUseId>,
+    /// The subagent writing it, or `None` for the agent itself. Sent as `parent_tool_use_id`, its name from when a
+    /// subagent was named by the call that started it.
+    #[serde(default, rename = "parent_tool_use_id")]
+    pub subagent: Option<SubagentId>,
     pub change: DeltaChange,
 }
 
@@ -83,7 +85,9 @@ pub struct Compacting {
 pub struct InBackground {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub run: Option<RunId>,
-    pub call: ToolUseId,
+    /// Sent as `call`, its name from when a subagent was named by the call that started it.
+    #[serde(rename = "call")]
+    pub subagent: SubagentId,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -92,7 +96,9 @@ pub struct TailMessage {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub run: Option<RunId>,
     pub message_id: MessageId,
-    pub parent_tool_use_id: Option<ToolUseId>,
+    /// The subagent writing it, or `None` for the agent itself, sent as [`StreamDelta`]'s is.
+    #[serde(rename = "parent_tool_use_id")]
+    pub subagent: Option<SubagentId>,
     pub blocks: Vec<TailBlock>,
 }
 
@@ -115,7 +121,7 @@ impl Tail {
             self.messages.push(TailMessage {
                 run: delta.run,
                 message_id: delta.message_id.clone(),
-                parent_tool_use_id: delta.parent_tool_use_id.clone(),
+                subagent: delta.subagent.clone(),
                 blocks: Vec::new(),
             });
             self.messages.len() - 1
@@ -155,18 +161,18 @@ impl Tail {
     /// What [`Tail::on_event`] does, for an event recorded at `seq`, or one no hub has recorded yet.
     pub(super) fn heard(&mut self, seq: Option<Seq>, run: Option<RunId>, body: &EventBody) {
         match body {
-            EventBody::Assistant { message_id, parent_tool_use_id, .. } => {
+            EventBody::Assistant { message_id, subagent, .. } => {
                 if let Some(id) = message_id {
                     self.messages.retain(|m| m.message_id != *id);
                 }
-                if parent_tool_use_id.is_none() {
+                if subagent.is_none() {
                     self.compacted(run);
                 }
             }
             EventBody::TurnEnded { .. } => {
                 let in_background = &self.in_background;
-                let carries_on = |call: &ToolUseId| in_background.iter().any(|b| b.call == *call);
-                self.messages.retain(|m| later(run, m.run) || m.parent_tool_use_id.as_ref().is_some_and(carries_on));
+                let carries_on = |subagent: &SubagentId| in_background.iter().any(|b| b.subagent == *subagent);
+                self.messages.retain(|m| later(run, m.run) || m.subagent.as_ref().is_some_and(carries_on));
                 self.compacted(run);
             }
             EventBody::AgentExited { .. } => {
@@ -175,13 +181,11 @@ impl Tail {
                 self.compacted(run);
             }
             EventBody::SubagentStarted { call, in_background: true, .. } => {
-                if !self.in_background.iter().any(|b| b.call == *call) {
-                    self.in_background.push(InBackground { run, call: call.clone() });
-                }
+                self.in_background(run, SubagentId::of_call(call));
             }
-            EventBody::SubagentEnded { call, .. } => {
-                self.messages.retain(|m| m.parent_tool_use_id.as_ref() != Some(call));
-                self.in_background.retain(|b| b.call != *call);
+            EventBody::SubagentEnded { subagent, .. } => {
+                self.messages.retain(|m| m.subagent.as_ref() != Some(subagent));
+                self.in_background.retain(|b| b.subagent != *subagent);
             }
             EventBody::CompactionAsked { .. } => {
                 self.compacting = Some(Compacting { run, asked: seq, written_chars: None });
@@ -216,6 +220,13 @@ impl Tail {
         }
     }
 
+    /// `subagent`, which `run` started, works in the background, so the end of a turn leaves what it's writing.
+    fn in_background(&mut self, run: Option<RunId>, subagent: SubagentId) {
+        if !self.in_background.iter().any(|b| b.subagent == subagent) {
+            self.in_background.push(InBackground { run, subagent });
+        }
+    }
+
     /// `run`'s compaction is over, or an earlier run's.
     pub(super) fn compacted(&mut self, run: Option<RunId>) {
         self.compacting = self.compacting.take().filter(|compacting| later(run, compacting.run));
@@ -233,11 +244,11 @@ impl Tail {
         messages.is_empty() && in_background.is_empty() && compacting.is_none()
     }
 
-    /// What the agent itself is writing, or the subagent `subagent` started. It holds no other's messages for the
-    /// end of a turn to leave, so it doesn't say which subagents are in the background.
+    /// What the agent itself is writing, or the subagent `subagent`. It holds no other's messages for the end of a
+    /// turn to leave, so it doesn't say which subagents are in the background.
     #[must_use]
-    pub fn of(&self, subagent: Option<&ToolUseId>) -> Tail {
-        let messages = self.messages.iter().filter(|message| message.parent_tool_use_id.as_ref() == subagent);
+    pub fn of(&self, subagent: Option<&SubagentId>) -> Tail {
+        let messages = self.messages.iter().filter(|message| message.subagent.as_ref() == subagent);
         // Only the agent compacts its conversation, so a subagent's tail never says it's compacting.
         let compacting = self.compacting.clone().filter(|_| subagent.is_none());
         Tail { messages: messages.cloned().collect(), in_background: Vec::new(), compacting }

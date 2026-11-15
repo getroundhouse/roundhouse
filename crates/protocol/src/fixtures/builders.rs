@@ -5,7 +5,7 @@ use crate::event::{
 };
 use crate::model::{
     Account, AgentKind, ApprovalId, BranchName, Call, CallResult, ChildStatus, ChildWorktree, Draft, Effort, MadeBy,
-    ModelName, PermissionMode, Place, RecentWork, Rev, Seq, Session, SessionStatus, SetupStatus, Subagent,
+    ModelName, PermissionMode, Place, RecentWork, Rev, Seq, Session, SessionStatus, SetupStatus, Subagent, SubagentId,
     SubagentStatus, TitleSource, ToolUseId, Workspace, WorkspaceStatus,
 };
 
@@ -150,10 +150,10 @@ pub fn turn_ended(outcome: TurnOutcome) -> EventBody {
 }
 
 /// A request to the model that failed on the account's usage limit, saying `message`, as the agent sends it, the
-/// agent's own unless `subagent` names the call that started the subagent whose it was.
+/// agent's own unless `subagent` names the subagent whose it was.
 pub fn request_failed(message: &str, subagent: Option<&str>) -> EventBody {
     let failure = RequestFailure { message: message.into(), kind: FailureKind::Limit, resets_at_ms: None };
-    EventBody::RequestFailed { parent_tool_use_id: subagent.map(Into::into), failure, again: None }
+    EventBody::RequestFailed { subagent: subagent.map(Into::into), failure, again: None }
 }
 
 /// The subagent the call `call` started in the session `s`, working in the foreground, with nothing else known of it
@@ -272,7 +272,7 @@ pub struct ApprovalRequest {
     pub suggestions: Value,
     pub asking: Option<Asking>,
     pub reason: Option<String>,
-    pub asked_by: Option<ToolUseId>,
+    pub asked_by: Option<SubagentId>,
 }
 
 /// The agent itself asking to use `tool`, under the approval `id`, with no input. Like a request recorded before

@@ -4,7 +4,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::{BranchName, Branches, ChildWorktreeId, Rev, SessionId, ToolUseId, WorkspaceId};
+use super::{BranchName, Branches, ChildWorktreeId, Rev, SessionId, SubagentId, WorkspaceId};
 
 /// Another worktree of a workspace's repository, made for its work, in [`CHILDREN`] beside the workspaces, in a folder
 /// named after its workspace. No workspace's name starts with a dot, so `.children` is no workspace's. A child isn't
@@ -36,8 +36,11 @@ pub struct ChildWorktree {
 pub enum MadeBy {
     /// The chat's own agent.
     Agent,
-    /// One of its subagents, by the call that started it.
-    Subagent { call: ToolUseId },
+    /// One of its subagents. Sent as `call`, its name from when a subagent was named by the call that started it.
+    Subagent {
+        #[serde(rename = "call")]
+        subagent: SubagentId,
+    },
     /// One of the chat's agents, but the hub couldn't tell which.
     Undetermined,
     /// From a newer hub.

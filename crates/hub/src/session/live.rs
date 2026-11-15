@@ -14,7 +14,7 @@ use protocol::client::{ApiError, ErrorCode};
 use protocol::event::EventBody;
 use protocol::model::{
     AgentKind, AgentSessionId, ContextUsage, PromptCache, RunId, Seq, Session, SessionId, SessionSettings,
-    SessionSettingsChange, SessionStatus, ToolUseId, WorkspaceId,
+    SessionSettingsChange, SessionStatus, SubagentId, WorkspaceId,
 };
 use protocol::tail::{StreamDelta, Tail};
 use protocol::worker::Delivery;
@@ -30,7 +30,7 @@ pub(crate) enum LiveItem {
     /// The log now reaches `seq`, with an event from the subagent `subagent` started, or the agent's own.
     Appended {
         seq: Seq,
-        subagent: Option<ToolUseId>,
+        subagent: Option<SubagentId>,
         /// It ended what another agent or subagent was writing, as the end of a turn ends a subagent's message, which
         /// a subscriber following only that one doesn't see.
         ended_others: bool,

@@ -50,7 +50,7 @@ fn what_a_subagents_conversation_holds_keeps_the_form_and_the_kind_its_stored_un
     let holds: EventBody = serde_json::from_str(stored).unwrap();
     let ended: EventBody = serde_json::from_str(before).unwrap();
 
-    assert_eq!(holds, EventBody::SubagentContext { call: "toolu_1".into(), tokens: 37_386 });
+    assert_eq!(holds, EventBody::SubagentContext { subagent: "toolu_1".into(), tokens: 37_386 });
     assert_eq!(holds.kind(), "subagent_context");
     assert_eq!(serde_json::to_string(&holds).unwrap(), stored);
     let EventBody::SubagentEnded { context_tokens: None, .. } = &ended else { panic!("{ended:?}") };
@@ -76,12 +76,11 @@ fn a_failed_request_keeps_the_form_and_the_kind_its_stored_under() {
         kind: FailureKind::Limit,
         resets_at_ms: Some(1_700_000_000_000),
     };
-    assert_eq!(failed, EventBody::RequestFailed { parent_tool_use_id: Some("toolu_1".into()), failure, again: None });
+    assert_eq!(failed, EventBody::RequestFailed { subagent: Some("toolu_1".into()), failure, again: None });
     assert_eq!(failed.kind(), "request_failed");
     assert_eq!(serde_json::to_string(&failed).unwrap(), stored);
     for line in [later, bare] {
-        let EventBody::RequestFailed { parent_tool_use_id: None, failure, .. } = serde_json::from_str(line).unwrap()
-        else {
+        let EventBody::RequestFailed { subagent: None, failure, .. } = serde_json::from_str(line).unwrap() else {
             panic!("{line}")
         };
         assert_eq!((failure.kind, failure.resets_at_ms), (FailureKind::Unknown, None), "{line}");
@@ -99,7 +98,7 @@ fn a_failed_request_that_repeats_the_one_before_keeps_the_form_its_stored_in() {
     let failure =
         RequestFailure { message: "You've reached your limit.".into(), kind: FailureKind::Limit, resets_at_ms: None };
     let again = Some(Again { previous: Seq::new(12), times: 3 });
-    assert_eq!(failed, EventBody::RequestFailed { parent_tool_use_id: None, failure, again });
+    assert_eq!(failed, EventBody::RequestFailed { subagent: None, failure, again });
     assert_eq!(serde_json::to_string(&failed).unwrap(), stored);
 }
 
@@ -111,7 +110,7 @@ fn a_notice_from_before_notices_were_a_subagents_is_the_agents_own() {
 
     let notice: EventBody = serde_json::from_str(before).unwrap();
 
-    let EventBody::Notice { parent_tool_use_id: None, .. } = &notice else { panic!("{notice:?}") };
+    let EventBody::Notice { subagent: None, .. } = &notice else { panic!("{notice:?}") };
     assert_eq!(serde_json::to_string(&notice).unwrap(), before);
 }
 

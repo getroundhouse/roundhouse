@@ -9,7 +9,7 @@ const PNG: &[u8] = b"\x89PNG\r\n\x1a\nrest";
 fn said(texts: &[&str]) -> EventBody {
     let blocks =
         texts.iter().map(|text| ContentBlock::Text { text: (*text).to_string(), images: Vec::new() }).collect();
-    EventBody::Assistant { message_id: None, parent_tool_use_id: None, model: None, blocks, first_index: None }
+    EventBody::Assistant { message_id: None, subagent: None, model: None, blocks, first_index: None }
 }
 
 /// What each text block in `body` names, by address.
@@ -105,7 +105,7 @@ fn an_event_without_text_is_left_as_it_was() {
     let mut body = EventBody::Notice {
         level: protocol::event::NoticeLevel::Info,
         message: "![a](shot.png)".into(),
-        parent_tool_use_id: None,
+        subagent: None,
     };
     let before = body.clone();
 

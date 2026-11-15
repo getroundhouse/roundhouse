@@ -4,7 +4,7 @@
 use client_core::Approval;
 use gpui_kit::{AnyElement, App};
 use protocol::event::{ApprovalDecision, EventBody, Question, QuestionAnswer};
-use protocol::model::ToolUseId;
+use protocol::model::SubagentId;
 
 use super::tool_use::{self, ToolUse};
 
@@ -33,8 +33,8 @@ impl Asks {
         ToolUse::read(body, approval, words).map(Asks::ToolUse)
     }
 
-    /// The subagent that asks `body`'s request, as the call that started it, whichever it asks.
-    pub(crate) fn asked_by(body: &EventBody) -> Option<&ToolUseId> {
+    /// The subagent that asks `body`'s request, whichever it asks.
+    pub(crate) fn asked_by(body: &EventBody) -> Option<&SubagentId> {
         let EventBody::ApprovalRequested { asked_by, .. } = body else { return None };
         asked_by.as_ref()
     }

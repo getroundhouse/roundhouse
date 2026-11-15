@@ -41,7 +41,7 @@ fn a_failed_request_says_what_kind_of_failure_it_was_in_the_clis_words_and_when_
         resets_at_ms: Some(1_700_000_000_000),
     };
 
-    assert_eq!(parsed(&limit_reached()), EventBody::RequestFailed { parent_tool_use_id: None, failure, again: None });
+    assert_eq!(parsed(&limit_reached()), EventBody::RequestFailed { subagent: None, failure, again: None });
 }
 
 #[test]
@@ -49,9 +49,9 @@ fn a_subagents_failed_request_is_its_own() {
     let mut line = limit_reached();
     line["parent_tool_use_id"] = json!("call-1");
 
-    let EventBody::RequestFailed { parent_tool_use_id, .. } = parsed(&line) else { panic!() };
+    let EventBody::RequestFailed { subagent, .. } = parsed(&line) else { panic!() };
 
-    assert_eq!(parent_tool_use_id.as_ref().map(ToString::to_string).as_deref(), Some("call-1"));
+    assert_eq!(subagent.as_ref().map(ToString::to_string).as_deref(), Some("call-1"));
 }
 
 #[test]
@@ -83,7 +83,7 @@ fn what_the_cli_wrote_itself_without_an_error_is_a_note_of_its_own_and_not_the_a
     let note = EventBody::Notice {
         level: NoticeLevel::Info,
         message: "Auto-compact window set to 500k tokens".into(),
-        parent_tool_use_id: None,
+        subagent: None,
     };
     assert_eq!(parsed(&line), note);
 }
@@ -91,7 +91,7 @@ fn what_the_cli_wrote_itself_without_an_error_is_a_note_of_its_own_and_not_the_a
 #[test]
 fn what_a_command_printed_is_a_notice_as_the_cli_wrote_it_and_what_it_printed_as_an_error_a_warning() {
     let replayed = |text: &str| json!({"type": "user", "isReplay": true, "message": {"role": "user", "content": text}, "session_id": "s"});
-    let notice = |level, message: &str| EventBody::Notice { level, message: message.into(), parent_tool_use_id: None };
+    let notice = |level, message: &str| EventBody::Notice { level, message: message.into(), subagent: None };
 
     let model_set = replayed("<local-command-stdout>Set model to `sonnet (claude-sonnet-5-5)`</local-command-stdout>");
     let refused = replayed("<local-command-stderr>No such model</local-command-stderr>");

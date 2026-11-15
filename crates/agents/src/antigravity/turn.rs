@@ -43,11 +43,7 @@ pub(super) async fn prompt_finished(shared: &Shared, rpc_id: u64, reply: RpcRepl
             }
             shared
                 .event(
-                    EventBody::Notice {
-                        level: NoticeLevel::Error,
-                        message: error.to_string(),
-                        parent_tool_use_id: None,
-                    },
+                    EventBody::Notice { level: NoticeLevel::Error, message: error.to_string(), subagent: None },
                     Some(raw),
                 )
                 .await;

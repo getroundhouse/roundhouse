@@ -12,7 +12,7 @@ fn prompt() -> EventBody {
 }
 
 fn notice() -> EventBody {
-    EventBody::Notice { level: NoticeLevel::Info, message: "meanwhile".into(), parent_tool_use_id: None }
+    EventBody::Notice { level: NoticeLevel::Info, message: "meanwhile".into(), subagent: None }
 }
 
 /// A log of these bodies, from seq 1, all loaded.
@@ -83,7 +83,7 @@ fn taken(prompt: Seq) -> EventBody {
 fn thought() -> EventBody {
     EventBody::Assistant {
         message_id: None,
-        parent_tool_use_id: None,
+        subagent: None,
         model: None,
         blocks: vec![protocol::event::ContentBlock::Thinking { text: "So".into() }],
         first_index: None,

@@ -36,7 +36,7 @@ enum Tool {
 impl Collaboration {
     pub(super) fn call(&self, shared: &Shared, value: &Value) -> Call {
         let state = shared.state.lock();
-        let targets: Option<Vec<_>> = self.receiver_thread_ids.iter().map(|id| state.subagents.call(id)).collect();
+        let targets: Option<Vec<_>> = self.receiver_thread_ids.iter().map(|id| state.subagents.subagent(id)).collect();
         if let Some(targets) = targets {
             match (&self.tool, targets.as_slice()) {
                 (Tool::Wait, _) => {

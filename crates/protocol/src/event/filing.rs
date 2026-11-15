@@ -1,7 +1,7 @@
 //! How an event is filed: the kind the hub stores it under, and the subagent it's from.
 
 use super::EventBody;
-use crate::model::ToolUseId;
+use crate::model::SubagentId;
 
 impl EventBody {
     /// Stored beside the event, so the hub can find events by kind without parsing the log.
@@ -38,15 +38,15 @@ impl EventBody {
         }
     }
 
-    /// The subagent it's from, as the call that started it, or `None` for the agent's own. Only what the agent and its
-    /// CLI send can come from a subagent, and only these say which.
-    pub fn subagent(&self) -> Option<&ToolUseId> {
+    /// The subagent it's from, or `None` for the agent's own. Only what the agent and its CLI send can come from a
+    /// subagent, and only these say which.
+    pub fn subagent(&self) -> Option<&SubagentId> {
         match self {
-            EventBody::Assistant { parent_tool_use_id, .. }
-            | EventBody::AgentUser { parent_tool_use_id, .. }
-            | EventBody::AgentOther { parent_tool_use_id, .. }
-            | EventBody::RequestFailed { parent_tool_use_id, .. }
-            | EventBody::Notice { parent_tool_use_id, .. } => parent_tool_use_id.as_ref(),
+            EventBody::Assistant { subagent, .. }
+            | EventBody::AgentUser { subagent, .. }
+            | EventBody::AgentOther { subagent, .. }
+            | EventBody::RequestFailed { subagent, .. }
+            | EventBody::Notice { subagent, .. } => subagent.as_ref(),
             EventBody::UserPrompt { .. }
             | EventBody::CompactionAsked { .. }
             | EventBody::PromptTaken { .. }

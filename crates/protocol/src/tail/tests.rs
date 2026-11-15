@@ -2,17 +2,11 @@ use super::*;
 use crate::event::{ExitReason, TaskOutcome};
 
 fn delta(change: DeltaChange) -> StreamDelta {
-    StreamDelta { run: None, message_id: "m1".into(), parent_tool_use_id: None, change }
+    StreamDelta { run: None, message_id: "m1".into(), subagent: None, change }
 }
 
 fn assistant(id: &str) -> EventBody {
-    EventBody::Assistant {
-        message_id: Some(id.into()),
-        parent_tool_use_id: None,
-        model: None,
-        blocks: vec![],
-        first_index: None,
-    }
+    EventBody::Assistant { message_id: Some(id.into()), subagent: None, model: None, blocks: vec![], first_index: None }
 }
 
 #[test]
@@ -43,7 +37,7 @@ fn messages_stay_separate_and_only_the_named_one_is_cleared() {
     tail.apply(&StreamDelta {
         run: None,
         message_id: "sub".into(),
-        parent_tool_use_id: Some("toolu_1".into()),
+        subagent: Some("toolu_1".into()),
         change: DeltaChange::Text { index: 0, text: "sub".into() },
     });
     assert_eq!(tail.messages.len(), 2);
@@ -58,12 +52,7 @@ fn the_tail_of_the_agent_or_a_subagent_is_only_what_that_one_writes() {
     tail.apply(&delta(DeltaChange::Text { index: 0, text: "own".into() }));
     for (message, call) in [("a1", "toolu_a"), ("b1", "toolu_b"), ("a2", "toolu_a")] {
         let change = DeltaChange::Text { index: 0, text: message.into() };
-        tail.apply(&StreamDelta {
-            run: None,
-            message_id: message.into(),
-            parent_tool_use_id: Some(call.into()),
-            change,
-        });
+        tail.apply(&StreamDelta { run: None, message_id: message.into(), subagent: Some(call.into()), change });
     }
     let ids = |tail: Tail| tail.messages.into_iter().map(|m| m.message_id).collect::<Vec<_>>();
     assert_eq!(ids(tail.of(None)), vec!["m1".into()]);
@@ -96,7 +85,7 @@ pub(super) fn started(call: &str, in_background: bool) -> EventBody {
 fn writes(tail: &mut Tail, call: &str, message: &str, text: &str) {
     let change = DeltaChange::Text { index: 0, text: text.into() };
     let run = Some(RunId::new(1));
-    tail.apply(&StreamDelta { run, message_id: message.into(), parent_tool_use_id: Some(call.into()), change });
+    tail.apply(&StreamDelta { run, message_id: message.into(), subagent: Some(call.into()), change });
 }
 
 fn text(tail: &Tail) -> String {
@@ -135,7 +124,7 @@ fn a_subagents_end_clears_what_it_was_writing_and_the_agents_end_clears_the_rest
     writes(&mut tail, "toolu_b", "b", "Going on");
 
     let ended = EventBody::SubagentEnded {
-        call: "toolu_a".into(),
+        subagent: "toolu_a".into(),
         outcome: TaskOutcome::Stopped,
         report: None,
         context_tokens: None,

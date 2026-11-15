@@ -7,7 +7,7 @@ use protocol::prompt::Prompt;
 use protocol::tail::DeltaChange;
 
 fn notice(seq: Seq) -> SessionEvent {
-    event(seq, EventBody::Notice { level: NoticeLevel::Info, message: format!("{seq}"), parent_tool_use_id: None })
+    event(seq, EventBody::Notice { level: NoticeLevel::Info, message: format!("{seq}"), subagent: None })
 }
 
 pub(super) fn page(range: Range<u64>) -> Vec<SessionEvent> {
@@ -16,11 +16,8 @@ pub(super) fn page(range: Range<u64>) -> Vec<SessionEvent> {
 
 /// The events of [`page`], as a hub of another build has them, which a migration rewrote.
 pub(super) fn rewritten(range: Range<u64>) -> Vec<SessionEvent> {
-    let rewrite = |seq| EventBody::Notice {
-        level: NoticeLevel::Info,
-        message: format!("{seq} rewritten"),
-        parent_tool_use_id: None,
-    };
+    let rewrite =
+        |seq| EventBody::Notice { level: NoticeLevel::Info, message: format!("{seq} rewritten"), subagent: None };
     range.map(Seq::new).map(|seq| event(seq, rewrite(seq))).collect()
 }
 
@@ -187,7 +184,7 @@ fn a_request_with_events_after_it_that_arent_loaded_isnt_open() {
     // Its answer could be the event that isn't here.
     log.apply_event(event(
         Seq::new(3),
-        EventBody::Notice { level: NoticeLevel::Info, message: "later".into(), parent_tool_use_id: None },
+        EventBody::Notice { level: NoticeLevel::Info, message: "later".into(), subagent: None },
     ));
 
     assert!(log.open_approvals(None).is_empty());
@@ -199,7 +196,7 @@ fn the_streaming_tail_follows_deltas_and_clears_with_the_finished_message() {
     log.apply_delta(&StreamDelta {
         run: None,
         message_id: "m".into(),
-        parent_tool_use_id: None,
+        subagent: None,
         change: DeltaChange::Text { index: 0, text: "hi".into() },
     });
     assert!(!log.tail().is_empty());
@@ -207,7 +204,7 @@ fn the_streaming_tail_follows_deltas_and_clears_with_the_finished_message() {
         Seq::new(1),
         EventBody::Assistant {
             message_id: Some("m".into()),
-            parent_tool_use_id: None,
+            subagent: None,
             model: None,
             blocks: vec![],
             first_index: None,

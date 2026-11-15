@@ -55,7 +55,7 @@ mod tests {
             exit_code: None,
             denied: None,
         };
-        let mut body = EventBody::AgentUser { parent_tool_use_id: None, blocks: vec![result] };
+        let mut body = EventBody::AgentUser { subagent: None, blocks: vec![result] };
         say(&mut body, &json!({ "type": "user", "tool_result_meta": [meta] }));
         let EventBody::AgentUser { blocks, .. } = body else { return None };
         let [ContentBlock::ToolResult { denied, .. }] = blocks.as_slice() else { return None };
