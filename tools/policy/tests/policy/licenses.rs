@@ -36,13 +36,25 @@ const ALLOWED_UNCHANGED: &[&str] = &["MPL-2.0"];
 /// How `cargo metadata` names crates.io as a package's source.
 const CRATES_IO: &str = "registry+https://github.com/rust-lang/crates.io-index";
 
-/// Someone else's files kept in this repo rather than taken as a crate, as (the folder, its SPDX license, words its
-/// `LICENSE` has to hold). The dependency graph doesn't show them, so the license check can't see them unless they're
+/// Someone else's files kept in this repo, as (the folder, its license's file, its SPDX license expression, words that
+/// file has to hold). Not all of them are crates, so the license check of what ships can't see them all unless they're
 /// listed here.
-const VENDORED: &[(&str, &str, &str)] = &[
+const VENDORED: &[(&str, &str, &str, &[&str])] = &[
     // Catppuccin's icons, manifest and colours, which `tools/file-icons/update.py` writes.
-    ("apps/desktop/file-icons", "MIT", "Permission is hereby granted, free of charge"),
+    ("apps/desktop/file-icons", "LICENSE", "MIT", &["Permission is hereby granted, free of charge"]),
+    // gpui-kit and the crates under it, which `tools/kit-sync` writes. Each crate's manifest says so too.
+    // `crates/component-macros` has a symbolic link to the copy's own `LICENSE-APACHE`, as upstream has it, which
+    // the search for licenses skips, as it skips every link.
+    ("third_party/gpui-kit", "LICENSE-APACHE", "Apache-2.0", APACHE),
+    ("third_party/gpui-kit/crates/base", "LICENSE-APACHE", "Apache-2.0", APACHE),
+    ("third_party/gpui-kit/crates/component", "LICENSE-APACHE", "Apache-2.0", APACHE),
+    // The icons the kit draws, which are Lucide's, but those Lucide took from Feather, which are under MIT.
+    ("third_party/gpui-kit/crates/assets", "LICENSE-LUCIDE", "ISC AND MIT", &["ISC License", "The MIT License"]),
 ];
+
+/// What the kit's Apache license file holds: its notice, then the license's terms.
+const APACHE: &[&str] =
+    &["Licensed under the Apache License, Version 2.0", "TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION"];
 
 /// Whether a package with this SPDX license expression can ship, given where it comes from. `source` is
 /// `None` for a package kept in this repo.
@@ -189,15 +201,16 @@ fn a_license_is_known_by_its_name() {
 fn files_kept_from_elsewhere_ship_with_an_allowed_license() {
     let metadata = workspace();
     let root = Path::new(metadata["workspace_root"].as_str().unwrap());
-    for (dir, license, words) in VENDORED {
-        assert!(ALLOWED.contains(license), "{dir} is under {license}, which can't ship");
-        let text = std::fs::read_to_string(root.join(dir).join("LICENSE")).unwrap_or_default();
-        assert!(text.contains(words), "{dir}/LICENSE isn't the {license} license it's listed as");
+    for (dir, file, license, words) in VENDORED {
+        assert!(may_ship(license, None), "{dir} is under {license}, which can't ship");
+        let text = std::fs::read_to_string(root.join(dir).join(file)).unwrap_or_default();
+        let missing: Vec<_> = words.iter().filter(|words| !text.contains(*words)).collect();
+        assert!(missing.is_empty(), "{dir}/{file} isn't the {license} license it's listed as: no {missing:?}");
     }
     let mut found = Vec::new();
     license_folders(root, root, &mut found);
-    let listed = |dir: &PathBuf| VENDORED.iter().any(|(listed, _, _)| Path::new(listed) == dir);
-    let missed: Vec<_> = VENDORED.iter().filter(|(dir, _, _)| !found.iter().any(|f| Path::new(dir) == f)).collect();
+    let listed = |dir: &PathBuf| VENDORED.iter().any(|(listed, ..)| Path::new(listed) == dir);
+    let missed: Vec<_> = VENDORED.iter().filter(|(dir, ..)| !found.iter().any(|f| Path::new(dir) == f)).collect();
     assert!(missed.is_empty(), "the search for licenses didn't find these, so it isn't looking properly: {missed:?}");
     // The repo's own license, at its root, is the only one that isn't someone else's.
     let unlisted: Vec<_> = found.iter().filter(|dir| !dir.as_os_str().is_empty() && !listed(dir)).collect();

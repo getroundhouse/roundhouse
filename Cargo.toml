@@ -19,6 +19,7 @@ members = [
     "crates/fetching",
     "tools/policy",
     "tools/guide",
+    "tools/kit-sync",
     "tools/spec-page",
     "tools/stand-ins/fake-claude",
     "tools/stand-ins/login-standin",
@@ -44,6 +45,7 @@ default-members = [
     "crates/fetching",
     "tools/policy",
     "tools/guide",
+    "tools/kit-sync",
     "tools/spec-page",
     "tools/stand-ins/fake-claude",
     "tools/stand-ins/login-standin",
@@ -51,8 +53,9 @@ default-members = [
     "tools/stand-ins/recording-adapter",
     "tools/stand-ins/stand-in-hub",
 ]
-# The mobile proof of concept is a standalone project with its own lockfiles and pinned GPUI snapshots.
-exclude = ["mobile-poc"]
+# The mobile proof of concept is a standalone project with its own lockfiles and pinned GPUI snapshots. The copy of
+# gpui-kit is upstream's workspace, cut down, whose crates keep upstream's manifests and lints rather than ours.
+exclude = ["mobile-poc", "third_party/gpui-kit"]
 
 [workspace.package]
 version = "0.1.0"
@@ -74,6 +77,7 @@ look = { path = "crates/look" }
 dictation = { path = "crates/dictation" }
 fetching = { path = "crates/fetching" }
 desktop = { path = "apps/desktop" }
+kit-sync = { path = "tools/kit-sync" }
 
 anyhow = "1.0.104"
 async-trait = "0.1.92"
@@ -91,9 +95,11 @@ fastrand = "2.5.0"
 flume = "0.11.1"
 # Already under GPUI. Compresses what a test serves, as a web server would.
 flate2 = "1.1.11"
-# Exact, because gpui-kit pins exact GPUI snapshots and upgrades should be deliberate.
+# Exact, because gpui-kit pins exact GPUI snapshots and upgrades should be deliberate. On the release of our copy of
+# it, in `third_party/gpui-kit`, which `tools/kit-sync` moves the version here with.
 gpui-kit = { version = "=0.9.0", features = ["syntect"] }
-# Moves with gpui-kit: the version its GPUI uses. Only for drawing off the main thread, which tests run on.
+# Moves with gpui-kit, as `tools/kit-sync` moves it: the version its GPUI uses. Only for drawing off the main thread,
+# which tests run on.
 gpui-pre-apple = { version = "=0.3.11", features = ["font-kit"] }
 # The same as GPUI's, which hands its screenshots back as this crate's images.
 image = { version = "0.25.10", default-features = false }
