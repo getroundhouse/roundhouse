@@ -179,7 +179,9 @@ fn the_data_directory_and_the_log_a_client_makes_are_only_its_users() {
 /// handed is whole, so a relative one still names what it did where the client is.
 #[test]
 fn a_hub_runs_in_its_data_directory_and_is_handed_whole_paths() {
-    let dir = tempfile::tempdir().unwrap();
+    // Under /tmp, since the socket's path is named from here, a `..` for each directory of a checkout however deep, and
+    // has a limit.
+    let dir = tempfile::tempdir_in("/tmp").unwrap();
     // The same directory, named from the one this test runs in.
     let up: PathBuf = std::env::current_dir().unwrap().components().skip(1).map(|_| Component::ParentDir).collect();
     let relative = up.join(dir.path().strip_prefix("/").unwrap());
