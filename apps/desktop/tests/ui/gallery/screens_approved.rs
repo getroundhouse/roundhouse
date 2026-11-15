@@ -150,6 +150,7 @@ fn screens() -> impl Iterator<Item = &'static steps::Screen> {
         .chain(settings_screens::SCREENS)
         .chain(dictation_screens::SCREENS)
         .chain(component_screens::SCREENS)
+        .chain(super::prompt_screens::SCREENS)
 }
 
 /// What's wrong with a picture: its spec doesn't show it, it keeps changing, or it isn't as approved. With
