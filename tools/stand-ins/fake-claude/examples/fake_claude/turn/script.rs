@@ -1,5 +1,6 @@
 use super::prose;
 use crate::tools::{ask_questions, edit_file, present_plan, run_tool};
+use crate::waiting::{WaitingOn, hang, until};
 use crate::{
     Config, Input, Out, Prompt, advisor, asking_subagents, background, cache, current_mode, current_model, emit, fail,
     lifecycle, mcp, pause, read, subagent,
@@ -7,6 +8,7 @@ use crate::{
 use serde_json::{Value, json};
 use std::collections::VecDeque;
 use std::os::unix::process::CommandExt as _;
+use std::path::Path;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::mpsc::Receiver;
 use std::time::Duration;
@@ -66,7 +68,7 @@ impl Turn<'_> {
     pub(crate) fn say(
         &mut self,
         block: Block,
-        chunks: Vec<String>,
+        chunks: impl IntoIterator<Item = String>,
         gap: Duration,
         rx: &Receiver<Input>,
         queued: &mut VecDeque<Prompt>,
@@ -219,27 +221,6 @@ pub(crate) fn run_turn(
     state_event(config, out, "idle");
 }
 
-/// Returns true if the turn was interrupted.
-pub(crate) fn hang(
-    turn: &mut Turn,
-    total_ms: u64,
-    rx: &Receiver<Input>,
-    queued: &mut VecDeque<Prompt>,
-    eof: &mut bool,
-) -> bool {
-    let tool_use_id = turn.tool_use("hang");
-    let mut waited = 0;
-    while waited < total_ms {
-        if pause(rx, Duration::from_millis(50), queued, eof) {
-            turn.tool_result(&tool_use_id, "stopped", true);
-            return true;
-        }
-        waited += 50;
-    }
-    turn.tool_result(&tool_use_id, "finished hanging", false);
-    false
-}
-
 /// What a command that answers in one piece says, if `command` is one.
 fn answer(turn: &Turn, command: &str) -> Option<String> {
     if command == "attached" {
@@ -279,10 +260,19 @@ pub(crate) fn run_command(
         let chunks: Vec<String> = text.chars().collect::<Vec<_>>().chunks(4).map(|c| c.iter().collect()).collect();
         return turn.say(Block::Text, chunks, Duration::ZERO, rx, queued, eof);
     }
+    if let Some(text) = command.strip_prefix("whole:") {
+        return turn.say(Block::Text, [text.to_string()], Duration::ZERO, rx, queued, eof);
+    }
     if let Some(rest) = command.strip_prefix("slow:") {
         let (count, text) = rest.split_once(':').unwrap();
         let chunks = Vec::from_fn(count.parse().unwrap(), |i| format!("{text}{i} "));
         return turn.say(Block::Text, chunks, Duration::from_millis(100), rx, queued, eof);
+    }
+    if let Some(rest) = command.strip_prefix("slow-until:") {
+        return turn.say(Block::Text, until(rest), Duration::from_millis(100), rx, queued, eof);
+    }
+    if let Some(rest) = command.strip_prefix("think-until:") {
+        return turn.say(Block::Thinking, until(rest), Duration::from_millis(100), rx, queued, eof);
     }
     if let Some(rest) = command.strip_prefix("think:") {
         let (count, text) = rest.split_once(':').unwrap();
@@ -328,7 +318,12 @@ fn act(turn: &mut Turn, command: &str, rx: &Receiver<Input>, queued: &mut VecDeq
         return edit_file(turn, size);
     }
     if let Some(ms) = command.strip_prefix("hang:") {
-        return hang(turn, ms.parse().unwrap(), rx, queued, eof);
+        let total = Duration::from_millis(ms.parse().unwrap());
+        return hang(turn, |waited| waited >= total, rx, queued, eof);
+    }
+    if let Some(file) = command.strip_prefix("hang-until:") {
+        let waiting = WaitingOn::file(Path::new(file));
+        return hang(turn, move |_| waiting.made(), rx, queued, eof);
     }
     if let Some(error) = command.strip_prefix("fail:") {
         return fail::request(turn, error);

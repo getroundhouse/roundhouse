@@ -10,6 +10,7 @@ mod daemons;
 mod diff;
 mod drawn;
 mod frozen;
+mod gate;
 mod held;
 mod hover;
 mod hub;
@@ -27,6 +28,7 @@ pub(crate) use click::click;
 pub(crate) use daemons::binaries;
 pub(crate) use diff::Diff;
 pub(crate) use frozen::Frozen;
+pub(crate) use gate::Gate;
 pub(crate) use held::Held;
 pub(crate) use labels::{MENU, click_menu_item, labelled};
 

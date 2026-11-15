@@ -87,9 +87,12 @@ impl Drop for Stack {
 /// has to draw first.
 pub(crate) fn wait_until(what: &str, mut done: impl FnMut() -> bool) {
     let deadline = Instant::now() + TIMEOUT;
+    // Soon at first, since most of what's waited for is a few milliseconds away, and then every 10.
+    let mut pause = Duration::from_millis(1);
     while !done() {
         assert!(Instant::now() < deadline, "timed out waiting for {what}");
-        std::thread::sleep(Duration::from_millis(10));
+        std::thread::sleep(pause);
+        pause = (pause * 2).min(Duration::from_millis(10));
     }
 }
 

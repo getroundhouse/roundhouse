@@ -37,9 +37,11 @@ impl Stack {
         let client = self.client();
         client.session_prompt(chat, script, None).unwrap();
         let deadline = Instant::now() + TIMEOUT;
+        // Often, since a script of replies alone takes the fake agent a few milliseconds, and a long session is built
+        // from dozens of them.
         while client.session_get(chat).unwrap().status != SessionStatus::Idle {
             assert!(Instant::now() < deadline, "the agent never finished {script}");
-            std::thread::sleep(Duration::from_millis(20));
+            std::thread::sleep(Duration::from_millis(5));
         }
     }
 }

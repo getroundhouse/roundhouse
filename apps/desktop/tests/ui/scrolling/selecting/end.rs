@@ -5,10 +5,11 @@ use gpui_kit::{AppContext as _, Entity, TestAppContext};
 use protocol::model::SessionStatus;
 use transcript::Transcript;
 
+use super::kinds::thought;
 use super::{
     LAST, click, copy, everything, on_the_end_of_the_chat, on_the_reply_saying, open, settled, shift_click, tail,
 };
-use crate::support::{Stack, Ui, wait_until};
+use crate::support::{Gate, Stack, Ui, wait_until};
 
 /// Cmd-A while the agent writes a reply selects as far as it's got. What's selected of the reply stays selected once
 /// it's recorded, in its record's row.
@@ -20,7 +21,10 @@ fn what_the_agent_is_writing_is_selected_with_the_rest_and_stays_selected_once_i
     let mut ui = open(cx, &stack);
     let transcript = ui.transcript().unwrap();
     let window = settled(&mut ui, &stack, &session);
-    stack.client().session_prompt(&session, "slow:30:word", None).unwrap();
+    // A reply that goes on until the test has selected some of it.
+    let reply_done = Gate::new(&stack, "reply-done");
+    let writing_slowly = format!("slow-until:{reply_done}:word");
+    stack.client().session_prompt(&session, &writing_slowly, None).unwrap();
     ui.wait("the start of the reply to be drawn", |ui| drawn(ui, &transcript, "word3"));
 
     let on_it = on_the_reply_saying(&ui, window, LAST);
@@ -31,12 +35,13 @@ fn what_the_agent_is_writing_is_selected_with_the_rest_and_stays_selected_once_i
     shift_click(&mut ui, writing);
     let some = copy(&mut ui);
     let unrecorded = still_writing(&ui, &transcript);
+    reply_done.open();
     wait_until("the turn to end", || stack.client().session_get(&session).unwrap().status == SessionStatus::Idle);
-    ui.wait_idle_with("the recorded reply", |text| text.contains("word29"));
+    ui.wait_idle_with("the recorded reply", |text| text.contains("word3"));
     settled(&mut ui, &stack, &session);
     let recorded = copy(&mut ui);
 
-    let start = format!("say:{LAST}\n\n{LAST}\n\nslow:30:word\n\nword0 word1 word2 word3");
+    let start = format!("say:{LAST}\n\n{LAST}\n\n{writing_slowly}\n\nword0 word1 word2 word3");
     assert!(unrecorded, "the reply was still being written, so that's what was selected");
     assert!(all.starts_with(&start), "what it's written so far, after the rest: {:?}", tail(&all));
     let into = some.rsplit("\n\n").next().unwrap();
@@ -56,7 +61,10 @@ fn a_prompt_the_agent_has_not_read_is_copied_after_what_it_s_writing_and_once_it
     let transcript = ui.transcript().unwrap();
     ui.cx.update_entity(&transcript, |t, cx| t.set_thinking_open(true, cx));
     let window = settled(&mut ui, &stack, &session);
-    ui.input("think:30:idea");
+    // A thought that goes on until the test has copied the prompt waiting after it.
+    let thought_done = Gate::new(&stack, "thought-done");
+    let thinking = format!("think-until:{thought_done}:idea");
+    ui.paste_text(&thinking);
     ui.press("enter");
     ui.wait("the thought to be drawn as it's written", |ui| drawn(ui, &transcript, "idea3"));
     let steered = "say:Then the sidings.";
@@ -68,14 +76,18 @@ fn a_prompt_the_agent_has_not_read_is_copied_after_what_it_s_writing_and_once_it
     let waiting = everything(&mut ui, on_it);
     // The agent takes the prompt once it's done thinking.
     let untaken = still_writing(&ui, &transcript);
+    thought_done.open_once_the_agent_has_a_prompt();
     ui.wait_idle_with("the answer", |text| text.contains("Then the sidings."));
     settled(&mut ui, &stack, &session);
     let taken = copy(&mut ui);
 
     assert!(untaken, "the agent was still thinking, so the prompt was waiting");
-    assert!(waiting.contains("\n\nthink:30:idea\n\nidea0 idea1 idea2 idea3"), "the thought: {:?}", tail(&waiting));
+    let started = format!("\n\n{thinking}\n\nidea0 idea1 idea2 idea3");
+    assert!(waiting.contains(&started), "the thought: {:?}", tail(&waiting));
     assert!(waiting.ends_with(&format!("\n\n{steered}")), "then the prompt: {:?}", tail(&waiting));
-    assert!(taken.contains("idea29"), "all of the thought, once it's done: {:?}", tail(&taken));
+    // Drawn, the thought doesn't end with the space it was recorded with.
+    let thought = thought(&ui);
+    assert!(taken.contains(thought.trim_end()), "all of the thought, once it's done: {:?}", tail(&taken));
     assert!(taken.ends_with(&format!("\n\n{steered}")), "then the prompt, where it was taken: {:?}", tail(&taken));
 }
 

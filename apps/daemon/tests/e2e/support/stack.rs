@@ -188,6 +188,8 @@ pub(crate) fn wait_while_progressing<P: PartialEq>(
 ) {
     let mut last = progress();
     let mut deadline = Instant::now() + TIMEOUT;
+    // Soon at first, since most of what's waited for is a few milliseconds away, and then every 20.
+    let mut pause = Duration::from_millis(1);
     while !condition() {
         let now = progress();
         if now != last {
@@ -195,7 +197,8 @@ pub(crate) fn wait_while_progressing<P: PartialEq>(
             deadline = Instant::now() + TIMEOUT;
         }
         assert!(Instant::now() < deadline, "timed out waiting for {what}");
-        std::thread::sleep(Duration::from_millis(20));
+        std::thread::sleep(pause);
+        pause = (pause * 2).min(Duration::from_millis(20));
     }
 }
 
