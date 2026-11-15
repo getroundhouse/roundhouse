@@ -447,13 +447,19 @@ Every call is drawn the same way, as `look.md` says, and each kind fills in what
 
 ## The model and plan mode
 
-- **A workspace can have Claude and Codex chats.** Choose the agent in the new-workspace dialog or from the chat tabs' `+`; a chat keeps the kind it was created with. When only one kind is offered, the tabs' `+` starts its chat directly. The keyboard shortcut starts another of the current chat's kind. *Unconfirmed.*
+- **A workspace can have Claude, Codex and Antigravity chats.** Choose the agent in the new-workspace dialog or from the chat tabs' `+`; a chat keeps the kind it was created with. When only one kind is offered, the tabs' `+` starts its chat directly. The keyboard shortcut starts another of the current chat's kind. *Unconfirmed.*
 - **Codex starts on GPT-6.1 Sol at Low effort, with the worker machine's native Codex sign-in.** Roundhouse leaves those credentials with Codex. Its model, mode and effort changes apply on the next turn. Its completed plan waits for approval even when Codex returns it as ordinary final text, so implementation cannot follow an unapproved plan. *Unconfirmed.*
   ![Choose the agent for a new chat](screens/new-chat-agents.png)
 
 - **The Codex model picker offers the compiled native catalog and each model’s supported efforts, including Ultra where supported.** Switching to a model that cannot use the current effort selects that model’s default. The catalog is a snapshot; refreshing it ships in a Roundhouse update. *Unconfirmed.*
 
   ![Codex models and the selected model’s effort levels](screens/codex-models.png)
+
+- **Antigravity starts on Gemini 4 Carbon at Medium effort, with the worker machine's native Antigravity sign-in.** Roundhouse leaves those credentials with Antigravity. Approval-mode changes apply at once while model and effort changes apply on the next turn, and a completed plan waits for approval before switching to full access. *Unconfirmed.*
+
+- **The Antigravity model picker offers the compiled native Gemini catalog and each model’s supported efforts, including Extra high on Gemini 4 Hydrogen.** Switching to a model that cannot use the current effort selects that model’s default. *Unconfirmed.*
+
+  ![Antigravity models and the selected model’s effort levels](screens/antigravity-models.png)
 
 - **A tool approval offers a written denial only when its run claims that it can take one.** Otherwise the choices are Allow and Deny. *Unconfirmed.*
 - **A secret answer is masked and never kept in shared drafts or the chat log.** It goes to the agent only when submitted. A question that forbids typed answers offers only its choices. *Unconfirmed.*
@@ -496,7 +502,7 @@ Every call is drawn the same way, as `look.md` says, and each kind fills in what
 
 ## The context and the account
 
-- **An agent reports only what its adapter can establish.** Codex does not supply context, cache, token, cost or account-limit reports through this adapter, and their indicators stay absent. *Unconfirmed.*
+- **An agent reports only what its adapter can establish.** Codex does not supply context, cache, token, cost or account-limit reports through this adapter, and Antigravity supplies context window usage and per-turn token counts without prompt-cache, cost or account-limit reports; indicators an agent does not supply stay absent. *Unconfirmed.*
 
 - **A ring beside Send shows how full the agent's context is,** filled clockwise from the top. It shows once the agent has said, so a new chat has none until its first turn starts. It follows the agent as it works: the agent says when a turn starts, a few times a minute during one, and when it ends. It's in muted text's colour however full it is, since amber and red already mean something, and it doesn't move by itself, since only a working agent moves anything. *Unconfirmed.*
 - **Resting the pointer on the ring shows a card above it,** with its right edge on the edge of the ring's place in the bar, so it covers neither the ring nor Send. It goes a third of a second after the pointer leaves, so the pointer can cross to its button. *Unconfirmed.*

@@ -147,3 +147,14 @@ fn every_control_a_run_of_this_build_claims_keeps_its_form() {
         assert_eq!(serde_json::from_value::<WorkerRequest>(sent).unwrap(), request, "{form}");
     }
 }
+
+#[test]
+fn classifier_approval_mode_keeps_its_form() {
+    use protocol::capability::approvals::{ApprovalMode, Beyond, Unasked};
+
+    let classifier = ApprovalMode { unasked: Unasked::Reads, beyond: Beyond::Classifier, sandbox: None, plan: false };
+    assert!(classifier.is_known());
+    let wire = serde_json::to_value(classifier).unwrap();
+    assert_eq!(wire, json!({"unasked":"reads","beyond":"classifier"}));
+    assert_eq!(serde_json::from_value::<ApprovalMode>(wire).unwrap(), classifier);
+}

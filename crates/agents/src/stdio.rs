@@ -1,10 +1,18 @@
 use std::collections::VecDeque;
+use std::path::PathBuf;
 use std::process::ExitStatus;
+use std::time::Duration;
+
+use serde_json::Value;
 use tokio::io::{AsyncBufRead, AsyncBufReadExt, BufReader};
-use tokio::process::ChildStderr;
+use tokio::process::{ChildStderr, ChildStdout};
+use tokio::sync::mpsc;
+use tokio::task::JoinHandle;
 use tracing::warn;
 
 const STDERR_TAIL_LINES: usize = 20;
+/// A descendant may keep its parent's pipes open after the CLI exits.
+const DRAIN_GRACE: Duration = Duration::from_secs(5);
 
 /// Reads bytes rather than text: one line of invalid UTF-8 mustn't end the whole stream, which would
 /// leave the agent blocked and the session stuck.
@@ -20,6 +28,34 @@ pub(crate) async fn next_line<R: AsyncBufRead + Unpin>(reader: &mut R, buffer: &
     }
 }
 
+pub(crate) async fn read_json_lines(
+    stdout: ChildStdout,
+    tap: Option<crate::tap::Tap>,
+    notifications: mpsc::Sender<(Value, String)>,
+) {
+    let mut reader = BufReader::new(stdout);
+    let mut buffer = Vec::new();
+    while let Some(raw) = next_line(&mut reader, &mut buffer).await {
+        if let Some(tap) = &tap {
+            tap.read(&raw);
+        }
+        let Ok(value) = serde_json::from_str::<Value>(&raw) else { continue };
+        if notifications.send((value, raw)).await.is_err() {
+            break;
+        }
+    }
+}
+
+pub(crate) async fn drain<T>(mut task: JoinHandle<T>) -> Option<T> {
+    if let Ok(result) = tokio::time::timeout(DRAIN_GRACE, &mut task).await {
+        result.ok()
+    } else {
+        task.abort();
+        let _ = task.await;
+        None
+    }
+}
+
 pub(crate) async fn read_stderr(stderr: ChildStderr) -> Vec<String> {
     let mut reader = BufReader::new(stderr);
     let mut buffer = Vec::new();
@@ -31,6 +67,40 @@ pub(crate) async fn read_stderr(stderr: ChildStderr) -> Vec<String> {
         tail.push_back(line);
     }
     tail.into()
+}
+
+/// A one-off CLI call recorded at `pid_file` so the provider can stop it if the worker is killed. Unless marked
+/// finished, dropping this guard kills the whole process group.
+pub(crate) struct GroupGuard {
+    pid: u32,
+    pid_file: Option<PathBuf>,
+    finished: bool,
+}
+
+impl GroupGuard {
+    pub(crate) fn new(pid: u32, pid_file: Option<PathBuf>) -> Self {
+        if let Some(path) = &pid_file
+            && let Err(error) = process::ProcessRecord::write(path, pid)
+        {
+            warn!("could not record {pid} in {}: {error}", path.display());
+        }
+        Self { pid, pid_file, finished: false }
+    }
+
+    pub(crate) fn finished(mut self) {
+        self.finished = true;
+    }
+}
+
+impl Drop for GroupGuard {
+    fn drop(&mut self) {
+        if !self.finished {
+            process::signal_group(self.pid, process::Signal::Kill);
+        }
+        if let Some(path) = &self.pid_file {
+            let _ = std::fs::remove_file(path);
+        }
+    }
 }
 
 #[cfg(unix)]

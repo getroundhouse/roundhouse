@@ -68,5 +68,6 @@ mod tests {
     fn only_a_kind_that_hears_how_a_call_left_in_the_background_ended_can_wait() {
         assert!(can_wait(AgentKind::Claude), "Claude's CLI runs a wait as an MCP task");
         assert!(!can_wait(AgentKind::Codex), "Codex's speaks a version of MCP without tasks");
+        assert!(!can_wait(AgentKind::Antigravity), "Antigravity's CLI does not negotiate MCP tasks");
     }
 }

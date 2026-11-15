@@ -144,7 +144,7 @@ pub(super) async fn transport(
 ) -> Result<Arc<CodexProcess>, AgentError> {
     let launched = launch::launch(bin, cwd, env, options)?;
     let shared = Arc::new(Shared {
-        rpc: Rpc::new(launched.stdin, tap.clone()),
+        rpc: Rpc::new(launched.stdin, super::rpc::Dialect::Bare, "Codex", tap.clone()),
         state: Mutex::new(Conversation::new(settings)),
         controls: tokio::sync::Mutex::new(()),
         pid: launched.pid,

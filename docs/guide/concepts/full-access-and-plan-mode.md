@@ -30,6 +30,6 @@ An agent with full access can still ask you something, when it needs a decision 
 
 Claude also asks about what its CLI won't do unasked in any mode. It asks before a command that removes something it can't check, such as an `rm -rf` whose target is only known once the command runs, and says why. One of its subagents' commands is asked about the same way.
 
-To have these Claude commands run without asking, turn on **Skip Claude's safety checks** in [Settings](../reference/settings.md). The hub then allows each one as it's asked, so the chat never waits, whether or not the app is open. It's off to start with, since what Claude asks about is what it couldn't rule out doing harm. Plan mode still asks, and so do questions. Codex runs with full access by default; in plan mode it uses a read-only sandbox and its finished plan waits for your approval.
+To have these Claude commands run without asking, turn on **Skip Claude's safety checks** in [Settings](../reference/settings.md). The hub then allows each one as it's asked, so the chat never waits, whether or not the app is open. It's off to start with, since what Claude asks about is what it couldn't rule out doing harm. Plan mode still asks, and so do questions. Codex and Antigravity run with full access by default; in plan mode Codex uses a read-only sandbox while Antigravity asks before changing files or running commands, and each holds its finished plan for your approval.
 
 [Answer its questions](../guides/answer-its-questions.md) says how to answer each.

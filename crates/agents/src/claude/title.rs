@@ -107,7 +107,7 @@ fn title_from_output(stdout: &[u8]) -> Result<Title, NoTitle> {
     if value["is_error"].as_bool() != Some(false) {
         return Err(NoTitle::Reported(reason(&value).unwrap_or_else(|| "an error".to_string())));
     }
-    tidy(value["result"].as_str().unwrap_or_default()).ok_or(NoTitle::Empty)
+    crate::title::tidy(value["result"].as_str().unwrap_or_default()).ok_or(NoTitle::Empty)
 }
 
 /// The line that ends the call, with its answer, or how it failed. The CLI prints a line or two after it.
@@ -123,16 +123,6 @@ fn reason(value: &Value) -> Option<String> {
     result.or_else(|| value["subtype"].as_str()).map(str::to_string)
 }
 
-/// The first line, without the markup, label, quotes or full stop a model sometimes adds anyway.
-fn tidy(answer: &str) -> Option<Title> {
-    let line = answer.lines().map(str::trim).find(|line| !line.is_empty())?;
-    let plain: String = line.trim_start_matches('#').chars().filter(|c| !matches!(c, '*' | '`')).collect();
-    let plain = plain.trim();
-    let plain = plain.trim_prefix("Title:");
-    let plain = plain.trim_matches(|c: char| matches!(c, '"' | '\'' | '“' | '”' | '‘' | '’') || c.is_whitespace());
-    Title::from_first_line(plain.trim_suffix('.'))
-}
-
 #[cfg(test)]
 mod tests {
     use protocol::attachment::{Attachment, AttachmentBytes, MediaType};
@@ -141,7 +131,7 @@ mod tests {
     use super::*;
 
     fn tidied(answer: &str) -> Option<String> {
-        tidy(answer).map(|title| title.to_string())
+        crate::title::tidy(answer).map(|title| title.to_string())
     }
 
     #[test]

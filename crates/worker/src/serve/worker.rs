@@ -54,6 +54,7 @@ pub struct Config {
     /// An agent CLI to use without searching.
     pub claude_bin: Option<PathBuf>,
     pub codex_bin: Option<PathBuf>,
+    pub antigravity_bin: Option<PathBuf>,
     /// Where a one-off call to an agent runs, each in an empty directory of its own. The system's temporary
     /// directory suits, since no project's instructions are above it.
     pub scratch_dir: PathBuf,

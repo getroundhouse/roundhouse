@@ -86,8 +86,10 @@ fn main() -> anyhow::Result<()> {
         .with_ansi(false)
         .init();
     let args = Args::parse();
-    let codex_bin = std::env::var_os("ROUNDHOUSE_CODEX_BIN").filter(|bin| !bin.is_empty()).map(PathBuf::from);
+    let codex_bin = std::env::var_os(worker::ENV_CODEX_BIN).filter(|bin| !bin.is_empty()).map(PathBuf::from);
     let claude_bin = std::env::var_os(worker::ENV_CLAUDE_BIN).filter(|bin| !bin.is_empty()).map(PathBuf::from);
+    let antigravity_bin =
+        std::env::var_os(worker::ENV_ANTIGRAVITY_BIN).filter(|bin| !bin.is_empty()).map(PathBuf::from);
     // Before the hub's variables are forgotten, since a test gives its workers their timers beside its hub's own. A
     // build without `testing`, as the product's is, takes the defaults whatever the environment says.
     let worker_timers = worker::Timers::from_env(|name| std::env::var(name).ok());
@@ -135,6 +137,7 @@ fn main() -> anyhow::Result<()> {
                     state_dir,
                     claude_bin,
                     codex_bin,
+                    antigravity_bin,
                     timers: worker_timers,
                 },
             )

@@ -47,6 +47,7 @@ impl Listening {
             path: None,
             claude_bin: Some(cli),
             codex_bin: None,
+            antigravity_bin: None,
             scratch_dir: dir.path().to_path_buf(),
             deleter: Deleter::new("/bin/rm", ["-rf", "--"]),
             refused: None,

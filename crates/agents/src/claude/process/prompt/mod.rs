@@ -20,6 +20,6 @@ mod tests;
 
 mod message;
 #[cfg(test)]
-use message::INLINE_IMAGE_BYTES;
+use crate::attachments::INLINE_IMAGE_BYTES;
 pub(super) use message::user_message;
 pub(in crate::claude) use message::{image_block, user_line_saying};

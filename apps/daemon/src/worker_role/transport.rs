@@ -22,6 +22,7 @@ pub(crate) struct Given {
     pub state_dir: PathBuf,
     pub claude_bin: Option<PathBuf>,
     pub codex_bin: Option<PathBuf>,
+    pub antigravity_bin: Option<PathBuf>,
     pub timers: worker::Timers,
 }
 
@@ -55,6 +56,7 @@ pub(super) fn config(given: Given, refused: Option<String>) -> anyhow::Result<wo
         path: std::env::var_os("PATH"),
         claude_bin: given.claude_bin,
         codex_bin: given.codex_bin,
+        antigravity_bin: given.antigravity_bin,
         scratch_dir: std::env::temp_dir(),
         deleter: worker::Deleter::new(exe, ["delete", "--"]),
         refused,

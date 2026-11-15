@@ -1,4 +1,4 @@
-use crate::{AgentError, AgentOptions, AgentOutput, AgentProcess, claude, codex};
+use crate::{AgentError, AgentOptions, AgentOutput, AgentProcess, antigravity, claude, codex};
 use protocol::attachment::NewAttachment;
 use protocol::model::{AgentAccount, AgentDescription, AgentKind, NotOffered, SessionSettings, Title};
 use protocol::prompt::Prompt;
@@ -10,7 +10,7 @@ use tokio::sync::mpsc;
 /// What each kind of agent this build runs is called and offers, as its adapter describes it, for the hub to give each
 /// chat what its agent starts with and to tell clients what to offer.
 pub fn descriptions() -> Vec<AgentDescription> {
-    vec![claude::description(), codex::description()]
+    vec![claude::description(), codex::description(), antigravity::description()]
 }
 
 pub async fn spawn(
@@ -26,6 +26,7 @@ pub async fn spawn(
     match spec.agent {
         AgentKind::Claude => claude::spawn(spec, output, options).await,
         AgentKind::Codex => codex::spawn(spec, output, options).await,
+        AgentKind::Antigravity => antigravity::spawn(spec, output, options).await,
         AgentKind::Unknown => Err(AgentError::UnknownKind),
     }
 }
@@ -48,6 +49,7 @@ pub async fn account(kind: AgentKind, options: &AgentOptions, scratch_dir: &Path
     match kind {
         AgentKind::Claude => claude::account(options, scratch_dir).await,
         AgentKind::Codex => codex::account(options, scratch_dir).await,
+        AgentKind::Antigravity => antigravity::account(options, scratch_dir).await,
         AgentKind::Unknown => Err(AgentError::UnknownKind),
     }
 }
@@ -63,6 +65,7 @@ pub async fn title_for(
     match kind {
         AgentKind::Claude => claude::title_for(prompt, options, scratch_dir).await,
         AgentKind::Codex => codex::title_for(prompt, options, scratch_dir).await,
+        AgentKind::Antigravity => antigravity::title_for(prompt, options, scratch_dir).await,
         AgentKind::Unknown => Err(AgentError::UnknownKind),
     }
 }

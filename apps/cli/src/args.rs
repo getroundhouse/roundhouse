@@ -217,8 +217,8 @@ fn effort() -> impl TypedValueParser<Value = Effort> {
 }
 
 fn agent_kind() -> impl TypedValueParser<Value = AgentKind> {
-    PossibleValuesParser::new(["claude", "codex"])
-        .map(|name| if name == "codex" { AgentKind::Codex } else { AgentKind::Claude })
+    PossibleValuesParser::new(AgentKind::ALL.map(AgentKind::as_str))
+        .try_map(|name| AgentKind::parse(&name).ok_or("not an agent kind"))
 }
 
 #[cfg(test)]
@@ -237,5 +237,14 @@ mod tests {
 
         assert_eq!(from(&["roundhouse", "attach", "s", "--from", &printed]), Seq::new(7));
         assert_eq!(from(&["roundhouse", "attach", "s"]), Seq::FIRST);
+    }
+
+    #[test]
+    fn session_new_accepts_every_known_agent_kind() {
+        for kind in AgentKind::ALL {
+            let parsed = Args::try_parse_from(["roundhouse", "session", "new", "w", "--agent", kind.as_str()]).unwrap();
+            let Cmd::Session(SessionCmd::New { agent, .. }) = parsed.command else { panic!("not session new") };
+            assert_eq!(agent, Some(kind));
+        }
     }
 }

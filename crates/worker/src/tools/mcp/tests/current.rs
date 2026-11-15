@@ -83,7 +83,12 @@ async fn discovering_says_which_version_it_speaks_and_that_it_has_tools() {
 async fn the_tools_listed_are_the_ones_it_answers() {
     let (asks, _) = asks();
 
-    let answer = answered(&asks, &headers("tools/list", None), &request("tools/list", &json!({}))).await;
+    let answer = answered(&asks, &headers("tools/list", None), &offering_tasks("tools/list", &json!({}))).await;
+    let without_tasks = answered(&asks, &headers("tools/list", None), &request("tools/list", &json!({}))).await;
+    let discover_with =
+        answered(&asks, &headers("server/discover", None), &offering_tasks("server/discover", &json!({}))).await;
+    let discover_without =
+        answered(&asks, &headers("server/discover", None), &request("server/discover", &json!({}))).await;
 
     let tools = answer.to_json()["result"]["tools"].clone();
     assert_eq!(tools.as_array().map(Vec::len), Some(2));
@@ -92,6 +97,12 @@ async fn the_tools_listed_are_the_ones_it_answers() {
         assert!(Tool::named(name).is_some(), "{name} is answered");
         assert_eq!(tool["annotations"]["readOnlyHint"], true);
     }
+    let read_only = without_tasks.to_json()["result"]["tools"].clone();
+    assert_eq!(read_only.as_array().map(Vec::len), Some(1));
+    assert_eq!(read_only[0]["name"], pull_requests::READ);
+    assert!(!read_only[0]["description"].as_str().unwrap_or_default().contains(pull_requests::WAIT));
+    assert!(discover_with.to_json()["result"]["instructions"].as_str().unwrap_or_default().contains("waiting"));
+    assert!(!discover_without.to_json()["result"]["instructions"].as_str().unwrap_or_default().contains("waiting"));
 }
 
 #[tokio::test]

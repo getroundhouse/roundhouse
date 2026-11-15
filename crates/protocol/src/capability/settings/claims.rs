@@ -10,10 +10,12 @@ area! { "a chat's settings";
     /// The models [`Models::offered`] lists can be chosen, each saying what it takes, and a model named by its full ID
     /// can be too, which the agent says whether it knows. Every chat names a model, so this is only what's offered.
     Models => models: Models,
-    /// The models are found by asking the agent, since they depend on its account, its model providers and its
-    /// project's configuration, as opencode's do, rather than built into the adapter. The hub asks the chat's agent,
-    /// and keeps the answer on the session's record, in place of the kind's list for that chat, so a model added to
-    /// the account or the project shows without a new build.
+    /// The models come from the agent at runtime, since they depend on its account, its model providers and its
+    /// project's configuration, as opencode's and Antigravity's do, rather than being built into the adapter alone. The
+    /// agent reports [`Report::Models`](crate::capability::Report::Models) when a session starts or its offered models
+    /// change, and in reply to [`Control::ListModels`](crate::capability::Control::ListModels), and the hub keeps the
+    /// newest list on the session's record in place of the kind's list for that chat, so a model added to the account
+    /// or the project shows without a new build.
     DiscoveredModels => discovered_models: Claimed,
     /// How hard the model thinks can be chosen, from the efforts each model offers.
     Effort => effort: Claimed,

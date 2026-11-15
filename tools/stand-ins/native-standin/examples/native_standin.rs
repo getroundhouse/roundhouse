@@ -4,15 +4,27 @@
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::io::{BufRead as _, Write as _};
+use std::path::Path;
 
 fn main() {
-    if std::env::args().any(|arg| arg == "--descendant") {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.iter().any(|arg| arg == "--descendant") {
         hold();
     }
-    let rules: Vec<Value> = serde_json::from_slice(&std::fs::read("native-script.json").unwrap()).unwrap();
+    if args.first().map(String::as_str) == Some("models") {
+        run_models();
+    }
+    let (script_bytes, root) = if let Ok(bytes) = std::fs::read("native-script.json") {
+        (bytes, Path::new("."))
+    } else {
+        (std::fs::read("../native-script.json").unwrap(), Path::new(".."))
+    };
+    record_line(root, &json!({ "launch_args": args }));
+    let rules: Vec<Value> = serde_json::from_slice(&script_bytes).unwrap();
     let mut calls: HashMap<String, u64> = HashMap::new();
     for line in std::io::stdin().lock().lines() {
         let request: Value = serde_json::from_str(&line.unwrap()).unwrap();
+        record_line(root, &request);
         say(&json!({"method":"test/request","params":request}));
         let method = request["method"].as_str().unwrap_or_default();
         let count = calls.entry(method.to_owned()).or_default();
@@ -25,14 +37,74 @@ fn main() {
             }
         } else {
             match method {
-                "initialize" => say(&json!({"id":request["id"],"result":{}})),
+                "initialize" | "session/close" | "session/set_mode" | "session/set_config_option" => {
+                    say(&json!({"id":request["id"],"result":{}}));
+                }
                 "thread/start" => {
                     say(&json!({"id":request["id"],"result":{"thread":{"id":"thread"},"model":"gpt-6-luna"}}));
+                }
+                "session/new" | "session/resume" => {
+                    say(&json!({
+                        "id": request["id"],
+                        "result": {
+                            "sessionId": "session-1",
+                            "configOptions": [{
+                                "id": "thought_level",
+                                "currentValue": "medium",
+                                "options": [
+                                    {"value": "low", "name": "Low"},
+                                    {"value": "medium", "name": "Medium"},
+                                    {"value": "high", "name": "High"},
+                                    {"value": "xhigh", "name": "Extra High"}
+                                ]
+                            }]
+                        }
+                    }));
                 }
                 _ => {}
             }
         }
     }
+}
+
+fn run_models() -> ! {
+    let (bytes, root) = if let Ok(bytes) = std::fs::read("native-models.json") {
+        (bytes, Path::new("."))
+    } else {
+        (std::fs::read("../native-models.json").unwrap(), Path::new(".."))
+    };
+    let spec: Value = serde_json::from_slice(&bytes).unwrap();
+    if spec["descendant"].as_bool() == Some(true) {
+        #[expect(
+            clippy::zombie_processes,
+            reason = "the test kills this process and its deliberately live descendant together"
+        )]
+        let child = std::process::Command::new(std::env::current_exe().unwrap())
+            .arg("--descendant")
+            .stdin(std::process::Stdio::null())
+            .spawn()
+            .unwrap();
+        std::fs::write(root.join("descendant"), child.id().to_string()).unwrap();
+    }
+    if spec["hold"].as_bool() == Some(true) {
+        std::fs::write(root.join("models-ready"), "ready").unwrap();
+        hold();
+    }
+    if let Some(stdout) = spec["stdout"].as_str() {
+        print!("{stdout}");
+        std::io::stdout().flush().unwrap();
+    }
+    if let Some(stderr) = spec["stderr"].as_str() {
+        eprint!("{stderr}");
+        std::io::stderr().flush().unwrap();
+    }
+    std::process::exit(i32::try_from(spec["exit"].as_i64().unwrap_or(0)).unwrap());
+}
+
+fn record_line(root: &Path, value: &Value) {
+    let mut file =
+        std::fs::OpenOptions::new().create(true).append(true).open(root.join("native-requests.jsonl")).unwrap();
+    writeln!(file, "{value}").unwrap();
 }
 
 fn act(action: &Value, request: &Value) {
@@ -58,7 +130,7 @@ fn act(action: &Value, request: &Value) {
         Some(other) => panic!("unknown script action {other}"),
         None => {
             let mut output = action.clone();
-            if output.get("method").is_none() {
+            if output.get("method").is_none() && output.get("id").is_none() {
                 output["id"] = request["id"].clone();
             }
             say(&output);

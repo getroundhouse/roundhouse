@@ -42,9 +42,9 @@ An ordinary answered question is a line in the chat where the agent asked it: `A
 
 ## Approvals
 
-An agent in plan mode asks before a tool needs permission. An agent with full access asks only about what its own CLI won't do unasked in any mode, such as a command that removes something it can't check, and Claude can allow those automatically with **Skip Claude's safety checks** on in [Settings](../settings.md). Codex's plan mode uses a read-only sandbox, and its completed plan waits for approval before implementation.
+An agent in plan mode asks before a tool needs permission. An agent with full access asks only about what its own CLI won't do unasked in any mode, such as a command that removes something it can't check, and Claude can allow those automatically with **Skip Claude's safety checks** on in [Settings](../settings.md). Codex's plan mode uses a read-only sandbox, Antigravity's asks before edits and commands, and both hold a completed plan for approval before implementation.
 
-Codex offers Allow and Deny for tool approvals, without a field for a written denial.
+Codex and Antigravity offer Allow and Deny for tool approvals, without a field for a written denial.
 
 Either way, the request takes the composer's place, as a question does, and is answered by the same keys.
 

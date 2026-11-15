@@ -42,7 +42,7 @@ On Windows and Linux no sound plays.
 
 ## Accounts
 
-The logins your agents run under: native logins found where agents ran, and Claude logins you've given the hub. Codex uses `codex login` on the worker's machine. Its credentials stay with Codex; this page doesn't add or move them.
+The logins your agents run under: native logins found where agents ran, and Claude logins you've given the hub. Codex uses `codex login` and Antigravity uses `agy` on the worker's machine. Their credentials stay with their CLIs; this page doesn't add or move them.
 
 ![Accounts, with Claude Code's own login and four you've added](../../spec/screens/settings-accounts.png)
 

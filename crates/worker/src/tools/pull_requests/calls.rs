@@ -7,7 +7,15 @@ use std::time::Duration;
 pub(in crate::tools) const READ: &str = "get_pull_requests";
 pub(in crate::tools) const WAIT: &str = protocol::worker::WAITS_TOOL;
 
-pub(in crate::tools) fn definition(wait: bool) -> Value {
+pub(in crate::tools) fn definitions(takes_tasks: bool) -> Vec<Value> {
+    let mut tools = vec![definition(false, takes_tasks)];
+    if takes_tasks {
+        tools.push(definition(true, true));
+    }
+    tools
+}
+
+fn definition(wait: bool, takes_tasks: bool) -> Value {
     let mut properties = json!({ "pull_requests": {
         "type": "array", "items": { "type": "integer", "minimum": 1, "maximum": 2_147_483_647 },
         "minItems": 1, "uniqueItems": true,
@@ -26,8 +34,10 @@ pub(in crate::tools) fn definition(wait: bool) -> Value {
         "title": if wait { "Wait on pull requests" } else { "Get pull requests" },
         "description": if wait {
             "Waits on explicit pull requests and their open lower stack dependencies. Returns a background task and says which PRs it watches. All must reach the condition; one conflict, required rebase, relevant failed check, new change request, closure without merging, or queue rejection ends the wait early. Follows new pushed revisions without switching branches. A changed dependency set ends as stack_changed. You may end your turn. Use this instead of polling GitHub or sleeping. Each call is independent: it does not replace another wait. It never rebases, pushes, queues or merges anything."
-        } else {
+        } else if takes_tasks {
             "Reads explicit pull requests and their open lower GitHub stack dependencies, using this workspace's repository and credentials. Returns current revisions, checks and effective requirements, mergeability, queue and review state, and the time read. Uses the same scope as wait_for_pull_requests. Does not switch branches. A PR in the queue has not yet merged. Use the wait tool instead of repeatedly reading."
+        } else {
+            "Reads explicit pull requests and their open lower GitHub stack dependencies, using this workspace's repository and credentials. Returns current revisions, checks and effective requirements, mergeability, queue and review state, and the time read. Does not switch branches. A PR in the queue has not yet merged."
         },
         "inputSchema": { "type": "object", "properties": properties, "required": required, "additionalProperties": false },
         "annotations": { "readOnlyHint": true, "openWorldHint": true }

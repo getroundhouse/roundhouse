@@ -11,17 +11,26 @@ use serde::{Deserialize, Serialize};
 pub enum AgentKind {
     Claude,
     Codex,
+    Antigravity,
     #[serde(other)]
     Unknown,
 }
 
 impl AgentKind {
+    /// Every known kind, in the order they're offered.
+    pub const ALL: [AgentKind; 3] = [AgentKind::Claude, AgentKind::Codex, AgentKind::Antigravity];
+
     pub fn as_str(self) -> &'static str {
         match self {
             AgentKind::Claude => "claude",
             AgentKind::Codex => "codex",
+            AgentKind::Antigravity => "antigravity",
             AgentKind::Unknown => "unknown",
         }
+    }
+
+    pub fn parse(name: &str) -> Option<AgentKind> {
+        Self::ALL.into_iter().find(|kind| kind.as_str() == name)
     }
 }
 

@@ -21,7 +21,7 @@ mod timers;
 mod tools;
 mod worktree_file;
 
-pub use agents::ENV_CLAUDE_BIN;
+pub use agents::{ENV_ANTIGRAVITY_BIN, ENV_CLAUDE_BIN, ENV_CODEX_BIN};
 #[cfg(unix)]
 pub use attach::attach;
 pub use claim::{ClaimError, InstanceClaim, claim_instance};

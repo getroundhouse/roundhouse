@@ -47,8 +47,8 @@ Two environment variables move them, for a hub started with them set:
 ## What leaves your machine
 
 - **The app's check for updates,** which is its only request of its own.
-- **What your agent sends,** to its model provider, through the Claude or Codex CLI under its login. Codex keeps its native sign-in and conversation files in its own data directory.
-- **Your prompts' words and their first images, to write a title,** in a separate call through that chat’s CLI and login: Haiku for Claude, Luna at Low effort for Codex.
+- **What your agent sends,** to its model provider, through the Claude, Codex or Antigravity CLI under its login. Codex and Antigravity keep their native sign-ins and conversation files in their own data directories.
+- **Your prompts' words and their first images, to write a title,** in a separate call through that chat’s CLI and login: Haiku for Claude, Luna at Low effort for Codex, and Gemini 3.8 Flash at Low effort for Antigravity.
 - **What `git` and `gh` send,** to your remotes and to GitHub, as you.
 
 ## Going back a version

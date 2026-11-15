@@ -31,6 +31,19 @@ pub(super) const SCREENS: &[Screen] = &[
         ],
     },
     Screen {
+        name: "antigravity-models",
+        spec: "chats.md",
+        world: Some(offered),
+        frame: Frame::Dialog,
+        steps: &[
+            Step::Select(FOCUS),
+            Step::Click("new-in-repo-1"),
+            Step::Click("new-workspace-agent"),
+            Step::ClickItem("Antigravity"),
+            Step::Click("new-workspace-model"),
+        ],
+    },
+    Screen {
         name: "new-chat-agents",
         spec: "chats.md",
         world: Some(offered),

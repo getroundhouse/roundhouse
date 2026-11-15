@@ -276,8 +276,5 @@ pub(super) async fn unsupported(shared: &Shared, id: &Value, method: &str) -> Re
             None,
         )
         .await;
-    shared
-        .rpc
-        .write(&json!({"id":id,"error":{"code":-32601,"message":"Roundhouse does not support this request"}}))
-        .await
+    shared.rpc.refuse(id.clone(), "Roundhouse does not support this request").await
 }
