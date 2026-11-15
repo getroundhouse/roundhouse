@@ -120,6 +120,24 @@ impl Account {
     }
 }
 
+/// Where the login a chat's agent runs under comes from, as [`Session::account_source`] says.
+///
+/// [`Session::account_source`]: super::Session::account_source
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AccountSource {
+    /// The agent's CLI's own credentials, from the environment of the machine it runs on, such as a login the person
+    /// made there. The hub hands it none, and learns whose it is only from the worker, after each launch.
+    Ambient,
+    /// The login the hub holds for an account a person added, which [`Session::account`] names.
+    ///
+    /// [`Session::account`]: super::Session::account
+    Hub,
+    /// One from a newer peer.
+    #[serde(other)]
+    Unknown,
+}
+
 /// A login the hub holds for an account, as it hands it to a worker for an agent or a one-off call to run under, so the
 /// worker's machine needs no login of its own. The hub gives one only to a worker, which keeps it only while the agent
 /// or the call it came with runs. No provider's adapter is given one, though one that carries a worker's stream itself

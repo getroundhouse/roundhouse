@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use protocol::model::{AgentAccount, AgentKind, CacheTtl, PromptCache};
+use protocol::model::{AccountSource, AgentAccount, AgentKind, CacheTtl, PromptCache};
 
 use super::launch_rows::Recorded;
 use super::*;
@@ -144,12 +144,16 @@ fn a_chats_first_launch_under_a_held_login_puts_it_on_that_account_and_a_later_o
     let after = store.get_session(&s).unwrap().session;
     let later = store.record_run_login(&s, RunId::new(2), &"other".into()).unwrap();
 
-    assert_eq!(before.assigned_account, None);
+    assert_eq!((before.assigned_account, before.account_source), (None, None));
     assert_eq!(first, Recorded { before: None, on: Some("given".into()) });
     assert_eq!(after.assigned_account, Some("given".into()));
+    assert_eq!(after.account_source, None, "not on the hub's until its record names the account");
     assert!(after.rev > before.rev);
     assert_eq!(later, Recorded { before: None, on: Some("given".into()) });
     assert_eq!(store.get_session(&s).unwrap().session.rev, after.rev, "nothing about it changed");
+    store.file_run_login(&s, RunId::new(1)).unwrap();
+    let filed = store.get_session(&s).unwrap().session;
+    assert_eq!(filed.account_source, Some(AccountSource::Hub), "on the hub's once its record names the account");
 }
 
 /// Moving a chat puts it on the account, has its record name it, and forgets what was cached when the record named

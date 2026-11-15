@@ -5,8 +5,9 @@ use super::super::{
     Store, StoreError, StoredSession, current_rev, from_text, json_at, lock, rev_of, seq_column, seq_of, text_of,
 };
 use protocol::model::{
-    Account, AccountId, AgentKind, AttachmentId, ClientRequestId, ContextUsage, Draft, ModelName, PromptCache,
-    QueuedPrompt, Rev, RunId, Session, SessionId, SessionSettingsChange, SessionStatus, Title, Wait, WorkspaceId,
+    Account, AccountId, AccountSource, AgentKind, AttachmentId, ClientRequestId, ContextUsage, Draft, ModelName,
+    PromptCache, QueuedPrompt, Rev, RunId, Session, SessionId, SessionSettingsChange, SessionStatus, Title, Wait,
+    WorkspaceId,
 };
 use rusqlite::{OptionalExtension, Row, TransactionBehavior, params};
 
@@ -55,6 +56,8 @@ pub(in super::super) fn draft_column(draft: &Draft) -> serde_json::Result<Option
 
 pub(in super::super) fn session_from_row(row: &Row) -> rusqlite::Result<StoredSession> {
     let waits = waits_from(&row.get::<_, String>(32)?)?;
+    let assigned: Option<AccountId> = row.get::<_, Option<String>>(31)?.map(Into::into);
+    let account: Option<AccountId> = row.get::<_, Option<String>>(22)?.map(Into::into);
     Ok(StoredSession {
         session: Session {
             id: row.get::<_, String>(0)?.into(),
@@ -81,8 +84,11 @@ pub(in super::super) fn session_from_row(row: &Row) -> rusqlite::Result<StoredSe
             effort: from_text(row.get(20)?)?,
             // Written only by this hub, as JSON. One it can't read is as good as none, until the agent next says.
             context: json_at(row, 21)?,
-            account: row.get::<_, Option<String>>(22)?.map(Into::into),
-            assigned_account: row.get::<_, Option<String>>(31)?.map(Into::into),
+            // Only a chat on a login the hub holds, once its record names that login's account, is on the hub's, as the
+            // protocol has it, so the rest are on none.
+            account_source: (assigned.is_some() && assigned == account).then_some(AccountSource::Hub),
+            account,
+            assigned_account: assigned,
             user_active_at_ms: row.get(23)?,
             // Written only by this hub, as JSON. One it can't read is as good as none, until the agent next asks.
             prompt_cache: json_at(row, 24)?,
