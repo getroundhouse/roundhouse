@@ -1,4 +1,5 @@
 use super::*;
+use crate::git::worktrees::tests::while_one_is_made;
 
 pub(crate) fn run(cwd: &Path, args: &[&str]) -> String {
     let output = std::process::Command::new("git")
@@ -230,4 +231,42 @@ async fn a_detached_head_that_a_branch_holds_has_nothing_to_lose() {
     let current = status(&prepared.path).await.unwrap();
     assert_eq!(current.branch, None);
     assert!(!current.unreferenced_commits);
+}
+
+#[tokio::test]
+async fn making_a_workspace_waits_for_a_worktree_being_made_rather_than_failing_on_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = new_repo(dir.path());
+
+    let made = while_one_is_made(&repo, prepare(&dir.path().join("ws"), &repo, "alder", None)).await;
+
+    assert!(Path::new(&made.unwrap().path).join("a.txt").exists());
+}
+
+/// The fetch before a workspace is made reads every worktree too, and a failed one only warns.
+#[tokio::test]
+async fn making_a_workspace_from_origin_fetches_once_a_worktree_being_made_is_done() {
+    let dir = tempfile::tempdir().unwrap();
+    let origin = new_repo(dir.path());
+    let clone = dir.path().join("clone");
+    run(dir.path(), &["clone", "-q", origin.to_str().unwrap(), clone.to_str().unwrap()]);
+
+    let made = while_one_is_made(&clone, prepare(&dir.path().join("ws"), &clone, "alder", None)).await.unwrap();
+
+    assert_eq!(made.base_ref, "origin/main");
+    assert!(made.warnings.is_empty(), "{:?}", made.warnings);
+}
+
+#[tokio::test]
+async fn restoring_a_workspace_waits_for_a_worktree_being_made() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = new_repo(dir.path());
+    let root = dir.path().join("ws");
+    let path =
+        prepare_workspace(&root, "repo", repo.to_str().unwrap(), "alder", &"alder".into(), None).await.unwrap().path;
+    run(&repo, &["worktree", "remove", &path]);
+
+    while_one_is_made(&repo, restore_workspace(repo.to_str().unwrap(), &path, &"alder".into())).await.unwrap();
+
+    assert!(Path::new(&path).join("a.txt").exists());
 }

@@ -1,4 +1,4 @@
-use super::super::{git, git_error, git_ok, off_thread, status};
+use super::super::{Worktrees, git, git_error, git_ok, off_thread, status};
 use crate::deleting::Deleter;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::worker::RemoveWorkspace;
@@ -45,7 +45,7 @@ async fn remove(repo: &Path, worktree: &Path, force: bool, deleting: &Path, dele
     let path = &*worktree.to_string_lossy();
     if !off_thread(worktree.to_path_buf(), |worktree| Ok(worktree.exists())).await.unwrap_or(true) {
         // Already gone, perhaps deleted by hand, or moved aside by a worker that stopped before git forgot it, which
-        // was to be deleted next. Under the lock, so this prune can't forget one moved aside meanwhile.
+        // was to be deleted next. Under `Deleting`'s lock, so this prune can't forget one moved aside meanwhile.
         // Without it, a worktree moved aside meanwhile is still safe, since `forget` sees git has forgotten it.
         let held = match Deleting::lock(deleting).await {
             Ok(held) => Some(held),
@@ -56,7 +56,7 @@ async fn remove(repo: &Path, worktree: &Path, force: bool, deleting: &Path, dele
                 None
             }
         };
-        git_ok(repo, &["worktree", "prune"]).await?;
+        Worktrees::of(repo).await?.changing().await?.prune().await?;
         if let Some(held) = held {
             held.delete_waiting(deleter).await;
         }
@@ -102,15 +102,13 @@ async fn remove(repo: &Path, worktree: &Path, force: bool, deleting: &Path, dele
 }
 
 async fn remove_in_place(repo: &Path, path: &str, force: Force) -> Result<(), ApiError> {
-    let mut args = vec!["worktree", "remove"];
-    args.extend(match force {
-        Force::No => &[][..],
-        Force::Yes => &["--force"],
-        Force::PartMade => &["--force", "--force"],
-    });
+    let mut args = match force {
+        Force::No => vec![],
+        Force::Yes => vec!["--force"],
+        Force::PartMade => vec!["--force", "--force"],
+    };
     args.push(path);
-    git_ok(repo, &args).await?;
-    Ok(())
+    Worktrees::of(repo).await?.changing().await?.remove(&args).await
 }
 
 /// Removes the worktree at `worktree` if it's one a `git worktree add` was stopped part way through, as when the
@@ -198,8 +196,10 @@ struct Deleting {
 }
 
 impl Deleting {
-    /// Waits for the lock, which another archive holds only for a rename and a quick git command. Makes the directory
-    /// if it isn't there, but not the one it's in.
+    /// Waits for the lock, which another archive holds for a rename and a quick git command, and while that git command
+    /// waits for whatever else holds the repository's worktrees: a `git worktree add`, with its checkout and its hook,
+    /// a fetch, for up to its 15 s, or a worktree removed in place.
+    /// Makes the directory if it isn't there, but not the one it's in.
     pub(super) async fn lock(dir: &Path) -> io::Result<Self> {
         let lock = off_thread(dir.to_path_buf(), |dir| {
             match std::fs::create_dir(&dir) {

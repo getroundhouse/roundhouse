@@ -30,6 +30,8 @@ In it:
 
 Each workspace's worktree is in `~/roundhouse/workspaces`. It's an ordinary git worktree of your repository, so its branch is in your repository too.
 
+In your repository's git directory, Roundhouse keeps an empty file, `roundhouse-worktrees`, which it locks while it changes the repository's worktrees, so that two workspaces being made at once take turns. Leave it there.
+
 In a worktree, Roundhouse uses `.context/`, which git is told to ignore:
 
 - Agents keep what they make for their own use there, in folders named for what they hold, such as `.context/screenshots/`.
