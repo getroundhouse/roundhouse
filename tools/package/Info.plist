@@ -26,6 +26,10 @@
 	<string>11.0</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
+	<!-- What macOS says when it asks whether the app may use the microphone, the first time someone dictates. Without
+	     it, macOS ends the app rather than ask. -->
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Roundhouse hears what you dictate into a prompt, on this Mac, and nothing you say leaves it.</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 </dict>

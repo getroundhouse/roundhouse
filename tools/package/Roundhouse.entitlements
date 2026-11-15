@@ -1,7 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<!-- What the hardened runtime lets every binary in the bundle do beyond its defaults: nothing. vpk's default is .NET's,
-     which allows JIT, unsigned executable memory and libraries signed by anyone, none of which these binaries use. -->
+<!-- What the hardened runtime lets every binary in the bundle do beyond its defaults: use the microphone, which
+     dictation hears, once the person allows it when macOS asks, with what Info.plist's NSMicrophoneUsageDescription
+     says. vpk signs every binary with the same, so the hub, the CLI and the updater have it too, and never use it.
+     vpk's default is .NET's, which allows JIT, unsigned executable memory and libraries signed by anyone, none of which
+     these binaries use. -->
 <plist version="1.0">
-<dict/>
+<dict>
+	<key>com.apple.security.device.audio-input</key>
+	<true/>
+</dict>
 </plist>
