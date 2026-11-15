@@ -5,7 +5,7 @@ use proptest::prelude::*;
 use proptest::test_runner::{Config, RngSeed};
 
 use super::pages::PAGE_EVENTS;
-use super::tests::page;
+use super::tests::{is_rewritten, page, rewritten};
 use super::*;
 use protocol::prompt::Prompt;
 
@@ -21,6 +21,11 @@ fn opened(last_seq: Seq) -> SessionLog {
 /// Fetches what the log asks for at this focus, and installs it. The fetch at `fails`, if any, fails, and
 /// so does everything after it, as when the connection goes.
 fn fetch(log: &mut SessionLog, focus: usize, fails: Option<usize>) {
+    fetch_from(log, focus, fails, page);
+}
+
+/// What [`fetch`] does, from a hub that serves `served`.
+fn fetch_from(log: &mut SessionLog, focus: usize, fails: Option<usize>, served: fn(Range<u64>) -> Vec<SessionEvent>) {
     let after_last = log.last().next();
     log.focus_on(focus);
     for (i, range) in log.pages_to_fetch().into_iter().enumerate() {
@@ -28,7 +33,7 @@ fn fetch(log: &mut SessionLog, focus: usize, fails: Option<usize>) {
             log.fetch_failed();
             return;
         }
-        log.install_page(range.start, page(range.start.seq().get()..range.end.min(after_last).seq().get()));
+        log.install_page(range.start, served(range.start.seq().get()..range.end.min(after_last).seq().get()));
     }
 }
 
@@ -128,6 +133,41 @@ proptest! {
             scroll_to(&mut log, focus);
 
             prop_assert!(matches!(log.row(focus), Row::Event(_)), "row {} isn't loaded", focus);
+        }
+    }
+
+    /// A log read again, as from a hub of another build, reaches as far and still shows every row it held, and once
+    /// the newest pages have come live again, each row a view scrolls to is as the new hub has it.
+    #[test]
+    fn a_log_read_again_shows_what_it_held_until_each_row_comes_again(
+        last_seq in seq_in(1u64..6_000),
+        before in vec(0usize..6_000, 0..8),
+        after in vec(0usize..6_000, 1..12),
+    ) {
+        let mut log = opened(last_seq);
+        for focus in before {
+            let focus = focus % log.row_count();
+            scroll_to(&mut log, focus);
+        }
+        let (rows, held) = (log.row_count(), log.loaded_rows());
+
+        log.read_again();
+
+        prop_assert_eq!(log.row_count(), rows);
+        prop_assert_eq!(log.loaded_rows(), held);
+        for event in rewritten(log.received().next().seq().get()..last_seq.next().get()) {
+            log.apply_event(event);
+        }
+        for focus in after {
+            let focus = focus % log.row_count();
+
+            fetch_from(&mut log, focus, None, rewritten);
+
+            let Row::Event(event) = log.row(focus) else {
+                panic!("row {focus} isn't loaded");
+            };
+            prop_assert!(is_rewritten(event), "row {} is as the hub before had it", focus);
+            prop_assert!(log.loaded_events() <= MAX_LOADED_EVENTS, "{} loaded", log.loaded_events());
         }
     }
 

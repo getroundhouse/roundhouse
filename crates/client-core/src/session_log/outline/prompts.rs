@@ -88,9 +88,14 @@ impl Outline {
     pub(in super::super) fn moved(&mut self, by: By) {
         self.changes += 1;
         if by == By::Place {
-            self.listing = Listing::Wanted;
-            self.compactions_listing = Listing::Wanted;
+            self.list_again();
         }
+    }
+
+    /// Asks the hub for both lists again, keeping each line until another replaces it.
+    pub(in super::super) fn list_again(&mut self) {
+        self.listing = Listing::Wanted;
+        self.compactions_listing = Listing::Wanted;
     }
 }
 

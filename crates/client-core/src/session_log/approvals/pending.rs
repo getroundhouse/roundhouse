@@ -29,6 +29,8 @@ pub(in super::super) struct Apart {
     pub(super) in_flight: BTreeSet<Seq>,
     /// Those whose fetch failed, which aren't asked for again until [`Apart::retry_failed`].
     pub(super) failed: BTreeSet<Seq>,
+    /// Those fetched that are to be fetched again, as [`SessionLog::read_again`] says, and stay drawn until then.
+    pub(super) stale: BTreeSet<Seq>,
 }
 
 impl Apart {
@@ -40,9 +42,13 @@ impl Apart {
         self.failed.clear();
     }
 
-    /// Keeps `event`, which its page is letting go of, if it's a request that waits.
-    pub(in super::super) fn keep_if_waiting(&mut self, event: SessionEvent) {
+    /// Keeps `event`, which its page is letting go of, if it's a request that waits, to be fetched again if the page
+    /// was.
+    pub(in super::super) fn keep_if_waiting(&mut self, event: SessionEvent, stale: bool) {
         if self.wanted.contains(&event.seq) {
+            if stale {
+                self.stale.insert(event.seq);
+            }
             self.fetched.insert(event.seq, event);
         }
     }
@@ -50,6 +56,11 @@ impl Apart {
     /// The same requests waiting, with none fetched, for a log that starts again.
     pub(in super::super) fn again(self) -> Self {
         Self { wanted: self.wanted, ..Self::default() }
+    }
+
+    /// Fetches again each request fetched, keeping it until it comes.
+    pub(in super::super) fn read_again(&mut self) {
+        self.stale = self.fetched.keys().copied().collect();
     }
 }
 
@@ -74,14 +85,16 @@ impl SessionLog {
     pub(crate) fn waiting_on(&mut self, recorded: Option<&RecordedApprovals>) {
         let wanted: Vec<Seq> = recorded.iter().flat_map(|recorded| &recorded.open).map(|open| open.seq).collect();
         self.apart.fetched.retain(|seq, _| wanted.contains(seq));
+        self.apart.stale.retain(|seq| wanted.contains(seq));
         self.apart.wanted = wanted;
     }
 
-    /// The requests to fetch on their own: those waiting that aren't loaded, fetched or on their way, and haven't
-    /// failed, which this marks as on their way.
+    /// The requests to fetch on their own: those waiting that aren't loaded or fetched, or are to be fetched again, and
+    /// aren't on their way and haven't failed, which this marks as on their way.
     pub(crate) fn requests_to_fetch(&mut self) -> Vec<Seq> {
         let wanted = self.apart.wanted.clone();
-        let missing = |seq: &Seq| self.event_of(*seq).is_none() && !self.apart.fetched.contains_key(seq);
+        let held = |seq: &Seq| self.event_of(*seq).is_some() || self.apart.fetched.contains_key(seq);
+        let missing = |seq: &Seq| !held(seq) || self.apart.stale.contains(seq);
         let to_fetch: Vec<Seq> = wanted
             .into_iter()
             .filter(missing)
@@ -103,6 +116,7 @@ impl SessionLog {
             self.apart.failed.insert(seq);
             return;
         };
+        self.apart.stale.remove(&seq);
         self.apart.fetched.insert(seq, event);
         self.changes.requests_fetched = true;
     }

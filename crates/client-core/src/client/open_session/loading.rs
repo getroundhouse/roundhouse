@@ -67,6 +67,7 @@ impl OpenSession {
             view: view.clone(),
             last_seq: session.last_seq,
             placed: false,
+            read_from: client.hub_version().to_string(),
         };
         let follow = Follow::start(client, log, source);
         follow.wake();
@@ -158,11 +159,26 @@ struct SessionSource {
     pub(super) last_seq: Seq,
     /// The hub has said how far the events by place go.
     pub(super) placed: bool,
+    /// The build of the hub its events were read from, as the hub's hello said.
+    pub(super) read_from: String,
 }
 
 impl SessionSource {
     pub(super) fn subagent(&self) -> Option<&ToolUseId> {
         self.view.subagent()
+    }
+
+    /// Reads the log again on a hub of another build than the one its events were read from, since a migration can
+    /// have rewritten them, and catching up from one past the last would leave them as they were. It's read again as
+    /// far as the hub's events go, which [`SessionSource::place`] has learned by then for a log by place, since the agent
+    /// can have gone on while the hub restarted. Builds that no install or package stamped all say the same, so the log
+    /// isn't read again between two of them.
+    fn read_again_on_another_build(&mut self, client: &Client, held: &Mutex<SessionLog>) {
+        let build = client.hub_version();
+        if self.read_from != build {
+            build.clone_into(&mut self.read_from);
+            held.lock().read_again();
+        }
     }
 
     /// Asks how far the events by place go, the first time on each connection. A hub that can't read the agent's own
@@ -204,6 +220,7 @@ impl Source for SessionSource {
 
     fn resume(&mut self, client: &Client, held: &Mutex<SessionLog>) -> Result<Subscription> {
         self.place(client, held)?;
+        self.read_again_on_another_build(client, held);
         // Events arrive in order with no gaps, so carrying on from one past the last misses nothing, whatever
         // was fetched meanwhile.
         let from = held.lock().received().next();

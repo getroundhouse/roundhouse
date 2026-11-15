@@ -35,7 +35,8 @@ impl SessionLog {
         let mut out = Vec::new();
         for page in wanted {
             let fetchable = page_range(page).start <= self.received && !self.failed.contains(&page);
-            if fetchable && !self.pages.contains(&page) && self.in_flight.insert(page) {
+            let loaded = self.pages.contains(&page) && !self.stale.contains(&page);
+            if fetchable && !loaded && self.in_flight.insert(page) {
                 out.push(page_range(page));
             }
         }
@@ -46,6 +47,7 @@ impl SessionLog {
     pub(crate) fn install_page(&mut self, start: Position, events: Vec<SessionEvent>) {
         let page = page_of(start);
         self.in_flight.remove(&page);
+        self.stale.remove(&page);
         self.pages.insert(page);
         let (mut settles, mut prompts) = (Vec::new(), Vec::new());
         for event in events {
@@ -109,12 +111,13 @@ impl SessionLog {
                 .max_by_key(|page| page.abs_diff(center));
             let Some(far) = far else { return };
             self.pages.remove(&far);
+            let stale = self.stale.remove(&far);
             let doomed: Vec<Position> = self.events.range(page_range(far)).map(|(position, _)| *position).collect();
             for position in doomed {
                 if let Some(event) = self.events.remove(&position) {
                     self.positions.remove(&event.seq);
                     // A request that waits stays, so what waits is still asked.
-                    self.apart.keep_if_waiting(event);
+                    self.apart.keep_if_waiting(event, stale);
                 }
             }
         }
