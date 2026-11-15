@@ -11,7 +11,10 @@ fn the_specs_table_has_every_control_size_in_order_as_the_app_sizes_it() {
     let table: Vec<[String; 4]> = spec_table::rows("**Every size of a button, by its name.**");
 
     let sized: Vec<[String; 4]> = ControlSize::ALL.iter().map(|size| size.written()).collect();
-    assert_eq!(table, sized, "docs/spec/look.md's table of control sizes, against crates/look/src/controls.rs");
+    assert_eq!(
+        table, sized,
+        "docs/spec/components.md's table of button sizes, against crates/look/src/controls/sizing.rs"
+    );
 }
 
 #[test]

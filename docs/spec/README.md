@@ -16,8 +16,8 @@ A rule can end with *Not built*, when it's decided and not in the product yet, o
 | `menus.md` | The menus, on a Mac and off it, and the keys off the Mac |
 | `window.md` | The window: the strip along its top, its buttons on each platform, and where it opens |
 | `settings.md` | Settings, which shows in place of the workspace, and what each setting does |
-| `look.md` | The design system's foundations, the rules every screen follows: colour, type, space and shape, layout and the pointer, and the app icon |
-| `components.md` | The design system's components, which screens are built from: buttons, the status mark and empty states |
+| `look.md` | The design system's foundations, the rules every screen follows: colour, type, space and shape, layout and the pointer |
+| `components.md` | The design system's components, which screens are built from: buttons, the status mark, empty states and the app icon |
 | `speed.md` | How fast the desktop app has to be |
 
 ## How it looks
@@ -32,11 +32,11 @@ A screen that shows a rule goes under it, in the rule's list item, with a captio
 
 `cargo run -p spec-page` draws the spec as a page for a browser, rule by rule, each beside the screens that show it, so an area is read and confirmed at one sitting, and with only what isn't confirmed if asked. A rule shows its words in bold, and the rest of it a click away, and says when it has no picture. It shows nothing the spec doesn't. It takes a screen's caption to be the paragraph right above it that starts in bold, or above the run of images it's in, and a screen with no caption shows as having none. A screen in a rule's list item, under the rule, shows beside that rule, and one on its own shows beside its caption. *Unconfirmed.*
 
-Beside it, the same command draws the design system's page, which lays out `look.md`'s foundations, to look one up by its name, its value or what it's for, and then `components.md`'s components. Each of its tables whose caption names a type in `look`, such as `look::Space`, shows each name in it beside its own piece of the gallery's sheet of that type, cut out where the gallery drew it. The gallery keeps where it drew each name beside the sheet's image, in `screens/`, in a JSON file of the same name, and checks and accepts it with the image. The page shows nothing the spec doesn't, and it's in the app's own colours, from `look.md`'s table of them. *Unconfirmed.*
+Beside it, the same command draws the design system's page, which lays out `look.md`'s foundations and then `components.md`'s components, to look a name up by itself, its value or what it's for. Each of their tables whose caption names a type in `look`, such as `look::Space`, shows each name in it beside its own piece of the gallery's sheet of that type, cut out where the gallery drew it. The gallery keeps where it drew each name beside the sheet's image, in `screens/`, in a JSON file of the same name, and checks and accepts it with the image. The page shows nothing the spec doesn't, and it's in the app's own colours, from `look.md`'s table of them.
 
 An image is exact about everything, including what nobody chose, such as how text is smoothed. So a GPUI upgrade or a font change can change confirmed images too, and those need approving the same way.
 
-The design system is what screens are built from: its foundations, the rules every screen follows, such as spacing, type and colour, in `look.md`, the way `speed.md` holds the bars every area meets, and the components built on them, such as buttons and the status mark, in `components.md`. A rule about one place in the app is in that place's file, even when it's about how it looks, such as the transcript's column in `chats.md` and the window's buttons in `window.md`.
+The design system is what screens are built from: its foundations, the rules every screen follows, such as spacing, type and colour, in `look.md`, the way `speed.md` holds the bars every area meets, and the components built on them, such as buttons and the status mark, in `components.md`. A size, or any value with a name, that more than one component shares is a foundation, and one that only a single component has is that component's, such as a button's sizes. A rule about one place in the app is in that place's file, even when it's about how it looks, such as the transcript's column in `chats.md` and the window's buttons in `window.md`.
 
 ## How a feature is designed
 
