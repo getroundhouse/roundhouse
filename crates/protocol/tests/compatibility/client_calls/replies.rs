@@ -52,26 +52,6 @@ fn every_reply_of_the_hub_itself_or_listing_its_records_keeps_its_form() {
         ClientResponse::Hello(HelloReply { protocol_version: 3, hub_version: "0.1.9".into() }),
         r#"{"result":"hello","protocol_version":3,"hub_version":"0.1.9"}"#,
     );
-    let status = HubStatus {
-        pid: 7,
-        hub_version: "0.1.9".into(),
-        protocol_version: 3,
-        started_at_ms: 1,
-        workers: 4,
-        running_sessions: 2,
-        clients: 1,
-        on_demand: true,
-        build_number: Some(42),
-        running_setups: 1,
-        requests: 3,
-        keeping_awake: true,
-        keeps_workers: true,
-        oldest_protocol_version: Some(2),
-    };
-    answered(
-        ClientResponse::HubStatus(status),
-        r#"{"result":"hub_status","pid":7,"hub_version":"0.1.9","protocol_version":3,"started_at_ms":1,"workers":4,"running_sessions":2,"clients":1,"on_demand":true,"build_number":42,"running_setups":1,"requests":3,"keeping_awake":true,"keeps_workers":true,"oldest_protocol_version":2}"#,
-    );
     answered(ClientResponse::Agents(admin::Agents { agents: vec![] }), r#"{"result":"agents","agents":[]}"#);
     let account = Account {
         id: "claude-1".into(),
@@ -106,6 +86,32 @@ fn every_reply_of_the_hub_itself_or_listing_its_records_keeps_its_form() {
     answered(
         ClientResponse::Subagents(records::Subagents { subagents: vec![], rev: Rev::new(9) }),
         r#"{"result":"subagents","subagents":[],"rev":9}"#,
+    );
+}
+
+/// What a client reads of a hub across a break, to see it and stop or restart it, as "Changing the protocol" in
+/// `docs/architecture.md` says.
+#[test]
+fn the_hub_s_status_keeps_its_form() {
+    let status = HubStatus {
+        pid: 7,
+        hub_version: "0.1.9".into(),
+        protocol_version: 3,
+        started_at_ms: 1,
+        workers: 4,
+        running_sessions: 2,
+        clients: 1,
+        on_demand: true,
+        build_number: Some(42),
+        running_setups: 1,
+        requests: 3,
+        keeping_awake: true,
+        keeps_workers: true,
+        oldest_protocol_version: Some(2),
+    };
+    answered(
+        ClientResponse::HubStatus(status),
+        r#"{"result":"hub_status","pid":7,"hub_version":"0.1.9","protocol_version":3,"started_at_ms":1,"workers":4,"running_sessions":2,"clients":1,"on_demand":true,"build_number":42,"running_setups":1,"requests":3,"keeping_awake":true,"keeps_workers":true,"oldest_protocol_version":2}"#,
     );
 }
 
