@@ -1,6 +1,6 @@
 # Look
 
-The foundations of the app's design system, the rules every screen follows: colour, type, space and shape, layout, buttons, the pointer, and the status mark, with the app icon that's made from the mark. Each area's file shows its own screens. `crates/look` holds them in code: every colour, kind of text and corner by what it's for, every step of space, and every size a button, a bar, a row and an icon come in, the theme made from them, the mark, the icon, plan mode's texture, the pointing hand and the baseline text of different sizes shares.
+The foundations of the app's design system, the rules every screen follows: colour, type, space and shape, layout and the pointer, with the app icon that's made from the status mark. The components built on them, such as buttons and the status mark, are in `components.md`, and a rule about one place is in that place's file, even when it's about how it looks. Each area's file shows its own screens. `crates/look` holds them in code: every colour, kind of text and corner by what it's for, every step of space, and every size a button, a bar, a row and an icon come in, the theme made from them, the mark, the icon, plan mode's texture, the pointing hand and the baseline text of different sizes shares.
 
 It's meant to feel familiar to the people Roundhouse is for, and it sets itself apart with a motif of its own, the status mark.
 
@@ -130,9 +130,6 @@ Three strengths have names of their own, since several places draw with them: wh
 
 ![Every step of space](screens/spaces.png)
 
-- **The window has no title bar of its own.** The sidebar and the workspace header run up to its top edge, so the app reads as one field, and on a Mac the window's buttons sit in the sidebar's top corner, level with the header and as far from the top as from the side, or over the start of the header while the sidebar is hidden, as `sidebar.md` says. The strip along the top, as tall as the header, stands in for a title bar: dragging it moves the window and double-clicking it does what double-clicking a title bar does, which on a Mac is what its setting says and on Windows is maximizing or restoring the window, except where a button or a sidebar's edge takes the press, and pressing it leaves focus where it was.
-- **On Windows, the window's buttons are Windows' own three, minimize, maximize or restore, and close, at the right end of the strip and as tall as it,** since Windows puts them there and has no title bar here to hold them. Each is 46px wide and drawn as Windows draws its own, with the glyph from Windows' icon font, Segoe Fluent Icons, or Segoe MDL2 Assets on Windows 10, or the kit's icon where neither is installed, in the text colour, dimmed while another window is active, a faint shade under the pointer, and Windows' red with a white glyph under it for close. They work as Windows' own do, minimizing, maximizing or restoring, or closing the window as the press is let go, and a screen reader can press each. They're over everything, a dialog included, so they work while one is open. What reaches the strip's right end ends before them: the pull request's bar while the sidebar of changes shows, which leaves out its number once the number doesn't fit beside its action, and otherwise the workspace's header, Home's bar or an error. An action longer than all the room the bar has left, at the sidebar's narrowest, still runs under them, and for the moment the sidebar of changes slides in, the bar passes under them, since it slides at its whole width. The top left corner then has the app's own two, the button that opens the menus and then the one that hides the sidebar, each a small button's square, 4px apart and 12px from the window's edge, as it does on Linux, where the strip has no window buttons. *Unconfirmed.*
-- **The window opens where it was left,** at the size it was, on the display it was on, and in full screen if it was, so a window kept filling the screen still fills it after the app restarts to update. On Windows, one snapped to an edge or a corner, or stretched to the display's height, opens there as an ordinary window, since Windows can't be told to snap a window, and one closed while minimized opens as it was before, filling the screen if it did. One whose display has gone, or that would open out of reach, opens at its usual size in the middle of the main display. *Unconfirmed.*
 - **Corners are 6px on controls, and 10px on cards and the composer.**
 - **Every corner the app rounds has a name for what it's on,** so a corner means the same wherever it's drawn, and two that are the same size today can change apart. What's drawn takes one by its name, rather than a radius by its value. What's set across a chat's column, such as a card in the chat, a call's block or the queue, has a card's corners, as the composer it sits above does, and what's set small in it, such as a prompt's bubble, a pill or a chip, has a control's. A row to choose in a list inside a card, such as the outline's, has a control's, so its corner sits inside the card's. What's round all the way, such as a bar's track or a dot, is round all the way. Every edge is 1px, and a quote's rule, such as the one at the left of what a subagent was asked, and the line under the tab that's showing are 2px. `look::Corner` holds the corners, and `look::EDGE`, `look::QUOTE_RULE` and `look::TAB_LINE` the widths. The kit's theme is given a control's and a card's corners from there, so the kit's own parts agree, and its menus and tooltips have a control's. *Unconfirmed.*
 
@@ -201,28 +198,9 @@ Three strengths have names of their own, since several places draw with them: wh
 
 ![Every size of an icon](screens/icons.png)
 
-- **The transcript is a centred column, at most 848px wide,** so lines stay short enough to read in a wide window. *Unconfirmed.*
-- **Everything in the transcript but a prompt starts on the column's left edge:** what the agent wrote, a call's icon, and what a call or a thought opens to, so the eye always goes back to the same place. Something with an edge, such as a code block or the rule down a subagent's work, puts its edge there, and what's inside it sits in from it.
-- **A prompt sits at the right of the column, on a bubble only as wide as what it says,** so what was asked stands apart from the agent's work, which starts at the left. The bubble has no edge, a control's 6px corners, 16px of room beside its text and 12px above and below. It's at most 80% of the column wide, so it never reaches across the column the way the agent's work does. *Unconfirmed.*
-- **The composer is centred under the transcript, 24px wider than its column on each side, and at most 896px wide,** so the transcript's text sits inside the composer's edges. It has room for four lines before it grows, so a longer prompt doesn't start out cramped, and empty it's about 150px tall. *Unconfirmed.*
-- **The bar along the composer's bottom has two ends.** The left one sets up the prompt: the `+`, whose menu attaches files and turns plan mode on and off, then the model picker. The right one is the agent's: what it says of itself, such as how full its context is, and last the one main action, Send or Stop. Each thing beside the main action sits in the middle of a 24px square, the main action's own size, so things of different sizes line up with it and are as easy to point at as each other. The squares are 8px apart, and the main action is 16px from them, so it stands apart. Something 16px wide there, as the context's ring is, is so 20px from the main action and 16px from another like it. *Unconfirmed.*
-- **A tool call is one line:** an icon for its kind, what it did in a few words, and the detail that matters, such as the command on a raised pill or an MCP server in an outlined chip. Hovering the line turns its icon into a chevron, and clicking it opens what the call did in a block underneath, which scrolls once it's taller than a dozen lines or so. The wheel over a block that scrolls moves the block until it reaches the end the wheel is turning toward, and then the transcript, so a long block reads straight on into the rest of the chat. Over a block that fits, the wheel moves the transcript. A scroll stays with what it started on, as it does in a browser, so one that starts on the transcript carries on over the blocks it meets, and a trackpad's fling of a block stops at the block's end rather than speeding the transcript on. A scroll lasts from touching the trackpad to the end of the fling, or for a mouse wheel until it pauses. Calls in a row sit 36px apart, as one list. `chats.md` has how each kind of call reads. *Unconfirmed.*
-- **What a click opens, a second click closes without the pointer moving,** so the line that was clicked stays exactly where it is in the window while what it opened to comes and goes under it. At a chat's end, where the chat otherwise keeps its end at the window's bottom, opening something leaves the chat where it is, with its end out of sight as if it had been scrolled away from. Closing something there that would leave the chat ending above the window's bottom, with more of it above the window's top, brings the chat down until its end is at the bottom, since that room would show nothing, and the chat keeps to its end from there. That's the one place the line moves out from under the pointer. *Unconfirmed:* what the chat's end does.
-
 ## Layout
 
 - **A sidebar lists things to choose from, and what they open to is read in the workspace's pane,** as a file from Changes or All files opens in the file tab. A sidebar is too narrow for anything to read at length, such as a plan, a table or options compared side by side, and widening it far enough takes the room from the chat it would sit beside. So such things open in a tab in the pane, and never in a sidebar, even to keep them in sight of the chat.
-
-## Buttons
-
-- **Each area has at most one main action,** with a light fill and dark text, such as Create PR, Send, Add project or Send to agent. With one obvious next step per area, nothing competes with it.
-- **Every other button is borderless until hovered.** A button with an outline opens something, like the pull request. The button back down to a chat's end has an edge at rest, since it sits over the chat's text, as `chats.md` says.
-
-  **The workspace's header, with the pointer on the button that hides the sidebar of changes, which fills under it.** *Unconfirmed.*
-
-  ![A button under the pointer](screens/button-hovered.png)
-
-- **The pull request's bar fills its main action with the pull request's colour,** still with dark text, so the action reads as part of the bar it's on. One with no colour of its own, such as Create PR, is the light main button. *Unconfirmed.*
 
 ## The pointer
 
@@ -232,43 +210,6 @@ Three strengths have names of their own, since several places draw with them: wh
 - **It's an open hand over what can be dragged to another place, such as a project's row in the sidebar, and a closed one while it's dragged,** even where a press does something too, since a hand that points would say nothing of the drag. *Unconfirmed.*
 - **A menu's rows keep the arrow, as the system's menus do,** since an open menu is nothing but things to click, and the row under the pointer is lit. *Unconfirmed.*
 - **It's an I-beam over text that can be typed in or selected,** such as the composer and what the agent wrote, as it is everywhere else on a Mac, so it's plain that dragging there selects. *Unconfirmed.*
-
-## The status mark
-
-Every workspace and chat has a mark: a half circle of fine dots around a turntable, like a roundhouse seen from above. It has four rows of 9, 13, 17 and 21 dots, the same distance apart along every row. Each row has four more dots than the one inside it, so the fan keeps the same pattern with any number of rows, the rows sit a little further apart than the dots in them, and every row has a dot on the middle line, so the rows line up down it. The inner row has the fewest dots that keep it at least 2/5 of the way out to the outer row, which leaves room for the turntable. Fine dots give it a texture of its own. It's 26px wide in the sidebar, where it fills the room before a workspace's name and its dots are big enough to tell apart at a glance, and 16px in chat tabs, the working line and Home. A much bigger fan, such as the brand in an empty state, has more rows rather than bigger dots, so the texture stays fine, and its turntable stays the same share of its width.
-
-The mark has three layers, and each is about one thing, so several facts can show at once without competing:
-
-| Layer | It's about | What it shows |
-|---|---|---|
-| The fan's colour | The work | Where the workspace's pull request stands: grey for none, then green, yellow in the merge queue, purple, muted red or a lighter grey, as above |
-| A white light over the fan | The agent | A light sweeps the fan while the agent works, keeps to the inner row once its turn has ended with something still running, and the fan fills in while the workspace is set up |
-| The turntable in red | You | Red when the agent stopped short: it went away mid-turn, or its turn failed, as on a usage limit. It goes back to the fan's colour once that's dealt with, as a turn starts again |
-
-- **Only an agent with something running moves the mark.** Motion says something is going on there, so nothing else moves. While the agent waits on you, the fan holds still. A moving mark is redrawn on every frame of the display, as smoothly as it can show, and the system's Reduce Motion setting holds it still. Pictures of the app hold every mark still at one moment, so they come out the same every time.
-- **Only the pull request changes the colour of a workspace's fan,** so the colour always means one thing, and matches the bar. What's about you is on the turntable and the name, which leave the fan as it is.
-- **A chat's fan is grey,** in its tab and on its working line, since a pull request belongs to the workspace, not to one of its chats. So a chat's mark says only what its agent is doing, and the workspace's mark shows the pull request.
-- **The turntable shows one thing at a time:** red, then the white of something still running. *Unconfirmed.*
-- **The light sweeps the whole fan only for the agent's own work:** a turn, or a subagent it left going when its turn ended. *Unconfirmed.*
-- **Once a turn has ended with anything else still running, the light keeps to the inner row, beside the turntable, which is lit, and goes slower.** A command left running might end by itself, as a test run does, or be held open, as an app is, and the agent doesn't say which. So the mark claims only what's known: something is running there, and it isn't the agent. *Unconfirmed.*
-- **A workspace's mark speaks for its open chat with the most going on.** `sidebar.md` has the rule.
-- **A reply you haven't read isn't on the mark, and neither is a chat waiting on you.** Both mean the same to you, that it needs a look, so the name beside the mark says that one thing, as `sidebar.md` says, and the chat says which. It shows along with whatever the mark says, such as the light of something the agent left running. That reply might be the agent handing over, such as an app it opened for you to look at, so nothing on the mark hides it.
-- **Plan mode's texture is drawn from the mark without keeping to its rule.** Its rows are half circles of fine dots around one centre, with a dot on the middle line of each, but they're further apart than four more dots a row would put them, so each reads as a dotted line, and the dots are only about the same distance apart along every row. At the composer's size, the rule's own rows blur into an even field of dots. `chats.md` has the texture. *Unconfirmed.*
-- **The sidebar shows every workspace's pull request.**
-- **A background task has a ring, not a mark:** ten dots around a hub, which is the fan's turntable on its own, 16px wide so what follows it lines up with the working line's. The fan is for an agent, and a task isn't one. `chats.md` says when its light goes round. *Unconfirmed.*
-- **A subagent at work in the background has the robot its call's line has instead, with a white light sweeping across it,** so its line reads as the call it came from and plainly says it's at work. The light is the agent's, as it is on the fan, since a subagent is the agent's own work. It crosses the whole robot from left to right, fading at its edges, so its outline lights up as it passes, where the eyes alone are too small to show a change at a glance. It goes at the pace a ring's light goes round, so it doesn't vie with the working line. In pictures and with Reduce Motion, it holds still across the robot's face. It's as wide as the ring, so what follows it lines up too. *Unconfirmed:* how fast it goes, how wide the light is, and where it holds still.
-
-**Every state of the mark, against each colour a pull request gives its fan, at the sidebar's size and Home's, the ring of a background task, and a subagent's robot.** A tab's mark is the `None` column at Home's size. *Unconfirmed.*
-
-![Every state of the mark](screens/mark-states.png)
-
-## Empty states
-
-- **An empty pane shows the mark in copper, what's missing and why, and the one thing to do about it,** as a main button. The mark is 72px wide there, with five rows.
-
-  **The pane with projects and no workspace yet, which says to start one.** *Unconfirmed.*
-
-  ![The pane before there's a workspace](screens/start-a-workspace.png)
 
 ## The app icon
 
@@ -281,7 +222,7 @@ The brand on a tile, caught working: the fan in copper with the agent's white li
 
 - **Each size has a drawing of its own,** rather than one drawing scaled, because macOS shows each size's own drawing, and a big fan scaled down blurs into a smudge.
 - **Smaller drawings have fewer rows,** so the dots stay big enough to see: four at 256 pixels, which the Dock shrinks to under half its size, three at 128 and 64, and two below that. Only the largest drawings, where there are pixels for it, have nine rows of fine dots.
-- **Every size follows the status mark's rule,** so there's one geometry in the app and its icon: four more dots a row, the same distance apart along every row, with a dot on the middle line of each. The 16-pixel drawing is the one exception, with one dot fewer in every row and a gap on the middle line instead, since its one-pixel dots can't sit on the line between two pixels.
+- **Every size follows the status mark's rule, in `components.md`,** so there's one geometry in the app and its icon: four more dots a row, the same distance apart along every row, with a dot on the middle line of each. The 16-pixel drawing is the one exception, with one dot fewer in every row and a gap on the middle line instead, since its one-pixel dots can't sit on the line between two pixels.
 - **Below 128 pixels it's drawn on whole pixels,** where the fan's own shape would blur: the rule's dots moved onto whole pixels as squares, far enough apart that each keeps a pixel clear around it, mirrored across the line between the tile's two middle pixels so the fan sits in the middle, and a turntable that's only its hub where a ring would be too small to see. *Unconfirmed.*
 - **macOS mostly uses the smallest drawing with at least the pixels it needs,** and shrinks it to fit, so on a Retina display each drawing covers the sizes up to half its pixels in points. The Dock is the exception: at about 55 points it uses the 256-pixel drawing.
 

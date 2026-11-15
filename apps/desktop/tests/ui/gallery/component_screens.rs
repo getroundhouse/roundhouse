@@ -1,4 +1,5 @@
-//! Screens of the rules every screen follows, in `look.md`, where no area's own screen shows one by itself.
+//! Screens of the components screens are built from, in `components.md`, where no area's own screen shows one by
+//! itself.
 
 #![cfg(test)]
 
@@ -13,14 +14,20 @@ use super::worlds::titled;
 pub(crate) const SCREENS: &[Screen] = &[
     Screen {
         name: "button-hovered",
-        spec: "look.md",
+        spec: "components.md",
         world: Some(titled),
         frame: Frame::Exactly(Part::Region(Region::Header), &[]),
         steps: &[Step::Select(FOCUS), Step::Point("toggle-diff")],
     },
     // About the pane, which no region marks on its own, so it's the whole window, as the window before there's a
     // project is.
-    Screen { name: "start-a-workspace", spec: "look.md", world: Some(projects_only), frame: Frame::Layout, steps: &[] },
+    Screen {
+        name: "start-a-workspace",
+        spec: "components.md",
+        world: Some(projects_only),
+        frame: Frame::Layout,
+        steps: &[],
+    },
 ];
 
 /// Two projects, and no workspace in either.
