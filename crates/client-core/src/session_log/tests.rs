@@ -14,6 +14,21 @@ pub(super) fn page(range: Range<u64>) -> Vec<SessionEvent> {
     range.map(Seq::new).map(notice).collect()
 }
 
+/// The events of [`page`], as a hub of another build has them, which a migration rewrote.
+pub(super) fn rewritten(range: Range<u64>) -> Vec<SessionEvent> {
+    let rewrite = |seq| EventBody::Notice {
+        level: NoticeLevel::Info,
+        message: format!("{seq} rewritten"),
+        parent_tool_use_id: None,
+    };
+    range.map(Seq::new).map(|seq| event(seq, rewrite(seq))).collect()
+}
+
+/// Whether `event` is one of [`rewritten`].
+pub(super) fn is_rewritten(event: &SessionEvent) -> bool {
+    matches!(&event.body, EventBody::Notice { message, .. } if message.ends_with(" rewritten"))
+}
+
 /// The positions of the events at these `seq`s, in a log by `seq`.
 fn seqs(range: Range<u64>) -> Range<Position> {
     Position::of_seq(Seq::new(range.start))..Position::of_seq(Seq::new(range.end))

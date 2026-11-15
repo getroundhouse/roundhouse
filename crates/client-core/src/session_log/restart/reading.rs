@@ -1,9 +1,7 @@
-//! A log that learns how far it goes, or starts again following other events, when a hub reads them differently from
-//! the one before.
-
 use protocol::model::{Place, Seq};
 
-use super::{Position, SessionLog, before_live};
+use super::super::pages::page_range;
+use super::super::{Position, SessionLog, before_live};
 
 impl SessionLog {
     /// Learns how far the events from one agent or subagent go, which a log by place starts out not knowing.
@@ -28,6 +26,19 @@ impl SessionLog {
     /// hub that can read them apart after one that couldn't, such as a newer one after a restart.
     pub(crate) fn read_by_place(&mut self) {
         self.restart(Self::by_place(Place::default()));
+    }
+
+    /// Reads its events again where they are, for a hub of another build, whose migration can have rewritten them
+    /// without moving any. Each stays drawn until it comes again, so a chat stays on screen through an update: the
+    /// newest pages come live, as when the log was opened, every other page it holds is fetched again as a view looks
+    /// at it, and so is each request waiting that was fetched on its own. The hub is asked for the prompts and
+    /// compactions again too.
+    pub(crate) fn read_again(&mut self) {
+        let received = before_live(self.last);
+        self.received = received;
+        self.stale = self.pages.iter().copied().filter(|page| page_range(*page).start <= received).collect();
+        self.apart.read_again();
+        self.outline.list_again();
     }
 
     /// Starts again as `fresh`, keeping the prompts on their way, those recorded that it knows of and where each was

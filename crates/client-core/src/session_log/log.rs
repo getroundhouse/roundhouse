@@ -55,6 +55,8 @@ pub struct SessionLog {
     pub(super) positions: HashMap<Seq, Position>,
     /// The pages loaded, as `pages::page_of` numbers them.
     pub(super) pages: BTreeSet<usize>,
+    /// The pages loaded that are to be fetched again, as [`SessionLog::read_again`] says, and stay drawn until then.
+    pub(super) stale: BTreeSet<usize>,
     pub(super) in_flight: BTreeSet<usize>,
     /// Pages whose fetch failed, which aren't asked for again until [`SessionLog::retry_failed`].
     pub(super) failed: BTreeSet<usize>,
