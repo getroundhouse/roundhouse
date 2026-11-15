@@ -1,7 +1,8 @@
 use super::super::Asked;
 use protocol::model::{MergeState, PrState, PullRequest, Workspace, WorkspaceId, WorkspaceStatus};
 use std::collections::{HashMap, HashSet};
-use std::time::{Duration, Instant};
+use std::time::Duration;
+use tokio::time::Instant;
 
 /// The shortest wait between two reads nobody asked for. Soon enough to see a check finish or the merge queue merge it
 /// within a couple of minutes.

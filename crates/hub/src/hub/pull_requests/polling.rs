@@ -2,9 +2,10 @@
 
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use protocol::model::Workspace;
+use tokio::time::Instant;
 use tracing::debug;
 
 use super::{Answer, Asked, Hub, When, calls_to_read, schedule};

@@ -1,10 +1,11 @@
 use std::collections::{HashMap, HashSet};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use protocol::model::{
     BranchName, Branches, Checks, Head, Local, MergeState, PrState, PullRequest, PullRequestFound, Review, Workspace,
     WorkspaceId, WorkspaceStatus,
 };
+use tokio::time::Instant;
 
 use super::{Asked, LATEST, SOONEST, Schedule, Went, due};
 

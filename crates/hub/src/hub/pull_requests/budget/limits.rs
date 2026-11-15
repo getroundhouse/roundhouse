@@ -1,7 +1,8 @@
 use super::super::Asked;
 use protocol::model::{PrState, PullRequestFound};
 use protocol::worker::RateLimit;
-use std::time::{Duration, Instant};
+use std::time::Duration;
+use tokio::time::Instant;
 
 /// The calls a minute that reads nobody is waiting on spend once a burst is used up: one a second, so after a restart
 /// even two hundred workspaces are all read again within about five minutes. Spent flat out, that's 3,600 of GitHub's
