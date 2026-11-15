@@ -1,14 +1,11 @@
-//! Rules from `AGENTS.md`, `docs/architecture.md` and `docs/rust.md`, checked against the real
-//! dependency graph and source tree, so breaking one fails the build rather than waiting to be noticed
-//! in review.
-
-#![cfg(test)]
+//! Only licenses we can ship do, in the crates and in the files kept from elsewhere.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use serde_json::Value;
+
+use super::workspace::{metadata_for, workspace};
 
 /// Licenses that are fine in anything that ships, App Store apps included. `docs/architecture.md` has why
 /// these, and why not GPL, AGPL or LGPL.
@@ -46,34 +43,6 @@ const VENDORED: &[(&str, &str, &str)] = &[
     // Catppuccin's icons, manifest and colours, which `tools/file-icons/update.py` writes.
     ("apps/desktop/file-icons", "MIT", "Permission is hereby granted, free of charge"),
 ];
-
-/// The most lines a Rust file can have, tests included. `docs/rust.md` has the reasoning.
-const MAX_FILE_LINES: usize = 400;
-
-/// Files allowed past that limit, as (path from the repo root, why). Empty so far.
-const LONG_FILES: &[(&str, &str)] = &[];
-
-/// The whole dependency graph. Cargo holds the lock on its package cache while it works it out, so the tests that read
-/// it take turns, and a test that needs only the workspace's own packages reads [`workspace`] instead.
-fn metadata() -> Value {
-    cargo_metadata(&[])
-}
-
-/// The workspace's own packages, which Cargo reads without working out the graph or taking its lock.
-fn workspace() -> Value {
-    cargo_metadata(&["--no-deps"])
-}
-
-fn cargo_metadata(args: &[&str]) -> Value {
-    let manifest = concat!(env!("CARGO_MANIFEST_DIR"), "/../../Cargo.toml");
-    let output = Command::new(env!("CARGO"))
-        .args(["metadata", "--format-version", "1", "--locked", "--manifest-path", manifest])
-        .args(args)
-        .output()
-        .expect("running cargo metadata");
-    assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
-    serde_json::from_slice(&output.stdout).unwrap()
-}
 
 /// Whether a package with this SPDX license expression can ship, given where it comes from. `source` is
 /// `None` for a package kept in this repo.
@@ -148,11 +117,6 @@ fn shipped_packages(metadata: &Value, root: &str) -> BTreeMap<String, (String, O
     shipped
 }
 
-/// The dependency graph as it is on `target`, which [`metadata`] says takes turns with the others.
-fn metadata_for(target: &str) -> Value {
-    cargo_metadata(&["--filter-platform", target])
-}
-
 /// Checks what ships, on the platforms it ships on, rather than everything in `Cargo.lock`, which also
 /// holds build tools, proc macros and other platforms' crates. Add each platform here as it starts
 /// shipping, such as iOS.
@@ -177,153 +141,6 @@ fn only_allowed_licenses_ship() {
             assert!(bad.is_empty(), "{root} on {target} would ship licenses we can't: {bad:#?}");
         }
     }
-}
-
-/// Everything `package` pulls in, excluding dev-dependencies.
-fn runtime_closure(metadata: &Value, package: &str) -> HashSet<String> {
-    let id_to_name: HashMap<&str, &str> = metadata["packages"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|p| (p["id"].as_str().unwrap(), p["name"].as_str().unwrap()))
-        .collect();
-    let nodes: HashMap<&str, &Value> =
-        metadata["resolve"]["nodes"].as_array().unwrap().iter().map(|n| (n["id"].as_str().unwrap(), n)).collect();
-    let start = id_to_name.iter().find(|(_, name)| **name == package).map(|(id, _)| *id).unwrap();
-    let mut seen = HashSet::new();
-    let mut stack = vec![start];
-    while let Some(id) = stack.pop() {
-        for dep in nodes[id]["deps"].as_array().unwrap() {
-            let runtime = dep["dep_kinds"].as_array().unwrap().iter().any(|kind| kind["kind"].is_null());
-            let dep_id = dep["pkg"].as_str().unwrap();
-            if runtime && seen.insert(id_to_name[dep_id].to_string()) {
-                stack.push(dep_id);
-            }
-        }
-    }
-    seen
-}
-
-#[test]
-fn protocol_stays_free_of_io_and_ui() {
-    let metadata = metadata();
-    let closure = runtime_closure(&metadata, "protocol");
-    for banned in ["tokio", "rusqlite", "gpui", "libc"] {
-        assert!(!closure.contains(banned), "protocol depends on {banned}");
-    }
-}
-
-#[test]
-fn nothing_outside_the_ui_depends_on_gpui() {
-    let metadata = metadata();
-    for package in ["process", "protocol", "hub", "worker", "agents", "providers", "client-core", "daemon", "cli"] {
-        let gpui: Vec<_> = runtime_closure(&metadata, package)
-            .into_iter()
-            .filter(|name| name.starts_with("gpui") || name == "zed")
-            .collect();
-        assert!(gpui.is_empty(), "{package} depends on {gpui:?}");
-    }
-}
-
-#[test]
-fn clients_only_reach_the_hub_through_the_protocol() {
-    let metadata = metadata();
-    for package in ["client-core", "cli"] {
-        let closure = runtime_closure(&metadata, package);
-        for banned in ["hub", "worker", "agents", "providers"] {
-            assert!(!closure.contains(banned), "{package} depends on {banned}");
-        }
-    }
-}
-
-#[test]
-fn the_hub_and_the_worker_stay_apart() {
-    let metadata = metadata();
-    assert!(!runtime_closure(&metadata, "hub").contains("worker"));
-    assert!(!runtime_closure(&metadata, "hub").contains("agents"));
-    assert!(!runtime_closure(&metadata, "worker").contains("hub"));
-}
-
-/// `vpk` makes the packages and the feed that the app's `velopack` reads, and Velopack releases the two together,
-/// so they stay on one version. `tools/package/dotnet-tools.json` pins `vpk`.
-#[test]
-fn vpk_is_the_velopack_crate_s_version() {
-    let root = Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."));
-    // As `Cargo.lock` has it, which is the version every build takes.
-    let lock: toml::Table = std::fs::read_to_string(root.join("Cargo.lock")).unwrap().parse().unwrap();
-    let crates: Vec<&str> = lock["package"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter(|package| package["name"].as_str() == Some("velopack"))
-        .map(|package| package["version"].as_str().unwrap())
-        .collect();
-    let tools = root.join("tools/package/dotnet-tools.json");
-    let tools: Value = serde_json::from_str(&std::fs::read_to_string(tools).unwrap()).unwrap();
-
-    assert_eq!(crates, [tools["tools"]["vpk"]["version"].as_str().unwrap()]);
-}
-
-/// The directory of each crate the Rust standards cover, which is every workspace member.
-fn covered_crates(metadata: &Value) -> Vec<PathBuf> {
-    let members: HashSet<&str> =
-        metadata["workspace_members"].as_array().unwrap().iter().map(|id| id.as_str().unwrap()).collect();
-    metadata["packages"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter(|package| members.contains(package["id"].as_str().unwrap()))
-        .map(|package| Path::new(package["manifest_path"].as_str().unwrap()).parent().unwrap().to_path_buf())
-        .collect()
-}
-
-fn add_rust_files(dir: &Path, found: &mut Vec<PathBuf>) {
-    for entry in std::fs::read_dir(dir).unwrap() {
-        let path = entry.unwrap().path();
-        if path.is_dir() {
-            add_rust_files(&path, found);
-        } else if path.extension().is_some_and(|extension| extension == "rs") {
-            found.push(path);
-        }
-    }
-}
-
-#[test]
-fn every_file_stays_within_the_length_limit() {
-    let metadata = workspace();
-    let root = Path::new(metadata["workspace_root"].as_str().unwrap());
-    let mut files = Vec::new();
-    for dir in covered_crates(&metadata) {
-        add_rust_files(&dir, &mut files);
-    }
-    assert!(files.len() > 100, "found only {} files, so this isn't looking in the right place", files.len());
-    let long: BTreeMap<String, usize> = files
-        .iter()
-        .map(|file| (file, std::fs::read_to_string(file).unwrap().lines().count()))
-        .filter(|(_, lines)| *lines > MAX_FILE_LINES)
-        .map(|(file, lines)| (file.strip_prefix(root).unwrap().display().to_string(), lines))
-        .collect();
-    let unexplained: Vec<_> =
-        long.iter().filter(|(path, _)| !LONG_FILES.iter().any(|(file, _)| file == path)).collect();
-    assert!(unexplained.is_empty(), "over {MAX_FILE_LINES} lines, so split by responsibility: {unexplained:?}");
-    let stale: Vec<_> = LONG_FILES.iter().filter(|(file, _)| !long.contains_key(*file)).collect();
-    assert!(stale.is_empty(), "within the limit now, so take these off `LONG_FILES`: {stale:?}");
-}
-
-#[test]
-fn every_crate_inherits_the_lints() {
-    let metadata = workspace();
-    let crates = covered_crates(&metadata);
-    assert!(crates.len() > 10, "found only {} crates, so this isn't looking in the right place", crates.len());
-    let missing: Vec<_> = crates
-        .iter()
-        .filter(|dir| {
-            // Cargo's metadata leaves out `[lints]`, so this reads the manifest.
-            let manifest: toml::Table = std::fs::read_to_string(dir.join("Cargo.toml")).unwrap().parse().unwrap();
-            manifest.get("lints").and_then(|lints| lints.get("workspace")).and_then(toml::Value::as_bool) != Some(true)
-        })
-        .collect();
-    assert!(missing.is_empty(), "these need `[lints] workspace = true`: {missing:?}");
 }
 
 /// Folders `.gitignore` leaves out, which can hold what's installed or built, licenses and all. Hidden ones are left
