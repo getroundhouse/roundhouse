@@ -14,7 +14,7 @@ use gpui_kit::{
 
 use super::code_blocks;
 use super::parsing::Apart;
-use super::{Parsed, TextAt, TextKey, Texts};
+use super::{Parsed, Style, TextAt, TextKey, Texts};
 use crate::find::Marks;
 use crate::linked_images::Images;
 use crate::selection::{Geometry, Selection};
@@ -25,6 +25,7 @@ pub(super) struct ProseElement {
     pub(super) at: TextAt,
     /// The area that scrolls it, if it's in one.
     pub(super) area: Option<ElementId>,
+    pub(super) style: Style,
     /// What it was parsed as, whose blocks it draws, or nothing until it's parsed on another thread.
     pub(super) text: Option<Rc<Parsed>>,
     /// How it's to be parsed on another thread, if it is, which it's drawn as `text` until it's in.
@@ -65,8 +66,9 @@ impl Element for ProseElement {
         window: &mut Window,
         cx: &mut App,
     ) -> (LayoutId, Self::RequestLayoutState) {
-        let mut context =
-            code_blocks::with_actions(RenderContext::from_app(cx).on_link_click(self.selection.on_link()));
+        let mut context = self
+            .style
+            .apply(code_blocks::with_actions(RenderContext::from_app(cx).on_link_click(self.selection.on_link())));
         if let Some(Images { plugins, resolver }) = self.images.take() {
             context = context.with_image_source(resolver).with_markdown_extensions(plugins);
         }

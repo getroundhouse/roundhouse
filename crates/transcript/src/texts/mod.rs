@@ -33,6 +33,7 @@ pub(crate) use at::{Among, Of, Place, TextAt};
 use parse::ImagesAre;
 pub(crate) use parse::{ATOM, Parsed, leaves};
 pub(crate) use plain::Plain;
+pub(crate) use style::Style;
 
 mod at;
 mod budget;
@@ -42,6 +43,7 @@ mod moves;
 mod parse;
 mod parsing;
 mod plain;
+mod style;
 
 #[cfg(test)]
 mod tests;
