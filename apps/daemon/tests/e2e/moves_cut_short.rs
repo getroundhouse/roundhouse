@@ -4,10 +4,11 @@
 
 use std::path::{Path, PathBuf};
 use std::thread;
-use std::time::Duration;
 
 use client_core::Client;
+use process::ProcessRecord;
 use protocol::model::{SetupStatus, Workspace, WorkspaceId, WorkspaceStatus};
+use protocol::paths::WORKER_RECORD_FILE;
 
 use crate::support::{Stack, commit_settings, git, install_executable, wait_for_setup, wait_for_turn_end, wait_until};
 use crate::support::{assistant_text, workspace};
@@ -39,6 +40,12 @@ fn archive_until_the_script_runs(stack: &Stack, id: &WorkspaceId, started: &Path
 
 fn wait_for_workspace(client: &Client, id: &WorkspaceId, status: WorkspaceStatus) {
     wait_until(&format!("the workspace to be {status:?}"), || workspace(client, id).status == status);
+}
+
+/// The PID of the worker serving the workspace's instance, as it recorded itself.
+fn worker_of(stack: &Stack, client: &Client, id: &WorkspaceId) -> u32 {
+    let instance = stack.paths().instances_dir.join(workspace(client, id).instance_id.to_string());
+    ProcessRecord::read(&instance.join(WORKER_RECORD_FILE)).expect("the worker's record").pid
 }
 
 #[test]
@@ -110,17 +117,19 @@ fn a_restore_cut_short_is_settled_once_the_worker_has_finished_putting_the_workt
     });
     wait_until("the checkout to start", || started.exists());
     assert_eq!(workspace(&client, &made.id).status, WorkspaceStatus::Restoring);
+    let restoring = worker_of(&stack, &client, &made.id);
 
     stack.restart_hub();
     let client = stack.client();
-    // The worktree's folder is there already, but the worker hasn't finished with it, so the hub isn't told yet. Long
-    // enough for a hub that took the folder for the answer to have recorded it.
+    // The worktree's folder is there already, but the worker hasn't finished with it, so the hub isn't told yet.
     assert!(worktree.exists());
-    thread::sleep(Duration::from_millis(500));
     assert_eq!(workspace(&client, &made.id).status, WorkspaceStatus::Restoring);
 
     std::fs::write(&go, "").unwrap();
     wait_for_workspace(&client, &made.id, WorkspaceStatus::Ready);
+    // By the worker that was putting the worktree back, which answers once it has finished, rather than one started
+    // since, which would find the folder there at once. The hub's own tests have it take a worker's answer over that.
+    assert_eq!(worker_of(&stack, &client, &made.id), restoring, "settled by the worker that was restoring it");
     // As a restore that wasn't cut short ends: setup runs again, and an agent can work in it.
     assert_eq!(wait_for_setup(&client, &made.id), SetupStatus::Succeeded);
     assert!(workspace(&client, &made.id).archived_at_ms.is_none());
