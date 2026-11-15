@@ -100,7 +100,7 @@ impl Normalizer {
         if let Some(parsed) = self.compactions.read(&value) {
             return Normalized { dropped, parsed, after: own_turn };
         }
-        let mut parsed = noted.map_or_else(|| parse_value(&value), Parsed::Event);
+        let mut parsed = noted.map_or_else(|| parse_value(&value, &self.subagents), Parsed::Event);
         if let Parsed::Event(body) = &mut parsed {
             self.list(body);
         }
@@ -109,7 +109,7 @@ impl Normalizer {
             denied::say(body, &value);
         }
         if let Parsed::Event(EventBody::ApprovalRequested { asked_by, .. }) = &mut parsed {
-            *asked_by = self.subagents.asked_by(&value);
+            *asked_by = Subagents::asked_by(&value);
         }
         if let Parsed::Delta(delta) = &parsed {
             match delta.change {
@@ -161,7 +161,7 @@ impl Normalizer {
 /// block sits in its message, and which background tasks are monitors or were stopped.
 #[cfg(test)]
 pub(super) fn parse_line(line: &str) -> Parsed {
-    value_of(line).map_or_else(unparsed, |value| parse_value(&value))
+    value_of(line).map_or_else(unparsed, |value| parse_value(&value, &Subagents::default()))
 }
 
 /// A line as JSON, with what the CLI can write that JSON can't hold repaired.
@@ -177,14 +177,16 @@ fn unparsed() -> Parsed {
     Parsed::Event(EventBody::AgentOther { kind: "unparsed".into(), subagent: None })
 }
 
-fn parse_value(value: &Value) -> Parsed {
+/// What `value` says, naming the subagent whose line it is as `subagents` know it.
+fn parse_value(value: &Value, subagents: &Subagents) -> Parsed {
     let kind = str_of(value, "type").unwrap_or("unknown");
+    let from = subagents.of_line(value);
     match kind {
-        "assistant" => Parsed::Event(said::message(value).unwrap_or_else(|| assistant(value))),
-        "user" => user::line(value),
+        "assistant" => Parsed::Event(said::message(value, from.clone()).unwrap_or_else(|| assistant(value, from))),
+        "user" => user::line(value, from),
         "result" => Parsed::Event(turn_ended(value)),
         "system" => system(value),
-        "stream_event" => stream_event(value),
+        "stream_event" => stream_event(value, from),
         "control_request" => control_request(value),
         "control_cancel_request" => match str_of(value, "request_id") {
             Some(id) => Parsed::Event(EventBody::ApprovalResolved {
@@ -278,11 +280,11 @@ fn system(value: &Value) -> Parsed {
     }
 }
 
-fn assistant(value: &Value) -> EventBody {
+fn assistant(value: &Value, subagent: Option<SubagentId>) -> EventBody {
     let message = value.get("message").unwrap_or(&Value::Null);
     EventBody::Assistant {
         message_id: id_of(message, "id"),
-        subagent: id_of(value, "parent_tool_use_id"),
+        subagent,
         model: string_of(message, "model"),
         blocks: blocks::read(message.get("content")),
         // A Normalizer knows it from the deltas before.
@@ -314,7 +316,7 @@ fn control_request(value: &Value) -> Parsed {
     })
 }
 
-fn stream_event(value: &Value) -> Parsed {
+fn stream_event(value: &Value, subagent: Option<SubagentId>) -> Parsed {
     let event = value.get("event").unwrap_or(&Value::Null);
     if let Some(request) = request::request(value, event) {
         return Parsed::Request(request);
@@ -357,7 +359,7 @@ fn stream_event(value: &Value) -> Parsed {
         // The hub knows the run, and sets it.
         run: None,
         message_id: message_id.into(),
-        subagent: id_of(value, "parent_tool_use_id"),
+        subagent,
         change,
     })
 }

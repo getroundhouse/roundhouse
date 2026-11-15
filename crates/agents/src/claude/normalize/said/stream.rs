@@ -1,4 +1,4 @@
-use super::super::{id_of, str_of};
+use super::super::str_of;
 use protocol::event::{EventBody, FailureKind, NoticeLevel, RequestFailure};
 use protocol::model::SubagentId;
 use serde_json::Value;
@@ -7,14 +7,13 @@ use serde_json::Value;
 const NO_MODEL: &str = "<synthetic>";
 
 /// An `assistant` line the CLI wrote itself, if this is one: a failed request when it says it wraps an error from the
-/// model's API, and a note otherwise. Either keeps the subagent it's from.
-pub(in super::super) fn message(value: &Value) -> Option<EventBody> {
+/// model's API, and a note otherwise. Either keeps the subagent it's from, `subagent`.
+pub(in super::super) fn message(value: &Value, subagent: Option<SubagentId>) -> Option<EventBody> {
     let message = value.get("message")?;
     if str_of(message, "model") != Some(NO_MODEL) {
         return None;
     }
     let text = text_of(message.get("content"));
-    let subagent: Option<SubagentId> = id_of(value, "parent_tool_use_id");
     if value.get("is_api_error_message").and_then(Value::as_bool) != Some(true) {
         return Some(EventBody::Notice { level: NoticeLevel::Info, message: text, subagent });
     }

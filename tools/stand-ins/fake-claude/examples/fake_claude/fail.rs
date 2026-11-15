@@ -24,10 +24,12 @@ pub(crate) fn request(turn: &Turn, error: &str) -> bool {
         (error == "rate_limit").then(|| json!({"rate_limit_info": {"status": "rejected", "resetsAt": RESETS_AT}}));
     emit(
         turn.out,
-        json!({"type": "assistant", "parent_tool_use_id": turn.parent, "session_id": turn.config.session_id,
+        turn.named(
+            json!({"type": "assistant", "parent_tool_use_id": turn.parent(), "session_id": turn.config.session_id,
             "message": {"id": message_id(), "model": "<synthetic>", "role": "assistant",
                 "content": [{"type": "text", "text": SAID}]},
             "error": error, "is_api_error_message": true, "api_error_status": 429, "api_error_params": limit}),
+        ),
     );
     FAILED.store(true, Ordering::SeqCst);
     true

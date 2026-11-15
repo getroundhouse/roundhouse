@@ -63,7 +63,7 @@ An agent can hand part of its work to a subagent. Its call says what the subagen
 
 ![Two subagents' calls, opened](../../../spec/screens/tool-subagent.png)
 
-A subagent's work is kept out of the chat, so it doesn't bury the conversation it's part of. A subagent that starts working again after it finished says so in the same call, and its report is the one it gives next. Codex names its subagents by their task paths. Follow-up work on one appears as another call with its own transcript and report; a message to it alone does not start another call. What it was asked appears only when Codex supplies it.
+A subagent's work is kept out of the chat, so it doesn't bury the conversation it's part of. A subagent that starts working again after it finished, as Claude's does when the agent sends it a message, says so in the same call, and its report is the one it gives next. Codex names its subagents by their task paths. Follow-up work on one appears as another call with its own transcript and report; a message to it alone does not start another call. What it was asked appears only when Codex supplies it.
 
 ## Work in the background
 

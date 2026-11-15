@@ -15,7 +15,7 @@ use std::time::Duration;
 
 use serde_json::json;
 
-use crate::turn::{Block, Turn};
+use crate::turn::{Block, Turn, Within};
 use crate::waiting::WaitingOn;
 use crate::{Input, Prompt, background, emit, pause};
 
@@ -130,7 +130,7 @@ pub(crate) fn start(
     if pace.works(rx, queued, eof) {
         return stopped(turn);
     }
-    let mut within = Turn { parent: Some(&agent), ..*turn };
+    let mut within = Turn { within: Some(Within { call: &agent, task: &task }), ..*turn };
     for made in 1..=calls {
         let call = within.named_tool_use("Bash", json!({"command":"ls","description":"List what's here"}));
         within.tool_result(&call, "README.md", false);

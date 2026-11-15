@@ -29,6 +29,23 @@ fn subagent_call(client: &Client, session_id: &SessionId) -> ToolUseId {
     call.unwrap()
 }
 
+/// The call that started the subagent, and the subagent, as the agent named it when it said it started, once that's
+/// in the log. The CLI names it by the task it runs as, which isn't the call.
+fn subagent(client: &Client, session_id: &SessionId) -> (ToolUseId, SubagentId) {
+    let call = subagent_call(client, session_id);
+    let mut id = None;
+    wait_until("the subagent's start", || {
+        id = read_all(client, session_id).iter().find_map(|event| match &event.body {
+            EventBody::SubagentStarted { call: started, .. } if *started == call => event.body.subagent_started(),
+            _ => None,
+        });
+        id.is_some()
+    });
+    let id = id.unwrap();
+    assert_ne!(id, SubagentId::of_call(&call), "a test of a subagent named by its call can't tell the two apart");
+    (call, id)
+}
+
 /// Checks that `events` are all from `subagent`, or the agent's own, in place order from the first.
 fn assert_placed(events: &[SessionEvent], subagent: Option<&SubagentId>) {
     for (place, event) in (1..).zip(events) {
@@ -49,8 +66,7 @@ fn the_agents_own_events_and_a_subagents_are_read_and_followed_apart() {
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
     client.session_prompt(&session.id, "agent:Look around", None).unwrap();
-    let call = subagent_call(&client, &session.id);
-    let id = SubagentId::of_call(&call);
+    let (call, id) = subagent(&client, &session.id);
     let (own, subagent) = (client.session_subscribe_places(&session.id, None, Place::new(1)).unwrap(), {
         client.session_subscribe_places(&session.id, Some(&id), Place::new(1)).unwrap()
     });
@@ -86,6 +102,14 @@ fn the_agents_own_events_and_a_subagents_are_read_and_followed_apart() {
     assert_eq!((&agent.events[..read.len()], last), (read.as_slice(), Place::new(u64::try_from(read.len()).unwrap())));
     let (rest, last) = client.session_read_places(&session.id, Some(&id), Place::new(2), 1000).unwrap();
     assert_eq!((rest.as_slice(), last), (&work.events[1..], Place::new(3)));
+    // A client from before subagents had IDs of their own names one by the call that started it.
+    let by_its_call = Some(SubagentId::of_call(&call));
+    let (named, _) = client.session_read_places(&session.id, by_its_call.as_ref(), Place::new(1), 1000).unwrap();
+    assert_eq!(named, work.events, "read by its call");
+    let followed = client.session_subscribe_places(&session.id, by_its_call.as_ref(), Place::new(1)).unwrap();
+    let mut by_call = Follower::default();
+    by_call.drain_until(&followed, "its events, by its call", |by_call| by_call.events.len() >= work.events.len());
+    assert_eq!(by_call.events, work.events, "followed by its call");
 }
 
 /// Reads a new subscription as far as the tail it starts from, which comes once it has caught up on the log.
@@ -105,8 +129,7 @@ fn a_follower_that_joins_as_a_subagent_writes_starts_from_only_what_it_follows()
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
     client.session_prompt(&session.id, "agent:Look around", None).unwrap();
-    let call = subagent_call(&client, &session.id);
-    let id = SubagentId::of_call(&call);
+    let (_, id) = subagent(&client, &session.id);
     let first = client.session_subscribe_places(&session.id, Some(&id), Place::new(1)).unwrap();
     Follower::default().drain_until(&first, "the subagent to write", |work| work.tail_text().contains("There's"));
 
@@ -126,8 +149,7 @@ fn a_subagent_in_the_foreground_cut_off_as_it_writes_leaves_its_follower_nothing
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
     client.session_prompt(&session.id, "agent-foreground:Look around", None).unwrap();
-    let call = subagent_call(&client, &session.id);
-    let id = SubagentId::of_call(&call);
+    let (_, id) = subagent(&client, &session.id);
     let subagent = client.session_subscribe_places(&session.id, Some(&id), Place::new(1)).unwrap();
     let mut work = Follower::default();
     work.drain_until(&subagent, "the subagent to write", |work| work.tail_text().contains("There's"));
@@ -199,6 +221,7 @@ fn the_hub_keeps_a_record_of_each_subagent_and_says_on_the_feed_as_it_changes() 
 
     let [subagent] = subagents.as_slice() else { panic!("one subagent: {subagents:?}") };
     assert_eq!((&subagent.call, subagent.status, subagent.calls), (&call, SubagentStatus::Finished, 1));
+    assert_eq!(subagent.id(), SubagentId::from(format!("task_{call}")), "named by the task it runs as");
     assert_eq!((subagent.prompt.as_deref(), subagent.in_background), (Some("Look around."), true));
     assert_eq!(subagent.latest_call.as_ref().map(|call| call.name.as_str()), Some("Bash"));
     assert_eq!(subagent.report.as_deref(), Some("There's a README here."));
@@ -247,8 +270,7 @@ fn a_view_holds_only_the_agents_own_events_or_one_subagents_and_the_feed_keeps_t
     let (_, session) = stack.workspace(&client);
     let feed = RecordsFeed::start(&client);
     client.session_prompt(&session.id, "agent:Look around", None).unwrap();
-    let call = subagent_call(&client, &session.id);
-    let id = SubagentId::of_call(&call);
+    let (_, id) = subagent(&client, &session.id);
 
     let own = OpenSession::start_view(&client, &session, View::Own);
     let work = OpenSession::start_view(&client, &session, View::Subagent(id.clone()));

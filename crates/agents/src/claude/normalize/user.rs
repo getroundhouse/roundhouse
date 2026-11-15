@@ -2,11 +2,13 @@
 //! what a command the CLI ran printed.
 
 use protocol::event::{ContentBlock, EventBody};
+use protocol::model::SubagentId;
 use serde_json::Value;
 
-use super::{Parsed, blocks, file_change, id_of, images, said};
+use super::{Parsed, blocks, file_change, images, said};
 
-pub(super) fn line(value: &Value) -> Parsed {
+/// What the line `value` says, from the subagent `from`, or from the agent itself.
+pub(super) fn line(value: &Value, from: Option<SubagentId>) -> Parsed {
     // What a command the CLI ran printed is the CLI's, not the agent's. What a typed `/compact` printed is read first,
     // since the compaction says it better.
     if let Some((stream, text)) = said::printed(value) {
@@ -18,9 +20,7 @@ pub(super) fn line(value: &Value) -> Parsed {
     // summary is one too, but `compaction` reads it first. A result is shown even so, or its call would never get one.
     let for_the_model = value.get("isSynthetic").and_then(Value::as_bool) == Some(true);
     if for_the_model && !blocks.iter().any(|block| matches!(block, ContentBlock::ToolResult { .. })) {
-        // A subagent's names the call that started it, as every `user` line from one does.
-        let subagent = id_of(value, "parent_tool_use_id");
-        return Parsed::Event(EventBody::AgentOther { kind: "user/synthetic".into(), subagent });
+        return Parsed::Event(EventBody::AgentOther { kind: "user/synthetic".into(), subagent: from });
     }
     // Claude says what an edit changed beside the line's one result, rather than in it.
     if let [ContentBlock::ToolResult { change, text, .. }] = blocks.as_mut_slice() {
@@ -30,7 +30,7 @@ pub(super) fn line(value: &Value) -> Parsed {
         }
     }
     let taken = images::take(content, &mut blocks);
-    let body = EventBody::AgentUser { subagent: id_of(value, "parent_tool_use_id"), blocks };
+    let body = EventBody::AgentUser { subagent: from, blocks };
     if taken.is_empty() {
         return Parsed::Event(body);
     }

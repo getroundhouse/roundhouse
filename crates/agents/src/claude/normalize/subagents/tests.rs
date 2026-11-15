@@ -32,7 +32,7 @@ fn a_subagent_starts_with_what_it_was_asked_and_ends_with_its_report() {
         start,
         EventBody::SubagentStarted {
             call: "agent".into(),
-            subagent: Some("agent".into()),
+            subagent: Some("t1".into()),
             kind: Some("Explore".into()),
             description: Some("Find the tests".into()),
             prompt: Some("Find where the tests live.".into()),
@@ -41,7 +41,7 @@ fn a_subagent_starts_with_what_it_was_asked_and_ends_with_its_report() {
     );
     let report = Some("They're in tests/.".into());
     let ended = EventBody::SubagentEnded {
-        subagent: "agent".into(),
+        subagent: "t1".into(),
         outcome: TaskOutcome::Finished,
         report,
         context_tokens: None,
@@ -53,6 +53,80 @@ fn a_subagent_starts_with_what_it_was_asked_and_ends_with_its_report() {
     );
 }
 
+/// A line from the subagent the call `call` started, naming the task it runs as as `agent_id` if `agent` does, as
+/// each has since 2.1.322.
+fn from(call: &str, agent: Option<&str>) -> Value {
+    let mut line = json!({"type":"assistant","parent_tool_use_id":call,"session_id":"s",
+        "message":{"id":"m","model":"claude-haiku-5-5","content":[{"type":"text","text":"x"}]}});
+    if let Some(agent) = agent {
+        line["agent_id"] = json!(agent);
+    }
+    line
+}
+
+fn subagent_of(normalizer: &mut Normalizer, line: &Value) -> Option<String> {
+    event(normalizer, line).subagent().map(|subagent| subagent.as_str().to_owned())
+}
+
+/// A subagent is named by the task it runs as, which outlives the call that started it, and which its lines name as
+/// `agent_id`. A line that names only the call is from the subagent the CLI said that call started, and from one whose
+/// start wasn't heard, such as before the adapter started again, is named by the call.
+#[test]
+fn a_subagent_is_named_by_the_task_it_runs_as_which_its_lines_name_or_else_by_its_call() {
+    let mut normalizer = Normalizer::default();
+    event(&mut normalizer, &started("t1", "local_agent", true));
+
+    assert_eq!(subagent_of(&mut normalizer, &from("agent", Some("t1"))).as_deref(), Some("t1"));
+    assert_eq!(subagent_of(&mut normalizer, &from("agent", None)).as_deref(), Some("t1"), "by the call it started");
+    assert_eq!(subagent_of(&mut normalizer, &from("earlier", Some("t0"))).as_deref(), Some("t0"), "unheard");
+    assert_eq!(subagent_of(&mut normalizer, &from("earlier", None)).as_deref(), Some("earlier"), "nor named");
+    let own = json!({"type":"assistant","message":{"id":"m","content":[]}});
+    assert_eq!(subagent_of(&mut normalizer, &own), None, "the agent's own");
+}
+
+/// The CLI starts a subagent's task again when the agent carries on with it after it ended, under the call that carries
+/// on, such as a `SendMessage`, as the hub's own logs had it 78 times. Its lines still name the call that first started
+/// it, and the subagent is the same.
+#[test]
+fn a_subagent_carried_on_with_starts_again_as_the_same_subagent() {
+    let mut normalizer = Normalizer::default();
+    event(&mut normalizer, &started("t1", "local_agent", true));
+    event(&mut normalizer, &notification("t1", "completed"));
+    let mut again = started("t1", "local_agent", true);
+    again["tool_use_id"] = json!("send");
+
+    let start = event(&mut normalizer, &again);
+
+    assert!(matches!(&start, EventBody::SubagentStarted { call, .. } if call.as_str() == "send"), "{start:?}");
+    assert_eq!(start.subagent_started(), Some("t1".into()));
+    assert_eq!(subagent_of(&mut normalizer, &from("agent", None)).as_deref(), Some("t1"));
+    let ended = event(&mut normalizer, &notification("t1", "completed"));
+    assert!(matches!(ended, EventBody::SubagentEnded { subagent, .. } if subagent.as_str() == "t1"));
+}
+
+/// A subagent's request for approval names the task it runs as, which is the subagent, whether or not the adapter
+/// heard it start.
+#[test]
+fn a_subagent_s_request_names_it_by_the_task_it_runs_as() {
+    let request = |agent: Option<&str>| {
+        let mut line = json!({"type":"control_request","request_id":"r","request":{"subtype":"can_use_tool",
+            "tool_name":"Bash","input":{"command":"ls"},"tool_use_id":"toolu_1"}});
+        if let Some(agent) = agent {
+            line["request"]["agent_id"] = json!(agent);
+        }
+        line
+    };
+    let asked_by = |line: &Value| {
+        let EventBody::ApprovalRequested { asked_by, .. } = event(&mut Normalizer::default(), line) else {
+            panic!("{line}")
+        };
+        asked_by.map(|subagent| subagent.as_str().to_owned())
+    };
+
+    assert_eq!(asked_by(&request(Some("t1"))).as_deref(), Some("t1"));
+    assert_eq!(asked_by(&request(None)), None, "the agent's own");
+}
+
 #[test]
 fn a_stopped_subagent_reports_nothing() {
     let mut normalizer = Normalizer::default();
@@ -61,7 +135,7 @@ fn a_stopped_subagent_reports_nothing() {
     let end = event(&mut normalizer, &notification("t1", "stopped"));
 
     let ended = EventBody::SubagentEnded {
-        subagent: "agent".into(),
+        subagent: "t1".into(),
         outcome: TaskOutcome::Stopped,
         report: None,
         context_tokens: None,
@@ -87,7 +161,7 @@ fn a_subagent_says_how_many_tokens_its_conversation_holds_as_it_works_and_as_it_
     ending["usage"] = json!({"total_tokens":41_020,"tool_uses":9,"duration_ms":9000});
     let end = event(&mut normalizer, &ending);
 
-    assert_eq!(working, EventBody::SubagentContext { subagent: "agent".into(), tokens: 37_386 });
+    assert_eq!(working, EventBody::SubagentContext { subagent: "t1".into(), tokens: 37_386 });
     assert!(matches!(end, EventBody::SubagentEnded { context_tokens: Some(41_020), .. }), "{end:?}");
     assert!(
         matches!(event(&mut normalizer, &progress("t1", 41_020)), EventBody::AgentOther { .. }),
