@@ -147,11 +147,11 @@ jobs:
   # 16 cores, since PRs and the queue wait for the tests, and nextest runs two per core, as .config/nextest.toml says.
   # A cold run took over 20 minutes on 2. On RunsOn in our AWS account, since GitHub bills its 16-core runners even on a
   # public repository. A Spot instance AWS reclaims during a queue run drops the PR from the queue, before RunsOn reruns
-  # the job.
+  # the job. From the 8th generation on, since on c7g and r7g the tests ran about 1.4 times as long as on c9g.
   test:
     needs: changes
     if: needs.changes.outputs.run == 'true'
-    runs-on: runs-on=${{ github.run_id }}/runner=arm64-16
+    runs-on: runs-on=${{ github.run_id }}/runner=arm64-16-gen8
     timeout-minutes: 60
     steps:
       # Sends the cache steps below to the stack's S3 bucket, beside the runner, rather than to GitHub's.
@@ -162,7 +162,7 @@ jobs:
       - id: zig
         uses: ./.github/actions/zig
         with:
-          cache-name: runs-on-arm64-16-test
+          cache-name: runs-on-arm64-16-gen8-test
       # The tests make commits.
       - run: git config --global user.name ci && git config --global user.email ci@example.com
       - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
@@ -178,8 +178,8 @@ jobs:
             target/
           # As in lint. Our test binaries each link GPUI, so they're over half the build. Named for the runner, since a
           # target/ fits only the image and path it was built on.
-          key: runs-on-arm64-16-test-deps-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', '**/Cargo.toml') }}
-          restore-keys: ${{ github.ref != 'refs/heads/main' && 'runs-on-arm64-16-test-deps-' || '' }}
+          key: runs-on-arm64-16-gen8-test-deps-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', '**/Cargo.toml') }}
+          restore-keys: ${{ github.ref != 'refs/heads/main' && 'runs-on-arm64-16-gen8-test-deps-' || '' }}
       # One pool for every binary's tests. It skips doc tests, so they run after.
       - run: cargo nextest run --profile ci --workspace --locked
       - run: cargo test --workspace --doc --locked
