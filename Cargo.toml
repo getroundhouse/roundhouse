@@ -15,6 +15,7 @@ members = [
     "crates/transcript",
     "crates/look",
     "crates/terminal-state",
+    "crates/dictation",
     "crates/fetching",
     "tools/policy",
     "tools/guide",
@@ -39,6 +40,7 @@ default-members = [
     "apps/daemon",
     "apps/cli",
     "crates/terminal-state",
+    "crates/dictation",
     "crates/fetching",
     "tools/policy",
     "tools/guide",
@@ -69,6 +71,7 @@ hub = { path = "crates/hub" }
 client-core = { path = "crates/client-core" }
 transcript = { path = "crates/transcript" }
 look = { path = "crates/look" }
+dictation = { path = "crates/dictation" }
 fetching = { path = "crates/fetching" }
 desktop = { path = "apps/desktop" }
 
@@ -76,9 +79,13 @@ anyhow = "1.0.104"
 async-trait = "0.1.92"
 # Already under GPUI. Carries an attachment's bytes as text, the way JSON has to.
 base64 = "0.22.1"
+# Already under objc2's crates. The block a Mac calls with whether the app may use the microphone.
+block2 = "0.6.2"
 # Already under GPUI. Says when something happened in the local time zone.
 chrono = { version = "0.4.45", default-features = false, features = ["clock"] }
 clap = { version = "4.6.7", features = ["derive"] }
+# Hears the microphone. On a Mac it's Core Audio through objc2's bindings, with nothing generated as it builds.
+cpal = "0.18.2"
 # Already under GPUI. Picks the names the hub gives workspaces at random.
 fastrand = "2.5.0"
 flume = "0.11.1"
@@ -117,6 +124,8 @@ objc2 = "0.6.5"
 # Already under GPUI. Taps a Mac's trackpad as a sidebar's edge takes its usual width, and plays the sound for a chat
 # that needs a look.
 objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std", "NSHapticFeedback", "NSSound"] }
+# Asks a Mac whether the app may use the microphone, and has the system ask the person.
+objc2-av-foundation = { version = "0.3.2", default-features = false, features = ["std", "AVCaptureDevice", "AVMediaFormat", "block2"] }
 # Already under GPUI. Hands the sound for a chat that needs a look to AppKit, by its bytes or its name, and finds the
 # folders the computer keeps alert sounds in.
 objc2-foundation = { version = "0.3.2", default-features = false, features = ["std", "NSArray", "NSData", "NSEnumerator", "NSPathUtilities", "NSString"] }

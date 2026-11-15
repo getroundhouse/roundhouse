@@ -1,0 +1,30 @@
+[package]
+name = "dictation"
+description = "Hearing speech and turning it into text on this device: the microphone, cutting a recording at its pauses, and the engines that hear it. No UI and no async runtime."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[features]
+# What only tests use: an engine that stands in for the model, and audio a test feeds a recording itself.
+testing = []
+
+[dependencies]
+flume.workspace = true
+parking_lot.workspace = true
+thiserror.workspace = true
+
+# The microphone, through Core Audio, and asking whether the app may use it.
+[target.'cfg(target_os = "macos")'.dependencies]
+block2.workspace = true
+cpal.workspace = true
+objc2.workspace = true
+objc2-av-foundation.workspace = true
+
+[dev-dependencies]
+dictation = { workspace = true, features = ["testing"] }
+proptest.workspace = true
+
+[lints]
+workspace = true
