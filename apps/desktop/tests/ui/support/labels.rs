@@ -3,6 +3,8 @@
 
 use gpui_kit::test::{ElementSnapshot, TestQueryExt as _, TestWindowExt as _};
 use gpui_kit::{App, AppContext as _, ElementId, SharedString, Window};
+#[cfg(target_os = "macos")]
+use look::Region;
 
 use super::Ui;
 use super::click::click_at;
@@ -10,12 +12,14 @@ use super::click::click_at;
 /// The ID the kit gives the menu that's open.
 pub(crate) const MENU: &str = "popup-menu";
 
-/// The first element with this label that shows, in the order the window lists them, for a label several have, such
-/// as two tool calls that did the same thing. One scrolled out of sight is skipped, since it can't be pointed at. For
-/// the gallery, which only a Mac draws.
+/// The first element with this label that shows inside `region`, in the order the window lists them, for a label
+/// several have, such as two tool calls that did the same thing, rather than anything outside it with the same label,
+/// such as the sidebar's `Search` beside a search's line in the chat. One scrolled out of sight is skipped, since it
+/// can't be pointed at. For the gallery, which only a Mac draws.
 #[cfg(target_os = "macos")]
-pub(crate) fn first_labelled(window: &Window, label: &str) -> Option<ElementSnapshot> {
-    window.find_all_by_label(label).into_iter().find(ElementSnapshot::visible)
+pub(crate) fn first_labelled_in(window: &Window, region: Region, label: &str) -> Option<ElementSnapshot> {
+    let region = ElementId::Name(region.id().into());
+    window.find_all_by_label(label).into_iter().find(|found| found.visible() && found.path().contains(&region))
 }
 
 /// The ID of the one element labelled `label`, to act on it.

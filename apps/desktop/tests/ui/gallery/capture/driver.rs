@@ -3,7 +3,7 @@
 use super::super::frame;
 use super::super::steps::{Screen, Step, Target};
 use super::{opening, scrollbar};
-use crate::support::{first_labelled, menu_item};
+use crate::support::{first_labelled_in, menu_item};
 use desktop::app::AppView;
 use desktop::pull_request::Lookup;
 use desktop::sidebar_tabs::SidebarTab;
@@ -16,6 +16,7 @@ use gpui_kit::{
     InputEvent as _, MouseButton, MouseDownEvent, MouseMoveEvent, Pixels, PlatformTextSystem, point, px,
 };
 use image::RgbaImage;
+use look::Region;
 use opening::open;
 use protocol::model::Seq;
 use scrollbar::ChatScroll;
@@ -244,9 +245,9 @@ impl Driver {
         self.paste(ClipboardItem::from(ClipboardEntry::ExternalPaths(copied)));
     }
 
-    /// Clicks the line with this label, then moves away from it, so the picture shows it open rather than hovered. A
-    /// line that's clicked stays where it is in the window, with what it opened to running on under it, so the chat
-    /// then goes back to its end, where every screen's chat starts, and the picture shows what the line opened to.
+    /// Clicks the chat's line with this label, then moves away from it, so the picture shows it open rather than
+    /// hovered. A line that's clicked stays where it is in the window, with what it opened to running on under it, so
+    /// the chat then goes back to its end, where every screen's chat starts, and the picture shows what it opened to.
     pub(super) fn open(&mut self, label: &'static str) {
         let id = self.find(Target::Label(label));
         self.cx.update_window(self.handle, |_, window, cx| window.click(id, cx)).unwrap();
@@ -265,14 +266,23 @@ impl Driver {
         self.cx.update_window(self.handle, |_, window, cx| window.hover(AWAY, cx)).unwrap();
     }
 
-    /// The ID of what's drawn now as `target`. One found by its label is the first drawn with it.
+    /// The ID of what's drawn now as `target`. A line found by its label is the first the chat shows with it, rather
+    /// than anything outside the chat with it, such as the sidebar's `Search`.
     pub(super) fn find(&mut self, target: Target) -> gpui_kit::ElementId {
         self.frame();
         match target {
             Target::Id(id) => gpui_kit::SharedString::from(id).into(),
             Target::Label(label) => {
-                let found = self.cx.update_window(self.handle, |_, window, _| first_labelled(window, label)).unwrap();
-                found.unwrap_or_else(|| panic!("nothing is labelled {label}")).path().last().unwrap().clone()
+                let found = self
+                    .cx
+                    .update_window(self.handle, |_, window, _| first_labelled_in(window, Region::Transcript, label))
+                    .unwrap();
+                found
+                    .unwrap_or_else(|| panic!("the chat shows nothing labelled {label}"))
+                    .path()
+                    .last()
+                    .unwrap()
+                    .clone()
             }
         }
     }

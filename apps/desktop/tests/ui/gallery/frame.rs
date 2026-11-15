@@ -13,7 +13,7 @@ use image::RgbaImage;
 use look::Region;
 
 use super::steps::{Screen, Step};
-use crate::support::{MENU, first_labelled};
+use crate::support::{MENU, first_labelled_in};
 
 /// How much of the pane shows around what a [`Frame::Around`] or [`Frame::Transcript`] picture is about, in points,
 /// so its edges and corners show against the pane.
@@ -72,7 +72,8 @@ pub(crate) enum Part {
     /// A part of the window the app marks with `look::InRegion::region`, which is what lets a test find it.
     Region(Region),
     /// A line in the chat, by its label, for one whose ID is made from data the screen can't know. Every line can be
-    /// found by its label, and one several lines have is the first of them that shows, as a step finds it.
+    /// found by its label, and one several lines have is the first of them that shows in the chat, as a step finds it,
+    /// rather than anything outside it with the same label.
     Line(&'static str),
     /// The menu that's open, with its edge, which the kit draws over whatever's under it, so it's named alongside what
     /// it opened from.
@@ -256,7 +257,7 @@ fn drawn(window: &Window, open: impl Into<Open>, scale: f32) -> Option<Area> {
     let open = open.into();
     let found = match open {
         Open::Part(Part::Region(region)) => window.try_find(SharedString::from(region.id())),
-        Open::Part(Part::Line(label)) => first_labelled(window, label),
+        Open::Part(Part::Line(label)) => first_labelled_in(window, Region::Transcript, label),
         Open::Part(Part::Menu) => window.try_find(SharedString::from(MENU)),
         Open::Shown(id) => window.try_find(SharedString::from(id)),
     };

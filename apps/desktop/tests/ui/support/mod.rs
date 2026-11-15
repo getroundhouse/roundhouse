@@ -34,7 +34,7 @@ pub(crate) use labels::{MENU, click_menu_item, labelled};
 
 /// For the gallery, which only a Mac draws.
 #[cfg(target_os = "macos")]
-pub(crate) use labels::first_labelled;
+pub(crate) use labels::first_labelled_in;
 #[cfg(target_os = "macos")]
 pub(crate) use labels::menu_item;
 pub(crate) use order::{
