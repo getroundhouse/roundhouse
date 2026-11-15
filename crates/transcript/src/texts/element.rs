@@ -12,6 +12,7 @@ use gpui_kit::{
     InspectorElementId, IntoElement, LayoutId, ParentElement as _, Pixels, Styled as _, Window, div, px, size,
 };
 
+use super::code_blocks;
 use super::parsing::Apart;
 use super::{Parsed, TextAt, TextKey, Texts};
 use crate::find::Marks;
@@ -64,7 +65,8 @@ impl Element for ProseElement {
         window: &mut Window,
         cx: &mut App,
     ) -> (LayoutId, Self::RequestLayoutState) {
-        let mut context = RenderContext::from_app(cx).on_link_click(self.selection.on_link());
+        let mut context =
+            code_blocks::with_actions(RenderContext::from_app(cx).on_link_click(self.selection.on_link()));
         if let Some(Images { plugins, resolver }) = self.images.take() {
             context = context.with_image_source(resolver).with_markdown_extensions(plugins);
         }

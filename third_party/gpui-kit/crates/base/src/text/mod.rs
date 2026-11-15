@@ -1,3 +1,4 @@
+// Changed in Roundhouse's copy of gpui-kit, as third_party/README.md lists.
 mod document;
 pub mod editor_host;
 mod editor_seam;
@@ -22,7 +23,7 @@ mod utils;
 use gpui::{App, ElementId, IntoElement, RenderOnce, SharedString, Window};
 pub use inline_element::*;
 pub use markdown_ext::*;
-pub use node::{CodeBlock, TableData};
+pub use node::{CODE_BLOCK_GROUP, CodeBlock, TableData};
 pub use range_highlight::{RangeHighlight, RangeHighlightError, RenderedText};
 pub use state::*;
 pub use stream_fade::TextViewMotion;

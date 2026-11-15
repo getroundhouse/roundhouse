@@ -29,21 +29,23 @@ The code is under Apache-2.0. The icons in `crates/assets` are Lucide's, under I
 - **Write it as upstream would,** as `docs/rust.md` says, so it can go upstream as it is.
 - **Change it in the same pull request as the app code that needs it,** or in a stack with the kit's change at the bottom, as `AGENTS.md` says of layers.
 - **Say in each file it changes that it was changed,** with a comment near the top that holds `Changed in Roundhouse's copy of gpui-kit, as third_party/README.md lists.` as the tool's `NOTICE` has it, since Apache-2.0 asks a changed file to say so. `cargo run -p kit-sync -- diff` leaves the line out. A file that can't hold a comment, such as a JSON theme, is named in its entry under "Our changes" instead.
-- **List it under "Our changes",** with the files it changes, why, and where it was offered upstream.
-- **Leave no warnings.** Our builds show the compiler's warnings in the kit, but `-D warnings` and clippy don't reach it, so nothing fails on them. Run upstream's own checks on the crates it changes, in the copy's workspace:
+- **List it under "Our changes",** with the files it changes, why, and the issue that tracks offering it upstream, or where it was offered.
+- **Leave no warnings.** Our builds show the compiler's warnings in the kit, but our `-D warnings` and clippy don't reach it. Upstream's own clippy and tests do, which CI's `kit` job runs on `gpui-base` and `gpui-component` for a pull request that changes the copy, and which fail on a warning. Run them before pushing, in the copy's workspace:
 
   ```sh
-  cargo clippy --manifest-path third_party/gpui-kit/Cargo.toml --target-dir target/gpui-kit -p gpui-component --all-targets --features test-support
-  cargo test --manifest-path third_party/gpui-kit/Cargo.toml --target-dir target/gpui-kit -p gpui-component --features test-support
+  cargo clippy --manifest-path third_party/gpui-kit/Cargo.toml --target-dir target/gpui-kit -p gpui-base -p gpui-component --all-targets --features test-support -- -D warnings
+  cargo test --manifest-path third_party/gpui-kit/Cargo.toml --target-dir target/gpui-kit -p gpui-base -p gpui-component --features test-support
   ```
 
-  The tests need `test-support`, which upstream's whole workspace turns on for them and the copy's doesn't. They build GPUI and the kit's dependencies a second time, with upstream's settings, under `target/`, where `cargo clean` reaches them, and resolve a `Cargo.lock` in the copy, which git ignores.
+  The tests need `test-support`, which upstream's whole workspace turns on for them and the copy's doesn't. They build GPUI and the kit's dependencies a second time, with upstream's settings, under `target/`, where `cargo clean` reaches them, and resolve a `Cargo.lock` in the copy, which git ignores. CI copies ours there first, so the kit is checked on the versions the app ships, and `cp Cargo.lock third_party/gpui-kit/` does the same here.
 
   Cargo also warns about upstream's manifests: the workspace's names crates the copy doesn't keep or use, in its dependencies and its profiles, and a `publish` no kept crate inherits, `gpui-kit-assets` has no `[lints]`, and `gpui-component` names two dependencies it doesn't use. Leave those to upstream, since each change to a manifest is one more to merge at every release. The warnings to clear are those in the code a change touches.
 
 ### Offering a change upstream
 
 Upstream asks for a pull request that does one thing, as its `CONTRIBUTING.md` says, so each of our changes is offered in a pull request of its own, from a fork of upstream's repository on GitHub.
+
+For now, as the owner decided, each change we'd offer has an issue that tracks it, which its entry under "Our changes" links, and none is offered yet, since there's no fork. Once there is, these steps offer one:
 
 1. Make a patch of the change, from the root of upstream's repository. `cargo run -p kit-sync -- diff` prints all our changes against the release the copy is on, and `cargo run -p kit-sync -- diff <path>…` prints our changes to the files named, from the copy, such as `crates/base/src/text/node.rs`. Either leaves out the lines that say a file was changed.
 2. Apply it to a branch from upstream's `main` in a clone of the fork, with `git apply -3`, and run upstream's checks there.
@@ -68,3 +70,4 @@ Renovate opens a pull request for each new release, on its weekly schedule. It c
 | Change | Files | Why | Upstream |
 |---|---|---|---|
 | The workspace lists only the packages the copy keeps | `Cargo.toml` | Cargo looks for every member, and the copy keeps few of upstream's. `tools/kit-sync` makes this change itself | Not offered, since upstream builds them all |
+| `RenderContext::with_code_block_actions`, and `CODE_BLOCK_GROUP`, the hover group a code block with actions is | `crates/base/src/text/editor_host.rs`, `crates/base/src/text/mod.rs`, `crates/base/src/text/node.rs`, `crates/base/src/text/text_view.rs`, `crates/base/tests/text_host.rs` | The transcript draws its texts through the editor host, which had no way to give a code block the actions the kit's text view gives it, so a code block couldn't have a button that copies it. The group lets that button show only while its block is hovered | Not offered yet: #1518 |

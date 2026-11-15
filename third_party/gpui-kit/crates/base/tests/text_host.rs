@@ -1,15 +1,21 @@
+// Changed in Roundhouse's copy of gpui-kit, as third_party/README.md lists.
 #[cfg(feature = "gpui-fast")]
 use gpui_fast as gpui;
 
 use std::sync::{
-    Arc,
+    Arc, Mutex,
     atomic::{AtomicUsize, Ordering},
 };
 
-use gpui::{Context, IntoElement, ParentElement as _, Render, TestAppContext, Window, div};
+use gpui::{
+    Context, InteractiveElement as _, IntoElement, ParentElement as _, Render, Styled as _,
+    TestAppContext, Window, div,
+};
 use gpui_base::{
     TextViewStyle,
-    text::editor_host::{BlockNode, FlowPosition, LinkMark, RenderContext, parse_markdown},
+    text::editor_host::{
+        BlockNode, CODE_BLOCK_GROUP, FlowPosition, LinkMark, RenderContext, parse_markdown,
+    },
 };
 
 struct ExternalText {
@@ -78,4 +84,39 @@ fn external_host_uses_local_rendering_services(cx: &mut TestAppContext) {
     vcx.update(|window, cx| window.draw(cx).clear(cx));
     assert!(highlights.load(Ordering::SeqCst) > 0);
     assert!(images.load(Ordering::SeqCst) > 0);
+}
+
+/// A host's code block actions are drawn for each code block, one in a list
+/// too, and given the block they're for.
+#[gpui::test]
+fn external_host_draws_code_block_actions(cx: &mut TestAppContext) {
+    let drawn = Arc::new(Mutex::new(Vec::new()));
+    let context = RenderContext::new(TextViewStyle::default()).with_code_block_actions({
+        let drawn = drawn.clone();
+        move |block, _, _| {
+            drawn.lock().unwrap().push(block.code().trim().to_string());
+            div()
+                .invisible()
+                .group_hover(CODE_BLOCK_GROUP, |this| this.visible())
+                .child("Copy")
+        }
+    });
+    cx.update(gpui_base::init);
+    let blocks = parse_markdown(
+        "```rust\ntop\n```\n\n1. Item\n\n   ```\n   nested\n   ```\n",
+        Default::default(),
+    )
+    .unwrap();
+    let blocks = blocks
+        .into_iter()
+        .enumerate()
+        .map(|(ix, block)| (ix as u64, block))
+        .collect();
+    let (_, vcx) = cx.add_window_view(move |_, _| ExternalText { blocks, context });
+    vcx.run_until_parked();
+    vcx.update(|window, cx| window.draw(cx).clear(cx));
+    let mut drawn = drawn.lock().unwrap().clone();
+    drawn.sort();
+    drawn.dedup();
+    assert_eq!(drawn, ["nested", "top"]);
 }

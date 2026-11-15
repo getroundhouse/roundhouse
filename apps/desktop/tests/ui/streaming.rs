@@ -4,11 +4,12 @@
 
 use std::time::Duration;
 
-use gpui_kit::{AppContext as _, TestAppContext};
+use gpui_kit::{AppContext as _, Modifiers, MouseMoveEvent, TestAppContext, point, px};
 use protocol::event::{AgentRunState, EventBody, SessionEvent};
 use protocol::model::{SessionId, SessionStatus};
 
 use crate::support::{Gate, Stack, Ui, wait_until};
+use crate::tools::in_a_new_workspace;
 
 #[gpui_kit::test]
 fn text_streams_in_as_it_is_written(cx: &mut TestAppContext) {
@@ -230,6 +231,38 @@ fn a_turn_says_how_long_its_taken_until_it_ends_and_then_copies_its_reply(cx: &m
 
     let copied = ui.cx.read_from_clipboard().and_then(|item| item.text());
     assert_eq!(copied.as_deref(), Some("done"), "what the fake agent says its turn came to");
+}
+
+/// A code block in a reply has a button at its top right that copies its code, shown while the block is hovered, and
+/// pressing it selects nothing.
+#[gpui_kit::test]
+fn a_code_block_s_copy_button_shows_while_it_s_hovered_and_copies_its_code(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = in_a_new_workspace(cx, &stack);
+    // The fence is partway along the prompt's line, so only the reply has a code block, which runs to its end.
+    ui.paste_text("whole:```sh\nmake trains");
+    ui.press("enter");
+    ui.wait_idle_with("the reply", |text| text.contains("make trains"));
+    let shown = |ui: &mut Ui| match &ui.labelled("Copy code")[..] {
+        [copy] => copy.visible(),
+        found => panic!("{} buttons to copy code", found.len()),
+    };
+    let button = ui.labelled("Copy code")[0].bounds();
+    let moved = |ui: &mut Ui, position| {
+        ui.send(MouseMoveEvent { position, pressed_button: None, modifiers: Modifiers::default() });
+    };
+
+    moved(&mut ui, point(px(1.), px(1.)));
+    assert!(!shown(&mut ui), "hidden while the block isn't hovered");
+    // On the code's first line, to the left of the button and under it.
+    moved(&mut ui, button.bottom_left() + point(px(-40.), px(12.)));
+    assert!(shown(&mut ui), "shown while it is");
+    ui.click_labelled("Copy code", 0);
+
+    let copied = ui.cx.read_from_clipboard().and_then(|item| item.text());
+    assert_eq!(copied.as_deref(), Some("make trains"));
+    let transcript = ui.transcript().expect("the chat");
+    assert_eq!(ui.cx.read_entity(&transcript, |t, _| t.as_copied()), "", "nothing's selected");
 }
 
 /// The `markdown` crate the kit parses with panics on some texts, which the agent can write. A reply recorded with one
