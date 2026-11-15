@@ -252,6 +252,11 @@ fn an_exit_reported_late_cannot_be_mistaken_for_the_agent_that_replaced_it() {
     let exits =
         |events: &[SessionEvent]| events.iter().filter(|e| matches!(e.body, EventBody::AgentExited { .. })).count();
     assert_eq!(exits(&read_all(&client, &session.id)), 0, "the exit should still be on its way");
+    // So the hub resumes the agent's conversation, rather than starting one the CLI refuses as already in use, and the
+    // worker launches again without telling the hub, which is #1284. The agent's start can reach the hub after its
+    // process has gone.
+    let opened = |events: &[SessionEvent]| events.iter().any(|e| matches!(e.body, EventBody::AgentInit { .. }));
+    wait_until("the agent's start to be recorded", || opened(&read_all(&client, &session.id)));
 
     // A prompt in that window goes to a new agent, rather than failing on the dead one's pipe. The new
     // agent leaves text streaming, which the old one's exit mustn't clear.
