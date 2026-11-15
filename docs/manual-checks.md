@@ -10,8 +10,9 @@ Start with trackpad feel, then IME, then selection and copy.
 - Selection extended past the viewport by dragging, then copy
 - Copied text from a code block and a table pastes sensibly
 - Find in transcript works
-- Composer: IME input (try Japanese or Chinese), emoji picker, dictation
+- Composer: IME input (try Japanese or Chinese), emoji picker, macOS's own dictation
 - Composer: Option/Cmd arrow movement, undo, spellcheck
+- Dictation: from Ask first, the composer's microphone offers it, and Turn on downloads and prepares the model, saying how far it has got, in the microphone's card and in Settings; quitting partway and opening the app again goes on from what came; VoiceOver says the box under Dictation as it changes; preparing, the first time and after an update, takes as long as the box says; Delete the model frees the room, and Time Machine leaves the folder out (`tmutil isexcluded` on it); the first press asks for the microphone; held, Space types its space and dictates half a second after it's pressed, which typing fast never does, with what was said from about 0.2 s after the press, and let go of sooner, leaves the space and puts in nothing; the macOS microphone light comes on for a hold of more than about 0.2 s, and the first time, the system asks for the microphone only once Space dictates; and with an input mode such as Japanese selected, it goes to the input method, composing or not; held, ⌥Space shows words under what's typed about half a second after they're said, and each sentence goes in at the cursor once you've paused at its end and begun the next, and two said without a pause go in together, with a pause in the middle of one leaving it under what's typed, and its commas and capitals as they'd be with no pause; letting go, going to another app and ⌥Escape each stop it as their rules say; and words come out right in your own voice, in a quiet room and a noisy one
 - Image paste into the composer
 - Adding a project through the file picker
 - `Create PR` on a repository with a GitHub remote opens a real pull request

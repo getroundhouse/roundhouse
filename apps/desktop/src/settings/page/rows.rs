@@ -1,5 +1,5 @@
-//! A setting's row: what it's called and what it does on the left, its control on the right, and a line under it that
-//! sets it apart from the next.
+//! A setting's row: what it's called and what it does on the left, its control on the right, how it stands in a box
+//! under them when there's something to say, and a line under it all that sets it apart from the next.
 
 use gpui_kit::component::button::Button;
 use gpui_kit::component::menu::DropdownMenu as _;
@@ -45,18 +45,24 @@ pub(super) fn row(setting: &Setting, cx: &App) -> AnyElement {
                 .into_any_element()
         }
     };
-    h_flex()
+    let row = h_flex()
         .w_full()
         .items_center()
         .justify_between()
         .gap(look::Space::XLarge)
+        .child(said)
+        // As wide as it needs, however much there is to say beside it.
+        .child(div().flex_none().child(control));
+    let status_box = setting.status_box.as_ref().and_then(|of| of(cx)).map(|status_box| status_box.draw(cx));
+    v_flex()
+        .w_full()
+        .gap(look::Space::Medium)
         .pt(look::Space::XSmall)
         .pb(look::Space::XLarge)
         .border_b_1()
         .border_color(colors.edge)
         .typeset(look::Type::Body)
-        .child(said)
-        // As wide as it needs, however much there is to say beside it.
-        .child(div().flex_none().child(control))
+        .child(row)
+        .children(status_box)
         .into_any_element()
 }

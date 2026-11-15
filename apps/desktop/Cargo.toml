@@ -16,8 +16,9 @@ name = "desktop"
 path = "src/lib.rs"
 
 [features]
-# What only tests use: showing that updating failed, or that a check is under way, without an installed app.
-testing = []
+# What only tests use: showing that updating failed, or that a check is under way, without an installed app, and
+# dictating to a stand-in for the model, from audio the test gives it.
+testing = ["dictation/testing"]
 
 [dependencies]
 protocol.workspace = true
@@ -25,6 +26,7 @@ client-core.workspace = true
 transcript.workspace = true
 gpui-kit.workspace = true
 look.workspace = true
+dictation = { workspace = true, features = ["download"] }
 fetching.workspace = true
 anyhow.workspace = true
 serde.workspace = true
@@ -66,6 +68,7 @@ anyhow.workspace = true
 agents.workspace = true
 client-core = { workspace = true, features = ["testing"] }
 desktop = { workspace = true, features = ["testing"] }
+dictation = { workspace = true, features = ["testing"] }
 fetching = { workspace = true, features = ["testing"] }
 hub = { workspace = true, features = ["testing"] }
 look = { workspace = true, features = ["testing"] }

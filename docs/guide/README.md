@@ -26,6 +26,7 @@ New here? Start with the [quickstart](get-started/quickstart.md).
 - [Hand a task to an agent](guides/hand-a-task-to-an-agent.md): make a workspace, and say what to work on
 - [Know when an agent needs you](guides/know-when-an-agent-needs-you.md): the mark, a bright title, and notifications
 - [Steer or queue while it works](guides/steer-or-queue.md): send a prompt now, or for when the agent finishes
+- [Dictate a prompt](guides/dictate-a-prompt.md): say it rather than type it, heard on your Mac
 - [Answer its questions](guides/answer-its-questions.md): questions, and approvals in plan mode
 - [Review its changes](guides/review-its-changes.md): read the diff, and send comments to the agent
 - [Take a pull request to merge](guides/take-a-pull-request-to-merge.md): the one thing in the way, and what to do about it

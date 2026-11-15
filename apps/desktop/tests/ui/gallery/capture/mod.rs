@@ -2,6 +2,7 @@
 
 #![cfg(test)]
 
+mod dictating;
 mod files;
 mod finding;
 mod opening;

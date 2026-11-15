@@ -12,6 +12,7 @@ pub mod busy;
 pub mod changes;
 pub mod checkout;
 mod composing;
+pub mod dictating;
 mod failed;
 pub mod file_diff;
 mod file_header;
@@ -43,6 +44,7 @@ mod sidebar;
 pub mod sidebar_tabs;
 mod sides;
 mod sounds;
+mod status_box;
 pub mod updates;
 pub mod why_quit;
 #[cfg(target_os = "windows")]
@@ -105,6 +107,8 @@ actions!(
         NextChat,
         PreviousChat,
         TogglePlanMode,
+        HoldToDictate,
+        CancelDictation,
         FindInChat,
         FindNext,
         FindPrevious
@@ -124,6 +128,9 @@ pub fn open_main_window(
     settings::load(&hub.paths.data_dir, cx);
     accessibility_focus::install();
     keys::set(cx);
+    dictating::swallow_held_spaces(cx);
+    app::HearsTheKeyLetGo::register(cx);
+    dictating::start(&hub.paths.data_dir, cx);
     menus::set(hub.build_version, cx);
     std::thread::spawn(look::preload_highlighting);
     let (display_id, window_bounds) = window_place::open_at(opens, &hub.paths.data_dir, cx);

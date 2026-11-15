@@ -1,6 +1,7 @@
 use super::{accounts, general, notifications, rows, sidebar};
 use crate::FindSetting;
 use crate::app::TOP_STRIP_HEIGHT;
+use crate::status_box::StatusBox;
 use client_core::records::Snapshot;
 use client_core::{Client, RecordsFeed};
 use gpui_kit::assets::IconName as Lucide;
@@ -114,6 +115,8 @@ type IsOn = Box<dyn Fn(&App) -> Option<bool>>;
 type Set = Rc<dyn Fn(bool, &mut App)>;
 /// What's chosen now, as its button says it.
 type Chosen = Box<dyn Fn(&App) -> SharedString>;
+/// How things stand with a setting, as a box under its row, when there's something to say.
+type StatusBoxOf = Box<dyn Fn(&App) -> Option<StatusBox>>;
 /// Fills the menu a setting chooses from, as it opens.
 type Menu = Rc<dyn Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu>;
 
@@ -122,6 +125,7 @@ pub(super) struct Setting {
     pub(super) name: &'static str,
     pub(super) does: &'static str,
     pub(super) control: Control,
+    pub(super) status_box: Option<StatusBoxOf>,
 }
 
 /// How a setting is changed.

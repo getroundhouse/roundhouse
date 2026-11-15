@@ -49,6 +49,9 @@ pub(crate) const FILE: Frame = Frame::Exactly(Part::Region(Region::TabBar), &[Pa
 pub(crate) const COMPOSER: Frame = Frame::Around(Part::Region(Region::Composer), NOTHING_MORE);
 /// The composer, and a menu opened from it, such as a picker's.
 pub(crate) const COMPOSER_MENU: Frame = Frame::Around(Part::Region(Region::Composer), &[Part::Menu]);
+/// The composer, and what its microphone opens until dictation is ready.
+pub(crate) const DICTATION_CARD: Frame =
+    Frame::Around(Part::Region(Region::Composer), &[Part::Region(Region::DictationCard)]);
 /// The composer, and the prompts queued above it.
 pub(crate) const QUEUE: Frame = Frame::Around(Part::Region(Region::Queue), &[Part::Region(Region::Composer)]);
 /// The composer, and the card about the chat's context that opens from it.
@@ -130,7 +133,8 @@ fn region_in_the_column(region: Region) -> bool {
         | Region::EditPreview
         | Region::TurnCard
         | Region::ContextCard
-        | Region::UsageCard => true,
+        | Region::UsageCard
+        | Region::DictationCard => true,
         Region::LeftSidebar
         | Region::RightSidebar
         | Region::Header

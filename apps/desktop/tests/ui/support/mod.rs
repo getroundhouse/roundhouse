@@ -15,6 +15,9 @@ mod held;
 mod hover;
 mod hub;
 mod labels;
+/// For dictation, which only a Mac hears.
+#[cfg(target_os = "macos")]
+pub(crate) mod made_up_model;
 mod motion;
 mod new_workspace;
 mod order;

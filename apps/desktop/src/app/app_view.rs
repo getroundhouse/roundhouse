@@ -114,11 +114,17 @@ impl AppView {
         let focus = cx.focus_handle();
         window.focus(&focus, cx);
         crate::updates::observe(cx).detach();
+        // Settings says how dictation stands, and how far the model's download has got while it shows.
+        crate::dictating::observe(cx, |_, cx| cx.notify()).detach();
+        crate::dictating::observe_progress(cx, |t: &Self, _| t.settings_open()).detach();
         crate::settings::observe(cx, |_, cx| cx.notify()).detach();
         // Coming back from another app is when someone reads the chat showing. It's also when Reduce Motion may have
         // changed in System Settings, which macOS doesn't tell the kit about, so it's read again.
         cx.observe_window_activation(window, |t, window, cx| {
             gpui_kit::base::apply_system_reduce_motion(cx);
+            if !window.is_window_active() {
+                t.dictation_window_left(cx);
+            }
             t.read_on_screen(window.is_window_active(), cx);
         })
         .detach();

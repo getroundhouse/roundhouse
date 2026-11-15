@@ -1,8 +1,8 @@
 //! The model's files: Fluid Inference's Core ML export of NVIDIA's model, at a revision of its Hugging Face repository
 //! pinned so what's downloaded is what was measured. Only the files the engine loads: the 70/2/5 live encoder, the
 //! offline encoder, the decoder, the joint that takes one step at a time, and the vocabulary. The model is NVIDIA's,
-//! under the OpenMDW-1.1 licence, which lets it be used, and passed on with the licence and its notices. The app is
-//! to download them, rather than pass them on.
+//! under the OpenMDW-1.1 licence, which lets it be used, and passed on with the licence and its notices. The app
+//! downloads them, as "Dictation" in `docs/spec/settings.md` says, rather than pass them on.
 
 use crate::model::{ModelFile, ModelFiles};
 

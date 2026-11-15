@@ -16,7 +16,7 @@ Roundhouse is open source, under Apache-2.0. Your agents run on your own agent l
 
 ## What is sent to you?
 
-Nothing. The app's only request of its own is its check for updates. [Where data is kept](../reference/where-data-is-kept.md) has the rest.
+Nothing. The app's only requests of its own are its check for updates and, once you turn dictation on, the download of the model that hears it. [Where data is kept](../reference/where-data-is-kept.md) has the rest.
 
 ## Is a workspace a sandbox?
 

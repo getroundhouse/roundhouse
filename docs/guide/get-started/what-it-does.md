@@ -27,6 +27,7 @@ Everything the app does today, on one page, with where to read more. What's desi
 - **Queue.** `Cmd-Enter` holds a prompt for when the agent finishes. The hub keeps the queue, so it sends with the app closed.
 - **Stop means stop.** Stopping the agent holds the queue until you say go. See [Steer or queue while it works](../guides/steer-or-queue.md).
 - **A question takes the composer's place.** You answer where you'd type, with a number key. See [Answer its questions](../guides/answer-its-questions.md).
+- **Say a prompt rather than type it,** by holding Space, heard by a model on your Mac. See [Dictate a prompt](../guides/dictate-a-prompt.md).
 
 ## Review and merge
 

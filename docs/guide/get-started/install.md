@@ -29,6 +29,7 @@ What differs from the Mac:
 - Agents stop when the hub does, so an update waits until nothing is running.
 - No sound plays when an agent needs you.
 - Nothing keeps the computer awake while agents work.
+- There's no dictation.
 - The app's keys have `Ctrl` where a Mac's have `Cmd`, as [Keys](../reference/keys.md) says.
 - The menus open from the first button in the window's top left corner, or `F10`. Settings… and Exit are in File, and About Roundhouse and Check for Updates… in Help.
 
@@ -49,9 +50,10 @@ What differs from the Mac:
 - The menus open from the first button in the window's top left corner, or `F10`. Settings… and Quit are in File, and About Roundhouse and Check for Updates… in Help.
 - A notification needs a notification service, and no sound plays.
 - Nothing keeps the computer awake while agents work.
+- There's no dictation.
 
 ## No account
 
-There's no Roundhouse account to make. The app's only request of its own is its check for updates. Everything else stays on your machine, or goes where your agent and `gh` send it.
+There's no Roundhouse account to make. The app's only requests of its own are its check for updates and, once you turn dictation on, the download of the model that hears it. Everything else stays on your machine, or goes where your agent and `gh` send it.
 
 Next: the [quickstart](quickstart.md), from adding a project on.

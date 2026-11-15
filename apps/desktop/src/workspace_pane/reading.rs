@@ -64,9 +64,10 @@ impl WorkspacePane {
         self.active.as_ref().filter(|_| self.being_read() && self.showing() == Showing::Chat)
     }
 
-    /// For after anything that changes which chat is showing, or what it holds, or whether it's drawn or read: the
-    /// chat showing is read.
+    /// For after anything that changes which chat is showing, or what it holds, or whether it's drawn or read: what's
+    /// being dictated follows its composer, and the chat showing is read.
     pub(super) fn showing_changed(&mut self, cx: &mut Context<Self>) {
+        self.dictation_follows_its_composer(cx);
         self.read_showing(cx);
     }
 

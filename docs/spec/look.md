@@ -62,6 +62,7 @@ Each colour means one thing.
 | **What happened** | | |
 | `needs_you` | `#e9b24c` | The card that needs you, such as an approval |
 | `warning` | `#e9b24c` | A warning, such as setup that failed |
+| `done` | `#6cc488` | Something ready, or done, such as dictation's model once it's prepared |
 | `stopped` | `#ee6f64` | The agent stopped short: its mark's turntable, and a turn that failed |
 | `error` | `#ee6f64` | Something else that went wrong, such as a call that failed |
 | `added` | `#6cc488` | Lines and counts added to a file |

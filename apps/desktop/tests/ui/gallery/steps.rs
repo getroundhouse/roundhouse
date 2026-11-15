@@ -56,6 +56,19 @@ pub(crate) enum Step {
         on: Target,
         shows: &'static str,
     },
+    /// Dictates `said` into the composer from its microphone button, to a stand-in for the model that hears only what
+    /// the step gives it, and waits for the line under what's typed to show `shows`.
+    Dictate {
+        said: &'static str,
+        shows: &'static str,
+    },
+    /// Gives dictation a made-up model, half of it here, and the rest from a server that sends none of it, so turning
+    /// dictation on shows a download under way that gets no further.
+    StallDictationDownload,
+    /// Gives dictation a made-up model that's all here, so turning dictation on has it ready at once.
+    DictationModelHere,
+    /// Gives dictation a made-up model from a server that doesn't have it, so turning dictation on fails.
+    FailDictationDownload,
     /// Pastes an image where focus is, and waits for the composer to take it.
     PasteImage(fn() -> Vec<u8>),
     /// Pastes a copied file with this name and text, and waits for the composer to take it.
