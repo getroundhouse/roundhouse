@@ -40,17 +40,17 @@ fn long_history_loads_a_page_at_a_time_as_it_is_scrolled_to(cx: &mut TestAppCont
 #[gpui_kit::test]
 fn the_scrollbar_s_thumb_goes_up_a_long_session_as_steadily_as_the_wheel_does(cx: &mut TestAppContext) {
     let stack = Stack::new();
-    // Replies of a line, a paragraph and several long paragraphs, in no order, since rows alike hide what an
-    // estimate gets wrong.
-    let script = saying(500, |i| {
-        let paragraphs = [1, 1, 2, 1, 5, 1, 2][i * 5 % 7];
-        let sentences = [1, 2, 4, 1, 3][i * 3 % 5];
-        vec!["the signal box keeps a ledger of every train. ".repeat(sentences); paragraphs].join("\n\n")
-    });
-    // The long texts the wheel's check below is about.
-    let shortest = script.iter().map(String::len).min().unwrap();
-    assert!(shortest > 4 * 1024, "each prompt parsed on another thread, the shortest {shortest} bytes");
-    let newest = session_of(&stack, &script);
+    // Replies of a line, a paragraph or a few, and a few screens, in no order, since rows alike hide what an estimate
+    // gets wrong, and more rows than a chat loads as it opens. Those a few screens long are parsed on another thread,
+    // which the wheel's check below is about.
+    let newest = session_of(
+        &stack,
+        &prompts(400, |i| match i {
+            _ if i % 100 == 50 => format!("prose:22:{i}"),
+            _ if i % 5 == 0 => format!("prose:{}:{i}", [1, 2, 1, 3][i / 5 % 4]),
+            _ => format!("whole:{}", "train {i} is on the main line. ".repeat([1, 2, 1, 1, 1][i * 3 % 5])),
+        }),
+    );
     let mut ui = Ui::open(cx, &stack);
     ui.wait("the workspace", |ui| ui.transcript().is_some());
     let transcript = ui.transcript().unwrap();
@@ -76,6 +76,13 @@ fn the_scrollbar_s_thumb_goes_up_a_long_session_as_steadily_as_the_wheel_does(cx
         steps.push(read(&ui));
         assert!(steps.len() < 5000, "the top is never reached");
     }
+
+    // An older page arrived on the way, and each long reply was parsed on another thread, which keeps what it's parsed
+    // as for as long as its row is loaded.
+    assert!(steps[0].in_the_list < steps[steps.len() - 1].in_the_list, "no older page arrived");
+    let long =
+        ui.cx.read_entity(&transcript, |t, _| t.kept_texts().iter().filter(|text| text.len() > 4 * 1024).count());
+    assert_eq!(long, 4, "the long replies, parsed on another thread");
 
     // The wheel went as far as the session is tall, so the list passed through every row and jumped over none. A
     // long prompt or reply was once measured before its text had been read, and skipped.
