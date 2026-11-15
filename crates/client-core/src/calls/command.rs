@@ -8,12 +8,15 @@ pub struct Command<'a> {
     /// What the agent said it's doing, in its own words.
     pub(super) description: Option<&'a str>,
     pub command: &'a str,
+    /// The one file it does nothing but read, where its agent read the command and said so, which a client can draw
+    /// as reading that file. What's asked of a command, though, is still whether to run it.
+    pub reads: Option<&'a str>,
 }
 
 impl<'a> Command<'a> {
     pub(super) fn read(input: &'a Value) -> Option<Self> {
         let command = str_field(input, "command")?;
-        Some(Self { description: description(input), command })
+        Some(Self { description: description(input), command, reads: None })
     }
 
     /// What its line says it does: the agent's own words when it gave them.

@@ -12,14 +12,14 @@ use gpui_kit::{
 };
 
 use client_core::Given;
-use client_core::calls::files::{file_name, numbered_lines};
+use client_core::calls::files::{self, file_name};
 use client_core::calls::{EditFile, ReadFile, WriteFile, count};
 use look::{InRegion as _, Region, Typeset as _, language};
 
 use super::line::{Line, Part, Preview};
 use super::{Answer, Toggle, amount, block, line, marks, numbered};
 use crate::calls::diff;
-use crate::calls::lines::{Mark, NumberedLine, Section};
+use crate::calls::lines::{Counts, Mark, NumberedLine, Section};
 use crate::find::{Marks, Part as Text};
 use crate::folds::Fold;
 use crate::item_key::ItemKey;
@@ -83,9 +83,12 @@ struct Read<'a> {
 
 impl<'a> Read<'a> {
     fn of(answer: Option<&'a Answer>) -> Self {
-        let lines = answer.and_then(Answer::success).map_or_default(numbered_lines);
+        let success = answer.and_then(Answer::success);
+        let output = answer.and_then(|answer| answer.output.as_deref());
+        // What has no numbers, such as what a command that only reads printed, shows as it came.
+        let lines = success.map_or_default(|text| files::lines(text, output));
         let images = answer.map_or_default(Answer::images);
-        let text = answer.and_then(Answer::success).filter(|text| lines.is_empty() && !text.trim().is_empty());
+        let text = success.filter(|text| lines.is_empty() && !text.trim().is_empty());
         Self { lines, images, text }
     }
 
@@ -95,13 +98,8 @@ impl<'a> Read<'a> {
 }
 
 pub(super) fn write(file: &WriteFile, answer: Option<&Answer>, toggle: &Toggle, cx: &App) -> AnyElement {
-    // A write over a file that was there is a change, counted like an edit. Otherwise all of it is new.
-    let replaced = answer.and_then(Answer::hunks);
-    let icon = if replaced.is_some() { IconName::FilePen } else { IconName::FilePlus };
-    let title = format!("Write {}", count(file.content.lines().count(), "line", "lines"));
-    let line = Line::new(icon, title)
-        .part(chip(file.path))
-        .part(replaced.map(|hunks| Part::Counts(diff::change_counts(hunks))));
+    let replaced = answer.and_then(Answer::hunks).map(diff::change_counts);
+    let line = write_line(file.path, file.content.lines().count(), replaced);
     let opened = || Some(shown_file(toggle, file.path, &marks::marked(&Rc::new(written(file, answer))), cx));
     line::drawn(line, answer, opened, toggle, cx)
 }
@@ -116,14 +114,31 @@ fn written(file: &WriteFile, answer: Option<&Answer>) -> Vec<Section> {
     answer.and_then(Answer::hunks).map_or_else(|| vec![whole(file.content)], diff::from_hunks)
 }
 
+/// The line of a write of `lines` lines to `path`. One over a file that was there is a change, counted like an edit,
+/// with what it `replaced`. Otherwise all of it is new.
+pub(super) fn write_line(path: &str, lines: usize, replaced: Option<Counts>) -> Line {
+    let icon = if replaced.is_some() { IconName::FilePen } else { IconName::FilePlus };
+    Line::new(icon, format!("Write {}", count(lines, "line", "lines")))
+        .part(chip(path))
+        .part(replaced.map(Part::Counts))
+}
+
 pub(super) fn edit(file: &EditFile, answer: Option<&Answer>, toggle: &Toggle, cx: &App) -> AnyElement {
     let sections = Rc::new(edited(file, answer));
-    let line = Line::new(IconName::FilePen, "Edit")
-        .part(chip(file.path))
-        .part(Part::Counts(diff::counts(&sections)))
-        .preview(preview(language(file.path), sections.clone()));
+    let line = edit_line("Edit", file.path, file.path, &sections);
     let opened = || Some(shown_file(toggle, file.path, &marks::marked(&sections), cx));
     line::drawn(line, answer, opened, toggle, cx)
+}
+
+/// The line of a change, `title` such as `Edit`, to the file at `path`, named by `named`, which is where it went if it
+/// moved, and how many lines `sections` added and removed. Hovering it shows the diff. A change with no lines, as a
+/// file only moved has, has neither.
+pub(super) fn edit_line(title: &'static str, path: &str, named: &str, sections: &Rc<Vec<Section>>) -> Line {
+    let line = Line::new(IconName::FilePen, title).part(chip(named));
+    if sections.iter().all(Vec::is_empty) {
+        return line;
+    }
+    line.part(Part::Counts(diff::counts(sections))).preview(preview(language(path), sections.clone()))
 }
 
 /// What [`edit`] shows open, for finding.
@@ -165,7 +180,7 @@ impl ChangeAsked {
 }
 
 /// A file's lines in a block, under its path.
-fn shown_file(toggle: &Toggle, path: &str, sections: &[Section], cx: &App) -> AnyElement {
+pub(super) fn shown_file(toggle: &Toggle, path: &str, sections: &[Section], cx: &App) -> AnyElement {
     block::frame(cx)
         .child(block::found_label(toggle, Text::Label, path, cx))
         .child(numbered::lines(toggle, Text::File, language(path), sections, cx))
@@ -173,7 +188,13 @@ fn shown_file(toggle: &Toggle, path: &str, sections: &[Section], cx: &App) -> An
 }
 
 /// What [`shown_file`] shows, under what went wrong, for finding.
-fn shown_lines(path: &str, sections: &[Section], answer: Option<&Answer>, key: &ItemKey, gather: &mut Gather) {
+pub(super) fn shown_lines(
+    path: &str,
+    sections: &[Section],
+    answer: Option<&Answer>,
+    key: &ItemKey,
+    gather: &mut Gather,
+) {
     line::shown_failure(answer, false, key, gather);
     gather.inside(key, Fold::Output, |gather| {
         gather.plain(key, Text::Label, path);
@@ -181,15 +202,16 @@ fn shown_lines(path: &str, sections: &[Section], answer: Option<&Answer>, key: &
     });
 }
 
-fn chip(path: &str) -> Part {
+pub(super) fn chip(path: &str) -> Part {
     Part::Chip(file_name(path).to_string().into())
 }
 
 /// A new file, all of it added, numbered from the top.
-fn whole(content: &str) -> Section {
+pub(super) fn whole(content: &str) -> Section {
     (1..).zip(content.lines()).map(|(number, text)| NumberedLine::new(Mark::Added, Some(number), text)).collect()
 }
 
+/// A diff of `sections`, shown while the call's line is hovered.
 fn preview(language: &str, sections: Rc<Vec<Section>>) -> Preview {
     let language: SharedString = language.to_string().into();
     Rc::new(move |_, cx: &mut App| {

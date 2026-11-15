@@ -2,11 +2,11 @@ use super::super::around::{Answer, Reply, Subagent};
 use super::super::line::{Line, Part};
 use super::super::shown::Gather;
 use super::super::{InRow, Shared, line};
-use super::{advisor, agent, block, command, files, other, search, web};
+use super::{advisor, agent, block, command, files, notebook, other, patch, search, web};
 use crate::find::{FindLook, Marks, Part as Text};
 use crate::folds::Fold;
 use crate::item_key::ItemKey;
-use client_core::calls::{Recorded, ToolCall, count};
+use client_core::calls::{Command, ReadFile, Recorded, ToolCall, count};
 use gpui_kit::assets::IconName;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{AnyElement, App, IntoElement, ParentElement};
@@ -45,7 +45,10 @@ pub(in super::super) fn call(
 ) -> AnyElement {
     let (answer, input) = (reply.result(), recorded.input());
     match ToolCall::read(recorded) {
-        ToolCall::Command(command) => command::draw(&command, answer, toggle, cx),
+        ToolCall::Command(command) => match reads(&command, answer) {
+            Some(path) => files::read(&ReadFile { path }, answer, toggle, cx),
+            None => command::draw(&command, answer, toggle, cx),
+        },
         ToolCall::Read(file) => files::read(&file, answer, toggle, cx),
         ToolCall::Write(file) => files::write(&file, answer, toggle, cx),
         ToolCall::Edit(file) => files::edit(&file, answer, toggle, cx),
@@ -54,6 +57,8 @@ pub(in super::super) fn call(
         ToolCall::Fetch(fetch) => web::fetch(&fetch, answer, toggle, cx),
         ToolCall::WebSearch(search) => web::search(&search, answer, toggle, cx),
         ToolCall::Advisor => advisor::draw(reply, toggle, cx),
+        ToolCall::Patch(patch) => patch::draw(patch, answer, toggle, cx),
+        ToolCall::NotebookEdit(edit) => notebook::draw(edit, answer, toggle, cx),
         ToolCall::Typed(call) => super::typed::draw(call, answer, toggle, cx),
         ToolCall::Other(other) => other::draw(&other, input, answer, toggle, cx),
     }
@@ -69,7 +74,10 @@ pub(in super::super) fn shown(
 ) {
     let (answer, input) = (reply.result(), recorded.input());
     match ToolCall::read(recorded) {
-        ToolCall::Command(command) => command::shown(&command, answer, key, gather),
+        ToolCall::Command(command) => match reads(&command, answer) {
+            Some(path) => files::shown_read(&ReadFile { path }, answer, key, gather),
+            None => command::shown(&command, answer, key, gather),
+        },
         ToolCall::Read(file) => files::shown_read(&file, answer, key, gather),
         ToolCall::Write(file) => files::shown_write(&file, answer, key, gather),
         ToolCall::Edit(file) => files::shown_edit(&file, answer, key, gather),
@@ -78,10 +86,18 @@ pub(in super::super) fn shown(
         ToolCall::Fetch(fetch) => web::shown_fetch(&fetch, answer, key, gather),
         ToolCall::WebSearch(search) => web::shown_search(&search, answer, key, gather),
         ToolCall::Advisor => advisor::shown(reply, key, gather),
+        ToolCall::Patch(patch) => patch::shown(patch, answer, key, gather),
+        ToolCall::NotebookEdit(edit) => notebook::shown(edit, answer, key, gather),
         ToolCall::Typed(call) => super::typed::shown(call, answer, key, gather),
         ToolCall::Other(other) => other::shown(&other, input, answer, key, gather),
     }
     line::shown_denial(answer, key, gather);
+}
+
+/// The file a command does nothing but read, which it's drawn as reading. One that went on in the background is drawn
+/// as a command, since only a command's row says that.
+fn reads<'a>(command: &Command<'a>, answer: Option<&Answer>) -> Option<&'a str> {
+    command.reads.filter(|_| !answer.is_some_and(Answer::in_the_background))
 }
 
 /// How much came back, such as `10 lines`, `1 image`, or both, or `None` for nothing.

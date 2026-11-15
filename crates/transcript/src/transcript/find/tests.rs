@@ -4,7 +4,12 @@ use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 
 use client_core::session_log::{Position, SessionLog};
-use protocol::event::{ContentBlock, EventBody, SessionEvent};
+use protocol::capability::calls::call::{
+    CellEdit, Command, CommandPart, FilePatch, NotebookEdit, Patch, PatchChange, PatchHunk, Read,
+};
+use protocol::capability::calls::output::{Ended, FileOutcome, Lines};
+use protocol::capability::calls::{Call, CallOutput};
+use protocol::event::{ContentBlock, EventBody, FileChange, Hunk, HunkLine, LineMark, SessionEvent};
 use protocol::find::Needle;
 use protocol::model::{Place, Rev, Seq, Subagent, SubagentStatus};
 use protocol::prompt::Prompt;
@@ -229,4 +234,79 @@ fn the_bar_says_whether_there_may_be_more() {
     assert_eq!(says(None, 0, More::No), "No matches");
     assert_eq!(says(None, 0, More::Counting), "Finding…");
     assert_eq!(says(None, 0, More::Unlooked), "No matches loaded");
+}
+
+/// The agent making the typed call `call`, as `id`.
+fn typed(id: &str, call: Call) -> EventBody {
+    let blocks = vec![protocol::fixtures::typed_call(id, call)];
+    EventBody::Assistant { message_id: None, parent_tool_use_id: None, model: None, blocks, first_index: None }
+}
+
+/// What came back for the typed call `id`.
+fn came_back(id: &str, output: CallOutput) -> EventBody {
+    EventBody::AgentUser { parent_tool_use_id: None, blocks: vec![protocol::fixtures::typed_result(id, output, false)] }
+}
+
+fn added(text: &str) -> Vec<HunkLine> {
+    vec![HunkLine { mark: LineMark::Added, text: text.into() }]
+}
+
+/// A typed call of a file is found where its row draws it: a read's lines, each file a patch changed, as what came
+/// back says it changed it once it does, or deleted or moved, what a command that only reads printed, unless it went
+/// on in the background, and what a notebook's cell holds afterwards.
+#[test]
+fn a_typed_file_call_is_found_as_its_row_draws_it() {
+    let read = Call::Read(Read { path: "src/signal.rs".into(), lines: None, pages: None });
+    let lines = CallOutput::Lines(Lines { first: 40, lines: vec!["fn may_pass(&self) -> bool {".into()], total: None });
+    let update =
+        PatchChange::Update { move_to: None, hunks: vec![PatchHunk { after: None, lines: added("worked out") }] };
+    let patch = Call::Patch(Patch {
+        files: vec![
+            FilePatch { path: "src/signal.rs".into(), change: update },
+            FilePatch { path: "src/depot.rs".into(), change: PatchChange::Add { content: "may_pass".into() } },
+            FilePatch { path: "src/yard.rs".into(), change: PatchChange::Delete },
+            FilePatch {
+                path: "src/sidings.rs".into(),
+                change: PatchChange::Update { move_to: Some("src/yard/sidings.rs".into()), hunks: Vec::new() },
+            },
+        ],
+    });
+    let hunks = vec![Hunk { old_start: 3, new_start: 3, lines: added("may_pass, as it came back") }];
+    let signal = FileOutcome {
+        path: "src/signal.rs".into(),
+        change: Some(FileChange::Changed { hunks }),
+        moved_to: None,
+        diagnostics: Vec::new(),
+    };
+    let reads = vec![CommandPart::Read { path: "notes.md".into() }];
+    let cat = Call::Command(Command { parts: reads, ..protocol::fixtures::typed_command("cat notes.md") });
+    let printed = protocol::fixtures::command_output("may_pass is unchanged", Some(0), Ended::Exited);
+    let tailed = vec![CommandPart::Read { path: "depot.log".into() }];
+    let tail = Call::Command(Command { parts: tailed, ..protocol::fixtures::typed_command("tail -f depot.log") });
+    let went_on = Ended::Backgrounded { task: "tail".into() };
+    let tailing = protocol::fixtures::command_output("depot up", None, went_on);
+    let cell =
+        NotebookEdit { path: "a.ipynb".into(), cell: None, source: "may_pass()".into(), does: CellEdit::Replace };
+    let log = own([
+        placed(1, typed("read", read)),
+        placed(2, came_back("read", lines)),
+        placed(3, typed("patch", patch)),
+        placed(4, came_back("patch", CallOutput::Changed { files: vec![signal] })),
+        placed(5, typed("cat", cat)),
+        placed(6, came_back("cat", printed)),
+        placed(7, typed("cell", Call::NotebookEdit(cell))),
+        placed(8, typed("tail", tail)),
+        placed(9, came_back("tail", tailing)),
+    ]);
+    let counted = |query| {
+        let counts = count_held(&log, &Model::default(), &needle(query), (0..9).collect());
+        counts.into_iter().filter(|(_, count)| *count > 0).collect::<Vec<_>>()
+    };
+
+    assert_eq!(counted("may_pass"), [(0, 1), (2, 2), (4, 1), (6, 1)]);
+    assert_eq!(counted("worked out"), [], "what came back says what the patch did");
+    assert_eq!(counted("yard"), [(2, 2)], "a file it deleted, and where one it moved went");
+    assert_eq!(counted("cat "), [], "a command that only reads is drawn as reading, without the command");
+    assert_eq!(counted("replace"), [], "a notebook's cell is drawn as what it holds, not as the call's input");
+    assert_eq!(counted("tail -f"), [(7, 1)], "one that went on in the background is drawn as a command, which says so");
 }

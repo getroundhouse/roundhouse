@@ -1,8 +1,13 @@
+use protocol::capability::calls::Call;
+use protocol::capability::calls::call::{
+    CellEdit, Command as TypedCommand, CommandPart, FilePatch, GenerateImage, NotebookEdit, Patch, PatchChange,
+    ViewImage,
+};
 use protocol::event::{Asking, CallKind, EventBody};
 use protocol::fixtures::{self, ApprovalRequest, approval_request};
 use serde_json::{Value, json};
 
-use super::{Recorded, ToolCall, asked_about, count};
+use super::{Recorded, ToolCall, asked_about, count, typed};
 
 /// A call recorded with the kind its adapter said, or with none, as one from before adapters said.
 fn recorded<'a>(kind: Option<&'a CallKind>, name: &'a str, input: &'a Value) -> Recorded<'a> {
@@ -174,4 +179,57 @@ fn a_request_is_about_what_the_agent_said_it_s_for_when_it_said() {
     .into();
 
     assert_eq!(asked_about(&request).as_deref(), Some("Clear the build"));
+}
+
+/// A typed command, which its agent read as doing what `parts` says.
+fn command_doing(command: &str, parts: Vec<CommandPart>) -> Call {
+    Call::Command(TypedCommand { parts, ..fixtures::typed_command(command) })
+}
+
+/// A command its agent says does nothing but read one file says which, so a client can draw it as reading that file.
+/// One that reads more, or does anything else, or whose agent said nothing of what it does, is only a command.
+#[test]
+fn a_typed_command_that_only_reads_one_file_says_which() {
+    let read = |path: &str| CommandPart::Read { path: path.into() };
+    let reads = |call: &Call| {
+        let ToolCall::Command(command) = ToolCall::read(Recorded::Typed(call)) else { panic!("still a command") };
+        command.reads.map(str::to_string)
+    };
+
+    assert_eq!(reads(&command_doing("sed -n 1,40p a.rs", vec![read("a.rs")])).as_deref(), Some("a.rs"));
+    assert_eq!(reads(&command_doing("cat a.rs a.rs", vec![read("a.rs"), read("a.rs")])).as_deref(), Some("a.rs"));
+    assert_eq!(reads(&command_doing("cat a.rs b.rs", vec![read("a.rs"), read("b.rs")])), None, "two files");
+    let listed = vec![read("a.rs"), CommandPart::List { path: None }];
+    assert_eq!(reads(&command_doing("cat a.rs; ls", listed)), None, "more than reading");
+    assert_eq!(reads(&command_doing("cat a.rs", Vec::new())), None, "its agent didn't say");
+}
+
+/// Each typed call of a file is read as the kind a client draws, and named in words. Looking at an image and making
+/// one are named, though no agent records them typed yet, so they're drawn as any typed call.
+#[test]
+fn a_typed_call_of_a_file_is_read_as_its_kind_and_named_in_words() {
+    let looked_at = Call::ViewImage(ViewImage { path: "shot.png".into() });
+    let made = Call::GenerateImage(GenerateImage { prompt: "A signal at caution".into(), from: Vec::new() });
+    let notebook = Call::NotebookEdit(NotebookEdit {
+        path: "plots.ipynb".into(),
+        cell: None,
+        source: "plot(x)".into(),
+        does: CellEdit::InsertAfter,
+    });
+    let patch = Call::Patch(Patch {
+        files: vec![
+            FilePatch { path: "src/a.rs".into(), change: PatchChange::Delete },
+            FilePatch { path: "src/b.rs".into(), change: PatchChange::Add { content: "b".into() } },
+        ],
+    });
+    let read = |call| ToolCall::read(Recorded::Typed(call));
+
+    assert!(matches!(read(&notebook), ToolCall::NotebookEdit(_)));
+    assert!(matches!(read(&patch), ToolCall::Patch(_)));
+    assert!(matches!(read(&looked_at), ToolCall::Typed(_)));
+    let said = |call| (typed::title(call), Recorded::Typed(call).summary().unwrap_or_default());
+    assert_eq!(said(&notebook), ("Add a cell".into(), "plots.ipynb".into()));
+    assert_eq!(said(&patch), ("Edit".into(), "src/a.rs, src/b.rs".into()));
+    assert_eq!(typed::title(&looked_at), "View an image");
+    assert_eq!(typed::title(&made), "Make an image");
 }

@@ -27,6 +27,7 @@ Each call is a line: what it is, and what it's about. Click it to open it.
 | A command | What the agent said it's doing, and the command | The command, then what it printed |
 | Reading a file | The file, and how much was read, such as `Read 10 lines` | The lines, numbered and highlighted |
 | An edit | The file, and lines added and removed, such as `+5 −0` | Its diff |
+| A patch of several files, as Codex makes | How many files, such as `Edit 2 files`, the lines added and removed, and the files' names | Each file's path, then its diff |
 | A search | Its pattern, where it looked, and how much it found | The matching lines, under their files |
 | A web search | What it looked for, and how many pages it found | The pages, which open in the browser |
 | A fetch | The site | The address, what was asked of it, and the answer |
@@ -36,6 +37,7 @@ Each call is a line: what it is, and what it's about. Click it to open it.
 
 - **A call that failed says so on a red line under it,** such as `Exit 1`, or `Timed out` or `Stopped` for a command that didn't exit, where its agent says, with the first line of what went wrong. It shows while the call is closed, so a failure is never hidden.
 - **A command that went on in the background says so when it's opened,** under what it printed by then, since what it prints from then on isn't the call's.
+- **A command that only reads a file, as Codex says one does, shows as reading it,** with the file's name, and opens to what it printed. A patch of one file shows as an edit or a write of it does.
 - **Hovering an edit shows its diff,** without opening it.
 - **An opened call's text is selected with the rest of the chat,** such as a command and what it printed, what went wrong, and a question and its answer. So a drag from one reply into the next takes in a call opened between them, and `Cmd-A` takes in every opened call. A tool's input, a file's numbered lines, a diff, a search's matching lines, a web search's pages, what a fetch asked, what you told the agent when you denied a call, and output over 16 KB aren't selected.
 - **A command has a button that copies all of it,** to run elsewhere.

@@ -18,7 +18,7 @@ pub struct Command {
     #[serde(default)]
     pub runs: Runs,
     /// What it does, as the agent read the command itself, as Codex does: the files it reads, lists or searches. A
-    /// client draws a command made only of reads as reading. Empty where the agent doesn't say.
+    /// client draws a command that does nothing but read one file as reading it. Empty where the agent doesn't say.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub parts: Vec<CommandPart>,
     /// It asks to run outside the sandbox, and why, in the agent's words.

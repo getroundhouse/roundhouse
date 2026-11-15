@@ -266,6 +266,19 @@ Every call is drawn the same way, as `look.md` says, and each kind fills in what
 
   ![A read of an image, opened](screens/tool-read-image.png)
 
+- **A command its agent says does nothing but read one file is drawn as reading it,** `Read` with the file's name in a chip, and opens to what it printed, since that's the file, or the part of it the command read. Its agent didn't number the lines, so they show as they came. One that reads several files stays a command, since what it printed can't be told apart by file. What's asked of it is still whether to run the command, so a request to run it shows the command. One that went on in the background draws as a command too, since only a command's row says so. *Unconfirmed.*
+- **A patch of several files says `Edit 2 files`, how many lines it added and removed, and the files' names.** Opened, each file's path, then its change as a diff, a file it added all added, and one it deleted saying `Deleted`. A patch of one file draws as an edit or a write of it does, or says `Delete` or `Move`. The diff's line numbers are the file's own, from what came back. Before then, it's the patch's own lines, without numbers. A patch that failed says only `Error` under it, since what came back is the files it would have changed, not what went wrong. *Unconfirmed.*
+
+  **A command that only reads, drawn as reading, a read, a patch of two files opened to each file's diff, and a notebook's cell changed.** *Unconfirmed.*
+
+  ![A command drawn as reading, a read, a patch of two files opened, and a cell changed](screens/tool-files-typed.png)
+
+  **Patches of one file each: a file added, one changed, one moved, and one deleted.** *Unconfirmed.*
+
+  ![Patches of one file each, closed](screens/tool-patches.png)
+
+- **Changing a notebook's cell says `Edit a cell`, `Add a cell` or `Delete a cell`, with the notebook in a chip,** and opens to what the cell holds afterwards, all of it added, since the call doesn't say what it held before. *Unconfirmed.* *Not built:* an agent recording one. Claude's adapter records a notebook edit as any other tool's call, and it draws as one.
+
 - **An edit shows how many lines it added and removed,** as `+5 −0` in green and red, and so does a write over a file that was already there. A write that made a new file shows no counts, since all of it is new, and opens to the whole file marked as added. *Unconfirmed.*
 - **An edit's diff uses the file's own line numbers,** from the patch the agent sent back, with a gap mark between parts of the file that aren't next to each other. Added and removed lines are tinted, with a bar down their left, and the words that changed are picked out, as `diff.md` says the file tab's diff picks them out. Before the patch comes back, the diff is worked out from the edit itself, without numbers. *Unconfirmed.*
 - **Hovering an edit shows its diff,** so a change can be checked without opening it. The preview is a dozen lines tall at most, and stays while the pointer is on it, so a longer diff can be scrolled there. The wheel over it scrolls only the diff, so the transcript doesn't carry the edit away from it.

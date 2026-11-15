@@ -30,6 +30,9 @@ pub enum ContentBlock {
     CallResult {
         tool_use_id: ToolUseId,
         output: crate::capability::calls::CallOutput,
+        /// The call failed. A client shows what went wrong only from an output that's words: what a command printed,
+        /// what an MCP tool or a subagent said, or `Words`, which is where an adapter records the agent's own words
+        /// for a failure. One that failed with any other output, such as a patch's files, says only that it failed.
         is_error: bool,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         denied: Option<Denied>,

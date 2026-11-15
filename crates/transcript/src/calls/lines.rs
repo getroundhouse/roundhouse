@@ -43,6 +43,13 @@ pub(crate) struct Counts {
     pub(crate) removed: usize,
 }
 
+impl std::iter::Sum for Counts {
+    fn sum<I: Iterator<Item = Self>>(counts: I) -> Self {
+        counts
+            .fold(Self::default(), |all, one| Self { added: all.added + one.added, removed: all.removed + one.removed })
+    }
+}
+
 impl Counts {
     pub(crate) fn of(marks: impl IntoIterator<Item = Mark>) -> Self {
         let mut counts = Self::default();
