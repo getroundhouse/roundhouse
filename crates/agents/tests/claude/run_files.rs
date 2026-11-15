@@ -140,17 +140,21 @@ async fn a_launch_started_again_is_told_of_the_tools_too() {
     agent.stop().await;
 }
 
-/// So a call to one is offered MCP's tasks, which a wait is answered with. One that isn't is left as it was.
+/// So a call to one is offered MCP's tasks, which a wait is answered with. One that isn't is left as it was, which the
+/// spec's environment says here, since the worker's own may already have it, as an agent's does that Roundhouse
+/// started with its tools, and so does a test run from that agent's shell.
 #[tokio::test]
 async fn a_cli_told_of_the_tools_takes_tasks_from_them() {
-    for (with, told) in [(true, "1"), (false, "unset")] {
+    for (with, told) in [(true, "1"), (false, "as it was")] {
         let dir = tempfile::tempdir().unwrap();
         let (tx, _rx) = mpsc::channel(16);
         let options = if with { with_tools(&dir.path().join("agents/s-1.mcp.json")) } else { AgentOptions::default() };
         let says =
             r#"printf '%s' "${CLAUDE_AUTO_BACKGROUND_TASKS-unset}" > given.tmp; mv given.tmp given; exec sleep 100"#;
+        let mut spec = spec(dir.path());
+        spec.env.push(("CLAUDE_AUTO_BACKGROUND_TASKS".into(), "as it was".into()));
 
-        let agent = spawn_at(script(dir.path(), says), spec(dir.path()), tx, options).await.unwrap();
+        let agent = spawn_at(script(dir.path(), says), spec, tx, options).await.unwrap();
 
         assert_eq!(given(dir.path()).await, told.as_bytes(), "with the tools: {with}");
         agent.stop().await;
