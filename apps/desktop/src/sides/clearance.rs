@@ -19,7 +19,7 @@ const AFTER_MACOS_BUTTONS: Pixels = px(6.);
 /// button's square.
 const CORNER_BUTTON_WIDTH: Pixels = look::ControlSize::Small.height();
 /// The room between the corner's buttons, as between the buttons in Home's bar.
-const BETWEEN_THE_BUTTONS: Pixels = px(4.);
+const BETWEEN_THE_BUTTONS: look::Space = look::Space::XSmall;
 
 /// Whether the button that opens the menus is in the corner, before the one that hides the sidebar.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -115,7 +115,7 @@ impl Clearance {
     fn toggle_starts(self) -> Pixels {
         match self.menus {
             MenusButton::Absent => self.corner_starts(),
-            MenusButton::InTheCorner => self.corner_starts() + CORNER_BUTTON_WIDTH + BETWEEN_THE_BUTTONS,
+            MenusButton::InTheCorner => self.corner_starts() + CORNER_BUTTON_WIDTH + BETWEEN_THE_BUTTONS.size(),
         }
     }
 

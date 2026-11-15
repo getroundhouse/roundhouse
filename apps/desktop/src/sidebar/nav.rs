@@ -19,7 +19,7 @@ pub(super) fn nav(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement 
         .flex_none()
         .w_full()
         .p(LIST_PAD)
-        .gap_1()
+        .gap(look::Space::XSmall)
         .border_b_1()
         .border_color(border)
         .child(
@@ -40,7 +40,12 @@ pub(super) fn nav(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement 
 /// An item: a muted icon and label, filled while what it opens is showing.
 fn item(id: &'static str, icon: impl IconNamed, label: &'static str, cx: &mut Context<AppView>) -> Button {
     let muted = look::colors(cx).text_muted;
-    let content =
-        h_flex().w_full().gap_2().typeset(look::Type::Body).text_color(muted).child(icon_box(icon, muted)).child(label);
+    let content = h_flex()
+        .w_full()
+        .gap(look::Space::Small)
+        .typeset(look::Type::Body)
+        .text_color(muted)
+        .child(icon_box(icon, muted))
+        .child(label);
     Button::new(id).accessibility_label(label).ghost().w_full().h(ROW_SIZE.height()).px(ROW_PAD).child(content)
 }

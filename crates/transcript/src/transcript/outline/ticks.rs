@@ -34,7 +34,7 @@ const FADED: f32 = 0.35;
 /// In from the pane's right edge, clear by a pixel of the scrollbar's thumb, which reaches 12px in while it's dragged,
 /// and down from the tabs.
 const RIGHT: Pixels = px(13.);
-const TOP: Pixels = px(24.);
+const TOP: look::Space = look::Space::XLarge;
 /// How far above the ticks the list's edge is, so its first row starts level with them.
 const LIST_ABOVE: Pixels = px(4.);
 /// Over the rows and the composer, as a menu is.

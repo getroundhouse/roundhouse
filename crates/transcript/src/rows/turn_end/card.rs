@@ -51,8 +51,8 @@ impl TurnCard {
             .flex()
             .flex_col()
             .min_w(MIN_WIDTH)
-            .p_3()
-            .gap_1()
+            .p(look::Space::Medium)
+            .gap(look::Space::XSmall)
             .typeset(look::Type::Body)
             .children(heading.map(|heading| div().emphasis().child(heading)))
             .children(day.map(|day| div().whitespace_nowrap().text_color(look::colors(cx).text_muted).child(day)))
@@ -77,12 +77,15 @@ fn counts(tokens: TokenUsage) -> Vec<(&'static str, String)> {
 
 /// Rows under a rule, each a name and what it says.
 fn table(rows: Vec<(&'static str, String)>, cx: &App) -> Div {
-    v_flex().gap_1().child(rule(cx)).children(rows.into_iter().map(|(name, said)| row(name, said, None, cx)))
+    v_flex()
+        .gap(look::Space::XSmall)
+        .child(rule(cx))
+        .children(rows.into_iter().map(|(name, said)| row(name, said, None, cx)))
 }
 
 /// The rule each part of the card starts under.
 pub(super) fn rule(cx: &App) -> Div {
-    div().my_1().h(look::EDGE).bg(look::colors(cx).edge)
+    div().my(look::Space::XSmall).h(look::EDGE).bg(look::colors(cx).edge)
 }
 
 /// A name and what it says, after `mark` if there is one, at either end of a line, said together to assistive apps.
@@ -90,9 +93,9 @@ pub(super) fn row(name: &'static str, said: String, mark: Option<AnyElement>, cx
     h_flex()
         .id(name)
         .justify_between()
-        .gap_6()
+        .gap(look::Space::XLarge)
         .aria_label(format!("{name} {said}"))
         .child(div().text_color(look::colors(cx).text_muted).child(name))
-        .child(h_flex().gap_2().children(mark).child(div().whitespace_nowrap().child(said)))
+        .child(h_flex().gap(look::Space::Small).children(mark).child(div().whitespace_nowrap().child(said)))
         .test_support()
 }

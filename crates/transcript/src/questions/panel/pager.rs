@@ -21,7 +21,7 @@ pub(super) fn more_waiting(more: usize, cx: &mut Context<QuestionPanel>) -> Opti
     let muted = look::colors(cx).text_muted;
     let waiting = |more| {
         said("question-more-waiting", format!("{more} more waiting"))
-            .pl_2()
+            .pl(look::Space::Small)
             .typeset(look::Type::Detail)
             .text_color(muted)
     };
@@ -85,7 +85,7 @@ pub(super) fn pager(
             // The arrows' squares stand out past the panel's edge inside, so their icons line up with it.
             .ml(-look::ControlSize::Small.inset())
             .child(back)
-            .child(h_flex().gap_1().children(dots))
+            .child(h_flex().gap(look::Space::XSmall).children(dots))
             .child(next)
             .into_any_element(),
     )

@@ -7,7 +7,6 @@ use gpui_kit::component::menu::{DropdownMenu as _, PopupMenu, PopupMenuItem};
 use gpui_kit::component::{Icon, IconName, h_flex};
 use gpui_kit::{
     Context, InteractiveElement as _, IntoElement, ParentElement, Styled, TestSupportExt as _, WeakEntity, Window, div,
-    px,
 };
 use look::{Hand as _, Off as _, Sizing as _};
 
@@ -24,9 +23,9 @@ pub(super) fn bar(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement 
         .flex_none()
         .w_full()
         .h(look::BarSize::Regular.height())
-        .pl(px(16.) + clear.start)
-        .pr(px(8.) + clear.end)
-        .gap_1()
+        .pl(look::Space::Large.size() + clear.start)
+        .pr(look::Space::Small.size() + clear.end)
+        .gap(look::Space::XSmall)
         .border_b_1()
         .border_color(border)
         .child(

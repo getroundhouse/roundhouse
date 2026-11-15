@@ -16,10 +16,10 @@ use std::rc::Rc;
 /// Room for two lines of most prompts, and narrow enough to leave the chat beside the list.
 const WIDTH: Pixels = px(360.);
 /// Around the rows, inside the edge.
-const INSET: Pixels = px(4.);
+const INSET: look::Space = look::Space::XSmall;
 /// The tallest the rows get before they scroll: about eight prompts of two lines.
 const TALLEST: Pixels = px(420.);
-const GAP: Pixels = px(4.);
+const GAP: look::Space = look::Space::XSmall;
 /// Room for a prompt's number, up to four digits.
 const NUMBER_WIDTH: Pixels = px(28.);
 /// How far past the list's window rows are laid out, so one is ready before it scrolls in.
@@ -30,7 +30,7 @@ const LEAD: usize = 2;
 /// A row's width: the list's, less [`INSET`] and the edge on each side. It's set rather than left to the list, because
 /// the list measures a row before it knows how wide it is, which would count a long prompt's lines unwrapped.
 fn row_width() -> Pixels {
-    WIDTH - (INSET + look::EDGE) * 2.
+    WIDTH - (INSET.size() + look::EDGE) * 2.
 }
 
 /// The list's rows, kept for as long as the chat is, so each is measured once rather than each time the list opens.
@@ -111,7 +111,7 @@ pub(in super::super) fn draw(
         .role(Role::ListBox)
         .aria_label("Jump to a prompt or a compaction")
         .w(WIDTH)
-        .max_h(TALLEST + (INSET + look::EDGE) * 2.)
+        .max_h(TALLEST + (INSET.size() + look::EDGE) * 2.)
         .p(INSET)
         // The wheel scrolls the list and not the chat under it.
         .occlude()
@@ -152,10 +152,10 @@ fn row(
         .aria_selected(lit)
         .w(row_width())
         .flex()
-        .gap_3()
-        .pl_1()
-        .pr_3()
-        .py_2()
+        .gap(look::Space::Medium)
+        .pl(look::Space::XSmall)
+        .pr(look::Space::Medium)
+        .py(look::Space::Small)
         .corners(look::Corner::Control)
         .hand()
         .when(lit, |d| d.bg(fill))
@@ -198,10 +198,10 @@ fn compaction_row(
         .w(row_width())
         .flex()
         .items_center()
-        .gap_3()
-        .pl_1()
-        .pr_3()
-        .py_2()
+        .gap(look::Space::Medium)
+        .pl(look::Space::XSmall)
+        .pr(look::Space::Medium)
+        .py(look::Space::Small)
         .corners(look::Corner::Control)
         .hand()
         .hover(move |d| d.bg(fill))

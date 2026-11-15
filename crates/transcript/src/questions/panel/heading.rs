@@ -55,12 +55,12 @@ pub(super) fn heading(
     });
     v_flex()
         .w_full()
-        .gap_1()
+        .gap(look::Space::XSmall)
         .child(
             h_flex()
                 .w_full()
                 .h(px(HEADER_LINE))
-                .gap_2()
+                .gap(look::Space::Small)
                 .child(
                     said("question-header", header)
                         .flex_1()

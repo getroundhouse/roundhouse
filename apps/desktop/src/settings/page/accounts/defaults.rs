@@ -26,7 +26,12 @@ pub(super) fn section(drawing: &Drawing<'_>, accounts: &[&Account], cx: &App) ->
         .error
         .as_ref()
         .map(|said| div().typeset(look::Type::Body).text_color(colors.error).child(said.clone()));
-    v_flex().gap_3().child(div().emphasis().child("Default accounts")).child(intro).children(rows).children(error)
+    v_flex()
+        .gap(look::Space::Medium)
+        .child(div().emphasis().child("Default accounts"))
+        .child(intro)
+        .children(rows)
+        .children(error)
 }
 
 fn row(drawing: &Drawing<'_>, agent: &AgentDescription, accounts: &[&Account], cx: &App) -> Div {
@@ -52,10 +57,10 @@ fn row(drawing: &Drawing<'_>, agent: &AgentDescription, accounts: &[&Account], c
     let says = says.map(|says| {
         div().typeset(look::Type::Body).text_color(if blocked { colors.error } else { colors.text_muted }).child(says)
     });
-    let description = v_flex().flex_1().min_w_0().gap_1().child(agent.name.clone()).children(says);
+    let description = v_flex().flex_1().min_w_0().gap(look::Space::XSmall).child(agent.name.clone()).children(says);
     h_flex()
-        .gap_6()
-        .py_3()
+        .gap(look::Space::XLarge)
+        .py(look::Space::Medium)
         .border_b_1()
         .border_color(colors.edge)
         .child(description)

@@ -66,8 +66,8 @@ impl Said {
             let text = div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis_start();
             let text = text.typeset(look::Type::Code).child(path.clone());
             let copy = look::copy_button("copy-workspace-path", path, "Copy path");
-            let row = h_flex().gap_2().text_color(colors.text_muted).child(text).child(copy);
-            v_flex().child(row).child(div().my_2().h(look::EDGE).bg(colors.edge))
+            let row = h_flex().gap(look::Space::Small).text_color(colors.text_muted).child(text).child(copy);
+            v_flex().child(row).child(div().my(look::Space::Small).h(look::EDGE).bg(colors.edge))
         });
         let version = self.version.clone().map(|version| {
             let moving = self.moving_to.clone().map(|to| {
@@ -81,20 +81,20 @@ impl Said {
         });
         let ports = self.ports.clone().map(|ports| row("Ports", format!("Ports {ports}"), div().child(ports), cx));
         let rows = v_flex()
-            .gap_1()
+            .gap(look::Space::XSmall)
             .typeset(look::Type::Detail)
             .text_color(colors.text_muted)
             .children(version)
             .child(row("Runs on", format!("Runs on {}", self.runs_on), div().child(self.runs_on.clone()), cx))
             .children(ports);
-        let card = look::raised(cx).region(Region::WorkspaceCard).flex().flex_col().w(WIDTH).p_3();
+        let card = look::raised(cx).region(Region::WorkspaceCard).flex().flex_col().w(WIDTH).p(look::Space::Medium);
         card.children(path).child(rows).into_any_element()
     }
 }
 
 /// A label, faint, and what it says beside it, read out as `said`, since a screen reader would read the two apart.
 fn row(label: &'static str, said: String, value: Div, cx: &App) -> Stateful<Div> {
-    let row = h_flex().id(label).role(Role::Label).aria_label(said).items_start().gap_3();
+    let row = h_flex().id(label).role(Role::Label).aria_label(said).items_start().gap(look::Space::Medium);
     row.child(div().flex_none().w(LABEL).text_color(look::colors(cx).text_faint).child(label))
         .child(value.flex_1().min_w_0())
 }

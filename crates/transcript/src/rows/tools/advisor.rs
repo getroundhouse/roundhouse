@@ -69,8 +69,8 @@ fn said(reply: &Reply, advice: Option<&str>, toggle: &Toggle, cx: &App) -> Optio
     Some(
         div()
             .id(id)
-            .px_3()
-            .py_2()
+            .px(look::Space::Medium)
+            .py(look::Space::Small)
             .typeset(look::Type::Body)
             .text_color(muted)
             .child(why)

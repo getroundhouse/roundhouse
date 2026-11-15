@@ -27,5 +27,10 @@ pub(super) fn draw(thought: &str, toggle: &Toggle, cx: &App) -> AnyElement {
 /// All of what the agent thought, `text`, drawn from the kit's blocks, while it's written and once it's recorded, in
 /// a row of its own or a call's. Wherever it is, it's known by its [`find::view_id`].
 pub(super) fn text(key: &ItemKey, text: impl IntoElement, cx: &App) -> impl IntoElement {
-    div().id(key.element("thinking")).mb_1().text_color(look::colors(cx).text_muted).child(text).test_support()
+    div()
+        .id(key.element("thinking"))
+        .mb(look::Space::XSmall)
+        .text_color(look::colors(cx).text_muted)
+        .child(text)
+        .test_support()
 }

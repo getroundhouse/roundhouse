@@ -48,12 +48,12 @@ pub(super) fn in_the_card(cache: &PromptCache, cx: &App) -> Option<Div> {
     let left = card::row("Cache", left, Some(look::cache_mark(mark, muted).into_any_element()), cx);
     let lasts = h_flex()
         .justify_between()
-        .gap_6()
+        .gap(look::Space::XLarge)
         .typeset(look::Type::Detail)
         .text_color(muted)
         .children(when)
         .child(div().whitespace_nowrap().child(format!("{} cache", ttl_words(cache.ttl)?)));
-    Some(v_flex().gap_1().child(card::rule(cx)).child(left).child(lasts))
+    Some(v_flex().gap(look::Space::XSmall).child(card::rule(cx)).child(left).child(lasts))
 }
 
 /// How long a cache lasts, as "1h".

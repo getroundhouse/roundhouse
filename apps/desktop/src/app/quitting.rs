@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 use client_core::{Client, Commands, Drafts};
 use gpui_kit::{App, AppContext as _, Context, Global, PromptLevel, WeakEntity, Window};
 
-use super::{AppView, view};
+use super::{AppView, restarts};
 use crate::window_place;
 
 /// The longest quitting, or restarting to update, waits for what's on its way to the hub, such as a file attached just
@@ -141,7 +141,7 @@ impl AppView {
 
     /// Asks in the system's alert, as archiving anyway does, with keeping working first, so Return loses nothing.
     fn ask_to_quit(&mut self, chats: usize, comments: usize, cx: &mut Context<Self>) {
-        let detail = view::unsent_note(chats, comments, "quitting").unwrap_or_default();
+        let detail = restarts::unsent_note(chats, comments, "quitting").unwrap_or_default();
         let answer = self.window.update(cx, |_, window, cx| {
             window.prompt(PromptLevel::Warning, "Quit Roundhouse?", Some(&detail), &["Keep working", "Quit"], cx)
         });

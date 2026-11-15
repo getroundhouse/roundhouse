@@ -122,10 +122,10 @@ pub(crate) fn bar(
         .w_full()
         // A regular bar's, as the chat tabs are, so the two rows of tabs line up across the window.
         .h(look::BarSize::Regular.height())
-        .pl_1()
+        .pl(look::Space::XSmall)
         // As far in as the rows under it, so what's at its right end lines up with what's at theirs.
-        .pr_3()
-        .gap_2()
+        .pr(look::Space::Medium)
+        .gap(look::Space::Small)
         // The bar's bottom edge, under the tabs rather than a border, so the line under the tab chosen can cover it,
         // as it does under the chat tabs.
         .child(div().absolute().left_0().right_0().bottom_0().h(look::EDGE).bg(look::colors(cx).edge))
@@ -160,8 +160,8 @@ fn tab_element(
                 .selected(selected)
                 .accessibility_label(label)
                 .h_full()
-                .px_3()
-                .gap_2()
+                .px(look::Space::Medium)
+                .gap(look::Space::Small)
                 .when(!selected, |d| d.text_color(muted))
                 .on_click(move |_, window, cx| on_click(window, cx))
                 // Its count is smaller, so it's set on the name's baseline.

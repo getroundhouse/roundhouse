@@ -163,6 +163,6 @@ impl WorkspacePane {
     /// The tiles above what's typed.
     pub(crate) fn attached_tiles(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
         let tiles = self.attached.tiles("composer-attachments", cx, Self::remove_attached)?;
-        Some(tiles.px_3().pt_3().into_any_element())
+        Some(tiles.px(look::Space::Medium).pt(look::Space::Medium).into_any_element())
     }
 }

@@ -63,7 +63,8 @@ fn opened(found: &Found, toggle: &Toggle, cx: &App) -> Option<AnyElement> {
                 });
                 rows.extend(numbered::rows(language(file.path), &lines, &marks, Some(&area), cx));
             }
-            numbered::scrolling(toggle, &id, div().id(id.clone()).pb_2().children(rows)).into_any_element()
+            numbered::scrolling(toggle, &id, div().id(id.clone()).pb(look::Space::Small).children(rows))
+                .into_any_element()
         }
         Found::Files(_) | Found::Raw(_) => {
             block::output(toggle, Text::Found, &listed(found)?, look::colors(cx).text, cx)

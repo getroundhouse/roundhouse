@@ -172,7 +172,13 @@ fn changes(kind: LineKind, code: &Code<'_>, drawing: &Drawing, at: Option<(DiffS
 
 fn number(line: Option<u32>, width: Pixels, cx: &App) -> Div {
     let text = line.map(|line| SharedString::from(line.to_string()));
-    div().flex_none().w(width).pr_2().text_right().text_color(look::colors(cx).text_faint).children(text)
+    div()
+        .flex_none()
+        .w(width)
+        .pr(look::Space::Small)
+        .text_right()
+        .text_color(look::colors(cx).text_faint)
+        .children(text)
 }
 
 /// The button that starts a comment on a line, which shows while the line is hovered, and while it's `marked` as the
@@ -256,7 +262,7 @@ fn fold_row(fold: &Fold, drawing: &Drawing, cx: &App) -> AnyElement {
 }
 
 /// The room between a fold's two arrows.
-pub(super) const BETWEEN_ARROWS: Pixels = px(4.);
+pub(super) const BETWEEN_ARROWS: look::Space = look::Space::XSmall;
 
 /// How wide a side's column of line numbers is, and the gutter before its code, for a file whose numbers go up to
 /// `highest`. A fold's two arrows sit in the gutter, which in a split view is a side's one column of numbers, so that
@@ -264,7 +270,7 @@ pub(super) const BETWEEN_ARROWS: Pixels = px(4.);
 pub(in super::super) fn gutter(highest: usize, split: bool) -> (Pixels, Pixels) {
     let numbers = numbers_width(highest);
     if split {
-        let numbers = numbers.max(look::ControlSize::Small.height() * 2. + BETWEEN_ARROWS);
+        let numbers = numbers.max(look::ControlSize::Small.height() * 2. + BETWEEN_ARROWS.size());
         (numbers, numbers)
     } else {
         (numbers, numbers * 2.)

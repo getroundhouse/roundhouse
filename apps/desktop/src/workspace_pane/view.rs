@@ -70,9 +70,9 @@ impl WorkspacePane {
                     .accessibility_label(title.clone())
                     .size_full()
                     .justify_start()
-                    .gap_2()
-                    .pl_3()
-                    .pr_2()
+                    .gap(look::Space::Small)
+                    .pl(look::Space::Medium)
+                    .pr(look::Space::Small)
                     .typeset(look::Type::Body)
                     .line_height(relative(1.25))
                     // Only a chat that needs a look stands out: one with a reply that hasn't been read, or a question
@@ -138,9 +138,9 @@ impl WorkspacePane {
             .child(
                 h_flex()
                     .size_full()
-                    .pl_1()
-                    .pr_3()
-                    .gap_1()
+                    .pl(look::Space::XSmall)
+                    .pr(look::Space::Medium)
+                    .gap(look::Space::XSmall)
                     .child(Tabs::new("chat-tabs").flex().h_full().min_w_0().overflow_x_scroll().children(tabs))
                     .child(self.new_chat_button(cx))
                     // Kept to the end of the row, so it stays put as chats open and close.
@@ -192,9 +192,9 @@ impl WorkspacePane {
             .flex_none()
             .w_full()
             .h(look::BarSize::Regular.height())
-            .pl(px(16.) + clear.start)
-            .pr(px(12.) + clear.end)
-            .gap_2()
+            .pl(look::Space::Large.size() + clear.start)
+            .pr(look::Space::Medium.size() + clear.end)
+            .gap(look::Space::Small)
             .border_b_1()
             .border_color(border)
             .child(self.heading(line_text, cx))
@@ -233,7 +233,7 @@ impl WorkspacePane {
         h_flex()
             .flex_1()
             .min_w_0()
-            .gap_2()
+            .gap(look::Space::Small)
             .overflow_hidden()
             .whitespace_nowrap()
             .child(title)
@@ -314,7 +314,7 @@ impl WorkspacePane {
                         "The agent stopped before it finished. Send a message to pick up where it left off.",
                     )
                     .flex_none()
-                    .py_1()
+                    .py(look::Space::XSmall)
                     .typeset(look::Type::Detail)
                     .text_color(muted),
                 )
@@ -322,8 +322,14 @@ impl WorkspacePane {
             // What the next prompt costs, with a clock as the newest turn's line has.
             .when_some(cache_expired, |d, said| {
                 let clock = look::cache_mark(look::CacheMark::Clock, faint);
-                let line = h_flex().gap_2().child(clock).child(said);
-                d.child(transcript::in_column(line).flex_none().py_1().typeset(look::Type::Detail).text_color(muted))
+                let line = h_flex().gap(look::Space::Small).child(clock).child(said);
+                d.child(
+                    transcript::in_column(line)
+                        .flex_none()
+                        .py(look::Space::XSmall)
+                        .typeset(look::Type::Detail)
+                        .text_color(muted),
+                )
             })
             .child(composer)
             .into_any_element()

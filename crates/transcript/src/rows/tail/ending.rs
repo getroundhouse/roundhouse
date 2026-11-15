@@ -134,7 +134,7 @@ fn waiting_prompt(prompt: &Waiting, at: TextAt, shared: &Shared, cx: &App) -> An
 
 /// A line as tall as a call's, at body size, so nothing jumps when what's above it is recorded.
 pub(super) fn tail_line(cx: &App) -> Div {
-    div().flex().items_center().gap_2().h(HEIGHT).text_color(look::colors(cx).text_muted)
+    div().flex().items_center().gap(look::Space::Small).h(HEIGHT).text_color(look::colors(cx).text_muted)
 }
 
 /// What a thought the agent is still writing says, after the icon its line will have once it's recorded. The working

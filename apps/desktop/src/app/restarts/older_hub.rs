@@ -1,5 +1,5 @@
-use super::super::{AppView, Connection, hub_source, view};
-use super::asking;
+use super::super::{AppView, Connection, hub_source};
+use super::{asking, said};
 use crate::workspace_pane::WorkspacePane;
 use gpui_kit::component::WindowExt as _;
 use gpui_kit::{App, AppContext as _, Context, Task};
@@ -29,8 +29,8 @@ impl UpdateQuestion {
     /// What going ahead loses.
     pub fn detail(&self) -> String {
         match self {
-            Self::Restart { chats, comments } => view::unsent_note(*chats, *comments, "restarting").unwrap_or_default(),
-            Self::Finish(status) => view::finish_question(status),
+            Self::Restart { chats, comments } => said::unsent_note(*chats, *comments, "restarting").unwrap_or_default(),
+            Self::Finish(status) => said::finish_question(status),
         }
     }
 }

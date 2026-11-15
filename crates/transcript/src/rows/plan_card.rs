@@ -42,13 +42,13 @@ pub(super) fn plan_card(seq: Seq, body: &EventBody, open: bool, shared: &Shared,
         None,
     );
     let buttons = h_flex()
-        .gap_2()
+        .gap(look::Space::Small)
         .child(answer_button("approve-plan", "Approve plan", allow).primary())
         .child(answer_button("keep-planning", "Keep planning", approval.refused()));
     row()
         .child(
             waiting_card(open, cx)
-                .gap_2()
+                .gap(look::Space::Small)
                 .child(div().typeset(look::Type::Body).emphasis().child("Plan"))
                 .child(content)
                 .when(open, |d| d.child(buttons)),

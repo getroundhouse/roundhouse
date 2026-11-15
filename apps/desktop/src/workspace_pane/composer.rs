@@ -209,7 +209,10 @@ impl WorkspacePane {
         let queue = self.queue_card(cx);
         let around = |inside: AnyElement| transcript::around_column(v_flex().w_full().children(queue).child(inside));
         if let Some(question) = self.transcript().and_then(|t| t.read(cx).question().cloned()) {
-            return around(question.into_any_element()).flex_none().pb_4().pt(transcript::ABOVE_THE_COMPOSER);
+            return around(question.into_any_element())
+                .flex_none()
+                .pb(look::Space::Large)
+                .pt(transcript::ABOVE_THE_COMPOSER);
         }
         let planning = self.planning();
         let attached = self.attached_tiles(cx);
@@ -223,9 +226,9 @@ impl WorkspacePane {
         let composer = composing::place(composer, planning, look::Corner::Card, cx, Self::toggle_plan_mode);
         let composer = attached::takes_drops(composer, cx, |t: &mut Self, paths, cx| t.attach_paths(paths, cx))
             .children(attached)
-            .child(div().w_full().px_2().pt_2().child(textarea))
+            .child(div().w_full().px(look::Space::Small).pt(look::Space::Small).child(textarea))
             .child(bar);
-        around(composer.into_any_element()).flex_none().pb_4().pt(transcript::ABOVE_THE_COMPOSER)
+        around(composer.into_any_element()).flex_none().pb(look::Space::Large).pt(transcript::ABOVE_THE_COMPOSER)
     }
 
     /// The row along the composer's bottom, which has two ends. The left one sets up the prompt: the `+` menu, then
@@ -239,9 +242,17 @@ impl WorkspacePane {
         let picker = self.picker(cx).into_any_element();
         let beside = self.beside_the_main_action(cx);
         // Left out when there's nothing in it, so it doesn't push the main action in by a gap.
-        let beside = (!beside.is_empty()).then(|| h_flex().flex_none().gap_2().children(beside));
-        let agents = h_flex().flex_none().gap_4().children(beside).child(self.main_action(cx));
-        h_flex().w_full().px_3().pt_2().pb_3().gap_2().child(add).child(picker).child(agents)
+        let beside = (!beside.is_empty()).then(|| h_flex().flex_none().gap(look::Space::Small).children(beside));
+        let agents = h_flex().flex_none().gap(look::Space::Large).children(beside).child(self.main_action(cx));
+        h_flex()
+            .w_full()
+            .px(look::Space::Medium)
+            .pt(look::Space::Small)
+            .pb(look::Space::Medium)
+            .gap(look::Space::Small)
+            .child(add)
+            .child(picker)
+            .child(agents)
     }
 
     /// What sits beside the main action, in the order it's drawn. Something new for the bar's right end goes here,

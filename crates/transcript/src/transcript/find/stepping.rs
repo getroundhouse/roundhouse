@@ -113,7 +113,7 @@ impl Transcript {
     pub(crate) fn keep_revealing(&mut self, cx: &mut Context<Self>) {
         let Some(finding) = &mut self.finding else { return };
         let mut visible = self.list.viewport();
-        let under = bar::BOTTOM.min(visible.size.height / 2.);
+        let under = bar::bottom().min(visible.size.height / 2.);
         visible.origin.y += under;
         visible.size.height -= under;
         let (reveal, revealing) = (finding.reveal.clone(), &mut finding.revealing);

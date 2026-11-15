@@ -52,7 +52,7 @@ impl WorkspacePane {
         Some(
             v_flex()
                 .region(Region::Queue)
-                .mx_3()
+                .mx(look::Space::Medium)
                 .corners_top(look::Corner::Card)
                 .border_1()
                 .border_b_0()
@@ -60,8 +60,8 @@ impl WorkspacePane {
                 .bg(colors.pane)
                 .child(
                     div()
-                        .px_3()
-                        .py_2()
+                        .px(look::Space::Medium)
+                        .py(look::Space::Small)
                         .border_b_1()
                         .border_color(border)
                         .typeset(look::Type::Detail)
@@ -69,7 +69,14 @@ impl WorkspacePane {
                         .child(heading),
                 )
                 // Its own height, so a long queue scrolls rather than pushing the composer out of the window.
-                .child(div().id("queue-rows").max_h(px(QUEUE_MOST_HEIGHT)).overflow_y_scroll().p_1().children(rows))
+                .child(
+                    div()
+                        .id("queue-rows")
+                        .max_h(px(QUEUE_MOST_HEIGHT))
+                        .overflow_y_scroll()
+                        .p(look::Space::XSmall)
+                        .children(rows),
+                )
                 .into_any_element(),
         )
     }
@@ -95,8 +102,8 @@ impl WorkspacePane {
             .group(group.clone())
             .w_full()
             .items_center()
-            .gap_2()
-            .p_2()
+            .gap(look::Space::Small)
+            .p(look::Space::Small)
             .corners(look::Corner::Control)
             .hover(move |style| style.bg(lit))
             .child(queued_line(prompt, text, muted))
@@ -125,7 +132,7 @@ fn queued_buttons(
             .tooltip(tooltip)
     };
     let (edit, remove) = (button("edit", IconName::Pencil, "Edit"), button("remove", IconName::Trash, "Remove"));
-    let buttons = h_flex().flex_none().gap_1().invisible();
+    let buttons = h_flex().flex_none().gap(look::Space::XSmall).invisible();
     let Row::Queued { working } = row else {
         return buttons.child(edit).child(remove).child(button("send", IconName::ArrowUp, "Send now"));
     };
@@ -145,9 +152,9 @@ fn editing_row(editing: &Editing, cx: &mut Context<WorkspacePane>) -> AnyElement
     h_flex()
         .id(ElementId::Name(format!("queued-editing-{}", editing.was.client_msg_id).into()))
         .items_start()
-        .gap_2()
-        .px_1()
-        .py_1()
+        .gap(look::Space::Small)
+        .px(look::Space::XSmall)
+        .py(look::Space::XSmall)
         .on_action(cx.listener(|t, _: &Escape, window, cx| t.cancel_edit(window, cx)))
         .child(div().flex_1().min_w_0().child(Textarea::new(&editing.input).with_size(Size::Medium).appearance(false)))
         .child(beside)
@@ -160,7 +167,7 @@ fn queued_line(prompt: &QueuedPrompt, text: Hsla, muted: Hsla) -> impl IntoEleme
     h_flex()
         .flex_1()
         .min_w_0()
-        .gap_2()
+        .gap(look::Space::Small)
         .items_center()
         .when(!line.is_empty(), |row| {
             row.child(div().min_w_0().typeset(look::Type::Body).text_color(text).truncate().child(line))
@@ -181,7 +188,7 @@ fn carried(prompt: &QueuedPrompt, muted: Hsla) -> Option<AnyElement> {
             .id(ElementId::Name(format!("queued-files-{}", prompt.client_msg_id).into()))
             .flex_none()
             .max_w(px(CARRIED_MOST_WIDTH))
-            .gap_1()
+            .gap(look::Space::XSmall)
             .items_center()
             .typeset(look::Type::Body)
             .text_color(muted)

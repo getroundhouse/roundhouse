@@ -31,7 +31,8 @@ pub(super) fn row(drawing: &Drawing<'_>, account: &Account, cx: &App) -> AnyElem
     let colors = look::colors(cx);
     let standing = account.login_agent.map(|_| words::standing(account.held_login.as_ref(), drawing.now_ms, cx));
     let icon = if account.login_agent.is_some() { Lucide::KeyRound } else { Lucide::CircleUser };
-    let icon = div().flex_none().pt_0p5().child(Icon::new(icon).size_4().text_color(colors.text_muted));
+    // Down to the middle of the name beside it, whose line is taller than the icon.
+    let icon = div().flex_none().pt(px(2.)).child(Icon::new(icon).size_4().text_color(colors.text_muted));
     let called = crate::names::called(account);
     let dim = standing == Some(Standing::Disconnected);
     let name =
@@ -43,31 +44,38 @@ pub(super) fn row(drawing: &Drawing<'_>, account: &Account, cx: &App) -> AnyElem
         .map(|agent| {
             div()
                 .flex_none()
-                .px_2()
-                .py_0p5()
+                .px(look::Space::Small)
+                // A chip's own room above and below its words, rather than a space.
+                .py(px(2.))
                 .corners(look::Corner::Control)
                 .bg(colors.raised)
                 .typeset(look::Type::Body)
                 .text_color(colors.text_muted)
                 .child(format!("Default for {}", agent.name))
         });
-    let name = h_flex().gap_2().min_w_0().child(name).children(badge);
+    let name = h_flex().gap(look::Space::Small).min_w_0().child(name).children(badge);
     let used = words::last_used(account, drawing.now_ms, cx);
     let used = used.map(|used| div().typeset(look::Type::Body).text_color(colors.text_faint).child(used));
-    let who = v_flex().flex_1().min_w_0().gap_1().child(name).children(stands(drawing, account, standing.as_ref(), cx));
+    let who = v_flex().flex_1().min_w_0().gap(look::Space::XSmall).child(name).children(stands(
+        drawing,
+        account,
+        standing.as_ref(),
+        cx,
+    ));
     let line = h_flex()
         .items_center()
-        .gap_4()
-        .py_4()
-        .child(h_flex().flex_1().min_w_0().items_start().gap_4().child(icon).child(who.children(used)))
+        .gap(look::Space::Large)
+        .py(look::Space::Large)
+        .child(h_flex().flex_1().min_w_0().items_start().gap(look::Space::Large).child(icon).child(who.children(used)))
         .child(limits(account, drawing.now_ms, cx))
         .child(controls(drawing, account, &called, standing.as_ref(), cx));
     let kept = drawing.kept.read(cx);
     let not_disconnected = kept.not_disconnected(&account.id);
-    let not_disconnected = not_disconnected
-        .map(|said| div().pb_3().typeset(look::Type::Body).text_color(colors.error).child(said.to_string()));
+    let not_disconnected = not_disconnected.map(|said| {
+        div().pb(look::Space::Medium).typeset(look::Type::Body).text_color(colors.error).child(said.to_string())
+    });
     let panel = kept.panel.as_ref().filter(|panel| panel.is_for(&account.id));
-    let panel = panel.map(|panel| div().pb_4().child(panel::panel(drawing, panel, cx)));
+    let panel = panel.map(|panel| div().pb(look::Space::Large).child(panel::panel(drawing, panel, cx)));
     v_flex()
         .id(SharedString::from(format!("account-{}", account.id)))
         .border_b_1()
@@ -107,7 +115,7 @@ fn stands(drawing: &Drawing<'_>, account: &Account, standing: Option<&Standing>,
         .id(SharedString::from(format!("account-stands-{}", account.id)))
         .role(Role::Label)
         .aria_label(said.clone())
-        .gap_2()
+        .gap(look::Space::Small)
         .typeset(look::Type::Body)
         .text_color(warns.unwrap_or(colors.text_muted))
         .children(sign)
@@ -119,7 +127,12 @@ fn stands(drawing: &Drawing<'_>, account: &Account, standing: Option<&Standing>,
 /// them shows. An account no agent has heard a limit of says so.
 fn limits(account: &Account, now_ms: i64, cx: &App) -> Div {
     let colors = look::colors(cx);
-    let column = v_flex().flex_none().w(LIMITS_WIDTH).gap_2().typeset(look::Type::Detail).text_color(colors.text_muted);
+    let column = v_flex()
+        .flex_none()
+        .w(LIMITS_WIDTH)
+        .gap(look::Space::Small)
+        .typeset(look::Type::Detail)
+        .text_color(colors.text_muted);
     if account.limits.is_empty() {
         return column.child(div().text_color(colors.text_faint).child("No limits heard of yet"));
     }
@@ -127,7 +140,7 @@ fn limits(account: &Account, now_ms: i64, cx: &App) -> Div {
         let left = limit.left_percent();
         let bar = crate::limits::bar(left, BAR, cx);
         h_flex()
-            .gap_2()
+            .gap(look::Space::Small)
             .child(div().flex_none().w(LIMIT_NAME_WIDTH).truncate().child(name))
             .child(div().flex_1().child(bar))
             .child(h_flex().flex_none().w(LEFT_WIDTH).justify_end().child(format!("{left}% left")))
@@ -139,7 +152,7 @@ fn limits(account: &Account, now_ms: i64, cx: &App) -> Div {
 /// Each is off with no hub to ask, and Renew and Connect again while the hub doesn't say what makes a token for its
 /// kind.
 fn controls(drawing: &Drawing<'_>, account: &Account, called: &str, standing: Option<&Standing>, cx: &App) -> Div {
-    let column = h_flex().flex_none().w(CONTROLS_WIDTH).justify_end().gap_1();
+    let column = h_flex().flex_none().w(CONTROLS_WIDTH).justify_end().gap(look::Space::XSmall);
     let (Some(agent), Some(standing)) = (account.login_agent, standing) else { return column };
     let makes_a_token = drawing.agents.of(agent).is_some_and(|agent| agent.login.is_some());
     let can_ask = drawing.kept.read(cx).can_ask();

@@ -22,12 +22,12 @@ fn band(column: Div, cx: &App) -> AnyElement {
     let colors = look::colors(cx);
     div()
         .w_full()
-        .px_6()
-        .pt_6()
-        .pb_4()
+        .px(look::Space::XLarge)
+        .pt(look::Space::XLarge)
+        .pb(look::Space::Large)
         .bg(colors.raised)
         .typeset(look::Type::Body)
-        .child(column.w_full().max_w(px(WIDTH)).gap_3())
+        .child(column.w_full().max_w(px(WIDTH)).gap(look::Space::Medium))
         .into_any_element()
 }
 
@@ -44,7 +44,7 @@ pub(super) fn draft_card(
     let (cancel, save) = (view.clone(), view);
     let field = div()
         .w_full()
-        .p_1()
+        .p(look::Space::XSmall)
         .corners(look::Corner::Control)
         .border_1()
         .border_color(colors.brand.opacity(0.6))
@@ -53,7 +53,7 @@ pub(super) fn draft_card(
     let actions = h_flex()
         .w_full()
         .justify_end()
-        .gap_2()
+        .gap(look::Space::Small)
         .child(Button::new("cancel-comment").sized(look::ControlSize::Regular).hand().ghost().label("Cancel").on_click(
             move |_, window, cx| {
                 let _ = cancel.update(cx, |t, cx| t.cancel_draft(window, cx));
@@ -81,7 +81,7 @@ pub(super) fn comment_card(comment: DiffComment, view: WeakEntity<FileDiff>, cx:
     let actions = h_flex()
         .w_full()
         .justify_end()
-        .gap_2()
+        .gap(look::Space::Small)
         .child(
             Button::new(named("edit"))
                 .hand()
@@ -116,5 +116,5 @@ pub(super) fn comment_card(comment: DiffComment, view: WeakEntity<FileDiff>, cx:
                     let _ = add.update(cx, |t, cx| t.add_to_chat(&to_add, cx));
                 }),
         );
-    band(v_flex().child(div().px_1().child(comment.text)).child(actions), cx)
+    band(v_flex().child(div().px(look::Space::XSmall).child(comment.text)).child(actions), cx)
 }

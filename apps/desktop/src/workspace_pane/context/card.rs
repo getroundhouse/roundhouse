@@ -22,7 +22,7 @@ const BAR: Pixels = px(6.);
 
 /// Raised like the app's other cards, with a card's room around what it holds.
 fn surface(region: Region, cx: &App) -> ObservedElement<Stateful<Div>> {
-    look::raised(cx).region(region).flex().flex_col().w(WIDTH).p_3().typeset(look::Type::Body)
+    look::raised(cx).region(region).flex().flex_col().w(WIDTH).p(look::Space::Medium).typeset(look::Type::Body)
 }
 
 /// The ring's card: the chat's context. `usage` is given only when the bars aren't drawn, since this is then the one
@@ -62,8 +62,8 @@ fn compact(pane: &WeakEntity<WorkspacePane>, off: bool, cx: &App) -> Div {
         .typeset(look::Type::Detail)
         .text_color(colors.text_faint)
         .child("Summarize to make room");
-    let under = h_flex().justify_between().items_center().gap_3().child(said).child(button);
-    v_flex().child(div().my_2().h(look::EDGE).bg(colors.edge)).child(under)
+    let under = h_flex().justify_between().items_center().gap(look::Space::Medium).child(said).child(button);
+    v_flex().child(div().my(look::Space::Small).h(look::EDGE).bg(colors.edge)).child(under)
 }
 
 /// The bars' card: the plan beside its heading, which is what it's `called`, how much of each limit shown is left, as a
@@ -72,7 +72,7 @@ fn compact(pane: &WeakEntity<WorkspacePane>, off: bool, cx: &App) -> Div {
 pub(super) fn usage_card(usage: &Usage, called: SharedString, hold: &HoldOpen, cx: &App) -> AnyElement {
     let limits = usage.limits.iter().map(|(name, limit)| self::limit(name.clone(), limit, cx));
     let plan = usage.account.plan.clone().map(SharedString::from);
-    let limits = v_flex().gap_3().child(heading(called, plan, cx)).children(limits);
+    let limits = v_flex().gap(look::Space::Medium).child(heading(called, plan, cx)).children(limits);
     let whose = whose(&usage.account, Plan::BesideHeading, usage.moves.as_ref().map(|moves| (moves, hold)), cx);
     surface(Region::UsageCard, cx).child(limits).children(whose).into_any_element()
 }
@@ -88,14 +88,14 @@ fn room(context: &ContextUsage, cx: &App) -> Div {
     let of = format!("{}/{}", look::tokens(context.used_tokens), look::tokens(context.max_tokens));
     let under = h_flex()
         .justify_between()
-        .gap_3()
+        .gap(look::Space::Medium)
         .typeset(look::Type::Detail)
         .child(div().min_w_0().truncate().text_color(colors.text_muted).child(left))
         .child(div().flex_none().text_color(colors.text_faint).child(of));
     let parts: Vec<Div> =
         in_it(context).into_iter().map(|part| share(part.name.clone(), look::tokens(part.tokens), cx)).collect();
     v_flex()
-        .gap_1()
+        .gap(look::Space::XSmall)
         .child(heading("Context", Some(used.into()), cx))
         .child(bar_with_room_kept_back(context.used_fraction(), context.fraction(kept_back), cx))
         .child(under)
@@ -108,7 +108,7 @@ fn room(context: &ContextUsage, cx: &App) -> Div {
                 .test_support()
         }))
         // Left out when the agent named no parts, so the card doesn't end in the room above them.
-        .children((!parts.is_empty()).then(|| v_flex().mt_2().gap_1().children(parts)))
+        .children((!parts.is_empty()).then(|| v_flex().mt(look::Space::Small).gap(look::Space::XSmall).children(parts)))
 }
 
 /// How many more tokens the context can take: what isn't used, less what the agent keeps back. None, rather than
@@ -138,13 +138,13 @@ fn limit(name: SharedString, limit: &UsageLimit, cx: &App) -> AnyElement {
     let resets = limit.resets_at_ms.and_then(|at_ms| look::day_and_time(at_ms, cx));
     let said = h_flex()
         .justify_between()
-        .gap_3()
+        .gap(look::Space::Medium)
         .child(div().min_w_0().truncate().text_color(colors.text_muted).child(name))
         .child(div().flex_none().emphasis().child(format!("{left}% left")));
     let resets = resets
         .map(|when| div().typeset(look::Type::Detail).text_color(colors.text_faint).child(format!("Resets {when}")));
     let bar = crate::limits::bar(left, BAR, cx);
-    v_flex().gap_1().child(said).child(bar).children(resets).into_any_element()
+    v_flex().gap(look::Space::XSmall).child(said).child(bar).children(resets).into_any_element()
 }
 
 /// Whether the plan is said with whose account it is, or is already beside a heading above it.
@@ -171,10 +171,11 @@ fn whose(account: &Account, plan: Plan, moves: Option<(&Moves, &HoldOpen)>, cx: 
     let who = who.map(|who| div().truncate().text_color(colors.text_muted).child(who));
     let how = (!how.is_empty())
         .then(|| div().truncate().typeset(look::Type::Detail).text_color(colors.text_faint).child(how.join(" · ")));
-    let said = v_flex().id("account").flex_1().min_w_0().gap_1().children(who).children(how).test_support();
+    let said =
+        v_flex().id("account").flex_1().min_w_0().gap(look::Space::XSmall).children(who).children(how).test_support();
     let move_button = moves.map(|(moves, hold)| moving::button(moves, hold));
-    let said = h_flex().items_center().gap_3().child(said).children(move_button);
-    Some(v_flex().child(div().my_2().h(look::EDGE).bg(colors.edge)).child(said).into_any_element())
+    let said = h_flex().items_center().gap(look::Space::Medium).child(said).children(move_button);
+    Some(v_flex().child(div().my(look::Space::Small).h(look::EDGE).bg(colors.edge)).child(said).into_any_element())
 }
 
 /// A section's name, in medium weight, and what it comes to, if anything, at the far end.
@@ -193,7 +194,7 @@ fn share(name: impl Into<SharedString>, share: String, cx: &App) -> Div {
     let muted = colors.text_muted;
     h_flex()
         .justify_between()
-        .gap_3()
+        .gap(look::Space::Medium)
         .child(div().min_w_0().truncate().text_color(muted).child(name.into()))
         .child(div().flex_none().text_color(colors.text_faint).child(share))
 }
@@ -208,6 +209,7 @@ fn bar_with_room_kept_back(used: f32, kept_back: f32, cx: &App) -> Div {
     h_flex()
         .w_full()
         .h(BAR)
+        // The drawing's own gap, where the agent shrinks the conversation, rather than a space.
         .gap(px(3.))
         .child(track().w(relative(usable)).flex_shrink(1.).child(filled))
         .children((kept_back > 0.).then(|| track().flex_1()))

@@ -33,7 +33,7 @@ pub(super) fn card(
     let stopped = colors.stopped;
     let resets = failure.resets_at_ms.and_then(|at_ms| look::day_and_time(at_ms, cx));
     let head = h_flex()
-        .gap_2()
+        .gap(look::Space::Small)
         .child(Icon::new(IconName::CircleX).flex_none().size(px(ICON)).text_color(stopped))
         .child(div().typeset(look::Type::Body).emphasis().child(title(failure.kind)))
         .children(resets.map(|when| {
@@ -42,10 +42,10 @@ pub(super) fn card(
     let id = (ItemKey::Event(seq, 0), Part::FailedRequest);
     let said = from_blocks(&Written::found(TextAt::only(seq, 0), &id, find, &failure.message), None, shared);
     let card = card::tinted(Some(stopped), cx)
-        .gap_2()
+        .gap(look::Space::Small)
         .child(head)
         .child(div().typeset(look::Type::Body).text_color(colors.text_muted).child(said))
-        .when(retry, |d| d.child(h_flex().pt_1().child(retry_button(seq, shared))));
+        .when(retry, |d| d.child(h_flex().pt(look::Space::XSmall).child(retry_button(seq, shared))));
     row().child(card).into_any_element()
 }
 

@@ -181,7 +181,7 @@ fn render_shown(
 }
 
 pub(super) fn row() -> Div {
-    v_flex().w_full().pb_4().gap_2()
+    v_flex().w_full().pb(look::Space::Large).gap(look::Space::Small)
 }
 
 pub(super) fn empty() -> AnyElement {
@@ -193,7 +193,7 @@ pub(crate) const RULE_ICON: f32 = 13.0;
 
 /// The row of a rule across the chat, with `middle` in its middle and nothing under it.
 pub(super) fn rule_row(middle: impl IntoElement, cx: &App) -> AnyElement {
-    row().pt_2().child(rule_across(middle, cx)).into_any_element()
+    row().pt(look::Space::Small).child(rule_across(middle, cx)).into_any_element()
 }
 
 /// A rule across the chat with `middle` in its middle, as a compaction, a cache that had expired and an update are
@@ -201,7 +201,7 @@ pub(super) fn rule_row(middle: impl IntoElement, cx: &App) -> AnyElement {
 pub(super) fn rule_across(middle: impl IntoElement, cx: &App) -> Div {
     let border = look::colors(cx).edge;
     let rule = || div().flex_1().h(look::EDGE).bg(border);
-    h_flex().w_full().items_center().gap_3().child(rule()).child(middle).child(rule())
+    h_flex().w_full().items_center().gap(look::Space::Medium).child(rule()).child(middle).child(rule())
 }
 
 /// What's said in the middle of a rule across the chat, small and faint.
@@ -209,9 +209,9 @@ pub(super) fn rule_middle(id: impl Into<ElementId>, cx: &App) -> Stateful<Div> {
     h_flex()
         .id(id)
         .flex_none()
-        .gap_2()
-        .px_2()
-        .py_1()
+        .gap(look::Space::Small)
+        .px(look::Space::Small)
+        .py(look::Space::XSmall)
         .typeset(look::Type::Detail)
         .text_color(look::colors(cx).text_faint)
 }
@@ -242,7 +242,7 @@ fn message(
     }
     // Calls and thinking in a row read as one list, so they sit closer together than paragraphs do.
     let only_lines = blocks.iter().all(is_a_line);
-    row().when(only_lines, |d| d.pb_2().gap_2()).children(rendered).into_any_element()
+    row().when(only_lines, |d| d.pb(look::Space::Small).gap(look::Space::Small)).children(rendered).into_any_element()
 }
 
 /// `event`, drawn in the row of an event, which is its own but for a prompt drawn where the agent took it, or at the

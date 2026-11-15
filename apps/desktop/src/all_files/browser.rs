@@ -316,7 +316,7 @@ impl Render for AllFiles {
                 uniform_list("all-files", self.rows.len(), cx.processor(|t, range, _, cx| t.draw_rows(range, cx)))
                     .flex_1()
                     .w_full()
-                    .py_1()
+                    .py(look::Space::XSmall)
                     .into_any_element()
             }
         };
@@ -326,8 +326,8 @@ impl Render for AllFiles {
                 d.child(
                     div()
                         .flex_none()
-                        .px_3()
-                        .py_1()
+                        .px(look::Space::Medium)
+                        .py(look::Space::XSmall)
                         .typeset(look::Type::Detail)
                         .text_color(muted)
                         .child("There are so many files that some aren't shown"),
@@ -341,7 +341,7 @@ fn placeholder(text: SharedString, color: Hsla) -> AnyElement {
     div()
         .flex_1()
         .w_full()
-        .px_4()
+        .px(look::Space::Large)
         .flex()
         .items_center()
         .justify_center()

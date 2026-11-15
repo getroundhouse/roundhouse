@@ -27,21 +27,21 @@ pub(super) const ROW_SIZE: RowSize = RowSize::Regular;
 pub(super) const HEADING_SIZE: RowSize = RowSize::Small;
 /// How far a row in the sidebar sets what it shows in from its ends: Home's, Create's and Search's icons, the heading's
 /// name, a repository's folder, and the buttons at a row's right end, which line up under each other.
-pub(super) const ROW_PAD: Pixels = px(8.);
+pub(super) const ROW_PAD: look::Space = look::Space::Small;
 /// How much further in a workspace's row sets its mark than a repository's row sets its folder, so the rows read as
 /// the repository's.
-const MARK_INDENT: Pixels = px(8.);
+const MARK_INDENT: look::Space = look::Space::Small;
 /// The space between a workspace's mark and its name, between its name and what's at its row's end, and between a
 /// draft's pencil and what the agent is doing.
-pub(super) const MARK_GAP: Pixels = px(8.);
+pub(super) const MARK_GAP: look::Space = look::Space::Small;
 /// The space between lines of one repository, its own row and its workspaces', so they read as one list, and under
 /// the heading, which the list is under.
-const LINE_GAP: Pixels = px(4.);
+const LINE_GAP: look::Space = look::Space::XSmall;
 /// The space between one repository's last line and the next repository, more than between its own lines, so each
 /// repository's lines read as apart from the next's.
-pub(super) const GROUP_GAP: Pixels = px(8.);
+pub(super) const GROUP_GAP: look::Space = look::Space::Small;
 /// The space around the list, at its sides and above its first line, and around Home, Create and Search above it.
-pub(super) const LIST_PAD: Pixels = px(8.);
+pub(super) const LIST_PAD: look::Space = look::Space::Small;
 
 /// One line of the list, by where its record is in the app's lists. The lines are made and drawn in the same frame,
 /// and those lists can't change in between.
@@ -101,8 +101,8 @@ impl Line {
     /// The space between this line and the one after it.
     pub(super) fn gap_before(self, next: Line) -> Pixels {
         match (self, next) {
-            (Line::Heading, _) | (_, Line::Workspace(_) | Line::Creating(_)) => LINE_GAP,
-            (_, Line::Repo(_) | Line::Heading) => GROUP_GAP,
+            (Line::Heading, _) | (_, Line::Workspace(_) | Line::Creating(_)) => LINE_GAP.size(),
+            (_, Line::Repo(_) | Line::Heading) => GROUP_GAP.size(),
         }
     }
 }
@@ -274,14 +274,14 @@ pub(in super::super) fn icon_box(icon: impl IconNamed, color: Hsla) -> Div {
 
 /// How far a workspace's row sets its mark in from its edge.
 pub(super) fn row_inset() -> Pixels {
-    ROW_PAD + MARK_INDENT
+    ROW_PAD.size() + MARK_INDENT.size()
 }
 
 /// Level with the names of the workspaces above it.
 fn creating(workspace: &Workspace, cx: &mut Context<AppView>) -> AnyElement {
     div()
         .id(ElementId::Name(format!("creating-{}", workspace.id).into()))
-        .pl(row_inset() + look::Size::Row.width() + MARK_GAP)
+        .pl(row_inset() + look::Size::Row.width() + MARK_GAP.size())
         .h(ROW_SIZE.height())
         .flex()
         .items_center()

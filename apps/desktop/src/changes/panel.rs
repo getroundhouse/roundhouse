@@ -135,8 +135,8 @@ impl Changes {
             .flex_none()
             .w_full()
             .h(look::BarSize::Regular.height())
-            .px_3()
-            .gap_2()
+            .px(look::Space::Medium)
+            .gap(look::Space::Small)
             .justify_between()
             .border_b_1()
             .border_color(look::colors(cx).edge)
@@ -182,7 +182,7 @@ impl Render for Changes {
             )
             .flex_1()
             .w_full()
-            .py_1()
+            .py(look::Space::XSmall)
             .into_any_element(),
         };
         v_flex()
@@ -192,8 +192,8 @@ impl Render for Changes {
                 d.child(
                     div()
                         .flex_none()
-                        .px_3()
-                        .py_1()
+                        .px(look::Space::Medium)
+                        .py(look::Space::XSmall)
                         .typeset(look::Type::Detail)
                         .text_color(muted)
                         .child("Some untracked files aren't shown"),
@@ -213,11 +213,11 @@ pub(crate) fn controls(changes: &Entity<Changes>, code: &Placed, cx: &App) -> An
     let changes = changes.downgrade();
     h_flex()
         .flex_none()
-        .gap_2()
+        .gap(look::Space::Small)
         // Out past the bar's room by the room around the button's icon, so the icon lines up with the rows' marks.
         .mr(-look::ControlSize::Regular.inset())
         // On the baseline of the tabs' names beside it.
-        .child(code.set(h_flex().flex_none().gap_2().children(counts(added, removed, cx))))
+        .child(code.set(h_flex().flex_none().gap(look::Space::Small).children(counts(added, removed, cx))))
         .child(
             Button::new("changes-layout")
                 .hand()
@@ -289,7 +289,13 @@ fn file_row(
     let counts = counts(file.added(), file.removed(), cx);
     row_frame(format!("file-{path}"), List::Changes, depth, showing, cx)
         .child(label)
-        .child(h_flex().flex_none().gap_2().child(line_text.code.set(h_flex().gap_2().children(counts))).child(status))
+        .child(
+            h_flex()
+                .flex_none()
+                .gap(look::Space::Small)
+                .child(line_text.code.set(h_flex().gap(look::Space::Small).children(counts)))
+                .child(status),
+        )
         .on_click(cx.listener(move |_, _, _, cx| cx.emit(ChangesEvent::Open(path.clone()))))
         .test_support()
         .into_any_element()
