@@ -47,6 +47,7 @@ mod own_turn_chats;
 mod patch;
 mod pictures;
 mod places;
+mod prompt_screens;
 mod pull_requests;
 mod question_chats;
 mod screens;
