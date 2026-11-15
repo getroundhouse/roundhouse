@@ -21,3 +21,20 @@ runners:
     volume: 80gb:gp3:1000mbs:4000iops
     spot: price-capacity-optimized
     extras: [s3-cache]
+  arm64-16-gen8:
+    cpu: 16
+    ram: [32, 128]
+    # Every Graviton c, m and r family from the 8th generation on, for Spot capacity. `.*` leaves out the pricier
+    # variants with local disks or faster networks.
+    family:
+      - c8g.*
+      - c9g.*
+      - m8g.*
+      - m9g.*
+      - r8g.*
+      - r9g.*
+    image: ubuntu26-full-arm64
+    # gp3 needs 4,000 IOPS for 1,000 MiB/s.
+    volume: 80gb:gp3:1000mbs:4000iops
+    spot: price-capacity-optimized
+    extras: [s3-cache]
