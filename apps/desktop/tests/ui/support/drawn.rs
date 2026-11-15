@@ -51,20 +51,28 @@ impl Ui<'_> {
         self.cx.read_entity(&pane, |p, _| p.session().map(|s| s.status))
     }
 
-    /// Waits until the chat is idle, its transcript has drawn the end of the turn that said the last of what it says,
-    /// and that says what `text` wants. The chat's status comes on the hub's feed, apart from its events, so it can be
-    /// idle before the last of the turn is drawn.
+    /// Waits until the chat is idle, its transcript has drawn the end of its newest turn, as [`Ui::turn_drawn_to_its_end`]
+    /// says, and that says what `text` wants. The chat's status comes on the hub's feed, apart from its events, so it can
+    /// be idle before the last of the turn is drawn.
     pub(crate) fn wait_idle_with(&mut self, what: &str, mut text: impl FnMut(&str) -> bool) {
         self.wait(what, |ui| {
             ui.session_status() == Some(SessionStatus::Idle) && ui.turn_drawn_to_its_end() && text(&ui.assistant_text())
         });
     }
 
-    /// Whether the transcript has drawn a turn's end after the last thing the agent said.
+    /// Whether the transcript has drawn the end of the newest turn the chat's record names, with nothing the agent said
+    /// after it. The record and the events come apart, so an earlier turn's end can be drawn while the record has moved
+    /// on, and the log hasn't yet taken the newest turn's first words. So it's the end the record names, by its `seq`,
+    /// as the transcript itself compares against.
     pub(crate) fn turn_drawn_to_its_end(&self) -> bool {
+        let Some(newest) =
+            self.pane().and_then(|pane| self.cx.read_entity(&pane, |p, _| p.session().map(|s| s.reply_seq)))
+        else {
+            return false;
+        };
         let events = self.events();
-        let last = |is: fn(&EventBody) -> bool| events.iter().rposition(|event| is(&event.body));
-        let ended = last(|body| matches!(body, EventBody::TurnEnded { .. }));
-        ended >= last(|body| matches!(body, EventBody::Assistant { .. }))
+        let Some(ended) = events.iter().position(|event| event.seq == newest) else { return false };
+        let said = events.iter().rposition(|event| matches!(event.body, EventBody::Assistant { .. }));
+        said.is_none_or(|said| said < ended)
     }
 }
