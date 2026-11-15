@@ -7,7 +7,7 @@ use gpui_kit::{AppContext as _, TestAppContext};
 use protocol::event::EventBody;
 use protocol::model::{ContextUsage, Seq, SessionStatus};
 
-use crate::support::{Stack, Ui};
+use crate::support::{Gate, Stack, Ui};
 
 /// How full the record of the chat showing says its agent's context is.
 fn context(ui: &Ui<'_>) -> Option<ContextUsage> {
@@ -129,7 +129,8 @@ fn typing_compact_asks_the_same_way_with_what_follows_it_as_what_to_keep(cx: &mu
 fn compact_typed_while_the_agent_is_on_a_turn_is_refused_and_stays_typed(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = after_a_turn(cx, &stack);
-    ui.input("hang:4000");
+    let done = Gate::new(&stack, "done");
+    ui.paste_text(&format!("hang-until:{done}"));
     ui.press("enter");
     ui.wait("the agent to start working", |ui| ui.session_status() == Some(SessionStatus::Running));
 
@@ -144,7 +145,8 @@ fn compact_typed_while_the_agent_is_on_a_turn_is_refused_and_stays_typed(cx: &mu
 fn the_cards_button_is_off_while_the_agent_is_on_a_turn(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = after_a_turn(cx, &stack);
-    ui.input("hang:4000");
+    let done = Gate::new(&stack, "done");
+    ui.paste_text(&format!("hang-until:{done}"));
     ui.press("enter");
     ui.wait("the agent to start working", |ui| ui.session_status() == Some(SessionStatus::Running));
 

@@ -8,7 +8,7 @@ use gpui_kit::{AppContext as _, SharedString, TestAppContext};
 use protocol::event::EventBody;
 use protocol::model::{SessionId, SessionStatus, Title};
 
-use crate::support::{Stack, Ui};
+use crate::support::{Gate, Stack, Ui};
 use crate::tools::in_a_new_workspace;
 
 #[gpui_kit::test]
@@ -177,7 +177,8 @@ fn closing_a_chat_thats_working_asks_first(cx: &mut TestAppContext) {
     ui.new_workspace();
     let first = ui.active_chat();
     let working = ui.new_chat();
-    ui.input("slow:200:still going");
+    let done = Gate::new(&stack, "done");
+    ui.paste_text(&format!("slow-until:{done}:still going"));
     ui.press("enter");
     ui.wait("it to be working", |ui| ui.session_status() == Some(SessionStatus::Running));
 
@@ -342,7 +343,8 @@ fn a_tabs_close_button_shows_under_the_pointer_and_closes_only_that_chat(cx: &mu
     ui.new_workspace();
     // Working, so closing it asks first, which holds it open long enough to see which chat is showing.
     let working = ui.active_chat();
-    ui.input("slow:200:still going");
+    let done = Gate::new(&stack, "done");
+    ui.paste_text(&format!("slow-until:{done}:still going"));
     ui.press("enter");
     ui.wait("it to be working", |ui| ui.session_status() == Some(SessionStatus::Running));
     let showing = ui.new_chat();
