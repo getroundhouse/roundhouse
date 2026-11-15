@@ -1,32 +1,64 @@
 //! Workspaces whose order changes as they're worked in, as the sidebar and Home list them: three to put in order, more
 //! than the sidebar has room for, working in one, and the order their rows are drawn in.
 
+use std::collections::{HashMap, VecDeque};
+use std::thread::JoinHandle;
+
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{AppContext as _, ElementId, Pixels, TestAppContext};
 use protocol::model::{RepoId, Session, SessionId, SetupStatus, Workspace, WorkspaceId};
 
-use super::{Stack, Ui};
+use super::{Stack, Ui, wait_until};
 
 /// More workspaces than the sidebar has room for in the window, which shows 15, and few enough that a test makes
 /// them quickly.
 pub(crate) const MORE_THAN_FIT: usize = 24;
 
-/// Makes `count` workspaces in `repo`, one after another, and answers them in the order they were made, each newer than
-/// the one before.
-///
-/// From one thread, rather than several at once, until #1322: `git worktree add` can fail while another of the
-/// repository's worktrees is part way through being made, and nothing yet keeps two workers from making them at once.
-pub(crate) fn made_one_at_a_time(stack: &Stack, repo: &RepoId, count: usize) -> Vec<WorkspaceId> {
+/// How many workspaces [`made_in_order`] has the hub make at once. Not all of them, since each has a worker of its own,
+/// with its git, on a machine running other tests beside these. Eight took the long lists from about 6.9 s to 5.8 s on
+/// a busy Mac, and more wasn't tried.
+const MADE_AT_ONCE: usize = 8;
+
+/// Makes `count` workspaces in `repo`, and answers them oldest first, each newer than the one before, which the order
+/// they're shown in relies on. Up to [`MADE_AT_ONCE`] are made at the same time: workers take turns at a repository's
+/// worktrees, as `docs/architecture.md` says, and the rest of making one, such as starting its worker, goes on side by
+/// side. The hub records a workspace before it makes it, so each is asked for once the hub has the one before and the
+/// clock has gone past that one's time. Nothing else may make or remove a workspace on the hub meanwhile.
+pub(crate) fn made_in_order(stack: &Stack, repo: &RepoId, count: usize) -> Vec<WorkspaceId> {
     let client = stack.client();
-    let (mut made, mut newest) = (Vec::new(), i64::MIN);
+    let newest_ms = || client.workspace_list(false).unwrap().iter().map(|w| w.created_at_ms).max().unwrap_or(i64::MIN);
+    let mut newest = newest_ms();
+    let (mut made, mut making) = (Vec::new(), VecDeque::<JoinHandle<WorkspaceId>>::new());
     for _ in 0..count {
-        let workspace = client.workspace_create(repo, None, None, None).unwrap();
-        // Making one takes far longer than the millisecond its time is in, so each is newer, which the order relies on.
-        assert!(workspace.created_at_ms > newest, "made in the same millisecond as the one before");
-        newest = workspace.created_at_ms;
-        made.push(workspace.id);
+        if making.len() == MADE_AT_ONCE {
+            let oldest = making.pop_front().unwrap();
+            made.push(joined(oldest));
+        }
+        wait_until("the clock to pass the newest workspace", || hub::store::now_ms() > newest);
+        let (asking, repo) = (client.clone(), repo.clone());
+        making.push_back(std::thread::spawn(move || asking.workspace_create(&repo, None, None, None).unwrap().id));
+        let before = newest;
+        wait_until("the hub to record the workspace", || {
+            // Before the list, so one that ended had been recorded by then, if it was made at all.
+            let ended = making.back().is_some_and(JoinHandle::is_finished);
+            newest = newest_ms();
+            newest > before || ended
+        });
+        if newest <= before {
+            let id = joined(making.pop_back().unwrap());
+            panic!("{id:?} was made, and the hub had nothing newer than the workspace before");
+        }
     }
+    made.extend(making.into_iter().map(joined));
+    let times: HashMap<_, _> =
+        client.workspace_list(false).unwrap().into_iter().map(|w| (w.id, w.created_at_ms)).collect();
+    assert!(made.windows(2).all(|pair| times[&pair[0]] < times[&pair[1]]), "each newer than the one before");
     made
+}
+
+/// What a workspace's maker answered, or its own panic, so a failure says why rather than what it held up.
+fn joined(making: JoinHandle<WorkspaceId>) -> WorkspaceId {
+    making.join().unwrap_or_else(|panic| std::panic::resume_unwind(panic))
 }
 
 /// A window with three workspaces in one repository, made in the order they're returned, each with its chat.
@@ -44,12 +76,11 @@ pub(crate) fn three_workspaces<'a>(
     (ui, workspaces.try_into().unwrap(), chats.try_into().unwrap())
 }
 
-/// A window with [`MORE_THAN_FIT`] workspaces in one repository, each set up, and the workspaces in the order they
-/// were made.
+/// A window with [`MORE_THAN_FIT`] workspaces in one repository, each set up, and the workspaces oldest first.
 pub(crate) fn more_than_fit<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> (Ui<'a>, Vec<WorkspaceId>) {
     let client = stack.client();
     let repo = client.repo_add(stack.repo().to_str().unwrap()).unwrap();
-    let made = made_one_at_a_time(stack, &repo.id, MORE_THAN_FIT);
+    let made = made_in_order(stack, &repo.id, MORE_THAN_FIT);
     let mut ui = Ui::open(cx, stack);
     ui.wait("every workspace", |ui| ui.view().visible_workspaces().len() == MORE_THAN_FIT);
     wait_out_setup(&mut ui);
