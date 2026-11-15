@@ -21,7 +21,7 @@ use super::places::{self, Places};
 /// Its image's name, in `docs/spec/screens/`.
 pub(crate) const NAME: &str = "controls";
 /// The spec's file that shows it.
-pub(crate) const SPEC: &str = "look.md";
+pub(crate) const SPEC: &str = "components.md";
 /// What the spec's table calls the type that names each.
 const KIND: &str = "look::ControlSize";
 const NAME_WIDTH: f32 = 90.;

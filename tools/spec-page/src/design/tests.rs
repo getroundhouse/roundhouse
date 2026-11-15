@@ -2,7 +2,7 @@ use std::path::Path;
 
 use crate::index::{Area, Index, Place, Size, area, read};
 
-use super::html::{COLOURS, FOUNDATIONS, STYLE, all_named, colours, text};
+use super::html::{COLOURS, COMPONENTS, FOUNDATIONS, STYLE, all_named, colours, text};
 use super::{draw, write};
 
 /// The area from `text`, with every screen 400 by 200 pixels, and `places` beside the one named `spaces`.
@@ -129,21 +129,31 @@ fn the_page_is_in_the_colours_the_spec_names() {
     assert!(page.contains(":root {\n  --pane: #151312;\n}"), "{page}");
 }
 
-/// The spec as it is, and its sheets' places, which the gallery keeps.
-fn the_foundations() -> Area {
+/// The spec's file as it is, and its sheets' places, which the gallery keeps.
+fn as_it_is(file: &str) -> Area {
     let spec = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/spec");
     let mut index = read(&spec).unwrap();
-    let at = index.areas.iter().position(|area| area.file == FOUNDATIONS).unwrap();
+    let at = index.areas.iter().position(|area| area.file == file).unwrap();
     index.areas.swap_remove(at)
 }
 
 #[test]
 fn every_name_in_the_spec_has_a_piece_of_its_sheet_and_every_piece_is_a_name() {
-    let area = the_foundations();
     let mut problems = Vec::new();
     let mut shown = Vec::new();
 
-    for (_, named) in all_named(&area) {
+    for area in [as_it_is(FOUNDATIONS), as_it_is(COMPONENTS)] {
+        check_names(&area, &mut problems, &mut shown);
+    }
+
+    assert!(problems.is_empty(), "{problems:#?}");
+    assert!(shown.len() >= 8, "the spec's tables of names: {shown:?}");
+}
+
+/// Each name in `area`'s tables against its piece of its sheet, and each piece of a sheet in `area` against a name.
+fn check_names(area: &Area, problems: &mut Vec<String>, shown: &mut Vec<String>) {
+    let start = shown.len();
+    for (_, named) in all_named(area) {
         let Some(sheet) = named.sheet else {
             problems.push(format!("no sheet has places for {}", named.kind));
             continue;
@@ -154,18 +164,17 @@ fn every_name_in_the_spec_has_a_piece_of_its_sheet_and_every_piece_is_a_name() {
         problems.extend(unplaced.map(|name| format!("{}'s sheet has no place for {name}", named.kind)));
         let unnamed = places.keys().filter(|name| !names.contains(name));
         problems.extend(unnamed.map(|name| format!("{}'s table has no {name}, which its sheet has", named.kind)));
-        shown.push(named.kind);
+        shown.push(named.kind.to_string());
     }
+    let here = &shown[start..];
     let kinds = area.screens().flat_map(|screen| screen.places.keys());
-    problems.extend(kinds.filter(|kind| !shown.contains(&kind.as_str())).map(|kind| format!("no table names {kind}")));
-
-    assert!(problems.is_empty(), "{problems:#?}");
-    assert!(shown.len() >= 8, "the spec's tables of names: {shown:?}");
+    let unnamed = kinds.filter(|kind| !here.contains(kind));
+    problems.extend(unnamed.map(|kind| format!("no table in {} names {kind}", area.file)));
 }
 
 #[test]
 fn every_colour_the_page_is_drawn_in_is_one_the_spec_names() {
-    let area = the_foundations();
+    let area = as_it_is(FOUNDATIONS);
     let defined = colours(&area);
 
     let used = STYLE.split("var(--").skip(1).filter_map(|after| after.split(')').next());

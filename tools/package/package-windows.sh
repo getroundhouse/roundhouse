@@ -26,7 +26,7 @@ source "$HERE/../build.sh"
 # PACK_ID, die, dotnet_tools, dotnet_here, refuse_vpk_variables, check_newer and full_package.
 # shellcheck source=SCRIPTDIR/vpk.sh
 source "$HERE/vpk.sh"
-# The app's icon, with a drawing for each size, which `ico.py` makes and the program has too. `docs/spec/look.md` says
+# The app's icon, with a drawing for each size, which `ico.py` makes and the program has too. `docs/spec/components.md` says
 # which style it is.
 ICON="$ROOT/apps/desktop/icons/AppIcon.ico"
 

@@ -35,7 +35,7 @@ source "$HERE/../build.sh"
 # Info.plist.
 # shellcheck source=SCRIPTDIR/vpk.sh
 source "$HERE/vpk.sh"
-# The app's icon, a drawing for each size. `docs/spec/look.md` says which style it is.
+# The app's icon, a drawing for each size. `docs/spec/components.md` says which style it is.
 ICONSET="$ROOT/apps/desktop/icons/working.iconset"
 
 # Puts the binaries in `bins/`, and the bundle's Info.plist and icon beside it, in a directory of their own. The

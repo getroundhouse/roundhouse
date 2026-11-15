@@ -6,7 +6,7 @@
 //! made from the mark, the pointing hand, the button that copies, the parts of the window tests find by where they're
 //! drawn, how long things take to move, a hover card that waits like a tooltip, a chat's cache, how a count of tokens
 //! reads, and the time text on screen reads, which pictures hold still with everything that moves.
-//! `docs/spec/look.md` has the rules these follow, and `docs/spec/components.md` the status mark's.
+//! `docs/spec/look.md` has the rules these follow, and `docs/spec/components.md` the status mark's and the app icon's.
 
 #![warn(clippy::wildcard_enum_match_arm)]
 
