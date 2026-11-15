@@ -7,8 +7,8 @@ use std::sync::Arc;
 
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{
-    AppContext as _, Bounds, Context, HeadlessAppContext, Pixels, PlatformTextSystem, Render, Size, WindowBounds,
-    WindowOptions, point, px,
+    AppContext as _, Bounds, Context, HeadlessAppContext, Pixels, PlatformTextSystem, Render, Size, Window,
+    WindowBounds, WindowOptions, point, px,
 };
 
 use super::capture::Picture;
@@ -43,6 +43,17 @@ pub(crate) fn draw_at<V: Render>(
     scale: Option<f32>,
     view: impl FnOnce(&mut Context<V>) -> V + 'static,
 ) -> Picture {
+    draw_and_measure(cx, size, scale, view, |_| ()).0
+}
+
+/// As [`draw_at`], with what `measure` finds in the window once it's drawn, such as where it drew something.
+pub(crate) fn draw_and_measure<V: Render, T>(
+    cx: &mut HeadlessAppContext,
+    size: Size<Pixels>,
+    scale: Option<f32>,
+    view: impl FnOnce(&mut Context<V>) -> V + 'static,
+    measure: impl FnOnce(&Window) -> T,
+) -> (Picture, T) {
     let options = WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(Bounds::new(point(px(0.), px(0.)), size))),
         focus: false,
@@ -59,7 +70,8 @@ pub(crate) fn draw_at<V: Render>(
         cx.capture_screenshot(handle.into()).unwrap()
     };
     let (first, image) = (frame(), frame());
+    let measured = cx.update_window(handle.into(), |_, window, _| measure(window)).unwrap();
     cx.update_window(handle.into(), |_, window, _| window.remove_window()).unwrap();
     cx.run_until_parked();
-    Picture { settled: first == image, image }
+    (Picture { settled: first == image, image }, measured)
 }

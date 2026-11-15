@@ -1,6 +1,8 @@
 //! Draws the spec as a page to open in a browser, in `.context/spec/`: each area's screens beside the rules they go
-//! with, and which the owner has confirmed. Beside it, `index.json` holds what the page was drawn from.
+//! with, and which the owner has confirmed. Beside it, `index.json` holds what the page was drawn from, and
+//! `design.html` is the design system's page, which lays out the foundations to look one up.
 
+mod design;
 mod index;
 mod page;
 
@@ -12,7 +14,9 @@ fn main() -> Result<()> {
     let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let spec = repo.join("docs/spec");
     let index = index::read(&spec)?;
-    let page = page::write(&index, &spec, &repo.join(".context/spec"))?;
-    println!("{}", page.display());
+    let out = repo.join(".context/spec");
+    let page = page::write(&index, &spec, &out)?;
+    let design = design::write(&index, &out)?;
+    println!("{}\n{}", page.display(), design.display());
     Ok(())
 }

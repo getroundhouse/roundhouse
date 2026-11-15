@@ -361,6 +361,6 @@ fn drawn_in(image: &RgbaImage, area: Area) -> Area {
     clippy::cast_sign_loss,
     reason = "clamped at zero first, and a place in a window is far smaller than u32's range"
 )]
-fn to_pixels(points: f32, scale: f32) -> u32 {
+pub(crate) fn to_pixels(points: f32, scale: f32) -> u32 {
     (points * scale).round().max(0.) as u32
 }

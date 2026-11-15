@@ -101,7 +101,7 @@ Start with "Easily confused" and "Ending things", which cover the words most lik
 
 | Term | Meaning | In code |
 |---|---|---|
-| Design system | What every screen is built from: its foundations, and the components built on them. `docs/spec/look.md` has the foundations, and `docs/spec/components.md` the components. A rule about one place in the app isn't the design system's, even when it's about how it looks, and is in that place's file | `look` |
+| Design system | What every screen is built from: its foundations, and the components built on them. `docs/spec/look.md` has the foundations and `docs/spec/components.md` the components, and the design system's page lays both out to look one up. A rule about one place in the app isn't the design system's, even when it's about how it looks, and is in that place's file | `look`, the `design` module of `tools/spec-page` |
 | Foundation | One kind of thing every screen draws with, such as colour, type, space or corners, with a name for each value it has | `look::Colors`, `look::Type`, `look::Space`, `look::Corner`, `look::ControlSize`, `look::BarSize`, `look::RowSize`, `look::IconSize` |
 | Colour's name, role | What a colour is for, such as `pane` or `text_muted`, by which everything drawn takes it, rather than by its value. Each is a field of `look::Colors`, and `docs/spec/look.md` has the table of them | `look::Colors`, `look::colors` |
 | Kind of text | What a piece of text is for, such as `Body`, `Detail` or `Code`, which gives it its font, its size and any weight of its own. Each is a `look::Type`, and `docs/spec/look.md` has the table of them | `look::Type`, `look::Typeset` |

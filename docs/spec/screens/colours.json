@@ -1,0 +1,262 @@
+{
+  "look::Colors": {
+    "added": {
+      "x": 632,
+      "y": 936,
+      "width": 40,
+      "height": 40
+    },
+    "brand": {
+      "x": 632,
+      "y": 432,
+      "width": 40,
+      "height": 40
+    },
+    "button": {
+      "x": 632,
+      "y": 96,
+      "width": 40,
+      "height": 40
+    },
+    "control_edge": {
+      "x": 32,
+      "y": 880,
+      "width": 40,
+      "height": 40
+    },
+    "current": {
+      "x": 632,
+      "y": 488,
+      "width": 40,
+      "height": 40
+    },
+    "dim": {
+      "x": 1232,
+      "y": 432,
+      "width": 40,
+      "height": 40
+    },
+    "edge": {
+      "x": 32,
+      "y": 824,
+      "width": 40,
+      "height": 40
+    },
+    "error": {
+      "x": 632,
+      "y": 880,
+      "width": 40,
+      "height": 40
+    },
+    "icon_tile_top": {
+      "x": 32,
+      "y": 376,
+      "width": 40,
+      "height": 40
+    },
+    "inset": {
+      "x": 32,
+      "y": 208,
+      "width": 40,
+      "height": 40
+    },
+    "line_hover": {
+      "x": 32,
+      "y": 544,
+      "width": 40,
+      "height": 40
+    },
+    "link": {
+      "x": 632,
+      "y": 544,
+      "width": 40,
+      "height": 40
+    },
+    "link_hover": {
+      "x": 632,
+      "y": 600,
+      "width": 40,
+      "height": 40
+    },
+    "main": {
+      "x": 632,
+      "y": 152,
+      "width": 40,
+      "height": 40
+    },
+    "main_hover": {
+      "x": 632,
+      "y": 208,
+      "width": 40,
+      "height": 40
+    },
+    "main_pressed": {
+      "x": 632,
+      "y": 264,
+      "width": 40,
+      "height": 40
+    },
+    "menu_hover": {
+      "x": 32,
+      "y": 600,
+      "width": 40,
+      "height": 40
+    },
+    "modified": {
+      "x": 632,
+      "y": 1048,
+      "width": 40,
+      "height": 40
+    },
+    "needs_you": {
+      "x": 632,
+      "y": 712,
+      "width": 40,
+      "height": 40
+    },
+    "on_main": {
+      "x": 632,
+      "y": 320,
+      "width": 40,
+      "height": 40
+    },
+    "on_windows_close": {
+      "x": 1232,
+      "y": 656,
+      "width": 40,
+      "height": 40
+    },
+    "pane": {
+      "x": 32,
+      "y": 96,
+      "width": 40,
+      "height": 40
+    },
+    "pr_closed": {
+      "x": 1232,
+      "y": 208,
+      "width": 40,
+      "height": 40
+    },
+    "pr_draft": {
+      "x": 1232,
+      "y": 264,
+      "width": 40,
+      "height": 40
+    },
+    "pr_merged": {
+      "x": 1232,
+      "y": 152,
+      "width": 40,
+      "height": 40
+    },
+    "pr_open": {
+      "x": 1232,
+      "y": 96,
+      "width": 40,
+      "height": 40
+    },
+    "pr_queued": {
+      "x": 1232,
+      "y": 320,
+      "width": 40,
+      "height": 40
+    },
+    "prompt": {
+      "x": 32,
+      "y": 320,
+      "width": 40,
+      "height": 40
+    },
+    "raised": {
+      "x": 32,
+      "y": 264,
+      "width": 40,
+      "height": 40
+    },
+    "raised_hover": {
+      "x": 32,
+      "y": 656,
+      "width": 40,
+      "height": 40
+    },
+    "raised_pressed": {
+      "x": 32,
+      "y": 712,
+      "width": 40,
+      "height": 40
+    },
+    "removed": {
+      "x": 632,
+      "y": 992,
+      "width": 40,
+      "height": 40
+    },
+    "row_hover": {
+      "x": 32,
+      "y": 488,
+      "width": 40,
+      "height": 40
+    },
+    "scroll_thumb": {
+      "x": 1232,
+      "y": 488,
+      "width": 40,
+      "height": 40
+    },
+    "scroll_thumb_hover": {
+      "x": 1232,
+      "y": 544,
+      "width": 40,
+      "height": 40
+    },
+    "shadow": {
+      "x": 32,
+      "y": 936,
+      "width": 40,
+      "height": 40
+    },
+    "sidebar": {
+      "x": 32,
+      "y": 152,
+      "width": 40,
+      "height": 40
+    },
+    "stopped": {
+      "x": 632,
+      "y": 824,
+      "width": 40,
+      "height": 40
+    },
+    "text": {
+      "x": 32,
+      "y": 1048,
+      "width": 40,
+      "height": 40
+    },
+    "text_faint": {
+      "x": 32,
+      "y": 1160,
+      "width": 40,
+      "height": 40
+    },
+    "text_muted": {
+      "x": 32,
+      "y": 1104,
+      "width": 40,
+      "height": 40
+    },
+    "warning": {
+      "x": 632,
+      "y": 768,
+      "width": 40,
+      "height": 40
+    },
+    "windows_close": {
+      "x": 1232,
+      "y": 600,
+      "width": 40,
+      "height": 40
+    }
+  }
+}

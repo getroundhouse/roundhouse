@@ -13,4 +13,4 @@ mod html;
 
 #[cfg(test)]
 pub(crate) use html::draw;
-pub(crate) use html::write;
+pub(crate) use html::{marked, write};

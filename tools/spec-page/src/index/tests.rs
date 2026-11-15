@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use super::{Confirmation, area, listed, read};
+use super::{Confirmation, Place, area, listed, read};
 
 #[test]
 fn a_bold_paragraph_above_an_image_is_its_caption_and_says_whether_its_confirmed() {
@@ -147,4 +147,59 @@ fn a_file_the_parser_panics_on_is_refused_as_one_it_cant_read() {
     let error = area("chats.md", "Chats", text).err().expect("refused");
 
     assert_eq!(error.to_string(), "chats.md: the parser panicked");
+}
+
+#[test]
+fn a_table_is_read_as_its_cells_each_as_html() {
+    let text = "# Look\n\n**Every step, by its name.**\n\n| Name | Room | For |\n|---|---|---|\n| **Steps** | | |\n\
+                | `Small` | 8px | Between a `name` and its words, \\| or not |\n";
+
+    let area = area("look.md", "Look", text).unwrap();
+
+    let blocks = &area.sections[0].blocks;
+    assert!(blocks[0].table.is_none(), "a caption isn't a table");
+    let table = blocks[1].table.as_ref().unwrap();
+    assert_eq!(table.header, ["Name", "Room", "For"]);
+    assert_eq!(table.rows[0], ["<strong>Steps</strong>", "", ""]);
+    assert_eq!(table.rows[1], ["<code>Small</code>", "8px", "Between a <code>name</code> and its words, | or not"]);
+}
+
+#[test]
+fn a_heading_under_a_heading_is_a_section_one_deeper_and_the_one_above_stays_with_nothing_of_its_own() {
+    let text = "# Look\n\n## Space and shape\n\n### Space\n\n- **A rule.**\n\n### Corners\n\n- **Another.**\n";
+
+    let area = area("look.md", "Look", text).unwrap();
+
+    let sections: Vec<_> = area.sections.iter().map(|s| (s.title.as_deref(), s.depth, s.blocks.len())).collect();
+    assert_eq!(sections, [(Some("Space and shape"), 2, 0), (Some("Space"), 3, 1), (Some("Corners"), 3, 1)]);
+}
+
+#[test]
+fn a_sheets_places_are_read_from_beside_its_image_and_any_other_screen_has_none() {
+    let spec = tempfile::tempdir().unwrap();
+    let write = |file: &str, text: &str| std::fs::write(spec.path().join(file), text).unwrap();
+    std::fs::create_dir(spec.path().join("screens")).unwrap();
+    write("README.md", "| File | Covers |\n|---|---|\n| `look.md` | The foundations |\n");
+    write("look.md", "# Look\n\n![Every step](screens/spaces.png)\n\n![The pane](screens/pane.png)\n");
+    write("screens/spaces.json", r#"{ "look::Space": { "Small": { "x": 2, "y": 4, "width": 6, "height": 8 } } }"#);
+
+    let index = read(spec.path()).unwrap();
+
+    let screens: Vec<_> = index.areas[0].screens().collect();
+    assert_eq!(screens[0].places["look::Space"]["Small"], Place { x: 2, y: 4, width: 6, height: 8 });
+    assert!(screens[1].places.is_empty());
+}
+
+#[test]
+fn places_that_cant_be_read_are_refused() {
+    let spec = tempfile::tempdir().unwrap();
+    let write = |file: &str, text: &str| std::fs::write(spec.path().join(file), text).unwrap();
+    std::fs::create_dir(spec.path().join("screens")).unwrap();
+    write("README.md", "| File | Covers |\n|---|---|\n| `look.md` | The foundations |\n");
+    write("look.md", "# Look\n\n![Every step](screens/spaces.png)\n");
+    write("screens/spaces.json", r#"{ "look::Space": { "Small": [2, 4] } }"#);
+
+    let error = read(spec.path()).err().expect("refused");
+
+    assert!(error.to_string().contains("spaces.json"), "{error}");
 }

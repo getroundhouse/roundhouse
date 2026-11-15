@@ -1,0 +1,28 @@
+{
+  "look::Corner": {
+    "Card": {
+      "x": 292,
+      "y": 159,
+      "width": 80,
+      "height": 80
+    },
+    "Control": {
+      "x": 292,
+      "y": 47,
+      "width": 80,
+      "height": 80
+    },
+    "Glyph": {
+      "x": 292,
+      "y": 383,
+      "width": 80,
+      "height": 80
+    },
+    "InlineControl": {
+      "x": 292,
+      "y": 271,
+      "width": 80,
+      "height": 80
+    }
+  }
+}
