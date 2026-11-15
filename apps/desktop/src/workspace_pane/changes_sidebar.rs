@@ -136,13 +136,6 @@ impl WorkspacePane {
                 cx.emit(PaneEvent::Error(message.clone()));
                 this.tell_tab(TabShown::read_failed, cx);
             }
-            ReviewEvent::SendToAgent(prompt) => {
-                if let Some(transcript) = this.transcript() {
-                    transcript.update(cx, |t, cx| t.send_prompt(prompt.clone(), cx));
-                }
-                // So the agent can be seen taking them up.
-                this.show_chat(cx);
-            }
             ReviewEvent::Loaded => {
                 let files = this.diff.as_ref().and_then(|diff| diff.review.read(cx).files.as_ref().map(Vec::len));
                 if let Some(files) = files {

@@ -32,7 +32,7 @@ Everything the app does today, on one page, with where to read more. What's desi
 ## Review and merge
 
 - **The changes sit beside the chat.** Click a file for its diff, in one column, side by side, or as the whole file.
-- **Comment on a changed line, and send the comments to the agent.** See [Review its changes](../guides/review-its-changes.md).
+- **Comment on a changed line, and have the agent read the comments.** See [Review its changes](../guides/review-its-changes.md).
 - **A changed image is compared,** side by side, by flipping, or as what changed.
 - **Every file in the workspace can be read,** ignored ones too.
 - **A bar says the first thing in the way of merging,** and offers the one thing to do about it, such as Push, Fix checks, Resolve or Merge. See [Take a pull request to merge](../guides/take-a-pull-request-to-merge.md).

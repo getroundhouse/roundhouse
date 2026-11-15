@@ -42,7 +42,7 @@ The sidebar on the right lists every file the workspace changes. Click one to se
 
 ![A file's diff, with a comment on a changed line](../../spec/screens/diff.png)
 
-To ask for a change, hover a line, click its add button, and write a comment. `Send to agent`, at the top of the sidebar, sends every comment at once.
+To ask for a change, hover a line, click its add button, and write a comment. Then ask the agent to address your comments, and it reads them with Roundhouse's tools. `Add to chat`, beside a comment, puts that one in the composer instead.
 
 ## 6. Merge it
 

@@ -1,4 +1,4 @@
-use super::rows;
+use super::{comments_mark, rows};
 use crate::file_tree::{List, Row, chain, folder_row, row_frame, split};
 use crate::patch::{FilePatch, FileStatus};
 use crate::review::Review;
@@ -90,13 +90,15 @@ impl Changes {
         let line_text = LineText::new(window, cx);
         let rows: Vec<Row> = self.rows.get(range).map_or_default(<[Row]>::to_vec);
         // Only the files in view, rather than every file the branch changes.
-        let files: Vec<Option<FilePatch>> = {
-            let files = self.review.read(cx).files.as_deref().unwrap_or_default();
+        let (files, commented) = {
+            let review = self.review.read(cx);
+            let files = review.files.as_deref().unwrap_or_default();
             let file = |row: &Row| match row {
                 Row::File { index, .. } => files.get(*index).cloned(),
                 Row::Folder { .. } => None,
             };
-            rows.iter().map(file).collect()
+            let in_view: Vec<Option<FilePatch>> = rows.iter().map(file).collect();
+            (in_view, comments_mark::commented(files, &review.comments))
         };
         rows.into_iter()
             .zip(files)
@@ -111,29 +113,24 @@ impl Changes {
                         plain_folder(open, cx),
                         cx,
                     )
+                    // An open folder's files show their own.
+                    .children(comments_mark::mark(
+                        &path,
+                        if open { 0 } else { comments_mark::in_folder(&commented, &path) },
+                        &line_text,
+                        cx,
+                    ))
                     .on_click(cx.listener(move |t, _, _, cx| t.toggle_folder(&path, &names, cx)))
                     .into_any_element(),
                 ),
                 Row::File { depth, .. } => {
                     let file = file?;
                     let showing = open.as_ref() == Some(file.path());
-                    Some(file_row(&file, depth, layout, showing, &line_text, cx))
+                    let comments = commented.get(file.path().as_ref()).copied().unwrap_or_default();
+                    Some(file_row(&file, depth, layout, showing, comments, &line_text, cx))
                 }
             })
             .collect()
-    }
-
-    /// How many comments are waiting, and the button that sends them.
-    pub(super) fn comments_bar(&self, count: usize, _cx: &mut Context<Self>) -> impl IntoElement {
-        let review = self.review.downgrade();
-        look::bar(look::BarKind::Words, look::BarSize::Regular)
-            .child(div().emphasis().child(format!("{count} comment{}", if count == 1 { "" } else { "s" })))
-            .end(
-                look::button("send-comments", look::ButtonKind::Main, look::ControlSize::Regular, "Send to agent")
-                    .on_click(move |_, _, cx| {
-                        let _ = review.update(cx, Review::send_comments);
-                    }),
-            )
     }
 }
 
@@ -141,7 +138,7 @@ impl Render for Changes {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let layout = layout(cx);
         let review = self.review.read(cx);
-        let (truncated, comments) = (review.truncated, review.comments.len());
+        let truncated = review.truncated;
         let changed = review.files.as_ref().map(|files| {
             if self.laid_out != Some(layout) {
                 self.rows = rows(layout, files.iter().map(|file| file.path().as_ref()), &self.closed);
@@ -165,7 +162,6 @@ impl Render for Changes {
         };
         v_flex()
             .size_full()
-            .when(comments > 0, |d| d.child(self.comments_bar(comments, cx)))
             .when(truncated, |d| {
                 d.child(
                     div()
@@ -225,13 +221,14 @@ fn status_icon(status: FileStatus, cx: &App) -> Icon {
     Icon::new(icon).sized(look::IconSize::Small).text_color(color)
 }
 
-/// A changed file's row: where it is, then its name, and at the right end how many lines it adds and removes, on the
-/// name's baseline, and how it changed.
+/// A changed file's row: where it is, then its name, and at the right end how many comments it has, if any, how many
+/// lines it adds and removes, on the name's baseline, and how it changed.
 fn file_row(
     file: &FilePatch,
     depth: usize,
     layout: Layout,
     showing: bool,
+    comments: usize,
     line_text: &LineText,
     cx: &mut Context<Changes>,
 ) -> AnyElement {
@@ -252,12 +249,14 @@ fn file_row(
         })
         .child(div().flex_shrink_0().child(name));
     let status = status_icon(file.status(), cx);
+    let comments = comments_mark::mark(&path, comments, line_text, cx);
     row_frame(format!("file-{path}"), List::Changes, depth, showing, cx)
         .child(label)
         .child(
             h_flex()
                 .flex_none()
                 .gap(look::Space::Small)
+                .children(comments)
                 .child(look::lines_changed(file.added(), file.removed()).placed(&line_text.code))
                 .child(status),
         )

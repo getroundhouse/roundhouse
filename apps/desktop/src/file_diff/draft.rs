@@ -7,10 +7,9 @@ use gpui_kit::component::input::{InputEvent, TextareaState};
 use gpui_kit::{
     App, AppContext as _, Context, Entity, FocusHandle, Focusable as _, SharedString, Subscription, Window,
 };
-use protocol::model::{CommentDraft, CommentId, DiffSide};
+use protocol::model::{CommentDraft, CommentId, DiffComment, DiffSide};
 
 use super::{FileDiff, FileDiffEvent};
-use crate::review::comment_line;
 
 /// A line of a file's diff, on one side.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -194,7 +193,7 @@ impl FileDiff {
     /// Puts a comment in the chat's composer, for the agent with whatever else is said there. It stays on the diff
     /// until it's deleted, like any other.
     pub fn add_to_chat(&self, id: &CommentId, cx: &mut Context<Self>) {
-        let Some(line) = self.review.read(cx).comment(id).map(comment_line) else { return };
+        let Some(line) = self.review.read(cx).comment(id).map(DiffComment::for_agent) else { return };
         cx.emit(FileDiffEvent::AddToChat(line));
     }
 }

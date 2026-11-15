@@ -3,7 +3,5 @@
 
 mod comments;
 
-pub use comments::{comment_line, comments_prompt};
-
 mod review_view;
 pub use review_view::{Review, ReviewEvent};

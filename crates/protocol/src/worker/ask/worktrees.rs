@@ -98,7 +98,8 @@ impl Answer for WorktreeRemoval {
             | AskReply::PullRequest(_)
             | AskReply::Wait(_)
             | AskReply::WorktreeCreated(_)
-            | AskReply::Worktrees(_) => Err(reply),
+            | AskReply::Worktrees(_)
+            | AskReply::DiffComments(_) => Err(reply),
         }
     }
 }

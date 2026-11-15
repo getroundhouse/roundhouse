@@ -1,4 +1,4 @@
-use super::super::{pull_request, pull_requests, wait};
+use super::super::{diff_comments, pull_request, pull_requests, wait};
 use crate::asks::Asks;
 use protocol::Build;
 use protocol::model::SessionId;
@@ -19,17 +19,18 @@ pub(super) const TASKS: &str = "io.modelcontextprotocol/tasks";
 
 /// What the agent is told of these tools from its first turn: what they're for, as a whole, and what to look among
 /// them for, since the Claude CLI shows it each tool only by name until it loads that tool, as `docs/claude-cli.md`
-/// says. When to use each, and how, is in its description, so this needn't grow with each tool, as "The worker's
-/// tools" in `docs/architecture.md` says. Every agent's system prompt also says when to reach for them, in
-/// `crate::instructions`, so a change to what they cover may change that too.
+/// says. When to use each, and how, is in its description, so this grows only with what they're for, rather than with
+/// each tool, as "The worker's tools" in `docs/architecture.md` says. Every agent's system prompt also says when to
+/// reach for them, in `crate::instructions`, so a change to what they cover may change that too.
 const INSTRUCTIONS: &str = "Roundhouse's tools, for pull requests in this workspace's repository and their lower stack \
-    dependencies. For reading their current state or waiting in the background until checks pass, they merge or \
-    need attention, look among these before you use `gh` or write a loop of your own.";
+    dependencies, and for the comments the person has left on this workspace's diff. For reading the pull requests' \
+    current state or waiting in the background until checks pass, they merge or need attention, look among these \
+    before you use `gh` or write a loop of your own.";
 
 /// For a 2026 client that offers no MCP tasks, such as Antigravity's, which is offered no wait tool.
 const READ_ONLY_INSTRUCTIONS: &str = "Roundhouse's tools, for pull requests in this workspace's repository and their \
-    lower stack dependencies. For reading their current state, look among these before you use `gh` or write a loop \
-    of your own.";
+    lower stack dependencies, and for the comments the person has left on this workspace's diff. For reading the pull \
+    requests' current state, look among these before you use `gh` or write a loop of your own.";
 
 /// What one of a request's HTTP headers says, which has to agree with its body.
 #[derive(Debug, PartialEq, Eq)]
@@ -225,7 +226,7 @@ async fn request(
         Method::Ping => Ok(json!({ "resultType": "complete" })),
         Method::ListTools => Ok(json!({
             "resultType": "complete",
-            "tools": pull_requests::definitions(takes_tasks(params)),
+            "tools": definitions(takes_tasks(params)),
             "ttlMs": 0,
             "cacheScope": "public",
         })),
@@ -286,6 +287,13 @@ pub(super) fn unsupported(requested: Option<&str>) -> RpcError {
     }
 }
 
+/// Every tool a client is offered, which leaves out a wait for one that doesn't take tasks.
+fn definitions(takes_tasks: bool) -> Vec<Value> {
+    let mut tools = pull_requests::definitions(takes_tasks);
+    tools.push(diff_comments::definition());
+    tools
+}
+
 /// Never cached for long, since the tools change with the worker's build, which can't say so as it's replaced.
 fn discover(build: Build, takes_tasks: bool) -> Value {
     json!({
@@ -314,6 +322,7 @@ async fn call(
         Some(Tool::Waits) if !takes_tasks(params) => Err(RpcError::needs_tasks()),
         Some(Tool::Waits) => Ok(pull_requests::start(asks, wait_poll, session_id, params).await),
         Some(Tool::PullRequest) => Ok(pull_request::call(asks, session_id).await.to_json()),
+        Some(Tool::DiffComments) => Ok(diff_comments::call(asks, session_id).await.to_json()),
         None => Err(RpcError::new(Code::InvalidParams, format!("there's no tool called {name}"))),
     }
 }
@@ -324,6 +333,7 @@ pub(super) enum Tool {
     PullRequest,
     PullRequests,
     Waits,
+    DiffComments,
 }
 
 impl Tool {
@@ -332,6 +342,7 @@ impl Tool {
             pull_requests::READ => Some(Tool::PullRequests),
             pull_requests::WAIT => Some(Tool::Waits),
             pull_request::NAME => Some(Tool::PullRequest),
+            diff_comments::NAME => Some(Tool::DiffComments),
             _ => None,
         }
     }

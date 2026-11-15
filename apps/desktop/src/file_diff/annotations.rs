@@ -83,7 +83,7 @@ pub(super) fn draft_card(
     band(dictation_ui::Field::keys(v_flex().child(field).child(actions), dictation), cx)
 }
 
-/// A comment waiting for the agent, with what can be done with it.
+/// A comment for the agent, with what can be done with it.
 pub(super) fn comment_card(comment: DiffComment, view: WeakEntity<FileDiff>, cx: &App) -> AnyElement {
     let id = comment.id.clone();
     let named = |action: &str| ElementId::Name(format!("{action}-{id}").into());

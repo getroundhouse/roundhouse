@@ -44,18 +44,19 @@ fn review_and_comment(ui: &mut Ui<'_>, stack: &Stack, id: &WorkspaceId) {
     ui.wait("the comment to be saved", |ui| ui.comments(&diff).len() == 1);
     assert_eq!(stack.client().comment_list(id).unwrap().len(), 1);
 
-    // Send it to the agent, which sees where it was left, and shows the chat it went to.
-    ui.click("send-comments");
+    // Add it to the chat, which shows the chat with the comment in its composer, saying where it was left, and send
+    // it. It stays on the diff until it's deleted.
+    let comment = ui.comments(&diff).remove(0);
+    ui.click(SharedString::from(format!("add-to-chat-{}", comment.id)));
     let pane = ui.pane().unwrap();
     assert_eq!(ui.cx.read_entity(&pane, |p, _| p.showing()), Showing::Chat);
+    ui.press("enter");
     ui.wait("the comment to reach the agent", |ui| {
         ui.events().iter().any(
             |e| matches!(&e.body, EventBody::UserPrompt { prompt: Prompt { text, .. }, .. } if text.contains("`a.txt:2`: Why this word?")),
         )
     });
-    ui.wait("the comment to be cleared", |ui| {
-        ui.comments(&diff).is_empty() && stack.client().comment_list(id).unwrap().is_empty()
-    });
+    assert_eq!(stack.client().comment_list(id).unwrap(), [comment]);
     ui.wait("the turn to finish", |ui| ui.session_status() == Some(SessionStatus::Idle));
 }
 

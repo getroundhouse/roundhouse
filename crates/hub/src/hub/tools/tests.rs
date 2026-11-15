@@ -2,10 +2,11 @@ use std::sync::Arc;
 
 use parking_lot::Mutex;
 use protocol::client::ErrorCode;
-use protocol::model::Workspace;
-use protocol::worker::{ServeTools, ToolsServing, WorkerAsk, WorkerRequest, WorkerResponse};
+use protocol::model::{DiffComment, DiffSide, Rev, Workspace};
+use protocol::worker::{AskReply, DiffComments, ServeTools, ToolsServing, WorkerAsk, WorkerRequest, WorkerResponse};
 
 use crate::hub::tests::hub_in;
+use crate::store::Made;
 use crate::worker_link::WorkerLink;
 
 #[tokio::test]
@@ -21,6 +22,39 @@ async fn a_worker_is_refused_what_it_asks_for_a_chat_in_another_workspace() {
     let refused = hub.answer_ask(&"v".into(), &link, "s".into(), WorkerAsk::PullRequest).await.unwrap_err();
 
     assert_eq!(refused.code, ErrorCode::NotFound, "{refused:?}");
+}
+
+/// What an agent reads with the tool is what the person sees on the diff, and nothing of another workspace's.
+#[tokio::test]
+async fn a_worker_asking_for_the_diffs_comments_hears_its_own_workspaces_oldest_first() {
+    let dir = tempfile::tempdir().unwrap();
+    let hub = hub_in(dir.path());
+    let w = hub.store.get_workspace(&"w".into()).unwrap();
+    let other = Workspace { id: "v".into(), name: "other".into(), instance_id: "v".into(), ..w };
+    hub.store.insert_workspace(&other, None).unwrap();
+    // Kept by the store, so each says when it was made, rather than two in the same millisecond going by their IDs.
+    let add = |id: &str, workspace: &str, created_at_ms: i64| {
+        let comment = DiffComment {
+            id: id.into(),
+            workspace_id: workspace.into(),
+            path: "a.rs".into(),
+            side: DiffSide::New,
+            line: 3,
+            text: format!("Comment {id}"),
+            created_at_ms,
+            rev: Rev::default(),
+        };
+        let Made::New(made) = hub.store.add_comment(&comment, None).unwrap().made else { panic!("{id} is new") };
+        made
+    };
+    let second = add("c2", "w", 20);
+    add("c3", "v", 15);
+    let first = add("c1", "w", 10);
+    let link = WorkerLink::unconnected();
+
+    let answered = hub.answer_ask(&"w".into(), &link, "s".into(), WorkerAsk::DiffComments).await.unwrap();
+
+    assert_eq!(answered, AskReply::DiffComments(DiffComments { comments: vec![first, second] }));
 }
 
 #[tokio::test]
