@@ -130,7 +130,8 @@ fn of_event(event: &SessionEvent, around: &Around, gather: &mut Gather) {
             }
         }
         EventBody::Notice { message, .. } => gather.written(&ItemKey::Event(seq, 0), Part::Notice, message),
-        EventBody::RequestFailed { failure, .. } => {
+        // One said in a later failure's card is the same failure, so only the card's words are found.
+        EventBody::RequestFailed { failure, .. } if !around.failures.in_a_later_card() => {
             gather.written(&ItemKey::Event(seq, 0), Part::FailedRequest, &failure.message);
         }
         // A turn that ended on a failed request draws nothing, since the request's card says why.
@@ -145,6 +146,7 @@ fn of_event(event: &SessionEvent, around: &Around, gather: &mut Gather) {
             }
         }
         EventBody::UserPrompt { .. }
+        | EventBody::RequestFailed { .. }
         | EventBody::ApprovalRequested { .. }
         | EventBody::TurnEnded { .. }
         | EventBody::ApprovalResolved { .. }

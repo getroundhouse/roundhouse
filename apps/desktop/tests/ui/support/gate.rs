@@ -7,8 +7,8 @@ use std::path::PathBuf;
 
 use super::{Stack, wait_until};
 
-/// What the fake agent's `slow-until:`, `think-until:`, `hang-until:` and `agent-until:` work until, put in a script
-/// as its path. Their work ends once it's opened.
+/// What the fake agent's `slow-until:`, `think-until:`, `hang-until:`, `request-until:` and `agent-until:` work until,
+/// put in a script as its path. Their work ends once it's opened.
 pub(crate) struct Gate(PathBuf);
 
 impl Gate {

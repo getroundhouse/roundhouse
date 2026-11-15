@@ -176,6 +176,20 @@ fn a_denied_calls_words_are_found_as_what_the_person_said() {
     assert_eq!(parts(&log, "rm -rf", 0), [Part::Command], "the command");
 }
 
+/// Failures in a row are one card, whose words are found once, in the newest, which draws them.
+#[test]
+fn a_failure_said_in_a_later_card_isn_t_found_again() {
+    let first = protocol::fixtures::request_failed("You've reached your limit.", None);
+    let mut second = first.clone();
+    if let EventBody::RequestFailed { again, .. } = &mut second {
+        *again = Some(protocol::event::Again { previous: Seq::new(1), times: 2 });
+    }
+    let log = log([event(Seq::new(1), first), event(Seq::new(2), second)]);
+
+    assert_eq!(parts(&log, "limit", 0), [], "the card after says it");
+    assert_eq!(parts(&log, "limit", 1), [Part::FailedRequest]);
+}
+
 #[test]
 fn what_the_app_writes_itself_isn_t_found() {
     let log = log([

@@ -1,7 +1,7 @@
-//! How the commands that work until a file a test makes exists, `slow-until`, `think-until`, `hang-until` and
-//! `agent-until`, wait on it, and the tool `hang:MS` runs for a time as `hang-until` does until then. While one waits
-//! on a file, a prompt that reaches the agent makes `FILE.prompted` once it's queued to be taken into the turn, so a
-//! test can wait for that before making FILE. A prompt the hub has recorded may not have reached
+//! How the commands that work until a file a test makes exists, `slow-until`, `think-until`, `hang-until`,
+//! `request-until` and `agent-until`, wait on it, and the tool `hang:MS` runs for a time as `hang-until` does until
+//! then. While one waits on a file, a prompt that reaches the agent makes `FILE.prompted` once it's queued to be taken
+//! into the turn, so a test can wait for that before making FILE. A prompt the hub has recorded may not have reached
 //! the agent yet, since the hub sends it on after.
 
 use std::collections::VecDeque;
@@ -66,13 +66,27 @@ pub(crate) fn hang(
     eof: &mut bool,
 ) -> bool {
     let tool_use_id = turn.tool_use("hang");
+    if pause_until(done, rx, queued, eof) {
+        turn.tool_result(&tool_use_id, "stopped", true);
+        return true;
+    }
+    turn.tool_result(&tool_use_id, "finished hanging", false);
+    false
+}
+
+/// Waits, saying nothing, until `done` says, given how long it has waited, as a tool does while it runs, or a request
+/// while its answer comes. Returns true if the turn was interrupted first.
+pub(crate) fn pause_until(
+    done: impl Fn(Duration) -> bool,
+    rx: &Receiver<Input>,
+    queued: &mut VecDeque<Prompt>,
+    eof: &mut bool,
+) -> bool {
     let started = Instant::now();
     while !done(started.elapsed()) {
         if pause(rx, HANG_POLL, queued, eof) {
-            turn.tool_result(&tool_use_id, "stopped", true);
             return true;
         }
     }
-    turn.tool_result(&tool_use_id, "finished hanging", false);
     false
 }

@@ -25,9 +25,13 @@ A Claude turn that failed because its request to the model did, as when you reac
 
 ![A turn that failed on a usage limit, with Retry](../../spec/screens/request-failed.png)
 
+When a request fails the same way again before anything else happens, as when the agent keeps picking up by itself after its background work while you're at your limit, the chat keeps one card for them. It says how many times, such as `3 times`, and has a line for what started each try: your prompt, the turn partway through, or the tasks the agent picked up after. Past four, the earlier ones fold under a line such as `2 earlier`, which opens them.
+
+![Three failures in a row, in one card](../../spec/screens/request-failed-in-a-row.png)
+
 What the agent's CLI says itself, such as `Set model to opus (claude-opus-5-5)`, is a muted line of its own, so it isn't taken for the agent's words.
 
-An agent that reports background work can end a turn with it still going, such as a test run the agent said it would come back to. When that finishes, the agent picks up again by itself, in a new turn, which starts with a line for each task that ended, saying how.
+An agent that reports background work can end a turn with it still going, such as a test run the agent said it would come back to. When that finishes, the agent picks up again by itself, in a new turn, which starts with a line for each task that ended, saying how. If the new turn's request fails before it does anything, as on a usage limit, those lines are in the failure's card instead.
 
 ## The composer
 

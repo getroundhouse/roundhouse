@@ -25,7 +25,7 @@ mod update_rule;
 
 pub(crate) use alone::rows_repeating_report;
 pub use alone::subagent_standing;
-pub(crate) use around::{NEAR, REACH, SubagentCalls, retry_at};
+pub(crate) use around::{NEAR, REACH, SubagentCalls, redrawn_with, retry_at};
 use column::column;
 pub(crate) use column::room_under;
 pub use column::{ABOVE_THE_COMPOSER, around_column, in_column};

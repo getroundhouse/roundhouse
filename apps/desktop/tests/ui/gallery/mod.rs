@@ -25,6 +25,7 @@ mod context_screens;
 mod diff_screens;
 mod events;
 mod failure_chats;
+mod failures_in_a_row;
 mod fake_hub;
 mod file_chats;
 mod finding;

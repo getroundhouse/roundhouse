@@ -257,6 +257,8 @@ pub(super) fn render_event(
 ) -> AnyElement {
     let (seq, body) = (event.seq, &event.body);
     match body {
+        // Said in a later failure's card, which hosts the failures in a row.
+        _ if around.failures.in_a_later_card() => empty(),
         // Asked in the composer's place while it waits, so it's drawn here once it's no longer waiting, as a call.
         EventBody::ApprovalRequested { .. } if asks_questions(body) => match &around.asked {
             Some(asked) => asked::draw(seq, asked, shared, cx),
@@ -267,7 +269,7 @@ pub(super) fn render_event(
         EventBody::CompactionAsked { .. }
         | EventBody::TurnEnded { only_compacted: true, .. }
         | EventBody::TurnEnded { request_failed: true, .. } => empty(),
-        EventBody::RequestFailed { failure, .. } => failed_request::card(seq, failure, around.retry, shared, find, cx),
+        EventBody::RequestFailed { failure, .. } => failed_request::card(seq, failure, around, shared, find, cx),
         EventBody::AgentCompacted { .. } => compaction::of(seq, body, around, shared, cx),
         EventBody::CacheExpired { idle_ms, read_tokens, written_tokens } => {
             cache_rule::line(seq, *idle_ms, *read_tokens, *written_tokens, cx)

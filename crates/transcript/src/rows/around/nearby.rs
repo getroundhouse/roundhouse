@@ -35,7 +35,7 @@ pub(super) fn call_before(log: &SessionLog, seq: Seq, id: &ToolUseId, reach: usi
 }
 
 /// The events before the one at `seq`, nearest first, back to the start of the log or to a row that isn't loaded.
-fn loaded_before(log: &SessionLog, seq: Seq) -> impl Iterator<Item = &SessionEvent> {
+pub(super) fn loaded_before(log: &SessionLog, seq: Seq) -> impl Iterator<Item = &SessionEvent> {
     let row = log.row_of(seq).unwrap_or(0);
     (0..row).rev().map_while(|ix| event_in(log, ix))
 }
@@ -50,6 +50,11 @@ pub(super) fn mode_before(log: &SessionLog, seq: Seq) -> Option<PermissionMode> 
         let EventBody::AgentInit { permission_mode, .. } = &event.body else { return None };
         *permission_mode
     })
+}
+
+/// The event at `seq`, if it's loaded.
+pub(super) fn event_at(log: &SessionLog, seq: Seq) -> Option<&SessionEvent> {
+    log.row_of(seq).and_then(|row| event_in(log, row))
 }
 
 /// Whether the event at `seq` is loaded, so its row is drawn.

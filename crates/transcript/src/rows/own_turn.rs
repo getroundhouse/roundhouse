@@ -24,15 +24,12 @@ pub(super) fn lines(event: &SessionEvent, tasks: &[EndedTask], shared: &Shared, 
     }
     let at = look::day_and_time(event.ts_ms, cx);
     let lines = tasks.iter().enumerate().map(|(ix, ended)| {
-        let (icon, title, how) = words(ended);
-        let note = at.as_ref().map_or_else(|| how.to_string(), |at| format!("{how} \u{b7} {at}"));
-        let label = at.as_ref().map_or_else(|| format!("{title}, {how}"), |at| format!("{title}, {how}, {at}"));
+        let (line, label) = line(ended, at.as_deref());
         let task = &ended.task;
         let open = task.call.as_ref().filter(|_| task.kind == TaskKind::Subagent).map(|call| {
             let id = ItemKey::Event(event.seq, ix).element("ended-task-open");
             agent::open_tab(id, call.clone(), task.description.as_deref().unwrap_or(UNTITLED), &shared.this)
         });
-        let line = Line::new(icon, title).part(Part::Note(note.into()));
         let line = match open {
             Some(open) => line.action(open),
             None => line,
@@ -41,6 +38,15 @@ pub(super) fn lines(event: &SessionEvent, tasks: &[EndedTask], shared: &Shared, 
     });
     // Spaced as a message of only calls is, since they read as calls' lines.
     row().pb(look::Space::Small).children(lines).into_any_element()
+}
+
+/// The line for `ended`, which says what the task was for, then how it ended, and `at`, when the agent heard, and what
+/// it says to a screen reader.
+pub(super) fn line(ended: &EndedTask, at: Option<&str>) -> (Line, String) {
+    let (icon, title, how) = words(ended);
+    let note = at.map_or_else(|| how.to_string(), |at| format!("{how} \u{b7} {at}"));
+    let label = at.map_or_else(|| format!("{title}, {how}"), |at| format!("{title}, {how}, {at}"));
+    (Line::new(icon, title).part(Part::Note(note.into())), label)
 }
 
 /// A task's icon, what it says the task was, and how it ended. A wait says which pull requests it waited on, and why it
