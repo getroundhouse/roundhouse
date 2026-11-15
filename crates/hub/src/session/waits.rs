@@ -1,11 +1,12 @@
-//! A chat's waits on its pull request, as the person calls one off, and as they leave its list of work in the
-//! background with no agent running to take them off it.
+//! A chat's waits on its pull request, as the person calls one off, as they leave its list of work in the background
+//! with no agent running to take them off it, and as the agent picks up by itself once one has ended.
 
+use protocol::capability::turns::OwnTurn;
 use protocol::client::ApiError;
 use protocol::event::{EventBody, TaskKind};
-use protocol::model::{Session, WaitId};
+use protocol::model::{EndedWait, Session, WaitId};
 use tokio::sync::MutexGuard;
-use tracing::info;
+use tracing::{info, warn};
 
 use super::{LiveSession, Origin};
 use crate::store::now_ms;
@@ -53,5 +54,23 @@ impl LiveSession {
             self.record(Origin::Hub, EventBody::AgentTasks { tasks: left, stopped: Vec::new() }, None).await?;
         }
         Ok(())
+    }
+
+    /// `body`, with what the hub keeps of each wait it says ended, if it's a turn the agent started by itself. The agent
+    /// heard only the tool's answer, and the hub's record says what the wait watched and how it ended, so what the
+    /// agent said of any wait is dropped. A wait the hub can't read is left without, and the turn is recorded all the
+    /// same.
+    pub(super) async fn with_waits(&self, mut body: EventBody) -> EventBody {
+        let EventBody::OwnTurn(OwnTurn::TaskEnded { ended }) = &mut body else { return body };
+        let hub = self.hub().ok();
+        for ended in ended.iter_mut() {
+            ended.wait = None;
+            let (Some(hub), TaskKind::Wait) = (&hub, ended.task.kind) else { continue };
+            match hub.started_by(&self.id, ended.task.call.as_ref()).await {
+                Ok(wait) => ended.wait = wait.as_ref().map(EndedWait::from),
+                Err(e) => warn!(session = %self.id, "could not read a wait the agent heard had ended: {e}"),
+            }
+        }
+        body
     }
 }

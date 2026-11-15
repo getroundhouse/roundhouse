@@ -106,6 +106,11 @@ pub enum EventBody {
         #[serde(default)]
         stopped: Vec<TaskId>,
     },
+    /// The agent started a turn by itself, with no prompt, and this says why, and what it took in. It's recorded as the
+    /// turn starts, before anything the turn does. The agent's adapter says, since only it knows what its agent heard,
+    /// and the hub adds what it keeps of a wait that ended. A turn a prompt started has none, even when the agent took
+    /// in a task's end with it, and so does one whose reason the adapter can't tell as it starts.
+    OwnTurn(crate::capability::turns::OwnTurn),
     /// How much of each limit on the account the agent runs under is used, as the agent just heard. A limit is the
     /// account's rather than the session's, so the hub keeps the newest for every session under that account.
     AgentLimits {

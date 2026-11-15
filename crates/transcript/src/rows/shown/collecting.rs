@@ -156,6 +156,7 @@ fn of_event(event: &SessionEvent, around: &Around, gather: &mut Gather) {
         | EventBody::AgentInit { .. }
         | EventBody::AgentState { .. }
         | EventBody::AgentTasks { .. }
+        | EventBody::OwnTurn(_)
         | EventBody::AgentLimits { .. }
         | EventBody::SubagentStarted { .. }
         | EventBody::SubagentContext { .. }

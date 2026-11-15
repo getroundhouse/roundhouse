@@ -1,10 +1,11 @@
 use super::super::kinds;
 use super::{
-    blocks, calls, compaction, denied, limits, pending, prompt, request, said, subagents, surrogates, tasks, turn_end,
-    user,
+    blocks, calls, compaction, denied, limits, own_turns, pending, prompt, request, said, subagents, surrogates, tasks,
+    turn_end, user,
 };
 use calls::OpenCalls;
 use compaction::Compactions;
+use own_turns::OwnTurns;
 use pending::PendingCalls;
 use prompt::PromptProgress;
 use protocol::attachment::NewAttachment;
@@ -26,9 +27,10 @@ pub struct Normalized {
     /// `ToolCallDropped` with no raw line, before what the line says.
     pub dropped: Vec<ToolUseId>,
     pub parsed: Parsed,
-    /// The list of background tasks again, once a subagent's start, which is what the line says, names the call that
-    /// started a listed task. It goes in the log after what the line says, with no raw line, since the line is that.
-    pub relisted: Option<EventBody>,
+    /// What the line shows without saying, which goes in the log after what it says, with no raw line, since the line
+    /// is that: the list of background tasks again, once a subagent's start, which is what the line says, names the call
+    /// that started a listed task, or why the agent starts a turn by itself, after the turn's `init`.
+    pub after: Option<EventBody>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -61,7 +63,9 @@ pub enum Parsed {
 /// each, which are monitors, by that call, and which left without finishing. It remembers which task each subagent runs as, so
 /// the end of one can say which subagent it was. It never says a call was dropped, so what follows the call has to
 /// show it. And its `result` doesn't say which models the agent's own replies came from, so the replies have to. It
-/// holds what a compaction's boundary says until the summary after it, so the two are one event.
+/// holds what a compaction's boundary says until the summary after it, so the two are one event. And it holds the end
+/// of each of the agent's own background tasks until a request to the model takes it in, so a turn the agent starts by
+/// itself can say which it took in.
 #[derive(Debug, Default)]
 pub struct Normalizer {
     /// The block of each message that's streaming, and the call whose subagent is writing it, if one is.
@@ -73,25 +77,28 @@ pub struct Normalizer {
     pub(super) subagents: Subagents,
     pub(super) compactions: Compactions,
     pub(super) failed: FailedRequests,
+    pub(super) own_turns: OwnTurns,
 }
 
 impl Normalizer {
     pub fn line(&mut self, line: &str) -> Normalized {
         let Some(value) = value_of(line) else {
-            return Normalized { dropped: Vec::new(), parsed: unparsed(), relisted: None };
+            return Normalized { dropped: Vec::new(), parsed: unparsed(), after: None };
         };
         let answered = self.calls.note(&value);
         let dropped = self.pending_calls.note(&value);
+        let own_turn = self.own_turns.note(&value, &self.tasks);
         let noted = self.tasks.note(&value, &self.calls);
         if let Some(body) = self.subagents.read(&value) {
             let relisted = noted.map(|mut list| {
                 self.list(&mut list);
                 list
             });
-            return Normalized { dropped, parsed: Parsed::Event(body), relisted };
+            // A list said again comes only after a subagent's line, and a turn's reason only after its `init`.
+            return Normalized { dropped, parsed: Parsed::Event(body), after: relisted.or(own_turn) };
         }
         if let Some(parsed) = self.compactions.read(&value) {
-            return Normalized { dropped, parsed, relisted: None };
+            return Normalized { dropped, parsed, after: own_turn };
         }
         let mut parsed = noted.map_or_else(|| parse_value(&value), Parsed::Event);
         if let Parsed::Event(body) = &mut parsed {
@@ -138,7 +145,7 @@ impl Normalizer {
             self.pending_calls.turn_ended();
             self.calls.turn_ended();
         }
-        Normalized { dropped, parsed, relisted: None }
+        Normalized { dropped, parsed, after: own_turn }
     }
 
     /// Gives a list of background tasks what the lines before it said of them.

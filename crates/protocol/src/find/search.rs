@@ -185,6 +185,8 @@ fn any_text(body: &EventBody, found: &mut impl FnMut(&str) -> bool) -> bool {
         | EventBody::AgentCompacted { .. }
         // Nor is a cache that expired, which says only how long and how much.
         | EventBody::CacheExpired { .. }
+        // Nor is what a turn the agent started by itself took in, whose words are found where each task started.
+        | EventBody::OwnTurn(_)
         | EventBody::Unknown => false,
     }
 }

@@ -4,7 +4,8 @@
 //! off, as the hub does for the person. Each is read as its own process's, as each launch has a normalizer of its own.
 
 use agents::claude::{Normalizer, Parsed};
-use protocol::event::{EventBody, TaskKind};
+use protocol::capability::turns::OwnTurn;
+use protocol::event::{EventBody, TaskKind, TaskOutcome};
 
 const STOPPED: &str = include_str!("../../fixtures/claude_mcp_task.jsonl");
 const RESUMED: &str = include_str!("../../fixtures/claude_mcp_task_resumed.jsonl");
@@ -72,4 +73,38 @@ fn a_wait_the_server_calls_off_leaves_the_list_and_starts_a_turn() {
     assert_eq!(steps[3..], [Step::Listed(vec![TaskKind::Wait]), Step::Ended, Step::Listed(vec![]), Step::Ended]);
     let stopped = |event: &EventBody| matches!(event, EventBody::AgentTasks { stopped, .. } if !stopped.is_empty());
     assert!(!events.iter().any(stopped), "none was stopped");
+}
+
+/// What the adapter records as each turn starts, in order: for a turn the CLI took by itself, each task it names and
+/// how it ended, and for any other, nothing.
+pub(in super::super) fn own_turns(lines: &str) -> Vec<Option<Vec<(String, TaskKind, TaskOutcome)>>> {
+    let mut normalizer = Normalizer::default();
+    let mut turns = Vec::new();
+    for line in lines.lines() {
+        let read = normalizer.line(line);
+        if let Parsed::Event(EventBody::AgentInit { .. }) = read.parsed {
+            let named = match read.after {
+                Some(EventBody::OwnTurn(OwnTurn::TaskEnded { ended })) => Some(
+                    ended
+                        .into_iter()
+                        .map(|ended| (ended.task.id.to_string(), ended.task.kind, ended.outcome))
+                        .collect(),
+                ),
+                _ => None,
+            };
+            turns.push(named);
+        }
+    }
+    turns
+}
+
+/// Each turn the CLI takes by itself names the wait whose end started it, and how it ended, and the turn a prompt
+/// starts names none.
+#[test]
+fn each_turn_the_cli_takes_by_itself_names_the_wait_that_started_it() {
+    let wait = |id: &str, outcome| Some(vec![(id.to_string(), TaskKind::Wait, outcome)]);
+
+    assert_eq!(own_turns(STOPPED), [None, wait("krcm4d0sb", TaskOutcome::Finished), None]);
+    let called_off = wait("kztvhoebo", TaskOutcome::Failed);
+    assert_eq!(own_turns(RESUMED), [wait("kp98x6sln", TaskOutcome::Finished), None, called_off]);
 }

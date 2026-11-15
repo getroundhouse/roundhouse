@@ -59,6 +59,7 @@ async fn ingest_event(
     }
     let current = session.state.lock().agent.is_some_and(|agent| agent.run == run);
     follow(session, run, current, &body).await;
+    let body = session.with_waits(body).await;
     let origin = Origin::Run { run, current, numbered };
     if current && let Some(approval_id) = allowed_by_the_hub(session, &body) {
         allow(session, origin, (body, raw), approval_id).await;
@@ -168,6 +169,7 @@ async fn follow(session: &Arc<LiveSession>, run: RunId, current: bool, body: &Ev
         | EventBody::AgentStarted { .. }
         | EventBody::AgentState { .. }
         | EventBody::AgentTasks { .. }
+        | EventBody::OwnTurn(_)
         | EventBody::AgentLimits { .. }
         | EventBody::Assistant { .. }
         | EventBody::AgentUser { .. }

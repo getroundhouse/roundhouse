@@ -1,3 +1,4 @@
+use super::super::tasks::outcome;
 use super::super::{id_of, str_of, string_of};
 use protocol::event::{EventBody, TaskOutcome};
 use protocol::model::{TaskId, ToolUseId};
@@ -61,12 +62,7 @@ impl Subagents {
             "task_notification" => {
                 let call = self.by_task.remove(&id_of::<TaskId>(value, "task_id")?)?;
                 self.in_background.remove(&call);
-                let outcome = match str_of(value, "status") {
-                    Some("completed") => TaskOutcome::Finished,
-                    Some("failed") => TaskOutcome::Failed,
-                    Some("stopped") => TaskOutcome::Stopped,
-                    _ => TaskOutcome::Unknown,
-                };
+                let outcome = outcome(value);
                 // Stopped, it only says so.
                 let report = string_of(value, "summary").filter(|_| outcome == TaskOutcome::Finished);
                 Some(EventBody::SubagentEnded { call, outcome, report, context_tokens: context_tokens(value) })

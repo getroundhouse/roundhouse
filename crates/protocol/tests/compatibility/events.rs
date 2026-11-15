@@ -1,6 +1,8 @@
 //! Events a hub kept in its log in the form an older hub wrote them, which every later hub and client has to read.
 
-use protocol::event::{EventBody, FailureKind, RequestFailure};
+use protocol::capability::turns::OwnTurn;
+use protocol::event::{EventBody, FailureKind, RequestFailure, TaskKind, TaskOutcome};
+use protocol::model::{WaitEnd, Watching};
 
 /// A hub stores events in the form it sends, so an agent's start recorded before hubs said which build it ran on has to
 /// read as saying nothing of it, which a chat takes as not having been updated.
@@ -109,4 +111,28 @@ fn a_turns_end_says_it_failed_on_a_request_only_when_it_did() {
     let EventBody::TurnEnded { request_failed: false, .. } = &ended else { panic!("{ended:?}") };
     assert!(!serde_json::to_string(&ended).unwrap().contains("request_failed"));
     assert!(matches!(failed, EventBody::TurnEnded { request_failed: true, .. }), "{failed:?}");
+}
+
+/// A hub stores a turn the agent started by itself in the form it sends, under this kind, with what it kept of a wait
+/// that ended. A reason a later agent gives, and what a later hub's wait watched, read as ones this build doesn't know.
+#[test]
+fn a_turn_the_agent_started_by_itself_keeps_the_form_and_the_kind_its_stored_under() {
+    let stored = r#"{"type":"own_turn","why":"task_ended","ended":[{"task":{"id":"b1","description":"Run the tests","kind":"command"},"outcome":"failed"},{"task":{"id":"k2","description":null,"kind":"wait","call":"toolu_2"},"outcome":"finished","wait":{"id":"w","watching":{"on":"branch","number":12,"until":"all_checks"},"ended":{"at_ms":9,"how":"checks_passed"}}}]}"#;
+    let later = r#"{"type":"own_turn","why":"woke_from_a_dream"}"#;
+
+    let own: EventBody = serde_json::from_str(stored).unwrap();
+
+    let EventBody::OwnTurn(OwnTurn::TaskEnded { ended }) = &own else { panic!("{own:?}") };
+    let how = |kind, outcome| (kind, outcome);
+    let read: Vec<_> = ended.iter().map(|ended| how(ended.task.kind, ended.outcome)).collect();
+    assert_eq!(read, [how(TaskKind::Command, TaskOutcome::Failed), how(TaskKind::Wait, TaskOutcome::Finished)]);
+    let wait_ended = ended[1].wait.as_ref().and_then(|wait| wait.ended).map(|ended| ended.how);
+    assert_eq!(wait_ended, Some(WaitEnd::ChecksPassed));
+    assert_eq!(own.kind(), "own_turn");
+    assert_eq!(serde_json::to_string(&own).unwrap(), stored);
+    let unknown = EventBody::OwnTurn(OwnTurn::Unknown);
+    assert_eq!(serde_json::from_str::<EventBody>(later).unwrap(), unknown);
+    let board = stored.replace(r#"{"on":"branch","number":12,"until":"all_checks"}"#, r#"{"on":"a_board","board":3}"#);
+    let EventBody::OwnTurn(OwnTurn::TaskEnded { ended }) = serde_json::from_str(&board).unwrap() else { panic!() };
+    assert_eq!(ended[1].wait.as_ref().map(|wait| &wait.watching), Some(&Watching::Unknown));
 }

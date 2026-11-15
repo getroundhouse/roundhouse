@@ -258,8 +258,9 @@ fn each_task_needs_the_capability_its_kind_of_task_is() {
 }
 
 #[test]
-fn a_turns_end_needs_what_it_says_beyond_how_it_ended() {
+fn a_turn_needs_what_its_start_and_end_say_beyond_how_it_ended() {
     let tokens = TokenUsage { input_tokens: 1, output_tokens: 1, cache_read_tokens: 0, cache_write_tokens: 0 };
+    let own = EventBody::OwnTurn(turns::OwnTurn::TaskEnded { ended: vec![] });
     let plain = turn_ended(TurnOutcome::Success);
     let mut full = plain.clone();
     if let EventBody::TurnEnded { cost_usd, tokens: told, only_compacted, .. } = &mut full {
@@ -269,6 +270,7 @@ fn a_turns_end_needs_what_it_says_beyond_how_it_ended() {
     }
 
     assert_eq!(needs(&plain), []);
+    assert_eq!(needs(&own), [Capability::from(turns::Capability::OwnTurns)], "a turn it started by itself");
     assert_eq!(
         needs(&full),
         [

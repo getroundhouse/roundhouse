@@ -53,6 +53,12 @@ impl OpenCalls {
         self.0.get(call).map(|call| call.tool.as_str())
     }
 
+    /// Whether a subagent made an open call, rather than the agent. `false` once it's answered, and for a call that was
+    /// never made.
+    pub(super) fn by_a_subagent(&self, call: &ToolUseId) -> bool {
+        self.0.get(call).is_some_and(|call| call.by_a_subagent)
+    }
+
     /// The agent's own calls are over when its turn is, answered or not, as when the turn is cancelled. A subagent's
     /// go on, since it can work past the turn that started it.
     pub(super) fn turn_ended(&mut self) {

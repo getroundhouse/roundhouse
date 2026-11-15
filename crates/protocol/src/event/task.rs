@@ -2,7 +2,8 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::model::{TaskId, ToolUseId};
+use super::TaskOutcome;
+use crate::model::{EndedWait, TaskId, ToolUseId};
 
 /// Work an agent started in the background, such as a command or a subagent. It carries on after the turn that
 /// started it ends.
@@ -38,4 +39,17 @@ pub enum TaskKind {
     #[default]
     #[serde(other)]
     Command,
+}
+
+/// A background task the agent heard had ended, as it started a turn by itself to take in how.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct EndedTask {
+    /// The task, as the agent's list of tasks last said it.
+    pub task: AgentTask,
+    pub outcome: TaskOutcome,
+    /// For a wait on pull requests, what the hub kept of it: what it watched and how it ended. The hub adds it as it
+    /// records the event, from its record of the wait the task's call started, since the agent hears only the tool's
+    /// answer. `None` for any other kind, and from a hub that doesn't add it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub wait: Option<EndedWait>,
 }

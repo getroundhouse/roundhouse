@@ -10,4 +10,4 @@ mod printer;
 pub(crate) use printer::Printer;
 use printer::about;
 #[cfg(test)]
-use printer::{called, came_back, denial, started};
+use printer::{called, came_back, denial, own_turn, started};

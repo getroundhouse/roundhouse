@@ -64,7 +64,7 @@ impl Hub {
     }
 
     /// The wait `call` started in the session, if it started one.
-    pub(super) async fn started_by(
+    pub(crate) async fn started_by(
         &self,
         session_id: &SessionId,
         call: Option<&ToolUseId>,

@@ -201,6 +201,7 @@ pub static PLAN_APPROVED: Scenario = Scenario {
                     | EventBody::AgentInit { .. }
                     | EventBody::AgentState { .. }
                     | EventBody::AgentTasks { .. }
+                    | EventBody::OwnTurn(_)
                     | EventBody::AgentLimits { .. }
                     | EventBody::SubagentStarted { .. }
                     | EventBody::SubagentContext { .. }
@@ -235,6 +236,7 @@ pub static PLAN_APPROVED: Scenario = Scenario {
                             | EventBody::AgentInit { .. }
                             | EventBody::AgentState { .. }
                             | EventBody::AgentTasks { .. }
+                            | EventBody::OwnTurn(_)
                             | EventBody::AgentLimits { .. }
                             | EventBody::SubagentStarted { .. }
                             | EventBody::SubagentContext { .. }

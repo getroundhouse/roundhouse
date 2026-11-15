@@ -276,6 +276,7 @@ pub(super) fn render_event(
         | EventBody::AgentInit { .. }
         | EventBody::AgentState { .. }
         | EventBody::AgentTasks { .. }
+        | EventBody::OwnTurn(_)
         | EventBody::AgentLimits { .. }
         | EventBody::SubagentStarted { .. }
         | EventBody::SubagentContext { .. }

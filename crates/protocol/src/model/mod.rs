@@ -56,7 +56,7 @@ pub use subagent::{
     Call, CallResult, Lately, LatelyCall, LatelyResult, RecentCall, RecentWork, Said, Subagent, SubagentStatus,
 };
 pub use title::{Title, TitleError, TitleSource};
-pub use wait::{Wait, WaitEnd, WaitEnded, WaitUntil};
+pub use wait::{EndedWait, Wait, WaitEnd, WaitEnded, WaitUntil, Watching};
 pub use worktrees::{CHILDREN, ChildStatus, ChildWorktree, MadeBy, WorkName, WorkNameError};
 
 mod ids;

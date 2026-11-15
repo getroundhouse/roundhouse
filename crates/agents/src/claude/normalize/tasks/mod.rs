@@ -6,4 +6,4 @@ mod tests;
 
 mod tracking;
 
-pub(super) use tracking::{Tasks, listed};
+pub(super) use tracking::{Tasks, listed, outcome};

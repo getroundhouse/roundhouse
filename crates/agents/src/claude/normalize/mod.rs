@@ -20,6 +20,7 @@ mod denied;
 mod file_change;
 mod images;
 mod limits;
+mod own_turns;
 mod pending;
 mod prompt;
 mod request;

@@ -199,6 +199,7 @@ impl Tail {
             | EventBody::AgentInit { .. }
             | EventBody::AgentState { .. }
             | EventBody::AgentTasks { .. }
+            | EventBody::OwnTurn(_)
             | EventBody::AgentLimits { .. }
             | EventBody::AgentUser { .. }
             | EventBody::ToolCallDropped { .. }

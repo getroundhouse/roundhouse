@@ -12,7 +12,7 @@ pub use content::{ContentBlock, Denied, LinkedImage};
 pub use ending::{ExitReason, TaskOutcome, TurnOutcome};
 pub use failure::{FailureKind, RequestFailure};
 pub use file_change::{FileChange, Hunk, HunkLine, LineMark};
-pub use task::{AgentTask, TaskKind};
+pub use task::{AgentTask, EndedTask, TaskKind};
 pub use tokens::TokenUsage;
 
 mod approval;
@@ -29,4 +29,6 @@ mod task;
 mod tokens;
 
 mod recorded;
+#[cfg(test)]
+mod tests;
 pub use recorded::{AgentRunState, EventBody, NoticeLevel, SessionEvent};
