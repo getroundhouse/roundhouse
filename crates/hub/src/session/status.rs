@@ -105,6 +105,7 @@ pub(crate) fn next_status(current: SessionStatus, body: &EventBody, open: Open, 
         | EventBody::ToolCallDropped { .. }
         | EventBody::AgentStarted { .. }
         | EventBody::AgentTasks { .. }
+        | EventBody::OwnTurn(_)
         | EventBody::AgentLimits { .. }
         | EventBody::Assistant { .. }
         | EventBody::AgentUser { .. }
@@ -205,6 +206,7 @@ pub(crate) fn open_after(
         | EventBody::PromptDropped { .. }
         | EventBody::ToolCallDropped { .. }
         | EventBody::AgentInit { .. }
+        | EventBody::OwnTurn(_)
         | EventBody::AgentState { .. }
         | EventBody::AgentLimits { .. }
         | EventBody::Assistant { .. }

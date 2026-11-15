@@ -12,7 +12,7 @@ use super::output::{CallSummary, Rerouted, Retracted, Retrying, TodoList};
 use super::prompts::{AgentCommand, ListedSkill};
 use super::settings::{ModelOffer, Persona, Speed, StyleName};
 use super::setup::{HookRun, ToolServerState};
-use super::turns::{Finding, Goal, OwnTurn};
+use super::turns::{Finding, Goal};
 use super::{Capability, account, approvals, background, calls, context, conversation, output, prompts, settings};
 use super::{setup, turns};
 use crate::model::{ApprovalId, CacheRequest, ContextUsage, Seq, TaskId, ToolUseId};
@@ -98,10 +98,6 @@ pub enum Report {
         insertions: Option<u32>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         deletions: Option<u32>,
-    },
-    /// Why the agent started the turn that's starting.
-    OwnTurn {
-        why: OwnTurn,
     },
     /// The chat's goal as it stands, or `None` once there's none.
     Goal {
@@ -214,7 +210,6 @@ impl Report {
             Report::RewindUndone => conversation::Capability::UndoRewind.into(),
             Report::FilesRestored { .. } => conversation::Capability::RestoreFiles.into(),
             Report::WouldRestoreFiles { .. } => conversation::Capability::PreviewRestoreFiles.into(),
-            Report::OwnTurn { .. } => turns::Capability::OwnTurns.into(),
             Report::Goal { .. } => turns::Capability::Goals.into(),
             Report::Findings { .. } => turns::Capability::ReviewFindings.into(),
             Report::Reply { .. } => prompts::Capability::StructuredReply.into(),
@@ -247,7 +242,6 @@ impl Report {
             | Report::Rewound { .. }
             | Report::RewindUndone
             | Report::FilesRestored { .. }
-            | Report::OwnTurn { .. }
             | Report::Findings { .. }
             | Report::Reply { .. }
             | Report::Pruned { .. }

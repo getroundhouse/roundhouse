@@ -1,6 +1,7 @@
-//! The live session's tests: how its status follows what's recorded, what it takes in from its agent's worker, and the
-//! claims its runs are held to.
+//! The live session's tests: how its status follows what's recorded, what it takes in from its agent's worker, the
+//! claims its runs are held to, and what it adds to a turn the agent started by itself.
 
 mod capabilities;
 mod ingest;
+mod own_turns;
 mod status;

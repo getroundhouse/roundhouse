@@ -146,6 +146,7 @@ fn follow<'a>(open: &mut Vec<&'a SessionEvent>, event: &'a SessionEvent) {
         | EventBody::AgentInit { .. }
         | EventBody::AgentState { .. }
         | EventBody::AgentTasks { .. }
+        | EventBody::OwnTurn(_)
         | EventBody::AgentLimits { .. }
         | EventBody::Assistant { .. }
         | EventBody::AgentUser { .. }

@@ -7,7 +7,7 @@
 #![cfg(test)]
 
 use agents::claude::{Normalizer, Parsed};
-use protocol::event::{AgentRunState, EventBody};
+use protocol::event::{AgentRunState, EventBody, TaskKind, TaskOutcome};
 
 const BACKGROUND: &str = include_str!("../fixtures/claude_background.jsonl");
 
@@ -77,4 +77,13 @@ fn every_line_is_understood_or_deliberately_kept() {
             assert!(!needs_handling.contains(&kind.as_str()), "line {i}: {kind}");
         }
     }
+}
+
+/// The turn the CLI took by itself names the command whose end started it, and the turn the prompt started names none.
+#[test]
+fn the_turn_the_cli_takes_by_itself_names_the_command_that_started_it() {
+    let turns = super::contract::own_turns(BACKGROUND);
+
+    let finished = Some(vec![("byixe0hg3".to_string(), TaskKind::Command, TaskOutcome::Finished)]);
+    assert_eq!(turns[..2], [None, finished]);
 }

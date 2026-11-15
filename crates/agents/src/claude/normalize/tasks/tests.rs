@@ -197,7 +197,7 @@ fn a_subagent_in_the_background_is_listed_with_its_call_once_its_start_names_it(
 
     assert_eq!(calls(Some(event(first.parsed))), [("a1".into(), subagent, None)], "its call isn't known yet");
     assert!(matches!(start.parsed, Parsed::Event(EventBody::SubagentStarted { .. })), "{:?}", start.parsed);
-    assert_eq!(calls(start.relisted), [("a1".into(), subagent, Some("c1".into()))], "the list again, after its start");
+    assert_eq!(calls(start.after), [("a1".into(), subagent, Some("c1".into()))], "the list again, after its start");
     let next = normalizer.line(&listed(&["a1"]));
     assert_eq!(calls(Some(event(next.parsed))), [("a1".into(), subagent, Some("c1".into()))], "and every list after");
 

@@ -89,6 +89,7 @@ pub(in super::super) fn note_subagents(tx: &Connection, event: &SessionEvent) ->
         | EventBody::AgentInit { .. }
         | EventBody::AgentState { .. }
         | EventBody::AgentTasks { .. }
+        | EventBody::OwnTurn(_)
         | EventBody::AgentLimits { .. }
         | EventBody::ToolCallDropped { .. }
         | EventBody::TurnEnded { .. }

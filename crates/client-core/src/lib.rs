@@ -14,6 +14,7 @@ pub mod calls;
 pub mod file_text;
 pub mod records;
 pub mod session_log;
+pub mod waits;
 
 mod agents;
 mod approval;

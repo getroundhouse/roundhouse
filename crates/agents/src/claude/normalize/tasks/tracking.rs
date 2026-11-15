@@ -1,7 +1,7 @@
 use super::super::calls::OpenCalls;
 use super::super::{Parsed, id_of, other, str_of, string_of};
 use crate::claude::TOOLS_SERVER;
-use protocol::event::{AgentTask, EventBody, TaskKind};
+use protocol::event::{AgentTask, EventBody, TaskKind, TaskOutcome};
 use protocol::model::{TaskId, ToolUseId};
 use protocol::worker::{WAIT_TOOL, WAITS_TOOL};
 use serde_json::Value;
@@ -54,6 +54,10 @@ pub(in super::super) struct Tasks {
     /// The tasks a `Monitor` call started, each until a list that held it leaves it out. Its `task_notification`
     /// doesn't end it, since the CLI can list a task once more after saying it ended.
     pub(super) monitors: BTreeSet<TaskId>,
+    /// The tasks a subagent's call started, each until a list that held it leaves it out, as for a monitor. The CLI lists
+    /// them with the agent's own, but tells the subagent how each ends while it works, and seldom the agent once it has
+    /// ended.
+    pub(super) subagents: BTreeSet<TaskId>,
     /// The call that started each task, from its `task_started`, until a list that held it leaves it out, as for a
     /// monitor, since the CLI can list a task once more after saying it ended. A task that ends unlisted, as a command
     /// or a subagent in the foreground does, is forgotten as it ends. [`super::super::subagents::Subagents`] keeps a
@@ -77,6 +81,7 @@ impl Tasks {
                 let id = id_of::<TaskId>(value, "task_id")?;
                 if !self.newest.iter().any(|task| task.id == id) {
                     self.calls.remove(&id);
+                    self.subagents.remove(&id);
                 }
                 if str_of(value, "status") == Some("stopped") {
                     self.stopped.insert(id);
@@ -94,10 +99,23 @@ impl Tasks {
         if monitor {
             self.monitors.insert(id.clone());
         }
+        if calls.by_a_subagent(&call) {
+            self.subagents.insert(id.clone());
+        }
         let shown = monitor || str_of(value, "task_type") == Some(SUBAGENT);
         let already_listed = self.newest.iter().any(|task| task.id == id);
         self.calls.insert(id, call);
         (shown && already_listed).then(|| EventBody::AgentTasks { tasks: self.newest.clone(), stopped: Vec::new() })
+    }
+
+    /// The task `id` as the newest list has it, with what the lines before it said.
+    pub(in super::super) fn task(&self, id: &TaskId) -> Option<&AgentTask> {
+        self.newest.iter().find(|task| task.id == *id)
+    }
+
+    /// Whether a subagent's call started the task `id`, so the agent doesn't hear how it ends, or seldom does.
+    pub(in super::super) fn a_subagents(&self, id: &TaskId) -> bool {
+        self.subagents.contains(id)
     }
 
     /// Says which call started each of a list's tasks and which are monitors, and returns those the CLI said it
@@ -105,6 +123,7 @@ impl Tasks {
     pub(in super::super) fn listed(&mut self, tasks: &mut [AgentTask]) -> Vec<TaskId> {
         let left = |id: &TaskId| self.newest.iter().any(|t| t.id == *id) && tasks.iter().all(|t| t.id != *id);
         self.monitors.retain(|id| !left(id));
+        self.subagents.retain(|id| !left(id));
         self.calls.retain(|id, _| !left(id));
         for task in tasks.iter_mut() {
             if self.monitors.contains(&task.id) {
@@ -117,5 +136,15 @@ impl Tasks {
             std::mem::take(&mut self.stopped).into_iter().partition(|id| tasks.iter().all(|t| t.id != *id));
         self.stopped = still_listed;
         gone.into_iter().collect()
+    }
+}
+
+/// How the task a `task_notification` is about ended, as its `status` says.
+pub(in super::super) fn outcome(value: &Value) -> TaskOutcome {
+    match str_of(value, "status") {
+        Some("completed") => TaskOutcome::Finished,
+        Some("failed") => TaskOutcome::Failed,
+        Some("stopped") => TaskOutcome::Stopped,
+        _ => TaskOutcome::Unknown,
     }
 }

@@ -1,10 +1,10 @@
 use client_core::calls::{Failure, Recorded};
-use protocol::event::{AgentTask, CallKind, ContentBlock, Denied, TaskKind, TaskOutcome};
+use protocol::event::{AgentTask, CallKind, ContentBlock, Denied, EndedTask, TaskKind, TaskOutcome};
 use protocol::fixtures;
-use protocol::model::Seq;
+use protocol::model::{EndedWait, Seq, WaitEnd, WaitEnded};
 use serde_json::{Value, json};
 
-use super::{Printer, called, came_back, denial, started};
+use super::{Printer, called, came_back, denial, own_turn, started};
 
 fn task(id: &str, kind: TaskKind) -> AgentTask {
     AgentTask { id: id.into(), description: Some(format!("Do {id}")), kind, call: None }
@@ -90,4 +90,36 @@ fn a_denied_call_says_so_with_what_the_person_said_rather_than_failing() {
 
     assert_eq!(denial(&said), "tool denied: Use the full path");
     assert_eq!(denial(&Denied::default()), "tool denied");
+}
+
+#[test]
+fn a_turn_the_agent_started_by_itself_says_which_tasks_it_heard_had_ended() {
+    let ended = |id: &str, description: Option<&str>, outcome| EndedTask {
+        task: AgentTask {
+            id: id.into(),
+            description: description.map(String::from),
+            kind: TaskKind::Command,
+            call: None,
+        },
+        outcome,
+        wait: None,
+    };
+
+    let said =
+        own_turn(&[ended("b1", Some("Run the tests"), TaskOutcome::Failed), ended("b2", None, TaskOutcome::Finished)]);
+
+    assert_eq!(
+        said, "the agent picked up by itself, after: Run the tests failed; b2 finished",
+        "by its ID with no name"
+    );
+    let mut wait = ended("k3", Some("roundhouse/wait_for_pull_requests"), TaskOutcome::Failed);
+    wait.task.kind = TaskKind::Wait;
+    let unrecorded = "the agent picked up by itself, after: waited on a pull request (failed)";
+    assert_eq!(own_turn(std::slice::from_ref(&wait)), unrecorded, "not by its tool's name");
+    let mut kept = fixtures::pull_request_wait("k3");
+    kept.ended = Some(WaitEnded { at_ms: 2, how: WaitEnd::CalledOffByPerson });
+    wait.wait = Some(EndedWait::from(&kept));
+    let as_the_app_says = "the agent picked up by itself, after: waited on #7: required checks (Stopped)";
+    assert_eq!(own_turn(&[wait]), as_the_app_says, "from the hub's record, not the agent's word");
+    assert_eq!(own_turn(&[]), "the agent picked up by itself");
 }

@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use super::Claimed;
 use super::area::area;
 use super::calls::call::LineRange;
+use crate::event::EndedTask;
 use crate::model::{BranchName, CommitId};
 
 area! { "a turn";
@@ -23,8 +24,10 @@ area! { "a turn";
     /// it out from its model's prices, as Claude's `total_cost_usd` does. A turn's own cost is what it adds to the
     /// total before it, which the hub works out.
     Cost => cost: Claimed,
-    /// The agent starts turns by itself, with no prompt, and says why, as an [`OwnTurn`], which the hub records. The
-    /// hub records each like any turn, and doesn't take it for one a prompt started.
+    /// The agent starts turns by itself, with no prompt, and as one starts, says why when it can tell then, as an
+    /// [`EventBody::OwnTurn`](crate::event::EventBody::OwnTurn), such as the background tasks it heard had ended. A
+    /// turn whose reason it can't tell as it starts has none. The hub records each like any turn, and doesn't take it
+    /// for one a prompt started.
     OwnTurns => own_turns: Claimed,
     /// A chat can have a goal the agent works toward across turns, starting turns by itself until it's met, blocked,
     /// paused or out of budget, and the goal is reported whenever it changes, which the hub keeps on the session's
@@ -87,12 +90,15 @@ pub enum Ending {
     Unknown,
 }
 
-/// Why the agent started a turn by itself.
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
+/// Why the agent started a turn by itself, with what it took in.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[serde(tag = "why", rename_all = "snake_case")]
 pub enum OwnTurn {
-    /// One of its background tasks ended, and it takes in how.
-    TaskEnded,
+    /// Background tasks of its ended, and it takes in how. Several can end before it starts.
+    TaskEnded {
+        /// In the order it heard.
+        ended: Vec<EndedTask>,
+    },
     /// It set itself to carry on at a time, which came.
     Scheduled,
     /// Its goal isn't met.

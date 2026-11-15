@@ -106,7 +106,49 @@ impl WaitEnd {
     }
 }
 
+/// Which pull requests a wait watches, and until what.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[serde(tag = "on", rename_all = "snake_case")]
+pub enum Watching {
+    /// The branch's pull request, as a wait asked for with no numbers watches, which was `number` as it started.
+    Branch { number: u64, until: WaitUntil },
+    /// The pull requests it was asked to watch, with the lower ones of a stack it watches, as it last read them.
+    PullRequests { numbers: Vec<u64>, until: WaitUntil },
+    /// One a newer hub knows.
+    #[serde(other)]
+    Unknown,
+}
+
+/// What a turn the agent started by itself keeps of a wait it heard had ended: which pull requests it watched, until
+/// what, and how it ended, with its id for the rest. Not the whole [`Wait`], whose snapshot of every pull request would
+/// make what's in it the log's stored form, and which goes on changing in a wait that hasn't ended.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct EndedWait {
+    pub id: WaitId,
+    pub watching: Watching,
+    /// `None` when the hub hadn't recorded its end, as when its tool answered with an error.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ended: Option<WaitEnded>,
+}
+
+impl From<&Wait> for EndedWait {
+    fn from(wait: &Wait) -> Self {
+        EndedWait { id: wait.id.clone(), watching: wait.watching(), ended: wait.ended }
+    }
+}
+
 impl Wait {
+    /// Which pull requests it watches, and until what.
+    pub fn watching(&self) -> Watching {
+        match &self.watch {
+            Some(watch) => Watching::PullRequests {
+                numbers: watch.snapshot.pull_requests.iter().map(|row| row.pull_request.number).collect(),
+                until: self.until,
+            },
+            None => Watching::Branch { number: self.number, until: self.until },
+        }
+    }
+
     pub fn result(&self) -> Option<super::PullRequestWaitResult> {
         let ended = self.ended?;
         let watch = *self.watch.clone()?;

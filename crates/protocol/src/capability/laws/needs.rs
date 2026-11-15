@@ -8,6 +8,7 @@ pub fn needs(body: &EventBody) -> Vec<Capability> {
     match body {
         EventBody::AgentTasks { tasks, .. } => tasks.iter().map(|task| task_needs(task.kind)).collect(),
         EventBody::AgentLimits { .. } => vec![crate::capability::account::Capability::Limits.into()],
+        EventBody::OwnTurn(_) => vec![turns::Capability::OwnTurns.into()],
         EventBody::SubagentStarted { .. } | EventBody::SubagentContext { .. } | EventBody::SubagentEnded { .. } => {
             vec![background::Capability::Subagents.into()]
         }

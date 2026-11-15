@@ -11,6 +11,7 @@ pub(super) fn claims() -> Capabilities {
     claims.turns.cancel = Some(turns::Cancel { stops: turns::CancelStops::Nothing });
     claims.turns.tokens = Some(Claimed {});
     claims.turns.cost = Some(Claimed {});
+    claims.turns.own_turns = Some(Claimed {});
     let full = approvals::ApprovalMode {
         unasked: approvals::Unasked::Everything,
         beyond: approvals::Beyond::Asks,

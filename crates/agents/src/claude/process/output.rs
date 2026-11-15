@@ -26,7 +26,7 @@ pub(super) async fn read_stdout(mut stdout: Output, shared: Arc<Shared>, output:
         if line.trim().is_empty() {
             continue;
         }
-        let Normalized { dropped, parsed, relisted } = normalizer.line(&line);
+        let Normalized { dropped, parsed, after } = normalizer.line(&line);
         let dropped = dropped.into_iter().map(|tool_use_id| EventBody::ToolCallDropped { tool_use_id });
         if !deliver_shown(&shared, &output, dropped).await {
             return;
@@ -70,7 +70,7 @@ pub(super) async fn read_stdout(mut stdout: Output, shared: Arc<Shared>, output:
                 item
             }
         };
-        if !deliver(&shared, &output, item).await || !deliver_shown(&shared, &output, relisted).await {
+        if !deliver(&shared, &output, item).await || !deliver_shown(&shared, &output, after).await {
             return;
         }
     }
@@ -198,6 +198,7 @@ fn track_approval(shared: &Shared, body: &EventBody) {
         | EventBody::AgentInit { .. }
         | EventBody::AgentState { .. }
         | EventBody::AgentTasks { .. }
+        | EventBody::OwnTurn(_)
         | EventBody::AgentLimits { .. }
         | EventBody::Assistant { .. }
         | EventBody::AgentUser { .. }
