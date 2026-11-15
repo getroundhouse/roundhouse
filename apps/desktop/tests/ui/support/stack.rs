@@ -74,14 +74,12 @@ impl Stack {
 }
 
 impl Drop for Stack {
+    /// Stops the hub, and waits for it to exit. One that's gone already, such as one of another build that a test
+    /// killed, is what was wanted.
     fn drop(&mut self) {
-        if let Ok(client) = Client::connect(&self.hub.paths.socket, "test") {
-            let _ = client.hub_shutdown();
-        }
-        let deadline = Instant::now() + Duration::from_secs(5);
-        while self.hub.paths.socket.exists() && Instant::now() < deadline {
-            std::thread::sleep(Duration::from_millis(20));
-        }
+        let stopped = client_core::stop_hub(&self.hub.paths.socket);
+        // Not again in a test that failed, since a panic as it unwinds would end the run without saying why.
+        assert!(stopped.is_ok() || std::thread::panicking(), "the hub didn't stop: {stopped:?}");
     }
 }
 

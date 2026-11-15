@@ -3,12 +3,31 @@
 
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{AppContext as _, ElementId, Pixels, TestAppContext};
-use protocol::model::{Session, SessionId, SetupStatus, Workspace, WorkspaceId};
+use protocol::model::{RepoId, Session, SessionId, SetupStatus, Workspace, WorkspaceId};
 
 use super::{Stack, Ui};
 
-/// More workspaces than the sidebar has room for in the window.
-pub(crate) const MORE_THAN_FIT: usize = 40;
+/// More workspaces than the sidebar has room for in the window, which shows 15, and few enough that a test makes
+/// them quickly.
+pub(crate) const MORE_THAN_FIT: usize = 24;
+
+/// Makes `count` workspaces in `repo`, one after another, and answers them in the order they were made, each newer than
+/// the one before.
+///
+/// From one thread, rather than several at once, until #1322: `git worktree add` can fail while another of the
+/// repository's worktrees is part way through being made, and nothing yet keeps two workers from making them at once.
+pub(crate) fn made_one_at_a_time(stack: &Stack, repo: &RepoId, count: usize) -> Vec<WorkspaceId> {
+    let client = stack.client();
+    let (mut made, mut newest) = (Vec::new(), i64::MIN);
+    for _ in 0..count {
+        let workspace = client.workspace_create(repo, None, None, None).unwrap();
+        // Making one takes far longer than the millisecond its time is in, so each is newer, which the order relies on.
+        assert!(workspace.created_at_ms > newest, "made in the same millisecond as the one before");
+        newest = workspace.created_at_ms;
+        made.push(workspace.id);
+    }
+    made
+}
 
 /// A window with three workspaces in one repository, made in the order they're returned, each with its chat.
 pub(crate) fn three_workspaces<'a>(
@@ -30,7 +49,7 @@ pub(crate) fn three_workspaces<'a>(
 pub(crate) fn more_than_fit<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> (Ui<'a>, Vec<WorkspaceId>) {
     let client = stack.client();
     let repo = client.repo_add(stack.repo().to_str().unwrap()).unwrap();
-    let made = Vec::from_fn(MORE_THAN_FIT, |_| client.workspace_create(&repo.id, None, None, None).unwrap().id);
+    let made = made_one_at_a_time(stack, &repo.id, MORE_THAN_FIT);
     let mut ui = Ui::open(cx, stack);
     ui.wait("every workspace", |ui| ui.view().visible_workspaces().len() == MORE_THAN_FIT);
     wait_out_setup(&mut ui);

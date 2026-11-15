@@ -7,7 +7,8 @@ use gpui_kit::{Pixels, SharedString, TestAppContext, px};
 use protocol::model::{RepoId, WorkspaceId};
 
 use crate::support::{
-    MORE_THAN_FIT, Stack, Ui, home_row, order, project_row, sidebar_row as row, top, two_projects, wait_out_setup,
+    MORE_THAN_FIT, Stack, Ui, home_row, made_one_at_a_time, order, project_row, sidebar_row as row, top, two_projects,
+    wait_out_setup,
 };
 
 /// Where the next project's row starts once `project` is collapsed: under its row, as it's drawn, and the 8px between
@@ -223,8 +224,7 @@ fn a_fold_turned_back_partway_goes_on_from_where_it_had_got_to(cx: &mut TestAppC
 fn what_comes_after_a_long_project_slides_out_of_sight_as_it_opens_rather_than_going_at_once(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let (mut ui, [first, second], _) = two_projects(cx, &stack);
-    let client = stack.client();
-    let made = Vec::from_fn(MORE_THAN_FIT, |_| client.workspace_create(&first, None, None, None).unwrap().id);
+    let made = made_one_at_a_time(&stack, &first, MORE_THAN_FIT);
     // The newest, which is the first project's first row.
     let upper = made.last().unwrap();
     ui.wait("every workspace", |ui| ui.view().visible_workspaces().len() == MORE_THAN_FIT + 4);

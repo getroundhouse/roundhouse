@@ -24,6 +24,8 @@ pub use build_line::{Agents, BuildLine, Updating};
 pub use hub_source::HubSource;
 pub use quitting::Quitting;
 pub(crate) use quitting::quit;
+#[cfg(feature = "testing")]
+pub use quitting::the_keeping_wait_is;
 pub use restarts::UpdateQuestion;
 pub(crate) use title_bar::TOP_STRIP_HEIGHT;
 pub use title_bar::TitleBar;

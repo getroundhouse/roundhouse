@@ -1,10 +1,11 @@
-//! A process held still, such as a hub that doesn't answer, for a test of what's on its way to it meanwhile.
+//! A process held still, such as a hub that doesn't answer, for a test of what's on its way to it meanwhile, and
+//! quitting given less time to wait for it.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
-use super::TIMEOUT;
+use super::{TIMEOUT, Ui};
 
 /// A process stopped, as a hub that doesn't answer, until this goes.
 pub(crate) struct Frozen(String);
@@ -65,4 +66,16 @@ fn stopped(pid: &str) -> bool {
 fn stopped(pid: &str) -> bool {
     let shown = std::process::Command::new("ps").args(["-o", "stat=", "-p", pid]).output().unwrap();
     String::from_utf8_lossy(&shown.stdout).trim_start().starts_with('T')
+}
+
+/// How long quitting waits for a frozen hub, in a test whose hub is held still until quitting has given up on it. The
+/// hub can't answer however long it's given, so this only has to be long enough to be a wait.
+const GIVE_UP_AFTER: Duration = Duration::from_millis(250);
+
+impl Ui<'_> {
+    /// Has quitting, and restarting to update, give up on what's on its way to a hub after [`GIVE_UP_AFTER`], rather
+    /// than the app's own wait, for a test whose hub is held still until after they've given up on it.
+    pub(crate) fn give_up_on_a_frozen_hub_soon(&mut self) {
+        self.cx.update(|cx| desktop::app::the_keeping_wait_is(GIVE_UP_AFTER, cx));
+    }
 }
