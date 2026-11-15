@@ -29,21 +29,26 @@ pub(super) fn translate_call(wire: &ToolCallWire) -> Call {
 
 fn by_name(name: &str, args: &Value, wire: &ToolCallWire) -> Call {
     match name {
-        "run_command" => Call::Command(Command {
-            command: str_field(args, &["CommandLine", "command"]).or_else(|| wire.title.clone()).unwrap_or_default(),
-            cwd: None,
-            description: str_field(args, &["toolSummary", "description"]),
-            // `agy` has no time limit for a command. Its `WaitMsBeforeAsync` is how long it waits before it moves the
-            // command to the background, as its tool says, and the command goes on.
-            timeout_ms: None,
-            runs: if args.get("IsDaemon").and_then(Value::as_bool) == Some(true) {
-                Runs::Background
-            } else {
-                Runs::Waits
-            },
-            parts: Vec::new(),
-            unsandboxed: None,
-        }),
+        "run_command" => {
+            let given = str_field(args, &["CommandLine", "command"]);
+            // What it does is read only from the command it was given, since a title can say it otherwise.
+            let parts = given.as_deref().map_or_else(Vec::new, crate::command_parts::of);
+            Call::Command(Command {
+                command: given.or_else(|| wire.title.clone()).unwrap_or_default(),
+                cwd: None,
+                description: str_field(args, &["toolSummary", "description"]),
+                // `agy` has no time limit for a command. Its `WaitMsBeforeAsync` is how long it waits before it moves
+                // the command to the background, as its tool says, and the command goes on.
+                timeout_ms: None,
+                runs: if args.get("IsDaemon").and_then(Value::as_bool) == Some(true) {
+                    Runs::Background
+                } else {
+                    Runs::Waits
+                },
+                parts,
+                unsandboxed: None,
+            })
+        }
         "read_file" => match str_field(args, &["Path", "path"]).or_else(|| wire.locations.first().cloned()) {
             Some(path) => Call::Read(Read { path, lines: line_range(args), pages: None }),
             None => other(name, args),

@@ -1,7 +1,7 @@
 #![cfg(test)]
 use protocol::capability::calls::{
     Call, CallOutput,
-    call::{Command, Replaces},
+    call::{Command, CommandPart, Replaces},
     output::{Ended, Lines},
 };
 use protocol::capability::setup::ServerName;
@@ -114,4 +114,27 @@ fn what_agy_does_its_own_way_is_told_as_it_is_rather_than_as_another_kind_does_i
     assert_eq!(timeout_ms, None, "how long it waits before backgrounding a command isn't a time limit");
     let Call::Edit(edit) = edit else { panic!("{edit:?}") };
     assert_eq!(edit.edits[0].replaces, Replaces::Every, "agy replaces every place its target is");
+}
+
+/// A command says what it does from the command it was given, and nothing from a title alone, which needn't be it.
+#[test]
+fn a_command_says_what_it_does_from_its_own_words() {
+    let wire = |args: serde_json::Value, title: &str| ToolCallWire {
+        tool_call_id: "c".into(),
+        title: Some(title.into()),
+        name: Some("run_command".into()),
+        args: Some(args),
+        ..ToolCallWire::default()
+    };
+    let parts = |call: Call| {
+        let Call::Command(command) = call else { panic!("{call:?}") };
+        command.parts
+    };
+
+    let reads = translate_call(&wire(json!({ "CommandLine": "cat a.rs" }), "Read a.rs"));
+    let deletes = translate_call(&wire(json!({ "CommandLine": "cat a.rs | xargs rm" }), "Read a.rs"));
+    let titled = translate_call(&wire(json!({}), "cat a.rs"));
+    assert_eq!(parts(reads), [CommandPart::Read { path: "a.rs".into() }]);
+    assert_eq!(parts(deletes), [CommandPart::Other]);
+    assert_eq!(parts(titled), [], "a title alone says nothing of what it does");
 }
