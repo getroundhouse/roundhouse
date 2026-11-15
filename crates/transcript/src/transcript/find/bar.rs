@@ -13,7 +13,6 @@ use gpui_kit::{
 use look::{Hand as _, IconSizing as _, InRegion as _, Off as _, Region, Sizing as _, Typeset as _};
 
 use crate::transcript::Transcript;
-use client_core::session_log::SessionLog;
 
 /// How long typing pauses before what's typed is looked for, so a word isn't looked for a letter at a time.
 const PAUSE: Duration = Duration::from_millis(150);
@@ -88,7 +87,7 @@ impl Transcript {
         let finding = self.finding.as_ref()?;
         let colors = look::colors(cx);
         let muted = colors.text_muted;
-        let everything_held = self.session.read(SessionLog::holds_every_event);
+        let everything_held = self.log.holds_every_event();
         let says = finding.query.as_ref().map_or_default(|query| query.says(everything_held));
         let none = finding.query.as_ref().is_none_or(|query| query.counts.total() == 0);
         let step = |id: &'static str, icon: IconName, what: &'static str, forward: bool| {

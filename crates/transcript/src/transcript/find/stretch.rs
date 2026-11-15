@@ -37,8 +37,7 @@ impl Transcript {
     }
 
     fn counted_stretch(&mut self, holding: Vec<Position>, counted: Vec<(usize, usize)>, cx: &mut Context<Self>) {
-        let counted: Vec<(usize, usize)> =
-            self.session.read(|held| counted.into_iter().filter(|(row, _)| !is_loaded(held, *row)).collect());
+        let counted: Vec<(usize, usize)> = counted.into_iter().filter(|(row, _)| !is_loaded(&self.log, *row)).collect();
         let Some(query) = self.query_mut() else { return };
         query.counting = None;
         query.candidates.extend(holding);

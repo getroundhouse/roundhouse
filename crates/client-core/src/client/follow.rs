@@ -21,8 +21,10 @@ pub(super) trait Source: Send + 'static {
     /// Takes in one item. Returns whether it changed what's held.
     fn apply(&mut self, client: &Client, held: &Mutex<Self::Held>, item: SubscriptionItem) -> Result<bool>;
 
-    /// Does what a reader asked for, such as fetching history. Returns whether it changed what's held.
-    fn asked(&mut self, client: &Client, held: &Mutex<Self::Held>) -> Result<bool>;
+    /// Does what a reader asked for, such as fetching history. Returns whether it changed what's held. `tell` tells
+    /// readers of a change made part way, such as a page put in place before the next is fetched, so they see each as
+    /// it comes rather than once everything asked for is in.
+    fn asked(&mut self, client: &Client, held: &Mutex<Self::Held>, tell: &dyn Fn()) -> Result<bool>;
 
     /// There's a new connection, which may be to another hub, such as a newer one after a restart. Runs just before
     /// [`Source::resume`] does for it.
@@ -209,7 +211,7 @@ impl<S: Source> Follower<S> {
         }
         // Nothing can be fetched without a connection, so what's asked waits for one.
         if self.subscription.is_some() {
-            match self.source.asked(&self.client, &self.shared.held) {
+            match self.source.asked(&self.client, &self.shared.held, &|| self.shared.changed()) {
                 Ok(true) => self.shared.changed(),
                 Ok(false) => {}
                 Err(e) => self.shared.failed(FollowError::Asked(e)),

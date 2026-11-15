@@ -4,12 +4,12 @@
 
 use client_core::session_log::PromptState;
 use gpui_kit::{AppContext as _, Pixels, TestAppContext};
-use protocol::event::EventBody;
-use protocol::model::SessionStatus;
+use protocol::event::{EventBody, SessionEvent};
+use protocol::model::{Place, Seq, SessionId, SessionStatus};
 use protocol::prompt::Prompt;
 
 use crate::queue::queued;
-use crate::support::{Gate, Stack, Ui, top};
+use crate::support::{Gate, Stack, Ui, top, wait_until};
 
 /// A workspace whose agent is running a tool until the gate this answers is opened. A test that needs the turn to end
 /// opens it or stops the turn, and otherwise the agent works until the stack goes.
@@ -52,6 +52,63 @@ fn enter_while_the_agent_works_steers_it_and_the_prompt_waits_until_its_taken(cx
     assert!(!ended, "taken because the agent said so, not because the turn is over");
     second.open();
     ui.wait_idle_with("the steered answer", |text| text.contains("steered"));
+}
+
+/// A frame is drawn from the log as the transcript last caught up with it, and the log can settle a prompt while the
+/// frame is drawn, after a row has drawn it where it waited, its own or the end of the chat's. The row of the event
+/// that settled it, drawn after that in the same frame, leaves it where it waited, rather than drawing it twice, and
+/// the next frame draws it where it was taken.
+#[gpui_kit::test]
+fn a_prompt_taken_while_a_frame_is_drawn_is_drawn_once_in_that_frame(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
+    let mut ui = Ui::open(cx, &stack);
+    let first = working(&mut ui, &stack);
+    ui.paste_text("say:steered");
+    ui.press("enter");
+    let transcript = ui.transcript().unwrap();
+    let sent =
+        |e: &&SessionEvent| matches!(&e.body, EventBody::UserPrompt { prompt, .. } if prompt.text == "say:steered");
+    ui.wait("the prompt to be recorded", |ui| ui.events().iter().any(|e| sent(&e)));
+    let sent = ui.events().iter().find(sent).cloned().unwrap();
+    let (chat, own) = (ui.active_chat(), ui.row_of(&sent));
+    let handle = ui.handle;
+
+    ui.cx
+        .update_window(handle, |_, window, cx| {
+            transcript.update(cx, |t, cx| {
+                t.start_a_frame();
+                let end = t.list().row_count() - 1;
+                for row in [own, end] {
+                    t.draw_row_in_this_frame(row, window, cx);
+                }
+            });
+        })
+        .unwrap();
+    first.open_once_the_agent_has_a_prompt();
+    let taken = taking(&stack, &chat, sent.seq);
+    let row = ui.row_of(&taken);
+    wait_until("the app's log to have where the agent took it", || {
+        ui.cx.read_entity(&transcript, |t, _| t.event_at(row).is_some())
+    });
+    ui.cx
+        .update_window(handle, |_, window, cx| transcript.update(cx, |t, cx| t.draw_row_in_this_frame(row, window, cx)))
+        .unwrap();
+    let copied = ui.cx.read_entity(&transcript, |t, _| t.all_as_copied());
+    assert_eq!(copied.matches("say:steered").count(), 1, "drawn once in that frame: {copied:?}");
+
+    ui.wait_idle_with("the steered answer", |text| text.contains("steered"));
+    let copied = ui.cx.read_entity(&transcript, |t, _| t.all_as_copied());
+    assert_eq!(copied.matches("say:steered").count(), 1, "and where it was taken after: {copied:?}");
+}
+
+/// The event that records the agent taking the prompt recorded at `prompt` in `chat`, once the hub has it.
+fn taking(stack: &Stack, chat: &SessionId, prompt: Seq) -> SessionEvent {
+    let took = |e: &SessionEvent| matches!(e.body, EventBody::PromptTaken { prompt: of } if of == prompt);
+    let taken =
+        || stack.client().session_read_places(chat, None, Place::new(1), 1000).unwrap().0.into_iter().find(took);
+    wait_until("the agent to take the prompt", || taken().is_some());
+    taken().unwrap()
 }
 
 /// How far down the window the lowest of `part`'s elements was drawn.

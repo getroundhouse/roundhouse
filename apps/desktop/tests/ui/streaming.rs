@@ -58,8 +58,8 @@ fn a_reply_shows_all_of_itself_once_it_is_recorded_however_its_end_arrived(cx: &
 }
 
 /// A long reply, which the transcript parses on another thread once it's recorded, goes on showing what it was parsed
-/// as while it streamed while that's done, rather than going blank between. So does one drawn once its record has
-/// taken it from the end of the chat, and before the transcript has caught up with its log.
+/// as while it streamed while that's done, rather than going blank between. So does one drawn once the log's record of
+/// it has taken it from the end of the chat, and before the transcript has caught up with the log.
 #[gpui_kit::test]
 fn a_long_reply_never_goes_blank_as_it_is_recorded(cx: &mut TestAppContext) {
     let stack = Stack::new();
@@ -76,11 +76,11 @@ fn a_long_reply_never_goes_blank_as_it_is_recorded(cx: &mut TestAppContext) {
     stack.client().session_prompt(&session, &script, None).unwrap();
     ui.wait("the reply to stream", |ui| ui.cx.read_entity(&transcript, |t, _| t.streaming_text().len() > 5 * 1024));
     done.open();
-    wait_for_the_whole_turn(&stack, &ui, &session);
-    // Before the transcript has caught up with its log, which has taken the reply from the end of the chat.
+    let last = wait_for_the_whole_turn(&stack, &ui, &session);
+    // Before the transcript has caught up with the log, which has taken the reply from the end of the chat.
     ui.redraw();
-    let (listed, logged) = ui.cx.read_entity(&transcript, |t, _| (t.list().row_count(), t.row_count()));
-    assert_eq!(listed, logged + 1, "the frame told the list of the log's rows, and the end of the chat after them");
+    let shown = ui.cx.read_entity(&transcript, |t, _| t.row_count());
+    assert!(shown <= last, "drawn from the log from before the turn ended, with the reply at the end of the chat");
     ui.wait_idle_with("the recorded reply", |text| text.contains("part3"));
     ui.settle(Duration::from_millis(16));
 
@@ -95,11 +95,11 @@ fn a_long_reply_never_goes_blank_as_it_is_recorded(cx: &mut TestAppContext) {
     assert!(heights[tall..].iter().all(|height| *height > last / 2.), "and never went blank after: {heights:?}");
 }
 
-/// A frame tells the list of the log's rows as it starts, and the log can take a reply's record while the frame is
-/// drawn, after that, which takes the reply from the end of the chat. The end of the chat then draws it from its record,
-/// rather than it being drawn in neither.
+/// A frame is drawn from the log as the transcript last caught up with it, and the log can take a reply's record while
+/// the frame is drawn, which takes the reply from the end of the chat. The end of the chat goes on drawing it as it
+/// streamed until the transcript catches up, rather than it being drawn in neither.
 #[gpui_kit::test]
-fn a_reply_recorded_while_a_frame_is_drawn_is_drawn_at_the_end_from_its_record(cx: &mut TestAppContext) {
+fn a_reply_recorded_while_a_frame_is_drawn_stays_at_the_end_for_that_frame(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let session = stack.chat_in_a_new_workspace();
     let mut ui = Ui::open(cx, &stack);
@@ -114,7 +114,11 @@ fn a_reply_recorded_while_a_frame_is_drawn_is_drawn_at_the_end_from_its_record(c
     let handle = ui.handle;
     ui.cx
         .update_window(handle, |_, window, cx| {
-            transcript.update(cx, |t, cx| t.draw_the_end_as_the_list_has_it(window, cx));
+            transcript.update(cx, |t, cx| {
+                t.start_a_frame();
+                let end = t.list().row_count() - 1;
+                t.draw_row_in_this_frame(end, window, cx);
+            });
         })
         .unwrap();
     let copied = ui.cx.read_entity(&transcript, |t, _| t.all_as_copied());
@@ -122,9 +126,9 @@ fn a_reply_recorded_while_a_frame_is_drawn_is_drawn_at_the_end_from_its_record(c
 }
 
 /// Waits, without letting the app run, for the app's log to hold all of the turn the agent has just ended, so nothing
-/// more comes to it until the next prompt. The turn's end has the chat idle, and the agent says it's idle after that,
-/// the last it sends of a turn, which comes to the log as a row of its own.
-fn wait_for_the_whole_turn(stack: &Stack, ui: &Ui, session: &SessionId) {
+/// more comes to it until the next prompt, and says which row has the last of it. The turn's end has the chat idle, and
+/// the agent says it's idle after that, the last it sends of a turn, which comes to the log as a row of its own.
+fn wait_for_the_whole_turn(stack: &Stack, ui: &Ui, session: &SessionId) -> usize {
     let said_idle = |event: &SessionEvent| matches!(event.body, EventBody::AgentState { state: AgentRunState::Idle });
     wait_until("the agent to say it's idle, after the turn's end", || {
         let ended = stack.client().session_get(session).unwrap().status == SessionStatus::Idle;
@@ -133,6 +137,7 @@ fn wait_for_the_whole_turn(stack: &Stack, ui: &Ui, session: &SessionId) {
     let last = ui.row_of(&stack.newest_event(session));
     let transcript = ui.transcript().unwrap();
     wait_until("the turn to reach the app", || ui.cx.read_entity(&transcript, |t, _| t.event_at(last).is_some()));
+    last
 }
 
 /// Whether the agent's words in `body` say `text`.

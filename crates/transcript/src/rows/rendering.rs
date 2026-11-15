@@ -10,7 +10,6 @@ use crate::texts::{Of, TextAt, Texts};
 use crate::transcript::{Model, Transcript};
 use crate::{attachments, find};
 use around::{Around, Closes, asks_questions, drawn_in_its_call, drawn_in_row};
-use client_core::OpenSession;
 use client_core::session_log::{By, Row, SessionLog};
 use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::{
@@ -46,15 +45,19 @@ pub(crate) struct Shared {
     pub(crate) selection: Selection,
 }
 
+/// Draws the list's row `item` from `log`, the version of the log whose rows the list was last told of, which every
+/// row of a frame is drawn from. So a frame draws each of the log's events in one place, however much the log takes
+/// while it's drawn: a prompt where it waits or where the agent took it, and a reply at the end of the chat as it's
+/// written or from its record. The list's last row is the end of the chat.
 pub(crate) fn render_row(
     model: &Rc<RefCell<Model>>,
-    session: &OpenSession,
+    log: &SessionLog,
     shared: &Shared,
     item: Item,
     cx: &mut App,
 ) -> Option<AnyElement> {
     let Item { ix, tail } = item;
-    let drawn = render_row_inner(model, session, shared, item, cx)?;
+    let drawn = render_row_inner(model, log, shared, item, cx)?;
     let m = model.borrow();
     if m.alone.is_none() {
         return Some(column(drawn).into_any_element());
@@ -77,66 +80,47 @@ pub(crate) fn list_row_of(of: Of, tail: usize) -> Option<usize> {
     }
 }
 
-/// What a row shows, copied out so the log isn't held while it's drawn.
-#[expect(clippy::large_enum_variant, reason = "made for a row, or the few the last row takes in, and drawn at once")]
-enum Shown {
+/// What a row shows, from the version of the log the frame is drawn from.
+#[expect(clippy::large_enum_variant, reason = "made for a row, and drawn at once")]
+enum Shown<'a> {
     /// With how the log is read, which says whether the subagents' work is kept apart, in the subagent tab, and the
     /// prompts the agent hasn't read yet.
-    Tail(Tail, By, Vec<Waiting>),
+    Tail(&'a Tail, By, Vec<Waiting>),
     /// The place in the log of the row's own event, which its texts are placed by, and the event it draws, which for a
     /// prompt is the one the row's event settled.
-    Event(Seq, SessionEvent, Around),
+    Event(Seq, &'a SessionEvent, Around),
     Unloaded,
     /// Drawn elsewhere, so its own row is empty: a subagent's event, which its call draws, in the subagent tab, its
     /// last words, which its report says, or a prompt, drawn where the agent took it or at the end.
     InCall(Seq),
 }
 
-/// Draws the list's row `item`. The list's last row is the end of the chat, and draws the log's tail after any loaded
-/// rows the log has from there on. The list is told of the log's rows as each frame starts, and a thread of its own
-/// fills the log, so the log can gain rows while the frame is drawn, such as the record of a reply, which takes the
-/// reply from the log's tail as it comes. Each row reads the log once, so each of the log's rows is drawn in at most
-/// one of the list's rows, and a reply recorded part way through a frame is drawn at the end of the chat or from its
-/// record, by whether it came before the last row read the log, and never in neither. Rows that come after the end
-/// are loaded, since the log keeps the newest. A log by place that learns how far it goes reaches back to rows that
-/// aren't, which are left for the list to fetch once it's told of them.
+/// Draws the list's row `item`, as [`render_row`] says.
 fn render_row_inner(
     model: &Rc<RefCell<Model>>,
-    session: &OpenSession,
+    log: &SessionLog,
     shared: &Shared,
     item: Item,
     cx: &mut App,
 ) -> Option<AnyElement> {
     let Item { ix, tail } = item;
     let find = model.borrow().find.clone();
-    let (ahead, shown) = {
+    let shown = {
         let m = model.borrow();
-        session.read(|log| {
-            let end = || Shown::Tail(log.tail().clone(), log.by(), tail::waiting(log, &m));
-            if ix >= tail {
-                let loaded = |row| matches!(log.row(row), Row::Event(_)).then(|| Shown::of(log, &m, row));
-                return ((ix..log.row_count()).map_while(loaded).collect(), end());
-            }
-            (Vec::new(), if ix >= log.row_count() { end() } else { Shown::of(log, &m, ix) })
-        })
+        if ix >= tail { Shown::Tail(log.tail(), log.by(), tail::waiting(log, &m)) } else { Shown::of(log, &m, ix) }
     };
-    let ahead: Vec<_> = ahead.into_iter().filter_map(|shown| render_shown(model, shared, &find, shown, cx)).collect();
-    let drawn = render_shown(model, shared, &find, shown, cx)?;
-    if ahead.is_empty() {
-        return Some(drawn);
-    }
-    Some(v_flex().w_full().children(ahead).child(drawn).into_any_element())
+    render_shown(model, shared, &find, shown, cx)
 }
 
-impl Shown {
+impl<'a> Shown<'a> {
     /// What the log's row `row` shows: its event, with what's around it, or nothing, for an event drawn elsewhere.
-    fn of(log: &SessionLog, m: &Model, row: usize) -> Self {
+    fn of(log: &'a SessionLog, m: &Model, row: usize) -> Self {
         match log.row(row) {
             Row::Event(event) if drawn_in_its_call(log, m, event) || alone::repeats_report(log, m, row) => {
                 Shown::InCall(event.seq)
             }
             Row::Event(event) => match drawn_in_row(log, event) {
-                Some(drawn) => Shown::Event(event.seq, drawn.clone(), Around::read(log, m, drawn.seq, &drawn.body)),
+                Some(drawn) => Shown::Event(event.seq, drawn, Around::read(log, m, drawn.seq, &drawn.body)),
                 None => Shown::InCall(event.seq),
             },
             Row::Unloaded => Shown::Unloaded,
@@ -161,7 +145,7 @@ fn render_shown(
             }
             let m = model.borrow();
             let pull_request = m.pull_request.as_ref();
-            let end = EndOfChat { tail: &tail, waiting: &waiting, at_work: &m.at_work, folds: &m.folds, pull_request };
+            let end = EndOfChat { tail, waiting: &waiting, at_work: &m.at_work, folds: &m.folds, pull_request };
             shared.texts.drawing(Of::Tail, || render_tail(&end, shared, by, cx))
         }
         // Each text an event's row no longer draws is hidden, such as one in a fold that's been closed, or all of
@@ -169,7 +153,7 @@ fn render_shown(
         Shown::Event(row, event, around) => {
             attachments::fetch_missing(model, &shared.this, Some(event.seq), around.images(), cx);
             let prompt_at = TextAt::only(row, 0);
-            shared.texts.drawing(Of::Event(row), || render_event(&event, &around, prompt_at, shared, find, cx))
+            shared.texts.drawing(Of::Event(row), || render_event(event, &around, prompt_at, shared, find, cx))
         }
         Shown::InCall(seq) => shared.texts.drawing(Of::Event(seq), empty),
         Shown::Unloaded => return None,

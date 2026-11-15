@@ -129,7 +129,7 @@ impl Transcript {
 
     /// Draws the end of the turn `reply` again, for what it says of the cache. Not loaded, so not drawn either.
     fn redraw_reply(&self, reply: Seq) {
-        if let Some(row) = self.session.read(|log| log.row_of(reply)) {
+        if let Some(row) = self.log.row_of(reply) {
             self.list.out_of_date(row..row + 1);
         }
     }
@@ -138,13 +138,12 @@ impl Transcript {
     /// that loses it, since Retry makes a card taller. The record, the events and what's sent each change it, and the
     /// first two arrive apart in either order, so it's followed as each changes rather than as a card is drawn.
     pub(super) fn follow_retry(&self) {
-        let now = self.session.read(|log| crate::rows::retry_at(log, &self.model.borrow().at_work));
+        let now = crate::rows::retry_at(&self.log, &self.model.borrow().at_work);
         let before = std::mem::replace(&mut self.model.borrow_mut().retry_at, now);
         if before == now {
             return;
         }
-        let rows: Vec<usize> =
-            self.session.read(|log| [before, now].into_iter().flatten().filter_map(|seq| log.row_of(seq)).collect());
+        let rows: Vec<usize> = [before, now].into_iter().flatten().filter_map(|seq| self.log.row_of(seq)).collect();
         for row in rows {
             self.list.out_of_date(row..row + 1);
         }
@@ -192,7 +191,7 @@ impl Transcript {
             }
             let repeated = {
                 let m = self.model.borrow();
-                self.session.read(|log| crate::rows::rows_repeating_report(log, &m))
+                crate::rows::rows_repeating_report(&self.log, &m)
             };
             for row in repeated {
                 self.list.out_of_date(row..row + 1);

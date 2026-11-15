@@ -1,7 +1,7 @@
 use super::super::Transcript;
 use super::{hover, list};
 use crate::list::TranscriptList;
-use client_core::OpenSession;
+use client_core::session_log::SessionLog;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, ClickEvent, Context, DispatchPhase, Div, ElementId, Entity, EntityId, InteractiveElement,
@@ -75,8 +75,8 @@ pub(in super::super) struct Outline {
 }
 
 impl Outline {
-    pub(super) fn read(&mut self, session: &OpenSession) -> Rc<[Line]> {
-        let changed = session.read(|log| {
+    pub(super) fn read(&mut self, log: &SessionLog) -> Rc<[Line]> {
+        let changed = {
             let changed = log.outline_changes() != self.changes;
             if changed {
                 let prompts = log.prompt_lines().zip(1..).map(|(line, number)| Line {
@@ -93,7 +93,7 @@ impl Outline {
                 self.changes = log.outline_changes();
             }
             changed
-        });
+        };
         if changed {
             self.rows.follow(&self.lines);
         }
@@ -144,7 +144,7 @@ impl Transcript {
         cx: &mut Context<Self>,
     ) -> Div {
         let around = div().relative().size_full();
-        let lines = self.outline.read(&self.session);
+        let lines = self.outline.read(&self.log);
         if !lines.iter().any(Line::is_prompt) {
             return around.child(chat);
         }

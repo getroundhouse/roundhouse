@@ -36,7 +36,7 @@ impl Transcript {
         }
         let open = |transcript: &Self| -> Vec<Seq> {
             let m = transcript.model.borrow();
-            transcript.session.read(|log| log.open_approvals(m.approvals.as_ref()).iter().map(|e| e.seq).collect())
+            transcript.log.open_approvals(m.approvals.as_ref()).iter().map(|e| e.seq).collect()
         };
         let before = open(self);
         self.session.waiting_on(recorded.as_ref());
@@ -91,19 +91,18 @@ impl Transcript {
     /// The requests waiting that are asked in the composer's place, oldest first: every one but a plan.
     fn waiting_to_be_asked(&self) -> Vec<Waiting> {
         let m = self.model.borrow();
-        self.session.read(|log| {
-            log.open_approvals(m.approvals.as_ref())
-                .into_iter()
-                .filter_map(|event| {
-                    let EventBody::ApprovalRequested { approval_id, .. } = &event.body else { return None };
-                    let (seq, approval_id) = (event.seq, approval_id.clone());
-                    let asked_by = Asks::asked_by(&event.body).cloned();
-                    let claims =
-                        m.claims.as_ref().filter(|claims| Some(claims.run) == event.run).map(|claims| &*claims.claims);
-                    Some(Waiting { seq, approval_id, asks: Asks::of(&event.body, claims)?, asked_by })
-                })
-                .collect()
-        })
+        self.log
+            .open_approvals(m.approvals.as_ref())
+            .into_iter()
+            .filter_map(|event| {
+                let EventBody::ApprovalRequested { approval_id, .. } = &event.body else { return None };
+                let (seq, approval_id) = (event.seq, approval_id.clone());
+                let asked_by = Asks::asked_by(&event.body).cloned();
+                let claims =
+                    m.claims.as_ref().filter(|claims| Some(claims.run) == event.run).map(|claims| &*claims.claims);
+                Some(Waiting { seq, approval_id, asks: Asks::of(&event.body, claims)?, asked_by })
+            })
+            .collect()
     }
 
     pub fn answer_approval(&mut self, approval_id: ApprovalId, decision: ApprovalDecision, cx: &mut Context<Self>) {

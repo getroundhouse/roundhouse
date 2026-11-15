@@ -130,7 +130,7 @@ impl Transcript {
     /// What the bar says of the matches, while it's open.
     pub fn find_says(&self) -> Option<String> {
         let finding = self.finding.as_ref()?;
-        let everything_held = self.session.read(SessionLog::holds_every_event);
+        let everything_held = self.log.holds_every_event();
         Some(finding.query.as_ref().map_or_default(|query| query.says(everything_held)))
     }
 
@@ -160,7 +160,7 @@ impl Transcript {
         if let Some(needle) = needle {
             let (found, rows) = {
                 let m = self.model.borrow();
-                self.session.read(|log| held_to_count(log, &m, &needle))
+                held_to_count(&self.log, &m, &needle)
             };
             if let Some(query) = self.query_mut() {
                 query.candidates.extend(found);
@@ -186,7 +186,7 @@ impl Transcript {
         let Some(needle) = self.query().map(|query| query.needle.clone()) else { return };
         let counted = {
             let m = self.model.borrow();
-            self.session.read(|log| count_held(log, &m, &needle, rows))
+            count_held(&self.log, &m, &needle, rows)
         };
         if let Some(query) = self.query_mut() {
             for (row, count) in counted {
@@ -203,9 +203,7 @@ impl Transcript {
         let Some(query) = self.query() else { return };
         let (found, rows) = {
             let m = self.model.borrow();
-            self.session.read(|log| {
-                changed_to_count(log, &m, (&query.needle, &query.candidates, &query.counts), changed.clone())
-            })
+            changed_to_count(&self.log, &m, (&query.needle, &query.candidates, &query.counts), changed)
         };
         if let Some(query) = self.query_mut() {
             query.candidates.extend(found);
@@ -217,7 +215,7 @@ impl Transcript {
     /// Counts the next stretch the search has read, unless it's counting one, and says if the search failed.
     pub(crate) fn find_news(&mut self, cx: &mut Context<Self>) {
         let model = self.model.clone();
-        let settled = self.session.read(SessionLog::settled_prompts);
+        let settled = self.log.settled_prompts();
         let Some(query) = self.query_mut() else { return };
         if query.counting.is_none()
             && let Some(stretch) = query.search.take()
@@ -238,12 +236,12 @@ impl Transcript {
     /// it can hold another: once every row there is held, or the search can't say more.
     pub(super) fn after_counting(&mut self, cx: &mut Context<Self>) {
         let top = self.list.top().row;
-        let everything_held = self.session.read(SessionLog::holds_every_event);
-        let session = self.session.clone();
+        let everything_held = self.log.holds_every_event();
+        let log = self.log.clone();
         let Some(query) = self.query_mut() else { return };
         if query.first {
             let settled = query.complete(everything_held) || query.searched() != Searched::Underway;
-            let first = session.read(|log| first_match(&query.counts, top, settled, log));
+            let first = first_match(&query.counts, top, settled, &log);
             if let Some(first) = first {
                 query.first = false;
                 self.select(first, cx);
