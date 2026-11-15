@@ -9,7 +9,7 @@ use protocol::find::Needle;
 use super::is_loaded;
 use crate::find::FindLook;
 use crate::find::reveal::Reveal;
-use crate::rows::{Found, Item, Shared, found_in_row, render_row};
+use crate::rows::{Found, found_in_row};
 use crate::transcript::Transcript;
 
 impl Transcript {
@@ -28,12 +28,11 @@ impl Transcript {
         cx: &mut Context<Self>,
     ) -> (BTreeMap<String, usize>, BTreeMap<String, usize>) {
         let Ok(needle) = Needle::new(query) else { return Default::default() };
-        let rows: Vec<usize> = self.session.read(|log| (0..log.row_count()).filter(|ix| is_loaded(log, *ix)).collect());
+        let rows: Vec<usize> = (0..self.log.row_count()).filter(|ix| is_loaded(&self.log, *ix)).collect();
         let mut counted = BTreeMap::new();
         {
             let mut m = self.model.borrow_mut();
-            let found: Vec<Found> =
-                self.session.read(|log| rows.iter().flat_map(|row| found_in_row(log, &m, &needle, *row)).collect());
+            let found: Vec<Found> = rows.iter().flat_map(|row| found_in_row(&self.log, &m, &needle, *row)).collect();
             for found in found {
                 for (key, fold) in &found.opens {
                     m.folds.choose(key.clone(), *fold, true);
@@ -42,17 +41,9 @@ impl Transcript {
             }
             m.find = Rc::new(FindLook::new(Some(needle), None, Reveal::default(), look::colors(cx)));
         }
-        let line_text = look::LineText::new(window, cx);
-        let shared = Shared {
-            this: cx.weak_entity(),
-            linked: self.linked.clone(),
-            line_text,
-            texts: self.texts.clone(),
-            selection: self.selection.clone(),
-        };
-        let tail = self.list.row_count().saturating_sub(1);
+        let row = self.frame_rows(look::LineText::new(window, cx), cx);
         for ix in rows {
-            render_row(&self.model, &self.session, &shared, Item { ix, tail }, cx);
+            row(ix, cx);
         }
         let drawn = self.model.borrow().find.drawn();
         let drawn =

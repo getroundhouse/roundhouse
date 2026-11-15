@@ -7,7 +7,6 @@ use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{PromptLine, Seq};
 
 use super::{Transcript, rows_and_loaded};
-use crate::rows::{Item, Shared, render_row};
 
 impl Transcript {
     /// The event at a row, if it's loaded.
@@ -54,8 +53,8 @@ impl Transcript {
         self.session.read(|log| log.tail().messages.iter().flat_map(|m| &m.blocks).map(|b| b.text.as_str()).collect())
     }
 
-    /// How many rows are loaded as the session's log has them now. The list is told of them as each frame starts, and
-    /// when the log says it has changed, which is after the last of the pages asked for together is in, so this can be
+    /// How many rows are loaded as the session's log has them now. The list is told of them as the transcript catches
+    /// up with the log, once the log says it has changed, as it does when each page is put in place, so this can be
     /// ahead of the list.
     pub fn loaded_rows(&self) -> usize {
         self.session.read(|log| rows_and_loaded(log).1.iter().map(ExactSizeIterator::len).sum())
@@ -79,20 +78,17 @@ impl Transcript {
         self.selection.as_copied()
     }
 
-    /// Draws the list's last row, the end of the chat, as the list was last told of the log's rows, as a frame does
-    /// once the log has gained rows since the frame started, for a test of what it shows then. Nothing else is drawn,
-    /// and the list isn't told.
-    pub fn draw_the_end_as_the_list_has_it(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    /// Starts a frame as the list does, for a test that then draws its rows one at a time with
+    /// [`Transcript::draw_row_in_this_frame`], so the log can change between them, as it can while a frame is drawn.
+    pub fn start_a_frame(&mut self) {
         self.texts.new_frame();
-        let shared = Shared {
-            this: cx.weak_entity(),
-            linked: self.linked.clone(),
-            line_text: look::LineText::new(window, cx),
-            texts: self.texts.clone(),
-            selection: self.selection.clone(),
-        };
-        let tail = self.list.row_count().saturating_sub(1);
-        render_row(&self.model, &self.session, &shared, Item { ix: tail, tail }, cx);
+    }
+
+    /// Draws the list's row `ix` as a frame does, in the frame drawn last or started by
+    /// [`Transcript::start_a_frame`], for a test of what it shows. Nothing else is drawn.
+    pub fn draw_row_in_this_frame(&mut self, ix: usize, window: &mut Window, cx: &mut Context<Self>) {
+        let row = self.frame_rows(look::LineText::new(window, cx), cx);
+        row(ix, cx);
     }
 
     /// What each text the transcript keeps the kit's blocks of was parsed from, which is what it shows.

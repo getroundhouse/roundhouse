@@ -94,9 +94,13 @@ impl OpenSession {
         read(&self.version())
     }
 
-    /// What changed since a view last looked.
-    pub fn take_changes(&self) -> Changes {
-        self.follow.quietly(|log| Arc::make_mut(log).take_changes())
+    /// The log as it is now, as [`OpenSession::version`] has it, with what changed since a view last caught up, taken
+    /// together so that what changed is what makes this version from the last one caught up with.
+    pub fn catch_up(&self) -> (Arc<SessionLog>, Changes) {
+        self.follow.quietly(|log| {
+            let changes = Arc::make_mut(log).take_changes();
+            (Arc::clone(log), changes)
+        })
     }
 
     /// Fetches what a view looking at this row needs.
@@ -157,7 +161,7 @@ impl OpenSession {
     }
 }
 
-struct SessionSource {
+pub(super) struct SessionSource {
     pub(super) session_id: SessionId,
     /// The view asked for.
     pub(super) wanted: View,
@@ -262,16 +266,20 @@ impl Source for SessionSource {
         })
     }
 
-    /// Fetches the pages around where the view is looking that aren't loaded, then each request waiting on an answer
-    /// that none of them holds, then the session's prompts if they haven't been listed.
-    fn asked(&mut self, client: &Client, held: &Mutex<Arc<SessionLog>>) -> Result<bool> {
+    /// Fetches the pages around where the view is looking that aren't loaded, nearest first, telling readers of each as
+    /// it's put in place, then each request waiting on an answer that none of them holds, then the session's prompts
+    /// if they haven't been listed.
+    fn asked(&mut self, client: &Client, held: &Mutex<Arc<SessionLog>>, tell: &dyn Fn()) -> Result<bool> {
         let pages = change(held).pages_to_fetch();
         let requests = change(held).requests_to_fetch();
         let fetched = !pages.is_empty() || !requests.is_empty();
         for range in pages {
             let start = range.start;
             match read_range(client, &self.session_id, &self.view, range) {
-                Ok(events) => change(held).install_page(start, events),
+                Ok(events) => {
+                    change(held).install_page(start, events);
+                    tell();
+                }
                 Err(e) => {
                     change(held).fetch_failed();
                     return Err(e);

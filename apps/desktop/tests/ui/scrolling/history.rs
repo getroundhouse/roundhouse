@@ -114,8 +114,7 @@ struct Step {
     /// How many rows the session's log holds, with the row that shows what's streaming.
     pub(super) in_the_log: usize,
     /// How many of them the list has been told of. A page goes into the log on another thread, and the list is told
-    /// as each frame starts, and once the pages asked for with it are all in. Rows drawn from the log meanwhile are
-    /// measured as they're drawn.
+    /// of it as the transcript catches up with the log, which it draws the rows from.
     pub(super) in_the_list: usize,
 }
 
@@ -323,7 +322,10 @@ fn a_place_on_the_scrollbars_track_is_the_same_row_however_long_the_thumb_rests_
     press(&mut ui, MouseMoveEvent { position: rest, pressed_button: held, ..Default::default() });
     ui.play(A_FRAME);
     let row = top(&ui);
-    ui.wait("the rows there to load", |ui| ui.cx.read_entity(&transcript, |t, _| t.event_at(row).is_some()));
+    // And the list to be told of them, since the rows are drawn from the log as the transcript last caught up with it.
+    ui.wait("the rows there to load", |ui| {
+        ui.cx.read_entity(&transcript, |t, _| t.event_at(row).is_some() && t.list().loaded_rows() == t.loaded_rows())
+    });
 
     // The pointer says where it is again and again, as a hand resting on it does, while the rows that loaded are
     // measured a few to a frame.

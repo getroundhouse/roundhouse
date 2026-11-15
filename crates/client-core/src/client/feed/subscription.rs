@@ -104,7 +104,7 @@ impl Source for RecordsSource {
     }
 
     /// Lists the subagents of a session a view has just asked for.
-    fn asked(&mut self, client: &Client, held: &Mutex<HubRecords>) -> Result<bool> {
+    fn asked(&mut self, client: &Client, held: &Mutex<HubRecords>, _: &dyn Fn()) -> Result<bool> {
         list_subagents(client, held)
     }
 }

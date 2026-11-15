@@ -45,7 +45,7 @@ impl Transcript {
         let Some(query) = self.query_mut() else { return };
         query.at = Some(at);
         query.going_to = Some(at);
-        if self.session.read(|log| is_loaded(log, at.row)) {
+        if is_loaded(&self.log, at.row) {
             self.show(at, cx);
         } else {
             // Drawing its row asks for its page, and the log says once it's here.
@@ -57,7 +57,7 @@ impl Transcript {
     /// Shows the match being gone to, if its row has loaded.
     pub(crate) fn go_on(&mut self, cx: &mut Context<Self>) {
         let Some(at) = self.query().and_then(|query| query.going_to) else { return };
-        if self.session.read(|log| is_loaded(log, at.row)) {
+        if is_loaded(&self.log, at.row) {
             self.show(at, cx);
         }
     }
@@ -71,7 +71,7 @@ impl Transcript {
         let needle = query.needle.clone();
         let texts = {
             let m = self.model.borrow();
-            self.session.read(|log| found_in_row(log, &m, &needle, at.row))
+            found_in_row(&self.log, &m, &needle, at.row)
         };
         let spots: Vec<(&crate::rows::Found, usize)> =
             texts.iter().flat_map(|found| (0..found.matches).map(move |nth| (found, nth))).collect();

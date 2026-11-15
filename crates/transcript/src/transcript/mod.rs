@@ -5,6 +5,7 @@ pub use events::TranscriptEvent;
 mod answers;
 mod events;
 mod find;
+mod model;
 mod outline;
 mod pull_request;
 mod record;
@@ -16,7 +17,7 @@ pub use pull_request::PullRequestStanding;
 pub(crate) use record::{AtWork, IdleCache};
 
 mod view;
-pub(crate) use view::Model;
+pub(crate) use model::Model;
 pub use view::Transcript;
 #[cfg(any(test, feature = "testing"))]
 use view::rows_and_loaded;

@@ -1,12 +1,10 @@
-use super::{events, find, outline, pull_request, record};
+use super::{Model, events, find, outline, record};
 use crate::attachments::Picture;
-use crate::find::FindLook;
-use crate::folds::{Fold, Folds};
+use crate::folds::Fold;
 use crate::item_key::ItemKey;
 use crate::linked_images::LinkedImages;
 use crate::list::TranscriptList;
 use crate::questions::QuestionPanel;
-use crate::rows::SubagentCalls;
 use crate::selection::Selection;
 use crate::texts::{Of, Texts};
 use client_core::session_log::{RecordedApprovals, SessionLog};
@@ -14,80 +12,17 @@ use client_core::{Client, OpenSession, View};
 use events::TranscriptEvent;
 use find::Finding;
 use gpui_kit::{
-    AppContext, Context, ElementId, Entity, EventEmitter, IntoElement, ParentElement as _, Render, SharedString, Task,
-    Window,
+    AnyElement, App, AppContext, Context, ElementId, Entity, EventEmitter, IntoElement, ParentElement as _, Render,
+    Task, Window,
 };
+use look::LineText;
 use protocol::attachment::Attachment;
 use protocol::event::SessionEvent;
-use protocol::model::{AttachmentId, Seq, Session, SessionId, Subagent, ToolUseId};
-use pull_request::PullRequestStanding;
+use protocol::model::{Seq, Session, SessionId, ToolUseId};
 use record::{AtWork, tick};
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
-
-pub(crate) struct Model {
-    /// What the agent the chat runs is called, as the hub describes it. `None` until it has, and from a hub that
-    /// doesn't.
-    pub agent: Option<SharedString>,
-    pub claims: Option<protocol::model::RunCapabilities>,
-    pub folds: Folds,
-    /// The images prompts carry, by attachment, from the first time a row drew each.
-    pub pictures: HashMap<AttachmentId, Picture>,
-    /// Where the calls that started subagents are, as rows have looked for them.
-    pub subagent_calls: RefCell<SubagentCalls>,
-    /// What the agent is at, as the session's record says, which the transcript's last row draws.
-    pub at_work: AtWork,
-    /// The failed request whose card offers Retry, as [`crate::rows::retry_at`] says, as of the last look.
-    pub retry_at: Option<Seq>,
-    /// Where the workspace's pull request stands on GitHub, which a line for a wait on it says. `None` until it's
-    /// known, and while there's none or nothing to say of it.
-    pub pull_request: Option<PullRequestStanding>,
-    /// The approvals the session's record says its agent is waiting on, which a plan's card and the panel follow.
-    /// None from a hub that doesn't say, whose are found among what's loaded.
-    pub approvals: Option<RecordedApprovals>,
-    /// Each subagent's record, by the call that started it, as the hub keeps them. None from a hub that doesn't. Each is
-    /// shared with client-core's snapshot, since every frame's rows take the records of the calls they draw, and one
-    /// can hold a call's whole input, such as all of a file it wrote.
-    pub subagents: HashMap<ToolUseId, Arc<Subagent>>,
-    /// The `seq` of the event each subagent's call was drawn in, so the row is measured again when its record
-    /// changes. A call's row is measured only once it's been drawn, so one that isn't here needs nothing.
-    pub subagent_rows: RefCell<HashMap<ToolUseId, Seq>>,
-    /// In the subagent tab, the call that started the subagent it shows, alone.
-    pub alone: Option<ToolUseId>,
-    /// What's being found in the chat, for rows to draw.
-    pub find: Rc<FindLook>,
-}
-
-impl Model {
-    /// One that's drawn nothing yet, for a chat or for its subagent tab.
-    pub(super) fn with(at_work: AtWork) -> Self {
-        Model {
-            agent: None,
-            claims: None,
-            folds: Folds::default(),
-            pictures: HashMap::new(),
-            subagent_calls: RefCell::default(),
-            at_work,
-            retry_at: None,
-            pull_request: None,
-            approvals: None,
-            subagents: HashMap::new(),
-            subagent_rows: RefCell::default(),
-            alone: None,
-            find: Rc::default(),
-        }
-    }
-}
-
-/// An idle chat, for tests that draw rows without one.
-#[cfg(test)]
-impl Default for Model {
-    fn default() -> Self {
-        Model::with(AtWork::default())
-    }
-}
 
 pub struct Transcript {
     pub(super) client: Client,
@@ -96,6 +31,9 @@ pub struct Transcript {
     pub(super) list_id: String,
     /// Client-core's copy of the session, which this only reads.
     pub(super) session: OpenSession,
+    /// The version of the session's log the transcript last caught up with, which is what it shows: the list was told
+    /// of its rows, every row of a frame is drawn from it, and everything else reads it, until the next catch up.
+    pub(super) log: Arc<SessionLog>,
     pub(super) model: Rc<RefCell<Model>>,
     /// The images the agent's text points to.
     pub(super) linked: LinkedImages,
@@ -146,7 +84,8 @@ impl Transcript {
             View::Whole | View::Own => session.id.to_string(),
         };
         let open = OpenSession::start_view(&client, session, view);
-        let (rows, loaded) = open.read(rows_and_loaded);
+        let log = open.version();
+        let (rows, loaded) = rows_and_loaded(&log);
         let this = cx.weak_entity();
         let texts = Texts::new(move |of, cx| {
             let _ = this.update(cx, |transcript, cx| transcript.redrawn(of, cx));
@@ -175,6 +114,7 @@ impl Transcript {
             session_id: session.id.clone(),
             list_id,
             session: open,
+            log,
             model,
             linked,
             texts,
@@ -210,37 +150,35 @@ impl Transcript {
     /// The approvals waiting on an answer, newest last.
     pub fn open_approvals(&self) -> Vec<SessionEvent> {
         let m = self.model.borrow();
-        self.session.read(|log| log.open_approvals(m.approvals.as_ref()).into_iter().cloned().collect())
+        self.log.open_approvals(m.approvals.as_ref()).into_iter().cloned().collect()
     }
 
     pub fn loaded_events(&self) -> usize {
-        self.session.read(SessionLog::loaded_events)
+        self.log.loaded_events()
     }
 
     /// Rows in the list, not counting the streaming tail.
     pub fn row_count(&self) -> usize {
-        self.session.read(SessionLog::row_count)
+        self.log.row_count()
     }
 
-    /// Tells the list how many rows the log has now, and which are loaded.
-    fn tell_the_list(&self) {
-        let (rows, loaded) = self.session.read(rows_and_loaded);
-        self.list.set_rows(rows, loaded);
-    }
-
-    /// Shows what changed in the session since this last looked, however much that is.
+    /// Shows what changed in the session since this last looked, however much that is. It takes the log as it is now,
+    /// with what changed since, and tells the list of its rows, so every frame until the next is drawn from a log
+    /// whose changes the list has been told of.
     pub(super) fn catch_up(&mut self, cx: &mut Context<Self>) {
-        let changes = self.session.take_changes();
+        let (log, changes) = self.session.catch_up();
+        self.log = log;
         let errors = self.session.take_errors();
         // What's asked opens and closes with an event, a row of its own rather than the tail, or is fetched alone.
-        let events = self.session.read(SessionLog::row_count);
+        let events = self.log.row_count();
         let events_changed = changes.rows.as_ref().is_some_and(|changed| changed.start < events);
-        self.tell_the_list();
+        let (rows, loaded) = rows_and_loaded(&self.log);
+        self.list.set_rows(rows, loaded);
         self.follow_retry();
-        self.session.read(|log| self.texts.let_go(log, self.selection.held().as_ref()));
+        self.texts.let_go(&self.log, self.selection.held().as_ref());
         if let Some(changed) = changes.rows {
             // A failure of the agent's own changes how rows around it are drawn.
-            let redrawn = self.session.read(|log| crate::rows::redrawn_with(log, changed));
+            let redrawn = crate::rows::redrawn_with(&self.log, changed);
             self.list.out_of_date(redrawn.clone());
             self.find_in_changes(redrawn, cx);
         }
@@ -263,7 +201,7 @@ impl Transcript {
     /// where it is in the window, with the fold where it was clicked, as far as the chat's end lets it.
     pub(crate) fn set_open(&mut self, seq: Seq, key: ItemKey, fold: Fold, open: bool, cx: &mut Context<Self>) {
         self.model.borrow_mut().folds.choose(key, fold, open);
-        if let Some(row) = self.session.read(|log| log.row_of(seq)) {
+        if let Some(row) = self.log.row_of(seq) {
             self.list.keep_still(row, open);
         }
         self.remeasure(seq, cx);
@@ -281,7 +219,7 @@ impl Transcript {
     /// Measures the row the event at `seq` is drawn in again, since what it draws has changed height, and draws it.
     pub(crate) fn remeasure(&mut self, seq: Seq, cx: &mut Context<Self>) {
         // Not loaded, so not measured either.
-        if let Some(row) = self.session.read(|log| log.row_drawing(seq)) {
+        if let Some(row) = self.log.row_drawing(seq) {
             self.list.out_of_date(row..row + 1);
             // What it draws has changed too.
             self.find_in_changes(row..row + 1, cx);
@@ -292,7 +230,7 @@ impl Transcript {
     /// Measures the row `of` is drawn in again, since it draws what it drew another way, and draws it.
     pub(crate) fn redrawn(&mut self, of: Of, cx: &mut Context<Self>) {
         let row = match of {
-            Of::Event(seq) => self.session.read(|log| log.row_of(seq)),
+            Of::Event(seq) => self.log.row_of(seq),
             Of::Head | Of::Tail | Of::Foot => {
                 self.list.row_count().checked_sub(1).and_then(|tail| crate::rows::list_row_of(of, tail))
             }
@@ -345,30 +283,37 @@ impl Transcript {
     }
 }
 
-impl Render for Transcript {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        self.keep_revealing(cx);
-        let (model, session, wanted) = (self.model.clone(), self.session.clone(), self.session.clone());
-        let line_text = look::LineText::new(window, cx);
+impl Transcript {
+    /// What draws each of the list's rows in this frame, by its index, from the version of the log the transcript last
+    /// caught up with, as `rows`' `render_row` says.
+    pub(super) fn frame_rows(
+        &self,
+        line_text: LineText,
+        cx: &mut Context<Self>,
+    ) -> impl Fn(usize, &mut App) -> Option<AnyElement> + 'static {
+        let (model, log) = (self.model.clone(), self.log.clone());
         let shared = crate::rows::Shared {
             this: cx.weak_entity(),
             linked: self.linked.clone(),
-            line_text: line_text.clone(),
+            line_text,
             texts: self.texts.clone(),
             selection: self.selection.clone(),
         };
-        // Before what's drawn reads the log, which may have changed since it was last looked at, so the list's last
-        // row, the end of the chat, takes in only what comes while the frame is drawn, as `rows`' `render_row_inner`
-        // says.
-        self.tell_the_list();
         let tail = self.list.row_count().saturating_sub(1);
+        move |ix, cx| crate::rows::render_row(&model, &log, &shared, crate::rows::Item { ix, tail }, cx)
+    }
+}
+
+impl Render for Transcript {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        self.keep_revealing(cx);
+        let wanted = self.session.clone();
+        let line_text = LineText::new(window, cx);
+        let row = self.frame_rows(line_text.clone(), cx);
         let room_under = crate::rows::room_under(&self.model.borrow());
         let rows = self.list.render(
             ElementId::Name(self.list_id.clone().into()),
-            move |ix, _, cx| {
-                let item = crate::rows::Item { ix, tail };
-                crate::rows::render_row(&model, &session, &shared, item, cx)
-            },
+            move |ix, _, cx| row(ix, cx),
             move |row| wanted.want(row),
             room_under,
             window,
