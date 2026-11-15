@@ -1,6 +1,6 @@
 use super::super::*;
 use crate::store::tests::store_with_session;
-use protocol::event::{ExitReason, SubagentOutcome};
+use protocol::event::{ExitReason, TaskOutcome};
 use protocol::fixtures;
 use protocol::model::SubagentStatus::{Finished, Stopped, Working};
 use serde_json::json;
@@ -15,7 +15,7 @@ pub(super) fn started(call: &str) -> EventBody {
     }
 }
 
-pub(super) fn ended(call: &str, outcome: SubagentOutcome, report: Option<&str>) -> EventBody {
+pub(super) fn ended(call: &str, outcome: TaskOutcome, report: Option<&str>) -> EventBody {
     EventBody::SubagentEnded { call: call.into(), outcome, report: report.map(Into::into), context_tokens: None }
 }
 
@@ -89,14 +89,14 @@ fn a_subagents_record_starts_with_what_it_was_asked_counts_its_calls_and_ends_wi
     assert_eq!(working.latest_call.unwrap().input, json!({"file_path": "read-2"}));
     assert!(working.rev > first.rev, "a client only takes a newer copy");
 
-    let (end, changed) = record(&store, &ended("agent", SubagentOutcome::Finished, Some("They're in tests/.")));
+    let (end, changed) = record(&store, &ended("agent", TaskOutcome::Finished, Some("They're in tests/.")));
     assert_eq!(changed, ["agent"]);
     let finished = subagent(&store, "agent");
     assert_eq!((finished.status, finished.ended_at_ms), (Finished, Some(end.ts_ms)));
     assert_eq!((finished.calls, finished.report.as_deref()), (2, Some("They're in tests/.")));
     assert!(finished.rev > working.rev);
 
-    assert_eq!(record(&store, &ended("agent", SubagentOutcome::Failed, None)).1, Vec::<String>::new(), "ended once");
+    assert_eq!(record(&store, &ended("agent", TaskOutcome::Failed, None)).1, Vec::<String>::new(), "ended once");
     assert_eq!(record(&store, &started("agent")).1, Vec::<String>::new(), "started once");
     assert_eq!(subagent(&store, "agent"), finished);
 }
@@ -150,7 +150,7 @@ fn a_subagents_record_counts_what_its_conversation_holds_and_changes_only_when_t
     assert_eq!(subagent(&store, "agent").context_tokens, Some(u64::MAX), "however large the agent says");
 
     record(&store, &holds("agent", 900));
-    assert_eq!(record(&store, &ended("agent", SubagentOutcome::Stopped, None)).1, ["agent"]);
+    assert_eq!(record(&store, &ended("agent", TaskOutcome::Stopped, None)).1, ["agent"]);
     assert_eq!(subagent(&store, "agent").context_tokens, Some(900), "an end that counts none leaves its count");
     assert_eq!(record(&store, &holds("agent", 5_000)).1, unchanged, "it's ended, and its end has the last word");
 
@@ -158,7 +158,7 @@ fn a_subagents_record_counts_what_its_conversation_holds_and_changes_only_when_t
     record(&store, &holds("other", 10));
     let end = EventBody::SubagentEnded {
         call: "other".into(),
-        outcome: SubagentOutcome::Finished,
+        outcome: TaskOutcome::Finished,
         report: None,
         context_tokens: Some(2_000),
     };
@@ -207,7 +207,7 @@ fn a_working_subagents_record_keeps_what_it_has_done_lately_and_lets_go_of_it_wh
     );
     assert_eq!(made.latest_call.as_ref().map(|call| call.id.as_str()), Some("read"), "for a client from before");
 
-    record(&store, &ended("agent", SubagentOutcome::Finished, Some("Found it.")));
+    record(&store, &ended("agent", TaskOutcome::Finished, Some("Found it.")));
     let finished = subagent(&store, "agent");
     assert_eq!(finished.recent, RecentWork::default(), "it's only shown while it works");
     assert_eq!(finished.latest_call, made.latest_call);
@@ -220,7 +220,7 @@ fn a_working_subagents_record_keeps_what_it_has_done_lately_and_lets_go_of_it_wh
 fn an_agent_that_exits_takes_the_subagents_still_working_with_it() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
-    for body in [started("working"), started("done"), ended("done", SubagentOutcome::Finished, Some("Done."))] {
+    for body in [started("working"), started("done"), ended("done", TaskOutcome::Finished, Some("Done."))] {
         record(&store, &body);
     }
     let done = subagent(&store, "done");
@@ -252,6 +252,6 @@ fn a_sessions_subagents_are_listed_oldest_first_as_of_a_revision() {
     assert!(subagents.iter().all(|subagent| subagent.rev <= rev));
     assert_eq!(store.list_subagents(&"t".into()).unwrap().0.len(), 1);
 
-    record(&store, &ended("a", SubagentOutcome::Finished, None));
+    record(&store, &ended("a", TaskOutcome::Finished, None));
     assert!(subagent(&store, "a").rev > rev, "a change since is newer than the list");
 }

@@ -4,7 +4,7 @@ use protocol::capability::calls::{
     Call, CallOutput,
     call::{Runs, StartSubagent},
 };
-use protocol::event::{AgentTask, ContentBlock, EventBody, SubagentOutcome, TaskKind};
+use protocol::event::{AgentTask, ContentBlock, EventBody, TaskKind, TaskOutcome};
 use protocol::model::ToolUseId;
 use serde_json::Value;
 
@@ -155,10 +155,10 @@ pub(in crate::codex) async fn complete(shared: &Shared, call: &ToolUseId, turn: 
     };
     control::settle(shared, Some(call)).await;
     let outcome = match turn["status"].as_str() {
-        Some("completed") => SubagentOutcome::Finished,
-        Some("interrupted") => SubagentOutcome::Stopped,
-        Some("failed") => SubagentOutcome::Failed,
-        _ => SubagentOutcome::Unknown,
+        Some("completed") => TaskOutcome::Finished,
+        Some("interrupted") => TaskOutcome::Stopped,
+        Some("failed") => TaskOutcome::Failed,
+        _ => TaskOutcome::Unknown,
     };
     let (parent, report) = ended;
     shared
@@ -174,7 +174,7 @@ pub(in crate::codex) async fn complete(shared: &Shared, call: &ToolUseId, turn: 
                 blocks: vec![ContentBlock::CallResult {
                     tool_use_id: call.clone(),
                     output: CallOutput::Report { report: report.unwrap_or_default() },
-                    is_error: matches!(outcome, SubagentOutcome::Failed),
+                    is_error: matches!(outcome, TaskOutcome::Failed),
                     denied: None,
                     images: Vec::new(),
                 }],

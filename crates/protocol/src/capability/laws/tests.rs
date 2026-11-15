@@ -4,7 +4,7 @@ use super::*;
 use crate::capability::output::{Thinking, ThinkingForm};
 use crate::capability::{Capabilities, Capability, approvals, asking, background, context, turns};
 use crate::capability::{Claimed, approvals as approval_claims, background as background_claims};
-use crate::event::{AgentTask, ApprovalOutcome, ExitReason, SubagentOutcome, TokenUsage, TurnOutcome};
+use crate::event::{AgentTask, ApprovalOutcome, ExitReason, TaskOutcome, TokenUsage, TurnOutcome};
 use crate::event::{Asking, CompactedBy, CompactionOutcome, ContentBlock, EventBody, SessionEvent, TaskKind};
 use crate::fixtures::{event, tool_result, tool_use, turn_ended};
 use crate::model::PermissionMode;
@@ -72,12 +72,7 @@ fn subagent_started(call: &str) -> EventBody {
 }
 
 fn subagent_ended(call: &str) -> EventBody {
-    EventBody::SubagentEnded {
-        call: call.into(),
-        outcome: SubagentOutcome::Finished,
-        report: None,
-        context_tokens: None,
-    }
+    EventBody::SubagentEnded { call: call.into(), outcome: TaskOutcome::Finished, report: None, context_tokens: None }
 }
 
 fn started() -> EventBody {

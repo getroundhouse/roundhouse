@@ -1,5 +1,5 @@
 use client_core::calls::{Failure, Recorded};
-use protocol::event::{AgentTask, CallKind, ContentBlock, Denied, SubagentOutcome, TaskKind};
+use protocol::event::{AgentTask, CallKind, ContentBlock, Denied, TaskKind, TaskOutcome};
 use protocol::fixtures;
 use protocol::model::Seq;
 use serde_json::{Value, json};
@@ -75,10 +75,10 @@ fn a_subagents_end_says_which_it_was() {
     printer.subagent(Seq::new(1), Some("Find the tests"), &"toolu_a".into());
     printer.subagent(Seq::new(2), None, &"toolu_b".into());
 
-    assert_eq!(printer.ending(&"toolu_a".into(), SubagentOutcome::Finished), "a subagent finished: Find the tests");
-    assert_eq!(printer.ending(&"toolu_b".into(), SubagentOutcome::Stopped), "a subagent stopped: toolu_b");
+    assert_eq!(printer.ending(&"toolu_a".into(), TaskOutcome::Finished), "a subagent finished: Find the tests");
+    assert_eq!(printer.ending(&"toolu_b".into(), TaskOutcome::Stopped), "a subagent stopped: toolu_b");
     assert_eq!(
-        printer.ending(&"toolu_c".into(), SubagentOutcome::Failed),
+        printer.ending(&"toolu_c".into(), TaskOutcome::Failed),
         "a subagent failed: toolu_c",
         "one it didn't see start"
     );
