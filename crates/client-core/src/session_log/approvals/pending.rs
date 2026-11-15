@@ -2,6 +2,7 @@ use super::super::{Position, SessionLog};
 use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{ApprovalId, OpenApproval, Seq, Session};
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
 
 /// The approvals a copy of a session's record says its agent is waiting on, and the newest event it had recorded then,
 /// so what's loaded after that says what has changed since, as a newer copy will once the feed tells of it.
@@ -21,11 +22,11 @@ impl RecordedApprovals {
 /// The requests a record says are waiting that no page loaded here holds, each fetched on its own. An open approval
 /// is usually near the end, which is always loaded, but a subagent working in the background can have asked long
 /// before, with the agent at work since.
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub(in super::super) struct Apart {
     /// The requests the record last said are waiting, by their `seq`s.
     pub(super) wanted: Vec<Seq>,
-    pub(super) fetched: BTreeMap<Seq, SessionEvent>,
+    pub(super) fetched: BTreeMap<Seq, Arc<SessionEvent>>,
     pub(super) in_flight: BTreeSet<Seq>,
     /// Those whose fetch failed, which aren't asked for again until [`Apart::retry_failed`].
     pub(super) failed: BTreeSet<Seq>,
@@ -44,7 +45,7 @@ impl Apart {
 
     /// Keeps `event`, which its page is letting go of, if it's a request that waits, to be fetched again if the page
     /// was.
-    pub(in super::super) fn keep_if_waiting(&mut self, event: SessionEvent, stale: bool) {
+    pub(in super::super) fn keep_if_waiting(&mut self, event: Arc<SessionEvent>, stale: bool) {
         if self.wanted.contains(&event.seq) {
             if stale {
                 self.stale.insert(event.seq);
@@ -70,10 +71,10 @@ impl SessionLog {
     /// they're found among what's loaded, as [`SessionLog::open_approvals_loaded`] says.
     pub fn open_approvals(&self, recorded: Option<&RecordedApprovals>) -> Vec<&SessionEvent> {
         let Some(recorded) = recorded else { return self.open_approvals_loaded() };
-        let request = |seq: Seq| self.event_of(seq).or_else(|| self.apart.fetched.get(&seq));
+        let request = |seq: Seq| self.event_of(seq).or_else(|| self.apart.fetched.get(&seq).map(Arc::as_ref));
         let mut open: Vec<&SessionEvent> = recorded.open.iter().filter_map(|approval| request(approval.seq)).collect();
         let since: Vec<&SessionEvent> =
-            self.events.values().rev().take_while(|event| event.seq > recorded.through).collect();
+            self.events.values().map(Arc::as_ref).rev().take_while(|event| event.seq > recorded.through).collect();
         for event in since.into_iter().rev() {
             follow(&mut open, event);
         }
@@ -117,7 +118,7 @@ impl SessionLog {
             return;
         };
         self.apart.stale.remove(&seq);
-        self.apart.fetched.insert(seq, event);
+        self.apart.fetched.insert(seq, Arc::new(event));
         self.changes.requests_fetched = true;
     }
 
@@ -138,7 +139,7 @@ impl SessionLog {
         let unbroken =
             self.events.keys().rev().zip(rows).take_while(|(position, row)| **position == Position::of_row(*row));
         let first = unbroken.last().map(|(position, _)| *position);
-        first.into_iter().flat_map(|first| self.events.range(first..).map(|(_, event)| event))
+        first.into_iter().flat_map(|first| self.events.range(first..).map(|(_, event)| event.as_ref()))
     }
 }
 

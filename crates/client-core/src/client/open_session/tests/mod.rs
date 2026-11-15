@@ -2,6 +2,7 @@
 
 mod compactions;
 mod prompts;
+mod versions;
 mod views;
 mod waiting;
 

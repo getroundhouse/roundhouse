@@ -2,6 +2,7 @@ use super::super::{Row, SessionLog};
 use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{Seq, SettledAt, Settlement};
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 /// Where a recorded prompt stands with the agent.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -30,9 +31,9 @@ pub enum PromptAt {
 /// Where each prompt was last settled, by where it was recorded, as [`SettledAt`] says: from the hub's list of prompts,
 /// and from every event the log has been given that settles one. It stays when those events are let go of, since each
 /// is small. A log of a stretch of the chat, read for finding, is given a copy, so it puts each prompt where the
-/// chat does.
+/// chat does. A copy shares them until either changes.
 #[derive(Clone, Debug, Default)]
-pub struct Settled(pub(super) BTreeMap<Seq, SettledAt>);
+pub struct Settled(pub(super) Arc<BTreeMap<Seq, SettledAt>>);
 
 impl Settled {
     pub(super) fn at(&self, prompt: Seq) -> Option<SettledAt> {
@@ -46,7 +47,7 @@ impl Settled {
         if self.0.get(&prompt).is_some_and(|known| known.seq > at.seq || *known == at) {
             return false;
         }
-        self.0.insert(prompt, at);
+        Arc::make_mut(&mut self.0).insert(prompt, at);
         true
     }
 
@@ -160,7 +161,7 @@ impl SessionLog {
 
     /// The event recorded at `seq`, if it's loaded.
     pub(in super::super) fn event_of(&self, seq: Seq) -> Option<&SessionEvent> {
-        self.events.get(&self.position_of(seq)?)
+        self.events.get(&self.position_of(seq)?).map(Arc::as_ref)
     }
 
     /// Notes that the prompt recorded at `prompt` was settled `at`, and tells a view of each row that moves.
