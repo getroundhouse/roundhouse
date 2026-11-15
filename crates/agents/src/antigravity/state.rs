@@ -28,12 +28,18 @@ pub(super) struct Conversation {
     pub(super) reply: Option<String>,
     pub(super) next_message: u64,
     /// Open calls emitted as `ContentBlock::Call` and not yet settled by `CallResult` or `ToolCallDropped`.
-    pub(super) calls: HashMap<ToolUseId, Call>,
+    pub(super) calls: HashMap<ToolUseId, OpenCall>,
     /// Every call ID already emitted as `ContentBlock::Call` in this run, so repeated `tool_call` / `tool_call_update`
     /// notifications for the same tool call never emit a second `Call` block.
     pub(super) emitted_calls: HashSet<ToolUseId>,
     pub(super) denied_calls: HashSet<ToolUseId>,
     pub(super) waiting: HashMap<ApprovalId, Waiting>,
+}
+
+pub(super) struct OpenCall {
+    pub(super) call: Call,
+    /// Whether `agy` can keep this call running in the background after the current `session/prompt` finishes.
+    pub(super) outlives_turn: bool,
 }
 
 /// How far the turn has got to ending.
@@ -52,6 +58,14 @@ pub(super) struct InFlightPrompt {
     pub(super) rpc_id: u64,
     pub(super) seq: Option<Seq>,
     pub(super) taken: bool,
+    /// Remaining non-empty `"text"` blocks in this prompt's request for which `agy` emits a `user_message_chunk`.
+    pub(super) user_chunks_left: usize,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum UserChunk {
+    Ignore,
+    FirstOfPrompt(Option<Seq>),
 }
 
 pub(super) struct Waiting {
@@ -110,13 +124,17 @@ impl Conversation {
         format!("agy-{prefix}-{id}")
     }
 
-    /// Marks the active front prompt as taken once `agy` begins acting on it, returning its recorded `Seq` at most once.
-    pub(super) fn take_front_prompt(&mut self) -> Option<Seq> {
-        let front = self.prompts.front_mut()?;
-        if front.taken {
-            return None;
+    /// Consumes one `user_message_chunk` for the earliest prompt with non-empty `"text"` blocks left, returning
+    /// `FirstOfPrompt` on its first chunk so pre-prompt streams flush and `reply` resets before `PromptTaken`.
+    pub(super) fn accept_user_chunk(&mut self) -> UserChunk {
+        let Some(entry) = self.prompts.iter_mut().find(|entry| entry.user_chunks_left > 0) else {
+            return UserChunk::Ignore;
+        };
+        entry.user_chunks_left -= 1;
+        if entry.taken {
+            return UserChunk::Ignore;
         }
-        front.taken = true;
-        front.seq
+        entry.taken = true;
+        UserChunk::FirstOfPrompt(entry.seq)
     }
 }

@@ -24,8 +24,12 @@ pub(super) async fn prompt_finished(shared: &Shared, rpc_id: u64, reply: RpcRepl
             if !entry.taken
                 && let Some(prompt) = entry.seq
             {
+                notifications::flush_streams(shared).await;
                 let cancelled =
                     was_cancelling || acp::parse_prompt_response(&result).stop_reason == StopReason::Cancelled;
+                if !cancelled {
+                    shared.state.lock().reply = None;
+                }
                 let event =
                     if cancelled { EventBody::PromptDropped { prompt } } else { EventBody::PromptTaken { prompt } };
                 shared.event(event, None).await;
@@ -50,13 +54,14 @@ pub(super) async fn prompt_finished(shared: &Shared, rpc_id: u64, reply: RpcRepl
         }
         (Err(error), false) => {
             notifications::flush_streams(shared).await;
-            if !entry.taken
-                && let Some(prompt) = entry.seq
-            {
-                shared.event(EventBody::PromptDropped { prompt }, None).await;
+            if !entry.taken {
+                shared.state.lock().reply = None;
+                if let Some(prompt) = entry.seq {
+                    shared.event(EventBody::PromptDropped { prompt }, None).await;
+                }
             }
             shared.state.lock().cancelling = false;
-            control::settle_all(shared).await;
+            control::settle_turn(shared).await;
             record_end(shared, TurnOutcome::Error, Some(error.to_string()), None, Some(raw)).await;
         }
         (Ok(result), false) => finish_last_ok(shared, entry, &result, raw).await,

@@ -168,23 +168,10 @@ fn str_field(value: &Value, keys: &[&str]) -> Option<String> {
     keys.iter().find_map(|key| value.get(*key).and_then(Value::as_str).map(str::to_owned))
 }
 
-pub(super) fn translate_output(call: &Call, wire: &ToolCallWire, cancelling: bool) -> CallOutput {
+pub(super) fn translate_output(call: &Call, wire: &ToolCallWire, cancelling: bool, was_denied: bool) -> CallOutput {
     let raw = wire.raw_output.as_ref().unwrap_or(&Value::Null);
     match call {
-        Call::Command(_) => {
-            let raw_text = raw
-                .get("output")
-                .and_then(Value::as_str)
-                .or_else(|| raw.as_str())
-                .or(wire.content_text.as_deref())
-                .unwrap_or_default();
-            let (output, parsed_exit) = parse_command_envelope(raw_text);
-            let exit_code =
-                raw.get("exit_code").and_then(Value::as_i64).and_then(|c| i32::try_from(c).ok()).or(parsed_exit);
-            let ended =
-                if cancelling && wire.status == Some(ToolStatusWire::Failed) { Ended::Stopped } else { Ended::Exited };
-            CallOutput::Command(CommandOutput { output, exit_code, ended, took_ms: None, truncated: None })
-        }
+        Call::Command(_) => command_output(raw, wire, cancelling, was_denied),
         Call::Read(_) => {
             let text = raw_text(raw, wire);
             parse_read_lines(&text).map_or(CallOutput::Words { text }, CallOutput::Lines)
@@ -221,6 +208,31 @@ pub(super) fn translate_output(call: &Call, wire: &ToolCallWire, cancelling: boo
         | Call::Other { .. }
         | Call::Unknown => CallOutput::Words { text: raw_text(raw, wire) },
     }
+}
+
+fn command_output(raw: &Value, wire: &ToolCallWire, cancelling: bool, was_denied: bool) -> CallOutput {
+    let explicit_text =
+        raw.get("output").and_then(Value::as_str).or_else(|| raw.as_str()).or(wire.content_text.as_deref());
+    let fallback;
+    let raw_out = match explicit_text {
+        Some(text) => text,
+        None if raw.is_null() => "",
+        None => {
+            fallback = raw.to_string();
+            &fallback
+        }
+    };
+    let (output, parsed_exit) = parse_command_envelope(raw_out);
+    let exit_code = raw.get("exit_code").and_then(Value::as_i64).and_then(|c| i32::try_from(c).ok()).or(parsed_exit);
+    // `agy` reports both `session/cancel` and `manage_task` (`Action: "kill"`) as `status: "failed"` with
+    // `rawOutput: {"output": ""}` and no `exit_code`, whereas commands that ran to an exit carry `exit_code`
+    // and spawn or validation failures carry error text.
+    let stopped = wire.status == Some(ToolStatusWire::Failed)
+        && exit_code.is_none()
+        && !was_denied
+        && (cancelling || (explicit_text.is_some() && output.is_empty()));
+    let ended = if stopped { Ended::Stopped } else { Ended::Exited };
+    CallOutput::Command(CommandOutput { output, exit_code, ended, took_ms: None, truncated: None })
 }
 
 fn changed_file(path: &str) -> CallOutput {

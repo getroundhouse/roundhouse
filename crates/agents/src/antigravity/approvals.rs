@@ -37,8 +37,12 @@ async fn permission_requested(
     let Some(perm) = acp::parse_permission_request(params) else {
         return unsupported(shared, native_id, "session/request_permission").await;
     };
+    let id = ToolUseId::from(perm.tool_call.tool_call_id.as_str());
     let (mode, in_turn) = {
-        let state = shared.state.lock();
+        let mut state = shared.state.lock();
+        if let Some(open) = state.calls.get_mut(&id) {
+            open.outlives_turn = false;
+        }
         (state.mode, state.in_turn())
     };
     if !in_turn {
@@ -50,8 +54,15 @@ async fn permission_requested(
         return shared.rpc.reply(native_id.clone(), acp::permission_selected(allow)).await;
     }
     notifications::ensure_call_emitted(shared, &perm.tool_call, None).await;
-    let id = ToolUseId::from(perm.tool_call.tool_call_id.as_str());
-    let call = shared.state.lock().calls.get(&id).cloned().unwrap_or_else(|| calls::translate_call(&perm.tool_call));
+    let call = {
+        let mut state = shared.state.lock();
+        if let Some(open) = state.calls.get_mut(&id) {
+            open.outlives_turn = false;
+            open.call.clone()
+        } else {
+            calls::translate_call(&perm.tool_call)
+        }
+    };
     let request = Request { asks: Asks::Call { call }, suggested: Vec::new(), always: false, why: None };
     // A call's request names the call, as Claude's and Codex's do, so a client ties the call's result to it.
     ask(
@@ -202,7 +213,8 @@ async fn answer(shared: &Shared, waiting: &Waiting, decision: &Decision) -> Resu
             switch_plan_mode(shared, PermissionMode::FullAccess, "Implement the approved plan.").await
         }
         (NativeRequest::Plan, Decision::KeepPlanning { words }) => {
-            let text = words.as_deref().unwrap_or("Keep planning; the plan is not approved.");
+            let text =
+                words.as_deref().filter(|w| !w.trim().is_empty()).unwrap_or("Keep planning; the plan is not approved.");
             switch_plan_mode(shared, PermissionMode::Plan, text).await
         }
         (NativeRequest::Permission { id, request }, Decision::Allow { edited: None, remember }) => {

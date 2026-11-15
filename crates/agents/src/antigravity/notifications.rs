@@ -1,12 +1,18 @@
 use std::sync::Arc;
 
+use protocol::capability::calls::Call;
 use protocol::event::{AgentRunState, ContentBlock, Denied, EventBody, NoticeLevel};
 use protocol::model::{ContextUsage, MaxSetBy, PermissionMode, ToolUseId};
 use protocol::tail::{BlockKind, DeltaChange, StreamDelta};
 use serde_json::Value;
 use tokio::sync::mpsc;
 
-use super::{approvals, calls, running::Shared, turn};
+use super::{
+    approvals, calls,
+    running::Shared,
+    state::{OpenCall, UserChunk},
+    turn,
+};
 use crate::acp::{self, SessionUpdate, ToolCallWire, ToolStatusWire};
 use crate::{AgentError, AgentOutput};
 
@@ -42,7 +48,6 @@ async fn incoming(shared: &Shared, value: &Value, raw: String) -> Result<(), Age
     let method = value["method"].as_str().unwrap_or_default();
     let params = &value["params"];
     if value.get("id").is_some() {
-        note_prompt_taken(shared, None).await;
         flush_streams(shared).await;
         return approvals::requested(shared, method, &value["id"], params, raw).await;
     }
@@ -56,19 +61,16 @@ async fn incoming(shared: &Shared, value: &Value, raw: String) -> Result<(), Age
 
 async fn session_update(shared: &Shared, update: SessionUpdate, raw: String) {
     match update {
-        SessionUpdate::UserMessageChunk { .. } => note_prompt_taken(shared, Some(raw)).await,
+        SessionUpdate::UserMessageChunk { .. } => on_user_message(shared, raw).await,
         SessionUpdate::AgentThoughtChunk { text } => {
-            note_prompt_taken(shared, None).await;
             flush_text(shared).await;
             stream_chunk(shared, true, &text).await;
         }
         SessionUpdate::AgentMessageChunk { text } => {
-            note_prompt_taken(shared, None).await;
             flush_thought(shared).await;
             stream_chunk(shared, false, &text).await;
         }
         SessionUpdate::ToolCall(wire) | SessionUpdate::ToolCallUpdate(wire) => {
-            note_prompt_taken(shared, None).await;
             flush_streams(shared).await;
             on_tool(shared, wire, raw).await;
         }
@@ -85,7 +87,6 @@ async fn session_update(shared: &Shared, update: SessionUpdate, raw: String) {
             }
         }
         SessionUpdate::UsageUpdate { used, size } => {
-            note_prompt_taken(shared, None).await;
             shared
                 .emit(AgentOutput::Context(ContextUsage {
                     used_tokens: used,
@@ -100,10 +101,14 @@ async fn session_update(shared: &Shared, update: SessionUpdate, raw: String) {
     }
 }
 
-pub(super) async fn note_prompt_taken(shared: &Shared, raw: Option<String>) {
-    let taken = shared.state.lock().take_front_prompt();
-    if let Some(prompt) = taken {
-        shared.event(EventBody::PromptTaken { prompt }, raw).await;
+async fn on_user_message(shared: &Shared, raw: String) {
+    let UserChunk::FirstOfPrompt(prompt) = shared.state.lock().accept_user_chunk() else {
+        return;
+    };
+    flush_streams(shared).await;
+    shared.state.lock().reply = None;
+    if let Some(prompt) = prompt {
+        shared.event(EventBody::PromptTaken { prompt }, Some(raw)).await;
         shared.event(EventBody::AgentState { state: AgentRunState::Running }, None).await;
     }
 }
@@ -198,6 +203,13 @@ async fn flush_text(shared: &Shared) {
     }
 }
 
+/// `agy` keeps backgrounded `run_command`, `schedule` and `run_workflow` calls in `in_progress` across `session/prompt`
+/// endings and settles them later under the same `toolCallId`, whereas `invoke_subagent` completes its own call on
+/// spawn and all other tools are turn-local (`docs/antigravity-cli.md`).
+fn outlives_turn(call: &Call, status: ToolStatusWire) -> bool {
+    status == ToolStatusWire::InProgress && matches!(call, Call::Command(_) | Call::Schedule(_) | Call::Workflow(_))
+}
+
 pub(super) async fn ensure_call_emitted(shared: &Shared, wire: &ToolCallWire, raw: Option<String>) {
     let id = ToolUseId::from(wire.tool_call_id.as_str());
     let to_emit = {
@@ -205,9 +217,15 @@ pub(super) async fn ensure_call_emitted(shared: &Shared, wire: &ToolCallWire, ra
         if state.emitted_calls.insert(id.clone()) {
             state.reply = None;
             let call = calls::translate_call(wire);
-            state.calls.insert(id.clone(), call.clone());
+            let outlives = wire.status.is_some_and(|status| outlives_turn(&call, status));
+            state.calls.insert(id.clone(), OpenCall { call: call.clone(), outlives_turn: outlives });
             Some((call, state.model.as_str().to_owned()))
         } else {
+            if let Some(status) = wire.status
+                && let Some(open) = state.calls.get_mut(&id)
+            {
+                open.outlives_turn = outlives_turn(&open.call, status);
+            }
             None
         }
     };
@@ -237,10 +255,10 @@ async fn on_tool(shared: &Shared, wire: ToolCallWire, raw: String) {
     let settled = {
         let mut state = shared.state.lock();
         let was_denied = state.denied_calls.remove(&id);
-        state.calls.remove(&id).map(|call| (call, state.cancelling, was_denied))
+        state.calls.remove(&id).map(|open| (open.call, state.cancelling, was_denied))
     };
     let Some((call, cancelling, was_denied)) = settled else { return };
-    let output = calls::translate_output(&call, &wire, cancelling);
+    let output = calls::translate_output(&call, &wire, cancelling, was_denied);
     let is_error = wire.status == Some(ToolStatusWire::Failed);
     let denied = (is_error && was_denied).then_some(Denied { said: None });
     shared
