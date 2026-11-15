@@ -266,7 +266,7 @@ fn a_log_that_holds_every_event_needs_no_hub_once_it_knows_how_far_they_go() {
     let before = open.search(&client, needle("parser"), 64);
     answer.send(()).unwrap();
     until("it knows how far they go", || open.read(SessionLog::last) == at(1));
-    open.follow.update(|log| log.apply_event(only));
+    open.follow.update(|log| std::sync::Arc::make_mut(log).apply_event(only));
 
     assert_eq!(open.search(&client, needle("parser"), 64).searched(), Searched::Done);
     until("the first is answered", || before.searched() == Searched::Done);

@@ -359,3 +359,18 @@ fn a_log_by_place_that_has_to_read_the_whole_log_keeps_the_prompts_on_their_way(
     assert_eq!(log.by(), By::Seq);
     assert_eq!((log.row_count(), log.pending()[0].prompt.text.as_str()), (5, "go"));
 }
+
+#[test]
+fn a_copy_shares_what_it_holds_until_one_of_them_changes_it() {
+    let mut log = SessionLog::new(Seq::new(2));
+    log.apply_event(event(Seq::new(3), prompt()));
+    let copy = log.clone();
+    let (Row::Event(held), Row::Event(copied)) = (log.row(2), copy.row(2)) else { panic!("the prompt is loaded") };
+    assert!(std::ptr::eq(held, copied), "an event is shared, not copied");
+    let lines = |log: &SessionLog| log.prompt_lines().map(std::ptr::from_ref).collect::<Vec<_>>();
+    assert_eq!(lines(&log), lines(&copy), "so are the outline's lines");
+
+    log.apply_event(event(Seq::new(4), prompt()));
+    assert_eq!((log.row_count(), copy.row_count()), (4, 3), "the copy stays as it was");
+    assert_eq!((log.prompt_lines().len(), copy.prompt_lines().len()), (2, 1));
+}

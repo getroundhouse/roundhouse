@@ -2,7 +2,7 @@ use super::super::follow::{Follow, FollowError, Source};
 use super::super::{Client, Result, Subscription, SubscriptionItem};
 use super::search;
 use crate::session_log::{By, Changes, Position, RecordedApprovals, SessionLog};
-use parking_lot::Mutex;
+use parking_lot::{MappedMutexGuard, Mutex, MutexGuard};
 use protocol::event::SessionEvent;
 use protocol::find::Needle;
 use protocol::model::{ClientMessageId, Place, QueuedPrompt, Seq, Session, SessionId, ToolUseId};
@@ -32,10 +32,11 @@ impl View {
 }
 
 /// A session someone has open, kept current until every clone of this has gone. It fetches the history a
-/// view is looking at, and carries on from a new connection given to [`OpenSession::reconnect`].
+/// view is looking at, and carries on from a new connection given to [`OpenSession::reconnect`]. It holds the log as
+/// versions, as [`OpenSession::version`] says.
 #[derive(Clone)]
 pub struct OpenSession {
-    pub(super) follow: Follow<SessionLog>,
+    pub(super) follow: Follow<Arc<SessionLog>>,
     pub(super) session_id: SessionId,
     /// The view asked for, which is what a search looks through.
     pub(super) view: View,
@@ -69,7 +70,7 @@ impl OpenSession {
             placed: false,
             read_from: client.hub_version().to_string(),
         };
-        let follow = Follow::start(client, log, source);
+        let follow = Follow::start(client, Arc::new(log), source);
         follow.wake();
         OpenSession { follow, session_id: session.id.clone(), view, searches: Arc::default() }
     }
@@ -81,35 +82,43 @@ impl OpenSession {
         &self.follow.changed
     }
 
+    /// The log as it is now, which never changes: whatever comes next goes in the next version. So whatever reads one,
+    /// such as a frame drawing each of its rows from it, reads the same log however much comes meanwhile, and keeps
+    /// nothing waiting while it does. A version shares what it holds with the next, as a copy of a [`SessionLog`] does.
+    pub fn version(&self) -> Arc<SessionLog> {
+        self.follow.read(Arc::clone)
+    }
+
+    /// Reads the log as it is now, as [`OpenSession::version`] has it.
     pub fn read<T>(&self, read: impl FnOnce(&SessionLog) -> T) -> T {
-        self.follow.read(read)
+        read(&self.version())
     }
 
     /// What changed since a view last looked.
     pub fn take_changes(&self) -> Changes {
-        self.follow.quietly(SessionLog::take_changes)
+        self.follow.quietly(|log| Arc::make_mut(log).take_changes())
     }
 
     /// Fetches what a view looking at this row needs.
     pub fn want(&self, row: usize) {
-        self.follow.quietly(|log| log.focus_on(row));
+        self.follow.quietly(|log| Arc::make_mut(log).focus_on(row));
         self.follow.wake();
     }
 
     /// Fetches each request `recorded` says is waiting that isn't loaded, as [`SessionLog::waiting_on`] says.
     pub fn waiting_on(&self, recorded: Option<&RecordedApprovals>) {
-        self.follow.quietly(|log| log.waiting_on(recorded));
+        self.follow.quietly(|log| Arc::make_mut(log).waiting_on(recorded));
         self.follow.wake();
     }
 
     /// Shows a prompt on its way, with what it carries, as [`crate::Written::on_its_way`] says.
     pub(crate) fn add_pending(&self, prompt: QueuedPrompt) {
-        self.follow.update(|log| log.add_pending(prompt));
+        self.follow.update(|log| Arc::make_mut(log).add_pending(prompt));
     }
 
     /// Takes back a prompt that couldn't be sent.
     pub(crate) fn remove_pending(&self, client_msg_id: &ClientMessageId) -> Option<QueuedPrompt> {
-        self.follow.update(|log| log.remove_pending(client_msg_id))
+        self.follow.update(|log| Arc::make_mut(log).remove_pending(client_msg_id))
     }
 
     pub(crate) fn session_id(&self) -> &SessionId {
@@ -173,23 +182,23 @@ impl SessionSource {
     /// far as the hub's events go, which [`SessionSource::place`] has learned by then for a log by place, since the agent
     /// can have gone on while the hub restarted. Builds that no install or package stamped all say the same, so the log
     /// isn't read again between two of them.
-    fn read_again_on_another_build(&mut self, client: &Client, held: &Mutex<SessionLog>) {
+    fn read_again_on_another_build(&mut self, client: &Client, held: &Mutex<Arc<SessionLog>>) {
         let build = client.hub_version();
         if self.read_from != build {
             build.clone_into(&mut self.read_from);
-            held.lock().read_again();
+            change(held).read_again();
         }
     }
 
     /// Asks how far the events by place go, the first time on each connection. A hub that can't read the agent's own
     /// events apart is followed for every event instead, and one that can, after one that couldn't, by place again.
-    pub(super) fn place(&mut self, client: &Client, held: &Mutex<SessionLog>) -> Result<()> {
+    pub(super) fn place(&mut self, client: &Client, held: &Mutex<Arc<SessionLog>>) -> Result<()> {
         if self.view == View::Whole || self.placed {
             return Ok(());
         }
         match client.session_read_places(&self.session_id, self.subagent(), Place::new(1), 1) {
             Ok((_, last)) => {
-                let mut log = held.lock();
+                let mut log = change(held);
                 if log.by() == By::Seq {
                     log.read_by_place();
                 }
@@ -198,7 +207,7 @@ impl SessionSource {
             Err(e) if e.is_unsupported() && self.view == View::Own => {
                 self.view = View::Whole;
                 // One already by `seq`, from such a hub before, carries on from where it got to.
-                let mut log = held.lock();
+                let mut log = change(held);
                 if log.by() == By::Place {
                     log.read_whole(self.last_seq);
                 }
@@ -211,14 +220,14 @@ impl SessionSource {
 }
 
 impl Source for SessionSource {
-    type Held = SessionLog;
+    type Held = Arc<SessionLog>;
 
     fn reconnected(&mut self) {
         self.view = self.wanted.clone();
         self.placed = false;
     }
 
-    fn resume(&mut self, client: &Client, held: &Mutex<SessionLog>) -> Result<Subscription> {
+    fn resume(&mut self, client: &Client, held: &Mutex<Arc<SessionLog>>) -> Result<Subscription> {
         self.place(client, held)?;
         self.read_again_on_another_build(client, held);
         // Events arrive in order with no gaps, so carrying on from one past the last misses nothing, whatever
@@ -230,12 +239,12 @@ impl Source for SessionSource {
                 client.session_subscribe_places(&self.session_id, self.subagent(), from.place())?
             }
         };
-        held.lock().retry_failed();
+        change(held).retry_failed();
         Ok(subscription)
     }
 
-    fn apply(&mut self, _: &Client, held: &Mutex<SessionLog>, item: SubscriptionItem) -> Result<bool> {
-        let mut log = held.lock();
+    fn apply(&mut self, _: &Client, held: &Mutex<Arc<SessionLog>>, item: SubscriptionItem) -> Result<bool> {
+        let mut log = change(held);
         Ok(match item {
             SubscriptionItem::Event(event) => {
                 log.apply_event(*event);
@@ -255,16 +264,16 @@ impl Source for SessionSource {
 
     /// Fetches the pages around where the view is looking that aren't loaded, then each request waiting on an answer
     /// that none of them holds, then the session's prompts if they haven't been listed.
-    fn asked(&mut self, client: &Client, held: &Mutex<SessionLog>) -> Result<bool> {
-        let pages = held.lock().pages_to_fetch();
-        let requests = held.lock().requests_to_fetch();
+    fn asked(&mut self, client: &Client, held: &Mutex<Arc<SessionLog>>) -> Result<bool> {
+        let pages = change(held).pages_to_fetch();
+        let requests = change(held).requests_to_fetch();
         let fetched = !pages.is_empty() || !requests.is_empty();
         for range in pages {
             let start = range.start;
             match read_range(client, &self.session_id, &self.view, range) {
-                Ok(events) => held.lock().install_page(start, events),
+                Ok(events) => change(held).install_page(start, events),
                 Err(e) => {
-                    held.lock().fetch_failed();
+                    change(held).fetch_failed();
                     return Err(e);
                 }
             }
@@ -272,9 +281,9 @@ impl Source for SessionSource {
         // By its `seq`, from the whole log, whichever events this view holds.
         for seq in requests {
             match client.session_read(&self.session_id, seq, 1, false) {
-                Ok((events, _)) => held.lock().install_request(seq, events.into_iter().next()),
+                Ok((events, _)) => change(held).install_request(seq, events.into_iter().next()),
                 Err(e) => {
-                    held.lock().fetch_failed();
+                    change(held).fetch_failed();
                     return Err(e);
                 }
             }
@@ -289,21 +298,21 @@ impl SessionSource {
     /// nothing: every prompt the subscription won't send was recorded before this. A hub too old to list them leaves
     /// only the prompts the log is given, and one that fails to is asked again on a new connection, while the chat goes
     /// on either way. A subagent's events hold no prompts, so a view of them asks for none.
-    pub(super) fn list_prompts(&self, client: &Client, held: &Mutex<SessionLog>) -> Result<bool> {
+    pub(super) fn list_prompts(&self, client: &Client, held: &Mutex<Arc<SessionLog>>) -> Result<bool> {
         if matches!(self.view, View::Subagent(_)) || !held.lock().wants_prompt_list() {
             return Ok(false);
         }
         match client.session_prompt_list(&self.session_id) {
             Ok(lines) => {
-                held.lock().list_prompts(lines);
+                change(held).list_prompts(lines);
                 Ok(true)
             }
             Err(e) if e.is_unsupported() => {
-                held.lock().prompts_unlisted();
+                change(held).prompts_unlisted();
                 Ok(false)
             }
             Err(e) => {
-                held.lock().prompt_list_failed();
+                change(held).prompt_list_failed();
                 Err(e)
             }
         }
@@ -313,25 +322,30 @@ impl SessionSource {
 impl SessionSource {
     /// Asks for the session's compactions, once, as [`SessionSource::list_prompts`] asks for its prompts, and for the
     /// same reasons. A subagent's compactions aren't in the chat, so a view of them asks for none.
-    pub(super) fn list_compactions(&self, client: &Client, held: &Mutex<SessionLog>) -> Result<bool> {
+    pub(super) fn list_compactions(&self, client: &Client, held: &Mutex<Arc<SessionLog>>) -> Result<bool> {
         if matches!(self.view, View::Subagent(_)) || !held.lock().wants_compaction_list() {
             return Ok(false);
         }
         match client.session_compaction_list(&self.session_id) {
             Ok(lines) => {
-                held.lock().list_compactions(lines);
+                change(held).list_compactions(lines);
                 Ok(true)
             }
             Err(e) if e.is_unsupported() => {
-                held.lock().compactions_unlisted();
+                change(held).compactions_unlisted();
                 Ok(false)
             }
             Err(e) => {
-                held.lock().compaction_list_failed();
+                change(held).compaction_list_failed();
                 Err(e)
             }
         }
     }
+}
+
+/// The log, to change. A version a reader holds stays as it was, and the next one has the change.
+fn change(held: &Mutex<Arc<SessionLog>>) -> MappedMutexGuard<'_, SessionLog> {
+    MutexGuard::map(held.lock(), Arc::make_mut)
 }
 
 /// The events of `view` at these positions, which are its `seq`s in the whole log and its places in the rest. A size

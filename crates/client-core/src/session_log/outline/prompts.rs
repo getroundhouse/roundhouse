@@ -2,15 +2,16 @@ use super::super::{By, Position, SessionLog};
 use protocol::event::SessionEvent;
 use protocol::model::{CompactionLine, Place, PromptLine, Seq};
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 /// The prompts and compactions the log knows of, by where they were recorded. They stay when their events are dropped,
-/// since each is small.
-#[derive(Debug, Default)]
+/// since each is small. A copy shares them until either changes.
+#[derive(Clone, Debug, Default)]
 pub(in super::super) struct Outline {
     /// Each without where it was settled, which the log keeps apart, since a line made from the prompt's event can't
     /// say, and it changes after the line is made.
-    pub(super) lines: BTreeMap<Seq, PromptLine>,
-    pub(super) compactions: BTreeMap<Seq, CompactionLine>,
+    pub(super) lines: Arc<BTreeMap<Seq, PromptLine>>,
+    pub(super) compactions: Arc<BTreeMap<Seq, CompactionLine>>,
     /// How many times `lines` or `compactions` has changed, or something moved a prompt to another row.
     pub(super) changes: u64,
     pub(super) listing: Listing,
@@ -50,7 +51,7 @@ impl Outline {
     pub(super) fn add(&mut self, line: PromptLine) {
         let line = line.unsettled();
         if self.lines.get(&line.seq()) != Some(&line) {
-            self.lines.insert(line.seq(), line);
+            Arc::make_mut(&mut self.lines).insert(line.seq(), line);
             self.changes += 1;
         }
     }
@@ -72,7 +73,7 @@ impl Outline {
 
     pub(super) fn add_compaction(&mut self, line: CompactionLine) {
         if self.compactions.get(&line.seq) != Some(&line) {
-            self.compactions.insert(line.seq, line);
+            Arc::make_mut(&mut self.compactions).insert(line.seq, line);
             self.changes += 1;
         }
     }

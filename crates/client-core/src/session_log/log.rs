@@ -7,6 +7,7 @@ use protocol::model::{ClientMessageId, Place, QueuedPrompt, Seq, SettledAt};
 use protocol::tail::{StreamDelta, Tail};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::ops::Range;
+use std::sync::Arc;
 
 /// Far more than fits on screen, and small enough that a 50 MB session stays cheap to hold.
 pub const MAX_LOADED_EVENTS: usize = 2000;
@@ -41,7 +42,10 @@ pub enum By {
     Place,
 }
 
-#[derive(Debug, Default)]
+/// A copy shares what's large with the log it was copied from, until one of them changes it: each event, which never
+/// changes, the outline's lines, where each prompt was settled and the tail. So a copy costs little however long the
+/// chat is, and [`crate::OpenSession::version`] makes one whenever a version is read and the log then changes.
+#[derive(Clone, Debug, Default)]
 pub struct SessionLog {
     pub(super) by: By,
     /// The position of the newest event, or 0 when it has none.
@@ -50,7 +54,7 @@ pub struct SessionLog {
     /// aren't fetched.
     pub(super) received: Position,
     /// What's loaded, by position.
-    pub(super) events: BTreeMap<Position, SessionEvent>,
+    pub(super) events: BTreeMap<Position, Arc<SessionEvent>>,
     /// The position of each event loaded, by its `seq`, when that isn't its position.
     pub(super) positions: HashMap<Seq, Position>,
     /// The pages loaded, as `pages::page_of` numbers them.
@@ -65,7 +69,7 @@ pub struct SessionLog {
     pub(super) focus: usize,
     /// Sent, and not yet recorded. Each is held as the hub holds a queued prompt, under the ID it'll be recorded under.
     pub(super) pending: Vec<QueuedPrompt>,
-    pub(super) tail: Tail,
+    pub(super) tail: Arc<Tail>,
     pub(super) changes: Changes,
     /// How many times events have been put in, live or by the page.
     pub(super) events_added: u64,
@@ -109,7 +113,7 @@ impl SessionLog {
 
     pub fn row(&self, index: usize) -> Row<'_> {
         match self.events.get(&Position::of_row(index)) {
-            Some(event) => Row::Event(event),
+            Some(event) => Row::Event(event.as_ref()),
             None => Row::Unloaded,
         }
     }
@@ -142,7 +146,7 @@ impl SessionLog {
         if self.by == By::Place {
             self.positions.insert(event.seq, position);
         }
-        self.events.insert(position, event);
+        self.events.insert(position, Arc::new(event));
     }
 
     pub fn tail(&self) -> &Tail {
@@ -169,7 +173,7 @@ impl SessionLog {
             self.pending.retain(|prompt| prompt.client_msg_id != *id);
         }
         let waited = self.at_the_end();
-        self.tail.on_event(event.seq, event.run, &event.body);
+        Arc::make_mut(&mut self.tail).on_event(event.seq, event.run, &event.body);
         self.outline.saw(&event);
         self.received = self.received.max(position);
         self.last = self.last.max(position);
@@ -186,12 +190,12 @@ impl SessionLog {
     }
 
     pub(crate) fn apply_tail(&mut self, tail: Tail) {
-        self.tail = tail;
+        self.tail = Arc::new(tail);
         self.touched(self.row_count()..self.row_count() + 1);
     }
 
     pub(crate) fn apply_delta(&mut self, delta: &StreamDelta) {
-        self.tail.apply(delta);
+        Arc::make_mut(&mut self.tail).apply(delta);
         self.touched(self.row_count()..self.row_count() + 1);
     }
 
@@ -241,7 +245,7 @@ impl SessionLog {
 
     /// The events that are loaded, oldest first.
     pub fn loaded(&self) -> impl Iterator<Item = &SessionEvent> {
-        self.events.values()
+        self.events.values().map(Arc::as_ref)
     }
 
     /// Whether every event it follows is loaded, so looking through them looks through it all. One that doesn't know
