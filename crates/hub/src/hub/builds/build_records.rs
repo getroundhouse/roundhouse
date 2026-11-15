@@ -4,13 +4,7 @@ use protocol::client::HubNotice;
 use protocol::model::WorkspaceId;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
-use std::time::Duration;
-use tracing::{info, warn};
-
-/// How often the hub looks at a workspace whose worker is another build. Two looks in a row have to find nothing at
-/// work, so a moment with nothing at work, as just before an agent picks up again by itself once its work in the
-/// background is done, isn't taken for the workspace being idle.
-pub(super) const LOOK_EVERY: Duration = Duration::from_secs(5);
+use tracing::{debug, info, warn};
 
 impl Hub {
     /// Replaces `link`, the workspace's worker, which is another build, once two looks in a row find nothing in the
@@ -22,10 +16,15 @@ impl Hub {
             let mut idle_before = false;
             loop {
                 tokio::select! {
-                    () = tokio::time::sleep(LOOK_EVERY) => {}
+                    () = tokio::time::sleep(hub.timers.look_every) => {}
                     () = link.wait_closed() => break,
                 }
                 let idle = hub.nothing_at_work_in(&workspace_id, &link);
+                if !idle {
+                    // `other_builds` in the daemon's e2e tests counts these, to know two looks have kept it.
+                    let build = link.build();
+                    debug!(%workspace_id, build, "keeping a worker from another build, with something at work");
+                }
                 if idle && idle_before && hub.replace_if_idle(&workspace_id, &link).await {
                     break;
                 }

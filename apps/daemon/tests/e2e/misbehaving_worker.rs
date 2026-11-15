@@ -7,6 +7,7 @@ use std::process::Command;
 use std::time::{Duration, Instant};
 
 use client_core::Client;
+use hub::Timers;
 
 use crate::support::{Stack, assistant_text, install_executable, signal, wait_for_turn_end, wait_until};
 
@@ -82,7 +83,10 @@ cat > /dev/null"#,
 
 #[test]
 fn a_worker_that_never_answers_only_affects_its_own_workspace_and_times_out() {
-    let mut stack = Stack::start();
+    // Long enough for every real worker this test starts, the last of them the first run of a binary just copied into
+    // place, which macOS checks first.
+    let hello = Duration::from_secs(3);
+    let mut stack = Stack::start_with(vec![Timers { hello_within: hello, ..Timers::FOR_TESTS }.env()]);
     let exe = hub_from_copy(&mut stack);
     let client = stack.client();
     let (hung, _) = stack.workspace(&client);
@@ -107,18 +111,17 @@ fn a_worker_that_never_answers_only_affects_its_own_workspace_and_times_out() {
         children_of(stack.hub_pid()).len() == 3
     });
 
+    // Each before the two starts give up, since one that waited on them would answer only then.
+    let before_they_give_up = || hello.saturating_sub(started.elapsed());
     let socket = stack.socket();
     assert!(
-        answered_within(Duration::from_secs(3), move || Client::connect(&socket, "test")
-            .unwrap()
-            .hub_status()
-            .unwrap()),
+        answered_within(before_they_give_up(), move || Client::connect(&socket, "test").unwrap().hub_status().unwrap()),
         "hub status must not wait on one workspace's worker"
     );
     let socket = stack.socket();
     let fine_id = fine.id.clone();
     assert!(
-        answered_within(Duration::from_secs(3), move || Client::connect(&socket, "test")
+        answered_within(before_they_give_up(), move || Client::connect(&socket, "test")
             .unwrap()
             .workspace_status(&fine_id)
             .unwrap()),
@@ -128,8 +131,8 @@ fn a_worker_that_never_answers_only_affects_its_own_workspace_and_times_out() {
     for attempt in blocked {
         assert!(attempt.join().unwrap().is_err(), "a worker that never answers is an error");
     }
-    // Each times out on its own 10 s. If one start had to wait for the other, this would be 20 s.
-    assert!(started.elapsed() < Duration::from_secs(15), "took {:?}", started.elapsed());
+    // Each times out on its own. If one start had to wait for the other, they'd take twice as long.
+    assert!(started.elapsed() < hello * 2, "took {:?}", started.elapsed());
     // Each is ended as its start gives up, rather than left until the 10 s a stopping worker gets.
     let given_up = Instant::now();
     wait_until("the workers that never answered to be gone", || children_of(stack.hub_pid()).len() == 1);

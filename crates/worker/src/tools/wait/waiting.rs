@@ -6,20 +6,21 @@ use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{PullRequest, SessionId, Standing, ToolUseId, Wait, WaitEnd, WaitUntil};
 use protocol::worker::{CancelWait, ReadWait, StartWait, WaitAnswer};
 use serde_json::{Map, Value, json};
+use std::time::Duration;
 
 pub(in super::super) const NAME: &str = protocol::worker::WAIT_TOOL;
-
-/// How often the agent's CLI is asked to check on a wait. The hub reads the pull request less often than this, so it's
-/// only how soon after the read that ends a wait the agent hears of it, at the cost of a question to the hub that never
-/// reads GitHub. *Unconfirmed*
-pub(super) const POLL_INTERVAL_MS: u64 = 5_000;
 
 /// Where the Claude CLI names the agent's call, in a call's `_meta`.
 const CALL_KEY: &str = "claudecode/toolUseId";
 
-/// Starts a wait, answered as a task. One that ended as it started, such as on a pull request that's merged already,
-/// is answered at once, and so is one that couldn't start, with why.
-pub(in super::super) async fn call(asks: &Asks, session_id: &SessionId, params: &Map<String, Value>) -> Value {
+/// Starts a wait, answered as a task the CLI asks after every `wait_poll`. One that ended as it started, such as on a
+/// pull request that's merged already, is answered at once, and so is one that couldn't start, with why.
+pub(in super::super) async fn call(
+    asks: &Asks,
+    wait_poll: Duration,
+    session_id: &SessionId,
+    params: &Map<String, Value>,
+) -> Value {
     let until = match until(params) {
         Ok(until) => until,
         Err(wrong) => return Called::failed(wrong).to_json(),
@@ -28,7 +29,7 @@ pub(in super::super) async fn call(asks: &Asks, session_id: &SessionId, params: 
     match asks.ask(session_id.clone(), StartWait { until, call }).await {
         Ok(WaitAnswer { wait, pull_request }) => match wait.ended {
             None => {
-                let mut started = task(&wait, pull_request.as_ref());
+                let mut started = task(&wait, pull_request.as_ref(), wait_poll);
                 started["resultType"] = "task".into();
                 started
             }
@@ -39,10 +40,15 @@ pub(in super::super) async fn call(asks: &Asks, session_id: &SessionId, params: 
 }
 
 /// `tasks/get`: how the wait stands, with how it ended once it has.
-pub(in super::super) async fn get(asks: &Asks, session_id: &SessionId, task_id: &str) -> Result<Value, RpcError> {
+pub(in super::super) async fn get(
+    asks: &Asks,
+    wait_poll: Duration,
+    session_id: &SessionId,
+    task_id: &str,
+) -> Result<Value, RpcError> {
     let asked = asks.ask(session_id.clone(), ReadWait { wait: task_id.into() }).await;
     let WaitAnswer { wait, pull_request } = asked.map_err(|e| not_said(&e))?;
-    Ok(task(&wait, pull_request.as_ref()))
+    Ok(task(&wait, pull_request.as_ref(), wait_poll))
 }
 
 /// `tasks/cancel`: ends the wait, unless it has ended already.
@@ -71,8 +77,8 @@ fn not_said(e: &ApiError) -> RpcError {
     }
 }
 
-/// The wait as an MCP task, as `tasks/get` reads it.
-pub(in crate::tools) fn task(wait: &Wait, pull_request: Option<&PullRequest>) -> Value {
+/// The wait as an MCP task, as `tasks/get` reads it, which the CLI is to ask after every `wait_poll`.
+pub(in crate::tools) fn task(wait: &Wait, pull_request: Option<&PullRequest>, wait_poll: Duration) -> Value {
     let updated_at_ms = wait.ended.map_or_else(
         || wait.watch.as_ref().map_or(wait.started_at_ms, |watch| watch.last_attempt_at_ms),
         |ended| ended.at_ms,
@@ -83,7 +89,7 @@ pub(in crate::tools) fn task(wait: &Wait, pull_request: Option<&PullRequest>) ->
         "createdAt": iso(wait.started_at_ms),
         "lastUpdatedAt": iso(updated_at_ms),
         "ttlMs": null,
-        "pollIntervalMs": POLL_INTERVAL_MS,
+        "pollIntervalMs": u64::try_from(wait_poll.as_millis()).unwrap_or(u64::MAX),
     });
     let (status, message) = match wait.ended {
         None => {

@@ -4,31 +4,24 @@
 //! until the next prompt, keeping the machine awake all the while. A hub that carries on with an agent the last hub was
 //! waiting on waits too, since the last hub's timer went with it.
 
-use std::time::Duration;
-
 use protocol::client::{ApiError, ErrorCode};
 use protocol::event::{AgentRunState, EventBody};
 use tracing::{error, warn};
 
 use super::{Item, LiveSession, LiveState, Origin};
 
-/// How long the agent has to pick up again. The CLI does within a tenth of a second. An agent asked to stop says its
-/// work was stopped too, and exits within eight seconds, three before it's killed and five for its last output, so its
-/// exit comes first, and says it was cut short.
-pub(crate) const PICKS_UP_WITHIN: Duration = Duration::from_secs(15);
-
 impl LiveSession {
-    /// Takes the agent to be idle if the session is still in this wait, [`PICKS_UP_WITHIN`] after it began. A wait
-    /// begun since has a timer of its own.
+    /// Takes the agent to be idle if the session is still in this wait, [`crate::Timers::picks_up_within`] after it
+    /// began. A wait begun since has a timer of its own.
     pub(super) fn wait_for_pickup(&self) {
         let wait = {
             let mut state = self.state.lock();
             state.pickup_waits += 1;
             state.pickup_waits
         };
-        let ingest = self.ingest.clone();
+        let (ingest, within) = (self.ingest.clone(), self.picks_up_within);
         tokio::spawn(async move {
-            tokio::time::sleep(PICKS_UP_WITHIN).await;
+            tokio::time::sleep(within).await;
             let _ = ingest.send(Item::PickupDue { wait }).await;
         });
     }

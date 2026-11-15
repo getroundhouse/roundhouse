@@ -24,8 +24,6 @@ mod tests;
 
 mod reading;
 
-#[cfg(test)]
-use reading::AGENT_SPACING;
 use reading::Asked;
 pub(super) use reading::{Reading, When};
 

@@ -3,6 +3,7 @@
 use super::examples;
 use client_core::{Client, Subscription, SubscriptionItem};
 use examples::fake_agent;
+use hub::Timers;
 use protocol::event::{ContentBlock, EventBody, SessionEvent};
 use protocol::model::{
     AgentKind, ApprovalId, PermissionMode, Seq, Session, SessionId, SessionSettingsChange, SessionStatus, Workspace,
@@ -10,6 +11,7 @@ use protocol::model::{
 };
 use protocol::paths::Paths;
 use protocol::tail::Tail;
+use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
@@ -24,7 +26,8 @@ const GH_LOGINS: [&str; 6] =
 pub(crate) struct Stack {
     pub(crate) dir: TempDir,
     pub(crate) hub: Option<Child>,
-    /// Set for every hub this starts, and so for its workers.
+    /// Set for every hub this starts, and so for its workers. A test about one of the hub's time limits sets the hub's
+    /// timers here, which go in place of [`Timers::FOR_TESTS`], and the workers' the same way.
     pub(super) env: Vec<(&'static str, String)>,
 }
 
@@ -77,6 +80,9 @@ impl Stack {
     }
 
     pub(crate) fn command_at(&self, exe: &Path) -> Command {
+        let log = File::options().create(true).append(true).open(self.hub_log()).unwrap();
+        let (timers, short) = Timers::FOR_TESTS.env();
+        let (worker_timers, worker_short) = worker::Timers::FOR_TESTS.env();
         let mut command = Command::new(exe);
         command
             .arg("hub")
@@ -84,11 +90,16 @@ impl Stack {
             .env("ROUNDHOUSE_WORKSPACES", self.path("workspaces"))
             .env("ROUNDHOUSE_CLAUDE_BIN", fake_agent())
             .env("FAKE_CLAUDE_STATE", self.agent_state())
+            // So an agent started again doesn't sit through the CLI's 2 s before it asks after a task.
+            .env("FAKE_CLAUDE_POLL_DEFAULT_MS", worker::Timers::FOR_TESTS.wait_poll.as_millis().to_string())
             // So a real ~/.conductor/settings.toml can't change what these tests do.
             .env("HOME", self.path("user-home"))
+            // So a test waits out only the time limits it's about. The hub passes the workers' on to them.
+            .env(timers, short)
+            .env(worker_timers, worker_short)
             .envs(self.env.iter().map(|(name, value)| (name, value)))
             .stdout(Stdio::null())
-            .stderr(Stdio::null());
+            .stderr(log);
         // So `gh` can't reach GitHub as whoever runs the tests, any more than it finds their login in `HOME`.
         for name in GH_LOGINS {
             command.env_remove(name);
@@ -96,6 +107,12 @@ impl Stack {
         // So the fake agent says who's logged in, not that it has the token of whoever runs the tests.
         command.env_remove("CLAUDE_CODE_OAUTH_TOKEN");
         command
+    }
+
+    /// Where every hub this starts writes its log. Beside its data rather than in it, since making the hub's directory
+    /// first would leave it as open as this user's other files, where the hub keeps its own to this user alone.
+    pub(crate) fn hub_log(&self) -> PathBuf {
+        self.path("hub.log")
     }
 
     /// Set for every hub started from now on, as [`Stack::start_with`] sets it for the first.

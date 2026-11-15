@@ -23,9 +23,6 @@ use tracing::warn;
 
 pub(super) static NEXT_LINK_ID: AtomicU64 = AtomicU64::new(1);
 
-/// A worker on this machine answers in milliseconds. Hitting this means something is wrong with it.
-pub(super) const HELLO_TIMEOUT: Duration = Duration::from_secs(10);
-
 /// How long a worker gets to stop its agents after its stdin closes. Agents get 3 s each.
 pub(crate) const STOP_GRACE: Duration = Duration::from_secs(10);
 
@@ -88,6 +85,7 @@ impl WorkerLink {
             build: OnceLock::new(),
             version: OnceLock::new(),
         });
+        let within = hub.timers.hello_within;
         tokio::spawn(acks::acknowledge(hub.clone(), link.clone()));
         tokio::spawn(reading::read_frames(
             hub,
@@ -104,7 +102,7 @@ impl WorkerLink {
             // So a restart leaves it running, for the next hub. The hub says when it means it to stop.
             keep_running_without_hub: true,
         });
-        let failure = match tokio::time::timeout(HELLO_TIMEOUT, hello).await {
+        let failure = match tokio::time::timeout(within, hello).await {
             Ok(Ok(HelloReply { protocol_version, build })) if versions::WORKERS.speaks(protocol_version) => {
                 let _ = link.build.set(build);
                 let _ = link.version.set(protocol_version);
@@ -115,7 +113,7 @@ impl WorkerLink {
                 format!("the worker chose protocol {protocol_version}, and this hub speaks {}", versions::WORKERS),
             ),
             Ok(Err(e)) => e,
-            Err(_) => ApiError::new(ErrorCode::Worker, format!("the worker didn't answer within {HELLO_TIMEOUT:?}")),
+            Err(_) => ApiError::new(ErrorCode::Worker, format!("the worker didn't answer within {within:?}")),
         };
         link.kill();
         // A worker refused its instance says so, because another worker is serving it, which ending the instance would

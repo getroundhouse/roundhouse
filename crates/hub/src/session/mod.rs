@@ -29,8 +29,6 @@ mod tests;
 mod waits;
 
 pub(crate) use messages::{Command, Item};
-#[cfg(test)]
-pub(crate) use pickup::PICKS_UP_WITHIN;
 pub(crate) use progress::Progress;
 
 mod live;

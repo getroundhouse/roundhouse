@@ -77,10 +77,18 @@ pub(crate) fn point_daemons_at_the_fake_agent() {
         // Under Cargo's target directory, so runs can't pile up in the system's. Conversation IDs are
         // unique, so nothing here carries over from one run to the next.
         let scratch = Path::new(env!("CARGO_TARGET_TMPDIR"));
+        let (timers, short) = hub::Timers::FOR_TESTS.env();
+        let (worker_timers, worker_short) = worker::Timers::FOR_TESTS.env();
+        let poll = worker::Timers::FOR_TESTS.wait_poll.as_millis().to_string();
         // SAFETY: guarded by the OnceLock, and this runs before any daemon or thread here reads it.
         unsafe {
             std::env::set_var("ROUNDHOUSE_CLAUDE_BIN", binaries().join("examples/fake_claude"));
+            // So a test waits out only the time limits it's about. The hub passes the workers' on to them.
+            std::env::set_var(timers, short);
+            std::env::set_var(worker_timers, worker_short);
             std::env::set_var("FAKE_CLAUDE_STATE", scratch.join("ui-agent-state"));
+            // So an agent started again doesn't sit through the CLI's 2 s before it asks after a task.
+            std::env::set_var("FAKE_CLAUDE_POLL_DEFAULT_MS", poll);
             // So a real ~/.conductor/settings.toml can't change what these tests do.
             std::env::set_var("HOME", scratch.join("ui-home"));
             // So `gh` can't reach GitHub as whoever runs the tests.

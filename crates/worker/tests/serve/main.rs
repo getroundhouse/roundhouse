@@ -186,6 +186,7 @@ fn config(dir: &Path, claude_bin: Option<PathBuf>) -> Config {
         scratch_dir: dir.to_path_buf(),
         deleter: Deleter::new("/bin/rm", ["-rf", "--"]),
         refused: None,
+        timers: worker::Timers::DEFAULT,
     }
 }
 

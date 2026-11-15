@@ -12,7 +12,7 @@ use tokio::sync::Mutex as AsyncMutex;
 use tracing::warn;
 
 use super::ready::ReadyWorkspace;
-use super::{Hub, SHUTDOWN_GRACE, Wanted};
+use super::{Hub, Wanted};
 use crate::session::Item;
 use crate::worker_link::{Opening, STOP_GRACE, WorkerLink};
 
@@ -234,7 +234,7 @@ impl Hub {
     /// says.
     pub(super) async fn close_worker(&self, workspace: &Workspace, link: &WorkerLink, provider: &dyn Provider) {
         link.close().await;
-        if tokio::time::timeout(SHUTDOWN_GRACE, link.wait_closed()).await.is_ok() {
+        if tokio::time::timeout(self.timers.shutdown_grace, link.wait_closed()).await.is_ok() {
             return;
         }
         warn!(instance_id = %workspace.instance_id, "a worker didn't stop in time");

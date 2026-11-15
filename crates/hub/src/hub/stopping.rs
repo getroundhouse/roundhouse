@@ -10,7 +10,7 @@ use tokio::sync::oneshot;
 use tokio::task::JoinSet;
 use tracing::warn;
 
-use super::{Hub, KEEPS_WORKERS, SHUTDOWN_GRACE};
+use super::{Hub, KEEPS_WORKERS};
 use crate::session::Item;
 use crate::store::Store;
 
@@ -78,7 +78,7 @@ impl Hub {
             link.close().await;
         }
         // One deadline for all of them, so several stuck workers don't add up.
-        let deadline = tokio::time::Instant::now() + SHUTDOWN_GRACE;
+        let deadline = tokio::time::Instant::now() + self.timers.shutdown_grace;
         let mut stuck = JoinSet::new();
         for (workspace_id, link) in links {
             if tokio::time::timeout_at(deadline, link.wait_closed()).await.is_err() {
@@ -101,7 +101,7 @@ impl Hub {
         for link in &links {
             link.leave(self).await;
         }
-        let deadline = tokio::time::Instant::now() + SHUTDOWN_GRACE;
+        let deadline = tokio::time::Instant::now() + self.timers.shutdown_grace;
         for link in &links {
             if tokio::time::timeout_at(deadline, link.wait_closed()).await.is_err() {
                 warn!("a worker didn't let this hub go in time");

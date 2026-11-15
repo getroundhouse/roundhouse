@@ -22,6 +22,7 @@ pub(crate) struct Given {
     pub state_dir: PathBuf,
     pub claude_bin: Option<PathBuf>,
     pub codex_bin: Option<PathBuf>,
+    pub timers: worker::Timers,
 }
 
 pub(crate) fn run(transport: Transport, given: Given) -> anyhow::Result<()> {
@@ -57,5 +58,6 @@ pub(super) fn config(given: Given, refused: Option<String>) -> anyhow::Result<wo
         scratch_dir: std::env::temp_dir(),
         deleter: worker::Deleter::new(exe, ["delete", "--"]),
         refused,
+        timers: given.timers,
     })
 }
