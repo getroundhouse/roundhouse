@@ -1,4 +1,6 @@
-use client_core::calls::{Failure, Recorded};
+use client_core::calls::{Recorded, Returned};
+use protocol::capability::calls::CallOutput;
+use protocol::capability::calls::output::Ended;
 use protocol::event::{AgentTask, CallKind, ContentBlock, Denied, EndedTask, TaskKind, TaskOutcome};
 use protocol::fixtures;
 use protocol::model::{EndedWait, Seq, WaitEnd, WaitEnded};
@@ -43,22 +45,51 @@ fn a_call_is_said_by_the_kind_its_adapter_said_it_is() {
     assert_eq!(called(Recorded::of(&since).unwrap()), "seek: fn main", "a search, by what it looks for");
 }
 
+/// What's printed of the result `block`.
+fn printed(block: &ContentBlock) -> Vec<String> {
+    came_back(&Returned::of(block).expect("a result"))
+}
+
 #[test]
 fn a_failed_result_says_how_the_command_exited_however_it_was_recorded() {
-    fn said(block: &ContentBlock) -> (String, &str) {
-        let ContentBlock::ToolResult { text, .. } = block else { panic!("a result") };
-        came_back(text, Failure::of(block))
-    }
     let before = fixtures::tool_result("c", "Exit code 2\nls: x: No such file", true);
     let since = fixtures::command_failed("c", "ls: x: No such file", 2);
+    let typed =
+        fixtures::typed_result("c", fixtures::command_output("ls: x: No such file", Some(2), Ended::Exited), true);
 
-    for block in [&before, &since] {
-        assert_eq!(said(block), ("tool error, exit 2".to_string(), "ls: x: No such file"));
+    for block in [&before, &since, &typed] {
+        assert_eq!(printed(block), ["tool error, exit 2: ls: x: No such file"], "{block:?}");
     }
     let refused = fixtures::tool_result("c", "<tool_use_error>no such tool</tool_use_error>", true);
-    assert_eq!(said(&refused), ("tool error".to_string(), "no such tool"));
-    let worked = fixtures::tool_result("c", "a.rs", false);
-    assert_eq!(said(&worked), ("tool result".to_string(), "a.rs"));
+    assert_eq!(printed(&refused), ["tool error: no such tool"]);
+    assert_eq!(printed(&fixtures::tool_result("c", "a.rs", false)), ["tool result: a.rs"]);
+    let timed_out =
+        fixtures::typed_result("c", fixtures::command_output("still building", None, Ended::TimedOut), true);
+    assert_eq!(printed(&timed_out), ["tool error, timed out: still building"]);
+}
+
+/// A typed result prints as one recorded as the agent's words does: its first lines, how many images came back, and
+/// that it was denied or is for the model alone.
+#[test]
+fn a_typed_result_prints_as_much_as_any_other() {
+    let long = (1..=9).map(|line| format!("line {line}")).collect::<Vec<_>>().join("\n");
+    let words = |text: &str| CallOutput::Words { text: text.into() };
+    let with_an_image =
+        fixtures::with_images(fixtures::typed_result("c", words("a screenshot"), false), vec![fixtures::image("i")]);
+    let backgrounded = Ended::Backgrounded { task: "t".into() };
+    let in_the_background =
+        fixtures::typed_result("c", fixtures::command_output("Compiling", None, backgrounded), false);
+
+    let first = printed(&fixtures::typed_result("c", words(&long), false));
+    assert_eq!(first[..2], ["tool result: line 1", "  line 2"]);
+    assert_eq!(first.last().map(String::as_str), Some("  ... 3 more lines"));
+    assert_eq!(printed(&with_an_image), ["tool result: a screenshot [1 image]"]);
+    assert_eq!(printed(&fixtures::typed_denied("c", "The user said no", Some("Not that"))), ["tool denied: Not that"]);
+    let encrypted = fixtures::typed_result("c", CallOutput::Encrypted, false);
+    assert_eq!(printed(&encrypted), ["tool result: encrypted, for the model alone"]);
+    assert_eq!(printed(&in_the_background), ["tool result, went on in the background: Compiling"]);
+    let any_other = fixtures::typed_result("c", CallOutput::Backgrounded { task: Some("t".into()) }, false);
+    assert_eq!(printed(&any_other), ["tool result, went on in the background"], "nothing came back but that");
 }
 
 #[test]

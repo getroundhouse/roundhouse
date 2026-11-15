@@ -8,7 +8,8 @@ use protocol::prompt::Prompt;
 use serde_json::{Value, json};
 
 use super::super::harness::Harness;
-use super::fixtures::{activity, bodies, command, play, turn};
+use super::fixtures::activity;
+use crate::codex::tests::script::{bodies, command, play, turn};
 use crate::{AgentOutput, AgentProcess};
 
 #[tokio::test]

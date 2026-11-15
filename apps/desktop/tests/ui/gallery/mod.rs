@@ -53,6 +53,7 @@ mod subagent_records;
 mod tool_chats;
 mod tool_screens;
 mod turn_screens;
+mod typed_chats;
 mod update_screens;
 mod workspace_screens;
 mod worktree;

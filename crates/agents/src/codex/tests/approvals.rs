@@ -15,9 +15,10 @@ fn native_questions_preserve_choices_open_text_and_secrets() {
 }
 
 use super::harness::Harness;
+use super::script::{bodies, command, item, play, turn};
 use crate::{AgentOutput, AgentProcess};
 use protocol::capability::{Control, approvals::Decision};
-use protocol::event::{EventBody, TurnOutcome};
+use protocol::event::{ContentBlock, EventBody, TurnOutcome};
 use protocol::model::{PermissionMode, Seq, SessionSettingsChange};
 use protocol::prompt::Prompt;
 
@@ -174,4 +175,48 @@ async fn codex_hears_only_the_answers_each_question_allows() {
     }
     assert_eq!(answered, Some(json!({"color":{"answers":["Red"]},"name":{"answers":["Bo"]}})));
     agent.stop().await;
+}
+
+/// A request to make a call names the call, as Claude's do, so a client ties what the call's result says to it, such as
+/// that the person denied it.
+#[tokio::test]
+async fn a_request_to_make_a_call_names_the_call() {
+    let asked = |id: u64, kind: &str, call: &str| {
+        json!({"id":id,"method":format!("item/{kind}/requestApproval"),
+            "params":{"threadId":"thread","turnId":"root-turn","itemId":call}})
+    };
+    let declined = json!({"type":"commandExecution","id":"run-tests","command":"echo hello","cwd":".",
+        "commandActions":[],"status":"declined","aggregatedOutput":null,"exitCode":null});
+    let edit = |status: &str| {
+        json!({"type":"fileChange","id":"add-notes","status":status,
+            "changes":[{"path":"NOTES.md","diff":"hello\n","kind":{"type":"add"}}]})
+    };
+    let output = play(vec![
+        turn("thread", "root-turn", "inProgress"),
+        command("thread", "root-turn", "run-tests", false),
+        asked(90, "commandExecution", "run-tests"),
+        item("thread", "root-turn", declined, true),
+        item("thread", "root-turn", edit("inProgress"), false),
+        asked(91, "fileChange", "add-notes"),
+        item("thread", "root-turn", edit("completed"), true),
+        turn("thread", "root-turn", "completed"),
+    ])
+    .await;
+
+    let bodies = bodies(&output);
+    let named: Vec<_> = bodies
+        .iter()
+        .filter_map(|body| {
+            if let EventBody::ApprovalRequested { tool_use_id, .. } = body { Some(tool_use_id.clone()) } else { None }
+        })
+        .collect();
+    assert_eq!(named, [Some("run-tests".into()), Some("add-notes".into())]);
+    let denied = bodies.iter().find_map(|body| {
+        let EventBody::AgentUser { blocks, .. } = body else { return None };
+        blocks.iter().find_map(|block| {
+            let ContentBlock::CallResult { tool_use_id, denied, .. } = block else { return None };
+            (tool_use_id.as_str() == "run-tests").then_some(denied.is_some())
+        })
+    });
+    assert_eq!(denied, Some(true), "the declined call's result, which the request names, says it was denied");
 }

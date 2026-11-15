@@ -6,6 +6,11 @@
 mod pr_wait;
 pub use pr_wait::{observed_pull_request, pull_request_wait};
 
+mod typed;
+pub use typed::{
+    command_output, image, typed_call, typed_command, typed_denied, typed_request, typed_result, with_images,
+};
+
 mod builders;
 pub use builders::{
     ApprovalRequest, account, approval_request, call, call_result, child_worktree, command_failed, event, of_kind,

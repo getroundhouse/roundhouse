@@ -1,4 +1,4 @@
-use client_core::calls::{Failure, Recorded, first_line};
+use client_core::calls::{Recorded, Returned, first_line};
 use client_core::waits::{watched, why_it_ended};
 use protocol::attachment::Attachment;
 use protocol::capability::turns::OwnTurn;
@@ -193,35 +193,11 @@ impl Printer {
                     self.line(seq, &format!("tool {}", called(call)));
                 }
             }
-            ContentBlock::ToolResult { encrypted: true, .. } => {
-                self.line(seq, "tool result: encrypted, for the model alone");
-            }
-            ContentBlock::ToolResult { denied: Some(denied), .. } => self.line(seq, &denial(denied)),
-            ContentBlock::ToolResult { text, images, .. } => {
-                let (label, text) = came_back(text, Failure::of(block));
-                let lines: Vec<&str> = text.lines().collect();
-                let first = lines.first().copied().unwrap_or("");
-                let shown = match images.len() {
-                    0 => String::new(),
-                    1 => "[1 image]".to_string(),
-                    n => format!("[{n} images]"),
-                };
-                let gap = if first.is_empty() || shown.is_empty() { "" } else { " " };
-                self.line(seq, &format!("{label}: {first}{gap}{shown}"));
-                for line in lines.iter().skip(1).take(RESULT_PREVIEW_LINES - 1) {
-                    self.line(seq, &format!("  {line}"));
-                }
-                if lines.len() > RESULT_PREVIEW_LINES {
-                    self.line(seq, &format!("  ... {} more lines", lines.len() - RESULT_PREVIEW_LINES));
-                }
-            }
-            ContentBlock::CallResult { output, denied, is_error, .. } => {
-                if let Some(denied) = denied {
-                    self.line(seq, &denial(denied));
-                } else {
-                    let text = client_core::calls::typed::output(output);
-                    let label = if *is_error { "tool error" } else { "tool result" };
-                    self.line(seq, &format!("{label}: {text}"));
+            ContentBlock::ToolResult { .. } | ContentBlock::CallResult { .. } => {
+                if let Some(returned) = Returned::of(block) {
+                    for line in came_back(&returned) {
+                        self.line(seq, &line);
+                    }
                 }
             }
             ContentBlock::Thinking { .. } | ContentBlock::Image { .. } | ContentBlock::Unknown => {}
@@ -304,13 +280,41 @@ pub(super) fn called(call: Recorded<'_>) -> String {
     about(&name, call.summary())
 }
 
-/// What to call a result, and what it sent back: its `text`, or for one that failed, what `failure` says of it, which
-/// is how every client reads one. So it says how a command exited, and leaves that out of what it printed, however
-/// it was recorded.
-pub(super) fn came_back<'a>(text: &'a str, failure: Option<Failure<'a>>) -> (String, &'a str) {
-    let Some(failure) = failure else { return ("tool result".to_string(), text) };
-    let label = failure.exit_code.map_or_else(|| "tool error".to_string(), |code| format!("tool error, exit {code}"));
-    (label, failure.output)
+/// What to print of what came back for a call, however it was recorded, as every client reads it: that it's for the
+/// model alone, that the person denied it, or what to call it, then the first lines of what it sent back, the first
+/// beside how many images came with it, if any came back. One that failed says how a command exited, or ended without exiting, and leaves
+/// that out of what it printed, and one that went on in the background says so, since what it sent is only what it had
+/// by then.
+pub(super) fn came_back(returned: &Returned<'_>) -> Vec<String> {
+    if returned.encrypted {
+        return vec!["tool result: encrypted, for the model alone".to_string()];
+    }
+    if let Some(denied) = returned.denied {
+        return vec![denial(denied)];
+    }
+    let failure = returned.failure();
+    let (label, text) = match &failure {
+        None if returned.in_the_background() => {
+            ("tool result, went on in the background".to_string(), returned.text.as_ref())
+        }
+        None => ("tool result".to_string(), returned.text.as_ref()),
+        Some(failure) if failure.ended.is_none() => ("tool error".to_string(), failure.output),
+        Some(failure) => (format!("tool error, {}", failure.label().to_lowercase()), failure.output),
+    };
+    let lines: Vec<&str> = text.lines().collect();
+    let first = lines.first().copied().unwrap_or("");
+    let images = match returned.images.len() {
+        0 => String::new(),
+        1 => "[1 image]".to_string(),
+        n => format!("[{n} images]"),
+    };
+    let said = [first, images.as_str()].into_iter().filter(|part| !part.is_empty()).collect::<Vec<_>>().join(" ");
+    let mut printed = vec![if said.is_empty() { label } else { format!("{label}: {said}") }];
+    printed.extend(lines.iter().skip(1).take(RESULT_PREVIEW_LINES - 1).map(|line| format!("  {line}")));
+    if lines.len() > RESULT_PREVIEW_LINES {
+        printed.push(format!("  ... {} more lines", lines.len() - RESULT_PREVIEW_LINES));
+    }
+    printed
 }
 
 /// The tool `name`, then `summary` after a colon, if there's one. Such as the advisor, which takes no input, a call can

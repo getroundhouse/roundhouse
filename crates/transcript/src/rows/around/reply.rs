@@ -1,8 +1,9 @@
 //! What's come back for a call: its result, found in the log near after it, or the log saying the agent went on
 //! without one.
 
-use client_core::calls::{Failure, ResultForm};
+use client_core::calls::{self, Failure, ResultForm, Returned};
 use client_core::session_log::SessionLog;
+use protocol::capability::calls::CallOutput;
 use protocol::event::{ContentBlock, Denied, EventBody, FileChange, Hunk, SessionEvent};
 use protocol::model::{Seq, ToolUseId};
 
@@ -48,8 +49,11 @@ impl Reply {
 /// A call's result, found in the log, to draw under the call.
 pub(in crate::rows) struct Answer {
     pub(in crate::rows) is_error: bool,
-    /// What it sent back, as recorded, which [`Answer::shown`] reads for showing.
+    /// What it sent back, as text, which [`Answer::shown`] reads for showing.
     text: String,
+    /// What it sent back, typed, from an adapter that records it so, which a call's row draws by its kind. Boxed,
+    /// since it's larger than the rest of the answer, and every [`Reply`] takes the room of one with an answer.
+    pub(in crate::rows) output: Option<Box<CallOutput>>,
     /// What it changed in a file, when its agent said.
     pub(in crate::rows) change: Option<FileChange>,
     /// The images it sent back, such as a screenshot the agent read.
@@ -108,6 +112,12 @@ impl Answer {
         (!text.trim().is_empty() || self.images().is_empty()).then_some(text)
     }
 
+    /// Whether its call goes on in the background, so what it sent back is only what it had by then, as
+    /// [`calls::in_the_background`] says.
+    pub(in crate::rows) fn in_the_background(&self) -> bool {
+        self.output.as_deref().is_some_and(calls::in_the_background)
+    }
+
     /// The parts of a file it changed, when its agent said which they were.
     pub(in crate::rows) fn hunks(&self) -> Option<&[Hunk]> {
         let Some(FileChange::Changed { hunks }) = &self.change else { return None };
@@ -116,62 +126,16 @@ impl Answer {
 
     /// What `block` says, if it's a result.
     fn of(block: &ContentBlock, m: &Model) -> Option<Answer> {
-        if let ContentBlock::CallResult { is_error, output, denied, .. } = block {
-            use protocol::capability::calls::{CallOutput, output::McpContent};
-            let images = match output {
-                CallOutput::Image { image, .. } => vec![image.clone()],
-                CallOutput::Mcp { content, .. } => content
-                    .iter()
-                    .filter_map(|c| match c {
-                        McpContent::Image { image } => Some(image.clone()),
-                        McpContent::Text { .. }
-                        | McpContent::Resource { .. }
-                        | McpContent::Other { .. }
-                        | McpContent::Unknown => None,
-                    })
-                    .collect(),
-                CallOutput::Command(_)
-                | CallOutput::Lines(_)
-                | CallOutput::Document { .. }
-                | CallOutput::Changed { .. }
-                | CallOutput::Found(_)
-                | CallOutput::Paths(_)
-                | CallOutput::Page { .. }
-                | CallOutput::WebResults { .. }
-                | CallOutput::Report { .. }
-                | CallOutput::Words { .. }
-                | CallOutput::Encrypted
-                | CallOutput::Backgrounded { .. }
-                | CallOutput::Unknown => Vec::new(),
-            };
-            let change = if let CallOutput::Changed { files } = output
-                && files.len() == 1
-            {
-                files[0].change.clone()
-            } else {
-                None
-            };
-            return Some(Answer {
-                is_error: *is_error,
-                text: client_core::calls::typed::output(output),
-                change,
-                images: attachments::carried(m, &images),
-                encrypted: false,
-                form: ResultForm::of(block)?,
-                denied: denied.clone(),
-            });
-        }
-        let ContentBlock::ToolResult { is_error, text, change, images, encrypted, denied, .. } = block else {
-            return None;
-        };
+        let returned = Returned::of(block)?;
         Some(Answer {
-            is_error: *is_error,
-            text: text.clone(),
-            change: change.clone(),
-            images: attachments::carried(m, images),
-            encrypted: *encrypted,
-            form: ResultForm::of(block)?,
-            denied: denied.clone(),
+            is_error: returned.is_error,
+            change: returned.change.cloned(),
+            images: attachments::carried(m, returned.images.iter().copied()),
+            encrypted: returned.encrypted,
+            output: returned.output.cloned().map(Box::new),
+            form: returned.form(),
+            denied: returned.denied.cloned(),
+            text: returned.text.into_owned(),
         })
     }
 }

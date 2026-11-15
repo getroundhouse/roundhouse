@@ -4,7 +4,8 @@ use protocol::prompt::Prompt;
 use serde_json::json;
 
 use super::super::harness::Harness;
-use super::fixtures::{activity, command, turn};
+use super::fixtures::activity;
+use crate::codex::tests::script::{command, turn};
 use crate::{AgentOutput, AgentProcess};
 
 #[tokio::test]
