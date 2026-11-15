@@ -48,6 +48,8 @@ fn a_wait_s_line_says_where_its_pull_request_stands_and_stop_calls_it_off(cx: &m
     let stop = SharedString::from(format!("wait-stop/{}", wait.id));
     ui.click(stop.clone());
 
+    // The hub's record first, then the line, so a wait that never ends says which didn't follow.
+    ui.wait("the hub to end the wait", |_| waiting().is_none_or(|open| open.id != wait.id));
     ui.wait("the line to go with the hub's wait", |ui| !ui.has(stop.clone()));
     ui.wait("the agent to hear", |_| {
         let session = stack.client().session_get(&chat).unwrap();
