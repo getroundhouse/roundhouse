@@ -110,6 +110,7 @@ fn failures_in_a_row_are_one_card_as_each_arrives(cx: &mut TestAppContext) {
     }
 
     let newest_failure = ui.events().into_iter().rfind(|e| failed(&e.body)).unwrap();
-    assert!(ui.visible(retry(newest_failure.seq)), "on the card, which is the newest's");
+    // Retry is offered once the chat's record says its turn failed, which comes on the hub's feed apart from the events.
+    ui.wait("Retry on the card, which is the newest's", |ui| ui.visible(retry(newest_failure.seq)));
     assert!(ui.shown("ended-task").is_empty(), "each turn's line is in the card");
 }
