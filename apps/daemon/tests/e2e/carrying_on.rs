@@ -9,7 +9,7 @@ use std::time::Duration;
 use client_core::{Client, Restart};
 use protocol::event::{ApprovalDecision, EventBody, SessionEvent};
 use protocol::model::{BranchName, Head, Seq, SetupStatus};
-use protocol::worker::{WorkerOutcome, WorkerRequest, WorkerResponse};
+use protocol::worker::{WorkerFrame, WorkerOutcome, WorkerRequest, WorkerResponse};
 
 use crate::attaching::Attached;
 
@@ -49,7 +49,9 @@ fn a_restart_leaves_the_agent_at_work_and_the_next_hub_carries_on_with_it() {
     let mut stack = Stack::start();
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
-    client.session_prompt(&session.id, "say:before; hang:1500; say:after", None).unwrap();
+    let (go, finished) = (stack.path("go"), stack.path("finished"));
+    let script = format!("say:before; hang-until:{}; say:after; tool:touch {}", go.display(), finished.display());
+    client.session_prompt(&session.id, &script, None).unwrap();
     wait_until("the agent to start its tool", || assistant_text(&read_all(&client, &session.id)) == "before");
     let agent = started_pid(&read_all(&client, &session.id)).unwrap();
     assert!(client.hub_status().unwrap().keeps_workers, "so the app knows it can restart this hub at once");
@@ -57,8 +59,10 @@ fn a_restart_leaves_the_agent_at_work_and_the_next_hub_carries_on_with_it() {
 
     restart(&mut stack);
     assert!(is_alive(agent), "the restart left the agent running");
-    // So the agent finishes its turn with no hub there.
-    std::thread::sleep(Duration::from_secs(2));
+    // So the agent finishes its turn with no hub there. All that's left once its last call has run is that call's
+    // result and the turn's end, which are written straight after.
+    std::fs::write(&go, "").unwrap();
+    wait_until("the agent to run its last call", || finished.exists());
     stack.start_hub();
 
     let events = wait_for_turn_end(&stack.client(), &session.id, 1);
@@ -72,16 +76,20 @@ fn a_message_the_agent_is_writing_as_the_hub_restarts_is_whole_in_the_next_hub_s
     let mut stack = Stack::start();
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
-    // Thinking for 30 s, so it's still writing once the next hub has started.
-    client.session_prompt(&session.id, "think:300:t", None).unwrap();
+    // Thinking until the test ends, so it's still writing once the next hub has started.
+    let never = stack.path("never");
+    client.session_prompt(&session.id, &format!("think-until:{}:t", never.display()), None).unwrap();
     let subscription = client.session_subscribe(&session.id, Seq::new(1)).unwrap();
     let mut before = Follower::default();
     before.drain_until(&subscription, "the agent to start thinking", |f| f.tail_text().contains("t2 "));
     drop((subscription, client));
 
     restart(&mut stack);
-    // So the agent writes with no hub there.
-    std::thread::sleep(Duration::from_millis(500));
+    // So the agent writes with no hub there: two more than it had said as the hub went, since the first of them may
+    // have been on its way already.
+    let said = || std::fs::read_to_string(format!("{}.said", never.display())).map_or(0, |said| said.lines().count());
+    let as_the_hub_went = said();
+    wait_until("the agent to write with no hub there", || said() >= as_the_hub_went + 2);
     stack.start_hub();
 
     let client = stack.client();
@@ -168,9 +176,10 @@ fn an_idle_agent_is_carried_on_with_and_stops_with_the_next_hub() {
 }
 
 /// The worker the next hub carries on with watches the worktree's branches for it, so the next hub hears of a branch
-/// checked out while there was no hub, which the worker couldn't send anyone.
+/// checked out after the last hub went, which the worker's watch has read already and sent where nothing recorded it.
+/// Here that's a stand-in for a hub rather than none, so the test knows the watch read it before the next hub came.
 #[test]
-fn the_next_hub_hears_of_a_branch_checked_out_while_there_was_none() {
+fn the_next_hub_hears_of_a_branch_checked_out_after_the_last_one_went() {
     let mut stack = Stack::start();
     let client = stack.client();
     let (workspace, session) = stack.workspace(&client);
@@ -182,14 +191,19 @@ fn the_next_hub_hears_of_a_branch_checked_out_while_there_was_none() {
     drop(client);
 
     stack.kill_hub();
+    let instance = stack.paths().instances_dir.join(workspace.instance_id.to_string());
+    let mut stand_in = Attached::next_hub(&stack.path("workspaces"), &instance);
     support::git(Path::new(&workspace.path.unwrap()), &["switch", "-q", "-c", "next-thing"]);
-    // Longer than the watch waits for git to stop writing, so it has read the branch before the next hub connects.
-    std::thread::sleep(Duration::from_secs(1));
+    let next_thing = Head::Branch { name: BranchName::from("next-thing") };
+    stand_in.frame_until("the watch the last hub asked for to read the branch", |frame| match frame {
+        WorkerFrame::Branches { branches } => (branches.head == next_thing).then_some(()),
+        _ => None,
+    });
+    stand_in.close();
     stack.start_hub();
 
     let client = stack.client();
-    let next_thing = Some(Head::Branch { name: BranchName::from("next-thing") });
-    wait_until("the next hub to hear of the branch", || head(&client) == next_thing);
+    wait_until("the next hub to hear of the branch", || head(&client) == Some(next_thing.clone()));
 }
 
 /// So a restart can't interrupt a setup that the next hub would only find failed.
@@ -233,7 +247,8 @@ fn a_signal_while_a_restart_waits_for_a_setup_script_stops_the_agents() {
 }
 
 /// Asks the hub to restart with an agent at work in one workspace and a setup script running in another, so it
-/// waits, and returns the agent's PID.
+/// waits, and returns the agent's PID. It says it's finishing, and goes only once the script ends, as
+/// `a_restart_waits_for_a_setup_script_to_finish` shows, which is long after the test.
 fn an_agent_at_work_while_a_restart_waits(stack: &Stack) -> u32 {
     let client = stack.client();
     let (workspace, session) = stack.workspace(&client);
@@ -244,8 +259,6 @@ fn an_agent_at_work_while_a_restart_waits(stack: &Stack) -> u32 {
     client.workspace_create(&workspace.repo_id, None, None, None).unwrap();
     wait_until("the setup to start", || client.hub_status().unwrap().running_setups == 1);
     assert_eq!(client_core::restart_hub(&client).unwrap(), Restart::Finishing);
-    std::thread::sleep(Duration::from_millis(200));
-    assert!(client.hub_status().is_ok(), "the restart waits for the setup script");
     agent
 }
 

@@ -50,11 +50,19 @@ pub(crate) fn a_prompt_is_queued() {
 }
 
 /// Numbered chunks of the text `FILE:TEXT` gives, until FILE exists. Each is made only once the one before has gone, so
-/// what they're said in ends as soon as the file exists, and they wait on it until then.
+/// what they're said in ends as soon as the file exists, and they wait on it until then. Each that has gone adds a line
+/// to `FILE.said`, so a test can wait for the agent to have said more.
 pub(crate) fn until(file_and_text: &str) -> impl Iterator<Item = String> + use<> {
     let (file, text) = file_and_text.split_once(':').unwrap();
+    let said = PathBuf::from(format!("{file}.said"));
     let (waiting, text) = (WaitingOn::file(Path::new(file)), text.to_string());
-    (0..).map_while(move |i| (!waiting.made()).then(|| format!("{text}{i} ")))
+    (0..).map_while(move |i| {
+        if i > 0 {
+            let mut said = std::fs::OpenOptions::new().create(true).append(true).open(&said).unwrap();
+            std::io::Write::write_all(&mut said, b"said\n").unwrap();
+        }
+        (!waiting.made()).then(|| format!("{text}{i} "))
+    })
 }
 
 /// A tool that runs until `done` says, given how long it has run. Returns true if the turn was interrupted.
