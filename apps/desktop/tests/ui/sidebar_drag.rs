@@ -14,7 +14,7 @@ use gpui_kit::{
 use protocol::model::{RepoId, WorkspaceId};
 
 use crate::support::{
-    MORE_THAN_FIT, Stack, Ui, made_one_at_a_time, project_row, sidebar_row as row, top, two_projects, wait_out_setup,
+    MORE_THAN_FIT, Stack, Ui, made_in_order, project_row, sidebar_row as row, top, two_projects, wait_out_setup,
 };
 
 /// Presses in the middle of `from`, and lets go with the pointer in the middle of `to`.
@@ -60,7 +60,7 @@ fn one_long<'a>(
     let (mut ui, projects, four) = two_projects(cx, stack);
     let was = ui.cx.update_window(ui.handle, |_, window, _| window.bounds().size).unwrap();
     ui.cx.simulate_window_resize(ui.handle, size(was.width, was.height - SHORTER));
-    let made = made_one_at_a_time(stack, &projects[long], MORE_THAN_FIT);
+    let made = made_in_order(stack, &projects[long], MORE_THAN_FIT);
     ui.wait("every workspace", |ui| ui.view().visible_workspaces().len() == MORE_THAN_FIT + 4);
     wait_out_setup(&mut ui);
     (ui, projects, four, made.last().unwrap().clone())
