@@ -16,8 +16,6 @@ pub(crate) const REACH: usize = MAX_LOADED_EVENTS;
 pub(in crate::rows) struct Subagent {
     /// The call that started it.
     pub(in crate::rows) call: ToolUseId,
-    /// Which subagent it is, which its events name.
-    pub(in crate::rows) id: SubagentId,
     /// How many calls it's made.
     pub(in crate::rows) calls: usize,
     /// Its events, with what each needs to be drawn. Only gathered while its call is open, and never when its work is
@@ -42,11 +40,10 @@ impl Subagent {
         open: bool,
         opening: Opening,
     ) -> Self {
-        let subagent = SubagentId::of_call(id);
         if log.by() == By::Place {
-            let record = m.subagents.get(&subagent).cloned();
+            let record = m.subagents.started_by(id).cloned();
             let calls = record.as_ref().map_or(0, |record| usize::try_from(record.calls).unwrap_or(usize::MAX));
-            m.subagent_rows.borrow_mut().insert(subagent.clone(), seq);
+            m.subagent_rows.borrow_mut().insert(id.clone(), seq);
             let working = record.as_ref().filter(|record| record.status == SubagentStatus::Working);
             let lately = working.filter(|_| open).map_or_default(|record| lately::lately(record));
             let lately = lately
@@ -60,12 +57,13 @@ impl Subagent {
                     (block, around)
                 })
                 .collect();
-            return Self { call: id.clone(), id: subagent, calls, events: None, apart: true, record, lately };
+            return Self { call: id.clone(), calls, events: None, apart: true, record, lately };
         }
+        // A log by `seq` is from a hub too old to keep a subagent's events apart, which names each by its call.
+        let subagent = SubagentId::of_call(id);
         let its_own = |event: &&SessionEvent| parent_of(&event.body) == Some(&subagent);
         let mut gathered = Self {
             call: id.clone(),
-            id: subagent.clone(),
             calls: 0,
             events: open.then(Vec::new),
             apart: false,
@@ -162,11 +160,15 @@ fn parent_of(body: &EventBody) -> Option<&SubagentId> {
 
 #[cfg(test)]
 mod tests {
-    use protocol::model::Seq;
+    use std::sync::Arc;
+
+    use client_core::session_log::SessionLog;
+    use protocol::event::SessionEvent;
+    use protocol::model::{Place, Seq, SubagentId, SubagentStatus, ToolUseId};
 
     use super::nearby::is_loaded;
-    use super::{Opening, Subagent, drawn_in_its_call};
-    use crate::fixtures::{calls, calls_to, event, log, result, within};
+    use super::{Opening, Record, Subagent, drawn_in_its_call};
+    use crate::fixtures::{calls, calls_to, event, log, record, result, within};
     use crate::transcript::Model;
 
     #[test]
@@ -226,6 +228,26 @@ mod tests {
         let log = log([event(Seq::new(1), calls(&["not-an-agent"])), work.clone()]);
 
         assert!(!drawn_in_its_call(&log, &Model::default(), &work));
+    }
+
+    /// A hub that keeps a subagent's work apart names it as its agent does, which needn't be its call, so its call's
+    /// row finds its record by the call the record keeps, and is measured again by that call when the record changes.
+    #[test]
+    fn a_call_s_row_finds_the_record_of_the_subagent_it_started_whatever_its_agent_named_it() {
+        let mut log = SessionLog::by_place(Place::default());
+        log.apply_event(SessionEvent { place: Place::new(1), ..event(Seq::new(1), calls_to("Agent", &["agent"])) });
+        let mut m = Model::default();
+        let started = Record { id: Some("thread-1".into()), calls: 3, ..record("agent", SubagentStatus::Working) };
+        m.subagents.insert(Arc::new(started));
+
+        let row = Subagent::read(&log, &m, Seq::new(1), &"agent".into(), false, Opening::AsChosen);
+
+        assert_eq!(row.record.as_deref().map(Record::id), Some("thread-1".into()));
+        assert_eq!(row.calls, 3);
+        assert_eq!(m.subagent_rows.borrow().get(&ToolUseId::from("agent")), Some(&Seq::new(1)));
+        assert_eq!(m.subagents.subagent_started_by(&"agent".into()), SubagentId::from("thread-1"), "its tab's");
+        let unrecorded = m.subagents.subagent_started_by(&"other".into());
+        assert_eq!(unrecorded, SubagentId::from("other"), "one with no record is named by its call");
     }
 
     #[test]

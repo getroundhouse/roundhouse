@@ -116,10 +116,13 @@ pub enum EventBody {
     AgentLimits {
         limits: Vec<UsageLimit>,
     },
-    /// The agent started a subagent with the call `call`, which the subagent's events name as their parent. It's the
-    /// agent's own event, about the subagent.
+    /// The agent started a subagent with the call `call`. It's the agent's own event, about the subagent.
     SubagentStarted {
         call: ToolUseId,
+        /// The subagent, by the ID its agent gives it, which its events name. `None` in one recorded before subagents
+        /// had IDs of their own, whose events name `call`, as [`EventBody::subagent_started`] says.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        subagent: Option<SubagentId>,
         /// Its kind of agent, such as `Explore`.
         #[serde(default)]
         kind: Option<String>,

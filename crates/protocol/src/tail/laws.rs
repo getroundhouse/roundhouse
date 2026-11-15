@@ -8,8 +8,9 @@ use proptest::prelude::*;
 use proptest::sample::Index;
 use proptest::test_runner::{Config, RngSeed};
 
-use super::tests::{started, turn_ended};
+use super::tests::turn_ended;
 use super::*;
+use crate::fixtures::subagent_started;
 
 fn kind() -> impl Strategy<Value = BlockKind> {
     prop_oneof![Just(BlockKind::Text), Just(BlockKind::Thinking), Just(BlockKind::ToolUse), Just(BlockKind::Unknown)]
@@ -53,7 +54,7 @@ fn heard() -> impl Strategy<Value = Heard> {
         4 => delta().prop_map(Heard::Delta),
         1 => "m[0-2]".prop_map(|message_id| Heard::Event(finished(&message_id.into()))),
         1 => Just(Heard::Event(turn_ended())),
-        1 => "t[01]".prop_map(|call| Heard::Event(started(&call, true))),
+        1 => "t[01]".prop_map(|call| Heard::Event(subagent_started(&call, true))),
     ]
 }
 

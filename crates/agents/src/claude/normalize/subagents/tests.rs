@@ -32,6 +32,7 @@ fn a_subagent_starts_with_what_it_was_asked_and_ends_with_its_report() {
         start,
         EventBody::SubagentStarted {
             call: "agent".into(),
+            subagent: Some("agent".into()),
             kind: Some("Explore".into()),
             description: Some("Find the tests".into()),
             prompt: Some("Find where the tests live.".into()),

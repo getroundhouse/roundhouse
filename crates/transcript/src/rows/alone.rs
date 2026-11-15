@@ -161,7 +161,7 @@ mod tests {
     /// The tab showing `subagent`.
     fn tab(subagent: Subagent) -> Model {
         let mut m = Model { alone: Some(subagent.id()), ..Model::default() };
-        m.subagents.insert(subagent.id(), Arc::new(subagent));
+        m.subagents.insert(Arc::new(subagent));
         m
     }
 

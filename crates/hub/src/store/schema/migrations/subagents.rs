@@ -156,3 +156,18 @@ pub(super) const CONTEXT_TOKENS: &str = r"
                 ELSE 0 END) AS found
         WHERE found.session_id = subagents.session_id AND found.call = subagents.call;
 ";
+
+/// Each subagent's ID, which its agent gives it and its events name, apart from the call that started it, which its
+/// row in the chat is drawn for. One from before this was named by its call, as its events are, so that's its ID. A
+/// client takes a record with no ID as named by its call, so what it shows of one doesn't change, and its revision
+/// stays.
+pub(super) const IDS: &str = r"
+    ALTER TABLE subagents ADD COLUMN id TEXT;
+    DROP TRIGGER subagents_rev_on_update;
+    UPDATE subagents SET id = call;
+    CREATE TRIGGER subagents_rev_on_update AFTER UPDATE ON subagents WHEN NEW.rev = OLD.rev BEGIN
+        UPDATE counters SET value = value + 1 WHERE name = 'rev';
+        UPDATE subagents SET rev = (SELECT value FROM counters WHERE name = 'rev') WHERE rowid = NEW.rowid;
+    END;
+    CREATE UNIQUE INDEX subagents_by_id ON subagents (session_id, id);
+";

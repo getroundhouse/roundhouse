@@ -110,8 +110,10 @@ impl Printer {
             }
             EventBody::AgentTasks { tasks, stopped } => self.background(event.seq, tasks, stopped),
             EventBody::OwnTurn(OwnTurn::TaskEnded { ended }) => self.line(event.seq, &own_turn(ended)),
-            EventBody::SubagentStarted { description, call, .. } => {
-                self.subagent(event.seq, description.as_deref(), &SubagentId::of_call(call));
+            EventBody::SubagentStarted { description, .. } => {
+                if let Some(subagent) = event.body.subagent_started() {
+                    self.subagent(event.seq, description.as_deref(), &subagent);
+                }
             }
             EventBody::SubagentEnded { subagent, outcome, .. } => self.subagent_ended(event.seq, subagent, *outcome),
             EventBody::PromptDropped { prompt } => {

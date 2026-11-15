@@ -226,3 +226,23 @@ fn a_migrated_record_counts_what_its_end_said_its_conversation_held() {
         assert!(subagent(&store, call).rev < subagent(&store, "counted").rev, "only one with a count changed: {call}");
     }
 }
+
+/// A record from before is named by its call, as its events are, so what they say goes on changing it. Its revision
+/// stays, since a client takes one without an ID as named by its call.
+#[test]
+fn a_migrated_record_is_named_by_its_call() {
+    let dir = tempfile::tempdir().unwrap();
+    // The first changed last, so a migration that moved every revision, in the order the records were made, would
+    // leave the second the newer.
+    let old = "INSERT INTO subagents (session_id, call, status, started_at_ms) VALUES ('s', 'first', 'working', 1);
+        INSERT INTO subagents (session_id, call, status, started_at_ms) VALUES ('s', 'second', 'working', 1);
+        UPDATE subagents SET calls = 1 WHERE call = 'first';";
+
+    let store = older::store_from_before(dir.path(), schema::BEFORE_SUBAGENT_IDS, &format!("{}{old}", rows(&[])));
+
+    let migrated = subagent(&store, "first");
+    assert_eq!((migrated.id.as_ref().map(SubagentId::as_str), migrated.call.as_str()), (Some("first"), "first"));
+    assert!(subagent(&store, "second").rev < migrated.rev, "no revision moved");
+    record(&store, &message(Some("first"), vec![tool_use("read")]));
+    assert_eq!(subagent(&store, "first").calls, 2);
+}

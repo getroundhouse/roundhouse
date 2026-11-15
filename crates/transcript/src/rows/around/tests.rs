@@ -126,7 +126,7 @@ fn what_else_says_what_became_of_an_approval_is_a_questions_line_a_denied_calls_
     let for_a = |subagent: &str| Closes::ForASubagent { tool: "Bash".into(), subagent: subagent.into() };
     assert_eq!(closes(&m, Seq::new(10), "s"), for_a("Subagent"), "its call is in the subagent's work");
     let checking = Subagent { description: Some("Check the build".into()), ..record("agent", SubagentStatus::Working) };
-    m.subagents.insert("agent".into(), Arc::new(checking));
+    m.subagents.insert(Arc::new(checking));
     assert_eq!(closes(&m, Seq::new(10), "s"), for_a("Check the build"));
 }
 
@@ -255,7 +255,7 @@ fn a_working_subagent_s_latest_images_are_fetched_once_its_call_under_working_on
     let recent =
         RecentWork { calls: vec![RecentCall { before: None, call: read, result: Some(came_back) }], since: None };
     let mut m = Model::default();
-    m.subagents.insert("agent".into(), Arc::new(working("agent", recent)));
+    m.subagents.insert(Arc::new(working("agent", recent)));
     m.folds.choose(ItemKey::Event(Seq::new(1), 0), Fold::Output, true);
     assert!(Around::read(&log, &m, Seq::new(1), &agent).images().is_empty(), "its read is closed");
 

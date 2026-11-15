@@ -91,8 +91,8 @@ impl Ledger {
         {
             broken.push(Law::ResultFollowsCall);
         }
-        if let EventBody::SubagentStarted { call, .. } = body {
-            self.subagents.record(SubagentId::of_call(call));
+        if let Some(subagent) = body.subagent_started() {
+            self.subagents.record(subagent);
         }
         if let EventBody::SubagentEnded { subagent, .. } = body
             && !self.subagents.settle(subagent, by_agent)

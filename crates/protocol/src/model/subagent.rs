@@ -8,10 +8,15 @@ use super::{ModelName, Rev, SessionId, SubagentId, ToolUseId};
 use crate::attachment::Attachment;
 use crate::event::{CallKind, ContentBlock, Denied, TaskOutcome};
 
-/// One subagent, named by its session and the call that started it, which its events name as their parent.
+/// One subagent, named in its session by the ID its agent gives it, which its events name.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct Subagent {
     pub session_id: SessionId,
+    /// Which subagent it is, as [`Subagent::id`] reads it. `None` from a hub from before subagents had IDs of their
+    /// own, which names each by its call.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<SubagentId>,
+    /// The call that started it, which its row in the chat is drawn for.
     pub call: ToolUseId,
     /// Its kind of agent, such as `Explore`.
     #[serde(default)]
@@ -60,9 +65,9 @@ pub struct Subagent {
 }
 
 impl Subagent {
-    /// Which subagent it is, which is the call that started it.
+    /// Which subagent it is: its ID, or its call from a hub from before subagents had IDs of their own.
     pub fn id(&self) -> SubagentId {
-        SubagentId::of_call(&self.call)
+        self.id.clone().unwrap_or_else(|| SubagentId::of_call(&self.call))
     }
 }
 

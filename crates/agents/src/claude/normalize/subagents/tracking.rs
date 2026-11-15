@@ -45,10 +45,11 @@ impl Subagents {
                 }
                 let in_background = value.get("is_backgrounded").and_then(Value::as_bool) == Some(true);
                 if in_background {
-                    self.in_background.insert(subagent);
+                    self.in_background.insert(subagent.clone());
                 }
                 Some(EventBody::SubagentStarted {
                     call,
+                    subagent: Some(subagent),
                     kind: string_of(value, "subagent_type"),
                     description: string_of(value, "description"),
                     prompt: string_of(value, "prompt"),

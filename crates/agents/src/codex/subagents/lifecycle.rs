@@ -135,6 +135,7 @@ async fn started(
     shared
         .event(
             EventBody::SubagentStarted {
+                subagent: Some(SubagentId::of_call(&call)),
                 call,
                 kind: details.persona.map(|name| name.to_string()),
                 description: details.description,

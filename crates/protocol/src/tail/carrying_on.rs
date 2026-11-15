@@ -1,7 +1,8 @@
 //! A worker's tail of each run, and a hub taking it in place of its own.
 
-use super::tests::{started, turn_ended};
+use super::tests::turn_ended;
 use super::*;
+use crate::fixtures::subagent_started;
 
 fn writing(run: u64, message_id: &str, text: &str) -> StreamDelta {
     StreamDelta {
@@ -16,7 +17,7 @@ fn writing(run: u64, message_id: &str, text: &str) -> StreamDelta {
 fn two_runs() -> Tail {
     let mut tail = Tail::default();
     tail.apply(&writing(1, "m1", "old"));
-    tail.on_agent_event(RunId::new(1), &started("toolu_1", true));
+    tail.on_agent_event(RunId::new(1), &subagent_started("toolu_1", true));
     tail.apply(&writing(2, "m2", "new"));
     tail.on_agent_event(RunId::new(2), &EventBody::AgentCompacting { written_chars: Some(40) });
     tail
@@ -54,7 +55,7 @@ fn replacing_a_run_takes_the_place_of_what_the_hub_had_of_it_and_leaves_the_rest
 fn replacing_a_run_takes_its_subagents_in_the_background_so_its_turn_s_end_leaves_them() {
     let mut worker = Tail::default();
     worker.apply(&StreamDelta { subagent: Some("toolu_1".into()), ..writing(1, "sub", "still going") });
-    worker.on_agent_event(RunId::new(1), &started("toolu_1", true));
+    worker.on_agent_event(RunId::new(1), &subagent_started("toolu_1", true));
     let mut hub = Tail::default();
 
     hub.replace_run(RunId::new(1), worker.of_run(RunId::new(1)));

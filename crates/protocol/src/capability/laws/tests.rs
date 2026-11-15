@@ -6,7 +6,7 @@ use crate::capability::{Capabilities, Capability, approvals, asking, background,
 use crate::capability::{Claimed, approvals as approval_claims, background as background_claims};
 use crate::event::{AgentTask, ApprovalOutcome, ExitReason, TaskOutcome, TokenUsage, TurnOutcome};
 use crate::event::{Asking, CompactedBy, CompactionOutcome, ContentBlock, EventBody, SessionEvent, TaskKind};
-use crate::fixtures::{event, tool_result, tool_use, turn_ended};
+use crate::fixtures::{event, subagent_started, tool_result, tool_use, turn_ended};
 use crate::model::PermissionMode;
 use crate::model::TaskId;
 use crate::model::{RunId, Seq};
@@ -67,10 +67,6 @@ fn resolved(id: &str) -> EventBody {
     }
 }
 
-fn subagent_started(call: &str) -> EventBody {
-    EventBody::SubagentStarted { call: call.into(), kind: None, description: None, prompt: None, in_background: false }
-}
-
 fn subagent_ended(call: &str) -> EventBody {
     EventBody::SubagentEnded {
         subagent: call.into(),
@@ -120,7 +116,7 @@ fn a_session_that_keeps_every_law_breaks_none() {
         from_hub(6, resolved("a")),
         from_run(1, 7, resolved("a")),
         from_run(1, 8, sent_back(vec![tool_result("t", "Cargo.toml", false)])),
-        from_run(1, 9, subagent_started("t")),
+        from_run(1, 9, subagent_started("t", false)),
         from_run(1, 10, turn_ended(TurnOutcome::Success)),
         from_hub(11, prompt()),
         from_run(1, 12, exited()),
@@ -175,14 +171,14 @@ fn a_request_is_resolved_after_it_was_made_by_the_hub_before_the_agent_and_by_ea
 fn a_subagent_ends_after_it_started_by_the_hub_before_the_agent_and_by_each_once() {
     let log = [
         from_run(1, 1, subagent_ended("t")),
-        from_run(1, 2, subagent_started("t")),
+        from_run(1, 2, subagent_started("t", false)),
         from_hub(3, subagent_ended("t")),
         from_run(1, 4, subagent_ended("t")),
         from_run(1, 5, subagent_ended("t")),
-        from_run(1, 6, subagent_started("u")),
+        from_run(1, 6, subagent_started("u", false)),
         from_hub(7, subagent_ended("u")),
         from_hub(8, subagent_ended("u")),
-        from_run(1, 9, subagent_started("v")),
+        from_run(1, 9, subagent_started("v", false)),
         from_run(1, 10, subagent_ended("v")),
         from_hub(11, subagent_ended("v")),
     ];
@@ -370,7 +366,7 @@ fn what_the_agent_says_of_its_mode_limits_and_questions_needs_their_capabilities
 fn what_the_agent_says_of_its_subagents_needs_them() {
     let subagents = [Capability::from(background::Capability::Subagents)];
 
-    assert_eq!(needs(&subagent_started("t")), subagents);
+    assert_eq!(needs(&subagent_started("t", false)), subagents);
     assert_eq!(needs(&EventBody::SubagentContext { subagent: "t".into(), tokens: 9 }), subagents);
     assert_eq!(needs(&subagent_ended("t")), subagents);
 }

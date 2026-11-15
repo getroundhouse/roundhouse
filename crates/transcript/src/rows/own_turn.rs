@@ -9,7 +9,6 @@ use client_core::waits::{watched, why_it_ended};
 use gpui_kit::assets::IconName;
 use gpui_kit::{AnyElement, App, IntoElement as _, ParentElement as _, Styled as _};
 use protocol::event::{EndedTask, SessionEvent, TaskKind, TaskOutcome};
-use protocol::model::SubagentId;
 
 use super::line::{Line, Part};
 use super::tools::{agent, command, typed};
@@ -29,8 +28,7 @@ pub(super) fn lines(event: &SessionEvent, tasks: &[EndedTask], shared: &Shared, 
         let task = &ended.task;
         let open = task.call.as_ref().filter(|_| task.kind == TaskKind::Subagent).map(|call| {
             let id = ItemKey::Event(event.seq, ix).element("ended-task-open");
-            let subagent = SubagentId::of_call(call);
-            agent::open_tab(id, subagent, task.description.as_deref().unwrap_or(UNTITLED), &shared.this)
+            agent::open_tab(id, call.clone(), task.description.as_deref().unwrap_or(UNTITLED), &shared.this)
         });
         let line = match open {
             Some(open) => line.action(open),

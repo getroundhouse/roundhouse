@@ -2,22 +2,18 @@
 //! each event the hub named. Each is put in a log of its own, by place as the chat's is, counted the way the log's own
 //! rows are, and let go, so the transcript never holds more than it would anyway.
 
-use std::collections::{BTreeSet, HashMap};
-use std::sync::Arc;
+use std::collections::BTreeSet;
 
 use client_core::Stretch;
 use client_core::session_log::{Position, SessionLog, Settled};
 use gpui_kit::{AppContext as _, Context, Task};
 use protocol::event::SessionEvent;
 use protocol::find::Needle;
-use protocol::model::{Place, Subagent, SubagentId};
+use protocol::model::Place;
 
 use super::is_loaded;
 use crate::rows::{found_in_row, rows_to_count};
-use crate::transcript::{AtWork, Model, Transcript};
-
-/// The subagents' records, by subagent, copied to go to the thread that counts.
-pub(super) type Records = HashMap<SubagentId, Arc<Subagent>>;
+use crate::transcript::{AtWork, Model, SubagentRecords, Transcript};
 
 impl Transcript {
     /// Counts the rows that draw the events `stretch` was read for, on another thread, then takes the counts of those
@@ -52,7 +48,7 @@ impl Transcript {
 /// records, which their calls draw, and where each prompt was settled, which is where it's drawn.
 #[derive(Default)]
 pub(super) struct Known {
-    pub(super) records: Records,
+    pub(super) records: SubagentRecords,
     pub(super) settled: Settled,
 }
 

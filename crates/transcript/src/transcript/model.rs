@@ -8,7 +8,7 @@ use crate::folds::Folds;
 use crate::rows::SubagentCalls;
 use client_core::session_log::RecordedApprovals;
 use gpui_kit::SharedString;
-use protocol::model::{AttachmentId, Seq, Subagent, SubagentId};
+use protocol::model::{AttachmentId, Seq, Subagent, SubagentId, ToolUseId};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -34,13 +34,12 @@ pub(crate) struct Model {
     /// The approvals the session's record says its agent is waiting on, which a plan's card and the panel follow.
     /// None from a hub that doesn't say, whose are found among what's loaded.
     pub approvals: Option<RecordedApprovals>,
-    /// Each subagent's record, as the hub keeps them. None from a hub that doesn't. Each is shared with client-core's
-    /// snapshot, since every frame's rows take the records of the calls they draw, and one can hold a call's whole
-    /// input, such as all of a file it wrote.
-    pub subagents: HashMap<SubagentId, Arc<Subagent>>,
-    /// The `seq` of the event each subagent's call was drawn in, so the row is measured again when its record
-    /// changes. A call's row is measured only once it's been drawn, so one that isn't here needs nothing.
-    pub subagent_rows: RefCell<HashMap<SubagentId, Seq>>,
+    /// Each subagent's record, as the hub keeps them. None from a hub that doesn't.
+    pub subagents: SubagentRecords,
+    /// The `seq` of the event each subagent's call was drawn in, by that call, so the row is measured again when its
+    /// record changes, which may come after the row was drawn. A call's row is measured only once it's been drawn, so
+    /// one that isn't here needs nothing.
+    pub subagent_rows: RefCell<HashMap<ToolUseId, Seq>>,
     /// In the subagent tab, the subagent it shows, alone.
     pub alone: Option<SubagentId>,
     /// What's being found in the chat, for rows to draw.
@@ -60,11 +59,44 @@ impl Model {
             retry_at: None,
             pull_request: None,
             approvals: None,
-            subagents: HashMap::new(),
+            subagents: SubagentRecords::default(),
             subagent_rows: RefCell::default(),
             alone: None,
             find: Rc::default(),
         }
+    }
+}
+
+/// Each subagent's record, as the hub keeps them, by its ID and by the call that started it, which its row in the chat
+/// is drawn for. Each is shared with client-core's snapshot, since every frame's rows take the records of the calls they
+/// draw, and one can hold a call's whole input, such as all of a file it wrote.
+#[derive(Clone, Default)]
+pub(crate) struct SubagentRecords {
+    by_id: HashMap<SubagentId, Arc<Subagent>>,
+    started_by: HashMap<ToolUseId, SubagentId>,
+}
+
+impl SubagentRecords {
+    pub(crate) fn get(&self, subagent: &SubagentId) -> Option<&Arc<Subagent>> {
+        self.by_id.get(subagent)
+    }
+
+    /// The record of the subagent `call` started, once it's come.
+    pub(crate) fn started_by(&self, call: &ToolUseId) -> Option<&Arc<Subagent>> {
+        self.by_id.get(self.started_by.get(call)?)
+    }
+
+    /// The subagent `call` started, as its record names it. One whose record hasn't come is taken as named by its
+    /// call, as a subagent from a hub from before subagents had IDs of their own is, which keeps no records.
+    pub(crate) fn subagent_started_by(&self, call: &ToolUseId) -> SubagentId {
+        self.started_by.get(call).cloned().unwrap_or_else(|| SubagentId::of_call(call))
+    }
+
+    /// Keeps `record` in place of the copy held of its subagent.
+    pub(crate) fn insert(&mut self, record: Arc<Subagent>) {
+        let id = record.id();
+        self.started_by.insert(record.call.clone(), id.clone());
+        self.by_id.insert(id, record);
     }
 }
 

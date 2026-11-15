@@ -197,9 +197,20 @@ impl Hub {
         let needle = Needle::new(query).map_err(|e| ApiError::new(ErrorCode::InvalidRequest, e.to_string()))?;
         self.blocking(move |store| {
             store.get_session(&id)?;
+            let subagent = subagent.map(|named| store.subagent_named(&id, &named)).transpose()?;
             store.find_events(&id, subagent.as_ref(), &needle)
         })
         .await
+    }
+
+    /// The subagent `named` names in the session `id`, as [`Store::subagent_named`] finds it, so a client from before
+    /// subagents had IDs of their own, which names one by its call, follows its events. `None` is the agent's own.
+    pub(crate) async fn subagent_named(
+        &self,
+        id: SessionId,
+        named: Option<SubagentId>,
+    ) -> Result<Option<SubagentId>, ApiError> {
+        self.blocking(move |store| named.map(|named| store.subagent_named(&id, &named)).transpose()).await
     }
 
     /// Reads for a subscriber, never past `through`.
@@ -215,8 +226,8 @@ impl Hub {
             .await
     }
 
-    /// Reads the agent's own events, or those of the subagent `subagent` started, by place, as
-    /// [`Hub::session_read`] reads every event by `seq`.
+    /// Reads the agent's own events, or the subagent `subagent`'s, by place, as [`Hub::session_read`] reads every event
+    /// by `seq`.
     pub(crate) async fn session_read_places(
         &self,
         id: SessionId,
@@ -230,6 +241,7 @@ impl Hub {
         let limit = limit.clamp(1, crate::server::MAX_READ_EVENTS);
         self.blocking(move |store| {
             store.get_session(&id)?;
+            let subagent = subagent.map(|named| store.subagent_named(&id, &named)).transpose()?;
             let places = Places { subagent: subagent.as_ref(), from: from_place, through: None };
             let (events, last_place) = store.read_places(&id, places, limit, max_bytes, include_raw)?;
             Ok(log::PlacedEvents { events, last_place })

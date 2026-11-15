@@ -71,7 +71,9 @@ ids!(
     ToolUseId,
     /// The agent's own ID for work it runs in the background.
     TaskId,
-    /// A subagent, which for now is the call that started it, as [`SubagentId::of_call`] names it.
+    /// A subagent, by the ID its agent gives it, such as Claude's `agent_id`, Codex's thread or Antigravity's
+    /// conversation, which outlives the call that started it. One recorded before subagents had IDs of their own is
+    /// named by the call that started it, as [`SubagentId::of_call`] names it.
     SubagentId,
     /// A wait on a workspace's pull request, chosen by the hub. The MCP task its agent follows it by has the same ID.
     WaitId,
@@ -92,7 +94,7 @@ ids!(
 );
 
 impl SubagentId {
-    /// The subagent `call` started, named by that call.
+    /// The subagent `call` started, named by that call, as one recorded before subagents had IDs of their own is.
     pub fn of_call(call: &ToolUseId) -> Self {
         Self(call.as_str().to_owned())
     }

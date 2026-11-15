@@ -170,6 +170,7 @@ pub(crate) fn on(model: &str, mut event: EventBody) -> EventBody {
 pub(crate) fn subagent_started(call: &str, kind: &str, description: &str, prompt: &str) -> EventBody {
     EventBody::SubagentStarted {
         call: call.into(),
+        subagent: None,
         kind: Some(kind.into()),
         description: Some(description.into()),
         prompt: Some(prompt.into()),
