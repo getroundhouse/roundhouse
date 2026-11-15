@@ -78,7 +78,7 @@ pub(super) fn failed_request_ending(log: &SessionLog, end: Seq) -> Option<Seq> {
     }
     events_before(log, end, NEAR)
         .take_while(|event| !matches!(event.body, EventBody::TurnEnded { .. } | EventBody::UserPrompt { .. }))
-        .find(|event| matches!(event.body, EventBody::RequestFailed { parent_tool_use_id: None, .. }))
+        .find(|event| matches!(event.body, EventBody::RequestFailed { subagent: None, .. }))
         .map(|event| event.seq)
 }
 

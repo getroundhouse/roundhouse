@@ -7,7 +7,7 @@ fn writing(run: u64, message_id: &str, text: &str) -> StreamDelta {
     StreamDelta {
         run: Some(RunId::new(run)),
         message_id: message_id.into(),
-        parent_tool_use_id: None,
+        subagent: None,
         change: DeltaChange::Thinking { index: 0, text: text.into() },
     }
 }
@@ -53,7 +53,7 @@ fn replacing_a_run_takes_the_place_of_what_the_hub_had_of_it_and_leaves_the_rest
 #[test]
 fn replacing_a_run_takes_its_subagents_in_the_background_so_its_turn_s_end_leaves_them() {
     let mut worker = Tail::default();
-    worker.apply(&StreamDelta { parent_tool_use_id: Some("toolu_1".into()), ..writing(1, "sub", "still going") });
+    worker.apply(&StreamDelta { subagent: Some("toolu_1".into()), ..writing(1, "sub", "still going") });
     worker.on_agent_event(RunId::new(1), &started("toolu_1", true));
     let mut hub = Tail::default();
 

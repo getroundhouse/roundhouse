@@ -1,30 +1,34 @@
 use std::collections::HashMap;
 
 use protocol::capability::calls::call::StartSubagent;
-use protocol::model::ToolUseId;
+use protocol::model::{SubagentId, ToolUseId};
 
 use crate::codex::state::{ThreadId, TurnId};
 
 #[derive(Default)]
 pub(in crate::codex) struct Subagents {
     pub(super) threads: HashMap<ThreadId, Child>,
-    pub(in crate::codex) runs: HashMap<ToolUseId, Run>,
+    /// Each turn a subagent has been given, as a subagent of its own.
+    pub(in crate::codex) runs: HashMap<SubagentId, Run>,
 }
 
 impl Subagents {
-    pub(in crate::codex) fn call(&self, thread: &ThreadId) -> Option<ToolUseId> {
+    /// The subagent working on `thread` now.
+    pub(in crate::codex) fn subagent(&self, thread: &ThreadId) -> Option<SubagentId> {
         self.threads.get(thread).map(|child| child.current.clone())
     }
 }
 
 pub(super) struct Child {
-    pub(super) current: ToolUseId,
+    pub(super) current: SubagentId,
     /// Keep ended turns' identities: their late items must not enter a newer invocation's transcript.
-    pub(super) turns: HashMap<TurnId, ToolUseId>,
+    pub(super) turns: HashMap<TurnId, SubagentId>,
 }
 
 pub(in crate::codex) struct Run {
-    pub(super) parent: Option<ToolUseId>,
+    /// The call that started it, which its result answers.
+    pub(super) call: ToolUseId,
+    pub(super) parent: Option<SubagentId>,
     pub(super) details: StartSubagent,
     pub(super) turn: Option<TurnId>,
     pub(in crate::codex) reply: Option<String>,

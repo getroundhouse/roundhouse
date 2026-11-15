@@ -1,6 +1,6 @@
 use super::super::{id_of, str_of};
 use protocol::event::{EventBody, FailureKind, NoticeLevel, RequestFailure};
-use protocol::model::ToolUseId;
+use protocol::model::SubagentId;
 use serde_json::Value;
 
 /// The CLI's name for the model of a message it wrote itself, such as one saying the API failed. No model wrote it.
@@ -14,16 +14,16 @@ pub(in super::super) fn message(value: &Value) -> Option<EventBody> {
         return None;
     }
     let text = text_of(message.get("content"));
-    let parent_tool_use_id: Option<ToolUseId> = id_of(value, "parent_tool_use_id");
+    let subagent: Option<SubagentId> = id_of(value, "parent_tool_use_id");
     if value.get("is_api_error_message").and_then(Value::as_bool) != Some(true) {
-        return Some(EventBody::Notice { level: NoticeLevel::Info, message: text, parent_tool_use_id });
+        return Some(EventBody::Notice { level: NoticeLevel::Info, message: text, subagent });
     }
     let limit = value.get("api_error_params").and_then(|params| params.get("rate_limit_info"));
     let resets_at_ms =
         limit.and_then(|limit| limit.get("resetsAt")).and_then(Value::as_i64).map(|s| s.saturating_mul(1000));
     let kind = str_of(value, "error").map_or(FailureKind::Unknown, kind_of);
     let failure = RequestFailure { message: text, kind, resets_at_ms };
-    Some(EventBody::RequestFailed { parent_tool_use_id, failure, again: None })
+    Some(EventBody::RequestFailed { subagent, failure, again: None })
 }
 
 /// The kind of failure the CLI's `error` says, from the categories its schema lists, rather than its words, which can
@@ -71,7 +71,7 @@ pub(in super::super) fn printed_notice(stream: Stream, text: String) -> EventBod
         Stream::Out => NoticeLevel::Info,
         Stream::Err => NoticeLevel::Warning,
     };
-    EventBody::Notice { level, message: text, parent_tool_use_id: None }
+    EventBody::Notice { level, message: text, subagent: None }
 }
 
 /// The text of a message's content, its text blocks run together.
@@ -94,12 +94,11 @@ impl FailedRequests {
     /// Notes a failed request of the agent's own, and anything the agent says after it, which goes on past it. A
     /// subagent's failure, and what a subagent says, leave the agent where it was.
     pub(in super::super) fn note(&mut self, body: &EventBody) {
-        if matches!(body, EventBody::RequestFailed { parent_tool_use_id: None, .. }) {
+        if matches!(body, EventBody::RequestFailed { subagent: None, .. }) {
             self.last = true;
         } else if matches!(
             body,
-            EventBody::Assistant { parent_tool_use_id: None, .. }
-                | EventBody::AgentUser { parent_tool_use_id: None, .. }
+            EventBody::Assistant { subagent: None, .. } | EventBody::AgentUser { subagent: None, .. }
         ) {
             self.last = false;
         }

@@ -28,16 +28,16 @@ fn needle(query: &str) -> Needle {
 
 fn agent_says(text: &str) -> EventBody {
     let blocks = vec![ContentBlock::Text { text: text.into(), images: Vec::new() }];
-    EventBody::Assistant { message_id: None, parent_tool_use_id: None, model: None, blocks, first_index: None }
+    EventBody::Assistant { message_id: None, subagent: None, model: None, blocks, first_index: None }
 }
 
 fn runs(id: &str, command: &str) -> EventBody {
     let blocks = vec![protocol::fixtures::tool_use(id, "Bash", json!({ "command": command }))];
-    EventBody::Assistant { message_id: None, parent_tool_use_id: None, model: None, blocks, first_index: None }
+    EventBody::Assistant { message_id: None, subagent: None, model: None, blocks, first_index: None }
 }
 
 fn printed(id: &str, text: &str) -> EventBody {
-    EventBody::AgentUser { parent_tool_use_id: None, blocks: vec![protocol::fixtures::tool_result(id, text, false)] }
+    EventBody::AgentUser { subagent: None, blocks: vec![protocol::fixtures::tool_result(id, text, false)] }
 }
 
 /// `body` at `place` among the agent's own events, with a `seq` far from it, as the agent's are once a subagent has
@@ -240,17 +240,17 @@ fn the_bar_says_whether_there_may_be_more() {
 /// The agent making the typed call `call`, as `id`.
 fn typed(id: &str, call: Call) -> EventBody {
     let blocks = vec![protocol::fixtures::typed_call(id, call)];
-    EventBody::Assistant { message_id: None, parent_tool_use_id: None, model: None, blocks, first_index: None }
+    EventBody::Assistant { message_id: None, subagent: None, model: None, blocks, first_index: None }
 }
 
 /// What came back for the typed call `id`.
 fn came_back(id: &str, output: CallOutput) -> EventBody {
-    EventBody::AgentUser { parent_tool_use_id: None, blocks: vec![protocol::fixtures::typed_result(id, output, false)] }
+    EventBody::AgentUser { subagent: None, blocks: vec![protocol::fixtures::typed_result(id, output, false)] }
 }
 
 /// What came back for the typed call `id`, which failed.
 fn failed_back(id: &str, output: CallOutput) -> EventBody {
-    EventBody::AgentUser { parent_tool_use_id: None, blocks: vec![protocol::fixtures::typed_result(id, output, true)] }
+    EventBody::AgentUser { subagent: None, blocks: vec![protocol::fixtures::typed_result(id, output, true)] }
 }
 
 fn added(text: &str) -> Vec<HunkLine> {

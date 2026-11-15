@@ -65,7 +65,7 @@ pub(crate) use ids::ids;
 pub use ids::{
     AccountId, AgentSessionId, ApprovalId, AskKey, AttachmentId, BranchName, ChildWorktreeId, ClientMessageId,
     ClientRequestId, CommentId, CommitId, HubId, InstanceId, MessageId, ProviderName, RemoteName, RepoId, SessionId,
-    TaskId, ToolUseId, WaitId, WorkerTarget, WorkspaceId,
+    SubagentId, TaskId, ToolUseId, WaitId, WorkerTarget, WorkspaceId,
 };
 mod repo;
 pub use repo::Repo;

@@ -174,8 +174,8 @@ impl WorkspacePane {
                 this.give_back(Some(&chat), prompt.clone(), cx);
                 cx.emit(PaneEvent::Error(message.clone()));
             }
-            TranscriptEvent::OpenSubagent { call, title } => {
-                this.open_subagent_tab(chat.clone(), call.clone(), title.clone(), cx);
+            TranscriptEvent::OpenSubagent { subagent, title } => {
+                this.open_subagent_tab(chat.clone(), subagent.clone(), title.clone(), cx);
             }
             TranscriptEvent::TurnEnded => {
                 // The hub reads the pull request again itself, and records it, except a hub too old to.

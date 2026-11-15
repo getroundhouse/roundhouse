@@ -10,7 +10,7 @@ use crate::store::tests::{idle_session, notice, store_with_session, workspace_w}
 fn subagents_message() -> EventBody {
     EventBody::Assistant {
         message_id: None,
-        parent_tool_use_id: Some("call-1".into()),
+        subagent: Some("call-1".into()),
         model: None,
         blocks: vec![ContentBlock::Text { text: "x".into(), images: Vec::new() }],
         first_index: None,

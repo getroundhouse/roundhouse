@@ -24,7 +24,7 @@ pub(super) async fn read(shared: Arc<Shared>, mut input: mpsc::Receiver<(Value, 
                     EventBody::Notice {
                         level: NoticeLevel::Error,
                         message: format!("Could not read Codex's message: {error}"),
-                        parent_tool_use_id: subagents::scope(&shared, &value["params"]).and_then(|scope| scope.parent),
+                        subagent: subagents::scope(&shared, &value["params"]).and_then(|scope| scope.parent),
                     },
                     Some(line),
                 )
@@ -50,7 +50,7 @@ async fn notification(shared: &Shared, value: &Value, raw: String) -> Result<(),
             .event(
                 EventBody::AgentOther {
                     kind: format!("unassociated Codex thread: {method}"),
-                    parent_tool_use_id: params["threadId"].as_str().map(|id| format!("codex-thread-{id}").into()),
+                    subagent: params["threadId"].as_str().map(|id| format!("codex-thread-{id}").into()),
                 },
                 Some(raw),
             )
@@ -105,7 +105,7 @@ async fn dispatch(
                     EventBody::Notice {
                         level: NoticeLevel::Error,
                         message: message.into(),
-                        parent_tool_use_id: scope.parent.clone(),
+                        subagent: scope.parent.clone(),
                     },
                     Some(raw),
                 )
@@ -115,10 +115,7 @@ async fn dispatch(
         "thread/status/changed" | "thread/started" | "item/reasoning/textDelta" => {}
         _ => {
             shared
-                .event(
-                    EventBody::AgentOther { kind: method.into(), parent_tool_use_id: scope.parent.clone() },
-                    Some(raw),
-                )
+                .event(EventBody::AgentOther { kind: method.into(), subagent: scope.parent.clone() }, Some(raw))
                 .await;
         }
     }
@@ -137,7 +134,7 @@ async fn delta(shared: &Shared, method: &str, params: &Value, scope: &subagents:
         .emit(AgentOutput::Delta(StreamDelta {
             run: None,
             message_id: id.into(),
-            parent_tool_use_id: scope.parent.clone(),
+            subagent: scope.parent.clone(),
             change,
         }))
         .await;

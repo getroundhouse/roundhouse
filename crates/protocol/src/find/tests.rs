@@ -40,13 +40,7 @@ fn a_needle_is_something_to_look_for_and_not_too_much() {
 
 fn call(input: Value) -> EventBody {
     let block = fixtures::tool_use("t", "Bash", input);
-    EventBody::Assistant {
-        message_id: None,
-        parent_tool_use_id: None,
-        model: None,
-        blocks: vec![block],
-        first_index: None,
-    }
+    EventBody::Assistant { message_id: None, subagent: None, model: None, blocks: vec![block], first_index: None }
 }
 
 fn changed(text: &str, line: &str) -> EventBody {
@@ -55,7 +49,7 @@ fn changed(text: &str, line: &str) -> EventBody {
     if let ContentBlock::ToolResult { change, .. } = &mut block {
         *change = Some(FileChange::Changed { hunks: vec![hunk] });
     }
-    EventBody::AgentUser { parent_tool_use_id: None, blocks: vec![block] }
+    EventBody::AgentUser { subagent: None, blocks: vec![block] }
 }
 
 #[test]
@@ -83,11 +77,8 @@ fn json_that_cant_hold_a_needle_is_passed_over() {
 
 #[test]
 fn a_phrase_across_a_line_is_found_as_a_paragraph_shows_it() {
-    let says = |text: &str| EventBody::Notice {
-        level: crate::event::NoticeLevel::Info,
-        message: text.into(),
-        parent_tool_use_id: None,
-    };
+    let says =
+        |text: &str| EventBody::Notice { level: crate::event::NoticeLevel::Info, message: text.into(), subagent: None };
     let wrapped = says("The parser\nis fixed");
 
     assert!(needle("parser is").is_in_event(&wrapped));
@@ -99,7 +90,7 @@ fn a_phrase_across_a_line_is_found_as_a_paragraph_shows_it() {
 fn markdown_is_found_past_what_marks_it() {
     let says = |text: &str| EventBody::Assistant {
         message_id: None,
-        parent_tool_use_id: None,
+        subagent: None,
         model: None,
         blocks: vec![ContentBlock::Text { text: text.into(), images: Vec::new() }],
         first_index: None,
@@ -194,7 +185,7 @@ proptest! {
         let blocks = vec![said, used];
         let bodies = [
             EventBody::UserPrompt { client_msg_id: None, prompt: crate::prompt::Prompt::new(texts[3].clone()) },
-            EventBody::Assistant { message_id: None, parent_tool_use_id: None, model: None, blocks, first_index: None },
+            EventBody::Assistant { message_id: None, subagent: None, model: None, blocks, first_index: None },
             changed(&texts[0], &texts[1]),
         ];
 

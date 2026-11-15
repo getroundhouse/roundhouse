@@ -137,7 +137,7 @@ pub(crate) async fn flushed(live: &LiveSession) {
 pub(crate) fn writing(run: RunId, text: &str) -> Tail {
     let mut tail = Tail::default();
     let change = DeltaChange::Thinking { index: 0, text: text.into() };
-    let delta = StreamDelta { run: Some(run), message_id: text.into(), parent_tool_use_id: None, change };
+    let delta = StreamDelta { run: Some(run), message_id: text.into(), subagent: None, change };
     tail.apply(&delta);
     tail
 }

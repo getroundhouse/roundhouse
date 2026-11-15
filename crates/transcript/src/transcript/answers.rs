@@ -4,7 +4,7 @@
 use client_core::session_log::RecordedApprovals;
 use gpui_kit::{AppContext as _, Context, Entity, Focusable as _};
 use protocol::event::{ApprovalDecision, EventBody};
-use protocol::model::{ApprovalId, Seq, Session, Subagent, ToolUseId};
+use protocol::model::{ApprovalId, Seq, Session, Subagent, SubagentId};
 
 use super::{Model, Transcript, TranscriptEvent};
 use crate::questions::{Asks, QuestionPanel};
@@ -14,8 +14,8 @@ struct Waiting {
     seq: Seq,
     approval_id: ApprovalId,
     asks: Asks,
-    /// The subagent that asks, as the call that started it.
-    asked_by: Option<ToolUseId>,
+    /// The subagent that asks.
+    asked_by: Option<SubagentId>,
 }
 
 /// What a subagent that asks is called where its record doesn't say what it's for, or hasn't come.
@@ -83,7 +83,7 @@ impl Transcript {
     /// more requests wait behind it. Both can change while the request waits, as a record comes or another agent asks.
     pub(super) fn tell_the_panel(&self, cx: &mut Context<Self>) {
         let Some(panel) = &self.asking else { return };
-        let asker = panel.read(cx).asked_by().map(|call| self.model.borrow().subagent_called(call));
+        let asker = panel.read(cx).asked_by().map(|subagent| self.model.borrow().subagent_called(subagent));
         let more_waiting = self.waiting.len().saturating_sub(1);
         panel.update(cx, |panel, cx| panel.set_around(asker, more_waiting, cx));
     }
@@ -125,10 +125,10 @@ impl Transcript {
 }
 
 impl Model {
-    /// What the subagent started by `call` is called, to say who asks: what it's for, or its kind, or `Subagent` where
-    /// its record says neither or hasn't come.
-    pub(crate) fn subagent_called(&self, call: &ToolUseId) -> String {
-        self.subagents.get(call).and_then(|subagent| called(subagent)).unwrap_or_else(|| A_SUBAGENT.to_string())
+    /// What `subagent` is called, to say who asks: what it's for, or its kind, or `Subagent` where its record says
+    /// neither or hasn't come.
+    pub(crate) fn subagent_called(&self, subagent: &SubagentId) -> String {
+        self.subagents.get(subagent).and_then(|subagent| called(subagent)).unwrap_or_else(|| A_SUBAGENT.to_string())
     }
 }
 

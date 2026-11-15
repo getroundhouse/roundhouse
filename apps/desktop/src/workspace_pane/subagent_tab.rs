@@ -20,7 +20,7 @@ use gpui_kit::{
     relative,
 };
 use look::{Hand as _, IconSizing as _, Shaped as _, Sizing as _, Typeset as _};
-use protocol::model::{SessionId, Subagent, ToolUseId};
+use protocol::model::{SessionId, Subagent, SubagentId};
 use transcript::{Transcript, TranscriptEvent, shown_kind, subagent_standing};
 
 use super::view::{TAB_GROUP, TAB_WIDTH, chat_title};
@@ -35,7 +35,7 @@ pub(super) struct Subagents {
 struct SubagentTab {
     /// The chat whose subagent it shows.
     session: SessionId,
-    call: ToolUseId,
+    subagent: SubagentId,
     /// What the call says the subagent is for, until its record comes.
     title: String,
     transcript: Entity<Transcript>,
@@ -71,7 +71,7 @@ impl Subagents {
     /// The subagent the tab shows, once its record has come.
     fn shown<'a>(&self, records: &'a Snapshot) -> Option<&'a Subagent> {
         let tab = self.tab.as_ref()?;
-        records.subagent(&tab.session, &tab.call).map(AsRef::as_ref)
+        records.subagent(&tab.session, &tab.subagent).map(AsRef::as_ref)
     }
 
     /// What the tab's subagent is for.
@@ -82,9 +82,9 @@ impl Subagents {
 }
 
 impl WorkspacePane {
-    /// The call that started the subagent the subagent tab shows, while it's open.
-    pub fn subagent_tab(&self) -> Option<&ToolUseId> {
-        self.subagents.tab.as_ref().map(|tab| &tab.call)
+    /// The subagent the subagent tab shows, while it's open.
+    pub fn subagent_tab(&self) -> Option<&SubagentId> {
+        self.subagents.tab.as_ref().map(|tab| &tab.subagent)
     }
 
     /// Every transcript the pane has: each chat's, and the subagent tab's.
@@ -98,13 +98,20 @@ impl WorkspacePane {
         self.shown.all().subagents(session)
     }
 
-    /// Shows the work of the subagent `call` started, in the chat `session`, in the subagent tab, opening the tab if
-    /// it isn't, and brings it to the front. `title` is what the call says the subagent is for.
-    pub fn open_subagent_tab(&mut self, session: SessionId, call: ToolUseId, title: String, cx: &mut Context<Self>) {
+    /// Shows the work of `subagent`, in the chat `session`, in the subagent tab, opening the tab if it isn't, and
+    /// brings it to the front. `title` is what its call says the subagent is for.
+    pub fn open_subagent_tab(
+        &mut self,
+        session: SessionId,
+        subagent: SubagentId,
+        title: String,
+        cx: &mut Context<Self>,
+    ) {
         let tab = self.subagents.tab.as_ref();
-        let showing = tab.is_some_and(|tab| tab.session == session && tab.call == call);
+        let showing = tab.is_some_and(|tab| tab.session == session && tab.subagent == subagent);
         if !showing && let Some(chat) = self.shown.session(&session).cloned() {
-            let (client, records, shown) = (self.client.clone(), self.subagents_of(&session).to_vec(), call.clone());
+            let (client, records, shown) =
+                (self.client.clone(), self.subagents_of(&session).to_vec(), subagent.clone());
             let transcript = cx.new(|cx| {
                 let mut transcript = Transcript::subagent(client, &chat, shown, cx);
                 transcript.set_thinking_open(crate::settings::get(cx).always_expand_thinking, cx);
@@ -115,8 +122,8 @@ impl WorkspacePane {
             let events = cx.subscribe(&transcript, move |this, _, event: &TranscriptEvent, cx| match event {
                 TranscriptEvent::Error(message) => cx.emit(PaneEvent::Error(message.clone())),
                 // A subagent its subagent started opens in the same tab.
-                TranscriptEvent::OpenSubagent { call, title } => {
-                    this.open_subagent_tab(chat.clone(), call.clone(), title.clone(), cx);
+                TranscriptEvent::OpenSubagent { subagent, title } => {
+                    this.open_subagent_tab(chat.clone(), subagent.clone(), title.clone(), cx);
                 }
                 // Nothing is sent from it, a subagent's work has no turns, no question is asked in it, since
                 // approvals are the agent's own, and nothing's found in it.
@@ -128,7 +135,7 @@ impl WorkspacePane {
             });
             let focus = cx.focus_handle();
             self.subagents.tab =
-                Some(SubagentTab { session, call, title, transcript, focus, in_front: false, _events: events });
+                Some(SubagentTab { session, subagent, title, transcript, focus, in_front: false, _events: events });
         }
         self.bring_to_front(Showing::Subagent, cx);
     }

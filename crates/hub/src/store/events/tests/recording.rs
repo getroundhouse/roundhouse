@@ -145,7 +145,7 @@ enum Sent {
 }
 
 impl Sent {
-    pub(super) fn subagent(self) -> Option<ToolUseId> {
+    pub(super) fn subagent(self) -> Option<SubagentId> {
         match self {
             Sent::Hub | Sent::Progress => None,
             Sent::Message(from) | Sent::Result(from) | Sent::Other(from) => {
@@ -155,19 +155,19 @@ impl Sent {
     }
 
     pub(super) fn body(self) -> EventBody {
-        let parent_tool_use_id = self.subagent();
+        let subagent = self.subagent();
         match self {
             Sent::Hub => notice("x"),
             Sent::Message(_) => EventBody::Assistant {
                 message_id: None,
-                parent_tool_use_id,
+                subagent,
                 model: None,
                 blocks: vec![ContentBlock::Text { text: "x".into(), images: Vec::new() }],
                 first_index: None,
             },
-            Sent::Result(_) => EventBody::AgentUser { parent_tool_use_id, blocks: Vec::new() },
-            Sent::Other(_) => EventBody::AgentOther { kind: "user/synthetic".into(), parent_tool_use_id },
-            Sent::Progress => EventBody::AgentOther { kind: "tool_progress".into(), parent_tool_use_id: None },
+            Sent::Result(_) => EventBody::AgentUser { subagent, blocks: Vec::new() },
+            Sent::Other(_) => EventBody::AgentOther { kind: "user/synthetic".into(), subagent },
+            Sent::Progress => EventBody::AgentOther { kind: "tool_progress".into(), subagent: None },
         }
     }
 
@@ -178,7 +178,7 @@ impl Sent {
             Sent::Other(_) => {
                 let raw =
                     serde_json::json!({"type": "user", "isSynthetic": true, "parent_tool_use_id": self.subagent()});
-                (EventBody::AgentOther { kind: "user/synthetic".into(), parent_tool_use_id: None }, raw.to_string())
+                (EventBody::AgentOther { kind: "user/synthetic".into(), subagent: None }, raw.to_string())
             }
             Sent::Progress => {
                 let raw = serde_json::json!({"type": "tool_progress", "parent_tool_use_id": "call-0"});
@@ -298,7 +298,7 @@ fn only_a_user_line_that_names_a_call_is_a_subagents_once_migrated() {
 
     let events = store.read_events(&"s".into(), Seq::new(1), 10, u64::MAX, false).unwrap();
     let placed: Vec<_> =
-        events.iter().map(|event| (event.subagent.as_ref().map(ToolUseId::as_str), event.place.get())).collect();
+        events.iter().map(|event| (event.subagent.as_ref().map(SubagentId::as_str), event.place.get())).collect();
     assert_eq!(placed, [(None, 1), (None, 2), (None, 3), (None, 4), (Some("call"), 1)]);
 }
 

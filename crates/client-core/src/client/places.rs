@@ -2,7 +2,7 @@
 
 use protocol::client::{log, subscriptions};
 use protocol::event::SessionEvent;
-use protocol::model::{Place, SessionId, ToolUseId};
+use protocol::model::{Place, SessionId, SubagentId};
 
 use super::{Client, Result, Subscription};
 
@@ -13,7 +13,7 @@ impl Client {
     pub fn session_read_places(
         &self,
         id: &SessionId,
-        subagent: Option<&ToolUseId>,
+        subagent: Option<&SubagentId>,
         from_place: Place,
         limit: u32,
     ) -> Result<(Vec<SessionEvent>, Place)> {
@@ -33,7 +33,7 @@ impl Client {
     pub fn session_subscribe_places(
         &self,
         id: &SessionId,
-        subagent: Option<&ToolUseId>,
+        subagent: Option<&SubagentId>,
         from_place: Place,
     ) -> Result<Subscription> {
         let subagent = subagent.cloned();

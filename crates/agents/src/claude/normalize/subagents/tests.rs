@@ -39,8 +39,12 @@ fn a_subagent_starts_with_what_it_was_asked_and_ends_with_its_report() {
         }
     );
     let report = Some("They're in tests/.".into());
-    let ended =
-        EventBody::SubagentEnded { call: "agent".into(), outcome: TaskOutcome::Finished, report, context_tokens: None };
+    let ended = EventBody::SubagentEnded {
+        subagent: "agent".into(),
+        outcome: TaskOutcome::Finished,
+        report,
+        context_tokens: None,
+    };
     assert_eq!(end, ended);
     assert!(
         matches!(event(&mut normalizer, &notification("t1", "completed")), EventBody::AgentOther { .. }),
@@ -56,7 +60,7 @@ fn a_stopped_subagent_reports_nothing() {
     let end = event(&mut normalizer, &notification("t1", "stopped"));
 
     let ended = EventBody::SubagentEnded {
-        call: "agent".into(),
+        subagent: "agent".into(),
         outcome: TaskOutcome::Stopped,
         report: None,
         context_tokens: None,
@@ -82,7 +86,7 @@ fn a_subagent_says_how_many_tokens_its_conversation_holds_as_it_works_and_as_it_
     ending["usage"] = json!({"total_tokens":41_020,"tool_uses":9,"duration_ms":9000});
     let end = event(&mut normalizer, &ending);
 
-    assert_eq!(working, EventBody::SubagentContext { call: "agent".into(), tokens: 37_386 });
+    assert_eq!(working, EventBody::SubagentContext { subagent: "agent".into(), tokens: 37_386 });
     assert!(matches!(end, EventBody::SubagentEnded { context_tokens: Some(41_020), .. }), "{end:?}");
     assert!(
         matches!(event(&mut normalizer, &progress("t1", 41_020)), EventBody::AgentOther { .. }),

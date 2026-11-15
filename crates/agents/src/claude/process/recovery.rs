@@ -20,7 +20,7 @@ impl Recovery {
         if !resume {
             let notice = EventBody::Notice { level: NoticeLevel::Warning,
                 message: "Claude's saved conversation for this session was not found, so it started a new one. The history here is intact, but the agent can't see it.".into(),
-                parent_tool_use_id: None };
+                subagent: None };
             let _ = output.send(AgentOutput::event(notice, None)).await;
         }
         Some(resume)

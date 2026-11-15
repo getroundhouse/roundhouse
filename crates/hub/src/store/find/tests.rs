@@ -1,6 +1,6 @@
 use protocol::event::{ContentBlock, EventBody};
 use protocol::find::{Found, Needle};
-use protocol::model::{Place, Seq, ToolUseId};
+use protocol::model::{Place, Seq, SubagentId};
 use protocol::prompt::Prompt;
 
 use crate::store::tests::{notice, store_with_session};
@@ -13,7 +13,7 @@ fn prompt(text: &str) -> EventBody {
 fn subagent_says(call: &str, text: &str) -> EventBody {
     EventBody::Assistant {
         message_id: None,
-        parent_tool_use_id: Some(call.into()),
+        subagent: Some(call.into()),
         model: None,
         blocks: vec![ContentBlock::Text { text: text.into(), images: Vec::new() }],
         first_index: None,
@@ -36,7 +36,7 @@ fn the_events_that_hold_the_text_are_found_by_place_oldest_first_as_of_the_newes
     append(&subagent_says("call", "nothing here"));
     append(&notice("nothing here"));
     let needle = Needle::new("train").unwrap();
-    let call: ToolUseId = "call".into();
+    let call: SubagentId = "call".into();
 
     assert_eq!(store.find_events(&"s".into(), None, &needle).unwrap(), found(&[1, 3], 4), "the agent's own");
     assert_eq!(store.find_events(&"s".into(), Some(&call), &needle).unwrap(), found(&[1], 2), "the subagent's");

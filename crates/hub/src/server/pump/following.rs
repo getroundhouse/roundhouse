@@ -2,7 +2,7 @@ use crate::hub::Hub;
 use crate::session::{Live, LiveItem, LiveSession};
 use protocol::client::HubFrame;
 use protocol::event::SessionEvent;
-use protocol::model::{Place, Seq, SessionId, ToolUseId};
+use protocol::model::{Place, Seq, SessionId, SubagentId};
 use protocol::tail::Tail;
 use std::sync::Arc;
 use tokio::sync::{broadcast, mpsc};
@@ -14,12 +14,12 @@ pub(in super::super) enum Following {
     Log { next: Seq },
     /// The agent's own events, or those of the subagent `subagent` started, and the next place to send. Its tail and
     /// deltas are only what that one is writing.
-    Places { subagent: Option<ToolUseId>, next: Place },
+    Places { subagent: Option<SubagentId>, next: Place },
 }
 
 impl Following {
     /// Whether what the agent, or the subagent `subagent` started, records or writes is part of this.
-    pub(super) fn takes(&self, subagent: Option<&ToolUseId>) -> bool {
+    pub(super) fn takes(&self, subagent: Option<&SubagentId>) -> bool {
         match self {
             Following::Log { .. } => true,
             Following::Places { subagent: followed, .. } => followed.as_ref() == subagent,
@@ -78,7 +78,7 @@ pub(in super::super) async fn pump(
                 }
                 // The client never sees the event, so a new snapshot gives it the tail that's left.
                 LiveItem::Appended { ended_others: true, .. } | LiveItem::Rewritten => continue 'resync,
-                LiveItem::Delta(delta) if following.takes(delta.parent_tool_use_id.as_ref()) => {
+                LiveItem::Delta(delta) if following.takes(delta.subagent.as_ref()) => {
                     frames.send(HubFrame::Delta { subscription_id, delta }).await.map_err(|_| ())
                 }
                 // What another records or writes, which this doesn't follow.

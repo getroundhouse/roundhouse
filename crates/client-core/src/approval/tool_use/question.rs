@@ -1,7 +1,7 @@
 use super::super::Approval;
 use crate::calls::{EditFile, Recorded, ToolCall, WriteFile};
 use protocol::event::{ApprovalDecision, Asking, EventBody, QuestionAnswer};
-use protocol::model::ToolUseId;
+use protocol::model::SubagentId;
 
 /// A tool's use the agent asks about.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -14,8 +14,8 @@ pub struct ToolUseAsked<'a> {
     pub given: Option<Given<'a>>,
     /// Why the agent asks, in its own words, when it says.
     pub reason: Option<&'a str>,
-    /// The subagent that asks, as the call that started it, or `None` for the agent itself.
-    pub asked_by: Option<&'a ToolUseId>,
+    /// The subagent that asks, or `None` for the agent itself.
+    pub asked_by: Option<&'a SubagentId>,
 }
 
 /// What a tool was given, which is what allowing its use allows.

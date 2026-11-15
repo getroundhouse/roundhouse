@@ -29,14 +29,9 @@ fn delta() -> impl Strategy<Value = StreamDelta> {
         Just(DeltaChange::MessageStop),
         Just(DeltaChange::Unknown),
     ];
-    (option::of(run()), "m[0-2]", option::of("t[01]"), change).prop_map(
-        |(run, message_id, parent_tool_use_id, change)| StreamDelta {
-            run,
-            message_id: message_id.into(),
-            parent_tool_use_id: parent_tool_use_id.map(Into::into),
-            change,
-        },
-    )
+    (option::of(run()), "m[0-2]", option::of("t[01]"), change).prop_map(|(run, message_id, subagent, change)| {
+        StreamDelta { run, message_id: message_id.into(), subagent: subagent.map(Into::into), change }
+    })
 }
 
 /// Three runs, so one often ends while another is writing, earlier or later.
@@ -89,7 +84,7 @@ fn applied(deltas: &[StreamDelta]) -> Tail {
 fn finished(message_id: &MessageId) -> EventBody {
     EventBody::Assistant {
         message_id: Some(message_id.clone()),
-        parent_tool_use_id: None,
+        subagent: None,
         model: None,
         blocks: Vec::new(),
         first_index: None,

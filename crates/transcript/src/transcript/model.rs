@@ -8,7 +8,7 @@ use crate::folds::Folds;
 use crate::rows::SubagentCalls;
 use client_core::session_log::RecordedApprovals;
 use gpui_kit::SharedString;
-use protocol::model::{AttachmentId, Seq, Subagent, ToolUseId};
+use protocol::model::{AttachmentId, Seq, Subagent, SubagentId};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -34,15 +34,15 @@ pub(crate) struct Model {
     /// The approvals the session's record says its agent is waiting on, which a plan's card and the panel follow.
     /// None from a hub that doesn't say, whose are found among what's loaded.
     pub approvals: Option<RecordedApprovals>,
-    /// Each subagent's record, by the call that started it, as the hub keeps them. None from a hub that doesn't. Each is
-    /// shared with client-core's snapshot, since every frame's rows take the records of the calls they draw, and one
-    /// can hold a call's whole input, such as all of a file it wrote.
-    pub subagents: HashMap<ToolUseId, Arc<Subagent>>,
+    /// Each subagent's record, as the hub keeps them. None from a hub that doesn't. Each is shared with client-core's
+    /// snapshot, since every frame's rows take the records of the calls they draw, and one can hold a call's whole
+    /// input, such as all of a file it wrote.
+    pub subagents: HashMap<SubagentId, Arc<Subagent>>,
     /// The `seq` of the event each subagent's call was drawn in, so the row is measured again when its record
     /// changes. A call's row is measured only once it's been drawn, so one that isn't here needs nothing.
-    pub subagent_rows: RefCell<HashMap<ToolUseId, Seq>>,
-    /// In the subagent tab, the call that started the subagent it shows, alone.
-    pub alone: Option<ToolUseId>,
+    pub subagent_rows: RefCell<HashMap<SubagentId, Seq>>,
+    /// In the subagent tab, the subagent it shows, alone.
+    pub alone: Option<SubagentId>,
     /// What's being found in the chat, for rows to draw.
     pub find: Rc<FindLook>,
 }

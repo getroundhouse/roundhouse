@@ -2,7 +2,7 @@
 
 use client_core::FileToSend;
 use gpui_kit::FocusHandle;
-use protocol::model::ToolUseId;
+use protocol::model::SubagentId;
 use protocol::prompt::Prompt;
 
 /// Things the owner of a transcript has to deal with.
@@ -20,9 +20,9 @@ pub enum TranscriptEvent {
     /// What's chosen or typed in answer to what's asked there changed, so the hub can keep it: within a moment while
     /// it's typed, or at once as something's chosen or it's answered. `QuestionPanel::so_far` says what it is now.
     Answering { at_once: bool },
-    /// Someone asked to see the work of the subagent the call `call` started, in the subagent tab. `title` is what the
-    /// call says it's for, for a subagent whose record hasn't come.
-    OpenSubagent { call: ToolUseId, title: String },
+    /// Someone asked to see the work of `subagent`, in the subagent tab. `title` is what its call says it's for, for a
+    /// subagent whose record hasn't come.
+    OpenSubagent { subagent: SubagentId, title: String },
     /// The bar for finding text in the chat closed, so focus can go back where it was.
     FindClosed,
 }

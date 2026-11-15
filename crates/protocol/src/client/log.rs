@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use super::{ClientRequest, ClientResponse, Reply, Request};
 use crate::event::SessionEvent;
 use crate::find::Found;
-use crate::model::{CompactionLine, Place, PromptLine, Seq, SessionId, ToolUseId};
+use crate::model::{CompactionLine, Place, PromptLine, Seq, SessionId, SubagentId};
 
 /// Reads events from `from_seq` on. Returns at least one event if any exist, and stops at `limit` events or about
 /// `max_bytes`, so a huge event can't produce an unbounded reply.
@@ -43,12 +43,12 @@ impl Reply for Events {
     }
 }
 
-/// Reads the agent's own events, or those of the subagent `subagent` started, from `from_place` on, as
+/// Reads the agent's own events, or those of the subagent `subagent`, from `from_place` on, as
 /// [`SessionRead`] reads every event. A hub older than this refuses it as unsupported, and a client reads by `seq`.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct SessionReadPlaces {
     pub id: SessionId,
-    pub subagent: Option<ToolUseId>,
+    pub subagent: Option<SubagentId>,
     pub from_place: Place,
     pub limit: u32,
     pub max_bytes: Option<u64>,
@@ -133,14 +133,14 @@ impl Reply for Compactions {
     }
 }
 
-/// Which of the agent's own events, or those of the subagent `subagent` started, hold `query`, by place, as
+/// Which of the agent's own events, or those of the subagent `subagent`, hold `query`, by place, as
 /// [`crate::find::Needle::is_in_event`] says, for finding text in a long chat without reading the whole log. An empty
 /// query, or one longer than [`crate::find::Needle::MOST_CHARS`], is refused as invalid, and a hub older than this
 /// refuses it as unsupported.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct SessionFind {
     pub id: SessionId,
-    pub subagent: Option<ToolUseId>,
+    pub subagent: Option<SubagentId>,
     pub query: String,
 }
 

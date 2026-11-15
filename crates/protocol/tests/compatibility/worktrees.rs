@@ -30,7 +30,7 @@ fn removed() -> (ChildWorktree, &'static str) {
         path: "/c/holly/x".into(),
         branch: BranchName::from("holly/x"),
         session_id: "s".into(),
-        made_by: MadeBy::Subagent { call: "t".into() },
+        made_by: MadeBy::Subagent { subagent: "t".into() },
         created_at_ms: 5,
         status: ChildStatus::Removed { removed_at_ms: 6 },
         branches: None,

@@ -87,7 +87,7 @@ fn a_task_a_monitor_call_started_is_a_monitor_from_the_line_that_says_so() {
 
     normalizer.line(&call("Bash", "c1"));
     assert_eq!(kinds(normalizer.line(&listed(&["t1"])).parsed), [("t1".into(), command)]);
-    let other = Parsed::Event(EventBody::AgentOther { kind: "system/task_started".into(), parent_tool_use_id: None });
+    let other = Parsed::Event(EventBody::AgentOther { kind: "system/task_started".into(), subagent: None });
     assert_eq!(normalizer.line(&started("t1", "c1")).parsed, other, "a command's call changes nothing shown");
 
     normalizer.line(&call("Monitor", "c2"));
@@ -122,10 +122,7 @@ fn a_monitor_that_starts_before_its_listed_is_one_in_its_first_list() {
     let start = normalizer.line(&started.to_string()).parsed;
     let list = normalizer.line(&listed.to_string()).parsed;
 
-    assert_eq!(
-        start,
-        Parsed::Event(EventBody::AgentOther { kind: "system/task_started".into(), parent_tool_use_id: None })
-    );
+    assert_eq!(start, Parsed::Event(EventBody::AgentOther { kind: "system/task_started".into(), subagent: None }));
     let Parsed::Event(EventBody::AgentTasks { tasks, .. }) = list else { panic!("{list:?}") };
     assert_eq!((tasks[0].kind, tasks[0].call.clone()), (TaskKind::Monitor, Some("c1".into())));
 }
@@ -135,10 +132,7 @@ fn a_list_of_background_tasks_it_cant_read_doesnt_say_theyre_done() {
     let line = json!({"type":"system","subtype":"background_tasks_changed"}).to_string();
     assert_eq!(
         parse_line(&line),
-        Parsed::Event(EventBody::AgentOther {
-            kind: "system/background_tasks_changed".into(),
-            parent_tool_use_id: None
-        })
+        Parsed::Event(EventBody::AgentOther { kind: "system/background_tasks_changed".into(), subagent: None })
     );
 }
 
@@ -159,10 +153,7 @@ fn a_monitor_call_that_was_answered_without_starting_a_task_starts_no_monitor() 
     normalizer.line(&listed.to_string());
     let start = normalizer.line(&started.to_string()).parsed;
 
-    assert_eq!(
-        start,
-        Parsed::Event(EventBody::AgentOther { kind: "system/task_started".into(), parent_tool_use_id: None })
-    );
+    assert_eq!(start, Parsed::Event(EventBody::AgentOther { kind: "system/task_started".into(), subagent: None }));
     let again = normalizer.line(&listed.to_string()).parsed;
     let Parsed::Event(EventBody::AgentTasks { tasks, .. }) = again else { panic!("{again:?}") };
     assert_eq!(tasks[0].kind, TaskKind::Command);

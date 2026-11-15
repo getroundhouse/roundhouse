@@ -121,7 +121,7 @@ pub(super) async fn conversation(
                     if message.contains("no rollout found") || message.contains("thread not found") =>
                 {
                     shared.event(EventBody::Notice { level: protocol::event::NoticeLevel::Warning,
-                        message: "Codex could not find this conversation. Starting a new one without its previous context.".into(), parent_tool_use_id: None }, None).await;
+                        message: "Codex could not find this conversation. Starting a new one without its previous context.".into(), subagent: None }, None).await;
                     shared.rpc.ask("thread/start", configuration(spec, &settings, options, told)).await?
                 }
                 Err(error) => return Err(error),

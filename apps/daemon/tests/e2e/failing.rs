@@ -24,9 +24,7 @@ fn a_turn_that_fails_on_a_request_stops_the_chat_short_and_holds_its_queue_until
     let failures: Vec<_> = events
         .iter()
         .filter_map(|e| match &e.body {
-            EventBody::RequestFailed { parent_tool_use_id: None, failure, .. } => {
-                Some((failure.kind, failure.resets_at_ms))
-            }
+            EventBody::RequestFailed { subagent: None, failure, .. } => Some((failure.kind, failure.resets_at_ms)),
             _ => None,
         })
         .collect();
@@ -83,7 +81,7 @@ fn the_agent_picking_up_by_itself_into_the_same_failure_repeats_the_one_before()
     let failed: Vec<_> = events
         .iter()
         .filter_map(|e| {
-            let EventBody::RequestFailed { parent_tool_use_id: None, again, .. } = &e.body else { return None };
+            let EventBody::RequestFailed { subagent: None, again, .. } = &e.body else { return None };
             Some((e.seq, *again))
         })
         .collect();

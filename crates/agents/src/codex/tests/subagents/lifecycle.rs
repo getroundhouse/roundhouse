@@ -32,12 +32,12 @@ async fn followup_turns_keep_old_output_and_completion_with_the_old_invocation()
     assert_eq!(starts.len(), 2);
     assert_ne!(starts[0], starts[1]);
     assert!(events.iter().any(|body|matches!(body,EventBody::Assistant{blocks,..} if blocks.iter().any(|b|matches!(b,ContentBlock::Call{call:Call::Subagent(details),..} if details.resumes.as_ref().is_some_and(|id|id.as_str()=="spawn"))))));
-    assert!(events.iter().any(|body|matches!(body,EventBody::Assistant{parent_tool_use_id:Some(parent),blocks,..} if parent.as_str()=="spawn" && blocks.iter().any(|b|matches!(b,ContentBlock::Text{text,..} if text=="Late old message")))));
+    assert!(events.iter().any(|body|matches!(body,EventBody::Assistant{subagent:Some(parent),blocks,..} if parent.as_str()=="spawn" && blocks.iter().any(|b|matches!(b,ContentBlock::Text{text,..} if text=="Late old message")))));
     let ends: Vec<_> = events
         .iter()
         .filter_map(|body| {
-            if let EventBody::SubagentEnded { call, report, .. } = body {
-                Some((call.as_str(), report.as_deref()))
+            if let EventBody::SubagentEnded { subagent, report, .. } = body {
+                Some((subagent.as_str(), report.as_deref()))
             } else {
                 None
             }
@@ -70,7 +70,7 @@ async fn root_completion_preserves_child_calls_and_approvals_until_the_child_fin
     let resolved = events.iter().position(|body| matches!(body, EventBody::ApprovalResolved { .. })).unwrap();
     assert!(requested < root_end && root_end < resolved);
     assert!(matches!(events[root_end + 1], EventBody::AgentState { state: AgentRunState::RequiresAction }));
-    assert!(events.iter().any(|body|matches!(body,EventBody::AgentUser{parent_tool_use_id:Some(parent),blocks} if parent.as_str()=="spawn" && blocks.iter().any(|b|matches!(b,ContentBlock::CallResult{tool_use_id,..} if tool_use_id.as_str()=="child-command")))));
+    assert!(events.iter().any(|body|matches!(body,EventBody::AgentUser{subagent:Some(parent),blocks} if parent.as_str()=="spawn" && blocks.iter().any(|b|matches!(b,ContentBlock::CallResult{tool_use_id,..} if tool_use_id.as_str()=="child-command")))));
     let snapshots: Vec<_> = events
         .iter()
         .filter_map(|body| if let EventBody::AgentTasks { tasks, .. } = body { Some(tasks.len()) } else { None })

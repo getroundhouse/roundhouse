@@ -24,8 +24,8 @@ pub(super) fn work(body: &EventBody) -> Work {
     match body {
         EventBody::AgentInit { .. } => Work::Started,
         // A failed request is said in the model's place, as what it wrote would have been.
-        EventBody::Assistant { parent_tool_use_id, .. } | EventBody::RequestFailed { parent_tool_use_id, .. } => {
-            Work::Wrote { subagent: parent_tool_use_id.is_some() }
+        EventBody::Assistant { subagent, .. } | EventBody::RequestFailed { subagent, .. } => {
+            Work::Wrote { subagent: subagent.is_some() }
         }
         // A compaction empties most of the context, so it's news as much as something written.
         EventBody::AgentCompacted { .. } => Work::Wrote { subagent: false },

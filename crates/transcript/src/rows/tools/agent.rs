@@ -20,7 +20,7 @@ use gpui_kit::{
 };
 use look::{Hand as _, Sizing as _, Typeset as _};
 use protocol::event::{ContentBlock, SessionEvent};
-use protocol::model::{SubagentStatus, ToolUseId};
+use protocol::model::{SubagentId, SubagentStatus};
 
 use super::line::{Line, Part};
 use super::{Answer, Subagent, Toggle, block, line};
@@ -52,7 +52,7 @@ pub(super) fn draw(
     // record has come, or ever will, as for one recorded before the agent said when its subagents started.
     if let Some(subagent) = subagent.filter(|s| s.apart) {
         let id = ElementId::Name(format!("open-subagent/{}", subagent.call).into());
-        line = line.action(open_tab(id, subagent.call.clone(), call.title(), &toggle.shared.this));
+        line = line.action(open_tab(id, subagent.id.clone(), call.title(), &toggle.shared.this));
     }
     if call.described().is_some() {
         line = line.found(toggle);
@@ -114,13 +114,13 @@ fn standing(subagent: Option<&Subagent>) -> Option<String> {
     (!words.is_empty()).then(|| words.join(" · "))
 }
 
-/// The button that asks for the work of the subagent `call` started in the subagent tab, which is named `title` until
+/// The button that asks for the work of `subagent` in the subagent tab, which is named `title` until
 /// its record comes. It says Open, and it's outlined, as a button that opens something is, so it reads as the way in,
 /// apart from the call's line, whose click opens the call where it is. A subagent's line in the background has it
 /// too, so the way to its tab is at the chat's end wherever its call is.
 pub(in crate::rows) fn open_tab(
     id: ElementId,
-    call: ToolUseId,
+    subagent: SubagentId,
     title: &str,
     this: &WeakEntity<Transcript>,
 ) -> AnyElement {
@@ -135,8 +135,8 @@ pub(in crate::rows) fn open_tab(
         .on_click(move |_, _, cx| {
             // The line under it would take the click too, and open or close the call.
             cx.stop_propagation();
-            let (call, title) = (call.clone(), title.clone());
-            let _ = this.update(cx, |_, cx| cx.emit(TranscriptEvent::OpenSubagent { call, title }));
+            let (subagent, title) = (subagent.clone(), title.clone());
+            let _ = this.update(cx, |_, cx| cx.emit(TranscriptEvent::OpenSubagent { subagent, title }));
         })
         .into_any_element()
 }
@@ -298,6 +298,7 @@ mod tests {
         let calls = usize::try_from(record.calls).unwrap();
         Subagent {
             call: record.call.clone(),
+            id: record.id(),
             calls,
             events: None,
             apart: true,

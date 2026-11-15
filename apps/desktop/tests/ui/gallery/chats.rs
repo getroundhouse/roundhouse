@@ -157,7 +157,7 @@ fn writing(message: &str, kind: BlockKind, text: &str) -> Tail {
         messages: vec![TailMessage {
             run: None,
             message_id: MessageId::from(message),
-            parent_tool_use_id: None,
+            subagent: None,
             blocks: vec![TailBlock { index: 0, kind, tool_name: None, text: text.to_string() }],
         }],
         ..Tail::default()

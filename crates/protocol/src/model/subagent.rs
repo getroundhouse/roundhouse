@@ -4,7 +4,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::{ModelName, Rev, SessionId, ToolUseId};
+use super::{ModelName, Rev, SessionId, SubagentId, ToolUseId};
 use crate::attachment::Attachment;
 use crate::event::{CallKind, ContentBlock, Denied, TaskOutcome};
 
@@ -57,6 +57,13 @@ pub struct Subagent {
     pub report: Option<String>,
     #[serde(default)]
     pub rev: Rev,
+}
+
+impl Subagent {
+    /// Which subagent it is, which is the call that started it.
+    pub fn id(&self) -> SubagentId {
+        SubagentId::of_call(&self.call)
+    }
 }
 
 /// Where a subagent has got to. One this build doesn't know reads as `Unknown`.

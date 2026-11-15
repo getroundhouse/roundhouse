@@ -2,14 +2,14 @@ use super::super::*;
 use protocol::attachment::{AttachmentBytes, MediaType};
 use protocol::event::{ContentBlock, FileChange, TurnOutcome};
 use protocol::fixtures;
-use protocol::model::{PermissionMode, ToolUseId};
+use protocol::model::{PermissionMode, SubagentId};
 use serde_json::json;
 
 #[test]
 fn output_that_is_not_json_is_kept_rather_than_failing() {
     assert_eq!(
         parse_line("Warning: something"),
-        Parsed::Event(EventBody::AgentOther { kind: "unparsed".into(), parent_tool_use_id: None })
+        Parsed::Event(EventBody::AgentOther { kind: "unparsed".into(), subagent: None })
     );
 }
 
@@ -66,11 +66,11 @@ fn surrogate_repair_only_touches_what_is_broken() {
 fn unknown_types_and_subtypes_are_kept() {
     assert_eq!(
         parse_line(r#"{"type":"brand_new"}"#),
-        Parsed::Event(EventBody::AgentOther { kind: "brand_new".into(), parent_tool_use_id: None })
+        Parsed::Event(EventBody::AgentOther { kind: "brand_new".into(), subagent: None })
     );
     assert_eq!(
         parse_line(r#"{"type":"system","subtype":"brand_new"}"#),
-        Parsed::Event(EventBody::AgentOther { kind: "system/brand_new".into(), parent_tool_use_id: None })
+        Parsed::Event(EventBody::AgentOther { kind: "system/brand_new".into(), subagent: None })
     );
 }
 
@@ -150,7 +150,7 @@ fn a_line_written_for_the_model_isn_t_shown() {
 
     assert_eq!(
         parse_line(&line.to_string()),
-        Parsed::Event(EventBody::AgentOther { kind: "user/synthetic".into(), parent_tool_use_id: None })
+        Parsed::Event(EventBody::AgentOther { kind: "user/synthetic".into(), subagent: None })
     );
 }
 
@@ -211,10 +211,7 @@ fn a_mode_change_is_reported_as_a_mode_a_chat_can_have_or_as_unknown() {
 #[test]
 fn a_status_about_something_else_isnt_a_mode_change() {
     let line = r#"{"type":"system","subtype":"status","status":"compacting"}"#;
-    assert_eq!(
-        parse_line(line),
-        Parsed::Event(EventBody::AgentOther { kind: "system/status".into(), parent_tool_use_id: None })
-    );
+    assert_eq!(parse_line(line), Parsed::Event(EventBody::AgentOther { kind: "system/status".into(), subagent: None }));
 }
 
 #[test]
@@ -283,7 +280,7 @@ fn a_prompts_lifecycle_names_it_by_the_uuid_it_was_sent_with() {
     let nameless = json!({"type":"command_lifecycle","state":"started"}).to_string();
     assert_eq!(
         parse_line(&nameless),
-        Parsed::Event(EventBody::AgentOther { kind: "command_lifecycle".into(), parent_tool_use_id: None })
+        Parsed::Event(EventBody::AgentOther { kind: "command_lifecycle".into(), subagent: None })
     );
 }
 
@@ -354,7 +351,7 @@ fn only_a_line_from_a_subagent_names_it() {
         let Parsed::Event(body @ EventBody::AgentOther { .. }) = parse_line(&line.to_string()) else {
             panic!("{line}")
         };
-        body.subagent().map(ToolUseId::to_string)
+        body.subagent().map(SubagentId::to_string)
     };
 
     assert_eq!(subagent(note).as_deref(), Some("agent"));

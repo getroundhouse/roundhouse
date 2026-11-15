@@ -35,11 +35,11 @@ fn dropped(prompt: u64) -> EventBody {
 }
 
 fn said(blocks: Vec<ContentBlock>) -> EventBody {
-    EventBody::Assistant { message_id: None, parent_tool_use_id: None, model: None, blocks, first_index: None }
+    EventBody::Assistant { message_id: None, subagent: None, model: None, blocks, first_index: None }
 }
 
 fn sent_back(blocks: Vec<ContentBlock>) -> EventBody {
-    EventBody::AgentUser { parent_tool_use_id: None, blocks }
+    EventBody::AgentUser { subagent: None, blocks }
 }
 
 fn asked(id: &str) -> EventBody {
@@ -72,7 +72,12 @@ fn subagent_started(call: &str) -> EventBody {
 }
 
 fn subagent_ended(call: &str) -> EventBody {
-    EventBody::SubagentEnded { call: call.into(), outcome: TaskOutcome::Finished, report: None, context_tokens: None }
+    EventBody::SubagentEnded {
+        subagent: call.into(),
+        outcome: TaskOutcome::Finished,
+        report: None,
+        context_tokens: None,
+    }
 }
 
 fn started() -> EventBody {
@@ -366,7 +371,7 @@ fn what_the_agent_says_of_its_subagents_needs_them() {
     let subagents = [Capability::from(background::Capability::Subagents)];
 
     assert_eq!(needs(&subagent_started("t")), subagents);
-    assert_eq!(needs(&EventBody::SubagentContext { call: "t".into(), tokens: 9 }), subagents);
+    assert_eq!(needs(&EventBody::SubagentContext { subagent: "t".into(), tokens: 9 }), subagents);
     assert_eq!(needs(&subagent_ended("t")), subagents);
 }
 

@@ -9,7 +9,7 @@ use protocol::client::{
 };
 use protocol::event::{EventBody, NoticeLevel, SessionEvent};
 use protocol::frame;
-use protocol::model::{Place, Seq, Session, ToolUseId};
+use protocol::model::{Place, Seq, Session, SubagentId};
 
 use super::super::{OpenSession, View};
 use crate::Client;
@@ -32,7 +32,7 @@ fn recorded(seq: u64, era: Era, build: &str) -> SessionEvent {
         Era::Now => (None, Place::new(seq.div_ceil(2))),
     };
     let message = format!("{seq} from {build}");
-    let body = EventBody::Notice { level: NoticeLevel::Info, message, parent_tool_use_id: None };
+    let body = EventBody::Notice { level: NoticeLevel::Info, message, subagent: None };
     SessionEvent { subagent, place, ..protocol::fixtures::event(Seq::new(seq), body) }
 }
 
@@ -57,7 +57,7 @@ fn start_hub(socket: &Path, era: Era, build: &'static str, last: u64) -> flume::
             let mut send = |frame: &HubFrame| stream.write_all(&frame::encode(frame).unwrap()).unwrap();
             let outcome = |response| HubFrame::Reply { id, outcome: ReplyOutcome::Response(response) };
             let events_from = |from: Seq| (from.get()..=last).map(|seq| recorded(seq, era, build));
-            let placed_from = |subagent: &Option<ToolUseId>, from: Place| {
+            let placed_from = |subagent: &Option<SubagentId>, from: Place| {
                 let of = |event: &SessionEvent| event.subagent == *subagent;
                 let events: Vec<SessionEvent> = events_from(Seq::FIRST).filter(of).collect();
                 let last = events.last().map_or(Place::default(), |event| event.place);

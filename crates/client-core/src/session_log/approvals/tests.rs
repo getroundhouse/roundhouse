@@ -19,7 +19,7 @@ fn answered(seq: Seq, id: &str) -> SessionEvent {
 }
 
 fn later(seq: Seq) -> SessionEvent {
-    event(seq, EventBody::Notice { level: NoticeLevel::Info, message: "later".into(), parent_tool_use_id: None })
+    event(seq, EventBody::Notice { level: NoticeLevel::Info, message: "later".into(), subagent: None })
 }
 
 fn recorded(open: &[(Seq, &str)], through: Seq) -> RecordedApprovals {

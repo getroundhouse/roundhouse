@@ -71,6 +71,8 @@ ids!(
     ToolUseId,
     /// The agent's own ID for work it runs in the background.
     TaskId,
+    /// A subagent, which for now is the call that started it, as [`SubagentId::of_call`] names it.
+    SubagentId,
     /// A wait on a workspace's pull request, chosen by the hub. The MCP task its agent follows it by has the same ID.
     WaitId,
     /// A commit, by the full object ID git gives it. It holds any string, as every ID here does, so it's the worker
@@ -88,6 +90,13 @@ ids!(
     /// Unique within the session that asked, as a tool use's ID is.
     AskKey,
 );
+
+impl SubagentId {
+    /// The subagent `call` started, named by that call.
+    pub fn of_call(call: &ToolUseId) -> Self {
+        Self(call.as_str().to_owned())
+    }
+}
 
 impl ProviderName {
     /// What a hub calls the provider that runs workers on its own machine.

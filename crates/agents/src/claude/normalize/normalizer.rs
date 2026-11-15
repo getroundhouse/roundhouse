@@ -10,7 +10,7 @@ use pending::PendingCalls;
 use prompt::PromptProgress;
 use protocol::attachment::NewAttachment;
 use protocol::event::{AgentRunState, ApprovalOutcome, EventBody, TurnOutcome};
-use protocol::model::{CacheRequest, MessageId, ToolUseId};
+use protocol::model::{CacheRequest, MessageId, SubagentId, ToolUseId};
 use protocol::tail::{BlockKind, DeltaChange, StreamDelta};
 use said::FailedRequests;
 use serde_json::Value;
@@ -68,8 +68,8 @@ pub enum Parsed {
 /// itself can say which it took in.
 #[derive(Debug, Default)]
 pub struct Normalizer {
-    /// The block of each message that's streaming, and the call whose subagent is writing it, if one is.
-    pub(super) streaming: HashMap<MessageId, (u32, Option<ToolUseId>)>,
+    /// The block of each message that's streaming, and the subagent writing it, if one is.
+    pub(super) streaming: HashMap<MessageId, (u32, Option<SubagentId>)>,
     pub(super) calls: OpenCalls,
     pub(super) tasks: Tasks,
     pub(super) pending_calls: PendingCalls,
@@ -117,7 +117,7 @@ impl Normalizer {
                 | DeltaChange::Text { index, .. }
                 | DeltaChange::Thinking { index, .. }
                 | DeltaChange::ToolInput { index, .. } => {
-                    self.streaming.insert(delta.message_id.clone(), (index, delta.parent_tool_use_id.clone()));
+                    self.streaming.insert(delta.message_id.clone(), (index, delta.subagent.clone()));
                 }
                 DeltaChange::MessageStop => {
                     self.streaming.remove(&delta.message_id);
@@ -141,7 +141,8 @@ impl Normalizer {
             *models = self.models.take();
             *request_failed = self.failed.ended_on_one() && *outcome == TurnOutcome::Error;
             let subagents = &self.subagents;
-            self.streaming.retain(|_, (_, writer)| writer.as_ref().is_some_and(|call| subagents.in_background(call)));
+            self.streaming
+                .retain(|_, (_, writer)| writer.as_ref().is_some_and(|writer| subagents.in_background(writer)));
             self.pending_calls.turn_ended();
             self.calls.turn_ended();
         }
@@ -173,7 +174,7 @@ pub(crate) fn value_of(line: &str) -> Option<Value> {
 }
 
 fn unparsed() -> Parsed {
-    Parsed::Event(EventBody::AgentOther { kind: "unparsed".into(), parent_tool_use_id: None })
+    Parsed::Event(EventBody::AgentOther { kind: "unparsed".into(), subagent: None })
 }
 
 fn parse_value(value: &Value) -> Parsed {
@@ -206,7 +207,7 @@ fn parse_value(value: &Value) -> Parsed {
 /// A line of `kind` with no normalized form, which isn't a subagent's. Not every line's `parent_tool_use_id` names a
 /// subagent: a `tool_progress` line's names the call that's making progress.
 pub(super) fn other(kind: &str) -> Parsed {
-    Parsed::Event(EventBody::AgentOther { kind: kind.to_string(), parent_tool_use_id: None })
+    Parsed::Event(EventBody::AgentOther { kind: kind.to_string(), subagent: None })
 }
 
 pub(super) fn str_of<'a>(value: &'a Value, key: &str) -> Option<&'a str> {
@@ -281,7 +282,7 @@ fn assistant(value: &Value) -> EventBody {
     let message = value.get("message").unwrap_or(&Value::Null);
     EventBody::Assistant {
         message_id: id_of(message, "id"),
-        parent_tool_use_id: id_of(value, "parent_tool_use_id"),
+        subagent: id_of(value, "parent_tool_use_id"),
         model: string_of(message, "model"),
         blocks: blocks::read(message.get("content")),
         // A Normalizer knows it from the deltas before.
@@ -356,7 +357,7 @@ fn stream_event(value: &Value) -> Parsed {
         // The hub knows the run, and sets it.
         run: None,
         message_id: message_id.into(),
-        parent_tool_use_id: id_of(value, "parent_tool_use_id"),
+        subagent: id_of(value, "parent_tool_use_id"),
         change,
     })
 }

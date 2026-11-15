@@ -5,7 +5,7 @@ use super::{Store, lock};
 #[cfg(test)]
 use protocol::event::{ApprovalOutcome, EventBody, SessionEvent};
 #[cfg(test)]
-use protocol::model::{Place, RunId, Seq, ToolUseId};
+use protocol::model::{Place, RunId, Seq, SubagentId};
 #[cfg(test)]
 use rusqlite::Connection;
 

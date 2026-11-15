@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     Account, AccountId, CommentId, DiffComment, HubSettings, NewWorkspaceDraft, Repo, RepoId, Rev, Session, SessionId,
-    Subagent, ToolUseId, Workspace, WorkspaceId,
+    Subagent, SubagentId, Workspace, WorkspaceId,
 };
 
 /// Which record, of which kind. A kind this build doesn't know reads as `Unknown`.
@@ -32,11 +32,11 @@ pub enum RecordKey {
     Account {
         id: AccountId,
     },
-    /// A subagent has no ID of its own: it's the call that started it, in its session. The hub never removes one, so
-    /// this isn't sent, and a peer from before it would read it as `Unknown`.
+    /// A subagent, in its session. The hub never removes one, so this isn't sent, and a peer from before it would read
+    /// it as `Unknown`.
     Subagent {
         session_id: SessionId,
-        call: ToolUseId,
+        subagent: SubagentId,
     },
     #[serde(other)]
     Unknown,
@@ -67,7 +67,7 @@ impl Record {
             Record::Account(account) => RecordKey::Account { id: account.id.clone() },
             Record::NewWorkspaceDraft(_) => RecordKey::NewWorkspaceDraft,
             Record::Subagent(subagent) => {
-                RecordKey::Subagent { session_id: subagent.session_id.clone(), call: subagent.call.clone() }
+                RecordKey::Subagent { session_id: subagent.session_id.clone(), subagent: subagent.id() }
             }
         }
     }

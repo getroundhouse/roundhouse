@@ -34,10 +34,7 @@ fn drawn(texts: &Texts, selection: &Selection, id: &TextKey, at: TextAt, text: &
 fn replies_at(seqs: impl IntoIterator<Item = Seq>) -> client_core::session_log::SessionLog {
     log(seqs.into_iter().map(|seq| {
         let blocks = vec![ContentBlock::Text { text: "words".into(), images: Vec::new() }];
-        event(
-            seq,
-            EventBody::Assistant { message_id: None, parent_tool_use_id: None, model: None, blocks, first_index: None },
-        )
+        event(seq, EventBody::Assistant { message_id: None, subagent: None, model: None, blocks, first_index: None })
     }))
 }
 

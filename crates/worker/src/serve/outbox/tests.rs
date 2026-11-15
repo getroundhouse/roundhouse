@@ -16,14 +16,14 @@ fn limits() -> WorkerFrame {
 
 fn delta() -> WorkerFrame {
     let change = DeltaChange::Text { index: 0, text: "hi".into() };
-    let delta = StreamDelta { run: None, message_id: "m".into(), parent_tool_use_id: None, change };
+    let delta = StreamDelta { run: None, message_id: "m".into(), subagent: None, change };
     WorkerFrame::AgentDelta { session_id: "s".into(), run: RunId::new(1), delta }
 }
 
 /// Thinking that the agent of `run` writes in its message, `m` and the run.
 fn thinking(run: u64, text: &str) -> WorkerFrame {
     let change = DeltaChange::Thinking { index: 0, text: text.into() };
-    let delta = StreamDelta { run: None, message_id: format!("m{run}").into(), parent_tool_use_id: None, change };
+    let delta = StreamDelta { run: None, message_id: format!("m{run}").into(), subagent: None, change };
     WorkerFrame::AgentDelta { session_id: "s".into(), run: RunId::new(run), delta }
 }
 
@@ -31,7 +31,7 @@ fn thinking(run: u64, text: &str) -> WorkerFrame {
 fn finished() -> WorkerFrame {
     let body = EventBody::Assistant {
         message_id: Some("m1".into()),
-        parent_tool_use_id: None,
+        subagent: None,
         model: None,
         blocks: Vec::new(),
         first_index: None,

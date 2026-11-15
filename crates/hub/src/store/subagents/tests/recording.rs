@@ -16,7 +16,7 @@ pub(super) fn started(call: &str) -> EventBody {
 }
 
 pub(super) fn ended(call: &str, outcome: TaskOutcome, report: Option<&str>) -> EventBody {
-    EventBody::SubagentEnded { call: call.into(), outcome, report: report.map(Into::into), context_tokens: None }
+    EventBody::SubagentEnded { subagent: call.into(), outcome, report: report.map(Into::into), context_tokens: None }
 }
 
 pub(super) fn tool_use(id: &str) -> ContentBlock {
@@ -25,13 +25,7 @@ pub(super) fn tool_use(id: &str) -> ContentBlock {
 
 /// A message from the agent, or from the subagent `from` started.
 pub(super) fn message(from: Option<&str>, blocks: Vec<ContentBlock>) -> EventBody {
-    EventBody::Assistant {
-        message_id: None,
-        parent_tool_use_id: from.map(Into::into),
-        model: None,
-        blocks,
-        first_index: None,
-    }
+    EventBody::Assistant { message_id: None, subagent: from.map(Into::into), model: None, blocks, first_index: None }
 }
 
 /// A reply from `model`, from the agent, or from the subagent `from` started.
@@ -48,7 +42,7 @@ pub(super) fn model(store: &Store, call: &str) -> Option<String> {
 }
 
 pub(super) fn other(kind: &str) -> EventBody {
-    EventBody::AgentOther { kind: kind.into(), parent_tool_use_id: None }
+    EventBody::AgentOther { kind: kind.into(), subagent: None }
 }
 
 pub(super) fn exited() -> EventBody {
@@ -133,7 +127,7 @@ fn a_subagents_record_counts_what_its_conversation_holds_and_changes_only_when_t
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
     record(&store, &started("agent"));
-    let holds = |call: &str, tokens| EventBody::SubagentContext { call: call.into(), tokens };
+    let holds = |call: &str, tokens| EventBody::SubagentContext { subagent: call.into(), tokens };
     let unchanged = Vec::<String>::new();
 
     assert_eq!(subagent(&store, "agent").context_tokens, None, "before the agent says");
@@ -157,7 +151,7 @@ fn a_subagents_record_counts_what_its_conversation_holds_and_changes_only_when_t
     record(&store, &started("other"));
     record(&store, &holds("other", 10));
     let end = EventBody::SubagentEnded {
-        call: "other".into(),
+        subagent: "other".into(),
         outcome: TaskOutcome::Finished,
         report: None,
         context_tokens: Some(2_000),
@@ -173,7 +167,7 @@ fn said(text: &str) -> ContentBlock {
 /// What came back for the call `id`, to the agent, or to the subagent `to` started.
 pub(super) fn answer(to: Option<&str>, id: &str, text: &str) -> EventBody {
     let result = fixtures::tool_result(id, text, false);
-    EventBody::AgentUser { parent_tool_use_id: to.map(Into::into), blocks: vec![result] }
+    EventBody::AgentUser { subagent: to.map(Into::into), blocks: vec![result] }
 }
 
 /// What the subagent has said since its newest call, and each of its calls kept, with what came back for it.
@@ -190,7 +184,7 @@ fn a_working_subagents_record_keeps_what_it_has_done_lately_and_lets_go_of_it_wh
     record(&store, &started("agent"));
     record(&store, &started("other"));
     // The prompt the CLI sends a subagent run in the foreground, which its call already shows.
-    let prompt = EventBody::AgentUser { parent_tool_use_id: Some("agent".into()), blocks: vec![said("Find it.")] };
+    let prompt = EventBody::AgentUser { subagent: Some("agent".into()), blocks: vec![said("Find it.")] };
     assert_eq!(record(&store, &prompt).1, Vec::<String>::new(), "what it was asked isn't what it wrote");
 
     assert_eq!(record(&store, &message(Some("agent"), vec![said("I'll read it."), tool_use("read")])).1, ["agent"]);

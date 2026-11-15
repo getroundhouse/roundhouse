@@ -61,8 +61,8 @@ impl Failing {
 /// What recording `body` does to the failures in a row, `failing`, setting its `again` if it's the agent's own failed
 /// request and repeats them. Only the hub says what one repeats, so a subagent's says nothing, whatever it came with.
 pub(super) fn after(failing: Option<&Failing>, body: &mut EventBody) -> FailingAfter {
-    if let EventBody::RequestFailed { parent_tool_use_id, failure, again } = body {
-        if parent_tool_use_id.is_some() {
+    if let EventBody::RequestFailed { subagent, failure, again } = body {
+        if subagent.is_some() {
             *again = None;
             return FailingAfter::Keeps;
         }

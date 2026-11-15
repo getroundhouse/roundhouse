@@ -35,7 +35,7 @@ pub(super) async fn read(shared: Arc<Shared>, mut input: mpsc::Receiver<(Value, 
                     EventBody::Notice {
                         level: NoticeLevel::Error,
                         message: format!("Could not read Antigravity's message: {error}"),
-                        parent_tool_use_id: None,
+                        subagent: None,
                     },
                     Some(line),
                 )
@@ -52,7 +52,7 @@ async fn incoming(shared: &Shared, value: &Value, raw: String) -> Result<(), Age
         return approvals::requested(shared, method, &value["id"], params, raw).await;
     }
     if method != "session/update" {
-        shared.event(EventBody::AgentOther { kind: method.into(), parent_tool_use_id: None }, Some(raw)).await;
+        shared.event(EventBody::AgentOther { kind: method.into(), subagent: None }, Some(raw)).await;
         return Ok(());
     }
     session_update(shared, acp::parse_session_update(params), raw).await;
@@ -137,7 +137,7 @@ async fn stream_chunk(shared: &Shared, thinking: bool, text: &str) {
             .emit(AgentOutput::Delta(StreamDelta {
                 run: None,
                 message_id: id.clone().into(),
-                parent_tool_use_id: None,
+                subagent: None,
                 change: DeltaChange::BlockStart { index: 0, kind, tool_name: None },
             }))
             .await;
@@ -147,9 +147,7 @@ async fn stream_chunk(shared: &Shared, thinking: bool, text: &str) {
     } else {
         DeltaChange::Text { index: 0, text: text.to_owned() }
     };
-    shared
-        .emit(AgentOutput::Delta(StreamDelta { run: None, message_id: id.into(), parent_tool_use_id: None, change }))
-        .await;
+    shared.emit(AgentOutput::Delta(StreamDelta { run: None, message_id: id.into(), subagent: None, change })).await;
 }
 
 pub(super) async fn flush_streams(shared: &Shared) {
@@ -167,7 +165,7 @@ async fn flush_thought(shared: &Shared) {
             .event(
                 EventBody::Assistant {
                     message_id: Some(id.into()),
-                    parent_tool_use_id: None,
+                    subagent: None,
                     model: Some(model),
                     blocks: vec![ContentBlock::Thinking { text }],
                     first_index: Some(0),
@@ -192,7 +190,7 @@ async fn flush_text(shared: &Shared) {
             .event(
                 EventBody::Assistant {
                     message_id: Some(id.into()),
-                    parent_tool_use_id: None,
+                    subagent: None,
                     model: Some(model),
                     blocks: vec![ContentBlock::Text { text, images: Vec::new() }],
                     first_index: Some(0),
@@ -234,7 +232,7 @@ pub(super) async fn ensure_call_emitted(shared: &Shared, wire: &ToolCallWire, ra
             .event(
                 EventBody::Assistant {
                     message_id: Some(format!("agy-call-{id}").into()),
-                    parent_tool_use_id: None,
+                    subagent: None,
                     model: Some(model),
                     blocks: vec![ContentBlock::Call { id, call }],
                     first_index: None,
@@ -264,7 +262,7 @@ async fn on_tool(shared: &Shared, wire: ToolCallWire, raw: String) {
     shared
         .event(
             EventBody::AgentUser {
-                parent_tool_use_id: None,
+                subagent: None,
                 blocks: vec![ContentBlock::CallResult {
                     tool_use_id: id,
                     output,

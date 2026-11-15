@@ -1,7 +1,7 @@
 use super::super::{Store, StoreError, current_rev, from_text, json_at, lock, rev_of, text_of};
 use super::recent;
 use protocol::event::{ContentBlock, EventBody, SessionEvent};
-use protocol::model::{Call, ModelName, RecentWork, Rev, SessionId, Subagent, SubagentStatus, ToolUseId};
+use protocol::model::{Call, ModelName, RecentWork, Rev, SessionId, Subagent, SubagentId, SubagentStatus};
 use rusqlite::types::ValueRef;
 use rusqlite::{Connection, OptionalExtension, Row, params};
 
@@ -24,10 +24,11 @@ impl Store {
         Ok((subagents, rev))
     }
 
-    pub fn get_subagent(&self, session_id: &SessionId, call: &ToolUseId) -> Result<Option<Subagent>, StoreError> {
+    pub fn get_subagent(&self, session_id: &SessionId, subagent: &SubagentId) -> Result<Option<Subagent>, StoreError> {
         let conn = lock(&self.reader);
+        // Each is kept by the call that started it, which is the subagent.
         let sql = format!("SELECT {SUBAGENT_COLUMNS} FROM subagents WHERE session_id = ? AND call = ?");
-        Ok(conn.query_row(&sql, params![session_id.as_str(), call.as_str()], subagent_from_row).optional()?)
+        Ok(conn.query_row(&sql, params![session_id.as_str(), subagent.as_str()], subagent_from_row).optional()?)
     }
 }
 
@@ -49,23 +50,23 @@ const CONTEXT: &str = "UPDATE subagents SET context_tokens = ?1
 /// the agent, which takes its subagents with it, and counts the calls in between from the subagent's own events,
 /// which also say what it's done lately, and its replies the model it runs on. How many tokens its conversation
 /// holds is the agent's word too, as it works and as it ends.
-pub(in super::super) fn note_subagents(tx: &Connection, event: &SessionEvent) -> Result<Vec<ToolUseId>, StoreError> {
+pub(in super::super) fn note_subagents(tx: &Connection, event: &SessionEvent) -> Result<Vec<SubagentId>, StoreError> {
     let (session, at) = (event.session_id.as_str(), event.ts_ms);
     let working = text_of(&SubagentStatus::Working);
     match &event.body {
         EventBody::SubagentStarted { call, kind, description, prompt, in_background } => {
             let row = params![session, call.as_str(), kind, description, prompt, in_background, working, at];
-            Ok(changed(tx.execute(STARTED, row)?, call))
+            Ok(changed(tx.execute(STARTED, row)?, &SubagentId::of_call(call)))
         }
-        EventBody::SubagentContext { call, tokens } => {
-            let row = params![tokens.cast_signed(), session, call.as_str(), working];
-            Ok(changed(tx.prepare_cached(CONTEXT)?.execute(row)?, call))
+        EventBody::SubagentContext { subagent, tokens } => {
+            let row = params![tokens.cast_signed(), session, subagent.as_str(), working];
+            Ok(changed(tx.prepare_cached(CONTEXT)?.execute(row)?, subagent))
         }
-        EventBody::SubagentEnded { call, outcome, report, context_tokens } => {
+        EventBody::SubagentEnded { subagent, outcome, report, context_tokens } => {
             let status = text_of(&SubagentStatus::ended(*outcome));
             let tokens = context_tokens.map(u64::cast_signed);
-            let row = params![status, at, report, tokens, session, call.as_str(), working];
-            Ok(changed(tx.execute(ENDED, row)?, call))
+            let row = params![status, at, report, tokens, session, subagent.as_str(), working];
+            Ok(changed(tx.execute(ENDED, row)?, subagent))
         }
         EventBody::AgentExited { .. } => {
             let mut statement = tx.prepare_cached(
@@ -74,11 +75,11 @@ pub(in super::super) fn note_subagents(tx: &Connection, event: &SessionEvent) ->
             )?;
             let stopped = text_of(&SubagentStatus::Stopped);
             let calls = statement.query_map(params![stopped, at, session, working], |row| row.get::<_, String>(0))?;
-            Ok(calls.map(|call| call.map(ToolUseId::from)).collect::<rusqlite::Result<_>>()?)
+            Ok(calls.map(|call| call.map(SubagentId::from)).collect::<rusqlite::Result<_>>()?)
         }
         // Its calls and what it wrote come from its side, and what came back for its calls from the user's.
         EventBody::Assistant { blocks, .. } | EventBody::AgentUser { blocks, .. } => match &event.subagent {
-            Some(call) => note_work(tx, event, call, blocks),
+            Some(subagent) => note_work(tx, event, subagent, blocks),
             None => Ok(Vec::new()),
         },
         EventBody::UserPrompt { .. }
@@ -106,54 +107,54 @@ pub(in super::super) fn note_subagents(tx: &Connection, event: &SessionEvent) ->
     }
 }
 
-/// `call`, if `rows` of the records were changed, which is at most its own.
-fn changed(rows: usize, call: &ToolUseId) -> Vec<ToolUseId> {
-    if rows == 0 { Vec::new() } else { vec![call.clone()] }
+/// `subagent`, if `rows` of the records were changed, which is at most its own.
+fn changed(rows: usize, subagent: &SubagentId) -> Vec<SubagentId> {
+    if rows == 0 { Vec::new() } else { vec![subagent.clone()] }
 }
 
-/// What `event`, one of the subagent `call` started's own, with `blocks`, adds to its record: the calls it made, what
-/// it's done lately, and from a reply, the model it runs on.
+/// What `event`, one of `subagent`'s own, with `blocks`, adds to its record: the calls it made, what it's done lately,
+/// and from a reply, the model it runs on.
 fn note_work(
     tx: &Connection,
     event: &SessionEvent,
-    call: &ToolUseId,
+    subagent: &SubagentId,
     blocks: &[ContentBlock],
-) -> Result<Vec<ToolUseId>, StoreError> {
+) -> Result<Vec<SubagentId>, StoreError> {
     let session = event.session_id.as_str();
-    let model = note_model(tx, session, call, &event.body)?;
+    let model = note_model(tx, session, subagent, &event.body)?;
     let made: Vec<Call> = blocks.iter().filter_map(Call::of).collect();
     let latest = made.last().map(serde_json::to_string).transpose()?;
-    let mut recent = recent_work(tx, session, call)?;
+    let mut recent = recent_work(tx, session, subagent)?;
     let wrote = matches!(event.body, EventBody::Assistant { .. });
     let added = recent.as_mut().is_some_and(|work| recent::add(work, blocks, wrote));
     if made.is_empty() && !added {
-        return Ok(changed(model, call));
+        return Ok(changed(model, subagent));
     }
     let recent = recent.filter(|_| added).map(|work| serde_json::to_string(&work)).transpose()?;
     let rows = tx.execute(
         "UPDATE subagents SET calls = calls + ?, latest_call = coalesce(?, latest_call),
              recent = coalesce(?, recent) WHERE session_id = ? AND call = ?",
-        params![made.len(), latest, recent, session, call.as_str()],
+        params![made.len(), latest, recent, session, subagent.as_str()],
     )?;
-    Ok(changed(rows + model, call))
+    Ok(changed(rows + model, subagent))
 }
 
-/// Notes the model a reply from the subagent `call` started came from, if it names one, and says how many records
-/// that changed. Most of its replies name the model the last one did, which changes nothing, so its record keeps its
-/// revision and isn't sent again for it.
-fn note_model(tx: &Connection, session: &str, call: &ToolUseId, body: &EventBody) -> Result<usize, StoreError> {
+/// Notes the model a reply from `subagent` came from, if it names one, and says how many records that changed. Most of
+/// its replies name the model the last one did, which changes nothing, so its record keeps its revision and isn't sent
+/// again for it.
+fn note_model(tx: &Connection, session: &str, subagent: &SubagentId, body: &EventBody) -> Result<usize, StoreError> {
     let EventBody::Assistant { model: Some(model), .. } = body else { return Ok(0) };
     let Ok(model) = ModelName::try_from(model.clone()) else { return Ok(0) };
     let sql = "UPDATE subagents SET model = ?1 WHERE session_id = ?2 AND call = ?3 AND model IS NOT ?1";
-    Ok(tx.prepare_cached(sql)?.execute(params![model.as_str(), session, call.as_str()])?)
+    Ok(tx.prepare_cached(sql)?.execute(params![model.as_str(), session, subagent.as_str()])?)
 }
 
-/// What the subagent `call` started has done lately, if it's still working, since that's only kept while it works.
-fn recent_work(tx: &Connection, session: &str, call: &ToolUseId) -> Result<Option<RecentWork>, StoreError> {
+/// What `subagent` has done lately, if it's still working, since that's only kept while it works.
+fn recent_work(tx: &Connection, session: &str, subagent: &SubagentId) -> Result<Option<RecentWork>, StoreError> {
     let working = text_of(&SubagentStatus::Working);
     let recent = tx
         .prepare_cached("SELECT recent FROM subagents WHERE session_id = ? AND call = ? AND status = ?")?
-        .query_row(params![session, call.as_str(), working], |row| json_at::<RecentWork>(row, 0))
+        .query_row(params![session, subagent.as_str(), working], |row| json_at::<RecentWork>(row, 0))
         .optional()?;
     // Written only by this hub, as JSON. What it can't read is nothing it knows of.
     Ok(recent.map(Option::unwrap_or_default))

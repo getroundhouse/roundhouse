@@ -154,7 +154,7 @@ fn an_approval_is_open_from_its_asking_until_its_answer() {
 #[test]
 fn an_event_that_changes_nothing_has_nothing_to_commit() {
     let progress = progress(SessionStatus::Running, 1);
-    let notice = EventBody::Notice { level: NoticeLevel::Info, message: "x".into(), parent_tool_use_id: None };
+    let notice = EventBody::Notice { level: NoticeLevel::Info, message: "x".into(), subagent: None };
 
     let Step { change, .. } = progress.step(current(1), notice, true);
 
@@ -197,7 +197,7 @@ fn a_turn_whose_prompt_the_hub_dropped_before_the_agent_said_anything_never_star
     assert_eq!(after(idle, &prompt, said(current(1), started), true), never_started, "its start isn't of the turn");
     let stale = EventBody::AgentState { state: AgentRunState::Idle };
     assert_eq!(after(idle, &prompt, said(current(1), stale), true), never_started, "an idle from before it isn't");
-    let warned = EventBody::Notice { level: NoticeLevel::Warning, message: "x".into(), parent_tool_use_id: None };
+    let warned = EventBody::Notice { level: NoticeLevel::Warning, message: "x".into(), subagent: None };
     assert_eq!(
         after(idle, &prompt, said(Origin::Hub, warned), true),
         never_started,
@@ -233,21 +233,21 @@ fn ended_on_a_failure() -> EventBody {
 
 fn says(text: &str, subagent: Option<&str>) -> EventBody {
     let blocks = vec![ContentBlock::Text { text: text.into(), images: Vec::new() }];
-    let parent_tool_use_id = subagent.map(Into::into);
-    EventBody::Assistant { message_id: None, parent_tool_use_id, model: None, blocks, first_index: None }
+    let subagent = subagent.map(Into::into);
+    EventBody::Assistant { message_id: None, subagent, model: None, blocks, first_index: None }
 }
 
 /// What Claude's CLI sends between two failed requests of the agent's own as one of its tasks ends and it picks up
 /// by itself, as the hub's own logs have it: a subagent's last words and end, the shorter list, the turn's start and
 /// the agent's own lines with no form, its state, why it picked up, and its limits.
 fn picks_up_by_itself() -> Vec<EventBody> {
-    let other = |kind: &str| EventBody::AgentOther { kind: kind.into(), parent_tool_use_id: None };
+    let other = |kind: &str| EventBody::AgentOther { kind: kind.into(), subagent: None };
     vec![
         says("Here's the review.", Some("toolu_1")),
-        EventBody::SubagentContext { call: "toolu_1".into(), tokens: 9 },
+        EventBody::SubagentContext { subagent: "toolu_1".into(), tokens: 9 },
         other("system/task_updated"),
         EventBody::SubagentEnded {
-            call: "toolu_1".into(),
+            subagent: "toolu_1".into(),
             outcome: TaskOutcome::Finished,
             report: None,
             context_tokens: None,

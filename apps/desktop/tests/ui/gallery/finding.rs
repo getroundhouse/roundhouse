@@ -85,12 +85,12 @@ fn what_went_wrong() -> Vec<EventBody> {
     let notice = EventBody::Notice {
         level: NoticeLevel::Warning,
         message: "The agent's CLI is 2 versions behind".into(),
-        parent_tool_use_id: None,
+        subagent: None,
     };
     let limit = RequestFailure {
         message: super::failure_chats::LIMIT_REACHED.into(),
         kind: FailureKind::Limit,
         resets_at_ms: None,
     };
-    vec![notice, EventBody::RequestFailed { parent_tool_use_id: None, failure: limit, again: None }, failed, stopped]
+    vec![notice, EventBody::RequestFailed { subagent: None, failure: limit, again: None }, failed, stopped]
 }

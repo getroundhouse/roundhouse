@@ -10,14 +10,14 @@ use client_core::session_log::{Position, SessionLog, Settled};
 use gpui_kit::{AppContext as _, Context, Task};
 use protocol::event::SessionEvent;
 use protocol::find::Needle;
-use protocol::model::{Place, Subagent, ToolUseId};
+use protocol::model::{Place, Subagent, SubagentId};
 
 use super::is_loaded;
 use crate::rows::{found_in_row, rows_to_count};
 use crate::transcript::{AtWork, Model, Transcript};
 
-/// The subagents' records, by the call that started each, copied to go to the thread that counts.
-pub(super) type Records = HashMap<ToolUseId, Arc<Subagent>>;
+/// The subagents' records, by subagent, copied to go to the thread that counts.
+pub(super) type Records = HashMap<SubagentId, Arc<Subagent>>;
 
 impl Transcript {
     /// Counts the rows that draw the events `stretch` was read for, on another thread, then takes the counts of those

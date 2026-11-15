@@ -11,7 +11,7 @@ use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{
     Account, AttachmentId, CacheTtl, ContextUsage, DiffComment, FileContents, GitDiff, InstanceId, ModelName,
     PORTS_PER_WORKSPACE, Place, PromptCache, PullRequest, Records, Repo, RepoId, Rev, Seq, Session, SessionId,
-    SessionStatus, Subagent, Title, ToolUseId, Workspace, WorkspaceId, WorktreeFiles,
+    SessionStatus, Subagent, SubagentId, Title, Workspace, WorkspaceId, WorktreeFiles,
 };
 use protocol::prompt::Prompt;
 use protocol::tail::Tail;
@@ -291,7 +291,7 @@ impl World {
     pub(crate) fn placed_from<'a>(
         &'a self,
         id: &SessionId,
-        subagent: Option<&'a ToolUseId>,
+        subagent: Option<&'a SubagentId>,
         from: Place,
     ) -> impl Iterator<Item = &'a SessionEvent> {
         let theirs = move |event: &&SessionEvent| event.subagent.as_ref() == subagent && event.place >= from;
@@ -310,7 +310,7 @@ impl World {
 
 /// A chat's events, with `seq` from 1 and no gaps, and each its place among the events from the same agent or subagent.
 fn log_of(id: &SessionId, created_at_ms: i64, events: Vec<EventBody>) -> Vec<SessionEvent> {
-    let mut places: HashMap<Option<ToolUseId>, u64> = HashMap::new();
+    let mut places: HashMap<Option<SubagentId>, u64> = HashMap::new();
     events
         .into_iter()
         .zip((1..).map(Seq::new))

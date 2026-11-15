@@ -48,7 +48,7 @@ pub(super) async fn read_stdout(mut stdout: Output, shared: Arc<Shared>, output:
             Parsed::UnsupportedControl { request_id, subtype } => {
                 refuse_control(&shared, &request_id, &subtype).await;
                 let kind = format!("control_request/{subtype}");
-                AgentOutput::event(EventBody::AgentOther { kind, parent_tool_use_id: None }, Some(line))
+                AgentOutput::event(EventBody::AgentOther { kind, subagent: None }, Some(line))
             }
             Parsed::Event(mut body) => {
                 if !plan::passed_on(&shared, &output, &body).await {
@@ -145,7 +145,7 @@ pub(super) async fn deliver(shared: &Shared, output: &mpsc::Sender<AgentOutput>,
 /// What the CLI's report on a prompt means for the log. Only a prompt the CLI hasn't taken can be taken or dropped, so
 /// the cancel that ends a turn says nothing of the prompts it took.
 fn prompt_progress(shared: &Shared, uuid: &str, progress: PromptProgress) -> EventBody {
-    let unchanged = || EventBody::AgentOther { kind: "command_lifecycle".to_string(), parent_tool_use_id: None };
+    let unchanged = || EventBody::AgentOther { kind: "command_lifecycle".to_string(), subagent: None };
     let moved = match progress {
         PromptProgress::Started | PromptProgress::Cancelled => shared.untaken.lock().remove(uuid),
         PromptProgress::Other => None,

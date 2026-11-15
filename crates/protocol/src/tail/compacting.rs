@@ -16,7 +16,7 @@ fn compacted() -> EventBody {
 fn writes(call: Option<&str>) -> EventBody {
     EventBody::Assistant {
         message_id: Some("m1".into()),
-        parent_tool_use_id: call.map(Into::into),
+        subagent: call.map(Into::into),
         model: None,
         blocks: vec![],
         first_index: None,

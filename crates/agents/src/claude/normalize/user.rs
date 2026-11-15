@@ -19,8 +19,8 @@ pub(super) fn line(value: &Value) -> Parsed {
     let for_the_model = value.get("isSynthetic").and_then(Value::as_bool) == Some(true);
     if for_the_model && !blocks.iter().any(|block| matches!(block, ContentBlock::ToolResult { .. })) {
         // A subagent's names the call that started it, as every `user` line from one does.
-        let parent_tool_use_id = id_of(value, "parent_tool_use_id");
-        return Parsed::Event(EventBody::AgentOther { kind: "user/synthetic".into(), parent_tool_use_id });
+        let subagent = id_of(value, "parent_tool_use_id");
+        return Parsed::Event(EventBody::AgentOther { kind: "user/synthetic".into(), subagent });
     }
     // Claude says what an edit changed beside the line's one result, rather than in it.
     if let [ContentBlock::ToolResult { change, text, .. }] = blocks.as_mut_slice() {
@@ -30,7 +30,7 @@ pub(super) fn line(value: &Value) -> Parsed {
         }
     }
     let taken = images::take(content, &mut blocks);
-    let body = EventBody::AgentUser { parent_tool_use_id: id_of(value, "parent_tool_use_id"), blocks };
+    let body = EventBody::AgentUser { subagent: id_of(value, "parent_tool_use_id"), blocks };
     if taken.is_empty() {
         return Parsed::Event(body);
     }

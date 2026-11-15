@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use protocol::client::{ApiError, HubNotice};
 use protocol::event::{EventBody, SessionEvent};
-use protocol::model::{ClientMessageId, RunCapabilities, RunId, Session, ToolUseId};
+use protocol::model::{ClientMessageId, RunCapabilities, RunId, Session, SubagentId};
 use protocol::tail::Tail;
 use tracing::error;
 
@@ -158,7 +158,7 @@ impl LiveSession {
         for account in appended.iter().filter_map(|appended| appended.account.clone()) {
             hub.notify(HubNotice::Account(account));
         }
-        let subagents: Vec<ToolUseId> = appended.iter().flat_map(|appended| appended.subagents.clone()).collect();
+        let subagents: Vec<SubagentId> = appended.iter().flat_map(|appended| appended.subagents.clone()).collect();
         if !subagents.is_empty()
             && let Err(e) = self.announce_subagents(hub, subagents).await
         {
@@ -178,13 +178,13 @@ impl LiveSession {
         Ok(session)
     }
 
-    /// Tells everyone following the feed what the records of the subagents that made `calls` are now, read back from
-    /// the store as the session is.
-    async fn announce_subagents(&self, hub: &Hub, calls: Vec<ToolUseId>) -> Result<(), ApiError> {
+    /// Tells everyone following the feed what the records of `changed` are now, read back from the store as the
+    /// session is.
+    async fn announce_subagents(&self, hub: &Hub, changed: Vec<SubagentId>) -> Result<(), ApiError> {
         let id = self.id.clone();
         let subagents = hub
             .blocking(move |store| {
-                let records = calls.iter().map(|call| store.get_subagent(&id, call));
+                let records = changed.iter().map(|subagent| store.get_subagent(&id, subagent));
                 records.filter_map(Result::transpose).collect::<Result<Vec<_>, _>>()
             })
             .await?;
@@ -249,7 +249,7 @@ fn take(state: &mut LiveState, origin: Origin, appended: &Appended, next: Next) 
             state.capabilities = Some(claims);
         }
     }
-    let others = |tail: &Tail| tail.messages.iter().filter(|message| message.parent_tool_use_id != *subagent).count();
+    let others = |tail: &Tail| tail.messages.iter().filter(|message| message.subagent != *subagent).count();
     let others_before = others(&state.tail);
     state.tail.on_event(seq, origin.run(), body);
     let ended_others = others(&state.tail) < others_before;

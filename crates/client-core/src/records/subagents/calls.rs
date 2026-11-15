@@ -1,14 +1,14 @@
 use super::super::snapshot::SubagentsListed;
 use super::super::{Kept, Taken};
-use protocol::model::{SessionId, Subagent, ToolUseId};
+use protocol::model::{SessionId, Subagent, SubagentId};
 use std::cell::OnceCell;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::Arc;
 
 #[derive(Debug, Default)]
 pub(crate) struct Subagents {
-    /// By session, then by the call that started each. Each is shared with what views read.
-    pub(super) held: HashMap<SessionId, BTreeMap<ToolUseId, Kept<Arc<Subagent>>>>,
+    /// By session, then by subagent. Each is shared with what views read.
+    pub(super) held: HashMap<SessionId, BTreeMap<SubagentId, Kept<Arc<Subagent>>>>,
     /// The sessions a view asked for, whose subagents are kept.
     pub(super) wanted: BTreeSet<SessionId>,
     /// Of those, the ones listed on this connection.
@@ -30,12 +30,12 @@ impl Subagents {
         let session = self.held.entry(subagent.session_id.clone()).or_default();
         // As for every record. A hub that keeps subagents' records keeps revisions, so a copy without one only comes
         // from a hub that doesn't, which has none to send.
-        let held = session.get(&subagent.call).map(|held| &held.record);
+        let held = session.get(&subagent.id()).map(|held| &held.record);
         if held.is_some_and(|held| !subagent.rev.supersedes(held.rev) || **held == subagent) {
             return false;
         }
         let taken = self.taken.next();
-        session.insert(subagent.call.clone(), Kept { record: Arc::new(subagent), taken });
+        session.insert(subagent.id(), Kept { record: Arc::new(subagent), taken });
         self.shown.take();
         true
     }

@@ -2,7 +2,7 @@ use super::{approval, asking, compaction, content, ending, failure, task, tokens
 use crate::attachment::Attachment;
 use crate::model::{
     AgentSessionId, ApprovalId, ClientMessageId, MessageId, ModelName, PermissionMode, Place, RunId, Seq, SessionId,
-    TaskId, ToolUseId, UsageLimit,
+    SubagentId, TaskId, ToolUseId, UsageLimit,
 };
 use crate::prompt::Prompt;
 use approval::ApprovalOutcome;
@@ -26,11 +26,11 @@ pub struct SessionEvent {
     /// events recorded before runs were.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub run: Option<RunId>,
-    /// The subagent it's from, as the call that started it, or `None` for the agent's own. The hub records it from
-    /// [`EventBody::subagent`], or from the agent's line for an `AgentOther` recorded before that named its subagent. A
-    /// hub that doesn't record it sends none, and `place` as 0.
+    /// The subagent it's from, or `None` for the agent's own. The hub records it from [`EventBody::subagent`], or from
+    /// the agent's line for an `AgentOther` recorded before that named its subagent. A hub that doesn't record it sends
+    /// none, and `place` as 0.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub subagent: Option<ToolUseId>,
+    pub subagent: Option<SubagentId>,
     #[serde(default)]
     pub place: Place,
     pub body: EventBody,
@@ -133,16 +133,20 @@ pub enum EventBody {
         #[serde(default)]
         in_background: bool,
     },
-    /// How much the conversation of the subagent that `call` started holds, as the agent says while it works. It's the
-    /// agent's own event, about the subagent.
+    /// How much the conversation of the subagent `subagent` holds, as the agent says while it works. It's the agent's
+    /// own event, about the subagent.
     SubagentContext {
-        call: ToolUseId,
+        /// Sent as `call`, its name from when a subagent was named by the call that started it, since it's stored so.
+        #[serde(rename = "call")]
+        subagent: SubagentId,
         /// As [`Subagent::context_tokens`](crate::model::Subagent::context_tokens) counts them.
         tokens: u64,
     },
-    /// The subagent that `call` started has stopped working.
+    /// The subagent `subagent` has stopped working.
     SubagentEnded {
-        call: ToolUseId,
+        /// Sent as `call`, as [`EventBody::SubagentContext`]'s is.
+        #[serde(rename = "call")]
+        subagent: SubagentId,
         outcome: TaskOutcome,
         /// What it reported, once it finished.
         #[serde(default)]
@@ -155,8 +159,10 @@ pub enum EventBody {
     /// Claude sends one of these per content block, sharing `message_id`.
     Assistant {
         message_id: Option<MessageId>,
-        #[serde(default)]
-        parent_tool_use_id: Option<ToolUseId>,
+        /// The subagent it's from, or `None` for the agent's own. Sent as `parent_tool_use_id`, its name from when a
+        /// subagent was named by the call that started it, since it's stored so.
+        #[serde(default, rename = "parent_tool_use_id")]
+        subagent: Option<SubagentId>,
         /// As the agent said it, for the reason [`EventBody::AgentInit`]'s is.
         model: Option<String>,
         blocks: Vec<ContentBlock>,
@@ -168,8 +174,9 @@ pub enum EventBody {
     },
     /// Content the agent itself added on the user's side: tool results and interruption notes.
     AgentUser {
-        #[serde(default)]
-        parent_tool_use_id: Option<ToolUseId>,
+        /// The subagent it's from, or `None` for the agent's own, sent as [`EventBody::Assistant`]'s is.
+        #[serde(default, rename = "parent_tool_use_id")]
+        subagent: Option<SubagentId>,
         blocks: Vec<ContentBlock>,
     },
     /// The agent went on without a result for the call `tool_use_id`: whoever made it began their next message with
@@ -216,9 +223,9 @@ pub enum EventBody {
     /// One of the agent's requests to its model failed, and its CLI said why in a message of its own, in the place of
     /// the model's reply. The agent's turn mostly ends there, failed, but a subagent's failing leaves the agent going.
     RequestFailed {
-        /// The call that started the subagent whose request it was, or `None` for the agent's own.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        parent_tool_use_id: Option<ToolUseId>,
+        /// The subagent whose request it was, or `None` for the agent's own, sent as [`EventBody::Assistant`]'s is.
+        #[serde(default, rename = "parent_tool_use_id", skip_serializing_if = "Option::is_none")]
+        subagent: Option<SubagentId>,
         failure: RequestFailure,
         /// It repeats the agent's own failed request before it. `None` for the first in a row, for a subagent's, from
         /// the agent, which doesn't know, and from a hub that doesn't add it.
@@ -254,11 +261,11 @@ pub enum EventBody {
         /// recorded before it was kept.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         reason: Option<String>,
-        /// The subagent that asks, as the call that started it, or `None` for the agent itself, and in one recorded
-        /// before adapters said. The request is among the agent's own events whichever asks, as
-        /// [`EventBody::subagent`] says, since it waits on the person, and a chat reads the agent's own.
+        /// The subagent that asks, or `None` for the agent itself, and in one recorded before adapters said. The
+        /// request is among the agent's own events whichever asks, as [`EventBody::subagent`] says, since it waits on
+        /// the person, and a chat reads the agent's own.
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        asked_by: Option<ToolUseId>,
+        asked_by: Option<SubagentId>,
     },
     ApprovalResolved {
         approval_id: ApprovalId,
@@ -287,9 +294,10 @@ pub enum EventBody {
     Notice {
         level: NoticeLevel,
         message: String,
-        /// The call that started the subagent the CLI said it of, or `None`. The hub's are never a subagent's.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        parent_tool_use_id: Option<ToolUseId>,
+        /// The subagent the CLI said it of, or `None`, sent as [`EventBody::Assistant`]'s is. The hub's are never a
+        /// subagent's.
+        #[serde(default, rename = "parent_tool_use_id", skip_serializing_if = "Option::is_none")]
+        subagent: Option<SubagentId>,
     },
     /// The agent's approval mode changed, whoever changed it. It changes by itself too: approving a plan leaves plan
     /// mode. The hub records one when the mode is changed with no agent running, for the next agent to start in.
@@ -299,10 +307,10 @@ pub enum EventBody {
     /// An agent event with no normalized form. The stored raw line has the details.
     AgentOther {
         kind: String,
-        /// The call that started the subagent it's from, if the agent said. It's `None` in one recorded before this
-        /// was, whose `SessionEvent::subagent` says.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        parent_tool_use_id: Option<ToolUseId>,
+        /// The subagent it's from, if the agent said, sent as [`EventBody::Assistant`]'s is. It's `None` in one
+        /// recorded before this was, whose `SessionEvent::subagent` says.
+        #[serde(default, rename = "parent_tool_use_id", skip_serializing_if = "Option::is_none")]
+        subagent: Option<SubagentId>,
     },
     /// The agent is compacting its conversation: writing a summary to carry on from in place of what it holds, so its
     /// context has room again. It says so again every so often until it's done.

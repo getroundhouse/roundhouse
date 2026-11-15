@@ -18,7 +18,7 @@ use gpui_kit::{
 use look::LineText;
 use protocol::attachment::Attachment;
 use protocol::event::SessionEvent;
-use protocol::model::{Seq, Session, SessionId, ToolUseId};
+use protocol::model::{Seq, Session, SessionId, SubagentId};
 use record::{AtWork, tick};
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -64,11 +64,11 @@ impl Transcript {
         Self::start(client, session, View::Own, AtWork::of(session), cx)
     }
 
-    /// The work of the subagent `call` started, alone, for the subagent tab. Whether it's at work is its record's to
-    /// say, once [`Transcript::set_subagents`] passes it on.
-    pub fn subagent(client: Client, session: &Session, call: ToolUseId, cx: &mut Context<Self>) -> Self {
-        let transcript = Self::start(client, session, View::Subagent(call.clone()), AtWork::default(), cx);
-        transcript.model.borrow_mut().alone = Some(call);
+    /// The work of `subagent`, alone, for the subagent tab. Whether it's at work is its record's to say, once
+    /// [`Transcript::set_subagents`] passes it on.
+    pub fn subagent(client: Client, session: &Session, subagent: SubagentId, cx: &mut Context<Self>) -> Self {
+        let transcript = Self::start(client, session, View::Subagent(subagent.clone()), AtWork::default(), cx);
+        transcript.model.borrow_mut().alone = Some(subagent);
         transcript
     }
 

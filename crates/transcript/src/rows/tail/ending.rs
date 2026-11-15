@@ -94,7 +94,7 @@ pub(in super::super) fn render_tail(end: &EndOfChat, shared: &Shared, by: By, cx
 /// it's recorded.
 fn still_writing(tail: &Tail, shared: &Shared, thinking_open: bool, cx: &App) -> (Vec<AnyElement>, usize) {
     let (mut out, mut placed) = (Vec::new(), 0);
-    for message in tail.messages.iter().filter(|m| m.parent_tool_use_id.is_none()) {
+    for message in tail.messages.iter().filter(|m| m.subagent.is_none()) {
         for block in &message.blocks {
             let key = ItemKey::Block(message.message_id.clone(), block.index);
             let mut drawn = |part| {
