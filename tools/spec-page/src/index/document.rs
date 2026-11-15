@@ -1,7 +1,8 @@
 use anyhow::{Context as _, Result, anyhow};
-use markdown::mdast::{Image, ListItem, Node};
+use markdown::mdast::{self, Image, ListItem, Node};
 use markdown::{Options, ParseOptions};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::path::Path;
 
 /// How the spec marks what the owner hasn't confirmed, as the HTML of a rule or a caption has it. The mark can end
@@ -30,6 +31,8 @@ pub(crate) struct Area {
 pub(crate) struct Section {
     /// `None` for what comes before the area's first heading.
     pub(crate) title: Option<String>,
+    /// How deep its heading is, from 2, for one under the area's title, and 2 for what comes before the first.
+    pub(crate) depth: u8,
     /// What it says, in order.
     pub(crate) blocks: Vec<Block>,
 }
@@ -46,6 +49,15 @@ pub(crate) struct Block {
     pub(crate) unconfirmed: usize,
     pub(crate) not_built: bool,
     pub(crate) screens: Vec<Screen>,
+    /// Its cells, if it's a table.
+    pub(crate) table: Option<Table>,
+}
+
+/// A table, each cell as HTML, without a paragraph around it.
+#[derive(Serialize)]
+pub(crate) struct Table {
+    pub(crate) header: Vec<String>,
+    pub(crate) rows: Vec<Vec<String>>,
 }
 
 #[derive(Serialize)]
@@ -59,6 +71,23 @@ pub(crate) struct Screen {
     /// The caption as HTML.
     pub(crate) caption: Option<String>,
     pub(crate) confirmation: Confirmation,
+    /// Where it draws each name it shows, if it's one of the gallery's sheets of the foundations, from what
+    /// the gallery keeps beside its image, and otherwise empty.
+    #[serde(skip_serializing_if = "Places::is_empty")]
+    pub(crate) places: Places,
+}
+
+/// Where a sheet draws each name it shows: by the type that gives them, such as `look::Space`, as the
+/// spec's table of them names it, then by each one's name, such as `Medium`.
+pub(crate) type Places = BTreeMap<String, BTreeMap<String, Place>>;
+
+/// A box in an image's pixels: its left and top edges, and how wide and tall it is.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct Place {
+    pub(crate) x: u32,
+    pub(crate) y: u32,
+    pub(crate) width: u32,
+    pub(crate) height: u32,
 }
 
 /// An image's size in pixels.
@@ -105,9 +134,22 @@ pub(crate) fn read(spec: &Path) -> Result<Index> {
     let mut areas = areas.collect::<Result<Vec<_>>>()?;
     let blocks = areas.iter_mut().flat_map(|area| area.sections.iter_mut().flat_map(|section| &mut section.blocks));
     for screen in blocks.flat_map(|block| &mut block.screens) {
-        screen.size = png_size(&spec.join(&screen.image));
+        let image = spec.join(&screen.image);
+        screen.size = png_size(&image);
+        screen.places = places(&image.with_extension("json"))?;
     }
     Ok(Index { areas })
+}
+
+/// What the gallery keeps at `path`, beside a sheet's image, of where it draws each name, or nothing if it keeps
+/// nothing there, as for any screen but a sheet.
+fn places(path: &Path) -> Result<Places> {
+    let read = || format!("reading {}", path.display());
+    match std::fs::read_to_string(path) {
+        Ok(text) => serde_json::from_str(&text).with_context(read),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Places::new()),
+        Err(error) => Err(error).with_context(read),
+    }
 }
 
 /// The size a PNG's header gives, if `path` is one.
@@ -140,15 +182,15 @@ pub(crate) fn area(file: &str, covers: &str, text: &str) -> Result<Area> {
     let nodes = tree.children().map_or(&[][..], Vec::as_slice);
     let reader = Reader { file, text };
     let mut title = None;
-    let mut sections = vec![Section { title: None, blocks: Vec::new() }];
+    let mut sections = vec![Section { title: None, depth: 2, blocks: Vec::new() }];
     for (ix, node) in nodes.iter().enumerate() {
         let blocks = match node {
             Node::Heading(heading) if heading.depth == 1 => {
                 title = Some(node.to_string());
                 continue;
             }
-            Node::Heading(_) => {
-                sections.push(Section { title: Some(node.to_string()), blocks: Vec::new() });
+            Node::Heading(heading) => {
+                sections.push(Section { title: Some(node.to_string()), depth: heading.depth, blocks: Vec::new() });
                 continue;
             }
             _ => &mut sections.last_mut().context("there's always a section")?.blocks,
@@ -169,7 +211,11 @@ pub(crate) fn area(file: &str, covers: &str, text: &str) -> Result<Area> {
         file: file.to_string(),
         title,
         covers: covers.to_string(),
-        sections: sections.into_iter().filter(|section| !section.blocks.is_empty()).collect(),
+        // A heading is kept with nothing under it but deeper headings, so theirs are read under it.
+        sections: sections
+            .into_iter()
+            .filter(|section| section.title.is_some() || !section.blocks.is_empty())
+            .collect(),
     })
 }
 
@@ -220,20 +266,49 @@ impl Reader<'_> {
         let html = if markdown.is_empty() { String::new() } else { self.html(markdown)? };
         let lead = match first {
             Some(Node::Paragraph(paragraph)) => match paragraph.children.first() {
-                Some(strong @ Node::Strong(_)) => Some(self.html(self.source(strong)?)?),
+                Some(strong @ Node::Strong(_)) => Some(self.words(self.source(strong)?)?),
                 _ => None,
             },
             _ => None,
         };
-        // The paragraph the renderer puts it in, since it goes among other words.
-        let lead = lead.map(|lead| lead.trim_end().trim_start_matches("<p>").trim_end_matches("</p>").to_string());
+        let table = match first {
+            Some(Node::Table(table)) => Some(self.table(table)?),
+            _ => None,
+        };
         Ok(Block {
             lead,
             unconfirmed: html.matches(UNCONFIRMED).count(),
             not_built: html.contains(NOT_BUILT),
             html,
             screens: Vec::new(),
+            table,
         })
+    }
+
+    /// A table's cells, its heading's first.
+    fn table(&self, table: &mdast::Table) -> Result<Table> {
+        let mut rows = table.children.iter().map(|row| {
+            let cells = row.children().map_or(&[][..], Vec::as_slice);
+            cells.iter().map(|cell| self.cell(cell)).collect::<Result<Vec<_>>>()
+        });
+        let header = rows.next().transpose()?.unwrap_or_default();
+        Ok(Table { header, rows: rows.collect::<Result<_>>()? })
+    }
+
+    /// A cell's words as HTML, from the first to the last, without the spaces and the bars around them.
+    fn cell(&self, cell: &Node) -> Result<String> {
+        let words = cell.children().map_or(&[][..], Vec::as_slice);
+        let (Some(first), Some(last)) = (words.first(), words.last()) else { return Ok(String::new()) };
+        let at = |node: &Node| node.position().context("the parser gives every node a position").cloned();
+        let source = self.text.get(at(first)?.start.offset..at(last)?.end.offset).context("a cell is in its file")?;
+        self.words(source)
+    }
+
+    /// Markdown that's words alone, such as a cell's or a rule's first words, as HTML, without the paragraph the
+    /// renderer puts them in, since they go among other words.
+    fn words(&self, markdown: &str) -> Result<String> {
+        let html = self.html(markdown)?;
+        Ok(html.trim_end().trim_start_matches("<p>").trim_end_matches("</p>").to_string())
     }
 
     /// The caption, as HTML, of the images at `ix`: the paragraph right above them, or above the run of images
@@ -284,6 +359,7 @@ fn screen(image: &Image, caption: Option<String>) -> Screen {
         size: None,
         caption,
         confirmation,
+        places: Places::new(),
     }
 }
 

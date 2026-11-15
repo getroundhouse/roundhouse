@@ -1,0 +1,46 @@
+{
+  "look::Type": {
+    "Body": {
+      "x": 252,
+      "y": 228,
+      "width": 640,
+      "height": 45
+    },
+    "Code": {
+      "x": 252,
+      "y": 407,
+      "width": 640,
+      "height": 39
+    },
+    "Detail": {
+      "x": 252,
+      "y": 319,
+      "width": 640,
+      "height": 39
+    },
+    "Heading": {
+      "x": 252,
+      "y": 137,
+      "width": 640,
+      "height": 52
+    },
+    "Key": {
+      "x": 252,
+      "y": 499,
+      "width": 640,
+      "height": 32
+    },
+    "KeyHeld": {
+      "x": 252,
+      "y": 591,
+      "width": 640,
+      "height": 24
+    },
+    "PageTitle": {
+      "x": 252,
+      "y": 36,
+      "width": 640,
+      "height": 78
+    }
+  }
+}

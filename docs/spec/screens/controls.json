@@ -1,0 +1,22 @@
+{
+  "look::ControlSize": {
+    "Large": {
+      "x": 212,
+      "y": 279,
+      "width": 520,
+      "height": 64
+    },
+    "Regular": {
+      "x": 212,
+      "y": 171,
+      "width": 520,
+      "height": 56
+    },
+    "Small": {
+      "x": 212,
+      "y": 63,
+      "width": 520,
+      "height": 48
+    }
+  }
+}

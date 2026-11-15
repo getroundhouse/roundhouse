@@ -7,17 +7,21 @@ use std::sync::Arc;
 
 use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::{
-    Context, IntoElement, ParentElement as _, PlatformTextSystem, Render, Styled as _, Window, div, px, size,
+    Context, InteractiveElement as _, IntoElement, ParentElement as _, PlatformTextSystem, Render, Styled as _,
+    TestSupportExt as _, Window, div, px, size,
 };
 use look::{Corner, Shaped as _, Type, Typeset as _};
 
 use super::capture::Picture;
 use super::headless;
+use super::places::{self, Places};
 
 /// Its image's name, in `docs/spec/screens/`.
 pub(crate) const NAME: &str = "corners";
 /// The spec's file that shows it.
 pub(crate) const SPEC: &str = "look.md";
+/// What the spec's table calls the type that names each.
+const KIND: &str = "look::Corner";
 const NAME_WIDTH: f32 = 130.;
 /// Big enough that the roundest corner is plain, and the least still shows.
 const SQUARE: f32 = 40.;
@@ -33,13 +37,16 @@ impl Render for Sheet {
         let colors = look::colors(cx);
         let row = |&corner: &Corner| {
             let [name, radius] = corner.written();
+            let place = places::id(KIND, &name);
             let name = div().w(px(NAME_WIDTH)).typeset(Type::Detail).text_color(colors.text_muted).child(name);
             let square = div()
                 .size(px(SQUARE))
                 .corners(corner)
                 .border(look::EDGE)
                 .border_color(colors.control_edge)
-                .bg(colors.raised);
+                .bg(colors.raised)
+                .id(place)
+                .test_support();
             let sample = div().w(px(SAMPLE_WIDTH)).child(square);
             let radius = div().w(px(RADIUS_WIDTH)).typeset(Type::Detail).text_color(colors.text_faint).child(radius);
             h_flex().h(px(ROW)).border_b_1().border_color(colors.edge).child(name).child(sample).child(radius)
@@ -48,11 +55,13 @@ impl Render for Sheet {
     }
 }
 
-/// At the app's scale, as the screens are.
-pub(crate) fn draw(text_system: &Arc<dyn PlatformTextSystem>) -> Picture {
+/// At the app's scale, as the screens are, with where it draws each corner's square.
+pub(crate) fn draw(text_system: &Arc<dyn PlatformTextSystem>) -> (Picture, Places) {
     let mut cx = headless::app(text_system);
     #[expect(clippy::cast_precision_loss, reason = "a handful of rows")]
     let rows = Corner::ALL.len() as f32;
     let width = px(MARGIN * 2. + NAME_WIDTH + SAMPLE_WIDTH + RADIUS_WIDTH);
-    headless::draw(&mut cx, size(width, px(MARGIN * 2. + rows * ROW)), |_| Sheet)
+    let names: Vec<String> = Corner::ALL.iter().map(|each| each.written()[0].clone()).collect();
+    let size = size(width, px(MARGIN * 2. + rows * ROW));
+    headless::draw_and_measure(&mut cx, size, None, |_| Sheet, |window| Places::of(window, &[(KIND, &names)]))
 }

@@ -48,6 +48,8 @@ main { padding: 0 32px 64px; }
 .about, .counts { margin: 4px 0; color: var(--muted); }
 .part { padding: 24px 0; border-bottom: 1px solid var(--line); }
 .part h3 { margin: 0 0 8px; font-size: 18px; }
+.part h4 { margin: 0 0 8px; font-size: 16px; }
+.design { margin-left: auto; }
 /* A rule beside the screens that show it. */
 .row {
   display: grid;

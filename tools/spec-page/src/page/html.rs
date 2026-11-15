@@ -57,6 +57,7 @@ pub(crate) fn draw(index: &Index) -> Markup {
                         h1 { "The spec" }
                         p { (confirmed) " of " (all) " screens confirmed" }
                         label { input type="checkbox" id="only-unconfirmed"; " Only what isn't confirmed" }
+                        a.design href="design.html" { "The design system" }
                     }
                     nav {
                         ul {
@@ -96,7 +97,9 @@ fn draw_area(area: &Area) -> Markup {
 fn draw_section(section: &Section) -> Markup {
     html! {
         div.part {
-            @if let Some(title) = &section.title { h3 { (title) } }
+            @if let Some(title) = &section.title {
+                @if section.depth > 2 { h4 { (title) } } @else { h3 { (title) } }
+            }
             @for block in &section.blocks { (draw_block(block)) }
         }
     }
@@ -171,7 +174,7 @@ fn counts(area: &Area) -> (usize, usize) {
 
 /// HTML the spec's Markdown was drawn as, which is the spec's own and so isn't escaped again, with its marks picked
 /// out so the stylesheet can colour them.
-fn marked(html: &str) -> PreEscaped<String> {
+pub(crate) fn marked(html: &str) -> PreEscaped<String> {
     let marked = html
         .replace(UNCONFIRMED, "<em class=\"mark unconfirmed\">Unconfirmed")
         .replace(NOT_BUILT, "<em class=\"mark not-built\">Not built");

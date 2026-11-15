@@ -44,18 +44,22 @@ fn every_state_of_the_mark_looks_as_approved() {
 fn every_colour_looks_as_approved() {
     let text_system: Arc<dyn PlatformTextSystem> = Arc::new(gpui_apple::AppleTextSystem::new());
 
-    let picture = colours::draw(&text_system);
+    let (picture, places) = colours::draw(&text_system);
 
-    report(&look_at(colours::NAME, colours::SPEC, &picture));
+    let mut problems = look_at(colours::NAME, colours::SPEC, &picture);
+    problems.extend(places.look_at(colours::NAME));
+    report(&problems);
 }
 
 #[test]
 fn every_kind_of_text_looks_as_approved() {
     let text_system: Arc<dyn PlatformTextSystem> = Arc::new(gpui_apple::AppleTextSystem::new());
 
-    let picture = kinds_of_text::draw(&text_system);
+    let (picture, places) = kinds_of_text::draw(&text_system);
 
-    report(&look_at(kinds_of_text::NAME, kinds_of_text::SPEC, &picture));
+    let mut problems = look_at(kinds_of_text::NAME, kinds_of_text::SPEC, &picture);
+    problems.extend(places.look_at(kinds_of_text::NAME));
+    report(&problems);
 }
 
 #[test]
@@ -190,43 +194,53 @@ fn report(problems: &[String]) {
 fn every_corner_looks_as_approved() {
     let text_system: Arc<dyn PlatformTextSystem> = Arc::new(gpui_apple::AppleTextSystem::new());
 
-    let picture = corners::draw(&text_system);
+    let (picture, places) = corners::draw(&text_system);
 
-    report(&look_at(corners::NAME, corners::SPEC, &picture));
+    let mut problems = look_at(corners::NAME, corners::SPEC, &picture);
+    problems.extend(places.look_at(corners::NAME));
+    report(&problems);
 }
 
 #[test]
 fn every_control_size_looks_as_approved() {
     let text_system: Arc<dyn PlatformTextSystem> = Arc::new(gpui_apple::AppleTextSystem::new());
 
-    let picture = controls::draw(&text_system);
+    let (picture, places) = controls::draw(&text_system);
 
-    report(&look_at(controls::NAME, controls::SPEC, &picture));
+    let mut problems = look_at(controls::NAME, controls::SPEC, &picture);
+    problems.extend(places.look_at(controls::NAME));
+    report(&problems);
 }
 
 #[test]
 fn every_bar_and_row_height_looks_as_approved() {
     let text_system: Arc<dyn PlatformTextSystem> = Arc::new(gpui_apple::AppleTextSystem::new());
 
-    let picture = heights::draw(&text_system);
+    let (picture, places) = heights::draw(&text_system);
 
-    report(&look_at(heights::NAME, heights::SPEC, &picture));
+    let mut problems = look_at(heights::NAME, heights::SPEC, &picture);
+    problems.extend(places.look_at(heights::NAME));
+    report(&problems);
 }
 
 #[test]
 fn every_icon_size_looks_as_approved() {
     let text_system: Arc<dyn PlatformTextSystem> = Arc::new(gpui_apple::AppleTextSystem::new());
 
-    let picture = icon_sizes::draw(&text_system);
+    let (picture, places) = icon_sizes::draw(&text_system);
 
-    report(&look_at(icon_sizes::NAME, icon_sizes::SPEC, &picture));
+    let mut problems = look_at(icon_sizes::NAME, icon_sizes::SPEC, &picture);
+    problems.extend(places.look_at(icon_sizes::NAME));
+    report(&problems);
 }
 
 #[test]
 fn every_step_of_space_looks_as_approved() {
     let text_system: Arc<dyn PlatformTextSystem> = Arc::new(gpui_apple::AppleTextSystem::new());
 
-    let picture = spaces::draw(&text_system);
+    let (picture, places) = spaces::draw(&text_system);
 
-    report(&look_at(spaces::NAME, spaces::SPEC, &picture));
+    let mut problems = look_at(spaces::NAME, spaces::SPEC, &picture);
+    problems.extend(places.look_at(spaces::NAME));
+    report(&problems);
 }

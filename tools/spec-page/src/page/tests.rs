@@ -57,3 +57,14 @@ fn the_page_is_written_with_its_index_and_the_spec_s_screens_as_they_are_now() {
     assert_eq!(std::fs::read_to_string(out.path().join("screens/menu.png")).unwrap(), "the menu");
     assert!(!out.path().join("screens/dropped.png").exists());
 }
+
+#[test]
+fn a_heading_under_a_heading_is_drawn_a_level_down_and_the_page_links_the_design_systems() {
+    let text = "# Look\n\n## Space and shape\n\n### Space\n\n- **A rule.**\n";
+
+    let page = draw(&index(text)).into_string();
+
+    assert!(page.contains("<div class=\"part\"><h3>Space and shape</h3></div>"), "{page}");
+    assert!(page.contains("<div class=\"part\"><h4>Space</h4>"), "{page}");
+    assert!(page.contains("<a class=\"design\" href=\"design.html\">The design system</a>"), "{page}");
+}

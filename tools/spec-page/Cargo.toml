@@ -1,6 +1,6 @@
 [package]
 name = "spec-page"
-description = "Draws the spec as a page, each area's screens beside their rules, and which are confirmed."
+description = "Draws the spec as a page, each area's screens beside their rules, and which are confirmed, and the design system's page beside it."
 version.workspace = true
 edition.workspace = true
 publish.workspace = true

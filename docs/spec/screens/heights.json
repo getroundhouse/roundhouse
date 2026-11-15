@@ -1,0 +1,36 @@
+{
+  "look::BarSize": {
+    "Regular": {
+      "x": 252,
+      "y": 159,
+      "width": 520,
+      "height": 80
+    },
+    "Small": {
+      "x": 252,
+      "y": 55,
+      "width": 520,
+      "height": 64
+    }
+  },
+  "look::RowSize": {
+    "Large": {
+      "x": 252,
+      "y": 491,
+      "width": 520,
+      "height": 88
+    },
+    "Regular": {
+      "x": 252,
+      "y": 387,
+      "width": 520,
+      "height": 72
+    },
+    "Small": {
+      "x": 252,
+      "y": 283,
+      "width": 520,
+      "height": 56
+    }
+  }
+}

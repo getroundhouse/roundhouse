@@ -8,18 +8,21 @@ use std::sync::Arc;
 
 use gpui_kit::component::{Icon, IconName, h_flex, v_flex};
 use gpui_kit::{
-    AnyElement, Context, IntoElement, ParentElement as _, PlatformTextSystem, Render, Styled as _, Window, div, px,
-    size,
+    AnyElement, Context, InteractiveElement as _, IntoElement, ParentElement as _, PlatformTextSystem, Render,
+    Styled as _, TestSupportExt as _, Window, div, px, size,
 };
 use look::{IconSize, IconSizing as _, Space, Type, Typeset as _};
 
 use super::capture::Picture;
 use super::headless;
+use super::places::{self, Places};
 
 /// Its image's name, in `docs/spec/screens/`.
 pub(crate) const NAME: &str = "icons";
 /// The spec's file that shows it.
 pub(crate) const SPEC: &str = "look.md";
+/// What the spec's table calls the type that names each size.
+const KIND: &str = "look::IconSize";
 const NAME_WIDTH: f32 = 90.;
 /// Wide enough for three of the largest, apart.
 const SAMPLE_WIDTH: f32 = 90.;
@@ -45,6 +48,7 @@ impl Render for Sheet {
         let colors = look::colors(cx);
         let row = |icon: IconSize| -> AnyElement {
             let [name, pixels] = icon.written();
+            let place = places::id(KIND, &name);
             let label = div().w(px(NAME_WIDTH)).typeset(Type::Detail).text_color(colors.text_muted).child(name);
             // Each in a place as wide as the largest, so the icons are in columns down the sheet.
             let boxed = |name: IconName| {
@@ -69,8 +73,7 @@ impl Render for Sheet {
                 .border_b_1()
                 .border_color(colors.edge)
                 .child(label)
-                .child(sample)
-                .child(beside)
+                .child(h_flex().child(sample).child(beside).id(place).test_support())
                 .child(written)
                 .into_any_element()
         };
@@ -83,11 +86,13 @@ impl Render for Sheet {
     }
 }
 
-/// At the app's scale, as the screens are.
-pub(crate) fn draw(text_system: &Arc<dyn PlatformTextSystem>) -> Picture {
+/// At the app's scale, as the screens are, with where it draws each size's icons.
+pub(crate) fn draw(text_system: &Arc<dyn PlatformTextSystem>) -> (Picture, Places) {
     let mut cx = headless::app(text_system);
     #[expect(clippy::cast_precision_loss, reason = "a handful of rows")]
     let rows = IconSize::ALL.len() as f32;
     let width = px(MARGIN * 2. + NAME_WIDTH + SAMPLE_WIDTH + BESIDE_WIDTH + WRITTEN_WIDTH);
-    headless::draw(&mut cx, size(width, px(MARGIN * 2. + rows * ROW)), |_| Sheet)
+    let names: Vec<String> = IconSize::ALL.iter().map(|icon| icon.written()[0].clone()).collect();
+    let size = size(width, px(MARGIN * 2. + rows * ROW));
+    headless::draw_and_measure(&mut cx, size, None, |_| Sheet, |window| Places::of(window, &[(KIND, &names)]))
 }

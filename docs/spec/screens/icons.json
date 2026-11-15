@@ -1,0 +1,22 @@
+{
+  "look::IconSize": {
+    "Large": {
+      "x": 212,
+      "y": 248,
+      "width": 480,
+      "height": 45
+    },
+    "Regular": {
+      "x": 212,
+      "y": 152,
+      "width": 480,
+      "height": 45
+    },
+    "Small": {
+      "x": 212,
+      "y": 59,
+      "width": 480,
+      "height": 39
+    }
+  }
+}

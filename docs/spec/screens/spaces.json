@@ -1,0 +1,40 @@
+{
+  "look::Space": {
+    "Large": {
+      "x": 212,
+      "y": 335,
+      "width": 280,
+      "height": 64
+    },
+    "Medium": {
+      "x": 212,
+      "y": 239,
+      "width": 280,
+      "height": 64
+    },
+    "Small": {
+      "x": 212,
+      "y": 143,
+      "width": 280,
+      "height": 64
+    },
+    "XLarge": {
+      "x": 212,
+      "y": 431,
+      "width": 280,
+      "height": 64
+    },
+    "XSmall": {
+      "x": 212,
+      "y": 47,
+      "width": 280,
+      "height": 64
+    },
+    "XXLarge": {
+      "x": 212,
+      "y": 527,
+      "width": 280,
+      "height": 64
+    }
+  }
+}

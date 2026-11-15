@@ -13,6 +13,8 @@ mod tests;
 mod document;
 #[cfg(test)]
 use document::listed;
-pub(crate) use document::{Area, Block, Confirmation, Index, NOT_BUILT, Screen, Section, UNCONFIRMED, read};
+pub(crate) use document::{
+    Area, Block, Confirmation, Index, NOT_BUILT, Place, Screen, Section, Table, UNCONFIRMED, read,
+};
 #[cfg(test)]
 pub(crate) use document::{Size, area};

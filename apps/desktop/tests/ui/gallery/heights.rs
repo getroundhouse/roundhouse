@@ -11,18 +11,22 @@ use gpui_kit::component::button::Button;
 use gpui_kit::component::{IconName, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, Context, IntoElement, ParentElement as _, Pixels, PlatformTextSystem, Render, Styled as _, Window, div,
-    px, size,
+    AnyElement, Context, ElementId, InteractiveElement as _, IntoElement, ParentElement as _, Pixels,
+    PlatformTextSystem, Render, Styled as _, TestSupportExt as _, Window, div, px, size,
 };
 use look::{BarSize, ControlSize, RowSize, Sizing as _, Type, Typeset as _};
 
 use super::capture::Picture;
 use super::headless;
+use super::places::{self, Places};
 
 /// Its image's name, in `docs/spec/screens/`.
 pub(crate) const NAME: &str = "heights";
 /// The spec's file that shows it.
 pub(crate) const SPEC: &str = "look.md";
+/// What the spec's tables call the types that name each size of a bar and of a row.
+const BARS: &str = "look::BarSize";
+const ROWS: &str = "look::RowSize";
 const NAME_WIDTH: f32 = 110.;
 const SAMPLE_WIDTH: f32 = 260.;
 const WRITTEN_WIDTH: f32 = 60.;
@@ -34,6 +38,8 @@ const MARGIN: f32 = 16.;
 /// drawn, whether it has an edge under it, the kind of text it holds and the size of the button it holds.
 struct Sample {
     name: String,
+    /// What it's drawn with, so its place can be found.
+    place: ElementId,
     tall: String,
     height: Pixels,
     edge: bool,
@@ -49,12 +55,14 @@ fn samples() -> Vec<Sample> {
             BarSize::Small => (Type::Detail, ControlSize::Small),
             BarSize::Regular => (Type::Body, ControlSize::Regular),
         };
-        Sample { name: format!("{name} bar"), tall, height: bar.height(), edge: true, kind, button }
+        let place = places::id(BARS, &name);
+        Sample { name: format!("{name} bar"), place, tall, height: bar.height(), edge: true, kind, button }
     });
     let rows = RowSize::ALL.iter().map(|&row| {
         let [name, tall] = row.written();
         let (kind, button) = (Type::Body, ControlSize::Small);
-        Sample { name: format!("{name} row"), tall, height: row.height(), edge: false, kind, button }
+        let place = places::id(ROWS, &name);
+        Sample { name: format!("{name} row"), place, tall, height: row.height(), edge: false, kind, button }
     });
     bars.chain(rows).collect()
 }
@@ -64,7 +72,7 @@ struct Sheet;
 impl Render for Sheet {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let colors = look::colors(cx);
-        let row = |Sample { name, tall, height, edge, kind, button }: Sample| -> AnyElement {
+        let row = |Sample { name, place, tall, height, edge, kind, button }: Sample| -> AnyElement {
             let outlined = Button::new(name.clone()).outline();
             let button = match button {
                 ControlSize::Small => outlined.sized_square(button).icon(IconName::Plus),
@@ -79,7 +87,9 @@ impl Render for Sheet {
                 .when(edge, |band| band.border_b_1().border_color(colors.edge))
                 .typeset(kind)
                 .child(div().flex_1().child("What it says"))
-                .child(button);
+                .child(button)
+                .id(place)
+                .test_support();
             let label = div().w(px(NAME_WIDTH)).typeset(Type::Detail).text_color(colors.text_muted).child(name);
             let written =
                 div().w(px(WRITTEN_WIDTH)).pl_3().typeset(Type::Detail).text_color(colors.text_faint).child(tall);
@@ -101,11 +111,15 @@ impl Render for Sheet {
     }
 }
 
-/// At the app's scale, as the screens are.
-pub(crate) fn draw(text_system: &Arc<dyn PlatformTextSystem>) -> Picture {
+/// At the app's scale, as the screens are, with where it draws each size's band.
+pub(crate) fn draw(text_system: &Arc<dyn PlatformTextSystem>) -> (Picture, Places) {
     let mut cx = headless::app(text_system);
     #[expect(clippy::cast_precision_loss, reason = "a handful of rows")]
-    let rows = samples().len() as f32;
+    let count = samples().len() as f32;
     let width = px(MARGIN * 2. + NAME_WIDTH + SAMPLE_WIDTH + WRITTEN_WIDTH);
-    headless::draw(&mut cx, size(width, px(MARGIN * 2. + rows * ROW)), |_| Sheet)
+    let bars: Vec<String> = BarSize::ALL.iter().map(|bar| bar.written()[0].clone()).collect();
+    let rows: Vec<String> = RowSize::ALL.iter().map(|row| row.written()[0].clone()).collect();
+    let size = size(width, px(MARGIN * 2. + count * ROW));
+    let measure = |window: &Window| Places::of(window, &[(BARS, &bars), (ROWS, &rows)]);
+    headless::draw_and_measure(&mut cx, size, None, |_| Sheet, measure)
 }

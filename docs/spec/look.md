@@ -113,6 +113,8 @@ Three strengths have names of their own, since several places draw with them: wh
 
 ## Space and shape
 
+### Space
+
 - **Every space is one of six steps on a 4px grid: 4, 8, 12, 16, 24 or 32px.** A space is the room left between and around things, as a gap, a padding or a margin, to set them apart or hold them together. What belongs together is closer than what's apart, as a project's row and its workspaces are in the sidebar, closer to each other than to the next project. `look::Space` holds the steps, and what's drawn takes one by its name, rather than a length by its value. *Unconfirmed.* A length set for something else isn't a space, even where it's a gap, a padding or a margin, so it isn't a step, but is set by what it's for: one that lines a thing up, such as an icon level with the middle of the line of text beside it, by what it lines up with; one that keeps clear of what the app doesn't lay out, such as the scrollbar's thumb or macOS's window buttons, by what it keeps clear of; a drawing's own, such as the gap between the two parts of the context card's bar, by the drawing; the 2px around and between the buttons of the diff's switch of views, by a regular button's height, which the switch is as tall as; and a pill's and a chip's pixel or two above and below their words, by the line of text they sit in. *Unconfirmed.* Settings' search has sizes of its own, so it looks familiar: it's 28px tall, spaced to the point rather than the grid, with a key 16px tall and 4px corners. *Unconfirmed.* The button back down to a chat's end is a 28px square, as `chats.md` says.
 
 **Every step of space, by its name.** Each is a step in `look::Space`, from the smallest, in pixels, so a space stays as it is whatever size text is set at. *Unconfirmed.*
@@ -130,6 +132,8 @@ Three strengths have names of their own, since several places draw with them: wh
 
 ![Every step of space](screens/spaces.png)
 
+### Corners
+
 - **Corners are 6px on controls, and 10px on cards and the composer.**
 - **Every corner the app rounds has a name for what it's on,** so a corner means the same wherever it's drawn, and two that are the same size today can change apart. What's drawn takes one by its name, rather than a radius by its value. What's set across a chat's column, such as a card in the chat, a call's block or the queue, has a card's corners, as the composer it sits above does, and what's set small in it, such as a prompt's bubble, a pill or a chip, has a control's. A row to choose in a list inside a card, such as the outline's, has a control's, so its corner sits inside the card's. What's round all the way, such as a bar's track or a dot, is round all the way. Every edge is 1px, and a quote's rule, such as the one at the left of what a subagent was asked, and the line under the tab that's showing are 2px. `look::Corner` holds the corners, and `look::EDGE`, `look::QUOTE_RULE` and `look::TAB_LINE` the widths. The kit's theme is given a control's and a card's corners from there, so the kit's own parts agree, and its menus and tooltips have a control's. *Unconfirmed.*
 
@@ -146,6 +150,8 @@ Three strengths have names of their own, since several places draw with them: wh
 
 ![Every corner](screens/corners.png)
 
+### Button sizes
+
 - **Every button has a size for where it sits,** so the buttons in the same kind of place are the same size, wherever it is, and each leaves a little room around its words and its icon. A small button is set in a line of text or a row one line tall, a regular one is a bar's or a card's own, set apart from its text, and a large one is on its own. One that's only an icon is a square, as wide as it's tall. `look::ControlSize` holds the sizes. *Unconfirmed.*
 - **A borderless button that's in line with text or marks under it or across from it stands out past its own room,** so its words or its icon line up with them, rather than that room in from them: Restart now under the update card's text, setup's last button across from its message, as far in from the strip's end as the message is from its start, the arrows over a question, on the panel's edge inside, and the button that sets out Changes' files, over the marks of the rows under it. Its fill, as the pointer lights it, then reaches past them by that room. *Unconfirmed.*
 
@@ -160,6 +166,8 @@ Three strengths have names of their own, since several places draw with them: wh
 **Every size of a button, as the app draws it.** *Unconfirmed.*
 
 ![Every size of a button](screens/controls.png)
+
+### Bars and rows
 
 - **Every bar has a size for where it sits.** A bar reaches from one edge of a pane or a card to the other, with an edge under it. A regular bar is along the top of a pane or a card, and every one is as tall, so the bars side by side across the window line up, whichever pane each is in: the workspace's header, the pull request's bar and Home's bar, in the strip along the window's top, which is as tall as they are, both rows of tabs under them, the bar over Changes' files that sends the comments waiting, a file's path, a subagent's tab's bar, and the bar along the top of the new workspace's card. A small bar is under a bar, and says more of what that one shows, in a detail's text, such as what each side of an image's comparison is. A bar holds buttons of its own size, with room above and below them. What else is called a bar, such as the find bar over the chat or the bar along the composer's bottom, isn't one of these. `look::BarSize` holds the sizes. *Unconfirmed.*
 
@@ -183,6 +191,8 @@ Three strengths have names of their own, since several places draw with them: wh
 **Every size of a bar and of a row, as the app draws them.** *Unconfirmed.*
 
 ![Every size of a bar and of a row](screens/heights.png)
+
+### Icons
 
 - **Every icon has a size for where it's drawn,** so the icons in the same kind of place are the same size, wherever it is. One set among text, as one of its words, is about as big as the text: small among a detail's or code's, and regular among body text. One that stands for what a row, a tab, a bar, a card or a call's line is, at its start, is large, as big as a mark beside text, since that's the place a workspace or a chat has its mark, so a file tab's icon is as big as a chat tab's mark, and a call's as the working line's. A button's icon is sized by the button, as its table says, and one inside a control about as tall as a line of text, such as the check in a checkbox, is small, so it has room inside it. Each is in pixels, so an icon stays as it is whatever size text is set at. `look::IconSize` holds the sizes. *Unconfirmed.* What's drawn rather than an icon, such as the mark, a task's ring or a cache's mark, keeps a size of its own. *Unconfirmed.* *Not built:* the kit's own parts size their icons themselves, so a menu's row has a 12px icon among body text.
 
