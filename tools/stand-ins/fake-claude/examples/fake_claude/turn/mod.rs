@@ -5,4 +5,6 @@ mod prose;
 use prose::prose;
 
 mod script;
-pub(crate) use script::{Block, Turn, begin, message_id, run_turn, state_event};
+mod writing;
+pub(crate) use script::{begin, run_turn, state_event};
+pub(crate) use writing::{Block, Turn, Within, message_id};

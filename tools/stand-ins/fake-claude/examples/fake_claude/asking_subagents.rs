@@ -11,7 +11,7 @@ use std::time::Duration;
 use serde_json::{Value, json};
 
 use crate::tools::{asks_before, execute, request_to_run};
-use crate::turn::{Turn, state_event};
+use crate::turn::{Turn, Within, state_event};
 use crate::{Input, Prompt, background, emit};
 
 /// Between one subagent asking and the next starting, so the first is being asked when the second's request comes.
@@ -79,7 +79,7 @@ fn ask(turn: &mut Turn, n: usize, command: &str) -> Asking {
         "session_id":turn.config.session_id}),
     );
     turn.tool_result(&agent, "Async agent launched successfully.", false);
-    let call = Turn { parent: Some(&agent), ..*turn }.tool_use(command);
+    let call = Turn { within: Some(Within { call: &agent, task: &task }), ..*turn }.tool_use(command);
     let (request_id, request) = request_to_run(&call, command, Some(&task));
     // Only the first, since nothing says the CLI's state changes again while one already waits.
     if n == 1 {
@@ -94,7 +94,7 @@ fn ask(turn: &mut Turn, n: usize, command: &str) -> Asking {
 fn answer(turn: &Turn, waiting: &mut Vec<Asking>, response: &Value, command: &str) {
     let answered = waiting.iter().position(|asking| response["request_id"] == asking.request_id.as_str());
     let asking = waiting.remove(answered.unwrap());
-    let mut within = Turn { parent: Some(&asking.agent), ..*turn };
+    let mut within = Turn { within: Some(Within { call: &asking.agent, task: &asking.task }), ..*turn };
     if response["response"]["behavior"] == "deny" {
         let message = response["response"]["message"].as_str().unwrap_or("denied");
         within.denied_result(&asking.call, message);

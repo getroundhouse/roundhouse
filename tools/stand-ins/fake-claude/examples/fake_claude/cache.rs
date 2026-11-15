@@ -19,12 +19,12 @@ pub(crate) fn expire() {
 
 /// The start of the message `message_id`, which says how its request met the cache, as the real CLI's does.
 pub(crate) fn message_start(turn: &Turn, message_id: &str) {
-    let message = json!({"id":message_id,"model":"fake-model","role":"assistant","usage":usage(turn.parent)});
+    let message = json!({"id":message_id,"model":"fake-model","role":"assistant","usage":usage(turn.parent())});
     let event = json!({"type":"message_start","message":message});
     emit(
         turn.out,
         json!({"type":"stream_event","event":event,"session_id":turn.config.session_id,
-        "parent_tool_use_id":turn.parent,"api_message_id":message_id,"ttft_ms":FIRST_TOKEN_MS}),
+        "parent_tool_use_id":turn.parent(),"api_message_id":message_id,"ttft_ms":FIRST_TOKEN_MS}),
     );
 }
 
