@@ -8,8 +8,6 @@ mod answer;
 mod location;
 mod problem;
 #[cfg(test)]
-mod serving;
-#[cfg(test)]
 mod signing;
 mod source;
 

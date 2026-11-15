@@ -1,5 +1,6 @@
 use super::super::answer::Answer;
 use super::super::source::SourceError;
+use fetching::FetchError;
 use gpui_kit::Global;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -73,21 +74,23 @@ pub(in super::super) fn problem(step: Step, error: &velopack::Error) -> Problem 
     };
     let kind = match (source, error) {
         (
-            Some(
-                SourceError::Fetch { .. }
-                | SourceError::Status { .. }
-                | SourceError::Read { .. }
-                | SourceError::CutShort { .. },
-            ),
+            Some(SourceError::Fetch(
+                FetchError::Request { .. }
+                | FetchError::Status { .. }
+                | FetchError::Read { .. }
+                | FetchError::CutShort { .. },
+            )),
             _,
         )
         | (None, velopack::Error::Network(_)) => Kind::Unreachable,
         (Some(SourceError::Unsigned), _) => Kind::Refused(Refusal::Unsigned),
-        (Some(SourceError::TooLong { .. }), _) => Kind::Refused(Refusal::TooLong),
+        (Some(SourceError::Fetch(FetchError::TooLong { .. })), _) => Kind::Refused(Refusal::TooLong),
         (None, velopack::Error::ChecksumInvalid(..) | velopack::Error::SizeInvalid(..)) => {
             Kind::Refused(Refusal::NotAsListed)
         }
-        (Some(SourceError::Unreadable(_) | SourceError::Save { .. }) | None, _) => Kind::Failed(step),
+        (Some(SourceError::Unreadable(_) | SourceError::Fetch(FetchError::Save { .. })) | None, _) => {
+            Kind::Failed(step)
+        }
     };
     Problem { kind, detail: source.map_or_else(|| error.to_string(), ToString::to_string) }
 }

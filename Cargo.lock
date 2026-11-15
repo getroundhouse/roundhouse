@@ -1552,7 +1552,7 @@ dependencies = [
  "anyhow",
  "client-core",
  "desktop",
- "flate2",
+ "fetching",
  "flume 0.11.1",
  "gpui-kit",
  "gpui-pre-apple",
@@ -1563,7 +1563,6 @@ dependencies = [
  "objc2 0.6.5",
  "objc2-app-kit 0.3.2",
  "objc2-foundation 0.3.2",
- "parking_lot",
  "proptest",
  "protocol",
  "raw-window-handle",
@@ -1574,7 +1573,6 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.21",
  "transcript",
- "ureq",
  "velopack",
  "windows-sys 0.61.2",
  "worker",
@@ -1965,6 +1963,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1e6853b52649d4ac5c0bd02320cddc5ba956bdb407c4b75a2c6b75bf51500f8c"
 dependencies = [
  "simd-adler32",
+]
+
+[[package]]
+name = "fetching"
+version = "0.1.0"
+dependencies = [
+ "fetching",
+ "flate2",
+ "parking_lot",
+ "tempfile",
+ "thiserror 2.0.21",
+ "ureq",
 ]
 
 [[package]]

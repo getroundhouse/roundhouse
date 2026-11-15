@@ -1,6 +1,6 @@
 use super::*;
-use crate::updates::serving::{Reply, Server, serve};
 use crate::updates::signing::{key_pair, public};
+use fetching::serving::{Reply, Server, serve};
 
 /// The shape `vpk` writes, with one release.
 const FEED: &str = r#"{"Assets":[{"PackageId":"Roundhouse","Version":"0.1.50","Type":"Full","FileName":"Roundhouse-0.1.50-osx-full.nupkg","SHA1":"AD4CF1813CB4589407AEEB7DA69063A25FF84566","SHA256":"0F568A995C5F5474207B3A3225F7B4059D2A268C35ED32310F1083E59CA286B7","Size":18889777}]}"#;
@@ -13,7 +13,7 @@ fn signed(feed: &str) -> (Vec<u8>, Vec<u8>, UpdateFeedKey) {
 
 /// Serves a feed and its signature, each as a list of replies in turn.
 fn serve_feed(feed: Vec<Reply>, signature: Vec<Reply>) -> Server {
-    serve(vec![("releases.osx.json".to_string(), feed), ("releases.osx.json.sig".to_string(), signature)])
+    serve(vec![("releases.osx.json".to_string(), feed), ("releases.osx.json.sig".to_string(), signature)]).unwrap()
 }
 
 /// Reads the feed through Velopack's interface, without waiting to read it again.
@@ -140,7 +140,7 @@ fn the_source_reads_again_a_feed_whose_signature_was_still_on_its_way() {
 #[test]
 fn a_signature_is_checked_on_the_feed_as_decompressed() {
     let (feed, signature, key) = signed(FEED);
-    let server = serve_feed(vec![Reply::gzipped(&feed)], vec![Reply::file(signature)]);
+    let server = serve_feed(vec![Reply::gzipped(&feed).unwrap()], vec![Reply::file(signature)]);
 
     assert_eq!(read_feed(&server, key).unwrap().Assets.len(), 1);
 }
@@ -149,9 +149,9 @@ fn a_signature_is_checked_on_the_feed_as_decompressed() {
 fn a_feed_longer_than_the_limit_once_decompressed_is_refused() {
     let (_, signature, key) = signed(FEED);
     let long = vec![b' '; usize::try_from(FEED_LIMIT_BYTES).unwrap() + 1];
-    let server = serve_feed(vec![Reply::gzipped(&long)], vec![Reply::file(signature)]);
+    let server = serve_feed(vec![Reply::gzipped(&long).unwrap()], vec![Reply::file(signature)]);
 
-    assert!(matches!(source_error(read_feed(&server, key)), SourceError::TooLong { .. }));
+    assert!(matches!(source_error(read_feed(&server, key)), SourceError::Fetch(fetching::FetchError::TooLong { .. })));
 }
 
 #[test]
@@ -160,14 +160,17 @@ fn a_redirect_is_not_followed() {
     let elsewhere = serve_feed(vec![Reply::file(feed)], vec![Reply::file(signature)]);
     let server = serve_feed(vec![Reply::redirect(&format!("{}/releases.osx.json", elsewhere.base))], vec![]);
 
-    assert!(matches!(source_error(read_feed(&server, key)), SourceError::Status { status: 302, .. }));
+    assert!(matches!(
+        source_error(read_feed(&server, key)),
+        SourceError::Fetch(fetching::FetchError::Status { status: 302, .. })
+    ));
     assert!(elsewhere.asked().is_empty());
 }
 
 /// A package the feed says is `size` bytes, served as `reply`, downloaded to a file of its own.
 fn download(size: u64, reply: Reply) -> (Result<(), velopack::Error>, tempfile::TempDir) {
     let name = "Roundhouse-0.1.50-osx-full.nupkg";
-    let server = serve(vec![(name.to_string(), vec![reply])]);
+    let server = serve(vec![(name.to_string(), vec![reply])]).unwrap();
     let asset = VelopackAsset { FileName: name.to_string(), Size: size, ..VelopackAsset::default() };
     let dir = tempfile::tempdir().unwrap();
     let source = SignedSource::new(&server.base, public(&key_pair()));
@@ -176,7 +179,7 @@ fn download(size: u64, reply: Reply) -> (Result<(), velopack::Error>, tempfile::
 
 #[test]
 fn a_package_downloads_as_long_as_the_feed_says() {
-    let (downloaded, dir) = download(5, Reply::gzipped(b"12345"));
+    let (downloaded, dir) = download(5, Reply::gzipped(b"12345").unwrap());
 
     downloaded.unwrap();
     assert_eq!(std::fs::read(dir.path().join("package.partial")).unwrap(), b"12345");
@@ -184,9 +187,12 @@ fn a_package_downloads_as_long_as_the_feed_says() {
 
 #[test]
 fn a_package_longer_than_the_feed_says_once_decompressed_is_refused_and_not_kept() {
-    let (downloaded, dir) = download(5, Reply::gzipped(&vec![b'0'; 10 * 1024 * 1024]));
+    let (downloaded, dir) = download(5, Reply::gzipped(&vec![b'0'; 10 * 1024 * 1024]).unwrap());
 
-    assert!(matches!(source_error(downloaded), SourceError::TooLong { limit: 5, .. }));
+    assert!(matches!(
+        source_error(downloaded),
+        SourceError::Fetch(fetching::FetchError::TooLong { limit_bytes: 5, .. })
+    ));
     assert!(!dir.path().join("package.partial").exists());
 }
 
@@ -194,6 +200,9 @@ fn a_package_longer_than_the_feed_says_once_decompressed_is_refused_and_not_kept
 fn a_package_cut_short_is_not_kept() {
     let (downloaded, dir) = download(6, Reply::file("12345"));
 
-    assert!(matches!(source_error(downloaded), SourceError::CutShort { expected: 6, got: 5, .. }));
+    assert!(matches!(
+        source_error(downloaded),
+        SourceError::Fetch(fetching::FetchError::CutShort { expected_bytes: 6, got_bytes: 5, .. })
+    ));
     assert!(!dir.path().join("package.partial").exists());
 }
