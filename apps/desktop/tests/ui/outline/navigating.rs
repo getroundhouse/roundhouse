@@ -93,8 +93,10 @@ fn a_prompt_recorded_while_the_list_is_open_joins_it(cx: &mut TestAppContext) {
     let before = ui.bounds("outline-list");
 
     stack.run(&session, "say:third");
-    ui.wait("the third prompt", |ui| prompt_rows(ui).len() == 3);
-    let third = row_id("outline-prompt", prompt_rows(&ui)[2]);
+    // A prompt is drawn where the agent took it, which comes after it, and before its reply.
+    ui.wait_idle_with("the third reply", |text| text.contains("third"));
+    let [_, _, third] = prompt_rows(&ui)[..] else { panic!("three prompts: {:?}", prompt_rows(&ui)) };
+    let third = row_id("outline-prompt", third);
     ui.wait("it to join the list", |ui| ui.has(third.clone()));
 
     assert!(ui.visible(third), "it shows");
