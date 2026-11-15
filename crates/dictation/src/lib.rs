@@ -13,6 +13,8 @@ mod dictation;
 mod engine;
 #[cfg(any(test, feature = "testing"))]
 pub mod fake;
+pub mod model;
+pub mod nemotron;
 mod pauses;
 mod samples;
 
