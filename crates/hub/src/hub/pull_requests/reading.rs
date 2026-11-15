@@ -1,5 +1,6 @@
 use super::super::Hub;
 use super::{budget, schedule};
+use crate::jobs;
 use crate::store::now_ms;
 use crate::worker_link::WorkerLink;
 use budget::{Budget, calls_to_read};
@@ -97,9 +98,14 @@ impl Reading {
 
     /// For one that couldn't be read in turn.
     pub(super) fn wait_longer(&self, id: &WorkspaceId) {
-        let mut schedules = self.schedules.lock();
-        let last = schedules.get(id).copied();
-        schedules.insert(id.clone(), Schedule::after(last, Instant::now(), Asked::InTurn, Went::Failed));
+        let last = self.schedules.lock().get(id).copied();
+        self.wait_longer_than(id, last);
+    }
+
+    /// The same, going by `before`, the schedule after the read before it.
+    pub(super) fn wait_longer_than(&self, id: &WorkspaceId, before: Option<Schedule>) {
+        let next = Schedule::after(before, Instant::now(), Asked::InTurn, Went::Failed);
+        self.schedules.lock().insert(id.clone(), next);
     }
 
     /// Until `spacing` after the workspace's last read, for an agent asking.
@@ -180,6 +186,7 @@ impl Hub {
         if asked == Asked::Agent {
             self.pull_requests.space_out(id, self.timers.agent_spacing).await;
         }
+        jobs::step("waiting for the workspace's turn to read its pull request");
         let gate = self.pull_requests.gates.lock().entry(id.clone()).or_default().clone();
         let held = gate.lock_owned().await;
         let workspace = self.workspace(id).await?;
@@ -201,7 +208,25 @@ impl Hub {
         }
         let read_at = Instant::now();
         self.pull_requests.schedules.lock().insert(id.clone(), Schedule::starting(read_at));
+        jobs::step(format!("waiting for {link} to read the pull request"));
         let read = ask(link, path).await;
+        // However the job this is in goes on, so what's recorded and what's said of it agree.
+        let hub = self.clone();
+        jobs::uncut(async move { hub.take_answer(workspace, read, last, read_at, asked, held).await }).await
+    }
+
+    /// What a read does once the worker has answered: records what it found, schedules the next read, judges the
+    /// waits on it and says what changed.
+    async fn take_answer(
+        self: Arc<Self>,
+        workspace: Workspace,
+        read: Result<Found, ApiError>,
+        last: Option<Schedule>,
+        read_at: Instant,
+        asked: Asked,
+        held: ReadsHeld,
+    ) -> Result<(Answer, ReadsHeld), ApiError> {
+        let (id, known) = (&workspace.id, workspace.pull_request.clone());
         let (recorded, changed) = self.record(&workspace, &read).await?;
         let went = match &read {
             Ok(_) if changed.is_some() => Went::Changed,
@@ -252,6 +277,7 @@ impl Hub {
     /// last said is old, or else says when it's worth trying again.
     pub(super) async fn spend(&self, link: &WorkerLink, path: &str, calls: u32, asked: Asked) -> Result<(), Instant> {
         if self.pull_requests.budget.lock().needs_github(Instant::now()) {
+            jobs::step(format!("asking {link} how much of GitHub's limit is left"));
             let reply = link.call(GithubRateLimit { path: path.to_string() }).await;
             let mut budget = self.pull_requests.budget.lock();
             match reply {

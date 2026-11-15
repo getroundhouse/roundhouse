@@ -11,6 +11,8 @@ mod error;
 pub mod local;
 pub mod serve;
 
+use std::time::Duration;
+
 use async_trait::async_trait;
 use protocol::model::InstanceId;
 pub use protocol::provider::{Capabilities, Feature, Instance, InstanceState, Size, WorkerBinary, WorkerCommand};
@@ -22,6 +24,9 @@ pub use error::ProviderError;
 pub trait Provider: Send + Sync {
     fn name(&self) -> &str;
     fn capabilities(&self) -> Capabilities;
+    /// The longest it takes to start one of its instances, up to running its worker there, or to stop one, with what
+    /// runs there, so whatever waits for either can tell one that's stuck.
+    fn starts_or_stops_within(&self) -> Duration;
     /// Makes the instance, as a copy of the base image `from` or a plain one, or does nothing if it's there.
     async fn create(
         &self,

@@ -9,6 +9,7 @@ mod child_process;
 mod error;
 mod frames;
 mod hub;
+mod jobs;
 mod lasting;
 mod listener;
 mod login_files;

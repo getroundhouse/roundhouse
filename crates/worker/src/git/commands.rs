@@ -6,7 +6,7 @@ use std::process::Stdio;
 use std::time::Duration;
 use tokio::process::Command;
 
-pub(super) const GH_TIMEOUT: Duration = Duration::from_secs(15);
+pub(super) const GH_TIMEOUT: Duration = protocol::worker::GH_RUNS_WITHIN;
 /// Keeps a diff response bounded when an agent leaves build output untracked and unignored.
 const MAX_UNTRACKED_FILES: usize = 200;
 const MAX_UNTRACKED_BYTES: usize = 8 * 1024 * 1024;

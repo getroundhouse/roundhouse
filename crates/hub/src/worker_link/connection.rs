@@ -15,6 +15,7 @@ use protocol::worker::{
 use providers::Provider;
 use reaching::{Opening, reach};
 use std::collections::HashMap;
+use std::fmt;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
@@ -293,5 +294,15 @@ impl WorkerLink {
     pub(crate) async fn wait_closed(&self) {
         let mut closed = self.closed.subscribe();
         let _ = closed.wait_for(|done| *done).await;
+    }
+}
+
+/// Which worker, for the log: the link's number, which tells two workers of one workspace apart, and its build.
+impl fmt::Display for WorkerLink {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.said_build() {
+            Some(build) => write!(f, "worker link {} of build {build}", self.id),
+            None => write!(f, "worker link {}", self.id),
+        }
     }
 }

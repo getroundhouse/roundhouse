@@ -1,6 +1,7 @@
 use super::{awake, feed, pull_requests, sessions, setup};
 use crate::attachment_files::AttachmentFiles;
 use crate::error::internal;
+use crate::jobs::Jobs;
 use crate::logins::Logins;
 use crate::provider_set::ProviderSet;
 use crate::session::{Item, LiveSession, Starting};
@@ -71,6 +72,8 @@ pub(crate) struct Hub {
     /// Workspaces whose setup is running. Removed as it finishes, which also wakes anyone waiting.
     pub(super) setup_gates: Mutex<HashMap<WorkspaceId, SetupGate>>,
     pub(super) pull_requests: pull_requests::Reading,
+    /// The work the hub does on its own that's running now, by the workspace each job is about.
+    pub(super) jobs: Jobs<WorkspaceId>,
     pub(super) awake: Arc<Awake>,
     /// Whether the hub allows what an agent with full access still asks about, as its settings say.
     pub(super) allows_asked_in_full_access: AtomicBool,
@@ -132,6 +135,7 @@ impl Hub {
             sessions: Mutex::new(Sessions::default()),
             setup_gates: Mutex::new(HashMap::new()),
             pull_requests: pull_requests::Reading::new(),
+            jobs: Jobs::new(),
             awake: Arc::default(),
             allows_asked_in_full_access: AtomicBool::new(false),
             configuring: AsyncMutex::new(()),
@@ -162,6 +166,11 @@ impl Hub {
         self.providers
             .get(name)
             .ok_or_else(|| ApiError::new(ErrorCode::Unavailable, format!("there's no provider {name}")))
+    }
+
+    /// Ends every job where it is, and starts none after, as the hub stops, before its workers are stopped or left.
+    pub(crate) fn stop_jobs(&self) {
+        self.jobs.stop();
     }
 
     /// Ends each provider's adapter, after the workers are stopped.

@@ -156,6 +156,7 @@ pub async fn run(config: HubConfig) -> Result<(), HubError> {
     accept.abort();
     watching_pull_requests.abort();
     watching_deadlines.abort();
+    hub.stop_jobs();
     listener::unbind(&paths.socket);
     if hub.restarting() && !signalled {
         hub.leave_workers().await;

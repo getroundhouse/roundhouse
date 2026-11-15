@@ -46,6 +46,10 @@ impl Provider for Recording {
         self.local.capabilities()
     }
 
+    fn starts_or_stops_within(&self) -> std::time::Duration {
+        self.local.starts_or_stops_within()
+    }
+
     async fn create(
         &self,
         instance_id: &InstanceId,
