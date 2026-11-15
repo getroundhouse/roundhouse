@@ -68,11 +68,16 @@ pub(crate) fn start(turn: &mut Turn, call: Call, file: &str) -> bool {
         while !file.exists() {
             std::thread::sleep(POLL);
         }
-        // As long as the file says, if it says, so a test can see what the moment before the agent picks up again is
-        // taken for.
-        let ms = std::fs::read_to_string(&file).ok().and_then(|said| said.trim().parse().ok());
-        let pause = Duration::from_millis(ms.unwrap_or(0));
-        finished(&config, &out, &id, "completed", format!("say:finished {}", file.display()), pause);
+        // As long as the file says, if it says a number, so a test can see what the moment before the agent picks up
+        // again is taken for. Anything else it says is the script the agent picks up with, such as a failure.
+        let said = std::fs::read_to_string(&file).unwrap_or_default();
+        let said = said.trim();
+        let (pause, told) = match said.parse() {
+            Ok(ms) => (Duration::from_millis(ms), None),
+            Err(_) => (Duration::ZERO, Some(said).filter(|said| !said.is_empty())),
+        };
+        let told = told.map_or_else(|| format!("say:finished {}", file.display()), str::to_string);
+        finished(&config, &out, &id, "completed", told, pause);
     });
     false
 }

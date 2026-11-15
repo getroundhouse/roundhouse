@@ -41,7 +41,7 @@ fn a_failed_request_says_what_kind_of_failure_it_was_in_the_clis_words_and_when_
         resets_at_ms: Some(1_700_000_000_000),
     };
 
-    assert_eq!(parsed(&limit_reached()), EventBody::RequestFailed { parent_tool_use_id: None, failure });
+    assert_eq!(parsed(&limit_reached()), EventBody::RequestFailed { parent_tool_use_id: None, failure, again: None });
 }
 
 #[test]

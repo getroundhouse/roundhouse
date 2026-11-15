@@ -1,6 +1,8 @@
 use serde_json::Value;
 
-use crate::event::{Asking, CallKind, ContentBlock, Denied, EventBody, SessionEvent, TurnOutcome};
+use crate::event::{
+    Asking, CallKind, ContentBlock, Denied, EventBody, FailureKind, RequestFailure, SessionEvent, TurnOutcome,
+};
 use crate::model::{
     Account, AgentKind, ApprovalId, BranchName, Call, CallResult, ChildStatus, ChildWorktree, Draft, Effort, MadeBy,
     ModelName, PermissionMode, Place, RecentWork, Rev, Seq, Session, SessionStatus, SetupStatus, Subagent,
@@ -145,6 +147,13 @@ pub fn turn_ended(outcome: TurnOutcome) -> EventBody {
         only_compacted: false,
         request_failed: false,
     }
+}
+
+/// A request to the model that failed on the account's usage limit, saying `message`, as the agent sends it, the
+/// agent's own unless `subagent` names the call that started the subagent whose it was.
+pub fn request_failed(message: &str, subagent: Option<&str>) -> EventBody {
+    let failure = RequestFailure { message: message.into(), kind: FailureKind::Limit, resets_at_ms: None };
+    EventBody::RequestFailed { parent_tool_use_id: subagent.map(Into::into), failure, again: None }
 }
 
 /// The subagent the call `call` started in the session `s`, working in the foreground, with nothing else known of it

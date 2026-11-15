@@ -15,5 +15,9 @@ use protocol::model::{RunId, Seq, SessionStatus};
 mod tests;
 
 mod advancing;
+mod failing;
 pub(crate) use advancing::Progress;
 pub(super) use advancing::{Next, Step};
+pub(crate) use failing::Failing;
+#[cfg(test)]
+pub(crate) use failing::READ_AT_ONCE;

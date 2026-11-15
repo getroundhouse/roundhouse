@@ -10,7 +10,7 @@ use asking::{Asking, QuestionAnswer};
 use compaction::CompactionOutcome;
 use content::ContentBlock;
 use ending::{ExitReason, TaskOutcome, TurnOutcome};
-use failure::RequestFailure;
+use failure::{Again, RequestFailure};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -220,6 +220,10 @@ pub enum EventBody {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         parent_tool_use_id: Option<ToolUseId>,
         failure: RequestFailure,
+        /// It repeats the agent's own failed request before it. `None` for the first in a row, for a subagent's, from
+        /// the agent, which doesn't know, and from a hub that doesn't add it.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        again: Option<Again>,
     },
     ApprovalRequested {
         approval_id: ApprovalId,

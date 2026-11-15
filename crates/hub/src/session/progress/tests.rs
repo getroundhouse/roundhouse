@@ -3,7 +3,11 @@
 
 use std::collections::HashMap;
 
-use protocol::event::{AgentRunState, AgentTask, ApprovalOutcome, ExitReason, NoticeLevel, TaskKind, TurnOutcome};
+use protocol::capability::turns::OwnTurn;
+use protocol::event::{
+    Again, AgentRunState, AgentTask, ApprovalOutcome, ContentBlock, ExitReason, FailureKind, NoticeLevel, TaskKind,
+    TaskOutcome, TurnOutcome,
+};
 use protocol::model::ApprovalId;
 use protocol::prompt::Prompt;
 use serde_json::json;
@@ -22,6 +26,7 @@ fn progress(status: SessionStatus, tasks: usize) -> Progress {
         queue: QueueWatch::default(),
         outlives_this_hub: false,
         opened_by: None,
+        failing: None,
     }
 }
 
@@ -212,4 +217,150 @@ fn a_turn_whose_prompt_the_hub_dropped_before_the_agent_said_anything_never_star
         (SessionStatus::Interrupted, Some(TurnEdge::Neither), true),
         "an agent's own drop leaves its exit to say"
     );
+}
+
+fn failed(message: &str, subagent: Option<&str>) -> EventBody {
+    protocol::fixtures::request_failed(message, subagent)
+}
+
+fn ended_on_a_failure() -> EventBody {
+    let mut ended = protocol::fixtures::turn_ended(TurnOutcome::Error);
+    if let EventBody::TurnEnded { request_failed, .. } = &mut ended {
+        *request_failed = true;
+    }
+    ended
+}
+
+fn says(text: &str, subagent: Option<&str>) -> EventBody {
+    let blocks = vec![ContentBlock::Text { text: text.into(), images: Vec::new() }];
+    let parent_tool_use_id = subagent.map(Into::into);
+    EventBody::Assistant { message_id: None, parent_tool_use_id, model: None, blocks, first_index: None }
+}
+
+/// What Claude's CLI sends between two failed requests of the agent's own as one of its tasks ends and it picks up
+/// by itself, as the hub's own logs have it: a subagent's last words and end, the shorter list, the turn's start and
+/// the agent's own lines with no form, its state, why it picked up, and its limits.
+fn picks_up_by_itself() -> Vec<EventBody> {
+    let other = |kind: &str| EventBody::AgentOther { kind: kind.into(), parent_tool_use_id: None };
+    vec![
+        says("Here's the review.", Some("toolu_1")),
+        EventBody::SubagentContext { call: "toolu_1".into(), tokens: 9 },
+        other("system/task_updated"),
+        EventBody::SubagentEnded {
+            call: "toolu_1".into(),
+            outcome: TaskOutcome::Finished,
+            report: None,
+            context_tokens: None,
+        },
+        EventBody::AgentTasks { tasks: Vec::new(), stopped: Vec::new() },
+        EventBody::AgentState { state: AgentRunState::Running },
+        serde_json::from_value(json!({"type": "agent_init", "agent_session_id": null, "model": null, "cwd": null,
+            "permission_mode": null, "agent_version": null}))
+        .unwrap(),
+        other("system/status"),
+        EventBody::OwnTurn(OwnTurn::TaskEnded { ended: Vec::new() }),
+        EventBody::AgentLimits { limits: Vec::new() },
+    ]
+}
+
+/// Records each of `bodies`, from the hub if it's a prompt and otherwise from the current agent, from seq 1, and
+/// returns what each failed request, a subagent's too, says it repeats, by its seq.
+fn agains(bodies: Vec<EventBody>) -> Vec<(u64, Option<Again>)> {
+    let origin = |body: &EventBody| if matches!(body, EventBody::UserPrompt { .. }) { Origin::Hub } else { current(1) };
+    agains_from(bodies.into_iter().map(|body| (origin(&body), body)).collect())
+}
+
+/// The same, each from its own origin.
+fn agains_from(bodies: Vec<(Origin, EventBody)>) -> Vec<(u64, Option<Again>)> {
+    let mut progress = progress(SessionStatus::Running, 0);
+    let mut said = Vec::new();
+    for ((origin, body), seq) in bodies.into_iter().zip(1u64..) {
+        let Step { body, next, .. } = progress.step(origin, body, true);
+        progress.take(next, Seq::new(seq), seq.cast_signed(), None);
+        if let EventBody::RequestFailed { again, .. } = body {
+            said.push((seq, again));
+        }
+    }
+    said
+}
+
+fn repeats(previous: u64, times: u32) -> Again {
+    Again { previous: Seq::new(previous), times }
+}
+
+/// Each turn the agent started by itself as one of its tasks ended failed the same way again, with what the CLI sends
+/// between, and one in between came to nothing, so each failure says it repeats the one before, and how many times it
+/// has failed in a row.
+#[test]
+fn the_same_failure_after_turns_that_came_to_nothing_else_repeats_the_one_before() {
+    let mut bodies = vec![failed("limit", None), ended_on_a_failure()];
+    let second = bodies.len() + picks_up_by_itself().len() + 1;
+    bodies.extend(picks_up_by_itself());
+    bodies.extend([failed("limit", None), ended_on_a_failure()]);
+    bodies.extend(picks_up_by_itself());
+    bodies.push(ended(None));
+    bodies.extend(picks_up_by_itself());
+    let third = bodies.len() + 1;
+    bodies.push(failed("limit", None));
+
+    let second = u64::try_from(second).unwrap();
+    let third = u64::try_from(third).unwrap();
+    assert_eq!(agains(bodies), [(1, None), (second, Some(repeats(1, 2))), (third, Some(repeats(second, 3)))]);
+}
+
+/// A prompt, Retry's included, anything the agent says, a turn someone stopped, and the agent going, each end the row,
+/// so the failure after starts another.
+#[test]
+fn anything_the_person_or_the_agent_does_between_two_failures_ends_the_row() {
+    let prompt = EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("Continue") };
+    let cancelled = protocol::fixtures::turn_ended(TurnOutcome::Cancelled);
+    for between in [prompt, says("Picking up where I left off.", None), cancelled, exited()] {
+        let kind = between.kind();
+        let bodies = vec![failed("limit", None), between, failed("limit", None)];
+        assert_eq!(agains(bodies), [(1, None), (3, None)], "{kind}");
+    }
+}
+
+/// Only the same failure carries on the row: one that differs only in when its limit resets, or only in its kind,
+/// starts another. A subagent's is in its own tab, so it's no part of the agent's row, doesn't end it, and repeats
+/// nothing, whatever it came with.
+#[test]
+fn another_failure_starts_a_row_and_a_subagents_is_no_part_of_one() {
+    let mut resets_later = failed("limit", None);
+    if let EventBody::RequestFailed { failure, .. } = &mut resets_later {
+        failure.resets_at_ms = Some(9_000);
+    }
+    let mut subagents = failed("limit", Some("toolu_1"));
+    if let EventBody::RequestFailed { again, .. } = &mut subagents {
+        *again = Some(repeats(1, 2));
+    }
+    let mut overloaded = failed("limit", None);
+    if let EventBody::RequestFailed { failure, .. } = &mut overloaded {
+        failure.kind = FailureKind::Overloaded;
+    }
+    let bodies = vec![resets_later, failed("limit", None), subagents, failed("limit", None), overloaded];
+
+    assert_eq!(agains(bodies), [(1, None), (2, None), (3, None), (4, Some(repeats(2, 2))), (5, None)]);
+}
+
+/// The failures in a row are the log's, which a session started again reads whoever said each event, so what an agent
+/// that was replaced says ends the row as the current agent's words would, and its failure counts as one of the row,
+/// with what the hub says of it rather than what it came with, though it changes nothing else.
+#[test]
+fn what_a_replaced_agent_says_ends_the_row_too() {
+    let replaced = Origin::Run { run: RunId::new(1), current: false, numbered: None };
+    let mut its_failure = failed("limit", None);
+    if let EventBody::RequestFailed { again, .. } = &mut its_failure {
+        *again = Some(repeats(9, 9));
+    }
+    let bodies = vec![
+        (current(2), failed("limit", None)),
+        (replaced, says("Picking up where I left off.", None)),
+        (current(2), failed("limit", None)),
+        (replaced, its_failure),
+        (current(2), failed("limit", None)),
+    ];
+
+    let expected = [(1, None), (3, None), (4, Some(repeats(3, 2))), (5, Some(repeats(4, 3)))];
+    assert_eq!(agains_from(bodies), expected);
 }

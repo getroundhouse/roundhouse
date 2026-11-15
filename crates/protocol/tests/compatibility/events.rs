@@ -1,8 +1,8 @@
 //! Events a hub kept in its log in the form an older hub wrote them, which every later hub and client has to read.
 
 use protocol::capability::turns::OwnTurn;
-use protocol::event::{EventBody, FailureKind, RequestFailure, TaskKind, TaskOutcome};
-use protocol::model::{WaitEnd, Watching};
+use protocol::event::{Again, EventBody, FailureKind, RequestFailure, TaskKind, TaskOutcome};
+use protocol::model::{Seq, WaitEnd, Watching};
 
 /// A hub stores events in the form it sends, so an agent's start recorded before hubs said which build it ran on has to
 /// read as saying nothing of it, which a chat takes as not having been updated.
@@ -76,15 +76,31 @@ fn a_failed_request_keeps_the_form_and_the_kind_its_stored_under() {
         kind: FailureKind::Limit,
         resets_at_ms: Some(1_700_000_000_000),
     };
-    assert_eq!(failed, EventBody::RequestFailed { parent_tool_use_id: Some("toolu_1".into()), failure });
+    assert_eq!(failed, EventBody::RequestFailed { parent_tool_use_id: Some("toolu_1".into()), failure, again: None });
     assert_eq!(failed.kind(), "request_failed");
     assert_eq!(serde_json::to_string(&failed).unwrap(), stored);
     for line in [later, bare] {
-        let EventBody::RequestFailed { parent_tool_use_id: None, failure } = serde_json::from_str(line).unwrap() else {
+        let EventBody::RequestFailed { parent_tool_use_id: None, failure, .. } = serde_json::from_str(line).unwrap()
+        else {
             panic!("{line}")
         };
         assert_eq!((failure.kind, failure.resets_at_ms), (FailureKind::Unknown, None), "{line}");
     }
+}
+
+/// The hub stores what a failed request repeats beside it, and one stored without, as the agent sends it and as every
+/// failure was recorded before the hub said, repeats nothing.
+#[test]
+fn a_failed_request_that_repeats_the_one_before_keeps_the_form_its_stored_in() {
+    let stored = r#"{"type":"request_failed","failure":{"message":"You've reached your limit.","kind":"limit"},"again":{"previous":12,"times":3}}"#;
+
+    let failed: EventBody = serde_json::from_str(stored).unwrap();
+
+    let failure =
+        RequestFailure { message: "You've reached your limit.".into(), kind: FailureKind::Limit, resets_at_ms: None };
+    let again = Some(Again { previous: Seq::new(12), times: 3 });
+    assert_eq!(failed, EventBody::RequestFailed { parent_tool_use_id: None, failure, again });
+    assert_eq!(serde_json::to_string(&failed).unwrap(), stored);
 }
 
 /// A notice from before notices could be a subagent's is the agent's own, and one that is says nothing of it, so it's

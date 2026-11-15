@@ -22,7 +22,8 @@ pub(in super::super) fn message(value: &Value) -> Option<EventBody> {
     let resets_at_ms =
         limit.and_then(|limit| limit.get("resetsAt")).and_then(Value::as_i64).map(|s| s.saturating_mul(1000));
     let kind = str_of(value, "error").map_or(FailureKind::Unknown, kind_of);
-    Some(EventBody::RequestFailed { parent_tool_use_id, failure: RequestFailure { message: text, kind, resets_at_ms } })
+    let failure = RequestFailure { message: text, kind, resets_at_ms };
+    Some(EventBody::RequestFailed { parent_tool_use_id, failure, again: None })
 }
 
 /// The kind of failure the CLI's `error` says, from the categories its schema lists, rather than its words, which can

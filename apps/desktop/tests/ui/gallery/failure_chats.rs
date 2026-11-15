@@ -47,7 +47,7 @@ fn failed() -> Vec<EventBody> {
         kind: FailureKind::Limit,
         resets_at_ms: Some(NOW_MS + (4 * 24 + 6) * 60 * 60 * 1_000),
     };
-    events.push(EventBody::RequestFailed { parent_tool_use_id: None, failure });
+    events.push(EventBody::RequestFailed { parent_tool_use_id: None, failure, again: None });
     let mut ended = finished_turn(74, 0.18);
     if let EventBody::TurnEnded { outcome, result, request_failed, .. } = &mut ended {
         (*outcome, *result, *request_failed) = (TurnOutcome::Error, Some(LIMIT_REACHED.to_string()), true);

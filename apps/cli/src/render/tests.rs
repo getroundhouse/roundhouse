@@ -1,12 +1,14 @@
 use client_core::calls::{Recorded, Returned};
 use protocol::capability::calls::CallOutput;
 use protocol::capability::calls::output::Ended;
-use protocol::event::{AgentTask, CallKind, ContentBlock, Denied, EndedTask, TaskKind, TaskOutcome};
+use protocol::event::{
+    Again, AgentTask, CallKind, ContentBlock, Denied, EndedTask, FailureKind, RequestFailure, TaskKind, TaskOutcome,
+};
 use protocol::fixtures;
 use protocol::model::{EndedWait, Seq, WaitEnd, WaitEnded};
 use serde_json::{Value, json};
 
-use super::{Printer, called, came_back, denial, own_turn, started};
+use super::{Printer, called, came_back, denial, own_turn, request_failed, started};
 
 fn task(id: &str, kind: TaskKind) -> AgentTask {
     AgentTask { id: id.into(), description: Some(format!("Do {id}")), kind, call: None }
@@ -153,4 +155,14 @@ fn a_turn_the_agent_started_by_itself_says_which_tasks_it_heard_had_ended() {
     let as_the_app_says = "the agent picked up by itself, after: waited on #7: required checks (Stopped)";
     assert_eq!(own_turn(&[wait]), as_the_app_says, "from the hub's record, not the agent's word");
     assert_eq!(own_turn(&[]), "the agent picked up by itself");
+}
+
+#[test]
+fn a_failed_request_that_repeats_the_one_before_says_how_many_times_in_a_row() {
+    let failure =
+        RequestFailure { message: "You've hit your limit.".into(), kind: FailureKind::Limit, resets_at_ms: None };
+
+    assert_eq!(request_failed(&failure, None), "request failed: You've hit your limit.");
+    let again = Again { previous: Seq::new(12), times: 3 };
+    assert_eq!(request_failed(&failure, Some(again)), "request failed again, 3 times in a row: You've hit your limit.");
 }

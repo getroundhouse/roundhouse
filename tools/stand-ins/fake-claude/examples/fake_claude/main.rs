@@ -45,7 +45,9 @@
 //!                   name and size on disk. The script is the prompt's last text block.
 //!   background:FILE Start a background task, and go on without it. Once FILE exists it finishes, and the agent
 //!                   picks up again by itself to say `finished FILE`, in a turn that starts with `init` alone,
-//!                   after as many milliseconds as FILE says, if it says any. SIGTERM stops it, and lists none left.
+//!                   after as many milliseconds as FILE says, if it says any. If FILE says a script instead, the
+//!                   agent picks up with that, such as `fail:rate_limit`. It's read as soon as it exists, so it has
+//!                   to appear whole. SIGTERM stops it, and lists none left.
 //!   monitor:FILE    The same, started by a `Monitor` call, so it's a monitor.
 //!   agents-ask:N:COMMAND  Start N subagents in the background, `Check 1` to `Check N`, each of which asks to run
 //!                   COMMAND before any is answered, as `tool:` would ask, and runs it if it's allowed.

@@ -1,9 +1,7 @@
 //! Made-up events and logs, for tests that read the log the way drawing does.
 
 use client_core::session_log::SessionLog;
-use protocol::event::{
-    ApprovalOutcome, Asking, EventBody, FailureKind, QuestionAnswer, RequestFailure, SessionEvent, TurnOutcome,
-};
+use protocol::event::{ApprovalOutcome, Asking, EventBody, QuestionAnswer, SessionEvent, TurnOutcome};
 pub(crate) use protocol::fixtures::event;
 use protocol::fixtures::{self, ApprovalRequest};
 use protocol::model::{Rev, Seq, Subagent, SubagentStatus};
@@ -98,9 +96,7 @@ pub(crate) fn prompt(text: &str) -> EventBody {
 
 /// A request to the model that failed on a limit, the agent's own, or the subagent's that `parent` started.
 pub(crate) fn failed_request(parent: Option<&str>) -> EventBody {
-    let failure =
-        RequestFailure { message: "You've reached your limit.".into(), kind: FailureKind::Limit, resets_at_ms: None };
-    EventBody::RequestFailed { parent_tool_use_id: parent.map(Into::into), failure }
+    protocol::fixtures::request_failed("You've reached your limit.", parent)
 }
 
 /// A turn that failed on the agent's own failed request.
