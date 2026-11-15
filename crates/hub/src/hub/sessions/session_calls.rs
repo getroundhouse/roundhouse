@@ -66,7 +66,6 @@ impl Hub {
             session: Session {
                 account: None,
                 account_source: None,
-                assigned_account: None,
                 agent_capabilities: None,
                 reply_outcome: None,
                 id: id.clone().into(),

@@ -219,10 +219,6 @@ pub struct Session {
     /// sources, whatever the chat is on, including one that can't move a chat, which a client learns by being refused.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub account_source: Option<AccountSource>,
-    /// The account the chat is on, when it's on a login the hub holds, as [`Session::hub_account`] says, for clients
-    /// from before `account_source`. It goes once the clients that read it have.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub assigned_account: Option<AccountId>,
     /// Prompts waiting for the agent to finish, oldest first, as [`QueuedPrompt`] says.
     #[serde(default)]
     pub queued: Vec<QueuedPrompt>,

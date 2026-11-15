@@ -3,7 +3,7 @@
 //! so none is here.
 
 use protocol::fixtures::account;
-use protocol::model::{Account, AgentKind, HeldLogin, LimitWindow, UsageLimit};
+use protocol::model::{Account, AccountSource, AgentKind, HeldLogin, LimitWindow, UsageLimit};
 
 use super::{context, conversation};
 use crate::gallery::world::{HOUR_MS, LoginSupport, NOW_MS, World};
@@ -43,7 +43,7 @@ pub(in crate::gallery) fn context_held_login() -> World {
     let mut world = context();
     let account = Account { limits: Vec::new(), ..work() };
     let chat = world.sessions.last_mut().unwrap();
-    (chat.account, chat.assigned_account) = (Some(account.id.clone()), Some(account.id.clone()));
+    (chat.account, chat.account_source) = (Some(account.id.clone()), Some(AccountSource::Hub));
     world.accounts = vec![account];
     world
 }
@@ -54,7 +54,7 @@ pub(in crate::gallery) fn context_held_login() -> World {
 pub(in crate::gallery) fn context_to_move() -> World {
     let mut world = context();
     let chat = world.sessions.last_mut().unwrap();
-    (chat.account, chat.assigned_account) = (Some(work().id), Some(work().id));
+    (chat.account, chat.account_source) = (Some(work().id), Some(AccountSource::Hub));
     world.accounts = vec![work(), personal(), side_project(), contractor()];
     world.account_defaults = vec![protocol::model::AccountDefault { agent: AgentKind::Claude, account: work().id }];
     world

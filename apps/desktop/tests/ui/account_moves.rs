@@ -31,7 +31,7 @@ fn under_work<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> (Ui<'a>, Account
 /// The account the chat showing is on, as the app shows it.
 fn on(ui: &Ui<'_>) -> Option<AccountId> {
     let pane = ui.pane()?;
-    ui.cx.read_entity(&pane, |pane, _| pane.session().and_then(|session| session.assigned_account.clone()))
+    ui.cx.read_entity(&pane, |pane, _| pane.session().and_then(|session| session.hub_account().cloned()))
 }
 
 /// The account the chat showing names, as the app shows it.
@@ -73,7 +73,7 @@ fn the_menu_beside_whose_account_it_is_moves_the_chat_and_back(cx: &mut TestAppC
     assert!(held, "the card and its menu stayed open with the pointer on the menu");
     assert_eq!(moved_names, Some(personal), "the chat names the account it was moved to");
     let hubs = stack.client().records_list().unwrap().sessions.into_iter().next().unwrap();
-    let hubs = (hubs.assigned_account, hubs.account);
+    let hubs = (hubs.hub_account().cloned(), hubs.account);
     assert_eq!(hubs, (Some(work.clone()), Some(work)), "and the hub has it as the app shows it");
 }
 

@@ -20,7 +20,8 @@ pub(in super::super) struct Moves {
     /// Each account the chat can be moved to, by what it's called: those added for its kind whose login works, and the
     /// one it's on, whatever its login, so the menu says which it's on.
     accounts: Vec<Choice>,
-    /// The account the chat is on. `None` until its agent first starts under a login the hub holds.
+    /// The account the chat is on, as [`Session::hub_account`] says. `None` for a chat on the ambient login, which
+    /// nothing moves a chat to, or on none yet.
     on: Option<AccountId>,
     /// Whether there's no hub to ask.
     off: bool,
@@ -68,7 +69,7 @@ impl WorkspacePane {
     pub(super) fn moves(&self, session: &Session, cx: &Context<Self>) -> Option<Moves> {
         let all = self.shown.all();
         all.hub_settings()?.account_defaults.as_ref()?;
-        let on = session.assigned_account.clone();
+        let on = session.hub_account().cloned();
         let accounts = offered(session.agent, on.as_ref(), all.accounts(), look::now_ms(cx))?;
         let off = self.hub == Hub::Away;
         Some(Moves { session: session.id.clone(), accounts, on, off, pane: cx.weak_entity() })
