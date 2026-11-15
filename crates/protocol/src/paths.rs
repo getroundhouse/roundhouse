@@ -20,18 +20,17 @@ pub const DAEMON_NAME: &str = "roundhoused";
 /// wherever a process is named for its file. "Updating the app" in `docs/architecture.md` says why it's a plain file.
 const HUB_COPY_NAME: &str = "Roundhouse Hub";
 
-/// What a worker locks in its instance's state directory while it serves the instance, so the instance has one
-/// worker at a time.
+/// What a worker locks in its state directory while it serves the instance, so the instance has one worker at a time.
 pub const WORKER_LOCK_FILE: &str = "worker.lock";
-/// Where a worker records itself in its instance's state directory, so its provider can tell whether one runs there.
+/// Where a worker records itself in its state directory, so its provider can tell whether one runs there.
 pub const WORKER_RECORD_FILE: &str = "worker.pid";
 /// The folder in a worker's state directory where it records each agent it runs, beside that run's other files, such
 /// as the one that tells the agent's CLI where the worker's tools are. Everything in it is a run's, so the provider
 /// removes all of it after a killed worker.
 pub const AGENTS_DIR: &str = "agents";
-/// Where a local worker that can outlive its hub listens for it, in its instance's state directory. The worker runs in
-/// that directory, and both it and what connects to it name the socket relative to it, since the whole path can be
-/// longer than a socket's may be.
+/// Where a local worker that can outlive its hub listens for it, in its state directory. The worker runs in that
+/// directory, and both it and what connects to it name the socket relative to it, since the whole path can be longer
+/// than a socket's may be.
 pub const WORKER_SOCKET_FILE: &str = "worker.sock";
 /// The daemon's file.
 pub fn daemon_file() -> String {

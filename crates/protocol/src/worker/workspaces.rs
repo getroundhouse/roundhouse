@@ -186,6 +186,8 @@ impl Request for CancelSetup {
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct SetupLog {
+    /// The workspace's worktree, which a worker doesn't read, since it keeps one setup log, in its state directory.
+    /// Kept for workers from before, which can't read the request without it, until the worker protocol next breaks.
     pub path: String,
 }
 

@@ -152,12 +152,9 @@ pub fn append_log(log: &Path, line: &str) {
     }
 }
 
-pub fn setup_log_path(state_dir: Option<&Path>, worktree: &Path) -> PathBuf {
-    match state_dir {
-        Some(dir) => dir.join("setup.log"),
-        // Only without an instance directory, in tests. Git ignores nothing here, so it's outside the worktree.
-        None => std::env::temp_dir().join(format!("setup-{}.log", worktree.display().to_string().replace('/', "-"))),
-    }
+/// In the worker's state directory rather than the worktree, where git would see it.
+pub fn setup_log_path(state_dir: &Path) -> PathBuf {
+    state_dir.join("setup.log")
 }
 
 /// The end of the log, because a long install prints far more than anyone reads.

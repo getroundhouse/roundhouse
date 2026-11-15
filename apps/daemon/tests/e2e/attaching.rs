@@ -25,7 +25,7 @@ impl Attached {
         Self::start_in(&dir.join("workspaces"), &dir.join("instance"))
     }
 
-    /// To the worker of the instance whose state is kept in `state_dir`, starting one if none is serving it.
+    /// To the worker whose state directory is `state_dir`, starting one if none is serving it.
     fn start_in(workspaces_root: &Path, state_dir: &Path) -> Self {
         let mut command = Command::new(env!("CARGO_BIN_EXE_roundhoused"))
             .args(["worker", "--attach", "--workspaces-root"])
@@ -57,9 +57,9 @@ impl Attached {
         assert!(matches!(answer, WorkerOutcome::Response(WorkerResponse::Hello(_))), "{answer:?}");
     }
 
-    /// As the next hub reaches the worker of the instance whose state is kept in `state_dir`, once the worker has let
-    /// go of the hub before. A hub that was killed holds on to its worker until its own `worker --attach` has noticed
-    /// it went, and till then the worker refuses another hub's hello.
+    /// As the next hub reaches the worker whose state directory is `state_dir`, once the worker has let go of the hub
+    /// before. A hub that was killed holds on to its worker until its own `worker --attach` has noticed it went, and
+    /// till then the worker refuses another hub's hello.
     pub(crate) fn next_hub(workspaces_root: &Path, state_dir: &Path) -> Self {
         let mut next = None;
         wait_until("the worker to let go of the hub before", || {

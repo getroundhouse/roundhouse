@@ -46,17 +46,18 @@ enum Role {
         stdio: bool,
         /// Connect stdin and stdout to the instance's worker, starting one if none is serving it, so it can outlive
         /// its hub. Not on Windows.
-        #[arg(long, group = "transport", requires = "state_dir")]
+        #[arg(long, group = "transport")]
         attach: bool,
-        /// Serve the instance on a socket in its directory, as `--attach` starts it.
-        #[arg(long, group = "transport", requires = "state_dir", hide = true)]
+        /// Serve the instance on a socket in the worker's state directory, as `--attach` starts it.
+        #[arg(long, group = "transport", hide = true)]
         listen: bool,
         /// Where worktrees go.
         #[arg(long)]
         workspaces_root: PathBuf,
-        /// Where to record running agents, so they can be stopped if this process is killed.
+        /// The worker's state directory, where it records what it runs, so it can be stopped if this process is killed,
+        /// and keeps the setup log and each run's files.
         #[arg(long)]
-        state_dir: Option<PathBuf>,
+        state_dir: PathBuf,
     },
 }
 

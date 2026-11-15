@@ -65,10 +65,11 @@ async fn next_frame<T>(frames: &mut mpsc::Receiver<Arc<WorkerFrame>>, wanted: im
 }
 
 fn config(dir: &Path) -> Config {
+    std::fs::create_dir_all(dir.join("state")).unwrap();
     Config {
         build: Build::UNSTAMPED,
         workspaces_root: dir.join("ws"),
-        state_dir: None,
+        state_dir: dir.join("state"),
         home: None,
         path: None,
         claude_bin: None,
