@@ -33,7 +33,7 @@ The guide is the one kind written for someone using the product rather than buil
 | `docs/gpui.md` | Standards | Owner | How code that uses GPUI is written |
 | `docs/testing.md` | Standards | Owner | Where each kind of test goes |
 | `docs/pull-requests.md` | Standards | Owner | How a change is split into pull requests, and how each and its commit are written |
-| `docs/reviews.md` | Standards | Owner | How agents review a change before it's a pull request |
+| `docs/reviews.md` | Standards | Owner | How agents review a change when the owner asks for a review |
 | `docs/manual-checks.md` | Reference | Owner | What a person has to judge by hand |
 | `docs/terms.md` | Reference | Agents | What the project's words mean, and which to write |
 | `docs/claude-cli.md` | Reference | Agents | How the Claude CLI behaves, and how the worker drives it |
