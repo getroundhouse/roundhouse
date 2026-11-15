@@ -5,8 +5,8 @@
 use std::time::Duration;
 
 use gpui_kit::{AppContext as _, TestAppContext};
-use protocol::event::EventBody;
-use protocol::model::SessionStatus;
+use protocol::event::{AgentRunState, EventBody, SessionEvent};
+use protocol::model::{SessionId, SessionStatus};
 
 use crate::support::{Gate, Stack, Ui, wait_until};
 
@@ -48,9 +48,7 @@ fn a_reply_shows_all_of_itself_once_it_is_recorded_however_its_end_arrived(cx: &
     // The app doesn't run while this waits, so it takes in the rest of the reply and its record in one go. The hub
     // sends the end of the stream as soon as it's written, and the record once it's stored, so the turn is over
     // only once the app's log, which a thread of its own fills, holds the record too.
-    wait_until("the turn to end", || stack.client().session_get(&session).unwrap().status == SessionStatus::Idle);
-    let record = ui.row_of(&stack.newest_event(&session));
-    wait_until("the record to reach the app", || ui.cx.read_entity(&transcript, |t, _| t.event_at(record).is_some()));
+    wait_for_the_whole_turn(&stack, &ui, &session);
     ui.wait_idle_with("the recorded reply", |text| text.contains("word5"));
     ui.settle(Duration::from_millis(16));
 
@@ -78,9 +76,7 @@ fn a_long_reply_never_goes_blank_as_it_is_recorded(cx: &mut TestAppContext) {
     stack.client().session_prompt(&session, &script, None).unwrap();
     ui.wait("the reply to stream", |ui| ui.cx.read_entity(&transcript, |t, _| t.streaming_text().len() > 5 * 1024));
     done.open();
-    wait_until("the turn to end", || stack.client().session_get(&session).unwrap().status == SessionStatus::Idle);
-    let record = ui.row_of(&stack.newest_event(&session));
-    wait_until("the record to reach the app", || ui.cx.read_entity(&transcript, |t, _| t.event_at(record).is_some()));
+    wait_for_the_whole_turn(&stack, &ui, &session);
     // Before the transcript has caught up with its log, which has taken the reply from the end of the chat.
     ui.redraw();
     let (listed, logged) = ui.cx.read_entity(&transcript, |t, _| (t.list().row_count(), t.row_count()));
@@ -113,9 +109,7 @@ fn a_reply_recorded_while_a_frame_is_drawn_is_drawn_at_the_end_from_its_record(c
     stack.client().session_prompt(&session, &format!("slow-until:{done}:word"), None).unwrap();
     ui.wait("the reply to be drawn", |ui| ui.cx.read_entity(&transcript, |t, _| t.all_as_copied().contains("word2")));
     done.open();
-    wait_until("the turn to end", || stack.client().session_get(&session).unwrap().status == SessionStatus::Idle);
-    let record = ui.row_of(&stack.newest_event(&session));
-    wait_until("the record to reach the app", || ui.cx.read_entity(&transcript, |t, _| t.event_at(record).is_some()));
+    wait_for_the_whole_turn(&stack, &ui, &session);
 
     let handle = ui.handle;
     ui.cx
@@ -125,6 +119,20 @@ fn a_reply_recorded_while_a_frame_is_drawn_is_drawn_at_the_end_from_its_record(c
         .unwrap();
     let copied = ui.cx.read_entity(&transcript, |t, _| t.all_as_copied());
     assert!(copied.contains("word2"), "the reply is still shown: {copied:?}");
+}
+
+/// Waits, without letting the app run, for the app's log to hold all of the turn the agent has just ended, so nothing
+/// more comes to it until the next prompt. The turn's end has the chat idle, and the agent says it's idle after that,
+/// the last it sends of a turn, which comes to the log as a row of its own.
+fn wait_for_the_whole_turn(stack: &Stack, ui: &Ui, session: &SessionId) {
+    let said_idle = |event: &SessionEvent| matches!(event.body, EventBody::AgentState { state: AgentRunState::Idle });
+    wait_until("the agent to say it's idle, after the turn's end", || {
+        let ended = stack.client().session_get(session).unwrap().status == SessionStatus::Idle;
+        ended && said_idle(&stack.newest_event(session))
+    });
+    let last = ui.row_of(&stack.newest_event(session));
+    let transcript = ui.transcript().unwrap();
+    wait_until("the turn to reach the app", || ui.cx.read_entity(&transcript, |t, _| t.event_at(last).is_some()));
 }
 
 /// Whether the agent's words in `body` say `text`.
