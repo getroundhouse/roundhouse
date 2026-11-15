@@ -8,6 +8,7 @@
 
 - **Search is only a place for searching.** *Not built:* it does nothing when pressed, and what it searches isn't decided.
 - **The workspaces are listed by project, under a small faint heading.** A project's row has its folder, its name in medium weight, and a button for a new workspace in it. Its workspaces are set in below it, so they read as its, each with its mark and its name at body size. A project's row and a workspace's are regular rows, 36px, as Home, Create and Search are, and the heading over them is a small one, as `look.md` says. A project's row and its workspaces are 4px apart, so they read as one list, and 8px before the next project, so each project reads as apart from the next. *Unconfirmed.*
+- **The sidebar shows every workspace's pull request.**
 - **Add project is at the heading's right end, in words,** so it isn't taken for the button for a new workspace on each project's row under it. The heading shows before there's a project too, so the button is in the same place from the start. Without a hub, such as while it restarts, Add project is greyed out, and the heading shows only over projects already listed. *Unconfirmed:* without a hub.
 - **An archived workspace isn't listed.** Home shows archived workspaces, and brings one back, as `home.md` says.
 - **A workspace's mark speaks for its open chat with the most going on:** one whose agent is working, then one that stopped short, then one that only left something running. A chat whose turn failed is stopped short whatever it left running, since it needs you more. *Unconfirmed.*

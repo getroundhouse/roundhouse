@@ -19,7 +19,7 @@ use super::headless;
 /// Its image's name, in `docs/spec/screens/`.
 pub(crate) const NAME: &str = "mark-states";
 /// The spec's file that shows it.
-pub(crate) const SPEC: &str = "look.md";
+pub(crate) const SPEC: &str = "components.md";
 const LABEL: f32 = 250.;
 const CELL: f32 = 112.;
 const ROW: f32 = 40.;
