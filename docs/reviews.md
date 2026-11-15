@@ -18,14 +18,16 @@ The agent the owner gave a change to has it reviewed without being asked to, onc
 
 - **A change of the last row whose docs are much of it gets a third reviewer, for docs alone.** One that adds a doc, or rewrites a section of one, is such a change. One that adds rules to the spec beside the code they describe isn't. The reviewer for architecture and cleanliness then leaves docs to the third.
 - **Each PR of a stack is a change of its own,** and gets the reviewers its own diff calls for.
+- **A stack that changes the protocol or what a hub stores is also reviewed whole,** by one reviewer in the stack lane, once every PR of it is built and has had its own review, since a shape can be right in each diff and wrong across them. Until that review is done only its groundwork merges, as `docs/pull-requests.md` names it: a form on `main` is published, a migration has rewritten people's stores, and a fix can only go forward. Its fixes are checked as "Until it's done" says.
 - **An agent that another agent starts doesn't have its work reviewed,** whether it builds a change or part of one, and its brief says so. The agent that started it has the work reviewed once it comes back.
 
-A change that adds or moves state, changes the protocol or what a hub stores, or adds a crate also has its design reviewed, by one reviewer, before any code is written.
+A change that adds or moves state, changes the protocol or what a hub stores, or adds a crate also has its design reviewed, by one reviewer, before any code is written. When any PR of a stack calls for one, the stack has one design review, of its whole plan, rather than one for each PR.
 
 ## How
 
 - **The reviewers run in parallel.**
 - **A reviewer gets the task, the diff, the checkout and the PR's description as drafted,** which holds the design, and the reason for any choice a reviewer might question. The diff is from the commit the change is built on, or from the PR below it in a stack, and the brief names that commit and any new file the diff doesn't show. A reviewer doesn't get the builder's chat, so it judges the change by what the change and its description say. Its brief names its lanes and points it to this doc, rather than retyping it.
+- **A stack's reviewer gets the diff from the commit the stack is built on to its top,** naming any PR of it that has merged, the issue that holds the stack's plan, each PR's description, and the design review's verdict. It's a fresh agent rather than the design's reviewer, which approved the plan.
 - **Only the reviewer with the docs lane checks the description's claims,** or the only reviewer, when none has docs. The others read it to learn the change. Where the description and the code disagree, a reviewer says which is wrong: code that doesn't do what the description promises is a finding against the code.
 - **A reviewer changes nothing in the builder's checkout.** One that breaks code to see whether a test notices does it in a checkout of its own, with the change in it.
 - **A reviewer stays in its lanes.** Something it sees outside them gets one line.
@@ -77,6 +79,7 @@ Each of these needs a reason: in a comment beside it, where `docs/documentation.
 - A check for a state the code can't reach. If it can reach it, fix what lets it. A state that comes from outside the process can always arrive, such as from the network, storage, another program, or an older hub or client, and handling it is right.
 - Logic copied, or nearly copied, rather than shared.
 - A wrapper around code this repo owns, rather than a change to it.
+- Code that exists only for the middle of a stack, as "Splitting a change" in `docs/pull-requests.md` says.
 - A sleep in the product's code, a retry of what failed, or a longer timeout, added so that a test passes. A fixed sleep in a test isn't let in even with a reason, as "Tests" in `docs/rust.md` says.
 
 A workaround copied from code nearby isn't let in, even with a reason. As `AGENTS.md` says, the change doesn't copy it, and the one it would copy is fixed if it's part of the change, and otherwise given an issue.
@@ -95,6 +98,8 @@ Before any code is written, the reviewer reads the change's design: parts 2 and 
 - Does something in the repo already do this, or could it be extended to?
 - Does it fit `docs/architecture.md`, including the parts that aren't built, such as workers on other machines and the iPhone app?
 - Does it change what an owner doc says, without saying so?
+- What does it commit, and in which PR: the forms it stores or sends, any migration, and any protocol break, as "Changing the protocol" in `docs/architecture.md` says?
+- For a stack, are its splits and their order right, by "Splitting a change" in `docs/pull-requests.md`?
 
 A rule changed in words alone is read the same way, the rule being its design, and the reviewer also asks where an agent following it would go wrong, on either side of its line.
 
@@ -107,6 +112,7 @@ Whether the change does what it should, taking for granted that it builds and it
 - Logic that's wrong: conditions, bounds, and assumptions about input. Input that's empty, repeated or very large.
 - Timing: an answer that arrives late, out of order or twice, two requests at once, a second client, a reconnect, and a restart of the hub, a worker or the app. "Keeping clients in sync" in `docs/architecture.md` says how each kind of state recovers.
 - Versions: a newer client or worker with an older hub, and the reverse, as "Changing the protocol" in `docs/architecture.md` says.
+- Stored data: a migration run on whatever an older build could have stored, and on a large store, and code that reads rows an older build wrote.
 - Failures: whether each one is surfaced, and whether one partway through leaves state consistent.
 - What's never let go of: processes, workers, subscriptions, records and tasks kept after nothing needs them.
 - In the app, more than the mouse: the keyboard, assistive apps, a narrow window, full screen, and what shows while something loads.
@@ -161,3 +167,16 @@ Whether every doc is still true after the change, and the PR says only what's tr
 - What `docs/documentation.md` keeps out of docs, such as a date, "yet" or an issue number.
 - A new word, or a new sense of one, missing from `docs/terms.md`.
 - The PR's description, when there is one, against `docs/pull-requests.md`: every claim checked, and anything unverified under **Not checked:**.
+
+### Stack
+
+Once a stack is built, the reviewer reads it as one change, against its design. It leaves what one PR's diff shows to that PR's reviewers. It looks for:
+
+- Where the built change departs from its design, and whether it was right to.
+- A shape that suits what fills it but not what reads it, or the reverse: a field nothing reads, a reader working out what the writer knew, a value converted twice, or one thing named differently in two layers.
+- State with the wrong owner, by "State ownership" in `docs/architecture.md`, that only shows with both layers in view.
+- Code that exists only for the middle of the stack, beyond what "Splitting a change" in `docs/pull-requests.md` lets in, and any of it left at the top.
+- Two forms of one shape at the top, where "Each shape has one form" in "Changing the protocol" asks for one, and readers of an old form the top no longer needs.
+- A pairing of versions in "Changing the protocol" that the stack breaks, and a migration that makes a different form from the live path given the same input.
+- No test that follows the data across the layers.
+- A doc that isn't true at the top of the stack.
