@@ -1,7 +1,7 @@
 #![cfg(test)]
 use protocol::capability::calls::{
     Call, CallOutput,
-    call::{Command, CommandPart, Replaces},
+    call::{Command, CommandPart, MessageSubagent, Replaces, StopSubagent},
     output::{Ended, Lines},
 };
 use protocol::capability::setup::ServerName;
@@ -93,6 +93,29 @@ fn string_command_output_and_underscore_mcp_servers_preserve_their_fields() {
     );
 }
 
+/// `agy` names a subagent by the ID of its conversation, which `invoke_subagent` gives it, so a message to one, or a
+/// stop of one, names it so. Listing them, or stopping several, isn't about one.
+#[test]
+fn a_message_to_a_subagent_or_a_stop_of_one_names_it_by_its_conversation() {
+    let wire = |name: &str, args: serde_json::Value| ToolCallWire {
+        tool_call_id: "c".into(),
+        name: Some(name.into()),
+        args: Some(args),
+        ..ToolCallWire::default()
+    };
+    let manage = |args| translate_call(&wire("manage_subagents", args));
+
+    let message = translate_call(&wire("send_message", json!({ "Recipient": "conv-7", "Message": "Carry on" })));
+    let stop = manage(json!({ "Action": "kill", "ConversationIds": ["conv-7"] }));
+
+    let to = MessageSubagent { subagent: "conv-7".into(), message: "Carry on".into() };
+    assert_eq!(message, Call::MessageSubagent(to));
+    assert_eq!(stop, Call::StopSubagent(StopSubagent { subagent: "conv-7".into() }));
+    let several = manage(json!({ "Action": "kill", "ConversationIds": ["conv-7", "conv-8"] }));
+    assert!(matches!(several, Call::Other { .. }), "{several:?}");
+    assert!(matches!(manage(json!({ "Action": "list" })), Call::Other { .. }));
+}
+
 #[test]
 fn what_agy_does_its_own_way_is_told_as_it_is_rather_than_as_another_kind_does_it() {
     let wire = |name: &str, args: serde_json::Value| ToolCallWire {
@@ -102,17 +125,14 @@ fn what_agy_does_its_own_way_is_told_as_it_is_rather_than_as_another_kind_does_i
         ..ToolCallWire::default()
     };
 
-    let message = translate_call(&wire("send_message", json!({ "Recipient": "conv-7", "Message": "Carry on" })));
+    let message = translate_call(&wire("send_message", json!({ "Recipient": "@children", "Message": "Carry on" })));
     let kill = translate_call(&wire("manage_subagents", json!({ "Action": "kill_all" })));
     let append = translate_call(&wire("write_file", json!({ "Path": "/w/log", "Content": "more", "Append": true })));
     let command = translate_call(&wire("run_command", json!({ "CommandLine": "make", "WaitMsBeforeAsync": 500 })));
     let edit = translate_call(&wire("edit_file", json!({ "Path": "/w/a", "Target": "x", "Replacement": "y" })));
 
-    assert!(
-        matches!(message, Call::Other { tool, .. } if tool == "send_message"),
-        "a conversation's ID isn't a call's"
-    );
-    assert!(matches!(kill, Call::Other { tool, .. } if tool == "manage_subagents"));
+    assert!(matches!(message, Call::Other { tool, .. } if tool == "send_message"), "to every subagent at once");
+    assert!(matches!(kill, Call::Other { tool, .. } if tool == "manage_subagents"), "every subagent at once");
     assert!(matches!(append, Call::Other { tool, .. } if tool == "write_file"), "an append doesn't write it whole");
     let Call::Command(Command { timeout_ms, .. }) = command else { panic!("{command:?}") };
     assert_eq!(timeout_ms, None, "how long it waits before backgrounding a command isn't a time limit");
