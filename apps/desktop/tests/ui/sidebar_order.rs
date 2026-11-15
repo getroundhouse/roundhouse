@@ -9,7 +9,8 @@ use gpui_kit::{AppContext as _, ElementId, TestAppContext};
 use protocol::model::{AgentKind, SessionSettingsChange, WorkspaceId, WorkspaceStatus};
 
 use crate::support::{
-    Held, MORE_THAN_FIT, Stack, Ui, more_than_fit, order, sidebar_row, three_workspaces, top, worked_in,
+    Held, MORE_THAN_FIT, Stack, Ui, after_every_workspace, more_than_fit, order, sidebar_row, three_workspaces, top,
+    worked_in,
 };
 
 /// The workspace the hub is making, once the app has heard of it and the last frame drew its note in the sidebar, and
@@ -127,6 +128,7 @@ fn a_row_coming_up_from_below_the_window_is_built_once_its_drawn_in_sight(cx: &m
     // workspace's record, which comes apart from the chat's.
     let worked_in = |ui: &Ui| ui.view().records().workspace(oldest).and_then(|w| w.user_active_at_ms);
     let before = worked_in(&ui);
+    after_every_workspace(&ui);
     client.session_create(oldest, AgentKind::Claude, SessionSettingsChange::default(), None).unwrap();
     ui.wait("it to be worked in", |ui| worked_in(ui) != before);
 
@@ -252,6 +254,7 @@ fn a_new_workspaces_note_keeps_its_place_once_the_order_holds_and_the_workspace_
     let making = Held::checkout(&stack);
     ui.press("secondary-n");
     ui.wait("the new-workspace dialog", Ui::has_dialog);
+    after_every_workspace(&ui);
     ui.press("enter");
     ui.wait("the note", |ui| on_its_way(ui).is_some());
     let (coming, note) = on_its_way(&mut ui).unwrap();
@@ -276,6 +279,7 @@ fn a_workspace_another_client_is_making_shows_on_its_way_where_it_will_go(cx: &m
     let (mut ui, [first, second, third], _) = three_workspaces(cx, &stack);
     let making = Held::checkout(&stack);
     let (client, repo) = (stack.client(), ui.first_repo_id());
+    after_every_workspace(&ui);
 
     let asking = std::thread::spawn(move || client.workspace_create(&repo, None, None, None).unwrap().id);
 

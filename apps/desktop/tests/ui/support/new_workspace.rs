@@ -7,7 +7,7 @@ use desktop::new_workspace::NewWorkspaceDialog;
 use gpui_kit::{AppContext as _, Entity, SharedString};
 use protocol::model::{PermissionMode, WorkspaceId};
 
-use super::Ui;
+use super::{Ui, after_every_workspace};
 
 impl Ui<'_> {
     /// Opens the dialog with the `+` beside the first repository, as someone would.
@@ -23,9 +23,11 @@ impl Ui<'_> {
         self.create_workspace()
     }
 
-    /// Clicks Create in the dialog that's open, and waits until the new workspace is on screen.
+    /// Clicks Create in the dialog that's open, once the clock has passed every workspace's last activity, so the new
+    /// one is the newest and the one last worked in, and waits until it's on screen.
     pub(crate) fn create_workspace(&mut self) -> WorkspaceId {
         let before = self.view().records().workspaces().len();
+        after_every_workspace(self);
         self.click("new-workspace-create");
         self.wait_for_a_new_workspace(before)
     }

@@ -61,6 +61,22 @@ fn joined(making: JoinHandle<WorkspaceId>) -> WorkspaceId {
     making.join().unwrap_or_else(|panic| std::panic::resume_unwind(panic))
 }
 
+/// Waits until the clock has gone past every time the app has heard a workspace was made or worked in, so whatever is
+/// made or done in one next comes after all of them, as what a person does next would. The hub stamps those times from
+/// the machine's clock, which reads the same for two things done within a millisecond, and goes back when the machine
+/// sets it back, and a workspace whose time ties with another's, or comes before it, would be listed below it.
+pub(crate) fn after_every_workspace(ui: &Ui) {
+    let latest = ui.view().records().workspaces().iter().map(Workspace::last_active_at_ms).max().unwrap_or(i64::MIN);
+    wait_until("the clock to pass every workspace's last activity", || hub::store::now_ms() > latest);
+}
+
+/// When each of `workspaces` was last made or worked in, as the app has heard, in the same order.
+fn last_active(ui: &Ui, workspaces: &[WorkspaceId]) -> Vec<i64> {
+    let view = ui.view();
+    let at = |id: &WorkspaceId| view.records().workspace(id).map(Workspace::last_active_at_ms);
+    workspaces.iter().map(|id| at(id).unwrap_or_else(|| panic!("the app has no record of {id:?}"))).collect()
+}
+
 /// A window with three workspaces in one repository, made in the order they're returned, each with its chat.
 pub(crate) fn three_workspaces<'a>(
     cx: &'a mut TestAppContext,
@@ -73,6 +89,8 @@ pub(crate) fn three_workspaces<'a>(
         made.push((workspace, ui.active_chat()));
     }
     let (workspaces, chats): (Vec<_>, Vec<_>) = made.into_iter().unzip();
+    let times = last_active(&ui, &workspaces);
+    assert!(times.windows(2).all(|pair| pair[0] < pair[1]), "each made after the one before: {times:?}");
     (ui, workspaces.try_into().unwrap(), chats.try_into().unwrap())
 }
 
@@ -95,9 +113,11 @@ pub(crate) fn wait_out_setup(ui: &mut Ui) {
     ui.wait("every workspace's setup to end", |ui| ui.view().records().workspaces().iter().all(ended));
 }
 
-/// Sends `chat` its first prompt, as the person would, and waits until the app has heard its agent reply, so nothing
-/// in the window is still at work, and heard from its workspace's record that it was worked in then.
+/// Sends `chat` its first prompt, as the person would, once the clock has passed every workspace's last activity, and
+/// waits until the app has heard its agent reply, so nothing in the window is still at work, and heard from its
+/// workspace's record that it was worked in then, which makes it the workspace last worked in.
 pub(crate) fn worked_in(ui: &mut Ui, stack: &Stack, chat: &SessionId) {
+    after_every_workspace(ui);
     stack.client().session_prompt(chat, "say:done", None).unwrap();
     let replied = |c: &Session| c.user_active_at_ms.is_some() && c.has_reply() && !c.status.in_turn();
     let caught_up = |ui: &mut Ui| {
@@ -106,6 +126,11 @@ pub(crate) fn worked_in(ui: &mut Ui, stack: &Stack, chat: &SessionId) {
         view.records().workspace(&c.workspace_id).is_some_and(|w| w.user_active_at_ms == c.user_active_at_ms)
     };
     ui.wait("the reply", caught_up);
+    let worked = ui.view().records().session(chat).unwrap().workspace_id.clone();
+    let others: Vec<_> =
+        ui.view().records().workspaces().iter().map(|w| w.id.clone()).filter(|id| *id != worked).collect();
+    let (at, others) = (last_active(ui, &[worked])[0], last_active(ui, &others));
+    assert!(others.iter().all(|&other| other < at), "it's the one last worked in, at {at}, after {others:?}");
 }
 
 /// How far down the window the last frame drew `row`.
