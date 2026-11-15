@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use protocol::client::{ApiError, ErrorCode};
 use protocol::frame::{self, Call};
-use protocol::worker::{Hello, ToWorker, WorkerFrame, WorkerOutcome, WorkerRequest, WorkerResponse};
+use protocol::worker::{GitCredentialSet, Hello, ToWorker, WorkerFrame, WorkerOutcome, WorkerRequest, WorkerResponse};
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
@@ -98,6 +98,11 @@ where
             Ok(WorkerRequest::Stop) => {
                 asked_to_stop = true;
                 let _ = frames.send(reply(Ok(WorkerResponse::Ok))).await;
+            }
+            // Before the next frame is read, so sets apply in the order sent, and what's asked after one has it.
+            Ok(WorkerRequest::GitCredentialSet(GitCredentialSet { credential })) => {
+                let answer = worker.state.credentials.set(credential).await;
+                let _ = frames.send(reply(answer.map(|()| WorkerResponse::Ok))).await;
             }
             request => {
                 // Each call runs on a task of its own, so a stop read after this could otherwise be handled before the

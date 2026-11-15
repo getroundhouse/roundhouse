@@ -1,5 +1,6 @@
 use super::*;
 use crate::git::worktrees::tests::while_one_is_made;
+use process::Environment;
 
 pub(crate) fn run(cwd: &Path, args: &[&str]) -> String {
     let output = std::process::Command::new("git")
@@ -40,7 +41,7 @@ pub(crate) async fn prepare(
     base: Option<&str>,
 ) -> Result<WorkspaceReady, ApiError> {
     let branch = BranchName::from(format!("{name}/start"));
-    prepare_workspace(root, "repo", repo.to_str().unwrap(), name, &branch, base).await
+    prepare_workspace(&Environment::NONE, root, "repo", repo.to_str().unwrap(), name, &branch, base).await
 }
 
 /// Gives `repo` a `post-checkout` hook running `body` under `/bin/sh`.
@@ -125,10 +126,18 @@ async fn existing_branches_paths_and_bad_input_are_refused() {
     // Same path and branch.
     assert_eq!(prepare(&root, &repo, "alder", None).await.err().unwrap().code, ErrorCode::NameTaken);
     // Same branch, different path.
-    let err = prepare_workspace(&root, "repo", repo.to_str().unwrap(), "birch", &"alder/start".into(), None)
-        .await
-        .err()
-        .unwrap();
+    let err = prepare_workspace(
+        &Environment::NONE,
+        &root,
+        "repo",
+        repo.to_str().unwrap(),
+        "birch",
+        &"alder/start".into(),
+        None,
+    )
+    .await
+    .err()
+    .unwrap();
     assert_eq!(err.code, ErrorCode::NameTaken);
     // A branch git can't have beside it, whatever its case.
     run(&repo, &["branch", "Elm"]);
@@ -137,7 +146,10 @@ async fn existing_branches_paths_and_bad_input_are_refused() {
     assert_eq!(err.code, ErrorCode::InvalidRequest);
     let err = prepare(&root, &repo, "cedar", Some("no-such-ref")).await.err().unwrap();
     assert_eq!(err.code, ErrorCode::InvalidRequest);
-    let err = prepare_workspace(&root, "repo", repo.to_str().unwrap(), "x", &"--bad".into(), None).await.err().unwrap();
+    let err = prepare_workspace(&Environment::NONE, &root, "repo", repo.to_str().unwrap(), "x", &"--bad".into(), None)
+        .await
+        .err()
+        .unwrap();
     assert_eq!(err.code, ErrorCode::InvalidRequest);
 }
 
@@ -157,7 +169,7 @@ async fn the_names_git_has_are_each_branch_s_first_part_here_and_among_origin_s_
     let root = dir.path().join("ws");
     std::fs::create_dir_all(root.join("repo").join("Dogwood")).unwrap();
 
-    let names = names_git_has(&root, "repo", clone.to_str().unwrap()).await.unwrap();
+    let names = names_git_has(&Environment::NONE, &root, "repo", clone.to_str().unwrap()).await.unwrap();
 
     assert_eq!(names, ["Alder", "Dogwood", "HEAD", "birch", "cedar", "main", "origin"], "each once, as it's spelled");
 }
@@ -168,7 +180,8 @@ async fn the_names_git_has_are_each_branch_s_first_part_here_and_among_origin_s_
 async fn head_is_a_name_git_has_once_there_s_a_remote() {
     let dir = tempfile::tempdir().unwrap();
     let repo = new_repo(dir.path());
-    let names = || names_git_has(dir.path(), "none", repo.to_str().unwrap());
+    let none = Environment::NONE;
+    let names = || names_git_has(&none, dir.path(), "none", repo.to_str().unwrap());
 
     let with_no_remote = names().await.unwrap();
     run(&repo, &["remote", "add", "upstream", "https://example.invalid/repo.git"]);
@@ -188,7 +201,7 @@ async fn status_reports_each_kind_of_change_including_renames_and_odd_names() {
     std::fs::write(path.join("with space.txt"), "x\n").unwrap();
     run(path, &["mv", ".gitignore", "renamed"]);
 
-    let status = status(&prepared.path).await.unwrap();
+    let status = status(&Environment::NONE, &prepared.path).await.unwrap();
     assert_eq!(status.branch, Some("alder/start".into()));
     assert_eq!(status.head, Some(CommitId::from(run(path, &["rev-parse", "HEAD"]).trim())));
     let find = |p: &str| status.files.iter().find(|f| f.path == p).unwrap_or_else(|| panic!("{p}: {:?}", status.files));
@@ -215,7 +228,7 @@ async fn diff_covers_commits_uncommitted_and_untracked_work() {
     run(&repo, &["add", "."]);
     run(&repo, &["commit", "-qm", "main moved"]);
 
-    let diff = diff(&prepared.path, Some("main")).await.unwrap();
+    let diff = diff(&Environment::NONE, &prepared.path, Some("main")).await.unwrap();
     assert_eq!(diff.base_commit, Some(merge_base));
     assert!(diff.patch.contains("+from a commit"), "{}", diff.patch);
     assert!(diff.patch.contains("+uncommitted"), "{}", diff.patch);
@@ -236,13 +249,16 @@ async fn a_diff_with_no_base_names_head_s_commit() {
     std::fs::create_dir_all(&empty).unwrap();
     run(&empty, &["init", "-q"]);
 
-    let no_base = diff(worktree, None).await.unwrap();
-    let gone = diff(worktree, Some("gone")).await.unwrap();
+    let no_base = diff(&Environment::NONE, worktree, None).await.unwrap();
+    let gone = diff(&Environment::NONE, worktree, Some("gone")).await.unwrap();
 
     assert_eq!(no_base.base_commit, head);
     assert!(no_base.patch.contains("+uncommitted"), "{}", no_base.patch);
     assert_eq!(gone.base_commit, head, "a base ref git finds no merge base with");
-    assert!(diff(empty.to_str().unwrap(), None).await.is_err(), "no commit at HEAD, so nothing to diff from");
+    assert!(
+        diff(&Environment::NONE, empty.to_str().unwrap(), None).await.is_err(),
+        "no commit at HEAD, so nothing to diff from"
+    );
 }
 
 #[tokio::test]
@@ -252,7 +268,7 @@ async fn a_detached_head_that_a_branch_holds_has_nothing_to_lose() {
     let prepared = prepare(&dir.path().join("ws"), &repo, "alder", None).await.unwrap();
     run(Path::new(&prepared.path), &["checkout", "-q", "--detach"]);
 
-    let current = status(&prepared.path).await.unwrap();
+    let current = status(&Environment::NONE, &prepared.path).await.unwrap();
     assert_eq!(current.branch, None);
     assert!(!current.unreferenced_commits);
 }
@@ -287,10 +303,15 @@ async fn restoring_a_workspace_waits_for_a_worktree_being_made() {
     let repo = new_repo(dir.path());
     let root = dir.path().join("ws");
     let path =
-        prepare_workspace(&root, "repo", repo.to_str().unwrap(), "alder", &"alder".into(), None).await.unwrap().path;
+        prepare_workspace(&Environment::NONE, &root, "repo", repo.to_str().unwrap(), "alder", &"alder".into(), None)
+            .await
+            .unwrap()
+            .path;
     run(&repo, &["worktree", "remove", &path]);
 
-    while_one_is_made(&repo, restore_workspace(repo.to_str().unwrap(), &path, &"alder".into())).await.unwrap();
+    while_one_is_made(&repo, restore_workspace(&Environment::NONE, repo.to_str().unwrap(), &path, &"alder".into()))
+        .await
+        .unwrap();
 
     assert!(Path::new(&path).join("a.txt").exists());
 }
@@ -331,7 +352,7 @@ async fn a_workspace_git_fails_to_check_out_leaves_neither_worktree_nor_branch()
     assert_eq!(failed.code, ErrorCode::Worker);
     assert!(!root.join("repo").join("alder").exists());
     assert!(run(&repo, &["branch", "--list", "alder/start"]).is_empty());
-    assert_eq!(names_git_has(&root, "repo", repo.to_str().unwrap()).await.unwrap(), ["main"]);
+    assert_eq!(names_git_has(&Environment::NONE, &root, "repo", repo.to_str().unwrap()).await.unwrap(), ["main"]);
 
     run(&repo, &["config", "filter.broken.required", "false"]);
     let retried = prepare(&root, &repo, "alder", None).await.unwrap();
@@ -350,6 +371,6 @@ async fn a_worktree_left_locked_as_part_made_is_neither_taken_for_ready_nor_keep
     let failed = prepare(&root, &repo, "alder", None).await.unwrap_err();
 
     assert_eq!(failed.code, ErrorCode::Worker);
-    assert!(!made_there(&repo, &root.join("repo").join("alder"), &"alder/start".into()).await);
+    assert!(!made_there(&Environment::NONE, &repo, &root.join("repo").join("alder"), &"alder/start".into()).await);
     assert!(run(&repo, &["branch", "--list", "alder/start"]).is_empty());
 }

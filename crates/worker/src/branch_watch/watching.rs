@@ -4,6 +4,7 @@ use crate::serve::Outbox;
 use notify::event::{AccessKind, AccessMode};
 use notify::{Event, EventKind, PollWatcher, RecursiveMode, Watcher};
 use parking_lot::Mutex;
+use process::Environment;
 use protocol::model::Branches;
 use protocol::worker::WorkerFrame;
 use std::path::{Path, PathBuf};
@@ -59,6 +60,7 @@ pub(super) struct Wakes {
 /// until the worker stops or another watch replaces this one. `first` is told once the first is sent, or can't be.
 /// What's sent while no hub is connected is lost, since the next hub to connect watches them again.
 pub(crate) async fn watch(
+    given: watch::Receiver<Arc<Environment>>,
     worktree: PathBuf,
     whose: Whose,
     outbox: Arc<Outbox>,
@@ -66,12 +68,14 @@ pub(crate) async fn watch(
     first: oneshot::Sender<()>,
 ) {
     let mut first = Some(first);
-    let Some(places) = repository(&worktree, &mut stopping, &mut first).await else { return };
+    let Some(places) = repository(&given, &worktree, &mut stopping, &mut first).await else { return };
     let wakes = Arc::new(Wakes { places, last: Mutex::new(None), wake: Notify::new() });
     // Watching before the first read, so a change made while it reads is heard.
     let _watching = start(&wakes);
     loop {
-        read_and_send(&worktree, whose, &wakes, &outbox).await;
+        // Each read with what's given then, so a credential set since reaches it.
+        let now = given.borrow().clone();
+        read_and_send(&now, &worktree, whose, &wakes, &outbox).await;
         if let Some(first) = first.take() {
             let _ = first.send(());
         }
@@ -84,12 +88,14 @@ pub(crate) async fn watch(
 /// The worktree's repository, looked for until it's found or the worker stops. `first` is told if it isn't found at
 /// once, since then there's nothing to send.
 async fn repository(
+    given: &watch::Receiver<Arc<Environment>>,
     worktree: &Path,
     stopping: &mut watch::Receiver<bool>,
     first: &mut Option<oneshot::Sender<()>>,
 ) -> Option<Places> {
     loop {
-        match branches::places(worktree).await {
+        let given = given.borrow().clone();
+        match branches::places(&given, worktree).await {
             Ok(places) => return Some(places),
             Err(e) => debug!(worktree = %worktree.display(), "finding the worktree's repository: {}", e.message),
         }
@@ -157,8 +163,8 @@ pub(super) fn mattered(wakes: &Wakes, event: &notify::Result<Event>) -> bool {
 }
 
 /// Reads the branches and sends them if they've changed.
-async fn read_and_send(worktree: &Path, whose: Whose, wakes: &Wakes, outbox: &Outbox) {
-    let read = match branches::read(worktree, &wakes.places).await {
+async fn read_and_send(given: &Environment, worktree: &Path, whose: Whose, wakes: &Wakes, outbox: &Outbox) {
+    let read = match branches::read(given, worktree, &wakes.places).await {
         Ok(read) => read,
         Err(e) => {
             debug!(worktree = %worktree.display(), "reading the branches: {}", e.message);

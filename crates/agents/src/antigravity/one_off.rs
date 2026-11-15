@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Stdio;
 use std::time::Duration;
 
@@ -31,7 +31,7 @@ pub async fn account(options: &AgentOptions, scratch_dir: &Path) -> Result<Agent
         return Err(AgentError::Refused("Antigravity uses the login on its worker's machine".into()));
     }
     let bin = running::binary(options)?;
-    let (status, stdout, stderr) = run_models(&bin, scratch_dir, options.pid_file.clone()).await?;
+    let (status, stdout, stderr) = run_models(&bin, scratch_dir, options).await?;
     Ok(parse_models_account(status.success(), &stdout, &stderr)?)
 }
 
@@ -68,7 +68,7 @@ pub(super) fn parse_models_account(ok: bool, stdout: &str, stderr: &str) -> Resu
 async fn run_models(
     bin: &Path,
     cwd: &Path,
-    pid_file: Option<PathBuf>,
+    options: &AgentOptions,
 ) -> Result<(std::process::ExitStatus, String, String), AgentError> {
     let mut command = Command::new(bin);
     command
@@ -79,13 +79,9 @@ async fn run_models(
         .stderr(Stdio::piped())
         .kill_on_drop(true);
     process::own_group(command.as_std_mut());
-    let mut child = command.spawn().map_err(|source| AgentError::Start {
-        bin: bin.display().to_string(),
-        cwd: cwd.display().to_string(),
-        source,
-    })?;
+    let mut child = crate::starting::start(&mut command, bin, cwd, &options.environment)?;
     let pid = child.id().unwrap_or_default();
-    let guard = GroupGuard::new(pid, pid_file);
+    let guard = GroupGuard::new(pid, options.pid_file.clone());
     let (Some(mut stdout), Some(mut stderr)) = (child.stdout.take(), child.stderr.take()) else {
         return Err(AgentError::NoPipes { bin: bin.display().to_string() });
     };

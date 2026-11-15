@@ -43,6 +43,7 @@ fn one_off(state: &State, agent: AgentKind, what: &str, login: Option<AgentLogin
         tools: None,
         instructions: None,
         login,
+        environment: (*state.credentials.given()).clone(),
     }
 }
 
@@ -103,6 +104,7 @@ pub(crate) async fn start_agent(
         // Taken out of the launch, as the tools' token is, so it's in one place: what the agent is started with, and
         // started again with, which goes when the agent does.
         login: spec.login.take(),
+        environment: (*state.credentials.given()).clone(),
     };
     let process = agents::spawn(spec, tx, options).await?;
     let (pid, capabilities) = (process.pid(), Some(Box::new(process.capabilities())));

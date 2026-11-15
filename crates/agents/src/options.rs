@@ -1,3 +1,4 @@
+use process::Environment;
 use protocol::model::AgentLogin;
 use protocol::worker::ToolsToken;
 use std::ffi::OsString;
@@ -29,6 +30,9 @@ pub struct AgentOptions {
     /// The login its hub holds for the account to run under, which the CLI is given for as long as it runs and nothing
     /// keeps afterwards. `None` runs it under this machine's own login.
     pub login: Option<AgentLogin>,
+    /// What its worker gives every process it starts, such as the git credential its hub set, which goes on the CLI
+    /// last as it starts.
+    pub environment: Environment,
 }
 
 /// Where an agent reaches the worker's tools, over MCP.

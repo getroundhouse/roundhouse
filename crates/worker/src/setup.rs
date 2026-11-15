@@ -6,6 +6,7 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 
+use process::Environment;
 use protocol::client::{ApiError, ErrorCode};
 use tokio::process::Command;
 use tracing::warn;
@@ -73,6 +74,7 @@ fn include_patterns(repo: &Path, settings: &Settings) -> Vec<String> {
 /// `.gitignore`. Only ignored files qualify: anything else is either tracked, and already there, or
 /// the user's work in progress. Returns what was copied.
 pub async fn copy_local_files(
+    given: &Environment,
     repo: &Path,
     worktree: &Path,
     settings: &Settings,
@@ -88,14 +90,16 @@ pub async fn copy_local_files(
     for pattern in &patterns {
         matching.push(format!("--exclude={pattern}"));
     }
-    let (ignored, matched) =
-        match tokio::try_join!(git::list_nul_separated(repo, &standard), git::list_nul_separated(repo, &matching)) {
-            Ok(lists) => lists,
-            Err(e) => {
-                warnings.push(format!("couldn't list files to copy: {}", e.message));
-                return Vec::new();
-            }
-        };
+    let (ignored, matched) = match tokio::try_join!(
+        git::list_nul_separated(given, repo, &standard),
+        git::list_nul_separated(given, repo, &matching)
+    ) {
+        Ok(lists) => lists,
+        Err(e) => {
+            warnings.push(format!("couldn't list files to copy: {}", e.message));
+            return Vec::new();
+        }
+    };
     let ignored: HashSet<String> = ignored.into_iter().collect();
     let mut copied = Vec::new();
     for relative in matched.into_iter().filter(|file| ignored.contains(file)) {
@@ -115,8 +119,10 @@ pub async fn copy_local_files(
 }
 
 /// Runs a script in the worktree, with its output going to `log`, and returns its exit code. In its own
-/// process group, so stopping it can stop what it started.
+/// process group, so stopping it can stop what it started. With `env`, and then what the worker gives every process it
+/// starts.
 pub async fn run_script(
+    given: &Environment,
     script: &str,
     worktree: &Path,
     env: &[(String, String)],
@@ -136,6 +142,7 @@ pub async fn run_script(
         .stderr(err)
         .kill_on_drop(true);
     process::own_group(command.as_std_mut());
+    given.apply(command.as_std_mut());
     let mut child = command.spawn().map_err(failed)?;
     if let Some(pid) = child.id() {
         on_start(pid);
@@ -247,7 +254,8 @@ mod tests {
         write(repo.join("work-in-progress.txt"), "not ignored, so it's the user's work\n");
 
         let mut warnings = Vec::new();
-        let mut copied = copy_local_files(&repo, &worktree, &Settings::default(), &mut warnings).await;
+        let mut copied =
+            copy_local_files(&Environment::NONE, &repo, &worktree, &Settings::default(), &mut warnings).await;
         copied.sort();
         assert!(copied.contains(&".env.local".to_string()), "{copied:?}");
         assert_eq!(std::fs::read_to_string(worktree.join(".env.local")).unwrap(), "A=1\n");
@@ -263,7 +271,8 @@ mod tests {
         write(repo.join(".worktreeinclude"), "# just this\nconfig/*.local.json\n");
         write(repo.join("config/app.local.json"), "{}\n");
         write(repo.join(".env"), "A=1\n");
-        let copied = copy_local_files(&repo, &worktree, &Settings::default(), &mut Vec::new()).await;
+        let copied =
+            copy_local_files(&Environment::NONE, &repo, &worktree, &Settings::default(), &mut Vec::new()).await;
         assert_eq!(copied, vec!["config/app.local.json".to_string()]);
         assert!(!worktree.join(".env").exists(), "an include file replaces the default, it doesn't add to it");
     }
@@ -274,7 +283,7 @@ mod tests {
         let (repo, worktree) = repo_and_worktree(dir.path(), "certs/\n");
         write(repo.join("certs/local.pem"), "pem\n");
         let settings = Settings { file_include_globs: Some("certs/*.pem\n".into()), ..Default::default() };
-        let copied = copy_local_files(&repo, &worktree, &settings, &mut Vec::new()).await;
+        let copied = copy_local_files(&Environment::NONE, &repo, &worktree, &settings, &mut Vec::new()).await;
         assert_eq!(copied, vec!["certs/local.pem".to_string()]);
     }
 
@@ -285,7 +294,8 @@ mod tests {
         write(repo.join(".env"), "from the checkout\n");
         write(worktree.join(".env"), "already here\n");
         std::os::unix::fs::symlink("/etc/hosts", repo.join(".env.link")).unwrap();
-        let copied = copy_local_files(&repo, &worktree, &Settings::default(), &mut Vec::new()).await;
+        let copied =
+            copy_local_files(&Environment::NONE, &repo, &worktree, &Settings::default(), &mut Vec::new()).await;
         assert!(copied.is_empty(), "{copied:?}");
         assert_eq!(std::fs::read_to_string(worktree.join(".env")).unwrap(), "already here\n");
         assert!(!worktree.join(".env.link").exists());
@@ -296,10 +306,16 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let log = dir.path().join("setup.log");
         let env = vec![("CONDUCTOR_WORKSPACE_NAME".to_string(), "alder".to_string())];
-        let status =
-            run_script("echo out $CONDUCTOR_WORKSPACE_NAME; pwd; echo err >&2; exit 3", dir.path(), &env, &log, |_| {})
-                .await
-                .unwrap();
+        let status = run_script(
+            &Environment::NONE,
+            "echo out $CONDUCTOR_WORKSPACE_NAME; pwd; echo err >&2; exit 3",
+            dir.path(),
+            &env,
+            &log,
+            |_| {},
+        )
+        .await
+        .unwrap();
         assert_eq!(status.code(), Some(3));
         let text = std::fs::read_to_string(&log).unwrap();
         assert!(text.contains("out alder"), "{text}");

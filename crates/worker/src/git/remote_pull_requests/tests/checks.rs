@@ -1,3 +1,5 @@
+use process::Environment;
+
 use super::*;
 
 fn run(created: &str, conclusion: &str) -> Value {
@@ -87,7 +89,7 @@ fn incomplete_pagination_is_an_error_not_an_empty_connection() {
 #[test]
 fn partial_graphql_errors_still_charge_the_reported_cost() {
     let mut reader = Reader {
-        source: Gh,
+        source: Gh(&Environment::NONE),
         path: "",
         repository: None,
         rate_limit: None,

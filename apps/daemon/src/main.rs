@@ -37,6 +37,14 @@ enum Role {
         #[arg(required = true)]
         paths: Vec<PathBuf>,
     },
+    /// Answers git as its credential helper for github.com, with what the worker whose files are in `dir` was given.
+    /// Started by git, in what a worker starts.
+    #[command(hide = true)]
+    GitCredential {
+        dir: PathBuf,
+        /// What git asks: `get`, `store` or `erase`.
+        action: String,
+    },
     /// Runs agents and git for a workspace. Started by a hub's provider.
     #[command(group(clap::ArgGroup::new("transport").required(true)))]
     Worker {
@@ -99,6 +107,13 @@ fn main() -> anyhow::Result<()> {
     }
     match args.role {
         Role::Hub { on_demand } => hub_role::run(on_demand),
+        Role::GitCredential { dir, action } => Ok(worker::answer_credential_request(
+            &dir,
+            &action,
+            std::io::stdin().lock(),
+            std::io::stdout(),
+            std::io::stderr(),
+        )?),
         Role::Delete { paths } => {
             let failed = worker::delete_trees(&paths);
             for (path, e) in &failed {

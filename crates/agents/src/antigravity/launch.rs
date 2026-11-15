@@ -59,11 +59,7 @@ pub(super) fn launch(
         .stderr(Stdio::piped())
         .kill_on_drop(true);
     process::own_group(command.as_std_mut());
-    let mut child = command.spawn().map_err(|source| AgentError::Start {
-        bin: bin.display().to_string(),
-        cwd: cwd.display().to_string(),
-        source,
-    })?;
+    let mut child = crate::starting::start(&mut command, bin, cwd, &options.environment)?;
     let pid = child.id().unwrap_or_default();
     if let Some(path) = &options.pid_file
         && let Err(error) = process::ProcessRecord::write(path, pid)

@@ -1,4 +1,5 @@
 use super::Worktrees;
+use process::Environment;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{BranchName, CommitId, GitDiff, GitFile, GitStatus};
 use std::path::{Path, PathBuf};
@@ -25,12 +26,13 @@ pub(super) struct GitOutput {
 }
 
 /// Runs git, with what it prints as it printed it.
-pub(super) async fn run(cwd: &Path, args: &[&str]) -> Result<std::process::Output, ApiError> {
-    command(cwd, args).output().await.map_err(|e| git_error(format!("could not run git in {}: {e}", cwd.display())))
+pub(super) async fn run(given: &Environment, cwd: &Path, args: &[&str]) -> Result<std::process::Output, ApiError> {
+    let output = command(given, cwd, args).output().await;
+    output.map_err(|e| git_error(format!("could not run git in {}: {e}", cwd.display())))
 }
 
-/// Git, ready to start, as everything here starts it.
-pub(super) fn command(cwd: &Path, args: &[&str]) -> Command {
+/// Git, ready to start, as everything here starts it, with what the worker gives every process it starts.
+pub(super) fn command(given: &Environment, cwd: &Path, args: &[&str]) -> Command {
     let mut command = Command::new("git");
     command
         .args(args)
@@ -43,11 +45,17 @@ pub(super) fn command(cwd: &Path, args: &[&str]) -> Command {
         .stdin(Stdio::null())
         // So a fetch that times out doesn't keep running, and nor does a read that's had what it needs.
         .kill_on_drop(true);
+    given.apply(command.as_std_mut());
     command
 }
 
-pub(super) async fn git(cwd: &Path, args: &[&str]) -> Result<GitOutput, ApiError> {
-    let output = run(cwd, args).await?;
+/// What `git --version` says, such as `git version 2.54.0`.
+pub(crate) async fn version(given: &Environment) -> Result<String, ApiError> {
+    git_ok(given, Path::new("."), &["--version"]).await
+}
+
+pub(super) async fn git(given: &Environment, cwd: &Path, args: &[&str]) -> Result<GitOutput, ApiError> {
+    let output = run(given, cwd, args).await?;
     Ok(GitOutput {
         command: format!("git {}", args.join(" ")),
         success: output.status.success(),
@@ -57,8 +65,8 @@ pub(super) async fn git(cwd: &Path, args: &[&str]) -> Result<GitOutput, ApiError
     })
 }
 
-pub(super) async fn git_ok(cwd: &Path, args: &[&str]) -> Result<String, ApiError> {
-    git(cwd, args).await?.succeeded()
+pub(super) async fn git_ok(given: &Environment, cwd: &Path, args: &[&str]) -> Result<String, ApiError> {
+    git(given, cwd, args).await?.succeeded()
 }
 
 impl GitOutput {
@@ -69,16 +77,20 @@ impl GitOutput {
 }
 
 /// For commands that print NUL-separated paths, such as `git ls-files -z`.
-pub(crate) async fn list_nul_separated(repo: &Path, args: &[String]) -> Result<Vec<String>, ApiError> {
+pub(crate) async fn list_nul_separated(
+    given: &Environment,
+    repo: &Path,
+    args: &[String],
+) -> Result<Vec<String>, ApiError> {
     let args: Vec<&str> = args.iter().map(String::as_str).collect();
-    let output = git_ok(repo, &args).await?;
+    let output = git_ok(given, repo, &args).await?;
     Ok(output.split('\0').filter(|f| !f.is_empty()).map(str::to_string).collect())
 }
 
 /// The commit `name` is in the worktree at `cwd`: a branch, a tag, a commit or `HEAD`. `None` if it's none there, as
 /// a branch with no commits yet isn't, and an error when git couldn't say, as outside a repository.
-pub(super) async fn commit_of(cwd: &Path, name: &str) -> Result<Option<CommitId>, ApiError> {
-    let found = git(cwd, &["rev-parse", "--verify", "--quiet", &format!("{name}^{{commit}}")]).await?;
+pub(super) async fn commit_of(given: &Environment, cwd: &Path, name: &str) -> Result<Option<CommitId>, ApiError> {
+    let found = git(given, cwd, &["rev-parse", "--verify", "--quiet", &format!("{name}^{{commit}}")]).await?;
     match found.code {
         Some(0) => Ok(Some(CommitId::from(found.stdout.trim()))),
         // git's word for a name that's no commit.
@@ -87,8 +99,8 @@ pub(super) async fn commit_of(cwd: &Path, name: &str) -> Result<Option<CommitId>
     }
 }
 
-pub(super) async fn ref_exists(repo: &Path, name: &str) -> Result<bool, ApiError> {
-    Ok(commit_of(repo, name).await?.is_some())
+pub(super) async fn ref_exists(given: &Environment, repo: &Path, name: &str) -> Result<bool, ApiError> {
+    Ok(commit_of(given, repo, name).await?.is_some())
 }
 
 pub(super) fn reject_option_like(value: &str, what: &str) -> Result<(), ApiError> {
@@ -100,9 +112,9 @@ pub(super) fn reject_option_like(value: &str, what: &str) -> Result<(), ApiError
 
 /// Refuses a branch name git can't have at all, as `InvalidRequest`, before it's looked for, so it's refused as that
 /// rather than as one something else has.
-pub(super) async fn valid_branch_name(cwd: &Path, branch: &BranchName) -> Result<(), ApiError> {
+pub(super) async fn valid_branch_name(given: &Environment, cwd: &Path, branch: &BranchName) -> Result<(), ApiError> {
     reject_option_like(branch.as_str(), "a branch name")?;
-    if !git(cwd, &["check-ref-format", "--branch", branch.as_str()]).await?.success {
+    if !git(given, cwd, &["check-ref-format", "--branch", branch.as_str()]).await?.success {
         return Err(ApiError::new(ErrorCode::InvalidRequest, format!("{branch} isn't a valid branch name")));
     }
     Ok(())
@@ -120,15 +132,20 @@ pub(super) async fn exists(path: &Path) -> bool {
     off_thread(path.to_path_buf(), |path| Ok(path.exists())).await.unwrap_or(false)
 }
 
-pub async fn restore_workspace(repo_path: &str, path: &str, branch: &BranchName) -> Result<(), ApiError> {
+pub async fn restore_workspace(
+    given: &Environment,
+    repo_path: &str,
+    path: &str,
+    branch: &BranchName,
+) -> Result<(), ApiError> {
     let repo = PathBuf::from(repo_path);
     if Path::new(path).exists() {
         return Err(ApiError::new(ErrorCode::Conflict, format!("{path} already exists")));
     }
-    if !ref_exists(&repo, &format!("refs/heads/{branch}")).await? {
+    if !ref_exists(given, &repo, &format!("refs/heads/{branch}")).await? {
         return Err(ApiError::new(ErrorCode::Conflict, format!("branch {branch} no longer exists")));
     }
-    let changing = Worktrees::of(&repo).await?.changing().await?;
+    let changing = Worktrees::of(given, &repo).await?.changing().await?;
     // A worktree deleted outside this app stays registered, and would block re-adding this path.
     changing.prune().await?;
     changing.add(&[path, branch.as_str()]).await?.succeeded()?;
@@ -139,29 +156,29 @@ pub async fn restore_workspace(repo_path: &str, path: &str, branch: &BranchName)
 /// worktree of yet, or that's something else, isn't. One a `git worktree add` was stopped part way through is, since
 /// git reads it as one, with its branch checked out and only some of its files. Fails if git couldn't be run to say, so
 /// a hub that settles a record from the answer doesn't take a worktree it couldn't ask about for one that has gone.
-pub async fn worktree_there(path: &str) -> Result<bool, ApiError> {
+pub async fn worktree_there(given: &Environment, path: &str) -> Result<bool, ApiError> {
     let worktree = PathBuf::from(path);
     if !worktree.is_dir() {
         return Ok(false);
     }
-    let top = git(&worktree, &["rev-parse", "--show-toplevel"]).await?;
+    let top = git(given, &worktree, &["rev-parse", "--show-toplevel"]).await?;
     // Git names the top with every link followed, so the path is compared the same way.
     Ok(top.success && std::fs::canonicalize(top.stdout.trim()).ok() == std::fs::canonicalize(&worktree).ok())
 }
 
-async fn any_ref_holds_head(worktree: &Path) -> Result<bool, ApiError> {
-    let holders = git_ok(worktree, &["for-each-ref", "--contains", "HEAD", "--count=1"]).await?;
+async fn any_ref_holds_head(given: &Environment, worktree: &Path) -> Result<bool, ApiError> {
+    let holders = git_ok(given, worktree, &["for-each-ref", "--contains", "HEAD", "--count=1"]).await?;
     Ok(!holders.trim().is_empty())
 }
 
-pub async fn status(path: &str) -> Result<GitStatus, ApiError> {
+pub async fn status(given: &Environment, path: &str) -> Result<GitStatus, ApiError> {
     // Explicit, because `status.showUntrackedFiles=no` in someone's config would otherwise hide new
     // files from this, and from the check that keeps archiving from deleting them.
     let args = ["status", "--porcelain=v2", "--branch", "--untracked-files=normal", "-z"];
     let worktree = Path::new(path);
-    let output = git_ok(worktree, &args).await?;
+    let output = git_ok(given, worktree, &args).await?;
     let mut status = parse_status(&output);
-    status.unreferenced_commits = status.branch.is_none() && !any_ref_holds_head(worktree).await?;
+    status.unreferenced_commits = status.branch.is_none() && !any_ref_holds_head(given, worktree).await?;
     Ok(status)
 }
 
@@ -208,14 +225,14 @@ fn parse_status(output: &str) -> GitStatus {
 }
 
 /// Everything the branch changes against its base, including uncommitted and untracked files.
-pub async fn diff(worktree_path: &str, base_ref: Option<&str>) -> Result<GitDiff, ApiError> {
+pub async fn diff(given: &Environment, worktree_path: &str, base_ref: Option<&str>) -> Result<GitDiff, ApiError> {
     let worktree = Path::new(worktree_path);
-    let base = diff_base(worktree, base_ref).await?;
+    let base = diff_base(given, worktree, base_ref).await?;
     // With no commit at HEAD, git refuses to diff from it, and so there's no diff.
     let from = base.as_ref().map_or("HEAD", CommitId::as_str);
-    let mut patch = git_ok(worktree, &["diff", "--no-color", "--no-ext-diff", from]).await?;
+    let mut patch = git_ok(given, worktree, &["diff", "--no-color", "--no-ext-diff", from]).await?;
 
-    let untracked = git_ok(worktree, &["ls-files", "--others", "--exclude-standard", "-z"]).await?;
+    let untracked = git_ok(given, worktree, &["ls-files", "--others", "--exclude-standard", "-z"]).await?;
     let mut truncated = false;
     for (i, file) in untracked.split('\0').filter(|f| !f.is_empty()).enumerate() {
         if i >= MAX_UNTRACKED_FILES || patch.len() > MAX_UNTRACKED_BYTES {
@@ -224,7 +241,8 @@ pub async fn diff(worktree_path: &str, base_ref: Option<&str>) -> Result<GitDiff
         }
         // --no-index exits 1 when the files differ, so success here doesn't mean exit 0.
         let output =
-            git(worktree, &["diff", "--no-color", "--no-ext-diff", "--no-index", "--", "/dev/null", file]).await?;
+            git(given, worktree, &["diff", "--no-color", "--no-ext-diff", "--no-index", "--", "/dev/null", file])
+                .await?;
         if output.code == Some(0) || output.code == Some(1) {
             patch.push_str(&output.stdout);
         } else {
@@ -237,12 +255,12 @@ pub async fn diff(worktree_path: &str, base_ref: Option<&str>) -> Result<GitDiff
 /// The commit a diff is taken from, by its full object ID, so a client can read a file as it was there: the merge base
 /// with `base_ref`, or HEAD's commit when there's no base ref or git finds no merge base with it. `None` only when
 /// HEAD has no commit yet.
-async fn diff_base(worktree: &Path, base_ref: Option<&str>) -> Result<Option<CommitId>, ApiError> {
+async fn diff_base(given: &Environment, worktree: &Path, base_ref: Option<&str>) -> Result<Option<CommitId>, ApiError> {
     if let Some(base) = base_ref {
-        let merge_base = git(worktree, &["merge-base", base, "HEAD"]).await?;
+        let merge_base = git(given, worktree, &["merge-base", base, "HEAD"]).await?;
         if merge_base.success {
             return Ok(Some(CommitId::from(merge_base.stdout.trim())));
         }
     }
-    commit_of(worktree, "HEAD").await
+    commit_of(given, worktree, "HEAD").await
 }

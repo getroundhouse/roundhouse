@@ -7,6 +7,7 @@ use std::time::Duration;
 
 use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
 
+use process::Environment;
 use protocol::model::AgentLogin;
 
 use super::process::{command, start};
@@ -29,6 +30,8 @@ pub(super) struct OneOff<'a> {
     pub(super) login: Option<&'a AgentLogin>,
     /// Stream-json calls verify their actual login before sending their prompt.
     pub(super) verify_login: bool,
+    /// What its worker gives every process it starts.
+    pub(super) environment: &'a Environment,
 }
 
 /// Runs the call and answers with what it printed and how it exited, which is for the caller to judge. Dropping the
@@ -36,7 +39,7 @@ pub(super) struct OneOff<'a> {
 pub(super) async fn run(call: OneOff<'_>) -> Result<Output, AgentError> {
     let mut command = command(call.bin, call.cwd);
     command.args(&call.args);
-    let mut child = start(&mut command, call.bin, call.cwd, call.login)?;
+    let mut child = start(&mut command, call.bin, call.cwd, call.login, call.environment)?;
     let running = GroupGuard::new(child.id().unwrap_or_default(), call.pid_file.clone());
     let output = tokio::time::timeout(call.timeout, collect(&mut child, &call))
         .await
@@ -95,7 +98,9 @@ mod tests {
         let args = vec!["-c".to_string(), script.to_string()];
         let timeout = Duration::from_secs(20);
         let bin = Path::new("/bin/sh");
-        run(OneOff { bin, cwd: Path::new("/"), args, stdin, timeout, pid_file: None, login: None, verify_login: false })
+        let environment = &Environment::NONE;
+        let cwd = Path::new("/");
+        run(OneOff { bin, cwd, args, stdin, timeout, pid_file: None, login: None, verify_login: false, environment })
             .await
     }
 

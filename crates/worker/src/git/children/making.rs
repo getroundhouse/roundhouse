@@ -2,6 +2,7 @@ use super::super::removal::remove_part_made;
 use super::super::{
     branches, commit_of, exists, made_there, make_on_branch, make_on_new_branch, ref_exists, valid_branch_name,
 };
+use process::Environment;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{CHILDREN, CommitId};
 use protocol::worker::ChildBranch;
@@ -11,6 +12,7 @@ use std::path::{Component, Path};
 /// checked out. One there already on the branch asked for is what was asked for, made by this ask heard before, or by
 /// hand. Whoever calls has `path` to itself.
 pub(crate) async fn add_child_worktree(
+    given: &Environment,
     own: &Path,
     path: &Path,
     on: &ChildBranch,
@@ -21,18 +23,18 @@ pub(crate) async fn add_child_worktree(
         ChildBranch::New { branch, .. } | ChildBranch::Existing { branch } => branch,
     };
     // Run in the workspace's own worktree, as everything here is, so `HEAD` is the commit it has checked out.
-    valid_branch_name(own, branch).await?;
+    valid_branch_name(given, own, branch).await?;
     // One a `git worktree add` was stopped part way through, as when the worker went, is nothing git will finish, so
     // it's removed, and made again below.
-    let had = branches::checked_out(path).await;
-    let stopped_part_way = remove_part_made(own, path).await?;
+    let had = branches::checked_out(given, path).await;
+    let stopped_part_way = remove_part_made(given, own, path).await?;
     // Its folder being a worktree itself, as one made there by hand would be, would have this one made inside it, and
     // go with it when that one is removed.
     let inside_another = match path.parent() {
         Some(folder) => exists(&folder.join(".git")).await,
         None => false,
     };
-    if inside_another || (!stopped_part_way && exists(path).await && !made_there(own, path, branch).await) {
+    if inside_another || (!stopped_part_way && exists(path).await && !made_there(given, own, path, branch).await) {
         return Err(ApiError::new(ErrorCode::NameTaken, format!("{} is taken", path.display())));
     }
     if !exists(path).await {
@@ -41,13 +43,13 @@ pub(crate) async fn add_child_worktree(
         let its_own = ChildBranch::Existing { branch: branch.clone() };
         let reuse_branch = stopped_part_way
             && had.as_ref() == Some(branch)
-            && ref_exists(own, &format!("refs/heads/{branch}")).await?;
+            && ref_exists(given, own, &format!("refs/heads/{branch}")).await?;
         match if reuse_branch { &its_own } else { on } {
-            ChildBranch::New { branch, base } => make_on_new_branch(own, branch, base, path, warnings).await?,
-            ChildBranch::Existing { branch } => make_on_branch(own, branch, path, warnings).await?,
+            ChildBranch::New { branch, base } => make_on_new_branch(given, own, branch, base, path, warnings).await?,
+            ChildBranch::Existing { branch } => make_on_branch(given, own, branch, path, warnings).await?,
         }
     }
-    commit_of(path, "HEAD")
+    commit_of(given, path, "HEAD")
         .await?
         .ok_or_else(|| ApiError::new(ErrorCode::Worker, format!("{} has no commit checked out", path.display())))
 }

@@ -1,4 +1,4 @@
-use super::{agents, children, connection, github, one_off, tools, workspaces, worktree};
+use super::{agents, children, connection, git_credential, github, one_off, tools, workspaces, worktree};
 use crate::client::Outcome;
 use crate::model;
 use crate::model::{AgentAccount, FileContents, FileOpened, WorktreeFiles};
@@ -9,6 +9,7 @@ use children::{AddChildWorktree, ChildWorktreeAdded, WatchChildBranches};
 use connection::{Hello, HelloReply, Received, RunningAgentsReply};
 #[cfg(test)]
 use connection::{RunningAgents, Stop};
+use git_credential::GitCredentialSet;
 use github::{
     GithubRateLimit, PullRequest, PullRequestReply, RateLimit, ReadRemotePullRequests, RemotePullRequestsReply,
 };
@@ -106,6 +107,7 @@ pub enum WorkerRequest {
     TitleFor(TitleFor),
     AccountFor(AccountFor),
     ServeTools(ServeTools),
+    GitCredentialSet(GitCredentialSet),
     /// Any request this build doesn't know, from a hub newer than it. A worker answers with
     /// [`ErrorCode::Unsupported`](crate::client::ErrorCode::Unsupported) and carries on, as a hub does a client's.
     #[serde(other)]

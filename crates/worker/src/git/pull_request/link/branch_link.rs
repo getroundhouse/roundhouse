@@ -1,4 +1,5 @@
 use crate::git::{commit_of, git, git_error, git_ok};
+use process::Environment;
 use protocol::client::ApiError;
 use protocol::model::{BranchName, CommitId};
 use std::collections::HashSet;
@@ -34,9 +35,13 @@ pub(in super::super) fn choose(found: Option<&str>, linked: Option<&str>, has_be
 
 /// The URL of the pull request `branch` is linked to, or `None` when it's linked to none. An error when git couldn't
 /// say, which isn't the same.
-pub(in super::super) async fn linked(worktree: &Path, branch: &BranchName) -> Result<Option<String>, ApiError> {
+pub(in super::super) async fn linked(
+    given: &Environment,
+    worktree: &Path,
+    branch: &BranchName,
+) -> Result<Option<String>, ApiError> {
     // The repository's own config, which is where a branch's settings are, and nowhere else's word for it.
-    let read = git(worktree, &["config", "--local", "--get", &setting(branch)]).await?;
+    let read = git(given, worktree, &["config", "--local", "--get", &setting(branch)]).await?;
     match read.code {
         // Only a URL, since it's passed to `gh`, which would take anything else for a branch or a flag.
         Some(0) => Ok(Some(read.stdout.trim().to_string()).filter(|url| url.starts_with("http"))),
@@ -50,8 +55,8 @@ pub(in super::super) async fn linked(worktree: &Path, branch: &BranchName) -> Re
 /// every worktree of the repository shares its config, and writing it takes a lock that would make an agent's own
 /// write, such as `git push -u`'s, fail meanwhile. One that can't be written is only missed once the pull request
 /// moves on without any of the branch's commits.
-pub(in super::super) async fn link(worktree: &Path, branch: &BranchName, url: &str) {
-    let written = git_ok(worktree, &["config", "--local", "--replace-all", &setting(branch), url]).await;
+pub(in super::super) async fn link(given: &Environment, worktree: &Path, branch: &BranchName, url: &str) {
+    let written = git_ok(given, worktree, &["config", "--local", "--replace-all", &setting(branch), url]).await;
     if let Err(e) = written {
         warn!(%branch, "couldn't link the branch to its pull request: {}", e.message);
     }
@@ -63,21 +68,22 @@ pub(in super::super) async fn link(worktree: &Path, branch: &BranchName, url: &s
 /// from it too, and a pull request from there into another base has its commits. A branch with no commits yet has
 /// been at none. An error when git couldn't say.
 pub(in super::super) async fn has_been_at(
+    given: &Environment,
     worktree: &Path,
     branch: &BranchName,
     commits: &[CommitId],
     its_branch: Option<&BranchName>,
 ) -> Result<bool, ApiError> {
     let own = format!("refs/heads/{branch}");
-    let Some(tip) = commit_of(worktree, &own).await? else { return Ok(false) };
+    let Some(tip) = commit_of(given, worktree, &own).await? else { return Ok(false) };
     let commits: HashSet<&str> = commits.iter().map(CommitId::as_str).collect();
-    let history = git_ok(worktree, &["reflog", "show", "--format=%H%x00%gs", &own, "--"]).await?;
+    let history = git_ok(given, worktree, &["reflog", "show", "--format=%H%x00%gs", &own, "--"]).await?;
     let history: Vec<(&str, &str)> = history.lines().filter_map(|entry| entry.split_once('\0')).collect();
     // Empty in a repository that keeps no reflogs, where only where the branch is now says.
     let Some(&(made_at, made_how)) = history.last() else { return Ok(commits.contains(tip.as_str())) };
     let shared_start = commits.contains(made_at)
         && match made_from(made_how) {
-            Some(start) => remote_branch(start, &remotes(worktree).await?)
+            Some(start) => remote_branch(start, &remotes(given, worktree).await?)
                 .is_some_and(|name| Some(name) != its_branch.map(BranchName::as_str)),
             None => false,
         };
@@ -98,8 +104,8 @@ pub(in super::super) fn remote_branch<'a>(start: &'a str, remotes: &[String]) ->
     names.min_by_key(|name| name.len())
 }
 
-async fn remotes(worktree: &Path) -> Result<Vec<String>, ApiError> {
-    Ok(git_ok(worktree, &["remote"]).await?.lines().map(str::to_string).collect())
+async fn remotes(given: &Environment, worktree: &Path) -> Result<Vec<String>, ApiError> {
+    Ok(git_ok(given, worktree, &["remote"]).await?.lines().map(str::to_string).collect())
 }
 
 fn setting(branch: &BranchName) -> String {

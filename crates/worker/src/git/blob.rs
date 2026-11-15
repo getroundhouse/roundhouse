@@ -5,6 +5,7 @@ use std::ops::ControlFlow;
 use std::path::Path;
 use std::process::Stdio;
 
+use process::Environment;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::CommitId;
 use tokio::io::AsyncReadExt as _;
@@ -19,19 +20,26 @@ const CHUNK_BYTES: usize = 256 * 1024;
 pub(crate) struct Blob {
     object: String,
     pub(crate) bytes: u64,
+    /// What the git that reads it is given.
+    given: Environment,
 }
 
 /// The file at `path` in `commit`, from the repository of the worktree at `worktree`. Refused as an invalid request
 /// unless `commit` is a full object ID, so it can't be taken for an option or name a branch that has moved since the
 /// diff, and when the commit has a folder or a submodule there. Refused as not found when the repository has no such
 /// commit, or the commit has nothing there. A link isn't followed, and is the path it leads to, as the commit holds it.
-pub(crate) async fn find(worktree: &Path, commit: &CommitId, path: &str) -> Result<Blob, ApiError> {
+pub(crate) async fn find(
+    given: &Environment,
+    worktree: &Path,
+    commit: &CommitId,
+    path: &str,
+) -> Result<Blob, ApiError> {
     if !is_object_id(commit.as_str()) {
         return Err(ApiError::new(ErrorCode::InvalidRequest, format!("{commit} isn't a commit's full object ID")));
     }
     // Literal, so a name such as `:notes.txt` is only itself, rather than what git reads into it.
     let args = ["--literal-pathspecs", "ls-tree", "-l", "-z", commit.as_str(), "--", path];
-    let output = run(worktree, &args).await?;
+    let output = run(given, worktree, &args).await?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         return Err(ApiError::new(ErrorCode::NotFound, format!("{commit} isn't here: {}", stderr.trim())));
@@ -43,13 +51,13 @@ pub(crate) async fn find(worktree: &Path, commit: &CommitId, path: &str) -> Resu
     let (b"blob", Some(bytes)) = (entry.kind, entry.bytes) else {
         return Err(ApiError::new(ErrorCode::InvalidRequest, format!("{path} isn't a file in {commit}")));
     };
-    Ok(Blob { object: entry.object, bytes })
+    Ok(Blob { object: entry.object, bytes, given: given.clone() })
 }
 
 impl Blob {
     /// Its bytes, all of them.
     pub(crate) async fn read(&self, worktree: &Path) -> Result<Vec<u8>, ApiError> {
-        let output = run(worktree, &["cat-file", "blob", &self.object]).await?;
+        let output = run(&self.given, worktree, &["cat-file", "blob", &self.object]).await?;
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
             return Err(git_error(format!("couldn't read {}: {}", self.object, stderr.trim())));
@@ -63,7 +71,7 @@ impl Blob {
         worktree: &Path,
         each: impl FnMut(&[u8]) -> ControlFlow<()>,
     ) -> Result<Streamed, ApiError> {
-        stream(worktree, &self.object, each).await
+        stream(&self.given, worktree, &self.object, each).await
     }
 
     /// Its first `most` bytes, or all of it if it's shorter, and no more, so a big file costs only its start.
@@ -89,12 +97,13 @@ pub(crate) struct Streamed {
 /// when git is stopped too. So a big file is never held whole by the worker, and what's past the part needed isn't
 /// read. Refused as not found when git reads nothing of it and fails, as for an object that isn't there.
 async fn stream(
+    given: &Environment,
     worktree: &Path,
     object: &str,
     mut each: impl FnMut(&[u8]) -> ControlFlow<()>,
 ) -> Result<Streamed, ApiError> {
     let failed = |e: std::io::Error| git_error(format!("couldn't read {object}: {e}"));
-    let mut git = command(worktree, &["cat-file", "blob", object])
+    let mut git = command(given, worktree, &["cat-file", "blob", object])
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .spawn()
@@ -157,6 +166,7 @@ fn entry(line: &[u8]) -> Option<Entry<'_>> {
 
 #[cfg(test)]
 mod tests {
+    use process::Environment;
     use protocol::model::CommitId;
 
     use super::{entry, find, is_object_id};
@@ -171,8 +181,10 @@ mod tests {
         run(&repo, &["add", "."]);
         run(&repo, &["commit", "-qm", "long"]);
         let commit = CommitId::from(run(&repo, &["rev-parse", "HEAD"]));
-        let (long, short) =
-            (find(&repo, &commit, "long.txt").await.unwrap(), find(&repo, &commit, "a.txt").await.unwrap());
+        let (long, short) = (
+            find(&Environment::NONE, &repo, &commit, "long.txt").await.unwrap(),
+            find(&Environment::NONE, &repo, &commit, "a.txt").await.unwrap(),
+        );
 
         let (start, all) = (long.start(&repo, 10).await.unwrap(), short.start(&repo, 10).await.unwrap());
 

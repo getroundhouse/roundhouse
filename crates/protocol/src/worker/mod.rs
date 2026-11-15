@@ -12,6 +12,7 @@ mod ask;
 mod children;
 mod connection;
 mod frames;
+mod git_credential;
 mod github;
 mod one_off;
 pub mod previous;
@@ -29,6 +30,7 @@ pub use ask::{
 pub use children::{AddChildWorktree, ChildBranch, ChildWorktreeAdded, WatchChildBranches};
 pub use connection::{Hello, HelloReply, Received, RunningAgent, RunningAgents, RunningAgentsReply, Stop};
 pub use frames::WorkerFrame;
+pub use git_credential::{GitCredential, GitCredentialSet, GithubCredential};
 pub use github::{
     GH_RUNS_WITHIN, GithubRateLimit, PullRequest, PullRequestReply, RateLimit, ReadRemotePullRequests,
     RemotePullRequestsReply,

@@ -34,6 +34,7 @@ pub async fn account(options: &AgentOptions, scratch_dir: &Path) -> Result<Agent
         pid_file,
         login,
         verify_login: false,
+        environment: &options.environment,
     };
     let output = one_off::run(call).await?;
     // How it exited isn't looked at: what it printed says whether anyone is logged in.

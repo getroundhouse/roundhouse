@@ -18,6 +18,7 @@ mod model_offers;
 mod options;
 mod output;
 mod registry;
+mod starting;
 mod stdio;
 mod tap;
 #[cfg(any(test, feature = "testing"))]

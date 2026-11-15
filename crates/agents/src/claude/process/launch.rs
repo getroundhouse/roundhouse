@@ -3,7 +3,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 
-use process::ProcessRecord;
+use process::{Environment, ProcessRecord};
 use protocol::model::{AgentLogin, SessionSettings};
 use protocol::worker::AgentSpec;
 use tokio::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command};
@@ -113,7 +113,7 @@ pub(super) fn launch(
     if let Some(tools) = options.tools.as_ref().and_then(super::tools::args) {
         command.args(tools).env(super::tools::TAKES_TASKS, "1");
     }
-    let mut child = start(&mut command, bin, cwd, options.login.as_ref())?;
+    let mut child = start(&mut command, bin, cwd, options.login.as_ref(), &options.environment)?;
     let pid = child.id().unwrap_or_default();
     record(options.pid_file.as_deref(), pid);
     let (Some(stdin), Some(stdout), Some(stderr)) = (child.stdin.take(), child.stdout.take(), child.stderr.take())
@@ -136,20 +136,18 @@ pub(in crate::claude) fn command(bin: &Path, cwd: &Path) -> Command {
     command
 }
 
-/// Starts `command`, which runs `bin` in `cwd`, under `login` if its hub sent one, and says which if it can't. The
-/// login goes on here, last, so every start of the CLI has it and nothing a caller set can undo it.
+/// Starts `command`, which runs `bin` in `cwd`, under `login` if its hub sent one, with what its worker gives every
+/// process, and says which if it can't. The login goes on here, last but for that, so every start of the CLI has it
+/// and nothing a caller set can undo it.
 pub(in crate::claude) fn start(
     command: &mut Command,
     bin: &Path,
     cwd: &Path,
     login: Option<&AgentLogin>,
+    environment: &Environment,
 ) -> Result<Child, AgentError> {
     crate::claude::login::run_under(command, login);
-    command.spawn().map_err(|source| AgentError::Start {
-        bin: bin.display().to_string(),
-        cwd: cwd.display().to_string(),
-        source,
-    })
+    crate::starting::start(command, bin, cwd, environment)
 }
 
 /// Records a running process at `pid_file`, so the provider can stop it if this worker is killed. Failing to only

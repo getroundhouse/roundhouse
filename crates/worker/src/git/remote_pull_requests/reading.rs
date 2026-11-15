@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
+use process::Environment;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{GitHubRepository, PrState, PullRequestNumber, PullRequestSelection, PullRequestsSnapshot};
 use serde_json::Value;
@@ -9,13 +10,14 @@ use super::{parse, query};
 use crate::git::pull_request::{Unran, run_gh};
 
 pub(crate) async fn read(
+    given: &Environment,
     path: &str,
     repository: Option<GitHubRepository>,
     requested: &PullRequestSelection,
 ) -> protocol::worker::RemotePullRequestsReply {
     let mut reader = Reader {
         path,
-        source: Gh,
+        source: Gh(given),
         repository,
         rate_limit: None,
         cost: 0,
@@ -29,10 +31,11 @@ pub(crate) async fn read(
 pub(super) trait Query {
     async fn run(&mut self, path: &str, args: &[&str]) -> Result<Value, ApiError>;
 }
-pub(super) struct Gh;
-impl Query for Gh {
+/// `gh`, with what the worker gives every process it starts.
+pub(super) struct Gh<'a>(pub(super) &'a Environment);
+impl Query for Gh<'_> {
     async fn run(&mut self, path: &str, args: &[&str]) -> Result<Value, ApiError> {
-        gh(path, args).await
+        gh(self.0, path, args).await
     }
 }
 
@@ -286,8 +289,8 @@ pub(super) fn next(connection: &Value) -> Result<Option<String>, ApiError> {
     }
 }
 
-pub(super) async fn gh(path: &str, args: &[&str]) -> Result<Value, ApiError> {
-    let output = run_gh(path, args).await.map_err(|e| match e {
+pub(super) async fn gh(given: &Environment, path: &str, args: &[&str]) -> Result<Value, ApiError> {
+    let output = run_gh(given, path, args).await.map_err(|e| match e {
         Unran::Missing => ApiError::new(ErrorCode::Unavailable, "gh isn't installed"),
         Unran::Failed(why) => ApiError::new(ErrorCode::Worker, why),
     })?;

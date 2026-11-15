@@ -1,3 +1,4 @@
+use process::Environment;
 use protocol::model::{Checks, LeftQueue, Local, MergeState, PrState, PullRequest, QueueState, Review};
 
 use super::super::tests::{new_repo, run};
@@ -181,9 +182,9 @@ async fn the_worktree_is_counted_against_the_pull_requests_head() {
     std::fs::write(repo.join("c.txt"), "three\n").unwrap();
     let path = repo.to_str().unwrap();
 
-    let ahead = local(path, Some(&pushed)).await;
-    let elsewhere = local(path, Some("0123456789abcdef0123456789abcdef01234567")).await;
-    let unknown = local(path, None).await;
+    let ahead = local(&Environment::NONE, path, Some(&pushed)).await;
+    let elsewhere = local(&Environment::NONE, path, Some("0123456789abcdef0123456789abcdef01234567")).await;
+    let unknown = local(&Environment::NONE, path, None).await;
 
     assert_eq!(ahead, Local { uncommitted: 1, ahead: 1, behind: 0 });
     // A head that isn't here is a commit to pull, however far the upstream says it is, and this branch has none.
@@ -203,7 +204,7 @@ async fn a_commit_pushed_before_github_says_so_isnt_counted_as_not_pushed() {
     // As `git push` leaves it.
     run(&repo, &["update-ref", "refs/remotes/origin/feature", "HEAD"]);
 
-    let lagging = local(repo.to_str().unwrap(), Some(&before)).await;
+    let lagging = local(&Environment::NONE, repo.to_str().unwrap(), Some(&before)).await;
 
     assert_eq!(lagging, Local { uncommitted: 0, ahead: 0, behind: 0 });
 }

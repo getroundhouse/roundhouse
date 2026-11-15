@@ -17,7 +17,7 @@ use crate::branch_watch::tests::PATIENCE;
 use crate::git::tests::{new_repo, prepare, run};
 use crate::serve::moves::tests::BOUND;
 use crate::serve::{Worker, handle};
-use crate::{Config, Deleter};
+use crate::{Config, CredentialHelper, Deleter};
 
 fn watch() -> AbortHandle {
     tokio::spawn(std::future::pending::<()>()).abort_handle()
@@ -77,6 +77,8 @@ fn config(dir: &Path) -> Config {
         antigravity_bin: None,
         scratch_dir: dir.to_path_buf(),
         deleter: Deleter::new("/bin/rm", ["-rf", "--"]),
+        // Never run here, since nothing these start asks git for a credential.
+        credential_helper: CredentialHelper::new("/bin/false", ["--"]),
         refused: None,
         timers: crate::Timers::DEFAULT,
     }

@@ -1,3 +1,4 @@
+use process::Environment;
 use std::fmt::Write as _;
 
 use proptest::prelude::*;
@@ -182,16 +183,20 @@ async fn a_file_too_big_to_send_whole_is_opened_and_read_a_page_at_a_time() {
     run(&repo, &["commit", "-qm", "files"]);
     let commit = CommitId::from(run(&repo, &["rev-parse", "HEAD"]));
 
-    let FileOpened::Text(big) = open_at(&repo, &commit, "big.log").await.unwrap() else { panic!("not text") };
-    let FileOpened::Text(long) = open_at(&repo, &commit, "long.txt").await.unwrap() else { panic!("not text") };
-    let read = pages(&repo, &commit, "big.log", big.page_lines, &[586]).await.unwrap();
+    let FileOpened::Text(big) = open_at(&Environment::NONE, &repo, &commit, "big.log").await.unwrap() else {
+        panic!("not text")
+    };
+    let FileOpened::Text(long) = open_at(&Environment::NONE, &repo, &commit, "long.txt").await.unwrap() else {
+        panic!("not text")
+    };
+    let read = pages(&Environment::NONE, &repo, &commit, "big.log", big.page_lines, &[586]).await.unwrap();
 
     assert_eq!((big.lines, big.page_lines, big.pages.len()), (200_000, PAGE_LINES, 0), "none sent with it");
     let line = &long.pages[0].lines[0];
     assert_eq!((line.text.len(), line.cut), (100_000, None), "a small one comes whole, its long lines too");
     let first = read.pages.first().map(|page| (page.index, page.lines[0].text.clone()));
     assert_eq!(first, Some((586, format!("line {:>20}", 586 * PAGE_LINES + 1))));
-    assert_eq!(open_at(&repo, &commit, "data.bin").await.unwrap(), FileOpened::NotText);
+    assert_eq!(open_at(&Environment::NONE, &repo, &commit, "data.bin").await.unwrap(), FileOpened::NotText);
 }
 
 #[tokio::test]
@@ -199,7 +204,8 @@ async fn pages_of_what_the_commit_doesnt_hold_or_of_no_size_are_refused() {
     let dir = tempfile::tempdir().unwrap();
     let repo = new_repo(dir.path());
     let commit = CommitId::from(run(&repo, &["rev-parse", "HEAD"]));
-    let refused = async |path, size| pages(&repo, &commit, path, size, &[0]).await.unwrap_err().code;
+    let refused =
+        async |path, size| pages(&Environment::NONE, &repo, &commit, path, size, &[0]).await.unwrap_err().code;
 
     assert_eq!(refused("none.txt", 256).await, ErrorCode::NotFound);
     assert_eq!(refused("a.txt", 0).await, ErrorCode::InvalidRequest);
