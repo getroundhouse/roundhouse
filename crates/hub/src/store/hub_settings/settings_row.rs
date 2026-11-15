@@ -1,9 +1,12 @@
 use super::super::{Store, StoreError, from_text, lock, rev_of, text_of};
-use protocol::model::{AccountDefault, AccountId, AgentKind, HubId, HubSettings, HubSettingsChange};
+use protocol::model::{
+    AccountDefault, AccountId, AgentKind, GithubAccountId, GithubSettings, HubId, HubSettings, HubSettingsChange,
+};
 use rusqlite::{Connection, params};
 
 pub(in super::super) fn hub_settings(conn: &Connection) -> rusqlite::Result<HubSettings> {
-    conn.query_row("SELECT keep_awake, allow_asked_in_full_access, rev FROM hub_settings", [], |row| {
+    let columns = "keep_awake, allow_asked_in_full_access, rev, github_account_id";
+    conn.query_row(&format!("SELECT {columns} FROM hub_settings"), [], |row| {
         // The outer SELECT remains active while the defaults are read, keeping one SQLite snapshot.
         let mut defaults = conn.prepare_cached("SELECT agent, account_id FROM account_defaults ORDER BY agent")?;
         let account_defaults = defaults
@@ -15,6 +18,7 @@ pub(in super::super) fn hub_settings(conn: &Connection) -> rusqlite::Result<HubS
             account_defaults: Some(account_defaults),
             keep_awake: row.get(0)?,
             allow_asked_in_full_access: Some(row.get(1)?),
+            github: Some(GithubSettings { account: row.get::<_, Option<String>>(3)?.map(GithubAccountId::from) }),
             rev: rev_of(row, 2)?,
         })
     })
@@ -29,6 +33,19 @@ impl Store {
                 ON CONFLICT (agent) DO UPDATE SET account_id = excluded.account_id
                 WHERE account_id != excluded.account_id",
                 params![text_of(&agent), account.as_str()],
+            )?;
+            hub_settings(tx)
+        })
+    }
+
+    /// Makes `account` the default GitHub account, or each machine's own login with `None`. Called with the GitHub
+    /// logins' lock held, after checking the account and its login. Only a default that ends up different gives the
+    /// settings a newer revision.
+    pub(crate) fn set_github_default(&self, account: Option<&GithubAccountId>) -> Result<HubSettings, StoreError> {
+        self.lasting(|tx| {
+            tx.execute(
+                "UPDATE hub_settings SET github_account_id = ?1 WHERE github_account_id IS NOT ?1",
+                [account.map(GithubAccountId::as_str)],
             )?;
             hub_settings(tx)
         })

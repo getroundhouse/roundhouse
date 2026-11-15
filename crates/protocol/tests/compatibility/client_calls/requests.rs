@@ -1,9 +1,11 @@
 //! Every request of the hub itself, for its records or its agents' logins, or about a workspace, as a client writes it
 //! and a hub reads it.
 
-use protocol::client::{ClientRequest, Hello, accounts, admin, comments, drafts, files, records, workspaces};
+use protocol::client::{
+    ClientRequest, Hello, accounts, admin, comments, drafts, files, github_accounts, records, workspaces,
+};
 use protocol::frame;
-use protocol::model::{AgentKind, CommentDraft, DiffSide, HubSettingsChange, LoginToken};
+use protocol::model::{AgentKind, CommentDraft, DiffSide, GithubToken, HubSettingsChange, LoginToken};
 
 use super::asked;
 
@@ -57,6 +59,29 @@ fn every_request_about_an_agents_login_keeps_its_form() {
         ClientRequest::AccountDisconnect(accounts::AccountDisconnect { id: "claude-1".into() }),
         r#"{"method":"account_disconnect","id":"claude-1"}"#,
     );
+}
+
+#[test]
+fn every_request_about_a_github_account_keeps_its_form() {
+    let connect = |id: Option<&str>| {
+        ClientRequest::GithubAccountConnect(github_accounts::GithubAccountConnect {
+            token: GithubToken::new("a-made-up-token"),
+            id: id.map(Into::into),
+        })
+    };
+    asked(connect(None), r#"{"method":"github_account_connect","token":"a-made-up-token"}"#);
+    asked(connect(Some("g")), r#"{"method":"github_account_connect","token":"a-made-up-token","id":"g"}"#);
+    asked(
+        ClientRequest::GithubAccountDisconnect(github_accounts::GithubAccountDisconnect { id: "g".into() }),
+        r#"{"method":"github_account_disconnect","id":"g"}"#,
+    );
+    let default = |account: Option<&str>| {
+        ClientRequest::GithubAccountSetDefault(github_accounts::GithubAccountSetDefault {
+            account: account.map(Into::into),
+        })
+    };
+    asked(default(Some("g")), r#"{"method":"github_account_set_default","account":"g"}"#);
+    asked(default(None), r#"{"method":"github_account_set_default","account":null}"#);
 }
 
 #[test]

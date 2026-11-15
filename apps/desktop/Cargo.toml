@@ -72,6 +72,7 @@ dictation = { workspace = true, features = ["testing"] }
 fetching = { workspace = true, features = ["testing"] }
 hub = { workspace = true, features = ["testing"] }
 look = { workspace = true, features = ["testing"] }
+process = { workspace = true, features = ["testing"] }
 protocol = { workspace = true, features = ["testing"] }
 transcript = { workspace = true, features = ["testing"] }
 worker = { workspace = true, features = ["testing"] }

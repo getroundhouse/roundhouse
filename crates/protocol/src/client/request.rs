@@ -6,8 +6,8 @@
 use serde::{Deserialize, Serialize};
 
 use super::{
-    Hello, accounts, admin, agent, attachments, comments, drafts, files, log, new_workspace, queue, records, sessions,
-    subscriptions, waits, workspaces,
+    Hello, accounts, admin, agent, attachments, comments, drafts, files, github_accounts, log, new_workspace, queue,
+    records, sessions, subscriptions, waits, workspaces,
 };
 
 /// Every request, each with a type of its own that names what it's answered with. One with no fields is a variant with
@@ -74,6 +74,9 @@ pub enum ClientRequest {
     AccountConnect(accounts::AccountConnect),
     AccountSetDefault(accounts::AccountSetDefault),
     AccountDisconnect(accounts::AccountDisconnect),
+    GithubAccountConnect(github_accounts::GithubAccountConnect),
+    GithubAccountDisconnect(github_accounts::GithubAccountDisconnect),
+    GithubAccountSetDefault(github_accounts::GithubAccountSetDefault),
     WorkspaceFiles(files::WorkspaceFiles),
     WorkspaceFolderRead(files::WorkspaceFolderRead),
     WorkspaceFileRead(files::WorkspaceFileRead),

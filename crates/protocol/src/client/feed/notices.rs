@@ -1,5 +1,6 @@
 use crate::model::{
-    Account, DiffComment, HubSettings, NewWorkspaceDraft, Record, RecordKey, Repo, Rev, Session, Subagent, Workspace,
+    Account, DiffComment, GithubAccount, HubSettings, NewWorkspaceDraft, Record, RecordKey, Repo, Rev, Session,
+    Subagent, Workspace,
 };
 use serde::{Deserialize, Serialize};
 
@@ -18,6 +19,7 @@ pub enum HubNotice {
     /// A subagent's record changed. A client keeps those of the sessions it's showing, which it lists with
     /// `SessionSubagents`.
     Subagent(Subagent),
+    GithubAccount(GithubAccount),
     /// The record is gone, as of `rev`.
     Removed {
         record: RecordKey,
@@ -75,6 +77,7 @@ impl TryFrom<HubNotice> for RecordNotice {
             HubNotice::Account(account) => Record::Account(account),
             HubNotice::NewWorkspaceDraft(draft) => Record::NewWorkspaceDraft(draft),
             HubNotice::Subagent(subagent) => Record::Subagent(subagent),
+            HubNotice::GithubAccount(account) => Record::GithubAccount(account),
             HubNotice::Removed { record, rev } => return Ok(RecordNotice::Removed { record, rev }),
             HubNotice::Resync | HubNotice::Unknown => return Err(notice),
         };
@@ -93,6 +96,7 @@ impl From<Record> for HubNotice {
             Record::Account(account) => HubNotice::Account(account),
             Record::NewWorkspaceDraft(draft) => HubNotice::NewWorkspaceDraft(draft),
             Record::Subagent(subagent) => HubNotice::Subagent(subagent),
+            Record::GithubAccount(account) => HubNotice::GithubAccount(account),
         }
     }
 }

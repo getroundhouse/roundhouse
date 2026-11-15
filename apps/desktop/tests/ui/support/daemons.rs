@@ -2,7 +2,6 @@
 
 use std::fs::File;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::sync::OnceLock;
 
 /// The binaries live in other packages, so `cargo test -p desktop` wouldn't otherwise rebuild them. They're in the
@@ -21,10 +20,8 @@ pub(crate) fn binaries() -> &'static PathBuf {
 /// Builds the hub and the examples, with the whole workspace's features as `docs/rust.md` says, and answers the folder
 /// Cargo says it put the hub in. Naming the examples in the same build is what gives the hub those features too.
 fn build_binaries() -> String {
-    let output = Command::new(env!("CARGO"))
+    let output = process::testing::workspace_build()
         .args([
-            "build",
-            "--workspace",
             "--bin",
             "roundhoused",
             "--example",

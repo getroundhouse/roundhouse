@@ -22,6 +22,7 @@ mod calls;
 mod capabilities;
 mod client_calls;
 mod events;
+mod github_accounts;
 mod hellos;
 mod outputs;
 mod previous;

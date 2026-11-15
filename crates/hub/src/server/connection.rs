@@ -8,8 +8,8 @@ use crate::versions;
 use parking_lot::Mutex;
 use protocol::client::{
     ApiError, ClientRequest, ClientResponse, ErrorCode, Hello, HelloReply, HubFrame, ReplyOutcome, accounts, admin,
-    agent, attachments, comments, drafts, files, log, new_workspace, queue, records, sessions, subscriptions, waits,
-    workspaces,
+    agent, attachments, comments, drafts, files, github_accounts, log, new_workspace, queue, records, sessions,
+    subscriptions, waits, workspaces,
 };
 use protocol::frame::Call;
 use protocol::model::{Place, Seq};
@@ -323,6 +323,11 @@ async fn handle(
         R::SessionAssignAccount(asked) => C::Session(hub.session_assign_account(asked).await?),
         R::AccountConnect(asked) => C::Account(hub.account_connect(asked).await?),
         R::AccountDisconnect(accounts::AccountDisconnect { id }) => C::Account(hub.account_disconnect(id).await?),
+        R::GithubAccountConnect(asked) => C::GithubAccount(hub.github_account_connect(asked).await?),
+        R::GithubAccountDisconnect(github_accounts::GithubAccountDisconnect { id }) => {
+            C::GithubAccount(hub.github_account_disconnect(id).await?)
+        }
+        R::GithubAccountSetDefault(asked) => C::HubSettings(hub.github_account_set_default(asked).await?),
         R::SessionQueue(queue::SessionQueue { id, client_msg_id, prompt }) => {
             C::Session(hub.session_queue(id, client_msg_id, prompt).await?)
         }

@@ -12,6 +12,7 @@ pub mod comments;
 pub mod drafts;
 mod feed;
 pub mod files;
+pub mod github_accounts;
 mod hello;
 pub mod log;
 pub mod new_workspace;

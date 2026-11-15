@@ -91,6 +91,13 @@ ids!(
     /// asked, so a hub that hears the ask again, as each new hub does what the last didn't answer, makes it once.
     /// Unique within the session that asked, as a tool use's ID is.
     AskKey,
+    /// A GitHub account the hub holds, as a UUID the hub chose, since one GitHub user can be connected more than once,
+    /// as with two tokens of different access.
+    GithubAccountId,
+    /// A GitHub user's name, such as `ada`, as GitHub spells it. GitHub's API calls it the user's `login`, a word that
+    /// here means a credential. The user can change it, and GitHub compares it without case, so a user is told apart
+    /// by its [`GithubUserId`](super::GithubUserId).
+    GithubUsername,
 );
 
 impl SubagentId {

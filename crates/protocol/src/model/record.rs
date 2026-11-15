@@ -5,8 +5,8 @@
 use serde::{Deserialize, Serialize};
 
 use super::{
-    Account, AccountId, CommentId, DiffComment, HubSettings, NewWorkspaceDraft, Repo, RepoId, Rev, Session, SessionId,
-    Subagent, SubagentId, Workspace, WorkspaceId,
+    Account, AccountId, CommentId, DiffComment, GithubAccount, GithubAccountId, HubSettings, NewWorkspaceDraft, Repo,
+    RepoId, Rev, Session, SessionId, Subagent, SubagentId, Workspace, WorkspaceId,
 };
 
 /// Which record, of which kind. A kind this build doesn't know reads as `Unknown`.
@@ -38,6 +38,11 @@ pub enum RecordKey {
         session_id: SessionId,
         subagent: SubagentId,
     },
+    /// Disconnecting one keeps its record, so the hub never removes one, and this isn't sent, as [`GithubAccount`]
+    /// says.
+    GithubAccount {
+        id: GithubAccountId,
+    },
     #[serde(other)]
     Unknown,
 }
@@ -54,6 +59,7 @@ pub enum Record {
     NewWorkspaceDraft(NewWorkspaceDraft),
     /// Listed by session, apart from [`Records`], since a session can have many.
     Subagent(Subagent),
+    GithubAccount(GithubAccount),
 }
 
 impl Record {
@@ -69,6 +75,7 @@ impl Record {
             Record::Subagent(subagent) => {
                 RecordKey::Subagent { session_id: subagent.session_id.clone(), subagent: subagent.id() }
             }
+            Record::GithubAccount(account) => RecordKey::GithubAccount { id: account.id.clone() },
         }
     }
 
@@ -83,6 +90,7 @@ impl Record {
             Record::Account(account) => account.rev,
             Record::NewWorkspaceDraft(draft) => draft.rev,
             Record::Subagent(subagent) => subagent.rev,
+            Record::GithubAccount(account) => account.rev,
         }
     }
 }
@@ -103,6 +111,9 @@ pub struct Records {
     /// `None` from a hub from before it kept one.
     #[serde(default)]
     pub new_workspace_draft: Option<NewWorkspaceDraft>,
+    /// Empty from a hub that keeps no GitHub accounts, as its settings' `github` says.
+    #[serde(default)]
+    pub github_accounts: Vec<GithubAccount>,
     /// The hub's newest revision when this was read. A record missing from the list is gone, unless
     /// a client holds a copy newer than this.
     pub rev: Rev,
@@ -111,14 +122,39 @@ pub struct Records {
 impl Records {
     /// Each record in the list, of every kind. The list's own revision is `rev`, which this leaves out.
     pub fn into_records(self) -> impl Iterator<Item = Record> {
-        let Records { repos, workspaces, sessions, comments, hub_settings, accounts, new_workspace_draft, rev: _ } =
-            self;
+        let Records {
+            repos,
+            workspaces,
+            sessions,
+            comments,
+            hub_settings,
+            accounts,
+            new_workspace_draft,
+            github_accounts,
+            rev: _,
+        } = self;
         let records = repos.into_iter().map(Record::Repo);
         let records = records.chain(workspaces.into_iter().map(Record::Workspace));
         let records = records.chain(sessions.into_iter().map(Record::Session));
         let records = records.chain(comments.into_iter().map(Record::Comment));
         let records = records.chain(hub_settings.into_iter().map(Record::HubSettings));
         let records = records.chain(accounts.into_iter().map(Record::Account));
-        records.chain(new_workspace_draft.into_iter().map(Record::NewWorkspaceDraft))
+        let records = records.chain(new_workspace_draft.into_iter().map(Record::NewWorkspaceDraft));
+        records.chain(github_accounts.into_iter().map(Record::GithubAccount))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::fixtures;
+
+    #[test]
+    fn a_list_gives_its_github_accounts_as_records() {
+        let list = Records { github_accounts: vec![fixtures::github_account("g")], ..Records::default() };
+
+        let keys: Vec<RecordKey> = list.into_records().map(|record| record.key()).collect();
+
+        assert_eq!(keys, [RecordKey::GithubAccount { id: "g".into() }]);
     }
 }

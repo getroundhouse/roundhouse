@@ -1,4 +1,6 @@
-use crate::model::{DiffComment, DiffSide, HubSettings, NewWorkspaceDraft, Record, RecordKey, Repo, Rev, Subagent};
+use crate::model::{
+    DiffComment, DiffSide, GithubAccount, HubSettings, NewWorkspaceDraft, Record, RecordKey, Repo, Rev, Subagent,
+};
 
 use super::{HubNotice, RecordNotice};
 
@@ -29,6 +31,7 @@ fn of_a_record() -> Vec<(HubNotice, RecordKey, Rev)> {
                 account_defaults: None,
                 keep_awake: true,
                 allow_asked_in_full_access: Some(true),
+                github: None,
                 rev: Rev::new(4),
             }),
             RecordKey::HubSettings,
@@ -41,6 +44,11 @@ fn of_a_record() -> Vec<(HubNotice, RecordKey, Rev)> {
             Rev::new(6),
         ),
         (HubNotice::Removed { record: gone.clone(), rev: Rev::new(7) }, gone, Rev::new(7)),
+        (
+            HubNotice::GithubAccount(GithubAccount { rev: Rev::new(8), ..crate::fixtures::github_account("g") }),
+            RecordKey::GithubAccount { id: "g".into() },
+            Rev::new(8),
+        ),
     ]
 }
 
