@@ -12,13 +12,13 @@ use tracing::warn;
 pub(in super::super) enum Following {
     /// Every event, and the next `seq` to send.
     Log { next: Seq },
-    /// The agent's own events, or those of the subagent `subagent` started, and the next place to send. Its tail and
+    /// The agent's own events, or those of the subagent `subagent`, and the next place to send. Its tail and
     /// deltas are only what that one is writing.
     Places { subagent: Option<SubagentId>, next: Place },
 }
 
 impl Following {
-    /// Whether what the agent, or the subagent `subagent` started, records or writes is part of this.
+    /// Whether what the agent, or the subagent `subagent`, records or writes is part of this.
     pub(super) fn takes(&self, subagent: Option<&SubagentId>) -> bool {
         match self {
             Following::Log { .. } => true,

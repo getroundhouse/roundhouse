@@ -27,7 +27,7 @@ const LIVE_CAPACITY: usize = 4096;
 
 #[derive(Clone, Debug)]
 pub(crate) enum LiveItem {
-    /// The log now reaches `seq`, with an event from the subagent `subagent` started, or the agent's own.
+    /// The log now reaches `seq`, with an event from the subagent `subagent`, or the agent's own.
     Appended {
         seq: Seq,
         subagent: Option<SubagentId>,

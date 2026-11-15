@@ -47,8 +47,8 @@ pub(super) fn draw(
     let mut line = Line::new(ICON, call.title())
         .part(agent::shown_kind(call.kind).map(|kind| Part::Chip(kind.to_string().into())))
         .part(standing(subagent).map(|standing| Part::Note(standing.into())));
-    // The tab reads the subagent's work by its call, which only a hub that keeps it apart can, whether or not its
-    // record has come, or ever will, as for one recorded before the agent said when its subagents started.
+    // The tab reads the work of the subagent its call started, which only a hub that keeps it apart can, whether or not
+    // its record has come, or ever will, as for one recorded before the agent said when its subagents started.
     if let Some(subagent) = subagent.filter(|s| s.apart) {
         let id = ElementId::Name(format!("open-subagent/{}", subagent.call).into());
         line = line.action(open_tab(id, subagent.call.clone(), call.title(), &toggle.shared.this));

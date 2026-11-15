@@ -20,7 +20,7 @@ pub enum Law {
     /// A call's result comes after the call, and a call has one result at most.
     ResultFollowsCall,
     /// A subagent ends only after it started, by the hub once at most and before the agent, and by the agent once at
-    /// most.
+    /// most, each time it starts, since one can start again once it's ended, as one given more work does.
     SubagentEndsOnce,
     /// Nothing is recorded of a run after it exited but its launch's start, which can come after a quick exit.
     NothingAfterExit,
@@ -92,7 +92,7 @@ impl Ledger {
             broken.push(Law::ResultFollowsCall);
         }
         if let Some(subagent) = body.subagent_started() {
-            self.subagents.record(subagent);
+            self.subagents.record_again(subagent);
         }
         if let EventBody::SubagentEnded { subagent, .. } = body
             && !self.subagents.settle(subagent, by_agent)
@@ -136,6 +136,13 @@ impl<K> Default for Settled<K> {
 
 impl<K: Clone + Eq + Hash> Settled<K> {
     fn record(&mut self, key: K) {
+        self.recorded.insert(key);
+    }
+
+    /// Records `key`, which may have been recorded and settled before, to be settled once more by each.
+    fn record_again(&mut self, key: K) {
+        self.by_hub.remove(&key);
+        self.by_agent.remove(&key);
         self.recorded.insert(key);
     }
 

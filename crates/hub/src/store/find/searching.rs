@@ -4,7 +4,7 @@ use protocol::find::{Found, Needle};
 use protocol::model::{Place, SessionId, SubagentId};
 
 impl Store {
-    /// Every event of the agent's own, or of the subagent `subagent` started, that holds `needle`, by place, oldest
+    /// Every event of the agent's own, or of the subagent `subagent`, that holds `needle`, by place, oldest
     /// first, as [`Needle::is_in_event`] says, read in one statement, so what it says is as of one moment. An event's
     /// body is only read as an event when its text may hold the needle, which most don't, so a long chat costs about as
     /// much as reading its text twice. The agent's raw lines aren't read at all. It reads on a connection of its own,
