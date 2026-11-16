@@ -1,4 +1,4 @@
-use crate::login_files::{LoginFiles, LoginSecret};
+use crate::login_files::{LoginFiles, LoginSecret, Stored};
 use crate::pasted_token::pasted_token;
 use crate::store::{Connected, Connecting, IdFrom, Store, StoreError};
 use protocol::client::accounts::AccountConnect;
@@ -21,12 +21,12 @@ pub(crate) struct Logins {
 impl LoginSecret for LoginToken {
     const DIR: &'static str = protocol::paths::LOGINS_DIR;
 
-    fn to_bytes(&self) -> Vec<u8> {
-        self.as_str().as_bytes().to_vec()
+    fn to_bytes(&self) -> std::io::Result<Vec<u8>> {
+        Ok(self.as_str().as_bytes().to_vec())
     }
 
-    fn from_bytes(bytes: Vec<u8>) -> Option<Self> {
-        String::from_utf8(bytes).ok().map(LoginToken::new)
+    fn from_bytes(bytes: Vec<u8>) -> Stored<Self> {
+        String::from_utf8(bytes).map_or(Stored::Nothing, |token| Stored::Secret(LoginToken::new(token)))
     }
 }
 

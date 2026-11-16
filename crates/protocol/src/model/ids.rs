@@ -98,6 +98,12 @@ ids!(
     /// here means a credential. The user can change it, and GitHub compares it without case, so a user is told apart
     /// by its [`GithubUserId`](super::GithubUserId).
     GithubUsername,
+    /// A sign-in with GitHub, chosen by the client that starts it, so starting it again, as after a reply that was
+    /// lost, is the same sign-in. Unique within a hub, as a `client_request_id` is.
+    GithubSignInId,
+    /// The code GitHub gives a sign-in for the person to type where it says, such as `WDJB-MJHT`. It's shown to them,
+    /// so it's no secret, and it's good only for approving its own sign-in, until the sign-in's code ends.
+    GithubUserCode,
 );
 
 impl SubagentId {

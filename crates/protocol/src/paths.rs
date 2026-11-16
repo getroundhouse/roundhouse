@@ -18,8 +18,8 @@ pub const ENV_LOG: &str = "ROUNDHOUSE_LOG";
 pub const ENV_TEST_HUB_TIMERS: &str = "ROUNDHOUSE_TEST_HUB_TIMERS";
 /// Shorter timers for a test's workers, which only a worker built for tests reads, as `worker::Timers` says.
 pub const ENV_TEST_WORKER_TIMERS: &str = "ROUNDHOUSE_TEST_WORKER_TIMERS";
-/// Where a test's hub calls GitHub's API, such as a stand-in's address, which only a hub built for tests reads, as
-/// `hub::github_api` says.
+/// Where a test's hub calls GitHub, both its API and its device flow, such as a stand-in's address, which only a hub
+/// built for tests reads, as `hub::GithubConfig::from_env` says.
 pub const ENV_TEST_GITHUB_API: &str = "ROUNDHOUSE_TEST_GITHUB_API";
 
 /// The binary that runs as a hub or a worker. It gives this name in `--version` too.

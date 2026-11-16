@@ -1,5 +1,5 @@
 use crate::error::HubError;
-use crate::github::Github;
+use crate::github::{Github, GithubConfig};
 use crate::hub::{Hub, HubDirs, LeftAtWork};
 use crate::listener;
 use crate::listener::Listener;
@@ -32,10 +32,9 @@ pub struct HubConfig {
     /// the hub doesn't run.
     pub agents: Vec<AgentDescription>,
     pub timers: Timers,
-    /// GitHub's API, such as `https://api.github.com`, which the hub asks whose a token is, as [`crate::github_api`]
-    /// gives it. Given rather than known here, so a hub can be pointed at a stand-in, as the hub's own tests point
-    /// theirs.
-    pub github_api: String,
+    /// Where the hub calls GitHub, and as which app it signs people in, as [`GithubConfig::from_env`] gives it. Given
+    /// rather than known here, so a hub can be pointed at a stand-in, as the hub's own tests point theirs.
+    pub github: GithubConfig,
 }
 
 /// What the last run left half done, for this one to finish once it's serving.
@@ -47,11 +46,13 @@ pub(super) struct LeftHalfDone {
 }
 
 /// Clears up what the last run left half done: setups that were running, which its workers can't report on to this hub,
-/// and workspaces half-made. It forgets which build each workspace's worker was, too, since only a worker this hub
-/// carries on with can be another build than its own. Returns what's left for the hub to finish once it's serving. What
+/// sign-ins with GitHub left waiting, which only it could ask GitHub after, and workspaces half-made. It forgets which
+/// build each workspace's worker was, too, since only a worker this hub carries on with can be another build than its
+/// own. Returns what's left for the hub to finish once it's serving. What
 /// it left at work, the hub carries on with as it starts.
 pub(super) fn recover(store: &Store) -> Result<LeftHalfDone, StoreError> {
     store.fail_interrupted_setups()?;
+    store.end_waiting_github_sign_ins()?;
     store.forget_worker_builds()?;
     let moves = store.moves_left()?;
     for workspace in store.take_unfinished_workspaces()? {
@@ -109,7 +110,7 @@ fn load_providers(
 
 /// Runs until asked to stop or signalled. Returns an error if another hub is using these paths.
 pub async fn run(config: HubConfig) -> Result<(), HubError> {
-    let HubConfig { build, paths, worker_exe, shell, path, on_demand, agents, timers, github_api } = config;
+    let HubConfig { build, paths, worker_exe, shell, path, on_demand, agents, timers, github } = config;
     private_files::create_dir_all(&paths.data_dir)
         .map_err(|e| HubError::io(format!("creating {}", paths.data_dir.display()), e))?;
     let lock_file = take_lock(&paths)?;
@@ -127,7 +128,7 @@ pub async fn run(config: HubConfig) -> Result<(), HubError> {
     let settings = store.hub_settings().map_err(HubError::OpenDatabase)?;
 
     let providers = load_providers(build, &paths, worker_exe, shell, path, &store)?;
-    let github = Github::new(github_api);
+    let github = Github::new(github);
     let hub = Arc::new(Hub::new(build, store, HubDirs::of(&paths), providers, github, agents, on_demand, timers));
     // Before clients are served, so none is told the hub holds a login whose token is gone.
     hub.tidy_logins().await;

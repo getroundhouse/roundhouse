@@ -5,8 +5,8 @@ use crate::attachment::Attachment;
 use crate::event::SessionEvent;
 use crate::find::Found;
 use crate::model::{
-    Account, DiffComment, FileContents, FileOpened, FilePages, GitDiff, GitStatus, GithubAccount, HubSettings,
-    NewWorkspaceDraft, Records, Repo, Session, SessionAccount, TitleError, Workspace, WorktreeFiles,
+    Account, DiffComment, FileContents, FileOpened, FilePages, GitDiff, GitStatus, GithubAccount, GithubSignIn,
+    HubSettings, NewWorkspaceDraft, Records, Repo, Session, SessionAccount, TitleError, Workspace, WorktreeFiles,
 };
 use crate::tail::{StreamDelta, Tail};
 use feed::HubNotice;
@@ -89,6 +89,7 @@ pub enum ClientResponse {
     SessionAccount(SessionAccount),
     Account(Account),
     GithubAccount(GithubAccount),
+    GithubSignIn(GithubSignIn),
     WorktreeFiles(WorktreeFiles),
     FileContents(FileContents),
     FileOpened(FileOpened),

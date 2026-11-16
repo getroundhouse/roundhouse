@@ -5,13 +5,13 @@
 use std::io;
 
 use protocol::client::ApiError;
-use protocol::model::{GithubAccount, GithubToken, GithubUsername};
+use protocol::model::{GithubAccount, GithubLoginKind, GithubToken, GithubUsername};
 use protocol::worker::{GitCredential, GithubCredential};
 use tokio::sync::watch;
 use tracing::info;
 
-use super::GithubLogins;
-use crate::login_files::Locked;
+use super::{GithubLogin, GithubLogins};
+use crate::login_files::{Locked, Stored};
 
 /// Why the login the hub holds for an account can't be used now.
 pub(super) enum Unusable {
@@ -19,6 +19,11 @@ pub(super) enum Unusable {
     Disconnected,
     /// Its token has ended, by GitHub's word.
     Ended,
+    /// It's a sign-in's, whose token has ended, by GitHub's word, or that needs signing in again, as when GitHub has
+    /// refused what renews it, so only signing in again gives it a login that works.
+    SignInAgain,
+    /// Its file holds a login in a form only a newer build reads, so this one can't use it, and keeps it for that one.
+    Newer,
     /// Its file holds no token, or, with the error, can't be read.
     Unreadable(Option<io::Error>),
 }
@@ -42,7 +47,7 @@ impl GithubLogins {
     pub(super) fn changing<T>(
         &self,
         now_ms: i64,
-        change: impl FnOnce(&Locked<'_, GithubToken>) -> Result<T, ApiError>,
+        change: impl FnOnce(&Locked<'_, GithubLogin>) -> Result<T, ApiError>,
     ) -> Result<T, ApiError> {
         let files = self.files.lock();
         let changed = change(&files);
@@ -50,27 +55,29 @@ impl GithubLogins {
         changed
     }
 
-    /// The token the hub holds for `account`, or why it can't be used at `now_ms`.
+    /// The token the hub holds for `account`, a token's or a sign-in's, or why it can't be used at `now_ms`.
     pub(super) fn token_of(
         &self,
-        files: &Locked<'_, GithubToken>,
+        files: &Locked<'_, GithubLogin>,
         account: &GithubAccount,
         now_ms: i64,
     ) -> Result<Result<GithubToken, Unusable>, ApiError> {
         let Some(held) = account.held_login else { return Ok(Err(Unusable::Disconnected)) };
         if !held.works_at(now_ms) {
-            return Ok(Err(Unusable::Ended));
+            let signed_in = held.needs_sign_in || held.how == GithubLoginKind::SignIn;
+            return Ok(Err(if signed_in { Unusable::SignInAgain } else { Unusable::Ended }));
         }
         let Some(file) = self.store.github_login_file(&account.id)? else { return Ok(Err(Unusable::Disconnected)) };
         Ok(match files.read(&file) {
-            Ok(Some(token)) => Ok(token),
-            Ok(None) => Err(Unusable::Unreadable(None)),
+            Ok(Stored::Secret(login)) => Ok(login.token().clone()),
+            Ok(Stored::Newer) => Err(Unusable::Newer),
+            Ok(Stored::Nothing) => Err(Unusable::Unreadable(None)),
             Err(e) => Err(Unusable::Unreadable(Some(e))),
         })
     }
 
     /// Has workers sent what they're to give their processes at `now_ms`, if that has changed.
-    fn publish(&self, files: &Locked<'_, GithubToken>, now_ms: i64) {
+    fn publish(&self, files: &Locked<'_, GithubLogin>, now_ms: i64) {
         let credential = self.worked_out(files, now_ms);
         self.credential.send_if_modified(|current| {
             if *current == credential {
@@ -86,7 +93,7 @@ impl GithubLogins {
     /// What workers are to give their processes for github.com at `now_ms`: nothing while the default is each
     /// machine's own login, the default's username and token while its login can be used, and otherwise a block that
     /// says what to do, never the machine's own in its place. So is a default the hub can't read.
-    fn worked_out(&self, files: &Locked<'_, GithubToken>, now_ms: i64) -> GithubCredential {
+    fn worked_out(&self, files: &Locked<'_, GithubLogin>, now_ms: i64) -> GithubCredential {
         let unread = |e: &dyn std::fmt::Display| {
             let why = format!("Roundhouse couldn't read its default GitHub account ({e})");
             blocked(&why, "It tries again within a minute.")
@@ -128,6 +135,16 @@ fn lost(name: &GithubUsername, unusable: &Unusable) -> GithubCredential {
         Unusable::Ended => blocked(
             &format!("The token of Roundhouse's default GitHub account, {name}, has ended"),
             "Renew it in Roundhouse's Settings, or choose another default there.",
+        ),
+        Unusable::SignInAgain => blocked(
+            &format!("The sign-in of Roundhouse's default GitHub account, {name}, has ended"),
+            "Sign in with GitHub again in Roundhouse's Settings, or choose another default there.",
+        ),
+        Unusable::Newer => blocked(
+            &format!(
+                "The login of Roundhouse's default GitHub account, {name}, is one only a newer Roundhouse can read"
+            ),
+            "Update Roundhouse, connect the account again in its Settings, or choose another default there.",
         ),
         Unusable::Unreadable(None) => {
             blocked(&format!("Roundhouse can't find the token of its default GitHub account, {name}"), connect_again)

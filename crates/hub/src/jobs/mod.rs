@@ -16,5 +16,5 @@ mod uncut;
 pub(crate) use kind::JobKind;
 use progress::Progress;
 pub(crate) use progress::step;
-pub(crate) use running::{Ended, Jobs, Limits};
+pub(crate) use running::{Ended, Jobs, Limits, NotStarted};
 pub(crate) use uncut::uncut;

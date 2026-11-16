@@ -125,6 +125,7 @@ impl Logins {
         let token = files
             .read(&file)
             .map_err(|e| internal(format!("couldn't read {called}'s login: {e}")))?
+            .secret()
             .ok_or_else(unavailable)?;
         Ok(Handed { account: account.clone(), login: AgentLogin { token } })
     }

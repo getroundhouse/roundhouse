@@ -15,6 +15,7 @@
 mod approval_chats;
 mod approved;
 mod background_chats;
+mod base_pages;
 mod baselines;
 mod cache_screens;
 mod call_screens;

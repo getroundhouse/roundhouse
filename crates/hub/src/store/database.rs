@@ -55,6 +55,11 @@ pub fn now_ms() -> i64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX))
 }
 
+/// `by` after `at_ms`, by the hub's clock, as when something GitHub gave at `at_ms` ends, or the end of time.
+pub(crate) fn later_ms(at_ms: i64, by: std::time::Duration) -> i64 {
+    at_ms.saturating_add(i64::try_from(by.as_millis()).unwrap_or(i64::MAX))
+}
+
 pub(super) fn lock(conn: &Mutex<Connection>) -> MutexGuard<'_, Connection> {
     conn.lock()
 }

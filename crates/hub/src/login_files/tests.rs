@@ -4,22 +4,30 @@ use protocol::client::{ApiError, ErrorCode};
 
 use super::*;
 
-/// A secret of a kind no login has yet, of two parts with a byte between them that no text has, so a file of one is
-/// read back only by its own kind, and not as text.
+/// A secret of a kind no login has, of two parts with a byte between them that no text has, so a file of one is read
+/// back only by its own kind, and not as text. One that starts with [`NEWER`] is in a form only a newer build reads.
 #[derive(Debug, PartialEq, Eq)]
 struct TwoParts(String, String);
+
+/// What a file of [`TwoParts`] in a form from a newer build starts with.
+const NEWER: &str = "newer:";
 
 impl LoginSecret for TwoParts {
     const DIR: &'static str = "two-parts";
 
-    fn to_bytes(&self) -> Vec<u8> {
-        [self.0.as_bytes(), &[0xff], self.1.as_bytes()].concat()
+    fn to_bytes(&self) -> std::io::Result<Vec<u8>> {
+        Ok([self.0.as_bytes(), &[0xff], self.1.as_bytes()].concat())
     }
 
-    fn from_bytes(bytes: Vec<u8>) -> Option<Self> {
-        let at = bytes.iter().position(|byte| *byte == 0xff)?;
-        let (first, second) = (&bytes[..at], &bytes[at + 1..]);
-        Some(Self(String::from_utf8(first.to_vec()).ok()?, String::from_utf8(second.to_vec()).ok()?))
+    fn from_bytes(bytes: Vec<u8>) -> Stored<Self> {
+        if bytes.starts_with(NEWER.as_bytes()) {
+            return Stored::Newer;
+        }
+        let parts = bytes.iter().position(|byte| *byte == 0xff).and_then(|at| {
+            let (first, second) = (&bytes[..at], &bytes[at + 1..]);
+            Some(Self(String::from_utf8(first.to_vec()).ok()?, String::from_utf8(second.to_vec()).ok()?))
+        });
+        parts.map_or(Stored::Nothing, Stored::Secret)
     }
 }
 
@@ -66,8 +74,8 @@ fn a_secret_of_another_kind_is_read_back_whole_from_its_own_directory_and_a_file
 
     let kept = connected(&files, &two_parts("an-access-token"));
 
-    assert_eq!(files.read(&kept).unwrap(), Some(two_parts("an-access-token")));
-    assert_eq!(files.read(&not_one).unwrap(), None);
+    assert_eq!(files.read(&kept).unwrap(), Stored::Secret(two_parts("an-access-token")));
+    assert_eq!(files.read(&not_one).unwrap(), Stored::Nothing);
     assert!(names_in(dir.path()).contains(&kept.as_str().to_string()), "it's in its kind's directory");
 }
 
@@ -87,7 +95,7 @@ fn connecting_keeps_the_secret_in_a_private_file_before_its_row_names_it_and_the
         })
         .unwrap();
 
-    assert_eq!(held_as_its_row_was_written, Some(Some(two_parts("new"))));
+    assert_eq!(held_as_its_row_was_written, Some(Stored::Secret(two_parts("new"))));
     assert_eq!(names_in(dir.path()), [new.as_str()], "the replaced file is gone");
     let mode = std::fs::metadata(dir_in(dir.path()).join(new.as_str())).unwrap().permissions().mode();
     assert_eq!(mode & 0o777, 0o600);
@@ -164,14 +172,15 @@ fn the_row_whose_file_holds_a_secret_is_found_past_one_that_cant_be_read() {
 }
 
 #[test]
-fn tidying_clears_each_row_whose_file_holds_none_of_its_kind_and_keeps_only_the_files_of_the_others() {
+fn tidying_clears_each_row_whose_file_holds_none_of_its_kind_and_keeps_only_the_files_of_the_others_and_newer_forms() {
     let dir = tempfile::tempdir().unwrap();
     let files = LoginFiles::<TwoParts>::new(dir.path());
     let files = files.lock();
     let [kept, unreadable, emptied, unnamed] =
         ["kept", "unreadable", "emptied", "unnamed"].map(|first| connected(&files, &two_parts(first)));
-    let (of_another_kind, gone) = (LoginFile::new(), LoginFile::new());
+    let (of_another_kind, gone, newer) = (LoginFile::new(), LoginFile::new(), LoginFile::new());
     write_by_hand(dir.path(), &of_another_kind, "a-token-of-another-kind");
+    write_by_hand(dir.path(), &newer, &format!("{NEWER}a-form-this-build-doesnt-know"));
     std::fs::write(dir_in(dir.path()).join(emptied.as_str()), "").unwrap();
     std::fs::remove_file(dir_in(dir.path()).join(unreadable.as_str())).unwrap();
     std::fs::create_dir(dir_in(dir.path()).join(unreadable.as_str())).unwrap();
@@ -183,6 +192,7 @@ fn tidying_clears_each_row_whose_file_holds_none_of_its_kind_and_keeps_only_the_
         (4, Some(of_another_kind)),
         (5, Some(gone)),
         (6, None),
+        (7, Some(newer.clone())),
     ];
     let mut cleared = Vec::new();
 
@@ -194,7 +204,7 @@ fn tidying_clears_each_row_whose_file_holds_none_of_its_kind_and_keeps_only_the_
     assert!(tidied.is_ok());
     assert_eq!(cleared, [3, 4, 5, 6]);
     // The file that can't be read is a directory, which tidying never removes, so only its row is checked, above.
-    let mut left = vec![kept.as_str(), unreadable.as_str()];
+    let mut left = vec![kept.as_str(), unreadable.as_str(), newer.as_str()];
     left.sort_unstable();
     assert_eq!(names_in(dir.path()), left, "neither {} nor any file but the rows' is left", unnamed.as_str());
 }

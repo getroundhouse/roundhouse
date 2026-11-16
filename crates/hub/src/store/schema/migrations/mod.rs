@@ -10,6 +10,7 @@ mod comments;
 mod drafts;
 mod first;
 mod github_accounts;
+mod github_sign_ins;
 mod hub_settings;
 mod limits;
 mod logins;

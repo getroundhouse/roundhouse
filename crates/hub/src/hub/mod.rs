@@ -14,6 +14,7 @@ mod children;
 mod comments;
 mod feed;
 mod github_accounts;
+mod github_sign_ins;
 mod hub_settings;
 mod instances;
 mod logins;

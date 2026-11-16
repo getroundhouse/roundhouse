@@ -3,10 +3,11 @@ use std::time::Duration;
 use octocrab::Octocrab;
 use protocol::client::{ApiError, ErrorCode, error_chain};
 use protocol::model::{GithubToken, GithubUser, GithubUserId};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tokio::sync::OnceCell;
 use tracing::warn;
 
+use super::GithubConfig;
 use super::expiration::ends_at_ms;
 
 /// How long a call to GitHub has, from asking to the end of its answer. GitHub answers in well under a second, so this
@@ -17,11 +18,11 @@ pub(crate) const ASK_WITHIN: Duration = Duration::from_secs(15);
 /// The header GitHub puts on an answer to a call with a token that ends, saying when.
 const EXPIRATION: &str = "github-authentication-token-expiration";
 
-/// GitHub's API, as the hub calls it. Only the hub calls GitHub, so its address, its answers and the time limit on each
-/// call are known here and nowhere else.
+/// GitHub's API and its device flow, as the hub calls them. Only the hub calls GitHub, so its addresses, its answers
+/// and the time limit on each call are known here and nowhere else.
 pub(crate) struct Github {
-    /// Such as `https://api.github.com`, as `main` gives it, or a test's stand-in.
-    api: String,
+    /// Where it calls, as `main` gives it, or a test's stand-in.
+    pub(super) config: GithubConfig,
     /// Made on the first call, on the runtime that runs it, since Octocrab starts a task as it's made. Making it also
     /// loads the system's certificates, which only a call needs, so a machine without them fails only its calls.
     client: OnceCell<Octocrab>,
@@ -53,8 +54,8 @@ struct Answered {
 }
 
 impl Github {
-    pub(crate) fn new(api: String) -> Self {
-        Self { api, client: OnceCell::new() }
+    pub(crate) fn new(config: GithubConfig) -> Self {
+        Self { config, client: OnceCell::new() }
     }
 
     /// Who `token` is and when it ends, as `GET /user` says, within [`ASK_WITHIN`], whatever GitHub does. Refused with
@@ -62,10 +63,7 @@ impl Github {
     /// with `Unavailable` when GitHub can't be reached, doesn't answer in time, is limiting the hub's calls, or answers
     /// with anything else.
     pub(crate) async fn token_owner(&self, token: &GithubToken) -> Result<TokenOwner, ApiError> {
-        match tokio::time::timeout(ASK_WITHIN, self.ask_who(token)).await {
-            Ok(answer) => owner(answer?),
-            Err(_) => Err(unavailable(format!("GitHub didn't answer within {} s", ASK_WITHIN.as_secs()))),
-        }
+        owner(within(self.ask_who(token)).await?)
     }
 
     async fn ask_who(&self, token: &GithubToken) -> Result<Answered, ApiError> {
@@ -82,10 +80,24 @@ impl Github {
         Ok(Answered { status, limited, expiration, body })
     }
 
+    /// Posts `body` as JSON to `path` of where GitHub's device flow is, asking for JSON back, as the device flow
+    /// answers otherwise in a form's encoding, and answers with the status and the body, whatever they are. Unbounded,
+    /// so its caller puts its own limit on the whole call.
+    pub(super) async fn post_to_login(&self, path: &str, body: &impl Serialize) -> Result<(u16, String), ApiError> {
+        let client = self.client().await?;
+        let uri = format!("{}{path}", self.config.login);
+        let asking = http::Request::post(uri).header(http::header::ACCEPT, "application/json");
+        let request = client.build_request(asking, Some(body)).map_err(|e| not_reached(&e))?;
+        let response = client.execute(request).await.map_err(|e| not_reached(&e))?;
+        let status = response.status().as_u16();
+        let body = client.body_to_string(response).await.map_err(|e| not_reached(&e))?;
+        Ok((status, body))
+    }
+
     async fn client(&self) -> Result<&Octocrab, ApiError> {
         self.client
             .get_or_try_init(|| async {
-                let builder = Octocrab::builder().base_uri(self.api.as_str()).map_err(|e| not_reached(&e))?;
+                let builder = Octocrab::builder().base_uri(self.config.api.as_str()).map_err(|e| not_reached(&e))?;
                 builder.build().map_err(|e| not_reached(&e))
             })
             .await
@@ -117,10 +129,19 @@ fn owner(answer: Answered) -> Result<TokenOwner, ApiError> {
     Ok(TokenOwner { user: GithubUser { id: GithubUserId::new(user.id), name: user.login.into() }, ends_at_ms })
 }
 
-fn not_reached(e: &octocrab::Error) -> ApiError {
+/// What `call` comes to within [`ASK_WITHIN`], from asking to the end of its answer, whatever stage it hangs at, or
+/// `Unavailable` once that's up.
+pub(super) async fn within<T>(call: impl Future<Output = Result<T, ApiError>>) -> Result<T, ApiError> {
+    match tokio::time::timeout(ASK_WITHIN, call).await {
+        Ok(answer) => answer,
+        Err(_) => Err(unavailable(format!("GitHub didn't answer within {} s", ASK_WITHIN.as_secs()))),
+    }
+}
+
+pub(super) fn not_reached(e: &octocrab::Error) -> ApiError {
     unavailable(format!("couldn't reach GitHub: {}", error_chain(e)))
 }
 
-fn unavailable(message: impl Into<String>) -> ApiError {
+pub(super) fn unavailable(message: impl Into<String>) -> ApiError {
     ApiError::new(ErrorCode::Unavailable, message)
 }

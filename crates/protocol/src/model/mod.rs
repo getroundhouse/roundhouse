@@ -43,7 +43,10 @@ pub use draft::{
 pub use effort::Effort;
 pub use files::{FileContents, FileOpened, FilePage, FilePages, OpenedText, PageLine, WorktreeFiles};
 pub use git::{GitDiff, GitFile, GitStatus};
-pub use github_account::{GithubAccount, GithubLoginKind, GithubToken, GithubUser, GithubUserId, HeldGithubLogin};
+pub use github_account::{
+    GithubAccount, GithubLoginKind, GithubSignIn, GithubSignInStatus, GithubToken, GithubUser, GithubUserId,
+    HeldGithubLogin,
+};
 pub use hub_settings::{AccountDefault, GithubSettings, HubSettings, HubSettingsChange};
 pub use model_name::{ModelName, ModelNameError};
 pub use permission_mode::PermissionMode;
@@ -67,10 +70,10 @@ pub(crate) use ids::ids;
 mod tokens;
 pub use ids::{
     AccountId, AgentSessionId, ApprovalId, AskKey, AttachmentId, BranchName, ChildWorktreeId, ClientMessageId,
-    ClientRequestId, CommentId, CommitId, GithubAccountId, GithubUsername, HubId, InstanceId, MessageId, ProviderName,
-    RemoteName, RepoId, SessionId, SubagentId, TaskId, ToolUseId, WaitId, WorkerTarget, WorkspaceId,
+    ClientRequestId, CommentId, CommitId, GithubAccountId, GithubSignInId, GithubUserCode, GithubUsername, HubId,
+    InstanceId, MessageId, ProviderName, RemoteName, RepoId, SessionId, SubagentId, TaskId, ToolUseId, WaitId,
+    WorkerTarget, WorkspaceId,
 };
-pub(crate) use tokens::tokens;
 mod repo;
 pub use repo::Repo;
 mod comment;

@@ -51,7 +51,8 @@ impl Hub {
         }
     }
 
-    fn announce_github_account(&self, change: GithubAccountChange) -> GithubAccount {
+    /// Tells every client what changed of a GitHub account's record, and of the settings when it changed the default.
+    pub(in super::super) fn announce_github_account(&self, change: GithubAccountChange) -> GithubAccount {
         let GithubAccountChange { account, changed, settings } = change;
         if changed {
             self.notify(HubNotice::GithubAccount(account.clone()));

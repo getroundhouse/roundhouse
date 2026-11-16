@@ -17,7 +17,7 @@ use providers::local::{LocalConfig, LocalProvider};
 use tokio::sync::oneshot;
 
 use super::{Hub, HubDirs};
-use crate::github::Github;
+use crate::github::{Github, GithubConfig};
 use crate::provider_set::ProviderSet;
 use crate::session::{CarriedOver, Item, LiveSession, Starting};
 use crate::store::tests::store_with_session;
@@ -75,12 +75,12 @@ pub(crate) fn hub_in(dir: &Path) -> Arc<Hub> {
 
 /// The same, whose agents are as `agents` says.
 pub(super) fn hub_describing(dir: &Path, agents: Vec<AgentDescription>) -> Arc<Hub> {
-    hub_of(dir, agents, Github::new(NO_GITHUB.to_string()))
+    hub_of(dir, agents, Github::new(GithubConfig::at(NO_GITHUB.to_string())))
 }
 
 /// The same, which calls GitHub's API at `api`, such as a stand-in's.
 pub(crate) fn hub_calling_github(dir: &Path, api: String) -> Arc<Hub> {
-    hub_of(dir, vec![described()], Github::new(api))
+    hub_of(dir, vec![described()], Github::new(GithubConfig::at(api)))
 }
 
 /// Where a test's hub that isn't about GitHub has GitHub's API, which nothing serves, so a call that reaches it fails

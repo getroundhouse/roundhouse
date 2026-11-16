@@ -5,9 +5,9 @@ use crate::event::{
 };
 use crate::model::{
     Account, AgentKind, ApprovalId, BranchName, Call, CallResult, ChildStatus, ChildWorktree, Draft, Effort,
-    GithubAccount, GithubLoginKind, GithubUser, GithubUserId, HeldGithubLogin, MadeBy, ModelName, PermissionMode,
-    Place, RecentWork, Rev, Seq, Session, SessionStatus, SetupStatus, Subagent, SubagentId, SubagentStatus,
-    TitleSource, ToolUseId, Workspace, WorkspaceStatus,
+    GithubAccount, GithubLoginKind, GithubSignIn, GithubSignInStatus, GithubUser, GithubUserId, HeldGithubLogin,
+    MadeBy, ModelName, PermissionMode, Place, RecentWork, Rev, Seq, Session, SessionStatus, SetupStatus, Subagent,
+    SubagentId, SubagentStatus, TitleSource, ToolUseId, Workspace, WorkspaceStatus,
 };
 
 /// The session `id`, in the workspace `w`, idle with nothing in its log. Its agent is Claude, running Opus with full
@@ -122,7 +122,23 @@ pub fn github_account(id: &str) -> GithubAccount {
     GithubAccount {
         id: id.into(),
         user: GithubUser { id: GithubUserId::new(1), name: "ada".into() },
-        held_login: Some(HeldGithubLogin { how: GithubLoginKind::Token, connected_at_ms: 0, ends_at_ms: None }),
+        held_login: Some(HeldGithubLogin {
+            how: GithubLoginKind::Token,
+            connected_at_ms: 0,
+            ends_at_ms: None,
+            needs_sign_in: false,
+        }),
+        rev: Rev::default(),
+    }
+}
+
+/// The sign-in with GitHub `id`, waiting for the person to type `WDJB-MJHT` at GitHub's address for it, until 900 s.
+pub fn github_sign_in(id: &str) -> GithubSignIn {
+    let code = "WDJB-MJHT".into();
+    let address = "https://github.com/login/device".to_string();
+    GithubSignIn {
+        id: id.into(),
+        status: GithubSignInStatus::Waiting { code, address, code_ends_at_ms: 900_000 },
         rev: Rev::default(),
     }
 }

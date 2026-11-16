@@ -5,8 +5,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use parking_lot::Mutex;
+use tokio::sync::Notify;
 use tokio::task::{AbortHandle, JoinHandle};
-use tracing::{error, warn};
+use tracing::{error, info, warn};
 
 use super::{JobKind, Progress};
 
@@ -21,6 +22,8 @@ struct Running {
     work: AbortHandle,
     /// What waits for the work within its limit and then runs its after-step.
     supervisor: AbortHandle,
+    /// Tells the supervisor the job is called off, as [`Jobs::call_off`] says.
+    called_off: Arc<Notify>,
 }
 
 /// How long a job's work has, and then its after-step.
@@ -44,13 +47,22 @@ pub(crate) enum Ended {
     Panicked {
         at: String,
     },
+    /// It was called off where it said it was, as [`Jobs::call_off`] says. `began_uncut` says whether it had begun what
+    /// it runs [`super::uncut`], which has ended by the time the after-step runs.
+    CalledOff {
+        at: String,
+        began_uncut: bool,
+    },
 }
 
 impl Ended {
     /// Whether the work finished, or got as far as what it runs uncut, which then ran to its end, so what it would
     /// have done with what it waited for is done.
     pub(crate) fn finished_or_ran_uncut(&self) -> bool {
-        matches!(self, Self::Finished | Self::Overran { began_uncut: true, .. })
+        matches!(
+            self,
+            Self::Finished | Self::Overran { began_uncut: true, .. } | Self::CalledOff { began_uncut: true, .. }
+        )
     }
 }
 
@@ -73,7 +85,16 @@ impl<K: Clone + Eq + Hash + Display + Send + Sync + 'static> Jobs<K> {
     /// Whether a job of `kind` about a key none is about would start now, so whatever decides what's due needn't look
     /// while it wouldn't.
     pub(crate) fn has_room(&self, kind: JobKind) -> bool {
-        self.running.lock().as_ref().is_some_and(|running| Self::kind_has_room(running, kind))
+        self.room_for(kind).is_ok()
+    }
+
+    /// The same, saying why one wouldn't, for what tells a person.
+    pub(crate) fn room_for(&self, kind: JobKind) -> Result<(), NotStarted> {
+        match self.running.lock().as_ref() {
+            None => Err(NotStarted::Stopped),
+            Some(running) if !Self::kind_has_room(running, kind) => Err(NotStarted::KindBusy),
+            Some(_) => Ok(()),
+        }
     }
 
     /// The keys of what jobs are running about, of any kind, for whatever decides what's due to pass over.
@@ -105,9 +126,20 @@ impl<K: Clone + Eq + Hash + Display + Send + Sync + 'static> Jobs<K> {
         // The supervisor takes the key off the list as it ends, which it can't before this lock is let go of, so the
         // key is always on the list first.
         let leaves = Leaves { running: self.running.clone(), key: key.clone() };
-        let supervisor = tokio::spawn(supervise(kind, leaves, limits, progress, work, after));
-        running.insert(key, Running { kind, work: work_task, supervisor: supervisor.abort_handle() });
+        let called_off = Arc::new(Notify::new());
+        let watching = Watching { limits, progress, called_off: called_off.clone() };
+        let supervisor = tokio::spawn(supervise(kind, leaves, watching, work, after));
+        running.insert(key, Running { kind, work: work_task, supervisor: supervisor.abort_handle(), called_off });
         Ok(())
+    }
+
+    /// Ends the work of the job about `key` where it is, as its limit would, as when what it's for is no longer wanted,
+    /// and then runs its after-step, told it was called off. What its work runs [`super::uncut`] runs to its end, as
+    /// it does at the limit. Does nothing when no job is about `key`, or once its work has ended.
+    pub(crate) fn call_off(&self, key: &K) {
+        if let Some(job) = self.running.lock().as_ref().and_then(|running| running.get(key)) {
+            job.called_off.notify_one();
+        }
     }
 
     /// Ends every job where it is, without its after-step, and starts none after, as the hub stops.
@@ -134,30 +166,48 @@ impl<K: Clone + Eq + Hash + Display + Send + Sync + 'static> Jobs<K> {
     }
 }
 
-/// Waits for the work within its limit, stopping it there, and then runs the after-step.
+/// What the supervisor of a job watches its work by.
+struct Watching {
+    limits: Limits,
+    progress: Progress,
+    called_off: Arc<Notify>,
+}
+
+/// Waits for the work within its limit, stopping it there, or once it's called off, and then runs the after-step.
 async fn supervise<K: Eq + Hash + Display, A: Future<Output = ()>>(
     kind: JobKind,
     leaves: Leaves<K>,
-    limits: Limits,
-    progress: Progress,
+    watching: Watching,
     mut work: JoinHandle<()>,
     after: impl FnOnce(Ended) -> A,
 ) {
+    let Watching { limits, progress, called_off } = watching;
     let key = &leaves.key;
-    let (ended, stopping) = match tokio::time::timeout(limits.work, &mut work).await {
-        Ok(Ok(())) => (Ended::Finished, None),
-        Ok(Err(e)) if e.is_panic() => {
+    // `None` once it's called off.
+    let ran = tokio::select! {
+        ran = tokio::time::timeout(limits.work, &mut work) => Some(ran),
+        () = called_off.notified() => None,
+    };
+    let (ended, stopping) = match ran {
+        Some(Ok(Ok(()))) => (Ended::Finished, None),
+        Some(Ok(Err(e))) if e.is_panic() => {
             let at = progress.last();
             error!(%key, %at, "a job of the hub's panicked: {kind}");
             (Ended::Panicked { at }, None)
         }
         // Stopped, as the hub stops, which ends this task too.
-        Ok(Err(_)) => return,
-        Err(_) => {
+        Some(Ok(Err(_))) => return,
+        Some(Err(_)) => {
             let at = progress.last();
             warn!(%key, %at, limit = ?limits.work, "a job of the hub's didn't finish in time, so it was stopped: {kind}");
             work.abort();
             (Ended::Overran { at, began_uncut: false }, Some(work))
+        }
+        None => {
+            let at = progress.last();
+            info!(%key, %at, "a job of the hub's was called off: {kind}");
+            work.abort();
+            (Ended::CalledOff { at, began_uncut: false }, Some(work))
         }
     };
     let afterwards = async {
@@ -170,7 +220,7 @@ async fn supervise<K: Eq + Hash + Display, A: Future<Output = ()>>(
         super::step("waiting for what its work runs uncut");
         let began = progress.uncut_ended().await;
         let mut ended = ended;
-        if let Ended::Overran { began_uncut, .. } = &mut ended {
+        if let Ended::Overran { began_uncut, .. } | Ended::CalledOff { began_uncut, .. } = &mut ended {
             *began_uncut = began;
         }
         super::step("putting back what its work left, before it said how");

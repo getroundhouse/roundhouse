@@ -45,7 +45,7 @@ fn hub_timed(dir: &Path, provider: &Arc<dyn Provider>, timers: Timers) -> Arc<Hu
     let store = Arc::new(store_with_session(dir));
     store.workspace_ready(&"w".into(), "/w", &"alder".into(), "main", None).unwrap();
     let providers = ProviderSet::only(provider.clone());
-    let github = Github::new(NO_GITHUB.to_string());
+    let github = Github::new(crate::github::GithubConfig::at(NO_GITHUB.to_string()));
     Arc::new(Hub::new(Build::UNSTAMPED, store, HubDirs::in_dir(dir), providers, github, Vec::new(), false, timers))
 }
 

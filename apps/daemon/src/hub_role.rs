@@ -18,8 +18,8 @@ pub(crate) fn run(on_demand: bool) -> anyhow::Result<()> {
     // A build without `testing`, as the product's is, takes the defaults whatever the environment says.
     let timers = hub::Timers::from_env(|name| std::env::var(name).ok());
     // GitHub's own, whatever the environment says, in a build without `testing`, as the product's is.
-    let github_api = hub::github_api(|name| std::env::var(name).ok());
-    let config = hub::HubConfig { build: BUILD, paths, worker_exe, shell, path, on_demand, agents, timers, github_api };
+    let github = hub::GithubConfig::from_env(|name| std::env::var(name).ok());
+    let config = hub::HubConfig { build: BUILD, paths, worker_exe, shell, path, on_demand, agents, timers, github };
     run_to_end(hub::run(config))??;
     Ok(())
 }

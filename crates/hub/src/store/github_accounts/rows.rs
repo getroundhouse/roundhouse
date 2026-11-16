@@ -4,11 +4,11 @@ use crate::login_files::LoginFile;
 use protocol::model::{
     GithubAccount, GithubAccountId, GithubLoginKind, GithubUser, GithubUserId, HeldGithubLogin, HubSettings,
 };
-use rusqlite::{Connection, OptionalExtension as _, Row, params};
+use rusqlite::{Connection, OptionalExtension as _, Row, Transaction, params};
 
 /// The columns every read of a GitHub account's row takes, in this order, as [`account_at`] reads them.
-const COLUMNS: &str =
-    "id, user_id, username, login_kind, login_file, login_connected_at_ms, login_ends_at_ms, rev FROM github_accounts";
+const COLUMNS: &str = "id, user_id, username, login_kind, login_file, login_connected_at_ms, login_ends_at_ms, rev, \
+                       login_needs_sign_in FROM github_accounts";
 
 /// A login being connected to a GitHub account, which is made if the hub has no record of it.
 #[derive(Clone, Copy)]
@@ -36,7 +36,12 @@ fn account_at(row: &Row<'_>) -> rusqlite::Result<(GithubAccount, Option<LoginFil
     let file = row.get::<_, Option<String>>(4)?.as_deref().and_then(LoginFile::parse);
     let held = match (file, row.get::<_, Option<String>>(3)?, row.get::<_, Option<i64>>(5)?) {
         (Some(file), Some(how), Some(connected_at_ms)) => {
-            let held = HeldGithubLogin { how: from_text(how)?, connected_at_ms, ends_at_ms: row.get(6)? };
+            let held = HeldGithubLogin {
+                how: from_text(how)?,
+                connected_at_ms,
+                ends_at_ms: row.get(6)?,
+                needs_sign_in: row.get(8)?,
+            };
             Some((file, held))
         }
         _ => None,
@@ -93,43 +98,23 @@ impl Store {
     }
 
     /// Has `connecting.account` hold the login whose token is in `connecting.file`, as `connecting.user`, and makes the
-    /// account's record if it has none. The first GitHub account the hub has a record of becomes the default, in the
-    /// same transaction. Its commit is on disk before this returns, so a login the hub has said it holds isn't lost to
-    /// a power cut, and the hub lets go of the replaced login's file only after.
+    /// account's record if it has none, as [`connect_login`] says. Its commit is on disk before this returns, so a
+    /// login the hub has said it holds isn't lost to a power cut, and the hub lets go of the replaced login's file only
+    /// after.
     pub(crate) fn connect_github_login(
         &self,
         connecting: &GithubConnecting<'_>,
     ) -> Result<GithubConnected, StoreError> {
-        let GithubConnecting { account: id, user, how, file, connected_at_ms, ends_at_ms } = *connecting;
-        self.lasting(|tx| {
-            let first =
-                !tx.query_row("SELECT EXISTS (SELECT 1 FROM github_accounts)", [], |row| row.get::<_, bool>(0))?;
-            let replaced = row_of(tx, id)?.and_then(|(_, file)| file);
-            tx.execute(
-                "INSERT INTO github_accounts
-                     (id, user_id, username, login_kind, login_file, login_connected_at_ms, login_ends_at_ms)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
-                     ON CONFLICT (id) DO UPDATE
-                     SET user_id = excluded.user_id, username = excluded.username, login_kind = excluded.login_kind,
-                         login_file = excluded.login_file, login_connected_at_ms = excluded.login_connected_at_ms,
-                         login_ends_at_ms = excluded.login_ends_at_ms",
-                params![
-                    id.as_str(),
-                    user.id.get(),
-                    user.name.as_str(),
-                    text_of(&how),
-                    file.as_str(),
-                    connected_at_ms,
-                    ends_at_ms
-                ],
-            )?;
-            if first {
-                tx.execute("UPDATE hub_settings SET github_account_id = ?", [id.as_str()])?;
-            }
-            let settings = if first { Some(hub_settings(tx)?) } else { None };
-            let (account, _) = row_of(tx, id)?.ok_or(rusqlite::Error::QueryReturnedNoRows)?;
-            Ok(GithubConnected { account, replaced, settings })
-        })
+        self.lasting(|tx| connect_login(tx, connecting))
+    }
+
+    /// Says the login the GitHub account `id` holds needs signing in again, as renewing a sign-in GitHub refuses is to.
+    /// *Not built:* renewing, so only tests say so.
+    #[cfg(test)]
+    pub(crate) fn github_login_needs_sign_in(&self, id: &GithubAccountId) {
+        let conn = lock(&self.writer);
+        let changed = conn.execute("UPDATE github_accounts SET login_needs_sign_in = 1 WHERE id = ?", [id.as_str()]);
+        assert_eq!(changed.ok(), Some(1), "{id} holds no login to sign in again");
     }
 
     /// Has the GitHub account `id` hold no login, keeping the rest of its record, and returns the record when that
@@ -139,7 +124,8 @@ impl Store {
         let conn = lock(&self.writer);
         let changed = conn.execute(
             "UPDATE github_accounts
-                 SET login_kind = NULL, login_file = NULL, login_connected_at_ms = NULL, login_ends_at_ms = NULL
+                 SET login_kind = NULL, login_file = NULL, login_connected_at_ms = NULL, login_ends_at_ms = NULL,
+                     login_needs_sign_in = 0
                  WHERE id = ? AND login_file IS NOT NULL",
             [id.as_str()],
         )?;
@@ -148,4 +134,56 @@ impl Store {
         }
         Ok(row_of(&conn, id)?.map(|(account, _)| account))
     }
+}
+
+/// Has `connecting.account` hold the login whose token is in `connecting.file`, as `connecting.user`, which needs no
+/// signing in again, in `tx`, and makes the account's record if it has none. The first GitHub account the hub has a
+/// record of becomes the default, in the same transaction.
+pub(in super::super) fn connect_login(
+    tx: &Transaction<'_>,
+    connecting: &GithubConnecting<'_>,
+) -> rusqlite::Result<GithubConnected> {
+    let GithubConnecting { account: id, user, how, file, connected_at_ms, ends_at_ms } = *connecting;
+    let first = !tx.query_row("SELECT EXISTS (SELECT 1 FROM github_accounts)", [], |row| row.get::<_, bool>(0))?;
+    let replaced = row_of(tx, id)?.and_then(|(_, file)| file);
+    tx.execute(
+        "INSERT INTO github_accounts
+             (id, user_id, username, login_kind, login_file, login_connected_at_ms, login_ends_at_ms,
+              login_needs_sign_in)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 0)
+             ON CONFLICT (id) DO UPDATE
+             SET user_id = excluded.user_id, username = excluded.username, login_kind = excluded.login_kind,
+                 login_file = excluded.login_file, login_connected_at_ms = excluded.login_connected_at_ms,
+                 login_ends_at_ms = excluded.login_ends_at_ms, login_needs_sign_in = 0",
+        params![
+            id.as_str(),
+            user.id.get(),
+            user.name.as_str(),
+            text_of(&how),
+            file.as_str(),
+            connected_at_ms,
+            ends_at_ms
+        ],
+    )?;
+    if first {
+        tx.execute("UPDATE hub_settings SET github_account_id = ?", [id.as_str()])?;
+    }
+    let settings = if first { Some(hub_settings(tx)?) } else { None };
+    let (account, _) = row_of(tx, id)?.ok_or(rusqlite::Error::QueryReturnedNoRows)?;
+    Ok(GithubConnected { account, replaced, settings })
+}
+
+/// The account the hub holds a sign-in with GitHub for as the GitHub user `user`, the oldest if there were several, in
+/// `tx`, whose login a sign-in as that user renews.
+pub(in super::super) fn signed_in_as(
+    tx: &Transaction<'_>,
+    user: &GithubUser,
+) -> rusqlite::Result<Option<GithubAccountId>> {
+    let found = tx.query_row(
+        "SELECT id FROM github_accounts WHERE user_id = ? AND login_kind = ? AND login_file IS NOT NULL
+             ORDER BY rowid LIMIT 1",
+        params![user.id.get(), text_of(&GithubLoginKind::SignIn)],
+        |row| row.get::<_, String>(0),
+    );
+    Ok(found.optional()?.map(GithubAccountId::from))
 }

@@ -1,10 +1,11 @@
+//! Connecting a token, disconnecting it, choosing the default and tidying, as GitHub accounts' logins.
+
 use std::path::Path;
 use std::sync::Barrier;
 
 use protocol::model::GithubLoginKind;
 
-use super::super::*;
-use crate::github::TokenOwner;
+use super::*;
 use crate::login_files::LoginFile;
 use crate::store::tests::store_with_session;
 
@@ -42,7 +43,7 @@ fn tokens_kept(dir: &Path) -> Vec<String> {
     tokens
 }
 
-fn default_of(store: &Store) -> Option<GithubAccountId> {
+pub(super) fn default_of(store: &Store) -> Option<GithubAccountId> {
     store.hub_settings().unwrap().github.unwrap().account
 }
 

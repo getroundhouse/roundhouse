@@ -16,7 +16,9 @@ use feed::Feed;
 use parking_lot::Mutex;
 use protocol::Build;
 use protocol::client::{ApiError, ErrorCode, HubNotice, HubStatus};
-use protocol::model::{AgentDescription, ClientRequestId, ProviderName, Records, SessionId, Workspace, WorkspaceId};
+use protocol::model::{
+    AgentDescription, ClientRequestId, GithubSignInId, ProviderName, Records, SessionId, Workspace, WorkspaceId,
+};
 use protocol::paths::Paths;
 use providers::Provider;
 use sessions::Sessions;
@@ -80,6 +82,8 @@ pub(crate) struct Hub {
     pub(super) pull_requests: pull_requests::Reading,
     /// The work the hub does on its own that's running now, by the workspace each job is about.
     pub(super) jobs: Jobs<WorkspaceId>,
+    /// The sign-ins with GitHub the hub is asking GitHub after, a job for each, as `Hub::wait_for_sign_in` says.
+    pub(super) sign_ins: Jobs<GithubSignInId>,
     pub(super) awake: Arc<Awake>,
     /// Whether the hub allows what an agent with full access still asks about, as its settings say.
     pub(super) allows_asked_in_full_access: AtomicBool,
@@ -160,6 +164,7 @@ impl Hub {
             setup_gates: Mutex::new(HashMap::new()),
             pull_requests: pull_requests::Reading::new(),
             jobs: Jobs::new(),
+            sign_ins: Jobs::new(),
             awake: Arc::default(),
             allows_asked_in_full_access: AtomicBool::new(false),
             configuring: AsyncMutex::new(()),
@@ -192,9 +197,11 @@ impl Hub {
             .ok_or_else(|| ApiError::new(ErrorCode::Unavailable, format!("there's no provider {name}")))
     }
 
-    /// Ends every job where it is, and starts none after, as the hub stops, before its workers are stopped or left.
+    /// Ends every job where it is, sign-ins' included, and starts none after, as the hub stops, before its workers are
+    /// stopped or left. A sign-in left waiting is recorded as ended as the next hub starts.
     pub(crate) fn stop_jobs(&self) {
         self.jobs.stop();
+        self.sign_ins.stop();
     }
 
     /// Ends each provider's adapter, after the workers are stopped.

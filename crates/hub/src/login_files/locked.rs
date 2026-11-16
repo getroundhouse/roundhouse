@@ -9,7 +9,7 @@ use parking_lot::{Mutex, MutexGuard};
 use protocol::client::ApiError;
 use tracing::{info, warn};
 
-use super::{LoginFile, LoginSecret};
+use super::{LoginFile, LoginSecret, Stored};
 use crate::error::internal;
 use crate::lasting;
 
@@ -43,13 +43,12 @@ pub(crate) struct Locked<'a, S> {
 }
 
 impl<S: LoginSecret> Locked<'_, S> {
-    /// The secret in `file`. `None` when it's gone, empty, as one a hub stopped part way through writing can be, or
-    /// not an `S`, as [`LoginSecret::from_bytes`] says.
-    pub(crate) fn read(&self, file: &LoginFile) -> io::Result<Option<S>> {
+    /// What `file` holds, as [`Stored`] says.
+    pub(crate) fn read(&self, file: &LoginFile) -> io::Result<Stored<S>> {
         match fs::read(self.path(file)) {
-            Ok(bytes) if bytes.is_empty() => Ok(None),
+            Ok(bytes) if bytes.is_empty() => Ok(Stored::Nothing),
             Ok(bytes) => Ok(S::from_bytes(bytes)),
-            Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
+            Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(Stored::Nothing),
             Err(e) => Err(e),
         }
     }
@@ -67,7 +66,7 @@ impl<S: LoginSecret> Locked<'_, S> {
         let dir = self.dir().display();
         for (id, file) in rows {
             match self.read(&file) {
-                Ok(read) if read.as_ref() == Some(secret) => return Some(id),
+                Ok(Stored::Secret(read)) if read == *secret => return Some(id),
                 Ok(_) => {}
                 Err(e) => warn!(account = %id, %dir, "couldn't read the secret of the hub's login for an account: {e}"),
             }
@@ -111,10 +110,10 @@ impl<S: LoginSecret> Locked<'_, S> {
 
     /// Makes the files and the rows of the table that names them agree, as the hub starts. `named` is each of its rows
     /// that names a file, by the row's ID, with the file, or `None` for a row that names one but doesn't hold it, such
-    /// as one naming a file the hub doesn't make. Each row whose file is gone, empty or not an `S`, or that doesn't hold
-    /// the one it names, is given to `clear_row`, and then every file but the other rows' is removed, so a row is
-    /// cleared even when a file can't be. A file that can't be read is left with its row, and said, so the rest are
-    /// still tidied.
+    /// as one naming a file the hub doesn't make. Each row whose file holds nothing, as [`Stored::Nothing`] says, or
+    /// that doesn't hold the one it names, is given to `clear_row`, and then every file but the other rows' is removed,
+    /// so a row is cleared even when a file can't be. A file in a form only a newer build reads is left with its row,
+    /// for that build, and so is one that can't be read, and both are said, so the rest are still tidied.
     pub(crate) fn tidy<Id: fmt::Display>(
         &self,
         named: Vec<(Id, Option<LoginFile>)>,
@@ -124,18 +123,22 @@ impl<S: LoginSecret> Locked<'_, S> {
         let mut kept = HashSet::new();
         for (id, file) in named {
             let held = match &file {
-                Some(file) => self.read(file).map(|secret| secret.is_some()),
-                None => Ok(false),
+                Some(file) => self.read(file),
+                None => Ok(Stored::Nothing),
             };
             match (file, held) {
-                (Some(file), Ok(true)) => {
+                (Some(file), Ok(Stored::Secret(_))) => {
+                    kept.insert(file);
+                }
+                (Some(file), Ok(Stored::Newer)) => {
+                    info!(account = %id, %dir, "kept the hub's login for an account, in a form a newer build wrote");
                     kept.insert(file);
                 }
                 (Some(file), Err(e)) => {
                     warn!(account = %id, %dir, "couldn't read the secret of the hub's login for an account: {e}");
                     kept.insert(file);
                 }
-                (None, _) | (Some(_), Ok(false)) => {
+                (None, _) | (Some(_), Ok(Stored::Nothing)) => {
                     info!(account = %id, %dir, "the secret of the hub's login for an account is gone, so it holds none");
                     clear_row(&id)?;
                 }
@@ -156,7 +159,7 @@ impl<S: LoginSecret> Locked<'_, S> {
     fn write(&self, file: &LoginFile, secret: &S) -> io::Result<()> {
         lasting::create_dir_all(self.dir())?;
         let mut handle = private_files::file_options().write(true).create_new(true).open(self.path(file))?;
-        handle.write_all(&secret.to_bytes())?;
+        handle.write_all(&secret.to_bytes()?)?;
         handle.sync_all()?;
         lasting::sync_dir(self.dir())
     }
