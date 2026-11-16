@@ -25,7 +25,11 @@ pub(crate) fn answer(state: &Path) {
     std::fs::write(state.join("title-token"), std::env::var("CLAUDE_CODE_OAUTH_TOKEN").unwrap_or_default()).unwrap();
     if state.join("title-held").exists() {
         let mut started = Command::new("sleep").arg("300").spawn().unwrap();
-        std::fs::write(state.join("title-pids"), format!("{} {}", std::process::id(), started.id())).unwrap();
+        // Tests wait for the marker to exist. Publish it only once both PIDs can be read, since creating it before
+        // writing lets a test observe an empty file and stop the call before the writer finishes.
+        let pending = state.join(format!("title-pids-{}", std::process::id()));
+        std::fs::write(&pending, format!("{} {}", std::process::id(), started.id())).unwrap();
+        std::fs::rename(pending, state.join("title-pids")).unwrap();
         while state.join("title-held").exists() {
             std::thread::sleep(Duration::from_millis(20));
         }
