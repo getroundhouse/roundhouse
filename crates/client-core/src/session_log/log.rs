@@ -70,6 +70,8 @@ pub struct SessionLog {
     pub(super) failed: BTreeSet<usize>,
     /// The whole range the viewport needs, including its buffer. It starts at the last row, which comes live.
     pub(super) focus: Range<usize>,
+    /// The lowest row this frame couldn't draw. Retaining loaded rows does not request more history.
+    pub(super) unfetched: Option<usize>,
     /// Sent, and not yet recorded. Each is held as the hub holds a queued prompt, under the ID it'll be recorded under.
     pub(super) pending: Vec<QueuedPrompt>,
     pub(super) tail: Arc<Tail>,

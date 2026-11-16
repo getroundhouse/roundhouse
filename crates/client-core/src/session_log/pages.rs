@@ -10,18 +10,17 @@ use protocol::model::SettledAt;
 use super::{MAX_LOADED_EVENTS, Position, SessionLog};
 
 pub(super) const PAGE_EVENTS: usize = 250;
-/// Yield to live events and a changed viewport between batches, even when a sparse window spans many pages.
-const FETCH_PAGES: usize = 3;
 
 impl SessionLog {
-    pub(crate) fn focused_on(&self, rows: &Range<usize>) -> bool {
-        self.focus == *rows
+    pub(crate) fn focused_on(&self, rows: &Range<usize>, unfetched: Option<usize>) -> bool {
+        self.focus == *rows && self.unfetched == unfetched
     }
 
     /// Protects the whole viewport and its buffer, including rows already fetched. Returns whether moving it let
     /// go of event bodies, which the view must hear about even when no new page needs fetching.
-    pub(crate) fn focus_on(&mut self, rows: Range<usize>) -> bool {
+    pub(crate) fn focus_on(&mut self, rows: Range<usize>, unfetched: Option<usize>) -> bool {
         self.focus = rows;
+        self.unfetched = unfetched;
         let before = self.events.len();
         self.evict();
         self.events.len() != before
@@ -30,7 +29,7 @@ impl SessionLog {
     /// The next batch for the range a view needs, bottom first, marking it as in flight. A page the subscription has
     /// yet to deliver isn't one of them. The view wakes the fetcher again while more pages are needed.
     pub(crate) fn pages_to_fetch(&mut self) -> Vec<Range<Position>> {
-        let wanted: Vec<_> = self.wanted_pages().filter(|page| self.needs_page(*page)).take(FETCH_PAGES).collect();
+        let wanted: Vec<_> = self.wanted_pages().filter(|page| self.needs_page(*page)).collect();
         self.in_flight.extend(&wanted);
         wanted.into_iter().map(page_range).collect()
     }
@@ -42,11 +41,15 @@ impl SessionLog {
     }
 
     fn wanted_pages(&self) -> impl Iterator<Item = usize> {
-        let focus = self.focus_pages();
         let last = page_of(self.last);
-        // Nearest the bottom first, as when scrolling back from the live tail. Keep one neighbouring page at each
-        // end too, for rows that read nearby events. These neighbours are protected from eviction as well.
-        focus.clone().rev().chain(focus.start.checked_sub(1)).chain((focus.end <= last).then_some(focus.end))
+        // Fetch around the missing row the frame actually drew, not every page its estimates put in sight. The
+        // live tail or a long text can still be arriving. Reconsider after at most three pages, when their real
+        // heights can narrow the viewport. Loaded rows only need protection, except when a new hub made them stale.
+        let asked = self.unfetched.map(|row| page_of(Position::of_row(row).min(self.last)));
+        let stale = || self.stale.range(self.focus_pages()).next_back().copied();
+        asked.or_else(stale).into_iter().flat_map(move |page| {
+            [Some(page), page.checked_sub(1), (page < last).then_some(page + 1)].into_iter().flatten()
+        })
     }
 
     fn needs_page(&self, page: usize) -> bool {

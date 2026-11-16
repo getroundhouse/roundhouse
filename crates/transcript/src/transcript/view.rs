@@ -308,13 +308,20 @@ impl Render for Transcript {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.keep_revealing(cx);
         let wanted = self.session.clone();
+        let recorded = self.log.row_count();
         let line_text = LineText::new(window, cx);
         let row = self.frame_rows(line_text.clone(), cx);
         let room_under = crate::rows::room_under(&self.model.borrow());
         let rows = self.list.render(
             ElementId::Name(self.list_id.clone().into()),
             move |ix, _, cx| row(ix, cx),
-            move |row| wanted.want(row),
+            move |rows, unfetched| {
+                // This frame's tail isn't a log row. Before the first catch-up it is row 0, even if history has
+                // arrived on the session's thread; asking for it there would fetch the start of a chat opened at its end.
+                if recorded > 0 {
+                    wanted.want(rows.start..rows.end.min(recorded), unfetched.filter(|row| *row < recorded));
+                }
+            },
             room_under,
             window,
             cx,

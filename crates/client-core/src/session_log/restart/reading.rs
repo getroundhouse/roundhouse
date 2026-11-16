@@ -13,6 +13,7 @@ impl SessionLog {
             self.received = before_live(last);
             let row = last.row().unwrap_or(0);
             self.focus = row..row + 1;
+            self.unfetched = None;
         }
         self.last = self.last.max(last);
         self.touched(0..self.row_count() + 1);
@@ -55,6 +56,7 @@ impl SessionLog {
         let old = std::mem::replace(self, fresh);
         self.pending = old.pending;
         self.focus = old.focus;
+        self.unfetched = old.unfetched;
         self.changes = old.changes;
         self.outline = old.outline;
         self.settled = old.settled;

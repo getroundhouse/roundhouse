@@ -46,10 +46,10 @@ fn a_prompt_stays_listed_after_its_page_is_dropped() {
     let mut log = SessionLog::new(Seq::new(3000));
     let mut first = page(1..251);
     first[9] = prompt(Seq::new(10), "far back");
-    log.focus_on(0..1);
+    log.focus_on(0..1, Some(0));
     log.install_page(Position::of_seq(Seq::new(1)), first);
 
-    log.focus_on(2999..3000);
+    log.focus_on(2999..3000, Some(2999));
     for start in (251..3000).step_by(250) {
         log.install_page(Position::of_seq(Seq::new(start)), page(start..start + 250));
     }

@@ -32,8 +32,9 @@ pub(super) struct ListElement {
     pub(super) id: ElementId,
     pub(super) state: Rc<RefCell<State>>,
     pub(super) row: DrawRow,
-    /// Told every row the viewport and its buffer need, fetched or not, so none can be evicted while in sight.
-    pub(super) want: Rc<dyn Fn(Range<usize>)>,
+    /// Told every row the viewport and its buffer need, so none can be evicted while in sight, and the lowest row
+    /// that could not be drawn, to fetch around it. A fully loaded viewport asks for no more history.
+    pub(super) want: Rc<dyn Fn(Range<usize>, Option<usize>)>,
     /// What's selected of the rows' text, which a press on it starts and a drag past the list's edge scrolls on.
     pub(super) selection: Selection,
 }
@@ -91,7 +92,8 @@ impl ListElement {
         state.laid_out(layout.top, layout.anchor, layout.end_in_sight);
         (state.shown, state.last_in_sight) = (shown, layout.last_in_sight);
         drop(state);
-        (self.want)(layout.wanted());
+        let unfetched = layout.rows.iter().rev().find(|row| !row.fetched).map(|row| row.row);
+        (self.want)(layout.wanted(), unfetched);
         layout
     }
 

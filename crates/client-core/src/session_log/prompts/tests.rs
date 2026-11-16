@@ -267,7 +267,7 @@ fn a_page_that_brings_a_prompt_or_where_it_was_taken_changes_the_other_row_too()
     let page = |range: std::ops::Range<u64>| range.map(|seq| event(Seq::new(seq), notice())).collect::<Vec<_>>();
     let mut later = page(251..501);
     later[1] = event(Seq::new(252), taken(Seq::new(250)));
-    log.focus_on(260..261);
+    log.focus_on(260..261, Some(260));
     log.install_page(Position::of_seq(Seq::new(251)), later);
     let _ = log.take_changes();
     let mut earlier = page(1..251);

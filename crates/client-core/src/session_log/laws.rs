@@ -27,7 +27,7 @@ fn fetch(log: &mut SessionLog, focus: usize, fails: Option<usize>) {
 /// What [`fetch`] does, from a hub that serves `served`.
 fn fetch_from(log: &mut SessionLog, focus: usize, fails: Option<usize>, served: fn(Range<u64>) -> Vec<SessionEvent>) {
     let after_last = log.last().next();
-    log.focus_on(focus..focus + 1);
+    log.focus_on(focus..focus + 1, Some(focus));
     for (i, range) in log.pages_to_fetch().into_iter().enumerate() {
         if fails == Some(i) {
             log.fetch_failed();
@@ -86,7 +86,7 @@ proptest! {
     #[test]
     fn it_only_asks_for_whole_pages_that_exist(last_seq in seq_in(1u64..30_000), focus in 0usize..30_000) {
         let mut log = SessionLog::new(last_seq);
-        log.focus_on(focus..focus + 1);
+        log.focus_on(focus..focus + 1, Some(focus));
 
         for range in log.pages_to_fetch() {
             prop_assert!(range.start <= log.last(), "{range:?} is past {last_seq}");
@@ -100,7 +100,7 @@ proptest! {
     #[test]
     fn a_page_on_its_way_is_not_asked_for_again(last_seq in seq_in(1u64..30_000), focus in 0usize..30_000) {
         let mut log = SessionLog::new(last_seq);
-        log.focus_on(focus..focus + 1);
+        log.focus_on(focus..focus + 1, Some(focus));
         log.pages_to_fetch();
 
         prop_assert_eq!(log.pages_to_fetch(), Vec::new());
