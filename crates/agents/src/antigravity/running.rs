@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::{
     Arc,
-    atomic::{AtomicBool, Ordering},
+    atomic::{AtomicBool, AtomicU32, Ordering},
 };
 use std::time::Duration;
 
@@ -18,13 +18,29 @@ use super::{launch, supervise};
 use crate::jsonrpc::{Dialect, Rpc};
 use crate::{AgentError, AgentOptions, AgentOutput, AgentProcess};
 
-const STOP_GRACE: Duration = Duration::from_secs(3);
+pub(super) const STOP_GRACE: Duration = Duration::from_secs(3);
+
+pub(super) struct LaunchContext {
+    pub(super) bin: PathBuf,
+    pub(super) cwd: PathBuf,
+    pub(super) env: Vec<(String, String)>,
+    pub(super) options: AgentOptions,
+    pub(super) purpose: launch::Purpose,
+}
+
+pub(super) struct ChildSlot {
+    pub(super) pid: u32,
+    pub(super) replacing: Arc<AtomicBool>,
+    pub(super) exited: watch::Receiver<bool>,
+}
 
 pub(super) struct Shared {
-    pub(super) rpc: Rpc,
+    pub(super) rpc_slot: Mutex<Arc<Rpc>>,
+    pub(super) child: Mutex<ChildSlot>,
+    pub(super) context: LaunchContext,
     pub(super) state: Mutex<Conversation>,
     pub(super) controls: tokio::sync::Mutex<()>,
-    pub(super) pid: u32,
+    pub(super) pid: AtomicU32,
     pub(super) gone: AtomicBool,
     pub(super) requested: AtomicBool,
     pub(super) exited: watch::Sender<bool>,
@@ -35,8 +51,11 @@ pub(super) struct Shared {
     emission: tokio::sync::Mutex<Option<mpsc::Sender<AgentOutput>>>,
 }
 
-// `emit`, `stop` and `AntigravityProcess`'s drop repeat Codex's `Shared` and `CodexProcess`, as `supervise` says.
 impl Shared {
+    pub(super) fn rpc(&self) -> Arc<Rpc> {
+        self.rpc_slot.lock().clone()
+    }
+
     pub(super) async fn emit(&self, output: AgentOutput) {
         let mut sender = self.emission.lock().await;
         let closes = matches!(output, AgentOutput::Exited { .. });
@@ -65,9 +84,11 @@ impl Shared {
         if *exited.borrow() {
             return;
         }
-        process::signal_group(self.pid, process::Signal::Terminate);
+        let pid = self.child.lock().pid;
+        process::signal_group(pid, process::Signal::Terminate);
         if tokio::time::timeout(STOP_GRACE, exited.wait_for(|done| *done)).await.is_err() {
-            process::signal_group(self.pid, process::Signal::Kill);
+            let pid = self.child.lock().pid;
+            process::signal_group(pid, process::Signal::Kill);
             let _ = exited.wait_for(|done| *done).await;
         }
     }
@@ -81,7 +102,7 @@ impl Drop for AntigravityProcess {
     fn drop(&mut self) {
         if !self.shared.gone.load(Ordering::SeqCst) {
             self.shared.requested.store(true, Ordering::SeqCst);
-            process::signal_group(self.shared.pid, process::Signal::Kill);
+            process::signal_group(self.shared.child.lock().pid, process::Signal::Kill);
         }
     }
 }
@@ -138,7 +159,8 @@ pub(super) async fn start_conversation(
     if !spec.start.allowed(&claims) || !spec.settings.allowed(&claims) {
         return Err(AgentError::Refused("Antigravity does not offer those launch settings".into()));
     }
-    let args = purpose.args();
+    let (model, mode, effort) = launch_settings(spec)?;
+    let args = purpose.args(mode);
     if let Some(tap) = &tap {
         let conversation = match &spec.start {
             protocol::capability::conversation::Start::Resume { conversation } => Some(conversation),
@@ -149,11 +171,16 @@ pub(super) async fn start_conversation(
         let owned: Vec<String> = args.iter().map(|s| (*s).to_owned()).collect();
         tap.launched(conversation.is_some(), conversation, &owned);
     }
-    let (model, mode, effort) = launch_settings(spec)?;
+    let context = LaunchContext {
+        bin: bin.to_path_buf(),
+        cwd: PathBuf::from(&spec.cwd),
+        env: spec.env.clone(),
+        options: options.clone(),
+        purpose,
+    };
     let hold_plans = matches!(purpose, launch::Purpose::Agent);
-    let process =
-        transport(bin, args, Path::new(&spec.cwd), &spec.env, (model, mode, effort, hold_plans), output, options, tap)
-            .await?;
+    let skip_permissions = purpose.skips_permissions(mode);
+    let process = transport(context, args, (model, mode, effort, hold_plans, skip_permissions), output, tap).await?;
     if let Err(error) = launch::conversation(&process.shared, spec, options, purpose).await {
         process.shared.stop().await;
         return Err(error);
@@ -161,23 +188,25 @@ pub(super) async fn start_conversation(
     Ok(process)
 }
 
-#[expect(clippy::too_many_arguments, reason = "internal process construction passing launch inputs once")]
 async fn transport(
-    bin: &Path,
+    context: LaunchContext,
     args: &[&str],
-    cwd: &Path,
-    env: &[(String, String)],
-    initial: (ModelName, PermissionMode, settings::Effort, bool),
+    initial: (ModelName, PermissionMode, settings::Effort, bool, bool),
     output: mpsc::Sender<AgentOutput>,
-    options: &AgentOptions,
     tap: Option<crate::tap::Tap>,
 ) -> Result<Arc<AntigravityProcess>, AgentError> {
-    let launched = launch::launch(bin, args, cwd, env, options)?;
+    let launched = launch::launch(&context.bin, args, &context.cwd, &context.env, &context.options)?;
+    let rpc = Arc::new(Rpc::new(launched.stdin, Dialect::JsonRpc2, "Antigravity", tap.clone()));
+    let replacing = Arc::new(AtomicBool::new(false));
+    let child_gone = Arc::new(AtomicBool::new(false));
+    let (exited_tx, exited_rx) = watch::channel(false);
     let shared = Arc::new(Shared {
-        rpc: Rpc::new(launched.stdin, Dialect::JsonRpc2, "Antigravity", tap.clone()),
-        state: Mutex::new(Conversation::new(initial.0, initial.1, initial.2, initial.3)),
+        rpc_slot: Mutex::new(rpc.clone()),
+        child: Mutex::new(ChildSlot { pid: launched.pid, replacing: replacing.clone(), exited: exited_rx }),
+        context,
+        state: Mutex::new(Conversation::new(initial.0, initial.1, initial.2, initial.3, initial.4)),
         controls: tokio::sync::Mutex::new(()),
-        pid: launched.pid,
+        pid: AtomicU32::new(launched.pid),
         gone: AtomicBool::new(false),
         requested: AtomicBool::new(false),
         exited: watch::channel(false).0,
@@ -186,11 +215,16 @@ async fn transport(
         emission: tokio::sync::Mutex::new(Some(output)),
     });
     tokio::spawn(supervise::supervise(
-        launched.child,
-        launched.stdout,
-        launched.stderr,
+        supervise::ChildPipes {
+            child: launched.child,
+            stdout: launched.stdout,
+            stderr: launched.stderr,
+            rpc,
+            replacing,
+            child_gone,
+            exited_tx,
+        },
         shared.clone(),
-        options.pid_file.clone(),
     ));
     let process = Arc::new(AntigravityProcess { shared });
     if let Err(error) = launch::initialize(&process.shared).await {

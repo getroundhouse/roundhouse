@@ -568,7 +568,7 @@ Every call is drawn the same way, as the first rule below says, and each kind fi
 
   ![Codex models and the selected model’s effort levels](screens/codex-models.png)
 
-- **Antigravity starts on Gemini 4 Carbon at Medium effort, with the worker machine's native Antigravity sign-in.** Roundhouse leaves those credentials with Antigravity. Approval-mode changes apply at once while model and effort changes apply on the next turn, and a completed plan waits for approval before switching to full access. *Unconfirmed.*
+- **Antigravity starts on Gemini 4 Carbon at Medium effort, with the worker machine's native Antigravity sign-in.** Roundhouse leaves those credentials with Antigravity. Its model, mode and effort changes apply on the next turn (switching between full access and plan mode restarts `agy` once idle, stopping any running `agy` background tasks or subagents), and a completed plan waits for approval before switching to full access. *Unconfirmed.*
 
 - **The Antigravity model picker offers the compiled native Gemini catalog and each model’s supported efforts, including Extra high on Gemini 4 Hydrogen.** Switching to a model that cannot use the current effort selects that model’s default. *Unconfirmed.*
 

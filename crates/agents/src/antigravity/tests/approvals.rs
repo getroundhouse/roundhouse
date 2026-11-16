@@ -263,6 +263,74 @@ async fn an_approved_plans_turn_counts_what_the_plan_took_with_what_carrying_it_
     assert_eq!((outcome, result.as_deref()), (TurnOutcome::Success, Some("Done.")));
     let tokens = tokens.expect("both prompts said what they took");
     assert_eq!((tokens.input_tokens, tokens.output_tokens, tokens.cache_read_tokens), (280, 50, 8));
+    let launches: Vec<Value> = std::fs::read_to_string(h.room.path().join("native-requests.jsonl"))
+        .unwrap()
+        .lines()
+        .filter_map(|line| serde_json::from_str::<Value>(line).ok())
+        .filter(|entry| entry.get("launch_args").is_some())
+        .map(|entry| entry["launch_args"].clone())
+        .collect();
+    assert_eq!(
+        launches,
+        vec![
+            json!(["acp", "--disable-telemetry"]),
+            json!(["acp", "--disable-telemetry", "--dangerously-skip-permissions"]),
+        ]
+    );
+    agent.stop().await;
+}
+
+#[tokio::test]
+async fn mode_switches_swap_skip_permissions_flag_stop_background_tasks_and_keep_active_turn_mode() {
+    let bg_call = json!({
+        "jsonrpc": "2.0", "method": "session/update",
+        "params": {"sessionId": "session-1", "update": {"sessionUpdate": "tool_call", "toolCallId": "bg-swap", "name": "run_command", "status": "in_progress", "args": {"CommandLine": "sleep 30", "WaitMsBeforeAsync": 500}}}
+    });
+    let reply = |text: &str| json!({"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "session-1", "update": {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": text}}}});
+    let script = json!([
+        {"on": "session/prompt", "at": 1, "actions": [bg_call, {"result": {"stopReason": "end_turn"}}]},
+        {"on": "session/prompt", "at": 2, "actions": [reply("1. Plan step")]},
+        {"on": "session/set_config_option", "at": 5, "actions": [{"result": {}}, {"id": 6, "jsonrpc": "2.0", "result": {"stopReason": "end_turn"}}]}
+    ]);
+    let mut h = Harness::new(&script, PermissionMode::FullAccess, Start::New { conversation: None });
+    let agent = h.started().await;
+    let first_pid = agent.pid();
+    agent.send_prompt(Seq::FIRST, &Prompt::new("start bg")).await.unwrap();
+    while !matches!(h.next().await, AgentOutput::Event { body: EventBody::TurnEnded { .. }, .. }) {}
+
+    let to_plan =
+        protocol::model::SessionSettingsChange { permission_mode: Some(PermissionMode::Plan), ..Default::default() };
+    agent.configure(&to_plan).await.unwrap();
+    assert_ne!(agent.pid(), first_pid);
+    let (mut saw_dropped, mut saw_stopped) = (false, false);
+    loop {
+        if let AgentOutput::Event { body, .. } = h.next().await {
+            saw_dropped |=
+                matches!(&body, EventBody::ToolCallDropped { tool_use_id } if tool_use_id.as_str() == "bg-swap");
+            saw_stopped |=
+                matches!(&body, EventBody::AgentTasks { tasks, stopped } if tasks.is_empty() && stopped.len() == 1);
+            if matches!(body, EventBody::AgentMode { permission_mode: PermissionMode::Plan }) {
+                break;
+            }
+        }
+    }
+    assert!(saw_dropped && saw_stopped);
+
+    agent.send_prompt(Seq::new(2), &Prompt::new("write plan")).await.unwrap();
+    while !matches!(h.next().await, AgentOutput::Delta(_)) {}
+    let mid = protocol::model::SessionSettingsChange {
+        effort: Some(protocol::model::Effort::Low),
+        permission_mode: Some(PermissionMode::FullAccess),
+        model: None,
+    };
+    agent.configure(&mid).await.unwrap();
+    let held = loop {
+        if let AgentOutput::Event { body: EventBody::ApprovalRequested { request: Some(req), .. }, .. } = h.next().await
+        {
+            break req.asks;
+        }
+    };
+    assert_eq!(held, Asks::Plan { plan: "1. Plan step".into(), file: None });
     agent.stop().await;
 }
 

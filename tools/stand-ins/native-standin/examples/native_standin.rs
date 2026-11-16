@@ -19,9 +19,9 @@ fn main() {
     } else {
         (std::fs::read("../native-script.json").unwrap(), Path::new(".."))
     };
+    let mut calls = prior_calls(root);
     record_line(root, &json!({ "launch_args": args }));
     let rules: Vec<Value> = serde_json::from_slice(&script_bytes).unwrap();
-    let mut calls: HashMap<String, u64> = HashMap::new();
     for line in std::io::stdin().lock().lines() {
         let request: Value = serde_json::from_str(&line.unwrap()).unwrap();
         record_line(root, &request);
@@ -44,10 +44,11 @@ fn main() {
                     say(&json!({"id":request["id"],"result":{"thread":{"id":"thread"},"model":"gpt-6-luna"}}));
                 }
                 "session/new" | "session/resume" => {
+                    let session_id = request["params"]["sessionId"].as_str().unwrap_or("session-1");
                     say(&json!({
                         "id": request["id"],
                         "result": {
-                            "sessionId": "session-1",
+                            "sessionId": session_id,
                             "configOptions": [{
                                 "id": "thought_level",
                                 "currentValue": "medium",
@@ -65,6 +66,19 @@ fn main() {
             }
         }
     }
+}
+
+fn prior_calls(root: &Path) -> HashMap<String, u64> {
+    let mut counts = HashMap::new();
+    let Ok(existing) = std::fs::read_to_string(root.join("native-requests.jsonl")) else { return counts };
+    for line in existing.lines() {
+        if let Ok(value) = serde_json::from_str::<Value>(line)
+            && let Some(method) = value["method"].as_str()
+        {
+            *counts.entry(method.to_owned()).or_default() += 1;
+        }
+    }
+    counts
 }
 
 fn run_models() -> ! {

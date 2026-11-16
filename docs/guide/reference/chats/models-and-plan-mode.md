@@ -25,7 +25,7 @@ One picker, in the composer's bottom row, chooses both, since how hard the agent
 - **A Claude chat nobody has chosen for runs Opus at Extra high; Codex runs GPT-6.1 Sol at Low; Antigravity runs Gemini 4 Carbon at Medium.**
 - **Every chat names its model and effort itself,** so your own CLI settings and your account don't decide them.
 - **A new chat with the same agent keeps the model and effort of the chat it was opened from.** Switching agents uses that agent’s defaults.
-- **A new effort reaches an agent that's already working without stopping it.** Codex accepts model, mode and effort changes for its next turn; Antigravity applies approval-mode changes at once and model and effort changes for its next turn.
+- **A new effort reaches an agent that's already working without stopping it.** Codex and Antigravity accept model, mode and effort changes for their next turn.
 - **For Claude, choosing another model writes the conversation to the prompt cache again,** and the picker says how much before you switch. See [Context, compacting and the cache](context-compacting-and-the-cache.md).
 
 ## Approval modes

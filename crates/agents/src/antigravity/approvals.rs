@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use protocol::capability::{
     approvals::{AfterDenial, Asks, Decision, Remember, Request},
     asking::PlanContext,
@@ -15,7 +17,7 @@ use super::{
 use crate::{AgentError, acp, jsonrpc};
 
 pub(super) async fn requested(
-    shared: &Shared,
+    shared: &Arc<Shared>,
     method: &str,
     native_id: &Value,
     params: &Value,
@@ -47,16 +49,16 @@ async fn permission_requested(
         if in_turn {
             state.note_wakeup_interaction();
         }
-        (state.mode, in_turn)
+        (state.process_mode, in_turn)
     };
     if !in_turn {
         let reject = perm.option_for(false, false).unwrap_or("reject");
-        return shared.rpc.reply(native_id.clone(), acp::permission_selected(reject)).await;
+        return shared.rpc().reply(native_id.clone(), acp::permission_selected(reject)).await;
     }
     notifications::ensure_own_turn_started(shared).await;
     if mode == PermissionMode::FullAccess {
         let allow = perm.option_for(false, true).unwrap_or("allow");
-        return shared.rpc.reply(native_id.clone(), acp::permission_selected(allow)).await;
+        return shared.rpc().reply(native_id.clone(), acp::permission_selected(allow)).await;
     }
     notifications::ensure_call_emitted(shared, &perm.tool_call, None).await;
     let call = {
@@ -97,7 +99,7 @@ async fn elicitation_requested(
         in_turn
     };
     if !in_turn {
-        return shared.rpc.reply(native_id.clone(), acp::elicitation_cancel()).await;
+        return shared.rpc().reply(native_id.clone(), acp::elicitation_cancel()).await;
     }
     notifications::ensure_own_turn_started(shared).await;
     let Some(form) = acp::parse_elicitation(params) else {
@@ -170,12 +172,13 @@ pub(super) async fn cancel_native_waiters(shared: &Shared) {
             })
             .collect()
     };
+    let rpc = shared.rpc();
     for (id, payload) in replies {
-        let _ = shared.rpc.reply(id, payload).await;
+        let _ = rpc.reply(id, payload).await;
     }
 }
 
-pub(super) async fn decide(shared: &Shared, id: &ApprovalId, decision: &Decision) -> Result<(), AgentError> {
+pub(super) async fn decide(shared: &Arc<Shared>, id: &ApprovalId, decision: &Decision) -> Result<(), AgentError> {
     let waiting = shared
         .state
         .lock()
@@ -218,7 +221,7 @@ fn can_answer(native: &NativeRequest, decision: &Decision) -> bool {
     )
 }
 
-async fn answer(shared: &Shared, waiting: &Waiting, decision: &Decision) -> Result<(), AgentError> {
+async fn answer(shared: &Arc<Shared>, waiting: &Waiting, decision: &Decision) -> Result<(), AgentError> {
     match (&waiting.native, decision) {
         (NativeRequest::Plan, Decision::ApprovePlan { context: PlanContext::Kept, .. }) => {
             switch_plan_mode(shared, PermissionMode::FullAccess, "Implement the approved plan.").await
@@ -235,13 +238,13 @@ async fn answer(shared: &Shared, waiting: &Waiting, decision: &Decision) -> Resu
                 Remember::Rule(_) => return Err(unsupported_decision()),
             };
             let option = request.option_for(always, true).unwrap_or(if always { "allow_always" } else { "allow" });
-            shared.rpc.reply(id.clone(), acp::permission_selected(option)).await
+            shared.rpc().reply(id.clone(), acp::permission_selected(option)).await
         }
         (NativeRequest::Permission { id, request }, Decision::Deny { words: None, then, keep: None }) => {
             let call_id = ToolUseId::from(request.tool_call.tool_call_id.as_str());
             shared.state.lock().denied_calls.insert(call_id);
             let reject = request.option_for(false, false).unwrap_or("reject");
-            shared.rpc.reply(id.clone(), acp::permission_selected(reject)).await?;
+            shared.rpc().reply(id.clone(), acp::permission_selected(reject)).await?;
             if *then == AfterDenial::Stop {
                 let session_id = {
                     let mut state = shared.state.lock();
@@ -252,26 +255,24 @@ async fn answer(shared: &Shared, waiting: &Waiting, decision: &Decision) -> Resu
                     session_id
                 };
                 if let Some(session_id) = session_id {
-                    shared.rpc.notify("session/cancel", json!({ "sessionId": session_id })).await?;
+                    shared.rpc().notify("session/cancel", json!({ "sessionId": session_id })).await?;
                 }
             }
             Ok(())
         }
         (NativeRequest::Elicitation { id, fields }, Decision::Answer { answers }) => {
-            shared.rpc.reply(id.clone(), acp::elicitation_accept(fields, answers)).await
+            shared.rpc().reply(id.clone(), acp::elicitation_accept(fields, answers)).await
         }
         _ => Err(unsupported_decision()),
     }
 }
 
-async fn switch_plan_mode(shared: &Shared, mode: PermissionMode, prompt_text: &str) -> Result<(), AgentError> {
-    let session_id = shared.state.lock().session_id.clone().ok_or(AgentError::Exited)?;
-    shared
-        .rpc
-        .ask("session/set_mode", json!({ "sessionId": session_id, "modeId": super::running::mode_id(mode) }))
-        .await?;
+async fn switch_plan_mode(shared: &Arc<Shared>, mode: PermissionMode, prompt_text: &str) -> Result<(), AgentError> {
     let changed = {
         let mut state = shared.state.lock();
+        if state.session_id.is_none() {
+            return Err(AgentError::Exited);
+        }
         // The turn goes on in the prompt below, and keeps what the plan's prompt took.
         state.ending = Ending::Not;
         let changed = state.mode != mode;
@@ -326,5 +327,5 @@ async fn unsupported(shared: &Shared, id: &Value, method: &str) -> Result<(), Ag
             None,
         )
         .await;
-    shared.rpc.refuse(id.clone(), "Roundhouse does not support this request").await
+    shared.rpc().refuse(id.clone(), "Roundhouse does not support this request").await
 }
