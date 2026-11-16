@@ -6,7 +6,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use kit_sync::{COPY, Commit, Error, Git, Kept, Pin, RECORD, Record, Release, Synced};
+use kit_sync::{
+    COPY, Commit, Error, Git, Kept, NOTICE, PATCHES, PatchName, Patched, Pin, RECORD, Record, Release, Synced,
+};
 use tempfile::TempDir;
 
 /// The crates the copy keeps.
@@ -35,6 +37,11 @@ pub(crate) fn lines(count: usize, changed: &[(usize, &str)]) -> String {
             None => format!("line {number}\n"),
         })
         .collect()
+}
+
+/// `body` preceded by the Rust comment notice line the copy puts on changed files.
+pub(crate) fn noticed_rs(body: &str) -> String {
+    format!("// {NOTICE}\n{body}")
 }
 
 /// Upstream's workspace manifest, on `gpui`, with `after_members` on the line that ends its members.
@@ -106,6 +113,7 @@ pub(crate) struct Stand {
     pub(crate) upstream: PathBuf,
     pub(crate) root: PathBuf,
     pub(crate) copy: PathBuf,
+    pub(crate) patches: PathBuf,
     pub(crate) first: Commit,
 }
 
@@ -158,12 +166,13 @@ impl Stand {
                 (".gitignore", "target/\ndist/\n"),
                 (
                     "Cargo.toml",
-                    "[workspace.dependencies]\ngpui-kit = { path = \"third_party/gpui-kit/crates/kit\", version = \
-                 \"=0.0.1\", features = [\"syntect\"] }\ngpui-pre-apple = { version = \"=0.3.10\" }\n",
+                    "[workspace.dependencies]\ngpui-kit = { path = \"third_party/gpui-kit/vendor/crates/kit\", \
+                 version = \"=0.0.1\", features = [\"syntect\"] }\ngpui-pre-apple = { version = \"=0.3.10\" }\n",
                 ),
             ],
         );
-        let stand = Self { copy: root.join(COPY), _work: held, work, upstream, root, first };
+        let stand =
+            Self { copy: root.join(COPY), patches: root.join(PATCHES), _work: held, work, upstream, root, first };
         stand.commit_root();
         stand
     }
@@ -203,6 +212,32 @@ impl Stand {
         kit_sync::sync(&git, &self.root, &self.pin(release, commit, kept()))
     }
 
+    /// Records changes in `copy` into `<name>.patch`.
+    pub(crate) fn patch(&self, name: &str) -> Result<Patched, Error> {
+        let upstream = format!("file://{}", self.upstream.display());
+        let name = PatchName::parse(name)?;
+        kit_sync::patch(&Git::new(std::env::vars_os()), &self.root, &upstream, &name)
+    }
+
+    /// Records changes in `copy` into `<name>.patch` with git run in `environment`.
+    pub(crate) fn patch_in(&self, environment: &[(OsString, OsString)], name: &str) -> Result<Patched, Error> {
+        let git = Git::new(std::env::vars_os().chain(environment.iter().cloned()));
+        let upstream = format!("file://{}", self.upstream.display());
+        let name = PatchName::parse(name)?;
+        kit_sync::patch(&git, &self.root, &upstream, &name)
+    }
+
+    /// Drops `<name>.patch` from the copy and the record.
+    pub(crate) fn drop_patch(&self, name: &str) -> Result<(), Error> {
+        let name = PatchName::parse(name)?;
+        kit_sync::drop_patch(&Git::new(std::env::vars_os()), &self.root, &name)
+    }
+
+    /// Runs the offline policy check against `release` and `commit`.
+    pub(crate) fn verify(&self, release: &str, commit: &Commit) -> Result<(), Error> {
+        kit_sync::verify(&Git::new(std::env::vars_os()), &self.root, &self.pin(release, commit, kept()))
+    }
+
     pub(crate) fn commit_root(&self) {
         git(&self.root, &["add", "-A"]);
         git(&self.root, &["commit", "-q", "--allow-empty", "-m", "Root"]);
@@ -210,6 +245,10 @@ impl Stand {
 
     pub(crate) fn read(&self, path: &str) -> String {
         fs::read_to_string(self.copy.join(path)).unwrap()
+    }
+
+    pub(crate) fn read_patch(&self, name: &str) -> String {
+        fs::read_to_string(self.patches.join(format!("{name}.patch"))).unwrap()
     }
 
     pub(crate) fn made(&self) -> Record {

@@ -25,7 +25,7 @@ Longbridge's component kit for GPUI, used in their shipping Longbridge Pro app.
 - **It has most of what the app needs:** messages, a message scroller, diffs, a sidebar, docks, a command palette, settings, native menus, variable-height virtual lists, a code editor, and Markdown.
 - **It runs UI tests headless,** so the app's tests click and type without a window on screen.
 - **It's Apache-2.0.**
-- **The app builds a copy of its own,** in `third_party/gpui-kit`, so a change the app needs of the kit, such as a hook it keeps private, goes in with the app code that needs it, checked by the app's tests and the gallery, and is offered upstream from there. `third_party/README.md` says how.
+- **The app builds a copy of its own,** in `third_party/gpui-kit/vendor`, so a change the app needs of the kit, such as a hook it keeps private, goes in with the app code that needs it, checked by the app's tests and the gallery, and is offered upstream from `third_party/gpui-kit/patches`. `third_party/README.md` says how.
 
 ## The transcript
 

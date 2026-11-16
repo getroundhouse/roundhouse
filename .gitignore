@@ -5,7 +5,7 @@ dist/
 .DS_Store
 __pycache__/
 # What running the kit's own tests in its copy's workspace resolves. The app's build resolves the kit in Cargo.lock.
-third_party/gpui-kit/Cargo.lock
+third_party/gpui-kit/vendor/Cargo.lock
 # Terraform's working files and local state. Its lockfile is committed
 infra/.terraform/
 infra/terraform.tfstate*

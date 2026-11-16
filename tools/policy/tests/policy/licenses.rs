@@ -45,11 +45,11 @@ const VENDORED: &[(&str, &str, &str, &[&str])] = &[
     // gpui-kit and the crates under it, which `tools/kit-sync` writes. Each crate's manifest says so too.
     // `crates/component-macros` has a symbolic link to the copy's own `LICENSE-APACHE`, as upstream has it, which
     // the search for licenses skips, as it skips every link.
-    ("third_party/gpui-kit", "LICENSE-APACHE", "Apache-2.0", APACHE),
-    ("third_party/gpui-kit/crates/base", "LICENSE-APACHE", "Apache-2.0", APACHE),
-    ("third_party/gpui-kit/crates/component", "LICENSE-APACHE", "Apache-2.0", APACHE),
+    ("third_party/gpui-kit/vendor", "LICENSE-APACHE", "Apache-2.0", APACHE),
+    ("third_party/gpui-kit/vendor/crates/base", "LICENSE-APACHE", "Apache-2.0", APACHE),
+    ("third_party/gpui-kit/vendor/crates/component", "LICENSE-APACHE", "Apache-2.0", APACHE),
     // The icons the kit draws, which are Lucide's, but those Lucide took from Feather, which are under MIT.
-    ("third_party/gpui-kit/crates/assets", "LICENSE-LUCIDE", "ISC AND MIT", &["ISC License", "The MIT License"]),
+    ("third_party/gpui-kit/vendor/crates/assets", "LICENSE-LUCIDE", "ISC AND MIT", &["ISC License", "The MIT License"]),
 ];
 
 /// What the kit's Apache license file holds: its notice, then the license's terms.

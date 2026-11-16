@@ -1,12 +1,13 @@
 [package]
 name = "kit-sync"
-description = "Keeps third_party/gpui-kit, the app's copy of gpui-kit, on the upstream release it pins, with our changes on top."
+description = "Keeps third_party/gpui-kit/vendor, the app's copy of gpui-kit, on the upstream release it pins, with our patches on top."
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
 license.workspace = true
 
 [dependencies]
+ring.workspace = true
 serde.workspace = true
 tempfile.workspace = true
 thiserror.workspace = true

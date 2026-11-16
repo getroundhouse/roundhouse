@@ -3,9 +3,9 @@
 use std::ffi::OsString;
 use std::fs;
 
-use kit_sync::{Git, Synced};
+use kit_sync::Synced;
 
-use crate::fixture::{Stand, lines, write};
+use crate::fixture::{Stand, lines, noticed_rs, write};
 
 /// A hook that fails, so a commit that runs it fails.
 fn failing_hook(dir: &std::path::Path) {
@@ -52,17 +52,16 @@ fn the_persons_git_settings_change_nothing_it_does() {
         ("GIT_DIR".into(), in_work("nowhere")),
     ];
     stand.sync_in(&environment, "v1", &stand.first).unwrap();
-    stand.commit_root();
     write(&stand.copy, &[("crates/base/src/lib.rs", &lines(12, &[(2, "ours")]))]);
+    stand.patch_in(&environment, "ours").unwrap();
     write(&stand.upstream, &[("crates/base/src/lib.rs", &lines(12, &[(10, "upstream's")]))]);
     let second = stand.release("v2");
 
     let synced = stand.sync_in(&environment, "v2", &second).unwrap();
 
-    assert_eq!(synced, Synced::Brought { moved: None });
-    assert_eq!(stand.read("crates/base/src/lib.rs"), lines(12, &[(2, "ours"), (10, "upstream's")]));
-    let git = Git::new(std::env::vars_os().chain(environment));
-    let upstream = stand.pin("v2", &second, Vec::new()).upstream;
-    let patch = kit_sync::diff(&git, &stand.root, &upstream, &[]).unwrap();
+    assert_eq!(synced, Synced::Brought { moved: None, dropped: Vec::new() });
+    assert_eq!(stand.read("crates/base/src/lib.rs"), noticed_rs(&lines(12, &[(2, "ours"), (10, "upstream's")])));
+    let patch = stand.read_patch("ours");
     assert!(patch.contains("--- a/crates/base/src/lib.rs\n"), "{patch}");
+    stand.verify("v2", &second).unwrap();
 }

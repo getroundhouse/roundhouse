@@ -1,0 +1,196 @@
+diff --git a/crates/base/src/text/editor_host.rs b/crates/base/src/text/editor_host.rs
+index 3ffc4b1..aeeea70 100644
+--- a/crates/base/src/text/editor_host.rs
++++ b/crates/base/src/text/editor_host.rs
+@@ -27,7 +27,7 @@ use std::{cell::RefCell, collections::HashMap, ops::Range, rc::Rc, sync::Arc};
+ 
+ use gpui::{
+     AnyElement, App, Bounds, ClickEvent, ElementId, HighlightStyle, Hsla, ImageSource,
+-    InteractiveElement as _, IntoElement as _, ParentElement as _, Pixels, Point, SharedString,
++    InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Point, SharedString,
+     SharedUri, TextLayout, Window, WrappedLineLayout, div, point, px,
+ };
+ use unicode_segmentation::UnicodeSegmentation as _;
+@@ -42,8 +42,8 @@ use super::{
+ };
+ 
+ pub use super::node::{
+-    BlockNode, BlockState, CodeBlock, ColumnumnAlign as ColumnAlign, ImageNode, InlineNode,
+-    LinkMark, Paragraph, Span, Table, TextMark,
++    BlockNode, BlockState, CODE_BLOCK_GROUP, CodeBlock, ColumnumnAlign as ColumnAlign, ImageNode,
++    InlineNode, LinkMark, Paragraph, Span, Table, TextMark,
+ };
+ 
+ /// Parses Markdown with the parser [`TextView`](super::TextView) uses,
+@@ -61,7 +61,7 @@ pub fn parse_markdown(
+ }
+ 
+ /// What [`BlockNode::render`] needs besides the node: the text style, code
+-/// highlighter and Markdown extensions.
++/// highlighter, code block actions and Markdown extensions.
+ #[derive(Clone)]
+ pub struct RenderContext {
+     node: NodeContext,
+@@ -89,6 +89,22 @@ impl RenderContext {
+         self
+     }
+ 
++    /// Sets the actions each code block draws in its top-right corner, in
++    /// place of its language, as [`TextView::code_block_actions`] does. A
++    /// block with actions is the hover group [`CODE_BLOCK_GROUP`].
++    ///
++    /// [`TextView::code_block_actions`]: super::TextView::code_block_actions
++    pub fn with_code_block_actions<F, E>(mut self, actions: F) -> Self
++    where
++        F: Fn(&CodeBlock, &mut Window, &mut App) -> E + Send + Sync + 'static,
++        E: IntoElement,
++    {
++        self.node.code_block_actions = Some(Arc::new(move |code_block, window, cx| {
++            actions(code_block, window, cx).into_any_element()
++        }));
++        self
++    }
++
+     /// Resolves document image URIs. The host owns resource access policy.
+     pub fn with_image_source<F>(mut self, resolver: F) -> Self
+     where
+diff --git a/crates/base/src/text/mod.rs b/crates/base/src/text/mod.rs
+index 91df982..61550d8 100644
+--- a/crates/base/src/text/mod.rs
++++ b/crates/base/src/text/mod.rs
+@@ -22,7 +22,7 @@ mod utils;
+ use gpui::{App, ElementId, IntoElement, RenderOnce, SharedString, Window};
+ pub use inline_element::*;
+ pub use markdown_ext::*;
+-pub use node::{CodeBlock, TableData};
++pub use node::{CODE_BLOCK_GROUP, CodeBlock, TableData};
+ pub use range_highlight::{RangeHighlight, RangeHighlightError, RenderedText};
+ pub use state::*;
+ pub use stream_fade::TextViewMotion;
+diff --git a/crates/base/src/text/node.rs b/crates/base/src/text/node.rs
+index c8a8c85..95a11d6 100644
+--- a/crates/base/src/text/node.rs
++++ b/crates/base/src/text/node.rs
+@@ -2337,6 +2337,10 @@ impl Paragraph {
+     }
+ }
+ 
++/// The hover group a code block with actions is, so an action can show only
++/// while its block is hovered, with `group_hover(CODE_BLOCK_GROUP, ..)`.
++pub const CODE_BLOCK_GROUP: &str = "code-block";
++
+ #[derive(Debug, Clone)]
+ pub struct CodeBlock {
+     lang: Option<SharedString>,
+@@ -2613,7 +2617,8 @@ impl CodeBlock {
+                 .child(actions(&self, window, cx))
+         });
+         // The id scopes the caller's action ids per code block, so plain ids
+-        // like `"copy"` don't collide across blocks.
++        // like `"copy"` don't collide across blocks, and the group lets them
++        // show only while their block is hovered.
+         let id = block_element_id("codeblock", self.span, options.ix);
+         let block = if matches!(style.code_block().overflow.y, Some(Overflow::Scroll)) {
+             let scroll_handle = window
+@@ -2632,6 +2637,7 @@ impl CodeBlock {
+             // pinned to the viewport instead of moving with the code.
+             div()
+                 .id(id.clone())
++                .when(actions.is_some(), |this| this.group(CODE_BLOCK_GROUP))
+                 .w_full()
+                 .min_w_0()
+                 .relative()
+@@ -2649,7 +2655,11 @@ impl CodeBlock {
+         } else {
+             // Without actions nothing under the block needs element state.
+             match actions {
+-                Some(actions) => block.id(id).child(actions).into_any_element(),
++                Some(actions) => block
++                    .id(id)
++                    .group(CODE_BLOCK_GROUP)
++                    .child(actions)
++                    .into_any_element(),
+                 None => block.children(lang_label).into_any_element(),
+             }
+         };
+diff --git a/crates/base/src/text/text_view.rs b/crates/base/src/text/text_view.rs
+index 21cc84a..376674f 100644
+--- a/crates/base/src/text/text_view.rs
++++ b/crates/base/src/text/text_view.rs
+@@ -380,7 +380,9 @@ impl TextView {
+     /// Set custom block actions for code blocks.
+     ///
+     /// The closure receives the [`CodeBlock`],
+-    /// and returns an element to display.
++    /// and returns an element to display. A block with actions is the hover
++    /// group [`CODE_BLOCK_GROUP`](super::CODE_BLOCK_GROUP), so an action can
++    /// show only while its block is hovered.
+     pub fn code_block_actions<F, E>(mut self, f: F) -> Self
+     where
+         F: Fn(&CodeBlock, &mut Window, &mut App) -> E + Send + Sync + 'static,
+diff --git a/crates/base/tests/text_host.rs b/crates/base/tests/text_host.rs
+index cda6b8c..5d4fcab 100644
+--- a/crates/base/tests/text_host.rs
++++ b/crates/base/tests/text_host.rs
+@@ -2,14 +2,19 @@
+ use gpui_fast as gpui;
+ 
+ use std::sync::{
+-    Arc,
++    Arc, Mutex,
+     atomic::{AtomicUsize, Ordering},
+ };
+ 
+-use gpui::{Context, IntoElement, ParentElement as _, Render, TestAppContext, Window, div};
++use gpui::{
++    Context, InteractiveElement as _, IntoElement, ParentElement as _, Render, Styled as _,
++    TestAppContext, Window, div,
++};
+ use gpui_base::{
+     TextViewStyle,
+-    text::editor_host::{BlockNode, FlowPosition, LinkMark, RenderContext, parse_markdown},
++    text::editor_host::{
++        BlockNode, CODE_BLOCK_GROUP, FlowPosition, LinkMark, RenderContext, parse_markdown,
++    },
+ };
+ 
+ struct ExternalText {
+@@ -79,3 +84,38 @@ fn external_host_uses_local_rendering_services(cx: &mut TestAppContext) {
+     assert!(highlights.load(Ordering::SeqCst) > 0);
+     assert!(images.load(Ordering::SeqCst) > 0);
+ }
++
++/// A host's code block actions are drawn for each code block, one in a list
++/// too, and given the block they're for.
++#[gpui::test]
++fn external_host_draws_code_block_actions(cx: &mut TestAppContext) {
++    let drawn = Arc::new(Mutex::new(Vec::new()));
++    let context = RenderContext::new(TextViewStyle::default()).with_code_block_actions({
++        let drawn = drawn.clone();
++        move |block, _, _| {
++            drawn.lock().unwrap().push(block.code().trim().to_string());
++            div()
++                .invisible()
++                .group_hover(CODE_BLOCK_GROUP, |this| this.visible())
++                .child("Copy")
++        }
++    });
++    cx.update(gpui_base::init);
++    let blocks = parse_markdown(
++        "```rust\ntop\n```\n\n1. Item\n\n   ```\n   nested\n   ```\n",
++        Default::default(),
++    )
++    .unwrap();
++    let blocks = blocks
++        .into_iter()
++        .enumerate()
++        .map(|(ix, block)| (ix as u64, block))
++        .collect();
++    let (_, vcx) = cx.add_window_view(move |_, _| ExternalText { blocks, context });
++    vcx.run_until_parked();
++    vcx.update(|window, cx| window.draw(cx).clear(cx));
++    let mut drawn = drawn.lock().unwrap().clone();
++    drawn.sort();
++    drawn.dedup();
++    assert_eq!(drawn, ["nested", "top"]);
++}

@@ -1,4 +1,4 @@
-//! What a copy that keeps what a pin says holds of upstream's files at a release.
+//! What a copy that keeps what a pin says holds of upstream's files at a release, before our patches and notices.
 
 use std::fs;
 use std::io;
@@ -9,7 +9,6 @@ use toml::Table;
 use crate::error::{At, Error};
 use crate::files::{CopyPath, files_under, put};
 use crate::members::members_cut;
-use crate::notice::NOTICE;
 use crate::pin::Kept;
 use crate::reads::unkept;
 
@@ -42,8 +41,8 @@ pub(crate) fn cut(checkout: &Path, out: &Path, kept: &[Kept]) -> Result<(), Erro
     let manifest = out.join("Cargo.toml");
     let text = fs::read_to_string(&manifest).at(&manifest)?;
     let parsed: Table = text.parse().map_err(|source| Error::Toml { path: manifest.clone(), source })?;
-    let notice = format!("# {NOTICE}\n# Its workspace lists only the packages the copy keeps.\n");
-    fs::write(&manifest, notice + &members_cut(&text, &parsed, &crates, &left_out)?).at(&manifest)?;
+    let header = "# Its workspace lists only the packages the copy keeps.\n";
+    fs::write(&manifest, String::from(header) + &members_cut(&text, &parsed, &crates, &left_out)?).at(&manifest)?;
     let unread = unkept(out)?;
     if !unread.is_empty() {
         return Err(Error::ReadsUnkept(unread));

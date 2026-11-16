@@ -1,4 +1,4 @@
-//! Why the copy was left as it was.
+//! Why the copy or its patches were left as they were.
 
 use std::fmt::Display;
 use std::io;
@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 
 use crate::copy::COPY;
 use crate::files::CopyPath;
+use crate::patches::{PATCHES, PatchName};
 use crate::pin::{Commit, Release};
 use crate::reads::Read;
 use crate::record::RECORD;
@@ -16,6 +17,38 @@ pub enum Error {
     TagElsewhere { release: Release, tagged: Option<Commit>, pinned: Commit },
     #[error("these still have git's conflict markers, so settle them first: {}", listed(.0))]
     StillMarked(Vec<CopyPath>),
+    #[error("{patch} still has conflicts to settle in {}, then run `cargo run -p kit-sync`", listed(files))]
+    Unsettled { patch: PatchName, files: Vec<CopyPath> },
+    #[error("finish settling the last merge before changing the pinned release or what it keeps")]
+    PinnedMovedWhileSettling,
+    #[error("the copy is on {copy}, not {pinned}: run `cargo run -p kit-sync`")]
+    NotAtPin { copy: Release, pinned: Release },
+    #[error("`{0}` isn't a patch name: use ASCII letters, digits, `-` and `_`, not starting with `-`")]
+    InvalidPatchName(String),
+    #[error("{RECORD} lists {0} more than once")]
+    DuplicatePatch(PatchName),
+    #[error("{RECORD} lists {0}, which isn't at {PATCHES}/{0}.patch")]
+    MissingPatch(PatchName),
+    #[error("{PATCHES}/{0} isn't listed in {RECORD}")]
+    UnlistedPatch(String),
+    #[error("there's no patch named {0} in {RECORD}")]
+    NoSuchPatch(PatchName),
+    #[error("{PATCHES}/{0}.patch doesn't match {COPY}: run `cargo run -p kit-sync` or record your edits first")]
+    PatchDrifted(PatchName),
+    #[error("{COPY} has changes that aren't in a patch: run `cargo run -p kit-sync -- patch <name>`")]
+    UnpatchedChanges,
+    #[error("nothing in {COPY} has changed to put in a patch")]
+    NothingChanged,
+    #[error("{0} would be empty: run `cargo run -p kit-sync -- drop {0}` to take it out")]
+    PatchEmpty(PatchName),
+    #[error("the changes to {0} touch lines a later patch changes, so update the later patch or drop it first")]
+    EntangledWithLaterPatch(PatchName),
+    #[error("updating {updated} conflicts with {later}, which comes after it")]
+    ConflictsWithLaterPatch { updated: PatchName, later: PatchName },
+    #[error("{by} depends on {dropped}, so update or drop {by} first")]
+    PatchDependedOn { dropped: PatchName, by: PatchName },
+    #[error("these don't have the notice line {COPY} gives changed files: {}", listed(.0))]
+    WrongNotices(Vec<CopyPath>),
     #[error("upstream has no {0} here, so what the copy keeps has to change with it")]
     NotUpstream(CopyPath),
     #[error("upstream has no {0} to leave out here, so what the copy keeps has to change with it")]

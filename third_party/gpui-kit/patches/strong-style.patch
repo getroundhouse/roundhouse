@@ -1,0 +1,150 @@
+diff --git a/crates/base/src/text/node.rs b/crates/base/src/text/node.rs
+index 95a11d6..1fd8614 100644
+--- a/crates/base/src/text/node.rs
++++ b/crates/base/src/text/node.rs
+@@ -2770,7 +2770,7 @@ fn mark_text_color(highlight: Hsla, background: Hsla) -> Hsla {
+ fn mark_highlight(mark: &TextMark, node_cx: &NodeContext, cx: &App) -> InlineHighlight {
+     let mut highlight = HighlightStyle::default();
+     if mark.bold {
+-        highlight.font_weight = Some(FontWeight::BOLD);
++        highlight = node_cx.style.strong();
+     }
+     if mark.italic {
+         highlight.font_style = Some(FontStyle::Italic);
+@@ -4711,6 +4711,57 @@ mod tests {
+         });
+     }
+ 
++    #[test]
++    fn strong_style_changes_rendering_without_changing_marks_or_other_styles() {
++        use gpui::{Empty, TestApp};
++        let mut app = TestApp::new();
++        let mut window = app.open_window(|_, _| Empty);
++        window.update(|_, _, cx| {
++            cx.set_global(crate::Theme::default());
++            let mark = TextMark::default().bold().italic().code().link(LinkMark {
++                url: "https://example.com".into(),
++                ..Default::default()
++            });
++            let paragraph = Paragraph {
++                children: vec![
++                    InlineNode::new("word").marks(vec![(0..4, mark)]),
++                    InlineNode::new("text").marks(vec![(0..4, TextMark::default().bold())]),
++                ],
++                ..Default::default()
++            };
++            let source = paragraph.to_markdown();
++            let mut context = NodeContext::default();
++            let (_, bold, links) = paragraph.plain_render(&context, cx);
++            assert_eq!(bold[0].1.style.font_weight, Some(FontWeight::BOLD));
++
++            for strong in [
++                HighlightStyle::default(),
++                HighlightStyle {
++                    font_weight: Some(FontWeight::MEDIUM),
++                    color: Some(gpui::red()),
++                    ..Default::default()
++                },
++            ] {
++                context.style = Arc::new(context.style.as_ref().clone().with_strong(strong));
++                let (_, restyled, restyled_links) = paragraph.plain_render(&context, cx);
++
++                let mut expected = bold[0].1.clone();
++                expected.style.font_weight = strong.font_weight;
++                assert_eq!(restyled[0].1, expected, "other marks retain their styling");
++                assert_eq!(
++                    restyled[1].1.style, strong,
++                    "strong alone uses the full style"
++                );
++                assert_eq!(paragraph.inline_highlights(&context, cx)[1].1.style, strong);
++                assert_eq!(restyled_links, links);
++                assert_eq!(paragraph.to_markdown(), source);
++            }
++
++            let (_, bold_again, _) = paragraph.plain_render(&NodeContext::default(), cx);
++            assert_eq!(bold_again, bold);
++        });
++    }
++
+     #[test]
+     fn translucent_mark_cache_tracks_theme_background() {
+         use gpui::{Empty, TestApp};
+diff --git a/crates/base/src/text/style.rs b/crates/base/src/text/style.rs
+index 506b293..50fd173 100644
+--- a/crates/base/src/text/style.rs
++++ b/crates/base/src/text/style.rs
+@@ -1,6 +1,6 @@
+ use std::sync::Arc;
+ 
+-use gpui::{HighlightStyle, Hsla, Rems, StyleRefinement, rems};
++use gpui::{FontWeight, HighlightStyle, Hsla, Rems, StyleRefinement, rems};
+ 
+ use crate::ColorTokens;
+ 
+@@ -24,6 +24,7 @@ pub struct TextViewStyle {
+     table: StyleRefinement,
+     table_head: StyleRefinement,
+     table_cell: StyleRefinement,
++    strong: HighlightStyle,
+     inline_code: HighlightStyle,
+     /// Explicit inline code refinements, applied after theme and surface colors.
+     inline_code_style: StyleRefinement,
+@@ -53,6 +54,7 @@ impl PartialEq for TextViewStyle {
+             && self.table == other.table
+             && self.table_head == other.table_head
+             && self.table_cell == other.table_cell
++            && self.strong == other.strong
+             && self.inline_code == other.inline_code
+             && self.inline_code_style == other.inline_code_style
+             && self.list_style == other.list_style
+@@ -96,6 +98,10 @@ impl TextViewStyle {
+             table: StyleRefinement::default(),
+             table_head: StyleRefinement::default(),
+             table_cell: StyleRefinement::default(),
++            strong: HighlightStyle {
++                font_weight: Some(FontWeight::BOLD),
++                ..Default::default()
++            },
+             inline_code: HighlightStyle {
+                 background_color: Some(colors.accent),
+                 ..Default::default()
+@@ -173,6 +179,19 @@ impl TextViewStyle {
+         self
+     }
+ 
++    /// Sets the highlight style for strong emphasis, which defaults to bold.
++    /// This replaces the default highlight rather than refining it, so callers
++    /// can choose another weight, color, or decoration. Italic, strikethrough,
++    /// underline, inline-code, explicit highlight and link marks are applied
++    /// afterward and keep their usual precedence.
++    ///
++    /// An empty style makes strong emphasis inherit the surrounding text's
++    /// appearance without changing the document's marks or other formatting.
++    pub fn with_strong(mut self, style: HighlightStyle) -> Self {
++        self.strong = style;
++        self
++    }
++
+     /// Sets the highlight style for inline code spans.
+     ///
+     /// When `background_color` is `None`, the neutral code background is used,
+@@ -320,6 +339,11 @@ impl TextViewStyle {
+         &self.table_cell
+     }
+ 
++    /// The highlight style for strong emphasis.
++    pub fn strong(&self) -> HighlightStyle {
++        self.strong
++    }
++
+     /// The highlight style for inline code, before the code-background
+     /// fallback in [`Self::inline_code_highlight`] applies.
+     pub fn inline_code(&self) -> HighlightStyle {
+@@ -465,6 +489,7 @@ mod tests {
+         assert!(base != base.clone().with_table_cell(table));
+ 
+         assert!(base != base.clone().with_dark(true));
++        assert!(base != base.clone().with_strong(HighlightStyle::default()));
+         assert!(
+             base != base
+                 .clone()

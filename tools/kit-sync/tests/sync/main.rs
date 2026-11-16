@@ -5,8 +5,8 @@
 
 mod bringing;
 mod conflicts;
-mod diff;
 mod fixture;
 mod manifest;
+mod patches;
 mod refusals;
 mod settings;
