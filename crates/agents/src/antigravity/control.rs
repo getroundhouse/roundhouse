@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
@@ -11,8 +12,9 @@ use serde_json::{Value, json};
 
 use super::{
     approvals, launch, notifications,
-    running::{AntigravityProcess, Shared, effort_str, ensure_model_offers_effort, mode_id},
+    running::{AntigravityProcess, Shared, effort_str, ensure_model_offers_effort},
     state::{Conversation, Ending, InFlightPrompt, PromptOrigin},
+    swap::ensure_mode_process,
     turn,
 };
 use crate::{AgentError, AgentProcess, acp};
@@ -25,7 +27,7 @@ impl AgentProcess for AntigravityProcess {
         super::claims::claims()
     }
     fn pid(&self) -> u32 {
-        self.shared.pid
+        self.shared.pid.load(Ordering::SeqCst)
     }
     fn is_gone(&self) -> bool {
         self.shared.gone.load(Ordering::SeqCst)
@@ -94,7 +96,7 @@ impl AgentProcess for AntigravityProcess {
     }
 }
 
-async fn prompt_to(shared: &Shared, seq: Seq, prompt: &Prompt<AttachmentFile>) -> Result<(), AgentError> {
+async fn prompt_to(shared: &Arc<Shared>, seq: Seq, prompt: &Prompt<AttachmentFile>) -> Result<(), AgentError> {
     let blocks = if prompt.files.is_empty() {
         vec![json!({ "type": "text", "text": prompt.text })]
     } else {
@@ -104,8 +106,17 @@ async fn prompt_to(shared: &Shared, seq: Seq, prompt: &Prompt<AttachmentFile>) -
     send_prompt_rpc(shared, Some(seq), blocks).await
 }
 
-pub(super) async fn send_prompt_rpc(shared: &Shared, seq: Option<Seq>, blocks: Vec<Value>) -> Result<(), AgentError> {
+pub(super) async fn send_prompt_rpc(
+    shared: &Arc<Shared>,
+    seq: Option<Seq>,
+    blocks: Vec<Value>,
+) -> Result<(), AgentError> {
+    if seq.is_some() && !shared.state.lock().waiting.is_empty() {
+        return Err(AgentError::Refused("Answer Antigravity's open request before sending another prompt".into()));
+    }
+    ensure_mode_process(shared).await?;
     let user_chunks = non_empty_text_chunks(&blocks);
+    let rpc = shared.rpc();
     let ((session_id, rpc_id), _) = between_endings(shared, |state| {
         if seq.is_some() && !state.waiting.is_empty() {
             return Err(AgentError::Refused("Answer Antigravity's open request before sending another prompt".into()));
@@ -115,7 +126,7 @@ pub(super) async fn send_prompt_rpc(shared: &Shared, seq: Option<Seq>, blocks: V
             state.reply = None;
             state.cancelling = false;
         }
-        let rpc_id = shared.rpc.next_id();
+        let rpc_id = rpc.next_id();
         state.prompts.push_back(InFlightPrompt {
             rpc_id,
             origin: PromptOrigin::Prompt(seq),
@@ -125,7 +136,7 @@ pub(super) async fn send_prompt_rpc(shared: &Shared, seq: Option<Seq>, blocks: V
         Ok((session_id, rpc_id))
     })
     .await?;
-    write_prompt_request(shared, rpc_id, &session_id, blocks).await;
+    write_prompt_request(shared, &rpc, rpc_id, &session_id, blocks).await;
     Ok(())
 }
 
@@ -135,20 +146,21 @@ pub(super) async fn send_drain_prompt(
     blocks: Vec<Value>,
 ) -> Result<bool, AgentError> {
     let user_chunks = non_empty_text_chunks(&blocks);
+    let rpc = shared.rpc();
     let (queued, _) = between_endings(shared, |state| {
-        if state.in_turn() || !state.waiting.is_empty() {
+        if state.in_turn() || !state.waiting.is_empty() || state.needs_mode_swap() {
             return Ok(None);
         }
         let session_id = state.session_id.clone().ok_or(AgentError::Exited)?;
         state.reply = None;
         state.cancelling = false;
-        let rpc_id = shared.rpc.next_id();
+        let rpc_id = rpc.next_id();
         state.prompts.push_back(InFlightPrompt { rpc_id, origin, taken: false, user_chunks_left: user_chunks });
         Ok(Some((session_id, rpc_id)))
     })
     .await?;
     let Some((session_id, rpc_id)) = queued else { return Ok(false) };
-    write_prompt_request(shared, rpc_id, &session_id, blocks).await;
+    write_prompt_request(shared, &rpc, rpc_id, &session_id, blocks).await;
     Ok(true)
 }
 
@@ -162,9 +174,15 @@ fn non_empty_text_chunks(blocks: &[Value]) -> usize {
         .count()
 }
 
-async fn write_prompt_request(shared: &Shared, rpc_id: u64, session_id: &AgentSessionId, blocks: Vec<Value>) {
+async fn write_prompt_request(
+    shared: &Shared,
+    rpc: &crate::jsonrpc::Rpc,
+    rpc_id: u64,
+    session_id: &AgentSessionId,
+    blocks: Vec<Value>,
+) {
     let params = json!({ "sessionId": session_id, "prompt": blocks });
-    if let Err(error) = shared.rpc.write_request(rpc_id, "session/prompt", params).await {
+    if let Err(error) = rpc.write_request(rpc_id, "session/prompt", params).await {
         // Some of it may have reached `agy`, so it's stopped rather than left in a state nobody knows, and its exit
         // drops the prompt, as it does any prompt `agy` hadn't taken.
         shared
@@ -199,11 +217,12 @@ async fn between_endings<T>(
     }
 }
 
-async fn change(shared: &Shared, requested: &settings::Settings) -> Result<(), AgentError> {
-    let (session_id, current_model, current_effort) = {
+async fn change(shared: &Arc<Shared>, requested: &settings::Settings) -> Result<(), AgentError> {
+    let (session_id, current_model, current_effort, idle_for_swap, process_mode) = {
         let state = shared.state.lock();
         let id = state.session_id.clone().ok_or(AgentError::Exited)?;
-        (id, state.model.clone(), state.effort)
+        let idle = !state.in_turn() && state.waiting.is_empty();
+        (id, state.model.clone(), state.effort, idle, state.process_mode)
     };
     let next_model = requested.model.as_ref().unwrap_or(&current_model);
     let next_effort = requested.effort.unwrap_or(current_effort);
@@ -215,10 +234,16 @@ async fn change(shared: &Shared, requested: &settings::Settings) -> Result<(), A
         Some(mode) if mode == super::claims::full_access() => Some(PermissionMode::FullAccess),
         Some(_) => return Err(AgentError::UnknownMode),
     };
+    if let Some(perm) = next_perm
+        && idle_for_swap
+        && perm != process_mode
+    {
+        return swap_idle_settings(shared, next_model, next_effort, perm).await;
+    }
     let mut switched_model = false;
     if let Some(model) = &requested.model {
         let reply = shared
-            .rpc
+            .rpc()
             .ask(
                 "session/set_config_option",
                 json!({ "sessionId": session_id, "configId": "model", "value": model.as_str() }),
@@ -228,37 +253,41 @@ async fn change(shared: &Shared, requested: &settings::Settings) -> Result<(), A
         shared.state.lock().model.clone_from(model);
         switched_model = true;
     }
-    let mut switched_effort = false;
-    if requested.effort.is_some() || requested.model.is_some() {
-        if let Err(error) = apply_effort(shared, &session_id, next_effort, level, requested.effort.is_some()).await {
-            rollback_config(shared, &session_id, switched_model.then_some(&current_model), None).await;
-            return Err(error);
-        }
-        switched_effort = true;
-    }
-    if let Some(perm) = next_perm
-        && let Err(error) = set_mode(shared, &session_id, perm).await
+    if (requested.effort.is_some() || requested.model.is_some())
+        && let Err(error) = apply_effort(shared, &session_id, next_effort, level, requested.effort.is_some()).await
     {
-        rollback_config(
-            shared,
-            &session_id,
-            switched_model.then_some(&current_model),
-            switched_effort.then_some(current_effort),
-        )
-        .await;
+        rollback_config(shared, &session_id, switched_model.then_some(&current_model), None).await;
         return Err(error);
+    }
+    if let Some(perm) = next_perm {
+        let changed = {
+            let mut state = shared.state.lock();
+            let changed = state.mode != perm;
+            state.mode = perm;
+            changed
+        };
+        if changed {
+            shared.event(EventBody::AgentMode { permission_mode: perm }, None).await;
+        }
     }
     Ok(())
 }
 
-async fn set_mode(shared: &Shared, session_id: &AgentSessionId, perm: PermissionMode) -> Result<(), AgentError> {
-    shared.rpc.ask("session/set_mode", json!({ "sessionId": session_id, "modeId": mode_id(perm) })).await?;
+async fn swap_idle_settings(
+    shared: &Arc<Shared>,
+    model: &ModelName,
+    effort: settings::Effort,
+    perm: PermissionMode,
+) -> Result<(), AgentError> {
     let changed = {
         let mut state = shared.state.lock();
+        state.model.clone_from(model);
+        state.effort = effort;
         let changed = state.mode != perm;
         state.mode = perm;
         changed
     };
+    ensure_mode_process(shared).await?;
     if changed {
         shared.event(EventBody::AgentMode { permission_mode: perm }, None).await;
     }
@@ -273,7 +302,7 @@ async fn rollback_config(
 ) {
     if let Some(model) = model {
         if let Ok(reply) = shared
-            .rpc
+            .rpc()
             .ask(
                 "session/set_config_option",
                 json!({ "sessionId": session_id, "configId": "model", "value": model.as_str() }),
@@ -308,7 +337,7 @@ async fn apply_effort(
     };
     if offers {
         let reply = shared
-            .rpc
+            .rpc()
             .ask(
                 "session/set_config_option",
                 json!({ "sessionId": session_id, "configId": "thought_level", "value": level }),
@@ -325,7 +354,7 @@ async fn apply_effort(
     }
 }
 
-async fn cancel(shared: &Shared) -> Result<(), AgentError> {
+async fn cancel(shared: &Arc<Shared>) -> Result<(), AgentError> {
     let (open, before) = between_endings(shared, |state| {
         if state.prompts.is_empty() && state.ending == Ending::Not && state.waiting.is_empty() {
             return Ok(None);
@@ -345,7 +374,7 @@ async fn cancel(shared: &Shared) -> Result<(), AgentError> {
         return Ok(());
     }
     if let Some(session_id) = session_id
-        && let Err(error) = shared.rpc.notify("session/cancel", json!({ "sessionId": session_id })).await
+        && let Err(error) = shared.rpc().notify("session/cancel", json!({ "sessionId": session_id })).await
     {
         shared.stop().await;
         return Err(error);

@@ -1,8 +1,11 @@
 #![cfg(test)]
 use std::io::Write as _;
 use std::path::Path;
+use std::time::Duration;
 
 use protocol::capability::{
+    Control,
+    approvals::{Asks, Decision, Remember},
     calls::{
         CallOutput,
         output::{CommandOutput, Ended},
@@ -12,11 +15,11 @@ use protocol::capability::{
     turns::OwnTurn,
 };
 use protocol::event::{
-    AgentRunState, AgentTask, ContentBlock, EndedTask, EventBody, ExitReason, SessionEvent, TaskKind, TaskOutcome,
-    TurnOutcome,
+    AgentRunState, AgentTask, ApprovalOutcome, ContentBlock, EndedTask, EventBody, ExitReason, QuestionAnswer,
+    SessionEvent, TaskKind, TaskOutcome, TurnOutcome,
 };
 use protocol::fixtures;
-use protocol::model::{AgentSessionId, PermissionMode, RunId, Seq, TaskId, ToolUseId};
+use protocol::model::{AgentSessionId, ApprovalId, PermissionMode, RunId, Seq, TaskId, ToolUseId};
 use protocol::prompt::Prompt;
 use serde_json::{Value, json};
 
@@ -63,6 +66,19 @@ fn tool_event(
     update(session_id, &body)
 }
 
+fn sys_step() -> Value {
+    json!({"source": "SYSTEM", "type": "SYSTEM_MESSAGE", "status": "DONE"})
+}
+
+fn planner_step(tools: &[&str]) -> Value {
+    let calls: Vec<Value> = tools.iter().map(|name| json!({"name": name})).collect();
+    json!({"source": "MODEL", "type": "PLANNER_RESPONSE", "status": "DONE", "tool_calls": calls})
+}
+
+fn generic_step() -> Value {
+    json!({"source": "MODEL", "type": "GENERIC", "status": "DONE"})
+}
+
 fn append_transcript(room: &Path, session_id: &str, steps: &[Value]) {
     let dir =
         room.join(".gemini").join("antigravity-cli").join("brain").join(session_id).join(".system_generated/logs");
@@ -72,6 +88,14 @@ fn append_transcript(room: &Path, session_id: &str, steps: &[Value]) {
         writeln!(file, "{step}").unwrap();
     }
     file.flush().unwrap();
+}
+
+async fn wait_init(h: &mut Harness) {
+    loop {
+        if matches!(h.next().await, AgentOutput::Event { body: EventBody::AgentInit { .. }, .. }) {
+            return;
+        }
+    }
 }
 
 struct Ledger {
@@ -91,6 +115,25 @@ impl Ledger {
         seq
     }
 
+    async fn collect_until_approval(&mut self, h: &mut Harness) -> ApprovalId {
+        loop {
+            if let AgentOutput::Event { body, .. } = h.next().await {
+                if matches!(&body, EventBody::AgentOther { kind, .. } if kind == "test/request") {
+                    continue;
+                }
+                let id = if let EventBody::ApprovalRequested { approval_id, .. } = &body {
+                    Some(approval_id.clone())
+                } else {
+                    None
+                };
+                self.push(Some(RUN), body);
+                if let Some(id) = id {
+                    return id;
+                }
+            }
+        }
+    }
+
     async fn collect_turn(&mut self, h: &mut Harness) -> Vec<EventBody> {
         let mut seen = Vec::new();
         loop {
@@ -98,11 +141,15 @@ impl Ledger {
                 if matches!(&body, EventBody::AgentOther { kind, .. } if kind == "test/request") {
                     continue;
                 }
-                let idle_after_end = matches!(&body, EventBody::AgentState { state: AgentRunState::Idle })
-                    && seen.iter().any(|item| matches!(item, EventBody::TurnEnded { .. }));
+                let done = (matches!(&body, EventBody::AgentState { state: AgentRunState::Idle })
+                    && seen.iter().any(|item| matches!(item, EventBody::TurnEnded { .. })))
+                    || (matches!(&body, EventBody::AgentState { state: AgentRunState::RequiresAction })
+                        && seen.iter().any(|item| {
+                            matches!(item, EventBody::ApprovalRequested { request: Some(r), .. } if matches!(r.asks, Asks::Plan { .. }))
+                        }));
                 seen.push(body.clone());
                 self.push(Some(RUN), body);
-                if idle_after_end {
+                if done {
                     return seen;
                 }
             }
@@ -158,12 +205,17 @@ async fn background_command_lists_task_drains_wakeup_into_own_turn_cancels_befor
         "session-1",
         &[
             json!({"source": "USER_EXPLICIT", "type": "USER_INPUT", "status": "DONE"}),
-            json!({"source": "MODEL", "type": "PLANNER_RESPONSE", "status": "DONE", "tool_calls": []}),
-            json!({"source": "SYSTEM", "type": "SYSTEM_MESSAGE", "status": "DONE"}),
-            json!({"source": "MODEL", "type": "PLANNER_RESPONSE", "status": "DONE", "tool_calls": []}),
+            planner_step(&[]),
+            sys_step(),
+            planner_step(&["run_command"]),
         ],
     );
+    // In FullAccess (`--dangerously-skip-permissions`), a wakeup command runs unasked past `UNGATED_PARK_GRACE`.
+    tokio::time::sleep(Duration::from_millis(520)).await;
+    let premature = std::fs::read_to_string(h.room.path().join("native-requests.jsonl")).unwrap();
+    assert_eq!(premature.lines().filter(|l| l.contains("\"session/prompt\"")).count(), 1);
 
+    append_transcript(h.room.path(), "session-1", &[generic_step(), planner_step(&[])]);
     let wakeup_events = ledger.collect_turn(&mut h).await;
     agent.stop().await;
     ledger.push(
@@ -193,8 +245,8 @@ async fn background_command_lists_task_drains_wakeup_into_own_turn_cancels_befor
     assert!(asked.contains("session/cancel"), "plain wakeup drain must cancel on user_message_chunk: {asked}");
 }
 
-fn gated_wakeup_script() -> Value {
-    let bg_args = json!({"CommandLine": "sleep 10", "toolSummary": "First step", "WaitMsBeforeAsync": 500});
+#[tokio::test]
+async fn mixed_ungated_and_gated_wakeup_batch_drains_and_holds_plan_in_plan_mode() {
     let step2_args = json!({"CommandLine": "echo done", "toolSummary": "Second step", "WaitMsBeforeAsync": 5000});
     let perm = json!({
         "jsonrpc": "2.0", "id": "perm-2", "method": "session/request_permission",
@@ -204,83 +256,77 @@ fn gated_wakeup_script() -> Value {
             "options": [{"optionId": "allow_once", "kind": "allow_once", "name": "Allow"}]
         }
     });
-    json!([
-        {
-            "on": "session/prompt", "at": 1,
-            "actions": [
-                user_chunk("session-1", "go"),
-                tool_event("session-1", "tool_call", "bg-1", "in_progress", &bg_args, None),
-                {"result": {"stopReason": "end_turn"}}
-            ]
+    let plan_script = json!([
+        {"on": "session/prompt", "at": 1, "actions": [tool_event("session-1", "tool_call", "step-2", "pending", &step2_args, None), perm]},
+        {"on": "", "at": 1, "actions": [tool_event("session-1", "tool_call_update", "step-2", "completed", &step2_args, Some(json!({"exit_code": 0, "output": "done\n"}))), user_chunk("session-1", "Continue"), msg_chunk("session-1", "Plan ready."), {"id": 6, "jsonrpc": "2.0", "result": {"stopReason": "end_turn"}}]}
+    ]);
+    let mut plan_h = Harness::new(&plan_script, PermissionMode::Plan, Start::New { conversation: None });
+    let plan_agent = plan_h.started().await;
+    let mut plan_ledger = Ledger::new();
+    wait_init(&mut plan_h).await;
+    append_transcript(
+        plan_h.room.path(),
+        "session-1",
+        &[sys_step(), planner_step(&["read_file", "read_file", "run_command"]), generic_step()],
+    );
+    let approval = plan_ledger.collect_until_approval(&mut plan_h).await;
+    plan_ledger.push(
+        None,
+        EventBody::ApprovalResolved {
+            approval_id: approval.clone(),
+            outcome: ApprovalOutcome::Allowed,
+            answers_by_text: None,
+            answers_by_position: None,
+            by_setting: false,
         },
-        {
-            "on": "session/prompt", "at": 2,
-            "actions": [
-                tool_event("session-1", "tool_call_update", "bg-1", "completed", &bg_args, Some(json!({"exit_code": 0, "output": ""}))),
-                tool_event("session-1", "tool_call", "step-2", "pending", &step2_args, None),
-                perm
-            ]
-        },
-        {
-            "on": "", "at": 1,
-            "actions": [
-                tool_event("session-1", "tool_call_update", "step-2", "completed", &step2_args, Some(json!({"exit_code": 0, "output": "done\n"}))),
-                user_chunk("session-1", "Continue"),
-                msg_chunk("session-1", "Finished both steps."),
-                {"id": 7, "jsonrpc": "2.0", "result": {"stopReason": "end_turn"}}
-            ]
-        }
-    ])
+    );
+    let allow_once = Decision::Allow { edited: None, remember: Remember::Once };
+    plan_agent.control(&Control::Decide { approval, decision: allow_once }).await.unwrap();
+    let plan_wakeup = plan_ledger.collect_turn(&mut plan_h).await;
+    plan_agent.stop().await;
+    let claims = super::super::claims::claims();
+    assert_eq!(laws::check(&plan_ledger.events, |_| &claims), []);
+    assert!(plan_wakeup.iter().any(|e| matches!(e, EventBody::ApprovalRequested { request: Some(r), .. } if matches!(&r.asks, Asks::Plan { plan, .. } if plan == "Plan ready."))));
 }
 
 #[tokio::test]
-async fn wakeup_parked_on_permission_gated_command_keeps_drain_open_and_finishes_follow_up_step() {
-    let mut h = Harness::new(&gated_wakeup_script(), PermissionMode::FullAccess, Start::New { conversation: None });
-    let agent = h.started().await;
-    let mut ledger = Ledger::new();
-    let p1 = ledger.push(None, EventBody::UserPrompt { prompt: Prompt::new("go"), client_msg_id: None });
-    agent.send_prompt(p1, &Prompt::new("go")).await.unwrap();
-    let _ = ledger.collect_turn(&mut h).await;
-
+async fn mixed_ungated_and_question_wakeup_batch_drains_in_full_access() {
+    let question = json!({
+        "jsonrpc": "2.0", "id": "elic-w", "method": "elicitation/create",
+        "params": {
+            "mode": "form", "message": "Pick",
+            "requestedSchema": {"type": "object", "properties": {"q": {"type": "string", "description": "Choice?", "oneOf": [{"const": "1", "title": "1. Yes"}]}}}
+        }
+    });
+    let q_script = json!([
+        {"on": "session/prompt", "at": 1, "actions": [question]},
+        {"on": "", "at": 1, "actions": [user_chunk("session-1", "Continue"), msg_chunk("session-1", "Answered."), {"id": 6, "jsonrpc": "2.0", "result": {"stopReason": "end_turn"}}]}
+    ]);
+    let mut full_h = Harness::new(&q_script, PermissionMode::FullAccess, Start::New { conversation: None });
+    let full_agent = full_h.started().await;
+    let mut full_ledger = Ledger::new();
+    wait_init(&mut full_h).await;
     append_transcript(
-        h.room.path(),
+        full_h.room.path(),
         "session-1",
-        &[
-            json!({"source": "SYSTEM", "type": "SYSTEM_MESSAGE", "status": "DONE"}),
-            json!({"source": "MODEL", "type": "PLANNER_RESPONSE", "status": "DONE", "tool_calls": [{"name": "run_command"}]}),
-        ],
+        &[sys_step(), planner_step(&["read_file", "ask_question"]), generic_step()],
     );
-
-    let wakeup_events = ledger.collect_turn(&mut h).await;
-    agent.stop().await;
-    ledger.push(
-        Some(RUN),
-        EventBody::AgentExited { code: Some(0), signal: None, stderr_tail: Vec::new(), reason: ExitReason::Requested },
-    );
-
-    let claims = super::super::claims::claims();
-    assert_eq!(laws::check(&ledger.events, |_| &claims), []);
-    assert!(wakeup_events.iter().any(|e| {
-        matches!(e, EventBody::TurnEnded { outcome: TurnOutcome::Success, result: Some(r), .. } if r == "Finished both steps.")
-    }));
-    let asked = std::fs::read_to_string(h.room.path().join("native-requests.jsonl")).unwrap();
-    assert!(!asked.contains("session/cancel"), "gated-tool drain must stay open until end_turn: {asked}");
+    let q_id = full_ledger.collect_until_approval(&mut full_h).await;
+    let ans = Decision::Answer { answers: vec![QuestionAnswer { picked: vec![0], typed: None }] };
+    full_agent.control(&Control::Decide { approval: q_id, decision: ans }).await.unwrap();
+    let full_wakeup = full_ledger.collect_turn(&mut full_h).await;
+    full_agent.stop().await;
+    assert!(full_wakeup.iter().any(|e| matches!(e, EventBody::TurnEnded { result: Some(r), .. } if r == "Answered.")));
 }
 
 #[tokio::test]
 async fn resumed_conversation_skips_historical_transcript_wakeups_from_before_launch() {
     let script = json!([
         {"on": "session/resume", "actions": [{"result": {"sessionId": "kept-id", "configOptions": []}}]},
-        {
-            "on": "session/prompt", "at": 1,
-            "actions": [msg_chunk("kept-id", "Post-resume wakeup."), user_chunk("kept-id", "Continue")]
-        },
+        {"on": "session/prompt", "at": 1, "actions": [msg_chunk("kept-id", "Post-resume wakeup."), user_chunk("kept-id", "Continue")]},
         {"on": "session/cancel", "actions": [{"id": 5, "jsonrpc": "2.0", "result": {"stopReason": "cancelled"}}]}
     ]);
-    let wakeup_steps = [
-        json!({"source": "SYSTEM", "type": "SYSTEM_MESSAGE", "status": "DONE"}),
-        json!({"source": "MODEL", "type": "PLANNER_RESPONSE", "status": "DONE", "tool_calls": []}),
-    ];
+    let wakeup_steps = [sys_step(), planner_step(&[])];
     let mut h = Harness::seeded(
         &script,
         PermissionMode::FullAccess,
@@ -293,11 +339,7 @@ async fn resumed_conversation_skips_historical_transcript_wakeups_from_before_la
         },
     );
     let agent = h.started().await;
-    loop {
-        if matches!(h.next().await, AgentOutput::Event { body: EventBody::AgentInit { .. }, .. }) {
-            break;
-        }
-    }
+    wait_init(&mut h).await;
 
     append_transcript(h.room.path(), "kept-id", &wakeup_steps);
     let result = loop {
@@ -308,33 +350,16 @@ async fn resumed_conversation_skips_historical_transcript_wakeups_from_before_la
     agent.stop().await;
 
     assert_eq!(result, (TurnOutcome::Success, Some("Post-resume wakeup.".into())));
-    let prompt_count = std::fs::read_to_string(h.room.path().join("native-requests.jsonl"))
-        .unwrap()
-        .lines()
-        .filter(|line| line.contains("\"session/prompt\""))
-        .count();
-    assert_eq!(prompt_count, 1, "historical wakeup before launch must not trigger a second drain prompt");
+    let asked = std::fs::read_to_string(h.room.path().join("native-requests.jsonl")).unwrap();
+    assert_eq!(asked.lines().filter(|l| l.contains("\"session/prompt\"")).count(), 1);
 }
 
 #[tokio::test]
 async fn mid_turn_system_message_written_before_prompt_finishes_does_not_trigger_extra_drain() {
     let script = json!([
-        {
-            "on": "session/prompt", "at": 1,
-            "actions": [user_chunk("session-1", "turn 1")]
-        },
-        {
-            "on": "session/set_config_option", "at": 3,
-            "actions": [
-                {"result": {}},
-                msg_chunk("session-1", "Handled mid-turn."),
-                {"id": 6, "jsonrpc": "2.0", "result": {"stopReason": "end_turn"}}
-            ]
-        },
-        {
-            "on": "session/prompt", "at": 2,
-            "actions": [msg_chunk("session-1", "Between-turn wakeup."), user_chunk("session-1", "Continue")]
-        },
+        {"on": "session/prompt", "at": 1, "actions": [user_chunk("session-1", "turn 1")]},
+        {"on": "session/set_config_option", "at": 3, "actions": [{"result": {}}, msg_chunk("session-1", "Handled mid-turn."), {"id": 6, "jsonrpc": "2.0", "result": {"stopReason": "end_turn"}}]},
+        {"on": "session/prompt", "at": 2, "actions": [msg_chunk("session-1", "Between-turn wakeup."), user_chunk("session-1", "Continue")]},
         {"on": "session/cancel", "actions": [{"id": 8, "jsonrpc": "2.0", "result": {"stopReason": "cancelled"}}]}
     ]);
     let mut h = Harness::new(&script, PermissionMode::FullAccess, Start::New { conversation: None });
@@ -347,38 +372,18 @@ async fn mid_turn_system_message_written_before_prompt_finishes_does_not_trigger
             break;
         }
     }
-    // Written while Turn 1's `session/prompt` is still open; advancing the floor at `prompt_finished` skips it.
-    append_transcript(
-        h.room.path(),
-        "session-1",
-        &[
-            json!({"source": "SYSTEM", "type": "SYSTEM_MESSAGE", "status": "DONE"}),
-            json!({"source": "MODEL", "type": "PLANNER_RESPONSE", "status": "DONE", "tool_calls": []}),
-        ],
-    );
-    agent
-        .configure(&protocol::model::SessionSettingsChange {
-            model: None,
-            effort: Some(protocol::model::Effort::Low),
-            permission_mode: None,
-        })
-        .await
-        .unwrap();
+    append_transcript(h.room.path(), "session-1", &[sys_step(), planner_step(&[])]);
+    let low =
+        protocol::model::SessionSettingsChange { effort: Some(protocol::model::Effort::Low), ..Default::default() };
+    agent.configure(&low).await.unwrap();
     let _ = ledger.collect_turn(&mut h).await;
 
-    // Now write an actual between-turn wakeup; it should be prompt #2 (`at: 2`), proving the mid-turn one was skipped.
-    append_transcript(
-        h.room.path(),
-        "session-1",
-        &[
-            json!({"source": "SYSTEM", "type": "SYSTEM_MESSAGE", "status": "DONE"}),
-            json!({"source": "MODEL", "type": "PLANNER_RESPONSE", "status": "DONE", "tool_calls": []}),
-        ],
-    );
+    append_transcript(h.room.path(), "session-1", &[sys_step(), planner_step(&[])]);
     let wakeup_turn = ledger.collect_turn(&mut h).await;
     agent.stop().await;
-
-    assert!(wakeup_turn.iter().any(|e| {
-        matches!(e, EventBody::TurnEnded { outcome: TurnOutcome::Success, result: Some(r), .. } if r == "Between-turn wakeup.")
-    }));
+    assert!(
+        wakeup_turn
+            .iter()
+            .any(|e| matches!(e, EventBody::TurnEnded { result: Some(r), .. } if r == "Between-turn wakeup."))
+    );
 }

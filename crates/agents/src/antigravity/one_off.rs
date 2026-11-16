@@ -144,8 +144,8 @@ pub async fn title_for(
     if result.is_ok()
         && let Some(id) = &session_id
     {
-        let _ =
-            tokio::time::timeout(CLOSE_WAIT, process.shared.rpc.ask("session/close", json!({ "sessionId": id }))).await;
+        let _ = tokio::time::timeout(CLOSE_WAIT, process.shared.rpc().ask("session/close", json!({ "sessionId": id })))
+            .await;
     }
     process.stop().await;
     if let Some(files) =

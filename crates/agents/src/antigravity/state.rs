@@ -13,7 +13,12 @@ pub(super) struct Conversation {
     /// `agy`'s trajectory log for this conversation and the byte offset at launch, for noticing between-turn wakeups.
     pub(super) transcript: Option<(PathBuf, u64)>,
     pub(super) model: ModelName,
+    /// The mode the session is set to; when changed mid-turn, takes effect once idle on the next child launch.
     pub(super) mode: PermissionMode,
+    /// The mode the currently running `agy acp` child process was launched for.
+    pub(super) process_mode: PermissionMode,
+    /// Whether the currently running `agy acp` child was launched with `--dangerously-skip-permissions`.
+    pub(super) skip_permissions: bool,
     pub(super) effort: settings::Effort,
     pub(super) hold_plans: bool,
     pub(super) config_options: Vec<ConfigOption>,
@@ -37,6 +42,9 @@ pub(super) struct Conversation {
     /// notifications for the same tool call never emit a second `Call` block.
     pub(super) emitted_calls: HashSet<ToolUseId>,
     pub(super) denied_calls: HashSet<ToolUseId>,
+    /// Whether the current `agy` child has spawned subagents or swarm workers (`invoke_subagent`, `swarm`), whose own
+    /// tool calls finish immediately on spawn while the child trajectories continue in the background.
+    pub(super) async_agents: AsyncAgents,
     pub(super) listed_tasks: Vec<AgentTask>,
     pub(super) ended_tasks: Vec<EndedTask>,
     pub(super) waiting: HashMap<ApprovalId, Waiting>,
@@ -50,6 +58,16 @@ pub(super) struct OpenCall {
 }
 
 /// How far the turn has got to ending.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum AsyncAgents {
+    None,
+    /// A subagent or swarm was spawned during the active turn, so final prose in this turn is a status update rather
+    /// than a finished plan.
+    SpawnedThisTurn,
+    /// A subagent or swarm was spawned in an earlier turn of this child process.
+    Active,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Ending {
     /// It hasn't begun to, or there's no turn.
@@ -117,12 +135,20 @@ pub(super) enum NativeRequest {
 }
 
 impl Conversation {
-    pub(super) fn new(model: ModelName, mode: PermissionMode, effort: settings::Effort, hold_plans: bool) -> Self {
+    pub(super) fn new(
+        model: ModelName,
+        mode: PermissionMode,
+        effort: settings::Effort,
+        hold_plans: bool,
+        skip_permissions: bool,
+    ) -> Self {
         Self {
             session_id: None,
             transcript: None,
             model,
             mode,
+            process_mode: mode,
+            skip_permissions,
             effort,
             hold_plans,
             config_options: Vec::new(),
@@ -138,6 +164,7 @@ impl Conversation {
             calls: HashMap::new(),
             emitted_calls: HashSet::new(),
             denied_calls: HashSet::new(),
+            async_agents: AsyncAgents::None,
             listed_tasks: Vec::new(),
             ended_tasks: Vec::new(),
             waiting: HashMap::new(),
@@ -146,6 +173,27 @@ impl Conversation {
 
     pub(super) fn in_turn(&self) -> bool {
         !self.prompts.is_empty() || self.ending != Ending::Not
+    }
+
+    /// Needs a fresh `agy acp` process once idle so `--dangerously-skip-permissions` matches `mode`.
+    pub(super) fn needs_mode_swap(&self) -> bool {
+        !self.in_turn() && self.waiting.is_empty() && self.process_mode != self.mode
+    }
+
+    /// Whether the turn ending now is still waiting on background work (`run_command`, `schedule`, `run_workflow` still
+    /// running, or a subagent/swarm spawned during this turn), so its final prose is a status message rather than a plan.
+    pub(super) fn awaiting_background_work(&self) -> bool {
+        self.async_agents == AsyncAgents::SpawnedThisTurn || self.calls.values().any(|open| open.outlives_turn)
+    }
+
+    /// Settles calls and listed background commands belonging to a child `agy` stopped for a mode switch.
+    pub(super) fn take_replaced_child_tasks(&mut self) -> (Vec<ToolUseId>, Option<Vec<TaskId>>) {
+        let dropped = self.calls.drain().map(|(id, _)| id).collect();
+        self.denied_calls.clear();
+        self.async_agents = AsyncAgents::None;
+        self.ended_tasks.clear();
+        let stopped: Vec<TaskId> = self.listed_tasks.drain(..).map(|task| task.id).collect();
+        (dropped, (!stopped.is_empty()).then_some(stopped))
     }
 
     /// Adds what a prompt of the turn took to what its earlier ones did, keeping either where the other said nothing.
@@ -253,6 +301,10 @@ impl Conversation {
         };
         let has_later = idx + 1 < self.prompts.len();
         let has_waiting = !self.waiting.is_empty();
+        // `session/cancel` clears `agy`'s deferred reactive wakeup, so never cancel a drain while another background
+        // command, schedule, workflow or subagent is still running.
+        let has_live_background =
+            self.async_agents != AsyncAgents::None || self.calls.values().any(|open| open.outlives_turn);
         let session_id = self.session_id.clone();
         let entry = &mut self.prompts[idx];
         entry.user_chunks_left -= 1;
@@ -263,7 +315,7 @@ impl Conversation {
         match &mut entry.origin {
             PromptOrigin::Prompt(seq) => UserChunk::FirstOfPrompt(*seq),
             PromptOrigin::WakeupDrain { keep_open, self_cancelled, .. } => {
-                if *keep_open || has_later || has_waiting {
+                if *keep_open || has_later || has_waiting || has_live_background {
                     UserChunk::ContinueDrain
                 } else if let Some(session_id) = session_id {
                     *self_cancelled = true;
@@ -273,5 +325,51 @@ impl Conversation {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn drain_prompt(rpc_id: u64) -> InFlightPrompt {
+        InFlightPrompt {
+            rpc_id,
+            origin: PromptOrigin::WakeupDrain { keep_open: false, started_own_turn: false, self_cancelled: false },
+            user_chunks_left: 1,
+            taken: false,
+        }
+    }
+
+    #[test]
+    fn drain_cancels_when_idle_and_stays_open_while_background_tasks_or_subagents_remain() {
+        let mut conv = Conversation::new(
+            ModelName::named("gemini-4-carbon"),
+            PermissionMode::FullAccess,
+            settings::Effort::Medium,
+            true,
+            true,
+        );
+        conv.session_id = Some(AgentSessionId::from("s-1"));
+
+        conv.prompts.push_back(drain_prompt(1));
+        assert_eq!(conv.accept_user_chunk(), UserChunk::CancelDrain { session_id: AgentSessionId::from("s-1") });
+        conv.prompts.clear();
+
+        let cmd = Call::Other { tool: "run_command".into(), input: Value::Null };
+        conv.calls.insert(ToolUseId::from("bg-2"), OpenCall { call: cmd, order: 1, outlives_turn: true });
+        conv.prompts.push_back(drain_prompt(2));
+        assert_eq!(conv.accept_user_chunk(), UserChunk::ContinueDrain);
+        conv.calls.clear();
+        conv.prompts.clear();
+
+        conv.async_agents = AsyncAgents::Active;
+        conv.prompts.push_back(drain_prompt(3));
+        assert_eq!(conv.accept_user_chunk(), UserChunk::ContinueDrain);
+        conv.prompts.clear();
+
+        let _ = conv.take_replaced_child_tasks();
+        conv.prompts.push_back(drain_prompt(4));
+        assert_eq!(conv.accept_user_chunk(), UserChunk::CancelDrain { session_id: AgentSessionId::from("s-1") });
     }
 }

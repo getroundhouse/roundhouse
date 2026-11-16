@@ -19,12 +19,13 @@ use crate::{AgentError, AgentOutput};
 pub(super) async fn read(shared: Arc<Shared>, mut input: mpsc::Receiver<(Value, String)>) {
     while let Some((value, raw)) = input.recv().await {
         if value.get("method").is_none() {
-            if let Some((id, reply)) = shared.rpc.decode_reply(&value)
+            let rpc = shared.rpc();
+            if let Some((id, reply)) = rpc.decode_reply(&value)
                 && shared.state.lock().has_prompt_rpc(id)
             {
                 turn::prompt_finished(&shared, id, reply, raw).await;
             } else {
-                shared.rpc.answered(&value);
+                rpc.answered(&value);
             }
             continue;
         }
@@ -44,7 +45,7 @@ pub(super) async fn read(shared: Arc<Shared>, mut input: mpsc::Receiver<(Value, 
     }
 }
 
-async fn incoming(shared: &Shared, value: &Value, raw: String) -> Result<(), AgentError> {
+async fn incoming(shared: &Arc<Shared>, value: &Value, raw: String) -> Result<(), AgentError> {
     let method = value["method"].as_str().unwrap_or_default();
     let params = &value["params"];
     if value.get("id").is_some() {
@@ -142,7 +143,7 @@ async fn on_user_message(shared: &Shared, raw: String) {
                 ensure_own_turn_started(shared).await;
             }
             flush_streams(shared).await;
-            let _ = shared.rpc.notify("session/cancel", json!({ "sessionId": session_id })).await;
+            let _ = shared.rpc().notify("session/cancel", json!({ "sessionId": session_id })).await;
         }
     }
 }
@@ -248,6 +249,9 @@ pub(super) async fn ensure_call_emitted(shared: &Shared, wire: &ToolCallWire, ra
         let mut state = shared.state.lock();
         if state.emitted_calls.insert(id.clone()) {
             state.reply = None;
+            if matches!(wire.name.as_deref(), Some("invoke_subagent" | "swarm")) {
+                state.async_agents = super::state::AsyncAgents::SpawnedThisTurn;
+            }
             let call = calls::translate_call(wire);
             let order = state.next_order();
             let outlives = wire.status.is_some_and(|status| outlives_turn(&call, status));
@@ -338,9 +342,14 @@ async fn on_mode(shared: &Shared, mode_id: &str, raw: String) {
     };
     let changed = {
         let mut state = shared.state.lock();
-        let changed = state.mode != mode;
-        state.mode = mode;
-        changed
+        if mode == state.process_mode {
+            false
+        } else {
+            state.process_mode = mode;
+            let changed = state.mode != mode;
+            state.mode = mode;
+            changed
+        }
     };
     if changed {
         shared.event(EventBody::AgentMode { permission_mode: mode }, Some(raw)).await;

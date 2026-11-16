@@ -25,7 +25,7 @@ pub(super) fn claims() -> Capabilities {
     claims.settings.models = Some(super::description::models());
     claims.settings.live_changes = Some(settings::LiveChanges {
         model: Some(settings::Takes::NextTurn),
-        mode: Some(settings::Takes::Now),
+        mode: Some(settings::Takes::NextTurn),
         effort: Some(settings::Takes::NextTurn),
         ..Default::default()
     });

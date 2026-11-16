@@ -3,7 +3,7 @@ use std::process::Stdio;
 
 use protocol::capability::conversation::Start;
 use protocol::event::{EventBody, NoticeLevel};
-use protocol::model::AgentSessionId;
+use protocol::model::{AgentSessionId, PermissionMode};
 use protocol::worker::AgentSpec;
 use serde_json::{Value, json};
 use tokio::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command};
@@ -13,7 +13,8 @@ use super::files::{ConversationFiles, effective_home};
 use super::running::{Shared, effort_str, mode_id};
 use crate::{AgentError, AgentOptions, acp};
 
-pub(super) const ARGS: [&str; 2] = ["acp", "--disable-telemetry"];
+pub(super) const FULL_ACCESS_ARGS: [&str; 3] = ["acp", "--disable-telemetry", "--dangerously-skip-permissions"];
+pub(super) const PLAN_ARGS: [&str; 2] = ["acp", "--disable-telemetry"];
 const TITLE_ARGS: [&str; 3] = ["acp", "--disable-telemetry", "--include-default-customizations=false"];
 
 #[derive(Clone, Copy, Debug)]
@@ -23,11 +24,16 @@ pub(super) enum Purpose {
 }
 
 impl Purpose {
-    pub(super) fn args(self) -> &'static [&'static str] {
+    pub(super) fn args(self, mode: PermissionMode) -> &'static [&'static str] {
         match self {
-            Purpose::Agent => &ARGS,
+            Purpose::Agent if mode == PermissionMode::FullAccess => &FULL_ACCESS_ARGS,
+            Purpose::Agent => &PLAN_ARGS,
             Purpose::Title(_) => &TITLE_ARGS,
         }
+    }
+
+    pub(super) fn skips_permissions(self, mode: PermissionMode) -> bool {
+        matches!(self, Purpose::Agent) && mode == PermissionMode::FullAccess
     }
 }
 
@@ -74,7 +80,7 @@ pub(super) fn launch(
 }
 
 pub(super) async fn initialize(shared: &Shared) -> Result<(), AgentError> {
-    shared.rpc.ask("initialize", acp::initialize_params("roundhouse", env!("CARGO_PKG_VERSION"))).await?;
+    shared.rpc().ask("initialize", acp::initialize_params("roundhouse", env!("CARGO_PKG_VERSION"))).await?;
     Ok(())
 }
 
@@ -84,14 +90,8 @@ pub(super) async fn conversation(
     options: &AgentOptions,
     purpose: Purpose,
 ) -> Result<(), AgentError> {
-    let servers = match (purpose, &options.tools) {
-        (Purpose::Agent, Some(tools)) => vec![acp::mcp_http_server("roundhouse", tools)],
-        _ => Vec::new(),
-    };
-    let told = match purpose {
-        Purpose::Agent => options.instructions.as_ref().map(|told| told.text.as_str()),
-        Purpose::Title(instructions) => Some(instructions),
-    };
+    let servers = session_servers(purpose, options);
+    let told = session_instructions(purpose, options);
     let home = effective_home(&spec.env, options);
     let response = open_session(shared, spec, &servers, told, home).await?;
     let parsed = acp::parse_session_response(&response)
@@ -133,6 +133,58 @@ pub(super) async fn conversation(
     Ok(())
 }
 
+pub(super) async fn resume_after_swap(
+    shared: &Shared,
+    id: &AgentSessionId,
+    mode: PermissionMode,
+) -> Result<(), AgentError> {
+    let purpose = shared.context.purpose;
+    let options = &shared.context.options;
+    let mut params =
+        session_params(&shared.context.cwd, &session_servers(purpose, options), session_instructions(purpose, options));
+    params["sessionId"] = json!(id);
+    let response = shared.rpc().ask("session/resume", params).await?;
+    let parsed = acp::parse_session_response(&response)
+        .ok_or_else(|| AgentError::Failed("Antigravity returned no session ID".into()))?;
+    let existing_transcript = shared.state.lock().transcript.clone();
+    let updated_offset = match &existing_transcript {
+        Some((path, prev)) => {
+            Some((path.clone(), tokio::fs::metadata(path).await.map_or(*prev, |m| m.len().max(*prev))))
+        }
+        None => None,
+    };
+    {
+        let mut state = shared.state.lock();
+        state.process_mode = mode;
+        state.skip_permissions = purpose.skips_permissions(mode);
+        state.transcript = updated_offset;
+        state.config_options = parsed.config_options;
+    }
+    apply_initial_settings(shared, id, matches!(purpose, Purpose::Agent)).await
+}
+
+fn session_servers(purpose: Purpose, options: &AgentOptions) -> Vec<Value> {
+    match (purpose, &options.tools) {
+        (Purpose::Agent, Some(tools)) => vec![acp::mcp_http_server("roundhouse", tools)],
+        _ => Vec::new(),
+    }
+}
+
+fn session_instructions(purpose: Purpose, options: &AgentOptions) -> Option<&str> {
+    match purpose {
+        Purpose::Agent => options.instructions.as_ref().map(|told| told.text.as_str()),
+        Purpose::Title(instructions) => Some(instructions),
+    }
+}
+
+fn session_params(cwd: &Path, servers: &[Value], told: Option<&str>) -> Value {
+    let mut params = json!({ "cwd": cwd, "mcpServers": servers });
+    if let Some(append) = told.filter(|s| !s.is_empty()) {
+        params["_meta"] = json!({ "antigravity": { "systemPrompt": { "append": append } } });
+    }
+    params
+}
+
 async fn open_session(
     shared: &Shared,
     spec: &AgentSpec,
@@ -140,19 +192,14 @@ async fn open_session(
     told: Option<&str>,
     home: Option<&Path>,
 ) -> Result<Value, AgentError> {
-    let new_params = || {
-        let mut params = json!({ "cwd": spec.cwd, "mcpServers": servers });
-        if let Some(append) = told.filter(|s| !s.is_empty()) {
-            params["_meta"] = json!({ "antigravity": { "systemPrompt": { "append": append } } });
-        }
-        params
-    };
+    let rpc = shared.rpc();
+    let cwd = Path::new(&spec.cwd);
     match &spec.start {
-        Start::New { conversation: None } => shared.rpc.ask("session/new", new_params()).await,
+        Start::New { conversation: None } => rpc.ask("session/new", session_params(cwd, servers, told)).await,
         Start::Resume { conversation } => {
-            let mut params = new_params();
+            let mut params = session_params(cwd, servers, told);
             params["sessionId"] = json!(conversation);
-            let resumed = shared.rpc.ask("session/resume", params).await;
+            let resumed = rpc.ask("session/resume", params).await;
             if let Err(error) = &resumed
                 && conversation_gone(error, conversation, home).await
             {
@@ -168,7 +215,7 @@ async fn open_session(
                         None,
                     )
                     .await;
-                return shared.rpc.ask("session/new", new_params()).await;
+                return rpc.ask("session/new", session_params(cwd, servers, told)).await;
             }
             resumed
         }
@@ -194,13 +241,13 @@ async fn conversation_gone(error: &AgentError, conversation: &AgentSessionId, ho
 }
 
 async fn apply_initial_settings(shared: &Shared, id: &AgentSessionId, strict_effort: bool) -> Result<(), AgentError> {
+    let rpc = shared.rpc();
     let (mode, model, effort) = {
         let state = shared.state.lock();
-        (state.mode, state.model.clone(), state.effort)
+        (state.process_mode, state.model.clone(), state.effort)
     };
-    shared.rpc.ask("session/set_mode", json!({ "sessionId": id, "modeId": mode_id(mode) })).await?;
-    let model_reply = shared
-        .rpc
+    rpc.ask("session/set_mode", json!({ "sessionId": id, "modeId": mode_id(mode) })).await?;
+    let model_reply = rpc
         .ask("session/set_config_option", json!({ "sessionId": id, "configId": "model", "value": model.as_str() }))
         .await?;
     update_options(shared, &model_reply);
@@ -213,8 +260,7 @@ async fn apply_initial_settings(shared: &Shared, id: &AgentSessionId, strict_eff
         )
     };
     if offers_level {
-        let reply = shared
-            .rpc
+        let reply = rpc
             .ask("session/set_config_option", json!({ "sessionId": id, "configId": "thought_level", "value": level }))
             .await?;
         update_options(shared, &reply);

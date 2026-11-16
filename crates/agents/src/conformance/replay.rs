@@ -1,13 +1,11 @@
 //! Replaying a capture of a scenario through the adapter's own process code, with a stand-in for the CLI.
 
-use std::collections::VecDeque;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
-use parking_lot::Mutex;
-use protocol::model::RunId;
+use protocol::model::{AgentSessionId, RunId};
 use tokio::sync::mpsc;
 
 use crate::conformance::capture::{self, Entry};
@@ -16,8 +14,8 @@ use crate::conformance::lines::Lines;
 use crate::conformance::scenario::{Failed, Scenario};
 use crate::conformance::stand_in::{QUIET, StandIn};
 use crate::conformance::trial::{Played, Report, Trial};
+use crate::conformance::{executable, quoted};
 use crate::{AgentOutput, AgentProcess};
-use protocol::model::AgentSessionId;
 
 /// The agent-specific launch and wire dialect, with all replay orchestration shared.
 #[async_trait]
@@ -33,7 +31,7 @@ pub trait Binding: Send + Sync {
 pub struct Launch<'a> {
     pub scenario: &'static Scenario,
     pub run: RunId,
-    pub cwd: &'a std::path::Path,
+    pub cwd: &'a Path,
     pub session: Option<AgentSessionId>,
     pub resume: bool,
     pub bin: PathBuf,
@@ -42,6 +40,17 @@ pub struct Launch<'a> {
 /// How long [`replay`] waits for every replayer to finish once the driver has stopped what it ran, which each does
 /// as soon as the adapter closes the CLI's stdin, unless one has gone wrong.
 const FINISHING: Duration = Duration::from_secs(10);
+
+const DISPATCHER: &str = r#"n=0
+while ! mkdir "$DIR/claimed-$n" 2>/dev/null; do
+  n=$((n + 1))
+done
+if [ ! -x "$DIR/proc-$n/stand-in" ]; then
+  echo "the adapter launched more CLI processes than the capture has" >&2
+  exit 99
+fi
+exec "$DIR/proc-$n/stand-in" "$@"
+"#;
 
 /// Replays `fixture`, a capture of `scenario` on the scripted model, through the adapter's own process code, and runs
 /// the scenario's checks on what the adapter made of it.
@@ -61,42 +70,62 @@ pub async fn replay(binding: &'static dyn Binding, scenario: &'static Scenario, 
         Err(e) => return report(Trial::default(), Err(Failed(format!("reading the fixture: {e}"))), Vec::new()),
     };
     let (saw, seen) = mpsc::unbounded_channel();
-    let state = Arc::new(Mutex::new(Replayed { processes: processes.into(), stand_ins: Vec::new() }));
-    let launcher = StandIns { binding, scenario, dir: dir.path().to_path_buf(), state: state.clone(), saw, seen };
+    let (bin, meta, stand_ins) = match prepare_stand_ins(dir.path(), processes, binding.lines(), &saw) {
+        Ok(prepared) => prepared,
+        Err(e) => return report(Trial::default(), Err(e), Vec::new()),
+    };
+    let total = meta.len();
+    let launcher = StandIns { binding, scenario, dir: dir.path().to_path_buf(), bin, meta, seen };
     let mut driver = Driver::new(Box::new(launcher));
     let steps = (scenario.steps)(&mut driver).await;
     let (trial, stopped) = driver.finish().await;
-    let Replayed { processes, stand_ins } = std::mem::take(&mut *state.lock());
+    let unclaimed = (0..total).filter(|idx| !dir.path().join(format!("claimed-{idx}")).exists()).count();
     let finished = tokio::task::spawn_blocking(move || stand_ins.into_iter().flat_map(StandIn::finish).collect());
     let mut problems: Vec<String> = match tokio::time::timeout(FINISHING, finished).await {
         Ok(Ok(problems)) => problems,
         Ok(Err(_)) => vec!["a replayer panicked".into()],
         Err(_) => vec!["a replayer didn't finish once its stand-in had gone".into()],
     };
-    if !processes.is_empty() {
-        problems.push(format!("the steps launched {} fewer processes than the capture has", processes.len()));
+    if unclaimed > 0 {
+        problems.push(format!("the steps launched {unclaimed} fewer processes than the capture has"));
     }
     report(trial, steps.and(stopped), problems)
 }
 
-/// Launches a stand-in for the CLI for each process of a capture in turn.
+type Prepared = (PathBuf, Vec<(bool, Option<AgentSessionId>)>, Vec<StandIn>);
+
+fn prepare_stand_ins(
+    root: &Path,
+    processes: Vec<Vec<Entry>>,
+    lines: &'static dyn Lines,
+    saw: &mpsc::UnboundedSender<String>,
+) -> Result<Prepared, Failed> {
+    let script = format!("#!/bin/sh\nDIR={}\n{DISPATCHER}", quoted(root));
+    let bin = executable(root, "stand-in", &script).map_err(|e| Failed(format!("making dispatcher: {e}")))?;
+    let mut meta = Vec::with_capacity(processes.len());
+    let mut stand_ins = Vec::with_capacity(processes.len());
+    for (idx, process) in processes.into_iter().enumerate() {
+        let Some(Entry::Launch { resume, session, .. }) = process.first().cloned() else {
+            return Err(Failed("a process in the capture doesn't start with its launch".into()));
+        };
+        let proc_dir = root.join(format!("proc-{idx}"));
+        let stand_in = std::fs::create_dir(&proc_dir)
+            .and_then(|()| StandIn::start(&proc_dir, process, lines, saw.clone()))
+            .map_err(|e| Failed(format!("starting the stand-in: {e}")))?;
+        meta.push((resume, session));
+        stand_ins.push(stand_in);
+    }
+    Ok((bin, meta, stand_ins))
+}
+
+/// Launches a stand-in for the CLI for each process of a capture in turn, including internal adapter restarts.
 struct StandIns {
     binding: &'static dyn Binding,
     scenario: &'static Scenario,
     dir: PathBuf,
-    /// Shared with [`replay`], which says what's left of the capture once the steps are done.
-    state: Arc<Mutex<Replayed>>,
-    /// Where each stand-in says it has reached what a step saw.
-    saw: mpsc::UnboundedSender<String>,
+    bin: PathBuf,
+    meta: Vec<(bool, Option<AgentSessionId>)>,
     seen: mpsc::UnboundedReceiver<String>,
-}
-
-#[derive(Default)]
-struct Replayed {
-    /// Those not launched yet.
-    processes: VecDeque<Vec<Entry>>,
-    /// Those launched, in order, each to say what the adapter did that the capture didn't have.
-    stand_ins: Vec<StandIn>,
 }
 
 #[async_trait]
@@ -107,24 +136,21 @@ impl Launcher for StandIns {
         resume: bool,
         output: mpsc::Sender<AgentOutput>,
     ) -> Result<Arc<dyn AgentProcess>, Failed> {
-        let next = self.state.lock().processes.pop_front();
-        let process = next.ok_or_else(|| Failed("the capture has no more processes".into()))?;
-        let Some(Entry::Launch { resume: captured, session, .. }) = process.first().cloned() else {
-            return Err(Failed("a process in the capture doesn't start with its launch".into()));
-        };
+        let next = (0..self.meta.len()).find(|idx| !self.dir.join(format!("claimed-{idx}")).exists());
+        let idx = next.ok_or_else(|| Failed("the capture has no more processes".into()))?;
+        let (captured, ref session) = self.meta[idx];
         if captured != resume {
             return Err(Failed(format!("the step launched with resume {resume}, and the capture with {captured}")));
         }
-        let dir = self.dir.join(format!("process-{}", run.get()));
-        let stand_in = std::fs::create_dir(&dir)
-            .and_then(|()| StandIn::start(&dir, process, self.binding.lines(), self.saw.clone()))
-            .map_err(|e| Failed(format!("starting the stand-in: {e}")))?;
-        let launch =
-            Launch { scenario: self.scenario, run, cwd: &self.dir, session, resume, bin: stand_in.program.clone() };
-        let spawned = self.binding.spawn(launch, output).await;
-        // Kept even when the adapter couldn't start it, so its replayer is let go of and says so.
-        self.state.lock().stand_ins.push(stand_in);
-        spawned.map_err(|e| Failed(format!("launching the stand-in: {e}")))
+        let launch = Launch {
+            scenario: self.scenario,
+            run,
+            cwd: &self.dir,
+            session: session.clone(),
+            resume,
+            bin: self.bin.clone(),
+        };
+        self.binding.spawn(launch, output).await.map_err(|e| Failed(format!("launching the stand-in: {e}")))
     }
 
     async fn made(&mut self, name: &str) -> Result<(), Failed> {

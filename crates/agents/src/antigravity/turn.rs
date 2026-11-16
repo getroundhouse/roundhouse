@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use protocol::event::{AgentRunState, ApprovalOutcome, EventBody, NoticeLevel, TokenUsage, TurnOutcome};
 use protocol::model::{PermissionMode, Seq};
 use serde_json::Value;
@@ -7,7 +9,7 @@ use super::{approvals, notifications, running::Shared};
 use crate::acp::{self, StopReason};
 use crate::jsonrpc::RpcReply;
 
-pub(super) async fn prompt_finished(shared: &Shared, rpc_id: u64, reply: RpcReply, raw: String) {
+pub(super) async fn prompt_finished(shared: &Arc<Shared>, rpc_id: u64, reply: RpcReply, raw: String) {
     let transcript_path = shared.state.lock().transcript.as_ref().map(|(path, _)| path.clone());
     let settled_len = match transcript_path {
         Some(path) => tokio::fs::metadata(path).await.ok().map(|meta| meta.len()),
@@ -61,7 +63,7 @@ pub(super) async fn prompt_finished(shared: &Shared, rpc_id: u64, reply: RpcRepl
     }
 }
 
-async fn finish_last_err(shared: &Shared, entry: &InFlightPrompt, error: &crate::AgentError, raw: String) {
+async fn finish_last_err(shared: &Arc<Shared>, entry: &InFlightPrompt, error: &crate::AgentError, raw: String) {
     notifications::flush_streams(shared).await;
     if !entry.taken {
         shared.state.lock().reply = None;
@@ -82,6 +84,7 @@ async fn finish_last_err(shared: &Shared, entry: &InFlightPrompt, error: &crate:
             settle_turn(shared).await;
             shared.count_end(&mut shared.state.lock(), Ending::Not);
             report_state(shared).await;
+            schedule_pending_mode_swap(shared);
             return;
         };
         shared.event(EventBody::AgentState { state: AgentRunState::Running }, None).await;
@@ -91,7 +94,7 @@ async fn finish_last_err(shared: &Shared, entry: &InFlightPrompt, error: &crate:
     record_end(shared, TurnOutcome::Error, Some(error.to_string()), None, Some(raw)).await;
 }
 
-async fn finish_last_ok(shared: &Shared, entry: &InFlightPrompt, result: &Value, raw: String) {
+async fn finish_last_ok(shared: &Arc<Shared>, entry: &InFlightPrompt, result: &Value, raw: String) {
     notifications::flush_streams(shared).await;
     let parsed = acp::parse_prompt_response(result);
     let was_cancelling = {
@@ -112,12 +115,17 @@ async fn finish_last_ok(shared: &Shared, entry: &InFlightPrompt, result: &Value,
         settle_turn(shared).await;
         shared.count_end(&mut shared.state.lock(), Ending::Not);
         report_state(shared).await;
+        schedule_pending_mode_swap(shared);
         return;
     }
     let ended_normally = self_cancelled || parsed.stop_reason == StopReason::EndTurn;
     let held_plan = if !cancelled && ended_normally {
         let mut state = shared.state.lock();
-        let plan = if state.hold_plans && state.mode == PermissionMode::Plan && state.waiting.is_empty() {
+        let plan = if state.hold_plans
+            && state.process_mode == PermissionMode::Plan
+            && state.waiting.is_empty()
+            && !state.awaiting_background_work()
+        {
             state.reply.take().filter(|text| !text.trim().is_empty())
         } else {
             None
@@ -147,7 +155,7 @@ async fn finish_last_ok(shared: &Shared, entry: &InFlightPrompt, result: &Value,
 }
 
 pub(super) async fn record_end(
-    shared: &Shared,
+    shared: &Arc<Shared>,
     outcome: TurnOutcome,
     error: Option<String>,
     tokens: Option<TokenUsage>,
@@ -181,6 +189,29 @@ pub(super) async fn record_end(
     // which reads it.
     shared.count_end(&mut shared.state.lock(), Ending::Not);
     report_state(shared).await;
+    schedule_pending_mode_swap(shared);
+}
+
+fn schedule_pending_mode_swap(shared: &Arc<Shared>) {
+    if !shared.state.lock().needs_mode_swap() {
+        return;
+    }
+    let shared = shared.clone();
+    tokio::spawn(async move {
+        let _ordered = shared.controls.lock().await;
+        let _ = super::swap::ensure_mode_process(&shared).await;
+    });
+}
+
+pub(super) async fn settle_replaced_child(shared: &Shared) {
+    notifications::flush_streams(shared).await;
+    let (dropped, stopped) = shared.state.lock().take_replaced_child_tasks();
+    for tool_use_id in dropped {
+        shared.event(EventBody::ToolCallDropped { tool_use_id }, None).await;
+    }
+    if let Some(stopped) = stopped {
+        shared.event(EventBody::AgentTasks { tasks: Vec::new(), stopped }, None).await;
+    }
 }
 
 pub(super) async fn settle_all(shared: &Shared) {
@@ -212,6 +243,9 @@ pub(super) async fn settle_turn(shared: &Shared) {
             }
         });
         state.denied_calls.retain(|id| state.calls.contains_key(id));
+        if state.async_agents == super::state::AsyncAgents::SpawnedThisTurn {
+            state.async_agents = super::state::AsyncAgents::Active;
+        }
         let surviving_tasks = state.list_surviving_commands();
         (requests, calls, surviving_tasks)
     };

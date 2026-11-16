@@ -12,6 +12,7 @@ mod one_off;
 mod running;
 mod state;
 mod supervise;
+mod swap;
 mod turn;
 mod wakeup;
 

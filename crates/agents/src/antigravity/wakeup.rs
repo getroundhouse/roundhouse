@@ -10,10 +10,12 @@
 
 use std::io::SeekFrom;
 use std::path::Path;
-use std::sync::{Arc, atomic::Ordering};
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+};
 use std::time::{Duration, Instant};
 
-use protocol::model::PermissionMode;
 use serde_json::{Value, json};
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
 use tokio::time::MissedTickBehavior;
@@ -23,9 +25,9 @@ use super::running::Shared;
 use super::state::PromptOrigin;
 
 const POLL_INTERVAL: Duration = Duration::from_millis(150);
-/// How long an apparently ungated wakeup tool call (`read_file`, `edit_file`, `write_file` in `FullAccess`) may sit
-/// without `agy` appending its `GENERIC` execution step before we conclude an out-of-workspace path parked it in
-/// `SetPendingToolPermission`.
+/// How long an apparently ungated wakeup tool call (`read_file` when running without `--dangerously-skip-permissions`)
+/// may sit without `agy` appending all `GENERIC` execution steps of that batch before concluding an out-of-workspace
+/// path parked it in `SetPendingToolPermission`.
 const UNGATED_PARK_GRACE: Duration = Duration::from_millis(450);
 const DRAIN_PROMPT: &str =
     "Continue from the completed background task if anything remains, otherwise briefly confirm.";
@@ -45,6 +47,7 @@ enum Phase {
     Waking,
     Ready(DrainAction),
     RunningUngated {
+        pending: usize,
         since: Instant,
     },
     Draining,
@@ -61,19 +64,19 @@ impl TranscriptWatch {
         Self { offset, phase: Phase::Idle }
     }
 
-    fn feed_bytes(&mut self, bytes: &[u8], mode: PermissionMode, now: Instant) {
+    fn feed_bytes(&mut self, bytes: &[u8], skip_permissions: bool, now: Instant) {
         let Some(end) = bytes.iter().rposition(|&b| b == b'\n').map(|idx| idx + 1) else {
             return;
         };
         self.offset = self.offset.saturating_add(u64::try_from(end).unwrap_or(u64::MAX));
         for line in bytes[..end].split(|&b| b == b'\n').filter(|line| !line.is_empty()) {
             if let Ok(step) = serde_json::from_slice::<Value>(line) {
-                self.on_step(&step, mode, now);
+                self.on_step(&step, skip_permissions, now);
             }
         }
     }
 
-    fn on_step(&mut self, step: &Value, mode: PermissionMode, now: Instant) {
+    fn on_step(&mut self, step: &Value, skip_permissions: bool, now: Instant) {
         let source = step.get("source").and_then(Value::as_str).unwrap_or_default();
         let kind = step.get("type").and_then(Value::as_str).unwrap_or_default();
         let status = step.get("status").and_then(Value::as_str).unwrap_or_default();
@@ -90,15 +93,24 @@ impl TranscriptWatch {
         }
         match kind {
             "ERROR_MESSAGE" => self.phase = Phase::Ready(DrainAction::FlushAndCancel),
-            "GENERIC" => self.phase = Phase::Waking,
+            "GENERIC" => {
+                if let Phase::RunningUngated { pending, .. } = &mut self.phase {
+                    *pending = pending.saturating_sub(1);
+                    if *pending == 0 {
+                        self.phase = Phase::Waking;
+                    }
+                }
+            }
             "PLANNER_RESPONSE" if status == "DONE" => {
                 let tools = tool_names(step);
                 if tools.is_empty() {
                     self.phase = Phase::Ready(DrainAction::FlushAndCancel);
-                } else if mode == PermissionMode::Plan || tools.iter().any(|name| gates_in_full_access(name)) {
+                } else if tools.iter().any(|name| gates_on_interaction(name, skip_permissions)) {
                     self.phase = Phase::Ready(DrainAction::RunTurn);
+                } else if skip_permissions {
+                    self.phase = Phase::Waking;
                 } else {
-                    self.phase = Phase::RunningUngated { since: now };
+                    self.phase = Phase::RunningUngated { pending: tools.len(), since: now };
                 }
             }
             _ => {}
@@ -108,7 +120,7 @@ impl TranscriptWatch {
     fn next_action(&self, now: Instant) -> Option<DrainAction> {
         match self.phase {
             Phase::Ready(action) => Some(action),
-            Phase::RunningUngated { since } if now.duration_since(since) >= UNGATED_PARK_GRACE => {
+            Phase::RunningUngated { since, .. } if now.duration_since(since) >= UNGATED_PARK_GRACE => {
                 Some(DrainAction::RunTurn)
             }
             Phase::Idle | Phase::Waking | Phase::RunningUngated { .. } | Phase::Draining => None,
@@ -129,19 +141,23 @@ fn tool_names(step: &Value) -> Vec<&str> {
         .collect()
 }
 
-fn gates_in_full_access(tool: &str) -> bool {
-    matches!(tool, "run_command" | "ask_question")
+fn gates_on_interaction(tool: &str, skip_permissions: bool) -> bool {
+    if skip_permissions {
+        tool == "ask_question"
+    } else {
+        matches!(tool, "ask_question" | "run_command" | "edit_file" | "write_file")
+    }
 }
 
-pub(super) async fn watch(shared: Arc<Shared>) {
+pub(super) async fn watch(shared: Arc<Shared>, child_gone: Arc<AtomicBool>) {
     let mut interval = tokio::time::interval(POLL_INTERVAL);
     interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
     let mut tracker: Option<(std::path::PathBuf, TranscriptWatch)> = None;
-    while !shared.gone.load(Ordering::SeqCst) {
+    while !shared.gone.load(Ordering::SeqCst) && !child_gone.load(Ordering::SeqCst) {
         interval.tick().await;
-        let (transcript, in_turn, mode) = {
+        let (transcript, in_turn, skip_permissions) = {
             let state = shared.state.lock();
-            (state.transcript.clone(), state.in_turn(), state.mode)
+            (state.transcript.clone(), state.in_turn(), state.skip_permissions)
         };
         let Some((path, floor_offset)) = transcript else { continue };
         let (watched_path, watch_state) =
@@ -156,7 +172,7 @@ pub(super) async fn watch(shared: Arc<Shared>) {
             continue;
         }
         if let Some(bytes) = read_since(&path, watch_state.offset).await {
-            watch_state.feed_bytes(&bytes, mode, Instant::now());
+            watch_state.feed_bytes(&bytes, skip_permissions, Instant::now());
         }
         if let Some(action) = watch_state.next_action(Instant::now())
             && trigger_drain(&shared, action).await
@@ -201,38 +217,54 @@ mod tests {
     }
 
     #[test]
-    fn wakeup_watch_distinguishes_normal_turns_plain_wakeups_gated_tools_and_parked_reads() {
+    fn wakeup_watch_handles_skip_permissions_mixed_batches_and_parked_plan_reads() {
         let t0 = Instant::now();
         let mut watch = TranscriptWatch::new(0);
-        watch.feed_bytes(&line("USER_EXPLICIT", "USER_INPUT", "DONE", &[]), PermissionMode::FullAccess, t0);
-        watch.feed_bytes(&line("MODEL", "PLANNER_RESPONSE", "DONE", &["run_command"]), PermissionMode::FullAccess, t0);
-        watch.feed_bytes(&line("MODEL", "PLANNER_RESPONSE", "DONE", &[]), PermissionMode::FullAccess, t0);
+        watch.feed_bytes(&line("USER_EXPLICIT", "USER_INPUT", "DONE", &[]), true, t0);
+        watch.feed_bytes(&line("MODEL", "PLANNER_RESPONSE", "DONE", &["run_command"]), true, t0);
+        watch.feed_bytes(&line("MODEL", "PLANNER_RESPONSE", "DONE", &[]), true, t0);
         assert_eq!(watch.next_action(t0), None, "ordinary user turn must not trigger a wakeup drain");
 
+        // Under --dangerously-skip-permissions (`skip_permissions = true`), `run_command` runs unasked without firing
+        // `UNGATED_PARK_GRACE` mid-command, then flushes once the follow-up `PLANNER_RESPONSE` finishes.
         let partial = b"{\"source\":\"SYSTEM\",\"type\":\"SYSTEM_MESSAGE\",\"status\":\"DONE\"}";
-        watch.feed_bytes(partial, PermissionMode::FullAccess, t0);
+        watch.feed_bytes(partial, true, t0);
         assert_eq!(watch.next_action(t0), None, "incomplete line without newline is held back");
-
         let mut complete = partial.to_vec();
         complete.push(b'\n');
-        complete.extend_from_slice(&line("MODEL", "PLANNER_RESPONSE", "DONE", &["read_file"]));
-        watch.feed_bytes(&complete, PermissionMode::FullAccess, t0);
-        assert_eq!(watch.next_action(t0), None, "ungated read_file waits for GENERIC step first");
-
-        watch.feed_bytes(&line("MODEL", "GENERIC", "DONE", &[]), PermissionMode::FullAccess, t0);
-        watch.feed_bytes(&line("MODEL", "PLANNER_RESPONSE", "DONE", &[]), PermissionMode::FullAccess, t0);
+        complete.extend_from_slice(&line("MODEL", "PLANNER_RESPONSE", "DONE", &["run_command"]));
+        watch.feed_bytes(&complete, true, t0);
+        assert_eq!(watch.next_action(t0 + Duration::from_secs(5)), None, "unasked run_command must not drain early");
+        watch.feed_bytes(&line("MODEL", "GENERIC", "DONE", &[]), true, t0);
+        watch.feed_bytes(&line("MODEL", "PLANNER_RESPONSE", "DONE", &[]), true, t0);
         assert_eq!(watch.next_action(t0), Some(DrainAction::FlushAndCancel));
         watch.mark_draining();
-        assert_eq!(watch.next_action(t0), None, "Draining state prevents duplicate drain RPCs");
 
-        watch.feed_bytes(&line("USER_EXPLICIT", "USER_INPUT", "DONE", &[]), PermissionMode::FullAccess, t0);
-        watch.feed_bytes(&line("SYSTEM", "SYSTEM_MESSAGE", "DONE", &[]), PermissionMode::FullAccess, t0);
-        watch.feed_bytes(&line("MODEL", "PLANNER_RESPONSE", "DONE", &["run_command"]), PermissionMode::FullAccess, t0);
+        // Mixed batch `[read_file, read_file, run_command]` in Plan mode (`skip_permissions = false`) where the first
+        // ungated `read_file` appends its `GENERIC` step immediately must preserve `Ready(RunTurn)`.
+        let mut batch = Vec::new();
+        batch.extend_from_slice(&line("USER_EXPLICIT", "USER_INPUT", "DONE", &[]));
+        batch.extend_from_slice(&line("SYSTEM", "SYSTEM_MESSAGE", "DONE", &[]));
+        batch.extend_from_slice(&line("MODEL", "PLANNER_RESPONSE", "DONE", &["read_file", "read_file", "run_command"]));
+        batch.extend_from_slice(&line("MODEL", "GENERIC", "DONE", &[]));
+        watch.feed_bytes(&batch, false, t0);
+        assert_eq!(watch.next_action(t0), Some(DrainAction::RunTurn), "sibling GENERIC must not clobber RunTurn");
+
+        // Mixed batch `[read_file, ask_question]` under `skip_permissions = true` also preserves `Ready(RunTurn)`.
+        let mut ask_batch = Vec::new();
+        ask_batch.extend_from_slice(&line("USER_EXPLICIT", "USER_INPUT", "DONE", &[]));
+        ask_batch.extend_from_slice(&line("SYSTEM", "SYSTEM_MESSAGE", "DONE", &[]));
+        ask_batch.extend_from_slice(&line("MODEL", "PLANNER_RESPONSE", "DONE", &["read_file", "ask_question"]));
+        ask_batch.extend_from_slice(&line("MODEL", "GENERIC", "DONE", &[]));
+        watch.feed_bytes(&ask_batch, true, t0);
         assert_eq!(watch.next_action(t0), Some(DrainAction::RunTurn));
 
-        watch.feed_bytes(&line("USER_EXPLICIT", "USER_INPUT", "DONE", &[]), PermissionMode::FullAccess, t0);
-        watch.feed_bytes(&line("SYSTEM", "SYSTEM_MESSAGE", "DONE", &[]), PermissionMode::FullAccess, t0);
-        watch.feed_bytes(&line("MODEL", "PLANNER_RESPONSE", "DONE", &["read_file"]), PermissionMode::FullAccess, t0);
+        // Two `read_file` calls in Plan mode where only one finishes keep `RunningUngated` armed for the parked second.
+        watch.feed_bytes(&line("USER_EXPLICIT", "USER_INPUT", "DONE", &[]), false, t0);
+        watch.feed_bytes(&line("SYSTEM", "SYSTEM_MESSAGE", "DONE", &[]), false, t0);
+        watch.feed_bytes(&line("MODEL", "PLANNER_RESPONSE", "DONE", &["read_file", "read_file"]), false, t0);
+        watch.feed_bytes(&line("MODEL", "GENERIC", "DONE", &[]), false, t0);
+        assert_eq!(watch.next_action(t0), None);
         assert_eq!(watch.next_action(t0 + UNGATED_PARK_GRACE), Some(DrainAction::RunTurn));
     }
 }
