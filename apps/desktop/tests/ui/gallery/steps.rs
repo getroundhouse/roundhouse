@@ -102,6 +102,7 @@ pub(crate) enum DictationTarget {
     Composer,
     NewWorkspace,
     Answer,
+    Comment,
 }
 
 /// An element in the app, by its ID, or a line in the chat, by the label it gives assistive apps, for one whose ID is

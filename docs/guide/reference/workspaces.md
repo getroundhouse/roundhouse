@@ -12,7 +12,8 @@ Making a workspace, its setup, its name and title, and archiving it. [Workspaces
 - **Return presses Create,** and `Shift-Return` starts a new line.
 - **Create with nothing typed makes the workspace and sends nothing.**
 - **The prompt supports dictation,** with the microphone beside Create or by holding Space or `Option-Space` while the prompt has focus. See [Dictate a prompt](../guides/dictate-a-prompt.md).
-- **Create finishes any active dictation, then closes the dialog,** and the sidebar shows the workspace being made, since it fetches first.
+- **While dictating, Return finishes the words before creating.** Finish dictation to bring back Create and the other controls.
+- **Creating closes the dialog,** and the sidebar shows the workspace being made, since it fetches first.
 - **The new workspace is selected once it's made,** unless you went somewhere else meanwhile.
 - **The agent, model and effort stay as chosen for the next workspace.** Choosing another agent resets model and effort to its defaults: Opus and Extra high for Claude, GPT-6.1 Sol and Low for Codex, and Gemini 4 Carbon and Medium for Antigravity. Plan mode doesn't carry over.
 - **Closing the dialog keeps what's in it.** The hub keeps it, files and all, until the workspace is made.

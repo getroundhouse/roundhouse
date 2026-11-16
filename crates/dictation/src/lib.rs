@@ -14,6 +14,7 @@ mod dictation;
 mod engine;
 #[cfg(any(test, feature = "testing"))]
 pub mod fake;
+mod level;
 pub mod model;
 pub mod nemotron;
 mod pauses;
@@ -22,4 +23,5 @@ mod samples;
 pub use audio::{AudioIn, HEARS, Permission, ask_for_microphone, microphone_permission};
 pub use dictation::{Dictation, DictationError, Ending, Recording, Update};
 pub use engine::{Engine, EngineError, Heard, Listening};
+pub use level::Level;
 pub use samples::{SAMPLE_RATE, Samples};

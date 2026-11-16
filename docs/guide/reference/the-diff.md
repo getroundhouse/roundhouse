@@ -50,6 +50,7 @@ Clicking a file shows it in the workspace's file tab: its diff from Changes, or 
 ## Comments
 
 - **Hover a line and click its add button** to comment on it. `Enter` saves the comment.
+- **To dictate, focus the comment and hold Space or `Option-Space`.** Finish dictation keeps the words in the box; `Enter` finishes them and saves. See [Dictate a prompt](../guides/dictate-a-prompt.md).
 - **A saved comment shows where it was written,** with `Edit`, `Delete` and `Add to chat`.
 - **`Send to agent`,** at the top of the sidebar, sends every comment at once, and shows the chat they went to.
 - **`Add to chat` puts one comment in the composer,** after what's typed there.

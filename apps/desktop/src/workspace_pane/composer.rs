@@ -238,7 +238,8 @@ impl WorkspacePane {
             .children(attached)
             // Keep the usual four-line writing area, shared with tentative words.
             .child(composing::writing_area(&self.composer, textarea, &self.dictation, cx).min_h(px(104.)))
-            .child(bar);
+            .child(bar)
+            .child(self.dictation.read(cx).edge());
         around(composer.into_any_element()).flex_none().pb(look::Space::Large).pt(transcript::ABOVE_THE_COMPOSER)
     }
 
@@ -246,7 +247,16 @@ impl WorkspacePane {
     /// the model picker, which takes whatever room is left. The right one has what's beside the main action, each in
     /// a [`Slot`], and last the one main action, twice as far from them as they are from each other, so it stands
     /// apart.
-    fn bar(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    fn bar(&self, cx: &mut Context<Self>) -> AnyElement {
+        let bar = h_flex()
+            .w_full()
+            .px(look::Space::Medium)
+            .pt(look::Space::Small)
+            .pb(look::Space::Medium)
+            .gap(look::Space::Small);
+        if let Some(controls) = dictation_ui::Field::controls(&self.dictation, look::ControlSize::Small, cx) {
+            return bar.child(controls).into_any_element();
+        }
         let field = self.composer.focus_handle(cx);
         let add =
             composing::plus_menu("add", self.plan(), field, cx, |t: &mut Self, paths, cx| t.attach_paths(paths, cx));
@@ -255,15 +265,7 @@ impl WorkspacePane {
         // Left out when there's nothing in it, so it doesn't push the main action in by a gap.
         let beside = (!beside.is_empty()).then(|| h_flex().flex_none().gap(look::Space::Small).children(beside));
         let agents = h_flex().flex_none().gap(look::Space::Large).children(beside).child(self.main_action(cx));
-        h_flex()
-            .w_full()
-            .px(look::Space::Medium)
-            .pt(look::Space::Small)
-            .pb(look::Space::Medium)
-            .gap(look::Space::Small)
-            .child(add)
-            .child(picker)
-            .child(agents)
+        bar.child(add).child(picker).child(agents).into_any_element()
     }
 
     /// What sits beside the main action, in the order it's drawn: what the agent says of itself, then the microphone,

@@ -20,7 +20,7 @@ fn sent_text(ui: &Ui) -> Option<String> {
 }
 
 #[gpui_kit::test]
-fn the_microphone_button_starts_and_stops_dictating(cx: &mut TestAppContext) {
+fn the_microphone_starts_and_finish_keeps_the_words_without_sending(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = Ui::open_with_a_repository(cx, &stack);
     ui.new_workspace();
@@ -32,7 +32,7 @@ fn the_microphone_button_starts_and_stops_dictating(cx: &mut TestAppContext) {
     ui.click(MICROPHONE);
     say(&mut ui, &engine, "fix the flaky test");
     hearing(&mut ui, "fix");
-    ui.click(MICROPHONE);
+    ui.click(dictation_ui::STOP);
 
     ui.wait("the final text", |ui| ui.composer_text() == "Fix the flaky test.");
     assert!(!sent(&ui));
@@ -51,7 +51,7 @@ fn what_is_said_goes_in_at_the_cursor_with_a_space_either_side(cx: &mut TestAppC
 
     ui.click("dictate");
     say(&mut ui, &engine, "fix the test. / in hub");
-    ui.click("dictate");
+    ui.click(dictation_ui::STOP);
 
     ui.wait("the final text", |ui| ui.composer_text() == "Please Fix the test. In hub. now");
 }
@@ -68,7 +68,7 @@ fn an_enter_with_nothing_typed_or_heard_yet_goes_on_dictating(cx: &mut TestAppCo
 
     assert!(!sent(&ui) && dictating(&mut ui));
     say(&mut ui, &engine, "fix the test");
-    ui.click("dictate");
+    ui.click(dictation_ui::STOP);
     ui.wait("the final text", |ui| ui.composer_text() == "Fix the test.");
 }
 
@@ -159,14 +159,14 @@ fn hearing_nothing_or_failing_to_hear_says_so(cx: &mut TestAppContext) {
     ui.new_workspace();
     ready(&mut ui);
     ui.click("dictate");
-    ui.click("dictate");
+    ui.click(dictation_ui::STOP);
     ui.wait("what's told", |ui| ui.view().error.as_deref() == Some(NOTHING_HEARD));
     ended(&mut ui);
 
     let engine = ready_with(&mut ui, FakeEngine::new(SCRIPT).failing());
     ui.click("dictate");
     say(&mut ui, &engine, "fix the test");
-    ui.click("dictate");
+    ui.click(dictation_ui::STOP);
     ui.wait("what's told", |ui| ui.view().error.as_deref().is_some_and(|e| e.starts_with("Dictation stopped: ")));
     ended(&mut ui);
     assert_eq!(ui.composer_text(), "");

@@ -31,6 +31,11 @@ impl WorkspacePane {
     pub(super) fn dictation_follows_its_composer(&mut self, cx: &mut Context<Self>) {
         let question = self.transcript().is_some_and(|t| t.read(cx).question().is_some());
         let showing_chat = self.drawn() && self.showing() == Showing::Chat;
+        if let Some(diff) = &self.diff {
+            let showing =
+                self.drawn() && self.showing() == Showing::File && self.file_tab_opened() == Some(super::Opened::Diff);
+            diff.file.update(cx, |file, cx| file.set_dictation_enabled(showing, cx));
+        }
         let drawn = self.active.clone().filter(|_| showing_chat && !question);
         if self.dictation_chat != drawn {
             self.end_dictation(cx);

@@ -69,7 +69,7 @@ fn escape_cancels_and_puts_the_prompt_back_as_it_was_with_option_still_held_or_n
     // Dictating works again after.
     ui.click("dictate");
     say(&mut ui, &engine, "in hub");
-    ui.click("dictate");
+    ui.click(dictation_ui::STOP);
     ui.wait("the final text", |ui| ui.composer_text() == "Keep this In hub.");
 }
 

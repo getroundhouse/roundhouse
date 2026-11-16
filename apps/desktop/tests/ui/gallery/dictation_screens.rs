@@ -15,6 +15,24 @@ use protocol::model::SessionStatus;
 
 pub(crate) const SCREENS: &[Screen] = &[
     Screen {
+        name: "comment-dictation",
+        spec: "diff.md",
+        world: Some(super::worlds::diff),
+        frame: super::frame::FILE,
+        steps: &[
+            Step::Select(FOCUS),
+            Step::OpenFile("crates/protocol/src/model.rs"),
+            Step::StartComment(35),
+            Step::Type("Could we keep the status visible?"),
+            Step::Dictate {
+                into: DictationTarget::Comment,
+                said: "let the name shrink before hiding the indicator",
+                shows: "let the name shrink before hiding the",
+            },
+            Step::MoveAway,
+        ],
+    },
+    Screen {
         name: "dictation",
         spec: "chats.md",
         world: Some(conversation),

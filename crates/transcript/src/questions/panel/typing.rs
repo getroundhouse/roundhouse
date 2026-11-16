@@ -46,7 +46,7 @@ impl QuestionPanel {
             && self.asks.can_type(q)
         {
             let field = cx.new(|cx| {
-                let mut field = dictation_ui::Field::new(input.clone(), window, cx);
+                let mut field = dictation_ui::Field::new(input.clone(), look::Corner::Control, window, cx);
                 field.set_enabled(self.dictation_enabled && q == self.showing, cx);
                 field
             });

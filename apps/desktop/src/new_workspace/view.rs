@@ -8,8 +8,8 @@ use gpui_kit::component::kbd::Kbd;
 use gpui_kit::component::menu::{DropdownMenu as _, PopupMenu, PopupMenuItem};
 use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::{
-    Anchor, Context, Focusable as _, InteractiveElement as _, IntoElement, Keystroke, ParentElement as _, Render,
-    Styled as _, TestSupportExt as _, Window, px, transparent_black,
+    Anchor, AnyElement, Context, Focusable as _, InteractiveElement as _, IntoElement, Keystroke, ParentElement as _,
+    Render, Styled as _, TestSupportExt as _, Window, px, transparent_black,
 };
 use look::{Hand as _, Off as _, Sizing as _};
 
@@ -23,15 +23,19 @@ impl Render for NewWorkspaceDialog {
         // An edge of its own inside the dialog's, which shows only while files are dragged over it.
         let target = v_flex().id("new-workspace").w_full().border_1().border_color(transparent_black());
         let target = composing::place(target, self.planning(), look::Corner::Card, cx, Self::toggle_plan_mode);
-        attached::takes_drops(target, cx, |_, paths, cx| Self::attach_paths(paths, cx))
-            .child(self.header(cx))
-            .children(
-                self.attached
-                    .tiles("new-workspace-attachments", cx, Self::remove_attached)
-                    .map(|t| t.px(look::Space::Small).pt(look::Space::Small)),
-            )
-            .child(self.prompt_field(cx))
-            .child(self.footer(cx))
+        attached::takes_drops(target, cx, |_, paths, cx| Self::attach_paths(paths, cx)).child(self.header(cx)).child(
+            v_flex()
+                .w_full()
+                .relative()
+                .children(
+                    self.attached
+                        .tiles("new-workspace-attachments", cx, Self::remove_attached)
+                        .map(|t| t.px(look::Space::Small).pt(look::Space::Small)),
+                )
+                .child(self.prompt_field(cx))
+                .child(self.footer(cx))
+                .child(self.dictation.read(cx).edge()),
+        )
     }
 }
 
@@ -82,7 +86,16 @@ impl NewWorkspaceDialog {
 
     /// The `+` menu and the model and effort on the left, as in the composer's bar, and on the right Create, the
     /// dialog's one main action.
-    fn footer(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    fn footer(&self, cx: &mut Context<Self>) -> AnyElement {
+        let bar = h_flex()
+            .w_full()
+            .px(look::Space::Medium)
+            .pb(look::Space::Medium)
+            .pt(look::Space::XSmall)
+            .gap(look::Space::Small);
+        if let Some(controls) = dictation_ui::Field::controls(&self.dictation, look::ControlSize::Regular, cx) {
+            return bar.child(controls).into_any_element();
+        }
         let this = cx.weak_entity();
         // Only once there's something to show, which a hub that doesn't describe its agents leaves to the hub.
         let picker = self.shown().map(|(model, effort)| {
@@ -126,16 +139,11 @@ impl NewWorkspaceDialog {
             .children(enter)
             .off_while(!self.can_create())
             .on_click(cx.listener(|t, _, _, cx| t.create(cx)));
-        h_flex()
-            .w_full()
-            .px(look::Space::Medium)
-            .pb(look::Space::Medium)
-            .pt(look::Space::XSmall)
-            .gap(look::Space::Small)
-            .child(plus)
+        bar.child(plus)
             // A row, so the picker keeps its own width and its caret stays beside what it says.
             .child(h_flex().flex_1().min_w_0().children(agent_picker).children(picker))
             .children(crate::dictating::microphone(&self.dictation, cx))
             .child(create)
+            .into_any_element()
     }
 }

@@ -54,6 +54,12 @@ impl Recording {
         Self { input, stopped: Cell::new(false), cancelled }
     }
 
+    /// A single consumer reads the latest loudness independently of recognition. A slow reader skips old levels.
+    /// The UI stops reading when this recording ends; silence sends nothing until its level changes.
+    pub fn levels(&self) -> flume::Receiver<crate::Level> {
+        self.input.levels()
+    }
+
     /// Ends the recording as letting go of the key does: no more audio is taken, what was said since the last sentence
     /// turned final is heard whole for its final text, and [`Update::Ended`] follows. Dropping this afterwards changes
     /// nothing.

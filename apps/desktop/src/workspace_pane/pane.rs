@@ -154,7 +154,7 @@ impl WorkspacePane {
         cx: &mut Context<Self>,
     ) -> Self {
         let (composer, on_enter) = composer::new_input(window, cx);
-        let dictation = cx.new(|cx| dictation_ui::Field::new(composer.clone(), window, cx));
+        let dictation = cx.new(|cx| dictation_ui::Field::new(composer.clone(), look::Corner::Card, window, cx));
         let dictated =
             cx.subscribe_in(&dictation, window, |this, _, event, window, cx| this.dictation_event(event, window, cx));
         let live = cx.observe(&dictation, |_, _, cx| cx.notify());

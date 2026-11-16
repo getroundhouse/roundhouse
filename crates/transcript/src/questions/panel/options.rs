@@ -186,6 +186,8 @@ fn other_row(
                 ),
         )
         .when(multiple, |d| d.child(checkbox))
+        .relative()
+        .children(dictation.map(|field| field.read(cx).edge()))
         .test_support();
     match dictation {
         Some(field) => dictation_ui::Field::keys(row, field).into_any_element(),

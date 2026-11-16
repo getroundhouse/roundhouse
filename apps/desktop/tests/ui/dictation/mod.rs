@@ -14,3 +14,6 @@ mod key;
 mod support;
 mod turning_on;
 mod what_goes_in;
+
+mod comments;
+mod fine_line;

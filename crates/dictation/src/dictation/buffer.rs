@@ -8,6 +8,7 @@ use parking_lot::Mutex;
 
 use super::recording::Input;
 use crate::DictationError;
+use crate::level::Meter;
 
 /// Thirty seconds leaves room for model startup without letting a stuck recognizer accumulate audio indefinitely.
 pub(super) const MAX_SAMPLES: usize = crate::Samples::from_secs(30).0;
@@ -19,6 +20,7 @@ pub(super) struct Buffer {
     ready: flume::Receiver<()>,
     close: flume::Sender<()>,
     closed: flume::Receiver<()>,
+    meter: Meter,
 }
 
 struct State {
@@ -33,7 +35,7 @@ impl Buffer {
         let (wake, ready) = flume::bounded(1);
         let (close, closed) = flume::bounded(1);
         let state = State { audio: VecDeque::new(), samples: 0, accepting: true, ending: None };
-        Self { state: Arc::new(Mutex::new(state)), wake, ready, close, closed }
+        Self { state: Arc::new(Mutex::new(state)), wake, ready, close, closed, meter: Meter::new() }
     }
 
     pub(super) fn audio(&self, audio: Vec<f32>) {
@@ -45,6 +47,7 @@ impl Buffer {
             self.finish(&mut state, Input::Failed(DictationError::AudioBacklog));
             return;
         }
+        self.meter.hear(&audio);
         state.samples += audio.len();
         state.audio.push_back(audio);
         let _ = self.wake.try_send(());
@@ -91,5 +94,9 @@ impl Buffer {
 
     pub(super) fn closed(&self) -> &flume::Receiver<()> {
         &self.closed
+    }
+
+    pub(super) fn levels(&self) -> flume::Receiver<crate::Level> {
+        self.meter.levels()
     }
 }

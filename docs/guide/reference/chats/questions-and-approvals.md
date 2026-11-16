@@ -22,7 +22,7 @@ It shows one question at a time: its header and text, then each option on a numb
 
 The question takes the keys when it comes. When it's just come, keys do nothing until half a second passes without one, so the end of something you were typing can't answer it by accident. Choosing with the pointer works at once.
 
-To dictate an ordinary written answer, focus its text field and hold Space or `Option-Space`. Questions have no microphone button. Finalized words select and save the written answer as typing does, and Send waits for the last live words. See [Dictate a prompt](../../guides/dictate-a-prompt.md). Secret answers do not support dictation.
+To dictate an ordinary written answer, focus its text field and hold Space or `Option-Space`. Questions have no microphone button. Finalized words select and save the written answer as typing does, and Enter waits for the last live words; Send returns when dictation ends. See [Dictate a prompt](../../guides/dictate-a-prompt.md). Secret answers do not support dictation.
 
 ### Several questions
 

@@ -121,9 +121,9 @@ pub(super) fn hearing(ui: &mut Ui, start: &str) {
     ui.wait(&format!("the live text to start {start:?}"), |ui| live(ui).is_some_and(|text| text.starts_with(start)));
 }
 
-/// Waits for the line under what's typed to go.
+/// Waits for recording and finalization to end, including when nothing was heard.
 pub(super) fn ended(ui: &mut Ui) {
-    ui.wait("the live text to go", |ui| live(ui).is_none());
+    ui.wait("the recording controls to go", |ui| !ui.has(dictation_ui::STOP));
 }
 
 /// Whether a prompt has been sent in the chat.

@@ -26,7 +26,7 @@ fn opening_settings_ends_dictation_and_drops_what_was_not_final(cx: &mut TestApp
     assert_eq!(live(&mut ui), None);
     ui.click("dictate");
     say(&mut ui, &engine, "in hub");
-    ui.click("dictate");
+    ui.click(dictation_ui::STOP);
     ui.wait("only what's said since", |ui| ui.composer_text() == "In hub.");
 }
 
@@ -46,7 +46,7 @@ fn another_chat_ends_dictation_and_nothing_goes_in_either(cx: &mut TestAppContex
     assert_eq!(live(&mut ui), None);
     ui.click("dictate");
     say(&mut ui, &engine, "in hub");
-    ui.click("dictate");
+    ui.click(dictation_ui::STOP);
     ui.wait("only what's said in this chat", |ui| ui.composer_text() == "In hub.");
     assert_eq!(kept(&stack, &first), "");
 }
@@ -91,7 +91,7 @@ fn archiving_the_workspace_ends_dictation_and_another_can_be_dictated_to(cx: &mu
     ui.new_workspace();
     ui.click("dictate");
     say(&mut ui, &engine, "in hub");
-    ui.click("dictate");
+    ui.click(dictation_ui::STOP);
     ui.wait("what's said in the next workspace", |ui| ui.composer_text() == "In hub.");
 }
 
@@ -111,7 +111,7 @@ fn the_hub_restarting_leaves_it_dictating_as_it_leaves_whats_typed(cx: &mut Test
 
     assert!(live(&mut ui).is_some_and(|text| text.starts_with("fix")), "still dictating");
     say(&mut ui, &engine, "test");
-    ui.click("dictate");
+    ui.click(dictation_ui::STOP);
     ui.wait("all of it, as one sentence", |ui| ui.composer_text() == "Fix the test.");
 }
 
