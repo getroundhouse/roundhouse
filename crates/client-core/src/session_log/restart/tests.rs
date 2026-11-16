@@ -73,13 +73,13 @@ fn a_request_whose_page_is_let_go_of_before_it_came_again_is_fetched_again() {
     log.waiting_on(Some(&waiting(Seq::FIRST)));
     let mut first = page(1..251);
     first[0] = asked(Seq::FIRST, "before");
-    log.focus_on(0);
+    log.focus_on(0..1, Some(0));
     log.install_page(page_range(0).start, first);
     log.read_again();
 
     for start in (251..last).step_by(250) {
         let position = Position::of_seq(Seq::new(start));
-        log.focus_on(position.row().unwrap());
+        log.focus_on(position.row().unwrap()..position.row().unwrap() + 1, Some(position.row().unwrap()));
         log.install_page(position, page(start..start + 250));
     }
 
@@ -107,7 +107,7 @@ fn the_newest_pages_come_live_and_are_not_fetched_again() {
     for event in page(251..601) {
         log.apply_event(event);
     }
-    log.focus_on(300);
+    log.focus_on(300..301, Some(300));
     assert_eq!(log.pages_to_fetch(), vec![page_range(0)]);
     log.install_page(page_range(0).start, page(1..251));
 

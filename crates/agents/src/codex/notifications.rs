@@ -112,8 +112,13 @@ async fn dispatch(
                 )
                 .await;
         }
+        // The completed command carries its aggregate output. These transient chunks have no separate transcript
+        // content; recording each as AgentOther can put thousands of invisible events between a call and its result.
         // Idle can precede turn/completed. Only the normalized outcome makes Roundhouse idle.
-        "thread/status/changed" | "thread/started" | "item/reasoning/textDelta" => {}
+        "thread/status/changed"
+        | "thread/started"
+        | "item/reasoning/textDelta"
+        | "item/commandExecution/outputDelta" => {}
         _ => {
             shared
                 .event(EventBody::AgentOther { kind: method.into(), subagent: scope.parent.clone() }, Some(raw))

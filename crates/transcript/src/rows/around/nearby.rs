@@ -37,7 +37,10 @@ pub(super) fn call_before(log: &SessionLog, seq: Seq, id: &ToolUseId, reach: usi
 /// The events before the one at `seq`, nearest first, back to the start of the log or to a row that isn't loaded.
 pub(super) fn loaded_before(log: &SessionLog, seq: Seq) -> impl Iterator<Item = &SessionEvent> {
     let row = log.row_of(seq).unwrap_or(0);
-    (0..row).rev().map_while(|ix| event_in(log, ix))
+    (0..row).rev().map(|ix| log.row(ix)).take_while(|row| *row != Row::Unloaded).filter_map(|row| match row {
+        Row::Event(event) => Some(event),
+        Row::Empty | Row::Unloaded => None,
+    })
 }
 
 /// The mode the agent was in before the event at `seq`: the last one it reported, as a change or at the start of a
@@ -65,7 +68,7 @@ pub(super) fn is_loaded(log: &SessionLog, seq: Seq) -> bool {
 fn event_in(log: &SessionLog, ix: usize) -> Option<&SessionEvent> {
     match log.row(ix) {
         Row::Event(event) => Some(event),
-        Row::Unloaded => None,
+        Row::Empty | Row::Unloaded => None,
     }
 }
 
@@ -154,6 +157,17 @@ mod tests {
         let log = log([event(Seq::new(1), changed_to(Plan)), event(Seq::new(3), changed_to(FullAccess))]);
 
         assert_eq!(mode_before(&log, Seq::new(3)), None);
+    }
+
+    #[test]
+    fn a_known_empty_row_does_not_hide_the_mode_before_it() {
+        let log = log([
+            event(Seq::new(1), changed_to(Plan)),
+            event(Seq::new(2), EventBody::AgentOther { kind: "future/event".into(), subagent: None }),
+            event(Seq::new(3), changed_to(FullAccess)),
+        ]);
+
+        assert_eq!(mode_before(&log, Seq::new(3)), Some(Plan));
     }
 
     #[test]

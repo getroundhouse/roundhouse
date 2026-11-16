@@ -106,7 +106,7 @@ fn held<T>(open: &OpenSession, of: impl Fn(&SessionEvent) -> T) -> Vec<Option<T>
     open.read(|log| {
         let row = |ix| match log.row(ix) {
             Row::Event(event) => Some(of(event)),
-            Row::Unloaded => None,
+            Row::Empty | Row::Unloaded => None,
         };
         Vec::from_fn(log.row_count(), row)
     })
@@ -270,11 +270,11 @@ fn an_open_view_reads_its_events_again_as_far_as_the_new_hub_has_them() {
     start_hub(&after, Era::Now, "2", 1510);
     let open = OpenSession::start_view(&Client::connect(&before, "test").unwrap(), &session(), View::Own);
     let row_300 = |open: &OpenSession| said(open).get(300).cloned().flatten();
-    open.want(300);
+    open.want(300..301, Some(300));
     wait_until(&open, row_300, &Some("601 from 1".into()));
 
     open.reconnect(&Client::connect(&after, "test").unwrap());
-    open.want(300);
+    open.want(300..301, Some(300));
 
     wait_until(&open, row_300, &Some("601 from 2".into()));
 }

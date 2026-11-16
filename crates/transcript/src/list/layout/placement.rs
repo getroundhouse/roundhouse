@@ -1,6 +1,7 @@
 use super::super::state::Place;
 use gpui_kit::{Pixels, px};
 use std::collections::VecDeque;
+use std::ops::Range;
 
 /// How far past each end of the window rows are laid out, so one that hasn't been fetched is asked for before it's in
 /// sight, and one whose height is out of date has it before it scrolls in.
@@ -96,6 +97,14 @@ pub(in super::super) struct Layout<T> {
     pub(in super::super) last_in_sight: usize,
     /// Whether the latest row ends in the window, so there's nothing further down to scroll to.
     pub(in super::super) end_in_sight: bool,
+}
+
+impl<T> Layout<T> {
+    /// The complete working set, including fetched rows and the buffer past each edge. A single missing row cannot
+    /// describe it: thousands of zero-height events can separate two rows that are both on screen.
+    pub(in super::super) fn wanted(&self) -> Range<usize> {
+        self.rows.front().zip(self.rows.back()).map_or(0..0, |(first, last)| first.row..last.row + 1)
+    }
 }
 
 /// Lays out a session of `rows` rows in a window `tall`.

@@ -4,7 +4,7 @@
 
 use std::time::Instant;
 
-use client_core::session_log::{By, Row, SessionLog};
+use client_core::session_log::{By, SessionLog};
 use client_core::{Client, OpenSession, RecordsFeed, Subscription, SubscriptionItem, View};
 use protocol::client::HubNotice;
 use protocol::event::{ContentBlock, EventBody, SessionEvent, TaskKind, TaskOutcome};
@@ -253,14 +253,9 @@ fn the_hub_keeps_a_record_of_each_subagent_and_says_on_the_feed_as_it_changes() 
     assert!(client.session_subagents(&"missing".into()).is_err());
 }
 
-/// Every event the open view holds, if it holds all of them, in order.
+/// Every retained body, in order, once all rows are known, including compacted empty rows.
 fn held(log: &SessionLog) -> Option<Vec<SessionEvent>> {
-    (0..log.row_count())
-        .map(|row| match log.row(row) {
-            Row::Event(event) => Some(event.clone()),
-            Row::Unloaded => None,
-        })
-        .collect()
+    log.holds_every_event().then(|| log.loaded().cloned().collect())
 }
 
 #[test]
@@ -276,7 +271,15 @@ fn a_view_holds_only_the_agents_own_events_or_one_subagents_and_the_feed_keeps_t
     let work = OpenSession::start_view(&client, &session, View::Subagent(id.clone()));
     wait_for_turn_end(&client, &session.id, 1);
 
-    let hub_has = |subagent| client.session_read_places(&session.id, subagent, Place::new(1), 1000).unwrap().0;
+    let hub_has = |subagent| {
+        client
+            .session_read_places(&session.id, subagent, Place::new(1), 1000)
+            .unwrap()
+            .0
+            .into_iter()
+            .filter(|event| !matches!(event.body, EventBody::AgentOther { .. }))
+            .collect::<Vec<_>>()
+    };
     wait_until("the agent's own events", || own.read(held).is_some_and(|events| events == hub_has(None)));
     wait_until("the subagent's", || work.read(held).is_some_and(|events| events == hub_has(Some(&id))));
     assert_eq!((own.read(SessionLog::by), work.read(SessionLog::by)), (By::Place, By::Place));

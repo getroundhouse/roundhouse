@@ -146,10 +146,13 @@ fn a_prompt_sent_while_the_agent_thinks_is_drawn_under_the_thought(cx: &mut Test
     assert!(under_the_thought(&mut ui), "as soon as it's sent, under the thought as it streams");
     let recorded = |ui: &Ui| {
         let events = ui.events();
-        let prompt = events.iter().position(
+        let prompt = events.iter().find(
             |e| matches!(&e.body, EventBody::UserPrompt { prompt: Prompt { text, .. }, .. } if text == "say:steered"),
         );
-        prompt.map(|row| ui.cx.read_entity(&transcript, |t, _| t.prompt_state_at(row)))
+        prompt.map(|event| {
+            let row = ui.row_of(event);
+            ui.cx.read_entity(&transcript, |t, _| t.prompt_state_at(row))
+        })
     };
     ui.wait("the prompt to be recorded", |ui| recorded(ui).is_some());
     assert_eq!(recorded(&ui), Some(Some(PromptState::Waiting)));

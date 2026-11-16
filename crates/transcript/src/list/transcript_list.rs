@@ -166,13 +166,14 @@ impl TranscriptList {
     }
 
     /// The list, drawing each row with `row`, which gives `None` for a row that hasn't been fetched. `want` is told
-    /// which of those to fetch. `room_under` is what's left between the list and what's under it, such as the
-    /// composer, which the button back to the latest row counts as part of its own room.
+    /// the whole range in and near the window to keep, and the lowest unfetched row to fetch around, if any.
+    /// `room_under` is what's left between the list and what's under it, such as the composer, which the button back
+    /// to the latest row counts as part of its own room.
     pub(crate) fn render(
         &self,
         id: ElementId,
         mut row: impl FnMut(usize, &mut Window, &mut App) -> Option<AnyElement> + 'static,
-        want: impl Fn(usize) + 'static,
+        want: impl Fn(std::ops::Range<usize>, Option<usize>) + 'static,
         room_under: Pixels,
         window: &mut Window,
         cx: &mut App,
