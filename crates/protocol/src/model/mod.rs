@@ -70,8 +70,8 @@ pub(crate) use ids::ids;
 mod tokens;
 pub use ids::{
     AccountId, AgentSessionId, ApprovalId, AskKey, AttachmentId, BranchName, ChildWorktreeId, ClientMessageId,
-    ClientRequestId, CommentId, CommitId, GithubAccountId, GithubSignInId, GithubUserCode, GithubUsername, HubId,
-    InstanceId, MessageId, ProviderName, RemoteName, RepoId, SessionId, SubagentId, TaskId, ToolUseId, WaitId,
+    ClientRequestId, CommentId, CommitId, DeviceId, GithubAccountId, GithubSignInId, GithubUserCode, GithubUsername,
+    HubId, InstanceId, MessageId, ProviderName, RemoteName, RepoId, SessionId, SubagentId, TaskId, ToolUseId, WaitId,
     WorkerTarget, WorkspaceId,
 };
 mod repo;

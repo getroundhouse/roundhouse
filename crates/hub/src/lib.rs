@@ -44,3 +44,5 @@ pub use crate::timers::Timers;
 pub fn workspace_names() -> &'static [&'static str] {
     names::NAMES
 }
+
+mod remote;

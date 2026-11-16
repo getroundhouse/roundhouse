@@ -283,9 +283,14 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         // saying it's being made, or on its way out, is the world's to say.
         R::WorkspaceCreate(_) | R::WorkspaceRegenerateTitle(_) => Ok(Outcome::Never),
         // The app reads whose account it is from the records, so a screen that asks some other way is wrong.
-        R::SessionAccount(_) | R::Unknown => {
-            Err(ApiError::new(ErrorCode::Unsupported, "the gallery's hub doesn't know that request"))
-        }
+        R::SessionAccount(_)
+        | R::Pair(_)
+        | R::Authenticate(_)
+        | R::PairingStart
+        | R::PairingWait(_)
+        | R::DeviceList
+        | R::DeviceRevoke(_)
+        | R::Unknown => Err(ApiError::new(ErrorCode::Unsupported, "the gallery's hub doesn't know that request")),
     }
 }
 

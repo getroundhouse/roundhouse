@@ -158,6 +158,8 @@ pub(super) fn refused(e: &ClientError, renewing: bool) -> Refused {
         | ErrorCode::NameTaken
         | ErrorCode::Worker
         | ErrorCode::Unavailable
+        | ErrorCode::Unauthorized
+        | ErrorCode::LocalOnly
         | ErrorCode::Internal
         | ErrorCode::Unknown => format!("Couldn't connect it: {}", api.message),
     })

@@ -33,6 +33,7 @@ pub(crate) fn run(args: Args) -> anyhow::Result<()> {
         Cmd::Workspace(command) => workspace_command(&client, command)?,
         Cmd::Session(command) => session_command(&client, command)?,
         Cmd::Agents => print_agents(&client)?,
+        Cmd::Phone(command) => crate::phone::phone_command(&client, command)?,
         Cmd::Send { session, prompt, no_follow, client_msg_id, attach } => {
             let session = find_session(&client, &session)?;
             let files = attach.iter().map(|path| FileToSend::read(path)).collect::<Result<Vec<_>, _>>()?;

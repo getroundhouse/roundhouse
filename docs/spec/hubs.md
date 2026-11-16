@@ -1,0 +1,6 @@
+# Paired hubs
+
+- **A network client pairs with a hub using a single-use link.** On the hub's machine, `roundhouse phone pair` prints a link and QR code. The link expires after ten minutes and pins the hub's public key before sending the code. A successful pairing gives that device its own token. The hub stores only its hash. *Unconfirmed.*
+- **The hub's machine controls access.** `roundhouse phone list` lists devices and `roundhouse phone revoke NAME-OR-ID` revokes one and closes its connections. Network clients can work with projects, workspaces and chats, but cannot administer devices, stop the hub or restart it. *Unconfirmed.*
+- **The machines must be directly reachable.** The network listener starts for pairing, or at startup when a device is paired. `ROUNDHOUSE_LISTEN` chooses its address; release builds use port 7867 and development builds use 7868. There is no relay. Workspace state stays on its hub. *Unconfirmed.*
+- **A peer that stops responding cannot hold connection setup or a write forever.** Pairing, or authentication and hello together, have ten seconds after TLS connects. Each outgoing frame also has ten seconds; expiry closes the connection and releases pending requests. An idle connected client can keep waiting for events. *Unconfirmed.*

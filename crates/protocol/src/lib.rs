@@ -20,6 +20,7 @@ pub mod find;
 pub mod fixtures;
 pub mod frame;
 pub mod model;
+pub mod pairing;
 pub mod paths;
 pub mod prompt;
 pub mod provider;

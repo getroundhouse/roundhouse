@@ -42,3 +42,5 @@ use crate::store::now_ms;
 mod coordinator;
 pub(crate) use coordinator::{BEFORE_SERVING, Hub, HubDirs};
 use coordinator::{KEEPS_WORKERS, Wanted, new_id, off_thread};
+
+mod devices;

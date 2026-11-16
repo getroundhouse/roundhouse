@@ -52,3 +52,13 @@ mod connection;
 use connection::SUBSCRIPTION_CAPACITY;
 pub use connection::{Client, ClientError, Ended, Result, Subscription, SubscriptionItem};
 use connection::{hub_is_missing, subscription_channel};
+
+mod transport;
+
+mod devices;
+
+mod remote;
+
+#[cfg(feature = "testing")]
+pub use remote::pair_with_timeout;
+pub use remote::{RemoteHub, pair};

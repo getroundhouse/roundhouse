@@ -351,4 +351,5 @@ pub(in super::super) const MIGRATIONS: &[&str] = &[
     github_sign_ins::GITHUB_SIGN_INS,
     // Who each provider's machines' own `gh` is logged in as, found since the hub started, in `github_accounts`.
     github_accounts::FOUND_GITHUB_LOGINS,
+    super::devices::DEVICES,
 ];

@@ -37,3 +37,7 @@ pub use client::{
     new_attachment_id, new_github_sign_in_id, new_message_id, new_request_id, restart_hub, stop_hub, stop_hub_if_idle,
     stop_hub_if_still,
 };
+
+#[cfg(feature = "testing")]
+pub use client::pair_with_timeout;
+pub use client::{RemoteHub, pair};

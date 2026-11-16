@@ -65,7 +65,7 @@ pub const HOME_VAR: &str = if cfg!(windows) { "USERPROFILE" } else { "HOME" };
 /// Which hub this is, what it runs, and the timers and GitHub a test gives it and its workers. Nothing a worker starts
 /// in a workspace gets these, because the code there can be another build of Roundhouse, and its commands would
 /// otherwise reach this hub, or start a hub with this one's timers or GitHub.
-pub const HUB_ONLY_ENV: [&str; 10] = [
+pub const HUB_ONLY_ENV: [&str; 11] = [
     ENV_HOME,
     ENV_WORKSPACES,
     ENV_DAEMON_BIN,
@@ -76,6 +76,7 @@ pub const HUB_ONLY_ENV: [&str; 10] = [
     ENV_TEST_HUB_TIMERS,
     ENV_TEST_WORKER_TIMERS,
     ENV_TEST_GITHUB_API,
+    ENV_LISTEN,
 ];
 
 const fn dir_name(debug_build: bool) -> &'static str {
@@ -215,6 +216,15 @@ fn fnv1a(bytes: &[u8]) -> u64 {
     const OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
     const PRIME: u64 = 0x0100_0000_01b3;
     bytes.iter().fold(OFFSET, |hash, byte| (hash ^ u64::from(*byte)).wrapping_mul(PRIME))
+}
+
+/// The optional `ip:port` or port for connections from paired devices.
+pub const ENV_LISTEN: &str = "ROUNDHOUSE_LISTEN";
+pub fn listen_address(env: impl Fn(&str) -> Option<String>) -> Result<std::net::SocketAddr, String> {
+    let port = if cfg!(debug_assertions) { 7868 } else { 7867 };
+    let every = |port| std::net::SocketAddr::from(([0, 0, 0, 0], port));
+    let Some(value) = env(ENV_LISTEN).filter(|v| !v.is_empty()) else { return Ok(every(port)) };
+    value.parse().or_else(|_| value.parse().map(every)).map_err(|_| format!("{ENV_LISTEN} must be a port or IP:port"))
 }
 
 #[cfg(test)]

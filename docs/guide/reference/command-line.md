@@ -1,5 +1,7 @@
 # The command line
 
+Run `roundhouse phone pair` on the hub's machine to generate a single-use pairing link for a network client. It expires after ten minutes. `roundhouse phone list` lists paired devices; `roundhouse phone revoke NAME-OR-ID` revokes one and closes its connections. The machines must be directly reachable over a LAN or VPN.
+
 The `roundhouse` command talks to the same hub as the app, so a workspace made in one shows in the other.
 
 ## Find it

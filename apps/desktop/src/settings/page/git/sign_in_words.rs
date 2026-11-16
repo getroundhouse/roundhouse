@@ -136,7 +136,9 @@ pub(super) fn not_started(e: &ClientError) -> String {
             "As many sign-ins as the hub allows are waiting. Finish or cancel one, then try again.".to_string()
         }
         ErrorCode::Unsupported => "This hub can't sign in with GitHub until it's updated. Use a token.".to_string(),
-        ErrorCode::InvalidRequest
+        ErrorCode::Unauthorized
+        | ErrorCode::LocalOnly
+        | ErrorCode::InvalidRequest
         | ErrorCode::VersionMismatch
         | ErrorCode::NeedsForce
         | ErrorCode::NameTaken

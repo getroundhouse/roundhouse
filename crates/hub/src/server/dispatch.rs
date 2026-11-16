@@ -1,0 +1,252 @@
+use super::Connection;
+use super::pump::Following;
+use super::subscribing::{follow_feed, follow_log, unsubscribe};
+use crate::attachment_files::FileFor;
+use crate::hub::Hub;
+use crate::store::AddedBy;
+use protocol::client::{
+    ApiError, ClientRequest, ClientResponse, ErrorCode, accounts, admin, agent, attachments, comments, drafts, files,
+    github_accounts, log, new_workspace, queue, records, sessions, subscriptions, waits, workspaces,
+};
+use protocol::model::{Place, Seq};
+use std::sync::Arc;
+#[expect(clippy::too_many_lines, reason = "a flat dispatch, with one short arm per request")]
+pub(super) async fn handle(
+    hub: &Arc<Hub>,
+    connection: &Arc<Connection>,
+    request: ClientRequest,
+) -> Result<ClientResponse, ApiError> {
+    use ClientRequest as R;
+    use ClientResponse as C;
+    Ok(match request {
+        R::Hello(_) => return Err(ApiError::new(ErrorCode::InvalidRequest, "already said hello")),
+        R::Unknown => return Err(hub.unsupported(None)),
+
+        R::PairingStart => C::Pairing(hub.pairing_start().await?),
+        R::PairingWait(protocol::client::devices::PairingWait { code }) => {
+            let mut closed = connection.closed.subscribe();
+            tokio::select! {
+                result = hub.pairing_wait(code) => C::Device(result?),
+                _ = closed.wait_for(|closed| *closed) => return Err(ApiError::new(ErrorCode::Unavailable, "connection closed")),
+            }
+        }
+        R::DeviceList => C::Devices(protocol::client::devices::Devices { devices: hub.device_list().await? }),
+        R::DeviceRevoke(protocol::client::devices::DeviceRevoke { id }) => {
+            hub.device_revoke(id).await?;
+            C::Ok
+        }
+        R::Pair(_) | R::Authenticate(_) => {
+            return Err(ApiError::new(ErrorCode::InvalidRequest, "already authenticated"));
+        }
+        R::HubStatus => C::HubStatus(hub.status()),
+        R::HubShutdown => {
+            hub.request_stop();
+            C::Ok
+        }
+        R::HubShutdownIfIdle => {
+            hub.shutdown_if_idle()?;
+            C::Ok
+        }
+        R::HubRestart => {
+            hub.request_restart()?;
+            C::Ok
+        }
+        R::HubConfigure(admin::HubConfigure { settings }) => C::HubSettings(hub.hub_configure(settings).await?),
+        R::RepoAdd(records::RepoAdd { path }) => C::Repo(hub.repo_add(path).await?),
+        R::RepoList => C::Repos(records::Repos { repos: hub.repo_list().await? }),
+        R::RecordsList => C::Records(hub.records_list().await?),
+        R::AgentList => C::Agents(admin::Agents { agents: hub.agent_list() }),
+        R::WorkspaceCreate(workspaces::WorkspaceCreate { repo_id, name, base_ref, client_request_id }) => {
+            C::Workspace(hub.workspace_create(repo_id, name, base_ref, client_request_id).await?)
+        }
+        R::WorkspaceList(workspaces::WorkspaceList { include_archived }) => {
+            C::Workspaces(workspaces::Workspaces { workspaces: hub.workspace_list(include_archived).await? })
+        }
+        R::WorkspaceArchive(workspaces::WorkspaceArchive { id, force }) => {
+            C::Workspace(hub.workspace_archive(id, force).await?)
+        }
+        R::WorkspaceRestore(workspaces::WorkspaceRestore { id }) => C::Workspace(hub.workspace_restore(id).await?),
+        R::WorkspaceRename(workspaces::WorkspaceRename { id, title }) => {
+            C::Workspace(hub.workspace_rename(id, &title).await?)
+        }
+        R::WorkspaceCommentDraft(drafts::WorkspaceCommentDraft { id, draft }) => {
+            C::Workspace(hub.workspace_comment_draft(id, draft).await?)
+        }
+        R::WorkspaceRegenerateTitle(workspaces::WorkspaceRegenerateTitle { id }) => {
+            C::Workspace(hub.workspace_regenerate_title(id).await?)
+        }
+        R::WorkspaceStatus(workspaces::WorkspaceStatus { id }) => C::GitStatus(hub.workspace_status(id).await?),
+        R::WorkspaceDiff(workspaces::WorkspaceDiff { id }) => C::GitDiff(hub.workspace_diff(id).await?),
+        R::WorkspaceFiles(files::WorkspaceFiles { id }) => C::WorktreeFiles(hub.workspace_files(id).await?),
+        R::WorkspaceFolderRead(files::WorkspaceFolderRead { id, path }) => {
+            C::WorktreeFiles(hub.workspace_folder_read(id, path).await?)
+        }
+        R::WorkspaceFileRead(files::WorkspaceFileRead { id, path }) => {
+            C::FileContents(hub.workspace_file_read(id, path).await?)
+        }
+        R::WorkspaceFileReadAt(files::WorkspaceFileReadAt { id, commit, path }) => {
+            C::FileContents(hub.workspace_file_read_at(id, commit, path).await?)
+        }
+        R::WorkspaceFileOpenAt(files::WorkspaceFileOpenAt { id, commit, path }) => {
+            C::FileOpened(hub.workspace_file_open_at(id, commit, path).await?)
+        }
+        R::WorkspaceFilePages(asked) => C::FilePages(hub.workspace_file_pages(asked).await?),
+        R::WorkspaceSetupLog(workspaces::WorkspaceSetupLog { id }) => {
+            C::SetupLog(workspaces::SetupLog { text: hub.workspace_setup_log(id).await? })
+        }
+        R::WorkspaceRerunSetup(workspaces::WorkspaceRerunSetup { id }) => {
+            C::Workspace(hub.workspace_rerun_setup(id).await?)
+        }
+        R::WorkspacePullRequest(workspaces::WorkspacePullRequest { id }) => {
+            C::PullRequest(workspaces::PullRequestReply { pull_request: hub.workspace_pull_request(id).await? })
+        }
+        R::CommentAdd(comments::CommentAdd { workspace_id, path, side, line, text, client_request_id }) => {
+            C::Comment(hub.comment_add(workspace_id, path, side, line, text, client_request_id).await?)
+        }
+        R::CommentList(comments::CommentList { workspace_id }) => {
+            C::Comments(comments::Comments { comments: hub.comment_list(workspace_id).await? })
+        }
+        R::CommentEdit(comments::CommentEdit { id, text }) => C::Comment(hub.comment_edit(id, text).await?),
+        R::CommentDelete(comments::CommentDelete { id }) => {
+            hub.comment_delete(id).await?;
+            C::Ok
+        }
+        R::SessionCreate(sessions::SessionCreate { workspace_id, agent: kind, options, client_request_id }) => {
+            C::Session(hub.session_create(workspace_id, kind, options, client_request_id).await?)
+        }
+        R::SessionEnsure(sessions::SessionEnsure { workspace_id, agent: kind }) => {
+            C::Session(hub.session_ensure(workspace_id, kind).await?)
+        }
+        R::SessionList(sessions::SessionList { workspace_id }) => {
+            C::Sessions(sessions::Sessions { sessions: hub.session_list(workspace_id).await? })
+        }
+        R::SessionGet(sessions::SessionGet { id }) => C::Session(hub.session_get(id).await?),
+        R::SessionRead(log::SessionRead { id, from_seq, limit, max_bytes, include_raw }) => {
+            C::Events(hub.session_read(id, from_seq, limit, max_bytes, include_raw).await?)
+        }
+        R::SessionPromptList(log::SessionPromptList { id }) => {
+            C::Prompts(log::Prompts { prompts: hub.session_prompt_list(id).await? })
+        }
+        R::SessionCompactionList(log::SessionCompactionList { id }) => {
+            C::Compactions(log::Compactions { compactions: hub.session_compaction_list(id).await? })
+        }
+        R::SessionFind(log::SessionFind { id, subagent, query }) => {
+            C::Found(hub.session_find(id, subagent, &query).await?)
+        }
+        R::SessionSubscribe(subscriptions::SessionSubscribe { id, from_seq, subscription_id }) => {
+            follow_log(hub, connection, id, subscription_id, Following::Log { next: from_seq.max(Seq::FIRST) }).await?;
+            C::Ok
+        }
+        R::SessionReadPlaces(log::SessionReadPlaces { id, subagent, from_place, limit, max_bytes, include_raw }) => {
+            C::PlacedEvents(hub.session_read_places(id, subagent, from_place, limit, max_bytes, include_raw).await?)
+        }
+        R::SessionSubagents(records::SessionSubagents { id }) => C::Subagents(hub.session_subagents(id).await?),
+        R::SessionSubscribePlaces(subscriptions::SessionSubscribePlaces {
+            id,
+            subagent,
+            from_place,
+            subscription_id,
+        }) => {
+            let next = from_place.max(Place::FIRST);
+            let subagent = hub.subagent_named(id.clone(), subagent).await?;
+            follow_log(hub, connection, id, subscription_id, Following::Places { subagent, next }).await?;
+            C::Ok
+        }
+        R::FeedSubscribe(subscriptions::FeedSubscribe { subscription_id }) => {
+            follow_feed(hub, connection, subscription_id)?;
+            C::Ok
+        }
+        R::SessionUnsubscribe(subscriptions::SessionUnsubscribe { subscription_id }) => {
+            unsubscribe(connection, subscription_id);
+            C::Ok
+        }
+        R::SessionPrompt(agent::SessionPrompt { id, client_msg_id, prompt }) => {
+            let (seq, duplicate) = hub.session_prompt(id, client_msg_id, prompt).await?;
+            C::PromptRecorded(agent::PromptRecorded { seq, duplicate })
+        }
+        R::AttachmentAdd(attachments::AttachmentAdd { session_id, id, name, media_type, data }) => {
+            let kept_for = FileFor::Session(session_id);
+            C::Attachment(hub.file_add(kept_for, id, name, media_type, data, AddedBy::Client).await?)
+        }
+        R::AttachmentRead(attachments::AttachmentRead { session_id, id }) => {
+            C::AttachmentData(attachments::AttachmentData {
+                data: hub.file_read(FileFor::Session(session_id), id).await?,
+            })
+        }
+        R::AttachmentRemove(attachments::AttachmentRemove { session_id, id }) => {
+            hub.file_remove(FileFor::Session(session_id), id).await?;
+            C::Ok
+        }
+        R::NewWorkspaceDraftKeep(drafts::NewWorkspaceDraftKeep { draft }) => {
+            C::NewWorkspaceDraft(hub.new_workspace_draft_keep(draft).await?)
+        }
+        R::NewWorkspaceDraftFileAdd(drafts::NewWorkspaceDraftFileAdd { id, name, media_type, data }) => {
+            C::Attachment(hub.file_add(FileFor::NewWorkspace, id, name, media_type, data, AddedBy::Client).await?)
+        }
+        R::NewWorkspaceDraftFileRead(drafts::NewWorkspaceDraftFileRead { id }) => {
+            C::AttachmentData(attachments::AttachmentData { data: hub.file_read(FileFor::NewWorkspace, id).await? })
+        }
+        R::NewWorkspaceDraftFileRemove(drafts::NewWorkspaceDraftFileRemove { id }) => {
+            hub.file_remove(FileFor::NewWorkspace, id).await?;
+            C::Ok
+        }
+        R::NewWorkspaceCreate(new_workspace::NewWorkspaceCreate { made_of, client_request_id }) => {
+            C::NewWorkspaceMade(Box::new(hub.new_workspace_create(made_of, client_request_id).await?))
+        }
+        R::SessionAccount(sessions::SessionAccount { id }) => C::SessionAccount(hub.session_account(id).await?),
+        R::AccountSetDefault(asked) => C::HubSettings(hub.account_set_default(asked).await?),
+        R::SessionAssignAccount(asked) => C::Session(hub.session_assign_account(asked).await?),
+        R::AccountConnect(asked) => C::Account(hub.account_connect(asked).await?),
+        R::AccountDisconnect(accounts::AccountDisconnect { id }) => C::Account(hub.account_disconnect(id).await?),
+        R::GithubAccountConnect(asked) => C::GithubAccount(hub.github_account_connect(asked).await?),
+        R::GithubAccountDisconnect(github_accounts::GithubAccountDisconnect { id }) => {
+            C::GithubAccount(hub.github_account_disconnect(id).await?)
+        }
+        R::GithubAccountSetDefault(asked) => C::HubSettings(hub.github_account_set_default(asked).await?),
+        R::GithubSignInStart(asked) => C::GithubSignIn(hub.github_sign_in_start(asked).await?),
+        R::GithubSignInCancel(github_accounts::GithubSignInCancel { id }) => {
+            C::GithubSignIn(hub.github_sign_in_cancel(id).await?)
+        }
+        R::SessionQueue(queue::SessionQueue { id, client_msg_id, prompt }) => {
+            C::Session(hub.session_queue(id, client_msg_id, prompt).await?)
+        }
+        R::SessionChangeQueued(queue::SessionChangeQueued { id, client_msg_id, text }) => {
+            C::Session(hub.session_change_queued(id, client_msg_id, text).await?)
+        }
+        R::SessionUnqueue(queue::SessionUnqueue { id, client_msg_id }) => {
+            C::Session(hub.session_unqueue(id, client_msg_id).await?)
+        }
+        R::SessionSendQueued(queue::SessionSendQueued { id, client_msg_id }) => {
+            C::Session(hub.session_send_queued(id, client_msg_id).await?)
+        }
+        R::SessionApprove(agent::SessionApprove { id, approval_id, decision }) => {
+            hub.session_approve(id, approval_id, decision).await?;
+            C::Ok
+        }
+        R::SessionConfigure(sessions::SessionConfigure { id, options }) => {
+            C::Session(hub.session_configure(id, options).await?)
+        }
+        R::SessionClose(sessions::SessionClose { id }) => C::Session(hub.session_close(id).await?),
+        R::SessionReopen(sessions::SessionReopen { id }) => C::Session(hub.session_reopen(id).await?),
+        R::SessionMarkRead(sessions::SessionMarkRead { id, through_seq }) => {
+            C::Session(hub.session_mark_read(id, through_seq).await?)
+        }
+        R::SessionMarkUnread(sessions::SessionMarkUnread { id }) => C::Session(hub.session_mark_unread(id).await?),
+        R::SessionCallOffWait(waits::SessionCallOffWait { id, wait }) => {
+            C::Session(hub.session_call_off_wait(id, wait).await?)
+        }
+        R::SessionDraft(drafts::SessionDraft { id, draft }) => C::Session(hub.session_draft(id, draft).await?),
+        R::SessionAnswerDraft(drafts::SessionAnswerDraft { id, draft }) => {
+            C::Session(hub.session_answer_draft(id, draft).await?)
+        }
+        R::SessionRename(sessions::SessionRename { id, title }) => C::Session(hub.session_rename(id, &title).await?),
+        R::SessionCancel(agent::SessionCancel { id }) => {
+            hub.session_cancel(id).await?;
+            C::Ok
+        }
+        R::SessionCompact(agent::SessionCompact { id, keeping }) => {
+            hub.session_compact(id, keeping).await?;
+            C::Ok
+        }
+    })
+}
