@@ -166,6 +166,7 @@ impl WorkspacePane {
             transcript.set_pull_request(standing, cx);
             transcript
         });
+        Self::attach_transcript_hints(&view, cx);
         // Its subagents' calls are drawn from their records, which client-core keeps once a chat asks for them.
         self.records.follow_subagents(&session.id);
         let chat = session.id.clone();

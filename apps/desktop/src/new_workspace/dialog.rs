@@ -116,6 +116,21 @@ impl NewWorkspaceDialog {
         self.dictation.read(cx).hear(audio);
     }
 
+    fn dictation_hints(&self, cx: &App) -> dictation_ui::Hints {
+        let mut collector = client_core::hints::HintCollector::new();
+        collector.add_prose(&self.prompt.read(cx).text().to_string());
+        for name in self.attached.names() {
+            collector.add_path(&name);
+        }
+        if let Some((_, selected)) = self.offer.repos.iter().find(|(id, _)| id == &self.repo) {
+            collector.add_name(selected);
+        }
+        for (_, name) in &self.offer.repos {
+            collector.add_name(name);
+        }
+        dictation_ui::Hints::new(collector.finish())
+    }
+
     pub(crate) fn new(
         repo: RepoId,
         offer: Offer,
@@ -134,7 +149,12 @@ impl NewWorkspaceDialog {
             InputEvent::Change => this.keep(false, cx),
             InputEvent::PressEnter { shift: true, .. } | InputEvent::Focus | InputEvent::Blur => {}
         });
-        let dictation = cx.new(|cx| dictation_ui::Field::new(prompt.clone(), look::Corner::Card, window, cx));
+        let dialog = cx.weak_entity();
+        let dictation = cx.new(|cx| {
+            dictation_ui::Field::new(prompt.clone(), look::Corner::Card, window, cx).with_hints(move |cx| {
+                dialog.upgrade().map_or_else(dictation_ui::Hints::default, |d| d.read(cx).dictation_hints(cx))
+            })
+        });
         let dictated = cx.subscribe(&dictation, |this, _, event, cx| match event {
             dictation_ui::Event::Ended { submit: true } => this.create(cx),
             dictation_ui::Event::Ended { submit: false } => {}

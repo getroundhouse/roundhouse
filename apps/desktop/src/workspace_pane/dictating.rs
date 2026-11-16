@@ -1,7 +1,8 @@
 //! Attaches shared dictation to the composer. The pane keeps only the chat being edited and the action to perform
 //! after transcription, so recording mechanics are identical in prompts and question answers.
 
-use gpui_kit::{Context, Window};
+use client_core::hints::HintCollector;
+use gpui_kit::{App, Context, Window};
 use protocol::prompt::says_or_carries;
 
 use super::{PaneEvent, Showing, WorkspacePane};
@@ -62,6 +63,45 @@ impl WorkspacePane {
             self.after_dictation = Some(then);
         }
         wait
+    }
+
+    pub(super) fn composer_hints(&self, cx: &App) -> dictation_ui::Hints {
+        let mut collector = HintCollector::new();
+        collector.add_prose(&self.composer.read(cx).text().to_string());
+        for name in self.attached.names() {
+            collector.add_path(&name);
+        }
+        if let Some(tab) = self.diff.as_ref().and_then(|diff| diff.tab.as_ref()) {
+            collector.add_path(&tab.path);
+        }
+        self.collect_workspace_hints(&mut collector, cx);
+        if let Some(transcript) = self.transcript() {
+            collector.add_session_log(transcript.read(cx).log());
+        }
+        dictation_ui::Hints::new(collector.finish())
+    }
+
+    pub(super) fn attach_transcript_hints(
+        transcript: &gpui_kit::Entity<transcript::Transcript>,
+        cx: &mut Context<Self>,
+    ) {
+        let pane = cx.weak_entity();
+        transcript.update(cx, |t, _| {
+            t.set_dictation_hints(move |collector, cx| {
+                if let Some(pane) = pane.upgrade() {
+                    pane.read(cx).collect_workspace_hints(collector, cx);
+                }
+            });
+        });
+    }
+
+    fn collect_workspace_hints(&self, collector: &mut HintCollector, cx: &App) {
+        collector.add_workspace(&self.shown);
+        if let Some(files) = self.diff.as_ref().and_then(|diff| diff.review.read(cx).files.as_ref()) {
+            for patch in files {
+                collector.add_path(patch.path());
+            }
+        }
     }
 
     #[cfg(feature = "testing")]

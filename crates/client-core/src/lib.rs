@@ -12,6 +12,7 @@
 
 pub mod calls;
 pub mod file_text;
+pub mod hints;
 pub mod records;
 pub mod session_log;
 pub mod waits;

@@ -35,6 +35,11 @@ impl Vocabulary {
         Ok(Self { pieces })
     }
 
+    /// Every token's piece, indexed by token ID, for building a [`crate::hints::HintGraph`].
+    pub(super) fn pieces(&self) -> &[String] {
+        &self.pieces
+    }
+
     /// The text of `token`, as it joins what came before it: `" word"` for a token that starts a word, and `"ing"`
     /// for one that goes on with it. Nothing for a token it doesn't have, or one that stands for no text.
     pub(super) fn text(&self, token: usize) -> &str {

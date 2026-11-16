@@ -7,6 +7,7 @@ use crate::list::TranscriptList;
 use crate::questions::QuestionPanel;
 use crate::selection::Selection;
 use crate::texts::{Of, Texts};
+use client_core::hints::HintCollector;
 use client_core::session_log::{RecordedApprovals, SessionLog};
 use client_core::{Client, OpenSession, View};
 use events::TranscriptEvent;
@@ -23,6 +24,8 @@ use record::{AtWork, tick};
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
+
+type DictationHints = Box<dyn Fn(&mut HintCollector, &App)>;
 
 pub struct Transcript {
     pub(super) client: Client,
@@ -53,6 +56,8 @@ pub struct Transcript {
     pub(super) waiting: Vec<Seq>,
     /// Finding text in the chat, while its bar is open.
     pub(super) finding: Option<Finding>,
+    /// Workspace-wide dictation hints supplied by the host pane, such as the branch and changed files.
+    pub(super) dictation_hints: Option<DictationHints>,
 }
 
 impl EventEmitter<TranscriptEvent> for Transcript {}
@@ -126,6 +131,22 @@ impl Transcript {
             asking: None,
             waiting: Vec::new(),
             finding: None,
+            dictation_hints: None,
+        }
+    }
+
+    pub fn log(&self) -> &SessionLog {
+        &self.log
+    }
+
+    /// Gives question answers in this transcript the workspace's own hint words when dictating.
+    pub fn set_dictation_hints(&mut self, hints: impl Fn(&mut HintCollector, &App) + 'static) {
+        self.dictation_hints = Some(Box::new(hints));
+    }
+
+    pub(crate) fn add_dictation_hints(&self, collector: &mut HintCollector, cx: &App) {
+        if let Some(hints) = &self.dictation_hints {
+            hints(collector, cx);
         }
     }
 

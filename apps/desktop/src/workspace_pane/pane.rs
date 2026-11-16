@@ -154,7 +154,12 @@ impl WorkspacePane {
         cx: &mut Context<Self>,
     ) -> Self {
         let (composer, on_enter) = composer::new_input(window, cx);
-        let dictation = cx.new(|cx| dictation_ui::Field::new(composer.clone(), look::Corner::Card, window, cx));
+        let pane = cx.weak_entity();
+        let dictation = cx.new(|cx| {
+            dictation_ui::Field::new(composer.clone(), look::Corner::Card, window, cx).with_hints(move |cx| {
+                pane.upgrade().map_or_else(dictation_ui::Hints::default, |pane| pane.read(cx).composer_hints(cx))
+            })
+        });
         let dictated =
             cx.subscribe_in(&dictation, window, |this, _, event, window, cx| this.dictation_event(event, window, cx));
         let live = cx.observe(&dictation, |_, _, cx| cx.notify());

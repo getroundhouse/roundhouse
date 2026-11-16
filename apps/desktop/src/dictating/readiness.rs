@@ -273,11 +273,11 @@ pub(crate) fn hears_the_microphone(cx: &App) -> bool {
     dictating(cx).audio == AudioIn::Microphone
 }
 
-/// Starts a recording, once dictation is ready, and gives it and what's heard of it.
-pub(crate) fn record(cx: &App) -> Option<(Recording, flume::Receiver<Update>)> {
+/// Starts a recording biased toward `hints`, once dictation is ready, and gives it and what's heard of it.
+pub(crate) fn record(hints: dictation::Hints, cx: &App) -> Option<(Recording, flume::Receiver<Update>)> {
     let dictating = dictating(cx);
     match &dictating.readiness {
-        Readiness::Ready(Hearing(dictation)) => Some(dictation.record(dictating.audio)),
+        Readiness::Ready(Hearing(dictation)) => Some(dictation.record(dictating.audio, hints)),
         Readiness::Off
         | Readiness::Downloading
         | Readiness::Preparing(_)

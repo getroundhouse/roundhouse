@@ -42,7 +42,8 @@ impl Field {
                 Permission::Denied => return cx.emit(Event::Error(ALLOW_THE_MICROPHONE.to_string())),
             }
         }
-        if let Some((recording, updates)) = source::record(cx) {
+        let hints = self.current_hints(cx);
+        if let Some((recording, updates)) = source::record(hints, cx) {
             self.start_with(recording, updates, started, window, cx);
         }
     }

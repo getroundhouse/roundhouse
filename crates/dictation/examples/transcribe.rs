@@ -11,25 +11,35 @@
 use std::path::Path;
 use std::time::Instant;
 
-use dictation::Engine as _;
 use dictation::nemotron::Nemotron;
+use dictation::{Engine as _, Hints};
 
 fn main() {
-    let arguments: Vec<String> = std::env::args().skip(1).collect();
-    let (directory, files) = arguments.split_first().expect("a model directory and WAV files");
+    let mut hint_words = Vec::new();
+    let mut positional = Vec::new();
+    let mut args = std::env::args().skip(1);
+    while let Some(arg) = args.next() {
+        if arg == "--hint" {
+            hint_words.push(args.next().expect("a word after --hint"));
+        } else {
+            positional.push(arg);
+        }
+    }
+    let (directory, files) = positional.split_first().expect("a model directory and WAV files");
+    let hints = Hints::new(hint_words);
     let started = Instant::now();
     let engine = Nemotron::load(Path::new(directory)).unwrap();
     eprintln!("loaded in {:?}", started.elapsed());
     for file in files {
         let audio = read(Path::new(file));
-        let mut listening = engine.listen();
+        let mut listening = engine.listen(&hints);
         let mut live = String::new();
         // 10 ms at a time, as the microphone gives it.
         for buffer in audio.chunks(160) {
             live.extend(listening.hear(buffer).unwrap().into_iter().map(|heard| heard.text));
         }
         live.extend(listening.finish().unwrap().into_iter().map(|heard| heard.text));
-        let whole = engine.transcribe(&audio).unwrap();
+        let whole = engine.transcribe(&audio, &hints).unwrap();
         println!("{}", serde_json::json!({ "file": file, "live": live.trim(), "whole": whole }));
     }
 }

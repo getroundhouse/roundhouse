@@ -1,11 +1,11 @@
 //! The app's recording source and the one field hearing it. Model setup and settings stay with the app.
 
-use dictation::{Recording, Update};
+use dictation::{Hints, Recording, Update};
 use gpui_kit::{App, Context, Global, WeakEntity};
 
 use crate::Field;
 
-type Record = fn(&App) -> Option<(Recording, flume::Receiver<Update>)>;
+type Record = fn(Hints, &App) -> Option<(Recording, flume::Receiver<Update>)>;
 
 /// Installed once by the app, whose model setup answers these without I/O. An app without a source has no dictation.
 pub struct Source {
@@ -37,8 +37,8 @@ pub(crate) fn uses_microphone(cx: &App) -> bool {
     cx.try_global::<Source>().is_some_and(|source| (source.uses_microphone)(cx))
 }
 
-pub(crate) fn record(cx: &App) -> Option<(Recording, flume::Receiver<Update>)> {
-    (cx.try_global::<Source>()?.record)(cx)
+pub(crate) fn record(hints: Hints, cx: &App) -> Option<(Recording, flume::Receiver<Update>)> {
+    (cx.try_global::<Source>()?.record)(hints, cx)
 }
 
 /// Ends an old target before asking the engine for another recording, including one still listening towards a held

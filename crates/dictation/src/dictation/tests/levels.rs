@@ -3,7 +3,7 @@
 use super::support::{KEEP, TIMEOUT};
 use super::watched::Gate;
 use crate::fake::FakeEngine;
-use crate::{AudioIn, Dictation};
+use crate::{AudioIn, Dictation, Hints};
 
 #[test]
 fn audio_levels_arrive_while_the_model_is_blocked() {
@@ -16,7 +16,7 @@ fn audio_levels_arrive_while_the_model_is_blocked() {
         KEEP,
     )
     .unwrap();
-    let (recording, _) = dictation.record(AudioIn::Fed);
+    let (recording, _) = dictation.record(AudioIn::Fed, Hints::default());
     let levels = recording.levels();
     reached.recv_timeout(TIMEOUT).unwrap();
 

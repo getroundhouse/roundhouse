@@ -13,7 +13,7 @@ fn a_cancelled_recording_says_nothing_more() {
     let engine = FakeEngine::new(SCRIPT);
     let audio = engine.saying("fix the test. / run it");
     let dictation = dictation(engine);
-    let (recording, updates) = dictation.record(AudioIn::Fed);
+    let (recording, updates) = dictation.record(AudioIn::Fed, crate::Hints::default());
     feed(&recording, &audio);
     until(&updates, &final_text("Fix the test."));
 
@@ -39,7 +39,7 @@ fn a_recording_cancelled_while_the_engine_loads_is_not_heard_and_says_nothing_of
             Ok(Box::new(Watched { engine: engine.clone(), watch: watched.clone(), gate: None }) as Box<dyn Engine>)
         };
         let dictation = Dictation::start(load, KEEP).unwrap();
-        let (recording, updates) = dictation.record(AudioIn::Fed);
+        let (recording, updates) = dictation.record(AudioIn::Fed, crate::Hints::default());
         at_gate.recv_timeout(TIMEOUT).unwrap();
         feed(&recording, &audio);
 
@@ -62,7 +62,7 @@ fn a_sentence_being_made_final_as_its_recording_is_cancelled_says_nothing_and_no
         Ok(Box::new(Watched { engine: engine.clone(), watch: watched.clone(), gate }) as Box<dyn Engine>)
     };
     let dictation = Dictation::start(load, KEEP).unwrap();
-    let (recording, updates) = dictation.record(AudioIn::Fed);
+    let (recording, updates) = dictation.record(AudioIn::Fed, crate::Hints::default());
     feed(&recording, &audio);
     at_gate.recv_timeout(TIMEOUT).unwrap();
     let heard = watch.heard();

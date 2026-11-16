@@ -19,7 +19,7 @@ use objc2_core_ml::{
 };
 use objc2_foundation::{NSArray, NSDictionary, NSError, NSInteger, NSNumber, NSString, NSURL};
 
-use super::parts::{Input, Part, Runs, Tensor};
+use super::parts::{Input, Part, Tensor};
 use crate::EngineError;
 
 /// A part, loaded by Core ML. Core ML's models aren't `Send`, so it's used on the thread that loaded it.
@@ -40,18 +40,14 @@ impl Drop for CoreMlPart {
 }
 
 impl CoreMlPart {
-    /// The compiled model at `path`, a `.mlmodelc` directory, to run where `runs` says.
-    pub(super) fn load(path: &Path, runs: Runs) -> Result<Self, EngineError> {
+    /// The compiled encoder at `path`, a `.mlmodelc` directory, to run on the Neural Engine.
+    pub(super) fn load(path: &Path) -> Result<Self, EngineError> {
         autoreleasepool(|_| {
             let url = NSURL::fileURLWithPath(&NSString::from_str(&path.to_string_lossy()));
-            let units = match runs {
-                Runs::OnTheNeuralEngine => MLComputeUnits::CPUAndNeuralEngine,
-                Runs::OnTheCpu => MLComputeUnits::CPUOnly,
-            };
             // SAFETY: a new configuration, set before anything else has it.
             let configuration = unsafe {
                 let configuration = MLModelConfiguration::new();
-                configuration.setComputeUnits(units);
+                configuration.setComputeUnits(MLComputeUnits::CPUAndNeuralEngine);
                 configuration
             };
             // SAFETY: loads from a file URL, with a configuration it copies, and reports what fails as an error.
