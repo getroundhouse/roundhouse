@@ -3,6 +3,8 @@
 #![cfg(test)]
 
 mod agents;
+mod git;
+mod git_sign_in;
 mod search;
 
 mod changing;

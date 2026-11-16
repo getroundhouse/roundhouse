@@ -9,7 +9,7 @@ You need:
 - **A Mac with Apple silicon.** For the Windows and Linux previews, see [Install](install.md).
 - **Git, and a repository to work in.**
 - **Your agent's CLI, `claude`, `codex` or `agy`, installed and signed in.** Run it once in a terminal to check. Claude can also use a login added in [Settings](../reference/settings.md#agents). Codex and Antigravity use their own sign-ins on the machine running the workspace.
-- **GitHub's CLI, `gh`, logged in,** for the pull request. Everything before that works without it.
+- **GitHub's CLI, `gh`,** for the pull request, with a GitHub account added in [Settings](../reference/settings.md#git), or logged in. Everything before that works without it.
 
 > [!WARNING]
 > Every agent has full access. It runs commands and changes files as you, without asking, and a worktree is a directory, not a sandbox. [Full access and plan mode](../concepts/full-access-and-plan-mode.md) says how to have an agent ask first.

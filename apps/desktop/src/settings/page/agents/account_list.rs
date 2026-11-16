@@ -1,4 +1,5 @@
 use self::kept::{Kept, To};
+use super::super::lists::{heading, list, said_in_the_list};
 use super::super::{Asking, Body, OfHub, Page, PageId, Within};
 use super::{kept, panel, row, words};
 use client_core::Agents;
@@ -6,12 +7,11 @@ use client_core::records::Snapshot;
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::button::Button;
 use gpui_kit::component::menu::{DropdownMenu as _, PopupMenu, PopupMenuItem};
-use gpui_kit::component::{IconName, h_flex, v_flex};
+use gpui_kit::component::{IconName, v_flex};
 use gpui_kit::{
-    AnyElement, App, Div, Entity, InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce, ScrollHandle,
-    Styled as _, TestSupportExt as _, Window, div,
+    AnyElement, App, Div, Entity, IntoElement, ParentElement as _, RenderOnce, ScrollHandle, Styled as _, Window, div,
 };
-use look::{Off as _, Sizing as _, Typeset as _};
+use look::{Off as _, Sizing as _};
 use protocol::model::{Account, AccountDefault, AgentDescription, AgentKind};
 
 pub(in super::super) fn page(hub: &OfHub) -> Page {
@@ -84,9 +84,10 @@ pub(super) fn older_hub(agents: &Agents, refused_as_older: bool) -> bool {
 
 fn found_list(drawing: &Drawing<'_>, found: &[&Account], cx: &App) -> Div {
     let rows = found.iter().map(|account| row::row(drawing, account, cx));
-    let none = found.is_empty().then(|| said_in_the_list("accounts-none-found", words::none_found(drawing.agents), cx));
+    let none =
+        found.is_empty().then(|| said_in_the_list("accounts-none-found", words::none_found(drawing.agents).into(), cx));
     let list = list(cx).children(none).children(rows);
-    v_flex().child(heading("Found", words::found_says(drawing.agents), None, cx)).child(list)
+    v_flex().child(heading("Found", None, words::found_says(drawing.agents), None, cx)).child(list)
 }
 
 /// Added, with Connect account by its heading. The panel for a new account is under the heading, where the account
@@ -105,10 +106,10 @@ fn added_list(drawing: &Drawing<'_>, added: &[&Account], cx: &App) -> Div {
     } else {
         (added.is_empty() && panel.is_none()).then_some(("accounts-none-added", words::NONE_ADDED))
     };
-    let said = said.map(|(id, said)| said_in_the_list(id, said.to_string(), cx));
+    let said = said.map(|(id, said)| said_in_the_list(id, said.into(), cx));
     let rows = added.iter().map(|account| row::row(drawing, account, cx));
     let list = list(cx).children(panel).children(said).children(rows);
-    v_flex().child(heading("Added", words::added_says(drawing.defaults.is_some()), Some(connect), cx)).child(list)
+    v_flex().child(heading("Added", None, words::added_says(drawing.defaults.is_some()), Some(connect), cx)).child(list)
 }
 
 /// Connect account, which opens the panel for a new account of the one kind the hub can hold a login for, or a menu
@@ -138,34 +139,4 @@ fn connect_button(drawing: &Drawing<'_>, kinds: &[&AgentDescription], on: bool) 
             })
         })
         .into_any_element()
-}
-
-/// A list's name, what it says of itself under that, and what it does at the far end, if anything.
-fn heading(name: &'static str, says: String, action: Option<AnyElement>, cx: &App) -> Div {
-    let said = v_flex()
-        .flex_1()
-        .min_w_0()
-        .gap(look::Space::XSmall)
-        .child(div().emphasis().child(name))
-        .child(div().typeset(look::Type::Body).text_color(look::colors(cx).text_muted).child(says));
-    h_flex().items_end().justify_between().gap(look::Space::XLarge).pb(look::Space::Medium).child(said).children(action)
-}
-
-/// The rows of a list, under a line, each with a line under it.
-fn list(cx: &App) -> Div {
-    v_flex().border_t_1().border_color(look::colors(cx).edge)
-}
-
-/// What a list says in place of rows, or before them, known to tests by `id`.
-fn said_in_the_list(id: &'static str, said: String, cx: &App) -> impl IntoElement + use<> {
-    let colors = look::colors(cx);
-    div()
-        .id(id)
-        .py(look::Space::Large)
-        .border_b_1()
-        .border_color(colors.edge)
-        .typeset(look::Type::Body)
-        .text_color(colors.text_muted)
-        .child(said)
-        .test_support()
 }

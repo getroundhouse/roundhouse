@@ -4,12 +4,9 @@
 #![cfg(test)]
 
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
-use std::time::{Duration, Instant};
 
-use client_core::Client;
-
-use super::{Stack, TIMEOUT, Ui, binaries};
+use super::hub_ahead::HubAhead;
+use super::{Stack, Ui};
 
 /// What `gh pr view` prints for a pull request in this state, such as `OPEN` or `MERGED`, for [`StandInGh::report`].
 pub(crate) fn pull_request(state: &str) -> String {
@@ -18,8 +15,7 @@ pub(crate) fn pull_request(state: &str) -> String {
 
 /// The hub, and the file its `gh` prints. Stops the hub with the test, even a failed one.
 pub(crate) struct StandInGh {
-    hub: Child,
-    socket: PathBuf,
+    _hub: HubAhead,
     answer: PathBuf,
     remote: PathBuf,
 }
@@ -39,21 +35,6 @@ impl StandInGh {
     /// Has `gh` fail from now on, as it does when it can't reach GitHub, which says nothing about the pull request.
     pub(crate) fn go_offline(&self) {
         std::fs::write(self.answer.with_extension("offline"), "").unwrap();
-    }
-}
-
-impl Drop for StandInGh {
-    /// The way the app stops a hub, so it has removed its socket by the time the stack looks.
-    fn drop(&mut self) {
-        if let Ok(client) = Client::connect(&self.socket, "test") {
-            let _ = client.hub_shutdown();
-        }
-        let deadline = Instant::now() + Duration::from_secs(5);
-        while matches!(self.hub.try_wait(), Ok(None)) && Instant::now() < deadline {
-            std::thread::sleep(Duration::from_millis(20));
-        }
-        let _ = self.hub.kill();
-        let _ = self.hub.wait();
     }
 }
 
@@ -86,26 +67,10 @@ exit 1
         let gh = bin.join("gh");
         std::fs::write(&gh, script).unwrap();
         std::fs::set_permissions(&gh, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+        // Workers get this PATH, with the stand-in at its front.
         let path = format!("{}:{}", bin.display(), std::env::var("PATH").unwrap());
-        let hub = Command::new(binaries().join("roundhoused"))
-            .args(["hub", "--on-demand"])
-            .env(protocol::paths::ENV_HOME, &self.hub.paths.data_dir)
-            .env(protocol::paths::ENV_WORKSPACES, &self.hub.paths.workspaces_root)
-            // No login shell, so workers get this PATH, with the stand-in at its front.
-            .env("PATH", path)
-            .env("SHELL", "/usr/bin/false")
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .unwrap();
-        let socket = self.hub.paths.socket.clone();
-        let deadline = Instant::now() + TIMEOUT;
-        while Client::connect(&socket, "test").is_err() {
-            assert!(Instant::now() < deadline, "timed out waiting for the hub to listen");
-            std::thread::sleep(Duration::from_millis(10));
-        }
-        StandInGh { hub, socket, answer, remote }
+        let hub = self.start_hub_ahead(&[("PATH", path)]);
+        StandInGh { _hub: hub, answer, remote }
     }
 }
 

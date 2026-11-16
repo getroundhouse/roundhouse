@@ -12,15 +12,15 @@ use protocol::attachment::AttachmentBytes;
 use protocol::client::CLIENT_PROTOCOL_VERSION;
 use protocol::client::{
     ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HelloReply, HubFrame, HubStatus, ReplyOutcome,
-    admin, attachments, comments, drafts, files, log, records, sessions, subscriptions, workspaces,
+    admin, attachments, comments, drafts, files, github_accounts, log, records, sessions, subscriptions, workspaces,
 };
 use protocol::event::SessionEvent;
 use protocol::find::{Found, Needle};
 use protocol::frame;
 use protocol::model::{
-    AgentDescription, AgentFeature, AgentKind, CompactionLine, Effort, GitDiff, GitStatus, LoginDescription,
-    ModelChoice, ModelName, PermissionMode, Place, PromptLine, Rev, Seq, SessionId, SessionSettings, SessionStatus,
-    SubagentId, WorkspaceStatus,
+    AgentDescription, AgentFeature, AgentKind, CompactionLine, Effort, GitDiff, GitStatus, GithubSignIn,
+    LoginDescription, ModelChoice, ModelName, PermissionMode, Place, PromptLine, Rev, Seq, SessionId, SessionSettings,
+    SessionStatus, SubagentId, WorkspaceStatus,
 };
 
 use super::base_pages::{opened, paged};
@@ -130,6 +130,12 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         // refusal itself is tested against a stand-in, with `Kept`.
         R::AccountConnect(_) if world.logins == LoginSupport::None => {
             Err(ApiError::new(ErrorCode::Unsupported, "an older hub doesn't keep logins"))
+        }
+        // As a hub that started it would answer, as the screen says it stands, though this one keeps no record of it, so
+        // a screen can show how a sign-in the app started went. The app shows it from the record the answer carries.
+        R::GithubSignInStart(github_accounts::GithubSignInStart { id }) => {
+            let status = world.sign_in_answer.clone().ok_or_else(|| read_only("change anything"))?;
+            reply(C::GithubSignIn(GithubSignIn { id, status, rev: Rev::default() }))
         }
         // As a hub too old to keep it, so a comment being written is what restarting would lose.
         R::WorkspaceCommentDraft(_) => {
@@ -272,7 +278,6 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         | R::GithubAccountConnect(_)
         | R::GithubAccountDisconnect(_)
         | R::GithubAccountSetDefault(_)
-        | R::GithubSignInStart(_)
         | R::GithubSignInCancel(_) => Err(read_only("change anything")),
         // So a screen can show the app waiting on a workspace it asked for, or on a new title. The workspace's record
         // saying it's being made, or on its way out, is the world's to say.

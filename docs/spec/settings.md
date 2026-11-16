@@ -10,7 +10,7 @@ The app's own settings, and where they're shown.
   ![Settings](screens/settings.png)
 
 - **The pages are listed under small muted headings, each page with an icon before its name.** Personal holds the pages about how the app and its hub work for you, rather than about a project. A page's row is a regular row, 36px tall, as the sidebar's are, and the one showing is filled. *Unconfirmed.*
-- **A search at the sidebar's top finds a setting by what it's called or what it does, in any case, as it's typed.** Only the settings that match are left, with the pages they're on and those pages' headings, and a page that draws what's on it itself, such as Agents, is left whole when what it's called or what it's about matches, such as `accounts`, `login` or `token` for Agents. The page says so when nothing matches. While it's empty the search says Search settings, in faint text, and it always shows `⌘F`, which puts the cursor in it with what's typed selected, so what's typed next replaces it, as a Mac's search fields do. Escape and `Cmd-W` go back from the search too, and Settings opens again with nothing in it, on its first page, since a search is for finding one setting now. It's 28px tall, on the pane's colour, with an edge lighter than a line, since it's something to type in. *Unconfirmed.*
+- **A search at the sidebar's top finds a setting by what it's called or what it does, in any case, as it's typed.** Only the settings that match are left, with the pages they're on and those pages' headings, and a page that draws what's on it itself, such as Agents, is left whole when what it's called or what it's about matches, such as `accounts`, `login` or `token` for Agents, and `github`, `push` or `gh` for Git. The page says so when nothing matches. While it's empty the search says Search settings, in faint text, and it always shows `⌘F`, which puts the cursor in it with what's typed selected, so what's typed next replaces it, as a Mac's search fields do. Escape and `Cmd-W` go back from the search too, and Settings opens again with nothing in it, on its first page, since a search is for finding one setting now. It's 28px tall, on the pane's colour, with an edge lighter than a line, since it's something to type in. *Unconfirmed.*
 
   **A search, leaving the settings that match, with their pages and headings.** *Unconfirmed.*
 
@@ -21,7 +21,7 @@ The app's own settings, and where they're shown.
   ![A settings search that matches nothing](screens/settings-nothing-found.png)
 
 - **A page starts with its name, at 24px, and each setting is a row under it:** what it's called and what it does on the left, its control on the right, and a line under it that sets it apart from the next. The name is below the strip along the top, which stays clear for moving the window.
-- **A page with more to show than a setting's row has room for, such as Agents, draws what's on it under its name instead,** and scrolls the same way. *Unconfirmed.*
+- **A page with more to show than a setting's row has room for, such as Agents and Git, draws what's on it under its name instead,** and scrolls the same way. *Unconfirmed.*
 - **A setting takes effect at once, everywhere it shows, and lasts.** There's no Save button. *Unconfirmed.*
 - **A setting belongs to whatever carries it out.** How the app looks and behaves is the app's, and belongs to this Mac rather than to a hub, since the app can show several hubs and has to draw before it reaches any. What a hub does whether or not the app is open is that hub's, which keeps it, so it holds after the hub restarts and every app showing that hub shows the same.
 - **A hub's setting can only be changed while its hub is there to ask.** Its switch shows what the hub says, and changes when the hub has. While the hub is out of reach, or with a hub from before it kept settings, the switch shows off and can't be flipped.
@@ -124,3 +124,68 @@ The app's own settings, and where they're shown.
   **A hub from before hubs kept logins, which describes Claude with nothing that makes a login.** *Unconfirmed.*
 
   ![Agents on a hub that can't keep logins](screens/settings-agents-older-hub.png)
+
+## Git
+
+- **Git lists the GitHub accounts agents push and open pull requests as, from the hub's records and settings, in two lists, Added and then Found, in a column 720 wide.** Each is a row of columns that line up from row to row: a picture, the name, with a `Default` badge on the default, how it was connected, `Signed in` or `Token`, what else there is to say, and a `…` menu. A row says only what isn't plain. The picture is the name's first letter in a circle, since the app fetches nothing from GitHub. A row is a table's, 44px tall, with a small `…`. *Unconfirmed:* the row's height and the menu's size.
+
+  **Git, with three accounts added, the default signed in, and the logins found on this Mac and a server.** *Unconfirmed.*
+
+  ![Git, with three accounts added and the logins found on two machines](screens/settings-git.png)
+
+- **One added account is the default, used for every GitHub repository on every machine, or else each machine's own login is.** Every machine's git and gh use the default for github.com, so agents push and open pull requests as it, and Roundhouse reads pull requests with it, wherever they run. A machine's own login is used only while it's the default, which it is while the hub has no account. The first account the hub has a record of becomes the default as it's connected, and after that only the person changes it. The page reads which is the default from the hub's settings, and never works it out.
+- **Added has the accounts the person gave the hub: the default first, then those the hub holds a login for, then those it doesn't, each by username.** Under its heading, Added says that every machine's git and gh use the default for github.com. With none, it says agents use each machine's own login, and to connect an account to push as it on every machine. *Unconfirmed:* the order, and the words.
+- **What else a row says is how its login stands.** A token says when it ends, as `Ends Feb 3, 2027`, since nothing renews it, and in red with a warning sign once it has, as `Ended Oct 29, 2026`. A sign-in says nothing of its token's end, since the hub renews it by itself, but `Renewing` in amber once its token has ended, until the hub has renewed it, and `Needs signing in again` in red once it can't be renewed. One the hub holds no login for says `Disconnected`, with its name muted. *Unconfirmed:* the words, and that a token's end isn't warned of before it comes.
+- **A default that can't be used stays the default, and blocks pushes until it's renewed, signed in again or connected again, or another is chosen, as an agent kind's default does.** Agents push as no one, rather than as the machine's own. A box at the top of Added says `Agents can't push.`, why, and what to do, such as renewing it from its menu, or making another account the default. *Unconfirmed:* the box and its words.
+
+  **Git, with the default's token ended three days ago, and this Mac's `gh` logged in with a token GitHub refused.** *Unconfirmed.*
+
+  ![Git saying agents can't push, since the default's token ended](screens/settings-git-default-ended.png)
+
+- **Found has the `gh` login each provider's machines already have, as the hub found it once it started, through the first workspace that ran there since: this machine's first, then the others' by provider.** A row says who `gh` is logged in as, `Not logged in`, with `Run gh auth login there`, or `No gh`, with `Install gh there`, and whose `gh` it is, as `gh on this Mac`, or `gh on` and the provider's name. For a login, it says whether GitHub took its token then: `Works`, `GitHub refused its token` in red, or `Couldn't tell if it works`. Roundhouse never copies one, so a row has no menu. With none, Found says the hub asks each machine once, through the first workspace that runs there after it starts. *Unconfirmed:* the words.
+- **Found's heading has the `Default` badge while each machine's own login is the default, and `Make default` at its far end while an account is, which makes each machine's own the default.** *Unconfirmed:* choosing the machine's own there.
+
+  **Git on a hub with no account, so each machine's own login is the default, with this Mac's `gh` logged in and a server's logged out.** *Unconfirmed.*
+
+  ![Git with no account added, and Found the default](screens/settings-git-none.png)
+
+- **Connect account opens a panel at the top of Added, with the ways to connect an account: Sign in with GitHub, and Use a token.** Each says what it takes, and has its button, and `Which should I choose?` opens the guide's page on who agents are on GitHub. Connect account is off while a panel is open there. *Unconfirmed:* the words and the link. *Not built:* an app of your own.
+
+  **Connect account, open.** *Unconfirmed.*
+
+  ![Choosing how to connect a GitHub account](screens/settings-git-choosing.png)
+
+- **Sign in with GitHub has the hub start a sign-in, and its panel shows it as the hub's record of it says.** While it waits, the panel has the code, in code's font, with a button that copies it, `Open github.com/login/device`, which opens where it's typed, and that it waits for the person to approve it on GitHub, until the time the code ends. Cancel has the hub cancel it, and puts the panel away. Then the panel says how it ended: signed in as the account, and that it's the default when it is, with Done; refused, its code ended, or failed, with why, each with Close and Sign in again; or cancelled, with Close. One the hub couldn't start says why, with the same buttons. *Unconfirmed:* the words.
+
+  **A sign-in that waits for its code to be typed on GitHub.** *Unconfirmed.*
+
+  ![Signing in with GitHub, with the code to type](screens/settings-git-signing-in.png)
+
+  **A sign-in refused on GitHub.** *Unconfirmed.*
+
+  ![A sign-in with GitHub that was refused](screens/settings-git-sign-in-refused.png)
+
+  **A sign-in approved as the default.** *Unconfirmed.*
+
+  ![Signed in with GitHub as the default](screens/settings-git-signed-in.png)
+
+- **A sign-in that waits shows wherever Git does, whichever client started it,** such as another window, or the app before it last quit, so it can be finished or cancelled there, while no panel but Connect account's is open. One whose panel was put away isn't shown again while Git shows, and one that has ended shows only in the panel that showed it waiting, until that's closed. A sign-in started from an account's row says to sign in as that account. *Unconfirmed.*
+- **Use a token opens a panel with `Make one on GitHub`, which opens GitHub's page for making a fine-grained token, and a field to paste one into, which has the cursor, shows only dots and can't be copied from.** Connect is off until the field has something in it, and Enter connects too. The app hands the token to the hub, which asks GitHub whose it is and when it ends, and keeps it nowhere itself. The panel goes once the hub has connected it. What the hub refuses is said in red in the panel, which stays open with the field made empty. A panel that goes before the hub has answered takes the wait for its answer with it. *Unconfirmed.*
+
+  **A token pasted for a new account.** *Unconfirmed.*
+
+  ![Pasting a token, masked](screens/settings-git-token.png)
+
+- **An account's `…` menu has Make default, but on the default, which is off while its login can't be used; Renew for a token, which opens the token's panel under its row; Sign in again for a sign-in; both of those ways of connecting it again once it was disconnected; and Disconnect, while the hub holds its login.** A sign-in approved as the account's GitHub user renews its login in place. *Unconfirmed.*
+
+  **The menu of a token's account.** *Unconfirmed.*
+
+  ![An account's menu, with Make default, Renew and Disconnect](screens/settings-git-menu.png)
+
+- **Disconnect asks first, in the system's alert, then has the hub forget the login.** The account stays, since the default can still name it, and the token isn't revoked on GitHub. Disconnecting the default says it stays the default, so agents can't push until it's connected again or another account is made the default. Why the hub couldn't do what an account's menu asked is said under its row, and why it couldn't make each machine's own the default under Found's heading. *Unconfirmed.*
+- **With no hub to ask, the accounts and logins stay listed, and every button is off.** *Unconfirmed.*
+- **A hub that keeps no GitHub accounts says so in place of Added's rows, and that agents use each machine's own login, with Connect account off, nothing of a default under Added's heading, and no Found.** It's told apart by its settings, which say nothing of GitHub. *Unconfirmed.*
+
+  **A hub from before hubs kept GitHub accounts.** *Unconfirmed.*
+
+  ![Git on a hub that keeps no GitHub accounts](screens/settings-git-older-hub.png)

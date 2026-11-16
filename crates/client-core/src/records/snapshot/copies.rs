@@ -1,4 +1,5 @@
 use super::super::Taken;
+use super::github::GithubListed;
 use crate::Agents;
 use protocol::model::{
     Account, AccountId, DiffComment, HubSettings, NewWorkspaceDraft, Record, Repo, RepoId, Session, SessionId,
@@ -32,6 +33,7 @@ pub(in super::super) struct Listed {
     pub(super) accounts: HashMap<AccountId, Account>,
     pub(super) hub_settings: Option<HubSettings>,
     pub(super) new_workspace_draft: Option<NewWorkspaceDraft>,
+    pub(super) github: GithubListed,
 }
 
 /// The subagents of the sessions views asked for, as views read them.
@@ -91,15 +93,14 @@ impl Listed {
                     listed.accounts.insert(account.id.clone(), account.clone());
                 }
                 Record::NewWorkspaceDraft(draft) => listed.new_workspace_draft = Some(draft.clone()),
-                // A subagent's held apart, as `HubRecords::apply_record` says. A GitHub account's, a sign-in's and a
-                // found GitHub login are held, but not listed for views. *Not built:* showing them, as "GitHub
-                // accounts" in "State ownership" in `docs/architecture.md` says.
-                Record::Subagent(_)
-                | Record::GithubAccount(_)
-                | Record::GithubSignIn(_)
-                | Record::FoundGithubLogin(_) => {}
+                Record::GithubAccount(account) => listed.github.account(account),
+                Record::GithubSignIn(sign_in) => listed.github.sign_in(sign_in),
+                Record::FoundGithubLogin(found) => listed.github.found(found),
+                // Held apart, as `HubRecords::apply_record` says.
+                Record::Subagent(_) => {}
             }
         }
+        listed.github.order();
         listed.repos.sort_by(|a, b| (&a.name, &a.id).cmp(&(&b.name, &b.id)));
         listed.repo_at = listed.repos.iter().enumerate().map(|(at, repo)| (repo.id.clone(), at)).collect();
         workspaces.sort_by(|(a, _), (b, _)| (a.created_at_ms, &a.id).cmp(&(b.created_at_ms, &b.id)));

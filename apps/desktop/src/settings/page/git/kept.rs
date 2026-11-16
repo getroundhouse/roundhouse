@@ -1,0 +1,206 @@
+//! What Git keeps from one frame to the next while it shows: the panel that's open, the sign-ins put away here, and what
+//! the hub last couldn't do. Which account is the default, how each login stands and how a sign-in goes are never kept
+//! here: each frame reads them from the hub's records and settings, as client-core keeps them.
+
+use std::collections::HashSet;
+
+use client_core::records::Snapshot;
+use gpui_kit::{Bounds, Context, FocusHandle, Pixels, PromptLevel, ScrollHandle, Task, Window};
+use protocol::model::{GithubAccountId, GithubSignInId, Record};
+
+use super::super::redraw::{RedrawAt, bring_into_sight};
+use super::Asking;
+use super::sign_in::SignInPanel;
+use super::token::TokenPanel;
+use super::words;
+
+/// The page's state, kept only while it shows, so a token half pasted goes with it, and so does the wait for what the
+/// hub answers.
+#[derive(Default)]
+pub(super) struct Kept {
+    /// The hub to ask, as of the page's last frame, with client-core's copy of its records, which takes in the record
+    /// an answer carries. `None` while there's no hub to ask.
+    pub(super) asking: Option<Asking>,
+    /// Settings' focus, as of the page's last frame, where focus goes back to as a panel goes while it has it, so keys
+    /// still reach Settings.
+    settings_focus: Option<FocusHandle>,
+    pub(super) panel: Option<Panel>,
+    /// The sign-ins whose panel was put away here, so one still waiting isn't shown again while the page shows.
+    pub(super) put_away: HashSet<GithubSignInId>,
+    /// Why the hub couldn't do what was last asked of an account's row, or of Found, to say there.
+    failed: Option<(Asked, String)>,
+    /// The wait for the hub to choose the default, while it hasn't answered.
+    choosing: Option<Task<()>>,
+    /// Draws the page again as a login it shows ends.
+    redraw: RedrawAt,
+}
+
+/// Where what the hub couldn't do is said.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) enum Asked {
+    /// Under the account's row: disconnecting it, or making it the default.
+    Account(GithubAccountId),
+    /// Under Found's heading: making each machine's own login the default.
+    MachinesOwn,
+}
+
+/// A panel open on the page: under Added's heading, or under the row of the account it renews.
+pub(super) struct Panel {
+    pub(super) shows: Shows,
+    /// Holds the focus of everything in the panel, to tell whether it has it as it goes.
+    pub(super) focus: FocusHandle,
+    /// Whether to bring the panel into sight as it's next laid out, which it is once as it opens.
+    reveal: bool,
+}
+
+pub(super) enum Shows {
+    /// Connect account, choosing how to connect one.
+    Choosing,
+    Token(TokenPanel),
+    SignIn(SignInPanel),
+}
+
+impl Panel {
+    /// The account whose row it's under, rather than under Added's heading: one whose token it renews.
+    pub(super) fn under(&self) -> Option<&GithubAccountId> {
+        match &self.shows {
+            Shows::Token(token) => token.renewing.as_ref().map(|renewing| &renewing.id),
+            Shows::Choosing | Shows::SignIn(_) => None,
+        }
+    }
+}
+
+impl Kept {
+    /// What the page was drawn with: the hub to ask, Settings' focus, the hub's records, and when what it says of a time
+    /// next changes, if it says one.
+    pub(super) fn drawn(
+        &mut self,
+        asking: Option<Asking>,
+        settings_focus: FocusHandle,
+        records: &Snapshot,
+        changes_at_ms: Option<i64>,
+        cx: &mut Context<Self>,
+    ) {
+        (self.asking, self.settings_focus) = (asking, Some(settings_focus));
+        self.redraw.set(changes_at_ms, cx);
+        self.show_waiting(records, cx);
+    }
+
+    /// Whether there's a hub to ask.
+    pub(super) fn can_ask(&self) -> bool {
+        self.asking.is_some()
+    }
+
+    /// Why the hub couldn't do what was last asked `at`, if it couldn't.
+    pub(super) fn failed(&self, at: &Asked) -> Option<&str> {
+        self.failed.as_ref().filter(|(asked, _)| asked == at).map(|(_, said)| said.as_str())
+    }
+
+    /// Whether the page waits for the hub to choose the default.
+    pub(super) fn choosing(&self) -> bool {
+        self.choosing.is_some()
+    }
+
+    /// Opens a panel showing `shows`, in place of any that was open.
+    pub(super) fn open(&mut self, shows: Shows, cx: &mut Context<Self>) {
+        self.panel = Some(Panel { shows, focus: cx.focus_handle(), reveal: true });
+        self.failed = None;
+        cx.notify();
+    }
+
+    /// Takes the panel away, and any wait for the hub's answer with it, putting away the sign-in it showed. Its fields
+    /// go too, so focus one of them had, or anything else in it, goes back to Settings, where keys still reach it.
+    pub(super) fn put_away_panel(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(panel) = self.panel.take() else { return };
+        if let Shows::SignIn(sign_in) = &panel.shows {
+            self.put_away.insert(sign_in.id.clone());
+        }
+        if let Some(settings) = &self.settings_focus
+            && panel.focus.contains_focused(window, cx)
+        {
+            window.focus(settings, cx);
+        }
+        cx.notify();
+    }
+
+    /// Brings the panel into sight on Settings' `scroll`, once as it opens, now that it's laid out at `bounds`. This is
+    /// during a draw, after the page has been placed by the scroll as it was, so the scroll shows in the frame after,
+    /// which is asked for once this one is done, since the window can't be marked for drawing again while it draws.
+    pub(super) fn laid_out(&mut self, bounds: Bounds<Pixels>, scroll: &ScrollHandle, window: &mut Window) {
+        let Some(panel) = self.panel.as_mut().filter(|panel| panel.reveal) else { return };
+        panel.reveal = false;
+        if bring_into_sight(scroll, bounds) {
+            window.on_next_frame(|window, _| window.refresh());
+        }
+    }
+
+    /// Has the hub make `account` the default, or each machine's own login with `None`, and says where it was asked
+    /// why it couldn't, if it couldn't. The hub's settings say which is the default, once it has answered.
+    pub(super) fn make_default(&mut self, account: Option<GithubAccountId>, cx: &mut Context<Self>) {
+        let at = account.clone().map_or(Asked::MachinesOwn, Asked::Account);
+        let Some(asking) = self.asking.clone() else {
+            self.failed = Some((at, words::NO_HUB.to_string()));
+            cx.notify();
+            return;
+        };
+        self.failed = None;
+        let choosing = asking.client.start(move |client| client.github_account_set_default(account));
+        self.choosing = Some(cx.spawn(async move |this, cx| {
+            let answer = choosing.recv().await;
+            let _ = this.update(cx, |this, cx| {
+                this.choosing = None;
+                match answer {
+                    Ok(settings) => asking.feed.take_reply(Record::HubSettings(settings)),
+                    Err(e) => this.failed = Some((at, words::couldnt("make it the default", &e))),
+                }
+                cx.notify();
+            });
+        }));
+        cx.notify();
+    }
+
+    /// Asks whether to have the hub forget the login of the account `id`, called `name`, which says more when it's
+    /// the `default`, and does once it's confirmed.
+    pub(super) fn ask_to_disconnect(
+        &mut self,
+        id: GithubAccountId,
+        name: &str,
+        default: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.failed = None;
+        let asked = words::disconnect_asks(name);
+        let says = words::disconnect_says(default);
+        let answer = window.prompt(PromptLevel::Warning, &asked, Some(says), &["Cancel", "Disconnect"], cx);
+        cx.spawn(async move |this, cx| {
+            if answer.await == Ok(1) {
+                let _ = this.update(cx, |this, cx| this.disconnect(id, cx));
+            }
+        })
+        .detach();
+    }
+
+    /// Has the hub forget the login of the account `id`, and says under its row why it couldn't, if it couldn't, as
+    /// with no hub to ask.
+    pub(super) fn disconnect(&mut self, id: GithubAccountId, cx: &mut Context<Self>) {
+        let Some(asking) = self.asking.clone() else {
+            self.failed = Some((Asked::Account(id), words::NO_HUB.to_string()));
+            cx.notify();
+            return;
+        };
+        let asked = id.clone();
+        let disconnecting = asking.client.start(move |client| client.github_account_disconnect(&asked));
+        cx.spawn(async move |this, cx| {
+            let answer = disconnecting.recv().await;
+            let _ = this.update(cx, |this, cx| {
+                match answer {
+                    Ok(account) => asking.feed.take_reply(Record::GithubAccount(account)),
+                    Err(e) => this.failed = Some((Asked::Account(id), words::couldnt("disconnect it", &e))),
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+}

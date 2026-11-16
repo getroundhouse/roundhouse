@@ -3,9 +3,13 @@
 #![cfg(test)]
 
 mod accounts;
+mod github;
 mod working;
 
 pub(super) use accounts::{accounts, context_held_login, context_to_move, logins_unkept, none_found};
+pub(super) use github::{
+    ada, github_accounts, github_default_ended, github_signing_in, github_signing_in_to, no_github_accounts,
+};
 pub(super) use working::{
     queue_held, queued, steered, steered_thinking, streaming, thinking_streaming, waiting_on_checks, waiting_on_stacks,
     working_background,
