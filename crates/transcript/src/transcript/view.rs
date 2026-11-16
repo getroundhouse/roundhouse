@@ -183,6 +183,11 @@ impl Transcript {
         self.log.row_count()
     }
 
+    /// Copies what's selected of the chat's texts, drawn or not, or lets the action go on when nothing is.
+    pub fn copy_selection(&self, cx: &mut App) {
+        self.selection.copy(cx);
+    }
+
     /// Shows what changed in the session since this last looked, however much that is. It takes the log as it is now,
     /// with what changed since, and tells the list of its rows, so every frame until the next is drawn from a log
     /// whose changes the list has been told of.

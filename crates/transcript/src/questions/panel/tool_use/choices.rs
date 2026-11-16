@@ -1,8 +1,8 @@
 use super::super::heading::said;
-use super::super::selectable::SelectableText;
 use crate::rows::ChangeAsked;
 use crate::scroll_area::holding_wide;
 use client_core::{Approval, Given, ToolUseAnswer, ToolUseAsked};
+use gpui_kit::base::SelectableText;
 use gpui_kit::component::v_flex;
 use gpui_kit::{
     AnyElement, App, InteractiveElement as _, IntoElement, ParentElement, Role, StatefulInteractiveElement as _,
@@ -108,7 +108,7 @@ impl ToolUse {
                 .aria_label(text.clone())
                 .overflow_y_scroll()
                 .px(look::Space::Medium)
-                .child(SelectableText::new("question-given-text", text.clone()))
+                .child(given_text(text.clone()))
                 .test_support()
                 .into_any_element(),
             // Its file, then its diff, which scrolls both ways, as an edit's does in the transcript.
@@ -135,4 +135,13 @@ impl ToolUse {
         });
         Some(v_flex().w_full().gap(look::Space::Medium).children(given).children(reason).into_any_element())
     }
+}
+
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the panel is in the composer's place, not the chat's list, so it's painted whenever it shows, and the \
+              window's selection keeps what's selected of it"
+)]
+fn given_text(text: String) -> SelectableText {
+    SelectableText::new("question-given-text", text)
 }

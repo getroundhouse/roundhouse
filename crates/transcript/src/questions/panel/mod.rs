@@ -9,7 +9,6 @@ mod heading;
 mod kept;
 mod options;
 mod pager;
-mod selectable;
 mod tool_use;
 mod typing;
 

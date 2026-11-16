@@ -208,6 +208,8 @@ fn a_sidebar_slides_shut_and_whats_beside_it_moves_with_it(cx: &mut TestAppConte
     slide_on(&mut ui, 0.6);
     assert!(!ui.has(LEFT_EDGE) && !ui.has(RIGHT_EDGE), "shut, they're not drawn");
     assert_eq!(ui.bounds("workspace-title").left(), button.right() + px(16.));
+    // The composer moved with the sidebar, so the frame it arrived on reports where its caret went on the next.
+    ui.bring_the_next_frame();
     assert_eq!(slide_on(&mut ui, 0.1), 0, "and nothing asks for another frame");
 }
 

@@ -2,6 +2,7 @@
 //! share, and what those menus say about the selected workspace. macOS greys out an item when nothing where focus is takes its action, so each shortcut is
 //! taken only where it can act.
 
+use gpui_kit::component::input::Copy;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{Context, Div, InteractiveElement};
 
@@ -106,5 +107,8 @@ fn with_workspace_shortcuts(root: Div, cx: &mut Context<AppView>) -> Div {
             if let Some((mark, chats)) = t.selected.as_ref().and_then(|id| t.workspace_marking(id, cx)) {
                 t.mark_chats(mark, chats, cx);
             }
+        }))
+        .on_action(cx.listener(|t, _: &Copy, window, cx| {
+            t.update_selected_pane(cx, |pane, cx| pane.copy_showing(window, cx));
         }))
 }

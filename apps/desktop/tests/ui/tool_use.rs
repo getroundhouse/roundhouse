@@ -2,7 +2,8 @@
 
 #![cfg(test)]
 
-use gpui_kit::TestAppContext;
+use gpui_kit::test::TestWindowExt as _;
+use gpui_kit::{AppContext as _, ClipboardItem, TestAppContext, point, px};
 use protocol::event::{ApprovalOutcome, EventBody};
 use protocol::model::SessionStatus;
 
@@ -101,4 +102,23 @@ fn subagents_that_ask_at_once_are_asked_in_turn_with_who_asks_and_how_many_wait(
     ui.click(id("question-send"));
     ui.wait("the removal", |ui| ui.session_status() == Some(SessionStatus::Idle) && !gone.exists());
     assert_eq!(outcomes(&ui), [ApprovalOutcome::Denied, ApprovalOutcome::Allowed]);
+}
+
+#[gpui_kit::test]
+fn the_command_asked_about_can_be_selected_and_copied_while_the_typing_row_has_focus(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let (mut ui, _gone) = with_something_to_remove(cx, &stack);
+    ui.ask(&format!("tool:{REMOVAL}"));
+    ui.click(id("question-other"));
+
+    let given = ui.bounds(id("question-given"));
+    let from = point(given.left() + px(14.), given.center().y);
+    let to = point(given.right() - px(14.), given.center().y);
+    ui.cx.update_window(ui.handle, |_, window, cx| window.drag(from, to, cx)).unwrap();
+    ui.frame();
+    ui.cx.write_to_clipboard(ClipboardItem::new_string(String::new()));
+    ui.press("secondary-c");
+
+    let copied = ui.cx.read_from_clipboard().and_then(|item| item.text());
+    assert_eq!(copied.as_deref(), Some(REMOVAL));
 }

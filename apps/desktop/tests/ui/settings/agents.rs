@@ -283,10 +283,11 @@ fn renewing_a_login_opens_its_panel_at_its_row_in_sight(cx: &mut TestAppContext)
     ui.click(id("account-more", last));
 
     // The scroll is set as the panel is first laid out, during a draw, so it shows only in a frame drawn after. The
-    // page asks for one, since nothing else may draw again. Here the panel's first draw happens to bring another, so
-    // that the page asked is checked too.
+    // page asks for one, since nothing else may draw again. Here closing the menu draws a second time before the next
+    // frame runs, and the focused token field reports its caret on both draws, so three callbacks wait on the frame:
+    // the page's refresh and those two caret reports.
     ui.cx.update_window(ui.handle, |_, window, cx| click_menu_item(window, "Renew", cx)).unwrap();
-    assert_eq!(ui.bring_the_next_frame(), 1, "the page asks for the frame that shows the scroll");
+    assert_eq!(ui.bring_the_next_frame(), 3, "the page asks for the frame that shows the scroll");
 
     let shows = ui.cx.update_window(ui.handle, |_, window, _| window.find("accounts-panel-connect").visible());
     assert!(shows.unwrap(), "the whole panel shows");

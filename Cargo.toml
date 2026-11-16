@@ -100,10 +100,10 @@ flate2 = "1.1.11"
 # Our copy of Longbridge's kit, on the release `tools/kit-sync` pins, with our changes, as `third_party/README.md`
 # says. It pins exact GPUI snapshots, so a release is taken deliberately, and `tools/kit-sync` moves the version here
 # with it.
-gpui-kit = { path = "third_party/gpui-kit/vendor/crates/kit", version = "=0.9.0", features = ["syntect"] }
+gpui-kit = { path = "third_party/gpui-kit/vendor/crates/kit", version = "=0.10.0", features = ["syntect"] }
 # Moves with gpui-kit, as `tools/kit-sync` moves it: the version its GPUI uses. Only for drawing off the main thread,
 # which tests run on.
-gpui-pre-apple = { version = "=0.3.11", features = ["font-kit"] }
+gpui-pre-apple = { version = "=0.3.12", features = ["font-kit"] }
 # The same as GPUI's, which hands its screenshots back as this crate's images.
 image = { version = "0.25.10", default-features = false }
 # Already under Octocrab. Names the header that asks GitHub's device flow to answer in JSON, on a request Octocrab sends.

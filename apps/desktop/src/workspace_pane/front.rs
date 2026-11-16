@@ -1,10 +1,12 @@
 //! What's in front under the tabs: the active chat, the file tab or the subagent tab. What's read and what has focus
 //! follow it, and `focus.rs` says where focus goes.
 
-use gpui_kit::Context;
+use gpui_kit::base::TextSelection;
 use gpui_kit::component::WindowExt as _;
+use gpui_kit::component::input::Copy;
+use gpui_kit::{Context, Window};
 
-use super::{PaneEvent, Showing, WorkspacePane};
+use super::{Opened, PaneEvent, Showing, WorkspacePane};
 
 impl WorkspacePane {
     /// What's in front under the tabs.
@@ -34,5 +36,31 @@ impl WorkspacePane {
             }
         });
         cx.notify();
+    }
+
+    /// Copies what's selected in what's in front, wherever focus is, once a text box with nothing selected lets the
+    /// action go on. What the kit has selected, such as a command asked about in the composer's place, goes on to the
+    /// window's root, which copies it.
+    pub fn copy_showing(&self, window: &mut Window, cx: &mut Context<Self>) {
+        if !TextSelection::selected_text(window, cx).trim().is_empty() {
+            cx.propagate();
+            return;
+        }
+        match self.showing() {
+            Showing::Chat => match self.transcript() {
+                Some(transcript) => transcript.update(cx, |t, cx| t.copy_selection(cx)),
+                None => cx.propagate(),
+            },
+            Showing::Subagent => match self.subagents.transcript().cloned() {
+                Some(transcript) => transcript.update(cx, |t, cx| t.copy_selection(cx)),
+                None => cx.propagate(),
+            },
+            Showing::File => {
+                match self.diff.as_ref().filter(|_| matches!(self.file_tab_opened(), Some(Opened::Diff) | None)) {
+                    Some(diff) => diff.file.update(cx, |file, cx| file.copy(&Copy, window, cx)),
+                    None => cx.propagate(),
+                }
+            }
+        }
     }
 }
