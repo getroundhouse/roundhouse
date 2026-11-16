@@ -136,15 +136,15 @@ fn command_part(command: &Command, toggle: &Toggle, cx: &App) -> AnyElement {
         .group(GROUP)
         .typeset(look::Type::Code)
         .child(scrolling)
-        .child(copy_button(&id, full))
+        .child(copy_button(&id, full, cx))
         .test_support()
         .into_any_element()
 }
 
 /// The button that copies the command, shown while the command is hovered. It's pinned at the command's top right,
 /// over what scrolls, so it stays beside the first line's place however far a long command is scrolled.
-fn copy_button(id: &ElementId, full: SharedString) -> impl IntoElement {
-    let copy = look::copy_button(ElementId::from((id.clone(), "copy")), full, "Copy command");
+fn copy_button(id: &ElementId, full: SharedString, cx: &App) -> impl IntoElement {
+    let copy = look::copy_button(ElementId::from((id.clone(), "copy")), full, "Copy command", cx);
     div()
         .absolute()
         .top_0()

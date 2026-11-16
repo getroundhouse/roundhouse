@@ -4,7 +4,10 @@
 
 use gpui_kit::base::text::editor_host::{CODE_BLOCK_GROUP, CodeBlock, RenderContext};
 use gpui_kit::component::h_flex;
-use gpui_kit::{App, Div, InteractiveElement as _, ParentElement as _, Pixels, Styled, Window, div, px};
+use gpui_kit::{
+    AnyElement, App, InteractiveElement as _, IntoElement as _, ParentElement as _, Pixels, Styled,
+    TestSupportExt as _, Window, div, px,
+};
 use look::Typeset as _;
 
 /// The room above a block's code, which the kit gives a block whose language it draws, and every block has, so the
@@ -23,12 +26,13 @@ pub(super) fn with_actions(context: RenderContext) -> RenderContext {
 }
 
 /// The button that copies `block`'s code, shown while the block is hovered, then its language, if it has one.
-fn actions(block: &CodeBlock, _: &mut Window, cx: &mut App) -> Div {
-    let copy = look::copy_button("copy", block.code(), "Copy code");
+fn actions(block: &CodeBlock, _: &mut Window, cx: &mut App) -> AnyElement {
+    let copy = look::copy_button("copy", block.code(), "Copy code", cx);
     // Centred on the line without making it taller, so the line sits where the kit's language would.
     let copy = div().flex().items_center().h_0().mr(look::Space::XSmall).child(copy);
     let copy = copy.invisible().group_hover(CODE_BLOCK_GROUP, Styled::visible);
     h_flex()
+        .id("code-block-actions")
         // As far in from the block's edge as the kit draws the language.
         .pr(look::Space::XSmall)
         .line_height(LINE)
@@ -39,4 +43,6 @@ fn actions(block: &CodeBlock, _: &mut Window, cx: &mut App) -> Div {
         .child(div().w_0().child("\u{a0}"))
         .child(copy)
         .children(block.lang().filter(|lang| !lang.is_empty()))
+        .test_support()
+        .into_any_element()
 }

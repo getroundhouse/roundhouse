@@ -281,14 +281,16 @@ fn a_reply_the_markdown_parser_panics_on_is_drawn_as_it_is_written(cx: &mut Test
     });
 }
 
-/// Copy sits in the gap below a prompt at its right edge, adding no space or movement, and copies what it says.
+/// Copy overlaps the prompt's corner without reaching a code-block reply or moving it, and its outer edge copies.
 #[gpui_kit::test]
 fn a_prompt_s_copy_button_shows_while_it_s_hovered_and_copies_what_it_says(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = in_a_new_workspace(cx, &stack);
-    ui.paste_text("say:the signal is clear");
+    let prompt = "whole:```python\nprint('Roundhouse')";
+    ui.paste_text(prompt);
     ui.press("enter");
-    ui.wait_idle_with("the reply", |text| text.contains("the signal is clear"));
+    ui.wait_idle_with("the reply", |text| text.contains("print('Roundhouse')"));
+    assert_eq!(ui.labelled("Copy code").len(), 1, "the reply starts with a code block");
     let shown = |ui: &mut Ui| match &ui.labelled("Copy prompt")[..] {
         [copy] => copy.visible(),
         found => panic!("{} buttons to copy a prompt", found.len()),
@@ -303,28 +305,30 @@ fn a_prompt_s_copy_button_shows_while_it_s_hovered_and_copies_what_it_says(cx: &
     let (bubble_bounds, reply_bounds, copy_bounds) =
         (ui.bounds(bubble.clone()), ui.bounds(reply.clone()), ui.bounds(copy.clone()));
     let [prompt_row] = &ui.shown("prompt-row/")[..] else { panic!("one prompt row") };
-    assert_eq!(ui.bounds(prompt_row.clone()).bottom(), bubble_bounds.bottom() + px(16.), "only the usual gap");
-    assert_eq!(copy_bounds.top(), bubble_bounds.bottom(), "the button starts below the bubble");
-    assert_eq!(copy_bounds.right(), bubble_bounds.right(), "aligned to its right edge");
+    let row_bottom = ui.bounds(prompt_row.clone()).bottom();
+    assert_eq!(row_bottom, bubble_bounds.bottom() + px(16.), "only the usual gap");
+    assert!(copy_bounds.bottom() <= row_bottom, "the hit target clears the reply below");
+    assert_eq!(copy_bounds.center().y, bubble_bounds.bottom() - px(4.), "one step above the corner");
+    assert_eq!(copy_bounds.center().x, bubble_bounds.right(), "centred on its right edge");
     ui.hover(bubble.clone());
     assert!(shown(&mut ui), "shown while it is");
     assert_eq!(ui.bounds(reply.clone()), reply_bounds, "showing it moves nothing below");
     let gap = point(copy_bounds.center().x, bubble_bounds.bottom() + px(1.));
     ui.send(MouseMoveEvent { position: gap, pressed_button: None, modifiers: Modifiers::default() });
-    assert!(shown(&mut ui), "stays shown across the gap below the bubble");
+    assert!(shown(&mut ui), "stays shown across the corner of the bubble");
     ui.hover(copy.clone());
     assert!(shown(&mut ui), "and while the pointer's on it, outside the bubble");
-    let lower_edge = point(copy_bounds.center().x, copy_bounds.bottom() - px(1.));
-    ui.send(MouseMoveEvent { position: lower_edge, pressed_button: None, modifiers: Modifiers::default() });
+    let outer_corner = copy_bounds.bottom_right() - point(px(2.), px(2.));
+    ui.send(MouseMoveEvent { position: outer_corner, pressed_button: None, modifiers: Modifiers::default() });
     assert!(shown(&mut ui), "including the edge of its hit target");
     assert_eq!(ui.bounds(bubble), bubble_bounds);
     assert_eq!(ui.bounds(copy), copy_bounds);
     assert_eq!(ui.bounds(reply), reply_bounds);
     ui.cx.write_to_clipboard(gpui_kit::ClipboardItem::new_string("before copy".to_string()));
-    ui.click_at(lower_edge);
+    ui.click_at(outer_corner);
 
     let copied = ui.cx.read_from_clipboard().and_then(|item| item.text());
-    assert_eq!(copied.as_deref(), Some("say:the signal is clear"));
+    assert_eq!(copied.as_deref(), Some(prompt));
 
     ui.click("composer");
     ui.paste_text(

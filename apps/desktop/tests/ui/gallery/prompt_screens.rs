@@ -1,4 +1,4 @@
-//! Copying prompts of different lengths, with the button below their shared right edge.
+//! Copying prompts of different lengths, with the button over their corner and clear of a code-block reply.
 
 #![cfg(test)]
 
@@ -26,6 +26,20 @@ pub(crate) const SCREENS: &[Screen] = &[
         frame: CHAT,
         steps: &[Step::Select(FOCUS), Step::Point("bubble/event/5/0")],
     },
+    Screen {
+        name: "copy-prompt-above-code",
+        spec: "chats.md",
+        world: Some(code_reply),
+        frame: CHAT,
+        steps: &[Step::Select(FOCUS), Step::Point("bubble/event/1/0")],
+    },
+    Screen {
+        name: "copy-code-block",
+        spec: "components.md",
+        world: Some(code_reply),
+        frame: CHAT,
+        steps: &[Step::Select(FOCUS), Step::Point("code-block-actions")],
+    },
 ];
 
 fn prompts() -> World {
@@ -46,5 +60,13 @@ fn prompts() -> World {
             text("msg-2", second),
             replied(second, 12, 0.04),
         ],
+    )
+}
+
+fn code_reply() -> World {
+    let reply = "```python\ndef greet(name):\n    return f\"Hello, {name}!\"\n\nprint(greet(\"Roundhouse\"))\n```";
+    chat_world(
+        SessionStatus::Idle,
+        vec![user_prompt("Show a Python greeting."), taken(Seq::new(1)), text("msg-1", reply), replied(reply, 4, 0.01)],
     )
 }

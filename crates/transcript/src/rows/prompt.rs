@@ -33,7 +33,7 @@ pub(super) struct Prompt<'a> {
 /// What was sent, on a bubble at the right of the column, with the files it carries above its text, in the order the
 /// agent was given them, and where the agent has it once it's recorded, `state`, which is `None` while it's being sent.
 /// It's faint until the agent has it, so one sent mid-turn reads as not yet seen until the agent takes it, and one the
-/// agent never took says so. While it's hovered, a button below the bubble, aligned right, copies what it says.
+/// agent never took says so. While it's hovered, a button over the bubble's lower right corner copies what it says.
 pub(super) fn prompt_bubble(
     key: &ItemKey,
     text: Prompt,
@@ -47,10 +47,9 @@ pub(super) fn prompt_bubble(
     let typed = !text.trim().is_empty();
     let faint = state != Some(PromptState::Taken);
     let dropped = state == Some(PromptState::Dropped);
-    let copy = typed.then(|| copy_button(key, text));
+    let copy = typed.then(|| copy_button(key, text, cx));
     let bubble = v_flex()
         .id(key.element("bubble"))
-        .max_w(relative(WIDEST_SHARE))
         .gap(look::Space::Medium)
         .px(look::Space::Large)
         .py(look::Space::Medium)
@@ -64,14 +63,13 @@ pub(super) fn prompt_bubble(
             d.child(from_blocks(&Written::found(at, &id, find, text), None, shared))
         })
         .test_support();
+    let bubble = v_flex().relative().max_w(relative(WIDEST_SHARE)).child(bubble).children(copy);
     // The row, so the button stays while the pointer moves from the bubble onto it.
     row()
         .id(key.element("prompt-row"))
-        .relative()
         .group(GROUP)
         .items_end()
         .child(bubble)
-        .children(copy)
         .when(dropped, |d| {
             d.child(
                 div()
@@ -84,12 +82,12 @@ pub(super) fn prompt_bubble(
         .into_any_element()
 }
 
-/// One small spacing step below the centre of the row's existing bottom padding, to give the icon room below the
-/// bubble without moving the following content. Its larger hit target reaches past the row without adding height.
-fn copy_button(key: &ItemKey, text: &str) -> impl IntoElement {
-    let copy = look::copy_button(key.element("copy-prompt"), text.to_string(), "Copy prompt");
-    // Its own hover keeps the part of the hit target below the row usable too.
+/// A cutout over the bubble's corner, one small step above it, so the whole hit target clears the following row.
+/// Anchored to the bubble, so a note below a prompt the agent dropped doesn't move the button away from it.
+fn copy_button(key: &ItemKey, text: &str, cx: &App) -> impl IntoElement {
+    let copy = look::copy_button(key.element("copy-prompt"), text.to_string(), "Copy prompt", cx);
+    // Its own hover keeps the half of the hit target past the row's right edge usable too.
     let copy = copy.invisible().group_hover(GROUP, Styled::visible).hover(Styled::visible);
-    let bottom = look::Space::Large.size() / 2. - look::Space::XSmall.size();
-    div().absolute().right_0().bottom(bottom).h_0().flex().items_center().child(copy)
+    let half = look::ControlSize::Small.height() / 2.;
+    div().absolute().right(-half).bottom(look::Space::XSmall).h_0().flex().items_center().child(copy)
 }
