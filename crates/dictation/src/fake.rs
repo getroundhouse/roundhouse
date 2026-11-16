@@ -10,8 +10,12 @@
 //! stop after it only with the next word, as the model does, since only then has it heard that the sentence ended,
 //! and its final text has the full stop, with the next word capitalised.
 
+use std::sync::Arc;
+
+use parking_lot::Mutex;
+
 use crate::pauses::level_db;
-use crate::{Engine, EngineError, Heard, Listening, Samples};
+use crate::{Engine, EngineError, Heard, Hints, Listening, Samples};
 
 /// How long each word sounds.
 const WORD: Samples = Samples::from_millis(300);
@@ -49,6 +53,8 @@ pub struct FakeEngine {
     fails: bool,
     /// Whether its final text leaves off the full stop at its end, as the model's sometimes does.
     leaves_off_the_last_full_stop: bool,
+    /// The hints the newest recording was started with, so tests can check what context a field passed.
+    last_hints: Arc<Mutex<Hints>>,
 }
 
 /// A word heard in a burst.
@@ -71,7 +77,13 @@ impl FakeEngine {
             held_back: HELD_BACK,
             fails: false,
             leaves_off_the_last_full_stop: false,
+            last_hints: Arc::new(Mutex::new(Hints::default())),
         }
+    }
+
+    /// The hints given to the latest recording this engine (or a clone of it) heard.
+    pub fn last_hints(&self) -> Hints {
+        self.last_hints.lock().clone()
     }
 
     /// Takes pieces no longer than `longest`.
@@ -124,16 +136,22 @@ impl FakeEngine {
         audio
     }
 
-    /// The words of the bursts in `audio`.
-    fn words(&self, audio: &[f32]) -> Vec<Word> {
+    /// The words of the bursts in `audio`, taking their casing from `hints` when a hint matches a word.
+    fn words(&self, audio: &[f32], hints: &Hints) -> Vec<Word> {
         bursts(audio)
             .into_iter()
             .filter_map(|(start, end)| {
                 let burst = &audio[start..end];
                 let word = self.script.get(nearest((pitch(burst) - FIRST_PITCH) / PITCH_STEP))?;
+                let text = hints
+                    .words()
+                    .iter()
+                    .find(|hint| hint.eq_ignore_ascii_case(word))
+                    .cloned()
+                    .unwrap_or_else(|| word.to_lowercase());
                 let loudest = burst.iter().fold(0.0_f32, |loudest, x| loudest.max(x.abs()));
                 let ends_a_sentence = loudest < f32::midpoint(LOUDNESS, FALLING);
-                Some(Word { at: Samples(start), text: word.to_lowercase(), ends_a_sentence })
+                Some(Word { at: Samples(start), text, ends_a_sentence })
             })
             .collect()
     }
@@ -144,11 +162,13 @@ impl Engine for FakeEngine {
         self.longest
     }
 
-    fn listen(&self) -> Box<dyn Listening + '_> {
-        Box::new(FakeListening { engine: self, audio: Vec::new(), told: 0 })
+    fn listen(&self, hints: &Hints) -> Box<dyn Listening + '_> {
+        *self.last_hints.lock() = hints.clone();
+        Box::new(FakeListening { engine: self, hints: hints.clone(), audio: Vec::new(), told: 0 })
     }
 
-    fn transcribe(&self, piece: &[f32]) -> Result<String, EngineError> {
+    fn transcribe(&self, piece: &[f32], hints: &Hints) -> Result<String, EngineError> {
+        *self.last_hints.lock() = hints.clone();
         if self.fails {
             return Err(EngineError("the model's files are damaged".to_string()));
         }
@@ -158,7 +178,7 @@ impl Engine for FakeEngine {
         }
         let mut text = String::new();
         let mut sentence_begins = true;
-        for word in self.words(piece) {
+        for word in self.words(piece, hints) {
             if !text.is_empty() {
                 text.push(' ');
             }
@@ -184,6 +204,7 @@ impl Engine for FakeEngine {
 /// A recording the fake hears, kept whole, since tests' recordings are short.
 struct FakeListening<'e> {
     engine: &'e FakeEngine,
+    hints: Hints,
     audio: Vec<f32>,
     /// How many of its words it has given.
     told: usize,
@@ -194,7 +215,7 @@ impl FakeListening<'_> {
     /// the sentence before it, if one does, and once everything has been said, the last sentence's too.
     fn heard(&mut self, everything: bool) -> Vec<Heard> {
         let now = self.audio.len();
-        let words = self.engine.words(&self.audio);
+        let words = self.engine.words(&self.audio, &self.hints);
         let held_back = self.engine.held_back;
         let mut heard = Vec::new();
         for (i, word) in words.iter().enumerate().skip(self.told) {

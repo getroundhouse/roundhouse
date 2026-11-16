@@ -36,11 +36,11 @@ impl Engine for Telling {
         Samples::from_secs(15)
     }
 
-    fn listen(&self) -> Box<dyn Listening + '_> {
+    fn listen(&self, _: &crate::Hints) -> Box<dyn Listening + '_> {
         Box::new(TellingListening { words: self.0.clone(), heard: 0 })
     }
 
-    fn transcribe(&self, piece: &[f32]) -> Result<String, EngineError> {
+    fn transcribe(&self, piece: &[f32], _: &crate::Hints) -> Result<String, EngineError> {
         let loud = piece.iter().any(|x| x.abs() > 0.1);
         Ok(if loud { "Loudly said." } else { "Quietly said." }.to_string())
     }
@@ -82,7 +82,7 @@ fn silence(millis: usize) -> Vec<f32> {
 #[test]
 fn words_heard_where_the_level_says_nothing_was_said_still_turn_final() {
     let dictation = telling(&[word(" quietly", 500, Some(600))]);
-    let (recording, updates) = dictation.record(AudioIn::Fed);
+    let (recording, updates) = dictation.record(AudioIn::Fed, crate::Hints::default());
 
     feed(&recording, &silence(1000));
     recording.stop();
@@ -97,7 +97,7 @@ fn words_heard_where_the_level_says_nothing_was_said_still_turn_final() {
 fn a_quiet_word_given_after_its_piece_was_cut_off_as_silence_still_turns_final() {
     // Two seconds with no speech are cut off at 1.71 s, before the word is given.
     let dictation = telling(&[word(" quietly", 1600, Some(2100))]);
-    let (recording, updates) = dictation.record(AudioIn::Fed);
+    let (recording, updates) = dictation.record(AudioIn::Fed, crate::Hints::default());
 
     feed(&recording, &silence(3000));
     recording.stop();
@@ -114,7 +114,7 @@ fn sentences_turn_final_in_order_and_their_live_text_shows_until_they_do() {
     // piece at 2.7 s, before the quiet word is given, and the loud one with it, since words come in order.
     let words = [word(" quietly", 1600, Some(3500)), word(".", 1650, Some(3500)), word(" loudly", 2200, Some(3500))];
     let dictation = telling(&words);
-    let (recording, updates) = dictation.record(AudioIn::Fed);
+    let (recording, updates) = dictation.record(AudioIn::Fed, crate::Hints::default());
     let mut audio = silence(2100);
     audio.extend(FakeEngine::new(&["loud"]).saying("loud /"));
 
@@ -133,7 +133,7 @@ fn a_full_stop_given_alone_after_a_sentence_is_nothing_said() {
     // The sentence's full stop, given in silence cut off after it, with no word after it.
     let words = [word(" loudly", 100, Some(500)), word(".", 3100, Some(3200))];
     let dictation = telling(&words);
-    let (recording, updates) = dictation.record(AudioIn::Fed);
+    let (recording, updates) = dictation.record(AudioIn::Fed, crate::Hints::default());
     let mut audio = FakeEngine::new(&["loud"]).saying("loud");
     audio.extend(silence(4000));
 
@@ -150,7 +150,7 @@ fn a_full_stop_given_alone_after_a_sentence_is_nothing_said() {
 #[test]
 fn a_word_given_as_said_past_the_end_is_the_last_pieces() {
     let dictation = telling(&[word(" late", 1100, None)]);
-    let (recording, updates) = dictation.record(AudioIn::Fed);
+    let (recording, updates) = dictation.record(AudioIn::Fed, crate::Hints::default());
 
     feed(&recording, &silence(1000));
     recording.stop();

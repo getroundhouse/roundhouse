@@ -15,8 +15,22 @@ impl FileDiff {
         cx: &mut Context<Self>,
     ) -> (Entity<dictation_ui::Field>, Vec<Subscription>) {
         let enabled = self.dictation_is_shown(position, cx);
+        let typed = input.clone();
+        let path = position.path.clone();
+        let review = self.review.clone();
         let field = cx.new(|cx| {
-            let mut field = dictation_ui::Field::new(input.clone(), look::Corner::Control, window, cx);
+            let mut field =
+                dictation_ui::Field::new(input.clone(), look::Corner::Control, window, cx).with_hints(move |cx| {
+                    let mut collector = client_core::hints::HintCollector::new();
+                    collector.add_prose(&typed.read(cx).text().to_string());
+                    collector.add_path(&path);
+                    if let Some(files) = review.read(cx).files.as_ref() {
+                        for patch in files {
+                            collector.add_path(patch.path());
+                        }
+                    }
+                    dictation_ui::Hints::new(collector.finish())
+                });
             field.set_enabled(enabled, cx);
             field
         });

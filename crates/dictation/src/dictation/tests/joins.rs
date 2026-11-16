@@ -42,11 +42,11 @@ impl Engine for Scripted {
         self.longest
     }
 
-    fn listen(&self) -> Box<dyn Listening + '_> {
+    fn listen(&self, _: &crate::Hints) -> Box<dyn Listening + '_> {
         Box::new(ScriptedListening { live: self.live.clone(), heard: Samples(0) })
     }
 
-    fn transcribe(&self, _: &[f32]) -> Result<String, EngineError> {
+    fn transcribe(&self, _: &[f32], _: &crate::Hints) -> Result<String, EngineError> {
         let mut finals = self.finals.lock();
         Ok(if finals.is_empty() { String::new() } else { finals.remove(0).to_string() })
     }
@@ -82,7 +82,7 @@ fn scripted(live: &[Said], finals: &[&'static str], longest: Samples) -> Dictati
 /// What's heard of `audio`, a recording, by an engine scripted with `live` and `finals`: the final text.
 fn finals_of(audio: &[f32], live: &[Said], finals: &[&'static str], longest: Samples) -> Vec<String> {
     let dictation = scripted(live, finals, longest);
-    let (recording, updates) = dictation.record(AudioIn::Fed);
+    let (recording, updates) = dictation.record(AudioIn::Fed, crate::Hints::default());
     feed(&recording, audio);
     recording.stop();
     finals_in(&the_rest(&updates))
@@ -126,7 +126,7 @@ fn a_sentence_counts_all_its_pieces_against_what_the_engine_takes() {
     let engine = FakeEngine::new(SCRIPT).with_longest_piece(Samples::from_millis(4000));
     let audio = engine.saying("fix the / flaky test / run it / again please");
     let dictation = dictation(engine);
-    let (recording, updates) = dictation.record(AudioIn::Fed);
+    let (recording, updates) = dictation.record(AudioIn::Fed, crate::Hints::default());
 
     feed(&recording, &audio);
     recording.stop();
@@ -139,7 +139,7 @@ fn a_sentence_after_one_cut_short_begins_with_its_own_capital() {
     let engine = FakeEngine::new(SCRIPT).with_longest_piece(Samples::from_millis(3000));
     let audio = engine.saying("fix the flaky test run it again please fix the flaky test. / run it");
     let dictation = dictation(engine);
-    let (recording, updates) = dictation.record(AudioIn::Fed);
+    let (recording, updates) = dictation.record(AudioIn::Fed, crate::Hints::default());
 
     feed(&recording, &audio);
     recording.stop();

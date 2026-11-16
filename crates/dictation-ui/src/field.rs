@@ -1,12 +1,15 @@
 //! A field's recording and its lifetime. A host retains this beside its input, and tells it when that input is hidden
 //! or reused for different content; being retained by a view does not mean it is still a target.
 
+use dictation::Hints;
 use gpui_kit::component::input::{InputEvent, TextareaState};
 use gpui_kit::{AnyWindowHandle, App, AppContext as _, Context, Entity, EventEmitter, Subscription, Window};
 
 use crate::fine_line::FineLine;
 use crate::holding::SpaceDown;
 use crate::recording::Underway;
+
+type HintsFn = Box<dyn Fn(&App) -> Hints>;
 
 pub struct Field {
     pub(crate) line: Entity<FineLine>,
@@ -15,6 +18,7 @@ pub struct Field {
     pub(crate) enabled: bool,
     pub(crate) underway: Option<Underway>,
     pub(crate) space_down: Option<SpaceDown>,
+    hints: Option<HintsFn>,
     _keys: Subscription,
     _input: Subscription,
 }
@@ -46,9 +50,21 @@ impl Field {
             enabled: true,
             underway: None,
             space_down: None,
+            hints: None,
             _keys: keys,
             _input: changed,
         }
+    }
+
+    /// Supplies the hint words to bias speech recognition toward whenever a recording starts on this field.
+    #[must_use]
+    pub fn with_hints(mut self, hints: impl Fn(&App) -> Hints + 'static) -> Self {
+        self.hints = Some(Box::new(hints));
+        self
+    }
+
+    pub(crate) fn current_hints(&self, cx: &App) -> Hints {
+        self.hints.as_ref().map_or_else(Hints::default, |f| f(cx))
     }
 
     /// A hidden field cannot start or keep a recording, even when its view stays alive for reopening.

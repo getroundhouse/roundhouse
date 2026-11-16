@@ -10,7 +10,7 @@ fn live_text_grows_as_words_are_said_and_a_sentence_turns_final_once_the_next_be
     let engine = FakeEngine::new(SCRIPT);
     let audio = engine.saying("fix the flaky test. / run it again");
     let dictation = dictation(engine);
-    let (recording, updates) = dictation.record(AudioIn::Fed);
+    let (recording, updates) = dictation.record(AudioIn::Fed, crate::Hints::default());
 
     feed(&recording, &audio);
 
@@ -33,7 +33,7 @@ fn a_pause_in_the_middle_of_a_sentence_ends_nothing_and_it_is_heard_whole() {
     let engine = FakeEngine::new(SCRIPT);
     let audio = engine.saying("fix the flaky test / run it again");
     let dictation = dictation(engine);
-    let (recording, updates) = dictation.record(AudioIn::Fed);
+    let (recording, updates) = dictation.record(AudioIn::Fed, crate::Hints::default());
 
     feed(&recording, &audio);
 
@@ -51,7 +51,7 @@ fn a_sentence_whose_final_text_leaves_off_its_full_stop_takes_the_live_texts() {
     let engine = FakeEngine::new(SCRIPT).leaving_off_the_last_full_stop();
     let audio = engine.saying("fix the test. / run it.");
     let dictation = dictation(engine);
-    let (recording, updates) = dictation.record(AudioIn::Fed);
+    let (recording, updates) = dictation.record(AudioIn::Fed, crate::Hints::default());
 
     feed(&recording, &audio);
     recording.stop();
@@ -65,7 +65,7 @@ fn the_last_sentence_keeps_its_own_ending_where_the_live_text_ends_none() {
     let engine = FakeEngine::new(SCRIPT).leaving_off_the_last_full_stop();
     let audio = engine.saying("fix the test. / run it again");
     let dictation = dictation(engine);
-    let (recording, updates) = dictation.record(AudioIn::Fed);
+    let (recording, updates) = dictation.record(AudioIn::Fed, crate::Hints::default());
 
     feed(&recording, &audio);
     recording.stop();
@@ -80,7 +80,7 @@ fn a_long_pause_in_a_sentence_takes_none_of_the_room_the_engine_has() {
     let audio = engine.saying("fix the / / / test");
     assert!(audio.len() > Samples::from_millis(4500).0);
     let dictation = dictation(engine);
-    let (recording, updates) = dictation.record(AudioIn::Fed);
+    let (recording, updates) = dictation.record(AudioIn::Fed, crate::Hints::default());
 
     feed(&recording, &audio);
     recording.stop();
@@ -95,7 +95,7 @@ fn the_live_text_of_a_sentence_goes_once_it_is_final_however_late_it_comes() {
         let engine = FakeEngine::new(SCRIPT).holding_back(Samples::from_millis(held_back));
         let audio = engine.saying("fix the test. / run it");
         let dictation = dictation(engine);
-        let (recording, updates) = dictation.record(AudioIn::Fed);
+        let (recording, updates) = dictation.record(AudioIn::Fed, crate::Hints::default());
 
         feed(&recording, &audio);
         recording.stop();
@@ -113,7 +113,7 @@ fn a_recording_with_no_speech_ends_with_nothing_heard() {
     let engine = FakeEngine::new(SCRIPT);
     let quiet = engine.saying("/ /");
     let dictation = dictation(engine);
-    let (recording, updates) = dictation.record(AudioIn::Fed);
+    let (recording, updates) = dictation.record(AudioIn::Fed, crate::Hints::default());
 
     feed(&recording, &quiet);
     recording.stop();
@@ -127,7 +127,7 @@ fn a_sentence_too_long_for_the_engine_is_cut_between_words_and_goes_on_as_the_li
     let said = "fix the flaky test run it again please fix the flaky test";
     let audio = engine.saying(said);
     let dictation = dictation(engine);
-    let (recording, updates) = dictation.record(AudioIn::Fed);
+    let (recording, updates) = dictation.record(AudioIn::Fed, crate::Hints::default());
 
     feed(&recording, &audio);
     recording.stop();

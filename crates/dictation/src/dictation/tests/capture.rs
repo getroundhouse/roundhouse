@@ -8,7 +8,7 @@ use crate::dictation::buffer::{Buffer, MAX_SAMPLES};
 use crate::dictation::capture::{Capture, Open};
 use crate::dictation::recording::Input;
 use crate::fake::FakeEngine;
-use crate::{AudioIn, Dictation, DictationError, Ending, Engine, EngineError, Update};
+use crate::{AudioIn, Dictation, DictationError, Ending, Engine, EngineError, Hints, Update};
 
 struct Microphone(flume::Sender<()>);
 
@@ -44,7 +44,7 @@ fn stop_and_drop_release_capture_while_the_model_is_loading() {
             capture,
         )
         .unwrap();
-        let (recording, updates) = dictation.record(AudioIn::Microphone);
+        let (recording, updates) = dictation.record(AudioIn::Microphone, Hints::default());
         let audio = audio.recv_timeout(TIMEOUT).unwrap();
         reached.recv_timeout(TIMEOUT).unwrap();
         audio.audio(words.clone());
@@ -88,7 +88,7 @@ fn stop_and_cancel_release_capture_while_inference_is_blocked() {
             capture,
         )
         .unwrap();
-        let (recording, updates) = dictation.record(AudioIn::Microphone);
+        let (recording, updates) = dictation.record(AudioIn::Microphone, Hints::default());
         let audio = audio.recv_timeout(TIMEOUT).unwrap();
         audio.audio(words);
         reached.recv_timeout(TIMEOUT).unwrap();
@@ -128,7 +128,7 @@ fn overflow_and_device_failure_release_capture_while_the_model_is_blocked() {
             capture,
         )
         .unwrap();
-        let (_recording, updates) = dictation.record(AudioIn::Microphone);
+        let (_recording, updates) = dictation.record(AudioIn::Microphone, Hints::default());
         let audio = audio.recv_timeout(TIMEOUT).unwrap();
         reached.recv_timeout(TIMEOUT).unwrap();
 
@@ -165,7 +165,7 @@ fn a_model_error_releases_capture_without_the_recording_handle_being_dropped() {
             capture,
         )
         .unwrap();
-        let (_recording, updates) = dictation.record(AudioIn::Microphone);
+        let (_recording, updates) = dictation.record(AudioIn::Microphone, Hints::default());
         let audio = audio.recv_timeout(TIMEOUT).unwrap();
 
         audio.audio(words);

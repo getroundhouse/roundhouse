@@ -120,14 +120,21 @@ const FILES: &[ModelFile] = &[
 #[cfg(test)]
 mod tests {
     use super::{FILES, MODEL};
-    use crate::nemotron::{engine, parts};
+    use crate::nemotron::{blob, engine, parts};
 
     #[test]
     fn everything_the_engine_loads_is_listed() {
-        for path in parts::PATHS.into_iter().chain([engine::VOCABULARY]) {
-            let listed = FILES.iter().any(|file| file.path == path || file.path.starts_with(&format!("{path}/")));
-            assert!(listed, "{path} isn't in FILES");
+        for dir in [parts::LIVE, parts::OFFLINE] {
+            let prefix = format!("{dir}/");
+            assert!(FILES.iter().any(|file| file.path.starts_with(&prefix)), "{dir} isn't in FILES");
         }
+        for dir in [parts::DECODER, parts::JOINT] {
+            for rel in [blob::MODEL_MIL, blob::WEIGHT_BIN] {
+                let path = format!("{dir}/{rel}");
+                assert!(FILES.iter().any(|file| file.path == path), "{path} isn't in FILES");
+            }
+        }
+        assert!(FILES.iter().any(|file| file.path == engine::VOCABULARY), "{} isn't in FILES", engine::VOCABULARY);
     }
 
     #[test]

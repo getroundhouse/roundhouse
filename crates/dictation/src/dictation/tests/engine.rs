@@ -15,7 +15,7 @@ fn a_failing_engine_ends_the_recording_with_its_error() {
     let engine = FakeEngine::new(SCRIPT).failing();
     let audio = engine.saying("fix the test");
     let dictation = dictation(engine);
-    let (recording, updates) = dictation.record(AudioIn::Fed);
+    let (recording, updates) = dictation.record(AudioIn::Fed, crate::Hints::default());
 
     feed(&recording, &audio);
     recording.stop();
@@ -41,7 +41,7 @@ fn the_engine_loads_once_for_every_recording_and_preparing_loads_it_ahead() {
 
     assert_eq!(dictation.prepare().recv_timeout(TIMEOUT).unwrap(), Ok(()));
     for _ in 0..2 {
-        let (recording, updates) = dictation.record(AudioIn::Fed);
+        let (recording, updates) = dictation.record(AudioIn::Fed, crate::Hints::default());
         feed(&recording, &audio);
         recording.stop();
         assert_eq!(the_rest(&updates).last(), Some(&Update::Ended(Ending::Heard)));
@@ -80,7 +80,7 @@ fn an_engine_that_fails_to_load_fails_the_recording_and_is_tried_again_next_time
     )
     .unwrap();
 
-    let (_recording, updates) = dictation.record(AudioIn::Fed);
+    let (_recording, updates) = dictation.record(AudioIn::Fed, crate::Hints::default());
     let failed = the_rest(&updates);
 
     assert_eq!(failed, [Update::Failed(DictationError::Engine(EngineError("not downloaded".to_string())))]);

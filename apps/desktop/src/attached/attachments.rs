@@ -114,8 +114,7 @@ impl Attachments {
         self.0.len()
     }
 
-    /// Their names, in order, for a test to see what a paste or drop did.
-    #[cfg(feature = "testing")]
+    /// Their names, in order.
     pub(crate) fn names(&self) -> Vec<String> {
         self.0.iter().map(|file| file.name().to_string()).collect()
     }

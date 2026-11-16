@@ -70,16 +70,16 @@ impl Engine for Watched {
         self.engine.longest_piece()
     }
 
-    fn listen(&self) -> Box<dyn crate::Listening + '_> {
+    fn listen(&self, hints: &crate::Hints) -> Box<dyn crate::Listening + '_> {
         self.watch.listened.fetch_add(1, Ordering::SeqCst);
-        Box::new(WatchedListening { listening: self.engine.listen(), heard: &self.watch.heard })
+        Box::new(WatchedListening { listening: self.engine.listen(hints), heard: &self.watch.heard })
     }
 
-    fn transcribe(&self, piece: &[f32]) -> Result<String, EngineError> {
+    fn transcribe(&self, piece: &[f32], hints: &crate::Hints) -> Result<String, EngineError> {
         if let Some(gate) = &self.gate {
             gate.pass();
         }
-        self.engine.transcribe(piece)
+        self.engine.transcribe(piece, hints)
     }
 }
 

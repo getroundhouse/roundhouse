@@ -55,10 +55,11 @@ impl Field {
     }
 
     fn listen(&mut self, cx: &mut Context<Self>) {
+        let hints = self.current_hints(cx);
         let Some(down) = self.space_down.as_mut() else { return };
         down.typed = Some(self.input.read(cx).text().clone());
         if !source::uses_microphone(cx) || dictation::microphone_permission() == Permission::Allowed {
-            down.listening = source::record(cx);
+            down.listening = source::record(hints, cx);
         }
     }
 

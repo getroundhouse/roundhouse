@@ -1,8 +1,11 @@
 //! Stand-ins for the model's parts, to test what runs them without Core ML: encoders that make out a step of nothing
-//! for each 80 ms of audio, a decoder whose output is how many tokens it has heard, and a joint that goes by that.
+//! for each 80 ms of audio, and scripted transducers for deterministic and ambiguous beam-search paths.
 
-use super::decoding::{BLANK, ENCODED, SAID};
+use super::engine::LONGEST;
+use super::mel::HOP;
 use super::parts::{Input, Part, Parts, Tensor};
+use super::transducer::{BLANK, ENCODED, HIDDEN, PredState, Transducer, VOCAB_SIZE, log_softmax};
+use super::windows::WINDOW;
 use crate::EngineError;
 
 /// `n`, as a part gives a count.
@@ -20,28 +23,98 @@ fn whole(value: f32) -> usize {
     value as usize
 }
 
-/// Parts whose joint gives tokens, numbered from 1, until as many have been heard as the step says there should be by
-/// its end.
+/// Parts whose transducer gives tokens, numbered from 1, until as many have been heard as the step says there should
+/// be by its end.
 pub(super) fn counting_parts() -> Parts {
-    parts(|step, heard| if heard < step { heard + 1 } else { BLANK })
+    deterministic_parts(|step, heard| if heard < step { heard + 1 } else { BLANK })
 }
 
-/// Parts whose joint never says a step is done, giving token 1 every time.
+/// Parts whose transducer never says a step is done, giving token 1 every time.
 pub(super) fn never_done_parts() -> Parts {
-    parts(|_, _| 1)
+    deterministic_parts(|_, _| 1)
 }
 
-/// Parts whose joint gives a token from the value of a step and how many tokens have been heard.
-fn parts(joint: fn(usize, usize) -> usize) -> Parts {
+pub(super) fn parts_with_transducer(transducer: impl Transducer + 'static) -> Parts {
     Parts {
-        live: Box::new(Encoder),
-        offline: Box::new(Encoder),
-        decoder: Box::new(Counter),
-        joint: Box::new(Joint(joint)),
+        live: Box::new(Encoder { expected_frames: WINDOW.0 / HOP + 1 }),
+        offline: Box::new(Encoder { expected_frames: LONGEST.0 / HOP + 1 }),
+        transducer: Box::new(transducer),
     }
 }
 
-/// Refuses an input whose values don't fill its shape, as Core ML does.
+fn deterministic_parts(choose: fn(usize, usize) -> usize) -> Parts {
+    parts_with_transducer(Deterministic(choose))
+}
+
+/// A scripted transducer whose step `s`, given the tokens emitted so far, assigns relative logits to `(token, logit)`
+/// choices, with every unlisted token at `-30.0` and `BLANK` at `0.0` unless overridden.
+pub(super) struct ScriptedTransducer<F>(pub(super) F);
+
+impl<F> Transducer for ScriptedTransducer<F>
+where
+    F: Fn(usize, &[usize]) -> Vec<(usize, f32)>,
+{
+    fn start(&self) -> Result<PredState, EngineError> {
+        Ok(PredState { joint_pred: vec![0.0; HIDDEN], hidden: Vec::new(), cell: Vec::new() })
+    }
+
+    fn advance(&self, state: &PredState, token: usize) -> Result<PredState, EngineError> {
+        let mut hidden = state.hidden.clone();
+        hidden.push(real(token));
+        Ok(PredState { joint_pred: vec![0.0; HIDDEN], hidden, cell: Vec::new() })
+    }
+
+    fn project_encoder(&self, step: &[f32]) -> Result<Vec<f32>, EngineError> {
+        let mut proj = vec![0.0; HIDDEN];
+        proj[0] = step.first().copied().unwrap_or_default();
+        Ok(proj)
+    }
+
+    fn log_probs(&self, enc_proj: &[f32], states: &[&PredState], out: &mut [f32]) -> Result<(), EngineError> {
+        let step = whole(enc_proj[0]);
+        for (state, row) in states.iter().zip(out.as_chunks_mut::<VOCAB_SIZE>().0) {
+            row.fill(-30.0);
+            row[BLANK] = 0.0;
+            let history: Vec<usize> = state.hidden.iter().map(|&v| whole(v)).collect();
+            for (token, logit) in (self.0)(step, &history) {
+                row[token] = logit;
+            }
+            log_softmax(row);
+        }
+        Ok(())
+    }
+}
+
+struct Deterministic(fn(usize, usize) -> usize);
+
+impl Transducer for Deterministic {
+    fn start(&self) -> Result<PredState, EngineError> {
+        Ok(PredState { joint_pred: vec![0.0; HIDDEN], hidden: vec![0.0], cell: Vec::new() })
+    }
+
+    fn advance(&self, state: &PredState, token: usize) -> Result<PredState, EngineError> {
+        let heard = state.hidden[0] + if token == BLANK { 0.0 } else { 1.0 };
+        Ok(PredState { joint_pred: vec![0.0; HIDDEN], hidden: vec![heard], cell: Vec::new() })
+    }
+
+    fn project_encoder(&self, step: &[f32]) -> Result<Vec<f32>, EngineError> {
+        let mut proj = vec![0.0; HIDDEN];
+        proj[0] = step.first().copied().unwrap_or_default();
+        Ok(proj)
+    }
+
+    fn log_probs(&self, enc_proj: &[f32], states: &[&PredState], out: &mut [f32]) -> Result<(), EngineError> {
+        let step = whole(enc_proj[0]);
+        for (state, row) in states.iter().zip(out.as_chunks_mut::<VOCAB_SIZE>().0) {
+            row.fill(-30.0);
+            let chosen = (self.0)(step, whole(state.hidden[0]));
+            row[chosen] = 20.0;
+            log_softmax(row);
+        }
+        Ok(())
+    }
+}
+
 fn shaped(inputs: &[Input<'_>]) -> Result<(), EngineError> {
     for input in inputs {
         let (name, count, shape) = match input {
@@ -55,7 +128,6 @@ fn shaped(inputs: &[Input<'_>]) -> Result<(), EngineError> {
     Ok(())
 }
 
-/// The input named `wanted`.
 fn input<'a>(inputs: &'a [Input<'a>], wanted: &str) -> Option<&'a Input<'a>> {
     inputs.iter().find(|input| {
         let (Input::Floats { name, .. } | Input::Ints { name, .. }) = input;
@@ -63,14 +135,6 @@ fn input<'a>(inputs: &'a [Input<'a>], wanted: &str) -> Option<&'a Input<'a>> {
     })
 }
 
-fn floats<'a>(inputs: &'a [Input<'a>], wanted: &str) -> &'a [f32] {
-    match input(inputs, wanted) {
-        Some(Input::Floats { values, .. }) => values,
-        Some(Input::Ints { .. }) | None => &[],
-    }
-}
-
-/// The first value of the input named `wanted`, which holds a count or a token's number.
 fn int(inputs: &[Input<'_>], wanted: &str) -> usize {
     match input(inputs, wanted) {
         Some(Input::Ints { values, .. }) => values.first().map_or(0, |&n| usize::try_from(n).unwrap_or(0)),
@@ -78,8 +142,9 @@ fn int(inputs: &[Input<'_>], wanted: &str) -> usize {
     }
 }
 
-/// An encoder that makes out a step of zeros for each 8 of the features' frames, as the model's do.
-struct Encoder;
+struct Encoder {
+    expected_frames: usize,
+}
 
 impl Part for Encoder {
     fn run(&self, inputs: &[Input<'_>], _: &[&str]) -> Result<Vec<Tensor>, EngineError> {
@@ -87,42 +152,11 @@ impl Part for Encoder {
         let Some(Input::Floats { shape: [1, _, frames], .. }) = input(inputs, "mel") else {
             return Err(EngineError("no features".to_string()));
         };
+        if *frames != self.expected_frames {
+            return Err(EngineError(format!("mel has {frames} frames, expected {}", self.expected_frames)));
+        }
         let steps = frames.div_ceil(8);
         let encoder = Tensor { values: vec![0.0; ENCODED * steps], shape: vec![1, ENCODED, steps] };
         Ok(vec![encoder, count(int(inputs, "mel_length").div_ceil(8))])
-    }
-}
-
-/// A decoder whose output starts with how many tokens it has heard, which it carries in its state.
-struct Counter;
-
-impl Part for Counter {
-    fn run(&self, inputs: &[Input<'_>], _: &[&str]) -> Result<Vec<Tensor>, EngineError> {
-        shaped(inputs)?;
-        let token = int(inputs, "targets");
-        let hidden = floats(inputs, "h_in");
-        let heard = hidden.first().copied().unwrap_or_default() + if token == BLANK { 0.0 } else { 1.0 };
-        let mut out = vec![0.0; SAID];
-        out[0] = heard;
-        let mut state = hidden.to_vec();
-        state[0] = heard;
-        let (shape, cell) = (vec![2, 1, 640], floats(inputs, "c_in").to_vec());
-        Ok(vec![
-            Tensor { values: out, shape: vec![1, SAID, 1] },
-            Tensor { values: state, shape: shape.clone() },
-            Tensor { values: cell, shape },
-        ])
-    }
-}
-
-/// A joint that gives a token from the value of the step and how many tokens the decoder has heard.
-struct Joint(fn(usize, usize) -> usize);
-
-impl Part for Joint {
-    fn run(&self, inputs: &[Input<'_>], _: &[&str]) -> Result<Vec<Tensor>, EngineError> {
-        shaped(inputs)?;
-        let step = whole(floats(inputs, "encoder_step").first().copied().unwrap_or_default());
-        let heard = whole(floats(inputs, "decoder_step").first().copied().unwrap_or_default());
-        Ok(vec![count((self.0)(step, heard))])
     }
 }
