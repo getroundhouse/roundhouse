@@ -35,6 +35,7 @@ fn band(column: Div, cx: &App) -> AnyElement {
 /// and goes with focus, so it's clear where the comment goes.
 pub(super) fn draft_card(
     input: &Entity<TextareaState>,
+    dictation: &Entity<dictation_ui::Field>,
     editing: bool,
     view: WeakEntity<FileDiff>,
     cx: &App,
@@ -49,7 +50,10 @@ pub(super) fn draft_card(
         .border_1()
         .border_color(colors.brand.opacity(0.6))
         .bg(colors.pane)
-        .child(Textarea::new(input).appearance(false));
+        .relative()
+        .child(Textarea::new(input).appearance(false))
+        .children(dictation.read(cx).live_line(cx).map(|line| line.px(look::Space::Small).pb(look::Space::Small)))
+        .child(dictation.read(cx).edge());
     let actions = h_flex()
         .w_full()
         .justify_end()
@@ -69,7 +73,11 @@ pub(super) fn draft_card(
                     let _ = save.update(cx, |t, cx| t.save_draft(window, cx));
                 }),
         );
-    band(v_flex().child(field).child(actions), cx)
+    let actions = match dictation_ui::Field::controls(dictation, look::ControlSize::Regular, cx) {
+        Some(controls) => controls.into_any_element(),
+        None => actions.into_any_element(),
+    };
+    band(dictation_ui::Field::keys(v_flex().child(field).child(actions), dictation), cx)
 }
 
 /// A comment waiting for the agent, with what can be done with it.

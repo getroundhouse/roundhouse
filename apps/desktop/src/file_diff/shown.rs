@@ -49,6 +49,7 @@ pub(super) struct Making {
 impl FileDiff {
     /// Shows the file as the diff last loaded has it, or nothing once it no longer changes anything.
     pub(super) fn show_file(&mut self, cx: &mut Context<Self>) {
+        self.set_dictation_enabled(self.dictation_enabled, cx);
         let review = self.review.read(cx);
         let found = self.path.as_ref().and_then(|path| review.file(path)).filter(|file| !file.is_binary()).cloned();
         let Some(file) = found else {

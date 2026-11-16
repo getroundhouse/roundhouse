@@ -34,7 +34,8 @@ pub struct Draft {
     /// The saved comment it edits, rather than adding one.
     pub editing: Option<CommentId>,
     pub input: Entity<TextareaState>,
-    _events: Subscription,
+    pub dictation: Entity<dictation_ui::Field>,
+    _events: Vec<Subscription>,
 }
 
 impl FileDiff {
@@ -79,6 +80,9 @@ impl FileDiff {
             self.write(position, kept.editing.clone(), kept.text.clone(), window, cx);
             return;
         };
+        if draft.position != position || draft.editing != kept.editing || *draft.input.read(cx).text() != kept.text {
+            draft.dictation.update(cx, dictation_ui::Field::end);
+        }
         (draft.position, draft.editing) = (position, kept.editing.clone());
         let input = draft.input.clone();
         if *input.read(cx).text() != kept.text {
@@ -88,6 +92,7 @@ impl FileDiff {
                 input.set_selected_range(end..end, cx);
             });
         }
+        self.set_dictation_enabled(self.dictation_enabled, cx);
         self.lay_out_again(cx);
     }
 
@@ -105,6 +110,9 @@ impl FileDiff {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if let Some(draft) = &self.draft {
+            draft.dictation.update(cx, dictation_ui::Field::end);
+        }
         let input = cx.new(|cx| {
             TextareaState::new(window, cx)
                 .auto_grow(2, 6)
@@ -125,7 +133,9 @@ impl FileDiff {
             input.set_value(text, window, cx);
             input.set_selected_range(end..end, cx);
         });
-        self.draft = Some(Draft { position, editing, input, _events: events });
+        let (dictation, mut subscriptions) = self.attach_dictation(&input, &position, window, cx);
+        subscriptions.push(events);
+        self.draft = Some(Draft { position, editing, input, dictation, _events: subscriptions });
         self.lay_out_again(cx);
     }
 
@@ -136,6 +146,12 @@ impl FileDiff {
     /// Takes the box away and asks for what's in it to be saved. The hub goes on keeping it until the save reaches it,
     /// which lets go of it there, so a save that fails loses nothing.
     pub fn save_draft(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(draft) = &self.draft {
+            let content = !draft.input.read(cx).text().to_string().trim().is_empty();
+            if draft.dictation.update(cx, |field, cx| field.finish_before_submit(content, cx)) {
+                return;
+            }
+        }
         let Some(saving) = self.writing(cx).filter(|writing| !writing.text.trim().is_empty()) else { return };
         self.put_away_draft(Away::Saved, window, cx);
         cx.emit(FileDiffEvent::Save(saving));
@@ -161,6 +177,7 @@ impl FileDiff {
     /// already, the focus moves only if the box had it.
     fn put_away_draft(&mut self, away: Away, window: &mut Window, cx: &mut Context<Self>) {
         let Some(draft) = self.draft.take() else { return };
+        draft.dictation.update(cx, dictation_ui::Field::end);
         if away != Away::Taken || draft.input.focus_handle(cx).is_focused(window) {
             window.focus(&self.focus, cx);
         }

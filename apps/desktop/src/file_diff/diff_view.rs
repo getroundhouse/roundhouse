@@ -33,9 +33,12 @@ pub enum FileDiffEvent {
     AddToChat(String),
     /// The comment being written changed, so the hub can keep it: within a moment while it's typed, or at once as it's
     /// started or cancelled. [`FileDiff::writing`] says what it is now.
-    Writing { at_once: bool },
+    Writing {
+        at_once: bool,
+    },
     /// Save this, the comment that was being written, whose box has gone.
     Save(CommentDraft),
+    Error(String),
 }
 
 pub struct FileDiff {
@@ -45,6 +48,7 @@ pub struct FileDiff {
     pub(super) shown: Option<Shown>,
     /// The comment being written. It's kept while another file shows, and shows again with its own.
     pub draft: Option<Draft>,
+    pub(super) dictation_enabled: bool,
     /// What shows in place of the lines for a file that isn't text, which has none.
     pub image: Entity<ImageDiff>,
     /// What's been opened of each file that's shown, by path, which stays open while other files show, until the file
@@ -89,6 +93,7 @@ impl FileDiff {
             path: None,
             shown: None,
             draft: None,
+            dictation_enabled: false,
             image,
             opened: HashMap::new(),
             list: DiffList::new(cx),
@@ -241,7 +246,10 @@ impl FileDiff {
             gutter,
             marked: self.draft.as_ref().map(|draft| (draft.position.side, draft.position.line)),
             comments: review.comments.clone(),
-            draft: self.draft.as_ref().map(|draft| (draft.input.clone(), draft.editing.is_some())),
+            draft: self
+                .draft
+                .as_ref()
+                .map(|draft| (draft.input.clone(), draft.dictation.clone(), draft.editing.is_some())),
             across: self.list.across(),
             selection: self.selection,
             drawn: self.drawn.clone(),
@@ -310,6 +318,14 @@ fn count(characters: usize) -> f32 {
 
 impl Render for FileDiff {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        // A retained draft can disappear on refresh. Keeping focus on its undrawn input would lose every shortcut,
+        // including the Space release that ends a held dictation key, so the visible file takes focus instead.
+        if let Some(draft) = &self.draft
+            && draft.input.focus_handle(cx).is_focused(window)
+            && self.shown.as_ref().is_none_or(|shown| shown.file.path() != &draft.position.path)
+        {
+            window.focus(&self.focus, cx);
+        }
         let muted = look::colors(cx).text_muted;
         let loaded = self.review.read(cx).files.is_some();
         let file = self.file(cx).cloned();

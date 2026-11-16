@@ -158,6 +158,7 @@ impl WorkspacePane {
             FileDiffEvent::AddToChat(text) => this.add_to_composer(text.clone(), cx),
             FileDiffEvent::Writing { at_once } => this.keep_writing(*at_once, cx),
             FileDiffEvent::Save(saving) => this.save_writing(saving.clone(), cx),
+            FileDiffEvent::Error(message) => cx.emit(PaneEvent::Error(message.clone())),
         });
         let changes_events = cx.subscribe(&changes, |this, _, event: &ChangesEvent, cx| match event {
             ChangesEvent::Open(path) => this.open_diff(path.clone(), cx),

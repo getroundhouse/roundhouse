@@ -5,7 +5,9 @@
 
 #![warn(clippy::wildcard_enum_match_arm)]
 
+mod controls;
 mod field;
+mod fine_line;
 mod holding;
 mod keys;
 mod recording;
@@ -13,6 +15,7 @@ mod source;
 mod text;
 mod view;
 
+pub use controls::{CANCEL, STOP};
 pub use field::{Event, Field};
 pub use holding::{SPACE_DICTATES_AFTER, SPACE_LISTENS_AFTER};
 pub use keys::{CancelDictation, HOLD_TO_DICTATE_KEY, HoldToDictate, bind_keys, window_left};

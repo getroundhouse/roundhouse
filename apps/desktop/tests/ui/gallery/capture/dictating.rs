@@ -30,7 +30,7 @@ impl Driver {
         self.until("dictation to be ready", |d| d.cx.update(|cx| desktop::dictating::is_ready(cx)));
         match into {
             DictationTarget::Composer => self.click("dictate"),
-            DictationTarget::NewWorkspace | DictationTarget::Answer => {
+            DictationTarget::NewWorkspace | DictationTarget::Answer | DictationTarget::Comment => {
                 self.cx
                     .update_window(self.handle, |_, window, cx| {
                         window.dispatch_event(
@@ -51,6 +51,9 @@ impl Driver {
                 let view = self.view.clone();
                 self.cx.update(|cx| view.read(cx).new_workspace.as_ref().unwrap().read(cx).hear(&audio, cx));
             }
+            DictationTarget::Comment => self.update_pane(|pane, cx| {
+                pane.diff.as_ref().unwrap().file.read(cx).hear(&audio, cx);
+            }),
             DictationTarget::Answer => self.update_pane(|pane, cx| {
                 pane.transcript().unwrap().read(cx).question().unwrap().read(cx).hear(&audio, cx);
             }),

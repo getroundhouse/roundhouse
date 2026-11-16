@@ -2,12 +2,14 @@
 //! or reused for different content; being retained by a view does not mean it is still a target.
 
 use gpui_kit::component::input::{InputEvent, TextareaState};
-use gpui_kit::{AnyWindowHandle, App, Context, Entity, EventEmitter, Subscription, Window};
+use gpui_kit::{AnyWindowHandle, App, AppContext as _, Context, Entity, EventEmitter, Subscription, Window};
 
+use crate::fine_line::FineLine;
 use crate::holding::SpaceDown;
 use crate::recording::Underway;
 
 pub struct Field {
+    pub(crate) line: Entity<FineLine>,
     pub(crate) input: Entity<TextareaState>,
     pub(crate) window: AnyWindowHandle,
     pub(crate) enabled: bool,
@@ -29,14 +31,16 @@ pub enum Event {
 impl EventEmitter<Event> for Field {}
 
 impl Field {
-    pub fn new(input: Entity<TextareaState>, window: &Window, cx: &mut Context<Self>) -> Self {
+    pub fn new(input: Entity<TextareaState>, corner: look::Corner, window: &Window, cx: &mut Context<Self>) -> Self {
         let keys = cx.observe_keystrokes(|this, event, _, _| this.key_pressed(&event.keystroke));
         let changed = cx.subscribe(&input, |this, _, event: &InputEvent, _| {
             if matches!(event, InputEvent::Blur) {
                 this.space_down = None;
             }
         });
+        let line = cx.new(|cx| FineLine::new(corner, cx));
         Self {
+            line,
             input,
             window: window.window_handle(),
             enabled: true,
@@ -63,7 +67,7 @@ impl Field {
         self.underway.is_some()
     }
 
-    /// A form can offer Send before the first sentence is final; pressing it waits for those words.
+    /// A form can submit before the first sentence is final; submission waits for those words.
     pub fn has_live_words(&self) -> bool {
         self.underway.as_ref().is_some_and(|u| !u.live.is_empty())
     }
@@ -73,6 +77,7 @@ impl Field {
     pub fn end(&mut self, cx: &mut Context<Self>) {
         self.space_down = None;
         if self.underway.take().is_some() {
+            self.line.update(cx, FineLine::hide);
             cx.emit(Event::Ended { submit: false });
             cx.notify();
         }

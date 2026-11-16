@@ -57,13 +57,10 @@ impl Field {
 
     /// A status for screen readers as well as a muted line. The host supplies the inset that matches its input size.
     pub fn live_line(&self, cx: &App) -> Option<impl IntoElement + Styled + use<>> {
-        let underway = self.underway.as_ref()?;
-        let colors = look::colors(cx);
-        let (text, color) = match (underway.live.as_str(), underway.stopping) {
-            ("", false) => ("Listening…", colors.text_faint),
-            ("", true) => ("…", colors.text_faint),
-            (live, _) => (live, colors.text_muted),
-        };
+        let text = self.underway.as_ref()?.live.as_str();
+        if text.is_empty() {
+            return None;
+        }
         Some(
             div()
                 .id(LIVE_LINE)
@@ -71,7 +68,7 @@ impl Field {
                 .aria_label(text.to_string())
                 .test_support()
                 .typeset(look::Type::Body)
-                .text_color(color)
+                .text_color(look::colors(cx).text_muted)
                 .child(text.to_string()),
         )
     }

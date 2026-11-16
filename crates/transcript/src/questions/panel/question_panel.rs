@@ -282,6 +282,18 @@ impl Render for QuestionPanel {
             .tooltip(if self.asked.len() > 1 { "Send answers" } else { "Send answer" })
             .off_while(!ready)
             .on_click(cx.listener(|this, _, _, cx| this.send(cx)));
+        let controls =
+            self.dictation().and_then(|field| dictation_ui::Field::controls(field, look::ControlSize::Small, cx));
+        let footer = match controls {
+            Some(controls) => controls.into_any_element(),
+            None => h_flex()
+                .w_full()
+                .items_center()
+                .gap(look::Space::Small)
+                .child(div().flex_1().min_w_0().children(pager))
+                .child(send)
+                .into_any_element(),
+        };
         v_flex()
             .region(Region::Question)
             .track_focus(&self.focus)
@@ -297,13 +309,6 @@ impl Render for QuestionPanel {
             .child(heading)
             .children(detail)
             .children(options)
-            .child(
-                h_flex()
-                    .w_full()
-                    .items_center()
-                    .gap(look::Space::Small)
-                    .child(div().flex_1().min_w_0().children(pager))
-                    .child(send),
-            )
+            .child(footer)
     }
 }

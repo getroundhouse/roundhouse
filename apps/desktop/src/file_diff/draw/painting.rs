@@ -40,7 +40,7 @@ pub(in super::super) struct Drawing {
     pub(in super::super) marked: Option<(DiffSide, u32)>,
     pub(in super::super) comments: Vec<DiffComment>,
     /// The comment being written, and whether it's a saved one being edited.
-    pub(in super::super) draft: Option<(Entity<TextareaState>, bool)>,
+    pub(in super::super) draft: Option<(Entity<TextareaState>, Entity<dictation_ui::Field>, bool)>,
     /// How far the code is scrolled sideways.
     pub(in super::super) across: Pixels,
     pub(in super::super) selection: Option<Selection>,
@@ -66,7 +66,7 @@ pub(in super::super) fn row(ix: usize, row: &Row, drawing: &Drawing, cx: &App) -
             None => div().into_any_element(),
         },
         Row::Draft => match &drawing.draft {
-            Some((input, editing)) => draft_card(input, *editing, drawing.view.clone(), cx),
+            Some((input, dictation, editing)) => draft_card(input, dictation, *editing, drawing.view.clone(), cx),
             None => div().into_any_element(),
         },
     }

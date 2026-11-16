@@ -4,6 +4,7 @@
 use dictation::{DictationError, Ending, Permission, Recording, Update};
 use gpui_kit::{Context, Task, Window};
 
+use crate::fine_line::FineLine;
 use crate::text::Before;
 use crate::{Event, Field, source};
 
@@ -66,10 +67,12 @@ impl Field {
             }
             let _ = this.update(cx, |field, cx| {
                 let submit = field.underway.take().is_some_and(|u| u.submit);
+                field.line.update(cx, FineLine::hide);
                 cx.emit(Event::Ended { submit });
                 cx.notify();
             });
         });
+        self.line.update(cx, |line, cx| line.listen(recording.levels(), cx));
         self.underway = Some(Underway {
             started,
             stopping: false,
@@ -85,6 +88,7 @@ impl Field {
     pub(crate) fn stop(&mut self, cx: &mut Context<Self>) {
         if let Some(underway) = self.underway.as_mut().filter(|u| !u.stopping) {
             underway.stopping = true;
+            self.line.update(cx, FineLine::settle);
             underway.recording.stop();
             cx.notify();
         }
@@ -102,6 +106,7 @@ impl Field {
     pub(crate) fn cancel(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.space_down = None;
         let Some(underway) = self.underway.take() else { return };
+        self.line.update(cx, FineLine::hide);
         self.put_back(&underway.before, window, cx);
         cx.emit(Event::Ended { submit: false });
         cx.notify();

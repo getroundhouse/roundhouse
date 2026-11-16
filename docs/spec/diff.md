@@ -65,6 +65,12 @@ A workspace's changes against its base, listed in a sidebar on the right, each f
 
   ![Writing a comment](screens/writing-a-comment.png)
 
+- **Comments use the same dictation shortcuts and fine line as prompts,** as `chats.md` says. Focus the comment and hold Space or `Option-Space`. The normal Cancel and Comment or Save buttons give way to recording controls. Finish dictation keeps the words without saving; Enter finishes the last words before saving. Cancel dictation restores the starting text and leaves the comment open. Hiding the diff, changing files, replacing the draft from another client, or starting another comment ends the recording, keeping final text and dropping tentative words.
+
+  A refresh that removes the file's text diff ends dictation too. If its retained comment had focus, the visible file container takes focus, so Space releases and other shortcuts still arrive. When the diff returns, the comment can be focused and dictated into again on the first press.
+
+  ![Dictating a comment](screens/comment-dictation.png)
+
 - **A comment being written on one file is kept while another file shows,** and comes back with its file. The hub keeps it until it's saved or cancelled, so it's there when the app opens again, and in any other client, where a change made to it shows as it reaches the hub, unless something typed here hasn't reached the hub yet. Saving it takes it off the hub as the comment is saved, so no client shows both, and a save that fails puts it back in its box. A comment deleted while it's being changed, such as in another client, leaves what was typed in the box as a new comment on its line. *Unconfirmed.*
 - **A saved comment shows where it was written, its text where it was typed,** on the same band, with Edit, Delete and Add to chat on its right. Edit opens it in the box again, and saving keeps it in its place. *Unconfirmed:* how Edit works.
 - **Add to chat puts a comment in the chat's composer, after what's typed there,** so you can say more with it. The comment stays on the diff until it's deleted, as every comment does, and Send to agent sends every comment at once.

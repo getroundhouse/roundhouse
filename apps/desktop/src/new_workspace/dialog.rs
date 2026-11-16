@@ -134,7 +134,7 @@ impl NewWorkspaceDialog {
             InputEvent::Change => this.keep(false, cx),
             InputEvent::PressEnter { shift: true, .. } | InputEvent::Focus | InputEvent::Blur => {}
         });
-        let dictation = cx.new(|cx| dictation_ui::Field::new(prompt.clone(), window, cx));
+        let dictation = cx.new(|cx| dictation_ui::Field::new(prompt.clone(), look::Corner::Card, window, cx));
         let dictated = cx.subscribe(&dictation, |this, _, event, cx| match event {
             dictation_ui::Event::Ended { submit: true } => this.create(cx),
             dictation_ui::Event::Ended { submit: false } => {}

@@ -2,7 +2,7 @@
 //! submission, and the lifetime of inputs that remain alive while hidden.
 
 use dictation::fake::FakeEngine;
-use gpui_kit::{AppContext as _, TestAppContext};
+use gpui_kit::{AppContext as _, Focusable as _, TestAppContext};
 use protocol::event::EventBody;
 use protocol::model::AnswerDraft;
 
@@ -84,7 +84,11 @@ fn a_question_change_drops_tentative_words_and_the_next_answer_has_its_own_recor
     say_in_answer(&mut ui, &engine, "fix the test");
     hearing(&mut ui, "fix");
 
-    ui.click("question-dot-1");
+    // The recording toolbar replaces the pager; navigation still ends a retained field.
+    let panel = ui.cx.read_entity(&ui.transcript().unwrap(), |t, _| t.question().unwrap().clone());
+    ui.cx.update_window(ui.handle, |_, window, cx| window.focus(&panel.focus_handle(cx), cx)).unwrap();
+    ui.let_what_is_asked_settle();
+    ui.press("right");
     let_go(&mut ui);
     assert!(live(&mut ui).is_none());
     ui.click("question-other");
@@ -113,7 +117,8 @@ fn creating_waits_for_the_final_dictated_prompt(cx: &mut TestAppContext) {
     ui.wait("the first sentence", |ui| ui.dialog_text() == "say: Fix the test.");
     hearing(&mut ui, "in");
 
-    ui.click("new-workspace-create");
+    assert!(!ui.has("new-workspace-create"));
+    ui.press("enter");
 
     ui.wait_for_a_new_workspace(before);
     ui.wait("the complete prompt to be sent", |ui| {
@@ -173,7 +178,7 @@ fn a_transcription_failure_keeps_the_dialog_and_its_text_without_creating(cx: &m
 }
 
 #[gpui_kit::test]
-fn holding_space_in_a_multiple_answer_keeps_its_choices_and_send_finishes_live_words(cx: &mut TestAppContext) {
+fn holding_space_in_a_multiple_answer_keeps_its_choices_and_enter_finishes_live_words(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = Ui::open_with_a_repository(cx, &stack);
     ui.new_workspace();
@@ -186,7 +191,8 @@ fn holding_space_in_a_multiple_answer_keeps_its_choices_and_send_finishes_live_w
     ui.frame();
     say_in_answer(&mut ui, &engine, "fix the test");
     hearing(&mut ui, "fix");
-    ui.click("question-send");
+    assert!(!ui.has("question-send"));
+    ui.press("enter");
 
     ui.wait("both the choice and the complete dictated answer", |ui| {
         let told = ui.told_to_agent();
@@ -195,7 +201,7 @@ fn holding_space_in_a_multiple_answer_keeps_its_choices_and_send_finishes_live_w
 }
 
 #[gpui_kit::test]
-fn send_can_finish_the_first_sentence_before_any_answer_is_final(cx: &mut TestAppContext) {
+fn enter_can_finish_the_first_sentence_before_any_answer_is_final(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = Ui::open_with_a_repository(cx, &stack);
     ui.new_workspace();
@@ -206,7 +212,8 @@ fn send_can_finish_the_first_sentence_before_any_answer_is_final(cx: &mut TestAp
     say_in_answer(&mut ui, &engine, "fix the test");
     hearing(&mut ui, "fix");
     assert!(answer(&ui).is_none(), "no final text has selected an answer yet");
-    ui.click("question-send");
+    assert!(!ui.has("question-send"));
+    ui.press("enter");
     ui.wait("the first sentence to be sent", |ui| ui.told_to_agent().contains("Fix the test."));
 }
 
@@ -242,7 +249,7 @@ fn dictating_feedback_never_turns_an_empty_denial_into_allow(cx: &mut TestAppCon
     ui.click("question-other");
     hold_option_space(&mut ui);
     ui.press("enter");
-    ui.wait("the empty recording to finish", |ui| live(ui).is_none());
+    ended(&mut ui);
     assert_eq!(ui.session_status(), Some(protocol::model::SessionStatus::WaitingApproval));
 
     ui.click("question-other");
@@ -298,7 +305,8 @@ fn an_empty_recording_still_allows_a_workspace_without_a_first_prompt(cx: &mut T
     let before = ui.view().records().workspaces().len();
     ui.open_new_workspace();
     hold_option_space(&mut ui);
-    ui.click("new-workspace-create");
+    assert!(!ui.has("new-workspace-create"));
+    ui.press("enter");
     ui.wait_for_a_new_workspace(before);
     assert!(!ui.has_dialog());
     assert!(!ui.events().iter().any(|event| matches!(event.body, EventBody::UserPrompt { .. })));

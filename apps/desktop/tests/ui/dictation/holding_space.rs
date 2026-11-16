@@ -179,7 +179,7 @@ fn the_microphone_clicked_while_space_is_held_dictates_and_space_types_again(cx:
     }
 
     assert_eq!(ui.composer_text(), "Please ", "what the microphone dictates into is left as it was");
-    assert_eq!(live(&mut ui).as_deref(), Some("Listening…"));
+    assert!(dictating(&mut ui));
 }
 
 #[gpui_kit::test]
@@ -271,7 +271,7 @@ fn space_repeats_as_it_always_has_where_there_is_nothing_to_dictate_to(cx: &mut 
         assert!(!repeat_space(&mut ui), "each repeat types a space, as the system has it");
     }
     hold_on_to_dictate(&mut ui);
-    assert_eq!(live(&mut ui), None);
+    assert!(!dictating(&mut ui));
 }
 
 #[gpui_kit::test]
@@ -288,9 +288,5 @@ fn space_types_as_it_always_has_while_the_microphone_dictates(cx: &mut TestAppCo
     }
     assert_eq!(ui.composer_text(), " ");
     let_go(&mut ui);
-    assert_eq!(
-        live(&mut ui).as_deref(),
-        Some("Listening…"),
-        "letting go of Space doesn't stop what the microphone started"
-    );
+    assert!(dictating(&mut ui), "letting go of Space doesn't stop what the microphone started");
 }

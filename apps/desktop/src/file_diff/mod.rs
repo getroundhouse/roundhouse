@@ -24,3 +24,5 @@ mod view;
 
 mod diff_view;
 pub use diff_view::{FileDiff, FileDiffEvent};
+
+mod dictating;
