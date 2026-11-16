@@ -10,7 +10,7 @@ What's built, and what's designed and not built. The order things are built in, 
 | **Windows** | A first preview, for amd64 and ARM64. Unsigned |
 | **Linux** | A first preview, as an AppImage for amd64 and ARM64 |
 | **Agents** | Claude, Codex and Antigravity, through their CLIs; Codex and Antigravity are exercised on macOS |
-| **The hub** | Runs on your machine |
+| **The hub** | Runs on your machine; another paired desktop can connect over a LAN or VPN |
 
 [Install](get-started/install.md) says what each preview needs, and how it differs from the Mac.
 

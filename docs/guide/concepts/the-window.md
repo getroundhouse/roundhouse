@@ -10,6 +10,7 @@ On the left. It lists your projects, each with its workspaces under it.
 
 | Part | What it is |
 |---|---|
+| Hub switcher | The selected machine and its connection status; choose another saved hub or connect one |
 | Home | Shows every workspace in one list, in place of the workspace |
 | Create | Opens the new-workspace dialog, as `Cmd-N` does |
 | Add project | Adds a repository |

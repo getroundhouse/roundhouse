@@ -324,6 +324,7 @@ pub(crate) fn render(app: &AppView, arranged: Arranged, cx: &mut Context<AppView
         // Where the window's buttons sit, level with the workspace header, with the button that hides the sidebar
         // beside them. It stays put, so the list scrolls under its bottom edge rather than under the buttons.
         .child(div().flex_none().h(TOP_STRIP_HEIGHT))
+        .child(super::hub::render(app, cx))
         .child(nav::nav(app, cx))
         .child(
             reorder::hears_the_pointer(

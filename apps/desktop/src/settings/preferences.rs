@@ -13,6 +13,10 @@ use std::path::{Path, PathBuf};
 /// out is the hub's, which keeps it.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub(crate) struct Settings {
+    #[serde(default)]
+    pub(crate) hubs: Vec<crate::app::saved_hubs::SavedHub>,
+    #[serde(default)]
+    pub(crate) selected_hub: Option<protocol::pairing::Fingerprint>,
     /// Thinking shows in full, rather than as a line to open.
     #[serde(default)]
     pub(crate) always_expand_thinking: bool,
@@ -50,6 +54,8 @@ pub(crate) struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            hubs: Vec::new(),
+            selected_hub: None,
             always_expand_thinking: false,
             sidebar_sort: Sort::default(),
             collapsed_projects: BTreeSet::new(),

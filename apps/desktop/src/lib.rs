@@ -158,14 +158,15 @@ pub fn open_main_window(
         show: true,
         ..Default::default()
     };
-    gpui_kit::open_window(options, cx, |window, cx| {
+    let (handle, hubs) = gpui_kit::open_window(options, cx, |window, cx| {
         look::apply(cx);
         window.activate_window();
         cx.new(|cx| {
             window_place::follow(window, cx);
-            app::AppView::new(hub, checkout, window, cx)
+            app::hubs::Hubs::new(hub, checkout, window, cx)
         })
-    })
+    })?;
+    Ok((handle, hubs.read(cx).active()))
 }
 
 /// Runs the app, which is `build`, from `checkout`, until it quits.

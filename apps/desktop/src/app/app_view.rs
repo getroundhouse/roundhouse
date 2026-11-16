@@ -37,6 +37,9 @@ pub enum Connection {
 
 pub struct AppView {
     pub(crate) hub: HubSource,
+    pub(super) visible: bool,
+    pub(super) presentation: super::presentation::Pending,
+    pub(super) connection_attempt: u32,
     /// The checkout this build is from, which the sidebar names, with why it's open.
     pub(crate) checkout: Option<Checkout>,
     /// Set by [`Self::set_connection`], so the panes are told, and by `feed_changed` once a new one is ready.
@@ -101,7 +104,7 @@ pub struct AppView {
     /// The menus off the Mac, while they're open from the button in the corner.
     pub(super) menus_open: Option<menu_button::OpenMenus>,
     /// What the menus were last given to say.
-    pub(super) menus_say: crate::menus::Says,
+    pub(super) menus_say: Option<crate::menus::Says>,
     /// Which chats have been told of as needing the person, and when that last sounded.
     pub(super) telling: notifying::Telling,
     /// The chat to show once its workspace's pane is made, as when a notification for a workspace with no pane yet is
@@ -118,19 +121,13 @@ impl AppView {
         crate::dictating::observe(cx, |_, cx| cx.notify()).detach();
         crate::dictating::observe_progress(cx, |t: &Self, _| t.settings_open()).detach();
         crate::settings::observe(cx, |_, cx| cx.notify()).detach();
-        // Coming back from another app is when someone reads the chat showing. It's also when Reduce Motion may have
-        // changed in System Settings, which macOS doesn't tell the kit about, so it's read again.
-        cx.observe_window_activation(window, |t, window, cx| {
-            gpui_kit::base::apply_system_reduce_motion(cx);
-            if !window.is_window_active() {
-                dictation_ui::window_left(window.window_handle(), cx);
-            }
-            t.read_on_screen(window.is_window_active(), cx);
-        })
-        .detach();
+        Self::observe_activation(window, cx);
         quitting::ask_first(window, cx);
         let mut this = Self {
             hub,
+            visible: true,
+            presentation: Vec::new(),
+            connection_attempt: 0,
             checkout,
             connection: Connection::Connecting,
             // Until the window says it's in front, so nothing is read that may not have been seen.
@@ -168,12 +165,25 @@ impl AppView {
             _watching_pull_requests: Self::watch_pull_requests(cx),
             cache_clock: None,
             menus_open: None,
-            menus_say: crate::menus::Says::default(),
+            menus_say: None,
             telling: notifying::Telling::default(),
             chat_to_show: None,
         };
         this.connect(cx);
         this
+    }
+
+    fn observe_activation(window: &mut Window, cx: &mut Context<Self>) {
+        // Coming back from another app is when someone reads the chat showing. It's also when Reduce Motion may have
+        // changed in System Settings, which macOS doesn't tell the kit about, so it's read again.
+        cx.observe_window_activation(window, |t, window, cx| {
+            gpui_kit::base::apply_system_reduce_motion(cx);
+            if !window.is_window_active() {
+                dictation_ui::window_left(window.window_handle(), cx);
+            }
+            t.read_on_screen(window.is_window_active(), cx);
+        })
+        .detach();
     }
 
     /// Whether the app is connected to a hub, or connecting, or why it isn't.
@@ -220,12 +230,22 @@ impl AppView {
         cx.notify();
         let hub = self.hub.clone();
         let socket = hub.paths.socket.clone();
+        let local = hub.remote.is_none();
+        let delay = std::time::Duration::from_secs(1_u64 << self.connection_attempt.min(5));
+        self.connection_attempt = self.connection_attempt.saturating_add(1);
         self.connecting = Some(cx.spawn(async move |this, cx| {
             let connected = cx.background_spawn(async move { hub.connect() }).await;
             let (client, status) = match connected {
                 Ok(connected) => connected,
                 Err(e) => {
-                    let status = if e.is_version_mismatch() {
+                    let retry = !local
+                        && matches!(
+                            &e,
+                            client_core::ClientError::Io(_)
+                                | client_core::ClientError::Disconnected
+                                | client_core::ClientError::Unreachable { .. }
+                        );
+                    let status = if local && e.is_version_mismatch() {
                         cx.background_spawn(async move { HubAdmin::connect(&socket)?.status() }).await.ok()
                     } else {
                         None
@@ -238,15 +258,20 @@ impl AppView {
                         t.set_connection(connection, cx);
                         cx.notify();
                     });
+                    if retry {
+                        cx.background_executor().timer(delay).await;
+                        let _ = this.update(cx, AppView::connect);
+                    }
                     return;
                 }
             };
-            let _ = this.update(cx, |t, cx| t.connected(client, &status, cx));
+            let _ = this.update(cx, |t, cx| t.connected(client, status.as_ref(), cx));
         }));
     }
 
     /// Ready once client-core has caught up on this connection, so the sidebar never shows empty.
-    pub(super) fn connected(&mut self, client: Client, status: &HubStatus, cx: &mut Context<Self>) {
+    pub(super) fn connected(&mut self, client: Client, status: Option<&HubStatus>, cx: &mut Context<Self>) {
+        self.connection_attempt = 0;
         self.keep_drafts_on(&client, cx);
         if let Some(feed) = &self.feed {
             feed.reconnect(&client);
@@ -261,6 +286,7 @@ impl AppView {
         }
         self.reconnect_dialog(&client, cx);
         self.joining = Some(client);
+        let Some(status) = status else { return };
         let build = self.hub.build_number;
         let restarting = hub_source::restarts_at_once(status, build);
         let older = restarts::OlderHub { pid: status.pid, restarting };

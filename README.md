@@ -23,7 +23,7 @@
 
 Give each task a workspace: a git worktree, a branch and chats of its own, with an agent at work in it. Roundhouse shows which agents are working, which have finished and which are waiting on you, and takes each one's work from the first prompt to a merged pull request. The workspace is the unit of delegation, and the branch and pull request are the unit of integration.
 
-**It's early.** It runs on a Mac with Apple silicon, with first previews for Windows and Linux, and it runs Claude, Codex and Antigravity through their installed CLIs. More agents, a hub on your own server or in the cloud, and an iPhone app are designed for and not built. [Where it stands](#where-it-stands) has the rest.
+**It's early.** It runs on a Mac with Apple silicon, with first previews for Windows and Linux, and it runs Claude, Codex and Antigravity through their installed CLIs. The desktop can [connect to a paired hub on another machine](docs/guide/guides/connect-another-hub.md). More agents, cloud providers and an iPhone app are designed for and not built. [Where it stands](#where-it-stands) has the rest.
 
 Roundhouse is a working name, after the round building where a railway services its locomotives, each in its own stall around one turntable. Rail is the theme for naming, and the mark beside every workspace is a roundhouse seen from above.
 
@@ -120,7 +120,7 @@ roundhouse --help
 |---|---|
 | **Mac** | Built, for Apple silicon. |
 | **Agents** | Claude, Codex and Antigravity, through their CLIs. Codex starts on GPT-6.1 Sol at Low effort, and Antigravity on Gemini 4 Carbon at Medium effort; both integrations are exercised on macOS. |
-| **Hub** | Runs on your Mac. One on your own server or in the cloud, with workspaces in VMs or sandboxes, is designed for and not built. |
+| **Hub** | Runs on your machine and can be controlled from another paired desktop. Cloud providers, with workspaces in VMs or sandboxes, are designed for and not built. |
 | **iPhone** | Not built. `mobile-poc/` is a proof of concept. |
 | **Windows** | A first preview. An installer is published from every merge, for [amd64](https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-win-amd64-Setup.exe) and [ARM64](https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-win-arm64-Setup.exe). It's unsigned, so Windows warns about it, and the only checks that run on Windows are a lint and a hub starting and stopping. |
 | **Linux** | A first preview. An AppImage is published from every merge, for [amd64](https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-linux-amd64.AppImage) and [ARM64](https://f001.backblazeb2.com/file/getroundhouse-releases/Roundhouse-linux-arm64.AppImage). Make it executable and open it, and it updates itself. It needs glibc 2.35 or newer, as on Ubuntu 22.04 and later, Vulkan and FUSE. The only checks that run on Linux are the tests and a hub starting and stopping. |

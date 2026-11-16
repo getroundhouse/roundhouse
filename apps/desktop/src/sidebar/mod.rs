@@ -4,6 +4,7 @@ mod drag;
 mod fold;
 mod footer;
 mod heading;
+mod hub;
 mod kept;
 mod nav;
 mod project;

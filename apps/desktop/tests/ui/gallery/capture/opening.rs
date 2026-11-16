@@ -60,7 +60,13 @@ fn hub_source(dir: &Path) -> HubSource {
     })
     .unwrap();
     let daemon = Daemon::in_place("/nonexistent/roundhoused");
-    HubSource { paths, daemon, build_number: Some(fake_hub::BUILD_NUMBER), build_version: fake_hub::BUILD }
+    HubSource {
+        remote: None,
+        paths,
+        daemon,
+        build_number: Some(fake_hub::BUILD_NUMBER),
+        build_version: fake_hub::BUILD,
+    }
 }
 
 impl Driver {

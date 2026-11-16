@@ -12,6 +12,9 @@ impl AppView {
     /// as `WorkspacePane::focus_showing` has it. An open new-workspace dialog gets its prompt back; with another dialog
     /// open, or none of those views, the window itself gets focus so its keys still work.
     pub(super) fn focus_what_shows(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.visible {
+            return;
+        }
         if self.settings_open() {
             window.focus(&self.settings_focus, cx);
         } else if window.has_active_dialog(cx) {

@@ -35,6 +35,7 @@ impl AppView {
                 PaneEvent::Archive(id, force) => t.archive(id, force, cx),
                 PaneEvent::RegenerateTitle(id) => t.regenerate_title(id, cx),
                 PaneEvent::Showing => t.tell_of_needs(cx),
+                PaneEvent::Present(present) => t.present(cx, move |_, window, cx| present(window, cx)),
             })
             .detach();
             self.panes.insert(id.clone(), pane);
@@ -48,8 +49,8 @@ impl AppView {
         if let Some(pane) = self.selected_pane() {
             pane.update(cx, WorkspacePane::shown);
         }
-        self.focus_pane(id, window, cx);
         self.read_on_screen(window.is_window_active(), cx);
+        self.focus_pane(id, window, cx);
         cx.notify();
     }
 
@@ -189,6 +190,10 @@ impl AppView {
     }
 
     pub fn add_repository(&mut self, cx: &mut Context<Self>) {
+        if self.hub.remote.is_some() {
+            self.show_error("Add the project on that hub’s machine, then select it here.", cx);
+            return;
+        }
         let Some(client) = self.client() else { return };
         let picked = cx.prompt_for_paths(PathPromptOptions {
             files: false,
@@ -294,23 +299,22 @@ impl AppView {
     }
 
     pub(super) fn confirm_forced_archive(&mut self, id: WorkspaceId, reason: &str, cx: &mut Context<Self>) {
-        let handle = self.window;
-        let answer = handle.update(cx, |_, window, cx| {
-            window.prompt(
+        let reason = reason.to_string();
+        self.present(cx, move |_, window, cx| {
+            let answer = window.prompt(
                 PromptLevel::Warning,
                 "Archive anyway?",
-                Some(reason),
+                Some(&reason),
                 &["Keep working", "Archive anyway"],
                 cx,
-            )
+            );
+            cx.spawn(async move |this, cx| {
+                if answer.await == Ok(1) {
+                    let _ = this.update(cx, |t, cx| t.archive(id, true, cx));
+                }
+            })
+            .detach();
         });
-        let Ok(answer) = answer else { return };
-        cx.spawn(async move |this, cx| {
-            if answer.await == Ok(1) {
-                let _ = this.update(cx, |t, cx| t.archive(id, true, cx));
-            }
-        })
-        .detach();
     }
 
     /// Restores an archived workspace. Does nothing while the app is making, archiving or restoring a workspace, nor
