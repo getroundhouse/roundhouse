@@ -6,10 +6,11 @@ use super::follow::FollowError;
 pub use search::{Search, Searched, Stretch};
 
 mod search;
+mod source;
 
 #[cfg(test)]
 pub(super) mod tests;
 
 mod loading;
-use loading::read_range;
 pub use loading::{OpenSession, View};
+use source::read_range;

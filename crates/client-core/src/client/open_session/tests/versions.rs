@@ -8,7 +8,7 @@ use protocol::model::{QueuedPrompt, Seq};
 use protocol::prompt::Prompt;
 use std::sync::Arc;
 
-use super::super::loading::SessionSource;
+use super::super::source::SessionSource;
 use super::super::{OpenSession, View};
 use super::{LAST_SEQ, answered_simply, session, start_hub_answering};
 use crate::Client;
