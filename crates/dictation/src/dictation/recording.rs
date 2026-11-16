@@ -5,11 +5,12 @@ use std::sync::Arc;
 
 use parking_lot::Mutex;
 
+use super::buffer::Buffer;
 use crate::EngineError;
 
 /// One recording, from the moment it's asked for. Dropping it before [`Recording::stop`] cancels it.
 pub struct Recording {
-    input: flume::Sender<Input>,
+    input: Buffer,
     stopped: Cell<bool>,
     cancelled: Cancelled,
 }
@@ -49,7 +50,7 @@ pub(super) enum Input {
 }
 
 impl Recording {
-    pub(super) fn new(input: flume::Sender<Input>, cancelled: Cancelled) -> Self {
+    pub(super) fn new(input: Buffer, cancelled: Cancelled) -> Self {
         Self { input, stopped: Cell::new(false), cancelled }
     }
 
@@ -58,7 +59,7 @@ impl Recording {
     /// nothing.
     pub fn stop(&self) {
         self.stopped.set(true);
-        let _ = self.input.send(Input::Stop);
+        self.input.end(Input::Stop);
     }
 
     /// Ends the recording at once, and nothing more is heard of it, not even of what was already said: no more
@@ -70,7 +71,7 @@ impl Recording {
     /// Gives the recording audio, at [`crate::SAMPLE_RATE`], as a microphone would.
     #[cfg(any(test, feature = "testing"))]
     pub fn feed(&self, audio: Vec<f32>) {
-        let _ = self.input.send(Input::Audio(audio));
+        self.input.audio(audio);
     }
 }
 
@@ -79,7 +80,7 @@ impl Drop for Recording {
         if !self.stopped.get() {
             self.cancelled.set();
             // Wakes the loop, if it's waiting for audio.
-            let _ = self.input.send(Input::Cancel);
+            self.input.end(Input::Cancel);
         }
     }
 }
@@ -121,6 +122,8 @@ pub enum DictationError {
     NoMicrophone,
     #[error("the microphone stopped working: {0}")]
     Microphone(String),
+    #[error("speech recognition couldn't keep up with the microphone")]
+    AudioBacklog,
     #[error(transparent)]
     Engine(#[from] EngineError),
 }
