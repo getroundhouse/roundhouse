@@ -24,6 +24,7 @@ New here? Start with the [quickstart](get-started/quickstart.md).
 
 ## Guides
 
+- [Connect to another machine's hub](guides/connect-another-hub.md): control a Mac's workspaces from another desktop
 - [Hand a task to an agent](guides/hand-a-task-to-an-agent.md): make a workspace, and say what to work on
 - [Know when an agent needs you](guides/know-when-an-agent-needs-you.md): the mark, a bright title, and notifications
 - [Steer or queue while it works](guides/steer-or-queue.md): send a prompt now, or for when the agent finishes

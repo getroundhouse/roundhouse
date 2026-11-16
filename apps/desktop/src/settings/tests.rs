@@ -77,6 +77,8 @@ fn saving_keeps_what_a_newer_build_wrote() {
     assert_eq!(
         saved,
         serde_json::json!({
+            "hubs": [],
+            "selected_hub": null,
             "always_expand_thinking": true,
             "sidebar_sort": "last_active",
             "collapsed_projects": [],

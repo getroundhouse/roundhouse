@@ -13,7 +13,7 @@ impl AppView {
     /// that changes one of those.
     pub(super) fn read_on_screen(&mut self, in_front: bool, cx: &mut Context<Self>) {
         self.in_front = in_front;
-        let hidden = self.settings_open() || self.home_showing();
+        let hidden = !self.visible || self.settings_open() || self.home_showing();
         let drawn = self.pane_to_draw().filter(|_| !hidden).map(|pane| pane.entity_id());
         let seen = if in_front { OnScreen::InFront } else { OnScreen::Behind };
         for pane in self.panes.values() {

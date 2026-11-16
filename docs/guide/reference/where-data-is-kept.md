@@ -1,8 +1,8 @@
 # Where data is kept
 
-Each hub keeps its workspaces and chats on its machine. There's no Roundhouse account, and nothing is sent to us.
+Each hub keeps its workspaces and chats on its machine. A desktop connected to another hub reads and controls that machine's state. There's no Roundhouse account, and nothing is sent to us.
 
-A hub keeps `hub-cert.der` and `hub-key.der` in its data directory; its database holds only hashes of paired-device tokens.
+Saved hub names, addresses and the selected hub are in the desktop's `settings.json`. Paired-device tokens are in its operating system's credential store. A hub keeps `hub-cert.der` and `hub-key.der` in its data directory; its database holds only hashes of paired-device tokens.
 
 ## The hub's data
 

@@ -58,7 +58,7 @@ pub enum Quitting {
 
 /// The current connection's commands, and what keeps drafts on whichever connection there is. Commands on a
 /// connection that has gone failed when it went.
-struct Started(Commands, Drafts);
+struct Started(std::collections::HashMap<gpui_kit::EntityId, (Commands, Drafts)>);
 
 impl Global for Started {}
 
@@ -84,6 +84,13 @@ pub(super) fn ask_first(window: &Window, cx: &mut Context<AppView>) {
 }
 
 impl AppView {
+    fn all_unsent(&self, cx: &Context<Self>) -> (usize, usize) {
+        super::hubs::other_views(cx.entity_id(), cx).iter().fold(self.unsent(cx), |(a, b), view| {
+            let (c, d) = view.read(cx).unsent(cx);
+            (a + c, b + d)
+        })
+    }
+
     /// Quits, as Cmd-Q, Quit in the menu and closing the window do, once what's on its way to the hub has reached it,
     /// as [`Self::once_kept`] waits for, or else once the person says to.
     /// Quitting again while it waits or asks changes nothing.
@@ -97,7 +104,7 @@ impl AppView {
     /// Whether the window can close at once, which quits the app, because nothing would be lost. If something would,
     /// it stays open, and quitting goes as [`Self::quit`] says.
     pub(super) fn may_close(&mut self, window: &Window, cx: &mut Context<Self>) -> bool {
-        if self.quitting == Quitting::Quit || self.unsent(cx) == (0, 0) {
+        if self.quitting == Quitting::Quit || self.all_unsent(cx) == (0, 0) {
             window_place::last_look(window, cx);
             return true;
         }
@@ -118,21 +125,24 @@ impl AppView {
             return;
         }
         self.quitting = Quitting::Waiting;
-        let flushed = self.drafts.as_ref().map(Drafts::flushed);
-        let finished = self.client().map(|client| client.commands().finished());
+        let pending: Vec<_> = cx.try_global::<Started>().map_or_else(Vec::new, |started| {
+            started.0.values().map(|(commands, drafts)| (drafts.flushed(), commands.finished())).collect()
+        });
         let wait = keeping_wait(cx);
         cx.spawn(async move |this, cx| {
             // On one of the executor's threads rather than racing a timer, since a test's timers only move when the
             // test moves its clock.
             cx.background_spawn(async move {
                 let by = Instant::now() + wait;
-                let _ = flushed.map(|flushed| flushed.recv_deadline(by));
-                let _ = finished.map(|finished| finished.recv_deadline(by));
+                for (flushed, finished) in pending {
+                    let _ = flushed.recv_deadline(by);
+                    let _ = finished.recv_deadline(by);
+                }
             })
             .await;
             let _ = this.update(cx, |t, cx| {
                 t.quitting = Quitting::No;
-                let unsent = t.unsent(cx);
+                let unsent = t.all_unsent(cx);
                 then(t, unsent, cx);
             });
         })
@@ -169,12 +179,15 @@ impl AppView {
 }
 
 /// Has quitting wait for the commands started on `client`, rather than on the connection before it, and for `drafts`.
-pub(super) fn wait_for(client: &Client, drafts: Drafts, cx: &mut App) {
+pub(super) fn wait_for(client: &Client, drafts: Drafts, cx: &mut Context<AppView>) {
     if !cx.has_global::<Started>() {
-        cx.on_app_quit(|cx| {
-            let started = cx.try_global::<Started>().map(|started| (started.0.finished(), started.1.flushed()));
+        let app: &mut App = cx;
+        app.on_app_quit(|cx| {
+            let started: Vec<_> = cx.try_global::<Started>().map_or_else(Vec::new, |started| {
+                started.0.values().map(|(commands, drafts)| (commands.finished(), drafts.flushed())).collect()
+            });
             async move {
-                if let Some((finished, flushed)) = started {
+                for (finished, flushed) in started {
                     let _ = flushed.recv_async().await;
                     let _ = finished.recv_async().await;
                 }
@@ -182,5 +195,16 @@ pub(super) fn wait_for(client: &Client, drafts: Drafts, cx: &mut App) {
         })
         .detach();
     }
-    cx.set_global(Started(client.commands(), drafts));
+    let id = cx.entity_id();
+    let mut pending =
+        cx.try_global::<Started>().map_or_else(std::collections::HashMap::new, |started| started.0.clone());
+    pending.insert(id, (client.commands(), drafts));
+    cx.set_global(Started(pending));
+}
+
+/// A new window has no outstanding work from views in a window that has closed.
+pub(super) fn new_window(cx: &mut App) {
+    if cx.has_global::<Started>() {
+        cx.set_global(Started(std::collections::HashMap::new()));
+    }
 }

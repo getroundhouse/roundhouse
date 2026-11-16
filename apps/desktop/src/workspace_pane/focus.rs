@@ -10,6 +10,9 @@ impl WorkspacePane {
     /// Focuses the file tab's view while it shows, the subagent's work while its tab does, and what's in the composer's
     /// place otherwise. The composer isn't drawn behind either tab.
     pub fn focus_showing(&self, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.drawn() {
+            return;
+        }
         match self.showing() {
             Showing::File => {
                 let Some(diff) = &self.diff else { return };
@@ -29,6 +32,9 @@ impl WorkspacePane {
 
     /// Focuses what's in the composer's place: what the agent asks while it waits on the person, or else the composer.
     pub fn focus_composer(&self, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.drawn() {
+            return;
+        }
         match self.transcript().and_then(|t| t.read(cx).question().cloned()) {
             Some(question) => window.focus(&question.focus_handle(cx), cx),
             None => self.composer.update(cx, |c, cx| c.focus(window, cx)),

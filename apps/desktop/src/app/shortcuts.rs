@@ -45,10 +45,15 @@ impl AppView {
             diff_open: pane.is_some_and(|pane| pane.changes_open(cx)),
             showing: pane.map_or(Showing::Chat, WorkspacePane::showing),
         };
-        if says != self.menus_say {
-            self.menus_say = says;
+        if Some(says) != self.menus_say {
+            self.menus_say = Some(says);
             // Not while the window draws.
-            cx.defer(move |cx| menus::show(says, cx));
+            let view = cx.weak_entity();
+            cx.defer(move |cx| {
+                if view.upgrade().is_some_and(|view| view.read(cx).visible) {
+                    menus::show(says, cx);
+                }
+            });
         }
     }
 

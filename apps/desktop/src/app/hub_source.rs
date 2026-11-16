@@ -13,6 +13,8 @@ use protocol::paths::Paths;
 #[derive(Clone, Debug)]
 pub struct HubSource {
     pub paths: Paths,
+    /// A paired hub, or this machine when absent.
+    pub remote: Option<client_core::RemoteHub>,
     pub daemon: Daemon,
     /// Which build this app is, for telling whether a hub is older.
     pub build_number: Option<u64>,
@@ -48,7 +50,7 @@ impl HubSource {
         let paths = protocol::paths::resolve(|name| std::env::var(name).ok()).map_err(anyhow::Error::msg)?;
         let named = std::env::var_os(protocol::paths::ENV_DAEMON_BIN).map(PathBuf::from);
         let daemon = Daemon::find(named, build).context("finding the daemon next to this binary")?;
-        Ok(Self { paths, daemon, build_number: build.number(), build_version: build.version() })
+        Ok(Self { paths, remote: None, daemon, build_number: build.number(), build_version: build.version() })
     }
 
     /// Connects, starting a hub if there's none, restarting one that [`restarts_at_once`] says to, and replacing one
@@ -56,14 +58,17 @@ impl HubSource {
     /// word on whether it's idle, and one that's busy after all is kept. One restarting that's still finishing, as with
     /// a setup script running, is used until it goes, and then the app connects again. The panes stay, with what's
     /// typed in them. Also returns the hub's status as it connected.
-    pub(super) fn connect(&self) -> Result<(Client, HubStatus), ClientError> {
+    pub(super) fn connect(&self) -> Result<(Client, Option<HubStatus>), ClientError> {
+        if let Some(remote) = &self.remote {
+            return Client::connect_remote(remote, "desktop").map(|client| (client, None));
+        }
         let mut client = self.connect_or_start()?;
         let mut status = client.hub_status()?;
         if restarts_at_once(&status, self.build_number) {
             match client_core::restart_hub(&client)? {
                 Restart::Exited => client = self.connect_or_start()?,
                 // Not read again, since it can go at any moment.
-                Restart::Finishing => return Ok((client, status)),
+                Restart::Finishing => return Ok((client, Some(status))),
             }
             status = client.hub_status()?;
         } else if should_replace(&status, self.build_number) {
@@ -73,7 +78,7 @@ impl HubSource {
             }
             status = client.hub_status()?;
         }
-        Ok((client, status))
+        Ok((client, Some(status)))
     }
 
     fn connect_or_start(&self) -> Result<Client, ClientError> {

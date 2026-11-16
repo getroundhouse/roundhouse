@@ -69,7 +69,11 @@ pub(super) struct Chat {
     pub(super) marking: Option<Seq>,
 }
 
-#[derive(Clone, Debug)]
+/// A pane asks its owning hub view to present window effects, so replies from an unselected hub cannot show a
+/// modal over another hub. The callback keeps a weak pane handle, since its workspace may have gone meanwhile.
+type Presentation = std::rc::Rc<dyn Fn(&mut Window, &mut gpui_kit::App)>;
+
+#[derive(Clone)]
 pub enum PaneEvent {
     Error(String),
     Archive(WorkspaceId, bool),
@@ -77,6 +81,7 @@ pub enum PaneEvent {
     RegenerateTitle(WorkspaceId),
     /// What's in front under the tabs changed, so the chat being read may have.
     Showing,
+    Present(Presentation),
 }
 
 pub struct WorkspacePane {

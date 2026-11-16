@@ -82,10 +82,14 @@ impl WorkspacePane {
         let moving = self.client.start(move |client| client.session_assign_account(&id, &account, force));
         cx.spawn_in(window, async move |this, cx| {
             let moved = moving.recv().await;
-            let _ = this.update_in(cx, |t, window, cx| match moved {
+            let _ = this.update_in(cx, |t, _, cx| match moved {
                 Ok(session) => t.took_reply(session, cx),
                 Err(ClientError::Api(e)) if e.code == ErrorCode::NeedsForce && !force => {
-                    Self::confirm_forced_move(session, to, window, cx);
+                    let pane = cx.weak_entity();
+                    cx.emit(PaneEvent::Present(std::rc::Rc::new(move |window, cx| {
+                        let _ =
+                            pane.update(cx, |_, cx| Self::confirm_forced_move(session.clone(), to.clone(), window, cx));
+                    })));
                 }
                 Err(e) => cx.emit(PaneEvent::Error(crate::failed::couldnt("move the chat", &e))),
             });

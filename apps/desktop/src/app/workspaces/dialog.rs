@@ -110,12 +110,13 @@ impl AppView {
     /// to show where it went, unless another dialog is open.
     pub(super) fn give_back_to_dialog(&mut self, given_back: GivenBack, mode: PermissionMode, cx: &mut Context<Self>) {
         let Some(dialog) = self.new_workspace.clone() else { return };
-        let this = cx.weak_entity();
         let GivenBack { prompt, coming_back, .. } = given_back;
         let _ = self.window.update(cx, |_, window, cx| {
             dialog.update(cx, |dialog, cx| dialog.give_back(prompt, coming_back, mode, window, cx));
+        });
+        self.present(cx, move |_, window, cx| {
             if !window.has_active_dialog(cx) {
-                new_workspace::open(&dialog, closed(this), window, cx);
+                new_workspace::open(&dialog, closed(cx.weak_entity()), window, cx);
             }
         });
     }
@@ -125,7 +126,7 @@ impl AppView {
     /// it's focused once that closes. While Home shows, as when the selection goes away under it, its search keeps the
     /// keys, and nothing waits to take them once a dialog or Settings closes over it.
     pub(in crate::app) fn focus_pane(&mut self, id: WorkspaceId, window: &mut Window, cx: &mut App) {
-        if self.home_showing() {
+        if !self.visible || self.home_showing() {
             return;
         }
         if window.has_active_dialog(cx) || self.settings_open() {
@@ -151,5 +152,47 @@ fn closed(this: WeakEntity<AppView>) -> impl Fn(&mut Window, &mut App) + 'static
         window.defer(cx, move |window, cx| {
             let _ = this.update(cx, |t, cx| t.dialog_closed(window, cx));
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app::hubs::tests::{host, pick, remote};
+
+    #[gpui_kit::test]
+    fn a_creation_failure_keeps_its_prompt_without_opening_over_another_hub(cx: &mut gpui_kit::TestAppContext) {
+        let (_dir, window, host) = host(cx);
+        let local = cx.read(|cx| host.read(cx).active());
+        let dialog = cx.update(|cx| {
+            window
+                .update(cx, |_, window, cx| local.update(cx, |view, cx| view.dialog("repo".into(), window, cx)))
+                .unwrap()
+        });
+        let other = pick(Some(remote("other")), window, &host, cx);
+        local.update(cx, |view, cx| {
+            view.give_back_to_dialog(
+                GivenBack {
+                    prompt: protocol::prompt::Prompt::new("Returned work"),
+                    coming_back: Vec::new(),
+                    in_the_dialog: false,
+                },
+                PermissionMode::Plan,
+                cx,
+            );
+        });
+        cx.run_until_parked();
+        cx.update(|cx| {
+            window
+                .update(cx, |_, window, cx| {
+                    assert!(!window.has_active_dialog(cx));
+                    assert!(other.read(cx).focus.is_focused(window));
+                    assert_eq!(dialog.read(cx).prompt_text(cx), "Returned work");
+                    assert!(!dialog.read(cx).is_shown());
+                })
+                .unwrap();
+        });
+        pick(None, window, &host, cx);
+        cx.read(|cx| assert!(dialog.read(cx).is_shown()));
     }
 }

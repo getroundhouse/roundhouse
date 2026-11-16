@@ -49,6 +49,7 @@ impl Stack {
         })
         .unwrap();
         let hub = HubSource {
+            remote: None,
             paths,
             daemon: Daemon::in_place(binaries().join("roundhoused")),
             build_number: None,

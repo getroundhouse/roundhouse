@@ -13,7 +13,7 @@ The app doesn't run your agents. A hub does, in a process of its own, and the ap
           Agents      Your own Claude, Codex or Antigravity CLI
 ```
 
-The hub starts by itself when the app, or the command line, needs it. It runs on your machine.
+The local hub starts by itself when the app, or the command line, needs it. The desktop can also [connect to a hub on another machine](../guides/connect-another-hub.md), such as using a Windows PC to control workspaces on a Mac.
 
 ## What that means for you
 

@@ -154,8 +154,12 @@ impl AppView {
     /// Opens the dialog that asks, and keeps what it asked for as long as it's open.
     pub(super) fn ask_to_restart_now(&mut self, status: HubStatus, cx: &mut Context<Self>) {
         let question = UpdateQuestion::Finish(status.clone());
-        let (restart, closed) = (cx.weak_entity(), cx.weak_entity());
-        let opened = self.window.update(cx, |_, window, cx| {
+        self.ask(question.clone(), cx);
+        self.present(cx, move |view, window, cx| {
+            if view.update_question.as_ref() != Some(&question) {
+                return;
+            }
+            let (restart, closed) = (cx.weak_entity(), cx.weak_entity());
             asking::open(
                 &question,
                 window,
@@ -164,9 +168,6 @@ impl AppView {
                 move |cx| drop(closed.update(cx, Self::dismiss_update_question)),
             );
         });
-        if opened.is_ok() {
-            self.ask(question, cx);
-        }
     }
 
     /// Forgets what it asked about the hub it was connected to, and closes the dialog asking it, which goes with that
@@ -178,7 +179,12 @@ impl AppView {
         self.update_question = None;
         // Once this update is over, since this can be in the middle of updating the window, which can't be asked then.
         let window = self.window;
-        cx.defer(move |cx| drop(window.update(cx, |_, window, cx| window.close_dialog(cx))));
+        let view = cx.weak_entity();
+        cx.defer(move |cx| {
+            if view.upgrade().is_some_and(|view| view.read(cx).visible) {
+                let _ = window.update(cx, |_, window, cx| window.close_dialog(cx));
+            }
+        });
     }
 
     /// Finishes the update now, as the dialog asked when it `said` what that stops, unless more is running on the

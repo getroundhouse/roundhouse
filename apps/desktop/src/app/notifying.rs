@@ -31,6 +31,9 @@ impl AppView {
     /// one being read, and takes back what told of one that no longer needs them. For after anything that changes the
     /// records or which chat is being read.
     pub(super) fn tell_of_needs(&mut self, cx: &mut Context<Self>) {
+        if !self.visible {
+            return;
+        }
         let reading = self.selected_pane().and_then(|pane| pane.read(cx).chat_being_read().cloned());
         let listed: HashSet<WorkspaceId> = self.visible_workspaces().into_iter().map(|w| w.id.clone()).collect();
         let sessions = self.records.every_session().filter(|s| listed.contains(&s.workspace_id));
@@ -51,14 +54,17 @@ impl AppView {
             Vec::new()
         };
         let (went, handle) = (changes.went, self.window);
+        let view = cx.weak_entity();
         // Showing one needs the window, which this can be called in the middle of updating.
         cx.defer(move |cx| {
             let _ = handle.update(cx, |_, window, cx| {
                 for chat in went {
                     window.remove_notification1::<ChatNeedsYou>(SharedString::from(chat.to_string()), cx);
                 }
-                for note in notes {
-                    window.push_notification(note, cx);
+                if view.upgrade().is_some_and(|view| view.read(cx).visible) {
+                    for note in notes {
+                        window.push_notification(note, cx);
+                    }
                 }
             });
         });
@@ -79,6 +85,10 @@ impl AppView {
             .message(said)
             .system()
             .on_click(move |_, window, cx| {
+                if let Some(view) = view.upgrade() {
+                    let remote = view.read(cx).hub.remote.clone();
+                    super::hubs::select(remote, window, cx);
+                }
                 let _ = view.update(cx, |t, cx| t.open_chat(at.clone(), chat.clone(), window, cx));
             });
         Some(note)
