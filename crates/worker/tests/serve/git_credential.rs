@@ -92,7 +92,12 @@ async fn an_agent_and_a_one_off_call_are_given_the_files_only_while_the_credenti
     let mut expected = ["-p --input-format", "-p --model", "auth status"].map(|words| format!("{words} {config}"));
     expected.sort();
     assert_eq!(under_an_account, expected);
-    assert_eq!(all.iter().filter(|line| line.ends_with(" none")).collect::<Vec<_>>(), ["-p --input-format none"]);
+    // MachineOwn inherits the caller's environment, which can itself come from a Roundhouse worker.
+    let inherited = std::env::var("GIT_CONFIG_VALUE_0").ok().filter(|value| !value.is_empty());
+    let mut expected = expected.to_vec();
+    expected.push(format!("-p --input-format {}", inherited.as_deref().unwrap_or("none")));
+    expected.sort();
+    assert_eq!(all, expected);
     hub_write.shutdown().await.unwrap();
     timeout(Duration::from_secs(10), running).await.expect("the worker to exit").unwrap();
 }

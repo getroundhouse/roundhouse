@@ -60,6 +60,7 @@ impl Worker {
             .env("GIT_TERMINAL_PROMPT", "0")
             .env_remove("XDG_CONFIG_HOME")
             .env_remove("GIT_CONFIG_COUNT")
+            .env_remove("GH_CONFIG_DIR")
             .envs(env)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
