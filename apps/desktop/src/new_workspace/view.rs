@@ -9,7 +9,7 @@ use gpui_kit::component::menu::{DropdownMenu as _, PopupMenu, PopupMenuItem};
 use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::{
     Anchor, Context, Focusable as _, InteractiveElement as _, IntoElement, Keystroke, ParentElement as _, Render,
-    Styled as _, Window, div, transparent_black,
+    Styled as _, TestSupportExt as _, Window, px, transparent_black,
 };
 use look::{Hand as _, Off as _, Sizing as _};
 
@@ -72,9 +72,12 @@ impl NewWorkspaceDialog {
     fn prompt_field(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let this = cx.weak_entity();
         let field = Textarea::new(&self.prompt)
-            .appearance(false)
             .on_paste(move |item, _, cx| this.update(cx, |_, cx| Self::paste(item, cx)).unwrap_or(false));
-        div().w_full().px(look::Space::Small).pt(look::Space::Small).child(field)
+        composing::writing_area(&self.prompt, field, &self.dictation, cx)
+            .id("new-workspace-writing")
+            .test_support()
+            // Room for the prompt's usual seven lines, shared with live words.
+            .min_h(px(164.))
     }
 
     /// The `+` menu and the model and effort on the left, as in the composer's bar, and on the right Create, the
@@ -132,6 +135,7 @@ impl NewWorkspaceDialog {
             .child(plus)
             // A row, so the picker keeps its own width and its caret stays beside what it says.
             .child(h_flex().flex_1().min_w_0().children(agent_picker).children(picker))
+            .children(crate::dictating::microphone(&self.dictation, cx))
             .child(create)
     }
 }

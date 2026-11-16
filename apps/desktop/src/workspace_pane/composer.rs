@@ -8,7 +8,7 @@ use gpui_kit::component::{IconName, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, AppContext as _, Context, Div, Entity, Focusable as _, IntoElement, ParentElement, Pixels, Styled,
-    Subscription, Window, div,
+    Subscription, Window, div, px,
 };
 use look::{Hand as _, InRegion as _, Off as _, Region, Shaped as _, Sizing as _};
 use protocol::model::{Effort, ModelName, PermissionMode, SessionId, SessionSettingsChange};
@@ -34,7 +34,7 @@ pub(super) fn new_input(window: &mut Window, cx: &mut Context<WorkspacePane>) ->
     let input = cx.new(|cx| {
         TextareaState::new(window, cx)
             // Room for a paragraph before it grows, so a longer prompt doesn't start out cramped.
-            .auto_grow(4, 12)
+            .auto_grow(1, 12)
             .submit_on_enter(true)
             .placeholder("Ask the agent to do something")
     });
@@ -94,7 +94,7 @@ impl WorkspacePane {
     /// Empties the composer once what was in it has gone, sent or queued: at once, so it can't come back as a draft,
     /// and ending what's being dictated, which leaves nothing for Esc to put back.
     pub(super) fn emptied_by_sending(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.end_dictation();
+        self.end_dictation(cx);
         self.composer.update(cx, |c, cx| c.set_value("", window, cx));
         self.keep_typed(true, cx);
     }
@@ -231,15 +231,13 @@ impl WorkspacePane {
         let (surface, border) = composing::colors(planning, look::colors(cx).control_edge, cx);
         let this = cx.weak_entity();
         let textarea = Textarea::new(&self.composer)
-            .appearance(false)
             .on_paste(move |item, _, cx| this.update(cx, |t, cx| t.paste(item, cx)).unwrap_or(false));
         let composer = v_flex().region(Region::Composer).w_full().border_1().border_color(border).bg(surface);
         let composer = composing::place(composer, planning, look::Corner::Card, cx, Self::toggle_plan_mode);
-        let composer = Self::hears_dictation_keys(composer, cx);
         let composer = attached::takes_drops(composer, cx, |t: &mut Self, paths, cx| t.attach_paths(paths, cx))
             .children(attached)
-            .child(div().w_full().px(look::Space::Small).pt(look::Space::Small).child(textarea))
-            .children(self.dictation_line(cx))
+            // Keep the usual four-line writing area, shared with tentative words.
+            .child(composing::writing_area(&self.composer, textarea, &self.dictation, cx).min_h(px(104.)))
             .child(bar);
         around(composer.into_any_element()).flex_none().pb(look::Space::Large).pt(transcript::ABOVE_THE_COMPOSER)
     }

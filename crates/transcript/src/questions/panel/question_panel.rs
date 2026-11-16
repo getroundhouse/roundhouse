@@ -38,6 +38,8 @@ pub struct QuestionPanel {
     pub(super) quiet_until: Instant,
     /// It has answered, so the arrow and the keys wait for the hub rather than answering again.
     pub(super) answered: bool,
+    pub(super) dictation_enabled: bool,
+    pub(super) after_dictation: Option<super::dictating::Then>,
 }
 
 /// One of the questions, and what's been chosen on it.
@@ -85,6 +87,8 @@ impl QuestionPanel {
             focus: cx.focus_handle(),
             quiet_until: cx.background_executor().now() + SETTLE,
             answered: false,
+            dictation_enabled: false,
+            after_dictation: None,
         }
     }
 
@@ -109,6 +113,7 @@ impl QuestionPanel {
     /// The hub didn't take the answer, so it can be given again.
     pub(crate) fn not_answered(&mut self, cx: &mut Context<Self>) {
         self.answered = false;
+        self.set_dictation_enabled(self.dictation_enabled, cx);
         cx.notify();
     }
 
@@ -141,9 +146,11 @@ impl QuestionPanel {
     }
 
     pub(super) fn show(&mut self, q: usize, window: &mut Window, cx: &mut Context<Self>) {
+        self.end_dictation(cx);
         if q < self.asked.len() {
             self.showing = q;
         }
+        self.set_dictation_enabled(self.dictation_enabled, cx);
         self.quiet_until = cx.background_executor().now();
         window.focus(&self.focus, cx);
         cx.notify();
@@ -157,6 +164,9 @@ impl QuestionPanel {
 
     /// What Enter does: shows the next question without an answer, and once they all have one, sends them.
     pub(super) fn go_on(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.once_dictated(super::dictating::Then::GoOn, cx) {
+            return;
+        }
         match next_unanswered(&self.answers_so_far(cx), self.showing) {
             Some(q) => self.show(q, window, cx),
             None => self.send(cx),
@@ -165,6 +175,9 @@ impl QuestionPanel {
 
     /// Sends the answers there are. A question left without one is sent with nothing in it, so the agent can tell.
     pub(super) fn send(&mut self, cx: &mut Context<Self>) {
+        if self.once_dictated(super::dictating::Then::Send, cx) {
+            return;
+        }
         let answered = self.answers_so_far(cx);
         if self.answered || answered.iter().all(Option::is_none) {
             return;
@@ -182,7 +195,9 @@ impl QuestionPanel {
     }
 
     pub(super) fn answer(&mut self, decision: ApprovalDecision, cx: &mut Context<Self>) {
+        self.end_dictation(cx);
         self.answered = true;
+        self.set_dictation_enabled(self.dictation_enabled, cx);
         let approval_id = self.approval_id.clone();
         let _ = self.transcript.update(cx, |t, cx| t.answer_approval(approval_id, decision, cx));
         // The hub lets go of what it kept as the question is answered, so it's still there if the answer can't be sent.
@@ -248,7 +263,8 @@ impl Render for QuestionPanel {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let edge = look::colors(cx).edge;
         let answered = self.answers_so_far(cx);
-        let ready = !self.answered && answered.iter().any(Option::is_some);
+        let live = self.dictation().is_some_and(|field| field.read(cx).has_live_words());
+        let ready = !self.answered && (live || answered.iter().any(Option::is_some));
         let q = self.showing;
         let question = self.asked.get(q).map(|asked| asked.question.clone());
         let heading = heading::heading(self, question.as_ref(), cx);

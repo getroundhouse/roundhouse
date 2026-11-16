@@ -4,6 +4,7 @@
 //! it is, and each way they differ.
 
 mod asks;
+mod dictating;
 mod heading;
 mod kept;
 mod options;

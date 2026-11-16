@@ -18,7 +18,7 @@ path = "src/lib.rs"
 [features]
 # What only tests use: showing that updating failed, or that a check is under way, without an installed app, and
 # dictating to a stand-in for the model, from audio the test gives it.
-testing = ["dictation/testing"]
+testing = ["dictation/testing", "dictation-ui/testing"]
 
 [dependencies]
 protocol.workspace = true
@@ -27,6 +27,7 @@ transcript.workspace = true
 gpui-kit.workspace = true
 look.workspace = true
 dictation = { workspace = true, features = ["download"] }
+dictation-ui.workspace = true
 fetching.workspace = true
 anyhow.workspace = true
 serde.workspace = true

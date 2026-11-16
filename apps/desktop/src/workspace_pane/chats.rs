@@ -98,6 +98,7 @@ impl WorkspacePane {
             self.show_chat(cx);
             return;
         }
+        self.end_dictation(cx);
         if let Some(current) = self.active.take() {
             let text = self.composer.read(cx).text().to_string();
             let draft = Composed { text, files: std::mem::take(&mut self.attached) };

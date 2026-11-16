@@ -18,9 +18,11 @@ It shows one question at a time: its header and text, then each option on a numb
 | `0` | Goes to the row for typing an answer |
 | Left and right arrows | Move between questions, when there are several |
 | `Enter` | Goes to the next question without an answer, and sends once there's none |
-| Escape | Leaves the typing row |
+| Escape | Cancels active dictation first; otherwise leaves the typing row |
 
 The question takes the keys when it comes. When it's just come, keys do nothing until half a second passes without one, so the end of something you were typing can't answer it by accident. Choosing with the pointer works at once.
+
+To dictate an ordinary written answer, focus its text field and hold Space or `Option-Space`. Questions have no microphone button. Finalized words select and save the written answer as typing does, and Send waits for the last live words. See [Dictate a prompt](../../guides/dictate-a-prompt.md). Secret answers do not support dictation.
 
 ### Several questions
 
@@ -28,7 +30,7 @@ With more than one, a dot for each sits at the bottom left, filled once it has a
 
 ![Three questions, with the first answered](../../../spec/screens/questions.png)
 
-- **The arrow sends once any question has an answer,** and leaves out the ones without.
+- **The arrow sends once any question has an answer or live dictated words,** and leaves out the ones without.
 - **The `×` skips them all,** and tells the agent to carry on if it can.
 - **Questions waiting are asked in turn,** oldest first.
 

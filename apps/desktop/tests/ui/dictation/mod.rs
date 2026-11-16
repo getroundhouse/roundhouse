@@ -8,6 +8,7 @@
 mod asking_first;
 mod composer_going;
 mod deleting;
+mod fields;
 mod holding_space;
 mod key;
 mod support;

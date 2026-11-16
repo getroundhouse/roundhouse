@@ -1,18 +1,20 @@
-//! What every place a prompt is written has, besides its text field and its files: in a chat's composer and in the
-//! new-workspace dialog. `Shift-Tab` turns plan mode on and off there, so does the `+` at the bottom left, whose menu
-//! also attaches files, and plan mode shows in copper over its texture. A chat's mode is the hub's, and the dialog's is
-//! its own until the workspace is made, so each place says whether it's on and handles [`TogglePlanMode`] itself.
+//! What the chat composer and new-workspace prompt share: their writing area, live dictation, plan mode and the `+`
+//! menu. `Shift-Tab` turns plan mode on and off, as its menu item does, and plan mode shows in copper over its texture.
+//! A chat's mode is the hub's, and the dialog's is its own until the workspace is made, so each place says whether it's
+//! on and handles [`TogglePlanMode`] itself.
 
 use std::path::PathBuf;
 
 use gpui_kit::assets::IconName as Lucide;
+use gpui_kit::base::GlobalState;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
+use gpui_kit::component::input::{Textarea, TextareaState};
 use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
-use gpui_kit::component::{Icon, IconName};
+use gpui_kit::component::{Icon, IconName, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    Anchor, App, Context, FocusHandle, Hsla, InteractiveElement, IntoElement, ParentElement, Role,
-    StatefulInteractiveElement as _, Styled, TestSupportExt as _, div,
+    Anchor, App, Context, Div, Entity, FocusHandle, Focusable as _, Hsla, InteractiveElement, IntoElement, MouseButton,
+    ParentElement, Role, StatefulInteractiveElement as _, Styled, TestSupportExt as _, div,
 };
 use look::{Hand as _, Shaped as _, Sizing as _};
 
@@ -71,6 +73,36 @@ pub(crate) fn place<T: 'static, E: InteractiveElement + IntoElement + ParentElem
 pub(crate) fn colors(planning: bool, edge: Hsla, cx: &App) -> (Hsla, Hsla) {
     let surface = look::colors(cx).inset;
     if planning { look::plan_colors(surface, cx) } else { (surface, edge) }
+}
+
+/// The prompt and its live words, with one inset and keyboard context. The caller chooses the minimum height;
+/// spare room below the current lines still focuses the input rather than selecting text elsewhere in the window.
+pub(crate) fn writing_area(
+    input: &Entity<TextareaState>,
+    textarea: Textarea,
+    dictation: &Entity<dictation_ui::Field>,
+    cx: &App,
+) -> Div {
+    let focus = input.focus_handle(cx);
+    dictation_ui::Field::keys(
+        v_flex()
+            .w_full()
+            .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+                // The whole writing area belongs to the input; neither selection nor an ancestor takes focus.
+                GlobalState::suppress_text_selection(cx);
+                window.focus(&focus, cx);
+                window.prevent_default();
+            })
+            .child(div().w_full().px(look::Space::Small).pt(look::Space::Small).child(textarea.appearance(false)))
+            .children(dictation.read(cx).live_line(cx).map(|line| {
+                div()
+                    .w_full()
+                    .px(look::Space::Small)
+                    .pt(look::Space::XSmall)
+                    .child(line.px(gpui_kit::component::Size::default().input_px()))
+            })),
+        dictation,
+    )
 }
 
 /// The `+` with ID `id`, and its menu of what goes with a prompt besides its text: files, handed to `attach`, and plan

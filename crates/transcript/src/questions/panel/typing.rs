@@ -7,7 +7,8 @@ use super::QuestionPanel;
 
 pub(super) struct Other {
     pub(super) input: Field,
-    _events: Subscription,
+    pub(super) dictation: Option<Entity<dictation_ui::Field>>,
+    _events: Vec<Subscription>,
 }
 
 impl QuestionPanel {
@@ -40,8 +41,25 @@ impl QuestionPanel {
             });
             (Field::Text(input), events)
         };
+        let mut events = vec![events];
+        let dictation = if let Field::Text(input) = &input
+            && self.asks.can_type(q)
+        {
+            let field = cx.new(|cx| {
+                let mut field = dictation_ui::Field::new(input.clone(), window, cx);
+                field.set_enabled(self.dictation_enabled && q == self.showing, cx);
+                field
+            });
+            events.push(cx.subscribe_in(&field, window, move |this, _, event, window, cx| {
+                this.dictation_event(q, event, window, cx);
+            }));
+            events.push(cx.observe(&field, |_, _, cx| cx.notify()));
+            Some(field)
+        } else {
+            None
+        };
         if let Some(asked) = self.asked.get_mut(q) {
-            asked.other = Some(Other { input: input.clone(), _events: events });
+            asked.other = Some(Other { input: input.clone(), dictation, _events: events });
         }
         input
     }
@@ -76,7 +94,10 @@ impl QuestionPanel {
     /// panel ignores keys for a moment.
     ///
     /// [`Asks`]: super::Asks
-    fn enter_in_the_typing_row(&mut self, q: usize, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn enter_in_the_typing_row(&mut self, q: usize, window: &mut Window, cx: &mut Context<Self>) {
+        if self.once_dictated(super::dictating::Then::Typed, cx) {
+            return;
+        }
         let typed = self.asked.get(q).is_some_and(|asked| asked.choice.other());
         if typed || self.asks.sends_a_chosen_option_from_the_typing_row() {
             self.go_on(window, cx);

@@ -55,7 +55,7 @@ pub(super) fn list(
         .gap(look::Space::XSmall)
         .children(rows)
         .when(panel.asks.can_type(panel.showing), |d| {
-            d.child(other_row(other, choice.other(), question.multiple, colors, cx))
+            d.child(other_row(other, choice.other(), question.multiple, colors, panel.dictation(), cx))
         })
         .into_any_element()
 }
@@ -138,6 +138,7 @@ fn other_row(
     chosen: bool,
     multiple: bool,
     colors: Colors,
+    dictation: Option<&gpui_kit::Entity<dictation_ui::Field>>,
     cx: &mut Context<QuestionPanel>,
 ) -> AnyElement {
     // Its own target, so it can take back what's typed without going to the text, which would choose it again.
@@ -159,7 +160,7 @@ fn other_row(
         }))
         .when(chosen, |d| d.child(Icon::new(IconName::Check).sized(look::IconSize::Small)))
         .test_support();
-    row("question-other".into(), chosen, colors)
+    let row = row("question-other".into(), chosen, colors)
         .on_click(cx.listener(|this, _, window, cx| this.type_other(window, cx)))
         .on_action(cx.listener(|this, _: &Escape, window, cx| {
             let showing = this.showing;
@@ -167,15 +168,27 @@ fn other_row(
         }))
         .child(number(0, colors.muted))
         // Its smallest size has the least padding, which leaves its text where the options' labels start.
-        .child(div().flex_1().min_w_0().ml(px(-TYPING_INSET)).child(match other {
-            super::typing::Field::Text(input) => {
-                Textarea::new(input).appearance(false).xsmall().typeset(look::Type::Body).into_any_element()
-            }
-            super::typing::Field::Secret(input) => {
-                Input::new(input).appearance(false).xsmall().typeset(look::Type::Body).into_any_element()
-            }
-        }))
+        .child(
+            v_flex()
+                .flex_1()
+                .min_w_0()
+                .ml(px(-TYPING_INSET))
+                .child(match other {
+                    super::typing::Field::Text(input) => {
+                        Textarea::new(input).appearance(false).xsmall().typeset(look::Type::Body).into_any_element()
+                    }
+                    super::typing::Field::Secret(input) => {
+                        Input::new(input).appearance(false).xsmall().typeset(look::Type::Body).into_any_element()
+                    }
+                })
+                .children(
+                    dictation.and_then(|field| field.read(cx).live_line(cx)).map(|line| line.pl(px(TYPING_INSET))),
+                ),
+        )
         .when(multiple, |d| d.child(checkbox))
-        .test_support()
-        .into_any_element()
+        .test_support();
+    match dictation {
+        Some(field) => dictation_ui::Field::keys(row, field).into_any_element(),
+        None => row.into_any_element(),
+    }
 }

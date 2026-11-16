@@ -4,11 +4,13 @@
 //! opens, in this app or another, since the hub keeps it, as `keeping` says.
 
 mod keeping;
+mod request;
 mod view;
 
 pub(crate) use keeping::Keeping;
 
 mod dialog;
 
+pub use dialog::NewWorkspaceDialog;
 pub(crate) use dialog::{DialogEvent, Offer, open};
-pub use dialog::{NewWorkspaceDialog, Request};
+pub use request::Request;

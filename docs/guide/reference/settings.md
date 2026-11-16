@@ -16,7 +16,7 @@ The app's own settings. A repository's are in [Repository settings](repository-s
 | Always expand thinking | Shows what the agent thinks in full, rather than as a line to open | Off |
 | Keep computer awake while agents are working | Stops the Mac going to sleep by itself while there's work | On |
 | Skip Claude's safety checks | Lets the few commands Claude still asks about with full access run without asking, such as a removal of a path it can't see. Plan mode and questions still ask | Off |
-| Dictation | On a Mac with macOS 14 or later, lets you say a prompt rather than type it, once it has downloaded the model, 2.4 GB, and prepared it. Ask first shows the composer's microphone, which offers to turn it on. Under it, Settings says how it stands, with Retry, and Delete the model. See [Dictate a prompt](../guides/dictate-a-prompt.md) | Ask first |
+| Dictation | On a Mac with macOS 14 or later, lets you dictate prompts and written answers, once it has downloaded the model, 2.4 GB, and prepared it. Ask first shows a microphone in the composer and new-workspace dialog, which offers to turn it on. Under it, Settings says how it stands, with Retry, and Delete the model. See [Dictate a prompt](../guides/dictate-a-prompt.md) | Ask first |
 
 Work is a turn, something an agent left running in the background, or a workspace being set up. An agent that's only waiting on you isn't, since it could wait all night. The display still sleeps, and closing the lid or a low battery still puts the Mac to sleep.
 

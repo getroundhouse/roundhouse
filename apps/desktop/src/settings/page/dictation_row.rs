@@ -16,7 +16,7 @@ const CHOICE: &str = "settings-dictation";
 pub(super) fn setting() -> Setting {
     Setting {
         name: "Dictation",
-        does: "Say a prompt rather than type it, by holding Space in the composer or clicking its microphone. \
+        does: "Dictate prompts and written answers by holding Space in their text fields. Prompts also have a microphone button. \
                It needs a model of 2.4 GB, downloaded once, which hears you on this Mac, so nothing you say leaves \
                it. Ask first shows the microphone, and downloads the model once you click it and say so.",
         control: Control::Choice {

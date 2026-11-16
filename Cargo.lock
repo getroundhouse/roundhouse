@@ -1700,6 +1700,7 @@ dependencies = [
  "client-core",
  "desktop",
  "dictation",
+ "dictation-ui",
  "fetching",
  "flume 0.11.1",
  "gpui-kit",
@@ -1747,6 +1748,16 @@ dependencies = [
  "serde_json",
  "tempfile",
  "thiserror 2.0.21",
+]
+
+[[package]]
+name = "dictation-ui"
+version = "0.1.0"
+dependencies = [
+ "dictation",
+ "flume 0.11.1",
+ "gpui-kit",
+ "look",
 ]
 
 [[package]]
@@ -8611,6 +8622,7 @@ name = "transcript"
 version = "0.1.0"
 dependencies = [
  "client-core",
+ "dictation-ui",
  "gpui-kit",
  "image",
  "look",
