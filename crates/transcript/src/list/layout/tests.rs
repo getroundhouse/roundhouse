@@ -360,3 +360,16 @@ fn the_bottom_row_is_the_last_with_more_than_a_pixel_in_the_window() {
     assert_eq!(layout.last_in_sight, 16);
     assert_eq!(nearly.last_in_sight, 15);
 }
+
+#[test]
+fn the_working_set_includes_loaded_rows_across_empty_runs_and_the_buffer() {
+    let mut heights = vec![0.; 6001];
+    for row in (0..6001).step_by(600) {
+        heights[row] = 100.;
+    }
+    let (layout, _) = Session::measured(&heights).from(top(2400, 0.));
+
+    assert_eq!(shown(&layout), [2400, 3000, 3600]);
+    assert_eq!(layout.wanted(), 0..6001, "the 400-pixel buffer at both edges also stays loaded");
+    assert!(layout.rows.iter().all(|row| row.fetched), "retention is reported even with nothing missing");
+}

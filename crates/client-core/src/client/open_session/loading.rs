@@ -7,6 +7,7 @@ use protocol::event::SessionEvent;
 use protocol::find::Needle;
 use protocol::model::{ClientMessageId, Place, QueuedPrompt, Seq, Session, SessionId, SubagentId};
 use search::{Search, Searched, Searches};
+use std::ops::Range;
 use std::sync::Arc;
 
 /// Which of a session's events a view follows.
@@ -103,10 +104,19 @@ impl OpenSession {
         })
     }
 
-    /// Fetches what a view looking at this row needs.
-    pub fn want(&self, row: usize) {
-        self.follow.quietly(|log| Arc::make_mut(log).focus_on(row));
-        self.follow.wake();
+    /// Keeps and fetches the whole range the viewport needs, including its buffer. Called even when all its rows
+    /// are loaded, so a later fetch or live event cannot evict something still on screen.
+    pub fn want(&self, rows: Range<usize>) {
+        let (evicted, fetch) = self.follow.quietly(|log| {
+            let evicted = !log.focused_on(&rows) && Arc::make_mut(log).focus_on(rows);
+            (evicted, log.wants_pages())
+        });
+        if evicted {
+            self.follow.teller().tell();
+        }
+        if fetch {
+            self.follow.wake();
+        }
     }
 
     /// Fetches each request `recorded` says is waiting that isn't loaded, as [`SessionLog::waiting_on`] says.

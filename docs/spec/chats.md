@@ -2,6 +2,7 @@
 
 ## The transcript and the composer
 
+- **Rows in sight stay drawn and interactive while history loads or new output arrives,** including in a long chat with many events that draw nothing. Once the rows needed for the window have loaded, keeping still asks for no more history.
 - **The transcript is a centred column, at most 848px wide,** so lines stay short enough to read in a wide window. *Unconfirmed.*
 - **Everything in the transcript but a prompt starts on the column's left edge:** what the agent wrote, a call's icon, and what a call or a thought opens to, so the eye always goes back to the same place. Something with an edge, such as a code block or the rule down a subagent's work, puts its edge there, and what's inside it sits in from it.
 - **A code block has a button at its top right that copies its code, shown only while the block is hovered,** the same button a command has, before the block's language, if it has one, wherever the chat shows Markdown, such as a reply, a thought or a prompt. Every code block has the room above its code that one with a language has for the language, so the button never covers the code. *Unconfirmed.*

@@ -127,7 +127,7 @@ fn a_waiting_request_whose_page_is_let_go_of_is_kept() {
     for start in (1..last).step_by(250) {
         let at = |seq| if seq == 1 { asked(Seq::FIRST, "a") } else { later(Seq::new(seq)) };
         let position = Position::of_seq(Seq::new(start));
-        log.focus_on(position.row().unwrap());
+        log.focus_on(position.row().unwrap()..position.row().unwrap() + 1);
         log.install_page(position, (start..start + 250).map(at).collect());
     }
 

@@ -5,6 +5,7 @@
 //! same handle the scrollbar does.
 
 use std::cell::RefCell;
+use std::ops::Range;
 use std::rc::Rc;
 
 use gpui_kit::{
@@ -31,8 +32,8 @@ pub(super) struct ListElement {
     pub(super) id: ElementId,
     pub(super) state: Rc<RefCell<State>>,
     pub(super) row: DrawRow,
-    /// Told a row in or near the window that hasn't been fetched, to fetch it.
-    pub(super) want: Rc<dyn Fn(usize)>,
+    /// Told every row the viewport and its buffer need, fetched or not, so none can be evicted while in sight.
+    pub(super) want: Rc<dyn Fn(Range<usize>)>,
     /// What's selected of the rows' text, which a press on it starts and a drag past the list's edge scrolls on.
     pub(super) selection: Selection,
 }
@@ -90,11 +91,7 @@ impl ListElement {
         state.laid_out(layout.top, layout.anchor, layout.end_in_sight);
         (state.shown, state.last_in_sight) = (shown, layout.last_in_sight);
         drop(state);
-        // The lowest of them, which is the one nearest what's already loaded when scrolling back through a session,
-        // and the last a list that asked for each row as it drew it would have asked for.
-        if let Some(unfetched) = layout.rows.iter().rev().find(|row| !row.fetched) {
-            (self.want)(unfetched.row);
-        }
+        (self.want)(layout.wanted());
         layout
     }
 

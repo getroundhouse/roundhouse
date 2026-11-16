@@ -17,6 +17,7 @@ use protocol::tail::StreamDelta;
 use std::ops::Range;
 
 mod approvals;
+mod empty;
 mod outline;
 mod pages;
 mod position;
@@ -34,5 +35,9 @@ mod laws;
 #[cfg(test)]
 mod tests;
 
+#[cfg(test)]
+mod retention;
+
+mod loaded;
 mod log;
 pub use log::{By, Changes, MAX_LOADED_EVENTS, Row, SessionLog};

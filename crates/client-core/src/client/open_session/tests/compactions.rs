@@ -82,7 +82,7 @@ fn a_hub_too_old_to_list_compactions_is_followed_without_them_and_not_asked_agai
 
     let open = OpenSession::start(&client, &session());
     until("answered", || open.read(|log| !log.wants_compaction_list() && !log.wants_prompt_list()));
-    open.want(0);
+    open.want(0..1);
     let errors = open.take_errors();
     let connected = open.follow.connected();
     drop(open);

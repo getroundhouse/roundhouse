@@ -41,7 +41,7 @@ fn rows_are_indexed_by_seq_whatever_is_loaded() {
     let mut log = SessionLog::new(Seq::new(1000));
     assert_eq!(log.row_count(), 1000);
     assert_eq!(log.row(0), Row::Unloaded);
-    log.focus_on(300);
+    log.focus_on(300..301);
     log.install_page(Position::of_seq(Seq::new(251)), page(251..501));
     assert!(matches!(log.row(250), Row::Event(e) if e.seq == Seq::new(251)));
     assert_eq!(log.row(249), Row::Unloaded);
@@ -51,7 +51,7 @@ fn rows_are_indexed_by_seq_whatever_is_loaded() {
 #[test]
 fn it_asks_for_the_page_in_view_first_and_only_once() {
     let mut log = SessionLog::new(Seq::new(1000));
-    log.focus_on(300);
+    log.focus_on(300..301);
     let first = log.pages_to_fetch();
     assert_eq!(first, vec![seqs(251..501), seqs(1..251)], "501 on is on its way from the subscription");
     assert!(log.pages_to_fetch().is_empty(), "already in flight");
@@ -74,7 +74,7 @@ fn before_a_view_has_looked_nothing_is_fetched() {
 #[test]
 fn an_installed_page_reports_the_rows_it_filled_and_is_not_fetched_again() {
     let mut log = SessionLog::new(Seq::new(800));
-    log.focus_on(300);
+    log.focus_on(300..301);
     assert_eq!(log.pages_to_fetch(), vec![seqs(251..501), seqs(1..251)]);
     log.install_page(Position::of_seq(Seq::new(1)), page(1..251));
     assert_eq!(log.take_changes().rows, Some(0..250));
@@ -98,7 +98,7 @@ fn a_short_last_page_fills_only_the_rows_there_are() {
 fn it_never_holds_a_whole_long_session() {
     let mut log = SessionLog::new(Seq::new(15_000));
     for at in 0..15_000 / PAGE_EVENTS {
-        log.focus_on(at * PAGE_EVENTS);
+        log.focus_on(at * PAGE_EVENTS..at * PAGE_EVENTS + 1);
         let positions = page_range(at);
         log.install_page(positions.start, page(positions.start.seq().get()..positions.end.seq().get()));
         assert!(log.loaded_events() <= MAX_LOADED_EVENTS + PAGE_EVENTS);
@@ -106,7 +106,7 @@ fn it_never_holds_a_whole_long_session() {
     // What's near the view and the tail stayed, and what was dropped can be fetched again.
     assert!(matches!(log.row(14_999), Row::Event(_)));
     assert_eq!(log.row(0), Row::Unloaded);
-    log.focus_on(0);
+    log.focus_on(0..1);
     assert_eq!(log.pages_to_fetch(), vec![seqs(1..251), seqs(251..501)]);
 }
 
@@ -296,7 +296,7 @@ fn a_log_by_place_fetches_nothing_until_a_view_asks_once_it_knows_how_far_it_goe
 fn a_log_by_place_fetches_and_lets_go_of_whole_pages_of_places() {
     let mut log = SessionLog::by_place(Place::default());
     log.reaches(Place::new(3000));
-    log.focus_on(300);
+    log.focus_on(300..301);
     assert_eq!(log.pages_to_fetch(), vec![places(251..501), places(1..251), places(501..751)], "by place, as by seq");
 
     let events = (251..501).map(|place| placed(Seq::new(place * 2), place, notice(Seq::new(place * 2)).body));
@@ -305,7 +305,7 @@ fn a_log_by_place_fetches_and_lets_go_of_whole_pages_of_places() {
     assert!(matches!(log.row(250), Row::Event(e) if e.seq == Seq::new(502)));
     assert_eq!(log.row_of(Seq::new(502)), Some(250));
     for page in 0..12 {
-        log.focus_on(page * PAGE_EVENTS + 1001);
+        log.focus_on(page * PAGE_EVENTS + 1001..page * PAGE_EVENTS + 1001 + 1);
         let positions = page_range(page);
         let events = (positions.start.place().get()..positions.end.place().get())
             .map(|p| placed(Seq::new(p * 2), p, notice(Seq::new(p * 2)).body));

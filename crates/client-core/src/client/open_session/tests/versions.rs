@@ -61,7 +61,7 @@ fn each_page_fetched_is_told_of_as_it_is_put_in_place() {
         read_from: client.hub_version().to_string(),
     };
     let mut log = SessionLog::new(LAST_SEQ);
-    log.focus_on(300);
+    log.focus_on(300..301);
     let held = Mutex::new(Arc::new(log));
     let told = Mutex::new(Vec::new());
 

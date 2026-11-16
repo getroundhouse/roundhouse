@@ -11,7 +11,8 @@ impl SessionLog {
         // the last row, so it fetches nothing until a view asks.
         if self.received == Position::default() {
             self.received = before_live(last);
-            self.focus = last.row().unwrap_or(0);
+            let row = last.row().unwrap_or(0);
+            self.focus = row..row + 1;
         }
         self.last = self.last.max(last);
         self.touched(0..self.row_count() + 1);
@@ -37,6 +38,10 @@ impl SessionLog {
         let received = before_live(self.last);
         self.received = received;
         self.stale = self.pages.iter().copied().filter(|page| page_range(*page).start <= received).collect();
+        // Unknown notifications may have been normalized into visible events by the migration. Only event bodies
+        // stay drawn until replaced; an old empty marker must never hide newly understood history.
+        self.empty = std::sync::Arc::default();
+        self.touched(0..self.row_count() + 1);
         self.apart.read_again();
         self.outline.list_again();
     }
