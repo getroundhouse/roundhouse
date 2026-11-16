@@ -1,4 +1,4 @@
-//! What Accounts says in words: what each list says of itself, what each account is called, how its login stands,
+//! What Agents says in words: what each list says of itself, what each account is called, how its login stands,
 //! when it was last used, how long a token lasts, what disconnecting asks, and what the hub's refusals mean.
 
 use client_core::{Agents, ClientError};
@@ -12,8 +12,8 @@ const YEAR_MS: i64 = 365 * DAY_MS;
 const WARNS_AT_MOST_MS: i64 = 30 * DAY_MS;
 
 /// What a search finds the page by, besides its name.
-pub(super) const ABOUT: &str = "Logins agents run under: those found where they ran, and those given to the hub with \
-                                a token, which can be connected, renewed and disconnected.";
+pub(super) const ABOUT: &str = "The accounts agents run under: the logins found where they ran, and those given to the \
+                                hub with a token, which can be connected, renewed and disconnected.";
 
 /// What a hub that can't keep a login is said to be.
 pub(super) const OLDER_HUB: &str =

@@ -2,7 +2,7 @@
 
 #![cfg(test)]
 
-mod accounts;
+mod agents;
 mod search;
 
 mod changing;

@@ -70,7 +70,7 @@ You need:
 
 - A Mac with Apple silicon.
 - Git, and a repository to work in.
-- The CLI for your agent, `claude`, `codex` or `agy`, installed and signed in. Choose the account new Claude chats use in Settings → Accounts; an added default takes priority over the machine's login. Codex and Antigravity use the sign-in on the worker's machine.
+- The CLI for your agent, `claude`, `codex` or `agy`, installed and signed in. Choose the account new Claude chats use in Settings → Agents; an added default takes priority over the machine's login. Codex and Antigravity use the sign-in on the worker's machine.
 - GitHub's CLI, `gh`, logged in, for pull requests. Everything else works without it.
 
 Then:

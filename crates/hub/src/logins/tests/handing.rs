@@ -121,4 +121,4 @@ fn a_move_is_refused_as_choosing_a_default_is() {
     assert_eq!(move_to(&personal, 1000).unwrap_err().code, ErrorCode::Conflict, "its login is gone");
 }
 
-const PERSONAL_FIRST: &str = "Personal needs a login; renew or reconnect it in Accounts first";
+const PERSONAL_FIRST: &str = "Personal needs a login; renew or reconnect it in Agents first";

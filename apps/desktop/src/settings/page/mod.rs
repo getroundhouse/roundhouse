@@ -1,8 +1,8 @@
 //! Settings as it fills the window: a sidebar with a search at its top and a page for each part of the app under a
 //! heading, with a way back at its top right, and the chosen page beside it. Most pages are a list of settings, and a
-//! page with more to show than a setting's row, such as Accounts, draws what's on it itself.
+//! page with more to show than a setting's row, such as Agents, draws what's on it itself.
 
-mod accounts;
+mod agents;
 mod dictation_row;
 mod general;
 mod notifications;

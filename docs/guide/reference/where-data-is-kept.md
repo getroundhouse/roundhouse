@@ -17,7 +17,7 @@ In it:
 | `hub.db` | Every project, workspace and chat, and each chat's history |
 | `backups/` | Copies of the database from before each migration |
 | `attachments/` | The files prompts carried |
-| `logins/` | The tokens of the logins you've added in [Settings](settings.md#accounts), a file each, which only you can open. Disconnecting one removes its file |
+| `logins/` | The tokens of the logins you've added in [Settings](settings.md#agents), a file each, which only you can open. Disconnecting one removes its file |
 | `hub.log` | The hub's log |
 | `worker-logs/` | Each workspace's worker's log |
 | `instances/` | A directory for each workspace's worker, with the workspace's setup log, which its archive script adds to. While an agent or the setup script runs, the directory also holds a record of it, so it can be stopped if the worker is killed, and while a Claude agent runs, the files its CLI reads, such as the one that tells it where Roundhouse's tools are |

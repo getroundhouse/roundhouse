@@ -1,4 +1,4 @@
-//! The accounts agents run under, as Accounts in Settings lists them: Claude Code's own login, found as an agent
+//! The accounts agents run under, as Agents in Settings lists them: Claude Code's own login, found as an agent
 //! launched under it, and the logins the person gave the hub, in each state one can be in. Their tokens are the hub's,
 //! so none is here.
 

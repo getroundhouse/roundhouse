@@ -31,11 +31,11 @@ impl Target {
     fn needs_a_login(&self, called: &str) -> String {
         match self {
             Target::Session(_) => format!(
-                "this chat's account {called} needs a login; renew or reconnect it in Accounts, or move the chat to \
+                "this chat's account {called} needs a login; renew or reconnect it in Agents, or move the chat to \
                  another account"
             ),
             Target::Default(_) => format!(
-                "the default account {called} needs a login; renew or reconnect it in Accounts, or choose another \
+                "the default account {called} needs a login; renew or reconnect it in Agents, or choose another \
                  default"
             ),
         }
@@ -45,7 +45,7 @@ impl Target {
 /// What's wrong with an account the person is choosing, for a default or a chat, once its login can't be used. It
 /// isn't the default or the chat's yet, so it's named alone.
 fn needs_a_login_first(called: &str) -> String {
-    format!("{called} needs a login; renew or reconnect it in Accounts first")
+    format!("{called} needs a login; renew or reconnect it in Agents first")
 }
 
 impl Logins {

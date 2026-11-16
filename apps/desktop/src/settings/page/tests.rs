@@ -20,7 +20,7 @@ fn page(name: &'static str, settings: Vec<Setting>) -> Page {
 /// A page that draws what's on it itself, about `about`.
 fn own(name: &'static str, about: &'static str) -> Page {
     let draw = Box::new(|_: &_| unreachable!("a search doesn't draw a page"));
-    Page { id: PageId::Accounts, name, icon: Lucide::KeyRound, body: Body::Own { about, draw } }
+    Page { id: PageId::Agents, name, icon: Lucide::Bot, body: Body::Own { about, draw } }
 }
 
 fn all() -> Vec<Section> {
@@ -89,24 +89,24 @@ fn real() -> Vec<Section> {
 }
 
 #[test]
-fn accounts_is_found_by_what_someone_would_look_for_it_by() {
-    for search in ["accounts", "login", "token", "Connect", "renew", "disconnect"] {
+fn agents_is_found_by_what_someone_would_look_for_it_by() {
+    for search in ["agents", "accounts", "login", "token", "Connect", "renew", "disconnect"] {
         let pages: Vec<PageId> =
             found(real(), search).iter().flat_map(|section| &section.pages).map(|page| page.id).collect();
 
-        assert!(pages.contains(&PageId::Accounts), "{search} doesn't find it, only {pages:?}");
+        assert!(pages.contains(&PageId::Agents), "{search} doesn't find it, only {pages:?}");
     }
     let pages = found(real(), "sound");
-    assert!(pages.iter().flat_map(|section| &section.pages).all(|page| page.id != PageId::Accounts));
+    assert!(pages.iter().flat_map(|section| &section.pages).all(|page| page.id != PageId::Agents));
 }
 
 #[test]
 fn the_page_chosen_shows() {
     let sections = real();
 
-    let page = shown(&sections, Some(PageId::Accounts));
+    let page = shown(&sections, Some(PageId::Agents));
 
-    assert_eq!(page.map(|page| page.id), Some(PageId::Accounts));
+    assert_eq!(page.map(|page| page.id), Some(PageId::Agents));
 }
 
 #[test]

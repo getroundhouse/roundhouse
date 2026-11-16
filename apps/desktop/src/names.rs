@@ -1,7 +1,7 @@
 //! What the app calls what it names in more than one place, so each is called the same everywhere: who an account is,
 //! on a chat's card of its limits, on the context's card when there are no limits, in the menu that moves a chat to
-//! another, and in Accounts in Settings, and what this machine is, where a workspace's card says where its worker runs
-//! and where Accounts says which machines the hub hands a login to.
+//! another, and in Agents in Settings, and what this machine is, where a workspace's card says where its worker runs
+//! and where Agents says which machines the hub hands a login to.
 
 use protocol::model::Account;
 
@@ -19,7 +19,7 @@ pub(crate) fn account(account: &Account) -> Option<String> {
     first.clone().or_else(|| then.clone())
 }
 
-/// What `account` is called where it has to be called something, as on its row in Accounts and in the menu that moves a
+/// What `account` is called where it has to be called something, as on its row in Agents and in the menu that moves a
 /// chat to it: who it is, as [`account`] says, and otherwise what else its record says.
 pub(crate) fn called(account: &Account) -> String {
     self::account(account).or_else(|| account.login.clone()).unwrap_or_else(|| account.id.to_string())

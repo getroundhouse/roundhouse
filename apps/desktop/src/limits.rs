@@ -1,6 +1,6 @@
 //! What's said of an account's limits wherever they show, beside Send as bars, in the chat's card of them, and in
-//! Accounts in Settings: which of them there's something true to say of, and what each is called, for all three, and
-//! the bar that empties as one is used, for the card and Accounts.
+//! Agents in Settings: which of them there's something true to say of, and what each is called, for all three, and
+//! the bar that empties as one is used, for the card and Agents.
 
 use gpui_kit::{App, Div, ParentElement as _, Pixels, SharedString, Styled as _, div, relative};
 use protocol::model::{LimitWindow, UsageLimit};

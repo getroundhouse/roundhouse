@@ -1,4 +1,4 @@
-//! What Accounts keeps from one frame to the next while it shows: the panel for connecting a login, and what the hub
+//! What Agents keeps from one frame to the next while it shows: the panel for connecting a login, and what the hub
 //! last answered. A token pasted into the panel is handed to the hub and kept nowhere else: not on disk, not in a log
 //! and not in the app's settings. Its field is made anew once the hub has answered, so nothing of it stays.
 

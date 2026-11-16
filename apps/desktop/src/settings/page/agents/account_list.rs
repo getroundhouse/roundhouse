@@ -17,15 +17,15 @@ use protocol::model::{Account, AccountDefault, AgentDescription, AgentKind};
 pub(in super::super) fn page(hub: &OfHub) -> Page {
     let (records, asking) = (hub.records.clone(), hub.asking.clone());
     let draw = Box::new(move |within: &Within| {
-        AccountsPage { records: records.clone(), asking: asking.clone(), within: within.clone() }.into_any_element()
+        AgentsPage { records: records.clone(), asking: asking.clone(), within: within.clone() }.into_any_element()
     });
     let body = Body::Own { about: words::ABOUT, draw };
-    Page { id: PageId::Accounts, name: "Accounts", icon: Lucide::KeyRound, body }
+    Page { id: PageId::Agents, name: "Agents", icon: Lucide::Bot, body }
 }
 
 /// The page, drawn from the hub's records, with the hub to ask while there's one, within Settings.
 #[derive(IntoElement)]
-struct AccountsPage {
+struct AgentsPage {
     pub(super) records: Snapshot,
     pub(super) asking: Option<Asking>,
     pub(super) within: Within,
@@ -42,9 +42,9 @@ pub(super) struct Drawing<'a> {
     pub(super) defaults: Option<&'a [AccountDefault]>,
 }
 
-impl RenderOnce for AccountsPage {
+impl RenderOnce for AgentsPage {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let kept = window.use_keyed_state("settings-accounts", cx, |_, _| Kept::default());
+        let kept = window.use_keyed_state("settings-agents", cx, |_, _| Kept::default());
         let now_ms = look::now_ms(cx);
         let (found, added) = listed(self.records.accounts());
         let changes_at_ms =

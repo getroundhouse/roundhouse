@@ -25,7 +25,7 @@ The hub starts by itself when the app, or the command line, needs it. It runs on
 
 ## Workers
 
-Each workspace has a worker, a process of its own that does the work there: git, the worktree, setup scripts and diffs. The worker runs the installed Claude, Codex or Antigravity CLI. A Claude chat uses the account it's on, which is the default chosen in [Settings](../reference/settings.md#accounts) when its agent first starts, or the one you've [moved it to](../guides/watch-context-and-limits.md#move-a-chat-to-another-account) since. A chat whose agent first starts before you've added a default uses machine credentials, and goes on using them once you add one, until you move it. If nobody was signed in on that machine, or it uses an API key, which Roundhouse can't tell apart, the chat goes on the default once you add one. Codex and Antigravity credentials stay with their CLIs on that machine.
+Each workspace has a worker, a process of its own that does the work there: git, the worktree, setup scripts and diffs. The worker runs the installed Claude, Codex or Antigravity CLI. A Claude chat uses the account it's on, which is the default chosen in [Settings](../reference/settings.md#agents) when its agent first starts, or the one you've [moved it to](../guides/watch-context-and-limits.md#move-a-chat-to-another-account) since. A chat whose agent first starts before you've added a default uses machine credentials, and goes on using them once you add one, until you move it. If nobody was signed in on that machine, or it uses an API key, which Roundhouse can't tell apart, the chat goes on the default once you add one. Codex and Antigravity credentials stay with their CLIs on that machine.
 
 ## Where it runs
 
