@@ -132,7 +132,7 @@ fn command(made_with: &str, cx: &App) -> Div {
         .typeset(look::Type::Code)
         .child(div().text_color(colors.text_faint).child("$"))
         .child(div().flex_1().min_w_0().truncate().child(made_with.to_string()))
-        .child(look::copy_button("accounts-copy-command", made_with.to_string(), "Copy command"))
+        .child(look::copy_button("accounts-copy-command", made_with.to_string(), "Copy command", cx))
 }
 
 /// A field `called` something, with what goes in it said under it. `id` is its own, for tests to find it by.

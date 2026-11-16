@@ -65,7 +65,7 @@ impl Said {
             // Cut at its start, if it's too long, since its end is the workspace's own folder.
             let text = div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis_start();
             let text = text.typeset(look::Type::Code).child(path.clone());
-            let copy = look::copy_button("copy-workspace-path", path, "Copy path");
+            let copy = look::copy_button("copy-workspace-path", path, "Copy path", cx);
             let row = h_flex().gap(look::Space::Small).text_color(colors.text_muted).child(text).child(copy);
             v_flex().child(row).child(div().my(look::Space::Small).h(look::EDGE).bg(colors.edge))
         });

@@ -11,6 +11,14 @@ The pieces screens are built from, on the foundations in `look.md`: what each is
 
   ![A button under the pointer](screens/button-hovered.png)
 
+### Copy buttons
+
+- **Every Copy button has the same borderless cutout, icon and feedback,** whether it copies a prompt, code, a command, a final reply or a workspace's path, so the action is recognisable wherever it appears. Its 24px square holds a 14px copy icon at 80% opacity. A pane-coloured surround with 6px corners reaches 1px beyond it without taking layout space. The button fills under the pointer and shows a check after copying. Each area's rules say where it sits and whether it appears only on hover.
+
+**Copy in a code block and beside the finished reply, with the pointer over the code.**
+
+![The shared Copy treatment in a code block and beside a finished reply](screens/copy-code-block.png)
+
 ### Sizes
 
 - **Every button has a size for where it sits,** so the buttons in the same kind of place are the same size, wherever it is, and each leaves a little room around its words and its icon. A small button is set in a line of text or a row one line tall, a regular one is a bar's or a card's own, set apart from its text, and a large one is on its own. One that's only an icon is a square, as wide as it's tall. `look::ControlSize` holds the sizes. *Unconfirmed.*

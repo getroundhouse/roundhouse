@@ -12,7 +12,7 @@ How a prompt is sent, what it can carry, and what happens to one sent while the 
 
 A chat's prompts reach the hub in the order you sent them, even when one is still adding a large file, so the agent never reads them out of order.
 
-To copy a prompt's text, hover over its row in the chat and click the copy button below the bubble, at its right edge. It appears in the existing gap, so it adds no spacing and the conversation doesn't move when it appears. A prompt with only files has no copy button.
+To copy a prompt's text, hover over its row in the chat and click the copy button overlapping the bubble's lower right corner. It stays clear of the reply below, adds no spacing, and doesn't move the conversation when it appears. A prompt with only files has no copy button.
 
 ## Files
 

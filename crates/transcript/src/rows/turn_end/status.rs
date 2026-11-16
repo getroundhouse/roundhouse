@@ -96,6 +96,7 @@ fn finished(
             ItemKey::Event(ended.seq, 0).element("copy-reply"),
             text.to_string(),
             "Copy final message",
+            cx,
         );
         div().flex().items_center().h_0().child(copy)
     });
