@@ -143,6 +143,7 @@ impl World {
             // As from a hub that doesn't keep one, since its hub refuses to.
             new_workspace_draft: None,
             github_accounts: Vec::new(),
+            github_sign_ins: Vec::new(),
             rev: Rev::default(),
         }
     }

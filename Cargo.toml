@@ -106,6 +106,8 @@ gpui-kit = { path = "third_party/gpui-kit/vendor/crates/kit", version = "=0.9.0"
 gpui-pre-apple = { version = "=0.3.11", features = ["font-kit"] }
 # The same as GPUI's, which hands its screenshots back as this crate's images.
 image = { version = "0.25.10", default-features = false }
+# Already under Octocrab. Names the header that asks GitHub's device flow to answer in JSON, on a request Octocrab sends.
+http = "1.5.0"
 # Already under GPUI. Reads a request's body for the worker's tools, up to a limit.
 http-body-util = "0.1.5"
 # Already under GPUI. Serves the worker's tools to its agents, over HTTP on 127.0.0.1.

@@ -3845,6 +3845,7 @@ dependencies = [
  "async-trait",
  "chrono",
  "fastrand",
+ "http",
  "hub",
  "octocrab",
  "parking_lot",

@@ -1,6 +1,8 @@
 /// Declares token types: text that's all it takes to act as whoever it's for, so it's kept out of logs. Its `Debug`
 /// says only that it's there, it has no `Display`, and a request or a reply that carries one can be logged whole. It's
-/// a plain string on the wire. A module that owns one declares it with `crate::model::tokens!`.
+/// a plain string on the wire, and in a file of the hub's. A crate that owns one declares it with `protocol::tokens!`, as
+/// the hub does its own, which never cross to another process but GitHub.
+#[macro_export]
 macro_rules! tokens {
     ($($(#[$doc:meta])* $name:ident),+ $(,)?) => {$(
         $(#[$doc])*
@@ -26,4 +28,3 @@ macro_rules! tokens {
         }
     )+};
 }
-pub(crate) use tokens;

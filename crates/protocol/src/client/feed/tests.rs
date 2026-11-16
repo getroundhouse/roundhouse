@@ -1,5 +1,6 @@
 use crate::model::{
-    DiffComment, DiffSide, GithubAccount, HubSettings, NewWorkspaceDraft, Record, RecordKey, Repo, Rev, Subagent,
+    DiffComment, DiffSide, GithubAccount, GithubSignIn, HubSettings, NewWorkspaceDraft, Record, RecordKey, Repo, Rev,
+    Subagent,
 };
 
 use super::{HubNotice, RecordNotice};
@@ -48,6 +49,11 @@ fn of_a_record() -> Vec<(HubNotice, RecordKey, Rev)> {
             HubNotice::GithubAccount(GithubAccount { rev: Rev::new(8), ..crate::fixtures::github_account("g") }),
             RecordKey::GithubAccount { id: "g".into() },
             Rev::new(8),
+        ),
+        (
+            HubNotice::GithubSignIn(GithubSignIn { rev: Rev::new(9), ..crate::fixtures::github_sign_in("s") }),
+            RecordKey::GithubSignIn { id: "s".into() },
+            Rev::new(9),
         ),
     ]
 }

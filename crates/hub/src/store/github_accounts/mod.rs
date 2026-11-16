@@ -11,5 +11,5 @@ use protocol::model::{GithubAccountId, GithubLoginKind, GithubUser, GithubUserId
 mod tests;
 
 mod rows;
-pub(super) use rows::github_accounts;
 pub(crate) use rows::{GithubConnected, GithubConnecting};
+pub(super) use rows::{connect_login, github_accounts, signed_in_as};

@@ -4,7 +4,6 @@ use std::time::Duration;
 
 use tokio::sync::mpsc;
 
-use super::running::NotStarted;
 use super::*;
 
 const LIMITS: Limits = Limits { work: Duration::from_secs(60), after: Duration::from_secs(10) };
@@ -205,4 +204,46 @@ async fn an_after_step_still_running_at_its_own_limit_is_stopped_and_frees_the_k
 
     until(|| !jobs.busy().contains(&"w")).await;
     assert!(dropped.load(Ordering::SeqCst));
+}
+
+/// Called off as it waits, and then as what it runs uncut runs, which goes on to its end before the after-step.
+#[tokio::test(start_paused = true)]
+async fn a_job_called_off_ends_where_it_is_and_its_after_step_runs_once_what_it_runs_uncut_has_ended() {
+    let jobs = Jobs::new();
+    let (ends, mut ended) = mpsc::unbounded_channel();
+    let finished = Arc::new(AtomicBool::new(false));
+    let (flag, seen) = (finished.clone(), finished.clone());
+    let (began, beginning) = tokio::sync::oneshot::channel();
+    let waiting = async {
+        step("waiting on GitHub");
+        std::future::pending::<()>().await;
+    };
+    jobs.start(KIND, "w", LIMITS, waiting, telling(&ends)).unwrap();
+    let keeping = async move {
+        uncut(async move {
+            began.send(()).unwrap();
+            tokio::time::sleep(Duration::from_secs(1)).await;
+            flag.store(true, Ordering::SeqCst);
+        })
+        .await;
+    };
+    let tell = telling(&ends);
+    let after = move |ended: Ended| {
+        // As the after-step finds it.
+        assert!(seen.load(Ordering::SeqCst), "{ended:?} ran before what was uncut ended");
+        tell(ended)
+    };
+    jobs.start(JobKind::ReadWaitedPullRequests, "v", LIMITS, keeping, after).unwrap();
+    tokio::task::yield_now().await;
+
+    jobs.call_off(&"w");
+    beginning.await.unwrap();
+    jobs.call_off(&"v");
+    jobs.call_off(&"nobody");
+
+    assert_eq!(next(&mut ended).await, Ended::CalledOff { at: "waiting on GitHub".into(), began_uncut: false });
+    let how = next(&mut ended).await;
+    assert!(matches!(how, Ended::CalledOff { began_uncut: true, .. }), "{how:?}");
+    assert!(how.finished_or_ran_uncut());
+    until(|| jobs.busy().is_empty()).await;
 }

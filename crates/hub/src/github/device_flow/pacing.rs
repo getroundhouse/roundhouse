@@ -1,0 +1,51 @@
+use std::time::Duration;
+
+use protocol::client::ApiError;
+use tokio::time::Instant;
+use tracing::{info, warn};
+
+use super::super::client::within;
+use super::approval::Approval;
+use super::code::LEAST_INTERVAL;
+
+/// How much longer GitHub asks the hub to wait between asks after `slow_down` that says no interval, as its docs give.
+const SLOWER_BY: Duration = Duration::from_secs(5);
+
+/// What one ask after a code's token came to.
+#[derive(Debug)]
+pub(super) enum Asked {
+    /// Not yet, so ask again.
+    Again,
+    /// Not yet, and ask less often: between asks as long as `interval` says, or, when GitHub said none, [`SLOWER_BY`]
+    /// longer than before.
+    SlowDown {
+        interval: Option<Duration>,
+    },
+    Done(Approval),
+}
+
+/// Asks with `ask` after a code's token, first and between each ask as long as `interval`, longer after GitHub says
+/// `slow_down`, until it's done or the code `ends`, as far as tokio's clock says. Each ask is within
+/// [`ASK_WITHIN`](super::super::ASK_WITHIN), and one that fails, as when GitHub can't be reached or doesn't answer in
+/// time, is asked again, so it ends with the code at the latest. Dropping it stops asking.
+pub(super) async fn paced<F>(mut interval: Duration, ends: Instant, mut ask: impl FnMut() -> F) -> Approval
+where
+    F: Future<Output = Result<Asked, ApiError>>,
+{
+    loop {
+        let next = Instant::now() + interval;
+        if next >= ends {
+            return Approval::Ended;
+        }
+        tokio::time::sleep_until(next).await;
+        match within(ask()).await {
+            Ok(Asked::Done(approval)) => return approval,
+            Ok(Asked::Again) => {}
+            Ok(Asked::SlowDown { interval: said }) => {
+                interval = said.unwrap_or(interval + SLOWER_BY).max(LEAST_INTERVAL);
+                info!(seconds = interval.as_secs(), "GitHub asked the hub to ask after a sign-in less often");
+            }
+            Err(e) => warn!("couldn't ask GitHub after a sign-in's token, so it's asked again: {}", e.message),
+        }
+    }
+}

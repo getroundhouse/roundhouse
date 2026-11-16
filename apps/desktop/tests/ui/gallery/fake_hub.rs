@@ -18,11 +18,12 @@ use protocol::event::SessionEvent;
 use protocol::find::{Found, Needle};
 use protocol::frame;
 use protocol::model::{
-    AgentDescription, AgentFeature, AgentKind, CompactionLine, Effort, FileContents, FileOpened, FilePage, FilePages,
-    GitDiff, GitStatus, LoginDescription, ModelChoice, ModelName, OpenedText, PageLine, PermissionMode, Place,
-    PromptLine, Rev, Seq, SessionId, SessionSettings, SessionStatus, SubagentId, WorkspaceStatus,
+    AgentDescription, AgentFeature, AgentKind, CompactionLine, Effort, GitDiff, GitStatus, LoginDescription,
+    ModelChoice, ModelName, PermissionMode, Place, PromptLine, Rev, Seq, SessionId, SessionSettings, SessionStatus,
+    SubagentId, WorkspaceStatus,
 };
 
+use super::base_pages::{opened, paged};
 use super::world::{LoginSupport, World};
 
 /// The build the app and its hub both say they are, so the label on every screen stays the same whatever this
@@ -230,15 +231,9 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
                 world.base_files.get(&path).ok_or_else(|| ApiError::new(ErrorCode::NotFound, "not in the base"))?;
             reply(C::FileContents(file.clone()))
         }
-        R::WorkspaceFileOpenAt(files::WorkspaceFileOpenAt { path, .. }) => {
-            let text = base_text(world, &path)?;
-            let lines = u32::try_from(text.lines().count()).unwrap();
-            let pages = pages_of(text, PAGE_LINES, &(0..lines.div_ceil(PAGE_LINES)).collect::<Vec<_>>());
-            let bytes = u64::try_from(text.len()).unwrap();
-            reply(C::FileOpened(FileOpened::Text(OpenedText { bytes, lines, page_lines: PAGE_LINES, pages })))
-        }
+        R::WorkspaceFileOpenAt(files::WorkspaceFileOpenAt { path, .. }) => reply(C::FileOpened(opened(world, &path)?)),
         R::WorkspaceFilePages(files::WorkspaceFilePages { path, page_lines, pages, .. }) => {
-            reply(C::FilePages(FilePages { pages: pages_of(base_text(world, &path)?, page_lines, &pages) }))
+            reply(C::FilePages(paged(world, &path, page_lines, &pages)?))
         }
         R::HubShutdown
         | R::HubRestart
@@ -276,7 +271,9 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         | R::AccountDisconnect(_)
         | R::GithubAccountConnect(_)
         | R::GithubAccountDisconnect(_)
-        | R::GithubAccountSetDefault(_) => Err(read_only("change anything")),
+        | R::GithubAccountSetDefault(_)
+        | R::GithubSignInStart(_)
+        | R::GithubSignInCancel(_) => Err(read_only("change anything")),
         // So a screen can show the app waiting on a workspace it asked for, or on a new title. The workspace's record
         // saying it's being made, or on its way out, is the world's to say.
         R::WorkspaceCreate(_) | R::WorkspaceRegenerateTitle(_) => Ok(Outcome::Never),
@@ -374,27 +371,4 @@ fn status(world: &World) -> HubStatus {
 
 fn read_only(what: &str) -> ApiError {
     ApiError::new(ErrorCode::Unsupported, format!("the gallery's hub only shows a fixed screen, so it can't {what}"))
-}
-
-/// How many lines a page of a base file has, as the worker pages them.
-const PAGE_LINES: u32 = 256;
-
-/// The text of a world's base file at `path`.
-fn base_text<'a>(world: &'a World, path: &str) -> Result<&'a str, ApiError> {
-    match world.base_files.get(path) {
-        Some(FileContents::Text { text }) => Ok(text),
-        _ => Err(ApiError::new(ErrorCode::NotFound, "no text in the base")),
-    }
-}
-
-/// Pages `pages` of `text`, with `page_lines` lines a page, as the worker sends them.
-fn pages_of(text: &str, page_lines: u32, pages: &[u32]) -> Vec<FilePage> {
-    let (lines, size): (Vec<&str>, usize) = (text.lines().collect(), usize::try_from(page_lines).unwrap());
-    let page = |index: u32| {
-        let first = usize::try_from(index).unwrap() * size;
-        let lines = lines.get(first..(first + size).min(lines.len()))?;
-        let lines = lines.iter().map(|line| PageLine { text: (*line).to_string(), cut: None }).collect();
-        Some(FilePage { index, lines })
-    };
-    pages.iter().filter_map(|index| page(*index)).collect()
 }

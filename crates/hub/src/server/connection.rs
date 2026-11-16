@@ -328,6 +328,10 @@ async fn handle(
             C::GithubAccount(hub.github_account_disconnect(id).await?)
         }
         R::GithubAccountSetDefault(asked) => C::HubSettings(hub.github_account_set_default(asked).await?),
+        R::GithubSignInStart(asked) => C::GithubSignIn(hub.github_sign_in_start(asked).await?),
+        R::GithubSignInCancel(github_accounts::GithubSignInCancel { id }) => {
+            C::GithubSignIn(hub.github_sign_in_cancel(id).await?)
+        }
         R::SessionQueue(queue::SessionQueue { id, client_msg_id, prompt }) => {
             C::Session(hub.session_queue(id, client_msg_id, prompt).await?)
         }

@@ -12,7 +12,7 @@ async fn a_token_is_whom_github_says_and_ends_when_github_says() {
         ("lasts", Answer::user(7, "ada", None)),
     ])
     .await;
-    let calls = Github::new(github.api());
+    let calls = Github::new(GithubConfig::at(github.api()));
 
     let ends = calls.token_owner(&GithubToken::new("ends")).await.unwrap();
     let lasts = calls.token_owner(&GithubToken::new("lasts")).await.unwrap();
@@ -46,7 +46,7 @@ async fn a_token_github_refuses_is_refused_and_a_github_that_cant_say_whose_it_i
         ("garbled", Answer::With { status: 200, headers: Vec::new(), body: "<html>".to_string() }),
     ])
     .await;
-    let calls = Github::new(github.api());
+    let calls = Github::new(GithubConfig::at(github.api()));
 
     let mut codes = Vec::new();
     for token in ["revoked", "an-apps", "limited", "too-often", "down", "garbled"] {
@@ -63,7 +63,7 @@ async fn a_github_that_cant_be_reached_is_unavailable() {
     let api = format!("http://{}", nowhere.local_addr().unwrap());
     drop(nowhere);
 
-    let refused = Github::new(api).token_owner(&GithubToken::new("a-token")).await;
+    let refused = Github::new(GithubConfig::at(api)).token_owner(&GithubToken::new("a-token")).await;
 
     assert_eq!(refused.unwrap_err().code, ErrorCode::Unavailable);
 }
@@ -72,7 +72,7 @@ async fn a_github_that_cant_be_reached_is_unavailable() {
 #[tokio::test]
 async fn a_github_that_never_answers_fails_the_call_at_its_time_limit() {
     let github = StandIn::start(vec![("a-token", Answer::Never)]).await;
-    let calls = Github::new(github.api());
+    let calls = Github::new(GithubConfig::at(github.api()));
     let started = tokio::time::Instant::now();
     let call = tokio::spawn(async move { calls.token_owner(&GithubToken::new("a-token")).await });
     github.until_asked(1).await;

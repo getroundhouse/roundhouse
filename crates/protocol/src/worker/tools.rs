@@ -39,7 +39,7 @@ impl Reply for ToolsServing {
     }
 }
 
-crate::model::tokens!(
+crate::tokens!(
     /// What an agent's calls to the worker's tools carry, as a bearer token, which tells the worker whose they are.
     /// It's only as secret as the agent's own files, since the agent's config holds it, but it's kept out of logs all
     /// the same.

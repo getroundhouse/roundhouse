@@ -82,6 +82,14 @@ fn every_request_about_a_github_account_keeps_its_form() {
     };
     asked(default(Some("g")), r#"{"method":"github_account_set_default","account":"g"}"#);
     asked(default(None), r#"{"method":"github_account_set_default","account":null}"#);
+    asked(
+        ClientRequest::GithubSignInStart(github_accounts::GithubSignInStart { id: "s".into() }),
+        r#"{"method":"github_sign_in_start","id":"s"}"#,
+    );
+    asked(
+        ClientRequest::GithubSignInCancel(github_accounts::GithubSignInCancel { id: "s".into() }),
+        r#"{"method":"github_sign_in_cancel","id":"s"}"#,
+    );
 }
 
 #[test]

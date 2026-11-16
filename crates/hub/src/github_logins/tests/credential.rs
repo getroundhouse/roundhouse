@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use protocol::worker::{GitCredential, GithubCredential};
 
 use super::super::*;
+use super::sign_ins::{approved, started};
 use super::{ada, connect, logins_in, owner};
 
 /// What a worker's link following `logins` is sent now.
@@ -105,4 +106,81 @@ fn a_default_whose_tokens_file_is_gone_or_cant_be_read_blocks() {
 
     assert!(gone.contains("can't find the token of its default GitHub account, ada"), "{gone}");
     assert!(unreadable.contains("can't read the token of its default GitHub account, ada ("), "{unreadable}");
+}
+
+/// The sign-in `id` approved as ada, with `token`, which ends at 9000, as the account `g` if the hub holds no sign-in as
+/// ada.
+fn signed_in(logins: &GithubLogins, store: &Store, id: &str, token: &str) {
+    logins.approve_sign_in(&approved(&started(store, id), token, "g"), &ada()).unwrap();
+}
+
+/// The one file among the GitHub logins' in `dir`.
+fn only_file(dir: &Path) -> PathBuf {
+    let mut paths = std::fs::read_dir(dir.join("github-logins")).unwrap().map(|entry| entry.unwrap().path());
+    let file = paths.next().unwrap();
+    assert!(paths.next().is_none());
+    file
+}
+
+#[test]
+fn workers_are_sent_a_default_signed_in_with_its_access_token_as_its_approved_and_as_signing_in_again_renews_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let (logins, store) = logins_in(dir.path());
+    let mut following = logins.git_credential();
+
+    signed_in(&logins, &store, "first", "first-token");
+    let approved = following.borrow_and_update().clone();
+    signed_in(&logins, &store, "again", "renewed-token");
+    let renewed = following.borrow_and_update().clone();
+
+    assert_eq!(approved, account("ada", "first-token"), "the first account became the default");
+    assert_eq!(renewed, account("ada", "renewed-token"), "signing in as ada again renewed it in place");
+}
+
+/// Choosing it as the default is refused then too, saying the same.
+#[test]
+fn a_default_signed_in_blocks_from_its_access_tokens_end_saying_to_sign_in_again() {
+    let dir = tempfile::tempdir().unwrap();
+    let (logins, store) = logins_in(dir.path());
+    signed_in(&logins, &store, "s", "a-token");
+
+    logins.check(8999);
+    let before_its_end = sent(&logins);
+    logins.check(9000);
+    let chosen = logins.set_default(Some(&"g".into()), 9000).unwrap_err();
+
+    assert_eq!(before_its_end, account("ada", "a-token"));
+    let reason = reason(sent(&logins));
+    assert!(reason.contains("The sign-in of Roundhouse's default GitHub account, ada, has ended"), "{reason}");
+    assert!(reason.contains("Sign in with GitHub again") && !reason.contains("Renew"), "{reason}");
+    assert_eq!(chosen.code, ErrorCode::Conflict);
+    assert!(chosen.message.contains("needs signing in with GitHub again"), "{}", chosen.message);
+}
+
+#[test]
+fn a_default_that_needs_signing_in_again_blocks_before_its_access_token_ends() {
+    let dir = tempfile::tempdir().unwrap();
+    let (logins, store) = logins_in(dir.path());
+    signed_in(&logins, &store, "s", "a-token");
+
+    store.github_login_needs_sign_in(&"g".into());
+    logins.check(2000);
+
+    let reason = reason(sent(&logins));
+    assert!(reason.contains("ada, has ended") && reason.contains("Sign in with GitHub again"), "{reason}");
+}
+
+/// Not as one whose file holds nothing, which says to connect it again, nor as the machine's own.
+#[test]
+fn a_default_whose_file_only_a_newer_build_reads_blocks_saying_so() {
+    let dir = tempfile::tempdir().unwrap();
+    let (logins, store) = logins_in(dir.path());
+    signed_in(&logins, &store, "s", "a-token");
+
+    std::fs::write(only_file(dir.path()), r#"{"format":"a_newer_form","token":"t"}"#).unwrap();
+    logins.check(2000);
+
+    let reason = reason(sent(&logins));
+    assert!(reason.contains("ada, is one only a newer Roundhouse can read"), "{reason}");
+    assert!(reason.contains("Update Roundhouse"), "{reason}");
 }

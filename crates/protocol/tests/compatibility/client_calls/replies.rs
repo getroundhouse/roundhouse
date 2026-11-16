@@ -13,8 +13,8 @@ use protocol::find::Found;
 use protocol::fixtures;
 use protocol::model::{
     Account, CompactionLine, DiffComment, DiffSide, FileContents, FileOpened, FilePages, GitDiff, GitStatus,
-    GithubAccount, GithubLoginKind, GithubSettings, GithubUser, GithubUserId, HeldGithubLogin, HubSettings,
-    NewWorkspaceDraft, Place, PromptLine, Records, Repo, Rev, Seq, SessionAccount, WorktreeFiles,
+    GithubAccount, GithubLoginKind, GithubSettings, GithubSignIn, GithubUser, GithubUserId, HeldGithubLogin,
+    HubSettings, NewWorkspaceDraft, Place, PromptLine, Records, Repo, Rev, Seq, SessionAccount, WorktreeFiles,
 };
 
 use super::answered;
@@ -63,7 +63,8 @@ fn a_hubs_settings_keep_their_form_and_one_from_a_hub_from_before_says_nothing_o
 
 #[test]
 fn a_github_accounts_record_keeps_its_form_held_or_disconnected() {
-    let held = HeldGithubLogin { how: GithubLoginKind::Token, connected_at_ms: 1, ends_at_ms: Some(9) };
+    let held =
+        HeldGithubLogin { how: GithubLoginKind::Token, connected_at_ms: 1, ends_at_ms: Some(9), needs_sign_in: false };
     let account = |held_login| GithubAccount {
         id: "g".into(),
         user: GithubUser { id: GithubUserId::new(7), name: "ada".into() },
@@ -72,11 +73,21 @@ fn a_github_accounts_record_keeps_its_form_held_or_disconnected() {
     };
     answered(
         ClientResponse::GithubAccount(account(Some(held))),
-        r#"{"result":"github_account","id":"g","user":{"id":7,"name":"ada"},"held_login":{"how":"token","connected_at_ms":1,"ends_at_ms":9},"rev":2}"#,
+        r#"{"result":"github_account","id":"g","user":{"id":7,"name":"ada"},"held_login":{"how":"token","connected_at_ms":1,"ends_at_ms":9,"needs_sign_in":false},"rev":2}"#,
     );
     answered(
         ClientResponse::GithubAccount(account(None)),
         r#"{"result":"github_account","id":"g","user":{"id":7,"name":"ada"},"held_login":null,"rev":2}"#,
+    );
+}
+
+#[test]
+fn a_sign_ins_record_keeps_its_form_as_a_reply() {
+    let sign_in = GithubSignIn { rev: Rev::new(3), ..fixtures::github_sign_in("s") };
+
+    answered(
+        ClientResponse::GithubSignIn(sign_in),
+        r#"{"result":"github_sign_in","id":"s","status":{"state":"waiting","code":"WDJB-MJHT","address":"https://github.com/login/device","code_ends_at_ms":900000},"rev":3}"#,
     );
 }
 

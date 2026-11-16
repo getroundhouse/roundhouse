@@ -7,35 +7,23 @@ use protocol::model::{GithubAccount, GithubAccountId, GithubLoginKind, GithubTok
 use protocol::worker::GithubCredential;
 use tokio::sync::watch;
 
+use super::GithubLogin;
 use super::credential::Unusable;
 use crate::error::internal;
 use crate::github::TokenOwner;
-use crate::login_files::{Locked, LoginFiles, LoginSecret};
+use crate::login_files::{Locked, LoginFiles};
 use crate::pasted_token::pasted_token;
 use crate::store::{GithubConnected, GithubConnecting, Store, StoreError};
 
-/// Connects, disconnects and tidies the logins of GitHub accounts, and chooses the default, one at a time, under their
-/// files' lock, so none finds another half done, and works out after each what workers give their processes for
-/// github.com. Synchronous, and only called off the async threads. Nothing here calls GitHub, which is asked before the
+/// Connects, disconnects and tidies the logins of GitHub accounts, chooses the default, and approves and ends sign-ins
+/// with GitHub, one at a time, under their files' lock, so none finds another half done, and works out after each
+/// change to a login what workers give their processes for github.com. Synchronous, and only called off the async threads. Nothing here calls GitHub, which is asked before the
 /// lock is taken, or a worker, whose link follows [`GithubLogins::git_credential`] on its own.
 pub(crate) struct GithubLogins {
     pub(super) store: Arc<Store>,
-    pub(super) files: LoginFiles<GithubToken>,
+    pub(super) files: LoginFiles<GithubLogin>,
     /// What workers are to give their processes for github.com, as of the last change, which is made under the lock.
     pub(super) credential: watch::Sender<GithubCredential>,
-}
-
-/// A token is kept as its text, and a file that isn't text holds none, since no token the hub wrote is.
-impl LoginSecret for GithubToken {
-    const DIR: &'static str = protocol::paths::GITHUB_LOGINS_DIR;
-
-    fn to_bytes(&self) -> Vec<u8> {
-        self.as_str().as_bytes().to_vec()
-    }
-
-    fn from_bytes(bytes: Vec<u8>) -> Option<Self> {
-        String::from_utf8(bytes).ok().map(GithubToken::new)
-    }
 }
 
 /// A token to connect, as a client asked: trimmed, and given the ID a new account would get.
@@ -114,7 +102,7 @@ impl GithubLogins {
                 Plan::Held(account) => return Ok(GithubAccountChange::unchanged(account)),
                 Plan::Keep(id) => id,
             };
-            let (account, settings) = files.connect(&connect.token, |file| {
+            let (account, settings) = files.connect(&GithubLogin::Token(connect.token.clone()), |file| {
                 let connecting = GithubConnecting {
                     account: &id,
                     user: &owner.user,
@@ -170,11 +158,12 @@ impl GithubLogins {
     /// token of another user than the account `connect.id` is.
     fn plan(
         &self,
-        files: &Locked<'_, GithubToken>,
+        files: &Locked<'_, GithubLogin>,
         connect: &Connect,
         user: Option<&GithubUser>,
     ) -> Result<Plan, ApiError> {
-        if let Some(holding) = files.holding(self.store.held_github_logins()?, &connect.token) {
+        let token = GithubLogin::Token(connect.token.clone());
+        if let Some(holding) = files.holding(self.store.held_github_logins()?, &token) {
             return match &connect.id {
                 Some(id) if *id != holding => Err(ApiError::new(
                     ErrorCode::Conflict,
@@ -194,9 +183,9 @@ impl GithubLogins {
         }
     }
 
-    /// Refuses with `Conflict` an account whose login can't be used now: disconnected, ended, or with no file that
-    /// holds a token.
-    fn usable(&self, files: &Locked<'_, GithubToken>, id: &GithubAccountId, now_ms: i64) -> Result<(), ApiError> {
+    /// Refuses with `Conflict` an account whose login can't be used now: disconnected, ended, needing signing in again,
+    /// in a form only a newer build reads, or with no file that holds a token.
+    fn usable(&self, files: &Locked<'_, GithubLogin>, id: &GithubAccountId, now_ms: i64) -> Result<(), ApiError> {
         let account = self.record(id)?;
         match self.token_of(files, &account, now_ms)? {
             Ok(_) => Ok(()),
@@ -205,6 +194,14 @@ impl GithubLogins {
             }
             Err(Unusable::Disconnected | Unusable::Ended | Unusable::Unreadable(None)) => {
                 let message = format!("{} needs a login; renew or reconnect it first", account.user.name);
+                Err(ApiError::new(ErrorCode::Conflict, message))
+            }
+            Err(Unusable::SignInAgain) => {
+                let message = format!("{} needs signing in with GitHub again first", account.user.name);
+                Err(ApiError::new(ErrorCode::Conflict, message))
+            }
+            Err(Unusable::Newer) => {
+                let message = format!("{}'s login is one only a newer Roundhouse can read", account.user.name);
                 Err(ApiError::new(ErrorCode::Conflict, message))
             }
         }

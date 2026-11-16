@@ -57,16 +57,22 @@ pub struct HeldGithubLogin {
     /// When it was connected, by the hub's clock. Renewing it moves it.
     pub connected_at_ms: i64,
     /// When it ends, by GitHub's word, converted to the hub's clock. `None` for one that doesn't end, such as a token
-    /// made with no end, and for one whose end GitHub gave in a form this hub couldn't read.
+    /// made with no end, and for one whose end GitHub gave in a form this hub couldn't read. For a sign-in, when the
+    /// token it gave ends, which renewing it moves.
     #[serde(default)]
     pub ends_at_ms: Option<i64>,
+    /// Whether it can't be renewed, so the person has to sign in again, as when a sign-in's refresh token has ended or
+    /// GitHub has refused it. Signing in again, or connecting a token, clears it. False from a hub from before it said.
+    /// *Not built:* renewing a sign-in, which is what sets it.
+    #[serde(default)]
+    pub needs_sign_in: bool,
 }
 
 impl HeldGithubLogin {
-    /// Whether it still works at `now_ms`, as far as the record says: it hasn't ended, or it doesn't end. GitHub can
-    /// still refuse it, as when it's been revoked, which the record can't say.
+    /// Whether it still works at `now_ms`, as far as the record says: it doesn't need signing in again, and it hasn't
+    /// ended, or it doesn't end. GitHub can still refuse it, as when it's been revoked, which the record can't say.
     pub fn works_at(&self, now_ms: i64) -> bool {
-        self.ends_at_ms.is_none_or(|ends_at_ms| ends_at_ms > now_ms)
+        !self.needs_sign_in && self.ends_at_ms.is_none_or(|ends_at_ms| ends_at_ms > now_ms)
     }
 }
 
@@ -76,12 +82,15 @@ impl HeldGithubLogin {
 pub enum GithubLoginKind {
     /// A token the person made on GitHub, such as a fine-grained one, and gave a client.
     Token,
+    /// Signing in with GitHub, through the hub's OAuth App, as a [`GithubSignIn`](super::GithubSignIn) did, whose token
+    /// GitHub ends after a few hours, and which the hub can renew with the refresh token it was given beside it.
+    SignIn,
     /// One from a newer peer.
     #[serde(other)]
     Unknown,
 }
 
-crate::model::tokens!(
+crate::tokens!(
     /// The token of a GitHub login, which is all it takes to act as its account on GitHub.
     GithubToken,
 );

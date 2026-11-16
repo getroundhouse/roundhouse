@@ -17,4 +17,4 @@ mod secret;
 
 pub(crate) use locked::{Locked, LoginFiles};
 pub(crate) use login_file::LoginFile;
-pub(crate) use secret::LoginSecret;
+pub(crate) use secret::{LoginSecret, Stored};

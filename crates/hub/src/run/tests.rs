@@ -58,6 +58,21 @@ fn a_starting_hub_forgets_which_build_each_worker_was() {
     assert_eq!(store.get_workspace(&"w".into()).unwrap().worker_build, None);
 }
 
+/// What GitHub is asked after a sign-in with was only in the last hub's memory, so none it left waiting can go on.
+#[test]
+fn a_starting_hub_records_every_sign_in_with_github_the_last_left_waiting_as_ended() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_session(dir.path());
+    let waiting = protocol::fixtures::github_sign_in("s").status;
+    store.start_github_sign_in(&"s".into(), &waiting).unwrap();
+
+    recover(&store).unwrap();
+
+    let statuses: Vec<_> =
+        store.list_records().unwrap().github_sign_ins.into_iter().map(|sign_in| sign_in.status).collect();
+    assert_eq!(statuses, [protocol::model::GithubSignInStatus::Ended]);
+}
+
 /// What a hub started can still be running once it lets go of its lock, which the next hub can take at once, so its
 /// store stops writing first.
 #[test]

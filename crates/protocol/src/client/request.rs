@@ -77,6 +77,8 @@ pub enum ClientRequest {
     GithubAccountConnect(github_accounts::GithubAccountConnect),
     GithubAccountDisconnect(github_accounts::GithubAccountDisconnect),
     GithubAccountSetDefault(github_accounts::GithubAccountSetDefault),
+    GithubSignInStart(github_accounts::GithubSignInStart),
+    GithubSignInCancel(github_accounts::GithubSignInCancel),
     WorkspaceFiles(files::WorkspaceFiles),
     WorkspaceFolderRead(files::WorkspaceFolderRead),
     WorkspaceFileRead(files::WorkspaceFileRead),

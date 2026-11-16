@@ -149,7 +149,7 @@ pub struct AgentLogin {
     pub token: LoginToken,
 }
 
-super::tokens!(
+crate::tokens!(
     /// The token of a login the hub holds for an agent's account, which is all it takes to use the account, and which
     /// the hub hands to the agent's CLI.
     LoginToken,
