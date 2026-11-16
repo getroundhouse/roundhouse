@@ -13,6 +13,7 @@ mod carrying_on;
 mod children;
 mod comments;
 mod feed;
+mod github_accounts;
 mod hub_settings;
 mod instances;
 mod logins;

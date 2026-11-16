@@ -168,7 +168,13 @@ proptest! {
 }
 
 fn settings(keep_awake: bool, rev: u64) -> HubSettings {
-    HubSettings { account_defaults: None, keep_awake, allow_asked_in_full_access: Some(false), rev: Rev::new(rev) }
+    HubSettings {
+        account_defaults: None,
+        keep_awake,
+        allow_asked_in_full_access: Some(false),
+        github: None,
+        rev: Rev::new(rev),
+    }
 }
 
 #[test]

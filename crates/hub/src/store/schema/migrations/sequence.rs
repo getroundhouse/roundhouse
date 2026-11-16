@@ -1,6 +1,6 @@
 use super::{
-    accounts, activity, cache, comments, drafts, first, hub_settings, limits, logins, providers, replies, subagents,
-    tools, waiting, waits, workers, workspaces,
+    accounts, activity, cache, comments, drafts, first, github_accounts, hub_settings, limits, logins, providers,
+    replies, subagents, tools, waiting, waits, workers, workspaces,
 };
 
 /// Applied in order. `PRAGMA user_version` records how many have run.
@@ -345,4 +345,6 @@ pub(in super::super) const MIGRATIONS: &[&str] = &[
     super::session_accounts::ACCOUNT_SOURCES,
     // Each subagent's ID, apart from the call that started it.
     subagents::IDS,
+    // The GitHub accounts the hub holds a login for, and which is the default, in `github_accounts`.
+    github_accounts::GITHUB_ACCOUNTS,
 ];

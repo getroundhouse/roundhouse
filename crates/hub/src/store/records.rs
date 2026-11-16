@@ -5,6 +5,7 @@ use rusqlite::{Row, Transaction};
 
 use super::accounts::accounts;
 use super::comments::{COMMENT_COLUMNS, comment_from_row};
+use super::github_accounts::github_accounts;
 use super::hub_settings::hub_settings;
 use super::new_workspace_draft::new_workspace_draft;
 use super::repos::{REPO_COLUMNS, repo_from_row};
@@ -37,6 +38,7 @@ impl Store {
             hub_settings: Some(hub_settings(&tx)?),
             accounts: accounts(&tx)?,
             new_workspace_draft: Some(new_workspace_draft(&tx)?),
+            github_accounts: github_accounts(&tx)?,
             rev: current_rev(&tx)?,
         };
         tx.commit()?;

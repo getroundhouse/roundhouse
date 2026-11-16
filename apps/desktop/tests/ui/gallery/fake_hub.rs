@@ -273,7 +273,10 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         | R::AccountConnect(_)
         | R::AccountSetDefault(_)
         | R::SessionAssignAccount(_)
-        | R::AccountDisconnect(_) => Err(read_only("change anything")),
+        | R::AccountDisconnect(_)
+        | R::GithubAccountConnect(_)
+        | R::GithubAccountDisconnect(_)
+        | R::GithubAccountSetDefault(_) => Err(read_only("change anything")),
         // So a screen can show the app waiting on a workspace it asked for, or on a new title. The workspace's record
         // saying it's being made, or on its way out, is the world's to say.
         R::WorkspaceCreate(_) | R::WorkspaceRegenerateTitle(_) => Ok(Outcome::Never),

@@ -11,6 +11,7 @@ mod draft;
 mod effort;
 mod files;
 mod git;
+mod github_account;
 mod hub_settings;
 mod model_name;
 mod permission_mode;
@@ -42,7 +43,8 @@ pub use draft::{
 pub use effort::Effort;
 pub use files::{FileContents, FileOpened, FilePage, FilePages, OpenedText, PageLine, WorktreeFiles};
 pub use git::{GitDiff, GitFile, GitStatus};
-pub use hub_settings::{AccountDefault, HubSettings, HubSettingsChange};
+pub use github_account::{GithubAccount, GithubLoginKind, GithubToken, GithubUser, GithubUserId, HeldGithubLogin};
+pub use hub_settings::{AccountDefault, GithubSettings, HubSettings, HubSettingsChange};
 pub use model_name::{ModelName, ModelNameError};
 pub use permission_mode::PermissionMode;
 pub use prompt_line::{PromptLine, SettledAt, Settlement};
@@ -62,11 +64,13 @@ pub use worktrees::{CHILDREN, ChildStatus, ChildWorktree, MadeBy, WorkName, Work
 
 mod ids;
 pub(crate) use ids::ids;
+mod tokens;
 pub use ids::{
     AccountId, AgentSessionId, ApprovalId, AskKey, AttachmentId, BranchName, ChildWorktreeId, ClientMessageId,
-    ClientRequestId, CommentId, CommitId, HubId, InstanceId, MessageId, ProviderName, RemoteName, RepoId, SessionId,
-    SubagentId, TaskId, ToolUseId, WaitId, WorkerTarget, WorkspaceId,
+    ClientRequestId, CommentId, CommitId, GithubAccountId, GithubUsername, HubId, InstanceId, MessageId, ProviderName,
+    RemoteName, RepoId, SessionId, SubagentId, TaskId, ToolUseId, WaitId, WorkerTarget, WorkspaceId,
 };
+pub(crate) use tokens::tokens;
 mod repo;
 pub use repo::Repo;
 mod comment;

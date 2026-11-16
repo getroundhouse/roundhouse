@@ -135,11 +135,14 @@ impl World {
                 account_defaults: (self.logins == LoginSupport::Defaults).then(|| self.account_defaults.clone()),
                 keep_awake: true,
                 allow_asked_in_full_access: Some(false),
+                // As from a hub that keeps no GitHub accounts, since its hub refuses to.
+                github: None,
                 rev: Rev::default(),
             }),
             accounts: self.accounts.clone(),
             // As from a hub that doesn't keep one, since its hub refuses to.
             new_workspace_draft: None,
+            github_accounts: Vec::new(),
             rev: Rev::default(),
         }
     }

@@ -1,4 +1,5 @@
 use crate::error::HubError;
+use crate::github::Github;
 use crate::hub::{Hub, HubDirs, LeftAtWork};
 use crate::listener;
 use crate::listener::Listener;
@@ -31,6 +32,9 @@ pub struct HubConfig {
     /// the hub doesn't run.
     pub agents: Vec<AgentDescription>,
     pub timers: Timers,
+    /// GitHub's API, such as `https://api.github.com`, which the hub asks whose a token is. Given rather than known
+    /// here, so a hub can be pointed at a stand-in, as the hub's own tests point theirs.
+    pub github_api: String,
 }
 
 /// What the last run left half done, for this one to finish once it's serving.
@@ -104,7 +108,7 @@ fn load_providers(
 
 /// Runs until asked to stop or signalled. Returns an error if another hub is using these paths.
 pub async fn run(config: HubConfig) -> Result<(), HubError> {
-    let paths = config.paths;
+    let HubConfig { build, paths, worker_exe, shell, path, on_demand, agents, timers, github_api } = config;
     private_files::create_dir_all(&paths.data_dir)
         .map_err(|e| HubError::io(format!("creating {}", paths.data_dir.display()), e))?;
     let lock_file = take_lock(&paths)?;
@@ -121,13 +125,9 @@ pub async fn run(config: HubConfig) -> Result<(), HubError> {
     let left_at_work = LeftAtWork::read(&store).map_err(HubError::Recover)?;
     let settings = store.hub_settings().map_err(HubError::OpenDatabase)?;
 
-    let providers = load_providers(config.build, &paths, config.worker_exe, config.shell, config.path, &store)?;
-    let dirs = HubDirs {
-        attachments: paths.attachments_dir.clone(),
-        worker_logs: paths.worker_logs_dir.clone(),
-        data: paths.data_dir.clone(),
-    };
-    let hub = Arc::new(Hub::new(config.build, store, dirs, providers, config.agents, config.on_demand, config.timers));
+    let providers = load_providers(build, &paths, worker_exe, shell, path, &store)?;
+    let github = Github::new(github_api);
+    let hub = Arc::new(Hub::new(build, store, HubDirs::of(&paths), providers, github, agents, on_demand, timers));
     // Before clients are served, so none is told the hub holds a login whose token is gone.
     hub.tidy_logins().await;
     // Before carrying on with the agents an earlier hub left, since what they asked meanwhile comes in as soon as

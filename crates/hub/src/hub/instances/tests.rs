@@ -12,7 +12,9 @@ use tokio::sync::Notify;
 use tokio::task::JoinHandle;
 
 use super::*;
+use crate::github::Github;
 use crate::hub::HubDirs;
+use crate::hub::tests::NO_GITHUB;
 use crate::provider_set::ProviderSet;
 use crate::store::tests::store_with_session;
 use crate::store::{InstanceStage, Store};
@@ -102,7 +104,9 @@ fn hub_with(dir: &Path, fake: Fake) -> (Arc<Hub>, Arc<Fake>) {
     let fake = Arc::new(fake);
     let providers = ProviderSet::only(fake.clone());
     let store = Arc::new(store_with_session(dir));
-    let hub = Hub::new(Build::UNSTAMPED, store, HubDirs::in_dir(dir), providers, Vec::new(), false, Timers::DEFAULT);
+    let github = Github::new(NO_GITHUB.to_string());
+    let hub =
+        Hub::new(Build::UNSTAMPED, store, HubDirs::in_dir(dir), providers, github, Vec::new(), false, Timers::DEFAULT);
     (Arc::new(hub), fake)
 }
 

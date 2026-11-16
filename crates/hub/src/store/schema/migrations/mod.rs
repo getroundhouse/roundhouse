@@ -9,6 +9,7 @@ mod cache;
 mod comments;
 mod drafts;
 mod first;
+mod github_accounts;
 mod hub_settings;
 mod limits;
 mod logins;

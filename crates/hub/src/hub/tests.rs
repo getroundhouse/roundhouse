@@ -17,6 +17,7 @@ use providers::local::{LocalConfig, LocalProvider};
 use tokio::sync::oneshot;
 
 use super::{Hub, HubDirs};
+use crate::github::Github;
 use crate::provider_set::ProviderSet;
 use crate::session::{CarriedOver, Item, LiveSession, Starting};
 use crate::store::tests::store_with_session;
@@ -74,6 +75,19 @@ pub(crate) fn hub_in(dir: &Path) -> Arc<Hub> {
 
 /// The same, whose agents are as `agents` says.
 pub(super) fn hub_describing(dir: &Path, agents: Vec<AgentDescription>) -> Arc<Hub> {
+    hub_of(dir, agents, Github::new(NO_GITHUB.to_string()))
+}
+
+/// The same, which calls GitHub's API at `api`, such as a stand-in's.
+pub(crate) fn hub_calling_github(dir: &Path, api: String) -> Arc<Hub> {
+    hub_of(dir, vec![described()], Github::new(api))
+}
+
+/// Where a test's hub that isn't about GitHub has GitHub's API, which nothing serves, so a call that reaches it fails
+/// at once.
+pub(crate) const NO_GITHUB: &str = "http://127.0.0.1:9";
+
+fn hub_of(dir: &Path, agents: Vec<AgentDescription>, github: Github) -> Arc<Hub> {
     let store = Arc::new(store_with_session(dir));
     let config = LocalConfig {
         worker_exe: dir.join("no-worker"),
@@ -83,7 +97,7 @@ pub(super) fn hub_describing(dir: &Path, agents: Vec<AgentDescription>) -> Arc<H
         path: None,
     };
     let providers = ProviderSet::only(Arc::new(LocalProvider::new(config)));
-    Arc::new(Hub::new(Build::UNSTAMPED, store, HubDirs::in_dir(dir), providers, agents, false, Timers::DEFAULT))
+    Arc::new(Hub::new(Build::UNSTAMPED, store, HubDirs::in_dir(dir), providers, github, agents, false, Timers::DEFAULT))
 }
 
 /// A stand-in for `w`'s worker, which fails every call, as `hub`'s worker.

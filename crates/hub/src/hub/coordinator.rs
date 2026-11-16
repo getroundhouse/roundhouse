@@ -1,6 +1,8 @@
 use super::{awake, feed, pull_requests, sessions, setup};
 use crate::attachment_files::AttachmentFiles;
 use crate::error::internal;
+use crate::github::Github;
+use crate::github_logins::GithubLogins;
 use crate::jobs::Jobs;
 use crate::logins::Logins;
 use crate::provider_set::ProviderSet;
@@ -15,6 +17,7 @@ use parking_lot::Mutex;
 use protocol::Build;
 use protocol::client::{ApiError, ErrorCode, HubNotice, HubStatus};
 use protocol::model::{AgentDescription, ClientRequestId, ProviderName, Records, SessionId, Workspace, WorkspaceId};
+use protocol::paths::Paths;
 use providers::Provider;
 use sessions::Sessions;
 use setup::SetupGate;
@@ -51,6 +54,9 @@ pub(crate) struct Hub {
     /// What each worker's command writes to stderr, a file per instance. Apart from any provider's own files.
     pub(super) worker_logs_dir: PathBuf,
     pub(super) logins: Arc<Logins>,
+    pub(super) github_logins: Arc<GithubLogins>,
+    /// What the hub asks GitHub, such as whose a token is.
+    pub(super) github: Github,
     pub(super) providers: ProviderSet,
     /// What each kind of agent the hub runs is called and offers, as `HubConfig` gave them.
     pub(super) agents: Vec<AgentDescription>,
@@ -103,6 +109,15 @@ pub(crate) struct HubDirs {
 }
 
 impl HubDirs {
+    /// Where `paths` has each.
+    pub(crate) fn of(paths: &Paths) -> Self {
+        Self {
+            attachments: paths.attachments_dir.clone(),
+            worker_logs: paths.worker_logs_dir.clone(),
+            data: paths.data_dir.clone(),
+        }
+    }
+
     /// Each in `dir`, for a test's hub.
     #[cfg(test)]
     pub(crate) fn in_dir(dir: &std::path::Path) -> Self {
@@ -111,11 +126,16 @@ impl HubDirs {
 }
 
 impl Hub {
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "each is a part of the hub made apart from it, handed over once, by `run` or a test's hub"
+    )]
     pub(crate) fn new(
         build: Build,
         store: Arc<Store>,
         dirs: HubDirs,
         providers: ProviderSet,
+        github: Github,
         agents: Vec<AgentDescription>,
         on_demand: bool,
         timers: Timers,
@@ -123,6 +143,8 @@ impl Hub {
         Self {
             build,
             logins: Arc::new(Logins::new(store.clone(), &dirs.data)),
+            github_logins: Arc::new(GithubLogins::new(store.clone(), &dirs.data)),
+            github,
             store,
             attachment_files: AttachmentFiles::new(dirs.attachments),
             worker_logs_dir: dirs.worker_logs,

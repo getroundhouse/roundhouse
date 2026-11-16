@@ -4,9 +4,10 @@ use crate::event::{
     Asking, CallKind, ContentBlock, Denied, EventBody, FailureKind, RequestFailure, SessionEvent, TurnOutcome,
 };
 use crate::model::{
-    Account, AgentKind, ApprovalId, BranchName, Call, CallResult, ChildStatus, ChildWorktree, Draft, Effort, MadeBy,
-    ModelName, PermissionMode, Place, RecentWork, Rev, Seq, Session, SessionStatus, SetupStatus, Subagent, SubagentId,
-    SubagentStatus, TitleSource, ToolUseId, Workspace, WorkspaceStatus,
+    Account, AgentKind, ApprovalId, BranchName, Call, CallResult, ChildStatus, ChildWorktree, Draft, Effort,
+    GithubAccount, GithubLoginKind, GithubUser, GithubUserId, HeldGithubLogin, MadeBy, ModelName, PermissionMode,
+    Place, RecentWork, Rev, Seq, Session, SessionStatus, SetupStatus, Subagent, SubagentId, SubagentStatus,
+    TitleSource, ToolUseId, Workspace, WorkspaceStatus,
 };
 
 /// The session `id`, in the workspace `w`, idle with nothing in its log. Its agent is Claude, running Opus with full
@@ -112,6 +113,16 @@ pub fn account(id: &str) -> Account {
         limits: Vec::new(),
         held_login: None,
         used_at_ms: None,
+        rev: Rev::default(),
+    }
+}
+
+/// The GitHub account `id` of the user `ada`, whose number is 1, holding a token connected at 0 that doesn't end.
+pub fn github_account(id: &str) -> GithubAccount {
+    GithubAccount {
+        id: id.into(),
+        user: GithubUser { id: GithubUserId::new(1), name: "ada".into() },
+        held_login: Some(HeldGithubLogin { how: GithubLoginKind::Token, connected_at_ms: 0, ends_at_ms: None }),
         rev: Rev::default(),
     }
 }

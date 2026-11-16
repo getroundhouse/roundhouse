@@ -13,6 +13,7 @@ pub use typed::{
 
 mod builders;
 pub use builders::{
-    ApprovalRequest, account, approval_request, call, call_result, child_worktree, command_failed, event, of_kind,
-    request_failed, session, subagent, subagent_started, tool_denied, tool_result, tool_use, turn_ended, workspace,
+    ApprovalRequest, account, approval_request, call, call_result, child_worktree, command_failed, event,
+    github_account, of_kind, request_failed, session, subagent, subagent_started, tool_denied, tool_result, tool_use,
+    turn_ended, workspace,
 };

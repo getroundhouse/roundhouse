@@ -3,7 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::{AccountId, AgentKind, Rev};
+use super::{AccountId, AgentKind, GithubAccountId, Rev};
 
 /// A hub's settings. There's one record of them per hub.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -17,7 +17,24 @@ pub struct HubSettings {
     /// Defaults chosen on this hub, by agent kind. None means the hub predates account defaults.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub account_defaults: Option<Vec<AccountDefault>>,
+    /// What it says of the GitHub accounts it holds. `None` from a hub that keeps none, which is how a client tells it
+    /// from one that holds none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub github: Option<GithubSettings>,
     pub rev: Rev,
+}
+
+/// What the settings of a hub that keeps GitHub accounts say of them.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct GithubSettings {
+    /// The default: the [`GithubAccount`](super::GithubAccount) agents are to push and open pull requests as, on every
+    /// machine, for every repository on GitHub. `None` is each machine's own login. Connecting the first GitHub account
+    /// the hub has a record of makes it the default. Otherwise only
+    /// [`GithubAccountSetDefault`](crate::client::github_accounts::GithubAccountSetDefault) changes it, so a default
+    /// whose login is disconnected or has ended stays the default, holding no login that can be used, until it's
+    /// renewed, connected again or another is chosen.
+    #[serde(default)]
+    pub account: Option<GithubAccountId>,
 }
 
 /// Settings to change. One left out is left as it is.

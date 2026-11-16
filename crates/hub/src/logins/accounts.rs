@@ -1,4 +1,5 @@
 use crate::login_files::{LoginFiles, LoginSecret};
+use crate::pasted_token::pasted_token;
 use crate::store::{Connected, Connecting, IdFrom, Store, StoreError};
 use protocol::client::accounts::AccountConnect;
 use protocol::client::{ApiError, ErrorCode};
@@ -8,9 +9,6 @@ use std::sync::Arc;
 
 /// Longer than any name a person gives an account, which every client is sent on its record.
 const MAX_NAME_BYTES: usize = 200;
-
-/// Longer than any token an agent's CLI makes, which `claude setup-token`'s is about a hundred characters.
-const MAX_TOKEN_BYTES: usize = 4096;
 
 /// Connects, disconnects, tidies and hands out a login one at a time, under its files' lock, so none finds another half
 /// done. Synchronous, and only called off the async threads.
@@ -53,22 +51,15 @@ pub(crate) struct Connect {
 
 impl Connect {
     /// Trims the token and the name, since what's pasted often ends in a line break, and refuses what can't be
-    /// connected: an empty or very long name, and a token that's empty, very long, or has a space or a control
-    /// character inside, which no CLI's has and an environment variable can't always carry. `login` is what the kind's
-    /// description says of its login, which says when it ends.
+    /// connected: an empty or very long name, and a token that can't be one, as [`pasted_token`] says. `login` is what
+    /// the kind's description says of its login, which says when it ends.
     pub(crate) fn new(asked: AccountConnect, login: &LoginDescription, connected_at_ms: i64) -> Result<Self, ApiError> {
         let AccountConnect { agent, name, token, account } = asked;
-        let refused = |message: &str| Err(ApiError::new(ErrorCode::InvalidRequest, message));
-        let (name, token) = (name.trim(), token.as_str().trim());
+        let name = name.trim();
         if name.is_empty() || name.len() > MAX_NAME_BYTES {
-            return refused("the account needs a name, of at most 200 bytes");
+            return Err(ApiError::new(ErrorCode::InvalidRequest, "the account needs a name, of at most 200 bytes"));
         }
-        if token.is_empty() || token.len() > MAX_TOKEN_BYTES {
-            return refused("the token is empty, or longer than any a CLI makes");
-        }
-        if token.chars().any(|c| c.is_whitespace() || c.is_control()) {
-            return refused("the token has a space or a line break inside, which no CLI's has");
-        }
+        let token = pasted_token(token.as_str())?;
         Ok(Self {
             agent,
             name: name.to_string(),

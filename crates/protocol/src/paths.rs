@@ -30,6 +30,10 @@ const HUB_COPY_NAME: &str = "Roundhouse Hub";
 /// as [`Paths::logins_dir`].
 pub const LOGINS_DIR: &str = "logins";
 
+/// The directory in the data directory where the hub keeps the token of each login it holds for a GitHub account, apart
+/// from agents' logins, so tidying one kind's files never removes another's.
+pub const GITHUB_LOGINS_DIR: &str = "github-logins";
+
 /// What a worker locks in its state directory while it serves the instance, so the instance has one worker at a time.
 pub const WORKER_LOCK_FILE: &str = "worker.lock";
 /// Where a worker records itself in its state directory, so its provider can tell whether one runs there.
