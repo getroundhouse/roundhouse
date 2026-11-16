@@ -10,6 +10,10 @@ license.workspace = true
 testing = []
 
 [dependencies]
+ring.workspace = true
+rustls.workspace = true
+socket2.workspace = true
+webpki.workspace = true
 parking_lot.workspace = true
 private-files.workspace = true
 protocol.workspace = true

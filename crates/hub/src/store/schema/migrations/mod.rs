@@ -7,6 +7,7 @@ mod activity;
 mod agent_runs;
 mod cache;
 mod comments;
+mod devices;
 mod drafts;
 mod first;
 mod github_accounts;

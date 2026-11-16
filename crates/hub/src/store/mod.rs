@@ -69,3 +69,6 @@ mod database;
 pub(crate) use database::later_ms;
 pub use database::{Appended, Store, StoredSession, now_ms};
 use database::{current_rev, from_text, json_at, lock, place_column, place_of, rev_of, seq_column, seq_of, text_of};
+
+mod devices;
+pub(crate) use devices::TokenHash;

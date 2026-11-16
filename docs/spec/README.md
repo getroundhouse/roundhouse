@@ -11,6 +11,7 @@ A rule can end with *Not built*, when it's decided and not in the product yet, o
 | `diff.md` | The diff, and comments on it |
 | `files.md` | All files, which lists every file in a workspace, and a file opened from it |
 | `sidebar.md` | The sidebar |
+| `hubs.md` | Pairing with and authorizing network clients |
 | `home.md` | Home, which lists every workspace |
 | `updates.md` | What someone sees when the app or its hub updates, or when there's no hub |
 | `menus.md` | The menus, on a Mac and off it, and the keys off the Mac |

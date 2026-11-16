@@ -183,6 +183,19 @@ velopack = { version = "=1.2.161", features = ["public-utils"] }
 windows-sys = "0.61.2"
 
 # docs/rust.md says what each of these is for.
+
+# Devices pair directly with a hub over TLS 1.3, using ring as the existing TLS dependencies do.
+rcgen = { version = "0.14.10", default-features = false, features = ["crypto", "ring"] }
+rustls = { version = "0.23.46", default-features = false, features = ["ring", "std"] }
+tokio-rustls = { version = "0.26.6", default-features = false, features = ["ring"] }
+webpki = { package = "rustls-webpki", version = "0.103.16", default-features = false, features = ["std"] }
+# TCP keepalive timings; tokio already uses this crate.
+socket2 = { version = "0.6.5", features = ["all"] }
+# A pairing link can be scanned on a phone as well as pasted on a desktop.
+qrcode = { version = "0.14.1", default-features = false }
+# Refuse control and format characters in device names displayed in terminals.
+unicode-properties = { version = "0.1.3", default-features = false, features = ["general-category"] }
+
 [workspace.lints.rust]
 unreachable_pub = "warn"
 

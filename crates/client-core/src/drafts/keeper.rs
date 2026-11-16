@@ -164,7 +164,13 @@ impl Keeper {
             }
             let Some(pending) = self.pending.remove(&key) else { continue };
             let answer = self.send(&pending.change);
-            let gone = matches!(answer, Err(ClientError::Io(_) | ClientError::Disconnected));
+            let gone = matches!(
+                answer,
+                Err(ClientError::Io(_)
+                    | ClientError::Disconnected
+                    | ClientError::FingerprintMismatch { .. }
+                    | ClientError::Unreachable { .. })
+            );
             let unsupported = answer.as_ref().is_err_and(ClientError::is_unsupported);
             // For the next connection, which may be to a hub that keeps it, such as this one once it's restarted as
             // the build that does. A hub that doesn't keep chats' drafts can't keep their files either, so everything
@@ -225,7 +231,12 @@ impl Keeper {
                 }
                 // Added, or the hub won't take it however often it's asked, and then a draft goes without it.
                 Ok(()) | Err(ClientError::Api(_) | ClientError::Unexpected(_)) => self.reached(&key, None),
-                Err(ClientError::Io(_) | ClientError::Disconnected) => {
+                Err(
+                    ClientError::Io(_)
+                    | ClientError::Disconnected
+                    | ClientError::FingerprintMismatch { .. }
+                    | ClientError::Unreachable { .. },
+                ) => {
                     self.adding.push_front((to, file));
                     self.stalled = true;
                 }
@@ -271,7 +282,12 @@ impl Keeper {
                 }
                 // Let go of, or the hub keeps it, such as for a prompt that carries it.
                 Ok(()) | Err(ClientError::Api(_) | ClientError::Unexpected(_)) => {}
-                Err(ClientError::Io(_) | ClientError::Disconnected) => {
+                Err(
+                    ClientError::Io(_)
+                    | ClientError::Disconnected
+                    | ClientError::FingerprintMismatch { .. }
+                    | ClientError::Unreachable { .. },
+                ) => {
                     left.push((from, file));
                     self.stalled = true;
                 }

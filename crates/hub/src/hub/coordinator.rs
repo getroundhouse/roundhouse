@@ -104,6 +104,7 @@ pub(crate) struct Hub {
     pub(super) restarting: AtomicBool,
     /// Asked to stop, which stops its workers and their agents, even once it was asked to restart.
     pub(super) stopping: AtomicBool,
+    pub(crate) remote: crate::remote::Remote,
     pub(crate) clients: AtomicU32,
     pub(crate) requests: AtomicU32,
 }
@@ -115,6 +116,7 @@ pub(crate) struct HubDirs {
     /// The data directory itself, in which the files of each kind of login have a directory of their own, as
     /// `LoginSecret::DIR` says.
     pub(crate) data: PathBuf,
+    pub(crate) network_address: std::net::SocketAddr,
 }
 
 impl HubDirs {
@@ -124,13 +126,19 @@ impl HubDirs {
             attachments: paths.attachments_dir.clone(),
             worker_logs: paths.worker_logs_dir.clone(),
             data: paths.data_dir.clone(),
+            network_address: std::net::SocketAddr::from(([127, 0, 0, 1], 0)),
         }
     }
 
     /// Each in `dir`, for a test's hub.
     #[cfg(test)]
     pub(crate) fn in_dir(dir: &std::path::Path) -> Self {
-        Self { attachments: dir.join("attachments"), worker_logs: dir.join("worker-logs"), data: dir.to_path_buf() }
+        Self {
+            attachments: dir.join("attachments"),
+            worker_logs: dir.join("worker-logs"),
+            data: dir.to_path_buf(),
+            network_address: std::net::SocketAddr::from(([127, 0, 0, 1], 0)),
+        }
     }
 }
 
@@ -150,6 +158,11 @@ impl Hub {
         timers: Timers,
     ) -> Self {
         Self {
+            remote: crate::remote::Remote::new(crate::remote::RemoteConfig {
+                address: dirs.network_address,
+                certificate: dirs.data.join("hub-cert.der"),
+                certificate_key: dirs.data.join("hub-key.der"),
+            }),
             build,
             logins: Arc::new(Logins::new(store.clone(), &dirs.data)),
             github_logins: Arc::new(GithubLogins::new(store.clone(), &dirs.data, now_ms())),

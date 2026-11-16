@@ -1,4 +1,5 @@
-use super::{commands, lines, queueing, stream};
+use super::transport::{Closer, Transport};
+use super::{commands, lines, queueing};
 use parking_lot::Mutex;
 use protocol::client::{
     ApiError, CLIENT_PROTOCOL_VERSION, ClientFrame, ClientRequest, ClientResponse, ErrorCode, Hello, HelloReply,
@@ -13,7 +14,7 @@ use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, OnceLock};
-use stream::Stream;
+use std::time::Instant;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ClientError {
@@ -23,6 +24,10 @@ pub enum ClientError {
     Io(#[from] std::io::Error),
     #[error("the connection to the hub was lost")]
     Disconnected,
+    #[error("the hub at {host} has another key; pair again only after checking the hub")]
+    FingerprintMismatch { host: String },
+    #[error("the hub could not be reached at {hosts:?}: {last:?}")]
+    Unreachable { hosts: Vec<String>, last: Option<std::io::Error>, not_pinned: Vec<String> },
     #[error("unexpected reply from the hub: {0}")]
     Unexpected(String),
 }
@@ -106,7 +111,7 @@ impl Drop for Subscription {
 type PendingReply = flume::Sender<std::result::Result<ClientResponse, ClientError>>;
 
 pub(super) struct Inner {
-    pub(super) writer: Mutex<Stream>,
+    pub(super) writer: Mutex<Box<dyn Write + Send>>,
     pub(super) pending: Mutex<HashMap<u64, PendingReply>>,
     pub(super) subscriptions: Mutex<HashMap<u64, flume::Sender<SubscriptionItem>>>,
     /// Subscriptions ended because their readers fell behind.
@@ -137,50 +142,55 @@ impl Inner {
     }
 }
 
-/// Closes the socket when the last `Client` clone goes away. The reader thread can't be what keeps
-/// this alive, or it would wait forever on a socket that only it was holding open.
-pub(super) struct Closer(pub(super) Stream);
-
-impl Drop for Closer {
-    fn drop(&mut self) {
-        let _ = self.0.shutdown(std::net::Shutdown::Both);
-    }
-}
-
 /// Dropping the last clone disconnects, which also ends its subscriptions.
 #[derive(Clone)]
 pub struct Client {
     pub(super) inner: Arc<Inner>,
-    pub(super) _closer: Arc<Closer>,
+    pub(super) closer: Arc<Closer>,
 }
 
 impl Client {
     /// Connects and checks the protocol version.
     pub fn connect(socket: &Path, client_name: &str) -> Result<Client> {
         let client = Client::open(socket)?;
-        let HelloReply { protocol_version, hub_version } = client.call(Hello {
-            protocol_version: CLIENT_PROTOCOL_VERSION,
-            client: client_name.to_string(),
-            // A client speaks only its own version, and a hub the one before its own as well after a break.
-            oldest_protocol_version: Some(CLIENT_PROTOCOL_VERSION),
-        })?;
+        client.hello(client_name)?;
+        Ok(client)
+    }
+
+    pub(super) fn hello(&self, client_name: &str) -> Result<()> {
+        self.hello_until(client_name, None)
+    }
+
+    pub(super) fn hello_until(&self, client_name: &str, deadline: Option<Instant>) -> Result<()> {
+        let HelloReply { protocol_version, hub_version } = self.call_until(
+            Hello {
+                protocol_version: CLIENT_PROTOCOL_VERSION,
+                client: client_name.to_string(),
+                // A client speaks only its own version, and a hub the one before its own as well after a break.
+                oldest_protocol_version: Some(CLIENT_PROTOCOL_VERSION),
+            },
+            deadline,
+        )?;
         // A client speaks only its own version, so it can't follow a hub that chose another.
         if protocol_version != CLIENT_PROTOCOL_VERSION {
             let message =
                 format!("the hub chose protocol {protocol_version}, and this client speaks {CLIENT_PROTOCOL_VERSION}");
             return Err(ApiError::new(ErrorCode::VersionMismatch, message).into());
         }
-        let _ = client.inner.hub_version.set(hub_version);
-        Ok(client)
+        let _ = self.inner.hub_version.set(hub_version);
+        Ok(())
     }
 
     /// A connection that hasn't said hello, which a hub only answers a little on. See [`HubAdmin`](super::HubAdmin).
     pub(super) fn open(socket: &Path) -> Result<Client> {
-        let stream = Stream::connect(socket)?;
-        let reader = stream.try_clone()?;
-        let closer = Arc::new(Closer(stream.try_clone()?));
+        Self::from_transport(Transport::local(socket)?)
+    }
+
+    pub(super) fn from_transport(transport: Transport) -> Result<Client> {
+        let Transport { reader, writer, closer } = transport;
+        let closer = Arc::new(closer);
         let inner = Arc::new(Inner {
-            writer: Mutex::new(stream),
+            writer: Mutex::new(writer),
             pending: Mutex::new(HashMap::new()),
             subscriptions: Mutex::new(HashMap::new()),
             lagged: Mutex::new(HashSet::new()),
@@ -196,7 +206,7 @@ impl Client {
         std::thread::Builder::new()
             .name("hub-client-reader".to_string())
             .spawn(move || read_frames(&for_reader, reader))?;
-        Ok(Client { inner, _closer: closer })
+        Ok(Client { inner, closer })
     }
 
     /// Which build the hub is, as it said when this connected.
@@ -213,13 +223,16 @@ impl Client {
     /// Sends `request` and waits for its reply, read as what the request names. A reply of any other kind fails it, with
     /// [`ClientError::Unexpected`].
     pub fn call<R: Request>(&self, request: R) -> Result<R::Reply> {
-        let response = self.exchange(request.into_request())?;
+        self.call_until(request, None)
+    }
+
+    pub(super) fn call_until<R: Request>(&self, request: R, deadline: Option<Instant>) -> Result<R::Reply> {
+        let response = self.exchange_until(request.into_request(), deadline)?;
         R::Reply::read(response).map_err(|response| ClientError::Unexpected(format!("{response:?}")))
     }
 
-    /// Sends `request` and waits for whatever the hub answers it with, which only [`Client::call`] reads, so it's read
-    /// in one place.
-    pub(super) fn exchange(&self, request: ClientRequest) -> Result<ClientResponse> {
+    /// Sends one request; an introduction deadline ends the whole connection if its reply never arrives.
+    fn exchange_until(&self, request: ClientRequest, deadline: Option<Instant>) -> Result<ClientResponse> {
         let id = self.inner.next_id.fetch_add(1, Ordering::Relaxed);
         let line = frame::encode(&ClientFrame { id, request }).map_err(|e| ClientError::Unexpected(e.to_string()))?;
         let (reply_tx, reply_rx) = flume::bounded(1);
@@ -230,15 +243,30 @@ impl Client {
         }
         // Writing to the hub only fails once it has gone, which the reader may not have found yet.
         if self.inner.writer.lock().write_all(&line).is_err() {
-            self.inner.pending.lock().remove(&id);
-            *self.inner.disconnected.lock() = true;
+            self.disconnect();
             return Err(ClientError::Disconnected);
         }
-        reply_rx.recv().map_err(|_| ClientError::Disconnected)?
+        match deadline {
+            None => reply_rx.recv().map_err(|_| ClientError::Disconnected)?,
+            Some(deadline) => match reply_rx.recv_deadline(deadline) {
+                Ok(reply) => reply,
+                Err(flume::RecvTimeoutError::Disconnected) => Err(ClientError::Disconnected),
+                Err(flume::RecvTimeoutError::Timeout) => {
+                    self.disconnect();
+                    Err(std::io::Error::new(std::io::ErrorKind::TimedOut, "the hub didn't finish connecting in time")
+                        .into())
+                }
+            },
+        }
+    }
+
+    fn disconnect(&self) {
+        self.closer.close();
+        end_connection(&self.inner);
     }
 }
 
-fn read_frames(inner: &Arc<Inner>, stream: Stream) {
+fn read_frames(inner: &Arc<Inner>, stream: impl std::io::Read) {
     let mut reader = BufReader::new(stream);
     let mut line = Vec::new();
     loop {
@@ -275,6 +303,10 @@ fn read_frames(inner: &Arc<Inner>, stream: Stream) {
             }
         }
     }
+    end_connection(inner);
+}
+
+fn end_connection(inner: &Inner) {
     *inner.disconnected.lock() = true;
     let pending: Vec<_> = inner.pending.lock().drain().collect();
     for (_, reply) in pending {
@@ -323,6 +355,9 @@ pub(super) fn hub_is_missing(error: &ClientError) -> bool {
                 | std::io::ErrorKind::ConnectionReset
                 | std::io::ErrorKind::BrokenPipe
         ),
-        ClientError::Api(_) | ClientError::Unexpected(_) => false,
+        ClientError::Api(_)
+        | ClientError::Unexpected(_)
+        | ClientError::FingerprintMismatch { .. }
+        | ClientError::Unreachable { .. } => false,
     }
 }

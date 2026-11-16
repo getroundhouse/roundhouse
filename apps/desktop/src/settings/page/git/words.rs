@@ -175,7 +175,9 @@ pub(super) fn reason(e: &ClientError) -> String {
     let ClientError::Api(api) = e else { return e.to_string() };
     match api.code {
         ErrorCode::Unsupported => "this hub can't do that until it's updated".to_string(),
-        ErrorCode::InvalidRequest
+        ErrorCode::Unauthorized
+        | ErrorCode::LocalOnly
+        | ErrorCode::InvalidRequest
         | ErrorCode::VersionMismatch
         | ErrorCode::NeedsForce
         | ErrorCode::NameTaken

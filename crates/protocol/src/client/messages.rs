@@ -56,6 +56,10 @@ pub struct ClientFrame {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(tag = "result", rename_all = "snake_case")]
 pub enum ClientResponse {
+    Paired(super::devices::Paired),
+    Devices(super::devices::Devices),
+    Pairing(crate::pairing::Pairing),
+    Device(crate::pairing::Device),
     Hello(HelloReply),
     Ok,
     HubStatus(HubStatus),
@@ -154,6 +158,8 @@ pub struct ApiError {
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum ErrorCode {
+    Unauthorized,
+    LocalOnly,
     /// The first request wasn't `Hello`, or the versions don't match.
     VersionMismatch,
     NotFound,

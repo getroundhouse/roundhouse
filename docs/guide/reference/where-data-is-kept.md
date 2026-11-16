@@ -1,6 +1,8 @@
 # Where data is kept
 
-Everything Roundhouse keeps is on your machine. There's no Roundhouse account, and nothing is sent to us.
+Each hub keeps its workspaces and chats on its machine. There's no Roundhouse account, and nothing is sent to us.
+
+A hub keeps `hub-cert.der` and `hub-key.der` in its data directory; its database holds only hashes of paired-device tokens.
 
 ## The hub's data
 

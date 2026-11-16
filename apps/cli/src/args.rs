@@ -15,6 +15,9 @@ pub(crate) struct Args {
 
 #[derive(Subcommand)]
 pub(crate) enum Cmd {
+    /// Pair and manage devices that can reach this hub over the network.
+    #[command(subcommand, alias = "device")]
+    Phone(PhoneCmd),
     /// Inspect or stop the hub. It starts by itself when a command needs it.
     #[command(subcommand)]
     Hub(HubCmd),
@@ -247,4 +250,11 @@ mod tests {
             assert_eq!(agent, Some(kind));
         }
     }
+}
+
+#[derive(Subcommand)]
+pub(crate) enum PhoneCmd {
+    Pair,
+    List,
+    Revoke { phone: String },
 }

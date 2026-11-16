@@ -16,6 +16,12 @@ use super::{
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(tag = "method", rename_all = "snake_case")]
 pub enum ClientRequest {
+    Pair(super::devices::Pair),
+    Authenticate(super::devices::Authenticate),
+    PairingStart,
+    PairingWait(super::devices::PairingWait),
+    DeviceList,
+    DeviceRevoke(super::devices::DeviceRevoke),
     Hello(Hello),
     /// See [`admin::HubStatus`].
     HubStatus,

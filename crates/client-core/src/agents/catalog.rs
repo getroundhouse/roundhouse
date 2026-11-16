@@ -16,7 +16,12 @@ impl Agents {
         match client.agent_list() {
             Ok(described) => Ok(Agents { described }),
             Err(ClientError::Api(_) | ClientError::Unexpected(_)) => Ok(Agents::default()),
-            Err(e @ (ClientError::Io(_) | ClientError::Disconnected)) => Err(e),
+            Err(
+                e @ (ClientError::Io(_)
+                | ClientError::Disconnected
+                | ClientError::FingerprintMismatch { .. }
+                | ClientError::Unreachable { .. }),
+            ) => Err(e),
         }
     }
 

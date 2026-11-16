@@ -1,29 +1,26 @@
-use super::{pump, subscribing};
-use crate::attachment_files::FileFor;
-use crate::frames::FrameReader;
-use crate::hub::Hub;
-use crate::listener::Listener;
-use crate::store::AddedBy;
-use crate::versions;
-use parking_lot::Mutex;
-use protocol::client::{
-    ApiError, ClientRequest, ClientResponse, ErrorCode, Hello, HelloReply, HubFrame, ReplyOutcome, accounts, admin,
-    agent, attachments, comments, drafts, files, github_accounts, log, new_workspace, queue, records, sessions,
-    subscriptions, waits, workspaces,
-};
-use protocol::frame::Call;
-use protocol::model::{Place, Seq};
-use protocol::versions::Versions;
-use protocol::{Build, frame};
-use pump::Following;
+//! Serving clients, on the Unix socket and over TLS for paired devices. Each connection reads its requests in order,
+//! and answers them alongside one another.
+
+use super::{admit, dispatch};
+
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
-use subscribing::{follow_feed, follow_log, unsubscribe};
-use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
-use tokio::sync::mpsc;
-use tokio::task::AbortHandle;
+use std::time::Duration;
+
+use crate::listener::Listener;
+use parking_lot::Mutex;
+use protocol::client::{HubFrame, ReplyOutcome};
+use protocol::frame;
+use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader};
+use tokio::sync::{mpsc, watch};
+use tokio::task::{AbortHandle, JoinHandle};
+use tokio::time::Instant;
 use tracing::{debug, warn};
+
+use admit::{Admit, Gate};
+
+use crate::hub::Hub;
 
 pub(crate) const DEFAULT_READ_BYTES: u64 = 4 * 1024 * 1024;
 pub(crate) const MAX_READ_EVENTS: u32 = 2000;
@@ -36,11 +33,11 @@ pub(crate) async fn accept_loop(hub: Arc<Hub>, mut listener: Listener) {
     loop {
         match listener.accept().await {
             Ok((read, write)) => {
-                tokio::spawn(serve_connection(hub.clone(), read, write));
+                tokio::spawn(serve_connection(hub.clone(), read, write, Gate::local(&hub)));
             }
             Err(e) => {
                 warn!("accepting a connection failed: {e}");
-                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                tokio::time::sleep(Duration::from_millis(100)).await;
             }
         }
     }
@@ -49,6 +46,8 @@ pub(crate) async fn accept_loop(hub: Arc<Hub>, mut listener: Listener) {
 pub(super) struct Connection {
     pub(super) frames: mpsc::Sender<HubFrame>,
     pub(super) subscriptions: Mutex<HashMap<u64, AbortHandle>>,
+    /// True once nothing more will be read, so a request that only waits, with nothing to carry on with, can stop.
+    pub(super) closed: Arc<watch::Sender<bool>>,
 }
 
 impl Drop for Connection {
@@ -59,319 +58,154 @@ impl Drop for Connection {
     }
 }
 
-async fn serve_connection(
+/// Why a connection stopped reading.
+enum Ending {
+    /// It closed, sent something unreadable, or was refused. What's queued for it is still sent.
+    Closed,
+    /// Its device was revoked, so nothing more is sent.
+    Revoked,
+}
+
+pub(super) async fn serve_connection(
     hub: Arc<Hub>,
     read: impl AsyncRead + Unpin,
-    mut write: impl AsyncWrite + Unpin + Send + 'static,
+    write: impl AsyncWrite + Unpin + Send + 'static,
+    mut gate: Gate,
 ) {
-    hub.clients.fetch_add(1, Ordering::Relaxed);
-    let (frames_tx, mut frames_rx) = mpsc::channel::<HubFrame>(CONNECTION_QUEUE);
-    let writer = tokio::spawn(async move {
-        while let Some(item) = frames_rx.recv().await {
-            let Ok(line) = frame::encode(&item) else { continue };
-            if write.write_all(&line).await.is_err() {
-                return;
-            }
-        }
-    });
-    let connection = Arc::new(Connection { frames: frames_tx, subscriptions: Mutex::new(HashMap::new()) });
+    let (frames, queued) = mpsc::channel::<HubFrame>(CONNECTION_QUEUE);
+    let mut writer = tokio::spawn(write_frames(write, queued));
+    let closed = Arc::new(watch::Sender::new(false));
+    let connection = Arc::new(Connection { frames, subscriptions: Mutex::new(HashMap::new()), closed: closed.clone() });
+    let revoked = gate.revoked();
+    let mut revoking = revoked.clone();
 
-    let mut incoming = FrameReader::new(read);
-    let mut greeted = false;
-    loop {
-        let Ok(Some(line)) = incoming.next().await else { break };
-        // A request this hub can't read is a newer client's, which is refused once it's past the hello, as one this
-        // hub doesn't know is.
-        let Call { id, request } = match frame::read_call::<ClientRequest>(line) {
-            Ok(call) => call,
-            Err(e) => {
-                debug!("closing a connection that sent a bad frame: {e}");
-                break;
-            }
-        };
-        if !greeted && !request.as_ref().is_ok_and(works_without_hello) {
-            let (outcome, version_ok) = hello(hub.build(), request.as_ref().ok());
-            let _ = connection.frames.send(HubFrame::Reply { id, outcome }).await;
-            if !version_ok {
-                break;
-            }
-            greeted = true;
-            continue;
-        }
-        let hub = hub.clone();
-        let connection = connection.clone();
-        // Counted as it's read, rather than once its task starts, so a request to stop if idle sees every request this
-        // connection sent before it, even one whose task hasn't started.
-        hub.requests.fetch_add(1, Ordering::Relaxed);
-        tokio::spawn(async move {
-            let answered = match request {
-                Ok(request) => handle(&hub, &connection, request).await,
-                Err(e) => Err(hub.unsupported(Some(&e))),
-            };
-            let outcome = match answered {
-                Ok(response) => ReplyOutcome::Response(response),
-                Err(error) => ReplyOutcome::Error(error),
-            };
-            hub.requests.fetch_sub(1, Ordering::Relaxed);
-            let _ = connection.frames.send(HubFrame::Reply { id, outcome }).await;
-        });
-    }
-    drop(connection);
-    // Finish writing what's queued, such as the error for a version mismatch.
-    let _ = writer.await;
-    hub.clients.fetch_sub(1, Ordering::Relaxed);
-}
-
-/// What a client of any version can do, so that a hub it can't otherwise talk to can still be seen and
-/// stopped. Anyone who can reach this socket is this user, as `bind_socket` makes sure. A connection from
-/// elsewhere, once there are any, shouldn't get this, because stopping a shared hub is for its admins.
-fn works_without_hello(request: &ClientRequest) -> bool {
-    matches!(request, ClientRequest::HubStatus | ClientRequest::HubShutdown | ClientRequest::HubRestart)
-}
-
-/// `None` for a first request this hub couldn't read, which can't be a hello it can answer.
-fn hello(build: Build, request: Option<&ClientRequest>) -> (ReplyOutcome, bool) {
-    let error = |message: String| (ReplyOutcome::Error(ApiError::new(ErrorCode::VersionMismatch, message)), false);
-    let Some(ClientRequest::Hello(Hello { protocol_version, oldest_protocol_version, .. })) = request else {
-        return error("the first request on a connection must be hello".to_string());
+    let serving = serve_requests(&hub, connection, &mut gate, BufReader::new(read), &revoked, &mut writer);
+    // Around everything the connection does, so revoking closes it however it's waiting: on the device to send, on
+    // room to queue a reply, or on a device that has stopped reading to take what's queued.
+    let revoked = tokio::select! {
+        biased;
+        Ok(_) = revoking.wait_for(|revoked| *revoked) => true,
+        ending = serving => matches!(ending, Ending::Revoked),
     };
-    let theirs = Versions::from_hello(*protocol_version, *oldest_protocol_version);
-    match versions::CLIENTS.newest_shared(theirs) {
-        Some(chosen) => (
-            ReplyOutcome::Response(ClientResponse::Hello(HelloReply {
-                protocol_version: chosen,
-                hub_version: build.version().to_string(),
-            })),
-            true,
-        ),
-        None => error(format!(
-            "this hub is version {} on {}, and this client speaks {theirs}. Stopping the hub, which also stops its agents, lets one that matches start",
-            build.version(),
-            versions::CLIENTS,
-        )),
+    closed.send_replace(true);
+    if revoked {
+        // Nothing more is sent, and the stream closes as its halves are dropped.
+        writer.abort();
     }
+    if let Some(device) = &gate.device {
+        hub.device_disconnected(device).await;
+    }
+    // Last, so it stops counting among the hub's clients once everything else is done.
+    drop(gate);
 }
 
-#[expect(clippy::too_many_lines, reason = "a flat dispatch, with one short arm per request")]
-async fn handle(
+/// Reads and answers requests until the connection ends, and then, unless its device was revoked, sends what's
+/// queued, such as the error for a version mismatch.
+async fn serve_requests<R>(
+    hub: &Arc<Hub>,
+    connection: Arc<Connection>,
+    gate: &mut Gate,
+    reader: R,
+    revoked: &watch::Receiver<bool>,
+    writer: &mut JoinHandle<()>,
+) -> Ending
+where
+    R: tokio::io::AsyncBufRead + Unpin,
+{
+    let ending = read_requests(hub, &connection, gate, reader, revoked).await;
+    connection.closed.send_replace(true);
+    // The writer finishes once nothing can queue a frame, and this is one thing that can.
+    drop(connection);
+    if let Ending::Closed = ending {
+        let _ = writer.await;
+    }
+    ending
+}
+
+async fn read_requests<R>(
     hub: &Arc<Hub>,
     connection: &Arc<Connection>,
-    request: ClientRequest,
-) -> Result<ClientResponse, ApiError> {
-    use ClientRequest as R;
-    use ClientResponse as C;
-    Ok(match request {
-        R::Hello(_) => return Err(ApiError::new(ErrorCode::InvalidRequest, "already said hello")),
-        R::Unknown => return Err(hub.unsupported(None)),
-        R::HubStatus => C::HubStatus(hub.status()),
-        R::HubShutdown => {
-            hub.request_stop();
-            C::Ok
+    gate: &mut Gate,
+    mut reader: R,
+    revoked: &watch::Receiver<bool>,
+) -> Ending
+where
+    R: tokio::io::AsyncBufRead + Unpin,
+{
+    let mut line = Vec::new();
+    loop {
+        line.clear();
+        let read = read_line(&mut reader, &mut line, gate.max_frame_bytes(), gate.deadline()).await;
+        // As well as around the whole connection, so a revoked device can't slip in a request that had already
+        // arrived.
+        if *revoked.borrow() {
+            return Ending::Revoked;
         }
-        R::HubShutdownIfIdle => {
-            hub.shutdown_if_idle()?;
-            C::Ok
+        if !read {
+            return Ending::Closed;
         }
-        R::HubRestart => {
-            hub.request_restart()?;
-            C::Ok
+        let request = match frame::read_call::<protocol::client::ClientRequest>(&line) {
+            Ok(request) => request,
+            Err(e) => {
+                debug!("closing a connection that sent a bad frame: {e}");
+                return Ending::Closed;
+            }
+        };
+        let (asked, unreadable) = match request.request {
+            Ok(asked) => (asked, None),
+            Err(error) => (protocol::client::ClientRequest::Unknown, Some(error)),
+        };
+        let (outcome, close) = match gate.admit(hub, asked).await {
+            Admit::Handle(handled) => {
+                let (hub, connection) = (hub.clone(), connection.clone());
+                hub.requests.fetch_add(1, Ordering::Relaxed);
+                tokio::spawn(async move {
+                    let answered = match unreadable {
+                        Some(error) => Err(hub.unsupported(Some(&error))),
+                        None => dispatch::handle(&hub, &connection, handled).await,
+                    };
+                    let outcome = match answered {
+                        Ok(response) => ReplyOutcome::Response(response),
+                        Err(error) => ReplyOutcome::Error(error),
+                    };
+                    hub.requests.fetch_sub(1, Ordering::Relaxed);
+                    let _ = connection.frames.send(HubFrame::Reply { id: request.id, outcome }).await;
+                });
+                continue;
+            }
+            Admit::Answer(outcome) => (outcome, false),
+            Admit::Refuse(outcome) => (outcome, true),
+        };
+        let _ = connection.frames.send(HubFrame::Reply { id: request.id, outcome }).await;
+        if close {
+            return Ending::Closed;
         }
-        R::HubConfigure(admin::HubConfigure { settings }) => C::HubSettings(hub.hub_configure(settings).await?),
-        R::RepoAdd(records::RepoAdd { path }) => C::Repo(hub.repo_add(path).await?),
-        R::RepoList => C::Repos(records::Repos { repos: hub.repo_list().await? }),
-        R::RecordsList => C::Records(hub.records_list().await?),
-        R::AgentList => C::Agents(admin::Agents { agents: hub.agent_list() }),
-        R::WorkspaceCreate(workspaces::WorkspaceCreate { repo_id, name, base_ref, client_request_id }) => {
-            C::Workspace(hub.workspace_create(repo_id, name, base_ref, client_request_id).await?)
+    }
+}
+
+/// Reads one line into `line`. False once there's nothing more to read: the connection closed or failed, the line
+/// was too long, or it didn't arrive by the deadline.
+async fn read_line<R>(reader: &mut R, line: &mut Vec<u8>, limit: usize, deadline: Option<Instant>) -> bool
+where
+    R: tokio::io::AsyncBufRead + Unpin,
+{
+    let mut limited = reader.take(limit as u64 + 1);
+    let read = limited.read_until(b'\n', line);
+    let read = match deadline {
+        Some(deadline) => tokio::time::timeout_at(deadline, read).await.unwrap_or(Ok(0)),
+        None => read.await,
+    };
+    matches!(read, Ok(n) if n > 0 && line.len() <= limit)
+}
+
+async fn write_frames<W: AsyncWrite + Unpin>(mut write: W, mut queued: mpsc::Receiver<HubFrame>) {
+    while let Some(item) = queued.recv().await {
+        let Ok(line) = frame::encode(&item) else { continue };
+        // Flushed each time, because TLS can hold a write back until the next one.
+        if write.write_all(&line).await.is_err() || write.flush().await.is_err() {
+            return;
         }
-        R::WorkspaceList(workspaces::WorkspaceList { include_archived }) => {
-            C::Workspaces(workspaces::Workspaces { workspaces: hub.workspace_list(include_archived).await? })
-        }
-        R::WorkspaceArchive(workspaces::WorkspaceArchive { id, force }) => {
-            C::Workspace(hub.workspace_archive(id, force).await?)
-        }
-        R::WorkspaceRestore(workspaces::WorkspaceRestore { id }) => C::Workspace(hub.workspace_restore(id).await?),
-        R::WorkspaceRename(workspaces::WorkspaceRename { id, title }) => {
-            C::Workspace(hub.workspace_rename(id, &title).await?)
-        }
-        R::WorkspaceCommentDraft(drafts::WorkspaceCommentDraft { id, draft }) => {
-            C::Workspace(hub.workspace_comment_draft(id, draft).await?)
-        }
-        R::WorkspaceRegenerateTitle(workspaces::WorkspaceRegenerateTitle { id }) => {
-            C::Workspace(hub.workspace_regenerate_title(id).await?)
-        }
-        R::WorkspaceStatus(workspaces::WorkspaceStatus { id }) => C::GitStatus(hub.workspace_status(id).await?),
-        R::WorkspaceDiff(workspaces::WorkspaceDiff { id }) => C::GitDiff(hub.workspace_diff(id).await?),
-        R::WorkspaceFiles(files::WorkspaceFiles { id }) => C::WorktreeFiles(hub.workspace_files(id).await?),
-        R::WorkspaceFolderRead(files::WorkspaceFolderRead { id, path }) => {
-            C::WorktreeFiles(hub.workspace_folder_read(id, path).await?)
-        }
-        R::WorkspaceFileRead(files::WorkspaceFileRead { id, path }) => {
-            C::FileContents(hub.workspace_file_read(id, path).await?)
-        }
-        R::WorkspaceFileReadAt(files::WorkspaceFileReadAt { id, commit, path }) => {
-            C::FileContents(hub.workspace_file_read_at(id, commit, path).await?)
-        }
-        R::WorkspaceFileOpenAt(files::WorkspaceFileOpenAt { id, commit, path }) => {
-            C::FileOpened(hub.workspace_file_open_at(id, commit, path).await?)
-        }
-        R::WorkspaceFilePages(asked) => C::FilePages(hub.workspace_file_pages(asked).await?),
-        R::WorkspaceSetupLog(workspaces::WorkspaceSetupLog { id }) => {
-            C::SetupLog(workspaces::SetupLog { text: hub.workspace_setup_log(id).await? })
-        }
-        R::WorkspaceRerunSetup(workspaces::WorkspaceRerunSetup { id }) => {
-            C::Workspace(hub.workspace_rerun_setup(id).await?)
-        }
-        R::WorkspacePullRequest(workspaces::WorkspacePullRequest { id }) => {
-            C::PullRequest(workspaces::PullRequestReply { pull_request: hub.workspace_pull_request(id).await? })
-        }
-        R::CommentAdd(comments::CommentAdd { workspace_id, path, side, line, text, client_request_id }) => {
-            C::Comment(hub.comment_add(workspace_id, path, side, line, text, client_request_id).await?)
-        }
-        R::CommentList(comments::CommentList { workspace_id }) => {
-            C::Comments(comments::Comments { comments: hub.comment_list(workspace_id).await? })
-        }
-        R::CommentEdit(comments::CommentEdit { id, text }) => C::Comment(hub.comment_edit(id, text).await?),
-        R::CommentDelete(comments::CommentDelete { id }) => {
-            hub.comment_delete(id).await?;
-            C::Ok
-        }
-        R::SessionCreate(sessions::SessionCreate { workspace_id, agent: kind, options, client_request_id }) => {
-            C::Session(hub.session_create(workspace_id, kind, options, client_request_id).await?)
-        }
-        R::SessionEnsure(sessions::SessionEnsure { workspace_id, agent: kind }) => {
-            C::Session(hub.session_ensure(workspace_id, kind).await?)
-        }
-        R::SessionList(sessions::SessionList { workspace_id }) => {
-            C::Sessions(sessions::Sessions { sessions: hub.session_list(workspace_id).await? })
-        }
-        R::SessionGet(sessions::SessionGet { id }) => C::Session(hub.session_get(id).await?),
-        R::SessionRead(log::SessionRead { id, from_seq, limit, max_bytes, include_raw }) => {
-            C::Events(hub.session_read(id, from_seq, limit, max_bytes, include_raw).await?)
-        }
-        R::SessionPromptList(log::SessionPromptList { id }) => {
-            C::Prompts(log::Prompts { prompts: hub.session_prompt_list(id).await? })
-        }
-        R::SessionCompactionList(log::SessionCompactionList { id }) => {
-            C::Compactions(log::Compactions { compactions: hub.session_compaction_list(id).await? })
-        }
-        R::SessionFind(log::SessionFind { id, subagent, query }) => {
-            C::Found(hub.session_find(id, subagent, &query).await?)
-        }
-        R::SessionSubscribe(subscriptions::SessionSubscribe { id, from_seq, subscription_id }) => {
-            follow_log(hub, connection, id, subscription_id, Following::Log { next: from_seq.max(Seq::FIRST) }).await?;
-            C::Ok
-        }
-        R::SessionReadPlaces(log::SessionReadPlaces { id, subagent, from_place, limit, max_bytes, include_raw }) => {
-            C::PlacedEvents(hub.session_read_places(id, subagent, from_place, limit, max_bytes, include_raw).await?)
-        }
-        R::SessionSubagents(records::SessionSubagents { id }) => C::Subagents(hub.session_subagents(id).await?),
-        R::SessionSubscribePlaces(subscriptions::SessionSubscribePlaces {
-            id,
-            subagent,
-            from_place,
-            subscription_id,
-        }) => {
-            let next = from_place.max(Place::FIRST);
-            let subagent = hub.subagent_named(id.clone(), subagent).await?;
-            follow_log(hub, connection, id, subscription_id, Following::Places { subagent, next }).await?;
-            C::Ok
-        }
-        R::FeedSubscribe(subscriptions::FeedSubscribe { subscription_id }) => {
-            follow_feed(hub, connection, subscription_id)?;
-            C::Ok
-        }
-        R::SessionUnsubscribe(subscriptions::SessionUnsubscribe { subscription_id }) => {
-            unsubscribe(connection, subscription_id);
-            C::Ok
-        }
-        R::SessionPrompt(agent::SessionPrompt { id, client_msg_id, prompt }) => {
-            let (seq, duplicate) = hub.session_prompt(id, client_msg_id, prompt).await?;
-            C::PromptRecorded(agent::PromptRecorded { seq, duplicate })
-        }
-        R::AttachmentAdd(attachments::AttachmentAdd { session_id, id, name, media_type, data }) => {
-            let kept_for = FileFor::Session(session_id);
-            C::Attachment(hub.file_add(kept_for, id, name, media_type, data, AddedBy::Client).await?)
-        }
-        R::AttachmentRead(attachments::AttachmentRead { session_id, id }) => {
-            C::AttachmentData(attachments::AttachmentData {
-                data: hub.file_read(FileFor::Session(session_id), id).await?,
-            })
-        }
-        R::AttachmentRemove(attachments::AttachmentRemove { session_id, id }) => {
-            hub.file_remove(FileFor::Session(session_id), id).await?;
-            C::Ok
-        }
-        R::NewWorkspaceDraftKeep(drafts::NewWorkspaceDraftKeep { draft }) => {
-            C::NewWorkspaceDraft(hub.new_workspace_draft_keep(draft).await?)
-        }
-        R::NewWorkspaceDraftFileAdd(drafts::NewWorkspaceDraftFileAdd { id, name, media_type, data }) => {
-            C::Attachment(hub.file_add(FileFor::NewWorkspace, id, name, media_type, data, AddedBy::Client).await?)
-        }
-        R::NewWorkspaceDraftFileRead(drafts::NewWorkspaceDraftFileRead { id }) => {
-            C::AttachmentData(attachments::AttachmentData { data: hub.file_read(FileFor::NewWorkspace, id).await? })
-        }
-        R::NewWorkspaceDraftFileRemove(drafts::NewWorkspaceDraftFileRemove { id }) => {
-            hub.file_remove(FileFor::NewWorkspace, id).await?;
-            C::Ok
-        }
-        R::NewWorkspaceCreate(new_workspace::NewWorkspaceCreate { made_of, client_request_id }) => {
-            C::NewWorkspaceMade(Box::new(hub.new_workspace_create(made_of, client_request_id).await?))
-        }
-        R::SessionAccount(sessions::SessionAccount { id }) => C::SessionAccount(hub.session_account(id).await?),
-        R::AccountSetDefault(asked) => C::HubSettings(hub.account_set_default(asked).await?),
-        R::SessionAssignAccount(asked) => C::Session(hub.session_assign_account(asked).await?),
-        R::AccountConnect(asked) => C::Account(hub.account_connect(asked).await?),
-        R::AccountDisconnect(accounts::AccountDisconnect { id }) => C::Account(hub.account_disconnect(id).await?),
-        R::GithubAccountConnect(asked) => C::GithubAccount(hub.github_account_connect(asked).await?),
-        R::GithubAccountDisconnect(github_accounts::GithubAccountDisconnect { id }) => {
-            C::GithubAccount(hub.github_account_disconnect(id).await?)
-        }
-        R::GithubAccountSetDefault(asked) => C::HubSettings(hub.github_account_set_default(asked).await?),
-        R::GithubSignInStart(asked) => C::GithubSignIn(hub.github_sign_in_start(asked).await?),
-        R::GithubSignInCancel(github_accounts::GithubSignInCancel { id }) => {
-            C::GithubSignIn(hub.github_sign_in_cancel(id).await?)
-        }
-        R::SessionQueue(queue::SessionQueue { id, client_msg_id, prompt }) => {
-            C::Session(hub.session_queue(id, client_msg_id, prompt).await?)
-        }
-        R::SessionChangeQueued(queue::SessionChangeQueued { id, client_msg_id, text }) => {
-            C::Session(hub.session_change_queued(id, client_msg_id, text).await?)
-        }
-        R::SessionUnqueue(queue::SessionUnqueue { id, client_msg_id }) => {
-            C::Session(hub.session_unqueue(id, client_msg_id).await?)
-        }
-        R::SessionSendQueued(queue::SessionSendQueued { id, client_msg_id }) => {
-            C::Session(hub.session_send_queued(id, client_msg_id).await?)
-        }
-        R::SessionApprove(agent::SessionApprove { id, approval_id, decision }) => {
-            hub.session_approve(id, approval_id, decision).await?;
-            C::Ok
-        }
-        R::SessionConfigure(sessions::SessionConfigure { id, options }) => {
-            C::Session(hub.session_configure(id, options).await?)
-        }
-        R::SessionClose(sessions::SessionClose { id }) => C::Session(hub.session_close(id).await?),
-        R::SessionReopen(sessions::SessionReopen { id }) => C::Session(hub.session_reopen(id).await?),
-        R::SessionMarkRead(sessions::SessionMarkRead { id, through_seq }) => {
-            C::Session(hub.session_mark_read(id, through_seq).await?)
-        }
-        R::SessionMarkUnread(sessions::SessionMarkUnread { id }) => C::Session(hub.session_mark_unread(id).await?),
-        R::SessionCallOffWait(waits::SessionCallOffWait { id, wait }) => {
-            C::Session(hub.session_call_off_wait(id, wait).await?)
-        }
-        R::SessionDraft(drafts::SessionDraft { id, draft }) => C::Session(hub.session_draft(id, draft).await?),
-        R::SessionAnswerDraft(drafts::SessionAnswerDraft { id, draft }) => {
-            C::Session(hub.session_answer_draft(id, draft).await?)
-        }
-        R::SessionRename(sessions::SessionRename { id, title }) => C::Session(hub.session_rename(id, &title).await?),
-        R::SessionCancel(agent::SessionCancel { id }) => {
-            hub.session_cancel(id).await?;
-            C::Ok
-        }
-        R::SessionCompact(agent::SessionCompact { id, keeping }) => {
-            hub.session_compact(id, keeping).await?;
-            C::Ok
-        }
-    })
+    }
+    // Says it's finished, which TLS needs to tell a close from a connection that was cut.
+    let _ = write.shutdown().await;
 }

@@ -11,6 +11,7 @@ name = "roundhouse"
 path = "src/main.rs"
 
 [dependencies]
+qrcode.workspace = true
 protocol.workspace = true
 client-core.workspace = true
 anyhow.workspace = true

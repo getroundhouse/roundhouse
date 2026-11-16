@@ -43,6 +43,7 @@ ids!(
     AccountId,
     RepoId,
     WorkspaceId,
+    DeviceId,
     SessionId,
     CommentId,
     /// The agent's own ID for an approval it asked for.

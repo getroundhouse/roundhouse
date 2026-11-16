@@ -105,7 +105,9 @@ impl Following {
             | ErrorCode::NameTaken
             | ErrorCode::Worker
             | ErrorCode::Internal
-            | ErrorCode::Unknown => Err(refused),
+            | ErrorCode::Unknown
+            | ErrorCode::Unauthorized
+            | ErrorCode::LocalOnly => Err(refused),
         }
     }
 }

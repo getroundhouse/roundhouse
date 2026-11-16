@@ -19,6 +19,8 @@ use tracing::{info, warn};
 pub struct HubConfig {
     /// Which build this hub is, which it tells clients, workers and provider adapters.
     pub build: Build,
+    /// Where paired devices can reach this hub, once pairing is enabled.
+    pub network_address: std::net::SocketAddr,
     pub paths: Paths,
     /// The binary that runs a worker, which the local provider starts.
     pub worker_exe: PathBuf,
@@ -111,18 +113,13 @@ fn load_providers(
 
 /// Runs until asked to stop or signalled. Returns an error if another hub is using these paths.
 pub async fn run(config: HubConfig) -> Result<(), HubError> {
-    let HubConfig { build, paths, worker_exe, shell, path, on_demand, agents, timers, github } = config;
+    let HubConfig { network_address, build, paths, worker_exe, shell, path, on_demand, agents, timers, github } =
+        config;
     private_files::create_dir_all(&paths.data_dir)
         .map_err(|e| HubError::io(format!("creating {}", paths.data_dir.display()), e))?;
     let lock_file = take_lock(&paths)?;
 
-    // Made here so it has its mode before SQLite opens it, which gives its -wal and -shm files the same one.
-    private_files::file_options()
-        .create(true)
-        .append(true)
-        .open(&paths.database)
-        .map_err(|e| HubError::io(format!("creating {}", paths.database.display()), e))?;
-    let store = Arc::new(Store::open(&paths.database, &paths.backups_dir).map_err(HubError::OpenDatabase)?);
+    let store = open_store(&paths)?;
     let lock = HubLock { store: store.clone(), _lock: lock_file };
     let unfinished = recover(&store).map_err(HubError::Recover)?;
     let left_at_work = LeftAtWork::read(&store).map_err(HubError::Recover)?;
@@ -130,7 +127,9 @@ pub async fn run(config: HubConfig) -> Result<(), HubError> {
 
     let providers = load_providers(build, &paths, worker_exe, shell, path, &store)?;
     let github = Github::new(github);
-    let hub = Arc::new(Hub::new(build, store, HubDirs::of(&paths), providers, github, agents, on_demand, timers));
+    let mut dirs = HubDirs::of(&paths);
+    dirs.network_address = network_address;
+    let hub = Arc::new(Hub::new(build, store, dirs, providers, github, agents, on_demand, timers));
     // Before clients are served, so none is told the hub holds a login whose token is gone.
     hub.tidy_logins().await;
     // Before carrying on with the agents an earlier hub left, since what they asked meanwhile comes in as soon as
@@ -140,6 +139,7 @@ pub async fn run(config: HubConfig) -> Result<(), HubError> {
     hub.tidy_draft_files().await;
     let awake = hub.keep_awake();
     hub.start_queues().await;
+    hub.listen_if_paired().await;
 
     // The lock is held, so nothing else is serving here.
     let listener =
@@ -158,6 +158,7 @@ pub async fn run(config: HubConfig) -> Result<(), HubError> {
     let mut terminate = Terminate::listen().map_err(|e| HubError::io("listening for a signal to stop", e))?;
     let signalled = asked_to_go(&hub, &mut terminate).await;
     accept.abort();
+    hub.remote.stop_listening().await;
     watching_pull_requests.abort();
     watching_deadlines.abort();
     hub.stop_jobs();
@@ -195,4 +196,14 @@ async fn asked_to_go(hub: &Hub, terminate: &mut Terminate) -> bool {
             true
         }
     }
+}
+
+fn open_store(paths: &Paths) -> Result<Arc<Store>, HubError> {
+    // Made here so it has its mode before SQLite opens it, which gives its -wal and -shm files the same one.
+    private_files::file_options()
+        .create(true)
+        .append(true)
+        .open(&paths.database)
+        .map_err(|e| HubError::io(format!("creating {}", paths.database.display()), e))?;
+    Ok(Arc::new(Store::open(&paths.database, &paths.backups_dir).map_err(HubError::OpenDatabase)?))
 }
