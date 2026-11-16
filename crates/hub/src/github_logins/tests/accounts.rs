@@ -3,19 +3,19 @@ use std::sync::Barrier;
 
 use protocol::model::GithubLoginKind;
 
-use super::*;
+use super::super::*;
 use crate::github::TokenOwner;
 use crate::login_files::LoginFile;
 use crate::store::tests::store_with_session;
 
-/// The GitHub logins of a hub whose data directory is `dir`, and its store.
-fn logins_in(dir: &Path) -> (Arc<GithubLogins>, Arc<Store>) {
+/// The GitHub logins of a hub whose data directory is `dir`, started at 1000, and its store.
+pub(super) fn logins_in(dir: &Path) -> (Arc<GithubLogins>, Arc<Store>) {
     let store = Arc::new(store_with_session(dir));
-    (Arc::new(GithubLogins::new(store.clone(), dir)), store)
+    (Arc::new(GithubLogins::new(store.clone(), dir, 1000)), store)
 }
 
 /// `token`, connected at 1000, renewing `id`'s login, or else making the account `new_id`.
-fn connect(token: &str, id: Option<&str>, new_id: &str) -> Connect {
+pub(super) fn connect(token: &str, id: Option<&str>, new_id: &str) -> Connect {
     Connect {
         token: GithubToken::new(token),
         id: id.map(GithubAccountId::from),
@@ -25,11 +25,11 @@ fn connect(token: &str, id: Option<&str>, new_id: &str) -> Connect {
 }
 
 /// The GitHub user `name`, of the number `user`, whose token ends at `ends_at_ms`.
-fn owner(user: u64, name: &str, ends_at_ms: Option<i64>) -> TokenOwner {
+pub(super) fn owner(user: u64, name: &str, ends_at_ms: Option<i64>) -> TokenOwner {
     TokenOwner { user: GithubUser { id: GithubUserId::new(user), name: name.into() }, ends_at_ms }
 }
 
-fn ada() -> TokenOwner {
+pub(super) fn ada() -> TokenOwner {
     owner(7, "ada", None)
 }
 
@@ -140,9 +140,9 @@ fn disconnecting_forgets_the_token_and_keeps_the_record_and_the_default_and_agai
     let (logins, store) = logins_in(dir.path());
     logins.connect(&connect("a-token", None, "g1"), &ada()).unwrap();
 
-    let disconnected = logins.disconnect(&"g1".into()).unwrap();
-    let again = logins.disconnect(&"g1".into()).unwrap();
-    let nobody = logins.disconnect(&"nobody".into());
+    let disconnected = logins.disconnect(&"g1".into(), 2000).unwrap();
+    let again = logins.disconnect(&"g1".into(), 2000).unwrap();
+    let nobody = logins.disconnect(&"nobody".into(), 2000);
     let connected_again = logins.held(&connect("a-token", None, "g2")).unwrap();
 
     assert!(disconnected.changed);
@@ -161,7 +161,7 @@ fn the_default_is_refused_for_an_account_with_no_record_or_no_login_that_can_be_
     logins.connect(&connect("work-token", None, "work"), &ada()).unwrap();
     logins.connect(&connect("old-token", None, "ended"), &owner(7, "ada", Some(1500))).unwrap();
     logins.connect(&connect("gone-token", None, "gone"), &ada()).unwrap();
-    logins.disconnect(&"gone".into()).unwrap();
+    logins.disconnect(&"gone".into(), 2000).unwrap();
     logins.connect(&connect("lost-token", None, "lost"), &ada()).unwrap();
     let mut paths = std::fs::read_dir(dir.path().join("github-logins")).unwrap().map(|entry| entry.unwrap().path());
     std::fs::remove_file(paths.find(|path| std::fs::read_to_string(path).unwrap() == "lost-token").unwrap()).unwrap();
@@ -204,7 +204,7 @@ fn tidying_clears_a_login_whose_file_isnt_a_token_and_removes_what_no_account_na
     std::fs::create_dir(dir.path().join("logins")).unwrap();
     std::fs::write(dir.path().join("logins").join(LoginFile::new().as_str()), "an-agents-token").unwrap();
 
-    logins.tidy().unwrap();
+    logins.tidy(2000).unwrap();
 
     let held = |id: &str| store.github_account(&id.into()).unwrap().unwrap().held_login.is_some();
     assert!(held("kept") && !held("garbled"));

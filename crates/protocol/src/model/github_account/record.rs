@@ -5,9 +5,9 @@ use serde::{Deserialize, Serialize};
 use super::super::{GithubAccountId, GithubUsername, Rev};
 
 /// A GitHub account the hub holds, or held, a login for, as a record of its own, so every client shows the same of it.
-/// The default, as [`GithubSettings::account`](crate::model::GithubSettings::account) names it, is the one agents are
-/// to push and open pull requests as, on every machine. The login itself is in a file of the hub's, and never on a
-/// record. Disconnecting forgets the login and keeps the record, with none, since the default can still name it.
+/// The default, as [`GithubSettings::account`](crate::model::GithubSettings::account) names it, is the one agents push
+/// and open pull requests as, on every machine. The login itself is in a file of the hub's, and never on a record.
+/// Disconnecting forgets the login and keeps the record, with none, since the default can still name it.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct GithubAccount {
     pub id: GithubAccountId,

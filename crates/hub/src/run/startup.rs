@@ -32,8 +32,9 @@ pub struct HubConfig {
     /// the hub doesn't run.
     pub agents: Vec<AgentDescription>,
     pub timers: Timers,
-    /// GitHub's API, such as `https://api.github.com`, which the hub asks whose a token is. Given rather than known
-    /// here, so a hub can be pointed at a stand-in, as the hub's own tests point theirs.
+    /// GitHub's API, such as `https://api.github.com`, which the hub asks whose a token is, as [`crate::github_api`]
+    /// gives it. Given rather than known here, so a hub can be pointed at a stand-in, as the hub's own tests point
+    /// theirs.
     pub github_api: String,
 }
 
@@ -151,9 +152,11 @@ pub async fn run(config: HubConfig) -> Result<(), HubError> {
     };
     let watching_deadlines = tokio::spawn(hub.clone().watch_wait_deadlines());
     let watching_pull_requests = tokio::spawn(hub.clone().watch_pull_requests());
+    let watching_token_ends = tokio::spawn(hub.clone().watch_github_token_ends());
     let mut terminate = Terminate::listen().map_err(|e| HubError::io("listening for a signal to stop", e))?;
     let signalled = asked_to_go(&hub, &mut terminate).await;
     accept.abort();
+    watching_token_ends.abort();
     watching_pull_requests.abort();
     watching_deadlines.abort();
     hub.stop_jobs();

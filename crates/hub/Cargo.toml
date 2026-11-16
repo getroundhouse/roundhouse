@@ -6,7 +6,8 @@ publish.workspace = true
 license.workspace = true
 
 [features]
-# What tests of the hub from outside it need, such as the names it picks from, and shorter timers.
+# What tests of the hub from outside it need, such as the names it picks from, shorter timers, and a stand-in for
+# GitHub.
 testing = []
 
 [dependencies]

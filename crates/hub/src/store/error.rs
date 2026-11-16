@@ -55,37 +55,16 @@ impl From<StoreError> for ApiError {
 
 #[cfg(test)]
 mod tests {
-    use std::io::Write;
-    use std::sync::Arc;
-
-    use parking_lot::Mutex;
-
     use super::*;
-
-    #[derive(Clone, Default)]
-    struct Captured(Arc<Mutex<Vec<u8>>>);
-
-    impl Write for Captured {
-        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
-            self.0.lock().extend_from_slice(bytes);
-            Ok(bytes.len())
-        }
-
-        fn flush(&mut self) -> std::io::Result<()> {
-            Ok(())
-        }
-    }
+    use crate::logged::Logs;
 
     /// The API error it becomes, and what that logged.
     fn convert(failure: StoreError) -> (ApiError, String) {
-        let captured = Captured::default();
-        let writer = captured.clone();
-        let subscriber = tracing_subscriber::fmt().with_writer(move || writer.clone()).with_ansi(false).finish();
+        let logs = Logs::capture();
 
-        let api_error = tracing::subscriber::with_default(subscriber, || ApiError::from(failure));
+        let api_error = ApiError::from(failure);
 
-        let logged = String::from_utf8(captured.0.lock().clone()).unwrap();
-        (api_error, logged)
+        (api_error, logs.text())
     }
 
     #[test]

@@ -143,7 +143,7 @@ impl Hub {
         Self {
             build,
             logins: Arc::new(Logins::new(store.clone(), &dirs.data)),
-            github_logins: Arc::new(GithubLogins::new(store.clone(), &dirs.data)),
+            github_logins: Arc::new(GithubLogins::new(store.clone(), &dirs.data, now_ms())),
             github,
             store,
             attachment_files: AttachmentFiles::new(dirs.attachments),

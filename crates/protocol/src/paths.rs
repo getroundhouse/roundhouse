@@ -18,6 +18,9 @@ pub const ENV_LOG: &str = "ROUNDHOUSE_LOG";
 pub const ENV_TEST_HUB_TIMERS: &str = "ROUNDHOUSE_TEST_HUB_TIMERS";
 /// Shorter timers for a test's workers, which only a worker built for tests reads, as `worker::Timers` says.
 pub const ENV_TEST_WORKER_TIMERS: &str = "ROUNDHOUSE_TEST_WORKER_TIMERS";
+/// Where a test's hub calls GitHub's API, such as a stand-in's address, which only a hub built for tests reads, as
+/// `hub::github_api` says.
+pub const ENV_TEST_GITHUB_API: &str = "ROUNDHOUSE_TEST_GITHUB_API";
 
 /// The binary that runs as a hub or a worker. It gives this name in `--version` too.
 pub const DAEMON_NAME: &str = "roundhoused";
@@ -59,10 +62,10 @@ fn program_file(name: &str) -> String {
 /// The variable that names the user's home directory.
 pub const HOME_VAR: &str = if cfg!(windows) { "USERPROFILE" } else { "HOME" };
 
-/// Which hub this is, what it runs, and the timers a test gives it and its workers. Nothing a worker starts in a
-/// workspace gets these, because the code there can be another build of Roundhouse, and its commands would otherwise
-/// reach this hub, or start a hub with this one's timers.
-pub const HUB_ONLY_ENV: [&str; 9] = [
+/// Which hub this is, what it runs, and the timers and GitHub a test gives it and its workers. Nothing a worker starts
+/// in a workspace gets these, because the code there can be another build of Roundhouse, and its commands would
+/// otherwise reach this hub, or start a hub with this one's timers or GitHub.
+pub const HUB_ONLY_ENV: [&str; 10] = [
     ENV_HOME,
     ENV_WORKSPACES,
     ENV_DAEMON_BIN,
@@ -72,6 +75,7 @@ pub const HUB_ONLY_ENV: [&str; 9] = [
     ENV_LOG,
     ENV_TEST_HUB_TIMERS,
     ENV_TEST_WORKER_TIMERS,
+    ENV_TEST_GITHUB_API,
 ];
 
 const fn dir_name(debug_build: bool) -> &'static str {

@@ -4,7 +4,10 @@ use std::sync::Arc;
 use protocol::client::github_accounts::GithubAccountConnect;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{GithubAccount, GithubAccountId, GithubLoginKind, GithubToken, GithubUser, HubSettings};
+use protocol::worker::GithubCredential;
+use tokio::sync::watch;
 
+use super::credential::Unusable;
 use crate::error::internal;
 use crate::github::TokenOwner;
 use crate::login_files::{Locked, LoginFiles, LoginSecret};
@@ -12,11 +15,14 @@ use crate::pasted_token::pasted_token;
 use crate::store::{GithubConnected, GithubConnecting, Store, StoreError};
 
 /// Connects, disconnects and tidies the logins of GitHub accounts, and chooses the default, one at a time, under their
-/// files' lock, so none finds another half done. Synchronous, and only called off the async threads. Nothing here
-/// calls GitHub, which is asked before the lock is taken.
+/// files' lock, so none finds another half done, and works out after each what workers give their processes for
+/// github.com. Synchronous, and only called off the async threads. Nothing here calls GitHub, which is asked before the
+/// lock is taken, or a worker, whose link follows [`GithubLogins::git_credential`] on its own.
 pub(crate) struct GithubLogins {
     pub(super) store: Arc<Store>,
     pub(super) files: LoginFiles<GithubToken>,
+    /// What workers are to give their processes for github.com, as of the last change, which is made under the lock.
+    pub(super) credential: watch::Sender<GithubCredential>,
 }
 
 /// A token is kept as its text, and a file that isn't text holds none, since no token the hub wrote is.
@@ -79,9 +85,13 @@ enum Plan {
 }
 
 impl GithubLogins {
-    /// The logins of a hub whose data directory is `data_dir`.
-    pub(crate) fn new(store: Arc<Store>, data_dir: &Path) -> Self {
-        Self { store, files: LoginFiles::new(data_dir) }
+    /// The logins of a hub whose data directory is `data_dir`, with what workers are to be sent at `now_ms`.
+    pub(crate) fn new(store: Arc<Store>, data_dir: &Path, now_ms: i64) -> Self {
+        // Replaced before this returns, so before anything can follow it. A block, so even a mistake there fails closed.
+        let unread = GithubCredential::Blocked { reason: "Roundhouse hasn't read its GitHub accounts".to_string() };
+        let logins = Self { store, files: LoginFiles::new(data_dir), credential: watch::Sender::new(unread) };
+        logins.check(now_ms);
+        logins
     }
 
     /// What connecting `connect` comes to without asking GitHub: the account that holds its token already, which
@@ -99,54 +109,59 @@ impl GithubLogins {
     /// said is checked again under the lock, since another connect can have come between. The token is kept, and then
     /// the row written, as [`Locked::connect`] says.
     pub(crate) fn connect(&self, connect: &Connect, owner: &TokenOwner) -> Result<GithubAccountChange, ApiError> {
-        let files = self.files.lock();
-        let id = match self.plan(&files, connect, Some(&owner.user))? {
-            Plan::Held(account) => return Ok(GithubAccountChange::unchanged(account)),
-            Plan::Keep(id) => id,
-        };
-        let (account, settings) = files.connect(&connect.token, |file| {
-            let connecting = GithubConnecting {
-                account: &id,
-                user: &owner.user,
-                how: GithubLoginKind::Token,
-                file,
-                connected_at_ms: connect.connected_at_ms,
-                ends_at_ms: owner.ends_at_ms,
+        self.changing(connect.connected_at_ms, |files| {
+            let id = match self.plan(files, connect, Some(&owner.user))? {
+                Plan::Held(account) => return Ok(GithubAccountChange::unchanged(account)),
+                Plan::Keep(id) => id,
             };
-            let GithubConnected { account, replaced, settings } = self.store.connect_github_login(&connecting)?;
-            Ok(((account, settings), replaced))
-        })?;
-        Ok(GithubAccountChange { account, changed: true, settings })
+            let (account, settings) = files.connect(&connect.token, |file| {
+                let connecting = GithubConnecting {
+                    account: &id,
+                    user: &owner.user,
+                    how: GithubLoginKind::Token,
+                    file,
+                    connected_at_ms: connect.connected_at_ms,
+                    ends_at_ms: owner.ends_at_ms,
+                };
+                let GithubConnected { account, replaced, settings } = self.store.connect_github_login(&connecting)?;
+                Ok(((account, settings), replaced))
+            })?;
+            Ok(GithubAccountChange { account, changed: true, settings })
+        })
     }
 
-    /// Has the hub forget the login it holds for `id`, keeping the record, as `GithubAccountDisconnect` says. The file
-    /// goes first, and then the row, as [`Locked::disconnect`] says.
-    pub(crate) fn disconnect(&self, id: &GithubAccountId) -> Result<GithubAccountChange, ApiError> {
-        let files = self.files.lock();
-        if let Some(file) = self.store.github_login_file(id)?
-            && let Some(account) = files.disconnect(&file, || Ok(self.store.clear_github_login(id)?))?
-        {
-            return Ok(GithubAccountChange { account, changed: true, settings: None });
-        }
-        Ok(GithubAccountChange::unchanged(self.record(id)?))
+    /// Has the hub forget the login it holds for `id`, keeping the record, as `GithubAccountDisconnect` says, at
+    /// `now_ms`. The file goes first, and then the row, as [`Locked::disconnect`] says.
+    pub(crate) fn disconnect(&self, id: &GithubAccountId, now_ms: i64) -> Result<GithubAccountChange, ApiError> {
+        self.changing(now_ms, |files| {
+            if let Some(file) = self.store.github_login_file(id)?
+                && let Some(account) = files.disconnect(&file, || Ok(self.store.clear_github_login(id)?))?
+            {
+                return Ok(GithubAccountChange { account, changed: true, settings: None });
+            }
+            Ok(GithubAccountChange::unchanged(self.record(id)?))
+        })
     }
 
     /// Makes `account` the default, or each machine's own login with `None`, as `GithubAccountSetDefault` says, under
     /// the same lock that connects and disconnects, so the login it checks is still there as it's chosen.
     pub(crate) fn set_default(&self, account: Option<&GithubAccountId>, now_ms: i64) -> Result<HubSettings, ApiError> {
-        let files = self.files.lock();
-        if let Some(id) = account {
-            self.usable(&files, id, now_ms)?;
-        }
-        Ok(self.store.set_github_default(account)?)
+        self.changing(now_ms, |files| {
+            if let Some(id) = account {
+                self.usable(files, id, now_ms)?;
+            }
+            Ok(self.store.set_github_default(account)?)
+        })
     }
 
-    /// Makes the logins' files and the GitHub accounts' rows agree, as the hub starts, as [`Locked::tidy`] says.
-    pub(crate) fn tidy(&self) -> Result<(), ApiError> {
-        let files = self.files.lock();
-        files.tidy(self.store.github_login_files()?, |id| {
-            self.store.clear_github_login(id)?;
-            Ok(())
+    /// Makes the logins' files and the GitHub accounts' rows agree, as the hub starts, at `now_ms`, as
+    /// [`Locked::tidy`] says.
+    pub(crate) fn tidy(&self, now_ms: i64) -> Result<(), ApiError> {
+        self.changing(now_ms, |files| {
+            files.tidy(self.store.github_login_files()?, |id| {
+                self.store.clear_github_login(id)?;
+                Ok(())
+            })
         })
     }
 
@@ -183,17 +198,16 @@ impl GithubLogins {
     /// holds a token.
     fn usable(&self, files: &Locked<'_, GithubToken>, id: &GithubAccountId, now_ms: i64) -> Result<(), ApiError> {
         let account = self.record(id)?;
-        let unusable = || {
-            let message = format!("{} needs a login; renew or reconnect it first", account.user.name);
-            ApiError::new(ErrorCode::Conflict, message)
-        };
-        if !account.held_login.is_some_and(|held| held.works_at(now_ms)) {
-            return Err(unusable());
+        match self.token_of(files, &account, now_ms)? {
+            Ok(_) => Ok(()),
+            Err(Unusable::Unreadable(Some(e))) => {
+                Err(internal(format!("couldn't read {}'s login: {e}", account.user.name)))
+            }
+            Err(Unusable::Disconnected | Unusable::Ended | Unusable::Unreadable(None)) => {
+                let message = format!("{} needs a login; renew or reconnect it first", account.user.name);
+                Err(ApiError::new(ErrorCode::Conflict, message))
+            }
         }
-        let file = self.store.github_login_file(id)?.ok_or_else(unusable)?;
-        let token =
-            files.read(&file).map_err(|e| internal(format!("couldn't read {}'s login: {e}", account.user.name)))?;
-        token.map(drop).ok_or_else(unusable)
     }
 
     fn record(&self, id: &GithubAccountId) -> Result<GithubAccount, ApiError> {
