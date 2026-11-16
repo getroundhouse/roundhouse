@@ -43,12 +43,17 @@ async fn permission_requested(
         if let Some(open) = state.calls.get_mut(&id) {
             open.outlives_turn = false;
         }
-        (state.mode, state.in_turn())
+        let in_turn = state.in_turn();
+        if in_turn {
+            state.note_wakeup_interaction();
+        }
+        (state.mode, in_turn)
     };
     if !in_turn {
         let reject = perm.option_for(false, false).unwrap_or("reject");
         return shared.rpc.reply(native_id.clone(), acp::permission_selected(reject)).await;
     }
+    notifications::ensure_own_turn_started(shared).await;
     if mode == PermissionMode::FullAccess {
         let allow = perm.option_for(false, true).unwrap_or("allow");
         return shared.rpc.reply(native_id.clone(), acp::permission_selected(allow)).await;
@@ -83,9 +88,18 @@ async fn elicitation_requested(
     params: &Value,
     raw: String,
 ) -> Result<(), AgentError> {
-    if !shared.state.lock().in_turn() {
+    let in_turn = {
+        let mut state = shared.state.lock();
+        let in_turn = state.in_turn();
+        if in_turn {
+            state.note_wakeup_interaction();
+        }
+        in_turn
+    };
+    if !in_turn {
         return shared.rpc.reply(native_id.clone(), acp::elicitation_cancel()).await;
     }
+    notifications::ensure_own_turn_started(shared).await;
     let Some(form) = acp::parse_elicitation(params) else {
         return unsupported(shared, native_id, "elicitation/create").await;
     };
@@ -184,10 +198,10 @@ pub(super) async fn decide(shared: &Shared, id: &ApprovalId, decision: &Decision
         if !refused {
             shared.stop().await;
         }
-        control::report_state(shared).await;
+        turn::report_state(shared).await;
         return Err(error);
     }
-    control::report_state(shared).await;
+    turn::report_state(shared).await;
     Ok(())
 }
 

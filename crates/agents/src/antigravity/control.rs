@@ -4,7 +4,7 @@ use std::time::Duration;
 use async_trait::async_trait;
 use protocol::attachment::AttachmentFile;
 use protocol::capability::{Control, settings};
-use protocol::event::{AgentRunState, ApprovalDecision, ApprovalOutcome, EventBody, NoticeLevel, TurnOutcome};
+use protocol::event::{ApprovalDecision, EventBody, NoticeLevel, TurnOutcome};
 use protocol::model::{AgentSessionId, ApprovalId, ModelName, PermissionMode, Seq, SessionSettingsChange};
 use protocol::prompt::Prompt;
 use serde_json::{Value, json};
@@ -12,7 +12,7 @@ use serde_json::{Value, json};
 use super::{
     approvals, launch, notifications,
     running::{AntigravityProcess, Shared, effort_str, ensure_model_offers_effort, mode_id},
-    state::{Conversation, Ending, InFlightPrompt},
+    state::{Conversation, Ending, InFlightPrompt, PromptOrigin},
     turn,
 };
 use crate::{AgentError, AgentProcess, acp};
@@ -105,13 +105,7 @@ async fn prompt_to(shared: &Shared, seq: Seq, prompt: &Prompt<AttachmentFile>) -
 }
 
 pub(super) async fn send_prompt_rpc(shared: &Shared, seq: Option<Seq>, blocks: Vec<Value>) -> Result<(), AgentError> {
-    let user_chunks = blocks
-        .iter()
-        .filter(|block| {
-            block.get("type").and_then(Value::as_str) == Some("text")
-                && block.get("text").and_then(Value::as_str).is_some_and(|text| !text.is_empty())
-        })
-        .count();
+    let user_chunks = non_empty_text_chunks(&blocks);
     let ((session_id, rpc_id), _) = between_endings(shared, |state| {
         if seq.is_some() && !state.waiting.is_empty() {
             return Err(AgentError::Refused("Answer Antigravity's open request before sending another prompt".into()));
@@ -122,10 +116,53 @@ pub(super) async fn send_prompt_rpc(shared: &Shared, seq: Option<Seq>, blocks: V
             state.cancelling = false;
         }
         let rpc_id = shared.rpc.next_id();
-        state.prompts.push_back(InFlightPrompt { rpc_id, seq, taken: false, user_chunks_left: user_chunks });
+        state.prompts.push_back(InFlightPrompt {
+            rpc_id,
+            origin: PromptOrigin::Prompt(seq),
+            taken: false,
+            user_chunks_left: user_chunks,
+        });
         Ok((session_id, rpc_id))
     })
     .await?;
+    write_prompt_request(shared, rpc_id, &session_id, blocks).await;
+    Ok(())
+}
+
+pub(super) async fn send_drain_prompt(
+    shared: &Shared,
+    origin: PromptOrigin,
+    blocks: Vec<Value>,
+) -> Result<bool, AgentError> {
+    let user_chunks = non_empty_text_chunks(&blocks);
+    let (queued, _) = between_endings(shared, |state| {
+        if state.in_turn() || !state.waiting.is_empty() {
+            return Ok(None);
+        }
+        let session_id = state.session_id.clone().ok_or(AgentError::Exited)?;
+        state.reply = None;
+        state.cancelling = false;
+        let rpc_id = shared.rpc.next_id();
+        state.prompts.push_back(InFlightPrompt { rpc_id, origin, taken: false, user_chunks_left: user_chunks });
+        Ok(Some((session_id, rpc_id)))
+    })
+    .await?;
+    let Some((session_id, rpc_id)) = queued else { return Ok(false) };
+    write_prompt_request(shared, rpc_id, &session_id, blocks).await;
+    Ok(true)
+}
+
+fn non_empty_text_chunks(blocks: &[Value]) -> usize {
+    blocks
+        .iter()
+        .filter(|block| {
+            block.get("type").and_then(Value::as_str) == Some("text")
+                && block.get("text").and_then(Value::as_str).is_some_and(|text| !text.is_empty())
+        })
+        .count()
+}
+
+async fn write_prompt_request(shared: &Shared, rpc_id: u64, session_id: &AgentSessionId, blocks: Vec<Value>) {
     let params = json!({ "sessionId": session_id, "prompt": blocks });
     if let Err(error) = shared.rpc.write_request(rpc_id, "session/prompt", params).await {
         // Some of it may have reached `agy`, so it's stopped rather than left in a state nobody knows, and its exit
@@ -135,7 +172,6 @@ pub(super) async fn send_prompt_rpc(shared: &Shared, seq: Option<Seq>, blocks: V
             .await;
         shared.stop().await;
     }
-    Ok(())
 }
 
 /// Runs `act` on the conversation once no turn is part way through being recorded as ended, under the lock that saw
@@ -304,7 +340,7 @@ async fn cancel(shared: &Shared) -> Result<(), AgentError> {
     approvals::cancel_native_waiters(shared).await;
     if !has_prompts {
         notifications::flush_streams(shared).await;
-        settle_turn(shared).await;
+        turn::settle_turn(shared).await;
         turn::record_end(shared, TurnOutcome::Cancelled, None, None, None).await;
         return Ok(());
     }
@@ -319,68 +355,4 @@ async fn cancel(shared: &Shared) -> Result<(), AgentError> {
         return Err(AgentError::NoAnswer);
     }
     Ok(())
-}
-
-pub(super) async fn settle_all(shared: &Shared) {
-    let prompts: Vec<Seq> = {
-        let mut state = shared.state.lock();
-        for open in state.calls.values_mut() {
-            open.outlives_turn = false;
-        }
-        state.prompts.drain(..).filter(|entry| !entry.taken).filter_map(|entry| entry.seq).collect()
-    };
-    for prompt in prompts {
-        shared.event(EventBody::PromptDropped { prompt }, None).await;
-    }
-    settle_turn(shared).await;
-}
-
-pub(super) async fn settle_turn(shared: &Shared) {
-    let (requests, calls) = {
-        let mut guard = shared.state.lock();
-        let state = &mut *guard;
-        let requests: Vec<_> = state.waiting.drain().map(|(id, _)| id).collect();
-        let mut calls = Vec::new();
-        state.calls.retain(|id, open| {
-            if open.outlives_turn {
-                true
-            } else {
-                calls.push(id.clone());
-                false
-            }
-        });
-        state.denied_calls.retain(|id| state.calls.contains_key(id));
-        (requests, calls)
-    };
-    for approval_id in requests {
-        shared
-            .event(
-                EventBody::ApprovalResolved {
-                    approval_id,
-                    outcome: ApprovalOutcome::Cancelled,
-                    answers_by_text: None,
-                    answers_by_position: None,
-                    by_setting: false,
-                },
-                None,
-            )
-            .await;
-    }
-    for tool_use_id in calls {
-        shared.event(EventBody::ToolCallDropped { tool_use_id }, None).await;
-    }
-}
-
-pub(super) async fn report_state(shared: &Shared) {
-    let state = {
-        let state = shared.state.lock();
-        if !state.waiting.is_empty() {
-            AgentRunState::RequiresAction
-        } else if state.in_turn() {
-            AgentRunState::Running
-        } else {
-            AgentRunState::Idle
-        }
-    };
-    shared.event(EventBody::AgentState { state }, None).await;
 }

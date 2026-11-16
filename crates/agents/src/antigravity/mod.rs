@@ -13,6 +13,7 @@ mod running;
 mod state;
 mod supervise;
 mod turn;
+mod wakeup;
 
 pub use description::description;
 pub use one_off::{account, title_for};

@@ -29,12 +29,25 @@ impl Harness {
     }
 
     pub(super) fn with_tools(rules: &Value, mode: PermissionMode, start: Start, tools: Option<ToolServer>) -> Self {
-        Self::launching(rules, mode, start, tools, None)
+        Self::launching(rules, mode, start, tools, |_| {})
     }
 
     /// One whose home already has `conversation`'s own file, as `agy` keeps it, before the launch.
     pub(super) fn keeping(rules: &Value, mode: PermissionMode, start: Start, conversation: &str) -> Self {
-        Self::launching(rules, mode, start, None, Some(conversation))
+        Self::seeded(rules, mode, start, |room| {
+            let kept = room.join(".gemini").join("antigravity-cli").join("conversations");
+            std::fs::create_dir_all(&kept).unwrap();
+            std::fs::write(kept.join(format!("{conversation}.db")), b"kept").unwrap();
+        })
+    }
+
+    pub(super) fn seeded(
+        rules: &Value,
+        mode: PermissionMode,
+        start: Start,
+        seed: impl FnOnce(&std::path::Path),
+    ) -> Self {
+        Self::launching(rules, mode, start, None, seed)
     }
 
     fn launching(
@@ -42,14 +55,10 @@ impl Harness {
         mode: PermissionMode,
         start: Start,
         tools: Option<ToolServer>,
-        keeping: Option<&str>,
+        seed: impl FnOnce(&std::path::Path),
     ) -> Self {
         let room = tempfile::tempdir().unwrap();
-        if let Some(conversation) = keeping {
-            let kept = room.path().join(".gemini").join("antigravity-cli").join("conversations");
-            std::fs::create_dir_all(&kept).unwrap();
-            std::fs::write(kept.join(format!("{conversation}.db")), b"kept").unwrap();
-        }
+        seed(room.path());
         let bin = PROGRAM.path();
         std::fs::write(room.path().join("native-script.json"), serde_json::to_vec(rules).unwrap()).unwrap();
         let mut settings = crate::antigravity::description().defaults;

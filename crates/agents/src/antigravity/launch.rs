@@ -9,7 +9,7 @@ use serde_json::{Value, json};
 use tokio::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command};
 use tracing::warn;
 
-use super::files::ConversationFiles;
+use super::files::{ConversationFiles, effective_home};
 use super::running::{Shared, effort_str, mode_id};
 use crate::{AgentError, AgentOptions, acp};
 
@@ -92,13 +92,24 @@ pub(super) async fn conversation(
         Purpose::Agent => options.instructions.as_ref().map(|told| told.text.as_str()),
         Purpose::Title(instructions) => Some(instructions),
     };
-    let response = open_session(shared, spec, &servers, told, options.binary.home.as_deref()).await?;
+    let home = effective_home(&spec.env, options);
+    let response = open_session(shared, spec, &servers, told, home).await?;
     let parsed = acp::parse_session_response(&response)
         .ok_or_else(|| AgentError::Failed("Antigravity returned no session ID".into()))?;
     let id = AgentSessionId::from(parsed.session_id);
+    let transcript = match (purpose, home.and_then(|dir| ConversationFiles::of(dir, &id))) {
+        (Purpose::Agent, Some(files)) => {
+            let path = files.transcript();
+            let resumed_same = matches!(&spec.start, Start::Resume { conversation } if *conversation == id);
+            let offset = if resumed_same { tokio::fs::metadata(&path).await.map_or(0, |meta| meta.len()) } else { 0 };
+            Some((path, offset))
+        }
+        _ => None,
+    };
     {
         let mut state = shared.state.lock();
         state.session_id = Some(id.clone());
+        state.transcript = transcript;
         state.config_options = parsed.config_options;
     }
     apply_initial_settings(shared, &id, matches!(purpose, Purpose::Agent)).await?;
