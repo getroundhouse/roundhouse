@@ -1,8 +1,9 @@
-//! What the agent asks in the composer's place, its questions and its requests to use a tool, and answering it.
+//! What the agent asks, and answering it: its questions and its requests to use a tool, in the composer's place, and
+//! its plans, on their cards in the transcript.
 
 #![cfg(test)]
 
-use gpui_kit::SharedString;
+use gpui_kit::{ElementId, SharedString};
 use protocol::event::{ContentBlock, EventBody};
 use protocol::model::SessionStatus;
 
@@ -35,6 +36,26 @@ impl Ui<'_> {
         self.wait("the request to be asked", |ui| ui.has(id("question-answer-0")));
         self.click(id("question-answer-0"));
         self.click(id("question-send"));
+    }
+
+    /// Approves the newest plan, with "Approve plan" on its card.
+    pub(crate) fn approve_plan(&mut self) {
+        self.answer_plan("approve-plan");
+    }
+
+    /// Sends the newest plan back, with "Keep planning" on its card.
+    pub(crate) fn keep_planning(&mut self) {
+        self.answer_plan("keep-planning");
+    }
+
+    /// Clicks `button` on the card of the newest open approval, a plan, once the card has drawn it. When the chat's
+    /// record says a request waits before the transcript's log has taken it in, the transcript fetches it on its own,
+    /// and has it open from then. A plan's card is drawn in the request's row, which comes only once the log takes it
+    /// in, so the card can come a moment after what [`Ui::next_open_approval`] waits for.
+    fn answer_plan(&mut self, button: &'static str) {
+        let id = ElementId::NamedInteger(button.into(), self.next_open_approval().get());
+        self.wait("the plan's buttons", |ui| ui.visible(id.clone()));
+        self.click(id);
     }
 
     /// What the agent was told its calls came to, such as the answers to its questions, one after another.

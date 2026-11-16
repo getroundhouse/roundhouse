@@ -165,10 +165,10 @@ impl<'a> Ui<'a> {
         )
     }
 
-    /// Runs the app until `done`, on real time, because a real hub is on the other end of the socket.
     /// The newest open approval, once the transcript has it. A session's status comes over the hub's
     /// feed, and the transcript's events over their own subscription, so either can arrive first, and
-    /// the transcript can still be showing the previous approval.
+    /// the transcript can still be showing the previous approval. The transcript can have it before it
+    /// draws it, so a test waits for what it clicks, as [`Ui::approve_plan`] does.
     pub(crate) fn next_open_approval(&mut self) -> Seq {
         let seen = self.seen_approval;
         let newest = |ui: &Self| {
@@ -180,6 +180,7 @@ impl<'a> Ui<'a> {
         self.seen_approval
     }
 
+    /// Runs the app until `done`, on real time, because a real hub is on the other end of the socket.
     pub(crate) fn wait(&mut self, what: &str, mut done: impl FnMut(&mut Self) -> bool) {
         wait_until(what, || {
             self.frame();
