@@ -1,5 +1,5 @@
 diff --git a/crates/base/src/text/editor_host.rs b/crates/base/src/text/editor_host.rs
-index 3ffc4b1..aeeea70 100644
+index 2540b9b..37d7adc 100644
 --- a/crates/base/src/text/editor_host.rs
 +++ b/crates/base/src/text/editor_host.rs
 @@ -27,7 +27,7 @@ use std::{cell::RefCell, collections::HashMap, ops::Range, rc::Rc, sync::Arc};
@@ -55,10 +55,10 @@ index 3ffc4b1..aeeea70 100644
      pub fn with_image_source<F>(mut self, resolver: F) -> Self
      where
 diff --git a/crates/base/src/text/mod.rs b/crates/base/src/text/mod.rs
-index 91df982..61550d8 100644
+index 1681ce0..e1f996d 100644
 --- a/crates/base/src/text/mod.rs
 +++ b/crates/base/src/text/mod.rs
-@@ -22,7 +22,7 @@ mod utils;
+@@ -24,7 +24,7 @@ mod utils;
  use gpui::{App, ElementId, IntoElement, RenderOnce, SharedString, Window};
  pub use inline_element::*;
  pub use markdown_ext::*;
@@ -68,10 +68,10 @@ index 91df982..61550d8 100644
  pub use state::*;
  pub use stream_fade::TextViewMotion;
 diff --git a/crates/base/src/text/node.rs b/crates/base/src/text/node.rs
-index c8a8c85..95a11d6 100644
+index 15d5d5a..7616acf 100644
 --- a/crates/base/src/text/node.rs
 +++ b/crates/base/src/text/node.rs
-@@ -2337,6 +2337,10 @@ impl Paragraph {
+@@ -2447,6 +2447,10 @@ impl Paragraph {
      }
  }
  
@@ -82,7 +82,7 @@ index c8a8c85..95a11d6 100644
  #[derive(Debug, Clone)]
  pub struct CodeBlock {
      lang: Option<SharedString>,
-@@ -2613,7 +2617,8 @@ impl CodeBlock {
+@@ -2723,7 +2727,8 @@ impl CodeBlock {
                  .child(actions(&self, window, cx))
          });
          // The id scopes the caller's action ids per code block, so plain ids
@@ -92,7 +92,7 @@ index c8a8c85..95a11d6 100644
          let id = block_element_id("codeblock", self.span, options.ix);
          let block = if matches!(style.code_block().overflow.y, Some(Overflow::Scroll)) {
              let scroll_handle = window
-@@ -2632,6 +2637,7 @@ impl CodeBlock {
+@@ -2742,6 +2747,7 @@ impl CodeBlock {
              // pinned to the viewport instead of moving with the code.
              div()
                  .id(id.clone())
@@ -100,7 +100,7 @@ index c8a8c85..95a11d6 100644
                  .w_full()
                  .min_w_0()
                  .relative()
-@@ -2649,7 +2655,11 @@ impl CodeBlock {
+@@ -2759,7 +2765,11 @@ impl CodeBlock {
          } else {
              // Without actions nothing under the block needs element state.
              match actions {
@@ -114,10 +114,10 @@ index c8a8c85..95a11d6 100644
              }
          };
 diff --git a/crates/base/src/text/text_view.rs b/crates/base/src/text/text_view.rs
-index 21cc84a..376674f 100644
+index acf0ae3..82a9332 100644
 --- a/crates/base/src/text/text_view.rs
 +++ b/crates/base/src/text/text_view.rs
-@@ -380,7 +380,9 @@ impl TextView {
+@@ -478,7 +478,9 @@ impl TextView {
      /// Set custom block actions for code blocks.
      ///
      /// The closure receives the [`CodeBlock`],

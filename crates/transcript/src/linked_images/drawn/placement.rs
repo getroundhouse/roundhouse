@@ -19,7 +19,7 @@ use std::sync::Arc;
 pub(super) const ALONE: &str = "linked-image-alone";
 pub(super) const AMONG_WORDS: &str = "linked-image-among-words";
 
-/// How tall an image among words is, for a line: what the kit draws one at, in its `inline_image_size_for_line`.
+/// How tall an image among words is, for a line: what the kit's `inline_image_size_for_line` leaves for one.
 const AMONG_WORDS_SHARE: f32 = 0.75;
 
 /// Whether parsing `source` with [`to_read`] can take anything, which it can only if it has an image in Markdown, and
@@ -195,18 +195,17 @@ impl Lookup {
     }
 }
 
-/// What a paragraph holds, for how its images are drawn, as the kit has it: whole, each as wide as it is, when it
-/// holds only images, and at the height of the text when it holds words too. The kit looks past bold, italics and
-/// struck text for both, so `**![The board](board.png)**` is an image alone.
+/// What a paragraph holds, for how its images are drawn: whole, as wide as it is, when it holds one image alone, and
+/// at the height of the text when it holds words too. Bold, italics and struck text are looked past, as the kit does
+/// for a standalone image, so `**![The board](board.png)**` is an image alone.
 pub(super) enum Holds<'a> {
     /// One image and nothing else.
     OnlyAnImage(&'a Image),
     /// Words, and these images among them. One in a link isn't among them.
     Words(Vec<&'a Image>),
-    /// Anything else, left to the kit to draw as it does: several images and no words, as in one mark or in marks side
-    /// by side, which `crate::images_apart` doesn't set apart, any that's a link or refers to its address, and any
-    /// beside a tag of HTML, which only the kit can say the words of, and draws whole, or beside `<br>` at the height
-    /// of the text.
+    /// Anything else, left to the kit: several images and no words, as in one mark or in marks side by side, which
+    /// `crate::images_apart` doesn't set apart, any that's a link or refers to its address, and any beside a tag of
+    /// HTML, which only the kit can say the words of.
     TheKits,
 }
 

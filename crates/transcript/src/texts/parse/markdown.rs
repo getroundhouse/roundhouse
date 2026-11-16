@@ -248,8 +248,8 @@ fn keyed(block: BlockNode, leaves: &mut Vec<String>) -> BlockNode {
         BlockNode::List { children, ordered, start, span } => {
             BlockNode::List { children: all(children, leaves), ordered, start, span }
         }
-        BlockNode::ListItem { children, spread, checked, span } => {
-            BlockNode::ListItem { children: all(children, leaves), spread, checked, span }
+        BlockNode::ListItem { children, spread, checked, task_marker, span } => {
+            BlockNode::ListItem { children: all(children, leaves), spread, checked, task_marker, span }
         }
         BlockNode::CodeBlock(code) => {
             let key = next_key(leaves);

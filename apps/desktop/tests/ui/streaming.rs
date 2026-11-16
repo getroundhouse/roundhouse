@@ -338,3 +338,32 @@ fn a_prompt_s_copy_button_shows_while_it_s_hovered_and_copies_what_it_says(cx: &
     assert_eq!(buttons.len(), 2);
     assert_eq!(buttons[0].bounds().right(), buttons[1].bounds().right(), "different lengths keep Copy aligned");
 }
+
+/// Inline code that's one word too long for a line wraps across the bubble's width rather than early, and the bubble's
+/// height fits every wrapped line (`#1200`).
+#[gpui_kit::test]
+fn a_prompt_with_inline_code_that_is_one_long_word_fills_and_stays_inside_its_bubble(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = in_a_new_workspace(cx, &stack);
+    let token = "0123456789abcdefghijklmnopqrstuvwxyz".repeat(4);
+    let prompt = format!("say:`{token}`");
+    ui.paste_text(&prompt);
+    ui.press("enter");
+    ui.wait_idle_with("the reply", |text| text.contains(&token));
+
+    let [bubble] = &ui.shown("bubble/")[..] else { panic!("one prompt") };
+    let [prompt_row] = &ui.shown("prompt-row/")[..] else { panic!("one prompt row") };
+    let (bubble_bounds, row_bounds) = (ui.bounds(bubble.clone()), ui.bounds(prompt_row.clone()));
+    // Prompts cap at 80% of the column; an unpadded per-grapheme wrap shrank this to ~42%.
+    assert!(
+        bubble_bounds.size.width > row_bounds.size.width * 0.7,
+        "the wrapped inline code uses the bubble's width: {bubble_bounds:?} in {row_bounds:?}"
+    );
+    let transcript = ui.transcript().unwrap();
+    let leaves = ui.cx.read_entity(&transcript, |t, _| t.drawn_leaf_bounds());
+    let prompt_leaf = leaves[0];
+    assert!(
+        prompt_leaf.top() >= bubble_bounds.top() && prompt_leaf.bottom() <= bubble_bounds.bottom(),
+        "every line of the inline code stays inside the bubble: {prompt_leaf:?} vs {bubble_bounds:?}"
+    );
+}

@@ -2,7 +2,7 @@
 //! texts show.
 
 use client_core::session_log::{By, PromptState, Row};
-use gpui_kit::{Context, Window};
+use gpui_kit::{Bounds, Context, Pixels, Window};
 use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{PromptLine, Seq};
 
@@ -94,5 +94,10 @@ impl Transcript {
     /// What each text the transcript keeps the kit's blocks of was parsed from, which is what it shows.
     pub fn kept_texts(&self) -> Vec<String> {
         self.texts.sources()
+    }
+
+    /// Where each leaf of text drawn in the last frame was laid out, in the order they were drawn.
+    pub fn drawn_leaf_bounds(&self) -> Vec<Bounds<Pixels>> {
+        self.selection.drawn_leaf_bounds()
     }
 }

@@ -53,7 +53,7 @@ fn frames_for(drawn: Vec<Drawn>, motion: Motion) -> usize {
     cx.update(gpui_kit::init);
     cx.update(look::apply);
     match motion {
-        Motion::Allowed => {}
+        Motion::Allowed => cx.update(|cx| cx.set_reduce_motion(false)),
         Motion::Reduced => cx.update(|cx| cx.set_reduce_motion(true)),
         Motion::HeldStill => cx.update(|cx| look::hold_still(0, cx)),
     }

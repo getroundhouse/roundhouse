@@ -1,4 +1,6 @@
 // Changed in Roundhouse's copy of gpui-kit, as third_party/README.md lists.
+#[cfg(test)]
+mod block_surface_tests;
 mod document;
 pub mod editor_host;
 mod editor_seam;

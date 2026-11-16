@@ -10,9 +10,9 @@ use crate::files::CopyPath;
 pub const UPSTREAM: &str = "https://github.com/longbridge/gpui-kit.git";
 
 // renovate: datasource=github-tags depName=longbridge/gpui-kit
-const RELEASE: &str = "v0.9.0";
+const RELEASE: &str = "v0.10.0";
 /// The commit [`RELEASE`] tags. A tag can be moved, so a copy is made only from the commit it was checked to be.
-const COMMIT: &str = "7591a35eced761e3613c01e71ff04c10129dae1a";
+const COMMIT: &str = "f697c3133d55c64fa8a5b67926147fb3dadd276d";
 
 /// What the copy keeps of upstream's repository: gpui-kit and every crate under it that's upstream's, then the
 /// workspace manifest the crates take their versions, dependencies and lints from, rustfmt's settings for upstream's

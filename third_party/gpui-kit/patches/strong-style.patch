@@ -1,8 +1,8 @@
 diff --git a/crates/base/src/text/node.rs b/crates/base/src/text/node.rs
-index 95a11d6..1fd8614 100644
+index 7616acf..24797c2 100644
 --- a/crates/base/src/text/node.rs
 +++ b/crates/base/src/text/node.rs
-@@ -2770,7 +2770,7 @@ fn mark_text_color(highlight: Hsla, background: Hsla) -> Hsla {
+@@ -2917,7 +2917,7 @@ fn mark_text_color(highlight: Hsla, background: Hsla) -> Hsla {
  fn mark_highlight(mark: &TextMark, node_cx: &NodeContext, cx: &App) -> InlineHighlight {
      let mut highlight = HighlightStyle::default();
      if mark.bold {
@@ -11,7 +11,7 @@ index 95a11d6..1fd8614 100644
      }
      if mark.italic {
          highlight.font_style = Some(FontStyle::Italic);
-@@ -4711,6 +4711,57 @@ mod tests {
+@@ -5296,6 +5296,57 @@ mod tests {
          });
      }
  
@@ -70,7 +70,7 @@ index 95a11d6..1fd8614 100644
      fn translucent_mark_cache_tracks_theme_background() {
          use gpui::{Empty, TestApp};
 diff --git a/crates/base/src/text/style.rs b/crates/base/src/text/style.rs
-index 506b293..50fd173 100644
+index 5954227..e228e8e 100644
 --- a/crates/base/src/text/style.rs
 +++ b/crates/base/src/text/style.rs
 @@ -1,6 +1,6 @@
@@ -89,7 +89,7 @@ index 506b293..50fd173 100644
      inline_code: HighlightStyle,
      /// Explicit inline code refinements, applied after theme and surface colors.
      inline_code_style: StyleRefinement,
-@@ -53,6 +54,7 @@ impl PartialEq for TextViewStyle {
+@@ -56,6 +57,7 @@ impl PartialEq for TextViewStyle {
              && self.table == other.table
              && self.table_head == other.table_head
              && self.table_cell == other.table_cell
@@ -97,7 +97,7 @@ index 506b293..50fd173 100644
              && self.inline_code == other.inline_code
              && self.inline_code_style == other.inline_code_style
              && self.list_style == other.list_style
-@@ -96,6 +98,10 @@ impl TextViewStyle {
+@@ -100,6 +102,10 @@ impl TextViewStyle {
              table: StyleRefinement::default(),
              table_head: StyleRefinement::default(),
              table_cell: StyleRefinement::default(),
@@ -108,7 +108,7 @@ index 506b293..50fd173 100644
              inline_code: HighlightStyle {
                  background_color: Some(colors.accent),
                  ..Default::default()
-@@ -173,6 +179,19 @@ impl TextViewStyle {
+@@ -178,6 +184,19 @@ impl TextViewStyle {
          self
      }
  
@@ -128,8 +128,8 @@ index 506b293..50fd173 100644
      /// Sets the highlight style for inline code spans.
      ///
      /// When `background_color` is `None`, the neutral code background is used,
-@@ -320,6 +339,11 @@ impl TextViewStyle {
-         &self.table_cell
+@@ -339,6 +358,11 @@ impl TextViewStyle {
+         self.table_row_hover
      }
  
 +    /// The highlight style for strong emphasis.
@@ -140,8 +140,8 @@ index 506b293..50fd173 100644
      /// The highlight style for inline code, before the code-background
      /// fallback in [`Self::inline_code_highlight`] applies.
      pub fn inline_code(&self) -> HighlightStyle {
-@@ -465,6 +489,7 @@ mod tests {
-         assert!(base != base.clone().with_table_cell(table));
+@@ -486,6 +510,7 @@ mod tests {
+         assert!(base != base.clone().with_table_row_hover(gpui::red()));
  
          assert!(base != base.clone().with_dark(true));
 +        assert!(base != base.clone().with_strong(HighlightStyle::default()));

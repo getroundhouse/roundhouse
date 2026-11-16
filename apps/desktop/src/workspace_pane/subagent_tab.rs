@@ -68,6 +68,10 @@ impl Subagents {
         self.tab.as_ref().map(|tab| &tab.focus)
     }
 
+    pub(super) fn transcript(&self) -> Option<&Entity<Transcript>> {
+        self.tab.as_ref().map(|tab| &tab.transcript)
+    }
+
     /// The subagent the tab shows, once its record has come.
     fn shown<'a>(&self, records: &'a Snapshot) -> Option<&'a Subagent> {
         let tab = self.tab.as_ref()?;

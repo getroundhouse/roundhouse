@@ -1,8 +1,8 @@
 # The release of https://github.com/longbridge/gpui-kit that third_party/gpui-kit/vendor was made from, what it kept of
 # it, and our patches on top of it, which tools/kit-sync writes, and reads to bring the next release in.
-release = "v0.9.0"
-commit = "7591a35eced761e3613c01e71ff04c10129dae1a"
-tree = "79c4144f98d924e5c7d5b13d2efc639501763bbfe2df4714788904465e64b90b"
+release = "v0.10.0"
+commit = "f697c3133d55c64fa8a5b67926147fb3dadd276d"
+tree = "8e8cfd171133f30546dcf90a5d0751b035e72bdee4c1c835373b46a71e4ab2f6"
 kept = [
     "crates/kit",
     "crates/base",
@@ -20,4 +20,5 @@ kept = [
 patches = [
     "code-block-actions",
     "strong-style",
+    "layout-direction-fmt",
 ]

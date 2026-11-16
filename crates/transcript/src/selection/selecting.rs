@@ -291,6 +291,12 @@ impl Selection {
         self.text()
     }
 
+    /// Where each leaf drawn in the last frame was laid out, in the order they were drawn.
+    #[cfg(feature = "testing")]
+    pub(crate) fn drawn_leaf_bounds(&self) -> Vec<Bounds<Pixels>> {
+        self.inner.borrow().drawn.iter().flat_map(|drawn| drawn.leaves.iter().map(|(_, leaf)| leaf.bounds())).collect()
+    }
+
     /// The ends of everything: the start of the first text that's shown and the end of the last, if there are any.
     pub(super) fn whole(&self) -> Option<(End, End)> {
         let (first, last) = self.texts.ends()?;
@@ -303,7 +309,7 @@ impl Selection {
     }
 
     /// Copies what's selected, drawn or not. With nothing selected, a copy is the kit's, of what it has selected.
-    pub(super) fn copy(&self, cx: &mut App) {
+    pub(crate) fn copy(&self, cx: &mut App) {
         let text = self.text();
         if text.is_empty() {
             cx.propagate();

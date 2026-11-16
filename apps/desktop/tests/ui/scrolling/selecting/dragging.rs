@@ -250,6 +250,24 @@ fn a_reference_link_opens_where_its_definition_says(cx: &mut TestAppContext) {
     assert_eq!(ui.cx.opened_url().as_deref(), Some("https://example.com/boxes"));
 }
 
+#[gpui_kit::test]
+fn what_s_selected_in_a_chat_copies_from_the_composer_while_nothing_is_selected_there(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let session = stack.chat_in_a_new_workspace();
+    stack.run(&session, &format!("say:{LAST}"));
+    let mut ui = open(cx, &stack);
+    let window = settled(&mut ui, &stack, &session);
+    let on_it = on_the_reply_saying(&ui, window, LAST);
+
+    click(&mut ui, on_it, 3);
+    ui.click("composer");
+    ui.input("half typed");
+    assert_eq!(copy(&mut ui), LAST, "with nothing selected in the composer, Cmd-C copies the chat's selection");
+
+    ui.press("secondary-a");
+    assert_eq!(copy(&mut ui), "half typed", "with text selected in the composer, Cmd-C copies that");
+}
+
 /// The app, open on the stack's chat.
 pub(super) fn open<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> Ui<'a> {
     let mut ui = Ui::open(cx, stack);

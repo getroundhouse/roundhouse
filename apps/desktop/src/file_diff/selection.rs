@@ -7,6 +7,7 @@ use std::cell::RefCell;
 use std::ops::Range;
 use std::rc::Rc;
 
+use gpui_kit::base::TextSelection;
 use gpui_kit::component::input::{Copy, SelectAll};
 use gpui_kit::{ClipboardItem, Context, MouseDownEvent, Pixels, Point, TextLayout, Window};
 
@@ -158,14 +159,17 @@ impl FileDiff {
         });
     }
 
-    pub(super) fn copy(&mut self, _: &Copy, _: &mut Window, cx: &mut Context<Self>) {
-        if let Some(text) = self.selected_text() {
-            cx.write_to_clipboard(ClipboardItem::new_string(text));
-        }
+    pub(crate) fn copy(&mut self, _: &Copy, _: &mut Window, cx: &mut Context<Self>) {
+        let Some(text) = self.selected_text() else {
+            cx.propagate();
+            return;
+        };
+        cx.write_to_clipboard(ClipboardItem::new_string(text));
     }
 
     /// Selects every line, or side by side, every line of the new side.
-    pub(super) fn select_all(&mut self, _: &SelectAll, _: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn select_all(&mut self, _: &SelectAll, window: &mut Window, cx: &mut Context<Self>) {
+        TextSelection::clear(window, cx);
         let split = self.rows.iter().any(|row| matches!(row, Row::Pair { .. }));
         let (anchor, head) = (Spot { row: 0, at: 0 }, Spot { row: self.rows.len().saturating_sub(1), at: usize::MAX });
         self.selection = Some(Selection { anchor, head, side: split.then_some(false) });
