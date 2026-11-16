@@ -4,6 +4,7 @@ mod background;
 mod calls;
 mod harness;
 mod lifecycle;
+mod models;
 #[cfg(unix)]
 mod real_cli;
 mod transitions;

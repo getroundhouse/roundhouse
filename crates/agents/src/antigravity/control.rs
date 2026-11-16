@@ -12,7 +12,7 @@ use serde_json::{Value, json};
 
 use super::{
     approvals, launch, notifications,
-    running::{AntigravityProcess, Shared, effort_str, ensure_model_offers_effort},
+    running::{AntigravityProcess, Shared, effort_str, ensure_model_offers_effort, ensure_sign_in_offers_model},
     state::{Conversation, Ending, InFlightPrompt, PromptOrigin},
     swap::ensure_mode_process,
     turn,
@@ -228,6 +228,9 @@ async fn change(shared: &Arc<Shared>, requested: &settings::Settings) -> Result<
     let next_effort = requested.effort.unwrap_or(current_effort);
     let level = effort_str(next_effort)?;
     ensure_model_offers_effort(next_model, next_effort)?;
+    if let Some(model) = &requested.model {
+        ensure_sign_in_offers_model(&shared.state.lock().config_options, model)?;
+    }
     let next_perm = match requested.mode {
         None => None,
         Some(mode) if mode == super::claims::plan() => Some(PermissionMode::Plan),

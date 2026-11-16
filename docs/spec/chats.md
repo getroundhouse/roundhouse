@@ -570,7 +570,7 @@ Every call is drawn the same way, as the first rule below says, and each kind fi
 
 - **Antigravity starts on Gemini 4 Carbon at Medium effort, with the worker machine's native Antigravity sign-in.** Roundhouse leaves those credentials with Antigravity. Its model, mode and effort changes apply on the next turn (switching between full access and plan mode restarts `agy` once idle, stopping any running `agy` background tasks or subagents), and a completed plan waits for approval before switching to full access. *Unconfirmed.*
 
-- **The Antigravity model picker offers the compiled native Gemini catalog and each model’s supported efforts, including Extra high on Gemini 4 Hydrogen.** Switching to a model that cannot use the current effort selects that model’s default. *Unconfirmed.*
+- **The Antigravity model picker offers the compiled native catalog, Gemini 4 Carbon, Hydrogen and Argon, Gemini 3.8 Flash, and Claude Opus 5.5 and Sonnet 5.5, with each model’s supported efforts, including Extra high on Gemini 4 Hydrogen.** Switching to a model that cannot use the current effort selects that model’s default, which is Medium on both Claude models. Antigravity offers the Claude models only when it’s signed in with a Google account, so a chat on one under a Gemini API key is refused with that reason rather than started. *Unconfirmed.*
 
   ![Antigravity models and the selected model’s effort levels](screens/antigravity-models.png)
 

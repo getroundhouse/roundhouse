@@ -10,7 +10,7 @@ use tokio::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command};
 use tracing::warn;
 
 use super::files::{ConversationFiles, effective_home};
-use super::running::{Shared, effort_str, mode_id};
+use super::running::{Shared, effort_str, ensure_sign_in_offers_model, mode_id};
 use crate::{AgentError, AgentOptions, acp};
 
 pub(super) const FULL_ACCESS_ARGS: [&str; 3] = ["acp", "--disable-telemetry", "--dangerously-skip-permissions"];
@@ -246,6 +246,7 @@ async fn apply_initial_settings(shared: &Shared, id: &AgentSessionId, strict_eff
         let state = shared.state.lock();
         (state.process_mode, state.model.clone(), state.effort)
     };
+    ensure_sign_in_offers_model(&shared.state.lock().config_options, &model)?;
     rpc.ask("session/set_mode", json!({ "sessionId": id, "modeId": mode_id(mode) })).await?;
     let model_reply = rpc
         .ask("session/set_config_option", json!({ "sessionId": id, "configId": "model", "value": model.as_str() }))
