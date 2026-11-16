@@ -2,7 +2,8 @@
 //! with the rest, and a long ask scrolling on under a drag from it.
 
 use desktop::workspace_pane::Showing;
-use gpui_kit::{TestAppContext, point, px};
+use gpui_kit::test::TestQueryExt as _;
+use gpui_kit::{AppContext as _, ElementId, TestAppContext, point, px};
 
 use super::super::A_FRAME;
 use super::calls::{ASKED, REPORT, SUBAGENT_LINE, held_past, long};
@@ -46,9 +47,21 @@ fn in_its_tab(ui: &mut Ui<'_>, what: &str) {
     let open = a_subagent_for(ui, what);
     ui.click(open);
     ui.wait("the subagent tab", |ui| showing(ui) == Showing::Subagent);
-    // A long text has its element ID while its empty placeholder waits for parsing. Wait for both texts to have
-    // height, then finish the frames that measure their rows before a drag uses those bounds.
-    let drawn = |ui: &mut Ui<'_>, part| ui.shown(part).into_iter().any(|id| bounds(ui, id).size.height > px(0.));
-    ui.wait("what it was asked, and its report", |ui| drawn(ui, "prompt/call/") && drawn(ui, "report/call/"));
-    ui.settle(A_FRAME);
+    // Parsing a long text and measuring its row can move it out of view. Settle those frames before checking both
+    // texts in one frame: separate `shown` calls can advance the app between finding the prompt and its report.
+    ui.wait("what it was asked, and its report, laid out", |ui| {
+        ui.settle(A_FRAME);
+        ui.cx
+            .update_window(ui.handle, |_, window, _| {
+                let elements = window.elements();
+                let drawn = |part: &str| {
+                    elements.iter().any(|element| {
+                        matches!(element.path().last(), Some(ElementId::Name(name)) if name.starts_with(part))
+                            && element.bounds().size.height > px(0.)
+                    })
+                };
+                drawn("prompt/call/") && drawn("report/call/")
+            })
+            .unwrap()
+    });
 }
