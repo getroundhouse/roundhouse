@@ -10,9 +10,10 @@ use gpui_kit::{
     AnyElement, App, Div, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Role, SharedString,
     StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, Window, div, px,
 };
-use look::{IconSizing as _, Off as _, Shaped as _, Sizing as _, Typeset as _};
+use look::{IconSizing as _, Off as _, Sizing as _, Typeset as _};
 use protocol::model::{Account, AgentKind};
 
+use super::super::lists::badge;
 use super::words::{self, Standing};
 use super::{Drawing, panel};
 
@@ -42,18 +43,7 @@ pub(super) fn row(drawing: &Drawing<'_>, account: &Account, cx: &App) -> AnyElem
         .defaults
         .and_then(|defaults| defaults.iter().find(|choice| choice.account == account.id))
         .and_then(|choice| drawing.agents.of(choice.agent))
-        .map(|agent| {
-            div()
-                .flex_none()
-                .px(look::Space::Small)
-                // A chip's own room above and below its words, rather than a space.
-                .py(px(2.))
-                .corners(look::Corner::Control)
-                .bg(colors.raised)
-                .typeset(look::Type::Body)
-                .text_color(colors.text_muted)
-                .child(format!("Default for {}", agent.name))
-        });
+        .map(|agent| badge(format!("Default for {}", agent.name), cx));
     let name = h_flex().gap(look::Space::Small).min_w_0().child(name).children(badge);
     let used = words::last_used(account, drawing.now_ms, cx);
     let used = used.map(|used| div().typeset(look::Type::Body).text_color(colors.text_faint).child(used));

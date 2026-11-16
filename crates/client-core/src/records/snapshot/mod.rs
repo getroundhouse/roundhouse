@@ -9,5 +9,6 @@
 mod tests;
 
 mod copies;
+mod github;
 pub use copies::{Changes, InWorkspace, Snapshot};
 pub(super) use copies::{Listed, SubagentsListed};

@@ -9,11 +9,13 @@ mod click;
 mod daemons;
 mod diff;
 mod drawn;
+mod files;
 mod frozen;
 mod gate;
 mod held;
 mod hover;
 mod hub;
+mod hub_ahead;
 mod labels;
 /// For dictation, which only a Mac hears.
 #[cfg(target_os = "macos")]
@@ -24,12 +26,14 @@ mod order;
 mod projects;
 mod stand_in;
 mod stand_in_gh;
+mod stand_in_github;
 mod workspaces;
 
 pub(crate) use asked::id;
 pub(crate) use click::click;
 pub(crate) use daemons::binaries;
 pub(crate) use diff::Diff;
+pub(crate) use files::files_holding;
 pub(crate) use frozen::Frozen;
 pub(crate) use gate::Gate;
 pub(crate) use held::Held;

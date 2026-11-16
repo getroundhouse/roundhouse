@@ -20,11 +20,20 @@ The chat ends on a card saying `Usage limit reached`, and when the limit resets.
 
 Pull requests are read with GitHub's CLI. Check that:
 
-- `gh` is installed, and `gh auth status` says you're logged in.
+- `gh` is installed, and either a GitHub account is the default in [Settings](../reference/settings.md#git), or `gh auth status` says you're logged in on the machine running the workspace.
 - The repository has a GitHub remote.
 - The pull request is the branch's own: one the workspace pushed to, or whose branch it checked out. One opened from a branch of the same name somewhere else isn't.
 
 Everything else works without `gh`.
+
+## An agent can't push
+
+Open the Git page in [Settings](../reference/settings.md#git):
+
+- **If it says `Agents can't push.`,** the default GitHub account can't be used, and it says why and what to do: renew its token, sign in again, or make another account the default. Agents don't fall back on the machine's own login.
+- **If you've added no account,** agents push with the machine's own login. **Found** says who `gh` is logged in as there, and whether GitHub took its token, as of when the hub last started. Run `gh auth login` on that machine, or add an account.
+
+See [Who agents are on GitHub](../concepts/who-agents-are-on-github.md).
 
 ## A workspace's setup failed
 

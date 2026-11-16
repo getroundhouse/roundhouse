@@ -4,8 +4,12 @@
 
 mod agents;
 mod dictation_row;
+mod field;
 mod general;
+mod git;
+mod lists;
 mod notifications;
+mod redraw;
 mod rows;
 mod sidebar;
 #[cfg(test)]

@@ -2,7 +2,7 @@
 
 A workspace's branch comes back as a pull request. Roundhouse says where it stands, and offers the one thing to do next, until it's merged.
 
-It needs GitHub's CLI, `gh`, logged in, and a repository with a GitHub remote.
+It needs GitHub's CLI, `gh`, a GitHub account added in [Settings](../reference/settings.md#git) or `gh` logged in on the machine, and a repository with a GitHub remote. [Who agents are on GitHub](../concepts/who-agents-are-on-github.md) says which to choose.
 
 ## Open it
 

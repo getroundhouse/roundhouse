@@ -25,6 +25,7 @@ gpui_kit::assets::icon_assets!(
         FilePlus,
         Files,
         FoldVertical,
+        GitBranch,
         GitPullRequest,
         HardDrive,
         House,

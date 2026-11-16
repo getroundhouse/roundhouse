@@ -1,0 +1,152 @@
+//! The panels for connecting a GitHub account: Connect account's, with the ways to connect one, and the one a token is
+//! pasted into, for a new account or in place of an account's own login.
+
+use gpui_kit::assets::IconName as Lucide;
+use gpui_kit::component::button::Button;
+use gpui_kit::component::input::Input;
+use gpui_kit::component::{Icon, h_flex, v_flex};
+use gpui_kit::prelude::FluentBuilder as _;
+use gpui_kit::{
+    AnyElement, App, Div, InteractiveElement as _, IntoElement, ParentElement as _, SharedString,
+    StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, Window, div,
+};
+use look::{Hand as _, IconSizing as _, Sizing as _, Typeset as _};
+
+use super::super::field::labelled;
+use super::Drawing;
+use super::kept::{Kept, Panel};
+use super::panel::{Framed, button, buttons, framed};
+use super::token::TokenPanel;
+
+/// The guide's page on who agents are on GitHub, which Connect account's panel links to.
+const WHICH: &str = "https://getroundhouse.dev/docs/concepts/who-agents-are-on-github/";
+
+/// Where GitHub makes a fine-grained token.
+const MAKE_A_TOKEN: &str = "https://github.com/settings/personal-access-tokens/new";
+
+/// Connect account, open: each way to connect an account, with who agents act as and what it takes.
+pub(super) fn choosing(drawing: &Drawing<'_>, panel: &Panel, cx: &App) -> AnyElement {
+    let off = !drawing.can_ask(cx);
+    let (signing_in, pasting) = (drawing.kept.clone(), drawing.kept.clone());
+    let sign_in = button("git-sign-in", "Sign in", false, off, move |_, cx| {
+        signing_in.update(cx, |kept, cx| kept.sign_in(None, cx));
+    });
+    let token = button("git-use-token", "Paste a token", false, off, move |window, cx| {
+        pasting.update(cx, |kept, cx| kept.open_token(None, window, cx));
+    });
+    let choices = [
+        choice(
+            Lucide::Github,
+            "Sign in with GitHub",
+            "Enter a code on GitHub, and the hub renews the login by itself. An organization that limits which apps \
+             can reach it has to approve Roundhouse first.",
+            sign_in.into_any_element(),
+            cx,
+        ),
+        choice(
+            Lucide::KeyRound,
+            "Use a token",
+            "A fine-grained one reaches only the repositories you choose, of one owner, and ends when you say. A \
+             classic one reaches everything you can.",
+            token.into_any_element(),
+            cx,
+        ),
+    ];
+    let rows = choices
+        .into_iter()
+        .enumerate()
+        .map(|(at, row)| row.when(at > 0, |row| row.border_t_1().border_color(look::colors(cx).edge)));
+    let body = v_flex().gap(look::Space::Small).child(h_flex().child(which(cx))).child(v_flex().children(rows));
+    let framed_as = Framed {
+        title: "Connect a GitHub account".into(),
+        lead: "Agents push, open pull requests and comment on GitHub as the account you connect.".into(),
+        body: Some(body.into_any_element()),
+        refused: None,
+        buttons: buttons().child(cancel(drawing.kept)),
+    };
+    framed(drawing, panel, framed_as, cx)
+}
+
+/// A way to connect an account: its icon, its name, what it takes, and its button.
+fn choice(icon: Lucide, name: &'static str, says: &'static str, act: AnyElement, cx: &App) -> Div {
+    let colors = look::colors(cx);
+    let icon = Icon::new(icon).sized(look::IconSize::Large).text_color(colors.text_muted);
+    h_flex()
+        .items_start()
+        .gap(look::Space::Large)
+        .py(look::Space::Large)
+        .child(div().flex_none().child(icon))
+        .child(
+            v_flex()
+                .flex_1()
+                .min_w_0()
+                .gap(look::Space::XSmall)
+                .child(div().emphasis().child(name))
+                .child(div().text_color(colors.text_muted).child(says)),
+        )
+        .child(h_flex().flex_none().justify_end().child(act))
+}
+
+/// The link to the guide's page on which way to choose.
+fn which(cx: &App) -> impl IntoElement {
+    h_flex()
+        .id("git-which")
+        .hand()
+        .gap(look::Space::XSmall)
+        .text_color(look::colors(cx).link)
+        .child("Which should I choose?")
+        .child(Icon::new(Lucide::ArrowUpRight).sized(look::IconSize::Regular))
+        .on_click(|_, _, cx| cx.open_url(WHICH))
+        .test_support()
+}
+
+/// The panel a token is pasted into, for a new account or in place of an account's own login: what makes one, the
+/// field, which has the cursor and shows only dots, and Connect, or Renew, which is off until there's a token, and
+/// while the hub hasn't answered.
+pub(super) fn token(drawing: &Drawing<'_>, panel: &Panel, token: &TokenPanel, cx: &App) -> AnyElement {
+    let (title, lead, act): (SharedString, SharedString, _) = match &token.renewing {
+        None => (
+            "Use a token".into(),
+            "Make a token on GitHub for the repositories agents should reach, and paste it here.".into(),
+            "Connect",
+        ),
+        Some(renewing) if renewing.held => (
+            format!("Renew {}", renewing.name).into(),
+            format!("Paste a new token made as {} on GitHub. It takes the old one's place.", renewing.name).into(),
+            "Renew",
+        ),
+        Some(renewing) => (
+            format!("Connect {} again", renewing.name).into(),
+            format!("Paste a token made as {} on GitHub, so the hub holds a login for it again.", renewing.name).into(),
+            "Connect",
+        ),
+    };
+    let make = Button::new("git-make-token")
+        .hand()
+        .outline()
+        .sized(look::ControlSize::Regular)
+        .icon(Lucide::ExternalLink)
+        .label("Make one on GitHub")
+        .on_click(|_, _, cx| cx.open_url(MAKE_A_TOKEN));
+    let field = labelled("Token", "git-token", Input::new(&token.token.input), "Only the hub keeps it.", cx);
+    let connecting = drawing.kept.clone();
+    let connect = button("git-panel-connect", act, true, !drawing.kept.read(cx).can_connect(cx), move |window, cx| {
+        connecting.update(cx, |kept, cx| kept.connect(window, cx));
+    });
+    let framed_as = Framed {
+        title,
+        lead,
+        body: Some(v_flex().gap(look::Space::Large).child(h_flex().child(make)).child(field).into_any_element()),
+        refused: token.refused.clone(),
+        buttons: buttons().child(cancel(drawing.kept)).child(connect),
+    };
+    framed(drawing, panel, framed_as, cx)
+}
+
+/// Cancel, which puts the panel away, and any wait for the hub's answer with it.
+fn cancel(kept: &gpui_kit::Entity<Kept>) -> Button {
+    let kept = kept.clone();
+    button("git-cancel", "Cancel", false, false, move |window: &mut Window, cx| {
+        kept.update(cx, |kept, cx| kept.put_away_panel(window, cx));
+    })
+}

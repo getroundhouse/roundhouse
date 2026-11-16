@@ -2,15 +2,11 @@
 //! last answered. A token pasted into the panel is handed to the hub and kept nowhere else: not on disk, not in a log
 //! and not in the app's settings. Its field is made anew once the hub has answered, so nothing of it stays.
 
-use std::time::Duration;
-
-use gpui_kit::component::input::{InputEvent, InputState};
-use gpui_kit::{
-    App, AppContext as _, Bounds, Context, Entity, FocusHandle, Pixels, PromptLevel, ScrollHandle, Subscription, Task,
-    Window, point, px,
-};
+use gpui_kit::{App, Bounds, Context, FocusHandle, Pixels, PromptLevel, ScrollHandle, Task, Window};
 use protocol::model::{Account, AccountId, AgentKind, LoginToken, Record};
 
+use super::super::field::Field;
+use super::super::redraw::{RedrawAt, bring_into_sight};
 use super::Asking;
 use super::words::{self, Refused};
 
@@ -30,8 +26,8 @@ pub(super) struct Kept {
     /// Settings' focus, as of the page's last frame, where focus goes back to as the panel goes while it has it, so
     /// keys still reach Settings.
     settings_focus: Option<FocusHandle>,
-    /// Draws the page again when what it says of a time next changes, and when that is.
-    clock: Option<(i64, Task<()>)>,
+    /// Draws the page again when what it says of a time next changes.
+    redraw: RedrawAt,
 }
 
 /// The panel for connecting a login of `agent`'s kind: as a new account, or in place of an account's own.
@@ -58,40 +54,6 @@ impl Panel {
     }
 }
 
-/// A field of the panel's, which connects as Enter is pressed in it.
-pub(super) struct Field {
-    pub(super) input: Entity<InputState>,
-    _entered: Subscription,
-}
-
-impl Field {
-    /// A field made with `made`, with the cursor in it.
-    fn new(window: &mut Window, cx: &mut Context<Kept>, made: impl FnOnce(InputState) -> InputState) -> Field {
-        let input = cx.new(|cx| made(InputState::new(window, cx)));
-        let entered = cx.subscribe_in(&input, window, |this, _, event: &InputEvent, window, cx| {
-            if matches!(event, InputEvent::PressEnter { .. }) {
-                this.connect(window, cx);
-            }
-        });
-        input.update(cx, |input, cx| input.focus(window, cx));
-        Field { input, _entered: entered }
-    }
-
-    /// A field for a token, whose text shows only as dots, and can't be copied from.
-    fn token(window: &mut Window, cx: &mut Context<Kept>) -> Field {
-        Field::new(window, cx, |input| input.masked(true))
-    }
-
-    /// Whether anything but spaces is in it.
-    pub(super) fn filled(&self, cx: &App) -> bool {
-        !self.input.read(cx).value().trim().is_empty()
-    }
-
-    fn value(&self, cx: &App) -> String {
-        self.input.read(cx).value().to_string()
-    }
-}
-
 /// What a panel connects a login to.
 pub(super) enum To {
     /// A new account, called what's typed here.
@@ -112,20 +74,7 @@ impl Kept {
         cx: &mut Context<Self>,
     ) {
         (self.asking, self.settings_focus) = (asking, Some(settings_focus));
-        if self.clock.as_ref().map(|(at_ms, _)| *at_ms) == changes_at_ms {
-            return;
-        }
-        self.clock = changes_at_ms.map(|at_ms| {
-            let wait = Duration::from_millis(at_ms.saturating_sub(look::now_ms(cx)).max(0).unsigned_abs());
-            let task = cx.spawn(async move |this, cx| {
-                cx.background_executor().timer(wait).await;
-                let _ = this.update(cx, |this, cx| {
-                    this.clock = None;
-                    cx.notify();
-                });
-            });
-            (at_ms, task)
-        });
+        self.redraw.set(changes_at_ms, cx);
     }
 
     /// Whether there's a hub to ask.
@@ -140,7 +89,7 @@ impl Kept {
 
     /// Opens the panel for connecting a login of `agent`'s kind as a new account, with a field for its name.
     pub(super) fn open_new(&mut self, agent: AgentKind, window: &mut Window, cx: &mut Context<Self>) {
-        let name = Field::new(window, cx, |input| input);
+        let name = Field::new(window, cx, |input| input, Kept::connect);
         self.open(agent, To::New { name }, window, cx);
     }
 
@@ -162,7 +111,7 @@ impl Kept {
 
     /// Opens the panel, in place of any that was open, with the cursor where the token is pasted.
     fn open(&mut self, agent: AgentKind, to: To, window: &mut Window, cx: &mut Context<Self>) {
-        let token = Field::token(window, cx);
+        let token = Field::token(window, cx, Kept::connect);
         let focus = cx.focus_handle();
         self.panel = Some(Panel { agent, to, token, refused: None, connecting: None, reveal: true, focus });
         self.not_disconnected = None;
@@ -236,7 +185,7 @@ impl Kept {
                 self.refused_as_older = true;
             }
             Err(Refused::Said(said)) => {
-                let token = Field::token(window, cx);
+                let token = Field::token(window, cx, Kept::connect);
                 let Some(panel) = self.panel.as_mut() else { return };
                 (panel.token, panel.refused, panel.connecting) = (token, Some(said), None);
                 cx.notify();
@@ -295,20 +244,4 @@ impl Kept {
         })
         .detach();
     }
-}
-
-/// Scrolls `scroll` the least that brings `bounds`, where something on it was just laid out, into sight, or as much
-/// of it as fits, from its top. Says whether it had to.
-fn bring_into_sight(scroll: &ScrollHandle, bounds: Bounds<Pixels>) -> bool {
-    let sight = scroll.bounds();
-    let by = if bounds.top() < sight.top() || bounds.size.height > sight.size.height {
-        sight.top() - bounds.top()
-    } else if bounds.bottom() > sight.bottom() {
-        sight.bottom() - bounds.bottom()
-    } else {
-        return false;
-    };
-    let offset = scroll.offset();
-    scroll.set_offset(point(offset.x, (offset.y + by).min(px(0.))));
-    true
 }

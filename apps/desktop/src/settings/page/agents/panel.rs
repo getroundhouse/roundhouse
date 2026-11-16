@@ -7,17 +7,15 @@ use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::Input;
 use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::{
-    AnyElement, App, Div, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Role, SharedString,
-    StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, div, px,
+    AnyElement, App, Div, InteractiveElement as _, IntoElement, ParentElement as _, Role, SharedString,
+    StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, div,
 };
 use look::{Hand as _, Off as _, Shaped as _, Sizing as _, Typeset as _};
 
+use super::super::field::{FIELDS_WIDTH, labelled as field};
 use super::Drawing;
 use super::kept::{Panel, To};
 use super::words;
-
-/// How wide the command and the fields are at most, so a token's field isn't as wide as a wide window.
-const FIELDS_WIDTH: Pixels = px(560.);
 
 pub(super) fn panel(drawing: &Drawing<'_>, panel: &Panel, cx: &App) -> AnyElement {
     let colors = look::colors(cx);
@@ -133,19 +131,6 @@ fn command(made_with: &str, cx: &App) -> Div {
         .child(div().text_color(colors.text_faint).child("$"))
         .child(div().flex_1().min_w_0().truncate().child(made_with.to_string()))
         .child(look::copy_button("accounts-copy-command", made_with.to_string(), "Copy command", cx))
-}
-
-/// A field `called` something, with what goes in it said under it. `id` is its own, for tests to find it by.
-fn field(called: &'static str, id: &'static str, input: Input, says: &'static str, cx: &App) -> Div {
-    let colors = look::colors(cx);
-    let input = div().id(id).child(input.aria_label(called)).test_support();
-    v_flex()
-        .w_full()
-        .max_w(FIELDS_WIDTH)
-        .gap(look::Space::Small)
-        .child(div().emphasis().child(called))
-        .child(input)
-        .child(div().typeset(look::Type::Detail).text_color(colors.text_faint).child(says))
 }
 
 /// Cancel, then the panel's main action, `act`, which is off until there's what connecting takes, and while the hub

@@ -1,5 +1,9 @@
 use protocol::client::HubNotice;
-use protocol::model::{DiffComment, DiffSide, RecordKey, Records, Repo, Rev, Session, Subagent, Title, Workspace};
+use protocol::fixtures::{found_github_login, github_account, github_sign_in};
+use protocol::model::{
+    DiffComment, DiffSide, GithubAccount, GithubUser, GithubUserId, RecordKey, Records, Repo, Rev, Session, Subagent,
+    Title, Workspace,
+};
 
 use crate::records::HubRecords;
 
@@ -163,4 +167,34 @@ fn a_sessions_subagents_are_listed_as_they_started_and_found_by_their_call() {
     assert!(!now.changes_since(&before).subagents(&"t".into()));
     let unchanged = |snapshot: &super::Snapshot| snapshot.subagent(&"s".into(), &"b".into()).cloned().unwrap();
     assert!(std::sync::Arc::ptr_eq(&unchanged(&before), &unchanged(&now)), "one that didn't change is shared");
+}
+
+/// Two accounts of one user and one of another, a sign-in, and the logins found on three providers, this one among them.
+#[test]
+fn what_a_hub_says_of_github_is_listed_in_the_order_views_show_it_and_found_by_its_id() {
+    let named = |id: &str, name: &str| GithubAccount {
+        user: GithubUser { id: GithubUserId::new(1), name: name.into() },
+        ..github_account(id)
+    };
+    let mut held = HubRecords::default();
+
+    held.apply_list(Records {
+        github_accounts: vec![named("g3", "bea"), named("g2", "Ada"), named("g1", "ada")],
+        github_sign_ins: vec![github_sign_in("s")],
+        found_github_logins: vec![found_github_login("incus"), found_github_login("local"), found_github_login("aws")],
+        rev: Rev::new(1),
+        ..Records::default()
+    });
+    let shown = held.snapshot();
+
+    assert_eq!(ids(shown.github_accounts(), |a| a.id.as_str()), ["g1", "g2", "g3"], "by name in any case, then ID");
+    assert_eq!(shown.github_account(&"g3".into()).map(|a| a.user.name.as_str()), Some("bea"));
+    assert_eq!(shown.github_sign_in(&"s".into()).map(|s| s.status.is_waiting()), Some(true));
+    assert_eq!(shown.github_sign_ins().count(), 1);
+    assert_eq!(
+        ids(shown.found_github_logins(), |f| f.provider.as_str()),
+        ["local", "aws", "incus"],
+        "this machine's first"
+    );
+    assert!(shown.github_account(&"gone".into()).is_none() && shown.github_sign_in(&"gone".into()).is_none());
 }

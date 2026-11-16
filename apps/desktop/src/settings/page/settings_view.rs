@@ -1,4 +1,4 @@
-use super::{agents, general, notifications, rows, sidebar};
+use super::{agents, general, git, notifications, rows, sidebar};
 use crate::FindSetting;
 use crate::app::TOP_STRIP_HEIGHT;
 use crate::status_box::StatusBox;
@@ -155,6 +155,7 @@ pub(super) enum PageId {
     General,
     Notifications,
     Agents,
+    Git,
 }
 
 impl PageId {
@@ -164,6 +165,7 @@ impl PageId {
             PageId::General => "settings-page-general",
             PageId::Notifications => "settings-page-notifications",
             PageId::Agents => "settings-page-agents",
+            PageId::Git => "settings-page-git",
         }
     }
 }
@@ -216,7 +218,8 @@ pub(super) struct Section {
 
 /// Every page, under its heading.
 pub(super) fn sections(hub: &OfHub) -> Vec<Section> {
-    vec![Section { heading: "Personal", pages: vec![general::page(hub), notifications::page(), agents::page(hub)] }]
+    let pages = vec![general::page(hub), notifications::page(), agents::page(hub), git::page(hub)];
+    vec![Section { heading: "Personal", pages }]
 }
 
 /// What a search leaves: the settings that match it, on their pages, and the pages of their own it finds, under their

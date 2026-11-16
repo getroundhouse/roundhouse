@@ -77,6 +77,41 @@ If an account expires or is disconnected, agents in the chats on it cannot start
 
 A hub from before account defaults cannot change them. Update the hub to choose one. An older worker that cannot enforce the selected account also refuses new launches until it is updated.
 
+## Git
+
+The GitHub accounts agents push and open pull requests as. [Who agents are on GitHub](../concepts/who-agents-are-on-github.md) says which to choose.
+
+![Git, with three accounts added and the logins found on two machines](../../spec/screens/settings-git.png)
+
+- **Added** has the accounts you've given the hub, the default first. Every machine's `git` and `gh` use the default for github.com, so agents push and open pull requests as it, and Roundhouse reads pull requests with it, wherever they run.
+- **Found** has who `gh` is logged in as on each machine where a workspace has run since the hub last started, and whether GitHub took its token then. Roundhouse never copies it. While you've added no account, agents use each machine's own login, and Found has the Default badge. **Make default**, by Found's heading, goes back to each machine's own login once you have.
+- **Each row** says how the account was connected, `Signed in` or `Token`, and only what else needs saying, such as when a token ends.
+
+The first account you connect becomes the default. To use another, choose **Make default** in its row's **…** menu.
+
+### Connect an account
+
+Click **Connect account**, then:
+
+- **Sign in:** the hub asks GitHub for a code, which the panel shows. Copy it, click **Open github.com/login/device**, type it there, and approve Roundhouse. The panel says when you're signed in, or why not, with **Sign in again**. The hub renews the login by itself, so there's no end to watch for.
+- **Paste a token:** click **Make one on GitHub**, make a token for the repositories agents should reach, paste it, and click **Connect**. The hub asks GitHub whose it is and when it ends.
+
+![Signing in with GitHub, with the code to type](../../spec/screens/settings-git-signing-in.png)
+
+Either way, the hub keeps the login in its own data, as [Where data is kept](where-data-is-kept.md) says, and the app writes it nowhere. A sign-in that waits shows on Git in every window until it's approved or cancelled, so you can finish one you started before the app quit.
+
+### Renew and disconnect
+
+- **A token says when it ends,** and in red once it has. Choose **Renew** in its row's **…** menu, and paste a new one in the panel that opens under it.
+- **A sign-in says `Renewing`** while the hub renews a token that has ended, and `Needs signing in again` once GitHub won't renew it. Choose **Sign in again** in its menu, and approve it as the same GitHub user.
+- **Disconnect,** in the same menu, has the hub forget the login, and asks first. The account stays, with **Connect again** and **Sign in again**. It doesn't revoke the token on GitHub.
+
+If the default can't be used, because its token ended, it was disconnected or it needs signing in again, it stays the default, and agents can't push until you put it right or make another the default. They don't fall back on the machine's own login. Git says so at the top of **Added**.
+
+![Git saying agents can't push, since the default's token ended](../../spec/screens/settings-git-default-ended.png)
+
+A hub from before hubs kept GitHub accounts can't connect one, and agents use each machine's own login. Update the hub to connect one.
+
 ## Whose setting it is
 
 A setting belongs to whatever carries it out:

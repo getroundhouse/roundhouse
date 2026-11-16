@@ -6,7 +6,7 @@ Roundhouse runs on a Mac with Apple silicon. Windows and Linux have first previe
 
 - **Git, and a repository to work in.**
 - **Your agent's CLI, `claude`, `codex` or `agy`, installed and signed in.** Run it once in a terminal to check. Claude can also use a login added in [Settings](../reference/settings.md#agents). Codex and Antigravity use their own sign-ins on the machine running the workspace.
-- **GitHub's CLI, `gh`, logged in,** for pull requests. Everything else works without it.
+- **GitHub's CLI, `gh`,** for pull requests, with a GitHub account added in [Settings](../reference/settings.md#git), or logged in. Everything else works without it.
 
 ## On a Mac
 
@@ -54,6 +54,6 @@ What differs from the Mac:
 
 ## No account
 
-There's no Roundhouse account to make. The app's only requests of its own are its check for updates and, once you turn dictation on, the download of the model that hears it. Everything else stays on your machine, or goes where your agent and `gh` send it.
+There's no Roundhouse account to make. The app's only requests of its own are its check for updates and, once you turn dictation on, the download of the model that hears it. Everything else stays on your machine, or goes where your agent, `git` and `gh` send it. The hub also asks GitHub about the GitHub accounts you add, as [Where data is kept](../reference/where-data-is-kept.md#what-leaves-your-machine) says.
 
 Next: the [quickstart](quickstart.md), from adding a project on.

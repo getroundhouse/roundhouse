@@ -9,9 +9,10 @@ use protocol::client::ApiError;
 use protocol::client::ErrorCode;
 use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{
-    Account, AttachmentId, CacheTtl, ContextUsage, DiffComment, FileContents, GitDiff, InstanceId, ModelName,
-    PORTS_PER_WORKSPACE, Place, PromptCache, PullRequest, Records, Repo, RepoId, Rev, Seq, Session, SessionId,
-    SessionStatus, Subagent, SubagentId, Title, Workspace, WorkspaceId, WorktreeFiles,
+    Account, AttachmentId, CacheTtl, ContextUsage, DiffComment, FileContents, FoundGithubLogin, GitDiff, GithubAccount,
+    GithubSettings, GithubSignIn, GithubSignInStatus, InstanceId, ModelName, PORTS_PER_WORKSPACE, Place, PromptCache,
+    PullRequest, Records, Repo, RepoId, Rev, Seq, Session, SessionId, SessionStatus, Subagent, SubagentId, Title,
+    Workspace, WorkspaceId, WorktreeFiles,
 };
 use protocol::prompt::Prompt;
 use protocol::tail::Tail;
@@ -68,6 +69,14 @@ pub(crate) struct World {
     /// The hub is from before hubs kept settings, so it sends none.
     pub(crate) keeps_no_settings: bool,
     pub(crate) logins: LoginSupport,
+    /// What the hub's settings say of GitHub: `None` for a hub that keeps no GitHub accounts.
+    pub(crate) github: Option<GithubSettings>,
+    pub(crate) github_accounts: Vec<GithubAccount>,
+    pub(crate) github_sign_ins: Vec<GithubSignIn>,
+    pub(crate) found_github_logins: Vec<FoundGithubLogin>,
+    /// How a sign-in with GitHub the app starts stands as the hub answers, which it does with the ID the app gave it,
+    /// though it keeps no record of it. `None` refuses it, as the rest of what would change what the hub holds.
+    pub(crate) sign_in_answer: Option<GithubSignInStatus>,
     records: i64,
 }
 
@@ -135,16 +144,15 @@ impl World {
                 account_defaults: (self.logins == LoginSupport::Defaults).then(|| self.account_defaults.clone()),
                 keep_awake: true,
                 allow_asked_in_full_access: Some(false),
-                // As from a hub that keeps no GitHub accounts, since its hub refuses to.
-                github: None,
+                github: self.github.clone(),
                 rev: Rev::default(),
             }),
             accounts: self.accounts.clone(),
             // As from a hub that doesn't keep one, since its hub refuses to.
             new_workspace_draft: None,
-            github_accounts: Vec::new(),
-            github_sign_ins: Vec::new(),
-            found_github_logins: Vec::new(),
+            github_accounts: self.github_accounts.clone(),
+            github_sign_ins: self.github_sign_ins.clone(),
+            found_github_logins: self.found_github_logins.clone(),
             rev: Rev::default(),
         }
     }

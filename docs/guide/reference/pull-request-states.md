@@ -60,7 +60,7 @@ With the sidebar of changes hidden, the workspace's header shows the pull reques
 
 ## When it's read
 
-Roundhouse reads the pull request with `gh`:
+Roundhouse reads the pull request with `gh`, as the default GitHub account in [Settings](settings.md#git), or the machine's own login:
 
 - Each time its workspace is shown, and every 30 seconds while it shows.
 - When a turn ends.
@@ -72,4 +72,4 @@ Roundhouse reads the pull request with `gh`:
 - **What was found is kept across restarts,** and `gh` failing, such as while offline, never takes away a pull request already found.
 - **A workspace's pull request is its branch's own:** one it pushed to, or one whose branch you checked out to work on. One from another computer's branch that only has the same name doesn't show. Once found, it stays the branch's, even after someone else pushes to it. Roundhouse keeps which it is as a setting of the branch in the repository's git config, `branch.<name>.roundhouse-pull-request`, which git renames and deletes with the branch.
 
-Without `gh`, a login to it, or a GitHub remote, a pull request can't be read, and the bar offers to create one.
+Without `gh`, a GitHub login for it to use, or a GitHub remote, a pull request can't be read, and the bar offers to create one.

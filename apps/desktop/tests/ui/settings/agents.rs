@@ -3,7 +3,7 @@
 
 #![cfg(test)]
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::time::Duration;
 
 use gpui_kit::component::WindowExt as _;
@@ -12,7 +12,7 @@ use gpui_kit::{AppContext as _, ScrollDelta, SharedString, TestAppContext, point
 use protocol::model::{Account, AccountId, AgentKind, LoginToken};
 
 use super::{open_settings, settings_showing};
-use crate::support::{Stack, Ui, click, click_menu_item};
+use crate::support::{Stack, Ui, click, click_menu_item, files_holding};
 
 const TOKEN: &str = "a-made-up-token";
 const MINUTE_MS: i64 = 60_000;
@@ -68,22 +68,6 @@ fn typed_where_the_cursor_is(ui: &mut Ui<'_>) -> Option<String> {
     ui.cx
         .update_window(ui.handle, |_, window, cx| window.focused_input(cx).map(|input| input.value(cx).to_string()))
         .unwrap()
-}
-
-/// Every file under `dir` that holds `text`, but for what's under a directory named `except`.
-fn files_holding(dir: &Path, text: &str, except: &str) -> Vec<PathBuf> {
-    let mut found = Vec::new();
-    for entry in std::fs::read_dir(dir).unwrap().map(Result::unwrap) {
-        let path = entry.path();
-        if entry.file_type().unwrap().is_dir() {
-            if entry.file_name() != except {
-                found.extend(files_holding(&path, text, except));
-            }
-        } else if std::fs::read(&path).is_ok_and(|bytes| bytes.windows(text.len()).any(|at| at == text.as_bytes())) {
-            found.push(path);
-        }
-    }
-    found
 }
 
 #[gpui_kit::test]

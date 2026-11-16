@@ -80,6 +80,7 @@ worker = { workspace = true, features = ["testing"] }
 gpui-kit = { workspace = true, features = ["test-support"] }
 image = { workspace = true, features = ["png"] }
 tempfile.workspace = true
+tokio.workspace = true
 proptest.workspace = true
 similar.workspace = true
 
