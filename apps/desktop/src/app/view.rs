@@ -11,8 +11,9 @@ use look::{Hand as _, Sizing as _, Typeset as _};
 use protocol::client::HubStatus;
 
 use super::restarts::restart_note;
-use super::{AppView, Connection, corner, hub_source, title_bar, window_buttons};
+use super::{AppView, Connection, ConnectionFailure, corner, hub_source, hubs, pairing, title_bar, window_buttons};
 use crate::menus::System;
+use crate::names::{MACHINE, THIS_MACHINE};
 use crate::sides::{self, AtTheTop, Side};
 use crate::workspace_pane::WorkspacePane;
 use crate::{CloseSettings, OpenSettings, ToggleMenus};
@@ -80,25 +81,15 @@ impl AppView {
         let (muted, error_colour) = (colors.text_muted, colors.error);
         match self.connection() {
             Connection::Connecting if self.pane_to_draw().is_none() => centered("Connecting…", muted),
-            Connection::Failed(reason) => failed(reason, error_colour, cx),
+            Connection::Failed(ConnectionFailure::Local(reason)) => failed(reason, error_colour, cx),
+            Connection::Failed(failure) if self.pane_to_draw().is_none() => self.remote_failed(failure, muted, cx),
             Connection::AcrossABreak(status) => {
                 let may_restart = hub_source::may_restart(status, self.hub.build_number);
                 across_a_break(status, self.hub.build_version, may_restart, muted, cx)
             }
-            Connection::Ready(_) | Connection::Connecting => match self.pane_to_draw() {
+            Connection::Ready(_) | Connection::Connecting | Connection::Failed(_) => match self.pane_to_draw() {
                 Some(pane) => pane.into_any_element(),
-                None if self.records.repos().is_empty() => empty_state(
-                    "Add a project",
-                    "Each workspace is a copy of a project on its own branch, with its own agents. Start by adding a \
-                     project from a repository on this Mac.",
-                    Button::new("first-add-project")
-                        .sized(look::ControlSize::Large)
-                        .hand()
-                        .primary()
-                        .label("Add project")
-                        .on_click(cx.listener(|t, _, _, cx| t.add_repository(cx))),
-                    cx,
-                ),
+                None if self.records.repos().is_empty() => self.no_projects(cx),
                 None => empty_state(
                     "Start a workspace",
                     "Pick a project in the sidebar and press + to give an agent a branch of its own.",
@@ -114,11 +105,71 @@ impl AppView {
         }
     }
 
+    fn no_projects(&self, cx: &mut Context<Self>) -> AnyElement {
+        if let Some(remote) = &self.hub.remote {
+            let name = &remote.hub_name;
+            let body = format!(
+                "Open Roundhouse on {name} and add a repository there. Its projects and workspaces will show up here \
+                 automatically."
+            );
+            return empty_state(&format!("No projects on {name}"), &body, switch_to_local("first-switch-local"), cx);
+        }
+        let body = format!(
+            "Each workspace is a copy of a project on its own branch, with its own agents. Start by adding a project \
+             from a repository on this {MACHINE}."
+        );
+        empty_state(
+            "Add a project",
+            &body,
+            Button::new("first-add-project")
+                .sized(look::ControlSize::Large)
+                .hand()
+                .primary()
+                .label("Add project")
+                .on_click(cx.listener(|t, _, _, cx| t.add_repository(cx))),
+            cx,
+        )
+    }
+
+    fn remote_failed(&self, failure: &ConnectionFailure, muted: Hsla, cx: &mut Context<Self>) -> AnyElement {
+        let hub_name = self.hub.remote.as_ref().map_or("the hub", |hub| hub.hub_name.as_str());
+        let (heading, body, pair_again) = remote_failure_words(hub_name, failure);
+        let primary = if pair_again {
+            let data_dir = self.hub.paths.data_dir.clone();
+            Button::new("pair-hub-again")
+                .sized(look::ControlSize::Large)
+                .hand()
+                .primary()
+                .label("Pair again…")
+                .on_click(move |_, window, cx| pairing::open(data_dir.clone(), window, cx))
+        } else {
+            try_again(cx).primary()
+        };
+        v_flex()
+            .size_full()
+            .items_center()
+            .justify_center()
+            .gap(look::Space::Large)
+            .child(
+                v_flex()
+                    .items_center()
+                    .gap(look::Space::Small)
+                    .child(div().typeset(look::Type::Heading).child(heading))
+                    .child(div().max_w(px(440.)).text_center().typeset(look::Type::Body).text_color(muted).child(body)),
+            )
+            .child(h_flex().gap(look::Space::Small).child(switch_to_local("failed-switch-local")).child(primary))
+            .into_any_element()
+    }
+
     /// The workspace to draw: the selected one, which stays on screen while the app connects to a hub again, such as
-    /// one it's restarting to finish an update. Otherwise what's typed for that moment would go nowhere. Unlike
-    /// `selected_pane`, which is for acting on one, and so only gives one with a hub to act through.
-    pub(super) fn pane_to_draw(&self) -> Option<Entity<WorkspacePane>> {
-        let drawn = matches!(self.connection(), Connection::Ready(_) | Connection::Connecting);
+    /// one it's restarting to finish an update, or a remote hub temporarily out of reach. Otherwise what's typed for
+    /// that moment would go nowhere. Unlike `selected_pane`, which is for acting on one, and so only gives one with a
+    /// hub to act through.
+    pub(in crate::app) fn pane_to_draw(&self) -> Option<Entity<WorkspacePane>> {
+        let drawn = matches!(
+            self.connection(),
+            Connection::Ready(_) | Connection::Connecting | Connection::Failed(ConnectionFailure::Unreachable { .. })
+        );
         self.selected.as_ref().filter(|_| drawn).and_then(|id| self.panes.get(id).cloned())
     }
 
@@ -168,6 +219,54 @@ fn error_bar(error: String, error_colour: Hsla, cx: &mut Context<AppView>) -> im
         }))
         .child(div().id("error-text").flex_1().min_w_0().child(error).test_support())
         .child(div().flex_none().child("Dismiss"))
+}
+
+fn remote_failure_words(hub_name: &str, failure: &ConnectionFailure) -> (String, String, bool) {
+    match failure {
+        ConnectionFailure::Unreachable { hosts } => {
+            let at = if hosts.is_empty() { String::new() } else { format!(" at {}", hosts.join(" or ")) };
+            (
+                format!("Can’t reach {hub_name}"),
+                format!(
+                    "Couldn’t connect{at}. Retrying automatically — check that {hub_name} is awake and on the same \
+                     network or VPN."
+                ),
+                false,
+            )
+        }
+        ConnectionFailure::Revoked => (
+            format!("Access to {hub_name} was revoked"),
+            format!(
+                "This computer’s device credential is no longer accepted by {hub_name}. Create a new pairing link \
+                 there to reconnect."
+            ),
+            true,
+        ),
+        ConnectionFailure::KeyChanged { host } => (
+            format!("{hub_name} presented a different key"),
+            format!(
+                "{host} no longer matches its saved key. Check that you’re reaching {hub_name} before pairing again."
+            ),
+            true,
+        ),
+        ConnectionFailure::RemoteProtocolBreak(detail) => (
+            format!("{hub_name} is on another protocol version"),
+            format!("{detail}. Update Roundhouse on the older machine to reconnect."),
+            false,
+        ),
+        ConnectionFailure::RemoteOther(detail) | ConnectionFailure::Local(detail) => {
+            (format!("Couldn’t connect to {hub_name}"), detail.clone(), false)
+        }
+    }
+}
+
+fn switch_to_local(id: &'static str) -> Button {
+    Button::new(id)
+        .outline()
+        .sized(look::ControlSize::Large)
+        .hand()
+        .label(format!("Switch to {THIS_MACHINE}"))
+        .on_click(|_, window, cx| hubs::select(None, window, cx))
 }
 
 fn try_again(cx: &mut Context<AppView>) -> Button {

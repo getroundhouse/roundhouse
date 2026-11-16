@@ -129,3 +129,43 @@ fn hidden_hubs_leave_focus_and_dialogs_with_the_selected_hub(cx: &mut TestAppCon
     pick(None, window, &host, cx);
     cx.update(|cx| window.update(cx, |_, window, cx| assert!(window.has_active_dialog(cx))).unwrap());
 }
+
+#[gpui_kit::test]
+fn background_hub_changes_notify_the_selected_hubs_view(cx: &mut TestAppContext) {
+    let (_dir, window, host) = host(cx);
+    let local = cx.read(|cx| host.read(cx).active());
+    let selected = pick(Some(remote("other")), window, &host, cx);
+    let notified = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let count = notified.clone();
+    cx.update(|cx| {
+        cx.observe(&selected, move |_, _| {
+            count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        })
+        .detach();
+    });
+    cx.run_until_parked();
+    notified.store(0, std::sync::atomic::Ordering::SeqCst);
+
+    local.update(cx, |_, cx| cx.notify());
+    cx.run_until_parked();
+
+    assert_eq!(notified.load(std::sync::atomic::Ordering::SeqCst), 1);
+}
+
+#[gpui_kit::test]
+fn unreachable_retries_keep_unreachable_state_without_flashing_connecting(cx: &mut TestAppContext) {
+    let (_dir, window, host) = host(cx);
+    let remote_view = pick(Some(remote("other")), window, &host, cx);
+    remote_view.update(cx, |view, cx| {
+        let failure = crate::app::ConnectionFailure::Unreachable { hosts: vec!["127.0.0.1:1".into()] };
+        view.set_connection(crate::app::Connection::Failed(failure), cx);
+        view.attempt_connect(cx);
+    });
+
+    cx.read(|cx| {
+        assert!(matches!(
+            remote_view.read(cx).connection(),
+            crate::app::Connection::Failed(crate::app::ConnectionFailure::Unreachable { .. })
+        ));
+    });
+}

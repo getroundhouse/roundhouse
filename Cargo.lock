@@ -1782,6 +1782,7 @@ dependencies = [
  "process",
  "proptest",
  "protocol",
+ "qrcode",
  "raw-window-handle",
  "ring",
  "serde",
@@ -3940,7 +3941,6 @@ dependencies = [
  "tokio-rustls",
  "tracing",
  "tracing-subscriber",
- "unicode-properties",
  "uuid",
  "windows-sys 0.61.2",
 ]
@@ -6515,6 +6515,7 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.21",
+ "unicode-properties",
 ]
 
 [[package]]

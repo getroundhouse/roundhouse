@@ -1,7 +1,5 @@
 # The command line
 
-To generate a pairing link from the terminal, run `roundhouse phone pair` on the hub's machine and paste its link into the other desktop's hub switcher. The local hub switcher's **Create pairing link…** does the same in the app. `roundhouse phone list` lists paired devices; `roundhouse phone revoke NAME-OR-ID` revokes one. See [Connect to another machine's hub](../guides/connect-another-hub.md).
-
 The `roundhouse` command talks to the same hub as the app, so a workspace made in one shows in the other.
 
 ## Find it
@@ -89,3 +87,13 @@ Wherever a command takes a session, give it one of:
 | `roundhouse hub stop` | Stops it, and any agents at work on it, which pick up their conversations at their next prompts |
 
 Quit the app before stopping the hub, since the app starts a new one as soon as this one stops.
+
+## Paired devices
+
+| Command | What it does |
+|---|---|
+| `roundhouse phone pair` | Prints a QR code and single-use pairing link for another computer or phone, and waits for it to connect |
+| `roundhouse phone list` | Lists paired devices and when each was last seen |
+| `roundhouse phone revoke <device>` | Revokes a paired device by name or ID prefix and closes its connections |
+
+**Pair a device with this Mac…** in the app's hub switcher generates a link and QR code the same way. See [Connect to another machine's hub](../guides/connect-another-hub.md).

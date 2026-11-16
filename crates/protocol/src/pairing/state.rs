@@ -6,12 +6,44 @@
 //! connection after that authenticates with the token before its hello.
 
 use serde::{Deserialize, Serialize};
+use unicode_properties::{GeneralCategory, UnicodeGeneralCategory as _};
 
+use crate::client::{ApiError, ErrorCode};
 use crate::model::DeviceId;
 
 #[cfg(test)]
 use super::Fingerprint;
 use super::PairingLink;
+
+/// Enough for any name a phone or computer gives itself.
+pub const MAX_DEVICE_NAME_CHARS: usize = 100;
+
+/// Validates the name a device gave itself, trimmed. One with a control or format character is refused, because names
+/// are shown in a terminal and in lists, where an escape sequence or a bidi override could change what's shown, and a
+/// character with no width could make one name look like another.
+pub fn device_name_from(name: &str) -> Result<&str, ApiError> {
+    let name = name.trim();
+    let invalid = |message: String| Err(ApiError::new(ErrorCode::InvalidRequest, message));
+    if name.is_empty() || name.chars().count() > MAX_DEVICE_NAME_CHARS {
+        return invalid(format!("a device's name has to be 1 to {MAX_DEVICE_NAME_CHARS} characters"));
+    }
+    if name.chars().any(|c| c.is_control() || c.general_category() == GeneralCategory::Format) {
+        return invalid(format!("a device's name can't have control or format characters, as {name:?} does"));
+    }
+    Ok(name)
+}
+
+/// Cleans a host's reported name so [`device_name_from`] accepts it, or returns `fallback` when nothing printable
+/// remains.
+pub fn clean_device_name(raw: &str, fallback: &str) -> String {
+    let filtered: String = raw
+        .chars()
+        .filter(|&c| !c.is_control() && c.general_category() != GeneralCategory::Format)
+        .take(MAX_DEVICE_NAME_CHARS)
+        .collect();
+    let trimmed = filtered.trim();
+    if trimmed.is_empty() { fallback.to_string() } else { trimmed.to_string() }
+}
 
 /// Declares secrets: text that's only compared and passed along, which `Debug` leaves out, so a request or
 /// reply in a log can't give one away. They're plain strings on the wire.

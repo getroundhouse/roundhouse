@@ -32,6 +32,7 @@ impl Hubs {
         let weak = cx.weak_entity();
         cx.set_global(OpenHubs(weak));
         let view = cx.new(|cx| AppView::new(local.clone(), checkout.clone(), window, cx));
+        Self::watch_background(&view, cx);
         let settings = crate::settings::get(cx);
         if let Some(saved) =
             settings.hubs.into_iter().find(|hub| Some(&hub.fingerprint) == settings.selected_hub.as_ref())
@@ -83,7 +84,11 @@ impl Hubs {
         let view = self
             .views
             .entry(key.clone())
-            .or_insert_with(|| cx.new(|cx| AppView::new(source, self.checkout.clone(), window, cx)))
+            .or_insert_with(|| {
+                let created = cx.new(|cx| AppView::new(source, self.checkout.clone(), window, cx));
+                Self::watch_background(&created, cx);
+                created
+            })
             .clone();
         self.selected.clone_from(&key);
         crate::settings::change(cx, |settings| settings.selected_hub = key);
@@ -97,6 +102,17 @@ impl Hubs {
             quitting::ask_first(window, cx);
         });
         cx.notify();
+    }
+
+    /// Re-renders the selected hub's switcher when a background hub gains an unread reply or loses its connection.
+    fn watch_background(view: &Entity<AppView>, cx: &mut Context<Self>) {
+        cx.observe(view, |host, changed, cx| {
+            let active = host.active();
+            if active.entity_id() != changed.entity_id() {
+                active.update(cx, |_, cx| cx.notify());
+            }
+        })
+        .detach();
     }
 }
 
@@ -134,8 +150,18 @@ pub(crate) fn finish_selection(intent: Option<u64>, remote: RemoteHub, window: &
     }
 }
 
-pub(in crate::app) fn other_views(current: gpui_kit::EntityId, cx: &App) -> Vec<Entity<AppView>> {
+pub(crate) fn other_views(current: gpui_kit::EntityId, cx: &App) -> Vec<Entity<AppView>> {
     cx.try_global::<OpenHubs>().and_then(|host| host.0.upgrade()).map_or_else(Vec::new, |host| {
         host.read(cx).views.values().filter(|view| view.entity_id() != current).cloned().collect()
     })
+}
+
+pub(crate) fn view_of(fingerprint: Option<&Fingerprint>, cx: &App) -> Option<Entity<AppView>> {
+    let host = cx.try_global::<OpenHubs>()?.0.upgrade()?;
+    let key = fingerprint.cloned();
+    host.read(cx).views.get(&key).cloned()
+}
+
+pub(crate) fn local_view(cx: &App) -> Option<Entity<AppView>> {
+    view_of(None, cx)
 }

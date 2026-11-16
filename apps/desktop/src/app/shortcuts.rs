@@ -21,7 +21,9 @@ impl AppView {
         root.when(connected && self.current_repo().is_some(), |root| {
             root.on_action(cx.listener(|t, _: &NewWorkspace, window, cx| t.new_workspace_here(window, cx)))
         })
-        .when(connected, |root| root.on_action(cx.listener(|t, _: &AddRepository, _, cx| t.add_repository(cx))))
+        .when(connected && self.hub.remote.is_none(), |root| {
+            root.on_action(cx.listener(|t, _: &AddRepository, _, cx| t.add_repository(cx)))
+        })
         .when(!self.visible_workspaces().is_empty(), |root| {
             root.on_action(cx.listener(|t, _: &NextWorkspace, _, cx| t.step_selection(1, cx)))
                 .on_action(cx.listener(|t, _: &PreviousWorkspace, _, cx| t.step_selection(-1, cx)))

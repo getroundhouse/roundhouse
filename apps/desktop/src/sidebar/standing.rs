@@ -34,6 +34,11 @@ pub(super) fn needs_a_look(app: &AppView, workspace: &Workspace, cx: &App) -> bo
     unread || signal::waiting_on_you(app.records().sessions(&workspace.id))
 }
 
+/// How many listed workspaces on `app` need a look.
+pub(crate) fn needing_a_look(app: &AppView, cx: &App) -> usize {
+    app.records().workspaces().iter().filter(|w| super::lists(w) && needs_a_look(app, w, cx)).count()
+}
+
 #[cfg(feature = "testing")]
 impl AppView {
     /// What a workspace's mark shows of its pull request, in the sidebar or in Home.

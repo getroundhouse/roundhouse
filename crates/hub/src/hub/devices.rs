@@ -6,10 +6,9 @@ use std::time::Instant;
 
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::DeviceId;
-use protocol::pairing::{Device, DeviceToken, Pairing, PairingCode, PairingLink};
+use protocol::pairing::{Device, DeviceToken, Pairing, PairingCode, PairingLink, device_name_from};
 use tokio::sync::MutexGuard;
 use tracing::{info, warn};
-use unicode_properties::{GeneralCategory, UnicodeGeneralCategory};
 
 use super::{Hub, new_id};
 use crate::error::internal;
@@ -18,26 +17,8 @@ use crate::remote::machine::this_machine;
 use crate::remote::{DeviceLink, Revoke, random_text};
 use crate::store::{Store, TokenHash, now_ms};
 
-/// Enough for any name a phone gives itself.
-const MAX_DEVICE_NAME_CHARS: usize = 100;
-
 fn unauthorized(message: &str) -> ApiError {
     ApiError::new(ErrorCode::Unauthorized, message)
-}
-
-/// The name a device gave itself, trimmed. One with a control or format character is refused, because names are
-/// shown in a terminal and in lists, where an escape sequence or a bidi override could change what's shown, and a
-/// character with no width could make one name look like another.
-fn device_name_from(name: &str) -> Result<&str, ApiError> {
-    let name = name.trim();
-    let invalid = |message: String| Err(ApiError::new(ErrorCode::InvalidRequest, message));
-    if name.is_empty() || name.chars().count() > MAX_DEVICE_NAME_CHARS {
-        return invalid(format!("a device's name has to be 1 to {MAX_DEVICE_NAME_CHARS} characters"));
-    }
-    if name.chars().any(|c| c.is_control() || c.general_category() == GeneralCategory::Format) {
-        return invalid(format!("a device's name can't have control or format characters, as {name:?} does"));
-    }
-    Ok(name)
 }
 
 impl Hub {
@@ -213,6 +194,6 @@ mod tests {
             let error = device_name_from(refused).map(drop).unwrap_err();
             assert_eq!(error.code, ErrorCode::InvalidRequest, "{refused:?}");
         }
-        assert!(device_name_from(&"x".repeat(MAX_DEVICE_NAME_CHARS + 1)).is_err());
+        assert!(device_name_from(&"x".repeat(protocol::pairing::MAX_DEVICE_NAME_CHARS + 1)).is_err());
     }
 }

@@ -8,6 +8,9 @@ use protocol::model::Account;
 /// What this machine is, after "this": a Mac, or a computer on any other system.
 pub(crate) const MACHINE: &str = if cfg!(target_os = "macos") { "Mac" } else { "computer" };
 
+/// What this machine is called as a heading or picker choice: "This Mac" on a Mac, and "This computer" elsewhere.
+pub(crate) const THIS_MACHINE: &str = if cfg!(target_os = "macos") { "This Mac" } else { "This computer" };
+
 /// Who `account` is: the name the person gave it, for one whose login they gave the hub, since a token doesn't say
 /// whose it is, and otherwise its email. Either goes by the other when it's all the record says, and `None` when it
 /// says neither.

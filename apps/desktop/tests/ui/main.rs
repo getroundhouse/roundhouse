@@ -32,6 +32,7 @@ mod new_workspace;
 mod notifications;
 mod other_hubs;
 mod outline;
+mod pairing;
 mod pickers;
 mod pull_requests;
 mod questions;

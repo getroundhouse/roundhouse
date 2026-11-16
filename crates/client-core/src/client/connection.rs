@@ -47,6 +47,11 @@ impl ClientError {
     pub fn is_version_mismatch(&self) -> bool {
         matches!(self, ClientError::Api(e) if e.code == ErrorCode::VersionMismatch)
     }
+
+    /// The hub refused our pairing code or device token.
+    pub fn is_unauthorized(&self) -> bool {
+        matches!(self, ClientError::Api(e) if e.code == ErrorCode::Unauthorized)
+    }
 }
 
 pub type Result<T> = std::result::Result<T, ClientError>;
@@ -260,7 +265,7 @@ impl Client {
         }
     }
 
-    fn disconnect(&self) {
+    pub(super) fn disconnect(&self) {
         self.closer.close();
         end_connection(&self.inner);
     }

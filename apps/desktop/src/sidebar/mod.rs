@@ -15,7 +15,7 @@ mod standing;
 pub(crate) use kept::Kept;
 pub(crate) use row::doing;
 use standing::needs_a_look;
-pub(crate) use standing::{Standing, standing};
+pub(crate) use standing::{Standing, needing_a_look, standing};
 
 mod workspace_list;
 #[cfg(test)]

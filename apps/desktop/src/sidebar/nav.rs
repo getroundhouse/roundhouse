@@ -22,6 +22,7 @@ pub(super) fn nav(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement 
         .gap(look::Space::XSmall)
         .border_b_1()
         .border_color(border)
+        .child(super::hub::render(app, cx))
         .child(
             item("home", Lucide::House, "Home", cx)
                 .selected(app.home_showing())

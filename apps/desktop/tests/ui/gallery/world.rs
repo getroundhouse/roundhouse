@@ -77,7 +77,17 @@ pub(crate) struct World {
     /// How a sign-in with GitHub the app starts stands as the hub answers, which it does with the ID the app gave it,
     /// though it keeps no record of it. `None` refuses it, as the rest of what would change what the hub holds.
     pub(crate) sign_in_answer: Option<GithubSignInStatus>,
+    /// Whether `pairing_start` hands out a deterministic pairing link, and whether `pairing_wait` resolves with this
+    /// device name or stays waiting.
+    pub(crate) pairing: Option<PairingWorld>,
+    /// Saved remote hubs written to `settings.json` before the window opens.
+    pub(crate) saved_hubs: Vec<(&'static str, &'static str)>,
     records: i64,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct PairingWorld {
+    pub(crate) paired_device: Option<&'static str>,
 }
 
 /// The login capabilities of the hub whose version the screen illustrates.
