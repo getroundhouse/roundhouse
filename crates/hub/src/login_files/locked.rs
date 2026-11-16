@@ -96,6 +96,26 @@ impl<S: LoginSecret> Locked<'_, S> {
         Ok(written)
     }
 
+    /// Replaces what `file` holds with `secret`, keeping its name, so the row that names it needn't change: a file
+    /// beside it, which lasts through a power cut, renamed over it, and then the rename made to last too. So whatever
+    /// stops the hub, or the machine, leaves `file` holding the old secret or the new, whole, and never the new in a
+    /// file no row names, which tidying would remove. For a secret that takes the place of the only one that works, as
+    /// a sign-in's renewed tokens do, since GitHub revokes the old as it gives the new, where [`Locked::connect`] is
+    /// for one beside which the old still works. What a hub stopped before renaming leaves beside it is no login's
+    /// file, so tidying removes it, and so does the next replace, before it makes its own, which it makes new, so the
+    /// secret is never written into a file it didn't make, whose mode or link it would keep.
+    pub(crate) fn replace(&self, file: &LoginFile, secret: &S) -> io::Result<()> {
+        let beside = self.dir().join(format!("{}.partial", file.as_str()));
+        match fs::remove_file(&beside) {
+            Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+            removed => removed?,
+        }
+        let handle = private_files::file_options().write(true).create_new(true).open(&beside)?;
+        write_lasting(handle, secret)?;
+        fs::rename(&beside, self.path(file))?;
+        lasting::sync_dir(self.dir())
+    }
+
     /// Removes `file`, and then has `clear_row` clear the row that names it, returning what that returns. The file
     /// goes first, and lasts through a power cut, so nothing that stops the hub or the machine between the two brings
     /// the secret back: a row whose file is gone is cleared as the hub next starts.
@@ -158,9 +178,8 @@ impl<S: LoginSecret> Locked<'_, S> {
     /// Writes `secret` as `file`, which is new, and has it last through a power cut before this returns.
     fn write(&self, file: &LoginFile, secret: &S) -> io::Result<()> {
         lasting::create_dir_all(self.dir())?;
-        let mut handle = private_files::file_options().write(true).create_new(true).open(self.path(file))?;
-        handle.write_all(&secret.to_bytes()?)?;
-        handle.sync_all()?;
+        let handle = private_files::file_options().write(true).create_new(true).open(self.path(file))?;
+        write_lasting(handle, secret)?;
         lasting::sync_dir(self.dir())
     }
 
@@ -203,4 +222,10 @@ impl<S: LoginSecret> Locked<'_, S> {
         }
         Ok(())
     }
+}
+
+/// Writes `secret` to `handle`, a file opened to write it, and has it last through a power cut before this returns.
+fn write_lasting<S: LoginSecret>(mut handle: fs::File, secret: &S) -> io::Result<()> {
+    handle.write_all(&secret.to_bytes()?)?;
+    handle.sync_all()
 }

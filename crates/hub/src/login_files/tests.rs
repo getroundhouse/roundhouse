@@ -132,6 +132,40 @@ fn a_connect_whose_file_cant_be_written_never_writes_its_row() {
     assert!(!written);
 }
 
+/// Over what a hub that stopped part way through the last replace left beside it.
+#[test]
+fn replacing_a_secret_keeps_its_files_name_and_has_it_hold_the_new_whole_and_only_the_hubs_user_can_open_it() {
+    use std::os::unix::fs::PermissionsExt as _;
+    let dir = tempfile::tempdir().unwrap();
+    let files = LoginFiles::<TwoParts>::new(dir.path());
+    let files = files.lock();
+    let kept = connected(&files, &two_parts("old"));
+    std::fs::write(dir_in(dir.path()).join(format!("{}.partial", kept.as_str())), "a-half").unwrap();
+
+    files.replace(&kept, &two_parts("new")).unwrap();
+
+    assert_eq!(files.read(&kept).unwrap(), Stored::Secret(two_parts("new")));
+    assert_eq!(names_in(dir.path()), [kept.as_str()], "nothing is left beside it");
+    let mode = std::fs::metadata(dir_in(dir.path()).join(kept.as_str())).unwrap().permissions().mode();
+    assert_eq!(mode & 0o777, 0o600);
+}
+
+#[test]
+fn a_replace_that_cant_be_written_fails_and_leaves_the_old_secret() {
+    let dir = tempfile::tempdir().unwrap();
+    let files = LoginFiles::<TwoParts>::new(dir.path());
+    let files = files.lock();
+    let kept = connected(&files, &two_parts("old"));
+    // A directory where the new is written beside it, which neither removing nor opening as a file gets past, even as
+    // root.
+    std::fs::create_dir(dir_in(dir.path()).join(format!("{}.partial", kept.as_str()))).unwrap();
+
+    let failed = files.replace(&kept, &two_parts("new"));
+
+    assert!(failed.is_err());
+    assert_eq!(files.read(&kept).unwrap(), Stored::Secret(two_parts("old")));
+}
+
 #[test]
 fn disconnecting_removes_the_file_before_its_row_is_cleared_and_even_when_the_row_cant_be() {
     let dir = tempfile::tempdir().unwrap();

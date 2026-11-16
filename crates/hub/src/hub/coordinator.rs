@@ -28,7 +28,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::time::Duration;
-use tokio::sync::{Mutex as AsyncMutex, Notify, broadcast};
+use tokio::sync::{Mutex as AsyncMutex, Notify, broadcast, watch};
 use tracing::warn;
 
 /// How long the hub waits for a provider as it starts, before it serves, to list its instances or say how to reach a
@@ -84,6 +84,9 @@ pub(crate) struct Hub {
     pub(super) jobs: Jobs<WorkspaceId>,
     /// The sign-ins with GitHub the hub is asking GitHub after, a job for each, as `Hub::wait_for_sign_in` says.
     pub(super) sign_ins: Jobs<GithubSignInId>,
+    /// Whether the hub has stopped checking its GitHub logins, as it does as it stops, so no check, and no renewal,
+    /// starts after, as `Hub::stop_checking_github_logins` says.
+    pub(super) github_checks_stopped: watch::Sender<bool>,
     pub(super) awake: Arc<Awake>,
     /// Whether the hub allows what an agent with full access still asks about, as its settings say.
     pub(super) allows_asked_in_full_access: AtomicBool,
@@ -165,6 +168,7 @@ impl Hub {
             pull_requests: pull_requests::Reading::new(),
             jobs: Jobs::new(),
             sign_ins: Jobs::new(),
+            github_checks_stopped: watch::Sender::new(false),
             awake: Arc::default(),
             allows_asked_in_full_access: AtomicBool::new(false),
             configuring: AsyncMutex::new(()),

@@ -54,7 +54,9 @@ impl fmt::Display for GithubUserId {
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct HeldGithubLogin {
     pub how: GithubLoginKind,
-    /// When it was connected, by the hub's clock. Renewing it moves it.
+    /// When it was connected, by the hub's clock: when its token was connected, or its sign-in approved. Connecting a
+    /// token to the account again, or signing in again, moves it, and the hub renewing a sign-in's token doesn't, since
+    /// the person did nothing. *Unconfirmed:* the hub's renewal leaving it.
     pub connected_at_ms: i64,
     /// When it ends, by GitHub's word, converted to the hub's clock. `None` for one that doesn't end, such as a token
     /// made with no end, and for one whose end GitHub gave in a form this hub couldn't read. For a sign-in, when the
@@ -62,8 +64,8 @@ pub struct HeldGithubLogin {
     #[serde(default)]
     pub ends_at_ms: Option<i64>,
     /// Whether it can't be renewed, so the person has to sign in again, as when a sign-in's refresh token has ended or
-    /// GitHub has refused it. Signing in again, or connecting a token, clears it. False from a hub from before it said.
-    /// *Not built:* renewing a sign-in, which is what sets it.
+    /// GitHub has refused it, or the hub couldn't keep what renewing it gave. Signing in again, or connecting a token,
+    /// clears it. False from a hub from before it said.
     #[serde(default)]
     pub needs_sign_in: bool,
 }

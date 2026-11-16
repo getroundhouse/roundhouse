@@ -10,16 +10,16 @@ use super::sign_ins::{approved, started};
 use super::{ada, connect, logins_in, owner};
 
 /// What a worker's link following `logins` is sent now.
-fn sent(logins: &GithubLogins) -> GithubCredential {
+pub(super) fn sent(logins: &GithubLogins) -> GithubCredential {
     logins.git_credential().borrow().clone()
 }
 
-fn account(username: &str, token: &str) -> GithubCredential {
+pub(super) fn account(username: &str, token: &str) -> GithubCredential {
     GithubCredential::Account(GitCredential { username: username.into(), token: GithubToken::new(token) })
 }
 
 /// What a block says, which fails for anything but a block, since nothing but one may take a lost default's place.
-fn reason(credential: GithubCredential) -> String {
+pub(super) fn reason(credential: GithubCredential) -> String {
     let GithubCredential::Blocked { reason } = credential else { panic!("not a block: {credential:?}") };
     reason
 }
@@ -54,7 +54,7 @@ fn workers_are_sent_the_defaults_username_and_token_as_its_connected_and_renewed
     logins.connect(&connect("renewed-token", Some("g1"), "g2"), &ada()).unwrap();
     let renewed = following.borrow_and_update().clone();
     logins.connect(&connect("another-token", None, "g3"), &owner(8, "grace", None)).unwrap();
-    logins.check(6000);
+    logins.check(6000).unwrap();
 
     assert_eq!(connected, account("ada", "first-token"), "the first account became the default");
     assert_eq!(renewed, account("ada", "renewed-token"));
@@ -80,9 +80,9 @@ fn a_default_whose_token_has_ended_blocks_from_its_end_saying_to_renew_it() {
     let (logins, _) = logins_in(dir.path());
     logins.connect(&connect("a-token", None, "g1"), &owner(7, "ada", Some(5000))).unwrap();
 
-    logins.check(4999);
+    logins.check(4999).unwrap();
     let before_its_end = sent(&logins);
-    logins.check(5000);
+    logins.check(5000).unwrap();
 
     assert_eq!(before_its_end, account("ada", "a-token"));
     let reason = reason(sent(&logins));
@@ -97,11 +97,11 @@ fn a_default_whose_tokens_file_is_gone_or_cant_be_read_blocks() {
     let file = file_holding(dir.path(), "a-token");
 
     std::fs::remove_file(&file).unwrap();
-    logins.check(2000);
+    logins.check(2000).unwrap();
     let gone = reason(sent(&logins));
     // Which can't be read as a file.
     std::fs::create_dir(&file).unwrap();
-    logins.check(2000);
+    logins.check(2000).unwrap();
     let unreadable = reason(sent(&logins));
 
     assert!(gone.contains("can't find the token of its default GitHub account, ada"), "{gone}");
@@ -137,24 +137,32 @@ fn workers_are_sent_a_default_signed_in_with_its_access_token_as_its_approved_an
     assert_eq!(renewed, account("ada", "renewed-token"), "signing in as ada again renewed it in place");
 }
 
-/// Choosing it as the default is refused then too, saying the same.
+/// As after a Mac wakes from a sleep past its token's end, before the hub has renewed it. Choosing it as the default
+/// is refused meanwhile, saying the same, and so is it once it needs signing in again.
 #[test]
-fn a_default_signed_in_blocks_from_its_access_tokens_end_saying_to_sign_in_again() {
+fn a_default_signed_in_blocks_from_its_tokens_end_saying_its_being_renewed_and_once_what_renews_it_ends_to_sign_in() {
     let dir = tempfile::tempdir().unwrap();
     let (logins, store) = logins_in(dir.path());
     signed_in(&logins, &store, "s", "a-token");
 
-    logins.check(8999);
+    logins.check(8999).unwrap();
     let before_its_end = sent(&logins);
-    logins.check(9000);
-    let chosen = logins.set_default(Some(&"g".into()), 9000).unwrap_err();
+    logins.check(9000).unwrap();
+    let renewing = reason(sent(&logins));
+    let chosen_while_renewing = logins.set_default(Some(&"g".into()), 9000).unwrap_err();
+    // Once what renews it has ended, as the sign-in `approved` gives has at 90,000.
+    logins.check(90_000).unwrap();
+    let ended = reason(sent(&logins));
+    let chosen_once_ended = logins.set_default(Some(&"g".into()), 90_000).unwrap_err();
 
     assert_eq!(before_its_end, account("ada", "a-token"));
-    let reason = reason(sent(&logins));
-    assert!(reason.contains("The sign-in of Roundhouse's default GitHub account, ada, has ended"), "{reason}");
-    assert!(reason.contains("Sign in with GitHub again") && !reason.contains("Renew"), "{reason}");
-    assert_eq!(chosen.code, ErrorCode::Conflict);
-    assert!(chosen.message.contains("needs signing in with GitHub again"), "{}", chosen.message);
+    assert!(renewing.contains("default GitHub account, ada, has ended, and Roundhouse is renewing it"), "{renewing}");
+    assert!(renewing.contains("If this goes on, sign in with GitHub again"), "{renewing}");
+    assert!(ended.contains("The sign-in of Roundhouse's default GitHub account, ada, has ended"), "{ended}");
+    assert!(ended.contains("Sign in with GitHub again") && !ended.contains("Renew"), "{ended}");
+    assert_eq!((chosen_while_renewing.code, chosen_once_ended.code), (ErrorCode::Conflict, ErrorCode::Conflict));
+    assert!(chosen_while_renewing.message.contains("is being renewed"), "{}", chosen_while_renewing.message);
+    assert!(chosen_once_ended.message.contains("needs signing in with GitHub again"), "{}", chosen_once_ended.message);
 }
 
 #[test]
@@ -163,8 +171,8 @@ fn a_default_that_needs_signing_in_again_blocks_before_its_access_token_ends() {
     let (logins, store) = logins_in(dir.path());
     signed_in(&logins, &store, "s", "a-token");
 
-    store.github_login_needs_sign_in(&"g".into());
-    logins.check(2000);
+    store.github_login_needs_sign_in(&"g".into()).unwrap().unwrap();
+    logins.check(2000).unwrap();
 
     let reason = reason(sent(&logins));
     assert!(reason.contains("ada, has ended") && reason.contains("Sign in with GitHub again"), "{reason}");
@@ -178,7 +186,7 @@ fn a_default_whose_file_only_a_newer_build_reads_blocks_saying_so() {
     signed_in(&logins, &store, "s", "a-token");
 
     std::fs::write(only_file(dir.path()), r#"{"format":"a_newer_form","token":"t"}"#).unwrap();
-    logins.check(2000);
+    logins.check(2000).unwrap();
 
     let reason = reason(sent(&logins));
     assert!(reason.contains("ada, is one only a newer Roundhouse can read"), "{reason}");

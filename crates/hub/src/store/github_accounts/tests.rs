@@ -62,3 +62,29 @@ fn a_row_naming_a_file_the_hub_doesnt_make_holds_no_login_and_is_listed_for_tidy
     assert_eq!(store.held_github_logins().unwrap(), []);
     assert_eq!(store.github_login_files().unwrap(), [(id, None)]);
 }
+
+/// Beside a token's account, which isn't listed to renew.
+#[test]
+fn renewing_a_sign_in_and_its_needing_signing_in_again_each_move_its_records_revision_and_once_only() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = open_in(dir.path());
+    let (user, token_file, sign_in_file) = (ada(), LoginFile::new(), LoginFile::new());
+    let (by_token, signed_in) = (GithubAccountId::from("t"), GithubAccountId::from("s"));
+    store.connect_github_login(&connecting(&by_token, &user, &token_file)).unwrap();
+    let signing_in = connecting(&signed_in, &user, &sign_in_file);
+    let signing_in = GithubConnecting { how: GithubLoginKind::SignIn, ends_at_ms: Some(9000), ..signing_in };
+    let connected = store.connect_github_login(&signing_in).unwrap().account;
+
+    let listed = store.held_github_sign_ins().unwrap();
+    let renewed = store.renew_github_sign_in(&signed_in, Some(20_000)).unwrap().unwrap();
+    let needing = store.github_login_needs_sign_in(&signed_in).unwrap().unwrap();
+    let needing_again = store.github_login_needs_sign_in(&signed_in).unwrap();
+
+    assert_eq!(listed, [(connected.clone(), sign_in_file)]);
+    let held = renewed.held_login.unwrap();
+    assert_eq!((held.connected_at_ms, held.ends_at_ms, held.needs_sign_in), (100, Some(20_000), false));
+    assert!(renewed.rev > connected.rev, "{} isn't past {}", renewed.rev, connected.rev);
+    assert!(needing.held_login.unwrap().needs_sign_in);
+    assert!(needing.rev > renewed.rev, "{} isn't past {}", needing.rev, renewed.rev);
+    assert_eq!(needing_again, None);
+}

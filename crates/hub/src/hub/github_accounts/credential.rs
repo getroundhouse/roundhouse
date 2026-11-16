@@ -1,94 +1,86 @@
 //! What the hub's workers give their processes for github.com, as `crate::github_logins` works it out, for each
-//! worker's link to follow, and the check by the wall clock that finds the default's token has ended.
+//! worker's link to follow, and the check by the wall clock that finds the default's token has ended, and which
+//! sign-ins to renew before theirs does, until the hub stops.
 
 use std::sync::Arc;
 use std::time::Duration;
 
 use protocol::worker::GithubCredential;
 use tokio::sync::watch;
+use tokio::task::JoinHandle;
 use tokio::time::MissedTickBehavior;
 use tracing::error;
 
 use super::super::Hub;
-use crate::github_logins::GithubLogins;
 use crate::store::now_ms;
 
-/// How often the hub checks, by the wall clock, whether the default GitHub account's token has ended, and as it
-/// starts. Tokio's timers don't count the time a Mac sleeps, so waiting until a token's end would wait as long again
-/// as the Mac slept, where checking every minute it's awake finds it within a minute of waking. Until then, a push
-/// fails at GitHub, which says the token is bad, rather than with the block, which says what to do.
-const TOKEN_ENDS_CHECKED_EVERY: Duration = Duration::from_secs(60);
+/// How often the hub checks the GitHub logins by the wall clock, and as it starts: whether the default's token has
+/// ended, and which sign-ins to renew. Tokio's timers don't count the time a Mac sleeps, so waiting until a token's
+/// end, or until it's due to be renewed, would wait as long again as the Mac slept, where checking every minute it's
+/// awake finds it within a minute of waking. Until then, a push fails at GitHub, which says the token is bad, rather
+/// than with the block, which says what to do.
+pub(super) const CHECKED_EVERY: Duration = Duration::from_secs(60);
 
 impl Hub {
     /// What workers are to give their processes for github.com, from now on, as it changes, as
-    /// [`GithubLogins::git_credential`] says.
+    /// [`GithubLogins::git_credential`](crate::github_logins::GithubLogins::git_credential) says.
     pub(crate) fn git_credential(&self) -> watch::Receiver<GithubCredential> {
         self.github_logins.git_credential()
     }
 
-    /// Checks, as the hub starts and every [`TOKEN_ENDS_CHECKED_EVERY`] after, by the wall clock, whether the default's
-    /// token has ended, which then has workers sent a block. Until the hub stops.
-    pub(crate) async fn watch_github_token_ends(self: Arc<Self>) {
-        check_token_ends(Arc::clone(&self.github_logins), TOKEN_ENDS_CHECKED_EVERY, now_ms).await;
+    /// Checks the GitHub logins as the hub starts and every [`CHECKED_EVERY`] after, by the wall clock, as
+    /// [`Hub::check_github_logins`] says, each once the last has finished, until
+    /// [`Hub::stop_checking_github_logins`].
+    pub(crate) async fn watch_github_logins(self: Arc<Self>) {
+        let stopped = stopped(self.github_checks_stopped.subscribe());
+        check_by_the_wall_clock(CHECKED_EVERY, now_ms, stopped, |now_ms| {
+            let hub = Arc::clone(&self);
+            async move { hub.check_github_logins(now_ms).await }
+        })
+        .await;
     }
-}
 
-/// Checks `logins` at once, and every `every` after, at the time `wall_clock` says.
-async fn check_token_ends(logins: Arc<GithubLogins>, every: Duration, wall_clock: impl Fn() -> i64) {
-    let mut checks = tokio::time::interval(every);
-    // One that comes late, as on a hub that's busy, isn't followed by others to catch up.
-    checks.set_missed_tick_behavior(MissedTickBehavior::Delay);
-    loop {
-        checks.tick().await;
-        let (logins, now_ms) = (Arc::clone(&logins), wall_clock());
-        if let Err(e) = tokio::task::spawn_blocking(move || logins.check(now_ms)).await {
-            error!("checking whether the default GitHub account's token has ended failed: {e}");
+    /// Stops checking the GitHub logins, as the hub stops, and waits for `watching`, the task
+    /// [`Hub::watch_github_logins`] runs on, to end, before the hub lets go of its lock. It ends at once between checks.
+    /// A check under way that hasn't started its renewals starts none, and one that has ends once they have, each
+    /// within [`ASK_WITHIN`](crate::github::ASK_WITHIN), 15 s, and then its write, which waits on nothing outside the
+    /// hub. So the wait is at most the check's own work, a renewal's call and its write. GitHub revokes what a renewal
+    /// renews as it gives the next, so a stop that dropped what GitHub gave would have the account need signing in
+    /// again, where waiting makes a stop at most about 15 s longer.
+    pub(crate) async fn stop_checking_github_logins(&self, watching: JoinHandle<()>) {
+        self.github_checks_stopped.send_replace(true);
+        if let Err(e) = watching.await {
+            error!("checking the GitHub logins failed as the hub stopped: {e}");
         }
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use std::sync::atomic::{AtomicI64, Ordering};
+/// Once `checks_stopped` says the hub has stopped checking, or the hub has gone.
+async fn stopped(mut checks_stopped: watch::Receiver<bool>) {
+    // An error says the hub has gone, which stops the checks too.
+    let _gone = checks_stopped.wait_for(|stopped| *stopped).await;
+}
 
-    use protocol::client::github_accounts::GithubAccountConnect;
-    use protocol::model::{GithubToken, GithubUser, GithubUserId};
-
-    use super::*;
-    use crate::github::TokenOwner;
-    use crate::github_logins::Connect;
-    use crate::store::tests::store_with_session;
-
-    const ENDS_AT_MS: i64 = 1_000_000_000;
-
-    /// A Mac that sleeps for the eight hours its default's token has left, by the wall clock, while tokio's clock,
-    /// which doesn't count the sleep, moves only to the next check.
-    #[tokio::test(start_paused = true)]
-    async fn a_defaults_token_that_ends_while_the_hub_runs_blocks_at_the_next_check_by_the_wall_clock() {
-        let dir = tempfile::tempdir().unwrap();
-        let store = Arc::new(store_with_session(dir.path()));
-        let logins = Arc::new(GithubLogins::new(store, dir.path(), 0));
-        let connect = Connect::new(GithubAccountConnect { token: GithubToken::new("a-token"), id: None }, 0).unwrap();
-        let user = GithubUser { id: GithubUserId::new(7), name: "ada".into() };
-        logins.connect(&connect, &TokenOwner { user, ends_at_ms: Some(ENDS_AT_MS) }).unwrap();
-        let mut sent = logins.git_credential();
-        let wall_clock = Arc::new(AtomicI64::new(ENDS_AT_MS - 8 * 60 * 60 * 1000));
-        let every = TOKEN_ENDS_CHECKED_EVERY;
-        tokio::spawn(check_token_ends(Arc::clone(&logins), every, {
-            let wall_clock = Arc::clone(&wall_clock);
-            move || wall_clock.load(Ordering::SeqCst)
-        }));
-        // Once the first check has been, and the next is waited for, which is when tokio's clock moves.
-        let first = tokio::time::timeout(every / 2, sent.changed()).await;
-
-        wall_clock.store(ENDS_AT_MS, Ordering::SeqCst);
-        let before_the_next =
-            tokio::time::timeout((every / 2).saturating_sub(Duration::from_millis(1)), sent.changed()).await;
-        let at_the_next = tokio::time::timeout(Duration::from_millis(2), sent.changed()).await;
-
-        assert!(first.is_err(), "the first check, as the hub starts, found it hadn't ended");
-        assert!(before_the_next.is_err(), "nothing changed before the next check: {:?}", *sent.borrow());
-        assert!(at_the_next.is_ok(), "the next check found it had ended");
-        assert!(matches!(&*sent.borrow(), GithubCredential::Blocked { reason } if reason.contains("has ended")));
+/// Has `check` check at once, and every `every` after, at the time `wall_clock` says then, each once the last has
+/// finished, so no two run at once, until `stopped`, which a check under way runs to its end past. One that comes late,
+/// as on a hub that's busy or after a check that took long, isn't followed by others to catch up.
+pub(super) async fn check_by_the_wall_clock<F>(
+    every: Duration,
+    wall_clock: impl Fn() -> i64,
+    stopped: impl Future<Output = ()>,
+    mut check: impl FnMut(i64) -> F,
+) where
+    F: Future<Output = ()>,
+{
+    let mut checks = tokio::time::interval(every);
+    checks.set_missed_tick_behavior(MissedTickBehavior::Delay);
+    let mut stopped = std::pin::pin!(stopped);
+    loop {
+        tokio::select! {
+            biased;
+            () = &mut stopped => return,
+            _ = checks.tick() => {}
+        }
+        check(wall_clock()).await;
     }
 }

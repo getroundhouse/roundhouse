@@ -22,6 +22,9 @@ pub(super) enum Unusable {
     /// It's a sign-in's, whose token has ended, by GitHub's word, or that needs signing in again, as when GitHub has
     /// refused what renews it, so only signing in again gives it a login that works.
     SignInAgain,
+    /// It's a sign-in's whose token has ended, by GitHub's word, which what renews it still can, as the hub tries to at
+    /// each check, so it works again once that's done, as after a Mac wakes from a sleep past the token's end.
+    Renewing,
     /// Its file holds a login in a form only a newer build reads, so this one can't use it, and keeps it for that one.
     Newer,
     /// Its file holds no token, or, with the error, can't be read.
@@ -33,13 +36,6 @@ impl GithubLogins {
     /// logins' lock, as each change to the logins is made, so it changes in the order they were made.
     pub(crate) fn git_credential(&self) -> watch::Receiver<GithubCredential> {
         self.credential.subscribe()
-    }
-
-    /// Works out again what workers are to be sent, at `now_ms` by the wall clock, as when the default's token may
-    /// have ended since.
-    pub(crate) fn check(&self, now_ms: i64) {
-        let files = self.files.lock();
-        self.publish(&files, now_ms);
     }
 
     /// Runs `change` under the logins' lock, then, still under it, works out what workers are to be sent at `now_ms`,
@@ -64,8 +60,14 @@ impl GithubLogins {
     ) -> Result<Result<GithubToken, Unusable>, ApiError> {
         let Some(held) = account.held_login else { return Ok(Err(Unusable::Disconnected)) };
         if !held.works_at(now_ms) {
-            let signed_in = held.needs_sign_in || held.how == GithubLoginKind::SignIn;
-            return Ok(Err(if signed_in { Unusable::SignInAgain } else { Unusable::Ended }));
+            let unusable = if held.needs_sign_in {
+                Unusable::SignInAgain
+            } else if held.how == GithubLoginKind::SignIn {
+                self.ended_sign_in(files, account, now_ms)?
+            } else {
+                Unusable::Ended
+            };
+            return Ok(Err(unusable));
         }
         let Some(file) = self.store.github_login_file(&account.id)? else { return Ok(Err(Unusable::Disconnected)) };
         Ok(match files.read(&file) {
@@ -76,8 +78,24 @@ impl GithubLogins {
         })
     }
 
+    /// Why `account`, a sign-in whose token has ended, can't be used at `now_ms`: it's being renewed while what renews
+    /// it still can, and otherwise only signing in again gives it a login that works.
+    fn ended_sign_in(
+        &self,
+        files: &Locked<'_, GithubLogin>,
+        account: &GithubAccount,
+        now_ms: i64,
+    ) -> Result<Unusable, ApiError> {
+        let Some(file) = self.store.github_login_file(&account.id)? else { return Ok(Unusable::Disconnected) };
+        let renewable = matches!(
+            files.read(&file),
+            Ok(Stored::Secret(GithubLogin::SignIn(signed_in))) if signed_in.renews_with(now_ms).is_some()
+        );
+        Ok(if renewable { Unusable::Renewing } else { Unusable::SignInAgain })
+    }
+
     /// Has workers sent what they're to give their processes at `now_ms`, if that has changed.
-    fn publish(&self, files: &Locked<'_, GithubLogin>, now_ms: i64) {
+    pub(super) fn publish(&self, files: &Locked<'_, GithubLogin>, now_ms: i64) {
         let credential = self.worked_out(files, now_ms);
         self.credential.send_if_modified(|current| {
             if *current == credential {
@@ -139,6 +157,13 @@ fn lost(name: &GithubUsername, unusable: &Unusable) -> GithubCredential {
         Unusable::SignInAgain => blocked(
             &format!("The sign-in of Roundhouse's default GitHub account, {name}, has ended"),
             "Sign in with GitHub again in Roundhouse's Settings, or choose another default there.",
+        ),
+        Unusable::Renewing => blocked(
+            &format!(
+                "The token of Roundhouse's default GitHub account, {name}, has ended, and Roundhouse is renewing it"
+            ),
+            "It tries every minute until GitHub answers. If this goes on, sign in with GitHub again in Roundhouse's \
+             Settings.",
         ),
         Unusable::Newer => blocked(
             &format!(
