@@ -35,7 +35,7 @@ A limit is your account's, not the chat's, so every chat under the same login sh
 
 ## Move a chat to another account
 
-Once you've added a Claude login in [Settings](../reference/settings.md#accounts) that the chat isn't on, `Move` beside whose account it is moves the chat to another, such as when its account is close to a limit. With no bars, it's on the ring's card.
+Once you've added a Claude login in [Settings](../reference/settings.md#agents) that the chat isn't on, `Move` beside whose account it is moves the chat to another, such as when its account is close to a limit. With no bars, it's on the ring's card.
 
 ![The menu of accounts to move the chat to](../../spec/screens/usage-move-menu.png)
 

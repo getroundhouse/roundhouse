@@ -1,4 +1,4 @@
-//! Accounts, the page of the logins agents run under, in two lists. Found has each agent's own login on a machine,
+//! Agents, the page of the logins agents run under, in two lists. Found has each agent's own login on a machine,
 //! which the hub learnt of as an agent launched under it, and which Roundhouse only reads. Added has the logins the
 //! person gave the hub, each a token the agent's own CLI made, which the hub keeps and supplies according to its
 //! selected default for the agent kind. The app never works out which login an agent will run under, since that's the hub's to decide.

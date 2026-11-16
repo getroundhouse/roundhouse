@@ -126,7 +126,7 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         | R::SessionAnswerDraft(drafts::SessionAnswerDraft { id, .. }) => {
             reply(C::Session(world.session(&id)?.clone()))
         }
-        // As an older hub refuses it. Accounts asks none, since such a hub says nothing of what makes a login, so the
+        // As an older hub refuses it. Agents asks none, since such a hub says nothing of what makes a login, so the
         // refusal itself is tested against a stand-in, with `Kept`.
         R::AccountConnect(_) if world.logins == LoginSupport::None => {
             Err(ApiError::new(ErrorCode::Unsupported, "an older hub doesn't keep logins"))
@@ -308,7 +308,7 @@ fn subscribe_places(
     Ok(Outcome::Reply(ClientResponse::Ok, events.chain(std::iter::once(tail)).collect()))
 }
 
-/// Claude as the app's own hub describes it, so the picker, the context's cards, a turn's card and Accounts say what
+/// Claude as the app's own hub describes it, so the picker, the context's cards, a turn's card and Agents say what
 /// they would, or as a hub from before hubs kept logins does, which says nothing of what makes one.
 fn claude(world: &World) -> AgentDescription {
     let offered =

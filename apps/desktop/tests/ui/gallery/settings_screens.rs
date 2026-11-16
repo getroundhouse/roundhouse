@@ -14,8 +14,8 @@ use super::worlds::{accounts, conversation, logins_unkept, none_found, own_hub};
 /// What puts the cursor in Settings' search.
 const FIND: &str = "secondary-f";
 
-/// Shows Accounts, once Settings is open.
-const ACCOUNTS: Step = Step::Click("settings-page-accounts");
+/// Shows Agents, once Settings is open.
+const AGENTS: Step = Step::Click("settings-page-agents");
 
 /// Opens Dictation's choices, once Settings is open, for [`ON`] or [`OFF`] to choose from.
 const DICTATION: Step = Step::Click("settings-dictation");
@@ -41,49 +41,49 @@ pub(crate) const SCREENS: &[Screen] = &[
         steps: &[Step::Select(FOCUS), Step::OpenSettings, Step::Press(FIND), Step::Type("zebra")],
     },
     Screen {
-        name: "settings-accounts",
+        name: "settings-agents",
         spec: "settings.md",
         world: Some(accounts),
         frame: Frame::Layout,
-        steps: &[Step::Select(FOCUS), Step::OpenSettings, ACCOUNTS],
+        steps: &[Step::Select(FOCUS), Step::OpenSettings, AGENTS],
     },
     Screen {
-        name: "settings-accounts-default-picker",
+        name: "settings-agents-default-picker",
         spec: "settings.md",
         world: Some(accounts),
         frame: Frame::Layout,
-        steps: &[Step::Select(FOCUS), Step::OpenSettings, ACCOUNTS, Step::Click("account-default-claude")],
+        steps: &[Step::Select(FOCUS), Step::OpenSettings, AGENTS, Step::Click("account-default-claude")],
     },
     Screen {
-        name: "settings-accounts-default-ended",
+        name: "settings-agents-default-ended",
         spec: "settings.md",
         world: Some(default_ended),
         frame: Frame::Layout,
-        steps: &[Step::Select(FOCUS), Step::OpenSettings, ACCOUNTS],
+        steps: &[Step::Select(FOCUS), Step::OpenSettings, AGENTS],
     },
     Screen {
-        name: "settings-accounts-no-defaults",
+        name: "settings-agents-no-defaults",
         spec: "settings.md",
         world: Some(defaults_unkept),
         frame: Frame::Layout,
-        steps: &[Step::Select(FOCUS), Step::OpenSettings, ACCOUNTS],
+        steps: &[Step::Select(FOCUS), Step::OpenSettings, AGENTS],
     },
     Screen {
-        name: "settings-accounts-none-found",
+        name: "settings-agents-none-found",
         spec: "settings.md",
         world: Some(none_found),
         frame: Frame::Layout,
-        steps: &[Step::Select(FOCUS), Step::OpenSettings, ACCOUNTS],
+        steps: &[Step::Select(FOCUS), Step::OpenSettings, AGENTS],
     },
     Screen {
-        name: "settings-accounts-connecting",
+        name: "settings-agents-connecting",
         spec: "settings.md",
         world: Some(none_found),
         frame: Frame::Layout,
         steps: &[
             Step::Select(FOCUS),
             Step::OpenSettings,
-            ACCOUNTS,
+            AGENTS,
             Step::Click("accounts-connect"),
             Step::Type(TOKEN),
             Step::Click("accounts-name"),
@@ -91,25 +91,25 @@ pub(crate) const SCREENS: &[Screen] = &[
         ],
     },
     Screen {
-        name: "settings-accounts-renewing",
+        name: "settings-agents-renewing",
         spec: "settings.md",
         world: Some(accounts),
         frame: Frame::Layout,
         steps: &[
             Step::Select(FOCUS),
             Step::OpenSettings,
-            ACCOUNTS,
+            AGENTS,
             Step::Click("account-more-claude-login-0002"),
             Step::ClickItem("Renew"),
             Step::Type(TOKEN),
         ],
     },
     Screen {
-        name: "settings-accounts-older-hub",
+        name: "settings-agents-older-hub",
         spec: "settings.md",
         world: Some(logins_unkept),
         frame: Frame::Layout,
-        steps: &[Step::Select(FOCUS), Step::OpenSettings, ACCOUNTS, Step::WaitFor("accounts-older-hub")],
+        steps: &[Step::Select(FOCUS), Step::OpenSettings, AGENTS, Step::WaitFor("accounts-older-hub")],
     },
     Screen {
         name: "settings-dictation-downloading",

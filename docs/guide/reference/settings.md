@@ -41,11 +41,11 @@ A chat needs you when it has a reply you haven't read, when it's waiting on you 
 
 On Windows and Linux no sound plays.
 
-## Accounts
+## Agents
 
-The logins your agents run under: native logins found where agents ran, and Claude logins you've given the hub. Codex uses `codex login` and Antigravity uses `agy` on the worker's machine. Their credentials stay with their CLIs; this page doesn't add or move them.
+The accounts your agents run under: native logins found where agents ran, and Claude logins you've given the hub. Codex uses `codex login` and Antigravity uses `agy` on the worker's machine. Their credentials stay with their CLIs; this page doesn't add or move them.
 
-![Accounts, with Claude Code's own login and four you've added](../../spec/screens/settings-accounts.png)
+![Agents, with Claude Code's own login and four you've added](../../spec/screens/settings-agents.png)
 
 - **Found** has Claude Code's own login on a machine, such as this Mac's, once an agent has run under it. Roundhouse reads who it is, and never copies it, so there's nothing to do with it here.
 - **Default accounts** chooses the account new chats of each supported agent use across this hub. Choose Work or Personal for Claude Code. A chat is put on the default when its agent first starts, and stays on that account when you choose another default, until you [move it](../guides/watch-context-and-limits.md#move-a-chat-to-another-account). For a chat that isn't on an account yet, an added default takes priority over machine credentials. With no added default, the agent uses its machine's own login, and its chat stays on it once you add one, until you move it. A chat that started with nobody signed in on the machine, or with an API key, goes on the default once you add one. So does a chat from before you updated that wasn't on an account, such as one that ran under the machine's own login, when its agent next starts.
@@ -60,7 +60,7 @@ The first account you connect becomes its agent's default. When updating a hub t
 2. Copy the command it shows, `claude setup-token`, and run it in a terminal of your own. It signs you in through Claude's own page, and prints a token that lasts a year.
 3. Paste the token, give the account a name, and click **Connect**.
 
-![Connecting an account, with its token pasted](../../spec/screens/settings-accounts-connecting.png)
+![Connecting an account, with its token pasted](../../spec/screens/settings-agents-connecting.png)
 
 The app hands the token to the hub, which keeps it in its own data, as [Where data is kept](where-data-is-kept.md) says. The app writes it nowhere. Roundhouse never runs the command or sees you sign in.
 
@@ -71,7 +71,7 @@ A chat under the account names it by the name you gave it, where a login of the 
 - **A login warns a month before it ends,** in amber, and in red once it has. Choose **Renew** in the row's **…** menu, run `claude setup-token` again for the same account, and paste the new token in the panel that opens under it. The account keeps its name, its limits and its chats.
 - **Disconnect,** in the same menu, has the hub forget the token, and asks first. The account stays, with **Connect again**, which takes pasting a token again. It doesn't revoke the token, which still works wherever else you've kept it.
 
-![Renewing a login that ends in nine days](../../spec/screens/settings-accounts-renewing.png)
+![Renewing a login that ends in nine days](../../spec/screens/settings-agents-renewing.png)
 
 If an account expires or is disconnected, agents in the chats on it cannot start until you renew or reconnect it. If it's your default, new chats can't start either until you do, or choose another default, which the chats already on it don't follow, so [move them](../guides/watch-context-and-limits.md#move-a-chat-to-another-account) to another account. It stays selected and does not fall back to another account or machine credentials.
 

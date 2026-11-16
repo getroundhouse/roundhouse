@@ -1,4 +1,4 @@
-use super::{accounts, general, notifications, rows, sidebar};
+use super::{agents, general, notifications, rows, sidebar};
 use crate::FindSetting;
 use crate::app::TOP_STRIP_HEIGHT;
 use crate::status_box::StatusBox;
@@ -154,7 +154,7 @@ fn matches(search: &str, said: &[&str]) -> bool {
 pub(super) enum PageId {
     General,
     Notifications,
-    Accounts,
+    Agents,
 }
 
 impl PageId {
@@ -163,7 +163,7 @@ impl PageId {
         match self {
             PageId::General => "settings-page-general",
             PageId::Notifications => "settings-page-notifications",
-            PageId::Accounts => "settings-page-accounts",
+            PageId::Agents => "settings-page-agents",
         }
     }
 }
@@ -216,7 +216,7 @@ pub(super) struct Section {
 
 /// Every page, under its heading.
 pub(super) fn sections(hub: &OfHub) -> Vec<Section> {
-    vec![Section { heading: "Personal", pages: vec![general::page(hub), notifications::page(), accounts::page(hub)] }]
+    vec![Section { heading: "Personal", pages: vec![general::page(hub), notifications::page(), agents::page(hub)] }]
 }
 
 /// What a search leaves: the settings that match it, on their pages, and the pages of their own it finds, under their

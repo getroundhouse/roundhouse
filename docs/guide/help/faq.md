@@ -8,7 +8,7 @@ Claude, Codex and Antigravity, through their installed CLIs. Choose the agent in
 
 ## Do I need an account?
 
-No. There's no Roundhouse account. You need your agent's CLI installed and signed in. Claude can also use a login added in [Settings](../reference/settings.md#accounts); Codex and Antigravity use the sign-in on the worker's machine. You need `gh` logged in for pull requests.
+No. There's no Roundhouse account. You need your agent's CLI installed and signed in. Claude can also use a login added in [Settings](../reference/settings.md#agents); Codex and Antigravity use the sign-in on the worker's machine. You need `gh` logged in for pull requests.
 
 ## What does it cost?
 

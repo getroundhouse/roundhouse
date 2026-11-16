@@ -22,14 +22,14 @@ named! {
         /// pages and Home's rows.
         Medium,
         /// At the sides of the chat's column and under the composer; where the workspace's header and Home's bar start,
-        /// and at both ends of an image's comparison's bar, a subagent's bar and Home's rows; around Accounts' panel;
+        /// and at both ends of an image's comparison's bar, a subagent's bar and Home's rows; around Agents' panel;
         /// and between the settings on a page and the parts of an account's row.
         Large,
-        /// Around what's in Accounts' panel, and around a picture in the file viewer or an image's comparison; under a
+        /// Around what's in Agents' panel, and around a picture in the file viewer or an image's comparison; under a
         /// setting; between the two sides in the bar under an image's comparison's; and the least room between the two
         /// ends of a line laid out to its ends, such as a setting's name and its switch.
         XLarge,
-        /// At the sides of a Settings page, and between its lists, such as Accounts'.
+        /// At the sides of a Settings page, and between its lists, such as Agents'.
         XXLarge,
     }
 }
