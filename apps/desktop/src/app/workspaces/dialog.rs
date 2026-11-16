@@ -179,7 +179,7 @@ mod tests {
                 },
                 PermissionMode::Plan,
                 cx,
-            )
+            );
         });
         cx.run_until_parked();
         cx.update(|cx| {
@@ -190,7 +190,7 @@ mod tests {
                     assert_eq!(dialog.read(cx).prompt_text(cx), "Returned work");
                     assert!(!dialog.read(cx).is_shown());
                 })
-                .unwrap()
+                .unwrap();
         });
         pick(None, window, &host, cx);
         cx.read(|cx| assert!(dialog.read(cx).is_shown()));

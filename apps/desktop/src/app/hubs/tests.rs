@@ -36,6 +36,7 @@ pub(in crate::app) fn host(cx: &mut TestAppContext) -> (tempfile::TempDir, AnyWi
     };
     let (window, host) = cx.update(|cx| {
         gpui_kit::init(cx);
+        look::apply(cx);
         dictation_ui::install(
             dictation_ui::Source {
                 ready: crate::dictating::ready,
@@ -109,12 +110,12 @@ fn hidden_hubs_leave_focus_and_dialogs_with_the_selected_hub(cx: &mut TestAppCon
                 local.update(cx, |view, cx| {
                     view.focus_what_shows(window, cx);
                     view.present(cx, |_, window, cx| {
-                        window.open_dialog(cx, |dialog, _, _| dialog.title("Returned prompt"))
+                        window.open_dialog(cx, |dialog, _, _| dialog.title("Returned prompt"));
                     });
                 });
                 assert!(other.read(cx).focus.is_focused(window));
             })
-            .unwrap()
+            .unwrap();
     });
     cx.run_until_parked();
     cx.update(|cx| {
@@ -123,7 +124,7 @@ fn hidden_hubs_leave_focus_and_dialogs_with_the_selected_hub(cx: &mut TestAppCon
                 assert!(!window.has_active_dialog(cx));
                 assert!(other.read(cx).focus.is_focused(window));
             })
-            .unwrap()
+            .unwrap();
     });
     pick(None, window, &host, cx);
     cx.update(|cx| window.update(cx, |_, window, cx| assert!(window.has_active_dialog(cx))).unwrap());
