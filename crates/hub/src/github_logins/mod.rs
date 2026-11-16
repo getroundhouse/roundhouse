@@ -1,6 +1,7 @@
-//! The logins the hub holds for GitHub accounts, and which account is the default. Each token is a file of its own, in
-//! a directory apart from agents' logins, which `crate::login_files` keeps in the order it says, and everything else
-//! about the login is on its account's row in the database, as `crate::logins` does for agents' accounts.
+//! The logins the hub holds for GitHub accounts, which account is the default, and so what every worker gives its
+//! processes for github.com. Each token is a file of its own, in a directory apart from agents' logins, which
+//! `crate::login_files` keeps in the order it says, and everything else about the login is on its account's row in the
+//! database, as `crate::logins` does for agents' accounts.
 
 #[cfg(test)]
 use crate::store::Store;
@@ -18,3 +19,4 @@ mod tests;
 
 mod accounts;
 pub(crate) use accounts::{Connect, GithubAccountChange, GithubLogins};
+mod credential;

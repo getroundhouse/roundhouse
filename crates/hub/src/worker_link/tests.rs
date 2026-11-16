@@ -7,7 +7,8 @@ use process::ProcessRecord;
 use protocol::frame;
 use protocol::paths::WORKER_RECORD_FILE;
 use protocol::worker::{
-    AskId, AskOutcome, AskReply, CancelSetup, GitStatus, PullRequestAnswer, PullRequestReply, WorkerAsk, WorkerOutcome,
+    AskId, AskOutcome, AskReply, CancelSetup, GitCredentialSet, GitStatus, GithubCredential, PullRequestAnswer,
+    PullRequestReply, WorkerAsk, WorkerCall, WorkerOutcome, WorkerRequest,
 };
 use providers::local::{LocalConfig, LocalProvider};
 
@@ -36,20 +37,16 @@ fn provider_running(dir: &Path, script: &str) -> Arc<dyn Provider> {
 
 /// A hub whose store has the workspace `w`, ready at `/w`, and its session `s`, and whose workers `provider` starts.
 fn hub_using(dir: &Path, provider: &Arc<dyn Provider>) -> Arc<Hub> {
+    hub_timed(dir, provider, Timers::DEFAULT)
+}
+
+/// The same, with `timers`.
+fn hub_timed(dir: &Path, provider: &Arc<dyn Provider>, timers: Timers) -> Arc<Hub> {
     let store = Arc::new(store_with_session(dir));
     store.workspace_ready(&"w".into(), "/w", &"alder".into(), "main", None).unwrap();
     let providers = ProviderSet::only(provider.clone());
     let github = Github::new(NO_GITHUB.to_string());
-    Arc::new(Hub::new(
-        Build::UNSTAMPED,
-        store,
-        HubDirs::in_dir(dir),
-        providers,
-        github,
-        Vec::new(),
-        false,
-        Timers::DEFAULT,
-    ))
+    Arc::new(Hub::new(Build::UNSTAMPED, store, HubDirs::in_dir(dir), providers, github, Vec::new(), false, timers))
 }
 
 /// Writes each frame to a file in `dir` by its name, for a script to send.
@@ -142,22 +139,21 @@ async fn a_worker_that_chose_another_version_is_not_used() {
 #[tokio::test]
 async fn a_worker_asking_for_its_pull_request_is_answered_once_it_has_answered_the_calls_that_takes() {
     let dir = tempfile::tempdir().unwrap();
-    let hello = WorkerResponse::Hello(HelloReply { protocol_version: versions::WORKERS.newest, build: None });
     let no_limit = WorkerOutcome::Error(ApiError::new(ErrorCode::Unavailable, "GitHub can't be reached"));
     let none = WorkerResponse::PullRequest(PullRequestReply { pull_request: None, branch: None });
     frames_in(
         dir.path(),
         &[
-            ("hello", WorkerFrame::Reply { id: 1, outcome: WorkerOutcome::Response(hello) }),
             ("ask", WorkerFrame::Ask { id: AskId::new(9), session_id: "s".into(), ask: WorkerAsk::PullRequest }),
             // How much of GitHub's limit is left, then the pull request.
-            ("limit", WorkerFrame::Reply { id: 2, outcome: no_limit }),
-            ("found", WorkerFrame::Reply { id: 3, outcome: WorkerOutcome::Response(none) }),
+            ("limit", WorkerFrame::Reply { id: 3, outcome: no_limit }),
+            ("found", WorkerFrame::Reply { id: 4, outcome: WorkerOutcome::Response(none) }),
         ],
     );
     let d = dir.path().display();
     let script = format!(
-        "read -r call\ncat '{d}/hello'\ncat '{d}/ask'\nread -r call\ncat '{d}/limit'\nread -r call\ncat '{d}/found'\n{}",
+        "{}cat '{d}/ask'\nread -r call\ncat '{d}/limit'\nread -r call\ncat '{d}/found'\n{}",
+        greeted(dir.path(), WorkerOutcome::Response(WorkerResponse::Ok)),
         answer_to_file(dir.path())
     );
     let provider = provider_running(dir.path(), &script);
@@ -180,11 +176,9 @@ async fn a_worker_asking_for_its_pull_request_is_answered_once_it_has_answered_t
 #[tokio::test]
 async fn an_ask_this_hub_cant_read_is_refused() {
     let dir = tempfile::tempdir().unwrap();
-    let hello = WorkerResponse::Hello(HelloReply { protocol_version: versions::WORKERS.newest, build: None });
-    frames_in(dir.path(), &[("hello", WorkerFrame::Reply { id: 1, outcome: WorkerOutcome::Response(hello) })]);
     let ask = r#"{"frame":"ask","id":9,"session_id":{"newer":true},"ask":{"method":"pull_request"}}"#;
-    let d = dir.path().display();
-    let script = format!("read -r call\ncat '{d}/hello'\necho '{ask}'\n{}", answer_to_file(dir.path()));
+    let greeted = greeted(dir.path(), WorkerOutcome::Response(WorkerResponse::Ok));
+    let script = format!("{greeted}echo '{ask}'\n{}", answer_to_file(dir.path()));
     let provider = provider_running(dir.path(), &script);
     provider.create(&"i".into(), None, None, "i").await.unwrap();
     let hub = hub_using(dir.path(), &provider);
@@ -198,6 +192,67 @@ async fn an_ask_this_hub_cant_read_is_refused() {
     assert_eq!(answer.answer, AskId::new(9));
     assert!(matches!(&answer.outcome, AskOutcome::Error(e) if e.code == ErrorCode::Unsupported), "{answer:?}");
     link.kill();
+}
+
+/// The worker answers the hello only once it has read the set too, so a hub that waited for the hello's answer before
+/// it queued the set would fail, and the hub's next call comes after the set.
+#[tokio::test]
+async fn a_worker_is_set_the_hubs_git_credential_right_behind_its_hello_before_anything_else() {
+    let dir = tempfile::tempdir().unwrap();
+
+    let (link, credential) = greeted_link(dir.path(), WorkerOutcome::Response(WorkerResponse::Ok)).await;
+    let cancelled = link.call(CancelSetup).await;
+
+    let call = |name: &str| frame::decode::<WorkerCall>(&std::fs::read(dir.path().join(name)).unwrap()).unwrap();
+    let set = WorkerRequest::GitCredentialSet(GitCredentialSet { credential });
+    assert_eq!(call("set"), WorkerCall { id: 2, request: set });
+    assert_eq!(call("next"), WorkerCall { id: 3, request: WorkerRequest::CancelSetup });
+    assert_eq!(cancelled, Ok(()));
+    link.kill();
+}
+
+#[tokio::test]
+async fn a_worker_from_before_git_credentials_is_used_all_the_same() {
+    let dir = tempfile::tempdir().unwrap();
+    let unknown = ApiError::new(ErrorCode::Unsupported, "a request this worker doesn't know");
+
+    let (link, _) = greeted_link(dir.path(), WorkerOutcome::Error(unknown)).await;
+    let cancelled = link.call(CancelSetup).await;
+
+    assert_eq!(cancelled, Ok(()));
+    link.kill();
+}
+
+/// A link to a worker that answers the hub's set of its git credential with `set_answer`, and its next call, which it
+/// keeps in `next` in `dir`, as done, and what the hub had to set as it opened.
+async fn greeted_link(dir: &Path, set_answer: WorkerOutcome) -> (Arc<WorkerLink>, GithubCredential) {
+    let done = WorkerFrame::Reply { id: 3, outcome: WorkerOutcome::Response(WorkerResponse::Ok) };
+    frames_in(dir, &[("done", done)]);
+    let d = dir.display();
+    let next = format!("read -r next\nprintf '%s\\n' \"$next\" > '{d}/next'\ncat '{d}/done'\ncat >/dev/null");
+    let provider = provider_running(dir, &format!("{}{next}", greeted(dir, set_answer)));
+    provider.create(&"i".into(), None, None, "i").await.unwrap();
+    // Short, so a hub that waits for the hello's answer before it sets the credential fails soon.
+    let hub = hub_timed(dir, &provider, Timers { hello_within: Duration::from_secs(2), ..Timers::DEFAULT });
+    let credential = hub.git_credential().borrow().clone();
+    let log = dir.join("logs/i.log");
+    let opened = WorkerLink::open(hub, provider, "w".into(), "i".into(), &log, Opening::Started).await;
+    (opened.unwrap(), credential)
+}
+
+/// For a script: reads the hub's hello and the git credential it sets behind it, keeping the set in `set` in `dir`,
+/// then answers the hello, and the set with `set`, as its first two calls.
+fn greeted(dir: &Path, set: WorkerOutcome) -> String {
+    let hello = WorkerResponse::Hello(HelloReply { protocol_version: versions::WORKERS.newest, build: None });
+    frames_in(
+        dir,
+        &[
+            ("hello", WorkerFrame::Reply { id: 1, outcome: WorkerOutcome::Response(hello) }),
+            ("set-answer", WorkerFrame::Reply { id: 2, outcome: set }),
+        ],
+    );
+    let d = dir.display();
+    format!("read -r call\nread -r set\nprintf '%s\\n' \"$set\" > '{d}/set'\ncat '{d}/hello'\ncat '{d}/set-answer'\n")
 }
 
 /// For a script: reads the hub's next line, an answer, into `answered` in `dir`, all at once, then waits.

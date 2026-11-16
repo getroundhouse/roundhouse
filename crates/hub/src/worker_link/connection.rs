@@ -1,16 +1,15 @@
+use super::credential::Following;
 use super::{acks, reaching, reading};
 use crate::calls::{Calls, NotSent};
 use crate::child_process::{ChildProcess, Spawned};
 use crate::error::internal;
 use crate::hub::Hub;
-use crate::versions;
 use acks::Acks;
 use protocol::Build;
 use protocol::client::{ApiError, ErrorCode, error_chain};
 use protocol::model::{InstanceId, RunId, SessionId, WorkspaceId};
 use protocol::worker::{
-    AskAnswer, Hello, HelloReply, Received, Reply, Request, RunningAgent, RunningAgents, Stop, WorkerCall, WorkerFrame,
-    WorkerResponse,
+    AskAnswer, Received, Reply, Request, RunningAgent, RunningAgents, Stop, WorkerCall, WorkerFrame, WorkerResponse,
 };
 use providers::Provider;
 use reaching::{Opening, reach};
@@ -62,8 +61,9 @@ fn unexpected(reply: &WorkerResponse) -> ApiError {
 }
 
 impl WorkerLink {
-    /// Starts the instance's worker and says hello. On failure nothing is left running, so the next
-    /// attempt starts clean.
+    /// Starts the instance's worker, says hello and sets the hub's git credential, as [`WorkerLink::greet`] says, and
+    /// from then on sets each the hub has, as [`Following::follow`] says. On failure nothing is left running, so the
+    /// next attempt starts clean.
     pub(crate) async fn open(
         hub: Arc<Hub>,
         provider: Arc<dyn Provider>,
@@ -87,6 +87,7 @@ impl WorkerLink {
             version: OnceLock::new(),
         });
         let within = hub.timers.hello_within;
+        let following = Following::new(link.clone(), hub.git_credential());
         tokio::spawn(acks::acknowledge(hub.clone(), link.clone()));
         tokio::spawn(reading::read_frames(
             hub,
@@ -97,24 +98,12 @@ impl WorkerLink {
             reader,
         ));
 
-        let hello = link.call(Hello {
-            protocol_version: versions::WORKERS.newest,
-            oldest_protocol_version: Some(versions::WORKERS.oldest),
-            // So a restart leaves it running, for the next hub. The hub says when it means it to stop.
-            keep_running_without_hub: true,
-        });
-        let failure = match tokio::time::timeout(within, hello).await {
-            Ok(Ok(HelloReply { protocol_version, build })) if versions::WORKERS.speaks(protocol_version) => {
-                let _ = link.build.set(build);
-                let _ = link.version.set(protocol_version);
+        let failure = match link.greet(within, following).await {
+            Ok(following) => {
+                tokio::spawn(following.follow());
                 return Ok(link);
             }
-            Ok(Ok(HelloReply { protocol_version, .. })) => ApiError::new(
-                ErrorCode::VersionMismatch,
-                format!("the worker chose protocol {protocol_version}, and this hub speaks {}", versions::WORKERS),
-            ),
-            Ok(Err(e)) => e,
-            Err(_) => ApiError::new(ErrorCode::Worker, format!("the worker didn't answer within {within:?}")),
+            Err(failure) => failure,
         };
         link.kill();
         // A worker refused its instance says so, because another worker is serving it, which ending the instance would

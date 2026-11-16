@@ -27,7 +27,7 @@ pub struct HubSettings {
 /// What the settings of a hub that keeps GitHub accounts say of them.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct GithubSettings {
-    /// The default: the [`GithubAccount`](super::GithubAccount) agents are to push and open pull requests as, on every
+    /// The default: the [`GithubAccount`](super::GithubAccount) agents push and open pull requests as, on every
     /// machine, for every repository on GitHub. `None` is each machine's own login. Connecting the first GitHub account
     /// the hub has a record of makes it the default. Otherwise only
     /// [`GithubAccountSetDefault`](crate::client::github_accounts::GithubAccountSetDefault) changes it, so a default

@@ -25,6 +25,7 @@ mod failing;
 mod feed;
 mod finding_a_hub;
 mod git_credential;
+mod github_accounts;
 mod hub_copies;
 mod hub_settings;
 mod instructions;

@@ -27,7 +27,7 @@ impl Hub {
     /// client when that changed the account's record.
     pub(crate) async fn github_account_disconnect(&self, id: GithubAccountId) -> Result<GithubAccount, ApiError> {
         let logins = Arc::clone(&self.github_logins);
-        let change = off_thread(move || logins.disconnect(&id)).await?;
+        let change = off_thread(move || logins.disconnect(&id, now_ms())).await?;
         Ok(self.announce_github_account(change))
     }
 
@@ -46,7 +46,7 @@ impl Hub {
     /// [`Hub::tidy_logins`] says.
     pub(in super::super) async fn tidy_github_logins(&self) {
         let logins = Arc::clone(&self.github_logins);
-        if let Err(e) = off_thread(move || logins.tidy()).await {
+        if let Err(e) = off_thread(move || logins.tidy(now_ms())).await {
             error!("couldn't make the GitHub logins' files and the GitHub accounts agree: {}", e.message);
         }
     }

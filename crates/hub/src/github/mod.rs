@@ -9,6 +9,8 @@ use protocol::model::GithubToken;
 #[cfg(test)]
 mod tests;
 
+mod address;
+pub use address::github_api;
 mod client;
 #[cfg(test)]
 use client::ASK_WITHIN;
@@ -16,7 +18,7 @@ pub(crate) use client::{Github, TokenOwner};
 mod expiration;
 #[cfg(test)]
 use expiration::ends_at_ms;
-#[cfg(test)]
+#[cfg(any(test, feature = "testing"))]
 mod stand_in;
-#[cfg(test)]
-pub(crate) use stand_in::{Answer, StandIn};
+#[cfg(any(test, feature = "testing"))]
+pub use stand_in::{Answer, StandIn};

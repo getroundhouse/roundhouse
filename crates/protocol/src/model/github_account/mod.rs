@@ -1,4 +1,4 @@
-//! The GitHub accounts the hub holds a login for, which agents are to push and open pull requests as.
+//! The GitHub accounts the hub holds a login for, which agents push and open pull requests as.
 
 #[cfg(test)]
 use super::{GithubAccountId, GithubUsername, Rev};

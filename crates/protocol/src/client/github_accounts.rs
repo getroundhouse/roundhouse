@@ -1,5 +1,5 @@
-//! The requests about the GitHub accounts a hub holds, the default of which agents are to push and open pull requests
-//! as on every machine. A hub older than these refuses them, as `is_unsupported` says, and its settings say nothing of
+//! The requests about the GitHub accounts a hub holds, the default of which agents push and open pull requests as on
+//! every machine. A hub older than these refuses them, as `is_unsupported` says, and its settings say nothing of
 //! GitHub.
 
 use serde::{Deserialize, Serialize};
