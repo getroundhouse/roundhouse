@@ -188,16 +188,14 @@ fn a_plan_can_be_approved_or_sent_back(cx: &mut TestAppContext) {
     ui.input("plan:First attempt");
     ui.press("enter");
     ui.wait("the plan", |ui| ui.session_status() == Some(SessionStatus::WaitingApproval));
-    let seq = ui.next_open_approval();
-    ui.click(ElementId::NamedInteger("keep-planning".into(), seq.get()));
+    ui.keep_planning();
     ui.wait("the turn to end", |ui| ui.session_status() == Some(SessionStatus::Idle));
     assert_eq!(ui.chat_mode(), Some(Plan), "still planning");
 
     ui.input("plan:Second attempt");
     ui.press("enter");
     ui.wait("the next plan", |ui| ui.session_status() == Some(SessionStatus::WaitingApproval));
-    let seq = ui.next_open_approval();
-    ui.click(ElementId::NamedInteger("approve-plan".into(), seq.get()));
+    ui.approve_plan();
     ui.wait("plan mode to end, by the agent's own report", |ui| {
         ui.session_status() == Some(SessionStatus::Idle) && ui.chat_mode() == Some(FullAccess)
     });

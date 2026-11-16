@@ -58,8 +58,7 @@ fn a_plan_is_selected_with_the_rest(cx: &mut TestAppContext) {
     let plan = "Timetables first, then the sidings, then each junction.";
     stack.client().session_prompt(&session, &format!("plan:{plan}"), None).unwrap();
     let mut ui = open(cx, &stack);
-    let approval = ui.next_open_approval();
-    ui.click(ElementId::NamedInteger("approve-plan".into(), approval.get()));
+    ui.approve_plan();
     ui.wait("the plan's turn to end", |ui| ui.session_status() == Some(SessionStatus::Idle));
     stack.run(&session, &format!("say:{LAST}"));
     let window = settled(&mut ui, &stack, &session);

@@ -2,7 +2,7 @@
 //! nothing in the window when it does.
 
 use gpui_kit::test::{ElementSnapshot, TestWindowExt as _};
-use gpui_kit::{AppContext as _, ElementId, Entity, Pixels, ScrollDelta, TestAppContext, point, px};
+use gpui_kit::{AppContext as _, Entity, Pixels, ScrollDelta, TestAppContext, point, px};
 use protocol::event::{ContentBlock, EventBody};
 use protocol::model::SessionStatus;
 use transcript::{Place, Transcript};
@@ -73,8 +73,7 @@ fn scrolling_up_into_a_long_plan_moves_as_far_as_the_wheel_turns(cx: &mut TestAp
     stack.client().session_prompt(&session, &format!("plan:{plan}"), None).unwrap();
     let mut ui = Ui::open(cx, &stack);
     ui.wait("the workspace", |ui| ui.transcript().is_some());
-    let approval = ui.next_open_approval();
-    ui.click(ElementId::NamedInteger("approve-plan".into(), approval.get()));
+    ui.approve_plan();
     ui.wait("the plan's turn to end", |ui| ui.session_status() == Some(SessionStatus::Idle));
     stack.run(&session, "prose:40:2");
     let transcript = ui.transcript().unwrap();
