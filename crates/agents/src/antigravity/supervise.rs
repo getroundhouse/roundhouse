@@ -21,13 +21,16 @@ pub(super) async fn supervise(
     let out = tokio::spawn(stdio::read_json_lines(stdout, shared.tap.clone(), tx));
     let events = tokio::spawn(notifications::read(shared.clone(), rx));
     let err = tokio::spawn(stdio::read_stderr(stderr));
+    let wakeup = tokio::spawn(super::wakeup::watch(shared.clone()));
     let status = child.wait().await;
     shared.gone.store(true, Ordering::SeqCst);
+    wakeup.abort();
+    let _ = wakeup.await;
     shared.rpc.close().await;
     stdio::drain(out).await;
     stdio::drain(events).await;
     let stderr_tail = stdio::drain(err).await.unwrap_or_default();
-    super::control::settle_all(&shared).await;
+    super::turn::settle_all(&shared).await;
     if let Some(path) = pid_file {
         let _ = tokio::fs::remove_file(path).await;
     }

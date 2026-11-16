@@ -1,15 +1,28 @@
 //! Where `agy` keeps a conversation on its machine, under the home's `.gemini/antigravity-cli/`, as
 //! `docs/antigravity-cli.md` says. The adapter reads it to tell a conversation `agy` no longer has from one it can't
-//! read, and removes a title call's, which nobody resumes.
+//! read, to notice a between-turn reactive wakeup `agy` 1.5.9 hasn't streamed over ACP, and to remove a title call's
+//! files, which nobody resumes.
 
 use std::path::{Path, PathBuf};
 
 use protocol::model::AgentSessionId;
 
+use crate::AgentOptions;
+
 pub(super) struct ConversationFiles {
     db: PathBuf,
     annotations: PathBuf,
     brain: PathBuf,
+}
+
+/// The home directory the launched `agy` process uses: an explicit `HOME`/`USERPROFILE` override in `env`, or the
+/// worker's configured home.
+pub(super) fn effective_home<'a>(env: &'a [(String, String)], options: &'a AgentOptions) -> Option<&'a Path> {
+    env.iter()
+        .rev()
+        .find(|(key, _)| key == protocol::paths::HOME_VAR)
+        .map(|(_, value)| Path::new(value.as_str()))
+        .or(options.binary.home.as_deref())
 }
 
 impl ConversationFiles {
@@ -26,6 +39,11 @@ impl ConversationFiles {
             annotations: root.join("annotations").join(format!("{id}.pbtxt")),
             brain: root.join("brain").join(id),
         })
+    }
+
+    /// The JSONL trajectory log `agy` appends every user, model and `<SYSTEM_MESSAGE>` wakeup step to.
+    pub(super) fn transcript(&self) -> PathBuf {
+        self.brain.join(".system_generated").join("logs").join("transcript.jsonl")
     }
 
     /// Whether the conversation's own file is gone. One that can't be looked for counts as there, so nothing is taken

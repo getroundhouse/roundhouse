@@ -1,4 +1,4 @@
-use protocol::capability::{Capabilities, Claimed, approvals, conversation, output, settings, turns};
+use protocol::capability::{Capabilities, Claimed, approvals, background, conversation, output, settings, turns};
 
 pub(super) fn claims() -> Capabilities {
     let mut claims = Capabilities::default();
@@ -12,6 +12,8 @@ pub(super) fn claims() -> Capabilities {
     claims.calls.exit_codes = Some(Claimed {});
     claims.turns.cancel = Some(turns::Cancel { stops: turns::CancelStops::Nothing });
     claims.turns.tokens = Some(Claimed {});
+    claims.turns.own_turns = Some(Claimed {});
+    claims.background.background_commands = Some(background::BackgroundCommands { hears: background::Hears::AtOnce });
     claims.approvals.modes = Some(approvals::Modes { default: full_access(), others: vec![plan()] });
     claims.approvals.requests = Some(approvals::Requests {
         parts: vec![approvals::DecisionPart::Stop, approvals::DecisionPart::ForConversation],

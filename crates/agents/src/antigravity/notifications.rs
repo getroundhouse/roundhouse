@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
-use protocol::capability::calls::Call;
-use protocol::event::{AgentRunState, ContentBlock, Denied, EventBody, NoticeLevel};
+use protocol::capability::calls::{Call, CallOutput, output::Ended};
+use protocol::event::{AgentRunState, ContentBlock, Denied, EventBody, NoticeLevel, TaskOutcome};
 use protocol::model::{ContextUsage, MaxSetBy, PermissionMode, ToolUseId};
 use protocol::tail::{BlockKind, DeltaChange, StreamDelta};
-use serde_json::Value;
+use serde_json::{Value, json};
 use tokio::sync::mpsc;
 
 use super::{
@@ -63,12 +63,18 @@ async fn session_update(shared: &Shared, update: SessionUpdate, raw: String) {
     match update {
         SessionUpdate::UserMessageChunk { .. } => on_user_message(shared, raw).await,
         SessionUpdate::AgentThoughtChunk { text } => {
-            flush_text(shared).await;
-            stream_chunk(shared, true, &text).await;
+            if !text.is_empty() {
+                ensure_own_turn_started(shared).await;
+                flush_text(shared).await;
+                stream_chunk(shared, true, &text).await;
+            }
         }
         SessionUpdate::AgentMessageChunk { text } => {
-            flush_thought(shared).await;
-            stream_chunk(shared, false, &text).await;
+            if !text.is_empty() {
+                ensure_own_turn_started(shared).await;
+                flush_thought(shared).await;
+                stream_chunk(shared, false, &text).await;
+            }
         }
         SessionUpdate::ToolCall(wire) | SessionUpdate::ToolCallUpdate(wire) => {
             flush_streams(shared).await;
@@ -101,15 +107,43 @@ async fn session_update(shared: &Shared, update: SessionUpdate, raw: String) {
     }
 }
 
-async fn on_user_message(shared: &Shared, raw: String) {
-    let UserChunk::FirstOfPrompt(prompt) = shared.state.lock().accept_user_chunk() else {
-        return;
-    };
-    flush_streams(shared).await;
-    shared.state.lock().reply = None;
-    if let Some(prompt) = prompt {
-        shared.event(EventBody::PromptTaken { prompt }, Some(raw)).await;
+pub(super) async fn ensure_own_turn_started(shared: &Shared) {
+    let started = shared.state.lock().begin_own_turn();
+    if let Some(why) = started {
         shared.event(EventBody::AgentState { state: AgentRunState::Running }, None).await;
+        shared.event(EventBody::OwnTurn(why), None).await;
+    }
+}
+
+async fn on_user_message(shared: &Shared, raw: String) {
+    let chunk = shared.state.lock().accept_user_chunk();
+    match chunk {
+        UserChunk::Ignore => {}
+        UserChunk::FirstOfPrompt(prompt) => {
+            flush_streams(shared).await;
+            {
+                let mut state = shared.state.lock();
+                state.reply = None;
+                state.ended_tasks.clear();
+            }
+            if let Some(prompt) = prompt {
+                shared.event(EventBody::PromptTaken { prompt }, Some(raw)).await;
+                shared.event(EventBody::AgentState { state: AgentRunState::Running }, None).await;
+            }
+        }
+        UserChunk::ContinueDrain => {
+            ensure_own_turn_started(shared).await;
+            flush_streams(shared).await;
+            shared.state.lock().reply = None;
+        }
+        UserChunk::CancelDrain { session_id } => {
+            let has_ended = !shared.state.lock().ended_tasks.is_empty();
+            if has_ended {
+                ensure_own_turn_started(shared).await;
+            }
+            flush_streams(shared).await;
+            let _ = shared.rpc.notify("session/cancel", json!({ "sessionId": session_id })).await;
+        }
     }
 }
 
@@ -215,8 +249,9 @@ pub(super) async fn ensure_call_emitted(shared: &Shared, wire: &ToolCallWire, ra
         if state.emitted_calls.insert(id.clone()) {
             state.reply = None;
             let call = calls::translate_call(wire);
+            let order = state.next_order();
             let outlives = wire.status.is_some_and(|status| outlives_turn(&call, status));
-            state.calls.insert(id.clone(), OpenCall { call: call.clone(), outlives_turn: outlives });
+            state.calls.insert(id.clone(), OpenCall { call: call.clone(), order, outlives_turn: outlives });
             Some((call, state.model.as_str().to_owned()))
         } else {
             if let Some(status) = wire.status
@@ -228,6 +263,7 @@ pub(super) async fn ensure_call_emitted(shared: &Shared, wire: &ToolCallWire, ra
         }
     };
     if let Some((call, model)) = to_emit {
+        ensure_own_turn_started(shared).await;
         shared
             .event(
                 EventBody::Assistant {
@@ -258,13 +294,14 @@ async fn on_tool(shared: &Shared, wire: ToolCallWire, raw: String) {
     let Some((call, cancelling, was_denied)) = settled else { return };
     let output = calls::translate_output(&call, &wire, cancelling, was_denied);
     let is_error = wire.status == Some(ToolStatusWire::Failed);
+    let task_outcome = task_outcome_of(&output, is_error);
     let denied = (is_error && was_denied).then_some(Denied { said: None });
     shared
         .event(
             EventBody::AgentUser {
                 subagent: None,
                 blocks: vec![ContentBlock::CallResult {
-                    tool_use_id: id,
+                    tool_use_id: id.clone(),
                     output,
                     is_error,
                     denied,
@@ -274,6 +311,23 @@ async fn on_tool(shared: &Shared, wire: ToolCallWire, raw: String) {
             Some(raw),
         )
         .await;
+    let updated_tasks = shared.state.lock().finish_listed_task(&id, task_outcome);
+    if let Some((tasks, stopped)) = updated_tasks {
+        shared.event(EventBody::AgentTasks { tasks, stopped }, None).await;
+    }
+}
+
+fn task_outcome_of(output: &CallOutput, is_error: bool) -> TaskOutcome {
+    let CallOutput::Command(cmd) = output else {
+        return if is_error { TaskOutcome::Failed } else { TaskOutcome::Finished };
+    };
+    if cmd.ended == Ended::Stopped {
+        TaskOutcome::Stopped
+    } else if is_error || cmd.exit_code.is_some_and(|code| code != 0) {
+        TaskOutcome::Failed
+    } else {
+        TaskOutcome::Finished
+    }
 }
 
 async fn on_mode(shared: &Shared, mode_id: &str, raw: String) {

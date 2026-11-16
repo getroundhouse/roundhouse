@@ -5,3 +5,4 @@ mod calls;
 mod harness;
 mod lifecycle;
 mod transitions;
+mod wakeup;
