@@ -349,4 +349,6 @@ pub(in super::super) const MIGRATIONS: &[&str] = &[
     github_accounts::GITHUB_ACCOUNTS,
     // Each sign-in with GitHub, and whether a GitHub account's login needs signing in again, in `github_sign_ins`.
     github_sign_ins::GITHUB_SIGN_INS,
+    // Who each provider's machines' own `gh` is logged in as, found since the hub started, in `github_accounts`.
+    github_accounts::FOUND_GITHUB_LOGINS,
 ];

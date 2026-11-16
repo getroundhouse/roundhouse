@@ -1,5 +1,5 @@
-//! The migration that keeps the GitHub accounts the hub holds a login for, kept apart since it's long. It has its place
-//! in `MIGRATIONS`.
+//! The migrations that keep the GitHub accounts the hub holds a login for, and the logins found on each provider's
+//! machines, kept apart since they're long. Each has its place in `MIGRATIONS`.
 
 /// Each GitHub account the hub holds, or held, a login for, as a record the feed announces: who it is on GitHub, by the
 /// user's number and the name GitHub last gave, and the login while the hub holds one. `login_kind` is how it was
@@ -27,4 +27,24 @@ pub(super) const GITHUB_ACCOUNTS: &str = r"
         UPDATE github_accounts SET rev = (SELECT value FROM counters WHERE name = 'rev') WHERE rowid = NEW.rowid;
     END;
     ALTER TABLE hub_settings ADD COLUMN github_account_id TEXT REFERENCES github_accounts(id);
+";
+
+/// Who each provider's machines' own `gh` is logged in to github.com as, as a record the feed announces, by the
+/// provider's name. `login` is JSON, as `GhLogin` has it. The hub deletes every row as it starts, since it asks again,
+/// so none survives a restart. A change to a row moves its revision only when it finds another login, since the update
+/// that writes it again leaves the row as it was.
+pub(super) const FOUND_GITHUB_LOGINS: &str = r"
+    CREATE TABLE found_github_logins (
+        provider TEXT PRIMARY KEY,
+        login TEXT NOT NULL,
+        rev INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE TRIGGER found_github_logins_rev_on_insert AFTER INSERT ON found_github_logins BEGIN
+        UPDATE counters SET value = value + 1 WHERE name = 'rev';
+        UPDATE found_github_logins SET rev = (SELECT value FROM counters WHERE name = 'rev') WHERE rowid = NEW.rowid;
+    END;
+    CREATE TRIGGER found_github_logins_rev_on_update AFTER UPDATE ON found_github_logins WHEN NEW.rev = OLD.rev BEGIN
+        UPDATE counters SET value = value + 1 WHERE name = 'rev';
+        UPDATE found_github_logins SET rev = (SELECT value FROM counters WHERE name = 'rev') WHERE rowid = NEW.rowid;
+    END;
 ";

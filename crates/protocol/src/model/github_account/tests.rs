@@ -48,8 +48,30 @@ fn any_account() -> impl Strategy<Value = GithubAccount> {
     })
 }
 
+fn any_gh_login() -> impl Strategy<Value = GhLogin> {
+    let works = prop_oneof![
+        Just(GhLoginWorks::Yes),
+        Just(GhLoginWorks::Refused),
+        Just(GhLoginWorks::CouldntTell),
+        Just(GhLoginWorks::Unknown),
+    ];
+    let logged_in = ("[a-z][a-z0-9-]{0,38}", works)
+        .prop_map(|(name, works)| GhLogin::LoggedIn { username: GithubUsername::from(name), works });
+    prop_oneof![logged_in, Just(GhLogin::LoggedOut), Just(GhLogin::NotInstalled)]
+}
+
 proptest! {
     #![proptest_config(Config { rng_seed: RngSeed::Fixed(1), failure_persistence: None, ..Config::default() })]
+
+    /// Logged in as someone, logged in to nothing, and with no `gh` there.
+    #[test]
+    fn a_found_login_reads_back_as_it_was(provider in "[a-z]{1,8}", login in any_gh_login(), rev in any::<u64>()) {
+        let found = FoundGithubLogin { provider: ProviderName::from(provider), login, rev: Rev::new(rev) };
+
+        let written = serde_json::to_string(&found).unwrap();
+
+        prop_assert_eq!(serde_json::from_str::<FoundGithubLogin>(&written).unwrap(), found);
+    }
 
     /// Held or disconnected, ending or not.
     #[test]
@@ -132,4 +154,26 @@ fn a_sign_in_in_a_state_from_a_newer_hub_reads_as_unknown_and_isnt_waiting() {
 
     assert_eq!(sign_in.status, GithubSignInStatus::Unknown);
     assert!(!sign_in.status.is_waiting());
+}
+
+/// As a newer worker might say it, through a hub that passes it on, and with no revision, as from a hub that keeps none.
+#[test]
+fn a_found_login_in_a_state_from_a_newer_peer_reads_as_unknown() {
+    let newer = json!({"provider": "local", "login": {"state": "logged_in_twice", "usernames": ["ada", "grace"]}});
+
+    let found: FoundGithubLogin = serde_json::from_value(newer).unwrap();
+
+    assert_eq!((found.login, found.rev), (GhLogin::Unknown, Rev::default()));
+}
+
+/// Whether its token works, as a newer worker might say it, and as a peer that doesn't say it leaves it out.
+#[test]
+fn whether_a_found_login_works_reads_as_unknown_when_its_from_a_newer_peer_or_not_said() {
+    let newer = json!({"state": "logged_in", "username": "ada", "works": "only_on_tuesdays"});
+    let unsaid = json!({"state": "logged_in", "username": "ada"});
+
+    for login in [newer, unsaid] {
+        let login: GhLogin = serde_json::from_value(login).unwrap();
+        assert_eq!(login, GhLogin::LoggedIn { username: "ada".into(), works: GhLoginWorks::Unknown });
+    }
 }

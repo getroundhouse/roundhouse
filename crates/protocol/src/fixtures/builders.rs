@@ -5,9 +5,10 @@ use crate::event::{
 };
 use crate::model::{
     Account, AgentKind, ApprovalId, BranchName, Call, CallResult, ChildStatus, ChildWorktree, Draft, Effort,
-    GithubAccount, GithubLoginKind, GithubSignIn, GithubSignInStatus, GithubUser, GithubUserId, HeldGithubLogin,
-    MadeBy, ModelName, PermissionMode, Place, RecentWork, Rev, Seq, Session, SessionStatus, SetupStatus, Subagent,
-    SubagentId, SubagentStatus, TitleSource, ToolUseId, Workspace, WorkspaceStatus,
+    FoundGithubLogin, GhLogin, GhLoginWorks, GithubAccount, GithubLoginKind, GithubSignIn, GithubSignInStatus,
+    GithubUser, GithubUserId, HeldGithubLogin, MadeBy, ModelName, PermissionMode, Place, RecentWork, Rev, Seq, Session,
+    SessionStatus, SetupStatus, Subagent, SubagentId, SubagentStatus, TitleSource, ToolUseId, Workspace,
+    WorkspaceStatus,
 };
 
 /// The session `id`, in the workspace `w`, idle with nothing in its log. Its agent is Claude, running Opus with full
@@ -139,6 +140,15 @@ pub fn github_sign_in(id: &str) -> GithubSignIn {
     GithubSignIn {
         id: id.into(),
         status: GithubSignInStatus::Waiting { code, address, code_ends_at_ms: 900_000 },
+        rev: Rev::default(),
+    }
+}
+
+/// The login found on `provider`'s machines, whose `gh` is logged in as `ada`, with a token GitHub took.
+pub fn found_github_login(provider: &str) -> FoundGithubLogin {
+    FoundGithubLogin {
+        provider: provider.into(),
+        login: GhLogin::LoggedIn { username: "ada".into(), works: GhLoginWorks::Yes },
         rev: Rev::default(),
     }
 }

@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet};
+use std::path::Path;
 
 use process::Environment;
 use protocol::client::{ApiError, ErrorCode};
@@ -7,7 +8,7 @@ use serde_json::Value;
 
 use super::parse::{Metadata, Policy};
 use super::{parse, query};
-use crate::git::pull_request::{Unran, run_gh};
+use crate::gh::{Unran, run_gh};
 
 pub(crate) async fn read(
     given: &Environment,
@@ -290,7 +291,7 @@ pub(super) fn next(connection: &Value) -> Result<Option<String>, ApiError> {
 }
 
 pub(super) async fn gh(given: &Environment, path: &str, args: &[&str]) -> Result<Value, ApiError> {
-    let output = run_gh(given, path, args).await.map_err(|e| match e {
+    let output = run_gh(given, Path::new(path), args).await.map_err(|e| match e {
         Unran::Missing => ApiError::new(ErrorCode::Unavailable, "gh isn't installed"),
         Unran::Failed(why) => ApiError::new(ErrorCode::Worker, why),
     })?;

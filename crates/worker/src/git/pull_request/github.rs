@@ -1,7 +1,7 @@
 use self::link::Choice;
-use super::super::GH_TIMEOUT;
 use super::super::branches::checked_out;
 use super::{link, local};
+use crate::gh::{Unran, run_gh};
 use chrono::DateTime;
 use process::Environment;
 use protocol::client::{ApiError, ErrorCode};
@@ -10,8 +10,6 @@ use protocol::worker::RateLimit;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::path::Path;
-use std::process::{Output, Stdio};
-use tokio::process::Command;
 
 /// What `gh pr view` is asked for. Not the commits, which [`commits_of`] asks for apart, by the pull request's URL. By
 /// the branch's name, `gh` 2.103 asks GitHub for up to thirty pull requests, so a field that's a list is asked for
@@ -124,7 +122,7 @@ async fn run_view(
     fields: &str,
 ) -> Result<Option<Vec<u8>>, ApiError> {
     let args: Vec<&str> = ["pr", "view"].into_iter().chain(url).chain(["--json", fields]).collect();
-    let viewed = match run_gh(given, path, &args).await {
+    let viewed = match run_gh(given, Path::new(path), &args).await {
         Ok(viewed) => viewed,
         Err(Unran::Missing) => return Err(cant_work_here("gh isn't installed")),
         Err(Unran::Failed(why)) => return Err(couldnt_say(&why)),
@@ -192,27 +190,8 @@ fn cant_work_here(why: &str) -> ApiError {
 
 /// What it printed, if it succeeded.
 async fn gh(given: &Environment, path: &str, args: &[&str]) -> Option<Vec<u8>> {
-    let output = run_gh(given, path, args).await.ok()?;
+    let output = run_gh(given, Path::new(path), args).await.ok()?;
     output.status.success().then_some(output.stdout)
-}
-
-/// Why `gh` didn't run to the end.
-pub(in crate::git) enum Unran {
-    Missing,
-    /// It couldn't start for another reason, or took too long.
-    Failed(String),
-}
-
-pub(in crate::git) async fn run_gh(given: &Environment, path: &str, args: &[&str]) -> Result<Output, Unran> {
-    let mut command = Command::new("gh");
-    command.args(args).current_dir(path).env("GH_PROMPT_DISABLED", "1").stdin(Stdio::null()).kill_on_drop(true);
-    given.apply(command.as_std_mut());
-    match tokio::time::timeout(GH_TIMEOUT, command.output()).await {
-        Ok(Ok(output)) => Ok(output),
-        Ok(Err(e)) if e.kind() == std::io::ErrorKind::NotFound => Err(Unran::Missing),
-        Ok(Err(e)) => Err(Unran::Failed(e.to_string())),
-        Err(_) => Err(Unran::Failed(format!("gh took more than {GH_TIMEOUT:?}"))),
-    }
 }
 
 pub(super) fn parse_pull_request(json: &[u8]) -> Option<Viewed> {

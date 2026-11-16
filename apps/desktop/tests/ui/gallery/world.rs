@@ -144,6 +144,7 @@ impl World {
             new_workspace_draft: None,
             github_accounts: Vec::new(),
             github_sign_ins: Vec::new(),
+            found_github_logins: Vec::new(),
             rev: Rev::default(),
         }
     }

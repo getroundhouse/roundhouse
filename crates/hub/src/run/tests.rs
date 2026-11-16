@@ -73,6 +73,19 @@ fn a_starting_hub_records_every_sign_in_with_github_the_last_left_waiting_as_end
     assert_eq!(statuses, [protocol::model::GithubSignInStatus::Ended]);
 }
 
+/// Each provider's is asked again once the hub is up, and one taken out of the hub's providers since isn't asked at all,
+/// so none the last run found is listed meanwhile.
+#[test]
+fn a_starting_hub_forgets_the_github_logins_the_last_found() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = store_with_session(dir.path());
+    store.record_found_github_login(&"gone".into(), &protocol::model::GhLogin::LoggedOut).unwrap();
+
+    recover(&store).unwrap();
+
+    assert_eq!(store.list_records().unwrap().found_github_logins, []);
+}
+
 /// What a hub started can still be running once it lets go of its lock, which the next hub can take at once, so its
 /// store stops writing first.
 #[test]

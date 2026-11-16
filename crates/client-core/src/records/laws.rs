@@ -5,7 +5,10 @@ use proptest::prelude::*;
 use proptest::sample::Index;
 use proptest::test_runner::{Config, RngSeed};
 
-use protocol::model::{Account, HubSettings, LimitWindow, NewWorkspaceDraft, Session, SessionId, Title, UsageLimit};
+use protocol::model::{
+    Account, FoundGithubLogin, GhLogin, GhLoginWorks, HubSettings, LimitWindow, NewWorkspaceDraft, Record, Session,
+    SessionId, Title, UsageLimit,
+};
 
 use super::*;
 
@@ -263,4 +266,29 @@ fn each_account_is_a_record_like_the_rest() {
     // A list from before the change, as a reconnect can bring.
     held.apply_list(Records { accounts: vec![account("ada", 4, 2)], rev: Rev::new(4), ..Records::default() });
     assert_eq!(held.snapshot().account(&"ada".into()).cloned(), Some(account("ada", 9, 5)));
+}
+
+fn found(provider: &str, login: GhLogin, rev: u64) -> FoundGithubLogin {
+    FoundGithubLogin { provider: provider.into(), login, rev: Rev::new(rev) }
+}
+
+/// Held, though no view draws one yet, and gone once a hub that started again lists none, as it does until it has
+/// asked again.
+#[test]
+fn each_found_github_login_is_a_record_like_the_rest() {
+    let mut held = HubRecords::default();
+    let ada = || GhLogin::LoggedIn { username: "ada".into(), works: GhLoginWorks::Yes };
+    let kept = |held: &HubRecords, provider: &str| {
+        held.held.get(&RecordKey::FoundGithubLogin { provider: provider.into() }).map(|kept| kept.record.clone())
+    };
+
+    let listed = vec![found("local", GhLogin::LoggedOut, 2), found("incus", GhLogin::NotInstalled, 3)];
+    assert!(held.apply_list(Records { found_github_logins: listed, rev: Rev::new(3), ..Records::default() }));
+    assert!(held.apply_notice(HubNotice::FoundGithubLogin(found("local", ada(), 5))));
+    assert!(!held.apply_notice(HubNotice::FoundGithubLogin(found("local", GhLogin::LoggedOut, 4))), "a late copy");
+
+    assert_eq!(kept(&held, "local"), Some(Record::FoundGithubLogin(found("local", ada(), 5))));
+    assert_eq!(kept(&held, "incus"), Some(Record::FoundGithubLogin(found("incus", GhLogin::NotInstalled, 3))));
+    held.apply_list(Records { rev: Rev::new(9), ..Records::default() });
+    assert_eq!((kept(&held, "local"), kept(&held, "incus")), (None, None));
 }

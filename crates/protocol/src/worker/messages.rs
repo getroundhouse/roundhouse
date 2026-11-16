@@ -1,4 +1,4 @@
-use super::{agents, children, connection, git_credential, github, one_off, tools, workspaces, worktree};
+use super::{agents, children, connection, found_login, git_credential, github, one_off, tools, workspaces, worktree};
 use crate::client::Outcome;
 use crate::model;
 use crate::model::{AgentAccount, FileContents, FileOpened, WorktreeFiles};
@@ -9,6 +9,9 @@ use children::{AddChildWorktree, ChildWorktreeAdded, WatchChildBranches};
 use connection::{Hello, HelloReply, Received, RunningAgentsReply};
 #[cfg(test)]
 use connection::{RunningAgents, Stop};
+#[cfg(test)]
+use found_login::FindGithubLogin;
+use found_login::GithubLoginReply;
 use git_credential::GitCredentialSet;
 use github::{
     GithubRateLimit, PullRequest, PullRequestReply, RateLimit, ReadRemotePullRequests, RemotePullRequestsReply,
@@ -108,6 +111,8 @@ pub enum WorkerRequest {
     AccountFor(AccountFor),
     ServeTools(ServeTools),
     GitCredentialSet(GitCredentialSet),
+    /// See [`FindGithubLogin`](super::FindGithubLogin).
+    FindGithubLogin,
     /// Any request this build doesn't know, from a hub newer than it. A worker answers with
     /// [`ErrorCode::Unsupported`](crate::client::ErrorCode::Unsupported) and carries on, as a hub does a client's.
     #[serde(other)]
@@ -143,6 +148,7 @@ pub enum WorkerResponse {
     Title(TitleReply),
     Account(AgentAccount),
     ToolsServing(ToolsServing),
+    GithubLogin(GithubLoginReply),
 }
 
 pub type WorkerOutcome = Outcome<WorkerResponse>;
@@ -159,6 +165,7 @@ mod tests {
         assert_eq!(sent(Stop.into_request()), r#"{"method":"stop"}"#);
         assert_eq!(sent(RunningAgents.into_request()), r#"{"method":"running_agents"}"#);
         assert_eq!(sent(CancelSetup.into_request()), r#"{"method":"cancel_setup"}"#);
+        assert_eq!(sent(FindGithubLogin.into_request()), r#"{"method":"find_github_login"}"#);
     }
 
     /// The rest each read the variant that holds them, which the compiler checks.

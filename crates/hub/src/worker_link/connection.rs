@@ -7,7 +7,7 @@ use crate::hub::Hub;
 use acks::Acks;
 use protocol::Build;
 use protocol::client::{ApiError, ErrorCode, error_chain};
-use protocol::model::{InstanceId, RunId, SessionId, WorkspaceId};
+use protocol::model::{InstanceId, ProviderName, RunId, SessionId, WorkspaceId};
 use protocol::worker::{
     AskAnswer, Received, Reply, Request, RunningAgent, RunningAgents, Stop, WorkerCall, WorkerFrame, WorkerResponse,
 };
@@ -62,8 +62,9 @@ fn unexpected(reply: &WorkerResponse) -> ApiError {
 
 impl WorkerLink {
     /// Starts the instance's worker, says hello and sets the hub's git credential, as [`WorkerLink::greet`] says, and
-    /// from then on sets each the hub has, as [`Following::follow`] says. On failure nothing is left running, so the
-    /// next attempt starts clean.
+    /// from then on sets each the hub has, as [`Following::follow`] says. Then asks who the worker's machine's own
+    /// `gh` is logged in as, if nobody has said for its provider since the hub started, as [`Hub::find_github_login`]
+    /// says, without waiting for the answer. On failure nothing is left running, so the next attempt starts clean.
     pub(crate) async fn open(
         hub: Arc<Hub>,
         provider: Arc<dyn Provider>,
@@ -90,7 +91,7 @@ impl WorkerLink {
         let following = Following::new(link.clone(), hub.git_credential());
         tokio::spawn(acks::acknowledge(hub.clone(), link.clone()));
         tokio::spawn(reading::read_frames(
-            hub,
+            hub.clone(),
             provider.clone(),
             link.clone(),
             workspace_id,
@@ -101,6 +102,7 @@ impl WorkerLink {
         let failure = match link.greet(within, following).await {
             Ok(following) => {
                 tokio::spawn(following.follow());
+                hub.find_github_login(ProviderName::from(provider.name()), &link).await;
                 return Ok(link);
             }
             Err(failure) => failure,
