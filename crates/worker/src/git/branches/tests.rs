@@ -1,3 +1,4 @@
+use process::Environment;
 use std::path::Path;
 
 use protocol::model::{BranchName, CommitId, Head, RemoteName, Upstream};
@@ -14,8 +15,8 @@ fn worktree(dir: &Path) -> (PathBuf, PathBuf) {
 }
 
 async fn read_branches(worktree: &Path) -> Branches {
-    let places = places(worktree).await.unwrap();
-    read(worktree, &places).await.unwrap().branches
+    let places = places(&Environment::NONE, worktree).await.unwrap();
+    read(&Environment::NONE, worktree, &places).await.unwrap().branches
 }
 
 fn names(branches: &Branches) -> Vec<&str> {
@@ -144,7 +145,7 @@ async fn a_repository_that_keeps_no_reflogs_knows_only_the_branch_checked_out() 
     let (repo, worktree) = worktree(dir.path());
     run(&worktree, &["switch", "-q", "-c", "header"]);
     run(&repo, &["config", "core.logAllRefUpdates", "false"]);
-    std::fs::remove_dir_all(places(&worktree).await.unwrap().git_dir.join("logs")).unwrap();
+    std::fs::remove_dir_all(places(&Environment::NONE, &worktree).await.unwrap().git_dir.join("logs")).unwrap();
 
     let branches = read_branches(&worktree).await;
 
@@ -184,8 +185,8 @@ fn a_branch_counts_from_the_reflog_once_its_been_left() {
 async fn only_what_git_writes_the_branches_in_matters() {
     let dir = tempfile::tempdir().unwrap();
     let (_, worktree) = worktree(dir.path());
-    let places = places(&worktree).await.unwrap();
-    let read = read(&worktree, &places).await.unwrap();
+    let places = places(&Environment::NONE, &worktree).await.unwrap();
+    let read = read(&Environment::NONE, &worktree, &places).await.unwrap();
     let (own, shared) = (places.git_dir.clone(), places.common_dir.clone());
     let matters = |file: PathBuf| matters(&places, Some(&read), &file);
 

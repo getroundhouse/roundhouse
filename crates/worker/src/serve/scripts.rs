@@ -45,8 +45,9 @@ pub(crate) async fn run_setup(
     let log = setup::setup_log_path(&state.config.state_dir);
     let _ = std::fs::remove_file(&log);
     let mut warnings = Vec::new();
+    let given = state.credentials.given();
     let settings = setup::load_settings(repo, worktree, state.config.home.as_deref(), &mut warnings);
-    let copied = setup::copy_local_files(repo, worktree, &settings, &mut warnings).await;
+    let copied = setup::copy_local_files(&given, repo, worktree, &settings, &mut warnings).await;
     for file in &copied {
         setup::append_log(&log, &format!("Copied {file}"));
     }
@@ -61,7 +62,7 @@ pub(crate) async fn run_setup(
     // Recorded like an agent, so the provider can stop it if this worker is killed.
     let record = state.config.state_dir.join(AGENTS_DIR).join("setup.pid");
     let (tracked, for_start) = (state.setup.clone(), record.clone());
-    let status = setup::run_script(&script, worktree, env, &log, move |pid| {
+    let status = setup::run_script(&given, &script, worktree, env, &log, move |pid| {
         let mut tracked = tracked.lock();
         if matches!(*tracked, Setup::Starting { stopped: true }) {
             process::signal_group(pid, process::Signal::Terminate);
@@ -95,7 +96,7 @@ pub(crate) async fn run_archive_script(
     let Some(script) = settings.archive else { return Ok(WorkerResponse::Ok) };
     let log = setup::setup_log_path(&state.config.state_dir);
     setup::append_log(&log, "Running the archive script");
-    let status = setup::run_script(&script, worktree, env, &log, |_| {}).await?;
+    let status = setup::run_script(&state.credentials.given(), &script, worktree, env, &log, |_| {}).await?;
     if status.success() {
         return Ok(WorkerResponse::Ok);
     }

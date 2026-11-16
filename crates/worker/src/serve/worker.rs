@@ -2,6 +2,7 @@ use super::{agent, connection, moves, outbox, scripts, worktrees};
 use crate::asks::Asks;
 use crate::branch_watch::Whose;
 use crate::deleting::Deleter;
+use crate::git_credential::{CredentialHelper, GitCredentials};
 use crate::tools::Tools;
 use crate::{git, setup};
 use agent::account_for;
@@ -60,6 +61,9 @@ pub struct Config {
     pub scratch_dir: PathBuf,
     /// Deletes the worktrees archiving moves aside.
     pub deleter: Deleter,
+    /// What git runs for a credential for github.com, in every process the worker gives the git credential its hub
+    /// set.
+    pub credential_helper: CredentialHelper,
     /// Why this worker can't serve its instance, which is another worker serving it already. It answers every request
     /// by saying so, rather than exiting, so the hub can tell it from a worker that failed to start. The hub cleans up
     /// after one of those by ending the instance, which would end the worker serving it.
@@ -96,6 +100,8 @@ pub(super) struct State {
     /// What the worker has asked its hub and waits to hear.
     pub(super) asks: Arc<Asks>,
     pub(super) tools: Arc<Tools>,
+    /// The git credential its hub set, which every process it starts is given.
+    pub(super) credentials: GitCredentials,
 }
 
 impl State {
@@ -123,6 +129,12 @@ impl Worker {
         let (asking, asked) = mpsc::channel::<WorkerFrame>(QUEUED_ASKS);
         tokio::spawn(send_asks(asked, outbox.clone()));
         let asks = Arc::new(Asks::new(asking));
+        let credentials = GitCredentials::new(&config.state_dir, &config.credential_helper);
+        // What the last worker left, if it was killed. Not a refused worker's, since the state directory is another
+        // worker's, which is serving it.
+        if config.refused.is_none() {
+            credentials.remove();
+        }
         let state = Arc::new(State {
             agents: Mutex::new(HashMap::new()),
             start_lock: tokio::sync::Mutex::new(()),
@@ -136,6 +148,7 @@ impl Worker {
             tools: Arc::new(Tools::new(asks.clone(), config.build, config.timers.wait_poll)),
             config,
             asks,
+            credentials,
         });
         Self { state, forwarders: Arc::new(tokio::sync::Mutex::new(JoinSet::new())) }
     }
@@ -194,6 +207,10 @@ async fn stop_everything(state: &State, forwarders: &tokio::sync::Mutex<JoinSet<
     state.tools.stop().await;
     let mut forwarders = std::mem::take(&mut *forwarders.lock().await);
     while forwarders.join_next().await.is_some() {}
+    // Once nothing it started is left to read them.
+    if state.config.refused.is_none() {
+        state.credentials.remove();
+    }
 }
 
 #[expect(clippy::too_many_lines, reason = "a flat dispatch, with one short arm per request")]
@@ -207,9 +224,11 @@ pub(super) async fn handle(
     let build = state.config.build.version();
     let unsupported =
         |unreadable: Option<&serde_json::Error>| ApiError::unsupported_request("this worker", build, unreadable);
+    // What every process this request starts is given, as the hub last set it before sending this.
+    let given = state.credentials.given();
     match request.map_err(|e| unsupported(Some(&e)))? {
         // About the connection they came on, which answers them itself.
-        WorkerRequest::Hello(_) | WorkerRequest::Stop => {
+        WorkerRequest::Hello(_) | WorkerRequest::Stop | WorkerRequest::GitCredentialSet(_) => {
             Err(ApiError::new(ErrorCode::Internal, "the connection answers this itself"))
         }
         WorkerRequest::Received(Received { through }) => {
@@ -224,24 +243,27 @@ pub(super) async fn handle(
         WorkerRequest::RemoveWorkspace(asked) => worktrees::remove(state, asked).await,
         WorkerRequest::WorktreeThere(asked) => worktrees::there(state, asked).await,
         WorkerRequest::AddChildWorktree(asked) => worktrees::add_child(state, asked).await,
-        WorkerRequest::GitStatus(GitStatus { path }) => Ok(WorkerResponse::GitStatus(git::status(&path).await?)),
+        WorkerRequest::GitStatus(GitStatus { path }) => {
+            Ok(WorkerResponse::GitStatus(git::status(&given, &path).await?))
+        }
         WorkerRequest::GitDiff(GitDiff { path, base_ref }) => {
-            Ok(WorkerResponse::GitDiff(git::diff(&path, base_ref.as_deref()).await?))
+            Ok(WorkerResponse::GitDiff(git::diff(&given, &path, base_ref.as_deref()).await?))
         }
         WorkerRequest::PullRequest(PullRequest { path }) => {
             // `gh` finds the pull request by the branch checked out.
-            let branch = git::branches::checked_out(Path::new(&path)).await;
-            let pull_request = git::pull_request(&path, branch.as_ref()).await?;
+            let branch = git::branches::checked_out(&given, Path::new(&path)).await;
+            let pull_request = git::pull_request(&given, &path, branch.as_ref()).await?;
             Ok(WorkerResponse::PullRequest(PullRequestReply { pull_request, branch }))
         }
         WorkerRequest::WatchBranches(asked) => worktrees::watch_branches(state, asked.path, Whose::Own).await,
         WorkerRequest::WatchChildBranches(asked) => worktrees::watch_branches(state, asked.path, Whose::Child).await,
         WorkerRequest::ReadRemotePullRequests(asked) => {
-            let snapshot = git::remote_pull_requests::read(&asked.path, asked.repository, &asked.pull_requests).await;
+            let (path, repository) = (&asked.path, asked.repository);
+            let snapshot = git::remote_pull_requests::read(&given, path, repository, &asked.pull_requests).await;
             Ok(WorkerResponse::RemotePullRequests(snapshot))
         }
         WorkerRequest::GithubRateLimit(asked) => {
-            Ok(WorkerResponse::GithubRateLimit(git::rate_limit(&asked.path).await?))
+            Ok(WorkerResponse::GithubRateLimit(git::rate_limit(&given, &asked.path).await?))
         }
         WorkerRequest::SetupWorkspace(asked) => run_setup(state, &asked.repo_path, &asked.path, &asked.env).await,
         WorkerRequest::CancelSetup => {
@@ -263,7 +285,9 @@ pub(super) async fn handle(
             .map_err(|e| ApiError::new(ErrorCode::Internal, format!("writing an attachment stopped: {e}")))??;
             Ok(WorkerResponse::AttachmentWritten(AttachmentWritten { path: written.to_string_lossy().into_owned() }))
         }
-        WorkerRequest::ListFiles(asked) => Ok(WorkerResponse::Files(crate::files::list(Path::new(&asked.path)).await?)),
+        WorkerRequest::ListFiles(asked) => {
+            Ok(WorkerResponse::Files(crate::files::list(&given, Path::new(&asked.path)).await?))
+        }
         WorkerRequest::FolderRead(FolderRead { path, folder }) => {
             let files = tokio::task::spawn_blocking(move || crate::files::read_folder(Path::new(&path), &folder))
                 .await
@@ -277,13 +301,13 @@ pub(super) async fn handle(
             Ok(WorkerResponse::FileContents(contents))
         }
         WorkerRequest::FileReadAt(FileReadAt { path, commit, file }) => {
-            Ok(WorkerResponse::FileContents(crate::files::read_at(Path::new(&path), &commit, &file).await?))
+            Ok(WorkerResponse::FileContents(crate::files::read_at(&given, Path::new(&path), &commit, &file).await?))
         }
         WorkerRequest::FileOpenAt(FileOpenAt { path, commit, file }) => {
-            Ok(WorkerResponse::FileOpened(crate::files::open_at(Path::new(&path), &commit, &file).await?))
+            Ok(WorkerResponse::FileOpened(crate::files::open_at(&given, Path::new(&path), &commit, &file).await?))
         }
         WorkerRequest::FilePages(FilePages { path, commit, file, page_lines, pages }) => {
-            let pages = crate::files::pages(Path::new(&path), &commit, &file, page_lines, &pages).await?;
+            let pages = crate::files::pages(&given, Path::new(&path), &commit, &file, page_lines, &pages).await?;
             Ok(WorkerResponse::FilePages(pages))
         }
         WorkerRequest::AgentControl(request) => {

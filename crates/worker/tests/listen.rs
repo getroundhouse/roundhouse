@@ -21,7 +21,7 @@ use tokio::net::UnixStream;
 use tokio::net::unix::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::task::JoinHandle;
 use tokio::time::timeout;
-use worker::{Config, Deleter, listen};
+use worker::{Config, CredentialHelper, Deleter, listen};
 
 const WAIT: Duration = Duration::from_secs(10);
 
@@ -50,6 +50,8 @@ impl Listening {
             antigravity_bin: None,
             scratch_dir: dir.path().to_path_buf(),
             deleter: Deleter::new("/bin/rm", ["-rf", "--"]),
+            // Never run here, since nothing these start asks git for a credential.
+            credential_helper: CredentialHelper::new("/bin/false", ["--"]),
             refused: None,
             timers: worker::Timers::DEFAULT,
         };

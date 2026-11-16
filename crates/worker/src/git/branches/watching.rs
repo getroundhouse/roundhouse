@@ -1,4 +1,5 @@
 use super::super::{commit_of, exists, git, git_error, git_ok};
+use process::Environment;
 use protocol::client::ApiError;
 use protocol::model::{Branch, BranchName, Branches, CommitId, Head, RemoteName, Upstream};
 use std::collections::{BTreeSet, HashMap};
@@ -29,8 +30,8 @@ pub(crate) struct Watched {
     pub(crate) deep: bool,
 }
 
-pub(crate) async fn places(worktree: &Path) -> Result<Places, ApiError> {
-    let found = git_ok(worktree, &["rev-parse", "--git-dir", "--git-common-dir"]).await?;
+pub(crate) async fn places(given: &Environment, worktree: &Path) -> Result<Places, ApiError> {
+    let found = git_ok(given, worktree, &["rev-parse", "--git-dir", "--git-common-dir"]).await?;
     let mut lines = found.lines();
     let (Some(git_dir), Some(common_dir)) = (lines.next(), lines.next()) else {
         return Err(git_error(format!("git didn't say where {}'s repository is", worktree.display())));
@@ -48,35 +49,35 @@ pub(crate) async fn places(worktree: &Path) -> Result<Places, ApiError> {
 }
 
 /// The branches, once, for a worktree nothing's watching yet.
-pub(crate) async fn read_now(worktree: &Path) -> Result<Branches, ApiError> {
-    Ok(read(worktree, &places(worktree).await?).await?.branches)
+pub(crate) async fn read_now(given: &Environment, worktree: &Path) -> Result<Branches, ApiError> {
+    Ok(read(given, worktree, &places(given, worktree).await?).await?.branches)
 }
 
 /// The branch the worktree at `worktree` has checked out, if one is there and HEAD isn't detached.
-pub(crate) async fn checked_out(worktree: &Path) -> Option<BranchName> {
+pub(crate) async fn checked_out(given: &Environment, worktree: &Path) -> Option<BranchName> {
     if !exists(&worktree.join(".git")).await {
         return None;
     }
-    let symbolic = git(worktree, &["symbolic-ref", "--quiet", "HEAD"]).await.ok()?;
+    let symbolic = git(given, worktree, &["symbolic-ref", "--quiet", "HEAD"]).await.ok()?;
     if !symbolic.success {
         return None;
     }
     symbolic.stdout.trim().strip_prefix("refs/heads/").map(BranchName::from)
 }
 
-pub(crate) async fn read(worktree: &Path, places: &Places) -> Result<Read, ApiError> {
-    let head = head(worktree).await?;
+pub(crate) async fn read(given: &Environment, worktree: &Path, places: &Places) -> Result<Read, ApiError> {
+    let head = head(given, worktree).await?;
     // Empty when the repository keeps no reflogs, and then only the branch checked out is known. So it is when git
     // can't read HEAD's reflog, as on a branch with no commits yet, which `git switch --orphan` makes, rather than
     // nothing being known.
-    let reflog = git(worktree, &["reflog", "show", "--format=%gs", "HEAD", "--"]).await?;
+    let reflog = git(given, worktree, &["reflog", "show", "--format=%gs", "HEAD", "--"]).await?;
     let mut names = if reflog.success { left(&reflog.stdout) } else { BTreeSet::new() };
     if let Head::Branch { name } = &head {
         names.insert(name.clone());
     }
     names.extend(rebasing(places).await);
     let format = format!("--format={LOCAL_FORMAT}");
-    let listed = git_ok(worktree, &["for-each-ref", &format, "refs/heads/"]).await?;
+    let listed = git_ok(given, worktree, &["for-each-ref", &format, "refs/heads/"]).await?;
     let had_it = |fields: &Vec<String>| {
         let name = fields.first().and_then(|name| name.strip_prefix("refs/heads/"));
         name.is_some_and(|name| names.contains(&BranchName::from(name)))
@@ -84,7 +85,7 @@ pub(crate) async fn read(worktree: &Path, places: &Places) -> Result<Read, ApiEr
     let local: Vec<Vec<String>> = fields(&listed).filter(had_it).collect();
     let upstreams: Vec<&str> =
         local.iter().filter_map(|fields| fields.get(2)).map(String::as_str).filter(|name| !name.is_empty()).collect();
-    let tips = upstream_tips(worktree, &upstreams).await?;
+    let tips = upstream_tips(given, worktree, &upstreams).await?;
     let each = local.iter().filter_map(|fields| branch(fields, &tips)).collect();
     let refs = local.iter().filter_map(|fields| fields.first()).map(String::as_str).chain(upstreams);
     // A part at a time, since `/` doesn't part a path that starts `\\?\`, as one on Windows does once its links are
@@ -125,8 +126,8 @@ pub(crate) fn matters(places: &Places, read: Option<&Read>, file: &Path) -> bool
         || read.is_some_and(|read| read.refs.iter().any(|read| read == file || (in_refs && read.starts_with(file))))
 }
 
-async fn head(worktree: &Path) -> Result<Head, ApiError> {
-    let symbolic = git(worktree, &["symbolic-ref", "--quiet", "HEAD"]).await?;
+async fn head(given: &Environment, worktree: &Path) -> Result<Head, ApiError> {
+    let symbolic = git(given, worktree, &["symbolic-ref", "--quiet", "HEAD"]).await?;
     if symbolic.success {
         let target = symbolic.stdout.trim();
         let name = target.strip_prefix("refs/heads/").ok_or_else(|| git_error(format!("HEAD is {target}")))?;
@@ -136,7 +137,7 @@ async fn head(worktree: &Path) -> Result<Head, ApiError> {
     if symbolic.code != Some(1) {
         return Err(git_error(format!("git couldn't say what's checked out: {}", symbolic.stderr)));
     }
-    let commit = commit_of(worktree, "HEAD").await?.ok_or_else(|| git_error("HEAD is detached at no commit"))?;
+    let commit = commit_of(given, worktree, "HEAD").await?.ok_or_else(|| git_error("HEAD is detached at no commit"))?;
     Ok(Head::Detached { commit })
 }
 
@@ -168,13 +169,17 @@ fn fields(listed: &str) -> impl Iterator<Item = Vec<String>> + '_ {
 
 /// The newest commit of each upstream, by its full ref name. A name is a pattern to git, which also matches the refs
 /// below it, so only an exact match is kept. Nothing for none, which git would take as every ref.
-async fn upstream_tips(worktree: &Path, upstreams: &[&str]) -> Result<HashMap<String, CommitId>, ApiError> {
+async fn upstream_tips(
+    given: &Environment,
+    worktree: &Path,
+    upstreams: &[&str],
+) -> Result<HashMap<String, CommitId>, ApiError> {
     if upstreams.is_empty() {
         return Ok(HashMap::new());
     }
     let format = format!("--format={TIP_FORMAT}");
     let args: Vec<&str> = ["for-each-ref", format.as_str()].into_iter().chain(upstreams.iter().copied()).collect();
-    let tips = fields(&git_ok(worktree, &args).await?)
+    let tips = fields(&git_ok(given, worktree, &args).await?)
         .filter_map(|fields| Some((fields.first()?.clone(), CommitId::from(fields.get(1)?.as_str()))))
         .filter(|(name, _)| upstreams.contains(&name.as_str()))
         .collect();

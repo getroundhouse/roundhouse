@@ -46,6 +46,7 @@ pub async fn title_for(
         pid_file: options.pid_file.clone(),
         login: options.login.as_ref(),
         verify_login: true,
+        environment: &options.environment,
     };
     let output = one_off::run(call).await?;
     if !output.status.success() {

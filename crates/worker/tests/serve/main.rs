@@ -2,6 +2,7 @@
 
 #![cfg(test)]
 
+mod git_credential;
 mod hellos;
 mod logins;
 
@@ -22,7 +23,7 @@ use tokio::io::{
 use tokio::net::TcpStream;
 use tokio::task::JoinHandle;
 use tokio::time::timeout;
-use worker::{Config, Deleter, serve};
+use worker::{Config, CredentialHelper, Deleter, serve};
 
 /// What a hub of this build says first.
 fn hello() -> WorkerRequest {
@@ -186,6 +187,8 @@ fn config(dir: &Path, claude_bin: Option<PathBuf>) -> Config {
         antigravity_bin: None,
         scratch_dir: dir.to_path_buf(),
         deleter: Deleter::new("/bin/rm", ["-rf", "--"]),
+        // Never run here, since nothing these start asks git for a credential.
+        credential_helper: CredentialHelper::new("/bin/false", ["--"]),
         refused: None,
         timers: worker::Timers::DEFAULT,
     }

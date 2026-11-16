@@ -47,7 +47,7 @@ fn on_stdio(given: Given) -> anyhow::Result<()> {
 }
 
 pub(super) fn config(given: Given, refused: Option<String>) -> anyhow::Result<worker::Config> {
-    let exe = std::env::current_exe().context("finding this binary to delete worktrees with")?;
+    let exe = std::env::current_exe().context("finding this binary to delete worktrees with, and answer git with")?;
     Ok(worker::Config {
         build: given.build,
         workspaces_root: given.workspaces_root,
@@ -58,7 +58,8 @@ pub(super) fn config(given: Given, refused: Option<String>) -> anyhow::Result<wo
         codex_bin: given.codex_bin,
         antigravity_bin: given.antigravity_bin,
         scratch_dir: std::env::temp_dir(),
-        deleter: worker::Deleter::new(exe, ["delete", "--"]),
+        deleter: worker::Deleter::new(&exe, ["delete", "--"]),
+        credential_helper: worker::CredentialHelper::new(exe, ["git-credential", "--"]),
         refused,
         timers: given.timers,
     })

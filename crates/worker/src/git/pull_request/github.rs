@@ -3,6 +3,7 @@ use super::super::GH_TIMEOUT;
 use super::super::branches::checked_out;
 use super::{link, local};
 use chrono::DateTime;
+use process::Environment;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{BranchName, Checks, CommitId, LeftQueue, Local, PrState, PullRequest, QueueState};
 use protocol::worker::RateLimit;
@@ -34,12 +35,16 @@ const BY_URL: &str = "query($url: URI!) { resource(url: $url) { ... on PullReque
 /// here at all, such as when it isn't installed or logged in, and [`ErrorCode::Worker`] when it couldn't this time,
 /// such as while GitHub can't be reached. Where it is in the merge queue counts as part of the answer, since a failure
 /// there would read as being in none. What the worktree can't say of itself is left at nothing to report.
-pub async fn pull_request(path: &str, branch: Option<&BranchName>) -> Result<Option<PullRequest>, ApiError> {
-    let Some(Viewed { mut pull_request, head, .. }) = of_branch(path, branch).await? else { return Ok(None) };
+pub async fn pull_request(
+    given: &Environment,
+    path: &str,
+    branch: Option<&BranchName>,
+) -> Result<Option<PullRequest>, ApiError> {
+    let Some(Viewed { mut pull_request, head, .. }) = of_branch(given, path, branch).await? else { return Ok(None) };
     // Only an open pull request can still change, so only what the second call says and its worktree matter.
     if pull_request.state == PrState::Open {
         let head = head.as_ref().map(CommitId::as_str);
-        let (by_url, local) = tokio::join!(by_url(path, &pull_request.url), local(path, head));
+        let (by_url, local) = tokio::join!(by_url(given, path, &pull_request.url), local(given, path, head));
         by_url?.fill(&mut pull_request);
         pull_request.local = local;
     }
@@ -51,20 +56,20 @@ pub async fn pull_request(path: &str, branch: Option<&BranchName>) -> Result<Opt
 /// as when it's found for the first time, and for the linked one only when `gh` finds another by the name, or none, as
 /// for a branch renamed since it was pushed. The hub's count of a read's calls leaves both out, and GitHub's own count
 /// of what's left, which the hub asks for, takes them in.
-async fn of_branch(path: &str, branch: Option<&BranchName>) -> Result<Option<Viewed>, ApiError> {
+async fn of_branch(given: &Environment, path: &str, branch: Option<&BranchName>) -> Result<Option<Viewed>, ApiError> {
     let worktree = Path::new(path);
-    let by_name = view(path, None).await?;
+    let by_name = view(given, path, None).await?;
     // `gh` looks for the one checked out as it runs, so another checked out since `branch` was read would be judged
     // by that one's history and linked to it. The next read, which switching branch brings, says.
-    if checked_out(worktree).await.as_ref() != branch {
+    if checked_out(given, worktree).await.as_ref() != branch {
         return Err(couldnt_say("another branch was checked out while it was read"));
     }
     let Some(branch) = branch else { return Ok(None) };
-    let linked = link::linked(worktree, branch).await?;
+    let linked = link::linked(given, worktree, branch).await?;
     let has_been_at = match &by_name {
         Some(found) if linked.as_deref() != Some(found.pull_request.url.as_str()) => {
-            let commits = commits_of(path, &found.pull_request.url).await?;
-            link::has_been_at(worktree, branch, &commits, found.from.as_ref()).await?
+            let commits = commits_of(given, path, &found.pull_request.url).await?;
+            link::has_been_at(given, worktree, branch, &commits, found.from.as_ref()).await?
         }
         _ => false,
     };
@@ -73,12 +78,12 @@ async fn of_branch(path: &str, branch: Option<&BranchName>) -> Result<Option<Vie
         Choice::Found => Ok(by_name),
         Choice::FoundAndLink => {
             if let Some(url) = found_url {
-                link::link(worktree, branch, url).await;
+                link::link(given, worktree, branch, url).await;
             }
             Ok(by_name)
         }
         Choice::ReadLinked => match linked {
-            Some(url) => view(path, Some(&url)).await,
+            Some(url) => view(given, path, Some(&url)).await,
             None => Ok(None),
         },
         Choice::None => Ok(None),
@@ -98,23 +103,28 @@ pub(super) struct Viewed {
 
 /// The pull request at `url`, or the one `gh` finds for the branch checked out, by its name. `None` when `gh` says
 /// there's none.
-async fn view(path: &str, url: Option<&str>) -> Result<Option<Viewed>, ApiError> {
-    let Some(printed) = run_view(path, url, FIELDS).await? else { return Ok(None) };
+async fn view(given: &Environment, path: &str, url: Option<&str>) -> Result<Option<Viewed>, ApiError> {
+    let Some(printed) = run_view(given, path, url, FIELDS).await? else { return Ok(None) };
     parse_pull_request(&printed).map(Some).ok_or_else(|| couldnt_say("gh printed something other than one"))
 }
 
 /// The commits of the pull request at `url`, as [`parse_commits`] says them. It was found a moment ago, so `gh` saying
 /// there's none now says nothing of whether it's the branch's.
-async fn commits_of(path: &str, url: &str) -> Result<Vec<CommitId>, ApiError> {
-    let printed = run_view(path, Some(url), COMMITS).await?;
+async fn commits_of(given: &Environment, path: &str, url: &str) -> Result<Vec<CommitId>, ApiError> {
+    let printed = run_view(given, path, Some(url), COMMITS).await?;
     printed.as_deref().and_then(parse_commits).ok_or_else(|| couldnt_say("its commits couldn't be read"))
 }
 
 /// Runs `gh pr view` for `fields` of the pull request at `url`, or else the one it finds by the branch's name, and
 /// returns what it printed. `None` when it says there's none.
-async fn run_view(path: &str, url: Option<&str>, fields: &str) -> Result<Option<Vec<u8>>, ApiError> {
+async fn run_view(
+    given: &Environment,
+    path: &str,
+    url: Option<&str>,
+    fields: &str,
+) -> Result<Option<Vec<u8>>, ApiError> {
     let args: Vec<&str> = ["pr", "view"].into_iter().chain(url).chain(["--json", fields]).collect();
-    let viewed = match run_gh(path, &args).await {
+    let viewed = match run_gh(given, path, &args).await {
         Ok(viewed) => viewed,
         Err(Unran::Missing) => return Err(cant_work_here("gh isn't installed")),
         Err(Unran::Failed(why)) => return Err(couldnt_say(&why)),
@@ -155,8 +165,8 @@ pub(super) fn failing(code: Option<i32>, stderr: &str) -> Failing {
 
 /// How much of GitHub's hourly GraphQL limit is left, which is what `gh pr view` spends. GitHub's `rate_limit` endpoint
 /// says, in the same numbers as the headers on every answer, and asking it doesn't count against the limit.
-pub async fn rate_limit(path: &str) -> Result<RateLimit, ApiError> {
-    let said = gh(path, &["api", "rate_limit"]).await.ok_or_else(|| couldnt_count("gh couldn't ask"))?;
+pub async fn rate_limit(given: &Environment, path: &str) -> Result<RateLimit, ApiError> {
+    let said = gh(given, path, &["api", "rate_limit"]).await.ok_or_else(|| couldnt_count("gh couldn't ask"))?;
     parse_rate_limit(&said).ok_or_else(|| couldnt_count("GitHub answered something else"))
 }
 
@@ -181,8 +191,8 @@ fn cant_work_here(why: &str) -> ApiError {
 }
 
 /// What it printed, if it succeeded.
-async fn gh(path: &str, args: &[&str]) -> Option<Vec<u8>> {
-    let output = run_gh(path, args).await.ok()?;
+async fn gh(given: &Environment, path: &str, args: &[&str]) -> Option<Vec<u8>> {
+    let output = run_gh(given, path, args).await.ok()?;
     output.status.success().then_some(output.stdout)
 }
 
@@ -193,15 +203,11 @@ pub(in crate::git) enum Unran {
     Failed(String),
 }
 
-pub(in crate::git) async fn run_gh(path: &str, args: &[&str]) -> Result<Output, Unran> {
-    let output = Command::new("gh")
-        .args(args)
-        .current_dir(path)
-        .env("GH_PROMPT_DISABLED", "1")
-        .stdin(Stdio::null())
-        .kill_on_drop(true)
-        .output();
-    match tokio::time::timeout(GH_TIMEOUT, output).await {
+pub(in crate::git) async fn run_gh(given: &Environment, path: &str, args: &[&str]) -> Result<Output, Unran> {
+    let mut command = Command::new("gh");
+    command.args(args).current_dir(path).env("GH_PROMPT_DISABLED", "1").stdin(Stdio::null()).kill_on_drop(true);
+    given.apply(command.as_std_mut());
+    match tokio::time::timeout(GH_TIMEOUT, command.output()).await {
         Ok(Ok(output)) => Ok(output),
         Ok(Err(e)) if e.kind() == std::io::ErrorKind::NotFound => Err(Unran::Missing),
         Ok(Err(e)) => Err(Unran::Failed(e.to_string())),
@@ -323,9 +329,9 @@ impl ByUrl {
     }
 }
 
-async fn by_url(path: &str, url: &str) -> Result<ByUrl, ApiError> {
+async fn by_url(given: &Environment, path: &str, url: &str) -> Result<ByUrl, ApiError> {
     let (query, url) = (format!("query={BY_URL}"), format!("url={url}"));
-    let answer = gh(path, &["api", "graphql", "-f", &query, "-f", &url]).await;
+    let answer = gh(given, path, &["api", "graphql", "-f", &query, "-f", &url]).await;
     let unread = || couldnt_say("its place in the merge queue couldn't be read");
     parse_by_url(&answer.ok_or_else(unread)?).ok_or_else(unread)
 }

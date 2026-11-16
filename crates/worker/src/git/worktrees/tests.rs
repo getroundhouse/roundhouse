@@ -1,12 +1,12 @@
 use super::locking::{Changing, Hold, WAITING, Worktrees};
 use crate::git::tests::{new_repo, prepare, run};
+use process::Environment;
 use std::cell::RefCell;
 use std::fmt::Debug;
 use std::fs::{OpenOptions, TryLockError};
 use std::io;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::pin::pin;
 use std::rc::Rc;
 use std::sync::Once;
 use std::time::{Duration, Instant};
@@ -25,7 +25,7 @@ struct BeingMade {
 
 impl BeingMade {
     async fn in_repo(repo: &Path) -> Self {
-        let changing = Worktrees::of(repo).await.unwrap().changing().await.unwrap();
+        let changing = Worktrees::of(&Environment::NONE, repo).await.unwrap().changing().await.unwrap();
         let common = run(repo, &["rev-parse", "--path-format=absolute", "--git-common-dir"]);
         let entry = Path::new(&common).join("worktrees").join("being-made");
         std::fs::create_dir_all(&entry).unwrap();
@@ -46,18 +46,23 @@ impl BeingMade {
 /// Runs `work` while a worktree of `repo` is being made, and has it done once `work` waits for the lock, as a worker
 /// does. So `work` fails if it runs a git command that the half-made entry breaks without waiting for the lock first.
 /// Panics if `work` ends before it has waited.
-pub(crate) async fn while_one_is_made<T: Debug>(repo: &Path, work: impl Future<Output = T>) -> T {
-    let being_made = BeingMade::in_repo(repo).await;
-    // Only once it's being made, so a wait of its own for the lock isn't taken for the work's.
-    let logs = Logs::capture();
-    let mut work = pin!(work);
-    tokio::select! {
-        biased;
-        () = logs.until(WAITING) => {}
-        ended = &mut work => panic!("it never waited for the worktree being made, and ended with {ended:?}"),
+///
+/// Not an `async fn`, whose future would hold `work` whole: making a workspace is a future of about 16 KB, so one that
+/// held it would be past clippy's `large_futures` on Linux. This boxes `work`, and its future holds only the box.
+pub(crate) fn while_one_is_made<T: Debug>(repo: &Path, work: impl Future<Output = T>) -> impl Future<Output = T> {
+    let mut work = Box::pin(work);
+    async move {
+        let being_made = BeingMade::in_repo(repo).await;
+        // Only once it's being made, so a wait of its own for the lock isn't taken for the work's.
+        let logs = Logs::capture();
+        tokio::select! {
+            biased;
+            () = logs.until(WAITING) => {}
+            ended = &mut work => panic!("it never waited for the worktree being made, and ended with {ended:?}"),
+        }
+        being_made.done();
+        tokio::time::timeout(TIMEOUT, work).await.expect("it never finished once the worktree was made")
     }
-    being_made.done();
-    tokio::time::timeout(TIMEOUT, work).await.expect("it never finished once the worktree was made")
 }
 
 type Buffer = Rc<RefCell<Vec<u8>>>;
@@ -147,7 +152,7 @@ fn comes_free(worktrees: &Worktrees) {
 #[tokio::test]
 async fn changing_holds_the_lock_alone_and_reading_beside_others_reading() {
     let dir = tempfile::tempdir().unwrap();
-    let worktrees = Worktrees::of(&new_repo(dir.path())).await.unwrap();
+    let worktrees = Worktrees::of(&Environment::NONE, &new_repo(dir.path())).await.unwrap();
 
     let changing = worktrees.changing().await.unwrap();
     assert!(!free(&worktrees, Hold::BesideOthersReading), "something read the worktrees while they were being changed");
@@ -165,7 +170,7 @@ async fn changing_holds_the_lock_alone_and_reading_beside_others_reading() {
 #[tokio::test]
 async fn a_lock_this_user_cant_write_is_still_held() {
     let dir = tempfile::tempdir().unwrap();
-    let worktrees = Worktrees::of(&new_repo(dir.path())).await.unwrap();
+    let worktrees = Worktrees::of(&Environment::NONE, &new_repo(dir.path())).await.unwrap();
     drop(worktrees.changing().await.unwrap());
     let mut read_only = std::fs::metadata(&worktrees.lock).unwrap().permissions();
     read_only.set_readonly(true);
@@ -184,9 +189,9 @@ async fn a_repository_and_its_worktrees_share_one_lock_and_another_repository_ha
     let workspace = prepare(&dir.path().join("ws"), &repo, "alder", None).await.unwrap();
     let other = tempfile::tempdir().unwrap();
 
-    let ours = Worktrees::of(&repo).await.unwrap().lock;
-    assert_eq!(Worktrees::of(Path::new(&workspace.path)).await.unwrap().lock, ours);
-    assert_ne!(Worktrees::of(&new_repo(other.path())).await.unwrap().lock, ours);
+    let ours = Worktrees::of(&Environment::NONE, &repo).await.unwrap().lock;
+    assert_eq!(Worktrees::of(&Environment::NONE, Path::new(&workspace.path)).await.unwrap().lock, ours);
+    assert_ne!(Worktrees::of(&Environment::NONE, &new_repo(other.path())).await.unwrap().lock, ours);
 }
 
 /// A callsite can first be reached on another test's thread, which has no thread-local subscriber.

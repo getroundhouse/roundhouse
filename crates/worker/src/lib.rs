@@ -12,6 +12,7 @@ mod context_dir;
 mod deleting;
 mod files;
 pub mod git;
+mod git_credential;
 mod images;
 mod instructions;
 mod linked_images;
@@ -28,6 +29,7 @@ pub use claim::{ClaimError, InstanceClaim, claim_instance};
 #[cfg(unix)]
 pub use claim::{claim_to_serve, instance_claimed};
 pub use deleting::{Deleter, delete_trees};
+pub use git_credential::{CredentialHelper, answer_credential_request};
 #[cfg(feature = "testing")]
 pub use serve::TEST_BUILD;
 #[cfg(unix)]

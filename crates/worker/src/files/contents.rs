@@ -1,4 +1,5 @@
 use crate::git::files::{Tracked, entries};
+use process::Environment;
 use protocol::attachment::{AttachmentBytes, MediaType};
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{CommitId, FileContents, WorktreeFiles};
@@ -21,8 +22,8 @@ pub(super) const SNIFF_BYTES: usize = 8000;
 /// A folder git ignores whole, or that's a repository of its own, whether a submodule or one git doesn't know, is
 /// listed as a folder rather than by its files, since one such as `target` can hold hundreds of thousands, and so is a
 /// link that leads to a folder.
-pub(crate) async fn list(worktree: &Path) -> Result<WorktreeFiles, ApiError> {
-    let entries = entries(worktree).await?;
+pub(crate) async fn list(given: &Environment, worktree: &Path) -> Result<WorktreeFiles, ApiError> {
+    let entries = entries(given, worktree).await?;
     let (mut tracked, mut folders) = (Vec::new(), Vec::new());
     for (path, kind) in entries.tracked.into_iter().filter(|(path, _)| !entries.deleted.contains(path)) {
         match kind {
@@ -147,9 +148,14 @@ pub(crate) fn read(worktree: &Path, path: &str) -> Result<FileContents, ApiError
 
 /// What the file at `path` held in `commit`, from the repository of the worktree at `worktree`, as [`read`] gives a
 /// file as it is now. A link isn't followed, so it holds the path it leads to.
-pub(crate) async fn read_at(worktree: &Path, commit: &CommitId, path: &str) -> Result<FileContents, ApiError> {
+pub(crate) async fn read_at(
+    given: &Environment,
+    worktree: &Path,
+    commit: &CommitId,
+    path: &str,
+) -> Result<FileContents, ApiError> {
     relative(path)?;
-    let blob = crate::git::blob::find(worktree, commit, path).await?;
+    let blob = crate::git::blob::find(given, worktree, commit, path).await?;
     // Only an image is sent past text's limit, and its start says whether it is one, so a big file that isn't is
     // refused without reading the rest.
     if blob.bytes > MAX_TEXT_BYTES && blob.bytes > most_sent(&blob.start(worktree, SNIFF_BYTES).await?) {

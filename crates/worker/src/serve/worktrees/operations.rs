@@ -43,20 +43,22 @@ impl Watches {
 }
 
 pub(in super::super) async fn names_git_has(state: &State, asked: NamesGitHas) -> Result<WorkerResponse, ApiError> {
-    let names = git::names_git_has(&state.config.workspaces_root, &asked.repo_name, &asked.repo_path).await?;
+    let (root, given) = (&state.config.workspaces_root, state.credentials.given());
+    let names = git::names_git_has(&given, root, &asked.repo_name, &asked.repo_path).await?;
     Ok(WorkerResponse::NamesGitHas(NamesGitHasReply { names }))
 }
 
 pub(in super::super) async fn prepare(state: &State, asked: PrepareWorkspace) -> Result<WorkerResponse, ApiError> {
     let PrepareWorkspace { repo_name, repo_path, workspace_name, branch, base_ref } = asked;
-    let root = &state.config.workspaces_root;
-    let ready = git::prepare_workspace(root, &repo_name, &repo_path, &workspace_name, &branch, base_ref.as_deref());
+    let (root, given) = (&state.config.workspaces_root, state.credentials.given());
+    let base_ref = base_ref.as_deref();
+    let ready = git::prepare_workspace(&given, root, &repo_name, &repo_path, &workspace_name, &branch, base_ref);
     Ok(WorkerResponse::WorkspaceReady(ready.await?))
 }
 
 pub(in super::super) async fn restore(state: &State, asked: RestoreWorkspace) -> Result<WorkerResponse, ApiError> {
     let _alone = state.moves.alone(Path::new(&asked.path)).await;
-    git::restore_workspace(&asked.repo_path, &asked.path, &asked.branch).await?;
+    git::restore_workspace(&state.credentials.given(), &asked.repo_path, &asked.path, &asked.branch).await?;
     Ok(WorkerResponse::Ok)
 }
 
@@ -65,14 +67,14 @@ pub(in super::super) async fn restore(state: &State, asked: RestoreWorkspace) ->
 pub(in super::super) async fn remove(state: &State, asked: RemoveWorkspace) -> Result<WorkerResponse, ApiError> {
     let path = Path::new(&asked.path);
     let _alone = state.moves.alone(path).await;
-    git::remove_workspace(&asked, &state.config.deleter).await?;
+    git::remove_workspace(&state.credentials.given(), &asked, &state.config.deleter).await?;
     state.watches.lock().stop(path);
     Ok(WorkerResponse::Ok)
 }
 
 pub(in super::super) async fn there(state: &State, asked: WorktreeThere) -> Result<WorkerResponse, ApiError> {
     let _alone = state.moves.alone(Path::new(&asked.path)).await;
-    let there = git::worktree_there(&asked.path).await?;
+    let there = git::worktree_there(&state.credentials.given(), &asked.path).await?;
     Ok(WorkerResponse::WorktreeThere(WorktreeThereReply { there }))
 }
 
@@ -83,11 +85,12 @@ pub(in super::super) async fn add_child(state: &State, asked: AddChildWorktree) 
     let (repo, path) = (Path::new(&asked.repo_path), Path::new(&asked.path));
     let _alone = state.moves.alone(path).await;
     let mut warnings = Vec::new();
-    let commit = git::add_child_worktree(Path::new(&asked.own), path, &asked.on, &mut warnings).await?;
+    let given = state.credentials.given();
+    let commit = git::add_child_worktree(&given, Path::new(&asked.own), path, &asked.on, &mut warnings).await?;
     // Copying skips what's there, so one made before keeps what's changed in it since.
     let settings = setup::load_settings(repo, path, state.config.home.as_deref(), &mut warnings);
-    let copied = setup::copy_local_files(repo, path, &settings, &mut warnings).await;
-    let branches = git::branches::read_now(path).await.ok();
+    let copied = setup::copy_local_files(&given, repo, path, &settings, &mut warnings).await;
+    let branches = git::branches::read_now(&given, path).await.ok();
     Ok(WorkerResponse::ChildWorktreeAdded(ChildWorktreeAdded { commit, copied, warnings, branches }))
 }
 
@@ -100,7 +103,8 @@ pub(in super::super) async fn watch_branches(
 ) -> Result<WorkerResponse, ApiError> {
     let (first, sent) = oneshot::channel();
     let path = PathBuf::from(path);
-    let watching = branch_watch::watch(path.clone(), whose, state.outbox.clone(), state.stopping.subscribe(), first);
+    let (given, outbox, stopping) = (state.credentials.watching(), state.outbox.clone(), state.stopping.subscribe());
+    let watching = branch_watch::watch(given, path.clone(), whose, outbox, stopping, first);
     state.watches.lock().start(path, whose, tokio::spawn(watching).abort_handle());
     let _ = sent.await;
     Ok(WorkerResponse::Ok)

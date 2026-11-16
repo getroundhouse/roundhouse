@@ -1,6 +1,7 @@
 use super::super::{MAX_TEXT_BYTES, SNIFF_BYTES, relative};
 use crate::git::blob;
 use crate::git::blob::Streamed;
+use process::Environment;
 use protocol::attachment::MediaType;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{CommitId, FileOpened, FilePage, FilePages, OpenedText, PageLine};
@@ -22,10 +23,15 @@ const SLOW: Duration = Duration::from_millis(100);
 
 /// Opens the file at `path` in `commit`, from the repository of the worktree at `worktree`, with every page when it's
 /// no bigger than text's limit, none of its lines cut short. Refused as [`super::super::read_at`] is.
-pub(crate) async fn open_at(worktree: &Path, commit: &CommitId, path: &str) -> Result<FileOpened, ApiError> {
+pub(crate) async fn open_at(
+    given: &Environment,
+    worktree: &Path,
+    commit: &CommitId,
+    path: &str,
+) -> Result<FileOpened, ApiError> {
     relative(path)?;
     let started = Instant::now();
-    let blob = blob::find(worktree, commit, path).await?;
+    let blob = blob::find(given, worktree, commit, path).await?;
     let whole = blob.bytes <= MAX_TEXT_BYTES;
     let (wanted, line) = if whole { (Wanted::All, usize::MAX) } else { (Wanted::Pages(Vec::new()), MAX_LINE_BYTES) };
     let mut paging = Paging::new(wanted, Reads::ToTheEnd, PAGE_LINES, Limits { line, reply: MAX_TEXT_BYTES });
@@ -46,6 +52,7 @@ pub(crate) async fn open_at(worktree: &Path, commit: &CommitId, path: &str) -> R
 /// as many as fit in text's limit and always the first, and none past its end. Refused as [`open_at`] is, and when
 /// `page_lines` is 0 or more than a page can have.
 pub(crate) async fn pages(
+    given: &Environment,
     worktree: &Path,
     commit: &CommitId,
     path: &str,
@@ -57,7 +64,7 @@ pub(crate) async fn pages(
         return Err(ApiError::new(ErrorCode::InvalidRequest, format!("a page can't have {page_lines} lines")));
     }
     let started = Instant::now();
-    let blob = blob::find(worktree, commit, path).await?;
+    let blob = blob::find(given, worktree, commit, path).await?;
     let limits = Limits { line: MAX_LINE_BYTES, reply: MAX_TEXT_BYTES };
     let mut paging = Paging::new(Wanted::Pages(pages.to_vec()), Reads::AsFarAsNeeded, page_lines, limits);
     let streamed = blob.stream(worktree, |chunk| paging.feed(chunk)).await?;

@@ -1,3 +1,4 @@
+use process::Environment;
 use std::ffi::OsString;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -17,12 +18,14 @@ impl Deleter {
         Self { program: program.into(), args: args.into_iter().map(Into::into).collect() }
     }
 
-    /// Starts deleting `paths`, and returns without waiting. It's in a process group of its own, so nothing that
-    /// stops this worker's group stops it. Its errors go to this worker's log, since it shares its stderr.
-    pub(crate) fn start(&self, paths: &[PathBuf]) {
+    /// Starts deleting `paths`, with what the worker gives every process it starts, and returns without waiting. It's
+    /// in a process group of its own, so nothing that stops this worker's group stops it. Its errors go to this
+    /// worker's log, since it shares its stderr.
+    pub(crate) fn start(&self, given: &Environment, paths: &[PathBuf]) {
         let mut command = Command::new(&self.program);
         command.args(&self.args).args(paths).stdin(Stdio::null()).stdout(Stdio::null());
         process::own_group(command.as_std_mut());
+        given.apply(command.as_std_mut());
         match command.spawn() {
             // Waited on to say how it went, while this worker is still here to.
             Ok(mut deleting) => drop(tokio::spawn(async move {
