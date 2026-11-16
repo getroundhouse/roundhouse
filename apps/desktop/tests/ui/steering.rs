@@ -36,13 +36,14 @@ fn enter_while_the_agent_works_steers_it_and_the_prompt_waits_until_its_taken(cx
     ui.press("enter");
 
     let transcript = ui.transcript().unwrap();
-    let row = |ui: &Ui| {
-        ui.events()
-            .iter()
-            .position(|e| matches!(&e.body, EventBody::UserPrompt { prompt: Prompt { text, .. }, .. } if text.ends_with("steered")))
+    let prompt = |ui: &Ui| {
+        ui.events().into_iter().find(
+            |e| matches!(&e.body, EventBody::UserPrompt { prompt: Prompt { text, .. }, .. } if text.ends_with("steered")),
+        )
     };
-    ui.wait("the prompt to be recorded", |ui| row(ui).is_some());
-    let at = row(&ui).unwrap();
+    ui.wait("the prompt to be recorded", |ui| prompt(ui).is_some());
+    // Its row in the log, which isn't its place among the events drawn, since a row may hold no event.
+    let at = ui.row_of(&prompt(&ui).unwrap());
     let state = |ui: &Ui| ui.cx.read_entity(&transcript, |t, _| t.prompt_state_at(at));
     assert_eq!(state(&ui), Some(PromptState::Waiting));
     assert!(queued(&ui).is_empty(), "steered, not queued");
