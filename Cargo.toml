@@ -56,7 +56,7 @@ default-members = [
 ]
 # The mobile proof of concept is a standalone project with its own lockfiles and pinned GPUI snapshots. The copy of
 # gpui-kit is upstream's workspace, cut down, whose crates keep upstream's manifests and lints rather than ours.
-exclude = ["mobile-poc", "third_party/gpui-kit"]
+exclude = ["mobile-poc", "third_party/gpui-kit/vendor"]
 
 [workspace.package]
 version = "0.1.0"
@@ -100,7 +100,7 @@ flate2 = "1.1.11"
 # Our copy of Longbridge's kit, on the release `tools/kit-sync` pins, with our changes, as `third_party/README.md`
 # says. It pins exact GPUI snapshots, so a release is taken deliberately, and `tools/kit-sync` moves the version here
 # with it.
-gpui-kit = { path = "third_party/gpui-kit/crates/kit", version = "=0.9.0", features = ["syntect"] }
+gpui-kit = { path = "third_party/gpui-kit/vendor/crates/kit", version = "=0.9.0", features = ["syntect"] }
 # Moves with gpui-kit, as `tools/kit-sync` moves it: the version its GPUI uses. Only for drawing off the main thread,
 # which tests run on.
 gpui-pre-apple = { version = "=0.3.11", features = ["font-kit"] }

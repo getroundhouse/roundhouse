@@ -79,7 +79,7 @@ jobs:
             guide=false
           fi
           # The copy, and the job that checks it.
-          if $based && git diff --quiet FETCH_HEAD HEAD -- third_party/gpui-kit .github/workflows/ci.yml; then
+          if $based && git diff --quiet FETCH_HEAD HEAD -- third_party/gpui-kit/vendor .github/workflows/ci.yml; then
             kit=false
           fi
           if $based &&
@@ -261,20 +261,20 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/gpui-kit/
-          key: linux-kit-deps-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', 'third_party/gpui-kit/**/Cargo.toml') }}
+          key: linux-kit-deps-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock', 'third_party/gpui-kit/vendor/**/Cargo.toml') }}
           restore-keys: ${{ github.ref != 'refs/heads/main' && 'linux-kit-deps-' || '' }}
       # Our lockfile, so the kit is checked on the versions the app ships rather than a fresh resolve. Cargo drops what
       # the copy's workspace doesn't use.
-      - run: cp Cargo.lock third_party/gpui-kit/Cargo.lock
+      - run: cp Cargo.lock third_party/gpui-kit/vendor/Cargo.lock
       - run: >-
-          cargo clippy --manifest-path third_party/gpui-kit/Cargo.toml --target-dir target/gpui-kit
+          cargo clippy --manifest-path third_party/gpui-kit/vendor/Cargo.toml --target-dir target/gpui-kit
           -p gpui-base -p gpui-component --all-targets --features test-support -- -D warnings
       - run: >-
-          cargo test --manifest-path third_party/gpui-kit/Cargo.toml --target-dir target/gpui-kit
+          cargo test --manifest-path third_party/gpui-kit/vendor/Cargo.toml --target-dir target/gpui-kit
           -p gpui-base -p gpui-component --features test-support
       # Only the dependencies, as for the lints.
       - if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
-        run: cargo clean --manifest-path third_party/gpui-kit/Cargo.toml --target-dir target/gpui-kit --workspace
+        run: cargo clean --manifest-path third_party/gpui-kit/vendor/Cargo.toml --target-dir target/gpui-kit --workspace
       - if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:

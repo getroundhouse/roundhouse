@@ -1,4 +1,4 @@
-//! What's refused before anything of the copy is written.
+//! What's refused before anything of the copy or its patches is lost or left out of step.
 
 use std::fs;
 
@@ -78,4 +78,34 @@ fn a_file_this_repository_ignores_is_refused() {
     let Err(Error::Ignored(ignored)) = refused else { panic!("{refused:?}") };
     assert_eq!(ignored, [CopyPath::new("crates/kit/dist/bundle.js")]);
     assert_eq!(stand.made().commit, stand.first);
+}
+
+#[test]
+fn unpatched_changes_missing_patches_and_missing_notices_are_refused() {
+    let stand = Stand::new();
+    stand.sync("v1", &stand.first).unwrap();
+    assert!(matches!(stand.patch("empty"), Err(Error::NothingChanged)));
+
+    write(&stand.copy, &[("crates/base/src/lib.rs", &lines(12, &[(2, "recorded")]))]);
+    stand.patch("recorded").unwrap();
+
+    // An unpatched edit to an untouched file is refused by verify, sync and drop.
+    write(&stand.copy, &[("crates/kit/src/lib.rs", &lines(12, &[(3, "loose")]))]);
+    assert!(matches!(stand.verify("v1", &stand.first), Err(Error::UnpatchedChanges)));
+    assert!(matches!(stand.sync("v1", &stand.first), Err(Error::UnpatchedChanges)));
+    assert!(matches!(stand.drop_patch("recorded"), Err(Error::UnpatchedChanges)));
+    write(&stand.copy, &[("crates/kit/src/lib.rs", &lines(12, &[]))]);
+
+    // Removing the notice line from a patched file is refused.
+    write(&stand.copy, &[("crates/base/src/lib.rs", &lines(12, &[(2, "recorded")]))]);
+    let Err(Error::WrongNotices(wrong)) = stand.verify("v1", &stand.first) else { panic!("missing notice passed") };
+    assert_eq!(wrong, [CopyPath::new("crates/base/src/lib.rs")]);
+    stand.patch("recorded").unwrap();
+
+    // An unlisted file in the patches folder is refused.
+    write(&stand.patches, &[("stray.patch", "stray\n")]);
+    let Err(Error::UnlistedPatch(stray)) = stand.verify("v1", &stand.first) else { panic!("unlisted patch passed") };
+    assert_eq!(stray, "stray.patch");
+    fs::remove_file(stand.patches.join("stray.patch")).unwrap();
+    stand.verify("v1", &stand.first).unwrap();
 }

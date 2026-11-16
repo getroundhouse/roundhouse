@@ -23,7 +23,7 @@
   schedule: ["* * * * 1"],
   // Everything but node_modules and the copy of gpui-kit's manifests, including tests/, whose fixtures say which
   // Claude CLI they came from. The copy's manifests are upstream's, and move with each release of it we take.
-  ignorePaths: ["**/node_modules/**", "third_party/gpui-kit/Cargo.toml", "third_party/gpui-kit/crates/**"],
+  ignorePaths: ["**/node_modules/**", "third_party/gpui-kit/vendor/Cargo.toml", "third_party/gpui-kit/vendor/crates/**"],
   // docs/documentation.md gives every issue one kind and an area.
   dependencyDashboardLabels: ["kind/task", "area/dev"],
   // Vulnerable direct dependencies, from OSV. Their PRs skip the schedule and approval, but Cargo still waits three

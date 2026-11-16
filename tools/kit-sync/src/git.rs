@@ -85,6 +85,9 @@ impl Git {
             // Each read from a place of its own, such as ~/.config/git, whatever the settings say.
             command.arg("-c").arg(format!("core.attributesFile={NOTHING}"));
             command.arg("-c").arg(format!("core.excludesFile={NOTHING}"));
+        } else {
+            // Tests in a container run as root over a mounted checkout owned by another user.
+            command.args(["-c", "safe.directory=*"]);
         }
         command.args(["-c", "user.name=kit-sync", "-c", "user.email=kit-sync@localhost"]).args(args);
         command.stdin(input.map_or_else(Stdio::null, Stdio::from));

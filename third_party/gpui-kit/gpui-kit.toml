@@ -1,7 +1,8 @@
-# The release of https://github.com/longbridge/gpui-kit that third_party/gpui-kit was made from, and what it
-# kept of it, which tools/kit-sync writes, and reads to merge the next release with our changes.
+# The release of https://github.com/longbridge/gpui-kit that third_party/gpui-kit/vendor was made from, what it kept of
+# it, and our patches on top of it, which tools/kit-sync writes, and reads to bring the next release in.
 release = "v0.9.0"
 commit = "7591a35eced761e3613c01e71ff04c10129dae1a"
+tree = "79c4144f98d924e5c7d5b13d2efc639501763bbfe2df4714788904465e64b90b"
 kept = [
     "crates/kit",
     "crates/base",
@@ -15,4 +16,8 @@ kept = [
     "examples/fixtures/test.md",
     "themes/aurora.json",
     "!crates/base/examples",
+]
+patches = [
+    "code-block-actions",
+    "strong-style",
 ]

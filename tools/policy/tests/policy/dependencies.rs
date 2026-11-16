@@ -5,7 +5,7 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::Path;
 
-use kit_sync::{Pin, Record};
+use kit_sync::{Git, Pin};
 use serde_json::Value;
 
 use super::workspace::metadata;
@@ -108,7 +108,7 @@ fn the_hub_and_the_worker_stay_apart() {
 #[test]
 fn the_app_builds_the_kit_from_its_copy() {
     let metadata = metadata();
-    let copy = Path::new(metadata["workspace_root"].as_str().unwrap()).join("third_party/gpui-kit");
+    let copy = Path::new(metadata["workspace_root"].as_str().unwrap()).join("third_party/gpui-kit/vendor");
     let packages = metadata["packages"].as_array().unwrap();
     let in_copy = |package: &Value| {
         Path::new(package["manifest_path"].as_str().unwrap()).starts_with(&copy) && package["source"].is_null()
@@ -153,16 +153,15 @@ fn gpui_pre_apple_is_the_kit_s_gpui() {
     assert_eq!(locked("gpui-pre-apple"), gpui, "run `cargo run -p kit-sync`, which moves gpui-pre-apple");
 }
 
-/// The copy of gpui-kit is on the release `tools/kit-sync` pins, with no conflict of its last merge left to settle, so a
-/// change to the pin, such as one Renovate makes, can't merge without the copy it names, which only running the tool
-/// makes.
+/// The copy of gpui-kit is on the release `tools/kit-sync` pins, with only the patches in `third_party/gpui-kit/patches`
+/// on top, notices on the files they change, and no conflict left to settle, so neither an unfinished sync nor an
+/// unrecorded change to the copy can merge.
 #[test]
 fn the_kit_s_copy_is_on_the_release_its_tool_pins() {
     let root = Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../.."));
-    let made = Record::read(root).unwrap().expect("there's a record of what the copy was made from");
-    let pin = Pin::ours();
+    let git = Git::new(std::env::vars_os());
 
-    let run = "run `cargo run -p kit-sync`, which brings the copy to the release it pins";
-    assert_eq!((&made.release, &made.commit, &made.kept), (&pin.release, &pin.commit, &pin.kept), "{run}");
-    assert_eq!(made.unsettled, [], "settle these, then run `cargo run -p kit-sync` again");
+    if let Err(error) = kit_sync::verify(&git, root, &Pin::ours()) {
+        panic!("{error}");
+    }
 }

@@ -1,6 +1,6 @@
 # Rust
 
-How Rust is written in this repo, in every crate of the Cargo workspace. `mobile-poc/` is a standalone prototype and is exempt. So is our copy of gpui-kit in `third_party/gpui-kit`, which is upstream's code, in upstream's workspace, with its manifests and lints: a change to it is written as upstream would write it, to upstream's standards, so it can go upstream as it is, as `third_party/README.md` says.
+How Rust is written in this repo, in every crate of the Cargo workspace. `mobile-poc/` is a standalone prototype and is exempt. So is our copy of gpui-kit in `third_party/gpui-kit/vendor`, which is upstream's code, in upstream's workspace, with its manifests and lints: a change to it is written as upstream would write it, to upstream's standards, so it can go upstream as it is, as `third_party/README.md` says.
 
 Two ideas sit behind the rules:
 
