@@ -15,14 +15,18 @@ use protocol::client::github_accounts::GithubAccountConnect;
 #[cfg(test)]
 use protocol::model::{GithubAccountId, GithubSignInStatus, GithubToken, GithubUser, GithubUserId};
 #[cfg(test)]
+pub(crate) use renewals::RENEWED_WITH_LEFT;
+#[cfg(test)]
 use std::sync::Arc;
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 
 mod accounts;
 pub(crate) use accounts::{Connect, GithubAccountChange, GithubLogins};
 mod credential;
+mod renewals;
+pub(crate) use renewals::{Checked, Due};
 mod secret;
 pub(crate) use secret::{GithubLogin, SignedIn};
 mod sign_ins;

@@ -52,9 +52,9 @@ struct Asking<'a> {
     grant_type: &'a str,
 }
 
-/// A token, as `POST /login/oauth/access_token` grants one.
+/// A token, as `POST /login/oauth/access_token` grants one, for a device code or a renewal.
 #[derive(Deserialize)]
-struct Given {
+pub(super) struct Given {
     access_token: String,
     #[serde(default)]
     expires_in: Option<u64>,
@@ -101,7 +101,7 @@ impl Github {
     }
 }
 
-fn granted(given: Given) -> Granted {
+pub(super) fn granted(given: Given) -> Granted {
     let Given { access_token, expires_in, refresh_token, refresh_token_expires_in } = given;
     let refresh = refresh_token
         .map(|refresh| (GithubRefreshToken::new(refresh), refresh_token_expires_in.map(Duration::from_secs)));

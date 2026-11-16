@@ -1,6 +1,7 @@
 //! A stand-in for GitHub on 127.0.0.1, for the hub's tests and tests of a real hub, serving both its API and its device
-//! flow at one address. It answers each token's `GET /user`, each ask for a sign-in's code, and each ask after a device
-//! code's token, as the test says, and keeps what it was asked.
+//! flow at one address. It answers each token's `GET /user`, each ask for a sign-in's code, each ask after a device
+//! code's token, and each renewal of a sign-in's token, as the test says, when the test says, and keeps what it was
+//! asked.
 #![expect(clippy::unwrap_used, reason = "only tests use it, so failing loudly is what it should do")]
 
 use std::collections::{HashMap, VecDeque};
@@ -18,6 +19,28 @@ pub enum Answer {
     With { status: u16, headers: Vec<(&'static str, &'static str)>, body: String },
     /// Nothing at all: it takes the request and holds the connection open.
     Never,
+    /// What the boxed answer says, once the gate has been opened.
+    After(Gate, Box<Answer>),
+}
+
+/// What holds an answer back until a test opens it, as [`Answer::After`] says.
+#[derive(Clone)]
+pub struct Gate(Arc<watch::Sender<bool>>);
+
+impl Gate {
+    /// One no answer has passed yet.
+    pub fn closed() -> Self {
+        Gate(Arc::new(watch::Sender::new(false)))
+    }
+
+    /// Lets every answer it holds back go, and every one after.
+    pub fn open(&self) {
+        self.0.send_replace(true);
+    }
+
+    async fn opened(&self) {
+        self.0.subscribe().wait_for(|open| *open).await.unwrap();
+    }
 }
 
 impl Answer {
@@ -90,6 +113,9 @@ pub struct Script {
     /// `POST /login/oauth/access_token`, in turn, by the device code asked with. Any other is GitHub's
     /// `incorrect_device_code`.
     pub polls: Vec<(&'static str, Vec<Answer>)>,
+    /// `POST /login/oauth/access_token` renewing a sign-in's token, in turn, by what renews it asked with. Any other is
+    /// GitHub's `bad_refresh_token`, as it answers one it doesn't know, or that has ended, been revoked or been used.
+    pub renewals: Vec<(&'static str, Vec<Answer>)>,
 }
 
 /// What it answers with still, as it goes through the script.
@@ -97,6 +123,7 @@ struct Answering {
     users: HashMap<&'static str, Answer>,
     codes: VecDeque<Answer>,
     polls: HashMap<String, VecDeque<Answer>>,
+    renewals: HashMap<String, VecDeque<Answer>>,
 }
 
 impl Answering {
@@ -127,6 +154,11 @@ impl StandIn {
             users: script.users.into_iter().collect(),
             codes: script.codes.into(),
             polls: script.polls.into_iter().map(|(device, answers)| (device.to_string(), answers.into())).collect(),
+            renewals: script
+                .renewals
+                .into_iter()
+                .map(|(refresh, answers)| (refresh.to_string(), answers.into()))
+                .collect(),
         }));
         let asked = Arc::new(Mutex::new(Vec::new()));
         let (count, asked_count) = watch::channel(0);
@@ -179,9 +211,13 @@ async fn answer(
     let mut body = vec![0; length];
     stream.read_exact(&mut body).await.unwrap();
     let body = String::from_utf8(body).unwrap();
-    let answer = chosen(&mut answering.lock(), &head, &body);
+    let mut answer = chosen(&mut answering.lock(), &head, &body);
     asked.lock().push(format!("{lowercase}{body}"));
     count.send_modify(|count| *count += 1);
+    while let Answer::After(gate, then) = answer {
+        gate.opened().await;
+        answer = *then;
+    }
     let Answer::With { status, headers, body } = answer else {
         std::future::pending::<()>().await;
         return;
@@ -203,6 +239,12 @@ fn chosen(answering: &mut Answering, head: &str, body: &str) -> Answer {
     }
     if head.starts_with("POST /login/oauth/access_token ") {
         let asked: serde_json::Value = serde_json::from_str(body).unwrap();
+        if let Some(refresh) = asked["refresh_token"].as_str() {
+            let renewals = answering.renewals.get_mut(refresh);
+            return renewals
+                .and_then(Answering::next)
+                .unwrap_or_else(|| Answer::device_flow_error("bad_refresh_token"));
+        }
         let device = asked["device_code"].as_str().unwrap_or_default();
         let polls = answering.polls.get_mut(device);
         return polls.and_then(Answering::next).unwrap_or_else(|| Answer::device_flow_error("incorrect_device_code"));

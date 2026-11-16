@@ -26,6 +26,44 @@ pub(super) fn approved(id: &GithubSignInId, token: &str, new_id: &str) -> Approv
     Approved { sign_in: id.clone(), login, new_id: new_id.into(), signed_in_at_ms: 1000 }
 }
 
+/// Has `logins` keep `login` as what a sign-in approved at 1000 as `owner` gave, as the account `new_id` if the hub
+/// holds no sign-in as that user, and answers with the account whose login it is.
+pub(super) fn sign_in_kept(
+    logins: &GithubLogins,
+    store: &Store,
+    owner: &TokenOwner,
+    new_id: &str,
+    login: SignedIn,
+) -> GithubAccountId {
+    let sign_in = started(store, &uuid::Uuid::new_v4().to_string());
+    let approved = Approved { sign_in, login, new_id: new_id.into(), signed_in_at_ms: 1000 };
+    logins.approve_sign_in(&approved, owner).unwrap().account.unwrap().account.id
+}
+
+/// The same, as ada, as the account `g` if the hub holds no sign-in as ada, which is the default as the first account.
+pub(crate) fn ada_signed_in(logins: &GithubLogins, store: &Store, login: SignedIn) -> GithubAccountId {
+    sign_in_kept(logins, store, &ada(), "g", login)
+}
+
+/// What a sign-in gives: `token`, ending at `ends_at_ms`, and `{token}-refresh`, which renews it, ending a day after.
+pub(crate) fn login_ending(token: &str, ends_at_ms: i64) -> SignedIn {
+    SignedIn {
+        token: GithubToken::new(token),
+        token_ends_at_ms: Some(ends_at_ms),
+        refresh: Some(crate::github::GithubRefreshToken::new(format!("{token}-refresh"))),
+        refresh_ends_at_ms: Some(ends_at_ms + 24 * 60 * 60 * 1000),
+    }
+}
+
+/// The sign-in the login file of the account `id` holds, as the logins read it.
+pub(crate) fn sign_in_held(logins: &GithubLogins, store: &Store, id: &GithubAccountId) -> SignedIn {
+    let file = store.github_login_file(id).unwrap().unwrap();
+    let Stored::Secret(GithubLogin::SignIn(held)) = logins.files.lock().read(&file).unwrap() else {
+        panic!("the file of {id} holds no sign-in")
+    };
+    held
+}
+
 /// What's in every file in the GitHub logins' directory, as the logins read it.
 fn logins_kept(logins: &GithubLogins, dir: &Path) -> Vec<Stored<GithubLogin>> {
     let Ok(entries) = std::fs::read_dir(dir.join("github-logins")) else { return Vec::new() };

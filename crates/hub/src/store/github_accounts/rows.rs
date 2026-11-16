@@ -108,13 +108,51 @@ impl Store {
         self.lasting(|tx| connect_login(tx, connecting))
     }
 
-    /// Says the login the GitHub account `id` holds needs signing in again, as renewing a sign-in GitHub refuses is to.
-    /// *Not built:* renewing, so only tests say so.
-    #[cfg(test)]
-    pub(crate) fn github_login_needs_sign_in(&self, id: &GithubAccountId) {
+    /// Every sign-in with GitHub the hub holds as an account's login, oldest first, with the account's record and the
+    /// login's file, for renewing each before its token ends.
+    pub(crate) fn held_github_sign_ins(&self) -> Result<Vec<(GithubAccount, LoginFile)>, StoreError> {
+        let conn = lock(&self.reader);
+        let mut statement = conn.prepare_cached(&format!(
+            "SELECT {COLUMNS} WHERE login_kind = ? AND login_file IS NOT NULL ORDER BY rowid"
+        ))?;
+        let rows = statement.query_map([text_of(&GithubLoginKind::SignIn)], account_at)?;
+        let rows = rows.collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(rows.into_iter().filter_map(|(account, file)| Some((account, file?))).collect())
+    }
+
+    /// Says the GitHub account `id`'s login, whose file the hub has just renewed in place, now ends at `ends_at_ms`, and
+    /// returns the record when that changed it. When it was connected stays as it was, since the person did nothing.
+    /// Not synced, since the file is what lasts: a row a power cut takes back says the login ends when it did, so it's
+    /// renewed again, with what the file holds.
+    pub(crate) fn renew_github_sign_in(
+        &self,
+        id: &GithubAccountId,
+        ends_at_ms: Option<i64>,
+    ) -> Result<Option<GithubAccount>, StoreError> {
         let conn = lock(&self.writer);
-        let changed = conn.execute("UPDATE github_accounts SET login_needs_sign_in = 1 WHERE id = ?", [id.as_str()]);
-        assert_eq!(changed.ok(), Some(1), "{id} holds no login to sign in again");
+        let changed = conn.execute(
+            "UPDATE github_accounts SET login_ends_at_ms = ? WHERE id = ? AND login_file IS NOT NULL",
+            params![ends_at_ms, id.as_str()],
+        )?;
+        if changed == 0 {
+            return Ok(None);
+        }
+        Ok(row_of(&conn, id)?.map(|(account, _)| account))
+    }
+
+    /// Says the login the GitHub account `id` holds needs signing in again, as when GitHub has refused what renews a
+    /// sign-in's token, or nothing can, and returns the record when that changed it.
+    pub(crate) fn github_login_needs_sign_in(&self, id: &GithubAccountId) -> Result<Option<GithubAccount>, StoreError> {
+        let conn = lock(&self.writer);
+        let changed = conn.execute(
+            "UPDATE github_accounts SET login_needs_sign_in = 1
+                 WHERE id = ? AND login_file IS NOT NULL AND login_needs_sign_in = 0",
+            [id.as_str()],
+        )?;
+        if changed == 0 {
+            return Ok(None);
+        }
+        Ok(row_of(&conn, id)?.map(|(account, _)| account))
     }
 
     /// Has the GitHub account `id` hold no login, keeping the rest of its record, and returns the record when that

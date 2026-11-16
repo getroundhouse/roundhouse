@@ -157,3 +157,61 @@ async fn an_answer_without_a_token_says_to_ask_again_less_often_or_how_the_sign_
     let unavailable = asked[6..].iter().map(|asked| asked.as_ref().map(|_| ()).map_err(|e| e.code)).collect::<Vec<_>>();
     assert_eq!(unavailable, [Err(ErrorCode::Unavailable); 2]);
 }
+
+#[tokio::test]
+async fn a_renewal_is_asked_with_what_renews_the_token_through_the_app_and_comes_with_both_anew() {
+    let renewed = Answer::granted("a-renewed-token", "a-renewed-refresh-token");
+    let github =
+        StandIn::with(Script { renewals: vec![("a-refresh-token", vec![renewed])], ..Script::default() }).await;
+
+    let renewal = calling(&github).renew(&GithubRefreshToken::new("a-refresh-token")).await.unwrap();
+
+    let Renewal::Renewed(granted) = renewal else { panic!("{renewal:?}") };
+    assert_eq!((granted.token.as_str(), granted.lasts), ("a-renewed-token", Some(Duration::from_hours(8))));
+    let (refresh, refresh_lasts) = granted.refresh.unwrap();
+    assert_eq!((refresh.as_str(), refresh_lasts), ("a-renewed-refresh-token", Some(Duration::from_hours(181 * 24))));
+    let head = &github.asked()[0];
+    assert!(head.starts_with("post /login/oauth/access_token http/1.1\r\n"), "{head}");
+    assert!(head.contains("accept: application/json\r\n"), "{head}");
+    let asked =
+        json!({"client_id": "a-made-up-client-id", "grant_type": "refresh_token", "refresh_token": "a-refresh-token"});
+    assert_eq!(sent(&github, 0), asked);
+}
+
+/// One GitHub doesn't know, as it answers one that has ended, been revoked or been used already, and then each answer
+/// that may pass by the next try: a limit on how often it's asked, a failure, what isn't a token or an error, an error
+/// that says nothing of what renews the token, a GitHub that can't be reached, and one that never answers, whose limit
+/// is waited out on tokio's paused clock once the stand-in has the request.
+#[tokio::test]
+async fn what_renews_a_token_that_github_refuses_is_refused_and_anything_else_is_unavailable() {
+    let renewals = vec![
+        ("limited", vec![Answer::status(429, vec![("retry-after", "60")])]),
+        ("failing", vec![Answer::status(503, Vec::new())]),
+        ("garbled", vec![Answer::With { status: 200, headers: Vec::new(), body: "<html>".to_string() }]),
+        ("misconfigured", vec![Answer::device_flow_error("incorrect_client_credentials")]),
+        ("never", vec![Answer::Never]),
+    ];
+    let github = StandIn::with(Script { renewals, ..Script::default() }).await;
+    let calls = calling(&github);
+    let nowhere = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let unreachable = Github::new(GithubConfig::at(format!("http://{}", nowhere.local_addr().unwrap())));
+    drop(nowhere);
+    let renewing = |refresh: &str| GithubRefreshToken::new(refresh);
+
+    let refused = calls.renew(&renewing("used-already")).await;
+    let mut codes = Vec::new();
+    for refresh in ["limited", "failing", "garbled", "misconfigured"] {
+        codes.push(calls.renew(&renewing(refresh)).await.unwrap_err().code);
+    }
+    codes.push(unreachable.renew(&renewing("a-refresh-token")).await.unwrap_err().code);
+    let never = renewing("never");
+    let (never, ()) = tokio::join!(calls.renew(&never), async {
+        github.until_asked(6).await;
+        tokio::time::pause();
+    });
+    codes.push(never.unwrap_err().code);
+
+    let Ok(Renewal::Refused(message)) = &refused else { panic!("{refused:?}") };
+    assert!(message.contains("bad_refresh_token"), "{message}");
+    assert_eq!(codes, [ErrorCode::Unavailable; 6]);
+}

@@ -78,7 +78,7 @@ impl GithubLogins {
         // Replaced before this returns, so before anything can follow it. A block, so even a mistake there fails closed.
         let unread = GithubCredential::Blocked { reason: "Roundhouse hasn't read its GitHub accounts".to_string() };
         let logins = Self { store, files: LoginFiles::new(data_dir), credential: watch::Sender::new(unread) };
-        logins.check(now_ms);
+        logins.publish(&logins.files.lock(), now_ms);
         logins
     }
 
@@ -184,7 +184,7 @@ impl GithubLogins {
     }
 
     /// Refuses with `Conflict` an account whose login can't be used now: disconnected, ended, needing signing in again,
-    /// in a form only a newer build reads, or with no file that holds a token.
+    /// being renewed, in a form only a newer build reads, or with no file that holds a token.
     fn usable(&self, files: &Locked<'_, GithubLogin>, id: &GithubAccountId, now_ms: i64) -> Result<(), ApiError> {
         let account = self.record(id)?;
         match self.token_of(files, &account, now_ms)? {
@@ -198,6 +198,11 @@ impl GithubLogins {
             }
             Err(Unusable::SignInAgain) => {
                 let message = format!("{} needs signing in with GitHub again first", account.user.name);
+                Err(ApiError::new(ErrorCode::Conflict, message))
+            }
+            Err(Unusable::Renewing) => {
+                let message =
+                    format!("{}'s sign-in with GitHub is being renewed; try again in a minute", account.user.name);
                 Err(ApiError::new(ErrorCode::Conflict, message))
             }
             Err(Unusable::Newer) => {

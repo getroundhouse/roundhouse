@@ -35,6 +35,7 @@ async fn github(device: &'static str, polls: Vec<Answer>) -> StandIn {
         users: vec![("a-token", Answer::user(7, "ada", None))],
         codes: vec![code(device)],
         polls: vec![(device, polls)],
+        ..Script::default()
     })
     .await
 }
@@ -188,6 +189,7 @@ async fn a_github_that_never_answers_one_sign_in_holds_up_only_that_one() {
         users: vec![("a-token", Answer::user(7, "ada", None))],
         codes: vec![code("stuck"), code("answered")],
         polls: vec![("stuck", vec![Answer::Never]), ("answered", vec![Answer::granted("a-token", "a-refresh-token")])],
+        ..Script::default()
     })
     .await;
     let dir = tempfile::tempdir().unwrap();

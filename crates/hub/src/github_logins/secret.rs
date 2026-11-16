@@ -47,6 +47,13 @@ impl SignedIn {
         let ends = |lasts: Option<std::time::Duration>| lasts.map(|lasts| later_ms(granted_at_ms, lasts));
         Self { token, token_ends_at_ms: ends(lasts), refresh, refresh_ends_at_ms: ends(refresh_lasts) }
     }
+
+    /// What renews its token at `now_ms`, by the hub's clock, unless GitHub gave none or it has ended, so only signing
+    /// in again gives the account a login that works once the token ends.
+    pub(crate) fn renews_with(&self, now_ms: i64) -> Option<&GithubRefreshToken> {
+        let ended = self.refresh_ends_at_ms.is_some_and(|ends_at_ms| ends_at_ms <= now_ms);
+        self.refresh.as_ref().filter(|_| !ended)
+    }
 }
 
 /// How a sign-in's file holds it: a JSON object whose `format` says which form it's in. A form only a newer build knows

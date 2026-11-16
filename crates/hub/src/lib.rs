@@ -34,7 +34,7 @@ mod worker_link;
 pub use crate::error::HubError;
 pub use crate::github::GithubConfig;
 #[cfg(feature = "testing")]
-pub use crate::github::{Answer as GithubAnswer, Script as GithubScript, StandIn as GithubStandIn};
+pub use crate::github::{Answer as GithubAnswer, Gate as GithubGate, Script as GithubScript, StandIn as GithubStandIn};
 pub use crate::run::{HubConfig, run};
 pub use crate::timers::Timers;
 

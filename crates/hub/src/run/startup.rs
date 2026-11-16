@@ -153,15 +153,16 @@ pub async fn run(config: HubConfig) -> Result<(), HubError> {
     };
     let watching_deadlines = tokio::spawn(hub.clone().watch_wait_deadlines());
     let watching_pull_requests = tokio::spawn(hub.clone().watch_pull_requests());
-    let watching_token_ends = tokio::spawn(hub.clone().watch_github_token_ends());
+    let watching_github_logins = tokio::spawn(hub.clone().watch_github_logins());
     let mut terminate = Terminate::listen().map_err(|e| HubError::io("listening for a signal to stop", e))?;
     let signalled = asked_to_go(&hub, &mut terminate).await;
     accept.abort();
-    watching_token_ends.abort();
     watching_pull_requests.abort();
     watching_deadlines.abort();
     hub.stop_jobs();
     listener::unbind(&paths.socket);
+    // Before the lock goes, so what a renewal under way is given is written before the next hub can start.
+    hub.stop_checking_github_logins(watching_github_logins).await;
     if hub.restarting() && !signalled {
         hub.leave_workers().await;
     } else {
