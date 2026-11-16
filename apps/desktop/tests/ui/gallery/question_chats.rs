@@ -27,6 +27,21 @@ pub(crate) fn question() -> Vec<EventBody> {
     events
 }
 
+/// A question that asks only for words, without any offered choices.
+pub(crate) fn written_answer() -> Vec<EventBody> {
+    let mut events = looked_around();
+    events.extend(asking(
+        "msg-3",
+        "toolu-3",
+        "approval-1",
+        json!({"questions": [{
+            "question": "How should the sidebar behave while the hub reconnects?",
+            "header": "Reconnecting", "options": [], "multiSelect": false,
+        }]}),
+    ));
+    events
+}
+
 /// Waiting for answers to three questions, the second of which takes several.
 pub(crate) fn questions() -> Vec<EventBody> {
     let mut events = looked_around();

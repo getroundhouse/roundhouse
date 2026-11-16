@@ -99,14 +99,14 @@ pub(super) fn repeat_space(ui: &mut Ui) -> bool {
 /// Whether anything is being dictated into the pane showing.
 pub(super) fn dictating(ui: &mut Ui) -> bool {
     let pane = ui.pane().unwrap();
-    ui.cx.read_entity(&pane, |pane, _| pane.dictating())
+    ui.cx.read_entity(&pane, desktop::workspace_pane::WorkspacePane::dictating)
 }
 
 /// What's said, given to what's being dictated.
 pub(super) fn say(ui: &mut Ui, engine: &FakeEngine, said: &str) {
     let audio = engine.saying(said);
     let pane = ui.pane().unwrap();
-    ui.cx.update(|cx| pane.read(cx).hear(&audio));
+    ui.cx.update(|cx| pane.read(cx).hear(&audio, cx));
 }
 
 /// The live text drawn under what's typed, while something is being dictated.

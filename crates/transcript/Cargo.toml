@@ -9,7 +9,7 @@ license.workspace = true
 [features]
 # What only tests read: where the scrollbar's thumb is, and how long a new question ignores keys, which a test can wait
 # out. And look's, for setting off a scroll by a test's clock.
-testing = ["look/testing"]
+testing = ["look/testing", "dictation-ui/testing"]
 
 [dependencies]
 protocol.workspace = true
@@ -18,6 +18,7 @@ gpui-kit.workspace = true
 # Reads an attached image's size before it's drawn, so its row doesn't change height. GPUI already builds these.
 image = { workspace = true, features = ["gif", "jpeg", "png", "webp"] }
 look.workspace = true
+dictation-ui.workspace = true
 # Finds the images written one after another in the agent's text or a prompt's, to draw each at its own width, as the
 # kit parses it.
 markdown.workspace = true

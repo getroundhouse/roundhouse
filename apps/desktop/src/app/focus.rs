@@ -3,20 +3,24 @@
 //! keys reach nothing without it, as "Focus stays on something that's drawn" in `docs/gpui.md` says.
 
 use gpui_kit::component::WindowExt as _;
-use gpui_kit::{Context, Window};
+use gpui_kit::{Context, Focusable as _, Window};
 
 use super::AppView;
 
 impl AppView {
     /// Focuses Settings while it shows, Home's search while it does, and what's in front in the workspace otherwise,
-    /// as `WorkspacePane::focus_showing` has it. With a dialog open, or none of them, the window itself has focus, so
-    /// its keys still work.
+    /// as `WorkspacePane::focus_showing` has it. An open new-workspace dialog gets its prompt back; with another dialog
+    /// open, or none of those views, the window itself gets focus so its keys still work.
     pub(super) fn focus_what_shows(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.settings_open() {
             window.focus(&self.settings_focus, cx);
         } else if window.has_active_dialog(cx) {
-            // Not what's behind it, where typing meant for the dialog would go unseen.
-            window.focus(&self.focus, cx);
+            // The retained draft isn't necessarily open. Only the visible prompt gets keys back when its microphone
+            // card disappears; another dialog must never send typing into that hidden draft or the composer behind it.
+            match self.new_workspace.as_ref().filter(|dialog| dialog.read(cx).is_shown()) {
+                Some(dialog) => window.focus(&dialog.focus_handle(cx), cx),
+                None => window.focus(&self.focus, cx),
+            }
         } else if self.home_drawn() {
             self.home.search.update(cx, |search, cx| search.focus(window, cx));
         } else if let Some(pane) = self.pane_to_draw() {

@@ -56,9 +56,9 @@ pub(crate) enum Step {
         on: Target,
         shows: &'static str,
     },
-    /// Dictates `said` into the composer from its microphone button, to a stand-in for the model that hears only what
-    /// the step gives it, and waits for the line under what's typed to show `shows`.
+    /// Dictates into this field, whose input is already focused, through its real recording attachment.
     Dictate {
+        into: DictationTarget,
         said: &'static str,
         shows: &'static str,
     },
@@ -96,6 +96,12 @@ pub(crate) enum Step {
     /// Opens the bar for finding text in the chat, as `Cmd-F` does, looks for this, and waits for every match to be
     /// counted and the first to be shown.
     Find(&'static str),
+}
+
+pub(crate) enum DictationTarget {
+    Composer,
+    NewWorkspace,
+    Answer,
 }
 
 /// An element in the app, by its ID, or a line in the chat, by the label it gives assistive apps, for one whose ID is

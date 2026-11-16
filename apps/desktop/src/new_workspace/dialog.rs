@@ -1,4 +1,4 @@
-use super::keeping;
+use super::{Request, keeping};
 use crate::attached::{Attachments, joined};
 use crate::model_picker::Picked;
 use crate::{attached, composing};
@@ -6,79 +6,19 @@ use client_core::{Agents, FileToSend, FilesFor};
 use gpui_kit::component::WindowExt as _;
 use gpui_kit::component::input::{InputEvent, TextareaState};
 use gpui_kit::{
-    App, AppContext as _, ClipboardItem, Context, Entity, EventEmitter, Hsla, ParentElement as _, Pixels, Styled as _,
-    Subscription, Window, px,
+    App, AppContext as _, ClipboardItem, Context, Entity, EventEmitter, FocusHandle, Focusable, Hsla,
+    ParentElement as _, Pixels, Styled as _, Subscription, Window, px,
 };
 use keeping::Keeping;
 use look::Shaped as _;
 use protocol::attachment::Attachment;
-use protocol::model::{
-    AgentDescription, AgentKind, AttachmentId, Effort, ModelName, NewWorkspaceDraftToKeep, PermissionMode, RepoId,
-};
-use protocol::prompt::{Prompt, says_or_carries};
+use protocol::model::{AgentDescription, AgentKind, AttachmentId, Effort, ModelName, PermissionMode, RepoId};
+use protocol::prompt::Prompt;
 use std::path::PathBuf;
 use std::rc::Rc;
 
 /// Wide enough for a few lines of a task's description, and narrower than the transcript's column.
 const WIDTH: Pixels = px(720.);
-
-/// What Create asks the app to make.
-#[derive(Debug)]
-pub struct Request {
-    pub repo: RepoId,
-    /// What was typed and attached, which is sent once the workspace is made, unless it says nothing and carries
-    /// nothing, as [`Request::has_prompt`] says. Its files are the ones the dialog had, to give back, or to send to a
-    /// hub too old to make the workspace from what it keeps.
-    pub prompt: Prompt<FileToSend>,
-    /// Files the hub keeps for the dialog that hadn't been read back yet, which come before the prompt's.
-    pub coming_back: Vec<Attachment>,
-    /// The kind of agent its first chat runs.
-    pub agent: AgentKind,
-    /// The model and effort the dialog showed. `None` from a hub that doesn't describe its agents, with nothing picked,
-    /// for what the agent starts a chat with.
-    pub model: Option<ModelName>,
-    pub effort: Option<Effort>,
-    /// Plan mode, if it was on in the dialog, and full access otherwise.
-    pub permission_mode: PermissionMode,
-    /// What Create had the hub keep as what's in the dialog, which the hub makes the workspace from. It's what the
-    /// dialog keeps, not what it shows, so its model and effort are `None` unless one was picked or kept, as the hub's
-    /// copy says, and the hub can tell once the dialog says nothing else.
-    pub made_of: NewWorkspaceDraftToKeep,
-    /// Answers once the hub keeps `made_of` as what's in the dialog, or once that's as far as it can get, so the hub
-    /// can make the workspace from what it keeps. `None` for a request that's not from the dialog.
-    pub kept: Option<flume::Receiver<()>>,
-}
-
-impl Request {
-    /// A request that's not from the dialog, such as a test's, which asks the hub to make what it says, with the model
-    /// and effort it names, or with `None`, what the agent starts a chat with. The hub refuses any file it carries,
-    /// since only the dialog gives the hub its files.
-    #[cfg(feature = "testing")]
-    pub fn new(
-        repo: RepoId,
-        prompt: Prompt<FileToSend>,
-        agent: AgentKind,
-        (model, effort): (Option<ModelName>, Option<Effort>),
-        permission_mode: PermissionMode,
-    ) -> Self {
-        let made_of = NewWorkspaceDraftToKeep {
-            agent: Some(agent),
-            repo_id: Some(repo.clone()),
-            text: prompt.text.clone(),
-            files: prompt.files.iter().map(|file| file.attachment.id.clone()).collect(),
-            model: model.clone(),
-            effort,
-            plan: permission_mode == PermissionMode::Plan,
-        };
-        let coming_back = Vec::new();
-        Self { repo, prompt, coming_back, agent, model, effort, permission_mode, made_of, kept: None }
-    }
-
-    /// Whether there's a prompt to send once the workspace is made, counting the files still coming back.
-    pub fn has_prompt(&self) -> bool {
-        says_or_carries(&self.prompt.text, self.coming_back.len() + self.prompt.files.len())
-    }
-}
 
 /// What the app tells the dialog: the repositories a workspace can be made in, whether one can be made now, and what the
 /// hub says of its agents, which the first chat runs one of.
@@ -105,6 +45,9 @@ pub struct NewWorkspaceDialog {
     pub(super) repo: RepoId,
     pub(super) offer: Offer,
     pub(super) prompt: Entity<TextareaState>,
+    pub(super) dictation: Entity<dictation_ui::Field>,
+    /// The draft outlives the dialog, so retaining it alone doesn't say whether its input can take focus.
+    shown: bool,
     /// What was picked, or kept by the hub. `None` until then, which is what the first chat's agent starts a chat with.
     pub(super) chosen_agent: Option<AgentKind>,
     pub(super) model: Option<ModelName>,
@@ -131,6 +74,7 @@ pub(crate) fn open(
         // The composer's corners, since it's where a prompt is written. The dialog's own padding is left to what's in
         // it, which runs a line under the repository from edge to edge.
         let ((background, edge), closed) = (shown.read(cx).colors(cx), closed.clone());
+        let closing = shown.clone();
         surface
             .p_0()
             .w(WIDTH)
@@ -142,13 +86,36 @@ pub(crate) fn open(
             // Enter is the prompt's, which creates, and Create closes the dialog once it can act, so Enter pressed
             // while it waits leaves the dialog open.
             .on_ok(|_, _, _| false)
-            .on_close(move |_, window, cx| closed(window, cx))
+            .on_close(move |_, window, cx| {
+                closing.update(cx, NewWorkspaceDialog::closed);
+                closed(window, cx);
+            })
     });
     // After opening, which focuses the dialog itself.
-    dialog.update(cx, |dialog, cx| dialog.prompt.update(cx, |prompt, cx| prompt.focus(window, cx)));
+    dialog.update(cx, |dialog, cx| {
+        dialog.shown = true;
+        dialog.dictation.update(cx, |field, cx| field.set_enabled(true, cx));
+        dialog.prompt.update(cx, |prompt, cx| prompt.focus(window, cx));
+    });
 }
 
 impl NewWorkspaceDialog {
+    pub(crate) fn is_shown(&self) -> bool {
+        self.shown
+    }
+
+    /// Both dismissal by the kit and successful creation end the visible input's lifetime.
+    pub(crate) fn closed(&mut self, cx: &mut Context<Self>) {
+        self.shown = false;
+        self.dictation.update(cx, |field, cx| field.set_enabled(false, cx));
+    }
+
+    /// Gives the prompt synthetic audio in UI tests.
+    #[cfg(feature = "testing")]
+    pub fn hear(&self, audio: &[f32], cx: &App) {
+        self.dictation.read(cx).hear(audio);
+    }
+
     pub(crate) fn new(
         repo: RepoId,
         offer: Offer,
@@ -158,7 +125,7 @@ impl NewWorkspaceDialog {
     ) -> Self {
         let prompt = cx.new(|cx| {
             TextareaState::new(window, cx)
-                .auto_grow(7, 16)
+                .auto_grow(1, 16)
                 .submit_on_enter(true)
                 .placeholder("What do you want to work on?")
         });
@@ -167,19 +134,29 @@ impl NewWorkspaceDialog {
             InputEvent::Change => this.keep(false, cx),
             InputEvent::PressEnter { shift: true, .. } | InputEvent::Focus | InputEvent::Blur => {}
         });
+        let dictation = cx.new(|cx| dictation_ui::Field::new(prompt.clone(), window, cx));
+        let dictated = cx.subscribe(&dictation, |this, _, event, cx| match event {
+            dictation_ui::Event::Ended { submit: true } => this.create(cx),
+            dictation_ui::Event::Ended { submit: false } => {}
+            dictation_ui::Event::Error(message) => cx.emit(DialogEvent::Error(message.clone())),
+        });
+        let live = cx.observe(&dictation, |_, _, cx| cx.notify());
+        let readiness = crate::dictating::observe(cx, |_, cx| cx.notify());
         let (model, effort, attached) = (None, None, Attachments::default());
         let mode = PermissionMode::FullAccess;
         Self {
             repo,
             offer,
             prompt,
+            dictation,
+            shown: false,
             chosen_agent: None,
             model,
             effort,
             mode,
             attached,
             keeping,
-            _subscriptions: vec![typed],
+            _subscriptions: vec![typed, dictated, live, readiness],
         }
     }
 
@@ -202,6 +179,10 @@ impl NewWorkspaceDialog {
     /// another, which Create shows by being disabled.
     pub(super) fn create(&mut self, cx: &mut Context<Self>) {
         if self.can_create() {
+            // Creating without a first prompt is valid too, so even an empty recording must finish this action.
+            if self.dictation.update(cx, |field, cx| field.finish_before_submit(true, cx)) {
+                return;
+            }
             cx.emit(DialogEvent::Create);
         }
     }
@@ -347,6 +328,12 @@ impl NewWorkspaceDialog {
         }
         self.keep(true, cx);
         cx.notify();
+    }
+}
+
+impl Focusable for NewWorkspaceDialog {
+    fn focus_handle(&self, cx: &App) -> FocusHandle {
+        self.prompt.focus_handle(cx)
     }
 }
 

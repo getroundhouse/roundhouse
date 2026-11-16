@@ -60,6 +60,8 @@ pub mod workspace_pane;
 mod app_icon_res;
 
 pub use assets::Assets;
+pub use dictation_ui::{CancelDictation, HoldToDictate};
+
 use checkout::Checkout;
 use gpui_kit::{AnyWindowHandle, App, AppContext, Entity, TitlebarOptions, WindowOptions, actions, point};
 pub use window_place::Opens;
@@ -107,8 +109,6 @@ actions!(
         NextChat,
         PreviousChat,
         TogglePlanMode,
-        HoldToDictate,
-        CancelDictation,
         FindInChat,
         FindNext,
         FindPrevious
@@ -128,8 +128,14 @@ pub fn open_main_window(
     settings::load(&hub.paths.data_dir, cx);
     accessibility_focus::install();
     keys::set(cx);
-    dictating::swallow_held_spaces(cx);
-    app::HearsTheKeyLetGo::register(cx);
+    dictation_ui::install(
+        dictation_ui::Source {
+            ready: dictating::ready,
+            record: dictating::record,
+            uses_microphone: dictating::hears_the_microphone,
+        },
+        cx,
+    );
     dictating::start(&hub.paths.data_dir, cx);
     menus::set(hub.build_version, cx);
     std::thread::spawn(look::preload_highlighting);

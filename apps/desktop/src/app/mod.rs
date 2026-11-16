@@ -3,7 +3,6 @@
 
 mod build_line;
 mod corner;
-mod dictating;
 mod drafts;
 mod focus;
 mod home;
@@ -23,7 +22,6 @@ mod window_buttons;
 mod workspaces;
 
 pub use build_line::{Agents, BuildLine, Updating};
-pub(crate) use dictating::HearsTheKeyLetGo;
 pub use hub_source::HubSource;
 pub use quitting::Quitting;
 pub(crate) use quitting::quit;

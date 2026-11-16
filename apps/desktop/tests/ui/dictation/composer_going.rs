@@ -133,7 +133,7 @@ fn losing_the_hub_ends_it_since_the_composer_goes(cx: &mut TestAppContext) {
     client_core::stop_hub(&stack.hub.paths.socket).unwrap();
     ui.wait("the app to find no hub", |ui| matches!(ui.view().connection(), Connection::Failed(_)));
     // Ended as the hub went, not as it comes back, so the microphone isn't on for as long as there's no hub.
-    assert!(!ui.cx.read_entity(&pane, |p, _| p.dictating()));
+    assert!(!ui.cx.read_entity(&pane, desktop::workspace_pane::WorkspacePane::dictating));
     Client::connect_or_start(&stack.hub.paths, &daemon, "test").unwrap();
     ui.click("try-hub-again");
     ui.wait("the hub to come back", |ui| matches!(ui.view().connection(), Connection::Ready(_)));

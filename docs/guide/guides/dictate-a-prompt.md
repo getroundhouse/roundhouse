@@ -1,10 +1,10 @@
 # Dictate a prompt
 
-Say a prompt rather than type it. A model on your Mac hears what you say, so it never leaves it, and what it heard waits in the composer for you to send.
+Say a chat prompt, a new workspace’s first prompt or an answer to an agent’s question. A model on your Mac hears what you say, so it never leaves it, and the text waits for you to send.
 
 ## Turn it on
 
-Dictation is on a Mac with macOS 14 or later, and needs a model of 2.4 GB, downloaded once, so it asks first. On an older Mac, the composer has no microphone. Until you choose, the composer has a microphone beside Send, and clicking it offers to turn dictation on. **Turn on** downloads the model, and **Hide the microphone** turns dictation off. You can choose either in Settings too, under General, where Dictation is Ask first, On or Off.
+Dictation is on a Mac with macOS 14 or later, and needs a model of 2.4 GB, downloaded once, so it asks first. On an older Mac, the composer has no microphone. Until you choose, the composer has a microphone beside Send, and the new-workspace dialog has one beside Create, and clicking it offers to turn dictation on. **Turn on** downloads the model, and **Hide the microphone** turns dictation off. You can choose either in Settings too, under General, where Dictation is Ask first, On or Off.
 
 ![The microphone offering to turn dictation on](../../spec/screens/dictation-offer.png)
 
@@ -20,9 +20,9 @@ Turning dictation off stops a download, and keeps what's downloaded for next tim
 |---|---|
 | Space, held | Dictates while it's held, and stops when you let go. A tap types a space, as always. Dictating starts at half a second, with what you've said from a moment after you pressed it, so you can start talking straight away |
 | `Option-Space`, held | Dictates while it's held, from the moment you press it |
-| Escape | Stops, and puts the composer back as it was when you started. `Option-Escape` while you still hold `Option-Space` |
+| Escape | Stops, and puts the text field back as it was when you started. `Option-Escape` while you still hold `Option-Space` |
 
-Or click the microphone beside Send at the bottom of the composer to start, and again to stop.
+Focus the text field before using these shortcuts. You can also click the microphone beside Send in the composer or beside Create in the new-workspace dialog to start, and again to stop.
 
 ![Dictating into the composer](../../spec/screens/dictation.png)
 
@@ -32,7 +32,17 @@ Nothing is sent until you press `Enter`, so you can fix what came out wrong firs
 
 The first time, your Mac asks whether Roundhouse may use the microphone. Allow it, and press again. If you didn't, a message says where in System Settings to allow it.
 
+## Dictate a new workspace or an answer
+
+The new-workspace prompt uses the same shortcuts. Create or `Enter` finishes the last words before creating the workspace. Letting go only puts them into the prompt. Escape cancels dictation first, leaving the dialog open.
+
+Questions have no microphone button. Focus **Other**, a written answer or the feedback field on a tool request, then hold Space or `Option-Space`. Final text selects your written answer and saves it just as typing does. With multiple choices, your selected options stay selected too. Send finishes the live words before answering, and `Enter` keeps its usual behavior of continuing to the next question or sending the answers. Secret inputs and questions that offer only choices do not support dictation.
+
+![Dictating an answer with the keyboard](../../spec/screens/question-dictation.png)
+
 ## When it stops by itself
 
 - **Going to another app** stops it as letting go does, so what you said goes in.
 - **The composer going,** such as for Settings, another chat, the file tab, a question from the agent, the workspace being archived or the app losing its hub, stops it, and drops what was still showing. A hub restarting, such as to finish an update, leaves the composer where it is, so you can go on dictating.
+
+- **Leaving an answer or closing the new-workspace dialog** drops tentative words and keeps finalized text. Starting dictation in another field ends the old recording too.

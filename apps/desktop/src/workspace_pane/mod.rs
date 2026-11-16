@@ -1,8 +1,7 @@
 //! One workspace: its chats, the composer, the file tab, and the sidebar of changes beside them when it's open.
 
-pub use dictating::{LIVE_LINE, NOTHING_HEARD};
+pub use dictation_ui::{LIVE_LINE, NOTHING_HEARD, SPACE_DICTATES_AFTER, SPACE_LISTENS_AFTER};
 pub use file_tab::Opened;
-pub use holding_space::{SPACE_DICTATES_AFTER, SPACE_LISTENS_AFTER};
 pub(crate) use keeping::drafted;
 pub use microphone::{HIDE, MICROPHONE, TURN_ON};
 pub use reading::Mark;
@@ -19,7 +18,6 @@ mod dictating;
 mod file_tab;
 mod focus;
 mod front;
-mod holding_space;
 mod keeping;
 mod microphone;
 mod pull_request;

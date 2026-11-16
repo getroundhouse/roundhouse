@@ -1,7 +1,7 @@
 //! How dictation stands: off, downloading the model, preparing it, ready, failed, or on a macOS too old for it. It
 //! follows the person's choice. Turned on, it downloads the model's files that aren't here, then loads it on the
 //! thread that hears what's dictated. Turned off, it stops a download, keeping what's come, and lets go of the thread.
-//! Each recording is its composer's, and ends with it, so the app keeps none.
+//! Each recording belongs to its field attachment, which ends it when the field goes, so model setup keeps none.
 
 use std::io;
 use std::path::{Path, PathBuf};
@@ -29,7 +29,7 @@ pub(super) enum Readiness {
     /// The thread that hears what's dictated is loading the model, which Core ML compiles for the Neural Engine the
     /// first time.
     Preparing(Hearing),
-    /// The composer can be dictated to.
+    /// Opted-in fields can be dictated to.
     Ready(Hearing),
     Failed(Failure),
     /// This Mac's macOS is older than the model needs.
@@ -93,6 +93,7 @@ pub(crate) fn start(data_dir: &Path, cx: &mut App) {
 }
 
 fn begin(model: Model, audio: AudioIn, cx: &mut App) {
+    dictation_ui::unavailable(cx);
     let bytes_on_disk = model::bytes_on_disk(&model.dir);
     let following_the_choice = crate::settings::observe_in_app(cx, follow_the_choice);
     let (readiness, following, deleting) = (Readiness::Off, None, None);
@@ -206,6 +207,7 @@ fn prepared(prepared: Result<(), EngineError>, cx: &mut App) {
 /// model. A thread still loading the model finishes first, so turning dictation on again meanwhile loads a second copy
 /// for as long as the first takes, and only for someone who turns it off and on that fast.
 fn turn_off(cx: &mut App) {
+    dictation_ui::unavailable(cx);
     set(Readiness::Off, None, cx);
     reread_whats_on_disk(cx);
 }
@@ -256,12 +258,12 @@ pub(super) fn model_size_bytes(cx: &App) -> u64 {
     dictating(cx).model.files.size_bytes()
 }
 
-/// Whether this Mac can run the model, so the composer can offer dictation.
+/// Whether this Mac can run the model, so prompts can offer dictation.
 pub(crate) fn runs_here(cx: &App) -> bool {
     dictation::HEARS && (dictating(cx).model.runs_here)()
 }
 
-/// Whether the composer can be dictated to.
+/// Whether opted-in fields can be dictated to.
 pub(crate) fn ready(cx: &App) -> bool {
     matches!(readiness(cx), Readiness::Ready(_))
 }
@@ -311,7 +313,7 @@ pub fn use_engine(engine: dictation::fake::FakeEngine, cx: &mut App) {
     crate::settings::change(cx, |settings| settings.dictation = DictationChoice::On);
 }
 
-/// Whether the composer can be dictated to, for a test to wait for.
+/// Whether opted-in fields can be dictated to, for a test to wait for.
 #[cfg(feature = "testing")]
 pub fn is_ready(cx: &App) -> bool {
     ready(cx)

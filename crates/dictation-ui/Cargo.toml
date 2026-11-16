@@ -1,0 +1,19 @@
+[package]
+name = "dictation-ui"
+description = "Dictation attached to a text field: shortcuts, recording, live text and insertion, independently of a microphone button."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[features]
+testing = ["dictation/testing"]
+
+[dependencies]
+dictation.workspace = true
+flume.workspace = true
+gpui-kit.workspace = true
+look.workspace = true
+
+[lints]
+workspace = true

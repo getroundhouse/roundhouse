@@ -38,7 +38,7 @@ pub(crate) struct Settings {
     pub(crate) play_sound: bool,
     #[serde(default, deserialize_with = "Sound::or_chime")]
     pub(crate) sound: Sound,
-    /// Whether the composer can be dictated to, once the model is downloaded and prepared. It asks first until the
+    /// Whether prompts and written answers can be dictated to, once the model is downloaded and prepared. It asks first until the
     /// person chooses, since turning it on downloads 2.4 GB.
     #[serde(default)]
     pub(crate) dictation: DictationChoice,

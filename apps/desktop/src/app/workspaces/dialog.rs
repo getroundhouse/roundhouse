@@ -54,6 +54,7 @@ impl AppView {
         let request = dialog.update(cx, |dialog, cx| dialog.take_request(window, cx));
         match self.create_workspace(request, cx) {
             Ok(()) => {
+                dialog.update(cx, NewWorkspaceDialog::closed);
                 window.close_dialog(cx);
                 self.dialog_closed(window, cx);
             }

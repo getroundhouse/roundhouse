@@ -1,4 +1,4 @@
-use super::{attaching, closed, composer, dictating, file_tab, holding_space, queue, reading, subagent_tab};
+use super::{attaching, closed, composer, dictating, file_tab, queue, reading, subagent_tab};
 use crate::all_files::AllFiles;
 use crate::attached::Attachments;
 use crate::busy::Busy;
@@ -13,7 +13,7 @@ use client_core::records::InWorkspace;
 use client_core::{Client, Drafts, RecordsFeed};
 use file_tab::FileTab;
 use gpui_kit::component::input::TextareaState;
-use gpui_kit::{AnyWindowHandle, Context, Entity, EventEmitter, Subscription, Task, Window};
+use gpui_kit::{AnyWindowHandle, AppContext as _, Context, Entity, EventEmitter, Subscription, Task, Window};
 use protocol::attachment::Attachment;
 use protocol::model::{AgentKind, Seq, Session, SessionId, Workspace, WorkspaceId, WorkspaceStatus};
 use reading::Reading;
@@ -109,9 +109,9 @@ pub struct WorkspacePane {
     pub(super) retitling: bool,
     pub(super) reading: Reading,
     /// What's being dictated into the composer, which ends with the pane.
-    pub(super) dictation: Option<dictating::Underway>,
-    /// Space, pressed where the prompt is typed and not let go of, which may be about to dictate.
-    pub(super) space_down: Option<holding_space::SpaceDown>,
+    pub(super) dictation: Entity<dictation_ui::Field>,
+    pub(super) dictation_chat: Option<SessionId>,
+    pub(super) after_dictation: Option<dictating::Then>,
     pub composer: Entity<TextareaState>,
     pub diff: Option<Diff>,
     pub(super) subagents: subagent_tab::Subagents,
@@ -149,6 +149,10 @@ impl WorkspacePane {
         cx: &mut Context<Self>,
     ) -> Self {
         let (composer, on_enter) = composer::new_input(window, cx);
+        let dictation = cx.new(|cx| dictation_ui::Field::new(composer.clone(), window, cx));
+        let dictated =
+            cx.subscribe_in(&dictation, window, |this, _, event, window, cx| this.dictation_event(event, window, cx));
+        let live = cx.observe(&dictation, |_, _, cx| cx.notify());
         let on_settings = crate::settings::observe(cx, |this, cx| {
             for transcript in this.every_transcript() {
                 transcript.update(cx, |t, cx| t.set_thinking_open(crate::settings::get(cx).always_expand_thinking, cx));
@@ -156,8 +160,6 @@ impl WorkspacePane {
         });
         // The microphone is as dictation stands.
         let on_dictation = crate::dictating::observe(cx, |_, cx| cx.notify());
-        // Any other key forgets Space held towards dictating, a binding's too.
-        let on_keys = cx.observe_keystrokes(|this, event, _, _| this.key_pressed(&event.keystroke));
         let pull_request = Lookup::recorded(shown.workspace()).unwrap_or(Lookup::Looking);
         let mut this = Self {
             client,
@@ -176,8 +178,9 @@ impl WorkspacePane {
             busy: Busy::Free,
             retitling: false,
             reading: Reading::default(),
-            dictation: None,
-            space_down: None,
+            dictation,
+            dictation_chat: None,
+            after_dictation: None,
             composer,
             diff: None,
             subagents: subagent_tab::Subagents::default(),
@@ -189,7 +192,7 @@ impl WorkspacePane {
             behind: false,
             hub: composer::Hub::Here,
             window: window.window_handle(),
-            subscriptions: vec![on_enter, on_settings, on_dictation, on_keys],
+            subscriptions: vec![on_enter, on_settings, on_dictation, dictated, live],
         };
         this.take_kept_drafts(cx);
         // The chat last worked in.

@@ -123,7 +123,7 @@ impl AppView {
         cx.observe_window_activation(window, |t, window, cx| {
             gpui_kit::base::apply_system_reduce_motion(cx);
             if !window.is_window_active() {
-                t.dictation_window_left(cx);
+                dictation_ui::window_left(window.window_handle(), cx);
             }
             t.read_on_screen(window.is_window_active(), cx);
         })

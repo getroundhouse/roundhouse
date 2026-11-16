@@ -7,13 +7,14 @@
 mod choice;
 mod deleting;
 mod downloading;
-mod held;
+mod microphone;
 mod readiness;
 mod words;
 
 pub(crate) use choice::DictationChoice;
 pub(crate) use downloading::observe_progress;
-pub(crate) use held::{HOLD_TO_DICTATE_KEY, SPACE, held, let_go, swallow_held_spaces, window_left};
+pub(crate) use microphone::microphone;
+pub use microphone::{HIDE, MICROPHONE, TURN_ON};
 pub(crate) use readiness::{hears_the_microphone, observe, ready, record, runs_here, start};
 #[cfg(feature = "testing")]
 pub use readiness::{is_ready, use_engine, use_model};

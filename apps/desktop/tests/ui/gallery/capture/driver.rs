@@ -121,7 +121,7 @@ impl Driver {
             }
             Step::Press(keys) => self.press(keys),
             Step::Hover { on, shows } => self.hover(*on, shows),
-            Step::Dictate { said, shows } => self.dictate(said, shows),
+            Step::Dictate { into, said, shows } => self.dictate(into, said, shows),
             Step::StallDictationDownload => self.stall_dictation_download(),
             Step::DictationModelHere => self.dictation_model_here(),
             Step::FailDictationDownload => self.fail_dictation_download(),
