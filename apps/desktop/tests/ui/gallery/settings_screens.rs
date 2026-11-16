@@ -4,10 +4,11 @@
 #![cfg(test)]
 
 use desktop::dictating::{DELETE, RETRY, STATUS};
+use look::Region;
 
 use super::frame::Frame;
 use super::screens::FOCUS;
-use super::steps::{Screen, Step};
+use super::steps::{Screen, Step, Target};
 use super::world::{LoginSupport, World};
 use super::worlds::{accounts, conversation, logins_unkept, none_found, own_hub};
 
@@ -88,6 +89,25 @@ pub(crate) const SCREENS: &[Screen] = &[
             Step::Type(TOKEN),
             Step::Click("accounts-name"),
             Step::Type("Build machines"),
+        ],
+    },
+    Screen {
+        name: "settings-agents-menu",
+        spec: "settings.md",
+        world: Some(accounts),
+        frame: Frame::Layout,
+        steps: &[Step::Select(FOCUS), Step::OpenSettings, AGENTS, Step::Click("account-more-claude-login-0002")],
+    },
+    Screen {
+        name: "settings-agents-card",
+        spec: "settings.md",
+        world: Some(accounts),
+        frame: Frame::Layout,
+        steps: &[
+            Step::Select(FOCUS),
+            Step::OpenSettings,
+            AGENTS,
+            Step::Hover { on: Target::Id("account-claude-login-0001"), shows: Region::AccountCard.id() },
         ],
     },
     Screen {

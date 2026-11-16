@@ -8,9 +8,10 @@ use gpui_kit::{AnyElement, App, Div, IntoElement, ParentElement as _, SharedStri
 use look::{Off as _, Sizing as _, Typeset as _};
 use protocol::model::{GithubAccount, GithubAccountId};
 
+use super::super::account_row::{self, Detail, Picture, Row, Tone};
 use super::super::lists::{heading, list as rows_of, said_in_the_list};
+use super::git_page::COLUMNS;
 use super::kept::{Asked, Panel, Shows};
-use super::row::{self, Row, Tone};
 use super::words::{self, Standing};
 use super::{Drawing, account_menu, connect_panels, sign_in_panel};
 use crate::status_box::{self, StatusBox};
@@ -93,14 +94,15 @@ fn account_row(drawing: &Drawing<'_>, account: &GithubAccount, cx: &App) -> AnyE
         panel.map(|panel| div().pb(look::Space::Large).child(draw_panel(drawing, panel, cx)).into_any_element());
     let shown = Row {
         id: SharedString::from(format!("git-account-{}", account.id)),
-        initial: row::initial(account.user.name.as_str()),
+        picture: Picture::of(account.user.name.as_str()),
         name: account.user.name.to_string(),
         dim: standing == Standing::Disconnected,
         default: drawing.is_default(account),
         how: account.held_login.map(|held| words::connected_by(held.how).into()),
-        detail: standing.said().map(|said| (said, tone)),
+        detail: standing.said().map(|said| Detail::Said(said, tone)),
         menu: Some(account_menu::menu(drawing, account, standing.works(), cx)),
+        card: None,
         under: failed.into_iter().chain(panel).collect(),
     };
-    row::row(shown, cx)
+    account_row::row(shown, COLUMNS, cx)
 }

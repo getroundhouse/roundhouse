@@ -1,4 +1,5 @@
 use self::kept::{Kept, To};
+use super::super::account_row::COLUMN_WIDTH;
 use super::super::lists::{heading, list, said_in_the_list};
 use super::super::{Asking, Body, OfHub, Page, PageId, Within};
 use super::{kept, panel, row, words};
@@ -9,7 +10,8 @@ use gpui_kit::component::button::Button;
 use gpui_kit::component::menu::{DropdownMenu as _, PopupMenu, PopupMenuItem};
 use gpui_kit::component::{IconName, v_flex};
 use gpui_kit::{
-    AnyElement, App, Div, Entity, IntoElement, ParentElement as _, RenderOnce, ScrollHandle, Styled as _, Window, div,
+    Anchor, AnyElement, App, Div, Entity, IntoElement, ParentElement as _, RenderOnce, ScrollHandle, Styled as _,
+    Window, div,
 };
 use look::{Off as _, Sizing as _};
 use protocol::model::{Account, AccountDefault, AgentDescription, AgentKind};
@@ -42,6 +44,13 @@ pub(super) struct Drawing<'a> {
     pub(super) defaults: Option<&'a [AccountDefault]>,
 }
 
+impl Drawing<'_> {
+    /// Whether `account` is the default for its kind, as the hub's settings say.
+    pub(super) fn is_default(&self, account: &Account) -> bool {
+        self.defaults.is_some_and(|defaults| defaults.iter().any(|choice| choice.account == account.id))
+    }
+}
+
 impl RenderOnce for AgentsPage {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let kept = window.use_keyed_state("settings-agents", cx, |_, _| Kept::default());
@@ -55,6 +64,8 @@ impl RenderOnce for AgentsPage {
         let drawing =
             Drawing { kept: &kept, agents: self.records.agents(), scroll: &self.within.scroll, now_ms, defaults };
         v_flex()
+            .w_full()
+            .max_w(COLUMN_WIDTH)
             .gap(look::Space::XXLarge)
             .pb(look::Space::Large)
             .child(super::defaults::section(&drawing, &added, cx))
@@ -113,7 +124,8 @@ fn added_list(drawing: &Drawing<'_>, added: &[&Account], cx: &App) -> Div {
 }
 
 /// Connect account, which opens the panel for a new account of the one kind the hub can hold a login for, or a menu
-/// of the kinds when it can hold one for several. It's on only while `on` and there's a kind.
+/// of the kinds when it can hold one for several, which opens towards the left, so it stays inside the page's column.
+/// It's on only while `on` and there's a kind.
 fn connect_button(drawing: &Drawing<'_>, kinds: &[&AgentDescription], on: bool) -> AnyElement {
     let button = Button::new("accounts-connect")
         .outline()
@@ -132,7 +144,7 @@ fn connect_button(drawing: &Drawing<'_>, kinds: &[&AgentDescription], on: bool) 
     let choices: Vec<(String, AgentKind)> = kinds.iter().map(|agent| (agent.name.clone(), agent.kind)).collect();
     let kept = drawing.kept.clone();
     button
-        .dropdown_menu(move |menu: PopupMenu, _, _| {
+        .dropdown_menu_with_anchor(Anchor::TopRight, move |menu: PopupMenu, _, _| {
             choices.iter().fold(menu, |menu, (name, agent)| {
                 let open = open(&kept, *agent);
                 menu.item(PopupMenuItem::new(name.clone()).on_click(move |_, window, cx| open(window, cx)))

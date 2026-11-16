@@ -2,13 +2,11 @@
 //! Renew for a token, Sign in again for a sign-in, or both ways of connecting it again once it was disconnected; then
 //! Disconnect, while the hub holds a login for it. The menu is off with no hub to ask.
 
-use gpui_kit::component::IconName;
-use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::menu::{DropdownMenu as _, PopupMenu, PopupMenuItem};
-use gpui_kit::{Anchor, AnyElement, App, Context, IntoElement, SharedString, Window};
-use look::{Off as _, Sizing as _};
+use gpui_kit::component::menu::{PopupMenu, PopupMenuItem};
+use gpui_kit::{AnyElement, App, Context, SharedString, Window};
 use protocol::model::{GithubAccount, GithubLoginKind};
 
+use super::super::account_row;
 use super::Drawing;
 use super::kept::Kept;
 use super::token::Renewing;
@@ -20,31 +18,25 @@ pub(super) fn menu(drawing: &Drawing<'_>, account: &GithubAccount, works: bool, 
     let name = account.user.name.to_string();
     let default = drawing.is_default(account);
     let (kept, account) = (drawing.kept.clone(), account.clone());
-    Button::new(SharedString::from(format!("git-more-{}", account.id)))
-        .accessibility_label(format!("More for {name}"))
-        .ghost()
-        .sized_square(look::ControlSize::Small)
-        .icon(IconName::Ellipsis)
-        .off_while(!drawing.can_ask(cx))
-        .dropdown_menu_with_anchor(Anchor::TopRight, move |menu: PopupMenu, _, _| {
-            let item = |label: &'static str, act: Act| {
-                let (kept, account) = (kept.clone(), account.clone());
-                PopupMenuItem::new(label).on_click(move |_, window, cx| {
-                    kept.update(cx, |kept, cx| act(kept, &account, default, window, cx));
-                })
-            };
-            let menu = if default { menu } else { menu.item(item("Make default", make_default).disabled(!works)) };
-            let menu = match account.held_login.map(|held| held.how) {
-                Some(GithubLoginKind::SignIn) => menu.item(item("Sign in again", sign_in_again)),
-                Some(GithubLoginKind::Token | GithubLoginKind::Unknown) => menu.item(item("Renew", renew)),
-                None => menu.item(item("Connect again", renew)).item(item("Sign in again", sign_in_again)),
-            };
-            if account.held_login.is_none() {
-                return menu;
-            }
-            menu.item(item("Disconnect", disconnect))
-        })
-        .into_any_element()
+    let id = SharedString::from(format!("git-more-{}", account.id));
+    account_row::menu(id, &name, !drawing.can_ask(cx), move |menu: PopupMenu, _, _| {
+        let item = |label: &'static str, act: Act| {
+            let (kept, account) = (kept.clone(), account.clone());
+            PopupMenuItem::new(label).on_click(move |_, window, cx| {
+                kept.update(cx, |kept, cx| act(kept, &account, default, window, cx));
+            })
+        };
+        let menu = if default { menu } else { menu.item(item("Make default", make_default).disabled(!works)) };
+        let menu = match account.held_login.map(|held| held.how) {
+            Some(GithubLoginKind::SignIn) => menu.item(item("Sign in again", sign_in_again)),
+            Some(GithubLoginKind::Token | GithubLoginKind::Unknown) => menu.item(item("Renew", renew)),
+            None => menu.item(item("Connect again", renew)).item(item("Sign in again", sign_in_again)),
+        };
+        if account.held_login.is_none() {
+            return menu;
+        }
+        menu.item(item("Disconnect", disconnect))
+    })
 }
 
 fn make_default(kept: &mut Kept, account: &GithubAccount, _: bool, _: &mut Window, cx: &mut Context<Kept>) {

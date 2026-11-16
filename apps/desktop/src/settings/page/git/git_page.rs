@@ -4,16 +4,16 @@
 use client_core::records::Snapshot;
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::v_flex;
-use gpui_kit::{
-    App, Entity, IntoElement, ParentElement as _, Pixels, RenderOnce, ScrollHandle, Styled as _, Window, px,
-};
+use gpui_kit::{App, Entity, IntoElement, ParentElement as _, RenderOnce, ScrollHandle, Styled as _, Window, px};
 use protocol::model::{GithubAccount, GithubSettings};
 
+use super::super::account_row::{COLUMN_WIDTH, Columns};
 use super::kept::Kept;
 use super::{Asking, Body, OfHub, Page, PageId, Within, added, found, words};
 
-/// How wide the page's lists are, so a row has no more room than what it says needs.
-pub(super) const COLUMN_WIDTH: Pixels = px(720.);
+/// How wide a row's middle columns are: how it was connected, `Signed in` or `Token`, and what else there is to say,
+/// such as when a token ends.
+pub(super) const COLUMNS: Columns = Columns { how: px(140.), detail: px(200.) };
 
 pub(in super::super) fn page(hub: &OfHub) -> Page {
     let (records, asking) = (hub.records.clone(), hub.asking.clone());

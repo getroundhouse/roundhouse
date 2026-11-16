@@ -49,8 +49,11 @@ The accounts your agents run under: native logins found where agents ran, and Cl
 
 - **Found** has Claude Code's own login on a machine, such as this Mac's, once an agent has run under it. Roundhouse reads who it is, and never copies it, so there's nothing to do with it here.
 - **Default accounts** chooses the account new chats of each supported agent use across this hub. Choose Work or Personal for Claude Code. A chat is put on the default when its agent first starts, and stays on that account when you choose another default, until you [move it](../guides/watch-context-and-limits.md#move-a-chat-to-another-account). For a chat that isn't on an account yet, an added default takes priority over machine credentials. With no added default, the agent uses its machine's own login, and its chat stays on it once you add one, until you move it. A chat that started with nobody signed in on the machine, or with an API key, goes on the default once you add one. So does a chat from before you updated that wasn't on an account, such as one that ran under the machine's own login, when its agent next starts.
-- **Added** has the logins you've given the hub. The chosen account has a default badge. Adding or renewing another account does not change your choice. Logins you've disconnected are listed last.
-- **Each row** says the day you last sent something in a chat under the account, such as yesterday or 3 days ago, once you have, and what's left of its limits, as the chat's limits' card does.
+- **Added** has the logins you've given the hub. The chosen account has the `Default` badge. Adding or renewing another account does not change your choice. Logins you've disconnected are listed last.
+- **Each row** says how its login was made: for one found, its plan and how it's logged in, such as `Max · Claude account`, and for one you've added, its agent, such as `Claude Code`. Then it says only what else needs saying: that its login ends soon, has ended or was disconnected, or else what's left of each of its limits, as the chat's limits' card does.
+- **Rest the pointer on a row,** or move to it with **Tab**, to see its card: which day you last used the account, when its login ends, and every limit with what's left and when it starts again, even while the row warns that the login ends soon. A screen reader reads the card out as it comes to the row.
+
+![An account's card, with the pointer resting on its row](../../spec/screens/settings-agents-card.png)
 
 The first account you connect becomes its agent's default. When updating a hub that already has accounts, the most recently connected or renewed usable account is selected once. If all have expired, the most recent stays selected until you renew it or choose another.
 
@@ -69,7 +72,9 @@ A chat under the account names it by the name you gave it, where a login of the 
 ### Renew and disconnect
 
 - **A login warns a month before it ends,** in amber, and in red once it has. Choose **Renew** in the row's **…** menu, run `claude setup-token` again for the same account, and paste the new token in the panel that opens under it. The account keeps its name, its limits and its chats.
-- **Disconnect,** in the same menu, has the hub forget the token, and asks first. The account stays, with **Connect again**, which takes pasting a token again. It doesn't revoke the token, which still works wherever else you've kept it.
+- **Disconnect,** in the same menu, has the hub forget the token, and asks first. The account stays, with **Connect again** in its menu, which takes pasting a token again. It doesn't revoke the token, which still works wherever else you've kept it.
+
+![An account's menu, with Renew and Disconnect](../../spec/screens/settings-agents-menu.png)
 
 ![Renewing a login that ends in nine days](../../spec/screens/settings-agents-renewing.png)
 

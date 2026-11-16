@@ -1,15 +1,18 @@
 //! The app's hover card: it shows once the pointer has rested on what it's for, and goes once the pointer has left
 //! both that and the card, as the kit's does. Unlike the kit's, something opened from it can hold it open, as a menu
-//! opened from a button in it does while the pointer is in the menu, which is drawn outside the card.
+//! opened from a button in it does while the pointer is in the menu, which is drawn outside the card, and one can show
+//! while what it's for has the keyboard's focus too.
 
+use std::cell::Cell;
 use std::rc::Rc;
 use std::time::Duration;
 
 use gpui_kit::base::{Popup, StyledExt as _, v_flex};
 use gpui_kit::{
-    Anchor, AnyElement, App, Context, DismissEvent, Div, ElementId, Entity, EntityId, EventEmitter,
-    InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce, StatefulInteractiveElement as _,
-    StyleRefinement, Styled as _, Task, WeakEntity, Window, div,
+    Anchor, AnyElement, App, Bounds, Context, DismissEvent, Div, ElementId, Entity, EntityId, EventEmitter,
+    FocusHandle, Half as _, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, RenderOnce, Role,
+    SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled as _, Subscription, Task,
+    TestSupportExt as _, WeakEntity, Window, canvas, div,
 };
 
 use crate::Space;
@@ -51,6 +54,16 @@ pub struct HoverCard {
     open_delay: Duration,
     close_delay: Duration,
     on_open_change: Option<OpenChange>,
+    on_focus: Option<Focusable>,
+    flips: bool,
+}
+
+/// What's said to assistive apps of what a card that shows on the keyboard's focus is for, since that's what they read
+/// out as it takes the focus.
+struct Focusable {
+    role: Role,
+    label: SharedString,
+    said: SharedString,
 }
 
 impl HoverCard {
@@ -64,6 +77,8 @@ impl HoverCard {
             open_delay,
             close_delay,
             on_open_change: None,
+            on_focus: None,
+            flips: false,
         }
     }
 
@@ -71,6 +86,16 @@ impl HoverCard {
     #[must_use]
     pub fn anchor(mut self, anchor: impl Into<Anchor>) -> Self {
         self.anchor = anchor.into();
+        self
+    }
+
+    /// Has it open on the other side of what it's for, over it rather than under it, or the other way round, while
+    /// what it's for is in the half of the window that side faces, by where it was last drawn. A card is moved only to
+    /// stay in the window, so one for something near the window's edge would otherwise cover what it's for, as a row's
+    /// near the bottom would.
+    #[must_use]
+    pub fn flips_to_fit(mut self) -> Self {
+        self.flips = true;
         self
     }
 
@@ -95,6 +120,16 @@ impl HoverCard {
         content: impl FnOnce(&HoldOpen, &mut Window, &mut App) -> E + 'static,
     ) -> Self {
         self.content = Some(Box::new(move |hold, window, cx| content(hold, window, cx).into_any_element()));
+        self
+    }
+
+    /// Has it show while what it's for has the keyboard's focus too, which makes that one of Tab's stops: at once, since
+    /// the focus was moved there on purpose, and for as long as it stays. A click that puts the focus there shows it no
+    /// sooner than the pointer resting there does. What it's for is said to assistive apps as `role`, named `label`, with
+    /// what the card says as `said`, whether it shows or not, since they can't see it.
+    #[must_use]
+    pub fn on_focus(mut self, role: Role, label: impl Into<SharedString>, said: impl Into<SharedString>) -> Self {
+        self.on_focus = Some(Focusable { role, label: label.into(), said: said.into() });
         self
     }
 
@@ -144,12 +179,26 @@ struct Shown {
     on_open_change: Option<OpenChange>,
     /// When it next opens or closes. A newer one replaces it, and dropping it cancels it.
     timer: Option<Task<()>>,
-    on_trigger: bool,
-    on_card: bool,
+    /// Where the pointer and the keyboard's focus are, which keep it open.
+    on: On,
+    /// What takes the keyboard's focus for a card that shows on it, made the first time it's drawn so, with what says
+    /// when the focus comes and goes.
+    focus: Option<(FocusHandle, [Subscription; 2])>,
+    /// Where what it's for was last drawn, for a card that flips to fit.
+    trigger_at: Rc<Cell<Option<Bounds<Pixels>>>>,
     /// What holds it open. It only closes once nothing does.
     holders: Vec<EntityId>,
     /// Counts each time it opens, so a hold handed out an earlier time does nothing.
     opening: usize,
+}
+
+/// Which of what keeps a card open, but a hold, it's on: the pointer on what it's for, the pointer on the card, and the
+/// keyboard's focus on what it's for, put there from the keyboard.
+#[derive(Clone, Copy, Default)]
+struct On {
+    trigger: bool,
+    card: bool,
+    focus: bool,
 }
 
 impl Shown {
@@ -164,9 +213,10 @@ impl Shown {
         }));
     }
 
-    /// Whether something keeps it open: the pointer, on the card or what it's for, or what holds it.
+    /// Whether something keeps it open: the pointer, on the card or what it's for, the keyboard's focus, or what holds
+    /// it.
     fn stays(&self) -> bool {
-        self.on_trigger || self.on_card || !self.holders.is_empty()
+        self.on.trigger || self.on.card || self.on.focus || !self.holders.is_empty()
     }
 
     /// Has it go after its delay, unless something keeps it open.
@@ -192,7 +242,7 @@ impl Shown {
     }
 
     fn on_trigger(&mut self, on: bool, window: &mut Window, cx: &mut Context<Self>) {
-        self.on_trigger = on;
+        self.on.trigger = on;
         if on {
             self.after(self.open_delay, true, window, cx);
         } else {
@@ -201,9 +251,34 @@ impl Shown {
     }
 
     fn on_card(&mut self, on: bool, window: &mut Window, cx: &mut Context<Self>) {
-        self.on_card = on;
+        self.on.card = on;
         if on {
             self.timer = None;
+        } else {
+            self.close_unless_kept(window, cx);
+        }
+    }
+
+    /// What takes the keyboard's focus for it, made the first time it's asked for.
+    fn focus(&mut self, window: &mut Window, cx: &mut Context<Self>) -> FocusHandle {
+        if let Some((focus, _)) = &self.focus {
+            return focus.clone();
+        }
+        let focus = cx.focus_handle().tab_stop(true);
+        // Only from the keyboard, since a click is the pointer's, which shows it once it has rested.
+        let came = cx.on_focus_in(&focus, window, |shown, window, cx| {
+            shown.focused(window.last_input_was_keyboard(), window, cx);
+        });
+        let went = cx.on_focus_out(&focus, window, |shown, _, window, cx| shown.focused(false, window, cx));
+        self.focus = Some((focus.clone(), [came, went]));
+        focus
+    }
+
+    fn focused(&mut self, focused: bool, window: &mut Window, cx: &mut Context<Self>) {
+        self.on.focus = focused;
+        if focused {
+            self.timer = None;
+            self.set_open(true, window, cx);
         } else {
             self.close_unless_kept(window, cx);
         }
@@ -223,18 +298,53 @@ impl RenderOnce for HoverCard {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let (open_delay, close_delay, on_open_change) = (self.open_delay, self.close_delay, self.on_open_change);
         let shown = window.use_keyed_state(self.id.clone(), cx, |_, _| Shown::default());
-        let (open, opening) = shown.update(cx, |shown, _| {
+        let focuses = self.on_focus.is_some();
+        let (open, opening, focus, trigger_at) = shown.update(cx, |shown, cx| {
             (shown.open_delay, shown.close_delay, shown.on_open_change) = (open_delay, close_delay, on_open_change);
-            (shown.open, shown.opening)
+            (shown.open, shown.opening, focuses.then(|| shown.focus(window, cx)), shown.trigger_at.clone())
         });
+        let anchor = if self.flips { fitting(self.anchor, trigger_at.get(), window) } else { self.anchor };
         let on_trigger = window.listener_for(&shown, |shown, on: &bool, window, cx| shown.on_trigger(*on, window, cx));
         let trigger = div().id("trigger").children(self.trigger).on_hover(on_trigger);
-        let popup = Popup::new(self.id, trigger).refine_style(&self.trigger_style).anchor(self.anchor);
+        // Measured only for a card that flips, so every other is laid out as it was.
+        let trigger = if self.flips { trigger.relative().child(measuring(trigger_at)) } else { trigger };
+        let trigger = match (focus, self.on_focus) {
+            (Some(focus), Some(said)) => trigger
+                .role(said.role)
+                .aria_label(said.label)
+                .aria_description(said.said)
+                .test_support()
+                .track_focus(&focus)
+                .into_any_element(),
+            _ => trigger.into_any_element(),
+        };
+        let popup = Popup::new(self.id, trigger).refine_style(&self.trigger_style).anchor(anchor);
         let Some(content) = self.content.filter(|_| open) else { return popup };
         let on_card = window.listener_for(&shown, |shown, on: &bool, window, cx| shown.on_card(*on, window, cx));
         let hold = HoldOpen { shown: shown.downgrade(), opening };
-        popup.content(around_content(self.anchor).on_hover(on_card).child(content(&hold, window, cx)))
+        popup.content(around_content(anchor).on_hover(on_card).child(content(&hold, window, cx)))
     }
+}
+
+/// `anchor`, or the one on the other side of what the card is for, at the same corner or the middle, while what it's
+/// for, last drawn `at`, is in the half of the window that `anchor` opens the card towards.
+fn fitting(anchor: Anchor, at: Option<Bounds<Pixels>>, window: &Window) -> Anchor {
+    let Some(at) = at else { return anchor };
+    let lower = at.center().y > window.viewport_size().height.half();
+    match (anchor, lower) {
+        (Anchor::TopLeft, true) => Anchor::BottomLeft,
+        (Anchor::TopCenter, true) => Anchor::BottomCenter,
+        (Anchor::TopRight, true) => Anchor::BottomRight,
+        (Anchor::BottomLeft, false) => Anchor::TopLeft,
+        (Anchor::BottomCenter, false) => Anchor::TopCenter,
+        (Anchor::BottomRight, false) => Anchor::TopRight,
+        (anchor, _) => anchor,
+    }
+}
+
+/// Keeps where what a card is for is drawn, `at`, laid over it, so it takes no room.
+fn measuring(at: Rc<Cell<Option<Bounds<Pixels>>>>) -> impl IntoElement {
+    canvas(move |bounds, _, _| at.set(Some(bounds)), |_, (), _, _| {}).absolute().top_0().left_0().size_full()
 }
 
 /// The box around what the card shows: a little way off what it's for, as the kit's popovers are, and in front of
