@@ -2,13 +2,11 @@
 
 #![cfg(test)]
 
-use std::time::{Duration, Instant};
-
 use gpui_kit::{AppContext as _, SharedString};
-use protocol::event::SessionEvent;
+use protocol::event::{AgentRunState, EventBody, SessionEvent};
 use protocol::model::{AgentKind, PermissionMode, Place, Seq, SessionId, SessionSettingsChange, SessionStatus};
 
-use super::{Stack, TIMEOUT, Ui};
+use super::{Stack, Ui, wait_until};
 
 impl Stack {
     /// A chat in a new workspace in the stack's repository.
@@ -36,13 +34,16 @@ impl Stack {
     pub(crate) fn run(&self, chat: &SessionId, script: &str) {
         let client = self.client();
         client.session_prompt(chat, script, None).unwrap();
-        let deadline = Instant::now() + TIMEOUT;
-        // Often, since a script of replies alone takes the fake agent a few milliseconds, and a long session is built
-        // from dozens of them.
-        while client.session_get(chat).unwrap().status != SessionStatus::Idle {
-            assert!(Instant::now() < deadline, "the agent never finished {script}");
-            std::thread::sleep(Duration::from_millis(5));
-        }
+        self.wait_for_whole_turn(chat);
+    }
+
+    /// The fake agent says the prompt is done and then idle after the turn ends. Wait for that last event, since a
+    /// test opening the transcript must not take the intervening, deliberately omitted `AgentOther` for its last row.
+    pub(crate) fn wait_for_whole_turn(&self, chat: &SessionId) {
+        wait_until("the agent to say it's idle, after the turn's end", || {
+            self.client().session_get(chat).unwrap().status == SessionStatus::Idle
+                && matches!(self.newest_event(chat).body, EventBody::AgentState { state: AgentRunState::Idle })
+        });
     }
 }
 

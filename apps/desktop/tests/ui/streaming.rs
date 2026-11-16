@@ -5,7 +5,7 @@
 use std::time::Duration;
 
 use gpui_kit::{AppContext as _, Modifiers, MouseMoveEvent, TestAppContext, point, px};
-use protocol::event::{AgentRunState, EventBody, SessionEvent};
+use protocol::event::EventBody;
 use protocol::model::{SessionId, SessionStatus};
 
 use crate::support::{Gate, Stack, Ui, wait_until};
@@ -130,11 +130,7 @@ fn a_reply_recorded_while_a_frame_is_drawn_stays_at_the_end_for_that_frame(cx: &
 /// more comes to it until the next prompt, and says which row has the last of it. The turn's end has the chat idle, and
 /// the agent says it's idle after that, the last it sends of a turn, which comes to the log as a row of its own.
 fn wait_for_the_whole_turn(stack: &Stack, ui: &Ui, session: &SessionId) -> usize {
-    let said_idle = |event: &SessionEvent| matches!(event.body, EventBody::AgentState { state: AgentRunState::Idle });
-    wait_until("the agent to say it's idle, after the turn's end", || {
-        let ended = stack.client().session_get(session).unwrap().status == SessionStatus::Idle;
-        ended && said_idle(&stack.newest_event(session))
-    });
+    stack.wait_for_whole_turn(session);
     let last = ui.row_of(&stack.newest_event(session));
     let transcript = ui.transcript().unwrap();
     wait_until("the turn to reach the app", || ui.cx.read_entity(&transcript, |t, _| t.event_at(last).is_some()));
