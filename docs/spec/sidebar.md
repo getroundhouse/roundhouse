@@ -1,10 +1,28 @@
 # Sidebar
 
-- **The hub switcher sits above Home, Create and Search.** Its card names the selected machine, with connection status beneath it and a chevron opening the menu. The menu lists this device and saved hubs, checks the selected one, and ends with **Connect another hub…**. Selecting a hub shows only its workspaces; each hub keeps its own open panes and drafts while the window stays open.
+- **The hub switcher sits above Home, Create and Search, in the same top block.** Its single-line outlined selector names the selected machine in muted text, shows connection status inline when degraded or a bright count when workspaces on background hubs need a look, and opens its menu with a double chevron. The menu lists this device and saved hubs with their host or status and any count needing a look, checks the selected one, and after a line offers **Pair a device with this Mac…** and **Connect another hub…**. Selecting a hub shows only its workspaces; each hub keeps its own open panes and drafts while the window stays open. *Unconfirmed:* the single-line selector, inline status and background attention count.
+
+  **The hub switcher's menu, with a saved hub listed beside this Mac.** *Unconfirmed.*
+
+  ![The hub switcher's menu](screens/hub-switcher-menu.png)
+
 - **Background hubs cannot take focus or open dialogs over the selected hub.** Their pending dialogs wait until they are selected again. An earlier connection request cannot override a later hub choice. Pairing again with the same hub key renews its saved connection and preserves its open view and pending drafts. *Unconfirmed.*
-- **Add project on a remote hub explains that the project must be added on that machine.** The local directory picker is used only for this device's hub. A remote path picker is *Not built*. *Unconfirmed.*
-- **Connect another hub accepts a pairing link from that machine.** The app saves the connection after pairing and returns to the selected hub when reopened. An unreachable hub remains selected, shows its connection error and retries; it never silently shows this device's workspaces instead. Details of the pairing dialog and retry timing are *Unconfirmed*.
-- **Create pairing link is in the hub switcher when this device's hub is selected.** It is disabled until that hub is connected. Its dialog asks the hub for a single-use link, shows how to use it on another device, and offers **Copy pairing link** and **Create new link**. Copying says **Copied**. An expired link cannot be copied; expiry or a failed request offers a new attempt. Each link lasts ten minutes or until used, and making another leaves earlier links valid until then. Pairing links are not saved in settings. Dialog wording and layout are *Unconfirmed*.
+- **Add project is greyed out on a remote hub, and a remote hub with no projects explains to add one on that machine, with Switch to This Mac.** The local directory picker is used only for this device's hub. A remote path picker is *Not built*. *Unconfirmed.*
+- **Connect another hub previews a valid pairing link from that machine before connecting, and stays open on failure.** `Connect` is off until a valid `roundhouse://pair?…` link is pasted, when the dialog previews the hub's name, its candidate addresses and the computer name this device pairs as. Errors show inline in red, keeping the link when the hub was unreachable and selecting it for replacement when the code was used or expired. The app saves the connection after pairing and returns to the selected hub when reopened. An unreachable hub remains selected, keeps any open workspace pane on screen, shows its status and retries; a revoked or changed key offers **Pair again…** and **Switch to This Mac**, and never silently shows this device's workspaces instead. *Unconfirmed.*
+
+  **Connect another hub, previewing the parsed machine and addresses before connecting.** *Unconfirmed.*
+
+  ![Connecting another hub](screens/connect-hub.png)
+
+- **Pair a device with this Mac is always in the hub switcher, talking to this device's hub whichever hub is selected.** It is disabled only while this device's hub is disconnected. Its dialog asks the local hub for a single-use link, shows a QR code beside the copyable link and when it expires, and offers **Cancel** and **Copy link**, which says **Copied** once pressed. While open it waits on a dedicated connection to the local hub for a device to claim the link, replacing the spent link with confirmation of the paired device's name and **Done** as soon as the device connects. An expired link cannot be copied; expiry or a failed request offers **Create new link**. Each link lasts ten minutes or until used, and making another leaves earlier links valid until then. Pairing links are not saved in settings. *Unconfirmed.*
+
+  **Pairing a device with this Mac, waiting for it to connect.** *Unconfirmed.*
+
+  ![Pairing a device, waiting](screens/pair-device.png)
+
+  **Pairing a device with this Mac, once the other computer has connected.** *Unconfirmed.*
+
+  ![Pairing a device, connected](screens/pair-device-paired.png)
 
 - **Home, Create and Search sit at the top, above the workspaces, with a line under them.** Home shows every workspace in place of the workspace, as `home.md` says, and Create opens the new-workspace dialog for the selected workspace's project, or for the one Home's list shows while Home shows, as `Cmd-N` does. Each is a muted icon and label, filled while what it opens is showing. *Unconfirmed.*
 

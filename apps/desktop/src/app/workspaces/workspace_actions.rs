@@ -190,11 +190,7 @@ impl AppView {
     }
 
     pub fn add_repository(&mut self, cx: &mut Context<Self>) {
-        if self.hub.remote.is_some() {
-            self.show_error("Add the project on that hub’s machine, then select it here.", cx);
-            return;
-        }
-        let Some(client) = self.client() else { return };
+        let Some(client) = self.client().filter(|_| self.hub.remote.is_none()) else { return };
         let picked = cx.prompt_for_paths(PathPromptOptions {
             files: false,
             directories: true,

@@ -56,6 +56,7 @@ use connection::{hub_is_missing, subscription_channel};
 mod transport;
 
 mod devices;
+pub use devices::PairingWait;
 
 mod remote;
 

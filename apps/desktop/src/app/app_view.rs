@@ -1,3 +1,4 @@
+use super::failure::ConnectionFailure;
 use super::{home, hub_source, menu_button, notifying, quitting, restarts, settings};
 use crate::busy::Busy;
 use crate::checkout::Checkout;
@@ -30,7 +31,7 @@ pub(crate) fn wrapped_step(at: usize, by: isize, len: usize) -> usize {
 pub enum Connection {
     Connecting,
     Ready(Client),
-    Failed(String),
+    Failed(ConnectionFailure),
     /// A hub is running, and there's a real protocol break between it and this app.
     AcrossABreak(HubStatus),
 }
@@ -223,11 +224,15 @@ impl AppView {
     /// Connects. Everything already shown carries on on the new connection, and the first time, client-core
     /// starts following the hub's records. Comes back here if the connection goes, which starts a new hub.
     pub fn connect(&mut self, cx: &mut Context<Self>) {
+        self.connection_attempt = 0;
         self.show_connecting(cx);
+        self.attempt_connect(cx);
+    }
+
+    pub(super) fn attempt_connect(&mut self, cx: &mut Context<Self>) {
         // What it was connected to says nothing about what it connects to next.
         (self.restartable_hub, self.finishing, self.looking, self.joining) = (None, None, None, None);
         self.drop_restart_question(cx);
-        cx.notify();
         let hub = self.hub.clone();
         let socket = hub.paths.socket.clone();
         let local = hub.remote.is_none();
@@ -238,29 +243,25 @@ impl AppView {
             let (client, status) = match connected {
                 Ok(connected) => connected,
                 Err(e) => {
-                    let retry = !local
-                        && matches!(
-                            &e,
-                            client_core::ClientError::Io(_)
-                                | client_core::ClientError::Disconnected
-                                | client_core::ClientError::Unreachable { .. }
-                        );
+                    let failure = ConnectionFailure::of(local, &e);
+                    let retry = matches!(failure, ConnectionFailure::Unreachable { .. });
                     let status = if local && e.is_version_mismatch() {
                         cx.background_spawn(async move { HubAdmin::connect(&socket)?.status() }).await.ok()
                     } else {
                         None
                     };
                     let _ = this.update(cx, |t, cx| {
-                        let connection = match status {
-                            Some(status) => Connection::AcrossABreak(status),
-                            None => Connection::Failed(format!("{e}")),
-                        };
-                        t.set_connection(connection, cx);
-                        cx.notify();
+                        let unchanged =
+                            status.is_none() && matches!(&t.connection, Connection::Failed(prev) if prev == &failure);
+                        if !unchanged {
+                            let connection = status.map_or(Connection::Failed(failure), Connection::AcrossABreak);
+                            t.set_connection(connection, cx);
+                            cx.notify();
+                        }
                     });
                     if retry {
                         cx.background_executor().timer(delay).await;
-                        let _ = this.update(cx, AppView::connect);
+                        let _ = this.update(cx, AppView::attempt_connect);
                     }
                     return;
                 }
@@ -314,7 +315,8 @@ impl AppView {
             if let Some(error) = errors.first() {
                 self.joining = None;
                 self.drop_restart_question(cx);
-                self.set_connection(Connection::Failed(error.to_string()), cx);
+                let failure = ConnectionFailure::of_follow(self.hub.remote.is_none(), error.to_string());
+                self.set_connection(Connection::Failed(failure), cx);
                 cx.notify();
             } else if matches!(self.connection, Connection::Ready(_))
                 || self.joining.as_ref().is_some_and(Client::is_disconnected)

@@ -23,7 +23,11 @@ pub(super) fn open(
     let hub = hub_source(dir.path());
     if let Some(world) = world {
         std::fs::create_dir_all(&hub.paths.data_dir).unwrap();
-        fake_hub::serve(&hub.paths.socket, world());
+        let built = world();
+        if !built.saved_hubs.is_empty() {
+            write_saved_hubs(&hub.paths.data_dir, &built.saved_hubs);
+        }
+        fake_hub::serve(&hub.paths.socket, built);
     }
     let mut cx = HeadlessAppContext::with_platform(
         text_system.clone(),
@@ -35,7 +39,10 @@ pub(super) fn open(
     cx.update(gpui_kit::init);
     // Nothing moves, so a mark holds still and anything else, such as a dialog's entrance, shows as it ends. The time
     // holds still too, so how long something took or how long ago it was is the same on every run.
-    cx.update(|cx| look::hold_still(world::NOW_MS, cx));
+    cx.update(|cx| {
+        look::hold_still(world::NOW_MS, cx);
+        desktop::app::the_device_name_is("Ada’s MacBook Air", cx);
+    });
     // The app loads the highlighter on a thread of its own, and draws code plain until it has, so load it first for
     // a picture of the app once it's ready.
     look::preload_highlighting();
@@ -67,6 +74,25 @@ fn hub_source(dir: &Path) -> HubSource {
         build_number: Some(fake_hub::BUILD_NUMBER),
         build_version: fake_hub::BUILD,
     }
+}
+
+fn write_saved_hubs(data_dir: &Path, hubs: &[(&str, &str)]) {
+    let entries: Vec<_> = hubs
+        .iter()
+        .enumerate()
+        .map(|(ix, (name, host))| {
+            let byte = u8::try_from(ix + 1).unwrap_or(1);
+            let fp = protocol::pairing::Fingerprint::of_sha256([byte; 32]);
+            serde_json::json!({
+                "name": name,
+                "hosts": [host],
+                "fingerprint": fp.as_str(),
+                "device": format!("saved-dev-{}", ix + 1),
+            })
+        })
+        .collect();
+    let json = serde_json::json!({ "hubs": entries });
+    std::fs::write(data_dir.join("settings.json"), serde_json::to_vec(&json).unwrap()).unwrap();
 }
 
 impl Driver {

@@ -130,7 +130,7 @@ impl AppView {
             let _ = this.update(cx, |t, cx| match stopped {
                 Ok(()) => t.connect(cx),
                 Err(e) => {
-                    t.set_connection(Connection::Failed(e.to_string()), cx);
+                    t.set_connection(Connection::Failed(super::super::ConnectionFailure::Local(e.to_string())), cx);
                     cx.notify();
                 }
             });

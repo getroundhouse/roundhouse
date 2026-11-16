@@ -1,0 +1,291 @@
+//! Connecting to another machine's hub from a short-lived pairing link: previews the target machine before connecting,
+//! keeps the dialog open while reaching it, and reports failures inline.
+
+use std::path::PathBuf;
+
+use gpui_kit::assets::IconName as Lucide;
+use gpui_kit::component::WindowExt as _;
+use gpui_kit::component::button::{Button, ButtonVariants as _};
+use gpui_kit::component::input::{Input, InputEvent, InputState};
+use gpui_kit::component::{Icon, h_flex, v_flex};
+use gpui_kit::prelude::FluentBuilder as _;
+use gpui_kit::{
+    AnyElement, App, AppContext as _, Context, Entity, InteractiveElement as _, IntoElement, ParentElement as _,
+    Pixels, Render, Role, SharedString, StatefulInteractiveElement as _, Styled as _, Subscription, Task,
+    TestSupportExt as _, Window, div, px,
+};
+use look::{
+    Corner, Hand as _, IconSize, IconSizing as _, Off as _, Shaped as _, Sizing as _, Space, TaskRing, Type,
+    Typeset as _,
+};
+use protocol::pairing::PairingLink;
+
+use super::words::{ParsedInput, connect_failure, parse_input};
+use crate::app::{device_name, hubs, saved_hubs};
+
+const DIALOG_WIDTH: Pixels = px(460.);
+
+struct ConnectHub {
+    data_dir: PathBuf,
+    input: Entity<InputState>,
+    device_name: Option<String>,
+    connecting_to: Option<String>,
+    error: Option<String>,
+    shown: bool,
+    _naming: Task<()>,
+    _subscriptions: Vec<Subscription>,
+}
+
+pub(crate) fn open(data_dir: PathBuf, window: &mut Window, cx: &mut App) {
+    let input = cx.new(|cx| InputState::new(window, cx).placeholder("roundhouse://pair?…"));
+    let field = input.clone();
+    let dialog = cx.new(|cx| ConnectHub::new(data_dir, field, window, cx));
+    let shown = dialog.clone();
+    window.open_dialog(cx, move |surface, _, cx| {
+        let colors = look::colors(cx);
+        let closing = shown.clone();
+        surface
+            .p_0()
+            .w(DIALOG_WIDTH)
+            .close_button(false)
+            .bg(colors.raised)
+            .border_color(colors.edge)
+            .corners(Corner::Card)
+            .child(shown.clone())
+            .on_ok(|_, _, _| false)
+            .on_close(move |_, _, cx| closing.update(cx, ConnectHub::closed))
+    });
+    input.update(cx, |input, cx| input.focus(window, cx));
+}
+
+impl ConnectHub {
+    fn new(data_dir: PathBuf, input: Entity<InputState>, window: &mut Window, cx: &mut Context<Self>) -> Self {
+        let reading = device_name::read_in_background(cx);
+        let naming = cx.spawn(async move |this, cx| {
+            let resolved = reading.await;
+            let _ = this.update(cx, |this, cx| {
+                this.device_name = Some(resolved);
+                cx.notify();
+            });
+        });
+        let sub = cx.subscribe_in(&input, window, |this, _, event: &InputEvent, window, cx| match event {
+            InputEvent::Change => {
+                if this.error.take().is_some() {
+                    cx.notify();
+                }
+            }
+            InputEvent::PressEnter { .. } => this.submit(window, cx),
+            _ => {}
+        });
+        Self {
+            data_dir,
+            input,
+            device_name: None,
+            connecting_to: None,
+            error: None,
+            shown: true,
+            _naming: naming,
+            _subscriptions: vec![sub],
+        }
+    }
+
+    fn closed(&mut self, _: &mut Context<Self>) {
+        self.shown = false;
+    }
+
+    fn submit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.connecting_to.is_some() {
+            return;
+        }
+        let ParsedInput::Valid(parsed) = parse_input(&self.input.read(cx).value()) else {
+            return;
+        };
+        let data = self.data_dir.clone();
+        let intent = hubs::begin_selection(cx);
+        let ready_name = self.device_name.clone();
+        let lookup_name = ready_name.is_none().then(|| device_name::read_in_background(cx));
+        let link = parsed.clone();
+        let handle = window.window_handle();
+        self.error = None;
+        self.connecting_to = Some(parsed.hub_name.clone());
+        cx.notify();
+        cx.spawn(async move |this, cx| {
+            let device = match (ready_name, lookup_name) {
+                (Some(name), _) => name,
+                (None, Some(reading)) => reading.await,
+                (None, None) => unreachable!(),
+            };
+            let paired = cx.background_spawn(async move { client_core::pair(&link, &device) }).await;
+            match paired {
+                Ok(remote) => {
+                    let key = saved_hubs::credential_key(&data, &remote.device_id);
+                    if let Err(err) = saved_hubs::keep(&remote, key, cx).await {
+                        let _ = this.update(cx, |this, cx| {
+                            this.connecting_to = None;
+                            this.error = Some(format!("Couldn’t save this hub’s credential: {err}"));
+                            cx.notify();
+                        });
+                        return;
+                    }
+                    let still_shown = this.read_with(cx, |this, _| this.shown).unwrap_or(false);
+                    if still_shown {
+                        let _ = handle.update(cx, |_, window, cx| {
+                            window.close_dialog(cx);
+                            hubs::finish_selection(intent, remote, window, cx);
+                        });
+                    }
+                }
+                Err(err) => {
+                    let (message, replace) = connect_failure(&parsed, &err);
+                    let _ = handle.update(cx, |_, window, cx| {
+                        let _ = this.update(cx, |this, cx| {
+                            this.connecting_to = None;
+                            this.error = Some(message);
+                            if replace && this.shown {
+                                this.input.update(cx, |input, cx| {
+                                    input.select_all(window, cx);
+                                    input.focus(window, cx);
+                                });
+                            }
+                            cx.notify();
+                        });
+                    });
+                }
+            }
+        })
+        .detach();
+    }
+}
+
+impl Render for ConnectHub {
+    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let colors = look::colors(cx);
+        let parsed = parse_input(&self.input.read(cx).value());
+        let connecting = self.connecting_to.is_some();
+        let preview = match &parsed {
+            ParsedInput::Valid(link) => Some(preview_card(link, self.device_name.as_deref(), cx)),
+            ParsedInput::Empty | ParsedInput::Invalid(_) => None,
+        };
+        let can_submit = matches!(parsed, ParsedInput::Valid(_)) && !connecting;
+        let feedback = self.error.clone().or(match parsed {
+            ParsedInput::Invalid(hint) => Some(hint),
+            ParsedInput::Empty | ParsedInput::Valid(_) => None,
+        });
+        let label = if connecting {
+            "Connecting…"
+        } else if self.error.is_some() && can_submit {
+            "Try again"
+        } else {
+            "Connect"
+        };
+        v_flex()
+            .id("connect-hub-dialog")
+            .w_full()
+            .p(Space::XLarge)
+            .gap(Space::Large)
+            .typeset(Type::Body)
+            .text_color(colors.text)
+            .child(
+                v_flex().gap(Space::XSmall).child(div().typeset(Type::Heading).child("Connect another hub")).child(
+                    div()
+                        .text_color(colors.text_muted)
+                        .child("Paste a single-use pairing link from the other machine’s hub switcher."),
+                ),
+            )
+            .child(div().id("pair-link-input").child(Input::new(&self.input).disabled(connecting)).test_support())
+            .children(preview)
+            .when_some(self.connecting_to.as_deref(), |d, hub| d.child(reaching_line(hub, cx)))
+            .when_some(feedback, |d, msg| d.child(feedback_alert(msg, cx)))
+            .child(connect_footer(label, can_submit, cx))
+            .test_support()
+    }
+}
+
+fn reaching_line(hub: &str, cx: &App) -> AnyElement {
+    h_flex()
+        .gap(Space::Small)
+        .items_center()
+        .text_color(look::colors(cx).text_muted)
+        .child(look::task_ring(TaskRing::Running, cx))
+        .child(format!("Reaching {hub}…"))
+        .into_any_element()
+}
+
+fn feedback_alert(msg: String, cx: &App) -> AnyElement {
+    let text = SharedString::from(msg);
+    div()
+        .id("connect-hub-error")
+        .role(Role::Alert)
+        .aria_label(text.clone())
+        .typeset(Type::Body)
+        .text_color(look::colors(cx).error)
+        .child(text)
+        .test_support()
+        .into_any_element()
+}
+
+fn connect_footer(label: &'static str, can_submit: bool, cx: &mut Context<ConnectHub>) -> AnyElement {
+    h_flex()
+        .justify_end()
+        .gap(Space::Small)
+        .child(Button::new("cancel-pair-hub").sized(look::ControlSize::Large).hand().label("Cancel").on_click(
+            cx.listener(|this, _, window, cx| {
+                this.closed(cx);
+                window.close_dialog(cx);
+            }),
+        ))
+        .child(
+            Button::new("pair-hub")
+                .primary()
+                .sized(look::ControlSize::Large)
+                .label(label)
+                .off_while(!can_submit)
+                .on_click(cx.listener(|this, _, window, cx| this.submit(window, cx))),
+        )
+        .into_any_element()
+}
+
+fn preview_card(link: &PairingLink, device_name: Option<&str>, cx: &App) -> AnyElement {
+    let colors = look::colors(cx);
+    let pairs_as = match device_name {
+        Some(name) => format!("Pairs this computer as {name}"),
+        None => "Pairs this computer".to_string(),
+    };
+    let a11y = format!("{}, {}, {pairs_as}", link.hub_name, link.hosts.join(" · "));
+    let detail_indent = IconSize::Large.size() + Space::Small.size();
+    let device_line =
+        div().pl(detail_indent).truncate().typeset(Type::Detail).text_color(colors.text_faint).child(pairs_as);
+    let device_line = match device_name {
+        Some(_) => device_line.id("pair-link-device-name").test_support().into_any_element(),
+        None => device_line.into_any_element(),
+    };
+    v_flex()
+        .id("pair-link-preview")
+        .role(Role::Group)
+        .aria_label(a11y)
+        .w_full()
+        .p(Space::Medium)
+        .gap(Space::XSmall)
+        .bg(colors.inset)
+        .border_1()
+        .border_color(colors.edge)
+        .corners(Corner::Control)
+        .child(
+            h_flex()
+                .gap(Space::Small)
+                .items_center()
+                .child(Icon::new(Lucide::Server).sized(IconSize::Large).text_color(colors.text_muted))
+                .child(div().flex_1().min_w_0().truncate().typeset(Type::Body).emphasis().child(link.hub_name.clone())),
+        )
+        .child(
+            div()
+                .pl(detail_indent)
+                .truncate()
+                .typeset(Type::Code)
+                .text_color(colors.text_muted)
+                .child(link.hosts.join(" · ")),
+        )
+        .child(device_line)
+        .test_support()
+        .into_any_element()
+}

@@ -1,8 +1,3 @@
-//! A hub that answers from a fixed [`World`], so a screen looks the same on every run. It speaks the real protocol
-//! over a real socket, so the app is unchanged, and it refuses anything that would change what it holds.
-
-#![cfg(test)]
-
 use std::io::{BufRead as _, BufReader, Write as _};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::Path;
@@ -11,26 +6,20 @@ use std::sync::Arc;
 use protocol::attachment::AttachmentBytes;
 use protocol::client::CLIENT_PROTOCOL_VERSION;
 use protocol::client::{
-    ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HelloReply, HubFrame, HubStatus, ReplyOutcome,
-    admin, attachments, comments, drafts, files, github_accounts, log, records, sessions, subscriptions, workspaces,
+    ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HelloReply, HubFrame, ReplyOutcome, admin,
+    attachments, comments, drafts, files, github_accounts, log, records, sessions, subscriptions, workspaces,
 };
 use protocol::event::SessionEvent;
 use protocol::find::{Found, Needle};
 use protocol::frame;
 use protocol::model::{
-    AgentDescription, AgentFeature, AgentKind, CompactionLine, Effort, GitDiff, GitStatus, GithubSignIn,
-    LoginDescription, ModelChoice, ModelName, PermissionMode, Place, PromptLine, Rev, Seq, SessionId, SessionSettings,
-    SessionStatus, SubagentId, WorkspaceStatus,
+    CompactionLine, GitDiff, GitStatus, GithubSignIn, Place, PromptLine, Rev, Seq, SessionId, SubagentId,
+    WorkspaceStatus,
 };
 
-use super::base_pages::{opened, paged};
-use super::world::{LoginSupport, World};
-
-/// The build the app and its hub both say they are, so the label on every screen stays the same whatever this
-/// checkout's version is.
-pub(crate) const BUILD: &str = "1.0.0";
-/// The app's build number, which a screen's hub can be older than.
-pub(crate) const BUILD_NUMBER: u64 = 2;
+use super::super::base_pages::{opened, paged};
+use super::super::world::{LoginSupport, NOW_MS, World};
+use super::stand_in::{claude, fixed_pairing, status, version};
 
 /// Listens until the process ends. Each screen gets its own socket, so nothing outlives the screen that needs it.
 pub(crate) fn serve(socket: &Path, world: World) {
@@ -282,6 +271,17 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         // So a screen can show the app waiting on a workspace it asked for, or on a new title. The workspace's record
         // saying it's being made, or on its way out, is the world's to say.
         R::WorkspaceCreate(_) | R::WorkspaceRegenerateTitle(_) => Ok(Outcome::Never),
+        R::PairingStart if world.pairing.is_some() => reply(C::Pairing(fixed_pairing())),
+        R::PairingWait(_) if world.pairing.is_some() => match world.pairing.and_then(|p| p.paired_device) {
+            Some(name) => reply(C::Device(protocol::pairing::Device {
+                id: "dev-1".into(),
+                name: name.to_string(),
+                paired_at_ms: NOW_MS,
+                last_seen_ms: NOW_MS,
+                connections: 1,
+            })),
+            None => Ok(Outcome::Never),
+        },
         // The app reads whose account it is from the records, so a screen that asks some other way is wrong.
         R::SessionAccount(_)
         | R::Pair(_)
@@ -316,67 +316,6 @@ fn subscribe_places(
     let tail = world.tails.get(id).map_or_default(|tail| tail.of(subagent));
     let tail = HubFrame::Tail { subscription_id, tail };
     Ok(Outcome::Reply(ClientResponse::Ok, events.chain(std::iter::once(tail)).collect()))
-}
-
-/// Claude as the app's own hub describes it, so the picker, the context's cards, a turn's card and Agents say what
-/// they would, or as a hub from before hubs kept logins does, which says nothing of what makes one.
-fn claude(world: &World) -> AgentDescription {
-    let offered =
-        |model: &'static str, label: &str| ModelChoice { model: ModelName::named(model), label: label.into() };
-    AgentDescription {
-        capabilities: None,
-        kind: AgentKind::Claude,
-        name: "Claude Code".into(),
-        usage_heading: "Claude usage".into(),
-        models: vec![
-            offered("fable", "Fable"),
-            offered("opus", "Opus"),
-            offered("sonnet", "Sonnet"),
-            offered("haiku", "Haiku"),
-        ],
-        efforts: Effort::ALL.into_iter().filter(|effort| *effort != Effort::Ultra).collect(),
-        modes: PermissionMode::CHOSEN.to_vec(),
-        defaults: SessionSettings {
-            model: ModelName::named("opus"),
-            permission_mode: PermissionMode::FullAccess,
-            effort: Effort::Xhigh,
-        },
-        features: vec![AgentFeature::Compacts],
-        login: (world.logins != LoginSupport::None).then(|| LoginDescription {
-            made_with: "claude setup-token".into(),
-            lasts_ms: Some(365 * 24 * 60 * 60 * 1000),
-        }),
-    }
-}
-
-fn version(world: &World) -> &'static str {
-    world.hub.map_or(BUILD, |hub| hub.version)
-}
-
-/// Started by hand, as far as the app can tell, unless the screen says otherwise. A hub a client started is never
-/// replaced, because its running chats keep it busy.
-fn status(world: &World) -> HubStatus {
-    let running = world
-        .sessions
-        .iter()
-        .filter(|s| matches!(s.status, SessionStatus::Running | SessionStatus::WaitingApproval))
-        .count();
-    HubStatus {
-        pid: std::process::id(),
-        hub_version: version(world).to_string(),
-        protocol_version: CLIENT_PROTOCOL_VERSION,
-        started_at_ms: 0,
-        workers: 0,
-        running_sessions: u32::try_from(running).unwrap(),
-        clients: 1,
-        on_demand: world.hub.is_some_and(|hub| hub.on_demand),
-        build_number: world.hub.map(|hub| hub.number),
-        running_setups: 0,
-        requests: 1,
-        keeping_awake: false,
-        keeps_workers: false,
-        oldest_protocol_version: None,
-    }
 }
 
 fn read_only(what: &str) -> ApiError {

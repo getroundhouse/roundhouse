@@ -3,7 +3,9 @@
 
 mod build_line;
 mod corner;
+pub(crate) mod device_name;
 mod drafts;
+mod failure;
 mod focus;
 mod home;
 mod hub_source;
@@ -27,6 +29,9 @@ mod window_buttons;
 mod workspaces;
 
 pub use build_line::{Agents, BuildLine, Updating};
+#[cfg(feature = "testing")]
+pub use device_name::the_device_name_is;
+pub use failure::ConnectionFailure;
 pub use hub_source::HubSource;
 pub use quitting::Quitting;
 pub(crate) use quitting::quit;
