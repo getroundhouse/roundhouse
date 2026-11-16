@@ -1,12 +1,14 @@
 //! The thread that holds the engine and hears one recording at a time.
 
+use std::sync::Arc;
 use std::time::Duration;
 
 use flume::RecvTimeoutError;
 
+use super::buffer::Buffer;
+use super::capture::{self, Capture, Open};
 use super::hearing;
-use super::recording::{Cancelled, Input, Recording, Update};
-use crate::audio::Microphone;
+use super::recording::{Cancelled, Recording, Update};
 use crate::{AudioIn, DictationError, Engine, EngineError};
 
 /// What loads the engine, each time it's needed after it was let go.
@@ -29,8 +31,7 @@ enum Request {
 /// where what's heard of it goes.
 struct Asked {
     audio: AudioIn,
-    input: flume::Sender<Input>,
-    heard: flume::Receiver<Input>,
+    input: Buffer,
     updates: flume::Sender<Update>,
     cancelled: Cancelled,
 }
@@ -42,21 +43,31 @@ impl Dictation {
         load: impl FnMut() -> Result<Box<dyn Engine>, EngineError> + Send + 'static,
         keep_for: Duration,
     ) -> std::io::Result<Self> {
+        Self::with_capture(load, keep_for, Arc::new(capture::microphone))
+    }
+
+    pub(super) fn with_capture(
+        load: impl FnMut() -> Result<Box<dyn Engine>, EngineError> + Send + 'static,
+        keep_for: Duration,
+        capture: Open,
+    ) -> std::io::Result<Self> {
         let (requests, asked) = flume::unbounded();
         let load: Load = Box::new(load);
-        std::thread::Builder::new().name("dictation".to_string()).spawn(move || run(load, &asked, keep_for))?;
+        std::thread::Builder::new()
+            .name("dictation".to_string())
+            .spawn(move || run(load, &asked, keep_for, &capture))?;
         Ok(Self { requests })
     }
 
     /// Starts a recording, which hears `audio` until it's stopped or cancelled, and what's heard of it. Once an
-    /// earlier recording has finished, the microphone is opened first, and then the engine loaded if it isn't, so
-    /// nothing said while it loads is lost.
+    /// earlier recording has finished, the microphone is opened first, and then the engine loaded if it isn't.
+    /// Audio awaiting recognition is bounded; exceeding the buffer ends capture with [`DictationError::AudioBacklog`].
     pub fn record(&self, audio: AudioIn) -> (Recording, flume::Receiver<Update>) {
-        let (input, heard) = flume::unbounded();
+        let input = Buffer::new();
         let (updates, read) = flume::unbounded();
         let cancelled = Cancelled::default();
         let recording = Recording::new(input.clone(), cancelled.clone());
-        let asked = Asked { audio, input, heard, updates, cancelled };
+        let asked = Asked { audio, input, updates, cancelled };
         if let Err(flume::SendError(Request::Record(asked))) = self.requests.send(Request::Record(asked)) {
             let _ = asked.updates.send(Update::Failed(DictationError::Engine(stopped())));
         }
@@ -79,13 +90,13 @@ fn stopped() -> EngineError {
     EngineError("dictation stopped".to_string())
 }
 
-fn run(mut load: Load, asked: &flume::Receiver<Request>, keep_for: Duration) {
+fn run(mut load: Load, asked: &flume::Receiver<Request>, keep_for: Duration, capture: &Open) {
     let mut engine = None;
     loop {
         match asked.recv_timeout(keep_for) {
             Ok(Request::Record(asked)) => {
                 let (updates, cancelled) = (asked.updates.clone(), asked.cancelled.clone());
-                let ended = match record(&mut engine, &mut load, asked) {
+                let ended = match record(&mut engine, &mut load, asked, capture) {
                     Ok(Some(ending)) => Update::Ended(ending),
                     Ok(None) => continue,
                     Err(e) => Update::Failed(e),
@@ -108,23 +119,16 @@ fn record(
     engine: &mut Option<Box<dyn Engine>>,
     load: &mut Load,
     asked: Asked,
+    capture: &Open,
 ) -> Result<Option<crate::Ending>, DictationError> {
-    let Asked { audio, input, heard, updates, cancelled } = asked;
+    let Asked { audio, input, updates, cancelled } = asked;
     if cancelled.is_set() {
         return Ok(None);
     }
-    // Kept until the recording ends, as is `input` when nothing takes it, so only a stop or a cancel ends it.
+    // This guard releases capture on an engine error as well. Stop and cancellation wake capture directly even
+    // while this thread is blocked in the model.
     let _microphone = match audio {
-        AudioIn::Microphone => {
-            let failed = input.clone();
-            let heard = move |samples| {
-                let _ = input.send(Input::Audio(samples));
-            };
-            let failed = move |e| {
-                let _ = failed.send(Input::Failed(e));
-            };
-            Some(Microphone::open(heard, failed)?)
-        }
+        AudioIn::Microphone => Some(Capture::start(input.clone(), capture.clone())?),
         #[cfg(any(test, feature = "testing"))]
         AudioIn::Fed => None,
     };
@@ -132,7 +136,7 @@ fn record(
     if cancelled.is_set() {
         return Ok(None);
     }
-    hearing::hear(engine, &heard, &updates, &cancelled)
+    hearing::hear(engine, &input, &updates, &cancelled)
 }
 
 /// The engine, loaded if it isn't. One that fails to load is tried again next time.

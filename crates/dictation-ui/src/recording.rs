@@ -130,6 +130,8 @@ fn failure(error: &DictationError) -> String {
             "Dictate again, and allow Roundhouse to use the microphone when asked.".to_string()
         }
         DictationError::NoMicrophone => "There's no microphone to dictate with.".to_string(),
-        DictationError::Microphone(_) | DictationError::Engine(_) => format!("Dictation stopped: {error}."),
+        DictationError::Microphone(_) | DictationError::Engine(_) | DictationError::AudioBacklog => {
+            format!("Dictation stopped: {error}.")
+        }
     }
 }

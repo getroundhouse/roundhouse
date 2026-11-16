@@ -1,5 +1,7 @@
 //! The thread that holds the engine, and each recording it hears.
 
+mod buffer;
+mod capture;
 mod hearing;
 mod joins;
 mod recording;

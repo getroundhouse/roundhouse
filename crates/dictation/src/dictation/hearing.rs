@@ -9,6 +9,7 @@
 
 use std::collections::VecDeque;
 
+use super::buffer::Buffer;
 use super::joins::{self, Ends, Join, is_mark};
 use super::recording::{Cancelled, Input, Update};
 use crate::pauses::{Cut, Pauses};
@@ -17,7 +18,7 @@ use crate::{DictationError, Ending, Engine, Heard, Listening, Samples};
 /// Hears the recording `input` brings until it's stopped, which gives how it went, or cancelled, which gives `None`.
 pub(super) fn hear(
     engine: &dyn Engine,
-    input: &flume::Receiver<Input>,
+    input: &Buffer,
     updates: &flume::Sender<Update>,
     cancelled: &Cancelled,
 ) -> Result<Option<Ending>, DictationError> {
@@ -36,17 +37,17 @@ pub(super) fn hear(
         cancelled,
     };
     loop {
-        let next = input.recv();
+        let next = input.next();
         // Whatever was queued before the cancel goes unheard.
         if cancelled.is_set() {
             return Ok(None);
         }
         match next {
-            Ok(Input::Audio(audio)) => hearing.audio(&audio)?,
-            Ok(Input::Stop) => return hearing.stop().map(Some),
-            Ok(Input::Failed(e)) => return Err(e),
+            Input::Audio(audio) => hearing.audio(&audio)?,
+            Input::Stop => return hearing.stop().map(Some),
+            Input::Failed(e) => return Err(e),
             // Its handle is gone, so nobody is left to hear it.
-            Ok(Input::Cancel) | Err(flume::RecvError::Disconnected) => return Ok(None),
+            Input::Cancel => return Ok(None),
         }
     }
 }
