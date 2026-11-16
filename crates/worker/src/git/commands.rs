@@ -4,10 +4,8 @@ use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{BranchName, CommitId, GitDiff, GitFile, GitStatus};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
-use std::time::Duration;
 use tokio::process::Command;
 
-pub(super) const GH_TIMEOUT: Duration = protocol::worker::GH_RUNS_WITHIN;
 /// Keeps a diff response bounded when an agent leaves build output untracked and unignored.
 const MAX_UNTRACKED_FILES: usize = 200;
 const MAX_UNTRACKED_BYTES: usize = 8 * 1024 * 1024;

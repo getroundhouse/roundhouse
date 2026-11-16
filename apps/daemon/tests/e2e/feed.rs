@@ -10,7 +10,7 @@ use protocol::model::{
     WorkspaceStatus,
 };
 
-use crate::support::{Stack, next_notice, wait_for_setup, wait_for_turn_end, wait_until};
+use crate::support::{Stack, next_notice, next_notice_of, wait_for_setup, wait_for_turn_end, wait_until};
 
 /// What a sidebar shows of the chat the feed last told of, its status and title, and the copy of its record that
 /// said so.
@@ -26,18 +26,28 @@ fn apart_from_the_log(session: &Session) -> Session {
     Session { rev: Rev::default(), last_seq: Seq::default(), updated_at_ms: 0, ..session.clone() }
 }
 
+/// Whether `notice` is of what a sidebar shows: a repository, a workspace or a chat, or one's going. Not of an account,
+/// which a chat runs under, or of the GitHub login found on the local provider's machine, which a sidebar doesn't
+/// show, and which come anywhere among the others, whenever the agent says which account it runs under and the hub's
+/// first worker says who `gh` is logged in as.
+fn shown(notice: &HubNotice) -> bool {
+    match notice {
+        HubNotice::Repo(_) | HubNotice::Workspace(_) | HubNotice::Session(_) => true,
+        HubNotice::Removed { record, .. } => {
+            matches!(record, RecordKey::Repo { .. } | RecordKey::Workspace { .. } | RecordKey::Session { .. })
+        }
+        _ => false,
+    }
+}
+
 impl Sidebar {
     /// The next notice that changes what a sidebar shows. A chat's record also says how full its agent's context is,
     /// which the agent says whenever it gets to it, and which account it runs under, so a notice of only that comes
-    /// anywhere among the others, and so does one of the account's own record, which a sidebar doesn't show. Each
-    /// notice of a chat has to be a newer copy than the last and say something the last didn't, so nothing is
-    /// announced twice, or for an event that changed nothing.
+    /// anywhere among the others. Each notice of a chat has to be a newer copy than the last and say something the
+    /// last didn't, so nothing is announced twice, or for an event that changed nothing.
     fn next_notice(&mut self, feed: &Subscription, what: &str) -> HubNotice {
         loop {
-            let notice = next_notice(feed, what);
-            if matches!(notice, HubNotice::Account(_)) {
-                continue;
-            }
+            let notice = next_notice_of(feed, what, shown);
             if let HubNotice::Session(session) = &notice {
                 if let Some(last) = &self.told {
                     assert!(session.rev > last.rev, "a copy no newer than the last: {session:?}");
@@ -62,12 +72,12 @@ fn the_feed_reports_what_a_sidebar_shows() {
     let feed = client.feed_subscribe().unwrap();
 
     let repo = client.repo_add(stack.repo().to_str().unwrap()).unwrap();
-    assert_eq!(next_notice(&feed, "the repo"), HubNotice::Repo(repo.clone()));
+    assert_eq!(next_notice_of(&feed, "the repo", shown), HubNotice::Repo(repo.clone()));
     let workspace = client.workspace_create(&repo.id, Some("watched".into()), None, None).unwrap();
     // On its way as soon as it's recorded, then ready, then its setup running and finishing.
-    let HubNotice::Workspace(making) = next_notice(&feed, "the workspace on its way") else { panic!() };
+    let HubNotice::Workspace(making) = next_notice_of(&feed, "the workspace on its way", shown) else { panic!() };
     assert_eq!((making.id.as_str(), making.status), (workspace.id.as_str(), WorkspaceStatus::Creating));
-    let HubNotice::Workspace(ready) = next_notice(&feed, "the workspace") else { panic!() };
+    let HubNotice::Workspace(ready) = next_notice_of(&feed, "the workspace", shown) else { panic!() };
     assert_eq!((ready.id.as_str(), ready.status), (workspace.id.as_str(), WorkspaceStatus::Ready));
     assert!(ready.rev > making.rev);
     // With the branch it's on, so nothing has to follow to say so.
@@ -75,13 +85,13 @@ fn the_feed_reports_what_a_sidebar_shows() {
     assert_eq!(on, Some(Head::Branch { name: workspace.branch.clone() }));
     wait_for_setup(&client, &workspace.id);
     for _ in 0..2 {
-        assert!(matches!(next_notice(&feed, "setup"), HubNotice::Workspace(_)));
+        assert!(matches!(next_notice_of(&feed, "setup", shown), HubNotice::Workspace(_)));
     }
     let session =
         client.session_create(&workspace.id, AgentKind::Claude, SessionSettingsChange::default(), None).unwrap();
-    assert_eq!(next_notice(&feed, "the session"), HubNotice::Session(session.clone()));
+    assert_eq!(next_notice_of(&feed, "the session", shown), HubNotice::Session(session.clone()));
     // Making a chat is doing something in its workspace, which moves up the sidebar.
-    let HubNotice::Workspace(made_a_chat) = next_notice(&feed, "a chat made in it") else { panic!() };
+    let HubNotice::Workspace(made_a_chat) = next_notice_of(&feed, "a chat made in it", shown) else { panic!() };
     assert_eq!(made_a_chat.user_active_at_ms, Some(session.created_at_ms));
 
     // One notice per change of status, not one per event. Once the first prompt is recorded, it titles the
@@ -124,14 +134,14 @@ fn a_workspace_that_cant_be_made_is_announced_on_its_way_and_then_removed() {
     let client = stack.client();
     let feed = client.feed_subscribe().unwrap();
     let repo = client.repo_add(stack.repo().to_str().unwrap()).unwrap();
-    next_notice(&feed, "the repo");
+    next_notice_of(&feed, "the repo", shown);
     std::fs::remove_dir_all(stack.repo()).unwrap();
 
     client.workspace_create(&repo.id, Some("doomed".into()), None, None).unwrap_err();
 
-    let HubNotice::Workspace(making) = next_notice(&feed, "the workspace on its way") else { panic!() };
+    let HubNotice::Workspace(making) = next_notice_of(&feed, "the workspace on its way", shown) else { panic!() };
     assert_eq!((making.name.as_str(), making.status), ("doomed", WorkspaceStatus::Creating));
-    let HubNotice::Removed { record, rev } = next_notice(&feed, "its removal") else { panic!() };
+    let HubNotice::Removed { record, rev } = next_notice_of(&feed, "its removal", shown) else { panic!() };
     assert_eq!(record, RecordKey::Workspace { id: making.id });
     assert!(rev > making.rev);
     assert!(client.workspace_list(true).unwrap().is_empty());

@@ -91,10 +91,13 @@ impl Listed {
                     listed.accounts.insert(account.id.clone(), account.clone());
                 }
                 Record::NewWorkspaceDraft(draft) => listed.new_workspace_draft = Some(draft.clone()),
-                // A subagent's held apart, as `HubRecords::apply_record` says. A GitHub account's and a sign-in's are
-                // held, but not listed for views. *Not built:* showing them, as "GitHub accounts" in "State ownership"
-                // in `docs/architecture.md` says.
-                Record::Subagent(_) | Record::GithubAccount(_) | Record::GithubSignIn(_) => {}
+                // A subagent's held apart, as `HubRecords::apply_record` says. A GitHub account's, a sign-in's and a
+                // found GitHub login are held, but not listed for views. *Not built:* showing them, as "GitHub
+                // accounts" in "State ownership" in `docs/architecture.md` says.
+                Record::Subagent(_)
+                | Record::GithubAccount(_)
+                | Record::GithubSignIn(_)
+                | Record::FoundGithubLogin(_) => {}
             }
         }
         listed.repos.sort_by(|a, b| (&a.name, &a.id).cmp(&(&b.name, &b.id)));

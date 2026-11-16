@@ -44,8 +44,8 @@ pub use effort::Effort;
 pub use files::{FileContents, FileOpened, FilePage, FilePages, OpenedText, PageLine, WorktreeFiles};
 pub use git::{GitDiff, GitFile, GitStatus};
 pub use github_account::{
-    GithubAccount, GithubLoginKind, GithubSignIn, GithubSignInStatus, GithubToken, GithubUser, GithubUserId,
-    HeldGithubLogin,
+    FoundGithubLogin, GhLogin, GhLoginWorks, GithubAccount, GithubLoginKind, GithubSignIn, GithubSignInStatus,
+    GithubToken, GithubUser, GithubUserId, HeldGithubLogin,
 };
 pub use hub_settings::{AccountDefault, GithubSettings, HubSettings, HubSettingsChange};
 pub use model_name::{ModelName, ModelNameError};

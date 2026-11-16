@@ -265,6 +265,8 @@ pub(super) async fn handle(
         WorkerRequest::GithubRateLimit(asked) => {
             Ok(WorkerResponse::GithubRateLimit(git::rate_limit(&given, &asked.path).await?))
         }
+        // The machine's own, so not with `given`, in a directory of no project's.
+        WorkerRequest::FindGithubLogin => crate::found_login::reply(&state.config.scratch_dir).await,
         WorkerRequest::SetupWorkspace(asked) => run_setup(state, &asked.repo_path, &asked.path, &asked.env).await,
         WorkerRequest::CancelSetup => {
             stop_setup_script(state);

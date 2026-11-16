@@ -1,17 +1,21 @@
 //! What git uses for github.com in what a real worker starts, once its hub has set the git credential: real git,
-//! asking the worker's own binary as its helper, in a workspace's setup script.
+//! asking the worker's own binary as its helper, in a workspace's setup script. And who the worker finds its machine's
+//! own `gh` is logged in as, whatever credential it was set.
 
 use std::collections::BTreeMap;
+use std::ffi::OsString;
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 
 use protocol::frame;
-use protocol::model::GithubToken;
+use protocol::model::{GhLogin, GhLoginWorks, GithubToken};
 use protocol::worker::{
-    GitCredential, GitCredentialSet, GithubCredential, Hello, SetupDone, SetupWorkspace, WORKER_PROTOCOL_VERSION,
-    WorkerCall, WorkerFrame, WorkerOutcome, WorkerRequest, WorkerResponse,
+    GitCredential, GitCredentialSet, GithubCredential, GithubLoginReply, Hello, SetupDone, SetupWorkspace,
+    WORKER_PROTOCOL_VERSION, WorkerCall, WorkerFrame, WorkerOutcome, WorkerRequest, WorkerResponse,
 };
+
+use crate::support::install_executable;
 
 /// Says it's started, then waits for `go` in the workspace, and asks git for a credential for a remote on github.com
 /// whose URL names another user, and where a remote over SSH goes.
@@ -31,6 +35,11 @@ struct Worker {
 
 impl Worker {
     fn start() -> Self {
+        Self::start_with(Vec::new())
+    }
+
+    /// The same, with `env` set too.
+    fn start_with(env: Vec<(&str, OsString)>) -> Self {
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
         std::fs::create_dir_all(&home).unwrap();
@@ -51,6 +60,7 @@ impl Worker {
             .env("GIT_TERMINAL_PROMPT", "0")
             .env_remove("XDG_CONFIG_HOME")
             .env_remove("GIT_CONFIG_COUNT")
+            .envs(env)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
@@ -189,6 +199,41 @@ fn sets_reach_git_in_a_process_started_before_them_in_the_order_sent() {
     assert!(applied.iter().all(|(_, answer)| *answer == WorkerOutcome::Response(WorkerResponse::Ok)), "{applied:?}");
     let (filled, _, _) = worker.git_said();
     assert!(filled.contains("username=ada\npassword=token-13\n"), "{filled}");
+}
+
+/// A `gh` that says it's logged in to github.com by the token in its environment, as the one the worker's own
+/// environment has, which it names as `the-machines-token`, and as `the-workers-credential` once it's given the
+/// worker's files, which it reads over any token, and that GitHub names the same for that token.
+const SAYS_WHOSE_LOGIN: &str = r#"#!/bin/sh
+login=
+[ "$GH_TOKEN" = machines-own ] && login=the-machines-token
+[ -n "$GH_CONFIG_DIR$GIT_CONFIG_COUNT" ] && login=the-workers-credential
+case "$1 $2" in
+'auth status') printf '{"hosts":{"github.com":[{"state":"success","active":true,"host":"github.com","login":"%s","tokenSource":"GH_TOKEN"}]}}\n' "$login" ;;
+'api --include') printf 'HTTP/2.0 200 OK\n\r\n{"login":"%s"}\n' "$login" ;;
+*) exit 1 ;;
+esac"#;
+
+/// What the worker starts under the machine's own finds, so not the files of the account it was set, nor without the
+/// `GH_TOKEN` its own environment has, which an account's credential takes out of what it starts.
+#[test]
+fn the_login_found_is_the_machines_own_while_an_accounts_credential_is_set() {
+    let bin = tempfile::tempdir().unwrap();
+    let source = bin.path().join("gh.source");
+    std::fs::write(&source, SAYS_WHOSE_LOGIN).unwrap();
+    install_executable(&source, &bin.path().join("gh"));
+    let mut path = OsString::from(bin.path());
+    path.push(":");
+    path.push(std::env::var_os("PATH").unwrap());
+    let mut worker = Worker::start_with(vec![("PATH", path), ("GH_TOKEN", "machines-own".into())]);
+
+    worker.send(1, WorkerRequest::GitCredentialSet(GitCredentialSet { credential: account("ada", "made-up") }));
+    worker.send(2, WorkerRequest::FindGithubLogin);
+    let replies = worker.replies(&[1, 2]);
+
+    assert_eq!(replies[&1], WorkerOutcome::Response(WorkerResponse::Ok));
+    let login = GhLogin::LoggedIn { username: "the-machines-token".into(), works: GhLoginWorks::Yes };
+    assert_eq!(replies[&2], WorkerOutcome::Response(WorkerResponse::GithubLogin(GithubLoginReply { login })));
 }
 
 fn wait_for(path: &Path) {

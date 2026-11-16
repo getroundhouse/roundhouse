@@ -48,12 +48,13 @@ pub(super) struct LeftHalfDone {
 /// Clears up what the last run left half done: setups that were running, which its workers can't report on to this hub,
 /// sign-ins with GitHub left waiting, which only it could ask GitHub after, and workspaces half-made. It forgets which
 /// build each workspace's worker was, too, since only a worker this hub carries on with can be another build than its
-/// own. Returns what's left for the hub to finish once it's serving. What
-/// it left at work, the hub carries on with as it starts.
+/// own, and the GitHub login found on each provider's machines, since each is asked again. Returns what's left for the
+/// hub to finish once it's serving. What it left at work, the hub carries on with as it starts.
 pub(super) fn recover(store: &Store) -> Result<LeftHalfDone, StoreError> {
     store.fail_interrupted_setups()?;
     store.end_waiting_github_sign_ins()?;
     store.forget_worker_builds()?;
+    store.forget_found_github_logins()?;
     let moves = store.moves_left()?;
     for workspace in store.take_unfinished_workspaces()? {
         warn!(workspace = workspace.name, "discarding a workspace left half-made by the last run");

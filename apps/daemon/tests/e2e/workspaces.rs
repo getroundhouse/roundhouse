@@ -13,7 +13,7 @@ use protocol::model::{
 };
 
 use crate::support::{
-    Stack, assistant_text, commit_settings, git, is_alive, next_notice, read_all, wait_for_setup, wait_for_turn_end,
+    Stack, assistant_text, commit_settings, git, is_alive, next_notice_of, read_all, wait_for_setup, wait_for_turn_end,
     wait_until,
 };
 
@@ -275,15 +275,17 @@ fn a_workspace_whose_name_git_has_takes_its_station_with_a_number_keeping_its_id
     let client = stack.client();
     let feed = client.feed_subscribe().unwrap();
     let repo = client.repo_add(stack.repo().to_str().unwrap()).unwrap();
-    next_notice(&feed, "the repo");
+    next_notice_of(&feed, "the repo", |notice| matches!(notice, HubNotice::Repo(_)));
     for name in hub::workspace_names() {
         git(&stack.repo(), &["branch", &format!("{}/fix", name.to_uppercase())]);
     }
 
     let made = client.workspace_create(&repo.id, None, None, None).unwrap();
 
-    let HubNotice::Workspace(first) = next_notice(&feed, "the workspace on its way") else { panic!() };
-    let HubNotice::Workspace(renamed) = next_notice(&feed, "its next name") else { panic!() };
+    // Its own, among the others the hub sends then, such as the login its worker finds.
+    let of_it = |notice: &HubNotice| matches!(notice, HubNotice::Workspace(_));
+    let HubNotice::Workspace(first) = next_notice_of(&feed, "the workspace on its way", of_it) else { panic!() };
+    let HubNotice::Workspace(renamed) = next_notice_of(&feed, "its next name", of_it) else { panic!() };
     assert_eq!((renamed.id.as_str(), renamed.status), (first.id.as_str(), WorkspaceStatus::Creating));
     assert_eq!((made.id, made.status), (first.id, WorkspaceStatus::Ready));
     assert_eq!(made.name, renamed.name);

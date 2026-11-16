@@ -5,6 +5,7 @@ use rusqlite::{Row, Transaction};
 
 use super::accounts::accounts;
 use super::comments::{COMMENT_COLUMNS, comment_from_row};
+use super::found_github_logins::found_github_logins;
 use super::github_accounts::github_accounts;
 use super::github_sign_ins::github_sign_ins;
 use super::hub_settings::hub_settings;
@@ -41,6 +42,7 @@ impl Store {
             new_workspace_draft: Some(new_workspace_draft(&tx)?),
             github_accounts: github_accounts(&tx)?,
             github_sign_ins: github_sign_ins(&tx)?,
+            found_github_logins: found_github_logins(&tx)?,
             rev: current_rev(&tx)?,
         };
         tx.commit()?;

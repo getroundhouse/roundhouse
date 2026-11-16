@@ -6,6 +6,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 mod remote;
 
 mod stand_in;
+pub(crate) use stand_in::LOGGED_IN_AS;
 pub(crate) use stand_in::LOGGED_OUT;
 pub(crate) use stand_in::MERGED;
 pub(crate) use stand_in::MOVED_ON;

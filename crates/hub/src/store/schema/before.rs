@@ -92,3 +92,6 @@ pub(crate) const BEFORE_GITHUB_ACCOUNTS: usize = 58;
 
 /// How many migrations there were before the hub signed in with GitHub.
 pub(crate) const BEFORE_GITHUB_SIGN_INS: usize = 59;
+
+/// How many migrations there were before the hub recorded the logins found on each provider's machines.
+pub(crate) const BEFORE_FOUND_GITHUB_LOGINS: usize = 60;
