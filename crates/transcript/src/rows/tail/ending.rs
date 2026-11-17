@@ -32,6 +32,8 @@ pub(in super::super) struct EndOfChat<'a> {
     /// have theirs under them.
     pub(in super::super) folds: &'a Folds,
     pub(in super::super) pull_request: Option<&'a PullRequestStanding>,
+    /// It's the subagent tab's, whose tail the hub sends with only what its subagent is writing.
+    pub(in super::super) alone: bool,
 }
 
 /// A prompt the agent hasn't read yet, which is drawn after what it's still writing, as it will be once it's read.
@@ -61,8 +63,8 @@ pub(in super::super) fn waiting(log: &SessionLog, m: &Model) -> Vec<Waiting> {
 /// read `by` place, which keeps its work apart, since only then can the tab read it. Nothing's found at the end of the
 /// chat, since it isn't counted, so nothing's marked there either.
 pub(in super::super) fn render_tail(end: &EndOfChat, shared: &Shared, by: By, cx: &App) -> AnyElement {
-    let EndOfChat { tail, waiting, at_work, folds, pull_request } = *end;
-    let (written, placed) = still_writing(tail, shared, folds.thinking_open(), cx);
+    let EndOfChat { tail, waiting, at_work, folds, pull_request, alone } = *end;
+    let (written, placed) = still_writing(tail, alone, shared, folds.thinking_open(), cx);
     let mut after: Vec<AnyElement> = Vec::new();
     if at_work.working {
         let line = working_line(at_work.turn_started_at_ms, tail.compacting.as_ref(), &shared.line_text, cx);
@@ -89,12 +91,13 @@ pub(in super::super) fn render_tail(end: &EndOfChat, shared: &Shared, by: By, cx
         .into_any_element()
 }
 
-/// What the agent is still writing, block by block, and how many texts that is, each at the next place at the end of
-/// the chat. Each is known as it will be once it's recorded. A subagent's work shows in the call that started it, once
-/// it's recorded.
-fn still_writing(tail: &Tail, shared: &Shared, thinking_open: bool, cx: &App) -> (Vec<AnyElement>, usize) {
+/// What the agent is still writing, or in the subagent tab, its subagent, block by block, and how many texts that is,
+/// each at the next place at the end of the chat. Each is known as it will be once it's recorded. A chat's tail from a
+/// hub too old to keep a subagent's work apart holds what its subagents are writing too, which shows in the call that
+/// started each, once it's recorded. The tab's holds only its subagent's, which is all it shows.
+fn still_writing(tail: &Tail, alone: bool, shared: &Shared, thinking_open: bool, cx: &App) -> (Vec<AnyElement>, usize) {
     let (mut out, mut placed) = (Vec::new(), 0);
-    for message in tail.messages.iter().filter(|m| m.subagent.is_none()) {
+    for message in tail.messages.iter().filter(|m| alone || m.subagent.is_none()) {
         for block in &message.blocks {
             let key = ItemKey::Block(message.message_id.clone(), block.index);
             let mut drawn = |part| {
