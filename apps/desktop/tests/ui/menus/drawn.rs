@@ -1,13 +1,24 @@
 //! The menus as the app draws them off the Mac: from a button in the strip's top left corner, or F10, as one of the
 //! kit's popup menus with each menu a submenu of it. What each menu holds is in `mod.rs`, read from what GPUI keeps,
-//! which is what's drawn.
+//! which is what's drawn. Opening them, and what an item does to the window, ask nothing of a hub, so each window
+//! opens on a fake hub, but for the one whose item has the hub make a chat.
 
+use client_core::fake_hub::World;
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{AppContext as _, TestAppContext, point, px};
 
-use super::with_a_repository;
+use super::{in_a_workspace, on, with_a_repository};
 use crate::sidebars::show_an_error;
-use crate::support::{MENU, Stack, Ui};
+use crate::support::{FakeHub, MENU, Stack, Ui};
+
+/// A window on a fake hub holding a repository with no workspace, so there's no composer.
+fn with_a_repository_on_a_fake_hub(cx: &mut TestAppContext) -> (FakeHub, Ui<'_>) {
+    let mut world = World::default();
+    world.repo("signals");
+    let (hub, mut ui) = on(cx, world);
+    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
+    (hub, ui)
+}
 
 /// Whether the menus are open, with a submenu or not, each of which is a menu of its own.
 fn open(ui: &mut Ui<'_>) -> bool {
@@ -22,6 +33,7 @@ fn choose(ui: &mut Ui<'_>, menu: &str, item: &str) {
     ui.click_menu_item(item);
 }
 
+/// On a real hub, since New Chat has the hub make a chat, which the fake hub refuses.
 #[gpui_kit::test]
 fn the_button_opens_the_menus_and_an_item_does_what_its_key_does(cx: &mut TestAppContext) {
     let stack = Stack::new();
@@ -47,9 +59,7 @@ fn the_button_opens_the_menus_and_an_item_does_what_its_key_does(cx: &mut TestAp
 /// They act on what had focus before they opened, as the menu bar's do, and give it back.
 #[gpui_kit::test]
 fn the_edit_menu_edits_the_composer_and_leaves_it_focused(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = with_a_repository(cx, &stack);
-    ui.new_workspace();
+    let (_hub, mut ui) = in_a_workspace(cx, |_, _| {});
     ui.input("say:hello");
     ui.press("secondary-a");
 
@@ -63,8 +73,7 @@ fn the_edit_menu_edits_the_composer_and_leaves_it_focused(cx: &mut TestAppContex
 /// As the menu bar greys out an item where nothing would take it, so choosing it does nothing, and the menus stay open.
 #[gpui_kit::test]
 fn an_item_that_cant_act_is_greyed_out(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = with_a_repository(cx, &stack);
+    let (_hub, mut ui) = with_a_repository_on_a_fake_hub(cx);
 
     choose(&mut ui, "File", "New Chat");
 
@@ -75,9 +84,7 @@ fn an_item_that_cant_act_is_greyed_out(cx: &mut TestAppContext) {
 /// As F10 opens a Windows or Linux app's menus. Escape closes them, and F10 again does too.
 #[gpui_kit::test]
 fn f10_opens_the_menus_and_escape_or_f10_closes_them(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = with_a_repository(cx, &stack);
-    ui.new_workspace();
+    let (_hub, mut ui) = in_a_workspace(cx, |_, _| {});
     ui.input("half");
 
     ui.press("f10");
@@ -94,8 +101,7 @@ fn f10_opens_the_menus_and_escape_or_f10_closes_them(cx: &mut TestAppContext) {
 
 #[gpui_kit::test]
 fn pressing_the_button_again_closes_the_menus(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = with_a_repository(cx, &stack);
+    let (_hub, mut ui) = with_a_repository_on_a_fake_hub(cx);
     ui.click("menus");
 
     ui.click("menus");
@@ -107,9 +113,7 @@ fn pressing_the_button_again_closes_the_menus(cx: &mut TestAppContext) {
 /// to hide.
 #[gpui_kit::test]
 fn the_button_stays_where_it_is(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = with_a_repository(cx, &stack);
-    ui.new_workspace();
+    let (_hub, mut ui) = in_a_workspace(cx, |_, _| {});
     let button = ui.bounds("menus");
     assert!(button.right() < ui.bounds("toggle-sidebar").left(), "it's first in the corner: {button:?}");
 
@@ -137,8 +141,7 @@ fn tab_to_the_button(ui: &mut Ui<'_>) {
 /// Enter on the button, once Tab has reached it, opens the menus, as a click does.
 #[gpui_kit::test]
 fn the_button_opens_the_menus_from_the_keyboard(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = with_a_repository(cx, &stack);
+    let (_hub, mut ui) = with_a_repository_on_a_fake_hub(cx);
     tab_to_the_button(&mut ui);
 
     ui.press("enter");
@@ -149,8 +152,7 @@ fn the_button_opens_the_menus_from_the_keyboard(cx: &mut TestAppContext) {
 /// What the app takes wherever focus is, such as About, isn't greyed out, though no view takes it.
 #[gpui_kit::test]
 fn about_can_be_chosen_from_the_menus(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = with_a_repository(cx, &stack);
+    let (_hub, mut ui) = with_a_repository_on_a_fake_hub(cx);
 
     choose(&mut ui, "Help", "About Roundhouse");
 
@@ -161,9 +163,7 @@ fn about_can_be_chosen_from_the_menus(cx: &mut TestAppContext) {
 /// menus leaves alone, as one on the sidebar's button does.
 #[gpui_kit::test]
 fn the_button_leaves_an_error_under_it_alone(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = with_a_repository(cx, &stack);
-    ui.new_workspace();
+    let (_hub, mut ui) = in_a_workspace(cx, |_, _| {});
     ui.click("toggle-sidebar");
     show_an_error(&mut ui);
 
@@ -176,8 +176,7 @@ fn the_button_leaves_an_error_under_it_alone(cx: &mut TestAppContext) {
 /// As a menu bar's menus close when you click away from them.
 #[gpui_kit::test]
 fn a_click_anywhere_else_closes_the_menus(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = with_a_repository(cx, &stack);
+    let (_hub, mut ui) = with_a_repository_on_a_fake_hub(cx);
     ui.click("menus");
     let button = ui.bounds("menus");
 
