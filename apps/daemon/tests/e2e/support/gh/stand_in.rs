@@ -26,12 +26,14 @@ pub(crate) const OFFLINE: &str = "offline";
 /// What it says before `gh auth login`.
 pub(crate) const LOGGED_OUT: &str = "logged-out";
 /// Who it says it's logged in to github.com as, for `gh auth status`, in the form `gh` 2.103 prints, with only what's
-/// read of it, and that GitHub names for its token, for `gh api --include user`.
+/// read of it.
 pub(crate) const LOGGED_IN_AS: &str = "ada";
+/// The token it says it uses for that login, for `gh auth token`.
+pub(crate) const LOGGED_IN_WITH: &str = "gho_made_up_for_ada";
 
 /// A `gh` at the front of the hub's `PATH`, which says what a test tells it to for `gh pr view` and `gh api rate_limit`,
 /// and explicit GraphQL reads, that the pull request isn't in a merge queue, and that it's logged in as
-/// [`LOGGED_IN_AS`], with a token GitHub takes. Other commands fail. Explicit reads use synthetic revisions in
+/// [`LOGGED_IN_AS`], with the token [`LOGGED_IN_WITH`]. Other commands fail. Explicit reads use synthetic revisions in
 /// example/project; their state follows `say`. By URL, `gh pr view` says what it was told
 /// of the pull request at that URL, but for the exception [`StandInGh::script`] names. It prints the commits only when
 /// they're asked for, as `gh` does, and fails when they're asked for by the branch's name, which GitHub charges 31
@@ -89,7 +91,7 @@ impl StandInGh {
 echo "$1 $2" >> '{ran}'
 [ "$1 $2" = 'api rate_limit' ] && exec cat '{rate_limit}'
 [ "$1 $2" = 'auth status' ] && exec echo '{{"hosts":{{"github.com":[{{"state":"success","active":true,"login":"{LOGGED_IN_AS}"}}]}}}}'
-[ "$1 $2" = 'api --include' ] && exec printf 'HTTP/2.0 200 OK\n\r\n{{"login":"{LOGGED_IN_AS}"}}\n'
+[ "$1 $2" = 'auth token' ] && exec echo '{LOGGED_IN_WITH}'
 [ "$1 $2" = 'api graphql' ] && exec echo '{{"data":{{"resource":{{"mergeQueueEntry":null}}}}}}'
 [ "$1 $2" = 'repo view' ] && exec echo '{{"url":"https://github.com/example/project","nameWithOwner":"example/project"}}'
 if [ "$1 $2" = 'api --hostname' ]; then

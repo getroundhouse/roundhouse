@@ -5,13 +5,14 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
 use protocol::client::{ApiError, ErrorCode, HubNotice};
-use protocol::model::{FoundGithubLogin, GhLogin, GhLoginWorks, ProviderName};
-use protocol::worker::{GithubLoginReply, WorkerRequest, WorkerResponse};
+use protocol::model::{FoundGithubLogin, GhLogin, GhLoginWorks, GithubToken, ProviderName};
+use protocol::worker::{FoundToken, GithubLoginReply, WorkerRequest, WorkerResponse};
 use tokio::sync::broadcast;
 
 use super::FOUND_WITHIN;
+use crate::github::{Answer as GithubAnswer, StandIn};
 use crate::hub::Hub;
-use crate::hub::tests::hub_in;
+use crate::hub::tests::{hub_calling_github, hub_in};
 use crate::worker_link::WorkerLink;
 
 type Answer = Option<Result<WorkerResponse, ApiError>>;
@@ -28,9 +29,9 @@ fn worker_answering(answer: Answer) -> (Arc<WorkerLink>, Arc<AtomicUsize>) {
     (link, asked)
 }
 
-/// What a worker that found `login` answers.
+/// What a worker that found `login` answers, as one from before it handed the hub the login's token does.
 fn found(login: GhLogin) -> WorkerResponse {
-    WorkerResponse::GithubLogin(GithubLoginReply { login })
+    WorkerResponse::GithubLogin(GithubLoginReply { login, token: None })
 }
 
 fn ada() -> GhLogin {
@@ -76,6 +77,29 @@ async fn the_first_link_to_each_provider_is_asked_and_what_it_found_recorded_and
     assert!(incus.rev > local.rev);
     assert_eq!((asked_first.load(Ordering::SeqCst), asked_second.load(Ordering::SeqCst)), (1, 1), "once a provider");
     assert_eq!(hub.records_list().await.unwrap().found_github_logins, [incus, local]);
+}
+
+/// Whatever the worker said of it, which a worker that hands the hub a token can't tell.
+#[tokio::test]
+async fn a_found_login_works_as_github_answers_the_hub_for_the_token_its_worker_handed_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let github = StandIn::start(vec![("ada-token", GithubAnswer::user(7, "ada", None))]).await;
+    let hub = hub_calling_github(dir.path(), github.api());
+    let mut feed = hub.subscribe_feed();
+    let handing = |token: &str| {
+        let login = GhLogin::LoggedIn { username: "ada".into(), works: GhLoginWorks::CouldntTell };
+        let token = Some(FoundToken { token: GithubToken::new(token), renews: false });
+        worker_answering(Some(Ok(WorkerResponse::GithubLogin(GithubLoginReply { login, token })))).0
+    };
+
+    hub.find_github_login("local".into(), &handing("ada-token")).await;
+    let local = told(&mut feed).await;
+    hub.find_github_login("incus".into(), &handing("revoked")).await;
+    let incus = told(&mut feed).await;
+
+    assert_eq!(local.login, ada());
+    assert_eq!(incus.login, GhLogin::LoggedIn { username: "ada".into(), works: GhLoginWorks::Refused });
+    assert!(github.asked().iter().all(|asked| asked.starts_with("get /user ")), "{:?}", github.asked());
 }
 
 /// One from before finding, one that can't tell, one that finds a kind of login this hub doesn't know, and one that

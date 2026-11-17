@@ -20,6 +20,7 @@ pub use config::GithubConfig;
 mod device_flow;
 pub(crate) use device_flow::{Approval, DeviceCode, GithubRefreshToken, Granted, Renewal};
 mod expiration;
+mod found;
 mod reach;
 #[cfg(test)]
 use expiration::ends_at_ms;

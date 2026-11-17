@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use protocol::client::{ApiError, ErrorCode, HubNotice};
 use protocol::model::{GhLogin, ProviderName};
-use protocol::worker::{FindGithubLogin, GH_RUNS_WITHIN, GithubLoginReply};
+use protocol::worker::{FindGithubLogin, FoundToken, GH_RUNS_WITHIN, GithubLoginReply};
 use tracing::{info, warn};
 
 use super::super::Hub;
@@ -12,7 +12,8 @@ use super::asked::Asking;
 use crate::worker_link::WorkerLink;
 
 /// How long the hub waits for a worker to say who its machine's own `gh` is logged in as: as long as a worker lets
-/// `gh` run for it, every run together, and as long again for a worker that's busy. One that hasn't said by then is no longer waited on, so its
+/// `gh` run for it, every run together, and as long again for a worker that's busy. Asking GitHub whether its token
+/// works comes after, within the time the hub gives any call to GitHub. One that hasn't said by then is no longer waited on, so its
 /// workspace isn't kept at work by it, and its provider is asked again by the next link to it. Not something a test
 /// from outside would sit through, so not one of [`crate::Timers`].
 pub(super) const FOUND_WITHIN: Duration = GH_RUNS_WITHIN.saturating_add(GH_RUNS_WITHIN);
@@ -40,10 +41,10 @@ impl Hub {
     ) {
         let provider = asking.provider().clone();
         let login = match tokio::time::timeout(FOUND_WITHIN, answer).await {
-            Ok(Ok(GithubLoginReply { login: GhLogin::Unknown })) => {
+            Ok(Ok(GithubLoginReply { login: GhLogin::Unknown, .. })) => {
                 return info!(%provider, "{link} found a GitHub login of a kind this hub doesn't know, so it isn't kept");
             }
-            Ok(Ok(GithubLoginReply { login })) => login,
+            Ok(Ok(GithubLoginReply { login, token })) => self.checked(login, token.as_ref()).await,
             Ok(Err(e)) if e.code == ErrorCode::Unsupported => {
                 return info!(%provider, "{link} can't say who its machine's own gh is logged in as: {}", e.message);
             }
@@ -57,6 +58,18 @@ impl Hub {
                 self.notify(HubNotice::FoundGithubLogin(found));
             }
             Err(e) => warn!(provider = %asking.provider(), "recording the GitHub login {link} found: {}", e.message),
+        }
+    }
+
+    /// `login`, saying whether GitHub takes its token, as the hub asks GitHub with `token`, the one its worker handed
+    /// it. Without one, as from a worker from before it handed one, what the worker said stands.
+    async fn checked(&self, login: GhLogin, token: Option<&FoundToken>) -> GhLogin {
+        match (login, token) {
+            (GhLogin::LoggedIn { username, .. }, Some(token)) => {
+                let works = self.github.found_login_works(token, &username).await;
+                GhLogin::LoggedIn { username, works }
+            }
+            (login, _) => login,
         }
     }
 }

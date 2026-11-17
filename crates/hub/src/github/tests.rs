@@ -1,6 +1,6 @@
 use fetching::serving::NOWHERE;
-use protocol::model::{GithubRepositoryName, GithubUser, GithubUserId};
-use protocol::worker::GitCredential;
+use protocol::model::{GhLoginWorks, GithubRepositoryName, GithubUser, GithubUserId, GithubUsername};
+use protocol::worker::{FoundToken, GitCredential};
 
 use super::*;
 use crate::store::GithubProfile;
@@ -86,6 +86,39 @@ async fn a_token_github_refuses_is_refused_and_a_github_that_cant_say_whose_it_i
 
     let (invalid, unavailable) = (ErrorCode::InvalidRequest, ErrorCode::Unavailable);
     assert_eq!(codes, [invalid, invalid, unavailable, unavailable, unavailable, unavailable]);
+}
+
+/// GitHub naming the login, in any case, works, and refusing it is refused, unless `gh` renews it by itself, whose time
+/// may only be up. Anything else, such as GitHub naming another user, limiting the hub, failing or not being there,
+/// can't tell.
+#[tokio::test]
+async fn a_found_token_works_as_github_answers_for_it() {
+    let github = StandIn::start(vec![
+        ("ada", Answer::user(7, "ada", None)),
+        ("ada-in-capitals", Answer::user(7, "Ada", None)),
+        ("grace", Answer::user(8, "grace", None)),
+        ("an-apps", Answer::status(403, Vec::new())),
+        ("limited", Answer::status(403, vec![("x-ratelimit-remaining", "0")])),
+        ("down", Answer::status(503, Vec::new())),
+    ])
+    .await;
+    let calls = Github::new(GithubConfig::at(github.api()));
+    let nowhere = Github::new(GithubConfig::at(NOWHERE.to_string()));
+    let found = |token: &str, renews| FoundToken { token: GithubToken::new(token), renews };
+    let ada = GithubUsername::from("ada");
+
+    let mut said = Vec::new();
+    for (token, renews) in [("ada", false), ("ada-in-capitals", true), ("revoked", false), ("revoked", true)] {
+        said.push(calls.found_login_works(&found(token, renews), &ada).await);
+    }
+    for token in ["grace", "an-apps", "limited", "down"] {
+        said.push(calls.found_login_works(&found(token, false), &ada).await);
+    }
+    said.push(nowhere.found_login_works(&found("ada", false), &ada).await);
+
+    let (yes, refused, cant) = (GhLoginWorks::Yes, GhLoginWorks::Refused, GhLoginWorks::CouldntTell);
+    assert_eq!(said, [yes, yes, refused, cant, cant, cant, cant, cant, cant]);
+    assert!(github.asked()[0].contains("authorization: bearer ada\r\n"), "{}", github.asked()[0]);
 }
 
 #[tokio::test]

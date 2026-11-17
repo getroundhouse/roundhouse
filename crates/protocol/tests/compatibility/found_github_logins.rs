@@ -4,8 +4,8 @@
 
 use protocol::client::{ClientResponse, HubNotice};
 use protocol::frame;
-use protocol::model::{FoundGithubLogin, GhLogin, GhLoginWorks, RecordKey, Rev};
-use protocol::worker::{GithubLoginReply, WorkerFrame, WorkerOutcome, WorkerRequest, WorkerResponse};
+use protocol::model::{FoundGithubLogin, GhLogin, GhLoginWorks, GithubToken, RecordKey, Rev};
+use protocol::worker::{FoundToken, GithubLoginReply, WorkerFrame, WorkerOutcome, WorkerRequest, WorkerResponse};
 
 use super::keeps_its_form;
 use super::worker_calls::{answered, asked};
@@ -65,9 +65,14 @@ fn a_list_of_every_record_reads_its_found_logins_and_one_from_a_hub_that_finds_n
     assert_eq!(read(older), []);
 }
 
+/// With the token a worker hands the hub, and as a worker from before it handed one says it, without.
 #[test]
 fn finding_the_machines_own_login_keeps_its_form() {
-    let reply = |login| WorkerResponse::GithubLogin(GithubLoginReply { login });
+    let reply = |login| WorkerResponse::GithubLogin(GithubLoginReply { login, token: None });
+    let handing = |renews| {
+        let token = Some(FoundToken { token: GithubToken::new("gho_made_up"), renews });
+        WorkerResponse::GithubLogin(GithubLoginReply { login: ada_and(GhLoginWorks::CouldntTell), token })
+    };
 
     asked(WorkerRequest::FindGithubLogin, r#"{"method":"find_github_login"}"#);
     let logged_in = |works| {
@@ -78,6 +83,13 @@ fn finding_the_machines_own_login_keeps_its_form() {
     answered(reply(ada_and(GhLoginWorks::CouldntTell)), &logged_in("couldnt_tell"));
     answered(reply(GhLogin::LoggedOut), r#"{"result":"github_login","login":{"state":"logged_out"}}"#);
     answered(reply(GhLogin::NotInstalled), r#"{"result":"github_login","login":{"state":"not_installed"}}"#);
+    let with_token = |renews| {
+        format!(
+            r#"{{"result":"github_login","login":{{"state":"logged_in","username":"ada","works":"couldnt_tell"}},"token":{{"token":"gho_made_up","renews":{renews}}}}}"#
+        )
+    };
+    answered(handing(false), &with_token(false));
+    answered(handing(true), &with_token(true));
 }
 
 /// From a newer hub, which may ask with more, and a newer worker, which may find what this build has no word for.
@@ -90,7 +102,7 @@ fn finding_one_reads_with_what_a_newer_peer_adds() {
     let reply = frame::decode::<WorkerFrame>(reply.as_bytes()).unwrap();
 
     assert_eq!(request, WorkerRequest::FindGithubLogin);
-    let unknown = WorkerResponse::GithubLogin(GithubLoginReply { login: GhLogin::Unknown });
+    let unknown = WorkerResponse::GithubLogin(GithubLoginReply { login: GhLogin::Unknown, token: None });
     assert_eq!(reply, WorkerFrame::Reply { id: 7, outcome: WorkerOutcome::Response(unknown) });
 }
 
@@ -102,5 +114,5 @@ fn a_login_that_works_in_a_newer_way_reads_as_not_said() {
     let reply = frame::decode::<WorkerResponse>(newer.as_bytes()).unwrap();
 
     let login = ada_and(GhLoginWorks::Unknown);
-    assert_eq!(reply, WorkerResponse::GithubLogin(GithubLoginReply { login }));
+    assert_eq!(reply, WorkerResponse::GithubLogin(GithubLoginReply { login, token: None }));
 }
