@@ -1,7 +1,7 @@
 use super::super::mcp::{Called, Code, RpcError};
 use super::super::pull_request;
 use crate::asks::Asks;
-use chrono::{DateTime, SecondsFormat};
+use jiff::Timestamp;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{PullRequest, SessionId, Standing, ToolUseId, Wait, WaitEnd, WaitUntil};
 use protocol::worker::{CancelWait, ReadWait, StartWait, WaitAnswer};
@@ -187,5 +187,5 @@ pub(in crate::tools) fn how(ended: WaitEnd) -> &'static str {
 
 /// A time as MCP's tasks give one: ISO 8601, in UTC.
 pub(in crate::tools) fn iso(at_ms: i64) -> String {
-    DateTime::from_timestamp_millis(at_ms).unwrap_or_default().to_rfc3339_opts(SecondsFormat::Millis, true)
+    format!("{:.3}", Timestamp::from_millisecond(at_ms).unwrap_or_default())
 }

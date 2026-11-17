@@ -3,7 +3,7 @@
 
 use std::cmp::Reverse;
 
-use chrono::DateTime;
+use jiff::Timestamp;
 use protocol::model::{LimitWindow, ModelLabel, UsageLimit};
 use serde_json::Value;
 use tracing::debug;
@@ -74,8 +74,8 @@ fn models_week(row: &Value) -> Option<UsageLimit> {
 
 /// When what `said` is of starts again, which it says as an ISO time with an offset.
 fn resets_at_ms(said: &Value) -> Option<i64> {
-    let at = DateTime::parse_from_rfc3339(said.get("resets_at")?.as_str()?).ok()?;
-    Some(at.timestamp_millis())
+    let at: Timestamp = said.get("resets_at")?.as_str()?.parse().ok()?;
+    Some(at.as_millisecond())
 }
 
 #[cfg(test)]

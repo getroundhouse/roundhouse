@@ -39,8 +39,8 @@ fn on_adalabs() -> Answer {
 
 /// The token `token`, ending `in_ms` from now, as GitHub gives an installation's.
 fn token_ending(token: &str, in_ms: i64) -> Answer {
-    let ends = chrono::DateTime::from_timestamp_millis(now_ms() + in_ms).unwrap();
-    Answer::installation_token(token, &ends.to_rfc3339())
+    let ends = jiff::Timestamp::from_millisecond(now_ms() + in_ms).unwrap();
+    Answer::installation_token(token, &ends.to_string())
 }
 
 async fn made(hub: &Hub) -> GithubApp {

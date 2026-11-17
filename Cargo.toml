@@ -98,8 +98,6 @@ async-trait = "0.1.92"
 base64 = "0.22.1"
 # Already under objc2's crates. The block a Mac calls with whether the app may use the microphone.
 block2 = "0.6.2"
-# Already under GPUI. Says when something happened in the local time zone.
-chrono = { version = "0.4.45", default-features = false, features = ["clock"] }
 clap = { version = "4.6.7", features = ["derive"] }
 # Hears the microphone. On a Mac it's Core Audio through objc2's bindings, with nothing generated as it builds.
 cpal = "0.18.2"
@@ -125,6 +123,8 @@ http-body-util = "0.1.5"
 hyper = { version = "1.12.0", features = ["http1", "server"] }
 # Already under GPUI. Runs hyper's connections on tokio.
 hyper-util = { version = "0.1.21", features = ["tokio"] }
+# Says when something happened in the local time zone, and reads the times services write.
+jiff = "1.0.0"
 libc = "0.2.191"
 # Ghostty's terminal core, through bindings pinned to the commit that builds its 1.0.1, which isn't on crates.io yet.
 # Its build script builds Ghostty with Zig 0.17, which has to be on the PATH, and fetches Ghostty's source as it builds.

@@ -2,7 +2,7 @@ use self::link::Choice;
 use super::super::branches::checked_out;
 use super::{link, local};
 use crate::gh::{Unran, run_gh};
-use chrono::DateTime;
+use jiff::Timestamp;
 use process::Environment;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{BranchName, Checks, CommitId, LeftQueue, Local, PrState, PullRequest, QueueState};
@@ -340,5 +340,5 @@ pub(super) fn parse_by_url(json: &[u8]) -> Option<ByUrl> {
 
 /// One of GitHub's times, in milliseconds since the epoch.
 fn at_ms(at: &Value) -> Option<i64> {
-    DateTime::parse_from_rfc3339(at.as_str()?).ok().map(|at| at.timestamp_millis())
+    at.as_str()?.parse::<Timestamp>().ok().map(Timestamp::as_millisecond)
 }
