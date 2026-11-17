@@ -141,6 +141,8 @@ impl Sliding {
 mod tests {
     use std::time::Instant;
 
+    use gpui_kit::TestAppContext;
+
     use super::{PANEL, SCROLL, Scrolling, Sliding};
 
     fn sliding(from: f32, to: f32) -> Sliding {
@@ -163,6 +165,28 @@ mod tests {
 
         assert!(at.windows(2).all(|pair| pair[0] < pair[1]), "{at:?}");
         assert!(at[1] - at[0] > at[10] - at[9], "the first tenth covers more than the last: {at:?}");
+    }
+
+    #[gpui_kit::test]
+    fn a_slide_turned_back_partway_sets_off_from_where_it_had_got_to_and_takes_its_whole_time_back(
+        cx: &mut TestAppContext,
+    ) {
+        let mut open = Sliding::at(0.);
+        cx.update(|cx| open.go(1., cx));
+        cx.executor().advance_clock(PANEL / 2);
+        let partway = cx.update(|cx| open.value(cx));
+
+        cx.update(|cx| open.go(0., cx));
+
+        assert!(partway > 0.5 && partway < 1., "halfway through its time it's most of the way open: {partway}");
+        let turned = cx.update(|cx| open.value(cx));
+        assert!((turned - partway).abs() < f32::EPSILON, "turned back at {partway}, it doesn't jump, to {turned}");
+        cx.executor().advance_clock(PANEL / 2);
+        let back = cx.update(|cx| (open.moving(cx), open.value(cx)));
+        assert!(back.0 && back.1 > 0. && back.1 < partway, "it's on its way back, not there: {back:?}");
+        cx.executor().advance_clock(PANEL / 2);
+        let shut = cx.update(|cx| (open.moving(cx), open.value(cx)));
+        assert!(!shut.0 && shut.1.abs() < f32::EPSILON, "it's shut once its whole time is up: {shut:?}");
     }
 
     #[test]

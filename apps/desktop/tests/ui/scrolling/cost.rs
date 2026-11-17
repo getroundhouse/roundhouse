@@ -33,6 +33,14 @@ fn a_change_of_width_measures_what_shows_and_not_the_whole_session(cx: &mut Test
     assert!(in_that_frame > 0 && in_that_frame < A_WINDOWFUL, "{in_that_frame} of {loaded} rows drawn at once");
     let left = to_measure(&ui);
     assert!(left > loaded / 2 && left < loaded, "{left} of {loaded} rows are left to measure after one frame");
+    // The frame after, at the same width, measures a few of those out of sight, and not all of them at once.
+    let before = drawn(&ui);
+    ui.bring_the_next_frame();
+    let (in_the_next, measured) = (drawn(&ui) - before, left - to_measure(&ui));
+    assert!(
+        measured > 0 && in_the_next < A_WINDOWFUL,
+        "the next frame measured {measured} of the {left} rows left, and drew {in_the_next}"
+    );
     // The rest are measured over the frames after, and then there's nothing more to draw.
     ui.settle(A_FRAME);
     assert_eq!(to_measure(&ui), 0);
