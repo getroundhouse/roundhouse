@@ -1,13 +1,12 @@
-//! Opening a terminal, typing and pasting into it, selecting what it shows and copying it, and closing it.
+//! Opening a terminal, and its ending, as it's closed, as its shell ends, and as the hub restarts under it, with a real
+//! shell, and what the terminal tests share.
 
 use desktop::app::Connection;
 use desktop::workspace_pane::Showing;
-use gpui_kit::test::{ClickOptions, TestWindowExt as _};
-use gpui_kit::{AppContext as _, ClipboardItem, Pixels, Point, SharedString, TestAppContext, WeakEntity, point, px};
-use protocol::model::WorkspaceStatus;
+use gpui_kit::{AppContext as _, SharedString, TestAppContext, WeakEntity};
 use terminal_view::TerminalView;
 
-use crate::support::{Cells, Stack, Ui, hub_environment, in_window};
+use crate::support::{Stack, Ui, hub_environment};
 
 /// A stack whose hubs start each terminal's shell as `/bin/sh`, so it's the same shell for everyone, with the prompt
 /// these tests wait for, rather than whichever one whoever runs the tests uses, or the login shell that says nothing,
@@ -47,39 +46,27 @@ pub(super) fn type_keys(ui: &mut Ui<'_>, keys: &[&str]) {
     }
 }
 
+/// Types `text`, a key for each character.
+pub(super) fn type_text(ui: &mut Ui<'_>, text: &str) {
+    let typed = Vec::from_iter(text.chars().map(|key| if key == ' ' { "space".to_owned() } else { key.to_string() }));
+    type_keys(ui, &Vec::from_iter(typed.iter().map(String::as_str)));
+}
+
+/// Types `line`, and Return.
+pub(super) fn type_line(ui: &mut Ui<'_>, line: &str) {
+    type_text(ui, line);
+    ui.press("enter");
+}
+
+/// Waits for the terminal in front to show a row that says `text` and nothing else, as the shell prints it, which the
+/// row with the command typed for it never is.
+pub(super) fn wait_for_a_row(ui: &mut Ui<'_>, what: &str, text: &str) {
+    ui.wait(what, |ui| rows(ui).iter().any(|row| row.trim_end() == text));
+}
+
 pub(super) fn rows(ui: &Ui<'_>) -> Vec<String> {
     let Some(terminal) = ui.cx.read_entity(&ui.pane().unwrap(), |p, _| p.terminal()) else { return Vec::new() };
     ui.cx.read_entity(&terminal, |t, _| t.rows())
-}
-
-/// Where in the window `along` cells along row `row` of the terminal in front is.
-fn place(ui: &mut Ui<'_>, along: f32, row: u16) -> Point<Pixels> {
-    ui.frame();
-    let terminal = ui.cx.read_entity(&ui.pane().unwrap(), |p, _| p.terminal()).unwrap();
-    let cell = ui.cx.read_entity(&terminal, |t, _| t.cell_size());
-    ui.cx.update_window(ui.handle, |_, window, _| in_window(window, cell, Cells { along, row })).unwrap()
-}
-
-fn grid_origin(ui: &mut Ui<'_>) -> Point<Pixels> {
-    ui.cx.update_window(ui.handle, |_, window, _| window.find(terminal_view::SHOWN_ID).bounds().origin).unwrap()
-}
-
-/// Prints `text` on a line of its own, and the row it's on.
-fn printed(ui: &mut Ui<'_>, text: &str) -> u16 {
-    // Quoted in what's typed, so the echo of the command doesn't count.
-    let (head, tail) = text.split_at(1);
-    let typed: Vec<String> = format!("echo {head}''{tail}")
-        .chars()
-        .map(|key| if key == ' ' { "space".to_owned() } else { key.to_string() })
-        .collect();
-    type_keys(ui, &typed.iter().map(String::as_str).collect::<Vec<_>>());
-    ui.press("enter");
-    ui.wait("what the shell printed", |ui| rows(ui).iter().any(|row| row.trim_end() == text));
-    u16::try_from(rows(ui).iter().position(|row| row.trim_end() == text).unwrap()).unwrap()
-}
-
-fn clipboard(ui: &Ui<'_>) -> Option<String> {
-    ui.cx.read_from_clipboard().and_then(|item| item.text())
 }
 
 pub(super) fn showing(ui: &Ui<'_>) -> Showing {
@@ -92,65 +79,85 @@ fn view(ui: &Ui<'_>) -> WeakEntity<TerminalView> {
     ui.cx.read_entity(&ui.pane().unwrap(), |p, _| p.terminal()).unwrap().downgrade()
 }
 
-pub(super) fn type_echo_hi(ui: &mut Ui<'_>) {
-    type_keys(ui, &["e", "c", "h", "o", "space", "h", "i", "enter"]);
-    ui.wait("what the shell printed", |ui| rows(ui).iter().any(|row| row.trim_end() == "hi"));
+fn type_echo_hi(ui: &mut Ui<'_>) {
+    type_line(ui, "echo hi");
+    wait_for_a_row(ui, "what the shell printed", "hi");
 }
 
-/// What's typed reaches the shell, which a new terminal has the keys for, and what it prints shows.
+/// Checks that the composer showing has the keys, by typing into it, whatever it held before.
+fn the_composer_has_the_keys(ui: &mut Ui<'_>, case: &str) {
+    let before = ui.composer_text();
+    ui.input("next");
+    assert_eq!(ui.composer_text(), format!("{before}next"), "{case}: the chat's composer has the keys");
+}
+
+/// However a terminal ends, its tab goes with it, and the chat comes back with the keys. Each way is taken in turn,
+/// in one window, each with a terminal of its own: its shell ending, as `exit` ends it, so the tab doesn't stay for a
+/// terminal that's gone, then closing one opened with ⇧⌘T, as ⌘T opens a chat, which ends its shell, then one that
+/// ends in a workspace behind, whose pane isn't drawn, so the keys stay with the workspace that is.
 #[gpui_kit::test]
-fn a_terminal_opened_from_the_plus_takes_the_keys(cx: &mut TestAppContext) {
+fn a_terminal_that_ends_takes_its_tab_with_it_and_leaves_the_keys_to_the_chat(cx: &mut TestAppContext) {
     let stack = stack();
     let mut ui = with_a_terminal(cx, &stack);
 
-    type_echo_hi(&mut ui);
-
-    assert_eq!(showing(&ui), Showing::Terminal);
+    its_shell_ending(&mut ui, &stack);
+    closing_one_opened_with_its_key(&mut ui, &stack);
+    ending_in_a_workspace_behind(&mut ui, &stack);
 }
 
-/// What's copied goes to the shell as if it were typed, with the terminal's paste key.
-#[gpui_kit::test]
-fn what_is_pasted_reaches_the_shell(cx: &mut TestAppContext) {
-    let stack = stack();
-    let mut ui = with_a_terminal(cx, &stack);
-    // Quoted so the shell prints it whole, and its echo of what was pasted doesn't count.
-    ui.cx.write_to_clipboard(ClipboardItem::new_string("echo pas''ted".to_owned()));
+fn its_shell_ending(ui: &mut Ui<'_>, stack: &Stack) {
+    let view = view(ui);
 
-    ui.press(if cfg!(target_os = "macos") { "cmd-v" } else { "ctrl-shift-v" });
-    ui.press("enter");
+    type_line(ui, "exit");
 
-    ui.wait("what the shell printed", |ui| rows(ui).iter().any(|row| row.trim_end() == "pasted"));
+    ui.wait("exit: the chat in front, with no terminal", |ui| showing(ui) == Showing::Chat && ui.pane().is_some());
+    crate::support::wait_until("exit: the terminal's record to go", || {
+        stack.client().records_list().unwrap().terminals.is_empty()
+    });
+    assert!(!ui.has(terminal_view::SHOWN_ID), "exit: the terminal is gone");
+    the_composer_has_the_keys(ui, "exit");
+    ui.wait("exit: the view to be let go", |_| view.upgrade().is_none());
 }
 
-/// As the paste key does.
-#[gpui_kit::test]
-fn the_edit_menus_paste_pastes_in_a_terminal(cx: &mut TestAppContext) {
-    let stack = stack();
-    let mut ui = with_a_terminal(cx, &stack);
-    ui.cx.write_to_clipboard(ClipboardItem::new_string("echo pas''ted".to_owned()));
-
-    crate::menus::choose(&mut ui, "Edit", "Paste");
-    ui.press("enter");
-
-    ui.wait("what the shell printed", |ui| rows(ui).iter().any(|row| row.trim_end() == "pasted"));
-}
-
-/// As ⌘T opens a chat.
-#[gpui_kit::test]
-fn shift_command_t_opens_a_terminal_that_takes_the_keys(cx: &mut TestAppContext) {
-    let stack = stack();
-    let mut ui = Ui::open_with_a_repository(cx, &stack);
-    ui.new_workspace();
-
+fn closing_one_opened_with_its_key(ui: &mut Ui<'_>, stack: &Stack) {
     ui.press("secondary-shift-t");
+    wait_for_the_prompt(ui);
+    type_echo_hi(ui);
+    assert_eq!(stack.client().records_list().unwrap().terminals.len(), 1);
+    let file = crate::menus::items(ui, "File");
+    assert!(file.iter().any(|item| item == "Close Terminal"), "it closes the terminal, not the chat behind it");
+    let view = view(ui);
 
-    wait_for_the_prompt(&mut ui);
-    type_echo_hi(&mut ui);
+    ui.press(CLOSE);
+
+    ui.wait("closing: the chat in front", |ui| showing(ui) == Showing::Chat);
+    crate::support::wait_until("closing: the terminal to close", || {
+        stack.client().records_list().unwrap().terminals.is_empty()
+    });
+    the_composer_has_the_keys(ui, "closing");
+    ui.wait("closing: the view to be let go", |_| view.upgrade().is_none());
 }
 
-/// The worker carries on with its shell, so the terminal is still there, and the view takes it up on the new hub.
+fn ending_in_a_workspace_behind(ui: &mut Ui<'_>, stack: &Stack) {
+    let behind = ui.view().selected.clone().unwrap();
+    ui.pick_item("new-tab", "New terminal");
+    ui.wait("behind: the terminal to show", |ui| ui.has(terminal_view::SHOWN_ID));
+    ui.new_workspace();
+    let pane = ui.view().panes.get(&behind).cloned().unwrap();
+    let terminal = stack.client().records_list().unwrap().terminals[0].id.clone();
+
+    stack.client().terminal_close(&terminal).unwrap();
+
+    ui.wait("behind: the chat in front behind", |ui| ui.cx.read_entity(&pane, |p, _| p.showing()) == Showing::Chat);
+    the_composer_has_the_keys(ui, "behind: the composer on screen");
+}
+
+/// The worker carries on with its shell through the hub's crash, so the terminal is still there, and the view takes it
+/// up on the new hub. Then, as the hub restarts for an update, the workspace stays on screen while the app reconnects,
+/// so the chat's tab brought to the front then gives its composer the keys, rather than leave them with the terminal it
+/// covers.
 #[gpui_kit::test]
-fn a_terminal_carries_on_after_the_hub_restarts(cx: &mut TestAppContext) {
+fn a_terminal_carries_on_as_the_hub_restarts_and_a_tab_brought_in_front_of_it_takes_the_keys(cx: &mut TestAppContext) {
     let stack = stack();
     let mut ui = with_a_terminal(cx, &stack);
     let view = view(&ui);
@@ -166,17 +173,9 @@ fn a_terminal_carries_on_after_the_hub_restarts(cx: &mut TestAppContext) {
         ui.cx.read_entity(&view.upgrade().unwrap(), |view, _| view.open_terminal().connected())
     });
     type_echo_hi(&mut ui);
-}
 
-/// The workspace stays on screen while the app reconnects, as through the hub's restart for an update, so the chat's
-/// tab brought to the front then gives its composer the keys, rather than leave them with the terminal it covers.
-#[gpui_kit::test]
-fn a_tab_brought_to_the_front_as_the_hub_restarts_takes_the_keys(cx: &mut TestAppContext) {
-    let stack = stack();
-    let mut ui = with_a_terminal(cx, &stack);
     let chat = ui.active_chat();
     let pid = stack.client().hub_status().unwrap().pid;
-
     // Clicked before anything else runs, so the app is surely still connecting.
     ui.cx.update(|cx| ui.view.update(cx, |view, cx| view.restart_hub(pid, cx)));
     assert!(matches!(ui.view().connection(), Connection::Connecting));
@@ -186,164 +185,4 @@ fn a_tab_brought_to_the_front_as_the_hub_restarts_takes_the_keys(cx: &mut TestAp
     assert_eq!(showing(&ui), Showing::Chat);
     assert_eq!(ui.composer_text(), "kept");
     ui.wait_for_new_hub(&stack, pid);
-}
-
-/// From near the left of its first letter to near the right of its last, as a hand drags over a word. A cell at either
-/// end is taken in only once the drag covers the point six tenths of the way across it, as in Ghostty.
-#[gpui_kit::test]
-fn dragging_over_what_the_shell_printed_selects_it_for_the_copy_key(cx: &mut TestAppContext) {
-    let stack = stack();
-    let mut ui = with_a_terminal(cx, &stack);
-    let row = printed(&mut ui, "copied");
-    let (from, to) = (place(&mut ui, 0.1, row), place(&mut ui, 5.9, row));
-
-    ui.cx.update_window(ui.handle, |_, window, cx| window.drag(from, to, cx)).unwrap();
-    ui.press(if cfg!(target_os = "macos") { "cmd-c" } else { "ctrl-shift-c" });
-
-    ui.wait("what was selected on the clipboard", |ui| clipboard(ui).as_deref() == Some("copied"));
-}
-
-/// From the end of a word up past the top of the grid, over the tabs, which takes in everything from the start of the
-/// first row, as a drag goes on wherever the pointer goes once it has started on the grid.
-#[gpui_kit::test]
-fn a_drag_past_the_grids_edge_selects_to_the_nearest_cell(cx: &mut TestAppContext) {
-    let stack = stack();
-    let mut ui = with_a_terminal(cx, &stack);
-    let row = printed(&mut ui, "copied");
-    let first = rows(&ui)[0].trim_end().to_owned();
-    let from = place(&mut ui, 5.9, row);
-    let above = grid_origin(&mut ui) - point(px(0.), px(30.));
-
-    ui.cx.update_window(ui.handle, |_, window, cx| window.drag(from, above, cx)).unwrap();
-    crate::menus::choose(&mut ui, "Edit", "Copy");
-
-    ui.wait("from the first row to the word on the clipboard", |ui| {
-        clipboard(ui).is_some_and(|copied| copied.starts_with(&first) && copied.ends_with("\ncopied"))
-    });
-}
-
-#[gpui_kit::test]
-fn a_double_click_selects_a_word(cx: &mut TestAppContext) {
-    let stack = stack();
-    let mut ui = with_a_terminal(cx, &stack);
-    // With another word after it, so selecting the line would copy more.
-    let row = printed(&mut ui, "doubled word");
-    let on_it = place(&mut ui, 3.5, row) - grid_origin(&mut ui);
-    let twice = ClickOptions::new().with_offset(on_it).with_count(2);
-
-    ui.cx
-        .update_window(ui.handle, |_, window, cx| window.click_with_options(terminal_view::SHOWN_ID, twice, cx))
-        .unwrap();
-    crate::menus::choose(&mut ui, "Edit", "Copy");
-
-    ui.wait("the word on the clipboard", |ui| clipboard(ui).as_deref() == Some("doubled"));
-}
-
-/// The pane's Copy, which the window's Copy reaches once focus is on what lets it go on, as a text box with nothing
-/// selected does. The app gives the terminal focus back as soon as nothing has it, so it's asked here directly.
-#[gpui_kit::test]
-fn copy_takes_what_is_selected_in_the_terminal_in_front_wherever_focus_is(cx: &mut TestAppContext) {
-    let stack = stack();
-    let mut ui = with_a_terminal(cx, &stack);
-    let row = printed(&mut ui, "copied");
-    let (from, to) = (place(&mut ui, 0.1, row), place(&mut ui, 5.9, row));
-    ui.cx.update_window(ui.handle, |_, window, cx| window.drag(from, to, cx)).unwrap();
-    let pane = ui.pane().unwrap();
-
-    ui.cx.update_window(ui.handle, |_, window, cx| pane.update(cx, |p, cx| p.copy_showing(window, cx))).unwrap();
-
-    ui.wait("what was selected on the clipboard", |ui| clipboard(ui).as_deref() == Some("copied"));
-}
-
-/// As the Edit menu's items do in a text box.
-#[gpui_kit::test]
-fn the_edit_menus_select_all_and_copy_take_everything_in_a_terminal(cx: &mut TestAppContext) {
-    let stack = stack();
-    let mut ui = with_a_terminal(cx, &stack);
-    printed(&mut ui, "everything");
-
-    crate::menus::choose(&mut ui, "Edit", "Select All");
-    crate::menus::choose(&mut ui, "Edit", "Copy");
-
-    ui.wait("all of it on the clipboard", |ui| {
-        clipboard(ui).is_some_and(|all| all.lines().any(|line| line == "everything"))
-    });
-}
-
-/// Off the Mac, Ctrl-Shift-A, which archives the workspace elsewhere in the app, since a terminal there has it for
-/// Select All, as it has Ctrl-Shift-C for Copy.
-#[gpui_kit::test]
-fn the_select_all_key_selects_everything_in_a_terminal_rather_than_archiving(cx: &mut TestAppContext) {
-    let stack = stack();
-    let mut ui = with_a_terminal(cx, &stack);
-    printed(&mut ui, "everything");
-
-    let (select_all, copy) =
-        if cfg!(target_os = "macos") { ("cmd-a", "cmd-c") } else { ("ctrl-shift-a", "ctrl-shift-c") };
-    ui.press(select_all);
-    ui.press(copy);
-
-    ui.wait("all of it on the clipboard", |ui| {
-        clipboard(ui).is_some_and(|all| all.lines().any(|line| line == "everything"))
-    });
-    let archived = ui.view().records().workspaces().iter().any(|w| w.status != WorkspaceStatus::Ready);
-    assert!(!archived && !ui.cx.has_pending_prompt(), "the workspace is left as it was");
-    assert_eq!(showing(&ui), Showing::Terminal);
-}
-
-#[gpui_kit::test]
-fn closing_a_terminal_ends_it_and_brings_back_the_chat(cx: &mut TestAppContext) {
-    let stack = stack();
-    let mut ui = with_a_terminal(cx, &stack);
-    assert_eq!(stack.client().records_list().unwrap().terminals.len(), 1);
-    let file = crate::menus::items(&ui, "File");
-    assert!(file.iter().any(|item| item == "Close Terminal"), "it closes the terminal, not the chat behind it");
-
-    let view = view(&ui);
-
-    ui.press(CLOSE);
-
-    ui.wait("the chat in front", |ui| showing(ui) == Showing::Chat);
-    crate::support::wait_until("the terminal to close", || stack.client().records_list().unwrap().terminals.is_empty());
-    ui.input("next");
-    assert_eq!(ui.composer_text(), "next", "the chat's composer has the keys again");
-    ui.wait("the view to be let go", |_| view.upgrade().is_none());
-}
-
-/// Its pane isn't drawn, so the keys stay with the workspace that is.
-#[gpui_kit::test]
-fn a_terminal_that_ends_in_a_workspace_behind_leaves_the_keys_where_they_are(cx: &mut TestAppContext) {
-    let stack = stack();
-    let mut ui = Ui::open_with_a_repository(cx, &stack);
-    let behind = ui.new_workspace();
-    ui.pick_item("new-tab", "New terminal");
-    ui.wait("the terminal to show", |ui| ui.has(terminal_view::SHOWN_ID));
-    ui.new_workspace();
-    let pane = ui.view().panes.get(&behind).cloned().unwrap();
-    let terminal = stack.client().records_list().unwrap().terminals[0].id.clone();
-
-    stack.client().terminal_close(&terminal).unwrap();
-
-    ui.wait("the chat in front behind", |ui| ui.cx.read_entity(&pane, |p, _| p.showing()) == Showing::Chat);
-    ui.input("next");
-    assert_eq!(ui.composer_text(), "next", "the composer on screen kept the keys");
-}
-
-/// As `exit` ends it, so the tab doesn't stay for a terminal that's gone.
-#[gpui_kit::test]
-fn a_terminal_whose_shell_ends_takes_its_tab_with_it(cx: &mut TestAppContext) {
-    let stack = stack();
-    let mut ui = with_a_terminal(cx, &stack);
-    let view = view(&ui);
-
-    type_keys(&mut ui, &["e", "x", "i", "t", "enter"]);
-
-    ui.wait("the chat in front, with no terminal", |ui| showing(ui) == Showing::Chat && ui.pane().is_some());
-    crate::support::wait_until("the terminal's record to go", || {
-        stack.client().records_list().unwrap().terminals.is_empty()
-    });
-    assert!(!ui.has(terminal_view::SHOWN_ID));
-    ui.input("next");
-    assert_eq!(ui.composer_text(), "next", "the chat's composer has the keys again");
-    ui.wait("the view to be let go", |_| view.upgrade().is_none());
 }
