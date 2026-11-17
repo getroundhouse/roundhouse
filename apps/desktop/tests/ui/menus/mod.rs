@@ -10,7 +10,9 @@ mod file_and_view;
 
 mod bindings;
 
+#[cfg(not(target_os = "macos"))]
+use bindings::with_a_repository;
 pub(crate) use bindings::{
     CHECK_FOR_UPDATES, QUIT, SETTINGS, bound_where_focus_is, choose, every_key_bound_where_focus_is, items,
 };
-use bindings::{action, enabled, key, keyed, with_a_repository};
+use bindings::{can_find, enabled, in_a_workspace, key, keyed, on};

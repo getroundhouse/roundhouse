@@ -9,7 +9,7 @@ use protocol::model::{Effort, ModelName, NewWorkspaceDraft, NewWorkspaceDraftToK
 use protocol::prompt::Prompt;
 
 use super::open_with_a_repo;
-use crate::support::{Frozen, Stack, Ui, wait_until};
+use crate::support::{CLAUDE_STARTS_WITH, Frozen, Stack, Ui, wait_until};
 
 /// What the hub keeps of the dialog.
 fn kept(stack: &Stack) -> NewWorkspaceDraft {
@@ -25,22 +25,28 @@ fn chosen(ui: &Ui<'_>) -> (ModelName, Effort) {
     ui.cx.read_entity(&ui.dialog(), |d, _| d.chosen()).expect("the hub describes the agent the first chat runs")
 }
 
+/// The model and effort picked, plan mode and a file pasted are the first chat's, whose agent runs with them from its
+/// first prompt, and the next workspace starts with the model and effort, and without plan mode or the file. What the
+/// hub gives the first chat from what it keeps, and how it empties what it keeps, is the hub's rule, which its tests in
+/// `new_workspace` pin, so this is the example of what the dialog has the hub keep, and of the agent running with it.
 #[gpui_kit::test]
-fn whats_in_the_dialog_is_there_when_the_app_opens_again_until_the_workspace_is_made(cx: &mut TestAppContext) {
+fn whats_in_the_dialog_is_there_when_the_app_opens_again_and_is_the_first_chats(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = open_with_a_repo(cx, &stack);
     let notes = stack.dir.path().join("notes.txt");
     std::fs::write(&notes, "the first line\n").unwrap();
     ui.open_new_workspace();
+    assert_eq!(chosen(&ui), CLAUDE_STARTS_WITH, "what the agent's description gives a chat that names neither");
     ui.paste(ClipboardItem::from(ClipboardEntry::ExternalPaths(ExternalPaths(vec![notes].into()))));
     ui.wait("the file to be attached", |ui| ui.dialog_attached() == ["notes.txt"]);
-    ui.input("half a thought");
+    ui.input("effort; attached");
     ui.pick_item("new-workspace-model", "Sonnet");
+    ui.pick_item("new-workspace-model", "High");
     ui.press("shift-tab");
     ui.press("escape");
     ui.wait("the hub to keep it", |_| {
         let kept = kept(&stack);
-        kept.text == "half a thought" && kept.files.len() == 1 && kept.plan
+        kept.text == "effort; attached" && kept.files.len() == 1 && kept.plan
     });
 
     ui.open_again(&stack);
@@ -48,9 +54,10 @@ fn whats_in_the_dialog_is_there_when_the_app_opens_again_until_the_workspace_is_
     ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     ui.open_new_workspace();
     ui.wait("the file it kept", |ui| ui.dialog_attached() == ["notes.txt"]);
-    assert_eq!(ui.dialog_text(), "half a thought");
+    assert_eq!(ui.dialog_text(), "effort; attached");
     assert!(ui.dialog_planning());
-    assert_eq!(chosen(&ui).0, ModelName::named("sonnet"));
+    let picked = (ModelName::named("sonnet"), Effort::High);
+    assert_eq!(chosen(&ui), picked, "the model and effort it kept");
     let before = ui.view().records().workspaces().len();
     ui.press("enter");
     ui.wait_for_a_new_workspace(before);
@@ -61,10 +68,26 @@ fn whats_in_the_dialog_is_there_when_the_app_opens_again_until_the_workspace_is_
         });
         carried.is_some_and(|files| files.iter().map(|file| file.name.as_str()).eq(["notes.txt"]))
     });
+    ui.wait_idle_with("the agent to say its effort and the file", |text| {
+        text.contains("effort=high") && text.contains("notes.txt")
+    });
+    let chat = stack.client().session_get(&ui.active_chat()).unwrap();
+    assert_eq!((chat.model, chat.effort), picked, "the first chat's model and effort");
+    assert_eq!(ui.chat_mode(), Some(PermissionMode::Plan), "the first chat plans");
+    let launched = ui.events().into_iter().find_map(|e| match e.body {
+        EventBody::AgentInit { model, permission_mode, .. } => Some((model, permission_mode)),
+        _ => None,
+    });
+    assert_eq!(launched, Some((Some("sonnet".to_string()), Some(PermissionMode::Plan))), "the agent ran with them");
     ui.wait("making it to empty what the hub keeps", |_| {
         let kept = kept(&stack);
         kept.text.is_empty() && kept.files.is_empty() && !kept.plan
     });
+    assert!(ui.dialog_attached().is_empty(), "creating takes what was attached");
+    ui.open_new_workspace();
+    assert_eq!(chosen(&ui), picked, "the next workspace starts with the model and effort");
+    assert!(!ui.dialog_planning(), "and with full access");
+    assert!(!ui.shows_label("new-workspace", "Plan mode"));
 }
 
 #[gpui_kit::test]
@@ -127,10 +150,10 @@ fn a_change_made_to_the_dialog_elsewhere_while_something_from_here_is_on_its_way
     ui.wait("what was typed elsewhere", |ui| ui.dialog_text() == "typed elsewhere");
 }
 
-/// Has the dialog take a record kept elsewhere, of a prompt carrying a file, which it hasn't read back yet. A read is a
+/// Has the dialog take a record kept elsewhere, of `typed` and a file, which it hasn't read back yet. A read is a
 /// task, and a test's tasks run only once it lets them, so the dialog takes the record here, and what the test does
 /// next comes before the read can run.
-fn kept_elsewhere_with_a_file(ui: &mut Ui<'_>, stack: &Stack) {
+fn kept_elsewhere_with_a_file(ui: &mut Ui<'_>, stack: &Stack, typed: &str) {
     ui.open_new_workspace();
     ui.view().drafts().unwrap().flushed().recv().unwrap();
     let elsewhere = stack.client();
@@ -138,11 +161,10 @@ fn kept_elsewhere_with_a_file(ui: &mut Ui<'_>, stack: &Stack) {
     let file = notes.attachment.id.clone();
     elsewhere.new_workspace_draft_file_add(&file, "notes.txt", MediaType::Text, notes.data).unwrap();
     elsewhere
-        .new_workspace_draft_keep(&NewWorkspaceDraftToKeep { files: vec![file], ..typed_elsewhere("say:with notes") })
+        .new_workspace_draft_keep(&NewWorkspaceDraftToKeep { files: vec![file], ..typed_elsewhere(typed) })
         .unwrap();
     let records = ui.view().feed().unwrap();
-    let in_records =
-        || records.snapshot().new_workspace_draft().filter(|draft| draft.text == "say:with notes").cloned();
+    let in_records = || records.snapshot().new_workspace_draft().filter(|draft| draft.text == typed).cloned();
     wait_until("client-core to hear of the change", || in_records().is_some());
     let (dialog, record) = (ui.dialog(), in_records().unwrap());
     ui.cx
@@ -151,12 +173,13 @@ fn kept_elsewhere_with_a_file(ui: &mut Ui<'_>, stack: &Stack) {
 }
 
 /// Create doesn't wait while the files the hub kept are read back, as the hub makes the workspace from what it keeps,
-/// and sends them itself.
+/// and sends them itself. One that wasn't read back before Create was pressed, for a workspace that then can't be
+/// made, is read back with the prompt, which the dialog shows again.
 #[gpui_kit::test]
-fn files_the_hub_kept_go_with_the_prompt_before_theyre_read_back(cx: &mut TestAppContext) {
+fn files_the_hub_kept_go_with_the_prompt_unread_or_come_back_if_the_workspace_cant_be_made(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = open_with_a_repo(cx, &stack);
-    kept_elsewhere_with_a_file(&mut ui, &stack);
+    kept_elsewhere_with_a_file(&mut ui, &stack, "say:with notes");
     let before = ui.view().records().workspaces().len();
 
     ui.press("enter");
@@ -174,36 +197,41 @@ fn files_the_hub_kept_go_with_the_prompt_before_theyre_read_back(cx: &mut TestAp
     assert_eq!(carried(&ui), Some(vec!["notes.txt".to_string()]));
     ui.wait("the dialog emptied on the hub", |_| kept(&stack).text.is_empty() && kept(&stack).files.is_empty());
     assert!(ui.dialog_attached().is_empty(), "the file wasn't brought back once it had gone");
-}
 
-/// One that wasn't read back before Create was pressed is read back with the prompt, which the dialog shows again.
-#[gpui_kit::test]
-fn files_the_hub_kept_come_back_to_the_dialog_when_the_workspace_cant_be_made(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = open_with_a_repo(cx, &stack);
-    kept_elsewhere_with_a_file(&mut ui, &stack);
+    // Typed differently, so what the app heard before of the first can't stand in for it.
+    kept_elsewhere_with_a_file(&mut ui, &stack, "say:with more notes");
     std::fs::remove_dir_all(stack.repo()).unwrap();
 
     ui.press("enter");
 
-    ui.wait("the failure", |ui| ui.view().error.is_some() && ui.view().busy.is_free());
-    assert!(ui.view().records().workspaces().is_empty());
-    assert_eq!(ui.dialog_text(), "say:with notes");
+    let failed = |ui: &Ui<'_>| ui.view().error.clone().is_some_and(|e| e.contains("couldn't create the workspace"));
+    ui.wait("the workspace that can't be made to fail", |ui| failed(ui) && ui.view().busy.is_free());
+    assert_eq!(ui.view().records().workspaces().len(), before + 1, "nothing more was made");
+    assert_eq!(ui.dialog_text(), "say:with more notes");
     ui.wait("the file read back", |ui| ui.dialog_attached() == ["notes.txt"]);
     assert_eq!(kept(&stack).files.iter().map(|file| file.name.as_str()).collect::<Vec<_>>(), ["notes.txt"]);
 }
 
+/// Plan mode comes back with the prompt, and the hub keeps all of it again as what's in the dialog.
 #[gpui_kit::test]
-fn a_prompt_given_back_to_the_dialog_is_kept_on_the_hub_again(cx: &mut TestAppContext) {
+fn a_workspace_that_cant_be_made_gives_the_prompt_back_to_the_dialog_and_the_hub_keeps_it(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = open_with_a_repo(cx, &stack);
     std::fs::remove_dir_all(stack.repo()).unwrap();
-    ui.open_new_workspace();
-    ui.input("say:never sent");
 
+    ui.open_new_workspace();
+    ui.press("shift-tab");
+    ui.input("say:never sent");
     ui.press("enter");
 
     ui.wait("the failure", |ui| ui.view().error.is_some() && ui.view().busy.is_free());
+    assert!(ui.view().error.clone().unwrap().contains("couldn't create the workspace"));
+    assert!(ui.view().records().workspaces().is_empty());
+    assert!(ui.has_dialog(), "the dialog opens again to show where the prompt went");
     assert_eq!(ui.dialog_text(), "say:never sent");
-    ui.wait("the hub to keep it again", |_| kept(&stack).text == "say:never sent");
+    assert!(ui.dialog_planning(), "plan mode comes back with the prompt");
+    ui.wait("the hub to keep it again", |_| {
+        let kept = kept(&stack);
+        kept.text == "say:never sent" && kept.plan
+    });
 }
