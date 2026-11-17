@@ -13,7 +13,7 @@ fn a_hub_with_nothing_on_it_stops_when_asked_to_if_idle() {
     let mut stack = Stack::start();
     let client = stack.client();
     let pid = client.hub_status().unwrap().pid;
-    // A connection that has just closed counts until the hub has seen it go, such as the one that waited for it.
+    // So nothing asked for as the stack started is still under way.
     wait_until("the hub to be idle", || client.hub_status().unwrap().is_idle());
 
     let stopped = stop_hub_if_idle(&client, &stack.socket(), pid).unwrap();
