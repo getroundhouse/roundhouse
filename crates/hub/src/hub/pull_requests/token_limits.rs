@@ -1,7 +1,7 @@
 //! What's left of GitHub's hourly limit for each token the hub reads pull requests as, as GitHub said in the answer
-//! to the last query read as it. Every GraphQL answer says what's left, so the hub keeps no
-//! count of its own: how often each workspace is read sets the pace, and GitHub's word keeps it from spending the part
-//! of the limit kept for agents and the person, whose own `gh` shares it.
+//! to the last query read as it. Every GraphQL answer says what's left, so the hub keeps no count of its own: how
+//! often each workspace is read sets the pace, and GitHub's word keeps it from spending the part of the limit kept
+//! for agents and the person, whose own `gh` shares it.
 
 use std::collections::HashMap;
 
@@ -15,7 +15,8 @@ use super::remote::ReadsAs;
 pub(in crate::hub::pull_requests) struct TokenLimits(Mutex<HashMap<ReadsAs, RateLimit>>);
 
 impl TokenLimits {
-    /// What GitHub said is left for `reads_as`, if it said.
+    /// Records `limit`, what GitHub last said is left for `reads_as`, in place of what it said before. An answer that
+    /// said nothing changes nothing.
     pub(in crate::hub::pull_requests) fn said(&self, reads_as: &ReadsAs, limit: Option<RateLimit>) {
         if let Some(limit) = limit {
             self.0.lock().insert(reads_as.clone(), limit);

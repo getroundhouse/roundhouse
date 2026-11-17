@@ -16,11 +16,11 @@ fn url(url: &str) -> RepoUrl {
     RepoUrl::try_from(url.to_string()).unwrap()
 }
 
-/// `birch` at `tip`, pushed to `remote`'s `birch/fix`, at `pushed`, whose address is `address`, one commit ahead.
+/// `birch` at `tip`, pushed to `remote`'s `birch`, at `pushed`, whose address is `address`, one commit ahead.
 fn birch(tip: &str, upstream: Option<(&str, Option<&str>, &str)>) -> Branch {
     let upstream = upstream.map(|(remote, address, pushed)| Upstream {
         remote: RemoteName::from(remote),
-        name: BranchName::from("birch/fix"),
+        name: BranchName::from("birch"),
         tip: Some(CommitId::from(pushed)),
         address: address.map(url),
         apart: Some(Apart { ahead: 1, behind: 0 }),
@@ -53,14 +53,19 @@ fn a_branch_pushed_to_github_is_asked_after_in_the_repository_its_work_merges_in
     let fork =
         wanted(&on(birch("a", Some(("ada", Some("https://github.com/ada/project.git"), "b")))), Some(&project()));
     let unsaid = wanted(&on(birch("a", Some(("origin", None, "b")))), Some(&project()));
+    // As `git switch -c birch origin/main` leaves it.
+    let mut tracking = birch("a", Some(("origin", Some("https://github.com/example/project.git"), "b")));
+    tracking.upstream.as_mut().unwrap().name = BranchName::from("main");
+    let tracking = wanted(&on(tracking), Some(&project()));
 
     assert_eq!(unpushed, Wanted::Nothing { on: birch_on() });
     assert_eq!(to_itself, Wanted::Nothing { on: birch_on() });
+    assert_eq!(tracking, Wanted::Nothing { on: birch_on() }, "taken from main, and pushed nowhere yet");
     assert_eq!(wanted(&detached, Some(&project())), Wanted::Nothing { on: None });
     let heads = |from: &str| HeadsAsk {
         repository: name("example/project"),
         from: name(from),
-        branch: BranchName::from("birch/fix"),
+        branch: BranchName::from("birch"),
     };
     assert_eq!(origin, Wanted::Heads { on: BranchName::from("birch"), ask: heads("example/project") });
     assert_eq!(fork, Wanted::Heads { on: BranchName::from("birch"), ask: heads("ada/project") });
@@ -87,30 +92,42 @@ fn a_repository_or_a_remote_elsewhere_than_github_has_none_to_read() {
 }
 
 fn headed(number: u64, state: PrState, head: &str) -> Headed {
-    Headed { number: PullRequestNumber::try_from(number).unwrap(), state, head: CommitId::from(head) }
+    Headed {
+        into: name("example/project"),
+        number: PullRequestNumber::try_from(number).unwrap(),
+        url: format!("https://github.com/example/project/pull/{number}"),
+        state,
+        head: CommitId::from(head),
+    }
 }
 
 fn known(number: u64) -> protocol::model::PullRequest {
-    protocol::model::PullRequest { number, state: PrState::Merged, ..crate::hub::tests::open() }
+    let url = format!("https://github.com/example/project/pull/{number}");
+    protocol::model::PullRequest { number, url, state: PrState::Merged, ..crate::hub::tests::open() }
 }
 
 #[test]
 fn the_workspaces_is_the_open_one_or_the_one_it_had_or_one_at_a_commit_the_branch_has() {
     let branch = birch("tip", Some(("origin", None, "pushed")));
-    let number = |found: Option<PullRequestNumber>| found.map(PullRequestNumber::get);
+    let number = |headed: &[Headed], known: Option<&protocol::model::PullRequest>| {
+        chosen(headed, known, &branch).map(|found| found.number.get())
+    };
     let merged = |n, head| headed(n, PrState::Merged, head);
+    let elsewhere = Headed { url: "https://github.com/example/other/pull/7".into(), ..merged(7, "else") };
 
-    let open = chosen(&[merged(9, "old"), headed(8, PrState::Open, "else")], None, &branch);
-    let had = chosen(&[merged(9, "old"), merged(7, "else")], Some(&known(7)), &branch);
-    let at_the_push = chosen(&[merged(9, "old"), merged(7, "pushed")], None, &branch);
-    let at_the_tip = chosen(&[headed(6, PrState::Closed, "tip")], None, &branch);
-    let a_name_used_before = chosen(&[merged(9, "old")], None, &branch);
+    let open = number(&[merged(9, "old"), headed(8, PrState::Open, "else")], None);
+    let had = number(&[merged(9, "old"), merged(7, "else")], Some(&known(7)));
+    let had_elsewhere = number(&[merged(9, "old"), elsewhere], Some(&known(7)));
+    let at_the_push = number(&[merged(9, "old"), merged(7, "pushed")], None);
+    let at_the_tip = number(&[headed(6, PrState::Closed, "tip")], None);
+    let a_name_used_before = number(&[merged(9, "old")], None);
 
-    assert_eq!(number(open), Some(8));
-    assert_eq!(number(had), Some(7));
-    assert_eq!(number(at_the_push), Some(7));
-    assert_eq!(number(at_the_tip), Some(6));
-    assert_eq!(number(a_name_used_before), None, "merged from a branch of the same name before this one");
+    assert_eq!(open, Some(8));
+    assert_eq!(had, Some(7));
+    assert_eq!(had_elsewhere, None, "the same number in another repository");
+    assert_eq!(at_the_push, Some(7));
+    assert_eq!(at_the_tip, Some(6));
+    assert_eq!(a_name_used_before, None, "merged from a branch of the same name before this one");
 }
 
 #[test]

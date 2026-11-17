@@ -216,7 +216,7 @@ impl Hub {
         let took_worker = AtomicBool::new(false);
         let read = match self.reads_as(&workspace) {
             _ if !asking.needs_github() => asking.settled(),
-            Err(e) => asking.failed(&e),
+            Err(e) => asking.failed(&super::polling::no_login(&e)),
             Ok(reads_as) => {
                 if self.pull_requests.limits.allows(&reads_as, asked, now_ms()).is_err() {
                     return Ok((Answer::Known(known, limit_used_up()), held));
@@ -226,10 +226,7 @@ impl Hub {
                     Ok(token) => {
                         self.pull_requests.schedules.lock().insert(id.clone(), Schedule::starting(read_at));
                         let read = self.read_own(&token, asking, asked).await;
-                        self.pull_requests.limits.said(&reads_as, read.rate_limit);
-                        if read.refused {
-                            self.reading_token_refused(&reads_as);
-                        }
+                        self.github_said(&reads_as, read.rate_limit, read.refused);
                         read
                     }
                 }

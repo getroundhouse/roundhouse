@@ -13,7 +13,7 @@ use protocol::model::{
 use protocol::worker::GitStatus;
 
 use super::judging::{Wanted, chosen, local, wanted};
-use crate::github::{HeadsAsk, PullRequestsAsk};
+use crate::github::{Headed, HeadsAsk, PullRequestsAsk};
 use crate::hub::Hub;
 use crate::hub::pull_requests::Asked;
 use crate::hub::pull_requests::reading::Found;
@@ -38,6 +38,11 @@ pub(in crate::hub::pull_requests) struct Asking {
 }
 
 impl Asking {
+    /// The first of them that needs GitHub, whose worker is asked for a machine's token if one is needed.
+    pub(in crate::hub::pull_requests) fn first_asked(&self) -> Option<WorkspaceId> {
+        self.asked.first().map(|(workspace, _, _)| workspace.id.clone())
+    }
+
     /// Whether any of them needs GitHub, and so a token.
     pub(in crate::hub::pull_requests) fn needs_github(&self) -> bool {
         !self.asked.is_empty()
@@ -90,15 +95,17 @@ impl Hub {
         let headed = self.github.read_heads(token, &heads, asked.leaving()).await;
         let (mut rate_limit, mut refused) = (headed.rate_limit, headed.refused);
         let mut reading: Vec<(Workspace, PullRequestsAsk, BranchName)> = Vec::new();
-        for ((workspace, ask, on), answer) in heads_of.into_iter().zip(headed.answers) {
+        for ((workspace, _, on), answer) in heads_of.into_iter().zip(headed.answers) {
             let known = workspace.known_pull_request().filter(|_| workspace.pull_request_branch.as_ref() == Some(&on));
-            let number = answer.map(|headed| checked_out(&workspace).and_then(|branch| chosen(&headed, known, branch)));
-            match number {
+            let theirs =
+                answer.map(|headed| checked_out(&workspace).and_then(|branch| chosen(&headed, known, branch)).cloned());
+            match theirs {
                 Err(error) => found.push((workspace.id.clone(), Err(error))),
                 Ok(None) => found.push((workspace.id.clone(), Ok(Found { found: none(), on: Some(on) }))),
-                Ok(Some(number)) => {
+                // Read where it merges into, which for a clone of a fork is the repository it was forked from.
+                Ok(Some(Headed { into, number, .. })) => {
                     let selection = PullRequestSelection::from(number);
-                    reading.push((workspace, PullRequestsAsk { repository: ask.repository, selection }, on));
+                    reading.push((workspace, PullRequestsAsk { repository: into, selection }, on));
                 }
             }
         }
@@ -121,7 +128,7 @@ impl Hub {
                 let observed =
                     snapshot.get(number).ok_or_else(|| ApiError::new(ErrorCode::Worker, "GitHub left it out"))?;
                 let mut pull_request = observed.pull_request.clone();
-                let known = workspace.known_pull_request().filter(|known| known.number == pull_request.number);
+                let known = workspace.known_pull_request().filter(|known| known.url == pull_request.url);
                 let files = uncommitted.get(&workspace.id).copied().or(known.map(|known| known.local.uncommitted));
                 if let Some(branch) = checked_out(&workspace) {
                     pull_request.local = local(&observed.head, branch, files.unwrap_or_default());

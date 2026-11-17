@@ -6,7 +6,7 @@ mod asked;
 pub(crate) use asked::{PullRequestsAsk, Unread};
 mod graphql;
 mod heads;
-pub(crate) use heads::{Headed, HeadsAsk};
+pub(crate) use heads::{BRANCHES_A_QUERY, Headed, HeadsAsk};
 mod parse;
 mod query;
 mod reading;

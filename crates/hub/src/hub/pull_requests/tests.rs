@@ -1,8 +1,9 @@
 //! Reading a workspace's own pull request for an agent and for a client, from a stand-in for GitHub, by the branch on
 //! GitHub that the branch checked out pushes to, on the real clock, since a call to the stand-in would race tokio's.
 
+use protocol::model::GhLogin;
 use protocol::model::{Branches, GitFile, GitStatus, Head, Local, PrState, PullRequest, PullRequestFound};
-use protocol::worker::{WorkerRequest, WorkerResponse};
+use protocol::worker::{GithubLoginReply, WorkerRequest, WorkerResponse};
 
 use super::*;
 use crate::github::PullRequestState;
@@ -130,6 +131,59 @@ async fn a_workspace_has_the_pull_request_from_the_branch_its_branch_is_pushed_t
     assert_eq!(merged.map(|pr| (pr.number, pr.state)), Some((7, PrState::Merged)));
     let asked = queries(&github);
     assert!(asked[0].contains(r#"headRefName:\"branch\""#), "{asked:?}");
+}
+
+/// The repository cloned is ada/project, a fork, and its branch's pull request merges into example/project, which it
+/// was forked from, so it's asked after by the branch in the fork and read in example/project.
+#[tokio::test]
+async fn a_clone_of_a_forks_pull_request_is_read_where_it_merges_into() {
+    let dir = tempfile::tempdir().unwrap();
+    let (hub, pull_requests, github) = hub_on_github(dir.path()).await;
+    let fork = protocol::model::RepoUrl::try_from("https://github.com/ada/project".to_string()).unwrap();
+    // Added again, as a checkout seen again is, so its address is read again.
+    hub.store.add_repo(&"r".into(), "repo", "/repo", 0).unwrap();
+    hub.store.read_repo_url(&"r".into(), "/repo", Some(&fork), None).unwrap();
+    let mut branches = pushed("head-7", "head-7", (0, 0));
+    branches.had[0].upstream.as_mut().unwrap().address = Some(fork);
+    hub.store.set_workspace_branches(&"w".into(), &branches).unwrap();
+    pull_requests.set(7, PullRequestState::Open);
+
+    let found = hub.workspace_pull_request("w".into()).await.unwrap();
+
+    assert_eq!(found.map(|pr| pr.number), Some(7));
+    let asked = queries(&github);
+    assert!(asked[0].contains(r#"r0: repository(owner:\"ada\",name:\"project\")"#), "{asked:?}");
+    assert!(asked[0].contains(r#"n0: repository(owner:\"ada\",name:\"project\")"#), "{asked:?}");
+    assert!(
+        asked[1..].iter().all(|query| query.contains(r#"repository(owner:\"example\",name:\"project\")"#)
+            && !query.contains(r#"owner:\"ada\""#)),
+        "{asked:?}"
+    );
+}
+
+/// The machine's `gh` isn't logged in, so there's no login to read the pull request as, which asking again won't
+/// change until it's logged in, so with nothing known it's recorded as none, and the app offers to create one rather
+/// than look for one for ever.
+#[tokio::test]
+async fn with_no_login_to_read_as_a_workspace_with_nothing_known_has_none() {
+    let dir = tempfile::tempdir().unwrap();
+    let (hub, pull_requests, github) = hub_on_github(dir.path()).await;
+    pull_requests.set(7, PullRequestState::Open);
+    hub.found_tokens.found(hub.store.get_workspace(&"w".into()).unwrap().provider, None);
+    let link = crate::worker_link::WorkerLink::answering(|request| {
+        let logged_out = GithubLoginReply { login: GhLogin::LoggedOut, token: None };
+        let found = matches!(request, WorkerRequest::FindGithubLogin);
+        Some(Ok(if found { WorkerResponse::GithubLogin(logged_out) } else { WorkerResponse::Ok }))
+    });
+    link.keep();
+    hub.workers.lock().insert("w".into(), link);
+
+    let found = hub.workspace_pull_request("w".into()).await;
+
+    assert_eq!(found.unwrap(), None);
+    let recorded = hub.store.get_workspace(&"w".into()).unwrap().pull_request;
+    assert_eq!(recorded, Some(PullRequestFound { pull_request: None }));
+    assert!(queries(&github).is_empty(), "nothing to ask GitHub as");
 }
 
 /// How the worktree stands against it: the commits its branch has that GitHub's doesn't, those GitHub's has that it

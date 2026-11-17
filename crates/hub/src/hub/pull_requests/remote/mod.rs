@@ -17,7 +17,8 @@ mod tests;
 mod for_agents;
 mod reading_as;
 mod waits_read;
-pub(in crate::hub) use reading_as::ReadsAs;
+pub(in crate::hub) use reading_as::{NoToken, ReadsAs};
+pub(in crate::hub::pull_requests) use waits_read::QUERIES_AT_MOST;
 mod watching;
 #[cfg(test)]
 use watching::BACKOFF_MAX;

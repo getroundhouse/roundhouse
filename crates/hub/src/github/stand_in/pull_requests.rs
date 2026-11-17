@@ -196,7 +196,8 @@ impl Set {
             .filter(|(number, _)| self.from.get(number).map_or("branch", String::as_str) == branch)
             .map(|(number, state)| {
                 let state = if *state == PullRequestState::Merged { "MERGED" } else { "OPEN" };
-                json!({"number": number, "state": state, "headRefOid": self.head(*number),
+                json!({"number": number, "url": format!("https://github.com/example/project/pull/{number}"),
+                    "state": state, "headRefOid": self.head(*number),
                     "headRepository": {"nameWithOwner": "example/project"},
                     "baseRepository": {"nameWithOwner": "example/project"}})
             })

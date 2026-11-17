@@ -19,8 +19,8 @@ fn heads(into: &str, from: &str, branch: &str) -> HeadsAsk {
 /// merges into.
 fn node(number: u64, state: &str, from: Option<&str>, into: &str) -> Value {
     let from = from.map(|from| json!({ "nameWithOwner": from }));
-    json!({"number": number, "state": state, "headRefOid": format!("head-{number}"), "headRepository": from,
-        "baseRepository": {"nameWithOwner": into}})
+    json!({"number": number, "url": format!("https://github.com/{into}/pull/{number}"), "state": state,
+        "headRefOid": format!("head-{number}"), "headRepository": from, "baseRepository": {"nameWithOwner": into}})
 }
 
 /// What GitHub answers for a branch that's there, listing `nodes` as its own, and listing `by_name` by its name.
@@ -37,46 +37,48 @@ async fn read(answers: Vec<Answer>, asks: &[HeadsAsk]) -> (HeadsRead, Vec<String
     (read, queries)
 }
 
-/// Four branches in one query. Two are there, one of example/project and one of a fork, so each has its own pull
-/// requests into example/project, however many forks' branches of the same name have one, and not one into another
-/// repository. One is gone, as GitHub deletes one as its pull request merges, so its are those its name finds from
-/// its own repository, but for one from a fork since deleted. And one is of example/gone, which isn't there.
+/// Five branches in one query. Two are there: one of example/project, whose own pull requests are those listed,
+/// however many forks' branches of the same name have one, and one of a clone of a fork, ada/project, whose own merge
+/// into the repository it was forked from. One is gone, as GitHub deletes one as its pull request merges, so its are
+/// those its name finds from its own repository, but for one from a fork since deleted. One was pushed to a fork
+/// that's been deleted since, so GitHub has no repository to ask of the branch in, and its name finds none. And one is
+/// of example/gone, which isn't there, so neither can be asked.
 #[tokio::test]
 async fn a_branch_thats_there_has_its_own_pull_requests_and_one_thats_gone_those_its_name_finds() {
     let forks = || vec![node(10, "OPEN", Some("someone/project"), "example/project"); 5];
-    let (own, own_by_name) = there(
-        &[
-            node(7, "MERGED", Some("example/project"), "example/project"),
-            node(6, "OPEN", Some("example/project"), "example/other"),
-        ],
-        &forks(),
-    );
-    let (forked, forked_by_name) = there(&[node(8, "OPEN", Some("ada/project"), "example/project")], &forks());
+    let (own, own_by_name) = there(&[node(7, "MERGED", Some("example/project"), "example/project")], &forks());
+    let (forked, forked_by_name) = there(&[node(8, "OPEN", Some("ada/project"), "example/project")], &[]);
     let gone_by_name = json!({"h": {"nodes": [node(9, "OPEN", Some("someone/project"), "example/project"),
         node(5, "MERGED", Some("example/project"), "example/project"), node(4, "CLOSED", None, "example/project")]}});
-    let missing = json!({"type":"NOT_FOUND","path":["r3"],"message":"Could not resolve to a Repository."});
+    let fork_gone_by_name = json!({"h": {"nodes": [node(3, "MERGED", None, "example/project")]}});
+    let not_found =
+        |alias: &str| json!({"type":"NOT_FOUND","path":[alias],"message":"Could not resolve to a Repository."});
     let answer = answer_with(
         json!({"r0": own, "n0": own_by_name, "r1": forked, "n1": forked_by_name, "r2": {"h": null}, "n2": gone_by_name,
-            "r3": null, "n3": null}),
+            "r3": null, "n3": fork_gone_by_name, "r4": null, "n4": null}),
         4900,
-        &[missing],
+        &[not_found("r3"), not_found("r4"), not_found("n4")],
     );
     let asks = [
         heads("example/project", "example/project", "birch"),
-        heads("example/project", "ada/project", "birch"),
+        heads("ada/project", "ada/project", "birch"),
         heads("example/project", "example/project", "elm"),
+        heads("example/project", "old/project", "birch"),
         heads("example/gone", "example/gone", "birch"),
     ];
 
     let (read, queries) = read(vec![answer], &asks).await;
 
-    let [own, forked, gone, missing] = <[_; 4]>::try_from(read.answers).unwrap();
-    let numbers = |found: Vec<super::super::heads::Headed>| found.iter().map(|pr| pr.number.get()).collect::<Vec<_>>();
-    let own = own.unwrap();
-    assert_eq!(numbers(own.clone()), [7], "its own, into example/project, and no fork's");
+    let [own, forked, gone, fork_gone, missing] = <[_; 5]>::try_from(read.answers).unwrap();
+    let numbers = |found: &[super::super::heads::Headed]| found.iter().map(|pr| pr.number.get()).collect::<Vec<_>>();
+    let (own, forked) = (own.unwrap(), forked.unwrap());
+    assert_eq!(numbers(&own), [7], "its own, and no fork's");
     assert_eq!((own[0].state, own[0].head.clone()), (PrState::Merged, CommitId::from("head-7")));
-    assert_eq!(numbers(forked.unwrap()), [8]);
-    assert_eq!(numbers(gone.unwrap()), [5], "by its name, from its own repository");
+    assert_eq!(own[0].url, "https://github.com/example/project/pull/7");
+    assert_eq!(numbers(&forked), [8]);
+    assert_eq!(forked[0].into, name("example/project"), "read where it merges into, rather than in the fork");
+    assert_eq!(numbers(&gone.unwrap()), [5], "by its name, from its own repository");
+    assert_eq!(numbers(&fork_gone.unwrap()), [] as [u64; 0], "a fork's branch that's gone has no head to be it");
     assert_eq!(missing.unwrap_err().code, ErrorCode::Unavailable);
     assert_eq!(queries.len(), 1, "{queries:?}");
     assert!(queries[0].contains(r#"r1: repository(owner:\"ada\",name:\"project\")"#), "{}", queries[0]);

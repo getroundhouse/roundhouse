@@ -6,24 +6,20 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
-use protocol::model::{GitHubRepository, GithubRepositoryName, GithubToken, ProviderName};
+use protocol::model::{GitHubRepository, GithubRepositoryName};
 use tracing::{debug, warn};
 
-use super::reading_as::ReadsAs;
+use super::reading_as::{NoToken, ReadsAs};
 use super::watching::{due, unfinished};
-use super::{
-    ApiError, Arc, Asked, ErrorCode, Group, GroupKey, Hub, Instant, PullRequestsSnapshot, WorkspaceId, groups,
-};
-use crate::github::{ASK_WITHIN, PullRequestsAsk, Unread, first_queries};
-use crate::hub::found_github_logins::FOUND_WITHIN;
-use crate::jobs::{self, Ended, JobKind, Limits};
+use super::{ApiError, Arc, Asked, ErrorCode, Group, GroupKey, Hub, Instant, PullRequestsSnapshot, groups};
+use crate::github::{PullRequestsAsk, Unread, first_queries};
+use crate::jobs::{self, Ended, JobKind};
 use crate::store::now_ms;
-use crate::worker_link::STOP_GRACE;
 
 /// The queries a read of waits makes at most, for each its first round makes, each given the time the hub gives a call
 /// to GitHub: two rounds for most, and as many again for pages and for what's under them in their stacks, read again
 /// twice for pull requests that moved as they were read.
-const QUERIES_AT_MOST: u32 = 12;
+pub(in crate::hub::pull_requests) const QUERIES_AT_MOST: u32 = 12;
 
 impl Hub {
     /// Starts reading the pull requests of every group of waits that's due, a job for each token they're read as, but
@@ -70,7 +66,7 @@ impl Hub {
     async fn start_wait_read(self: &Arc<Self>, reads_as: ReadsAs, groups: Vec<(GroupKey, Group)>) {
         let Some(id) = groups.first().map(|(key, _)| key.0.clone()) else { return };
         let queries = first_queries(&asks(&groups).0);
-        let limits = self.wait_read_limits(&id, queries.saturating_mul(QUERIES_AT_MOST)).await;
+        let limits = self.read_limits(&id, queries.saturating_mul(QUERIES_AT_MOST)).await;
         let took_worker = Arc::new(AtomicBool::new(false));
         let (hub, token_of, read, took) = (self.clone(), reads_as.clone(), groups.clone(), took_worker.clone());
         let work = async move { hub.read_waits_as(&token_of, read, &took).await };
@@ -91,17 +87,6 @@ impl Hub {
         }
     }
 
-    /// How long a read of waits that makes `queries` has: the time the hub gives a call to GitHub for each, and for a
-    /// machine's own token, the time to start the workspace's worker and for it to hand that over. Then as long as
-    /// a worker that was started takes to stop.
-    pub(in crate::hub::pull_requests) async fn wait_read_limits(&self, id: &WorkspaceId, queries: u32) -> Limits {
-        let provider = self.workspace(id).await.and_then(|workspace| self.provider(&workspace.provider));
-        let provider_takes = provider.map_or(Duration::ZERO, |provider| provider.starts_or_stops_within());
-        let starting = provider_takes.saturating_mul(2).saturating_add(self.timers.hello_within);
-        let work = ASK_WITHIN.saturating_mul(queries).saturating_add(starting).saturating_add(FOUND_WITHIN);
-        Limits { work, after: STOP_GRACE.saturating_add(provider_takes) }
-    }
-
     /// Reads `groups` as `reads_as`, together, and records what each found on its waits, however the job goes on
     /// once it has. One that GitHub's count for the token can't spare now stays due, for the next look. A read whose token can't be had,
     /// or which GitHub refuses, is recorded on the waits as one that may work later, so they go on waiting. `took`
@@ -109,7 +94,7 @@ impl Hub {
     async fn read_waits_as(self: &Arc<Self>, reads_as: &ReadsAs, groups: Vec<(GroupKey, Group)>, took: &AtomicBool) {
         let token = match (reads_as, groups.first()) {
             (ReadsAs::MachineOwn(provider), Some((key, _))) => {
-                self.machine_token_for_waits(provider, &key.0, took).await
+                self.machine_token_for_read(provider, &key.0, took).await.map_err(NoToken::into_error)
             }
             _ => self.token_of(reads_as, Duration::ZERO).await,
         };
@@ -128,10 +113,7 @@ impl Hub {
         let (asks, asked, unasked) = asks(&groups);
         jobs::step(format!("waiting for GitHub to answer for {} groups of waits", asks.len()));
         let read = self.github.read_pull_requests(&token, asks, Asked::InTurn.leaving()).await;
-        self.pull_requests.limits.said(reads_as, read.rate_limit);
-        if read.refused {
-            self.reading_token_refused(reads_as);
-        }
+        self.github_said(reads_as, read.rate_limit, read.refused);
         let hub = self.clone();
         jobs::uncut(async move {
             for ((key, group), answer) in asked.into_iter().zip(read.answers) {
@@ -142,24 +124,6 @@ impl Hub {
             }
         })
         .await;
-    }
-
-    /// The token of `provider`'s machines' own `gh`, for waits in the workspace `id`: the one handed the hub, or else
-    /// from the workspace's worker, started for it if it has none, and held until it has, as [`Hub::machine_token`]
-    /// asks for it. `took` is set once a worker is held, so the read lets go of it once it's done.
-    pub(in crate::hub::pull_requests) async fn machine_token_for_waits(
-        self: &Arc<Self>,
-        provider: &ProviderName,
-        id: &WorkspaceId,
-        took: &AtomicBool,
-    ) -> Result<GithubToken, ApiError> {
-        if let Ok(token) = self.token_of(&ReadsAs::MachineOwn(provider.clone()), Duration::ZERO).await {
-            return Ok(token);
-        }
-        let held = self.worker_to_read(id).await?;
-        took.store(true, Ordering::Relaxed);
-        jobs::step("waiting for the worker to hand over its machine's gh token");
-        self.machine_token(provider, Some(held.link())).await
     }
 
     /// Records what a group's read found on its waits, or that it failed, and schedules its next read by that.

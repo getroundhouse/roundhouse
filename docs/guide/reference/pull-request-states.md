@@ -72,4 +72,4 @@ Roundhouse reads the pull request from GitHub itself, as the default GitHub acco
 - **What was found is kept across restarts,** and GitHub failing, such as while offline, never takes away a pull request already found.
 - **A workspace's pull request is the one from the branch its branch is pushed to on GitHub.** Two workspaces on the same branch show the same one. A merged or closed one from an earlier branch that had the same name doesn't show, unless the workspace had it.
 
-Until the branch is pushed, or without a GitHub login to read it as, or a repository on github.com, there's no pull request to read, and the bar offers to create one.
+Until the branch is pushed, with its upstream set to a branch of the same name, as `git push -u origin HEAD` does, or without a GitHub login to read it as, or a repository on github.com, there's no pull request to read, and the bar offers to create one.
