@@ -7,7 +7,7 @@ use gpui_kit::{AppContext as _, ElementId, ScrollDelta, TestAppContext, point, p
 use protocol::event::EventBody;
 use protocol::model::Seq;
 
-use crate::support::{Gate, Stack, Ui, click};
+use crate::support::{Gate, Stack, Ui, click, under_the_middle_of};
 
 fn retry(card: Seq) -> ElementId {
     ElementId::NamedInteger("retry".into(), card.get())
@@ -40,15 +40,17 @@ fn retry_asks_the_agent_to_carry_on_once_and_goes_as_soon_as_its_pressed(cx: &mu
     assert_eq!(ui.cx.read_entity(&transcript, |t, _| t.retry_offered_at()), Some(card));
 
     // Read as the click is handled, before anything from the hub can arrive, so it's the prompt on its way that does it.
-    let offered = ui
+    let (offered, under) = ui
         .cx
         .update_window(ui.handle, |_, window, cx| {
             click(window, retry(card), cx);
-            transcript.read(cx).retry_offered_at()
+            let offered = transcript.read(cx).retry_offered_at();
+            // Only when it's still there, as a click that did nothing leaves it.
+            (offered, offered.map(|_| under_the_middle_of(window, retry(card))))
         })
         .unwrap();
 
-    assert_eq!(offered, None, "gone as soon as it's pressed, so it can't be pressed twice");
+    assert_eq!(offered, None, "gone as soon as it's pressed, so it can't be pressed twice. Under the click: {under:?}");
     let ended = |ui: &Ui| ui.events().iter().filter(|e| matches!(e.body, EventBody::TurnEnded { .. })).count();
     ui.wait("the turn it started to end", |ui| ended(ui) == 2);
     assert_eq!(prompts(&ui), ["fail:rate_limit", "Continue"]);
