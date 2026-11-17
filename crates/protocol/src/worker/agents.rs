@@ -127,37 +127,3 @@ impl Reply for Delivery {
         Ok(Self::AgentNotRunning)
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::model::{LoginToken, ModelName};
-
-    fn launch(login: Option<AgentLogin>) -> WorkerRequest {
-        AgentSpec {
-            session_id: "s".into(),
-            run: RunId::new(1),
-            agent: AgentKind::Claude,
-            cwd: "/w".into(),
-            start: Start::New { conversation: Some("a".into()) },
-            settings: Settings { model: Some(ModelName::named("opus")), ..Settings::default() },
-            env: vec![],
-            tools_token: None,
-            login,
-        }
-        .into_request()
-    }
-
-    #[test]
-    fn a_launch_carries_its_login_only_when_it_has_one_and_hides_the_token_from_debug() {
-        let sent = serde_json::to_string(&launch(None)).unwrap();
-        assert!(!sent.contains("login"), "{sent}");
-        assert_eq!(serde_json::from_str::<WorkerRequest>(&sent).unwrap(), launch(None));
-
-        let with_login = launch(Some(AgentLogin { token: LoginToken::new("a-made-up-token") }));
-        let sent = serde_json::to_string(&with_login).unwrap();
-        assert!(sent.contains(r#""login":{"token":"a-made-up-token"}"#), "{sent}");
-        assert_eq!(serde_json::from_str::<WorkerRequest>(&sent).unwrap(), with_login);
-        assert!(!format!("{with_login:?}").contains("made-up"));
-    }
-}

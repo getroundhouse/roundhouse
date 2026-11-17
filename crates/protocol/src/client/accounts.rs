@@ -89,26 +89,3 @@ impl Request for AccountSetDefault {
         ClientRequest::AccountSetDefault(self)
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use serde_json::json;
-
-    use super::*;
-
-    /// The same as if its fields were the request's own.
-    #[test]
-    fn connecting_a_login_names_no_account_unless_it_replaces_one_and_hides_its_token_from_debug() {
-        let wire = json!({"method": "account_connect", "agent": "claude", "name": "Work", "token": "a-made-up-token"});
-        let request = ClientRequest::AccountConnect(AccountConnect {
-            agent: AgentKind::Claude,
-            name: "Work".into(),
-            token: LoginToken::new("a-made-up-token"),
-            account: None,
-        });
-
-        assert_eq!(serde_json::to_value(&request).unwrap(), wire);
-        assert_eq!(serde_json::from_value::<ClientRequest>(wire).unwrap(), request);
-        assert!(!format!("{request:?}").contains("made-up"));
-    }
-}

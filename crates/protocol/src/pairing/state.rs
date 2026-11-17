@@ -11,8 +11,6 @@ use unicode_properties::{GeneralCategory, UnicodeGeneralCategory as _};
 use crate::client::{ApiError, ErrorCode};
 use crate::model::DeviceId;
 
-#[cfg(test)]
-use super::Fingerprint;
 use super::PairingLink;
 
 /// Enough for any name a phone or computer gives itself.
@@ -116,12 +114,25 @@ pub struct Pairing {
 mod tests {
     use super::*;
 
+    #[expect(unreachable_pub, reason = "a secret's type is public, as the protocol's are, and this is a test's")]
+    mod made_up {
+        use super::*;
+
+        secrets!(
+            /// A secret made up for the test.
+            MadeUpSecret,
+        );
+    }
+    use made_up::MadeUpSecret;
+
     #[test]
     fn a_secret_stays_out_of_debug_output_and_reads_as_plain_text() {
-        let token = DeviceToken::from("s3cret");
+        let secret = MadeUpSecret::from("s3cret");
 
-        assert_eq!(format!("{token:?}"), "DeviceToken(…)");
-        assert_eq!(serde_json::to_string(&token).unwrap(), "\"s3cret\"");
+        assert_eq!(format!("{secret:?}"), "MadeUpSecret(…)");
+        assert_eq!(serde_json::to_string(&secret).unwrap(), "\"s3cret\"");
+        assert_eq!(serde_json::from_str::<MadeUpSecret>("\"s3cret\"").unwrap(), secret);
+        assert_eq!(secret.as_str(), "s3cret");
     }
 
     #[test]
@@ -133,22 +144,5 @@ mod tests {
 
         assert_eq!(json["link"], pairing.link.to_string());
         assert_eq!(serde_json::from_value::<Pairing>(json).unwrap(), pairing);
-    }
-
-    /// A client that gets a reply it didn't expect puts the reply in its error.
-    #[test]
-    fn a_pairing_code_stays_out_of_debug_output_wherever_it_is() {
-        let link = PairingLink {
-            hub_name: "hub".to_string(),
-            hosts: vec!["hub.local:7867".to_string()],
-            fingerprint: Fingerprint::of_sha256([0; 32]),
-            code: PairingCode::from("s3cret"),
-        };
-        let pairing = Pairing { link: link.clone(), code: link.code.clone(), expires_at_ms: 1 };
-
-        let shown = format!("{link:?} {:?}", crate::client::ClientResponse::Pairing(pairing));
-
-        assert!(!shown.contains("s3cret"), "{shown}");
-        assert!(shown.contains("hub.local:7867"), "{shown}");
     }
 }

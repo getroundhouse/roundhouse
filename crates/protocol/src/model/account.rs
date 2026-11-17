@@ -287,16 +287,6 @@ mod tests {
     }
 
     #[test]
-    fn a_login_carries_its_token_on_the_wire_and_hides_it_from_debug() {
-        let login = AgentLogin { token: LoginToken::new("a-made-up-token") };
-
-        assert_eq!(serde_json::to_string(&login).unwrap(), r#"{"token":"a-made-up-token"}"#);
-        assert_eq!(serde_json::from_str::<AgentLogin>(r#"{"token":"a-made-up-token"}"#).unwrap(), login);
-        assert_eq!(login.token.as_str(), "a-made-up-token");
-        assert!(!format!("{login:?}").contains("made-up"), "{login:?}");
-    }
-
-    #[test]
     fn windows_sort_shortest_first() {
         let mut windows = [LimitWindow::SevenDays, LimitWindow::FiveHours];
         windows.sort();

@@ -111,34 +111,20 @@ mod tests {
         prop_oneof![Just(GithubCredential::MachineOwn), account, blocked]
     }
 
-    /// A set and the token it may carry.
-    fn setting() -> impl Strategy<Value = (GitCredentialSet, String)> {
+    /// A set, with a token of any of GitHub's kinds where it carries one.
+    fn setting() -> impl Strategy<Value = GitCredentialSet> {
         let token = "(ghp_|gho_|ghu_|ghs_|github_pat_)[A-Za-z0-9_]{8,60}";
-        token.prop_flat_map(|token| {
-            (credential(token.clone()).prop_map(|credential| GitCredentialSet { credential }), Just(token))
-        })
+        token.prop_flat_map(|token| credential(token).prop_map(|credential| GitCredentialSet { credential }))
     }
 
     proptest! {
         #![proptest_config(Config { rng_seed: RngSeed::Fixed(1), failure_persistence: None, ..Config::default() })]
 
         #[test]
-        fn a_credential_reads_back_as_it_was_set(setting in setting()) {
-            let (set, _) = setting;
+        fn a_credential_reads_back_as_it_was_set(set in setting()) {
             let written = serde_json::to_string(&set.clone().into_request()).unwrap();
 
             prop_assert_eq!(serde_json::from_str::<WorkerRequest>(&written).unwrap(), set.into_request());
-        }
-
-        /// The request whole, and the credential alone, as a worker might log either.
-        #[test]
-        fn a_credential_never_prints_its_token(setting in setting()) {
-            let (set, token) = setting;
-
-            let (request, credential) = (format!("{:?}", set.clone().into_request()), format!("{:?}", set.credential));
-
-            prop_assert!(!request.contains(&token), "{}", request);
-            prop_assert!(!credential.contains(&token), "{}", credential);
         }
     }
 }

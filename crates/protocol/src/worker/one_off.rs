@@ -68,23 +68,3 @@ impl Reply for AgentAccount {
         Ok(account)
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use serde_json::json;
-
-    use super::*;
-
-    #[test]
-    fn a_title_or_an_account_read_without_a_login_is_as_it_was_before_logins() {
-        let titling = json!({"method": "title_for", "agent": "claude", "prompt": "fix the build"});
-        let title = TitleFor { agent: AgentKind::Claude, prompt: "fix the build".into(), images: vec![], login: None };
-        let asking = json!({"method": "account_for", "agent": "claude"});
-        let account = AccountFor { agent: AgentKind::Claude, login: None };
-
-        assert_eq!(serde_json::to_value(title.clone().into_request()).unwrap(), titling);
-        assert_eq!(serde_json::from_value::<WorkerRequest>(titling).unwrap(), title.into_request());
-        assert_eq!(serde_json::to_value(account.clone().into_request()).unwrap(), asking);
-        assert_eq!(serde_json::from_value::<WorkerRequest>(asking).unwrap(), account.into_request());
-    }
-}

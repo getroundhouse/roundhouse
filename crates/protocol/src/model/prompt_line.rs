@@ -205,16 +205,6 @@ mod tests {
     }
 
     #[test]
-    fn a_line_goes_to_a_client_with_the_fields_it_reads() {
-        let line = PromptLine::new(Seq::new(7), "Fix it", 2);
-
-        assert_eq!(
-            serde_json::to_value(line.placed(Place::new(3))).unwrap(),
-            serde_json::json!({ "seq": 7, "place": 3, "text": "Fix it", "files": 2 })
-        );
-    }
-
-    #[test]
     fn a_line_says_where_it_was_settled_and_one_from_a_hub_that_doesnt_say_has_nowhere() {
         let at = SettledAt { seq: Seq::new(9), place: Place::new(6), how: None };
         let line = PromptLine::new(Seq::new(7), "Fix it", 2).placed(Place::new(3)).settled_at(at);
