@@ -103,9 +103,9 @@ impl OpenSession {
         })
     }
 
-    /// Keeps and fetches the whole range the viewport needs, including its buffer. Called even when all its rows
-    /// are loaded, so a later fetch or live event cannot evict something still on screen. `unfetched` is the lowest
-    /// row that frame could not draw; without one, only bodies made stale by a hub update need fetching.
+    /// Keeps the whole range the viewport needs, including its buffer, and fetches around `unfetched`, the lowest
+    /// row that frame could not draw. Called even when all its rows are loaded, so a later fetch or live event cannot
+    /// evict something still on screen. Without `unfetched`, only pages made stale by a hub update need fetching.
     pub fn want(&self, rows: Range<usize>, unfetched: Option<usize>) {
         let (evicted, fetch) = self.follow.quietly(|log| {
             let evicted = !log.focused_on(&rows, unfetched) && Arc::make_mut(log).focus_on(rows, unfetched);

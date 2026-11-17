@@ -197,8 +197,8 @@ fn a_sent_prompt_shows_once_and_becomes_the_recorded_event(cx: &mut TestAppConte
     ui.wait_idle_with("the answer", |text| text.contains("hello"));
     let transcript = ui.transcript().unwrap();
     let rows = ui.cx.read_entity(&transcript, |t, _| t.row_count());
-    let recorded = ui.row_of(&stack.newest_event(&ui.active_chat())) + 1;
-    assert_eq!(rows, recorded, "the list has every recorded row, including compacted empty ones");
+    let recorded = ui.events().len();
+    assert_eq!(rows, recorded, "nothing is left waiting to be recorded");
     assert_eq!(ui.shown("bubble/").len(), 1, "the recorded prompt is drawn once, with no pending copy");
     let prompts = ui.events().iter().filter(|e| matches!(e.body, EventBody::UserPrompt { .. })).count();
     assert_eq!(prompts, 1);

@@ -5,7 +5,7 @@
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
-use client_core::session_log::SessionLog;
+use client_core::session_log::{Row, SessionLog};
 use client_core::{OpenSession, SubscriptionItem};
 use protocol::client::{ClientRequest, Hello, subscriptions};
 use protocol::event::{EventBody, SessionEvent};
@@ -290,9 +290,14 @@ fn status_is_already_current_when_an_event_is_delivered() {
     }
 }
 
-/// Every retained body, in order, once all rows are known, including compacted empty rows.
+/// Every event the open session holds, if it holds all of them, in order.
 fn held(log: &SessionLog) -> Option<Vec<SessionEvent>> {
-    log.holds_every_event().then(|| log.loaded().cloned().collect())
+    (0..log.row_count())
+        .map(|row| match log.row(row) {
+            Row::Event(event) => Some(event.clone()),
+            Row::Unloaded => None,
+        })
+        .collect()
 }
 
 #[test]
@@ -311,16 +316,8 @@ fn an_open_session_carries_on_from_where_it_got_to_on_a_new_connection() {
     open.reconnect(&client);
     client.session_prompt(&session.id, "say:after", None).unwrap();
 
-    // Everything that can supply transcript content; untranslated notifications keep only their positions.
-    let hub_has = || {
-        client
-            .session_read(&session.id, Seq::new(1), 1000, false)
-            .unwrap()
-            .0
-            .into_iter()
-            .filter(|event| !matches!(event.body, EventBody::AgentOther { .. }))
-            .collect::<Vec<_>>()
-    };
+    // Everything the hub has, with nothing missing.
+    let hub_has = || client.session_read(&session.id, Seq::new(1), 1000, false).unwrap().0;
     wait_until("the second turn", || {
         open.read(held).is_some_and(|events| assistant_text(&events).contains("after") && events == hub_has())
     });

@@ -90,7 +90,6 @@ enum Shown<'a> {
     /// prompt is the one the row's event settled.
     Event(Seq, &'a SessionEvent, Around),
     Unloaded,
-    Empty,
     /// Drawn elsewhere, so its own row is empty: a subagent's event, which its call draws, in the subagent tab, its
     /// last words, which its report says, or a prompt, drawn where the agent took it or at the end.
     InCall(Seq),
@@ -125,7 +124,6 @@ impl<'a> Shown<'a> {
                 None => Shown::InCall(event.seq),
             },
             Row::Unloaded => Shown::Unloaded,
-            Row::Empty => Shown::Empty,
         }
     }
 }
@@ -159,7 +157,6 @@ fn render_shown(
         }
         Shown::InCall(seq) => shared.texts.drawing(Of::Event(seq), empty),
         Shown::Unloaded => return None,
-        Shown::Empty => empty(),
     })
 }
 

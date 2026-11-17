@@ -39,10 +39,6 @@ impl SessionLog {
         let received = before_live(self.last);
         self.received = received;
         self.stale = self.pages.iter().copied().filter(|page| page_range(*page).start <= received).collect();
-        // Unknown notifications may have been normalized into visible events by the migration. Only event bodies
-        // stay drawn until replaced; an old empty marker must never hide newly understood history.
-        self.empty = std::sync::Arc::default();
-        self.touched(0..self.row_count() + 1);
         self.apart.read_again();
         self.outline.list_again();
     }

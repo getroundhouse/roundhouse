@@ -10,7 +10,6 @@ use protocol::fixtures::event;
 use protocol::model::{Place, Seq};
 use protocol::prompt::Prompt;
 
-use super::pages::{PAGE_EVENTS, page_range};
 use super::tests::page;
 use super::{By, MAX_LOADED_EVENTS, Position, PromptState, Row, SessionLog};
 
@@ -71,7 +70,7 @@ fn sparse(range: Range<u64>) -> Vec<SessionEvent> {
 }
 
 #[test]
-fn sparse_history_keeps_bodies_only_for_events_that_can_supply_content() {
+fn sparse_history_stays_loaded_across_the_viewport_and_releases_when_scrolled_away() {
     for by in [By::Seq, By::Place] {
         let mut log = match by {
             By::Seq => SessionLog::new(Seq::new(20_000)),
@@ -91,67 +90,54 @@ fn sparse_history_keeps_bodies_only_for_events_that_can_supply_content() {
 
         assert!(log.holds(1000..9000));
         assert!(log.pages_to_fetch().is_empty());
-        assert!(log.loaded_events() < 20, "hidden event bodies must not fill the cache");
         let expected_seq = Seq::new(if by == By::Place { 3600 } else { 1200 });
         assert!(matches!(log.row(1199), Row::Event(event) if event.seq == expected_seq));
-        assert_eq!(log.row(1200), Row::Empty);
-        assert_eq!(log.row(0), Row::Unloaded, "unknown is different from empty");
+        assert!(matches!(log.row(1200), Row::Event(event) if matches!(event.body, EventBody::AgentOther { .. })));
+        assert_eq!(log.row(0), Row::Unloaded);
 
         for row in 20_001..24_001 {
             log.apply_event(served(row..row + 1).pop().unwrap());
         }
         assert!(log.holds(1000..9000));
         assert!(log.pages_to_fetch().is_empty());
+
+        log.focus_on(15_000..15_020, Some(15_000));
+        fetch(&mut log, served);
+        assert_eq!(log.row(1200), Row::Unloaded, "scrolling away releases sparse pages too");
+        assert!(log.loaded_events() <= MAX_LOADED_EVENTS);
     }
 }
 
 #[test]
-fn empty_pages_need_no_page_entries_and_are_reread_after_a_hub_upgrade() {
+fn a_hub_upgrade_rereads_stale_pages_while_keeping_snapshots_immutable() {
     let mut log = SessionLog::new(Seq::new(20_000));
-    log.focus_on(0..5000, Some(0));
-    let empty = |range: Range<u64>| {
+    log.focus_on(0..500, Some(0));
+    let other = |range: Range<u64>| {
         range
             .map(|seq| event(Seq::new(seq), EventBody::AgentOther { kind: "future/event".into(), subagent: None }))
             .collect()
     };
-    fetch(&mut log, empty);
-    assert_eq!(log.loaded_events(), 0);
-    assert!(log.pages.is_empty());
-    assert_eq!(log.loaded_rows(), vec![0..5250]);
+    fetch(&mut log, other);
+    assert_eq!(log.loaded_rows(), vec![0..750]);
     assert!(log.pages_to_fetch().is_empty());
     let before = log.clone();
 
     log.read_again();
-    assert_eq!(log.row(1), Row::Unloaded, "a migration may have made it visible");
+    assert!(log.wants_pages(), "a migration may have rewritten the loaded pages");
+    assert!(
+        matches!(log.row(1), Row::Event(event) if matches!(event.body, EventBody::AgentOther { .. })),
+        "loaded events stay in place until replaced"
+    );
     fetch(&mut log, page);
-    assert!(matches!(log.row(1), Row::Event(_)));
-    assert_eq!(before.row(1), Row::Empty, "the previous frame's snapshot stays immutable");
+    assert!(matches!(log.row(1), Row::Event(event) if matches!(event.body, EventBody::Notice { .. })));
+    assert!(
+        matches!(before.row(1), Row::Event(event) if matches!(event.body, EventBody::AgentOther { .. })),
+        "the previous frame's snapshot stays immutable"
+    );
 }
 
 #[test]
-fn a_mixed_page_can_be_evicted_without_forgetting_its_empty_rows() {
-    let mut log = SessionLog::new(Seq::new(20_000));
-    log.focus_on(0..1, Some(0));
-    log.install_page(Position::of_row(0), sparse(1..251));
-    log.install_page(Position::of_row(250), sparse(251..501));
-    log.install_page(Position::of_row(500), sparse(501..751));
-    log.focus_on(10_000..10_001, Some(10_000));
-    for number in 20..40 {
-        let range = page_range(number);
-        log.install_page(range.start, page(range.start.seq().get()..range.end.seq().get()));
-    }
-    assert_eq!(log.row(599), Row::Unloaded);
-    assert_eq!(log.row(600), Row::Empty);
-    assert_eq!(log.empty.count(0..750), 749);
-
-    log.focus_on(599..601, Some(599));
-    let asked = fetch(&mut log, sparse);
-    assert!(asked.iter().any(|range| range.start == Position::of_row(2 * PAGE_EVENTS)));
-    assert!(log.holds(599..601));
-}
-
-#[test]
-fn an_empty_row_does_not_make_an_unsettled_prompt_look_taken() {
+fn an_agent_other_event_does_not_make_an_unsettled_prompt_look_taken() {
     let mut log = SessionLog::default();
     log.apply_event(event(Seq::FIRST, EventBody::UserPrompt { client_msg_id: None, prompt: Prompt::new("waiting") }));
     log.apply_event(event(Seq::new(2), EventBody::AgentOther { kind: "future/event".into(), subagent: None }));

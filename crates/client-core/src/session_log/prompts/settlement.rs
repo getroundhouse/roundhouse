@@ -74,11 +74,9 @@ impl SessionLog {
         // agent's own events. One it doesn't hold, such as one past its end, has nothing after it yet.
         let Some(row) = self.row_of(seq) else { return PromptState::Waiting };
         for later in row + 1..self.row_count() {
-            let event = match self.row(later) {
-                Row::Event(event) => event,
-                Row::Empty => continue,
-                // Not loaded, so far behind the tail, where it was settled long ago.
-                Row::Unloaded => return if dropped { PromptState::Dropped } else { PromptState::Taken },
+            // Not loaded, so far behind the tail, where it was settled long ago.
+            let Row::Event(event) = self.row(later) else {
+                return if dropped { PromptState::Dropped } else { PromptState::Taken };
             };
             if matches!(event.body, EventBody::PromptTaken { prompt } if prompt == seq) {
                 return PromptState::Taken;
