@@ -1,11 +1,13 @@
 //! Where each repository is, spelled out: its record, as the feed and a list carry it, with its checkout beside it for
 //! a client from before addresses, which reads only that, and the request that reads a checkout's address and its
-//! reply, since a worker can outlive the hub that started it.
+//! reply, with where its pushes go, since a worker can outlive the hub that started it.
 
 use protocol::client::HubNotice;
 use protocol::frame;
 use protocol::model::{Repo, RepoOrigin, RepoUrl, Rev};
-use protocol::worker::{ReadRepoUrl, RepoUrlReply, WorkerFrame, WorkerRequest, WorkerResponse};
+use protocol::worker::{
+    PushRoute, ReadRepoUrl, RepoUrlReply, WorkerFrame, WorkerOutcome, WorkerRequest, WorkerResponse,
+};
 
 use super::keeps_its_form;
 use super::worker_calls::{answered, asked};
@@ -62,14 +64,38 @@ fn a_repository_somewhere_this_build_does_not_know_still_reads() {
 
 #[test]
 fn reading_a_checkouts_address_keeps_its_form() {
-    let reply = |url| WorkerResponse::RepoUrl(RepoUrlReply { url });
+    let reply = |url, push| WorkerResponse::RepoUrl(RepoUrlReply { url, push });
+    let address = r#""url":"https://github.com/ada/roundhouse.git""#;
 
     asked(
         WorkerRequest::ReadRepoUrl(ReadRepoUrl { path: "/repo".into() }),
         r#"{"method":"read_repo_url","path":"/repo"}"#,
     );
-    answered(reply(Some(roundhouse())), r#"{"result":"repo_url","url":"https://github.com/ada/roundhouse.git"}"#);
-    answered(reply(None), r#"{"result":"repo_url","url":null}"#);
+    let through = reply(Some(roundhouse()), Some(PushRoute::Credential));
+    answered(through, &format!(r#"{{"result":"repo_url",{address},"push":"credential"}}"#));
+    answered(
+        reply(Some(roundhouse()), Some(PushRoute::Around)),
+        &format!(r#"{{"result":"repo_url",{address},"push":"around"}}"#),
+    );
+    answered(reply(None, None), r#"{"result":"repo_url","url":null,"push":null}"#);
+}
+
+/// A worker from before it said where pushes go says nothing of it, and a newer one's way is one this build can't
+/// name, either of which the hub keeps as no word of it.
+#[test]
+fn a_reply_that_says_nothing_of_where_pushes_go_or_a_way_this_build_doesnt_know_still_reads() {
+    let line = |push: &str| {
+        format!(
+            r#"{{"frame":"reply","id":7,"response":{{"result":"repo_url","url":"https://github.com/ada/roundhouse.git"{push}}}}}"#
+        )
+    };
+    let push = |line: String| match frame::decode::<WorkerFrame>(line.as_bytes()).unwrap() {
+        WorkerFrame::Reply { outcome: WorkerOutcome::Response(WorkerResponse::RepoUrl(reply)), .. } => reply.push,
+        other => panic!("{other:?}"),
+    };
+
+    assert_eq!(push(line("")), None);
+    assert_eq!(push(line(r#","push":"over_a_tunnel""#)), Some(PushRoute::Unknown));
 }
 
 /// A hub keeps no address with a credential, so one in a worker's reply fails that call, as any reply the hub can't

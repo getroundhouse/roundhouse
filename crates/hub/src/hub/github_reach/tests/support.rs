@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use protocol::client::HubNotice;
 use protocol::model::{GithubReach, GithubRepositoryName, GithubToken, RepoUrl};
-use protocol::worker::{GitCredential, RepoUrlReply, WorkerRequest, WorkerResponse};
+use protocol::worker::{GitCredential, PushRoute, RepoUrlReply, WorkerRequest, WorkerResponse};
 use tokio::sync::{broadcast, watch};
 use tokio::task::JoinHandle;
 
@@ -15,12 +15,18 @@ use crate::worker_link::WorkerLink;
 pub(super) const CLI: GithubRepositoryName = GithubRepositoryName::named("cli/cli");
 
 /// Has a stand-in for a worker on the hub's machine read that the checkout of the hub's repository, `r`, fetches from
-/// `url`, as the first worker here to link after `r` is added does, so its record has the address.
+/// `url`, as the first worker here to link after `r` is added does, so its record has the address, and pushes through
+/// the git credential.
 pub(super) async fn reads(hub: &Arc<Hub>, url: &str) {
+    reads_pushing(hub, url, PushRoute::Credential).await;
+}
+
+/// As [`reads`] says, but with its pushes going as `push` says.
+pub(super) async fn reads_pushing(hub: &Arc<Hub>, url: &str, push: PushRoute) {
     let url = RepoUrl::try_from(url.to_owned()).unwrap();
     let link = WorkerLink::answering(move |request| {
         assert!(matches!(request, WorkerRequest::ReadRepoUrl(_)), "{request:?}");
-        Some(Ok(WorkerResponse::RepoUrl(RepoUrlReply { url: Some(url.clone()) })))
+        Some(Ok(WorkerResponse::RepoUrl(RepoUrlReply { url: Some(url.clone()), push: Some(push) })))
     });
     Arc::clone(hub).read_repo_urls("local".into(), link).await;
 }

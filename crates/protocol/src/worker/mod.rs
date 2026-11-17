@@ -41,7 +41,7 @@ pub use github::{
 };
 pub use one_off::{AccountFor, TitleFor, TitleReply};
 pub use repo_source::RepoSource;
-pub use repo_url::{ReadRepoUrl, RepoUrlReply};
+pub use repo_url::{PushRoute, ReadRepoUrl, RepoUrlReply};
 pub use tools::{ServeTools, ToolsServing, ToolsToken, WAIT_TOOL, WAITS_TOOL};
 pub use workspaces::{
     ArchiveScript, CancelSetup, NamesGitHas, NamesGitHasReply, PrepareWorkspace, RemoveWorkspace, RestoreWorkspace,

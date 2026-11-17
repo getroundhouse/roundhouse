@@ -32,13 +32,28 @@ const BLOCKED_TOKEN: &str = "blocked-by-roundhouse";
 /// Taken out of what every process given the files inherits, since `gh` takes any of them over its config directory.
 const GH_TOKENS: [&str; 4] = ["GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN"];
 
-/// How GitHub's SSH addresses start, which the git config sends to `https://github.com/`, so a remote over SSH goes
-/// through the helper too, rather than push with the machine's key.
+/// Where the git config sends GitHub's SSH addresses, so a push to one goes through the helper.
+const SENT_TO: &str = "https://github.com/";
+
+/// How GitHub's SSH addresses start, which the git config sends to [`SENT_TO`], so a remote over SSH goes through the
+/// helper too, rather than push with the machine's key. Not `ssh://github.com/` or one with a port, which git takes
+/// for others.
 const GITHUB_OVER_SSH: [&str; 2] = ["git@github.com:", "ssh://git@github.com/"];
 
 /// How the address of a repository on github.com starts over HTTPS, as a pattern of git's `includeIf`: without a user
 /// or with one, since git asks the helper for `https://github.com` whatever user an address names.
 const GITHUB_OVER_HTTPS: [&str; 2] = ["https://github.com/", "https://*@github.com/"];
+
+/// `machine` with the git config's rewriting of GitHub's SSH addresses, and nothing else of it, given in
+/// `GIT_CONFIG_*` as the file is, so what git makes of an address while the worker hands on a credential can be read
+/// whatever it hands on now, as it hands on none under the machine's own.
+pub(crate) fn rewriting(machine: &Environment) -> Environment {
+    let key = format!("url.{SENT_TO}.insteadOf");
+    let given = machine.clone().with("GIT_CONFIG_COUNT", GITHUB_OVER_SSH.len().to_string());
+    GITHUB_OVER_SSH.iter().enumerate().fold(given, |given, (i, address)| {
+        given.with(format!("GIT_CONFIG_KEY_{i}"), &key).with(format!("GIT_CONFIG_VALUE_{i}"), *address)
+    })
+}
 
 /// What a process can be handed for github.com: an account to push as, or a block, with what to do about it.
 pub(super) enum Handed {
@@ -135,7 +150,7 @@ impl Files {
         let mut config = b"# Rewritten by the Roundhouse worker whenever its hub sets the git credential.\n".to_vec();
         config.extend(b"[credential \"https://github.com\"]\n\thelper =\n\thelper = ");
         config.extend(config_quoted(&helper));
-        config.extend(b"\n[url \"https://github.com/\"]\n");
+        config.extend(format!("\n[url \"{SENT_TO}\"]\n").as_bytes());
         for start in GITHUB_OVER_SSH {
             config.extend(format!("\tinsteadOf = {start}\n").as_bytes());
         }

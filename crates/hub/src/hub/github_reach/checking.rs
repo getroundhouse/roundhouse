@@ -5,13 +5,14 @@ use std::time::Duration;
 use protocol::client::HubNotice;
 #[cfg(doc)]
 use protocol::model::RepoUrl;
-use protocol::model::{GithubReach, GithubRepositoryName, GithubUsername, Reach, RepoId};
+use protocol::model::{GithubReach, GithubUsername, Reach, RepoId};
 use tokio::sync::watch;
 use tokio::task::JoinSet;
 use tokio::time::{Instant, MissedTickBehavior};
 use tracing::{error, warn};
 
 use super::super::Hub;
+use super::reaching::PushesTo;
 use crate::github_logins::DefaultCredential;
 use crate::store::{Store, StoreError, now_ms};
 
@@ -26,14 +27,16 @@ impl Hub {
     /// Checks whether the default GitHub account can push to each repository's repository on GitHub, and records each
     /// answer as the repository's `GithubReach`, announced as records are, until the hub stops: as it starts, as a
     /// worker reads a repository's address, as `Hub::read_repo_urls` says, for one whose address then names another
-    /// repository on GitHub, as what workers give their processes for github.com changes, which it does as the
-    /// default, its login or its commit identity changes, and every [`CHECKED_AGAIN_EVERY`]. Once a repository and
-    /// login, not a workspace, and each repository's checks side by side, each within GitHub's time limit, never under
-    /// the logins' lock.
+    /// repository on GitHub, or whose pushes go another way, as what workers give their processes for github.com
+    /// changes, which it does as the default, its login or its commit identity changes, and every
+    /// [`CHECKED_AGAIN_EVERY`]. Once a repository and login, not a workspace, and each repository's checks side by
+    /// side, each within GitHub's time limit, never under the logins' lock.
     ///
     /// Which repository on GitHub a repository is, is the one its record's address names, as [`RepoUrl::on_github`]
     /// says, so one with no address, or an address elsewhere, isn't on GitHub. That's where its checkout fetches from,
-    /// and a `pushurl` of the checkout's can send its pushes elsewhere, which this doesn't see. *Unconfirmed.*
+    /// and a `pushurl` of the checkout's can send its pushes elsewhere, which this doesn't see. *Unconfirmed.* One whose
+    /// pushes go round the git credential, as the worker that read its address said, isn't checked, since its agents
+    /// push as the machine's own whoever the default is, as `Reach::PushesAsMachineOwn` says.
     pub(crate) async fn watch_github_reach(self: Arc<Self>) {
         let credential = self.git_credential();
         Checks::new(self, credential).run().await;
@@ -47,8 +50,8 @@ pub(super) struct Checks {
     /// What workers give their processes for github.com, which a push meets, and who GitHub knows that as, as the
     /// logins work it out.
     credential: watch::Receiver<DefaultCredential>,
-    /// Which repository on GitHub each repository was last checked for, by its record's address.
-    pushes_to: HashMap<RepoId, Option<GithubRepositoryName>>,
+    /// Where each repository's pushes went when it was last checked, by its record's address.
+    pushes_to: HashMap<RepoId, PushesTo>,
     under_way: JoinSet<Checked>,
     /// The number of each repository's newest check, whose answer alone is recorded.
     newest: HashMap<RepoId, u64>,
@@ -113,9 +116,13 @@ impl Checks {
     /// starts and as a worker reads an address. One with no address whose address a worker is still to read, as each
     /// is once the hub that added it is upgraded to keep addresses, is checked for the one its last check was of, if
     /// any, so it isn't left unchecked until a worker on the hub's machine links. `None` if the store can't say.
-    async fn recorded(&self) -> Option<HashMap<RepoId, Option<GithubRepositoryName>>> {
-        let read = |store: &Store| Ok((store.list_repos()?, store.repos_to_read()?, store.github_reaches()?));
-        let (repos, to_read, reaches) = match self.hub.blocking(read).await {
+    /// And whether a push from its checkout goes round the git credential, as the worker that read its address said.
+    async fn recorded(&self) -> Option<HashMap<RepoId, PushesTo>> {
+        let read = |store: &Store| {
+            let (repos, to_read) = (store.list_repos()?, store.repos_to_read()?);
+            Ok((repos, to_read, store.github_reaches()?, store.repos_pushing_around()?))
+        };
+        let (repos, to_read, reaches, around) = match self.hub.blocking(read).await {
             Ok(recorded) => recorded,
             Err(e) => {
                 warn!("couldn't read which repositories to check the default can push to: {}", e.message);
@@ -125,21 +132,23 @@ impl Checks {
         let to_read: HashSet<_> = to_read.into_iter().map(|repo| repo.id).collect();
         let mut checked: HashMap<_, _> =
             reaches.into_iter().filter_map(|record| Some((record.repo, record.reach.repository()?.clone()))).collect();
-        let named = repos.into_iter().filter_map(|repo| match repo.origin.url() {
-            Some(url) => Some((repo.id, url.on_github())),
-            None if to_read.contains(&repo.id) => {
-                checked.remove(&repo.id).map(|repository| (repo.id, Some(repository)))
-            }
-            None => Some((repo.id, None)),
+        let named = repos.into_iter().filter_map(|repo| {
+            let repository = match repo.origin.url() {
+                Some(url) => url.on_github(),
+                None if to_read.contains(&repo.id) => Some(checked.remove(&repo.id)?),
+                None => None,
+            };
+            let around = around.contains(&repo.id);
+            Some((repo.id, PushesTo { repository, around }))
         });
         Some(named.collect())
     }
 
-    /// The repositories whose records name another repository on GitHub than they were last checked for, as once a
+    /// The repositories whose records say their pushes go somewhere other than they were last checked for, as once a
     /// worker reads an address, which from then on they're checked for. One removed since isn't checked again.
     async fn newly_read(&mut self) -> Vec<RepoId> {
         let Some(recorded) = self.recorded().await else { return Vec::new() };
-        let read = recorded.iter().filter(|&(repo, repository)| self.pushes_to.get(repo) != Some(repository));
+        let read = recorded.iter().filter(|&(repo, pushes_to)| self.pushes_to.get(repo) != Some(pushes_to));
         let read = read.map(|(repo, _)| repo.clone()).collect();
         self.pushes_to = recorded;
         read
@@ -149,7 +158,7 @@ impl Checks {
     /// for one holds up none of the others.
     fn check(&mut self, credential: &DefaultCredential, repos: Vec<RepoId>) {
         for repo in repos {
-            let Some(repository) = self.pushes_to.get(&repo).cloned() else { continue };
+            let Some(pushes_to) = self.pushes_to.get(&repo).cloned() else { continue };
             self.started += 1;
             let number = self.started;
             self.newest.insert(repo.clone(), number);
@@ -159,7 +168,7 @@ impl Checks {
                 DefaultCredential::MachineOwn | DefaultCredential::Blocked { .. } => None,
             };
             self.under_way.spawn(async move {
-                let reach = super::reaching::reach(&hub.github, repository, &credential).await;
+                let reach = super::reaching::reach(&hub.github, pushes_to, &credential).await;
                 let answered_at_ms = reach.answered_for().is_some().then(now_ms);
                 Checked { repo, number, reach, answered_at_ms, asked_as }
             });

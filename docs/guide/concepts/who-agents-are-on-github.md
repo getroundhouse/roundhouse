@@ -41,7 +41,7 @@ A repository that isn't on GitHub, such as one on GitLab or GitHub Enterprise, i
 
 ## When the default can't be used
 
-If the default's token ends, you disconnect it, it needs signing in again, or it's an app's installation that was uninstalled on GitHub, it stays the default, and agents can't push until you renew it, sign in again, or make another the default. They don't fall back on the machine's own login, so nothing is pushed as someone you didn't choose. The Git page says what's wrong, and what to do, at the top of **Added**.
+If the default's token ends, you disconnect it, it needs signing in again, or it's an app's installation that was uninstalled on GitHub, it stays the default, and agents can't push until you renew it, sign in again, or make another the default. They don't fall back on the machine's own login, so nothing is pushed as someone you didn't choose, but for a repository whose pushes go round the default, [below](#when-the-default-cant-push-to-a-repository). The Git page says what's wrong, and what to do, at the top of **Added**.
 
 A signed-in account's token lasts 8 hours, and the hub renews it before it ends, so this happens only if the hub couldn't reach GitHub in time. Git says it's `Renewing` until the hub has. An app's installation's token lasts an hour, and the hub makes the next well before it ends, so the same goes for it: while GitHub doesn't make the next, a default installation says `Renewing` once the last has ended.
 
@@ -50,6 +50,8 @@ A signed-in account's token lasts 8 hours, and the hub renews it before it ends,
 The hub asks GitHub whether the default can push to the repository on GitHub that each repository's `origin` names, as `git push` would ask, so it meets what a push would: your access, a fine-grained token's repositories, the repositories an app of your own is installed on, and an organization that hasn't approved Roundhouse. It asks as it starts, whenever the default or its login changes, and every half hour, since what an account can do changes on GitHub too.
 
 If GitHub refuses, has no such repository the default can see, or doesn't take its token, every workspace of that repository says so in a line above the composer, with GitHub's words and what to do. **Open Git** opens the Git page, where you can make another account the default or add one that can push there. It blocks nothing: agents push as they would anyway. The line goes once the hub finds a push would be taken.
+
+Agents push as the default only to `https://github.com/`. If `origin` pushes anywhere else, as over SSH, which a `url."git@github.com:".insteadOf "https://github.com/"` in your git config makes of an `https://` address, they push as the machine's own login, with its SSH key, whoever the default is. The line says so instead, and to push as the default, have `origin` push to `https://github.com/`. Roundhouse reads where `origin` pushes when you add the project, so add it again after you change that.
 
 ![A line above the composer saying GitHub refuses pushes as the default](../../spec/screens/push-refused.png)
 

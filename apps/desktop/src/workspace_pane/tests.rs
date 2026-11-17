@@ -25,6 +25,7 @@ fn a_workspace_says_why_agents_cant_push_to_its_repository_and_nothing_while_the
     let said_of = |reach: Reach| {
         let said = said(&reach).unwrap();
         assert_eq!(said.install_at, None, "only an app's installation is given access on the app's page");
+        assert!(said.in_settings, "what it says to do is in Settings");
         (said.wrong, said.then)
     };
 
@@ -111,4 +112,19 @@ fn an_installations_line_names_its_bot_and_says_to_install_its_app_where_the_rep
     for then in [&refused_ours.then, &refused_theirs.then, &not_found_ours.then, &token_refused.then] {
         assert!(!then.contains("Roundhouse") && !then.contains("sign in"), "{then}");
     }
+}
+
+/// Pushes that go round the default go as the machine's own whoever the default is, which the line says, with how to
+/// push as the default, which is done in the repository's git config, so it has no way to Settings.
+#[test]
+fn a_workspace_whose_pushes_go_round_the_default_says_they_go_as_the_machines_own() {
+    let repository = GithubRepositoryName::named("cli/cli");
+
+    let said = said(&Reach::PushesAsMachineOwn { repository }).expect("it says so");
+
+    assert_eq!(said.wrong, "Agents push to cli/cli as their machine's own login, not the default GitHub account.");
+    assert!(said.then.contains("isn't https://github.com/"), "{}", said.then);
+    assert!(said.then.ends_with("have origin push to https://github.com/cli/cli.git."), "{}", said.then);
+    assert!(!said.in_settings);
+    assert_eq!(said.install_at, None);
 }

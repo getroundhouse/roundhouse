@@ -21,8 +21,8 @@ use protocol::versions::Versions;
 use protocol::worker::{
     AccountFor, AgentApproval, AgentStop, AttachmentWrite, AttachmentWritten, FileOpenAt, FilePages, FileRead,
     FileReadAt, FolderRead, GitDiff, GitStatus, HelloReply, PullRequest, PullRequestReply, ReadRepoUrl, Received,
-    RepoUrlReply, RunningAgentsReply, ServeTools, SetupLog, SetupLogReply, TitleFor, ToolsServing,
-    WORKER_PROTOCOL_VERSION, WorkerFrame, WorkerRequest, WorkerResponse,
+    RunningAgentsReply, ServeTools, SetupLog, SetupLogReply, TitleFor, ToolsServing, WORKER_PROTOCOL_VERSION,
+    WorkerFrame, WorkerRequest, WorkerResponse,
 };
 use scripts::{Setup, run_archive_script, run_setup, stop_setup_script};
 use std::collections::HashMap;
@@ -275,10 +275,9 @@ pub(super) async fn handle(
         // The machine's own, so not with `given`, in a directory of no project's.
         WorkerRequest::FindGithubLogin => crate::found_login::reply(&state.config.scratch_dir).await,
         // The machine's own too, since the git credential's rewriting of GitHub's addresses is the worker's, not the
-        // checkout's.
+        // checkout's, which only where it pushes is read with, whatever the credential is now.
         WorkerRequest::ReadRepoUrl(ReadRepoUrl { path }) => {
-            let url = git::repo_url(&process::Environment::NONE, Path::new(&path)).await?;
-            Ok(WorkerResponse::RepoUrl(RepoUrlReply { url }))
+            Ok(WorkerResponse::RepoUrl(git::repo_url(&process::Environment::NONE, Path::new(&path)).await?))
         }
         WorkerRequest::SetupWorkspace(asked) => run_setup(state, &asked.source, &asked.path, &asked.env).await,
         WorkerRequest::CancelSetup => {

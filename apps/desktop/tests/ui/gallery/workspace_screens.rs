@@ -89,6 +89,13 @@ pub(crate) const SCREENS: &[Screen] = &[
         steps: &[Step::Select(FOCUS)],
     },
     Screen {
+        name: "push-as-machine-own",
+        spec: "workspaces.md",
+        world: Some(push_as_machine_own),
+        frame: Frame::Around(Part::Region(Region::PushLine), &[Part::Region(Region::Composer)]),
+        steps: &[Step::Select(FOCUS)],
+    },
+    Screen {
         name: "titles-in-the-sidebar",
         spec: "workspaces.md",
         world: Some(some_titled),
@@ -143,7 +150,7 @@ fn setting_up() -> World {
     world
 }
 
-/// Where the screens' repository's `origin` pushes to on GitHub.
+/// The repository on GitHub that the screens' repository's `origin` names.
 const ON_GITHUB: GithubRepositoryName = GithubRepositoryName::named("railworks/roundhouse");
 
 /// A workspace with a chat open, whose repository the hub last found a push from as `reach` says.
@@ -180,6 +187,11 @@ fn push_refused_app() -> World {
     let reason = format!("Permission to railworks/roundhouse.git denied to {bot}.");
     let installation = Some(InstalledApp { slug: "railworks-roundhouse".into(), on: "railworks".into() });
     reaching(Reach::Refused { repository: ON_GITHUB, username: bot.into(), reason, installation })
+}
+
+/// Pushes going round the default, as over SSH, which a person's `insteadOf` makes of an `https://` address.
+fn push_as_machine_own() -> World {
+    reaching(Reach::PushesAsMachineOwn { repository: ON_GITHUB })
 }
 
 /// Workspaces titled each way a title comes: generated, from the first line of a long prompt while the generated one

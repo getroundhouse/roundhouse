@@ -363,4 +363,6 @@ pub(in super::super) const MIGRATIONS: &[&str] = &[
     repos::URLS,
     // What the hub sends every worker for the default GitHub account, on the hub's settings, in `github_accounts`.
     github_accounts::GITHUB_SENT,
+    // Whether a push from each repository's checkout goes round the git credential, in `repos`.
+    repos::PUSH_ROUTES,
 ];
