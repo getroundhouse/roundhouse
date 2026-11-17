@@ -79,6 +79,13 @@ pub(crate) const TOOL_SCREENS: &[Screen] = &[
         steps: &[Step::Select(FOCUS), Step::Open("Create issue")],
     },
     Screen {
+        name: "tool-any-typed",
+        spec: "chats.md",
+        world: Some(|| chat_world(SessionStatus::Idle, typed_chats::mcp_tools())),
+        frame: CHAT,
+        steps: &[Step::Select(FOCUS), Step::Open("Create issue")],
+    },
+    Screen {
         name: "tool-files",
         spec: "chats.md",
         world: Some(|| chat_world(SessionStatus::Idle, file_chats::files())),

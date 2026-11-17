@@ -7,11 +7,12 @@ use protocol::capability::calls::call::{
     CellEdit, Command, CommandPart, Fetch, FilePatch, FindFiles, NotebookEdit, Patch, PatchChange, PatchHunk, Read,
     Runs, Search, Shows, WebSearch,
 };
-use protocol::capability::calls::output::{Ended, FileOutcome, Found, Lines, Paths};
+use protocol::capability::calls::output::{Ended, FileOutcome, Found, Lines, McpContent, Paths};
 use protocol::capability::calls::{Call, CallOutput};
 use protocol::event::{EventBody, FileChange, Hunk, HunkLine, LineMark};
 use protocol::fixtures::{command_output, typed_command};
 use protocol::model::Seq;
+use serde_json::json;
 
 use super::events::{replied, taken, text, typed_call, typed_result, user_prompt};
 use super::tool_chats::ASK;
@@ -243,3 +244,28 @@ const WEB_WORDS: &str = "A flashing yellow is a preliminary caution on most rail
 
 /// The page the fetch sent back.
 const PAGE: &str = "Signal aspects\n\nStop, caution, preliminary caution and clear.";
+
+/// Calls to the tools of two MCP servers, as Codex's adapter types them: a search of Sentry's issues, then filing one on
+/// GitHub, which says what it made.
+pub(crate) fn mcp_tools() -> Vec<EventBody> {
+    let mcp = |server: &str, tool: &str, input| Call::Mcp { server: server.into(), tool: tool.into(), input };
+    let said = |text: &str| CallOutput::Mcp { content: vec![McpContent::Text { text: text.into() }], structured: None };
+    let search = json!({ "query": "signal stopped without a reason", "project": "signals" });
+    let issue = json!({
+        "title": "Signals should say why a train stopped",
+        "body": "A train that stops at a signal logs \"stop\", but not which signal or why.",
+        "labels": ["kind/feature"],
+    });
+    let reply = "Filed as #271.";
+    vec![
+        user_prompt("File the idea about saying why a train stopped."),
+        taken(Seq::new(1)),
+        text("msg-1", "I'll look for an existing issue first, then file one."),
+        typed_call("msg-2", "mcp-1", mcp("sentry", "search_issues", search)),
+        typed_result("mcp-1", said("No issues match."), false),
+        typed_call("msg-3", "mcp-2", mcp("github", "create_issue", issue)),
+        typed_result("mcp-2", said("Created issue #271: https://github.com/example/signals/issues/271"), false),
+        text("msg-4", reply),
+        replied(reply, 14, 0.05),
+    ]
+}

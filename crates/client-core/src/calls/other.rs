@@ -9,6 +9,9 @@ use super::{description, first_line, main_input};
 /// More than a line has room for, so a huge input isn't copied to be cut off.
 const DETAIL_CHARS: usize = 200;
 
+/// What a typed call is called when it names no tool, or is of a kind this build doesn't know.
+pub(super) const UNKNOWN_TOOL: &str = "Unknown tool";
+
 pub struct Other {
     pub title: String,
     /// The MCP server it's from.
@@ -49,6 +52,18 @@ impl Other {
             | CallKind::Plan
             | CallKind::Unknown => (None, readable(name)),
         };
+        Self::named(server, tool, input)
+    }
+
+    /// A call to `tool`, from the MCP server `server` if it's one's, as its agent typed it. A tool with no name, which
+    /// an agent shouldn't send, is named as one this build doesn't know.
+    pub(super) fn typed(server: Option<&str>, tool: &str, input: &Value) -> Self {
+        let tool = Some(readable(tool)).filter(|tool| !tool.is_empty()).unwrap_or_else(|| UNKNOWN_TOOL.to_string());
+        Self::named(server.map(str::to_string), tool, input)
+    }
+
+    /// A call to `tool`, its name made readable, from `server`, with `input`.
+    fn named(server: Option<String>, tool: String, input: &Value) -> Self {
         let described = description(input);
         let (title, tool) = match described {
             Some(description) => (description.to_string(), Some(tool)),
@@ -123,10 +138,12 @@ fn first_input(input: &Value) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    use protocol::capability::calls::Call;
     use protocol::event::CallKind;
     use serde_json::{Value, json};
 
     use super::{Other, readable};
+    use crate::calls::{Recorded, ToolCall};
 
     /// A call to `tool`, which its kind says is a tool with no kind of its own, and from no server.
     fn read(tool: &str, input: &Value) -> Other {
@@ -169,6 +186,28 @@ mod tests {
 
         assert_eq!(other.detail.as_deref(), Some("select:Read"));
         assert_eq!(read("Ping", &json!({})).detail, None);
+    }
+
+    /// A typed call to an MCP server's tool is read as one recorded before calls were typed is, by its name made
+    /// readable, with its server, and one to any other tool with none. One that names no tool is named as one of a
+    /// kind this build doesn't know.
+    #[test]
+    fn a_typed_tool_with_no_kind_of_its_own_is_read_as_any_other() {
+        let read = |call: &Call| {
+            let ToolCall::Other(other) = ToolCall::read(Recorded::Typed(call)) else { panic!("read as another kind") };
+            other
+        };
+        let input = json!({ "title": "Signals" });
+
+        let mcp = read(&Call::Mcp { server: "github".into(), tool: "create_issue".into(), input });
+        let named = (mcp.title.as_str(), mcp.server.as_deref(), mcp.detail.as_deref());
+        assert_eq!(named, ("Create issue", Some("github"), Some("title: \"Signals\"")));
+        let other = read(&Call::Other { tool: "list_open_PR".into(), input: json!({ "query": "signals" }) });
+        assert_eq!(
+            (other.title.as_str(), other.server, other.summary.as_deref()),
+            ("List open PR", None, Some("signals"))
+        );
+        assert_eq!(read(&Call::Other { tool: " ".into(), input: json!({}) }).title, "Unknown tool");
     }
 
     /// As a command given no command is, or a call of a kind this build doesn't know.
