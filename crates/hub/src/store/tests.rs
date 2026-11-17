@@ -7,9 +7,12 @@ use protocol::model::{
 
 use super::*;
 
-/// The store in `dir`, with its backups beside it.
+/// The store in `dir`, with its backups beside it. One that isn't there yet starts as a copy of one already migrated,
+/// as `migrated` says.
 pub(super) fn open_in(dir: &Path) -> Store {
-    Store::open(&dir.join("hub.db"), &dir.join("backups")).unwrap()
+    let path = dir.join("hub.db");
+    migrated::copy_to(&path);
+    Store::open(&path, &dir.join("backups")).unwrap()
 }
 
 /// A repository with one workspace, `w`, and one idle session in it, `s`.

@@ -89,7 +89,7 @@ mod tests {
     #[test]
     fn a_device_is_found_by_its_token_until_it_is_removed() {
         let dir = tempfile::tempdir().unwrap();
-        let store = Store::open(&dir.path().join("hub.db"), &dir.path().join("backups")).unwrap();
+        let store = super::super::tests::open_in(dir.path());
         let token = DeviceToken::from("token");
         store.add_device(&device("a", 1), &TokenHash::of(&token)).unwrap();
 
@@ -109,7 +109,7 @@ mod tests {
     fn only_the_hash_of_a_token_is_stored() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("hub.db");
-        let store = Store::open(&path, &dir.path().join("backups")).unwrap();
+        let store = super::super::tests::open_in(dir.path());
 
         store.add_device(&device("a", 1), &TokenHash::of(&DeviceToken::from("plain-token-text"))).unwrap();
         store.add_device(&device("b", 2), &TokenHash::of(&DeviceToken::from("another"))).unwrap();
