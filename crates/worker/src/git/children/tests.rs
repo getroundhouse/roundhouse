@@ -1,4 +1,4 @@
-use process::Environment;
+use crate::testing::given;
 use std::path::{Path, PathBuf};
 
 use protocol::client::{ApiError, ErrorCode};
@@ -45,7 +45,7 @@ struct Added {
 async fn add(made: &Made, directory: &str, on: ChildBranch) -> Result<Added, ApiError> {
     let path = children(&made.root).join(directory);
     let mut warnings = Vec::new();
-    let commit = add_child_worktree(&Environment::NONE, &made.alder, &path, &on, &mut warnings).await?;
+    let commit = add_child_worktree(&given(), &made.alder, &path, &on, &mut warnings).await?;
     Ok(Added { path, commit, warnings })
 }
 
@@ -94,8 +94,7 @@ async fn what_git_cant_make_there_is_refused_and_nothing_is_left_behind() {
     run(&made.repo, &["branch", "Alder/Taken"]);
     let beside = made.alder.with_file_name("beech");
     let outside =
-        add_child_worktree(&Environment::NONE, &made.alder, &beside, &new("alder/fresh", "HEAD"), &mut Vec::new())
-            .await;
+        add_child_worktree(&given(), &made.alder, &beside, &new("alder/fresh", "HEAD"), &mut Vec::new()).await;
 
     let refused = [
         (code(outside), ErrorCode::InvalidRequest),
@@ -224,17 +223,9 @@ async fn a_branch_made_for_a_path_git_then_refuses_is_deleted() {
     run(&made.root, &["init", "-q", "-b", "alder/other", other_repo.to_str().unwrap()]);
 
     let on_plain =
-        make_on_new_branch(&Environment::NONE, &made.alder, &"alder/raced".into(), "HEAD", &plain, &mut Vec::new())
-            .await;
-    let on_repo = make_on_new_branch(
-        &Environment::NONE,
-        &made.alder,
-        &"alder/other".into(),
-        "HEAD",
-        &other_repo,
-        &mut Vec::new(),
-    )
-    .await;
+        make_on_new_branch(&given(), &made.alder, &"alder/raced".into(), "HEAD", &plain, &mut Vec::new()).await;
+    let on_repo =
+        make_on_new_branch(&given(), &made.alder, &"alder/other".into(), "HEAD", &other_repo, &mut Vec::new()).await;
 
     assert_eq!(code(on_plain), Some(ErrorCode::NameTaken));
     assert_eq!(code(on_repo), Some(ErrorCode::NameTaken));

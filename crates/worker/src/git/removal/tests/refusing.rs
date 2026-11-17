@@ -1,5 +1,5 @@
 use super::*;
-use process::Environment;
+use crate::testing::given;
 
 #[tokio::test]
 async fn a_worktree_holding_another_repository_is_refused_unless_forced() {
@@ -12,7 +12,7 @@ async fn a_worktree_holding_another_repository_is_refused_unless_forced() {
     run(&nested, &["commit", "-qm", "a commit nowhere else"]);
     run(&archived.path, &["add", "nested"]);
     run(&archived.path, &["commit", "-qm", "the repository inside"]);
-    assert_eq!(status(&Environment::NONE, archived.path.to_str().unwrap()).await.unwrap().loss_if_removed(), None);
+    assert_eq!(status(&given(), archived.path.to_str().unwrap()).await.unwrap().loss_if_removed(), None);
 
     let refused = archived.remove(false).await.err().unwrap();
 

@@ -13,6 +13,7 @@ use super::super::files::{Files, Handed};
 use super::{ada, files, installation};
 use crate::git::tests::new_repo;
 use crate::git::{Clones, prepare_workspace};
+use crate::testing::given;
 
 /// Who the machine's own git config says commits are by.
 const MACHINES_OWN: &str = "Ada Lovelace <ada@example.com>";
@@ -121,7 +122,7 @@ async fn a_workspaces_worktree_commits_as_the_credentials_identity_from_a_checko
     let (machine, dir) = (Machine::new(), tempfile::tempdir().unwrap());
     let checkout = new_repo(dir.path());
     machine.git(&checkout, &["remote", "add", "origin", ON_GITHUB]);
-    let reaching = Environment::NONE
+    let reaching = given()
         .with("GIT_CONFIG_COUNT", "1")
         .with("GIT_CONFIG_KEY_0", format!("url.{}.insteadOf", checkout.display()))
         .with("GIT_CONFIG_VALUE_0", ON_GITHUB);

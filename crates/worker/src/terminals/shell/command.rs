@@ -71,6 +71,17 @@ impl TakesEnvironment for Shell<'_> {
     fn give(&mut self, name: &OsStr, value: &OsStr) {
         self.0.env(name, value);
     }
+
+    /// What it inherits is what portable-pty copied of this process's environment as the command was made, and what
+    /// it was told is what was set on it since. Portable-pty lists each only by names that are UTF-8.
+    fn inherit_nothing(&mut self) {
+        let told: Vec<&str> = self.0.iter_extra_env_as_str().map(|(name, _)| name).collect();
+        let full = self.0.iter_full_env_as_str().map(|(name, _)| name);
+        let inherited: Vec<String> = full.filter(|name| !told.contains(name)).map(str::to_string).collect();
+        for name in inherited {
+            self.0.env_remove(name);
+        }
+    }
 }
 
 fn another_terminals(name: &str) -> bool {

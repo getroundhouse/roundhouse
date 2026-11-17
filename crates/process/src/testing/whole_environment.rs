@@ -5,6 +5,8 @@ use std::ffi::{OsStr, OsString};
 use std::path::Path;
 use std::process::Command;
 
+use crate::Environment;
+
 /// What a process a test starts keeps of the test's own environment, by name: where to find the programs it runs,
 /// where to keep temporary files, and on Windows what any process there needs to start. Nothing else, so nothing of
 /// the person's or the runner's login, settings or tools reaches it, such as a token for GitHub, a `GIT_DIR` that a
@@ -20,7 +22,7 @@ const HOME: &str = if cfg!(windows) { "USERPROFILE" } else { "HOME" };
 const SAYS_NOTHING: &str = "/usr/bin/false";
 
 /// The whole environment of a process a test starts, in place of the test's own, as against a
-/// [`crate::Environment`], which is what a process gets beyond what it inherits. Every process a test starts that
+/// [`Environment`], which is what a process gets beyond what it inherits. Every process a test starts that
 /// reads its environment, such as a hub or a worker, runs in one, so what's in the environment of whoever runs the
 /// tests can't change what they do, and every variable it reads is one the test chose.
 #[derive(Clone, Debug)]
@@ -83,6 +85,14 @@ impl WholeEnvironment {
         command.env_clear().envs(&self.vars);
         command
     }
+
+    /// What a command that inherits this process's environment is given to start in this one instead, for code under
+    /// test that starts its own processes and takes an [`Environment`] for them, as the worker's git does: nothing of
+    /// what it inherits, and each of this one's variables. What the code told the command to set before it applies
+    /// this, such as a setting of its own or a script's variables, stays, unless this gives it too.
+    pub fn given(&self) -> Environment {
+        self.vars().fold(Environment::INHERITING_NOTHING, |given, (name, value)| given.with(name, value))
+    }
 }
 
 #[cfg(test)]
@@ -119,6 +129,25 @@ mod tests {
     #[cfg(unix)]
     const THE_SYSTEM_GIVES: &str = "__CF_USER_TEXT_ENCODING";
 
+    /// The names of the variables `env` printed that it ran with, but for what the system gives every process.
+    #[cfg(unix)]
+    fn names_printed(env: &mut Command) -> Vec<String> {
+        let printed = String::from_utf8(env.output().unwrap().stdout).unwrap();
+        let names = printed.lines().filter_map(|line| line.split_once('=')).map(|(name, _)| name.to_string());
+        let mut names: Vec<String> = names.filter(|name| name != THE_SYSTEM_GIVES).collect();
+        names.sort_unstable();
+        names
+    }
+
+    /// What [`KEPT`] names that this process has, and `also`.
+    #[cfg(unix)]
+    fn kept_and(also: &[&str]) -> Vec<String> {
+        let kept = KEPT.iter().copied().filter(|name| std::env::var_os(name).is_some());
+        let mut expected: Vec<String> = kept.chain(also.iter().copied()).map(str::to_string).collect();
+        expected.sort_unstable();
+        expected
+    }
+
     /// Run, so it's the process's environment that's checked, rather than what the command was told to set.
     #[cfg(unix)]
     #[test]
@@ -126,15 +155,25 @@ mod tests {
         let mut environment = WholeEnvironment::kept();
         environment.set("ONLY", "this");
 
-        let printed = environment.command("env").output().unwrap();
+        let names = names_printed(&mut environment.command("env"));
 
-        let printed = String::from_utf8(printed.stdout).unwrap();
-        let names = printed.lines().filter_map(|line| line.split_once('=')).map(|(name, _)| name);
-        let mut names: Vec<&str> = names.filter(|name| *name != THE_SYSTEM_GIVES).collect();
-        names.sort_unstable();
-        let mut expected: Vec<&str> = KEPT.iter().copied().filter(|name| std::env::var_os(name).is_some()).collect();
-        expected.push("ONLY");
-        expected.sort_unstable();
-        assert_eq!(names, expected, "{printed}");
+        assert_eq!(names, kept_and(&["ONLY"]));
+    }
+
+    /// As code under test starts a process, inheriting this one's environment, which has what Cargo sets for a test,
+    /// and telling it to set a variable of its own, which this process has too, as it would a script's.
+    #[cfg(unix)]
+    #[test]
+    fn a_process_given_it_has_nothing_else_but_what_its_command_was_told() {
+        let has = |name| std::env::var_os(name).is_some();
+        assert!(has("CARGO_MANIFEST_DIR") && has("CARGO_PKG_NAME"), "Cargo sets them for a test");
+        let mut environment = WholeEnvironment::kept();
+        environment.set("ONLY", "this");
+        let mut env = Command::new("env");
+        env.env("CARGO_PKG_NAME", "told");
+
+        environment.given().apply(&mut env);
+
+        assert_eq!(names_printed(&mut env), kept_and(&["CARGO_PKG_NAME", "ONLY"]));
     }
 }

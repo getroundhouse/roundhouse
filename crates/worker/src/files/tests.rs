@@ -1,4 +1,4 @@
-use process::Environment;
+use crate::testing::given;
 use std::path::Path;
 
 use protocol::attachment::{AttachmentBytes, MediaType};
@@ -22,7 +22,7 @@ async fn every_file_is_listed_in_order_ignored_ones_too() {
     std::fs::write(repo.join("src/debug.log"), "log\n").unwrap();
     std::fs::remove_file(repo.join("src/lib.rs")).unwrap();
 
-    let files = list(&Environment::NONE, &repo).await.unwrap();
+    let files = list(&given(), &repo).await.unwrap();
 
     assert_eq!(
         files.paths,
@@ -46,7 +46,7 @@ async fn a_folder_git_ignores_whole_or_another_repository_is_listed_as_a_folder(
     run(&inner, &["init", "-q"]);
     std::fs::write(inner.join("x.txt"), "x\n").unwrap();
 
-    let files = list(&Environment::NONE, &repo).await.unwrap();
+    let files = list(&given(), &repo).await.unwrap();
 
     assert_eq!(files.paths, [".gitignore", "a.txt"]);
     assert_eq!(files.folders, ["ignored", "vendor/inner"]);
@@ -63,7 +63,7 @@ async fn a_folder_ignored_by_a_pattern_for_files_is_listed_once_as_a_folder() {
         std::fs::write(repo.join(log), "log\n").unwrap();
     }
 
-    let files = list(&Environment::NONE, &repo).await.unwrap();
+    let files = list(&given(), &repo).await.unwrap();
 
     // Git lists each of these folders, and then every file in it too.
     assert_eq!(files.paths, [".gitignore", "a.txt"]);
@@ -88,7 +88,7 @@ async fn a_submodule_and_a_link_to_a_folder_git_tracks_are_listed_as_folders() {
     run(&repo, &["add", "."]);
     run(&repo, &["commit", "-qm", "sub and link"]);
 
-    let files = list(&Environment::NONE, &repo).await.unwrap();
+    let files = list(&given(), &repo).await.unwrap();
 
     assert_eq!(files.paths, [".gitignore", ".gitmodules", "a.txt", "docs/a.md"]);
     let folders: &[&str] = if cfg!(unix) { &["documents", "vendor/sub"] } else { &["vendor/sub"] };
@@ -111,7 +111,7 @@ async fn a_new_or_ignored_link_to_a_folder_is_listed_as_a_folder() {
     std::os::unix::fs::symlink("docs", repo.join("venv")).unwrap();
     std::os::unix::fs::symlink("a.txt", repo.join("notes.txt")).unwrap();
 
-    let files = list(&Environment::NONE, &repo).await.unwrap();
+    let files = list(&given(), &repo).await.unwrap();
 
     assert_eq!(files.paths, [".gitignore", "a.txt", "docs/a.md", "notes.txt"], "a link to a file is still a file");
     assert_eq!(files.folders, ["documents", "venv"]);
@@ -224,14 +224,14 @@ async fn a_file_reads_as_a_commit_held_it() {
     std::fs::remove_file(repo.join("a.txt")).unwrap();
     std::fs::remove_dir_all(repo.join("src")).unwrap();
 
-    assert_eq!(read_at(&Environment::NONE, &repo, &commit, "shot.png").await.unwrap(), image(before));
-    assert_eq!(read_at(&Environment::NONE, &repo, &commit, "a.txt").await.unwrap(), text("one\n"));
+    assert_eq!(read_at(&given(), &repo, &commit, "shot.png").await.unwrap(), image(before));
+    assert_eq!(read_at(&given(), &repo, &commit, "a.txt").await.unwrap(), text("one\n"));
     assert_eq!(
-        read_at(&Environment::NONE, &repo, &commit, "src/app/view.rs").await.unwrap(),
+        read_at(&given(), &repo, &commit, "src/app/view.rs").await.unwrap(),
         text("fn view() {}\n"),
         "in a folder"
     );
-    let notes = read_at(&Environment::NONE, &repo, &commit, ":notes.txt").await.unwrap();
+    let notes = read_at(&given(), &repo, &commit, ":notes.txt").await.unwrap();
     assert_eq!(notes, text("notes\n"), "a name, not what git reads into it");
 }
 
@@ -247,9 +247,9 @@ async fn a_link_at_a_commit_reads_as_the_path_it_leads_to() {
     std::os::unix::fs::symlink("a.txt", repo.join("notes.txt")).unwrap();
     let commit = commit_all(&repo);
 
-    assert_eq!(read_at(&Environment::NONE, &repo, &commit, "out").await.unwrap(), text("../outside.txt"));
+    assert_eq!(read_at(&given(), &repo, &commit, "out").await.unwrap(), text("../outside.txt"));
     assert_eq!(
-        read_at(&Environment::NONE, &repo, &commit, "notes.txt").await.unwrap(),
+        read_at(&given(), &repo, &commit, "notes.txt").await.unwrap(),
         text("a.txt"),
         "and one inside the worktree too"
     );
@@ -267,9 +267,9 @@ async fn a_file_at_a_commit_past_text_s_limit_is_sent_only_if_it_s_an_image() {
     std::fs::write(repo.join("big.log"), "a".repeat(over)).unwrap();
     let commit = commit_all(&repo);
 
-    assert_eq!(read_at(&Environment::NONE, &repo, &commit, "shot").await.unwrap(), image(shot));
+    assert_eq!(read_at(&given(), &repo, &commit, "shot").await.unwrap(), image(shot));
     assert_eq!(
-        read_at(&Environment::NONE, &repo, &commit, "big.log").await.unwrap(),
+        read_at(&given(), &repo, &commit, "big.log").await.unwrap(),
         FileContents::TooBig { bytes: MAX_TEXT_BYTES + 1 }
     );
 }
@@ -281,8 +281,7 @@ async fn a_commit_without_the_file_or_not_named_in_full_is_refused() {
     std::fs::create_dir_all(repo.join("src")).unwrap();
     std::fs::write(repo.join("src/lib.rs"), "\n").unwrap();
     let commit = commit_all(&repo);
-    let refused =
-        async |commit: &CommitId, path| read_at(&Environment::NONE, &repo, commit, path).await.unwrap_err().code;
+    let refused = async |commit: &CommitId, path| read_at(&given(), &repo, commit, path).await.unwrap_err().code;
 
     assert_eq!(refused(&commit, "new.txt").await, ErrorCode::NotFound);
     assert_eq!(refused(&CommitId::from("a1".repeat(20)), "a.txt").await, ErrorCode::NotFound, "not a commit here");

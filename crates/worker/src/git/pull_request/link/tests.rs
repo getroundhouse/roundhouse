@@ -1,4 +1,4 @@
-use process::Environment;
+use crate::testing::given;
 use std::path::{Path, PathBuf};
 
 use protocol::model::{BranchName, CommitId};
@@ -40,11 +40,11 @@ fn pushed_from_elsewhere(dir: &Path, onto: &str, branch: &str) -> CommitId {
 /// Whether `branch` has been at one of `commits`, of a pull request from a branch of the same name.
 async fn been_at(worktree: &Path, branch: &str, commits: &[CommitId]) -> bool {
     let name = BranchName::from(branch);
-    has_been_at(&Environment::NONE, worktree, &name, commits, Some(&name)).await.unwrap()
+    has_been_at(&given(), worktree, &name, commits, Some(&name)).await.unwrap()
 }
 
 async fn linked_to(repo: &Path, branch: &str) -> Option<String> {
-    linked(&Environment::NONE, repo, &BranchName::from(branch)).await.unwrap()
+    linked(&given(), repo, &BranchName::from(branch)).await.unwrap()
 }
 
 #[test]
@@ -95,12 +95,10 @@ async fn a_branch_hasnt_been_at_a_pull_request_it_only_started_from_the_same_com
     let made = been_at(&worktree, "redbud", &pull_request).await;
     run(&worktree, &["branch", "-q", "-m", "redbud", "redbud-renamed"]);
     let renamed =
-        has_been_at(&Environment::NONE, &worktree, &"redbud-renamed".into(), &pull_request, Some(&"redbud".into()))
-            .await;
+        has_been_at(&given(), &worktree, &"redbud-renamed".into(), &pull_request, Some(&"redbud".into())).await;
     commit(&worktree, "this branch's own");
     let committed =
-        has_been_at(&Environment::NONE, &worktree, &"redbud-renamed".into(), &pull_request, Some(&"redbud".into()))
-            .await;
+        has_been_at(&given(), &worktree, &"redbud-renamed".into(), &pull_request, Some(&"redbud".into())).await;
 
     assert!(!made, "it was made at a commit of theirs, from another branch");
     assert!(!renamed.unwrap(), "renaming it moves it to no other commit");
@@ -164,7 +162,7 @@ async fn a_branch_made_from_the_pull_requests_own_under_another_name_has_been_at
 
     run(&worktree, &["switch", "-q", "-c", "mine", "--track", "origin/birch"]);
 
-    assert!(has_been_at(&Environment::NONE, &worktree, &"mine".into(), &theirs, Some(&"birch".into())).await.unwrap());
+    assert!(has_been_at(&given(), &worktree, &"mine".into(), &theirs, Some(&"birch".into())).await.unwrap());
 }
 
 #[tokio::test]
@@ -198,8 +196,8 @@ async fn git_failing_isnt_taken_as_a_branch_not_having_been_there() {
     std::fs::create_dir(&nowhere).unwrap();
 
     let commits = [CommitId::from("0123456789abcdef0123456789abcdef01234567")];
-    assert!(has_been_at(&Environment::NONE, &nowhere, &branch, &commits, Some(&branch)).await.is_err());
-    assert!(linked(&Environment::NONE, &nowhere, &branch).await.is_err());
+    assert!(has_been_at(&given(), &nowhere, &branch, &commits, Some(&branch)).await.is_err());
+    assert!(linked(&given(), &nowhere, &branch).await.is_err());
 }
 
 /// Git keeps a branch's settings with the branch, which is why the link is one.
@@ -211,8 +209,8 @@ async fn a_link_goes_where_its_branch_goes_and_is_gone_with_it() {
     let aspen = BranchName::from("aspen");
     let unlinked = linked_to(&repo, "aspen").await;
 
-    link(&Environment::NONE, &worktree, &aspen, "https://example.com/pull/6").await;
-    link(&Environment::NONE, &worktree, &aspen, URL).await;
+    link(&given(), &worktree, &aspen, "https://example.com/pull/6").await;
+    link(&given(), &worktree, &aspen, URL).await;
     let from_the_repository = linked_to(&repo, "aspen").await;
     run(&worktree, &["branch", "-q", "-m", "aspen/fix-the-header"]);
     let under_the_old_name = linked_to(&repo, "aspen").await;
