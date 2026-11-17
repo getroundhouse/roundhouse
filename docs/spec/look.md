@@ -1,6 +1,6 @@
 # Look
 
-The foundations of the app's design system, the rules every screen follows: colour, type, space and shape, layout and the pointer. The components built on them, such as buttons, the status mark and the app icon, are in `components.md`, and a rule about one place is in that place's file, even when it's about how it looks. Each area's file shows its own screens. `crates/look` holds them in code: every colour, kind of text and corner by what it's for, every step of space, and every size a button, a bar, a row and an icon come in, the theme made from them, the mark, the icon, plan mode's texture, the pointing hand and the baseline text of different sizes shares.
+The foundations of the app's design system, the rules every screen follows: colour, type, space and shape, layout and the pointer. The components built on them, such as buttons, the status mark and the app icon, are in `components.md`, and a rule about one place is in that place's file, even when it's about how it looks. Each area's file shows its own screens. `crates/look` holds them in code: every colour, kind of text and corner by what it's for, every step of space, and every size a control, a bar, a row and an icon come in, the theme made from them, the mark, the icon, plan mode's texture, the pointing hand and the baseline text of different sizes shares.
 
 It's meant to feel familiar to the people Roundhouse is for, and it sets itself apart with a motif of its own, the status mark.
 
@@ -150,6 +150,22 @@ Three strengths have names of their own, since several places draw with them: wh
 **Every corner, as the app rounds it.** *Unconfirmed.*
 
 ![Every corner](screens/corners.png)
+
+### Controls
+
+- **Every control has a size for where it sits,** whether it's a button or a field, so the controls in the same kind of place are the same size, wherever it is, and a field is as tall as the buttons beside it. Each leaves a little room at its ends, around what it says. A small one is set in a line of text or a row one line tall, a regular one is a bar's or a card's own, set apart from its text, and a large one is on its own. `look::ControlSize` holds the sizes, and `components.md` says how each control takes them. *Unconfirmed.*
+
+**Every size of a control, by its name.** Each is a size in `look::ControlSize`, from the smallest. What a control says, such as a button's words or what's typed in a field, is the kind of text its row says. *Unconfirmed.*
+
+| Name | Tall | Room at its ends | Text | For |
+|---|---|---|---|---|
+| `Small` | 24px | 8px | Detail | Set in a line of text or a row one line tall: a row of a list, a tab, the heading over a list, a call's line in the chat, a line of a card's text, the composer's bar, the find bar, setup's strip and a fold, and the window's own buttons in its corner, beside the Mac's. A switch's segments are small, so the switch, with the room around them, is as tall as a regular button |
+| `Regular` | 28px | 12px | Body | A bar's own, along a pane's edge, such as a header's, a tab bar's, the pull request's bar's or Home's bar's, or a card's or a page's own action, set apart from its text, such as the update card's, a comment's on a diff, a setting's or a list's of accounts, and the button over the chat back to its end |
+| `Large` | 32px | 16px | Body | On its own: a dialog's buttons, the one thing an empty pane says to do, and what answers a card in the chat, such as approving a plan or retrying a request |
+
+**Every size of a control, as the app draws it.** *Unconfirmed.*
+
+![Every size of a control](screens/controls.png)
 
 ### Bars and rows
 

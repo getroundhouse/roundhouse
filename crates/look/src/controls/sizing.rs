@@ -1,104 +1,22 @@
-use crate::icon_sizes::IconSize;
-use crate::named::named;
-use crate::typography::{Type, Typeset as _};
 use gpui_kit::component::button::Button;
 use gpui_kit::component::{Sizable as _, Size};
-use gpui_kit::{Pixels, StyleRefinement, Styled as _, px};
+use gpui_kit::{StyleRefinement, Styled as _};
 
-named! {
-    /// How big a button is: how tall, the room at each end of its words, and how big its words and icon are.
-    /// [`Sizing::sized`] sizes a button with words as one, and [`Sizing::sized_square`] one that's only an icon.
-    ControlSize {
-        /// Set in a line of text or a row one line tall: a row of a list, a tab, the heading over a list, a call's
-        /// line in the chat, a line of a card's text, the composer's bar, the find bar, setup's strip and a fold, and
-        /// the window's own buttons in its corner, beside the Mac's. A switch's segments are small, so the switch, with
-        /// the room around them, is as tall as a regular button.
-        Small,
-        /// A bar's own, along a pane's edge, such as a header's, a tab bar's, the pull request's bar's or Home's bar's,
-        /// or a card's or a page's own action, set apart from its text, such as the update card's, a comment's on a
-        /// diff, a setting's or an account's, and the button over the chat back to its end.
-        Regular,
-        /// On its own: a dialog's buttons, the one thing an empty pane says to do, and what answers a card in the chat,
-        /// such as approving a plan or retrying a request.
-        Large,
+use crate::ControlSize;
+use crate::typography::Typeset as _;
+
+/// The kit's size a button is given for what the kit still sizes from it: the room between its icon and its words,
+/// and the caret after the words of one that opens a menu. Its words and icon are sized as [`ControlSize::text`] and
+/// [`ControlSize::icon_with_words`] or [`ControlSize::icon`] say, and its height and the room at its ends as this size's own.
+const fn kit(size: ControlSize) -> Size {
+    match size {
+        ControlSize::Small => Size::XSmall,
+        ControlSize::Regular => Size::Small,
+        ControlSize::Large => Size::Medium,
     }
 }
 
-impl ControlSize {
-    /// How tall it is, and how wide too, for one that's only an icon.
-    pub const fn height(self) -> Pixels {
-        match self {
-            ControlSize::Small => px(24.),
-            ControlSize::Regular => px(28.),
-            ControlSize::Large => px(32.),
-        }
-    }
-
-    /// The room at each end of a button with words, between its edge and its words. Something that lines the words up
-    /// with an edge past the button, such as a quiet button under a card's text, takes the button out by this.
-    pub const fn padding(self) -> Pixels {
-        match self {
-            ControlSize::Small => px(8.),
-            ControlSize::Regular => px(12.),
-            ControlSize::Large => px(16.),
-        }
-    }
-
-    /// How far a square's own icon is in from each of its edges. Something that lines the icon up with an edge past
-    /// the square, such as the arrows over a question, takes the square out by this.
-    pub fn inset(self) -> Pixels {
-        (self.height() - self.icon().size()) / 2.
-    }
-
-    /// The kind of text a button's words are: a detail for a small one, since it's set among text, and body text for
-    /// the others.
-    pub const fn words(self) -> Type {
-        match self {
-            ControlSize::Small => Type::Detail,
-            ControlSize::Regular | ControlSize::Large => Type::Body,
-        }
-    }
-
-    /// How big a square's own icon is, or an icon set in a square of this size, such as the one that opens closed
-    /// chats.
-    pub const fn icon(self) -> IconSize {
-        match self {
-            ControlSize::Small | ControlSize::Regular => IconSize::Regular,
-            ControlSize::Large => IconSize::Large,
-        }
-    }
-
-    /// How big an icon beside a button's words is, or one set among them, such as the arrow after a pull request's
-    /// number.
-    pub const fn icon_with_words(self) -> IconSize {
-        match self {
-            ControlSize::Small => IconSize::Small,
-            ControlSize::Regular => IconSize::Regular,
-            ControlSize::Large => IconSize::Large,
-        }
-    }
-
-    /// The kit's size a button is given for what the kit still sizes from it: the room between its icon and its words,
-    /// and the caret after the words of one that opens a menu. Its words and icon are sized as [`Self::words`] and
-    /// [`Self::icon_with_words`] or [`Self::icon`] say, and its height and the room at its ends as this size's own.
-    const fn kit(self) -> Size {
-        match self {
-            ControlSize::Small => Size::XSmall,
-            ControlSize::Regular => Size::Small,
-            ControlSize::Large => Size::Medium,
-        }
-    }
-
-    /// How the spec's table writes it: its name, how tall it is, the room beside its words, and their kind of text.
-    #[cfg(any(test, feature = "testing"))]
-    pub fn written(self) -> [String; 4] {
-        let pixels = |pixels: Pixels| format!("{}px", f32::from(pixels));
-        [format!("{self:?}"), pixels(self.height()), pixels(self.padding()), format!("{:?}", self.words())]
-    }
-}
-
-/// Sizes a button as one of the sizes a button comes in, rather than as one of the kit's. It's the kit's button's
-/// alone: a field or a switch takes its size from the kit by rules of its own, which the components will replace.
+/// Sizes a button as one of a control's sizes, rather than as one of the kit's.
 pub trait Sizing {
     /// Sizes a button with words, and maybe an icon beside them, as `size`: how tall it is, the room at each end, and
     /// how big its words and icon are.
@@ -113,13 +31,13 @@ pub trait Sizing {
 
 impl Sizing for Button {
     fn sized(self, size: ControlSize) -> Self {
-        let words = StyleRefinement::default().typeset(size.words());
+        let words = StyleRefinement::default().typeset(size.text());
         let icon = Size::Size(size.icon_with_words().size());
-        self.with_size(size.kit()).content_style(words, icon).h(size.height()).px(size.padding())
+        self.with_size(kit(size)).content_style(words, icon).h(size.height()).px(size.padding())
     }
 
     fn sized_square(self, size: ControlSize) -> Self {
         let icon = Size::Size(size.icon().size());
-        self.with_size(size.kit()).content_style(StyleRefinement::default(), icon).size(size.height()).p_0()
+        self.with_size(kit(size)).content_style(StyleRefinement::default(), icon).size(size.height()).p_0()
     }
 }

@@ -41,20 +41,8 @@ The pieces screens are built from, on the foundations in `look.md`: what each is
 
 ### Sizes
 
-- **Every button has a size for where it sits,** so the buttons in the same kind of place are the same size, wherever it is, and each leaves a little room around its words and its icon. A small button is set in a line of text or a row one line tall, a regular one is a bar's or a card's own, set apart from its text, and a large one is on its own. One that's only an icon is a square, as wide as it's tall. `look::ControlSize` holds the sizes. *Unconfirmed.*
+- **Every button is one of a control's sizes, for where it sits,** as `look.md` has them, so the buttons in the same kind of place are the same size, wherever it is. Its words are the kind of text its size says, with an icon beside them of the size of the same name, as the table of an icon's sizes in `look.md` has it: a small icon on a small button, a regular one on a regular button and a large one on a large button. One that's only an icon is a square, as wide as it's tall, whose own icon is regular, or large on a large one. *Unconfirmed.*
 - **A borderless button that's in line with text or marks under it or across from it stands out past its own room,** so its words or its icon line up with them, rather than that room in from them: Restart now under the update card's text, setup's last button across from its message, as far in from the strip's end as the message is from its start, the arrows over a question, on the panel's edge inside, and the button that sets out Changes' files, over the marks of the rows under it. Its fill, as the pointer lights it, then reaches past them by that room. *Unconfirmed.*
-
-**Every size of a button, by its name.** Each is a size in `look::ControlSize`, from the smallest. A button's words are the kind of text its row says, with an icon beside them of the size of the same name, as the table of an icon's sizes in `look.md` has it: a small icon on a small button, a regular one on a regular button and a large one on a large button. A square's own icon is regular, or large on a large one. *Unconfirmed.*
-
-| Name | Tall | Room beside its words | Words | For |
-|---|---|---|---|---|
-| `Small` | 24px | 8px | Detail | Set in a line of text or a row one line tall: a row of a list, a tab, the heading over a list, a call's line in the chat, a line of a card's text, the composer's bar, the find bar, setup's strip and a fold, and the window's own buttons in its corner, beside the Mac's. A switch's segments are small, so the switch, with the room around them, is as tall as a regular button |
-| `Regular` | 28px | 12px | Body | A bar's own, along a pane's edge, such as a header's, a tab bar's, the pull request's bar's or Home's bar's, or a card's or a page's own action, set apart from its text, such as the update card's, a comment's on a diff, a setting's or a list's of accounts, and the button over the chat back to its end |
-| `Large` | 32px | 16px | Body | On its own: a dialog's buttons, the one thing an empty pane says to do, and what answers a card in the chat, such as approving a plan or retrying a request |
-
-**Every size of a button, as the app draws it.** *Unconfirmed.*
-
-![Every size of a button](screens/controls.png)
 
 ## Keys
 

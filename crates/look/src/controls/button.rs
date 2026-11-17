@@ -14,7 +14,8 @@ use gpui_kit::{
     MouseDownEvent, ParentElement as _, Pixels, RenderOnce, SharedString, StyleRefinement, Styled, Window,
 };
 
-use super::{ButtonKind, ControlSize, Sizing as _};
+use super::{ButtonKind, Sizing as _};
+use crate::ControlSize;
 use crate::colors::colors;
 use crate::hand::Hand;
 use crate::work::Work;
