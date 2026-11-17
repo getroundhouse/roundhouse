@@ -144,6 +144,8 @@ fn the_default_is_chosen_from_an_accounts_menu_or_as_each_machines_own_by_found(
     ui.wait("grace the default", |ui| default(ui) == Some(grace.clone()));
     assert_eq!(the_hubs_default(&stack), Some(grace));
 
+    // The hub's notice of the new default can come before its reply, and Make default stays off until the reply.
+    ui.wait("Make default to be on", |ui| !ui.disabled("git-machines-own-default"));
     ui.click("git-machines-own-default");
 
     ui.wait("each machine's own the default", |ui| default(ui).is_none() && !ui.has("git-machines-own-default"));
