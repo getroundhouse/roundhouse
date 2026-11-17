@@ -1,15 +1,6 @@
 //! Worktrees and git state, by running the `git` binary. Local config, credentials and hooks then
 //! behave exactly as they do for the user.
 
-#[cfg(test)]
-use protocol::client::{ApiError, ErrorCode};
-#[cfg(test)]
-use protocol::model::{BranchName, CommitId};
-#[cfg(test)]
-use protocol::worker::WorkspaceReady;
-#[cfg(test)]
-use std::path::{Path, PathBuf};
-
 pub(crate) mod blob;
 pub(crate) mod branches;
 mod children;

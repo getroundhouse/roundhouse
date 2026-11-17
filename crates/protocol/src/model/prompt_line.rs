@@ -205,7 +205,7 @@ mod tests {
     }
 
     #[test]
-    fn a_line_says_where_it_was_settled_and_one_from_a_hub_that_doesnt_say_has_nowhere() {
+    fn a_line_says_where_it_was_settled_and_one_from_a_hub_that_doesnt_say_or_records_no_places_has_neither() {
         let at = SettledAt { seq: Seq::new(9), place: Place::new(6), how: None };
         let line = PromptLine::new(Seq::new(7), "Fix it", 2).placed(Place::new(3)).settled_at(at);
 
@@ -214,13 +214,7 @@ mod tests {
         assert_eq!(sent["settled"], serde_json::json!({ "seq": 9, "place": 6 }));
         assert_eq!(serde_json::from_value::<PromptLine>(sent).unwrap(), line);
         let older = serde_json::json!({ "seq": 7, "text": "Fix it", "files": 2 });
-        assert_eq!(serde_json::from_value::<PromptLine>(older).unwrap().settled(), None);
-    }
-
-    #[test]
-    fn a_line_from_a_hub_that_doesnt_record_places_has_none() {
-        let sent = serde_json::json!({ "seq": 7, "text": "Fix it", "files": 2 });
-
-        assert_eq!(serde_json::from_value::<PromptLine>(sent).unwrap().place(), Place::default());
+        let older = serde_json::from_value::<PromptLine>(older).unwrap();
+        assert_eq!((older.settled(), older.place()), (None, Place::default()));
     }
 }

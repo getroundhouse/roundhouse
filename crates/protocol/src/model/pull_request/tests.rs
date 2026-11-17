@@ -123,31 +123,6 @@ fn what_github_reports_decodes_by_its_own_names_and_anything_new_as_unknown() {
     );
 }
 
-#[test]
-fn every_word_reads_back_as_itself() {
-    let merge_states = [
-        MergeState::Behind,
-        MergeState::Blocked,
-        MergeState::Clean,
-        MergeState::Dirty,
-        MergeState::Draft,
-        MergeState::HasHooks,
-        MergeState::Unstable,
-        MergeState::Computing,
-        MergeState::Unknown,
-    ];
-    let reviews = [Review::Approved, Review::ChangesRequested, Review::Required, Review::NotRequired, Review::Unknown];
-
-    for word in merge_states {
-        let sent = serde_json::to_string(&word).unwrap();
-        assert_eq!(serde_json::from_str::<MergeState>(&sent).unwrap(), word, "{sent}");
-    }
-    for word in reviews {
-        let sent = serde_json::to_string(&word).unwrap();
-        assert_eq!(serde_json::from_str::<Review>(&sent).unwrap(), word, "{sent}");
-    }
-}
-
 fn any_pull_request() -> impl Strategy<Value = PullRequest> {
     let state = prop_oneof![Just(PrState::Open), Just(PrState::Closed), Just(PrState::Merged), Just(PrState::Unknown)];
     let merge_state = prop_oneof![
@@ -221,7 +196,8 @@ proptest! {
         ..Config::default()
     })]
 
-    /// Not looked, looked and found none, and found one each read back as themselves.
+    /// Not looked, looked and found none, and found one each read back as themselves, with every word for its state,
+    /// merge state and review, those that aren't GitHub's own names among them.
     #[test]
     fn what_the_hub_found_reads_back_as_it_was(found in proptest::option::of(any_found())) {
         let written = serde_json::to_string(&workspace(found.clone())).unwrap();

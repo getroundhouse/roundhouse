@@ -79,4 +79,16 @@ mod tests {
             assert_eq!(claims.unmet_needs(), [], "{:?}", description.kind);
         }
     }
+
+    /// A chat's model, effort and mode until another is chosen, which a picker shows among what it offers.
+    #[test]
+    fn what_a_chat_of_each_kind_starts_with_is_among_what_its_offered() {
+        for agent in super::descriptions() {
+            let defaults = &agent.defaults;
+
+            assert!(agent.label(&defaults.model).is_some(), "{:?}'s model", agent.kind);
+            assert!(agent.efforts_for(&defaults.model).contains(&defaults.effort), "{:?}'s effort", agent.kind);
+            assert!(agent.modes.contains(&defaults.permission_mode), "{:?}'s mode", agent.kind);
+        }
+    }
 }

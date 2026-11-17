@@ -54,15 +54,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn what_a_chat_starts_with_is_among_what_its_offered() {
-        let claude = description();
-
-        assert!(claude.label(&claude.defaults.model).is_some());
-        assert!(claude.efforts.contains(&claude.defaults.effort));
-        assert!(claude.modes.contains(&claude.defaults.permission_mode));
-    }
-
-    #[test]
     fn a_hub_can_hold_a_token_that_setup_token_makes_which_lasts_a_year() {
         let login = description().login.unwrap();
 
