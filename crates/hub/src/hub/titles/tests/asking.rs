@@ -1,7 +1,9 @@
+//! What a model is asked a title from: which prompts, and which of the images they carried.
+
 use protocol::attachment::MediaType;
 use protocol::model::Seq;
 
-use super::*;
+use super::super::*;
 
 fn lines(texts: &[&str]) -> Vec<PromptLine> {
     texts.iter().zip(1..).map(|(text, seq)| PromptLine::new(Seq::new(seq), text, 0)).collect()

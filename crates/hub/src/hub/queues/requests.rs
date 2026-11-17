@@ -1,4 +1,4 @@
-//! The requests for a session's queue: prompts waiting for the agent to finish, which the live session keeps.
+//! What a client asks of a session's queue, and the queues a hub sends as it starts.
 
 use std::sync::Arc;
 
@@ -7,8 +7,8 @@ use protocol::model::{AttachmentId, ClientMessageId, Session, SessionId};
 use protocol::prompt::Prompt;
 use tokio::sync::oneshot;
 
-use super::Hub;
 use crate::error::internal;
+use crate::hub::Hub;
 use crate::session::Command;
 use crate::store::Store;
 
