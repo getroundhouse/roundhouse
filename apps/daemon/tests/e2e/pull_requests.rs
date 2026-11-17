@@ -152,7 +152,7 @@ fn a_read_that_cant_get_the_found_ones_commits_fails_and_records_nothing() {
 
     let failed = client.workspace_pull_request(&workspace.id);
 
-    assert!(matches!(failed, Err(ClientError::Api(e)) if e.code == ErrorCode::Worker));
+    assert!(matches!(&failed, Err(ClientError::Api(e)) if e.code == ErrorCode::Worker), "{failed:?}");
     assert_eq!(support::workspace(&client, &workspace.id).pull_request, None, "still not looked at");
 }
 
@@ -190,7 +190,7 @@ fn with_nothing_known_a_gh_logged_out_says_none_and_one_offline_fails() {
     gh.say(LOGGED_OUT);
     let none = client.workspace_pull_request(&logged_out.id).unwrap();
 
-    assert!(matches!(failed, Err(ClientError::Api(e)) if e.code == ErrorCode::Worker));
+    assert!(matches!(&failed, Err(ClientError::Api(e)) if e.code == ErrorCode::Worker), "{failed:?}");
     assert_eq!(support::workspace(&client, &offline.id).pull_request, None, "still not looked at");
     assert_eq!(none, None);
     let found = support::workspace(&client, &logged_out.id).pull_request;
