@@ -3,14 +3,21 @@
 
 use protocol::client::{ClientResponse, HubNotice};
 use protocol::frame;
-use protocol::model::{GithubReach, GithubRepositoryName, Reach, RecordKey, Rev};
+use protocol::model::{GithubReach, GithubRepositoryName, InstalledApp, Reach, RecordKey, Rev};
 
 use super::keeps_its_form;
 
 const CLI: GithubRepositoryName = GithubRepositoryName::named("cli/cli");
 
+/// An app of your own's bot, as GitHub knows its installation.
+const BOT: &str = "ada-roundhouse[bot]";
+
 fn reach(reach: Reach) -> GithubReach {
     GithubReach { repo: "r".into(), reach, answered_at_ms: None, stale: false, rev: Rev::new(3) }
+}
+
+fn on_adalabs() -> InstalledApp {
+    InstalledApp { slug: "ada-roundhouse".into(), on: "adalabs".into() }
 }
 
 #[test]
@@ -23,16 +30,38 @@ fn a_notice_of_each_reach_keeps_its_form() {
             r#""pushes","repository":"cli/cli","username":"ada""#,
         ),
         (
-            Reach::Refused { repository: CLI, username: "ada".into(), reason: "Permission denied.".into() },
+            Reach::Refused {
+                repository: CLI,
+                username: "ada".into(),
+                reason: "Permission denied.".into(),
+                installation: None,
+            },
             r#""refused","repository":"cli/cli","username":"ada","reason":"Permission denied.""#,
         ),
         (
-            Reach::NotFound { repository: CLI, username: "ada".into() },
+            Reach::Refused {
+                repository: CLI,
+                username: BOT.into(),
+                reason: "Permission denied.".into(),
+                installation: Some(on_adalabs()),
+            },
+            r#""refused","repository":"cli/cli","username":"ada-roundhouse[bot]","reason":"Permission denied.","installation":{"slug":"ada-roundhouse","on":"adalabs"}"#,
+        ),
+        (
+            Reach::NotFound { repository: CLI, username: "ada".into(), installation: None },
             r#""not_found","repository":"cli/cli","username":"ada""#,
         ),
         (
-            Reach::TokenRefused { repository: CLI, username: "ada".into() },
+            Reach::NotFound { repository: CLI, username: BOT.into(), installation: Some(on_adalabs()) },
+            r#""not_found","repository":"cli/cli","username":"ada-roundhouse[bot]","installation":{"slug":"ada-roundhouse","on":"adalabs"}"#,
+        ),
+        (
+            Reach::TokenRefused { repository: CLI, username: "ada".into(), installation: None },
             r#""token_refused","repository":"cli/cli","username":"ada""#,
+        ),
+        (
+            Reach::TokenRefused { repository: CLI, username: BOT.into(), installation: Some(on_adalabs()) },
+            r#""token_refused","repository":"cli/cli","username":"ada-roundhouse[bot]","installation":{"slug":"ada-roundhouse","on":"adalabs"}"#,
         ),
         (
             Reach::CouldntTell { repository: CLI, why: "offline".into() },
@@ -54,7 +83,12 @@ fn a_notice_of_each_reach_keeps_its_form() {
 /// What GitHub answered, and when, which the hub's last run left and this one hasn't checked again.
 #[test]
 fn an_answer_the_last_run_left_says_when_github_gave_it() {
-    let refused = Reach::Refused { repository: CLI, username: "ada".into(), reason: "Permission denied.".into() };
+    let refused = Reach::Refused {
+        repository: CLI,
+        username: "ada".into(),
+        reason: "Permission denied.".into(),
+        installation: None,
+    };
     let left = GithubReach { answered_at_ms: Some(1_793_541_600_000), stale: true, ..reach(refused) };
 
     keeps_its_form(

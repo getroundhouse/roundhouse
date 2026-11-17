@@ -240,7 +240,7 @@ async fn greeted_link(dir: &Path, set_answer: WorkerOutcome) -> (Arc<WorkerLink>
     provider.create(&"i".into(), None, None, "i").await.unwrap();
     // Short, so a hub that waits for the hello's answer before it sets the credential fails soon.
     let hub = hub_timed(dir, &provider, Timers { hello_within: Duration::from_secs(2), ..Timers::DEFAULT });
-    let credential = hub.git_credential().borrow().clone();
+    let credential = hub.git_credential().borrow().for_workers();
     let log = dir.join("logs/i.log");
     // Well within the time the hub gives the answer to its ask of the machine's own login, which never comes, so a
     // hub that waited for it before the link is used fails.

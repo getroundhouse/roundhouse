@@ -20,6 +20,7 @@ mod file_icons;
 mod file_image;
 mod file_tree;
 pub mod file_view;
+mod github_app_pages;
 mod haptics;
 mod home;
 pub mod image_diff;

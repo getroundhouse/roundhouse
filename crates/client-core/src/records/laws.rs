@@ -303,7 +303,8 @@ fn each_repositorys_reach_is_a_record_like_the_rest() {
     let mut held = HubRecords::default();
     let cli = GithubRepositoryName::named("cli/cli");
     let pushes = Reach::Pushes { repository: cli.clone(), username: "ada".into() };
-    let refused = Reach::Refused { repository: cli, username: "ada".into(), reason: "Permission denied.".into() };
+    let reason = "Permission denied.".into();
+    let refused = Reach::Refused { repository: cli, username: "ada".into(), reason, installation: None };
     let kept = |held: &HubRecords, repo: &str| {
         held.held.get(&RecordKey::GithubReach { repo: repo.into() }).map(|kept| kept.record.clone())
     };

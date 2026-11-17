@@ -1,18 +1,20 @@
 //! What every worker gives the processes it starts for github.com, worked out from the default GitHub account in one
-//! place, under the logins' lock, and kept as it changes for each worker's link to follow, as "The worker's git
-//! credential" in `docs/architecture.md` says.
+//! place, under the logins' lock, and kept as it changes for each worker's link and the check of reach to follow, as
+//! "The worker's git credential" in `docs/architecture.md` says.
 
 use std::io;
 
 use protocol::client::ApiError;
-use protocol::model::{GithubAccount, GithubLoginKind, GithubToken, GithubUser, GithubUsername};
-use protocol::worker::{GitCredential, GitIdentity, GithubCredential};
+use protocol::model::{
+    GithubAccount, GithubInstallation, GithubLoginKind, GithubToken, GithubUser, GithubUsername, InstalledApp,
+};
+use protocol::worker::{GitCredential, GitIdentity};
 use tokio::sync::watch;
 use tracing::info;
 
-use super::{GithubLogin, GithubLogins};
+use super::{DefaultCredential, GithubLogin, GithubLogins};
 use crate::login_files::{Locked, Stored};
-use crate::store::GithubProfile;
+use crate::store::{GithubProfile, StoreError};
 
 /// Who git says it is as it gives GitHub an installation's token, as GitHub's docs give.
 const INSTALLATION_USERNAME: &str = "x-access-token";
@@ -36,9 +38,10 @@ pub(super) enum Unusable {
 }
 
 impl GithubLogins {
-    /// What workers are to give their processes for github.com, from now on, as it changes. It changes under the
-    /// logins' lock, as each change to the logins is made, so it changes in the order they were made.
-    pub(crate) fn git_credential(&self) -> watch::Receiver<GithubCredential> {
+    /// What workers are to give their processes for github.com, from now on, as it changes, with who GitHub knows the
+    /// default as, as [`DefaultCredential`] says. It changes under the logins' lock, as each change to the logins is
+    /// made, so it changes in the order they were made.
+    pub(crate) fn git_credential(&self) -> watch::Receiver<DefaultCredential> {
         self.credential.subscribe()
     }
 
@@ -117,12 +120,13 @@ impl GithubLogins {
         });
     }
 
-    /// What workers are to give their processes for github.com at `now_ms`: nothing while the default is each
-    /// machine's own login, the default's username and token while its login can be used, with its commit identity, an
-    /// installation's bot, or as GitHub's profile of a token's or a sign-in's user said, once the hub has asked, and
-    /// otherwise a block that says what to do, never the machine's own in its place. So is a default the hub can't
-    /// read, and one whose profile it can't read.
-    fn worked_out(&self, files: &Locked<'_, GithubLogin>, now_ms: i64) -> GithubCredential {
+    /// What workers are to give their processes for github.com at `now_ms`, with who GitHub knows the default as, as
+    /// [`DefaultCredential`] says: nothing while the default is each machine's own login, the default's username and
+    /// token while its login can be used, with its commit identity, an installation's bot, or as GitHub's profile of a
+    /// token's or a sign-in's user said, once the hub has asked, and otherwise a block that says what to do, never the
+    /// machine's own in its place. So is a default the hub can't read, one whose profile it can't read, and an
+    /// installation whose app's record it can't read.
+    fn worked_out(&self, files: &Locked<'_, GithubLogin>, now_ms: i64) -> DefaultCredential {
         let unread = |e: &dyn std::fmt::Display| {
             let why = format!("Roundhouse couldn't read its default GitHub account ({e})");
             blocked(&why, "It tries again within a minute.")
@@ -131,7 +135,7 @@ impl GithubLogins {
             Ok(settings) => settings.github.and_then(|github| github.account),
             Err(e) => return unread(&e),
         };
-        let Some(id) = default else { return GithubCredential::MachineOwn };
+        let Some(id) = default else { return DefaultCredential::MachineOwn };
         let account = match self.store.github_account(&id) {
             Ok(Some(account)) => account,
             Ok(None) => {
@@ -145,26 +149,46 @@ impl GithubLogins {
             Ok(Err(unusable)) => return lost(&account, &unusable),
             Err(e) => return unread(&e.message),
         };
-        if account.installation.is_some() {
-            return GithubCredential::Account(installation_credential(&account.user, token));
+        if let Some(installation) = &account.installation {
+            return match self.installed_app(installation) {
+                Ok(Some(installed)) => installation_credential(account.user, installed, token),
+                // Removing an app forgets its installations' logins first, so only a store changed behind the hub's
+                // back has one whose login can be used without the app.
+                Ok(None) => {
+                    let why = format!(
+                        "Roundhouse has no record of the app its default GitHub account, {}, is an installation of",
+                        account.user.name,
+                    );
+                    blocked(&why, "Choose another default in Roundhouse's Settings.")
+                }
+                Err(e) => unread(&e),
+            };
         }
         match self.store.github_profile(&account.id) {
             Ok(profile) => {
                 let identity = profile.map(|profile| identity_of(&account.user, profile));
-                GithubCredential::Account(GitCredential { username: account.user.name, token, identity })
+                let credential = GitCredential { username: account.user.name.clone(), token, identity };
+                DefaultCredential::Account { credential, username: account.user.name, installation: None }
             }
             Err(e) => unread(&e),
         }
     }
+
+    /// Where `installation`'s app is installed, as a reach says of it, unless the hub has no record of the app.
+    fn installed_app(&self, installation: &GithubInstallation) -> Result<Option<InstalledApp>, StoreError> {
+        let app = self.store.github_app(installation.app)?;
+        Ok(app.map(|app| InstalledApp { slug: app.slug, on: installation.on.name.clone() }))
+    }
 }
 
-/// What git and `gh` are given for an app's installation, whose user is the app's `bot`, and whose login's token is
-/// `token`: `x-access-token` as its username, as GitHub's docs give git for an installation's token, and the bot as the
-/// commit identity, so commits, pushes and pull requests all say the bot. A bot has no profile, so it's its name and
-/// the address GitHub links to it.
-fn installation_credential(bot: &GithubUser, token: GithubToken) -> GitCredential {
-    let identity = identity_of(bot, GithubProfile::default());
-    GitCredential { username: INSTALLATION_USERNAME.into(), token, identity: Some(identity) }
+/// What git and `gh` are given for an app's installation, whose user is the app's `bot`, installed as `installed`
+/// says, and whose login's token is `token`: `x-access-token` as its username, as GitHub's docs give git for an
+/// installation's token, and the bot as the commit identity, so commits, pushes and pull requests all say the bot. A
+/// bot has no profile, so it's its name and the address GitHub links to it. GitHub knows the installation as the bot.
+fn installation_credential(bot: GithubUser, installed: InstalledApp, token: GithubToken) -> DefaultCredential {
+    let identity = identity_of(&bot, GithubProfile::default());
+    let credential = GitCredential { username: INSTALLATION_USERNAME.into(), token, identity: Some(identity) };
+    DefaultCredential::Account { credential, username: bot.name, installation: Some(installed) }
 }
 
 /// Who commits are by as `user`, as its `profile` says: the name it goes by, or its username when it has none, or one
@@ -191,13 +215,15 @@ fn git_commits_as(name: &str) -> bool {
 
 /// A block, saying `why` agents push as nobody, and `to_do` about it. Git says it as it refuses to push, in a terminal
 /// or an agent's output, where nothing else says it's Roundhouse's, so it names Roundhouse.
-fn blocked(why: &str, to_do: &str) -> GithubCredential {
-    GithubCredential::Blocked { reason: format!("{why}, so this workspace's agents push to GitHub as nobody. {to_do}") }
+fn blocked(why: &str, to_do: &str) -> DefaultCredential {
+    DefaultCredential::Blocked {
+        reason: format!("{why}, so this workspace's agents push to GitHub as nobody. {to_do}"),
+    }
 }
 
 /// The block for a default, `account`, whose login can't be used, as `unusable` says. An app's installation is named
 /// with where it's installed, and is connected again, and renewed, with the app.
-fn lost(account: &GithubAccount, unusable: &Unusable) -> GithubCredential {
+fn lost(account: &GithubAccount, unusable: &Unusable) -> DefaultCredential {
     let Some(installation) = &account.installation else { return lost_login(&account.user.name, unusable) };
     let name = format!("{}, installed on {}", account.user.name, installation.on.name);
     let elsewhere = "or choose another default in Roundhouse's Settings.";
@@ -223,7 +249,7 @@ fn lost(account: &GithubAccount, unusable: &Unusable) -> GithubCredential {
 }
 
 /// The block for a default, `name`, whose login can't be used, as `unusable` says.
-fn lost_login(name: &GithubUsername, unusable: &Unusable) -> GithubCredential {
+fn lost_login(name: &GithubUsername, unusable: &Unusable) -> DefaultCredential {
     let connect_again = "Connect it again in Roundhouse's Settings, or choose another default there.";
     match unusable {
         Unusable::Disconnected => {

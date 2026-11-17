@@ -41,7 +41,8 @@ fn each_repository_has_one_whose_revision_moves_only_when_it_changes() {
     let b = store.record_github_reach(&"b".into(), &Reach::NotOnGithub, None).unwrap();
     let same_again = store.record_github_reach(&"a".into(), &pushes(), Some(5)).unwrap();
     let answered_again = store.record_github_reach(&"a".into(), &pushes(), Some(6)).unwrap();
-    let refused = Reach::Refused { repository: CLI, username: "ada".into(), reason: "Permission denied.".into() };
+    let reason = "Permission denied.".into();
+    let refused = Reach::Refused { repository: CLI, username: "ada".into(), reason, installation: None };
     let changed = store.record_github_reach(&"a".into(), &refused, Some(7)).unwrap();
 
     assert!(before < a.rev && a.rev < b.rev && b.rev < answered_again.rev && answered_again.rev < changed.rev);

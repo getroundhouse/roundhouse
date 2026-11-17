@@ -16,7 +16,7 @@ pub use found::{FoundGithubLogin, GhLogin, GhLoginWorks};
 mod numbers;
 pub use numbers::{GithubAppId, GithubInstallationId, GithubUserId};
 mod reach;
-pub use reach::{GithubReach, GithubRepositoryName, GithubRepositoryNameError, Reach};
+pub use reach::{GithubReach, GithubRepositoryName, GithubRepositoryNameError, InstalledApp, Reach};
 mod record;
 pub use record::{GithubAccount, GithubLoginKind, GithubToken, GithubUser, HeldGithubLogin};
 mod sign_in;

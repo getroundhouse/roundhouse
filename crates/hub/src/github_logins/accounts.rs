@@ -7,11 +7,10 @@ use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{
     GithubAccount, GithubAccountId, GithubAppId, GithubLoginKind, GithubToken, GithubUser, HubSettings,
 };
-use protocol::worker::GithubCredential;
 use tokio::sync::watch;
 
-use super::GithubLogin;
 use super::credential::Unusable;
+use super::{DefaultCredential, GithubLogin};
 use crate::error::internal;
 use crate::github::TokenOwner;
 use crate::login_files::{Locked, LoginFiles};
@@ -25,8 +24,9 @@ use crate::store::{GithubConnected, GithubConnecting, Store, StoreError};
 pub(crate) struct GithubLogins {
     pub(super) store: Arc<Store>,
     pub(super) files: LoginFiles<GithubLogin>,
-    /// What workers are to give their processes for github.com, as of the last change, which is made under the lock.
-    pub(super) credential: watch::Sender<GithubCredential>,
+    /// What workers are to give their processes for github.com, with who GitHub knows the default as, as of the last
+    /// change, which is made under the lock.
+    pub(super) credential: watch::Sender<DefaultCredential>,
 }
 
 /// A token to connect, as a client asked: trimmed, and given the ID a new account would get.
@@ -94,7 +94,7 @@ impl GithubLogins {
     /// The logins of a hub whose data directory is `data_dir`, with what workers are to be sent at `now_ms`.
     pub(crate) fn new(store: Arc<Store>, data_dir: &Path, now_ms: i64) -> Self {
         // Replaced before this returns, so before anything can follow it. A block, so even a mistake there fails closed.
-        let unread = GithubCredential::Blocked { reason: "Roundhouse hasn't read its GitHub accounts".to_string() };
+        let unread = DefaultCredential::Blocked { reason: "Roundhouse hasn't read its GitHub accounts".to_string() };
         let logins = Self { store, files: LoginFiles::new(data_dir), credential: watch::Sender::new(unread) };
         logins.publish(&logins.files.lock(), now_ms);
         logins

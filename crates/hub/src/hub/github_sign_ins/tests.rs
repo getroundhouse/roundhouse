@@ -110,7 +110,7 @@ async fn a_sign_in_waits_with_its_code_and_once_approved_every_client_hears_of_i
     assert_eq!(approved.status, GithubSignInStatus::Approved { account: account.id.clone() });
     assert_eq!(&again, approved, "the same start again is the same sign-in");
     assert_eq!(github.asked().len(), 1 + 1 + 1, "the code, an ask after the token, and whose it is, once");
-    let GithubCredential::Account(credential) = hub.git_credential().borrow().clone() else { panic!() };
+    let GithubCredential::Account(credential) = hub.git_credential().borrow().for_workers() else { panic!() };
     let identity =
         GitIdentity { name: "Ada Lovelace".to_string(), email: "7+ada@users.noreply.github.com".to_string() };
     assert_eq!(credential.identity, Some(identity), "workers are sent who it commits as, as whose it is said");

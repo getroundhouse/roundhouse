@@ -211,7 +211,8 @@ fn a_workspace_says_what_a_push_from_it_meets_by_its_repositorys_reach() {
     let reach =
         |reach: Reach, rev: u64| GithubReach { reach, rev: Rev::new(rev), ..protocol::fixtures::github_reach("r") };
     let repository = GithubRepositoryName::named("example/project");
-    let refused = Reach::Refused { repository, username: "ada".into(), reason: "Permission denied to ada.".into() };
+    let reason = "Permission denied to ada.".into();
+    let refused = Reach::Refused { repository, username: "ada".into(), reason, installation: None };
     let mut held = HubRecords::default();
     held.apply_list(Records { github_reach: vec![reach(refused.clone(), 6)], ..listed() });
 

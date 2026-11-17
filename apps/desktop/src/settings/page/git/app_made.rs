@@ -9,11 +9,7 @@ use protocol::model::{GithubAccount, GithubApp, GithubAppId, Record};
 use super::app_panel::{AppStep, OnGithub};
 use super::app_words;
 use super::kept::Kept;
-
-/// Where GitHub installs the app called `slug` from, letting the person choose its repositories.
-pub(super) fn install_page(slug: &str) -> String {
-    format!("https://github.com/apps/{slug}/installations/new")
-}
+use crate::github_app_pages::install_page;
 
 /// The account that's `app`'s installation, holding a login, once the hub has connected one.
 pub(super) fn installation(records: &Snapshot, app: GithubAppId) -> Option<&GithubAccount> {
@@ -74,7 +70,7 @@ impl Kept {
 
     /// Opens GitHub's page for installing `app`, and the panel at its last step, waiting for it, in place of any other.
     pub(super) fn install_on_github(&mut self, app: &GithubApp, window: &mut Window, cx: &mut Context<Self>) {
-        cx.open_url(&install_page(app.slug.as_str()));
+        cx.open_url(&install_page(&app.slug));
         let installing = matches!(
             self.app_panel().map(|panel| &panel.step),
             Some(AppStep::Installing { app: shown, .. }) if *shown == app.id

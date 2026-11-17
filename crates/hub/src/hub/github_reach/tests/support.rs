@@ -3,11 +3,12 @@ use std::time::Duration;
 
 use protocol::client::HubNotice;
 use protocol::model::{GithubReach, GithubRepositoryName, GithubToken, RepoUrl};
-use protocol::worker::{GitCredential, GithubCredential, RepoUrlReply, WorkerRequest, WorkerResponse};
+use protocol::worker::{GitCredential, RepoUrlReply, WorkerRequest, WorkerResponse};
 use tokio::sync::{broadcast, watch};
 use tokio::task::JoinHandle;
 
 use super::super::Checks;
+use crate::github_logins::DefaultCredential;
 use crate::hub::Hub;
 use crate::worker_link::WorkerLink;
 
@@ -25,13 +26,13 @@ pub(super) async fn reads(hub: &Arc<Hub>, url: &str) {
 }
 
 /// The credential of `username`'s token `token`.
-pub(super) fn account(username: &str, token: &str) -> GithubCredential {
-    let (username, token) = (username.into(), GithubToken::new(token));
-    GithubCredential::Account(GitCredential { username, token, identity: None })
+pub(super) fn account(username: &str, token: &str) -> DefaultCredential {
+    let credential = GitCredential { username: username.into(), token: GithubToken::new(token), identity: None };
+    DefaultCredential::Account { credential, username: username.into(), installation: None }
 }
 
 /// The hub's checks, run as it runs them, but following `credential` rather than its logins.
-pub(super) fn checking(hub: &Arc<Hub>, credential: watch::Receiver<GithubCredential>) -> JoinHandle<()> {
+pub(super) fn checking(hub: &Arc<Hub>, credential: watch::Receiver<DefaultCredential>) -> JoinHandle<()> {
     tokio::spawn(Checks::new(Arc::clone(hub), credential).run())
 }
 

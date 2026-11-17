@@ -5,7 +5,7 @@
 
 use look::Region;
 use protocol::model::{
-    GithubReach, GithubRepositoryName, Reach, Rev, SessionStatus, SetupStatus, Title, WorkspaceStatus,
+    GithubReach, GithubRepositoryName, InstalledApp, Reach, Rev, SessionStatus, SetupStatus, Title, WorkspaceStatus,
 };
 
 use super::frame::{Frame, Part, SIDEBAR, SIDEBAR_MENU};
@@ -82,6 +82,13 @@ pub(crate) const SCREENS: &[Screen] = &[
         steps: &[Step::Select(FOCUS)],
     },
     Screen {
+        name: "push-refused-app",
+        spec: "workspaces.md",
+        world: Some(push_refused_app),
+        frame: Frame::Around(Part::Region(Region::PushLine), &[Part::Region(Region::Composer)]),
+        steps: &[Step::Select(FOCUS)],
+    },
+    Screen {
         name: "titles-in-the-sidebar",
         spec: "workspaces.md",
         world: Some(some_titled),
@@ -153,12 +160,26 @@ fn reaching(reach: Reach) -> World {
 /// GitHub refusing a push as the default, in its own words, as it does for a user who can't write to the repository.
 fn push_refused() -> World {
     let reason = "Permission to railworks/roundhouse.git denied to ada.";
-    reaching(Reach::Refused { repository: ON_GITHUB, username: "ada".into(), reason: reason.into() })
+    reaching(Reach::Refused {
+        repository: ON_GITHUB,
+        username: "ada".into(),
+        reason: reason.into(),
+        installation: None,
+    })
 }
 
 /// GitHub having no repository there that the default can see, as for a private one that isn't theirs.
 fn push_not_found() -> World {
-    reaching(Reach::NotFound { repository: ON_GITHUB, username: "ada".into() })
+    reaching(Reach::NotFound { repository: ON_GITHUB, username: "ada".into(), installation: None })
+}
+
+/// GitHub refusing a push as the default, an app of your own's installation on the repository's owner, which wasn't
+/// given the repository there.
+fn push_refused_app() -> World {
+    let bot = "railworks-roundhouse[bot]";
+    let reason = format!("Permission to railworks/roundhouse.git denied to {bot}.");
+    let installation = Some(InstalledApp { slug: "railworks-roundhouse".into(), on: "railworks".into() });
+    reaching(Reach::Refused { repository: ON_GITHUB, username: bot.into(), reason, installation })
 }
 
 /// Workspaces titled each way a title comes: generated, from the first line of a long prompt while the generated one

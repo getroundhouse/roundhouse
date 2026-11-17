@@ -133,7 +133,7 @@ fn a_check_a_day_on_has_github_asked_again_and_whats_changed_there_reaches_worke
     assert!(before_a_day.is_empty(), "{before_a_day:?}");
     assert_eq!(due.token.as_str(), "a-token");
     assert_eq!((renamed.account.user.name.as_str(), renamed.changed), ("ada-lovelace", true));
-    let credential = following.borrow_and_update().clone();
+    let credential = following.borrow_and_update().for_workers();
     assert_eq!(commits_as(&credential).as_deref(), Some("Ada Lovelace <ada@example.com>"));
     assert!(
         matches!(credential, GithubCredential::Account(GitCredential { username, .. }) if username.as_str() == "ada-lovelace")

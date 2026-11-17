@@ -5,7 +5,7 @@ use std::path::Path;
 
 use protocol::client::github_apps::GithubManifestCode;
 use protocol::model::{
-    GithubAccount, GithubApp, GithubAppId, GithubInstallation, GithubInstallationId, GithubLoginKind,
+    GithubAccount, GithubApp, GithubAppId, GithubInstallation, GithubInstallationId, GithubLoginKind, InstalledApp,
 };
 use protocol::worker::{GitCredential, GitIdentity, GithubCredential};
 
@@ -109,6 +109,28 @@ fn an_installation_is_its_apps_bot_on_its_user_and_as_the_default_workers_commit
     assert_eq!((held.how, held.ends_at_ms), (GithubLoginKind::App, None), "its record changes for no new token");
     assert_eq!(default_of(&store), Some(account.id), "the first account the hub holds becomes the default");
     assert_eq!(sent(&logins), bots("ghs_first"));
+    let DefaultCredential::Account { username, installation, .. } = logins.git_credential().borrow().clone() else {
+        panic!("not an account's")
+    };
+    let installed = InstalledApp { slug: "ada-roundhouse".into(), on: "adalabs".into() };
+    assert_eq!((username, installation), (bot().name, Some(installed)), "GitHub knows it as the bot");
+}
+
+/// Removing an app forgets its installations' logins before its record, so only a store changed behind the hub's back
+/// has a default installation that can be used whose app the hub has no record of.
+#[test]
+fn a_default_installation_whose_app_has_no_record_blocks() {
+    let dir = tempfile::tempdir().unwrap();
+    let (logins, store) = logins_in(dir.path());
+    kept(&logins);
+    installed(&logins, &on_adalabs(70), "ghs_first", ENDS_AT_MS);
+
+    store.remove_github_app(APP).unwrap();
+    logins.check(2000).unwrap();
+
+    let reason = reason(sent(&logins));
+    let why = "no record of the app its default GitHub account, ada-roundhouse[bot], is an installation of";
+    assert!(reason.contains(why), "{reason}");
 }
 
 /// GitHub lists only where the app is installed now, so one it no longer lists has been uninstalled there.

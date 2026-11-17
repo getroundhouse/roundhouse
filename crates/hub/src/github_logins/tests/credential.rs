@@ -11,7 +11,7 @@ use super::{ada, connect, logins_in, owner};
 
 /// What a worker's link following `logins` is sent now.
 pub(super) fn sent(logins: &GithubLogins) -> GithubCredential {
-    logins.git_credential().borrow().clone()
+    logins.git_credential().borrow().for_workers()
 }
 
 /// Ada's `token`, as she's connected or signed in with no name or public email on GitHub, so she commits as her
@@ -57,9 +57,9 @@ fn workers_are_sent_the_defaults_username_and_token_as_its_connected_and_renewed
     let mut following = logins.git_credential();
 
     logins.connect(&connect("first-token", None, "g1"), &owner(7, "ada", Some(5000))).unwrap();
-    let connected = following.borrow_and_update().clone();
+    let connected = following.borrow_and_update().for_workers();
     logins.connect(&connect("renewed-token", Some("g1"), "g2"), &ada()).unwrap();
-    let renewed = following.borrow_and_update().clone();
+    let renewed = following.borrow_and_update().for_workers();
     logins.connect(&connect("another-token", None, "g3"), &owner(8, "grace", None)).unwrap();
     logins.check(6000).unwrap();
 
@@ -136,9 +136,9 @@ fn workers_are_sent_a_default_signed_in_with_its_access_token_as_its_approved_an
     let mut following = logins.git_credential();
 
     signed_in(&logins, &store, "first", "first-token");
-    let approved = following.borrow_and_update().clone();
+    let approved = following.borrow_and_update().for_workers();
     signed_in(&logins, &store, "again", "renewed-token");
-    let renewed = following.borrow_and_update().clone();
+    let renewed = following.borrow_and_update().for_workers();
 
     assert_eq!(approved, as_ada("first-token"), "the first account became the default");
     assert_eq!(renewed, as_ada("renewed-token"), "signing in as ada again renewed it in place");

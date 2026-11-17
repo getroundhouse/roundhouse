@@ -133,7 +133,7 @@ fn a_hub_records_whether_the_default_can_push_to_a_workspaces_repository_on_gith
 
     let reason = "Permission to cli/cli.git denied to ada.".to_string();
     let cli = GithubRepositoryName::named("cli/cli");
-    assert_eq!(checked.reach, Reach::Refused { repository: cli, username: "ada".into(), reason });
+    assert_eq!(checked.reach, Reach::Refused { repository: cli, username: "ada".into(), reason, installation: None });
     assert!(!checked.stale && checked.answered_at_ms.is_some(), "{checked:?}");
     let as_it_was = GithubReach { stale: true, rev: left.rev, ..checked.clone() };
     assert_eq!(left, &as_it_was, "the last run's, as it was, with when GitHub answered");

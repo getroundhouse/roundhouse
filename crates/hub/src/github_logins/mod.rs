@@ -28,6 +28,8 @@ pub(crate) use accounts::{Connect, GithubAccountChange, GithubLogins};
 mod apps;
 pub(crate) use apps::{AppChange, AppRemoved};
 mod credential;
+mod default_credential;
+pub(crate) use default_credential::DefaultCredential;
 mod installations;
 #[cfg(test)]
 pub(crate) use installations::MINTED_WITH_LEFT;
