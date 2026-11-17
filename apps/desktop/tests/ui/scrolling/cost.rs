@@ -4,7 +4,7 @@ use desktop::workspace_pane::WorkspacePane;
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{AppContext as _, ScrollDelta, TestAppContext, point, px};
 
-use super::{A_FRAME, long_reply, open_on_a_chat_saying, open_on_a_long_session};
+use super::{A_FRAME, long_reply, open_on_a_chat_saying, session_saying, wait_for_the_list_to_settle};
 use crate::support::{Stack, Ui};
 
 /// A change of the chat's width puts every row's height out of date. Only the rows in the window, and a few to a
@@ -80,14 +80,25 @@ fn a_frame_at_rest_draws_only_the_rows_that_show(cx: &mut TestAppContext) {
 #[gpui_kit::test]
 fn a_row_the_agent_adds_puts_no_other_rows_height_out_of_date(cx: &mut TestAppContext) {
     let stack = Stack::new();
-    let mut ui = open_on_a_long_session(cx, &stack);
+    // Replies of a line each, and as many as load as the chat opens, which is two pages, all of it here. Those are what
+    // a row taken for a page would put out of date, and the window measures some 300 of them again as it takes the
+    // reply in, so with fewer, all of them would be measured again by the time they're read. Each is a line, since
+    // every row that loads is laid out.
+    let newest = session_saying(&stack, 380, |i| format!("message {i}"));
+    let mut ui = Ui::open(cx, &stack);
+    ui.wait("the workspace", |ui| ui.transcript().is_some());
+    let last = ui.row_of(&newest);
+    wait_for_the_list_to_settle(&mut ui, last);
     let transcript = ui.transcript().unwrap();
     let to_measure = |ui: &Ui<'_>| ui.cx.read_entity(&transcript, |t, _| t.list().rows_to_measure());
+    let (loaded, rows) = ui.cx.read_entity(&transcript, |t, _| (t.list().loaded_rows(), t.list().row_count()));
+    assert!(loaded == rows && loaded > 450, "only {loaded} of {rows} rows loaded");
     assert_eq!(to_measure(&ui), 0, "at rest, every loaded row has its height");
-    let (session, rows) = ui.cx.read_entity(&transcript, |t, _| (t.session_id().clone(), t.row_count()));
+    let session = ui.cx.read_entity(&transcript, |t, _| t.session_id().clone());
 
     stack.run(&session, "say:one more thing");
-    ui.wait("the reply", |ui| ui.cx.read_entity(&transcript, |t, _| t.row_count() > rows));
+    // For the list itself to have been told of the new rows, since it's the list that's read.
+    ui.wait("the reply", |ui| ui.cx.read_entity(&transcript, |t, _| t.list().row_count() > rows));
 
     // Each new row is drawn as it comes, since the transcript keeps to the latest row.
     assert_eq!(to_measure(&ui), 0, "rows put out of date by what the agent added");

@@ -12,6 +12,6 @@ mod history;
 use history::{A_FRAME, press, settle_at_the_end, thumb, wait_for_the_list_to_settle};
 mod long_sessions;
 use long_sessions::{
-    LONG, just_over_4_kb, long_reply, open_on_a_chat, open_on_a_chat_saying, open_on_a_long_chat,
-    open_on_a_long_session, prose, session_saying, turns,
+    LONG, just_over_4_kb, long_reply, open_on_a_chat, open_on_a_chat_saying, open_on_a_long_chat, prose,
+    session_saying, turns,
 };

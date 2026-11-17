@@ -211,8 +211,10 @@ fn the_scrollbar_s_thumb_keeps_its_length_through_a_few_very_long_rows(cx: &mut 
 
 #[gpui_kit::test]
 fn dragging_the_scrollbar_s_thumb_goes_through_the_session_only_the_way_the_thumb_goes(cx: &mut TestAppContext) {
-    // Short prompts, and replies from a line to a few screens long, more than a transcript loads at once.
-    let (_fake, mut ui) = open_on_a_chat_saying(cx, 450, |i| prose([1, 2, 8, 1, 3, 20][i % 6], i));
+    // Short prompts, and replies from a line to a couple of screens long, more than a transcript loads at once, which
+    // is what bounds how many. Each is as long as rows of heights far apart need, and no longer, since every row that
+    // loads is laid out as the drag goes through the session.
+    let (_fake, mut ui) = open_on_a_chat_saying(cx, 450, |i| prose([1, 2, 4, 1, 2, 10][i % 6], i));
     let transcript = ui.transcript().unwrap();
     let total = ui.cx.read_entity(&transcript, |t, _| t.row_count());
     assert!(ui.cx.read_entity(&transcript, |t, _| t.event_at(0).is_none()), "the start isn't loaded yet");

@@ -6,12 +6,13 @@ use client_core::fake_hub::events::{
     self, advice_failed, advised, advised_encrypted, finished_turn, taken, text, typed_call, user_prompt,
 };
 use gpui_kit::test::ElementSnapshot;
-use gpui_kit::{AppContext as _, ElementId, TestAppContext};
+use gpui_kit::{AppContext as _, ElementId, Pixels, TestAppContext, px};
 use image::ImageFormat;
 use protocol::capability::calls::Call;
 use protocol::event::EventBody;
 use protocol::model::{Seq, SessionStatus};
 use std::io::Cursor;
+use std::time::Duration;
 
 /// The fake agent's commands come with no description, so their line says they run something.
 pub(crate) const COMMAND_LINE: &str = "Run";
@@ -90,25 +91,58 @@ pub(crate) fn in_a_new_workspace<'a>(cx: &'a mut TestAppContext, stack: &Stack) 
     ui
 }
 
-/// Runs `command`, opens its call as [`open_a_call`] does, and gives the IDs of the block's command and of its output.
-pub(crate) fn open_a_command(ui: &mut Ui<'_>, command: &str) -> (ElementId, ElementId) {
-    open_a_call(ui, &format!("tool:{command}"), COMMAND_LINE);
-    assert_eq!(command_open(ui, 0), Some(true));
-    (ui.shown("command/").remove(0), ui.shown("output/").remove(0))
+/// How many short sentences the agent says before a call, as [`words`] has them: a window or two of text, so the
+/// transcript can scroll further up past the call than any walk here takes it, which [`open_on_words_around`] checks
+/// with room for a narrower font.
+const BEFORE: usize = 300;
+/// And after it, a few lines, so what the call shows stays in the window as a walk scrolls the transcript up.
+const AFTER: usize = 100;
+
+/// `count` short sentences, in one paragraph, for a transcript to scroll through.
+fn words(count: usize) -> String {
+    Vec::from_fn(count, |n| format!("Entry {}.", n + 1)).join(" ")
 }
 
-/// Runs the fake agent's `step` between enough words that the transcript can scroll either way, and opens the call
-/// it makes, whose line says `line`, with the transcript at its end, where the button that jumps to the end would
-/// leave it, so the call is on screen however far the transcript had followed the turn.
-pub(super) fn open_a_call(ui: &mut Ui<'_>, step: &str, line: &str) {
-    ui.input(&format!("burst:3000; {step}; burst:150; say:done"));
-    ui.press("enter");
-    ui.wait_idle_with("the turn to finish", |text| text.contains("done"));
-    // The line the turn ends with can come just after, and drawn mid-click it would move the call's line away from
-    // under the pointer.
-    ui.wait("the turn's end", |ui| ui.events().iter().any(|e| matches!(e.body, EventBody::TurnEnded { .. })));
-    to_the_end(ui);
+/// A chat held by a fake hub where the agent ran `command`, which printed `printed`, between enough words that the
+/// transcript can scroll either way, open as [`open_on_a_call`] opens it. Gives the IDs of the block's command and of
+/// its output. The hub goes with the test, so it's returned to be kept.
+pub(super) fn open_on_a_command<'a>(
+    cx: &'a mut TestAppContext,
+    command: &str,
+    printed: &str,
+) -> (FakeHub, Ui<'a>, ElementId, ElementId) {
+    let (fake, mut ui) = open_on_a_call(cx, ran(1, command, printed), COMMAND_LINE);
+    assert_eq!(command_open(&mut ui, 0), Some(true));
+    let (command, output) = (ui.shown("command/").remove(0), ui.shown("output/").remove(0));
+    (fake, ui, command, output)
+}
+
+/// A chat held by a fake hub where the agent made the call `did` records, whose line says `line`, as
+/// [`open_on_words_around`] has it. The call is open, with the transcript at its end, where the button that jumps there would leave it.
+/// The hub goes with the test, so it's returned to be kept.
+pub(super) fn open_on_a_call<'a>(cx: &'a mut TestAppContext, did: Vec<EventBody>, line: &str) -> (FakeHub, Ui<'a>) {
+    let (fake, mut ui) = open_on_words_around(cx, did);
+    to_the_end(&mut ui);
     ui.click_labelled(line, 0);
+    (fake, ui)
+}
+
+/// A chat held by a fake hub, of one turn in which the agent said [`BEFORE`] short sentences, made the call `did`
+/// records, said [`AFTER`] more, and that it was done, open at its end as [`open_on_a_turn`] opens it. The hub goes
+/// with the test, so it's returned to be kept.
+pub(super) fn open_on_words_around(cx: &mut TestAppContext, did: Vec<EventBody>) -> (FakeHub, Ui<'_>) {
+    let mut events = vec![text("msg-before", &words(BEFORE))];
+    events.extend(did);
+    events.extend([text("msg-after", &words(AFTER)), text("msg-done", "done")]);
+    let (fake, mut ui) = open_on_a_turn(cx, events);
+    // Once every row there is measured, so what's above is as tall as it's drawn.
+    ui.settle(Duration::from_millis(16));
+    let above = ui.cx.read_entity(&ui.transcript().unwrap(), |t, _| {
+        let (list, top) = (t.list(), t.list().top());
+        (0..top.row).map(|row| list.row_height(row).unwrap_or_default()).sum::<Pixels>() + top.offset
+    });
+    assert!(above > px(400.), "the transcript can scroll a long way up past the window's top: {above:?}");
+    (fake, ui)
 }
 
 /// A chat held by a fake hub, of one turn in which the agent did what `did` records. It's open at its end, with the

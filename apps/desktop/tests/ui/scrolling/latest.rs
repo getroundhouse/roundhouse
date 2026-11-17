@@ -1,14 +1,17 @@
 //! Going back down to a long session's latest row, by the wheel and by the button that comes up once it's scrolled
 //! away from.
 
+use client_core::fake_hub::events::{
+    self, launched, printed, subagent_ended, subagent_started, subagents_listed, text, within,
+};
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{AppContext as _, ElementId, ScrollDelta, TestAppContext, point, px};
 use look::Region;
 use look::motion::SCROLL;
+use protocol::capability::calls::call::Runs;
 
-use super::{A_FRAME, open_on_a_long_chat, settle_at_the_end, thumb};
-use crate::support::{Stack, Ui};
-use crate::tools::in_a_new_workspace;
+use super::{A_FRAME, open_on_a_chat, open_on_a_long_chat, thumb, turns};
+use crate::support::{FakeHub, Ui};
 
 /// The fake agent's commands come with no description, so their line says they run something.
 const COMMAND_LINE: &str = "Run";
@@ -107,8 +110,7 @@ fn the_button_sits_on_the_composers_left_edge_just_above_it(cx: &mut TestAppCont
 /// has under it, doesn't open the call too.
 #[gpui_kit::test]
 fn a_click_on_the_button_leaves_the_call_under_it_closed(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = open_on_a_session_of_commands(cx, &stack);
+    let (_fake, mut ui) = open_on_a_chat_of_commands(cx);
     ui.scroll("transcript", ScrollDelta::Pixels(point(px(0.), px(300.))));
     assert!(shows(&mut ui));
     let middle = ui.bounds(Region::LatestButton.id()).center();
@@ -126,11 +128,7 @@ fn a_click_on_the_button_leaves_the_call_under_it_closed(cx: &mut TestAppContext
 /// tab's bottom edge, as it rests above a chat's composer.
 #[gpui_kit::test]
 fn in_a_subagent_s_tab_the_button_rests_above_the_tab_s_bottom_edge(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = in_a_new_workspace(cx, &stack);
-    ui.input("agent-calls:60:Look around; say:done");
-    ui.press("enter");
-    ui.wait_idle_with("the turn to finish", |text| text.contains("done"));
+    let (_fake, mut ui) = open_on_a_subagent_s_work(cx);
     ui.wait("the button that opens the subagent tab", |ui| !ui.shown("open-subagent/").is_empty());
     let open = ui.shown("open-subagent/").remove(0);
     ui.click(open);
@@ -158,17 +156,42 @@ fn on_the_composers_edge_just_above_it(ui: &mut Ui<'_>) {
     assert!((room - px(8.)).abs() < px(0.5), "it rests {room:?} above the composer, not 8px");
 }
 
-/// A session of sixty commands, open in the app at its end, so a call's line can be scrolled under the button.
-fn open_on_a_session_of_commands<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> Ui<'a> {
-    let session = stack.chat_in_a_new_workspace();
-    // A few to a prompt, as a person would ask.
-    for _ in 0..3 {
-        stack.run(&session, &["tool:echo signal"; 20].join("; "));
+/// A chat held by a fake hub of sixty commands, a few to a prompt, as a person would ask, and as the hub records the
+/// fake agent's, open at its end, so a call's line can be scrolled under the button. The hub goes with the test, so
+/// it's returned to be kept.
+fn open_on_a_chat_of_commands(cx: &mut TestAppContext) -> (FakeHub, Ui<'_>) {
+    let ran = |n: usize| {
+        let call = format!("toolu-{n}");
+        [events::command(&format!("msg-{n}"), &call, "echo signal", None), printed(&call, "signal\n")]
+    };
+    let prompt = ["tool:echo signal"; 20].join("; ");
+    let turn = |turn: usize| (prompt.clone(), Vec::from_iter((0..20).flat_map(|n| ran(turn * 20 + n))));
+    let (fake, ui, _) = open_on_a_chat(cx, turns(Vec::from_fn(3, turn)));
+    (fake, ui)
+}
+
+/// A chat held by a fake hub where a subagent made sixty calls and reported, as the hub records the fake agent's
+/// `agent-calls:60:`, open at its end. The hub goes with the test, so it's returned to be kept.
+fn open_on_a_subagent_s_work(cx: &mut TestAppContext) -> (FakeHub, Ui<'_>) {
+    let (agent, asked) = ("toolu-agent", "Look around");
+    let mut did = vec![
+        events::subagent("msg-agent", agent, "Explore", asked, &format!("{asked}."), Runs::Background),
+        subagent_started(agent, "Explore", asked, &format!("{asked}.")),
+        subagents_listed(&[(agent, asked)]),
+        launched(agent),
+    ];
+    for n in 0..60 {
+        let call = format!("toolu-s{n}");
+        let listing = events::command(&format!("sub-{n}"), &call, "ls", Some(SUBAGENT_CALL));
+        did.extend([within(agent, listing), within(agent, printed(&call, "README.md\n"))]);
     }
-    let mut ui = Ui::open(cx, stack);
-    ui.wait("the workspace", |ui| ui.transcript().is_some());
-    settle_at_the_end(&mut ui, stack, &session);
-    ui
+    did.extend([
+        subagent_ended(agent, "There's a README here.", 1_500),
+        subagents_listed(&[]),
+        text("msg-done", "done"),
+    ]);
+    let (fake, ui, _) = open_on_a_chat(cx, turns(vec![(format!("agent-calls:60:{asked}; say:done"), did)]));
+    (fake, ui)
 }
 
 /// The wheel over the button scrolls the chat under it, as it does anywhere else in it.

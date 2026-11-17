@@ -2,9 +2,14 @@
 //! worker or agent.
 
 use client_core::fake_hub::World;
-use client_core::fake_hub::events::{command, finished_turn, printed, taken, text, user_prompt};
+use client_core::fake_hub::events::{
+    self, advised, finished_turn, launched, printed, subagent_ended, subagent_started, subagents_listed, taken, text,
+    typed_call, user_prompt,
+};
 use gpui_kit::{Bounds, Pixels, TestAppContext};
-use protocol::event::EventBody;
+use protocol::capability::calls::Call;
+use protocol::capability::calls::call::Runs;
+use protocol::event::{CompactedBy, CompactionOutcome, EventBody, SessionEvent};
 use protocol::model::{Seq, SessionId, SessionStatus};
 
 use super::super::wait_for_the_list_to_settle;
@@ -28,19 +33,36 @@ pub(super) fn open_on_chats(
     cx: &mut TestAppContext,
     chats: Vec<Vec<Turn>>,
 ) -> (FakeHub, Ui<'_>, Vec<SessionId>, Bounds<Pixels>) {
+    let (fake, ui, chats, window) = open_on_chats_of(cx, Vec::from_iter(chats.into_iter().map(events)));
+    (fake, ui, Vec::from_iter(chats.into_iter().map(|(id, _)| id)), window)
+}
+
+/// The same, for chats of the events given, as the hub records them. Gives each chat with the newest of its events, to
+/// show it by with [`show`].
+pub(super) fn open_on_chats_of(
+    cx: &mut TestAppContext,
+    chats: Vec<Vec<EventBody>>,
+) -> (FakeHub, Ui<'_>, Vec<(SessionId, SessionEvent)>, Bounds<Pixels>) {
     let mut world = World::default();
     let repo = world.repo("signals");
     let workspace = world.workspace(&repo, "ledger");
-    let ids = Vec::from_iter(chats.into_iter().map(|turns| world.chat(&workspace, SessionStatus::Idle, events(turns))));
-    let newest = world.events_from(&ids[0], Seq::default()).last().cloned().unwrap();
+    let ids = Vec::from_iter(chats.into_iter().map(|events| world.chat(&workspace, SessionStatus::Idle, events)));
+    let newest = |id: &SessionId| world.events_from(id, Seq::default()).last().cloned().unwrap();
+    let chats = Vec::from_iter(ids.iter().map(|id| (id.clone(), newest(id))));
     let fake = FakeHub::holding(world);
     let mut ui = Ui::open_on(cx, &fake);
     ui.wait("the workspace", |ui| ui.transcript().is_some());
-    ui.activate_chat(&ids[0]);
-    let last = ui.row_of(&newest);
-    wait_for_the_list_to_settle(&mut ui, last);
-    let window = bounds(&mut ui, "transcript".into());
-    (fake, ui, ids, window)
+    let window = show(&mut ui, &chats[0]);
+    (fake, ui, chats, window)
+}
+
+/// Shows the chat, kept to its end, once its list has settled there with the newest of its events, which is given with
+/// it, loaded in its row. Gives where the transcript is.
+pub(super) fn show(ui: &mut Ui<'_>, (chat, newest): &(SessionId, SessionEvent)) -> Bounds<Pixels> {
+    ui.activate_chat(chat);
+    let last = ui.row_of(newest);
+    wait_for_the_list_to_settle(ui, last);
+    bounds(ui, "transcript".into())
 }
 
 /// The same, for one chat of `turns`.
@@ -62,7 +84,7 @@ fn events(turns: Vec<Turn>) -> Vec<EventBody> {
                 Said::Reply(reply) => events.push(text(&message, &reply)),
                 Said::Command(line, output) => {
                     let call = format!("toolu-{}", events.len());
-                    events.push(command(&message, &call, line, None));
+                    events.push(events::command(&message, &call, line, None));
                     events.push(printed(&call, output));
                 }
             }
@@ -86,4 +108,42 @@ pub(super) fn prose(paragraphs: usize, seed: usize) -> Said {
 /// A reply that says `text`.
 pub(super) fn reply(text: &str) -> Said {
     Said::Reply(text.to_owned())
+}
+
+/// Asking the advisor, as the `n`th call, and what it `said`, as the hub records them from Claude.
+pub(super) fn advice(n: usize, said: &str) -> Vec<EventBody> {
+    let (message, call) = (format!("msg-advisor-{n}"), format!("srvtoolu-{n}"));
+    vec![typed_call(&message, &call, Call::Advisor), advised(&message, &call, said)]
+}
+
+/// A subagent started in the background as the `n`th call, for what its line says, `description`, asked `asked`, and
+/// its `report` once it's done, as the hub records them from Claude.
+pub(super) fn subagent(n: usize, description: &str, asked: &str, report: &str) -> Vec<EventBody> {
+    let call = format!("toolu-agent-{n}");
+    vec![
+        events::subagent(&format!("msg-agent-{n}"), &call, "Explore", description, asked, Runs::Background),
+        subagent_started(&call, "Explore", description, asked),
+        subagents_listed(&[(&call, description)]),
+        launched(&call),
+        subagent_ended(&call, report, 1_500),
+        subagents_listed(&[]),
+    ]
+}
+
+/// A command run as the `n`th call, and what it printed, `output`, as the hub records them from Claude.
+pub(super) fn command(n: usize, command: &str, output: &str) -> Vec<EventBody> {
+    let call = format!("toolu-command-{n}");
+    vec![events::command(&format!("msg-command-{n}"), &call, command, None), printed(&call, output)]
+}
+
+/// A compaction that was asked for, and its `summary`.
+pub(super) fn compacted(summary: &str) -> EventBody {
+    let outcome = CompactionOutcome::Compacted {
+        by: CompactedBy::Asked,
+        before_tokens: Some(16_000),
+        after_tokens: Some(4_000),
+        took_ms: Some(1_500),
+        summary: Some(summary.to_owned()),
+    };
+    EventBody::AgentCompacted { asked: None, keeping: None, outcome }
 }
