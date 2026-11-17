@@ -1,34 +1,59 @@
 //! Windows' minimize, maximize and close, which the app draws at the right end of the strip along the top, standing
 //! in for Windows, where the tests mostly don't build. GPUI's Windows backend works each from a press the app lets
-//! propagate, so these check what the app does with the press, and what's in the strip ends before them.
+//! propagate, so these check what the app does with the press, and what's in the strip ends before them. What the app
+//! draws and does with a press is its own, so these open on a fake hub, holding a workspace whose branch has a pull
+//! request.
 
 #![cfg(test)]
 
+use client_core::fake_hub::World;
 use desktop::app::{TitleBar, the_title_bar_is};
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{
     AppContext as _, DispatchEventResult, ElementId, InputEvent as _, MouseButton, MouseDownEvent, MouseUpEvent,
     Pixels, Point, TestAppContext, px, size,
 };
+use protocol::model::{Checks, Local, MergeState, PrState, PullRequest, Review, SessionStatus};
 
-use crate::support::{Stack, Ui};
-use crate::tools::in_a_new_workspace;
+use crate::support::{FakeHub, Ui, open_on_the_world};
 
 /// How wide the three are together.
 const BUTTONS: Pixels = px(138.);
 
 const BUTTON_IDS: [&str; 3] = ["window-minimize", "window-maximize", "window-close"];
 
-/// A pull request with a failed check, whose bar offers Fix checks.
-const CHECK_FAILED: &str = r#"{"number":7,"url":"https://example.com/pull/7","title":"T","state":"OPEN",
-    "isDraft":false,"statusCheckRollup":[
-        {"__typename":"CheckRun","name":"build","status":"COMPLETED","conclusion":"FAILURE"}]}"#;
+/// The window on a fake hub holding a workspace, with a chat, whose pull request has a failed check, so its bar
+/// offers Fix checks. The hub goes with the test, so it's returned to be kept.
+fn in_a_workspace(cx: &mut TestAppContext) -> (FakeHub, Ui<'_>) {
+    let mut world = World::default();
+    let repo = world.repo("signals");
+    let workspace = world.workspace(&repo, "ledger");
+    world.chat(&workspace, SessionStatus::Idle, Vec::new());
+    let check_failed = PullRequest {
+        number: 7,
+        url: "https://example.com/pull/7".to_string(),
+        title: "T".to_string(),
+        state: PrState::Open,
+        is_draft: false,
+        base: Some("main".into()),
+        merge_state: MergeState::default(),
+        review: Review::default(),
+        checks: Checks { passed: 0, failed: 1, pending: 0 },
+        queue: None,
+        left_queue: None,
+        changes_requested_at_ms: None,
+        local: Local::default(),
+    };
+    world.pull_requests.insert(workspace, check_failed);
+    let (fake, mut ui) = open_on_the_world(cx, world);
+    ui.wait("the workspace", |ui| ui.pane().is_some());
+    (fake, ui)
+}
 
 #[gpui_kit::test]
 fn on_windows_a_press_on_a_window_button_goes_on_to_windows_and_nothing_in_the_app_hears_it(cx: &mut TestAppContext) {
     cx.update(|cx| the_title_bar_is(TitleBar::Windows, cx));
-    let stack = Stack::new();
-    let mut ui = in_a_new_workspace(cx, &stack);
+    let (_fake, mut ui) = in_a_workspace(cx);
 
     for id in BUTTON_IDS {
         let pressed = click(&mut ui, id);
@@ -42,8 +67,7 @@ fn on_windows_a_press_on_a_window_button_goes_on_to_windows_and_nothing_in_the_a
 #[gpui_kit::test]
 fn on_windows_the_window_buttons_are_over_an_open_dialog(cx: &mut TestAppContext) {
     cx.update(|cx| the_title_bar_is(TitleBar::Windows, cx));
-    let stack = Stack::new();
-    let mut ui = in_a_new_workspace(cx, &stack);
+    let (_fake, mut ui) = in_a_workspace(cx);
     ui.open_new_workspace();
 
     for id in BUTTON_IDS {
@@ -59,11 +83,7 @@ fn on_windows_the_window_buttons_are_over_an_open_dialog(cx: &mut TestAppContext
 #[gpui_kit::test]
 fn on_windows_the_pull_requests_bar_at_its_narrowest_ends_before_the_window_buttons(cx: &mut TestAppContext) {
     cx.update(|cx| the_title_bar_is(TitleBar::Windows, cx));
-    let stack = Stack::new();
-    let gh = stack.start_hub_with_stand_in_gh();
-    gh.report(CHECK_FAILED);
-    let mut ui = Ui::open_with_a_repository(cx, &stack);
-    ui.new_workspace();
+    let (_fake, mut ui) = in_a_workspace(cx);
     // Narrow enough that the sidebar of changes is at its narrowest.
     ui.cx.simulate_window_resize(ui.handle, size(px(900.), px(800.)));
     ui.wait("the bar to offer Fix checks", |ui| ui.shows_label("pull-request-bar", "Fix checks"));

@@ -35,6 +35,11 @@ impl FakeHub {
     pub(crate) fn settings_file(&self) -> PathBuf {
         self.hub.paths.data_dir.join("settings.json")
     }
+
+    /// The hub as the app is told of it, for a test that opens another window on it.
+    pub(crate) fn source(&self) -> &HubSource {
+        &self.hub
+    }
 }
 
 /// Somewhere of its own, with a daemon that doesn't exist, so the app can't start a real hub in its place. The

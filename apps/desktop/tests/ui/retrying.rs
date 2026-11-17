@@ -71,7 +71,9 @@ fn failures_in_a_row_are_one_card_as_each_arrives(cx: &mut TestAppContext) {
     ui.new_workspace();
     let file = |name: &str| stack.dir.path().join(name);
     let (first, second) = (file("first").display().to_string(), file("second").display().to_string());
-    ui.paste_text(&format!("prose:40:1; background:{first}; background:{second}; fail:rate_limit"));
+    // Long enough that scrolled up, the cards and lines are out of sight, and no longer, since a reply streamed a
+    // paragraph at a time is laid out again as each comes.
+    ui.paste_text(&format!("prose:20:1; background:{first}; background:{second}; fail:rate_limit"));
     ui.press("enter");
     let failures = |ui: &Ui| ui.events().iter().filter(|e| matches!(e.body, EventBody::RequestFailed { .. })).count();
     ui.wait("the first failure's card", |ui| failures(ui) == 1 && ui.shown("failed-request").len() == 1);
