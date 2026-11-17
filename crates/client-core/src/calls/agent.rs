@@ -2,6 +2,8 @@
 //! subagents in the background, so the call's result only says it started, and the subagent's own events, which
 //! name the call as their parent, are what it did.
 
+use protocol::capability::calls::call::StartSubagent;
+use protocol::capability::settings::PersonaName;
 use serde_json::Value;
 
 use super::{description, str_field};
@@ -21,6 +23,17 @@ pub struct Agent<'a> {
 pub const UNTITLED: &str = "Agent";
 
 impl<'a> Agent<'a> {
+    /// The call `start` makes, as its agent typed it. What it's for, and what it was asked, are only what says
+    /// something, as a description is read from an input.
+    pub(super) fn typed(start: &'a StartSubagent) -> Self {
+        let said = |text: &'a str| Some(text.trim()).filter(|text| !text.is_empty());
+        Self {
+            description: start.description.as_deref().and_then(said),
+            kind: start.persona.as_ref().map(PersonaName::as_str),
+            prompt: Some(start.prompt.as_str()).filter(|prompt| !prompt.trim().is_empty()),
+        }
+    }
+
     pub(super) fn read(input: &'a Value) -> Self {
         Self {
             description: description(input),
@@ -58,6 +71,9 @@ pub fn only_launched(text: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use serde_json::json;
+
+    use protocol::capability::calls::Call;
+    use protocol::capability::calls::call::{Runs, StartSubagent};
 
     use super::{Agent, only_launched, shown_kind};
     use crate::calls::{Recorded, ToolCall};
@@ -98,6 +114,33 @@ mod tests {
                 "{input}"
             );
         }
+    }
+
+    /// A subagent's call its agent typed is drawn as Claude's is, by what it's for, with its persona as its kind, and
+    /// what it was asked, which Codex leaves empty.
+    #[test]
+    fn a_typed_hand_off_is_drawn_as_a_subagent_s_call() {
+        let start = |description: Option<&str>, prompt: &str| {
+            Call::Subagent(StartSubagent {
+                persona: Some("explorer".into()),
+                description: description.map(Into::into),
+                prompt: prompt.into(),
+                model: None,
+                effort: None,
+                runs: Runs::Background,
+                resumes: None,
+            })
+        };
+        let read = |call| {
+            let ToolCall::Agent(agent) = ToolCall::read(Recorded::Typed(call)) else { panic!("drawn as another kind") };
+            (agent.title(), agent.kind, agent.prompt)
+        };
+
+        let (asked, silent) = (start(Some("/root/reviewer"), "Look"), start(Some(" "), " "));
+        assert_eq!(read(&asked), ("/root/reviewer", Some("explorer"), Some("Look")));
+        assert_eq!(read(&silent), ("Agent", Some("explorer"), None), "saying nothing");
+        let started = start(Some("/root/reviewer"), "");
+        assert_eq!(Recorded::Typed(&started).summary().as_deref(), Some("/root/reviewer"));
     }
 
     #[test]
