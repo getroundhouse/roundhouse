@@ -86,7 +86,9 @@ fn a_token_connected_here_becomes_the_default_only_the_hub_keeps_it_and_one_gith
     ui.wait("the account", |ui| !ui.view().records().github_accounts().is_empty() && !ui.has("git-panel"));
     let account = ui.view().records().github_accounts()[0].clone();
     assert_eq!(account.user.name.as_str(), "ada");
-    assert_eq!(default(&ui), Some(account.id.clone()), "the first account is the default");
+    // Which account is the default is on the hub's settings, a record of their own, which reaches the app apart from
+    // the account's, so it's waited for rather than read as soon as the account is there.
+    ui.wait("the first account to be the default", |ui| default(ui) == Some(account.id.clone()));
     assert!(ui.has(more(&account.id)), "it's listed, with its menu");
     assert!(!ui.has("git-none-added") && !ui.has("git-blocked"));
     let everything = stack.dir.path();
