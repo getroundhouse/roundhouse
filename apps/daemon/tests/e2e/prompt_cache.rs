@@ -89,23 +89,3 @@ fn choosing_another_model_leaves_nothing_cached_and_choosing_the_same_leaves_the
     let other = client.session_configure(&session.id, model(ModelName::named("haiku"))).unwrap();
     assert_eq!(other.prompt_cache, None, "the next request is to a model whose cache doesn't hold the conversation");
 }
-
-#[test]
-fn a_chat_still_says_what_its_cache_holds_after_the_hub_restarts_and_still_finds_it_expired() {
-    let mut stack = Stack::start();
-    let client = stack.client();
-    let (_, session) = stack.workspace(&client);
-    client.session_prompt(&session.id, "say:hello", None).unwrap();
-    wait_for_turn_end(&client, &session.id, 1);
-    let kept = client.session_get(&session.id).unwrap().prompt_cache;
-
-    stack.kill_hub();
-    stack.start_hub();
-    let client = stack.client();
-
-    assert_eq!(client.session_get(&session.id).unwrap().prompt_cache, kept);
-    client.session_prompt(&session.id, "cold", None).unwrap();
-    let events = wait_for_turn_end(&client, &session.id, 2);
-    let expired = events.iter().filter(|e| matches!(e.body, EventBody::CacheExpired { .. }));
-    assert_eq!(expired.count(), 1, "the hub that came back knows when the request before was sent");
-}

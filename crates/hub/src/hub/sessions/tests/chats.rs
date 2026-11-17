@@ -10,7 +10,7 @@ use protocol::model::{AnswerSoFar, RunId, SessionId, SessionStatus};
 use protocol::prompt::Prompt;
 use tokio::sync::broadcast::error::RecvError;
 
-use super::*;
+use super::super::*;
 use crate::hub::tests::{carried_on, flushed, hub_in, stand_in_worker, writing};
 use crate::session::{Item, LiveItem, LiveSession, Origin};
 use crate::store::cancelled_approval;

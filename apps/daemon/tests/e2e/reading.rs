@@ -12,9 +12,11 @@ fn unread_in(feed: &RecordsFeed, id: &SessionId) -> bool {
     feed.snapshot().session(id).is_some_and(Session::unread)
 }
 
+/// That a chat marked unread is still unread once the hub has restarted is in `records_kept.rs`, with the rest of its
+/// record.
 #[test]
-fn a_reply_stays_unread_until_someone_reads_it_even_across_a_restart() {
-    let mut stack = Stack::start();
+fn a_reply_stays_unread_until_someone_reads_it() {
+    let stack = Stack::start();
     let client = stack.client();
     let feed = RecordsFeed::start(&client);
     let (_, session) = stack.workspace(&client);
@@ -30,8 +32,4 @@ fn a_reply_stays_unread_until_someone_reads_it_even_across_a_restart() {
     wait_until("the feed to say it's read", || !unread_in(&feed, &session.id));
 
     assert!(client.session_mark_unread(&session.id).unwrap().unread());
-    stack.kill_hub();
-    stack.start_hub();
-
-    assert!(stack.client().session_get(&session.id).unwrap().unread());
 }

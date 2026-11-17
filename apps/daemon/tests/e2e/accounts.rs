@@ -67,12 +67,12 @@ fn account(client: &Client, id: &AccountId) -> Option<Account> {
 }
 
 /// The record of the account the session names.
-fn named_account(client: &Client, session: &SessionId) -> Option<Account> {
+pub(crate) fn named_account(client: &Client, session: &SessionId) -> Option<Account> {
     account(client, &client.session_get(session).unwrap().account?)
 }
 
 /// Waits until the session names Ada's account, and its record has the week's limit.
-fn wait_for_adas_week(client: &Client, session: &SessionId) {
+pub(crate) fn wait_for_adas_week(client: &Client, session: &SessionId) {
     wait_for_adas_limits(client, session, &[the_week()]);
 }
 
@@ -108,22 +108,6 @@ fn a_chat_names_the_account_its_agent_launched_under_and_the_feed_announces_what
         _ => None,
     });
     assert_eq!(told.map(|told| told.id), ada().id);
-}
-
-#[test]
-fn a_chat_still_names_its_account_and_the_account_its_limits_after_the_hub_restarts() {
-    let mut stack = Stack::start();
-    let client = stack.client();
-    let (_, session) = stack.workspace(&client);
-    client.session_prompt(&session.id, "say:hello", None).unwrap();
-    wait_for_turn_end(&client, &session.id, 1);
-    wait_for_adas_week(&client, &session.id);
-
-    stack.kill_hub();
-    stack.start_hub();
-
-    let after = named_account(&stack.client(), &session.id).expect("the chat still names it");
-    assert_eq!((Some(after.id), after.limits), (ada().id, vec![the_week()]));
 }
 
 #[test]

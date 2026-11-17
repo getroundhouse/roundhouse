@@ -20,7 +20,6 @@ mod connection;
 mod context;
 mod core_loop;
 mod drafts;
-mod effort;
 mod environment;
 mod failing;
 mod feed;
@@ -44,6 +43,7 @@ mod pull_requests;
 mod questions;
 mod queueing;
 mod reading;
+mod records_kept;
 mod repos;
 mod setup;
 #[cfg(target_os = "macos")]

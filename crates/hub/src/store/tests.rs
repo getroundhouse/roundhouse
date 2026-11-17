@@ -1,8 +1,8 @@
 use protocol::event::{EventBody, NoticeLevel};
 use protocol::fixtures::approval_request;
 use protocol::model::{
-    ApprovalId, ClientRequestId, DiffComment, ModelName, Rev, SessionSettingsChange, SessionStatus, SetupStatus, Title,
-    Workspace,
+    ApprovalId, ClientRequestId, DiffComment, DraftToKeep, ModelName, Rev, SessionId, SessionSettingsChange,
+    SessionStatus, SetupStatus, Title, Workspace,
 };
 
 use super::*;
@@ -133,12 +133,26 @@ fn open_approvals_are_those_requested_and_not_resolved() {
     assert_eq!(store.open_approvals(&"s".into()).unwrap(), vec![ApprovalId::from("b")]);
 }
 
+/// Every record whole, as well as the log, so a hub that starts again on the store serves each as it was, whichever of
+/// its parts the last one changed. The daemon's `e2e/records_kept.rs` restarts a real hub once for all of a chat's.
 #[test]
 fn data_survives_reopening_and_migrations_do_not_rerun() {
     let dir = tempfile::tempdir().unwrap();
-    store_with_session(dir.path()).append(&"s".into(), None, &notice("kept"), None, None, None).unwrap();
+    let store = store_with_session(dir.path());
+    let s = SessionId::from("s");
+    store.append(&s, None, &notice("kept"), None, None, None).unwrap();
+    store.set_draft(&s, &DraftToKeep::new("half a thought")).unwrap();
+    let options = SessionSettingsChange { model: Some(ModelName::named("haiku")), ..SessionSettingsChange::default() };
+    store.set_session_options(&s, &options).unwrap();
+    let before = store.list_records().unwrap();
+    drop(store);
+
     let store = open_in(dir.path());
-    assert_eq!(store.read_events(&"s".into(), Seq::new(1), 10, u64::MAX, false).unwrap()[0].body, notice("kept"));
+
+    assert_eq!(store.read_events(&s, Seq::new(1), 10, u64::MAX, false).unwrap()[0].body, notice("kept"));
+    let session = &before.sessions[0];
+    assert_eq!((session.draft.text.as_str(), session.model.as_str()), ("half a thought", "haiku"), "as it was changed");
+    assert_eq!(store.list_records().unwrap(), before, "every record, whole");
 }
 
 #[test]
