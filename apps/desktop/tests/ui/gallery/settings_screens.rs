@@ -9,8 +9,8 @@ use look::Region;
 use super::frame::Frame;
 use super::screens::FOCUS;
 use super::steps::{Screen, Step, Target};
-use super::world::{LoginSupport, World};
 use super::worlds::{accounts, conversation, logins_unkept, none_found, own_hub};
+use client_core::fake_hub::{LoginSupport, World};
 
 /// What puts the cursor in Settings' search.
 const FIND: &str = "secondary-f";

@@ -8,7 +8,7 @@ use protocol::event::EventBody;
 use protocol::model::{Place, PromptLine, Seq, SessionStatus};
 
 use super::events::{replied, taken, text, user_prompt};
-use super::world::World;
+use client_core::fake_hub::World;
 
 /// What each turn was asked, and what the agent said.
 pub(crate) const TURNS: [(&str, &str); 20] = [

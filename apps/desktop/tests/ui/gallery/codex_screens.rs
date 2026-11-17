@@ -1,7 +1,7 @@
 use super::frame::{Frame, TABS_MENU};
 use super::screens::FOCUS;
 use super::steps::{Screen, Step};
-use super::world::World;
+use client_core::fake_hub::World;
 
 fn offered() -> World {
     let mut world = super::worlds::titled();

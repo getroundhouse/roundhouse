@@ -12,8 +12,8 @@ use super::frame::{CHAT, Frame, Part};
 use super::screens::FOCUS;
 use super::steps::{Screen, Step};
 use super::subagent_chats::LAUNCHED;
-use super::world::World;
 use super::worlds::chat_world;
+use client_core::fake_hub::World;
 
 /// Several tasks' lines, from the first of them to the last, without the calls above that started them.
 const LINES: Frame = Frame::Around(Part::Line("6 subagents"), &[Part::Line("2 monitors")]);

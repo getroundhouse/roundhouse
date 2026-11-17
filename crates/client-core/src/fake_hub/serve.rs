@@ -18,12 +18,12 @@ use protocol::model::{
     WorkspaceStatus,
 };
 
-use super::super::base_pages::{opened, paged};
-use super::super::world::{LoginSupport, NOW_MS, World};
+use super::base_pages::{opened, paged};
 use super::stand_in::{claude, fixed_pairing, status, version};
+use super::world::{LoginSupport, NOW_MS, World};
 
 /// Listens until the process ends. Each screen gets its own socket, so nothing outlives the screen that needs it.
-pub(crate) fn serve(socket: &Path, world: World) {
+pub fn serve(socket: &Path, world: World) {
     let listener = UnixListener::bind(socket).unwrap();
     let world = Arc::new(world);
     std::thread::spawn(move || {

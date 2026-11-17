@@ -7,9 +7,9 @@ use gpui_kit::PlatformTextSystem;
 use protocol::event::{EventBody, ExitReason, FailureKind, NoticeLevel, RequestFailure, TurnOutcome};
 use protocol::model::SessionStatus;
 
-use super::world::World;
 use super::worlds::chat_world;
 use super::{capture, file_chats, subagent_chats, tool_chats, typed_chats};
+use client_core::fake_hub::World;
 
 /// What finding counts in each kind of call is what the call draws, so every match drawn is one that can be gone to,
 /// and the count is of what's there.

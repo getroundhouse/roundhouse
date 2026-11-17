@@ -9,8 +9,8 @@ use protocol::model::{WorkspaceId, WorkspaceStatus};
 use super::frame::{Frame, Part};
 use super::screens::FOCUS;
 use super::steps::{Screen, Step};
-use super::world::World;
 use super::worlds::{titled, unread_titled};
+use client_core::fake_hub::World;
 
 /// Home, and nothing more.
 const HOME: Frame = Frame::Exactly(Part::Region(Region::Home), &[]);

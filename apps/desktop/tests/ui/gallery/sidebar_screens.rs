@@ -9,8 +9,8 @@ use protocol::model::Seq;
 use super::frame::{Frame, SIDEBAR, SIDEBAR_MENU};
 use super::screens::FOCUS;
 use super::steps::{Screen, Step};
-use super::world::{PairingWorld, World};
 use super::worlds::conversation;
+use client_core::fake_hub::{PairingWorld, World};
 
 /// What's typed in the screen's own workspace and left unsent.
 const DRAFT: &str = "Keep the badge at its own width";

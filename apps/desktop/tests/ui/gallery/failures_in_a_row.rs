@@ -16,8 +16,8 @@ use super::frame::CHAT;
 use super::screens::FOCUS;
 use super::steps::{Screen, Step};
 use super::subagent_chats::LAUNCHED;
-use super::world::{NOW_MS, World};
 use super::worlds::chat_world;
+use client_core::fake_hub::{NOW_MS, World};
 
 /// The screens about failures in a row.
 pub(crate) const SCREENS: &[Screen] = &[

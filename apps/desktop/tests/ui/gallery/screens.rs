@@ -11,13 +11,13 @@ use super::frame::{
     TURN_CARD,
 };
 use super::steps::{Screen, Step, Target};
-use super::world::World;
 use super::worlds::{
     archiving, attachments, chat_tabs, chat_world, closed_chats, conversation, planning, queue_held, queued,
     setup_failed, steered, streaming, titled, unread, unread_titled, waiting_on_checks, waiting_on_stacks,
     working_background,
 };
 use super::{chats, long_chats, pictures, question_chats};
+use client_core::fake_hub::World;
 
 /// The workspace each screen is about, in the first repository, below the ones the sidebar always has.
 pub(super) const FOCUS: &str = "aspen";

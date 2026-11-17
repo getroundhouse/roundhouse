@@ -9,12 +9,14 @@ use gpui_kit::{HeadlessAppContext, PlatformTextSystem, px, size};
 
 use super::Driver;
 use super::scrollbar::ChatScroll;
-use crate::gallery::{fake_hub, frame, world};
+use client_core::fake_hub;
+
+use crate::gallery::frame;
 
 /// The real app, connected to a hub that holds `world`, if there's one, in a directory of its own, which goes with it,
 /// and in a [`frame::WIDE`] window if it's `wide`.
 pub(super) fn open(
-    world: Option<fn() -> world::World>,
+    world: Option<fn() -> fake_hub::World>,
     wide: bool,
     text_system: &Arc<dyn PlatformTextSystem>,
 ) -> (tempfile::TempDir, Driver) {
@@ -40,7 +42,7 @@ pub(super) fn open(
     // Nothing moves, so a mark holds still and anything else, such as a dialog's entrance, shows as it ends. The time
     // holds still too, so how long something took or how long ago it was is the same on every run.
     cx.update(|cx| {
-        look::hold_still(world::NOW_MS, cx);
+        look::hold_still(fake_hub::NOW_MS, cx);
         desktop::app::the_device_name_is("Ada’s MacBook Air", cx);
     });
     // The app loads the highlighter on a thread of its own, and draws code plain until it has, so load it first for

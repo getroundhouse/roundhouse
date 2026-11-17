@@ -9,7 +9,7 @@ use protocol::model::{
 };
 
 use super::conversation;
-use crate::gallery::world::{HOUR_MS, NOW_MS, World};
+use client_core::fake_hub::{HOUR_MS, NOW_MS, World};
 
 const DAY_MS: i64 = 24 * HOUR_MS;
 /// Feb 3, 2027, at 3 PM in UTC, when a fine-grained token made for 90 days ends.

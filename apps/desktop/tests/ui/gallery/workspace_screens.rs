@@ -11,8 +11,8 @@ use protocol::model::{
 use super::frame::{Frame, Part, SIDEBAR, SIDEBAR_MENU};
 use super::screens::FOCUS;
 use super::steps::{Screen, Step};
-use super::world::{NOW_MS, World};
 use super::worlds::{conversation, sidebar, titled};
+use client_core::fake_hub::{NOW_MS, World};
 
 /// What's typed into the dialog before Create, for a workspace the screen's hub never finishes making.
 const TASK: &str = "Keep the PR badge at its own width when the sidebar is narrow";

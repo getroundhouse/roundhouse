@@ -22,6 +22,8 @@ mod approval;
 mod attachments;
 mod client;
 mod drafts;
+#[cfg(any(test, feature = "testing"))]
+pub mod fake_hub;
 mod sending;
 #[cfg(any(test, feature = "testing"))]
 pub mod stand_in_hub;

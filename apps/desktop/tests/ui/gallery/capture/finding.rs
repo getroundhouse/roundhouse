@@ -10,7 +10,7 @@ use gpui_kit::test::TestWindowExt as _;
 use super::{Driver, open, selected_pane};
 use crate::gallery::screens::FOCUS;
 use crate::gallery::steps::Step;
-use crate::gallery::world::World;
+use client_core::fake_hub::World;
 
 impl Driver {
     pub(super) fn find_in_chat(&mut self, query: &str) {
