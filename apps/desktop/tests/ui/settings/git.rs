@@ -13,7 +13,7 @@ use protocol::model::{GithubAccount, GithubAccountId, GithubToken};
 use super::open_settings;
 use crate::support::{Stack, Ui, files_holding};
 
-const TOKEN: &str = "github_pat_made_up_for_a_test";
+pub(super) const TOKEN: &str = "github_pat_made_up_for_a_test";
 const ANOTHER: &str = "github_pat_another_made_up";
 
 /// GitHub, which knows `ada` by [`TOKEN`] and `grace` by [`ANOTHER`], and refuses any other token.
@@ -49,11 +49,11 @@ fn the_hubs(stack: &Stack) -> Vec<GithubAccount> {
 }
 
 /// An account whose token the hub was given from elsewhere.
-fn connected(stack: &Stack, token: &str) -> GithubAccountId {
+pub(super) fn connected(stack: &Stack, token: &str) -> GithubAccountId {
     stack.client().github_account_connect(GithubToken::new(token), None).unwrap().id
 }
 
-fn more(account: &GithubAccountId) -> SharedString {
+pub(super) fn more(account: &GithubAccountId) -> SharedString {
     format!("git-more-{account}").into()
 }
 

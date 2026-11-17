@@ -2,6 +2,7 @@
 //! heading, with a way back at its top right, and the chosen page beside it. Most pages are a list of settings, and a
 //! page with more to show than a setting's row, such as Agents, draws what's on it itself.
 
+mod account_row;
 mod agents;
 mod dictation_row;
 mod field;

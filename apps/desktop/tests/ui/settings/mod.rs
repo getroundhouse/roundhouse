@@ -2,6 +2,8 @@
 
 #![cfg(test)]
 
+mod account_card;
+mod account_rows;
 mod agents;
 mod git;
 mod git_sign_in;

@@ -1,4 +1,5 @@
-//! One hub-wide default for each kind whose adapter can accept a held login.
+//! Default accounts, a list with the hub's one default for each kind whose adapter can accept a held login, and what
+//! chooses it, under a heading as the account pages' lists are.
 
 use gpui_kit::component::button::Button;
 use gpui_kit::component::menu::{DropdownMenu as _, PopupMenu, PopupMenuItem};
@@ -7,6 +8,7 @@ use gpui_kit::{AnyElement, App, Div, IntoElement, ParentElement as _, SharedStri
 use look::{Off as _, Sizing as _, Typeset as _};
 use protocol::model::{Account, AgentDescription};
 
+use super::super::lists::{heading, list};
 use super::Drawing;
 
 /// What Default accounts says above its rows, on a hub that keeps defaults.
@@ -17,21 +19,13 @@ pub(super) fn section(drawing: &Drawing<'_>, accounts: &[&Account], cx: &App) ->
     let colors = look::colors(cx);
     // A hub that keeps no defaults puts no chat on an account.
     let intro = if drawing.defaults.is_some() { INTRO } else { "Choose which account new chats use across this hub." };
-    let intro = div().typeset(look::Type::Body).text_color(colors.text_muted).child(intro);
-    let rows = drawing.agents.with_logins().map(|agent| row(drawing, agent, accounts, cx));
-    let error = drawing
-        .kept
-        .read(cx)
-        .choosing
-        .error
-        .as_ref()
-        .map(|said| div().typeset(look::Type::Body).text_color(colors.error).child(said.clone()));
-    v_flex()
-        .gap(look::Space::Medium)
-        .child(div().emphasis().child("Default accounts"))
-        .child(intro)
-        .children(rows)
-        .children(error)
+    let rows: Vec<Div> = drawing.agents.with_logins().map(|agent| row(drawing, agent, accounts, cx)).collect();
+    // With no kind to choose for, as on a hub from before hubs kept logins, there's no line for rows to go under.
+    let rows = (!rows.is_empty()).then(|| list(cx).children(rows));
+    let error = drawing.kept.read(cx).choosing.error.as_ref().map(|said| {
+        div().pt(look::Space::Medium).typeset(look::Type::Body).text_color(colors.error).child(said.clone())
+    });
+    v_flex().child(heading("Default accounts", None, intro, None, cx)).children(rows).children(error)
 }
 
 fn row(drawing: &Drawing<'_>, agent: &AgentDescription, accounts: &[&Account], cx: &App) -> Div {

@@ -49,6 +49,8 @@ pub enum Region {
     UpdateDetails,
     /// Where a workspace's worktree is and which build its agents are on, shown from its name in the header.
     WorkspaceCard,
+    /// What an account's row in Settings has no room for, shown from the row.
+    AccountCard,
 }
 
 impl Region {
@@ -77,6 +79,7 @@ impl Region {
             Region::Home => "home-page",
             Region::UpdateDetails => "update-details-card",
             Region::WorkspaceCard => "workspace-card",
+            Region::AccountCard => "account-card",
         }
     }
 }

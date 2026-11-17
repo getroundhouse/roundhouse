@@ -9,9 +9,10 @@ use gpui_kit::{AnyElement, App, Div, IntoElement, ParentElement as _, SharedStri
 use look::{Off as _, Sizing as _, Typeset as _};
 use protocol::model::{FoundGithubLogin, GhLogin};
 
+use super::super::account_row::{self, Detail, Picture, Row, Tone};
 use super::super::lists::{badge, heading, list as rows_of, said_in_the_list};
+use super::git_page::COLUMNS;
 use super::kept::Asked;
-use super::row::{self, Row, Tone};
 use super::{Drawing, words};
 
 /// Found, but for a hub that keeps no GitHub accounts, whose Added says it can't, and which finds no logins either.
@@ -54,14 +55,16 @@ fn found_row(found: &FoundGithubLogin, cx: &App) -> AnyElement {
     let someone = matches!(found.login, GhLogin::LoggedIn { .. });
     let shown = Row {
         id: SharedString::from(format!("git-found-{}", found.provider)),
-        initial: someone.then(|| row::initial(&name)).flatten(),
+        picture: if someone { Picture::of(&name) } else { Picture::Nobody },
         dim: !someone,
         name,
         default: false,
         how: Some(words::found_on(&found.provider).into()),
-        detail: said.map(|(said, problem)| (said.to_string(), if problem { Tone::Problem } else { Tone::Plain })),
+        detail: said
+            .map(|(said, problem)| Detail::Said(said.to_string(), if problem { Tone::Problem } else { Tone::Plain })),
         menu: None,
+        card: None,
         under: Vec::new(),
     };
-    row::row(shown, cx)
+    account_row::row(shown, COLUMNS, cx)
 }

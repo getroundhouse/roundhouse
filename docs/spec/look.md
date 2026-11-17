@@ -170,7 +170,7 @@ Three strengths have names of their own, since several places draw with them: wh
 |---|---|---|
 | `Small` | 28px | Used sparingly: a long list to look down, where more room would show less of it at once, such as a file in a tree, a call's line in the chat, a page a search found or a closed chat in its menu, and whatever the list, the heading over it, and a line on its own, set apart from a list, such as a fold among a diff's lines or the build line under the sidebar |
 | `Regular` | 36px | Most lists, such as the places to go in a sidebar: the sidebar's own places, its projects and their workspaces, and Settings' pages |
-| `Large` | 44px | A row of a table, with a line between it and the next: Home's workspaces, and the accounts in Settings' Git |
+| `Large` | 44px | A row of a table, with a line between it and the next: Home's workspaces, and the accounts in Settings' Agents and Git |
 
 **Every size of a bar and of a row, as the app draws them.** *Unconfirmed.*
 

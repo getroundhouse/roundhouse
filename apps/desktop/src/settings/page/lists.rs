@@ -46,7 +46,7 @@ pub(super) fn said_in_the_list(id: &'static str, said: SharedString, cx: &App) -
         .test_support()
 }
 
-/// A chip that marks what's the default, such as `Default for Claude Code` beside an account's name.
+/// A chip that marks what's the default, such as `Default` beside an account's name.
 pub(super) fn badge(said: impl Into<SharedString>, cx: &App) -> Div {
     let colors = look::colors(cx);
     div()

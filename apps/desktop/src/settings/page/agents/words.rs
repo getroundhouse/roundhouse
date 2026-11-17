@@ -1,10 +1,13 @@
-//! What Agents says in words: what each list says of itself, what each account is called, how its login stands,
-//! when it was last used, how long a token lasts, what disconnecting asks, and what the hub's refusals mean.
+//! What Agents says in words: what each list says of itself, how an account's login was made and how it stands, what
+//! else its row says, when its card says it was last used and its login ends, how long a token lasts, what
+//! disconnecting asks, and what the hub's refusals mean.
 
 use client_core::{Agents, ClientError};
-use gpui_kit::App;
+use gpui_kit::{App, SharedString};
 use protocol::client::ErrorCode;
 use protocol::model::{Account, HeldLogin};
+
+use super::super::account_row::Tone;
 
 const DAY_MS: i64 = 24 * 60 * 60 * 1000;
 const YEAR_MS: i64 = 365 * DAY_MS;
@@ -44,13 +47,17 @@ pub(super) const DISCONNECT_SAYS: &str = "The hub forgets its token, so connecti
                                           you reconnect it or move them, and if it's a default account, new chats \
                                           can't either until you reconnect it or choose another default.";
 
+/// What an account's row and its card say, faintly, while no agent under it has heard a limit.
+pub(super) const NO_LIMITS_YET: &str = "No limits heard of yet";
+
 /// What's said under an account's row when it was to be disconnected with no hub to ask.
 pub(super) const NO_HUB_TO_DISCONNECT: &str = "Couldn't disconnect it: there's no hub to ask.";
 
 /// How a login the person added stands, as its row says, and how loudly.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) enum Standing {
-    /// The hub holds it, and it ends after its row starts to warn of it, as this says, or the hub doesn't know when.
+    /// The hub holds it, and it ends after its row starts to warn of it, so only its card says when, as `Ends Oct 12,
+    /// 2027`, or the hub doesn't know when, so nothing says it.
     Held(Option<String>),
     /// The hub holds it, and it ends soon, as [`warns_from_ms`] says, which is said in amber.
     EndingSoon(String),
@@ -91,11 +98,71 @@ pub(super) fn standing(held: Option<&HeldLogin>, now_ms: i64, cx: &App) -> Stand
     })
 }
 
-/// Which day the person last sent something in a chat under the account, such as "Last used yesterday". `None`
-/// until they have, and from a hub from before it kept that, which can't be told apart, so nothing is said of either.
+/// How an account's login was made, as its row says: the kind of agent it's for, for one the person added, then its
+/// plan and how it's logged in, where its record says, such as `Max · Claude account` for one found where agents ran.
+pub(super) fn how(account: &Account, agents: &Agents) -> Option<String> {
+    let kind = account.login_agent.and_then(|kind| agents.of(kind)).map(|agent| agent.name.clone());
+    let parts: Vec<String> = [kind, account.plan.clone(), account.login.clone()].into_iter().flatten().collect();
+    (!parts.is_empty()).then(|| parts.join(" · "))
+}
+
+/// What else an account's row says, after how its login was made.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) enum Says {
+    /// How the login the person added stands, as loudly as the tone says: that it ends soon or has ended, or that it
+    /// was disconnected.
+    Standing(String, Tone),
+    /// How much is left of each limit there's something true to say of, by its window, such as `5h`, as a percentage.
+    Limits(Vec<(SharedString, u8)>),
+    /// That no agent under it has heard a limit yet, faintly.
+    NoLimitsYet,
+    /// Nothing, since every limit heard has started again.
+    Nothing,
+}
+
+/// What else the row of `account`, whose login stands as `standing` says, if the person added it, says at `now_ms`: how
+/// its login stands, once that needs saying, since an agent can't run under it once it has ended or been disconnected,
+/// and otherwise what's left of its limits, as the chat's card of them would show them.
+pub(super) fn says(account: &Account, standing: Option<&Standing>, now_ms: i64) -> Says {
+    match standing {
+        Some(Standing::EndingSoon(said)) => return Says::Standing(said.clone(), Tone::Warning),
+        Some(Standing::Ended(said)) => return Says::Standing(said.clone(), Tone::Problem),
+        Some(Standing::Disconnected) => return Says::Standing("Disconnected".to_string(), Tone::Plain),
+        Some(Standing::Held(_)) | None => {}
+    }
+    if account.limits.is_empty() {
+        return Says::NoLimitsYet;
+    }
+    let shown = crate::limits::shown_by_window(&account.limits, now_ms);
+    if shown.is_empty() {
+        return Says::Nothing;
+    }
+    Says::Limits(shown.into_iter().map(|(window, limit)| (window, limit.left_percent())).collect())
+}
+
+/// What's said for `limits`, each by its window and how much of it is left, as `Says::Limits` holds them, to assistive
+/// apps, which can't see the bars: `5h limit, 71% left, 7d limit, 96% left`.
+pub(super) fn limits_left(limits: &[(SharedString, u8)]) -> String {
+    let each = limits.iter().map(|(window, left)| format!("{window} limit, {left}% left"));
+    each.collect::<Vec<_>>().join(", ")
+}
+
+/// Which day the person last sent something in a chat under the account, as its card says, such as "Last used
+/// yesterday". `None` until they have, and from a hub from before it kept that, which can't be told apart, so nothing
+/// is said of either.
 pub(super) fn last_used(account: &Account, now_ms: i64, cx: &App) -> Option<String> {
     let day = crate::ago::day_ago(account.used_at_ms?, now_ms, cx)?;
     Some(format!("Last used {day}"))
+}
+
+/// When the login the person added ends, or ended, as its card says, whether or not its row warns of it yet, from how
+/// it stands. `None` for one the hub holds none of, or doesn't know the end of.
+pub(super) fn ends(standing: &Standing) -> Option<&str> {
+    match standing {
+        Standing::Held(ends) => ends.as_deref(),
+        Standing::EndingSoon(ends) | Standing::Ended(ends) => Some(ends),
+        Standing::Disconnected => None,
+    }
 }
 
 /// How long a token lasts, in whole years or days, such as "a year". `None` for one that lasts no whole number of days.

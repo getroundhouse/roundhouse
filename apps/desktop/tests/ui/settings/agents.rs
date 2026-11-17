@@ -19,20 +19,20 @@ const MINUTE_MS: i64 = 60_000;
 const DAY_MS: i64 = 24 * 60 * MINUTE_MS;
 
 /// Opens Agents in Settings, once the hub has said what makes a login, so Connect account is on.
-fn in_agents<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> Ui<'a> {
+pub(super) fn in_agents<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> Ui<'a> {
     let mut ui = Ui::open(cx, stack);
     to_agents(&mut ui);
     ui
 }
 
-fn to_agents(ui: &mut Ui<'_>) {
+pub(super) fn to_agents(ui: &mut Ui<'_>) {
     open_settings(ui);
     ui.click("settings-page-agents");
     ui.wait("Connect account to be on", |ui| ui.has("accounts-connect") && !ui.disabled("accounts-connect"));
 }
 
 /// The hub's record of the account `id`, as the app shows it.
-fn record(ui: &Ui<'_>, id: &AccountId) -> Option<Account> {
+pub(super) fn record(ui: &Ui<'_>, id: &AccountId) -> Option<Account> {
     ui.view().records().account(id).cloned()
 }
 
@@ -42,24 +42,24 @@ fn called(ui: &Ui<'_>, name: &str) -> Option<Account> {
 }
 
 /// Every account the hub has, as it says when asked, rather than as the app shows them.
-fn the_hubs(stack: &Stack) -> Vec<Account> {
+pub(super) fn the_hubs(stack: &Stack) -> Vec<Account> {
     stack.client().records_list().unwrap().accounts
 }
 
 /// A login the hub was given from elsewhere, called `name`.
-fn connected(stack: &Stack, name: &str, token: &str) -> AccountId {
+pub(super) fn connected(stack: &Stack, name: &str, token: &str) -> AccountId {
     stack.client().account_connect(AgentKind::Claude, name, LoginToken::new(token), None).unwrap().id
 }
 
-fn id(prefix: &str, account: &AccountId) -> SharedString {
+pub(super) fn id(prefix: &str, account: &AccountId) -> SharedString {
     format!("{prefix}-{account}").into()
 }
 
-/// What the line under an account's name says, as it tells assistive apps.
-fn stands(ui: &mut Ui<'_>, account: &AccountId) -> String {
+/// What an account's row says after how its login was made, as it tells assistive apps.
+pub(super) fn says(ui: &mut Ui<'_>, account: &AccountId) -> String {
     ui.frame();
-    let line = id("account-stands", account);
-    ui.cx.update_window(ui.handle, |_, window, _| window.find(line).label().unwrap().to_string()).unwrap()
+    let said = format!("account-{account}-says");
+    ui.cx.update_window(ui.handle, |_, window, _| window.find(said).label().unwrap().to_string()).unwrap()
 }
 
 /// What's in the field that has the cursor.
@@ -153,10 +153,20 @@ fn disconnecting_asks_first_and_leaves_the_account_to_connect_again(cx: &mut Tes
     ui.wait("the question", |ui| ui.cx.has_pending_prompt());
     ui.cx.simulate_prompt_answer("Disconnect");
 
-    ui.wait("Connect again", |ui| ui.has(id("account-again", &account)));
-    assert_eq!(record(&ui, &account).unwrap().held_login, None);
+    ui.wait("it disconnected", |ui| record(ui, &account).is_some_and(|account| account.held_login.is_none()));
     assert_eq!(the_hubs(&stack)[0].held_login, None);
-    assert!(!ui.has(id("account-more", &account)), "with nothing to renew or disconnect");
+    assert_eq!(says(&mut ui, &account), "Disconnected");
+    ui.click(id("account-more", &account));
+    assert!(ui.labelled("Disconnect").is_empty(), "with nothing to disconnect");
+    ui.click_menu_item("Connect again");
+    assert!(!ui.has("accounts-name"), "the account keeps its name");
+    ui.input("another-made-up-token");
+    ui.press("enter");
+
+    ui.wait("the login again", |ui| record(ui, &account).is_some_and(|account| account.held_login.is_some()));
+    let accounts = the_hubs(&stack);
+    assert_eq!(accounts.iter().map(|account| &account.id).collect::<Vec<_>>(), [&account], "it's the same account");
+    assert!(accounts[0].held_login.is_some());
 }
 
 #[gpui_kit::test]
@@ -258,13 +268,13 @@ fn a_login_starts_to_warn_a_month_before_it_ends_with_nothing_else_drawing_the_p
     let warns_at_ms = record(&ui, &account).unwrap().held_login.unwrap().ends_at_ms.unwrap() - 30 * DAY_MS;
     ui.cx.update(|cx| look::hold_still(warns_at_ms - MINUTE_MS, cx));
     to_agents(&mut ui);
-    assert!(!stands(&mut ui, &account).contains("Ends in"), "{}", stands(&mut ui, &account));
+    assert_eq!(says(&mut ui, &account), "No limits heard of yet");
 
     ui.cx.update(|cx| look::hold_still(warns_at_ms + MINUTE_MS, cx));
     ui.cx.executor().advance_clock(Duration::from_mins(2));
     ui.frame();
 
-    assert!(stands(&mut ui, &account).contains("Ends in"), "{}", stands(&mut ui, &account));
+    assert!(says(&mut ui, &account).contains("Ends in"), "{}", says(&mut ui, &account));
 }
 
 /// More logins than fit, each the hub was given from elsewhere, in the order Added lists them.

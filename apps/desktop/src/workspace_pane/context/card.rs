@@ -10,15 +10,13 @@ use gpui_kit::{
     TestSupportExt as _, WeakEntity, div, px, relative,
 };
 use look::{HoldOpen, InRegion as _, Off as _, Region, Sizing as _, Typeset as _};
-use protocol::model::{Account, ContextPart, ContextPartKind, ContextUsage, UsageLimit};
+use protocol::model::{Account, ContextPart, ContextPartKind, ContextUsage};
 
 use super::moving::{self, Moves};
 use super::{Usage, words};
 use crate::workspace_pane::WorkspacePane;
 
 const WIDTH: Pixels = px(300.);
-/// How tall a bar is.
-const BAR: Pixels = px(6.);
 
 /// Raised like the app's other cards, with a card's room around what it holds.
 fn surface(region: Region, cx: &App) -> ObservedElement<Stateful<Div>> {
@@ -70,7 +68,8 @@ fn compact(pane: &WeakEntity<WorkspacePane>, off: bool, cx: &App) -> Div {
 /// bar that empties, and when it starts again, then whose account it is, and the menu that moves the chat to another,
 /// which `hold` keeps the card open for.
 pub(super) fn usage_card(usage: &Usage, called: SharedString, hold: &HoldOpen, cx: &App) -> AnyElement {
-    let limits = usage.limits.iter().map(|(name, limit)| self::limit(name.clone(), limit, cx));
+    let limits =
+        usage.limits.iter().enumerate().map(|(at, (name, limit))| crate::limits::in_a_card(at, name, limit, cx));
     let plan = usage.account.plan.clone().map(SharedString::from);
     let limits = v_flex().gap(look::Space::Medium).child(heading(called, plan, cx)).children(limits);
     let whose = whose(&usage.account, Plan::BesideHeading, usage.moves.as_ref().map(|moves| (moves, hold)), cx);
@@ -128,23 +127,6 @@ fn in_it(context: &ContextUsage) -> Vec<&ContextPart> {
     let mut parts: Vec<&ContextPart> = context.parts.iter().filter(held).collect();
     parts.sort_by_key(|part| std::cmp::Reverse(part.tokens));
     parts
-}
-
-/// A limit called `name`. A model's week is named by its provider's label for the model, which could be long, so the
-/// name is cut off before how much is left is.
-fn limit(name: SharedString, limit: &UsageLimit, cx: &App) -> AnyElement {
-    let colors = look::colors(cx);
-    let left = limit.left_percent();
-    let resets = limit.resets_at_ms.and_then(|at_ms| look::day_and_time(at_ms, cx));
-    let said = h_flex()
-        .justify_between()
-        .gap(look::Space::Medium)
-        .child(div().min_w_0().truncate().text_color(colors.text_muted).child(name))
-        .child(div().flex_none().emphasis().child(format!("{left}% left")));
-    let resets = resets
-        .map(|when| div().typeset(look::Type::Detail).text_color(colors.text_faint).child(format!("Resets {when}")));
-    let bar = crate::limits::bar(left, BAR, cx);
-    v_flex().gap(look::Space::XSmall).child(said).child(bar).children(resets).into_any_element()
 }
 
 /// Whether the plan is said with whose account it is, or is already beside a heading above it.
@@ -208,7 +190,7 @@ fn bar_with_room_kept_back(used: f32, kept_back: f32, cx: &App) -> Div {
     let track = || div().h_full().rounded_full().bg(color.opacity(0.12));
     h_flex()
         .w_full()
-        .h(BAR)
+        .h(crate::limits::BAR_IN_A_CARD)
         // The drawing's own gap, where the agent shrinks the conversation, rather than a space.
         .gap(px(3.))
         .child(track().w(relative(usable)).flex_shrink(1.).child(filled))

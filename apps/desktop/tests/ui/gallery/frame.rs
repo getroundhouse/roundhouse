@@ -146,7 +146,8 @@ fn region_in_the_column(region: Region) -> bool {
         | Region::FindBar
         | Region::Home
         | Region::UpdateDetails
-        | Region::WorkspaceCard => false,
+        | Region::WorkspaceCard
+        | Region::AccountCard => false,
     }
 }
 

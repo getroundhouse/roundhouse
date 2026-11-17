@@ -13,7 +13,6 @@ mod found;
 mod git_page;
 mod kept;
 mod panel;
-mod row;
 mod sign_in;
 mod sign_in_panel;
 mod sign_in_words;
