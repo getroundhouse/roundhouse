@@ -17,7 +17,7 @@ A rule can end with *Not built*, when it's decided and not in the product yet, o
 | `menus.md` | The menus, on a Mac and off it, and the keys off the Mac |
 | `window.md` | The window: the strip along its top, its buttons on each platform, and where it opens |
 | `settings.md` | Settings, which shows in place of the workspace, and what each setting does |
-| `look.md` | The design system's foundations, the rules every screen follows: colour, type, space and shape, layout and the pointer |
+| `look.md` | The design system's foundations, the rules every screen follows: how each client is designed for its device, colour, type, space and shape, layout and the pointer |
 | `components.md` | The design system's components, which screens are built from: buttons, the status mark, empty states and the app icon |
 | `speed.md` | How fast the desktop app has to be |
 
