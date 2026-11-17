@@ -1,4 +1,7 @@
-//! A hub that goes while it's archiving or restoring a workspace, and what the next one records of it.
+//! A hub that goes while it's archiving or restoring a workspace, and what the next one records of it: what spans
+//! processes, the next hub settling each move as it starts, by asking the worker the last one left at it. What it
+//! records from what that worker says is the hub's, and its table in `hub/workspaces/tests/making.rs` proves each
+//! outcome on a stand-in for the worker.
 
 #![cfg(test)]
 
@@ -10,7 +13,7 @@ use process::ProcessRecord;
 use protocol::model::{SetupStatus, Workspace, WorkspaceId, WorkspaceStatus};
 use protocol::paths::WORKER_RECORD_FILE;
 
-use crate::support::{Gate, Stack, commit_settings, git, install_executable, wait_for_setup, wait_for_turn_end};
+use crate::support::{Gate, Stack, commit_settings, install_executable, wait_for_setup, wait_for_turn_end};
 use crate::support::{assistant_text, wait_until, workspace};
 
 /// A shell line that says it has started, by making `started`, and then waits for `go` to be opened.
@@ -54,10 +57,14 @@ fn an_archive_cut_short_with_the_worktree_still_there_leaves_the_workspace_ready
     let client = stack.client();
     let (made, started, go) = workspace_with_a_held_archive(&stack, &client);
     archive_until_the_script_runs(&stack, &made.id, &started);
+    let archiving = worker_of(&stack, &client, &made.id);
 
     stack.restart_hub();
     let client = stack.client();
     wait_for_workspace(&client, &made.id, WorkspaceStatus::Ready);
+    // Only the worker that was archiving it can say how far it got while it's still at it, so the next hub keeps it to
+    // ask, rather than stopping it and starting another.
+    assert_eq!(worker_of(&stack, &client, &made.id), archiving, "settled by the worker that was archiving it");
 
     // It's a workspace like any other: an agent runs in it, and it can be archived.
     go.open();
@@ -65,36 +72,6 @@ fn an_archive_cut_short_with_the_worktree_still_there_leaves_the_workspace_ready
     client.session_prompt(&session.id, "say:still here", None).unwrap();
     assert_eq!(assistant_text(&wait_for_turn_end(&client, &session.id, 1)), "still here");
     assert_eq!(client.workspace_archive(&made.id, false).unwrap().status, WorkspaceStatus::Archived);
-}
-
-#[test]
-fn an_archive_cut_short_after_the_worktree_went_leaves_the_workspace_archived() {
-    let mut stack = Stack::start();
-    let client = stack.client();
-    let (made, started, go) = workspace_with_a_held_archive(&stack, &client);
-    let worktree = PathBuf::from(made.path.clone().unwrap());
-    git(&worktree, &["branch", "-m", "fix-the-login-bug"]);
-    wait_until("the hub to record the branch", || {
-        let branches = workspace(&client, &made.id).branches;
-        branches.and_then(|b| b.checked_out().map(|c| c.name.to_string())).as_deref() == Some("fix-the-login-bug")
-    });
-    archive_until_the_script_runs(&stack, &made.id, &started);
-
-    // As far as the hub got before it went: the worktree removed, and nothing recorded.
-    stack.kill_hub();
-    git(&stack.repo(), &["worktree", "remove", "--force", worktree.to_str().unwrap()]);
-    go.open();
-    stack.start_hub();
-    let client = stack.client();
-    wait_for_workspace(&client, &made.id, WorkspaceStatus::Archived);
-
-    // On the branch the worktree was last seen on, so it can come back.
-    let archived = workspace(&client, &made.id);
-    assert_eq!(archived.branch.as_str(), "fix-the-login-bug");
-    assert!(archived.archived_at_ms.is_some());
-    let restored = client.workspace_restore(&made.id).unwrap();
-    assert_eq!(restored.status, WorkspaceStatus::Ready);
-    assert_eq!(git(&worktree, &["branch", "--show-current"]), "fix-the-login-bug");
 }
 
 #[test]

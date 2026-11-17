@@ -71,19 +71,20 @@ fn an_address_is_read_once_for_an_event_however_many_texts_point_to_it() {
 
 #[test]
 fn what_isnt_an_image_inside_the_worktree_is_left_out() {
-    let outside = worktree_with(&[("secret.png", PNG)]);
-    let worktree = worktree_with(&[("notes.txt", b"not an image"), ("shot.png", PNG)]);
-    let elsewhere = outside.path().join("secret.png");
+    let dir =
+        worktree_with(&[("secret.png", PNG), ("worktree/notes.txt", b"not an image"), ("worktree/shot.png", PNG)]);
+    let worktree = dir.path().join("worktree");
+    let elsewhere = dir.path().join("secret.png");
     let text = format!(
-        "![a](notes.txt) ![b](missing.png) ![c]({}) ![d](https://example.com/x.png) ![e](shot.png)",
+        "![a](notes.txt) ![b](missing.png) ![c]({}) ![d](../secret.png) ![e](https://example.com/x.png) ![f](shot.png)",
         elsewhere.display()
     );
     let mut body = said(&[&text]);
 
-    let kept = keep(worktree.path(), &mut body, u64::MAX);
+    let kept = keep(&worktree, &mut body, u64::MAX);
 
-    assert_eq!(kept.len(), 1);
-    assert_eq!(named(&body), [["shot.png"]]);
+    assert_eq!(named(&body), [["shot.png"]], "only the image inside the worktree is named");
+    assert_eq!(kept.len(), 1, "and only it is sent");
 }
 
 #[test]

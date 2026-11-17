@@ -1,7 +1,8 @@
 //! Files sent with a prompt, from the client to the agent, and back to anyone reading the chat, and the images in the
 //! worktree that the agent's replies point to. What the hub keeps, refuses and gives the agent of a file is the hub's,
 //! and its own tests in `hub/attachments/` prove it on stand-ins for its workers. These are what spans processes: the
-//! files a real worker writes in a real worktree, and what it and the agent's adapter make of the images there.
+//! files a real worker writes in a real worktree, and what it and the agent's adapter make of the images there. Which
+//! images a reply names is the worker's, and its own tests in `linked_images/` prove it.
 
 #![cfg(test)]
 
@@ -90,19 +91,6 @@ fn an_image_a_reply_points_to_is_kept_as_it_was_when_the_reply_came() {
     assert_eq!((first.address.as_str(), second.address.as_str()), ("shot.png", "shot.png"));
     assert_eq!(client.attachment_read(&session.id, &first.attachment.id).unwrap(), png(64), "as it was then");
     assert_eq!(client.attachment_read(&session.id, &second.attachment.id).unwrap(), png(128));
-}
-
-#[test]
-fn a_reply_names_no_image_that_isnt_one_inside_the_worktree() {
-    let stack = Stack::start();
-    let client = stack.client();
-    let (workspace, session) = stack.workspace(&client);
-    std::fs::write(PathBuf::from(workspace.path.unwrap()).join("notes.txt"), "not an image").unwrap();
-
-    client.session_prompt(&session.id, "say:![a](notes.txt) ![b](../../x.png) ![c](missing.png)", None).unwrap();
-
-    let events = wait_for_turn_end(&client, &session.id, 1);
-    assert_eq!(linked(&events), [Vec::<LinkedImage>::new()]);
 }
 
 #[test]
