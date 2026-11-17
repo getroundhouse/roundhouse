@@ -13,6 +13,9 @@ mod notifications;
 mod redraw;
 mod rows;
 mod sidebar;
+/// What the pages' tests against a stand-in hub share. The stand-in listens on a Unix socket.
+#[cfg(all(test, unix))]
+mod stand_in_hub;
 #[cfg(test)]
 mod tests;
 

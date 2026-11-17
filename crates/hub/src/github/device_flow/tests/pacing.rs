@@ -9,6 +9,10 @@ use protocol::model::GithubToken;
 use tokio::time::Instant;
 
 use super::*;
+use crate::timers::Timers;
+
+/// The least the product asks after a code's token, which on tokio's paused clock no test waits out.
+const LEAST: Duration = Timers::DEFAULT.sign_in_pace;
 
 /// What a scripted ask comes to.
 enum Then {
@@ -32,7 +36,7 @@ async fn paced_by(interval: u64, ends_in: u64, script: Vec<Then>) -> (Approval, 
     let mut script = VecDeque::from(script);
     let mut asked = Vec::new();
     let ends = started + Duration::from_secs(ends_in);
-    let approval = paced(Duration::from_secs(interval), ends, || {
+    let approval = paced(Duration::from_secs(interval), LEAST, ends, || {
         asked.push(started.elapsed().as_secs());
         let then = script.pop_front().expect("it asked more often than the test says GitHub answers");
         async move {
@@ -65,6 +69,17 @@ async fn slow_down_has_it_ask_as_seldom_as_github_says_or_five_seconds_less_ofte
 
     assert!(matches!(approval, Approval::Granted(_)), "{approval:?}");
     assert_eq!(asked, [5, 15, 30, 45, 46]);
+}
+
+/// A code that says no time between asks, which GitHub's don't, is asked after a second apart, the least the product
+/// waits.
+#[tokio::test(start_paused = true)]
+async fn a_code_that_says_no_time_between_asks_is_asked_after_no_sooner_than_the_least() {
+    let (approval, asked, _) =
+        paced_by(0, 900, vec![Then::Answers(Asked::Again), Then::Answers(Asked::Again), granted()]).await;
+
+    assert!(matches!(approval, Approval::Granted(_)), "{approval:?}");
+    assert_eq!((LEAST, asked), (Duration::from_secs(1), vec![1, 2, 3]));
 }
 
 /// Asked at 5 s and 10 s, and not at 15 s, which is past its end at 12 s, so it ends at 10 s.

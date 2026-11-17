@@ -2,6 +2,9 @@
 //! and as a check has GitHub asked again, under the logins' lock. What GitHub's answer says is tested in
 //! `crate::github`, and asking it as the hub's check does in `crate::hub`.
 
+use std::path::Path;
+
+use process::testing::{git, git_in};
 use protocol::client::ApiError;
 use protocol::worker::{GitCredential, GitIdentity, GithubCredential};
 
@@ -65,23 +68,61 @@ fn a_name_falls_back_to_the_username_and_an_email_to_the_address_github_gives_th
     assert_eq!(only_an_email.as_deref(), Some("ada <ada@example.com>"));
 }
 
-/// Each made only of what git takes out of a name, or trims from its ends, which git 2.31 won't commit as, and some
-/// with more, which git commits as with that taken out, so they're sent as GitHub gives them.
-#[test]
-fn a_name_git_wont_commit_as_falls_back_to_the_username() {
+/// Names made only of what git takes out of a name, or trims from its ends, which git 2.31 won't commit as, then some
+/// with more, which git commits as with that taken out.
+const NAMES: [&str; 7] = [".", "<>", r#" .,:;"\' "#, "\n<\t>\n", "Ada.", "<Ada>", "🚀"];
+
+/// Who ada commits as, as workers are sent it, while her profile on GitHub says she's named each of [`NAMES`] in turn.
+fn identities_of_each_name() -> Vec<GitIdentity> {
     let dir = tempfile::tempdir().unwrap();
     let (logins, _) = logins_in(dir.path());
     logins.connect(&connect("a-token", None, "g1"), &owner_with(7, "ada", None, None)).unwrap();
-
-    let mut named = Vec::new();
-    for (at, name) in [".", "<>", r#" .,:;"\' "#, "\n<\t>\n", "Ada.", "<Ada>", "🚀"].into_iter().enumerate() {
+    let mut identities = Vec::new();
+    for (at, name) in NAMES.into_iter().enumerate() {
         let token = format!("token-{at}");
         logins.connect(&connect(&token, Some("g1"), "unused"), &owner_with(7, "ada", Some(name), None)).unwrap();
         let GithubCredential::Account(credential) = sent(&logins) else { panic!("{:?}", sent(&logins)) };
-        named.push(credential.identity.unwrap().name);
+        identities.push(credential.identity.unwrap());
     }
+    identities
+}
+
+/// Whether git commits in `repo` as `name` and `email`, given in its config, as a worker gives them.
+fn commits_through_git(repo: &Path, name: &str, email: &str) -> bool {
+    let mut command = git_in(repo);
+    // `git_in` names a made-up author in the environment, which git would take over the config.
+    for author in ["GIT_AUTHOR_NAME", "GIT_AUTHOR_EMAIL", "GIT_COMMITTER_NAME", "GIT_COMMITTER_EMAIL"] {
+        command.env_remove(author);
+    }
+    let (name, email) = (format!("user.name={name}"), format!("user.email={email}"));
+    command.args(["-c", &name, "-c", &email, "commit", "--allow-empty", "--quiet", "-m", "made up"]);
+    command.output().unwrap().status.success()
+}
+
+/// Those that are only what git takes out are sent as the username, and the rest as GitHub gives them.
+#[test]
+fn a_name_git_wont_commit_as_falls_back_to_the_username() {
+    let named: Vec<String> = identities_of_each_name().into_iter().map(|identity| identity.name).collect();
 
     assert_eq!(named, ["ada", "ada", "ada", "ada", "Ada.", "<Ada>", "🚀"]);
+}
+
+/// Through the git on this machine, as an agent's commits are. Git 2.31 refuses every name that falls back, but a
+/// later one, such as 2.54, keeps `.`, and so commits as a name with one, so only those without are refused by every
+/// git.
+#[test]
+fn git_commits_as_every_name_sent_and_refuses_each_that_falls_back() {
+    let repo = tempfile::tempdir().unwrap();
+    git(repo.path(), &["init", "--quiet"]);
+
+    let identities = identities_of_each_name();
+
+    for (name, sent) in NAMES.into_iter().zip(identities) {
+        assert!(commits_through_git(repo.path(), &sent.name, &sent.email), "git refused {:?}", sent.name);
+        if sent.name != name && !name.contains('.') {
+            assert!(!commits_through_git(repo.path(), name, &sent.email), "git took {name:?}, which fell back");
+        }
+    }
 }
 
 /// As a hub from before profiles left it: ada's token in its file, the default, and never asked who she is.

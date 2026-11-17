@@ -37,9 +37,10 @@ async fn a_code_is_asked_for_through_the_app_for_every_scope_and_says_what_to_ty
     assert!(!format!("{code:?}").contains("a-device-code"), "{code:?}");
 }
 
-/// One that says no interval, and one that says none at all, which isn't asked after in a loop.
+/// One that says no interval, and one that says no time between asks, which is kept as GitHub said it, since asking
+/// keeps to the hub's least, as `pacing` tests.
 #[tokio::test]
-async fn a_code_without_an_interval_is_asked_after_every_five_seconds_and_one_of_none_every_second() {
+async fn a_code_without_an_interval_is_asked_after_every_five_seconds_and_one_of_none_as_it_says() {
     let code = |interval: Option<u64>| {
         let mut body = json!({"device_code": "d", "user_code": "U", "verification_uri": "v", "expires_in": 900});
         if let Some(interval) = interval {
@@ -53,7 +54,7 @@ async fn a_code_without_an_interval_is_asked_after_every_five_seconds_and_one_of
     let unsaid = calls.device_code().await.unwrap();
     let none = calls.device_code().await.unwrap();
 
-    assert_eq!((unsaid.interval, none.interval), (Duration::from_secs(5), Duration::from_secs(1)));
+    assert_eq!((unsaid.interval, none.interval), (Duration::from_secs(5), Duration::ZERO));
 }
 
 /// GitHub failing, answering with what isn't a code or with an error, a GitHub that can't be reached, and one that

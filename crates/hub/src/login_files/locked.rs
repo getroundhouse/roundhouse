@@ -128,7 +128,7 @@ impl<S: LoginSecret> Locked<'_, S> {
         clear_row()
     }
 
-    /// Makes the files and the rows of the table that names them agree, as the hub starts. `named` is each of its rows
+    /// Makes the files and the rows of the tables that name them agree, as the hub starts. `named` is each of their rows
     /// that names a file, by the row's ID, with the file, or `None` for a row that names one but doesn't hold it, such
     /// as one naming a file the hub doesn't make. Each row whose file holds nothing, as [`Stored::Nothing`] says, or
     /// that doesn't hold the one it names, is given to `clear_row`, and then every file but the other rows' is removed,

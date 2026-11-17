@@ -6,7 +6,7 @@
 
 use std::time::Duration;
 
-use gpui_kit::{Context, Subscription, Task, Window};
+use gpui_kit::{App, Context, Subscription, Task, Window};
 use protocol::client::github_apps::GithubManifestCode;
 use protocol::model::GithubAppId;
 
@@ -18,6 +18,25 @@ use crate::manifest_flow::{Bound, Heard, Organization, Under};
 /// How long the app waits for GitHub to send the person back once its page has opened: time to sign in to GitHub and
 /// look over the form, but not so long that a page left open stays a way in. *Unconfirmed.*
 pub(super) const LISTENS_FOR: Duration = Duration::from_mins(30);
+
+/// How long the listener waits for GitHub: [`LISTENS_FOR`], unless a test has said otherwise.
+#[cfg(test)]
+pub(super) fn listens_for(cx: &App) -> Duration {
+    cx.try_global::<ListensFor>().map_or(LISTENS_FOR, |ListensFor(limit)| *limit)
+}
+
+#[cfg(not(test))]
+pub(super) fn listens_for(_: &App) -> Duration {
+    LISTENS_FOR
+}
+
+/// What a test has the listener wait in place of [`LISTENS_FOR`]. The listener waits by the system's clock, on a thread
+/// of its own, so a test can't move it, and would otherwise sit through all of it.
+#[cfg(test)]
+pub(super) struct ListensFor(pub(super) Duration);
+
+#[cfg(test)]
+impl gpui_kit::Global for ListensFor {}
 
 pub(super) struct AppPanel {
     pub(super) step: AppStep,
@@ -165,8 +184,9 @@ impl Kept {
     ) {
         let Some(AppStep::OnGithub { chosen, .. }) = self.app_panel().map(|app| &app.step) else { return };
         let chosen = chosen.clone();
+        let limit = listens_for(cx);
         let listening = match answer {
-            Ok(written) => bound.serve(&written.manifest, &chosen.under, LISTENS_FOR),
+            Ok(written) => bound.serve(&written.manifest, &chosen.under, limit),
             Err(e) => return self.choose_again(&chosen, Some(app_words::not_written(&e)), window, cx),
         };
         let listening = match listening {
@@ -181,7 +201,7 @@ impl Kept {
             drop(listening);
             let _ = cx.update(|window, cx| this.update(cx, |this, cx| this.heard(heard.ok(), window, cx)));
         });
-        let until_ms = look::now_ms(cx) + i64::try_from(LISTENS_FOR.as_millis()).unwrap_or(i64::MAX);
+        let until_ms = look::now_ms(cx) + i64::try_from(limit.as_millis()).unwrap_or(i64::MAX);
         let Some(app) = self.app_panel_mut() else { return };
         app.step = AppStep::OnGithub { chosen, stands: OnGithub::Waiting { page_url, until_ms } };
         app.waiting = Some(task);

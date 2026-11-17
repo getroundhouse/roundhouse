@@ -1,6 +1,7 @@
 //! Signing in with GitHub from Git in Settings, against a real hub that runs GitHub's device flow with a stand-in for
-//! GitHub: the code while it waits, and each way it ends, as the hub's record of it says, and cancelling it. GitHub is
-//! asked after a sign-in's token once a second, the least the hub waits, so each takes a second or two.
+//! GitHub: the code while it waits, and each way it ends, as the hub's record of it says, and cancelling it. The
+//! stand-in's codes say no time between asks after a sign-in's token, so the hub asks as often as a test's hub lets
+//! itself, as `hub::Timers::FOR_TESTS` says.
 
 #![cfg(test)]
 
@@ -20,7 +21,7 @@ fn signing_in(polls: Vec<Vec<GithubAnswer>>) -> GithubScript {
     const DEVICES: [&str; 3] = ["made-up-device-1", "made-up-device-2", "made-up-device-3"];
     GithubScript {
         users: vec![(GRANTED, GithubAnswer::user(7, "ada", None))],
-        codes: DEVICES.iter().map(|device| GithubAnswer::code(device, 900, 1)).collect(),
+        codes: DEVICES.iter().map(|device| GithubAnswer::code(device, 900, 0)).collect(),
         polls: DEVICES.into_iter().zip(polls).collect(),
         ..GithubScript::default()
     }

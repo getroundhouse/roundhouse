@@ -1,0 +1,29 @@
+//! What the pages' tests against a stand-in hub share: a window to act in, and a wait for what a page waits on, which
+//! gives up within CI's limit on a test.
+
+use std::time::{Duration, Instant};
+
+use gpui_kit::{Context, IntoElement, Render, TestAppContext, Window};
+
+/// How long a test waits for what a stand-in hub answers at once, which leaves room under the 10 s CI fails a test
+/// at.
+pub(super) const SOON: Duration = Duration::from_secs(5);
+
+/// A window that draws nothing, for a page's state to act in.
+pub(super) struct Blank;
+
+impl Render for Blank {
+    fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+        gpui_kit::Empty
+    }
+}
+
+/// Runs what the page waits on until `done`, or fails after [`SOON`].
+pub(super) fn until(cx: &mut TestAppContext, what: &str, mut done: impl FnMut(&mut TestAppContext) -> bool) {
+    let deadline = Instant::now() + SOON;
+    while !done(cx) {
+        assert!(Instant::now() < deadline, "timed out waiting for {what}");
+        cx.run_until_parked();
+        std::thread::sleep(Duration::from_millis(10));
+    }
+}

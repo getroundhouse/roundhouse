@@ -8,7 +8,7 @@ use protocol::model::{GhLogin, GhLoginWorks, GithubAccount, GithubLoginKind, Hel
 use super::super::added::listed;
 use super::super::git_page::changes_at_ms;
 use super::super::words::{self, Standing};
-use super::made_up::{FEB_3_MS, HOUR_MS, NOW_MS, OCT_29_MS, held, named};
+use super::made_up::{FEB_3_MS, HOUR_MS, NOW_MS, OCT_29_MS, held, named, records};
 
 /// How `held` stands at [`NOW_MS`], with days in UTC.
 fn standing(cx: &mut TestAppContext, held: Option<HeldGithubLogin>) -> Standing {
@@ -83,15 +83,20 @@ fn a_found_login_says_who_whether_github_took_it_and_what_to_do_when_theres_none
     assert_eq!(words::found_on(&"incus".into()), "gh on incus");
 }
 
+/// As the hub lists them, which is in neither client-core's order nor their IDs', and client-core keeps them by
+/// username, in any case, so an order by ID, or by name with capitals first, differs from it.
 #[test]
 fn added_lists_the_default_first_then_those_held_then_those_disconnected_each_as_client_core_does() {
-    let accounts =
-        [named("g1", "ada", false), named("g2", "bea", true), named("g3", "cy", false), named("g4", "dee", false)];
+    let hubs =
+        vec![named("g1", "dee", false), named("g2", "bea", true), named("g3", "Cy", false), named("g4", "ada", false)];
+    let records = records(hubs, Vec::new(), None);
+    let accounts = records.github_accounts();
     let ids = |listed: Vec<&GithubAccount>| listed.iter().map(|account| account.id.to_string()).collect::<Vec<_>>();
 
-    assert_eq!(ids(listed(&accounts, Some(&"g3".into()))), ["g3", "g1", "g4", "g2"]);
-    assert_eq!(ids(listed(&accounts, Some(&"g2".into()))), ["g2", "g1", "g3", "g4"], "a disconnected default too");
-    assert_eq!(ids(listed(&accounts, None)), ["g1", "g3", "g4", "g2"]);
+    assert_eq!(ids(accounts.iter().collect()), ["g4", "g2", "g3", "g1"], "ada, bea, Cy and dee");
+    assert_eq!(ids(listed(accounts, Some(&"g1".into()))), ["g1", "g4", "g3", "g2"]);
+    assert_eq!(ids(listed(accounts, Some(&"g2".into()))), ["g2", "g4", "g3", "g1"], "a disconnected default too");
+    assert_eq!(ids(listed(accounts, None)), ["g4", "g3", "g1", "g2"]);
 }
 
 #[test]

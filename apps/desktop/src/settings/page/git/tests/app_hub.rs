@@ -1,18 +1,21 @@
-//! Making an app of your own from GitHub's code against a stand-in hub, which refuses the first time as if GitHub
-//! couldn't be reached, so a test can see what Try again gives it.
+//! Making an app of your own against a stand-in hub: from GitHub's code, which it refuses the first time as if GitHub
+//! couldn't be reached, so a test can see what Try again gives it, and opening GitHub's form again once the listener
+//! has stopped waiting for GitHub to send the person back.
 
 use std::sync::mpsc;
+use std::time::Duration;
 
 use client_core::stand_in_hub::Does;
 use gpui_kit::TestAppContext;
-use protocol::client::github_apps::GithubManifestCode;
+use protocol::client::github_apps::{GithubAppManifest, GithubManifestCode};
 use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, ReplyOutcome};
 use protocol::fixtures::github_app;
 use protocol::model::GithubAppId;
 
-use super::super::app_panel::{AppStep, Chosen, OnGithub};
+use super::super::super::stand_in_hub::until;
+use super::super::app_panel::{AppStep, Chosen, LISTENS_FOR, ListensFor, OnGithub};
 use super::super::kept::Kept;
-use super::stand_in::{WithStandIn, until};
+use super::stand_in::WithStandIn;
 use crate::manifest_flow::Under;
 
 /// Why the hub couldn't make the app, and whether the panel offers the same code again, once it says.
@@ -55,4 +58,39 @@ fn trying_again_gives_the_hub_the_same_code_and_goes_on_to_installing_once_its_m
     let installing = |kept: &Kept| matches!(kept.app_panel().map(|app| &app.step), Some(AppStep::Installing { app, .. }) if *app == GithubAppId::new(9));
     until(cx, "the install step", |cx| page.kept.read_with(cx, |kept, _| installing(kept)));
     assert_eq!(codes.try_iter().collect::<Vec<_>>(), ["a-made-up-code", "a-made-up-code"], "the same code, twice");
+}
+
+/// How making it on GitHub stands, once it's that far.
+fn on_github(kept: &Kept) -> Option<&OnGithub> {
+    let Some(AppStep::OnGithub { stands, .. }) = kept.app_panel().map(|app| &app.step) else { return None };
+    Some(stands)
+}
+
+/// The listener waits as long as the test has it the first time, which passes with nobody sent back, and as long as
+/// the product has it once it's started again.
+#[gpui_kit::test]
+fn a_panel_that_stopped_waiting_for_github_opens_its_form_again_through_a_new_listener(cx: &mut TestAppContext) {
+    let (asked, redirects) = mpsc::channel();
+    let page = WithStandIn::new(cx, move |request| {
+        let ClientRequest::GithubAppManifestWrite(write) = request else { return Does::Nothing };
+        asked.send(write.redirect_url).unwrap();
+        let written = GithubAppManifest { manifest: serde_json::json!({ "name": write.name }) };
+        Does::Answers(Box::new(ReplyOutcome::Response(ClientResponse::GithubAppManifest(written))))
+    });
+    cx.update(|cx| cx.set_global(ListensFor(Duration::from_millis(50))));
+    page.act(cx, |kept, window, cx| {
+        kept.open_app("ada-roundhouse", window, cx);
+        kept.make_on_github(window, cx);
+    });
+    let stopped = |kept: &Kept| matches!(on_github(kept), Some(OnGithub::StoppedWaiting));
+    until(cx, "it to stop waiting", |cx| page.kept.read_with(cx, |kept, _| stopped(kept)));
+    cx.update(|cx| cx.set_global(ListensFor(LISTENS_FOR)));
+
+    page.act(cx, Kept::open_github_from_the_start);
+
+    let waiting = |kept: &Kept| matches!(on_github(kept), Some(OnGithub::Waiting { .. }));
+    until(cx, "it to wait again", |cx| page.kept.read_with(cx, |kept, _| waiting(kept)));
+    let redirects: Vec<String> = redirects.try_iter().collect();
+    let [first, again] = &redirects[..] else { panic!("{redirects:?}") };
+    assert_ne!(first, again, "each listener is on a port of its own");
 }

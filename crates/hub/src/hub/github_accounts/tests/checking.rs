@@ -18,8 +18,12 @@ use crate::github_logins::tests::{ada_signed_in, login_ending};
 use crate::github_logins::{Connect, GithubLogins, RENEWED_WITH_LEFT};
 use crate::store::tests::store_with_session;
 use crate::store::{GithubProfile, Store};
+use crate::timers::Timers;
 
 const ENDS_AT_MS: i64 = 1_000_000_000;
+
+/// How often the product checks, which tokio's paused clock moves through without waiting.
+const CHECKED_EVERY: Duration = Timers::DEFAULT.check_github_logins_every;
 
 const HOUR_MS: i64 = 60 * 60 * 1000;
 

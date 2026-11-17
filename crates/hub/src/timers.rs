@@ -24,6 +24,13 @@ pub struct Timers {
     pub look_every: Duration,
     /// How often the hub looks for a pull request to read that nobody asked for, while the budget can spare the calls.
     pub read_pace: Duration,
+    /// The least time between two asks after a sign-in's token, whatever GitHub says, so a code that says none between
+    /// them isn't asked after in a loop.
+    pub sign_in_pace: Duration,
+    /// How often the hub checks its GitHub logins by the wall clock, after the check as it starts: whether the default's
+    /// token has ended, and which sign-ins to renew and installations to make a token for, as
+    /// `Hub::watch_github_logins` says.
+    pub check_github_logins_every: Duration,
 }
 
 impl Timers {
@@ -47,6 +54,13 @@ impl Timers {
         look_every: Duration::from_secs(5),
         // The budget's steady rate is a call a second, so looking more often would find nothing it could spare.
         read_pace: Duration::from_secs(1),
+        // GitHub's docs give five seconds between asks, so only a code that says less than this keeps to it.
+        sign_in_pace: Duration::from_secs(1),
+        // Tokio's timers don't count the time a Mac sleeps, so waiting until a token's end, or until it's due to be
+        // renewed, would wait as long again as the Mac slept, where checking every minute it's awake finds it within a
+        // minute of waking. Until then, a push fails at GitHub, which says the token is bad, rather than with the
+        // block, which says what to do.
+        check_github_logins_every: Duration::from_secs(60),
     };
 
     /// [`Timers::DEFAULT`], whatever `var` says, since only a build with the `testing` feature takes others, and the
@@ -77,11 +91,14 @@ impl Timers {
     /// What a test's hub runs with, unless the test is about one of them: the timers that only make a test wait
     /// shortened, and the time limits as they are, since they guard against a process being slow, which one on a busy
     /// runner can be. A test about a time limit sets it to a second or a few, which still outlasts a process
-    /// starting there.
+    /// starting there. The GitHub logins are checked as seldom as the product checks them, since a check can call
+    /// GitHub, whose stand-in gives a test's scripted answers in turn, so a check the test didn't ask for would take
+    /// one. A test about a check after the first sets how often.
     pub const FOR_TESTS: Self = Self {
         agent_spacing: Duration::from_millis(100),
         look_every: Duration::from_millis(100),
         read_pace: Duration::from_millis(100),
+        sign_in_pace: Duration::from_millis(100),
         ..Self::DEFAULT
     };
 
@@ -107,9 +124,27 @@ mod tests {
         #![proptest_config(Config { rng_seed: RngSeed::Fixed(1), failure_persistence: None, ..Config::default() })]
 
         #[test]
-        fn a_hub_takes_the_timers_a_test_gives_it(times in prop::array::uniform6(duration())) {
-            let [agent_spacing, picks_up_within, shutdown_grace, hello_within, look_every, read_pace] = times;
-            let given = Timers { agent_spacing, picks_up_within, shutdown_grace, hello_within, look_every, read_pace };
+        fn a_hub_takes_the_timers_a_test_gives_it(times in prop::array::uniform8(duration())) {
+            let [
+                agent_spacing,
+                picks_up_within,
+                shutdown_grace,
+                hello_within,
+                look_every,
+                read_pace,
+                sign_in_pace,
+                check_github_logins_every,
+            ] = times;
+            let given = Timers {
+                agent_spacing,
+                picks_up_within,
+                shutdown_grace,
+                hello_within,
+                look_every,
+                read_pace,
+                sign_in_pace,
+                check_github_logins_every,
+            };
             let (name, value) = given.env();
 
             let taken = Timers::from_env(|asked| (asked == name).then(|| value.clone()));

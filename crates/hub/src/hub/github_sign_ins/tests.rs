@@ -1,8 +1,8 @@
 //! Signing in as a client asks, against a hub that never starts a worker and a stand-in for GitHub, on tokio's clock as
 //! it runs, since a request to the stand-in races a paused clock, as `crate::github`'s device flow tests say. So the
-//! stand-in's codes say a second between asks, the least the hub keeps to, and no test waits for more than one. How
-//! often GitHub is asked, and what its answers come to, is tested in `crate::github`, on the paused clock where it
-//! matters, and what approving keeps, and what it renews, in `crate::github_logins`.
+//! stand-in's codes say no time between asks, and the hub asks as often as a test's hub does, so no test waits out the
+//! product's pace. How often GitHub is asked, and what its answers come to, is tested in `crate::github`, on the
+//! paused clock where it matters, and what approving keeps, and what it renews, in `crate::github_logins`.
 
 use std::time::Duration;
 
@@ -24,9 +24,9 @@ fn pending() -> Answer {
     Answer::device_flow_error("authorization_pending")
 }
 
-/// A code, `device`, with a second between asks after its token.
+/// A code, `device`, that says no time between asks after its token, so the hub asks as often as it lets itself.
 fn code(device: &str) -> Answer {
-    Answer::code(device, 900, 1)
+    Answer::code(device, 900, 0)
 }
 
 /// A stand-in that gives each sign-in the code `device`, and answers its asks after the token with `polls`, the last
