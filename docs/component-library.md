@@ -101,6 +101,22 @@ A key in one of the kit's menus or tooltips is the kit's, from the action it's b
 | Find the keys rows show from where the keyboard's focus is, such as the field a menu is beside | `keys_from` |
 | Set how wide a menu is, such as as wide as what opens it | `width` |
 | Know when a menu closes, such as to hold something still while it's open | `open`, then the `look::OpenMenu`'s `on_close` |
+
+## Dialogs
+
+`docs/spec/components.md` has how a dialog is laid out and its widths, and `crates/look/src/dialogs` the code. A dialog is built each time it's drawn, by the closure that opens it, so it shows what's changed, such as an answer that's waiting. What it keeps, such as a field's state, is made before it opens.
+
+| To | Call |
+|---|---|
+| Open one over the window | `look::open_dialog(window, cx, build)`, where `build` makes a `look::Dialog` |
+| Make one that asks or says something | `look::dialog(title)` |
+| Say something under its title, or put something in it, such as a field | `lead`, `child` |
+| Add an answer that closes it, the one that confirms it, or one that does what its own handler says | `closes`, `confirms`, `answer`, each with a `look::Button` |
+| Put something at the start of its foot, such as a link | `start` |
+| Do something as it's confirmed, keeping it open if that says so, or once it's closed | `on_confirm`, `on_close` |
+| Set how wide it is | `width`, with a `look::DialogWidth` |
+| Close it once what it waited on has come, without what's done as someone closes it | `look::close_dialog` |
+
 ## Toggles
 
 `docs/spec/components.md` has a toggle's states, and `crates/look/src/toggles` the code. A toggle draws whether it's on from what the place that holds the setting gives it, and says when it's flipped, so the place sets what it holds and draws it again.

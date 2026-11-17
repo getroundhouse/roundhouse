@@ -2,10 +2,10 @@
 use super::screens::SCREENS;
 use super::{
     approval_chats, approved, background_chats, baselines, button_states, cache_screens, call_screens, capture,
-    colours, compaction_chats, component_screens, context_screens, controls, corners, dictation_screens, diff_screens,
-    failure_chats, failures_in_a_row, field_states, heights, home_screens, icon_sizes, key_kinds, kinds_of_text,
-    mark_states, menu_rows, own_turn_chats, pull_requests, settings_screens, sidebar_screens, spaces, steps,
-    subagent_chats, switch_kinds, terminal_screens, toggle_states, tool_screens, turn_screens, update_screens,
+    colours, compaction_chats, component_screens, context_screens, controls, corners, dialog_widths, dictation_screens,
+    diff_screens, failure_chats, failures_in_a_row, field_states, heights, home_screens, icon_sizes, key_kinds,
+    kinds_of_text, mark_states, menu_rows, own_turn_chats, pull_requests, settings_screens, sidebar_screens, spaces,
+    steps, subagent_chats, switch_kinds, terminal_screens, toggle_states, tool_screens, turn_screens, update_screens,
     workspace_screens,
 };
 use approved::Verdict;
@@ -108,6 +108,7 @@ fn every_screen_looks_as_approved() {
             key_kinds::NAME,
             toggle_states::NAME,
             switch_kinds::NAME,
+            dialog_widths::NAME,
             menu_rows::NAME,
             field_states::NAME,
             heights::NAME,
@@ -274,6 +275,17 @@ fn every_kind_of_switch_looks_as_approved() {
 
     let mut problems = look_at(switch_kinds::NAME, switch_kinds::SPEC, &picture);
     problems.extend(places.look_at(switch_kinds::NAME));
+    report(&problems);
+}
+
+#[test]
+fn every_width_of_dialog_looks_as_approved() {
+    let text_system: Arc<dyn PlatformTextSystem> = Arc::new(gpui_apple::AppleTextSystem::new());
+
+    let (picture, places) = dialog_widths::draw(&text_system);
+
+    let mut problems = look_at(dialog_widths::NAME, dialog_widths::SPEC, &picture);
+    problems.extend(places.look_at(dialog_widths::NAME));
     report(&problems);
 }
 

@@ -212,23 +212,28 @@ impl Button {
         let colors = colors(cx);
         let words = self.kind.words(colors);
         let (off, kind) = (self.off, self.kind);
-        let kit = match self.work {
-            Some(work) => match (kind, work.hue(colors)) {
-                // The kit draws a custom button's colour faintly, so the fill is set on the button itself, which hover
-                // and press still change. Not while it's off, since the kit lays the button's own style over its
-                // greyed-out one, which would keep the fill.
-                (ButtonKind::Main, Some(fill)) => {
-                    let style = ButtonCustomVariant::new(cx)
-                        .color(fill)
-                        .foreground(colors.on_main)
-                        .hover(fill.opacity(0.85))
-                        .active(fill.opacity(0.7));
-                    self.kit.custom(style).when(!off, |kit| kit.bg(fill))
-                }
-                (ButtonKind::Outlined, _) => self.kit.border_color(work.edge(colors)).text_color(work.text(colors)),
-                _ => self.kit,
-            },
-            None => self.kit,
+        // A fill of its own: the error's for what removes, or where a pull request stands for its main action.
+        let fill = match (kind, self.work) {
+            (ButtonKind::Removes, _) => Some(colors.error),
+            (ButtonKind::Main, Some(work)) => work.hue(colors),
+            _ => None,
+        };
+        let kit = match (fill, self.work) {
+            // The kit draws a custom button's colour faintly, so the fill is set on the button itself, which hover and
+            // press still change. Not while it's off, since the kit lays the button's own style over its greyed-out
+            // one, which would keep the fill.
+            (Some(fill), _) => {
+                let style = ButtonCustomVariant::new(cx)
+                    .color(fill)
+                    .foreground(colors.on_main)
+                    .hover(fill.opacity(0.85))
+                    .active(fill.opacity(0.7));
+                self.kit.custom(style).when(!off, |kit| kit.bg(fill))
+            }
+            (None, Some(work)) if kind == ButtonKind::Outlined => {
+                self.kit.border_color(work.edge(colors)).text_color(work.text(colors))
+            }
+            _ => self.kit,
         };
         kit.disabled(self.off)
             .loading(self.waiting)

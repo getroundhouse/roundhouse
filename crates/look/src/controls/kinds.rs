@@ -26,6 +26,10 @@ named! {
         /// An answer that isn't the main one, to what stands on its own, such as a dialog's Not now, a plan's choices or
         /// a failed request's Retry, with an edge and a dark fill.
         Edged,
+        /// The answer that removes or forgets what can't be had back from where it's asked, such as Disconnect,
+        /// Remove or Quit with something unsent, filled in the error's colour with dark text, in the main action's
+        /// place.
+        Removes,
     }
 }
 
@@ -33,7 +37,8 @@ impl ButtonKind {
     /// The kit's button, drawn as this kind but for its words' colour, which [`Self::words`] gives.
     pub(super) fn drawn(self, button: KitButton) -> KitButton {
         match self {
-            ButtonKind::Main => button.primary(),
+            // Its fill is the error's, which the button sets, as it does a pull request's colour.
+            ButtonKind::Main | ButtonKind::Removes => button.primary(),
             ButtonKind::Borderless | ButtonKind::Quiet | ButtonKind::Faint => button.ghost(),
             ButtonKind::Outlined => button.outline(),
             ButtonKind::Edged => button,
@@ -45,7 +50,11 @@ impl ButtonKind {
         match self {
             ButtonKind::Quiet => Some(colors.text_muted),
             ButtonKind::Faint => Some(colors.text_faint),
-            ButtonKind::Main | ButtonKind::Borderless | ButtonKind::Outlined | ButtonKind::Edged => None,
+            ButtonKind::Main
+            | ButtonKind::Borderless
+            | ButtonKind::Outlined
+            | ButtonKind::Edged
+            | ButtonKind::Removes => None,
         }
     }
 
