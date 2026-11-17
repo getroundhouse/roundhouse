@@ -5,11 +5,11 @@ use std::process::Output;
 use process::Environment;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{GhLogin, GhLoginWorks};
-use protocol::worker::{GH_RUNS_WITHIN, GithubLoginReply, WorkerResponse};
+use protocol::worker::{FoundToken, GH_RUNS_WITHIN, GithubLoginReply, WorkerResponse};
 use serde::Deserialize;
 use tokio::time::Instant;
 
-use super::checking::works;
+use super::token::token;
 use crate::gh::{Unran, run_gh_within};
 
 /// What `gh` is asked: its login for github.com that it uses, in JSON, which `gh` 2.81 is the first to print, and which
@@ -23,25 +23,24 @@ const ASKED_OF_AN_OLDER_GH: [&str; 7] = ["auth", "status", "--active", "--hostna
 /// [`FindGithubLogin`](protocol::worker::FindGithubLogin)'s answer, read in `dir`, with nothing beyond the worker's
 /// own environment, whatever git credential the hub has set, since it's the machine's own login that's found.
 pub(crate) async fn reply(dir: &Path) -> Result<WorkerResponse, ApiError> {
-    Ok(WorkerResponse::GithubLogin(GithubLoginReply { login: find(&Environment::NONE, dir).await? }))
+    let (login, token) = find(&Environment::NONE, dir).await?;
+    Ok(WorkerResponse::GithubLogin(GithubLoginReply { login, token }))
 }
 
-/// Who `gh` is logged in to github.com as, run in `dir` with `given`, and whether GitHub takes its token, as
+/// Who `gh` is logged in to github.com as, run in `dir` with `given`, and the token it uses for that login, as
 /// [`FindGithubLogin`](protocol::worker::FindGithubLogin) says. Every run of `gh` for it shares [`GH_RUNS_WITHIN`].
-pub(super) async fn find(given: &Environment, dir: &Path) -> Result<GhLogin, ApiError> {
+pub(super) async fn find(given: &Environment, dir: &Path) -> Result<(GhLogin, Option<FoundToken>), ApiError> {
     let until = Instant::now() + GH_RUNS_WITHIN;
-    let Some(printed) = status(given, dir, until).await? else { return Ok(GhLogin::NotInstalled) };
-    match read(&printed.stdout).ok_or_else(|| couldnt_tell("gh printed something else, or named nobody"))? {
-        Read::LoggedOut => Ok(GhLogin::LoggedOut),
-        // Asking GitHub with it would renew it, if it's due, as `--no-refresh` keeps the read from doing.
-        Read::LoggedIn { username, refreshable: true } => {
-            Ok(GhLogin::LoggedIn { username: username.into(), works: GhLoginWorks::CouldntTell })
-        }
-        Read::LoggedIn { username, refreshable: false } => {
-            let works = works(until.saturating_duration_since(Instant::now()), given, dir, &username).await;
-            Ok(GhLogin::LoggedIn { username: username.into(), works })
-        }
-    }
+    let Some(printed) = status(given, dir, until).await? else { return Ok((GhLogin::NotInstalled, None)) };
+    let Read::LoggedIn { username, refreshable } =
+        read(&printed.stdout).ok_or_else(|| couldnt_tell("gh printed something else, or named nobody"))?
+    else {
+        return Ok((GhLogin::LoggedOut, None));
+    };
+    let token = token(until.saturating_duration_since(Instant::now()), given, dir).await;
+    // Whether it works is the hub's to ask GitHub, with the token.
+    let login = GhLogin::LoggedIn { username: username.into(), works: GhLoginWorks::CouldntTell };
+    Ok((login, token.map(|token| FoundToken { token, renews: refreshable })))
 }
 
 /// What `gh auth status` printed, asked as [`ASKED`], or as [`ASKED_OF_AN_OLDER_GH`] once it has said it doesn't know

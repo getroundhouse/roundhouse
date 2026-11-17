@@ -11,8 +11,8 @@ use process::testing::WholeEnvironment;
 use protocol::frame;
 use protocol::model::{GhLogin, GhLoginWorks, GithubToken};
 use protocol::worker::{
-    GitCredential, GitCredentialSet, GithubCredential, GithubLoginReply, Hello, RepoSource, SetupDone, SetupWorkspace,
-    WORKER_PROTOCOL_VERSION, WorkerCall, WorkerFrame, WorkerOutcome, WorkerRequest, WorkerResponse,
+    FoundToken, GitCredential, GitCredentialSet, GithubCredential, GithubLoginReply, Hello, RepoSource, SetupDone,
+    SetupWorkspace, WORKER_PROTOCOL_VERSION, WorkerCall, WorkerFrame, WorkerOutcome, WorkerRequest, WorkerResponse,
 };
 
 use crate::support::install_executable;
@@ -218,7 +218,7 @@ login=
 [ -n "$GH_CONFIG_DIR$GIT_CONFIG_COUNT" ] && login=the-workers-credential
 case "$1 $2" in
 'auth status') printf '{"hosts":{"github.com":[{"state":"success","active":true,"host":"github.com","login":"%s","tokenSource":"GH_TOKEN"}]}}\n' "$login" ;;
-'api --include') printf 'HTTP/2.0 200 OK\n\r\n{"login":"%s"}\n' "$login" ;;
+'auth token') printf '%s-token\n' "$login" ;;
 *) exit 1 ;;
 esac"#;
 
@@ -239,8 +239,9 @@ fn the_login_found_is_the_machines_own_while_an_accounts_credential_is_set() {
     let replies = worker.replies(&[1, 2]);
 
     assert_eq!(replies[&1], WorkerOutcome::Response(WorkerResponse::Ok));
-    let login = GhLogin::LoggedIn { username: "the-machines-token".into(), works: GhLoginWorks::Yes };
-    assert_eq!(replies[&2], WorkerOutcome::Response(WorkerResponse::GithubLogin(GithubLoginReply { login })));
+    let login = GhLogin::LoggedIn { username: "the-machines-token".into(), works: GhLoginWorks::CouldntTell };
+    let token = Some(FoundToken { token: GithubToken::new("the-machines-token-token"), renews: false });
+    assert_eq!(replies[&2], WorkerOutcome::Response(WorkerResponse::GithubLogin(GithubLoginReply { login, token })));
 }
 
 fn wait_for(path: &Path) {

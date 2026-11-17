@@ -38,8 +38,9 @@ pub enum GhLogin {
     Unknown,
 }
 
-/// Whether GitHub took a found login's token, by the HTTP status it answered `gh` with when asked whose the token is:
-/// GitHub's own answer, rather than what `gh` makes of it.
+/// Whether GitHub took a found login's token, by the HTTP status it answered the hub with when the hub asked whose the
+/// token is, with the token its worker handed it, as [`FindGithubLogin`](crate::worker::FindGithubLogin) says. A
+/// worker from before the hub asked said it from what GitHub answered `gh`.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum GhLoginWorks {
@@ -48,7 +49,7 @@ pub enum GhLoginWorks {
     /// GitHub refused the token, with 401, so `gh auth login` would log it in again.
     Refused,
     /// GitHub didn't answer, as when it can't be reached, or answered anything else, such as 403, a 5xx or another
-    /// user, or the token is one `gh` renews by itself, which `gh` could renew as it asked, so it isn't asked.
+    /// user, refused a token `gh` renews by itself, whose time may only be up, or the worker had no token to give.
     CouldntTell,
     /// From a newer peer, or one that didn't say.
     #[default]

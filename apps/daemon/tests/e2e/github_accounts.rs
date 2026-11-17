@@ -16,7 +16,7 @@ use protocol::model::{
 };
 use protocol::paths::ENV_TEST_GITHUB_API;
 
-use crate::support::gh::{LOGGED_IN_AS, StandInGh};
+use crate::support::gh::{LOGGED_IN_AS, LOGGED_IN_WITH, StandInGh};
 use crate::support::{Stack, commit_settings, git, wait_for_setup, wait_until};
 
 /// Asks git for github.com's credential at once, keeping what it filled in `first`, then asks again until git can't
@@ -124,10 +124,13 @@ fn a_workspaces_git_gets_the_token_the_check_makes_an_installation_as_the_hub_st
     assert_eq!(minted, 2, "as the app was made, and as the hub started again");
 }
 
-/// Through the real worker of the local provider, and a stand-in for `gh` on its `PATH`, to every client.
+/// Through the real worker of the local provider, and a stand-in for `gh` on its `PATH`, whose token the hub checks
+/// against a stand-in for GitHub, to every client.
 #[test]
 fn a_hub_records_who_its_machines_own_gh_is_logged_in_as_once_a_worker_there_has_said() {
-    let mut stack = Stack::start();
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let github = runtime.block_on(GithubStandIn::start(vec![(LOGGED_IN_WITH, GithubAnswer::user(7, "ada", None))]));
+    let mut stack = Stack::start_with(vec![(ENV_TEST_GITHUB_API, github.api())]);
     let _gh = StandInGh::start(&mut stack);
     let client = stack.client();
     let listed = || client.records_list().unwrap().found_github_logins;
