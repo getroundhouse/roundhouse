@@ -3,14 +3,13 @@
 //! so a screen reader says it as it changes.
 
 use gpui_kit::assets::IconName as Lucide;
-use gpui_kit::component::button::Button;
 use gpui_kit::component::progress::Progress;
 use gpui_kit::component::{Icon, h_flex, v_flex};
 use gpui_kit::{
     AnyElement, App, HighlightStyle, InteractiveElement as _, IntoElement, ParentElement as _, Role, SharedString,
     StatefulInteractiveElement as _, Styled as _, StyledText, TestSupportExt as _, div,
 };
-use look::{Hand as _, IconSizing as _, Off as _, Shaped as _, Sizing as _, Typeset as _};
+use look::{IconSizing as _, Shaped as _, Typeset as _};
 
 /// How something stands, to be drawn as a box.
 pub(crate) struct StatusBox {
@@ -81,12 +80,8 @@ impl StatusBox {
             .child(div().flex_1().min_w_0().text_color(colors.text_muted).child(words));
         let action = self.action.map(|action| {
             let act = action.act;
-            Button::new(action.id)
-                .hand()
-                .outline()
-                .sized(look::ControlSize::Small)
-                .label(action.label)
-                .off_while(action.off)
+            look::button(action.id, look::ButtonKind::Outlined, look::ControlSize::Small, action.label)
+                .off(action.off)
                 .on_click(move |_, _, cx| act(cx))
         });
         let bar = self.progress.map(|done| {

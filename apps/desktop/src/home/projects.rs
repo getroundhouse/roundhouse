@@ -5,7 +5,6 @@ use crate::sidebar::{Standing, doing, standing};
 use crate::workspace_order::Sort;
 use crate::{prompt_cache, reorder};
 use gpui_kit::assets::IconName as Lucide;
-use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::{InputEvent, InputState};
 use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
@@ -13,7 +12,7 @@ use gpui_kit::{
     AnyElement, App, AppContext as _, Context, ElementId, Entity, InteractiveElement as _, IntoElement, ParentElement,
     Pixels, ScrollHandle, StatefulInteractiveElement as _, Styled, Subscription, TestSupportExt as _, Window, div, px,
 };
-use look::{Hand as _, InRegion as _, LineText, Off as _, Placed, Region, RowSize, Sizing as _};
+use look::{Hand as _, InRegion as _, LineText, Placed, Region, RowSize};
 use protocol::model::{RepoId, Workspace, WorkspaceId, WorkspaceStatus};
 use std::rc::Rc;
 
@@ -247,23 +246,24 @@ fn row_button(app: &AppView, workspace: &Workspace, small: &Placed, cx: &mut Con
     let archived = workspace.status == WorkspaceStatus::Archived;
     let (icon, what) = if archived { (Lucide::ArchiveRestore, "Restore") } else { (Lucide::Archive, "Archive") };
     let id = workspace.id.clone();
-    Button::new(ElementId::Name(format!("home-{}-{}", what.to_lowercase(), workspace.id).into()))
-        .ghost()
-        .sized_square(look::ControlSize::Small)
-        .icon(icon)
-        .text_color(look::colors(cx).text_muted)
-        .tooltip(what)
-        .off_while(!app.busy.is_free())
-        .on_click(cx.listener(move |t, _, _, cx| {
-            // The row under it would take the click too, and show the workspace.
-            cx.stop_propagation();
-            if archived {
-                t.restore(id.clone(), cx);
-            } else {
-                t.archive(id.clone(), false, cx);
-            }
-        }))
-        .into_any_element()
+    look::icon_button(
+        ElementId::Name(format!("home-{}-{}", what.to_lowercase(), workspace.id).into()),
+        look::ButtonKind::Quiet,
+        look::ControlSize::Small,
+        icon,
+    )
+    .tooltip(what)
+    .off(!app.busy.is_free())
+    .on_click(cx.listener(move |t, _, _, cx| {
+        // The row under it would take the click too, and show the workspace.
+        cx.stop_propagation();
+        if archived {
+            t.restore(id.clone(), cx);
+        } else {
+            t.archive(id.clone(), false, cx);
+        }
+    }))
+    .into_any_element()
 }
 
 fn nothing_listed(cx: &mut Context<AppView>) -> impl IntoElement {

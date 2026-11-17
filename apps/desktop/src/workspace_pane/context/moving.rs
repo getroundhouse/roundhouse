@@ -3,10 +3,9 @@
 //! chat's agent is at work, so this asks them only once it's refused.
 
 use client_core::ClientError;
-use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::menu::{DropdownMenu as _, PopupMenu, PopupMenuItem};
+use gpui_kit::component::menu::{PopupMenu, PopupMenuItem};
 use gpui_kit::{Anchor, AnyElement, Context, IntoElement, PromptLevel, SharedString, WeakEntity, Window};
-use look::{Hand as _, HoldOpen, Off as _, Sizing as _};
+use look::HoldOpen;
 use protocol::client::ErrorCode;
 use protocol::model::{Account, AccountId, AgentKind, Session, SessionId};
 
@@ -118,14 +117,9 @@ impl WorkspacePane {
 /// drawn outside the card.
 pub(super) fn button(moves: &Moves, hold: &HoldOpen) -> AnyElement {
     let (moves, hold) = (moves.clone(), hold.clone());
-    Button::new("account-move")
-        .hand()
-        .ghost()
-        .sized(look::ControlSize::Small)
-        .dropdown_caret(true)
-        .label("Move")
-        .off_while(moves.off)
-        .dropdown_menu_with_anchor(Anchor::BottomRight, move |menu, window, cx| {
+    look::button("account-move", look::ButtonKind::Borderless, look::ControlSize::Small, "Move")
+        .off(moves.off)
+        .menu(Anchor::BottomRight, move |menu, window, cx| {
             // Built as it opens, so this is when it starts to hold the card.
             hold.while_open(&cx.entity(), window, cx);
             menu_of(&moves, menu)

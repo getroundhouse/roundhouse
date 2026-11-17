@@ -7,14 +7,13 @@
 
 use std::sync::Arc;
 
-use gpui_kit::component::button::Button;
 use gpui_kit::component::{IconName, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, Context, ElementId, InteractiveElement as _, IntoElement, ParentElement as _, Pixels,
     PlatformTextSystem, Render, Styled as _, TestSupportExt as _, Window, div, px, size,
 };
-use look::{BarSize, ControlSize, RowSize, Sizing as _, Type, Typeset as _};
+use look::{BarSize, ButtonKind, ControlSize, RowSize, Type, Typeset as _};
 
 use super::capture::Picture;
 use super::headless;
@@ -73,10 +72,11 @@ impl Render for Sheet {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let colors = look::colors(cx);
         let row = |Sample { name, place, tall, height, edge, kind, button }: Sample| -> AnyElement {
-            let outlined = Button::new(name.clone()).outline();
             let button = match button {
-                ControlSize::Small => outlined.sized_square(button).icon(IconName::Plus),
-                ControlSize::Regular | ControlSize::Large => outlined.sized(button).label("Add"),
+                ControlSize::Small => look::icon_button(name.clone(), ButtonKind::Outlined, button, IconName::Plus),
+                ControlSize::Regular | ControlSize::Large => {
+                    look::button(name.clone(), ButtonKind::Outlined, button, "Add")
+                }
             };
             let band = h_flex()
                 .w(px(SAMPLE_WIDTH))

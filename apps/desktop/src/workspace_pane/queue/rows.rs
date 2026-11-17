@@ -1,7 +1,6 @@
 //! How the queue looks: a card above the composer, a line to each prompt, with what it carries after its text.
 
 use gpui_kit::assets::IconName;
-use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::{Escape, Textarea};
 use gpui_kit::component::{Icon, Sizable as _, Size, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
@@ -9,7 +8,7 @@ use gpui_kit::{
     AnyElement, Context, ElementId, Hsla, InteractiveElement as _, IntoElement, ParentElement, SharedString,
     StatefulInteractiveElement as _, Styled, TestSupportExt as _, div, px,
 };
-use look::{Hand as _, IconSizing as _, InRegion as _, Region, Shaped as _, Sizing as _, Typeset as _};
+use look::{IconSizing as _, InRegion as _, Region, Shaped as _, Typeset as _};
 use protocol::model::QueuedPrompt;
 use protocol::short_text::one_line;
 
@@ -107,7 +106,7 @@ impl WorkspacePane {
             .corners(look::Corner::Control)
             .hover(move |style| style.bg(lit))
             .child(queued_line(prompt, text, muted))
-            .child(queued_buttons(prompt, row, group, muted, cx))
+            .child(queued_buttons(prompt, row, group, cx))
             .test_support()
             .into_any_element()
     }
@@ -118,18 +117,17 @@ fn queued_buttons(
     prompt: &QueuedPrompt,
     row: Row,
     group: SharedString,
-    muted: Hsla,
     cx: &mut Context<WorkspacePane>,
 ) -> impl IntoElement {
     let id = &prompt.client_msg_id;
     let button = |name: &str, icon: IconName, tooltip: &'static str| {
-        Button::new(ElementId::Name(format!("{name}-queued-{id}").into()))
-            .hand()
-            .ghost()
-            .sized_square(look::ControlSize::Small)
-            .icon(icon)
-            .text_color(muted)
-            .tooltip(tooltip)
+        look::icon_button(
+            ElementId::Name(format!("{name}-queued-{id}").into()),
+            look::ButtonKind::Quiet,
+            look::ControlSize::Small,
+            icon,
+        )
+        .tooltip(tooltip)
     };
     let (edit, remove) = (button("edit", IconName::Pencil, "Edit"), button("remove", IconName::Trash, "Remove"));
     let buttons = h_flex().flex_none().gap(look::Space::XSmall).invisible();

@@ -4,14 +4,13 @@
 
 use client_core::session_log::By;
 use client_core::waits;
-use gpui_kit::component::button::Button;
 use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, Div, ElementId, InteractiveElement as _, IntoElement, ParentElement,
     StatefulInteractiveElement as _, Styled, TestSupportExt as _, WeakEntity, div,
 };
-use look::{Hand as _, Sizing as _, TaskRing};
+use look::TaskRing;
 use protocol::event::AgentTask;
 use protocol::model::{Wait, WaitId, WaitUntil};
 
@@ -152,17 +151,18 @@ fn wait_words(wait: &Wait, standing: Option<&PullRequestStanding>) -> (String, &
 /// which then tells the agent, or with no agent running, it hears with the next prompt.
 fn stop_waiting(wait: &WaitId, this: &WeakEntity<Transcript>) -> AnyElement {
     let (this, wait) = (this.clone(), wait.clone());
-    Button::new(ElementId::Name(format!("wait-stop/{wait}").into()))
-        .hand()
-        .outline()
-        .sized(look::ControlSize::Small)
-        .label("Stop")
-        .tooltip("Stop waiting, and tell the agent")
-        .on_click(move |_, _, cx| {
-            cx.stop_propagation();
-            let _ = this.update(cx, |t, cx| t.call_off_wait(wait.clone(), cx));
-        })
-        .into_any_element()
+    look::button(
+        ElementId::Name(format!("wait-stop/{wait}").into()),
+        look::ButtonKind::Outlined,
+        look::ControlSize::Small,
+        "Stop",
+    )
+    .tooltip("Stop waiting, and tell the agent")
+    .on_click(move |_, _, cx| {
+        cx.stop_propagation();
+        let _ = this.update(cx, |t, cx| t.call_off_wait(wait.clone(), cx));
+    })
+    .into_any_element()
 }
 
 /// A line for what the agent has in the background, named `kind-key`, and its text `kind-text/key`: what leads it,

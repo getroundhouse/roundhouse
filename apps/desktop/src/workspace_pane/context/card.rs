@@ -3,13 +3,12 @@
 //! told, so a part nobody has said is left out.
 
 use gpui_kit::base::ObservedElement;
-use gpui_kit::component::button::Button;
 use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::{
     AnyElement, App, Div, InteractiveElement as _, IntoElement, ParentElement, Pixels, SharedString, Stateful, Styled,
     TestSupportExt as _, WeakEntity, div, px, relative,
 };
-use look::{HoldOpen, InRegion as _, Off as _, Region, Sizing as _, Typeset as _};
+use look::{HoldOpen, InRegion as _, Region, Typeset as _};
 use protocol::model::{Account, ContextPart, ContextPartKind, ContextUsage};
 
 use super::moving::{self, Moves};
@@ -46,11 +45,8 @@ pub(super) fn context_card(
 fn compact(pane: &WeakEntity<WorkspacePane>, off: bool, cx: &App) -> Div {
     let colors = look::colors(cx);
     let pane = pane.clone();
-    let button = Button::new("context-compact")
-        .off_while(off)
-        .outline()
-        .sized(look::ControlSize::Small)
-        .label("Compact now")
+    let button = look::button("context-compact", look::ButtonKind::Outlined, look::ControlSize::Small, "Compact now")
+        .off(off)
         .on_click(move |_, _, cx| {
             let _ = pane.update(cx, WorkspacePane::compact);
         });

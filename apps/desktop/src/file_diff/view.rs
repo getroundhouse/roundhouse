@@ -2,10 +2,9 @@
 //! until the app quits, as it shares the sidebar's, and the switch for it is at the right end of the file tab's bar.
 
 use gpui_kit::assets::IconName as Lucide;
-use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::{Selectable as _, h_flex};
+use gpui_kit::component::h_flex;
 use gpui_kit::{AnyElement, App, Global, IntoElement as _, ParentElement as _, Styled as _};
-use look::{Hand as _, Shaped as _, Sizing as _};
+use look::Shaped as _;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum DiffView {
@@ -80,12 +79,8 @@ pub(super) fn switch(cx: &App) -> AnyElement {
         .corners(look::Corner::Control)
         .bg(look::colors(cx).raised)
         .children(DiffView::ALL.map(|view| {
-            Button::new(view.id())
-                .hand()
-                .ghost()
-                .sized_square(look::ControlSize::Small)
-                .icon(view.icon())
-                .selected(view == showing)
+            look::icon_button(view.id(), look::ButtonKind::Borderless, look::ControlSize::Small, view.icon())
+                .on(view == showing)
                 .tooltip(view.name())
                 .on_click(move |_, _, cx| {
                     if chosen(cx) != view {

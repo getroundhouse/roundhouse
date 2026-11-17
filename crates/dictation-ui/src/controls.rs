@@ -1,9 +1,8 @@
 //! The controls that replace a host's ordinary toolbar until the last words have settled.
 
-use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::h_flex;
 use gpui_kit::{App, Entity, Focusable as _, IntoElement, ParentElement as _, Styled as _, div, px};
-use look::{Hand as _, Off as _, Shaped as _, Sizing as _};
+use look::Shaped as _;
 
 use crate::Field;
 
@@ -23,11 +22,7 @@ impl Field {
                 .justify_end()
                 .gap(look::Space::Small)
                 .child(
-                    Button::new(CANCEL)
-                        .sized(size)
-                        .hand()
-                        .ghost()
-                        .label("Esc")
+                    look::button(CANCEL, look::ButtonKind::Borderless, size, "Esc")
                         .accessibility_label("Cancel dictation")
                         .tooltip("Cancel dictation (Esc)")
                         .on_click(move |_, window, cx| {
@@ -38,19 +33,21 @@ impl Field {
                         }),
                 )
                 .child(
-                    Button::new(STOP)
-                        .sized_square(size)
-                        .ghost()
-                        .child(div().size(px(9.)).corners(look::Corner::Glyph).bg(colors.brand))
-                        .accessibility_label("Finish dictation")
-                        .tooltip("Finish dictation")
-                        .off_while(stopping)
-                        .on_click(move |_, window, cx| {
-                            let _ = stop.update(cx, |field, cx| {
-                                window.focus(&field.input.focus_handle(cx), cx);
-                                field.stop(cx);
-                            });
-                        }),
+                    look::glyph_button(
+                        STOP,
+                        look::ButtonKind::Borderless,
+                        size,
+                        div().size(px(9.)).corners(look::Corner::Glyph).bg(colors.brand),
+                    )
+                    .accessibility_label("Finish dictation")
+                    .tooltip("Finish dictation")
+                    .off(stopping)
+                    .on_click(move |_, window, cx| {
+                        let _ = stop.update(cx, |field, cx| {
+                            window.focus(&field.input.focus_handle(cx), cx);
+                            field.stop(cx);
+                        });
+                    }),
                 ),
         )
     }

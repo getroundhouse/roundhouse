@@ -3,13 +3,11 @@ use crate::busy::Busy;
 use crate::sides;
 use crate::sides::AtTheTop;
 use gpui_kit::assets::IconName as Lucide;
-use gpui_kit::component::button::{Button, ButtonCustomVariant, ButtonVariants as _};
 use gpui_kit::component::{Icon, h_flex};
-use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, Div, InteractiveElement as _, IntoElement, ParentElement as _, Styled as _, Window, div,
 };
-use look::{Hand as _, IconSizing as _, Off as _, Sizing as _, Typeset as _, Work};
+use look::{IconSizing as _, Typeset as _, Work};
 use protocol::model::{BranchName, Local, PullRequest, Standing, Workspace};
 use std::time::Duration;
 use transcript::PullRequestStanding;
@@ -125,8 +123,8 @@ pub fn bar(
         .emphasis()
         .text_color(text)
         .child(title);
-    row.child(giving_way(pr.map(|pr| number(pr, work, cx)), title))
-        .children(words::action(standing).map(|action| action_button(action, work, (busy, doing), on_action, cx)))
+    row.child(giving_way(pr.map(|pr| number(pr, work)), title))
+        .children(words::action(standing).map(|action| action_button(action, work, (busy, doing), on_action)))
         .into_any_element()
 }
 
@@ -158,7 +156,6 @@ pub fn controls(
     busy: &Busy,
     doing: Option<&'static str>,
     on_action: impl Fn(&Action, &mut Window, &mut App) + 'static,
-    cx: &App,
 ) -> Option<AnyElement> {
     let standing = lookup.standing()?;
     let work = lookup.work();
@@ -166,24 +163,19 @@ pub fn controls(
     let controls = h_flex()
         .id("pull-request-controls")
         .gap(look::Space::Small)
-        .children(pr.map(|pr| number(pr, work, cx)))
-        .children(words::action(standing).map(|action| action_button(action, work, (busy, doing), on_action, cx)));
+        .children(pr.map(|pr| number(pr, work)))
+        .children(words::action(standing).map(|action| action_button(action, work, (busy, doing), on_action)));
     Some(controls.into_any_element())
 }
 
 /// The pull request's number, outlined as a button that opens something is, which opens it on GitHub.
-fn number(pr: &PullRequest, work: Work, cx: &App) -> AnyElement {
-    let (url, colors) = (pr.url.clone(), look::colors(cx));
+fn number(pr: &PullRequest, work: Work) -> AnyElement {
+    let url = pr.url.clone();
     let size = look::ControlSize::Regular;
-    Button::new("pull-request")
-        .hand()
-        .sized(size)
-        .outline()
-        .border_color(work.edge(colors))
-        .text_color(work.text(colors))
+    look::button("pull-request", look::ButtonKind::Outlined, size, format!("#{}", pr.number))
+        .of_work(work)
         .tooltip(pr.title.clone())
-        .label(format!("#{}", pr.number))
-        .child(Icon::new(Lucide::ArrowUpRight).sized(size.icon_with_words()))
+        .after(Icon::new(Lucide::ArrowUpRight).sized(size.icon_with_words()))
         .on_click(move |_, _, cx| cx.open_url(&url))
         .into_any_element()
 }
@@ -195,28 +187,15 @@ fn action_button(
     work: Work,
     (busy, doing): (&Busy, Option<&'static str>),
     on_action: impl Fn(&Action, &mut Window, &mut App) + 'static,
-    cx: &App,
 ) -> AnyElement {
-    let colors = look::colors(cx);
     // Greyed out while the app is making, archiving or restoring a workspace, as every button that archives is, so it
     // can't be pressed twice, and while this one is on its way out, whoever asked. The other actions only ask the agent.
     let doing = doing.filter(|_| action == Action::Archive);
     let disabled = action == Action::Archive && (!busy.is_free() || doing.is_some());
     let label = doing.unwrap_or(action.label());
-    let button = Button::new("pull-request-action").sized(look::ControlSize::Regular).label(label).off_while(disabled);
-    let button = match work.hue(colors) {
-        // The kit draws a custom button's colour faintly, so the fill is set on the button itself, which hover and
-        // press still change. Not while it's disabled, since the kit lays the button's own style over its disabled
-        // one, which would keep the fill.
-        Some(fill) => {
-            let style = ButtonCustomVariant::new(cx)
-                .color(fill)
-                .foreground(colors.on_main)
-                .hover(fill.opacity(0.85))
-                .active(fill.opacity(0.7));
-            button.custom(style).when(!disabled, |button| button.bg(fill))
-        }
-        None => button.primary(),
-    };
-    button.on_click(move |_, window, cx| on_action(&action, window, cx)).into_any_element()
+    look::button("pull-request-action", look::ButtonKind::Main, look::ControlSize::Regular, label)
+        .of_work(work)
+        .off(disabled)
+        .on_click(move |_, window, cx| on_action(&action, window, cx))
+        .into_any_element()
 }

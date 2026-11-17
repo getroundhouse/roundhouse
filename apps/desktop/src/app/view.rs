@@ -1,13 +1,12 @@
 //! How the app looks.
 
-use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, Context, Div, Entity, Hsla, InteractiveElement, IntoElement, MouseButton, ParentElement, Render,
     Stateful, StatefulInteractiveElement, Styled, TestSupportExt as _, Window, div, px,
 };
-use look::{Hand as _, Sizing as _, Typeset as _};
+use look::{Hand as _, Typeset as _};
 use protocol::client::HubStatus;
 
 use super::restarts::restart_note;
@@ -93,12 +92,13 @@ impl AppView {
                 None => empty_state(
                     "Start a workspace",
                     "Pick a project in the sidebar and press + to give an agent a branch of its own.",
-                    Button::new("first-new-workspace")
-                        .sized(look::ControlSize::Large)
-                        .hand()
-                        .primary()
-                        .label("New workspace")
-                        .on_click(cx.listener(|t, _, window, cx| t.new_workspace_here(window, cx))),
+                    look::button(
+                        "first-new-workspace",
+                        look::ButtonKind::Main,
+                        look::ControlSize::Large,
+                        "New workspace",
+                    )
+                    .on_click(cx.listener(|t, _, window, cx| t.new_workspace_here(window, cx))),
                     cx,
                 ),
             },
@@ -121,11 +121,7 @@ impl AppView {
         empty_state(
             "Add a project",
             &body,
-            Button::new("first-add-project")
-                .sized(look::ControlSize::Large)
-                .hand()
-                .primary()
-                .label("Add project")
+            look::button("first-add-project", look::ButtonKind::Main, look::ControlSize::Large, "Add project")
                 .on_click(cx.listener(|t, _, _, cx| t.add_repository(cx))),
             cx,
         )
@@ -136,14 +132,10 @@ impl AppView {
         let (heading, body, pair_again) = remote_failure_words(hub_name, failure);
         let primary = if pair_again {
             let data_dir = self.hub.paths.data_dir.clone();
-            Button::new("pair-hub-again")
-                .sized(look::ControlSize::Large)
-                .hand()
-                .primary()
-                .label("Pair again…")
+            look::button("pair-hub-again", look::ButtonKind::Main, look::ControlSize::Large, "Pair again…")
                 .on_click(move |_, window, cx| pairing::open(data_dir.clone(), window, cx))
         } else {
-            try_again(cx).primary()
+            try_again(look::ButtonKind::Main, cx)
         };
         v_flex()
             .size_full()
@@ -260,20 +252,14 @@ fn remote_failure_words(hub_name: &str, failure: &ConnectionFailure) -> (String,
     }
 }
 
-fn switch_to_local(id: &'static str) -> Button {
-    Button::new(id)
-        .outline()
-        .sized(look::ControlSize::Large)
-        .hand()
-        .label(format!("Switch to {THIS_MACHINE}"))
+fn switch_to_local(id: &'static str) -> look::Button {
+    look::button(id, look::ButtonKind::Outlined, look::ControlSize::Large, format!("Switch to {THIS_MACHINE}"))
         .on_click(|_, window, cx| hubs::select(None, window, cx))
 }
 
-fn try_again(cx: &mut Context<AppView>) -> Button {
-    Button::new("try-hub-again")
-        .sized(look::ControlSize::Large)
-        .hand()
-        .label("Try again")
+/// Tries the hub again, as `kind`: the main action where it's the only one, and an edged one beside another.
+fn try_again(kind: look::ButtonKind, cx: &mut Context<AppView>) -> look::Button {
+    look::button("try-hub-again", kind, look::ControlSize::Large, "Try again")
         .on_click(cx.listener(|t, _, _, cx| t.connect(cx)))
 }
 
@@ -290,7 +276,7 @@ fn failed(reason: &str, error_colour: Hsla, cx: &mut Context<AppView>) -> AnyEle
                 .text_color(error_colour)
                 .child(format!("Couldn't reach the hub. {reason}")),
         )
-        .child(try_again(cx))
+        .child(try_again(look::ButtonKind::Edged, cx))
         .into_any_element()
 }
 
@@ -315,14 +301,10 @@ fn across_a_break(
         |text: String| div().max_w(px(560.0)).text_center().typeset(look::Type::Body).text_color(muted).child(text);
     let action = if may_restart {
         let pid = status.pid;
-        Button::new("restart-hub")
-            .sized(look::ControlSize::Large)
-            .hand()
-            .primary()
-            .label("Restart the hub")
+        look::button("restart-hub", look::ButtonKind::Main, look::ControlSize::Large, "Restart the hub")
             .on_click(cx.listener(move |t, _, _, cx| t.restart_hub(pid, cx)))
     } else {
-        try_again(cx)
+        try_again(look::ButtonKind::Edged, cx)
     };
     v_flex()
         .size_full()
@@ -337,7 +319,7 @@ fn across_a_break(
 }
 
 /// What an empty pane shows: the mark, what's missing and why, and the one thing to do about it.
-fn empty_state(title: &str, body: &str, action: Button, cx: &mut Context<AppView>) -> AnyElement {
+fn empty_state(title: &str, body: &str, action: look::Button, cx: &mut Context<AppView>) -> AnyElement {
     let muted = look::colors(cx).text_muted;
     v_flex()
         .size_full()

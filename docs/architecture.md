@@ -113,7 +113,7 @@ crates/
   providers/       The trait a provider adapter written in Rust implements, the loop that serves it over the provider protocol, and the local provider
   client-core/     Connection, and each hub's records and open sessions, kept in sync. Shared by every Rust client. No UI
   transcript/      A session's history and live output, in a list of its own, on the kit's Markdown blocks
-  look/            How the app looks: every colour it draws with, by what it's for, the theme made from them, code's colours, the words that changed in a diff's lines, the status mark, the app icon, and the parts of the window tests find
+  look/            How the app looks: every colour it draws with, by what it's for, the theme made from them, code's colours, the words that changed in a diff's lines, the components screens are built from, such as buttons, the status mark and the app icon, and the parts of the window tests find
   terminal-state/  What a terminal shows, kept from what the program in it writes on Ghostty's terminal core, and the bytes that draw it again in another terminal. No IO and no UI
   dictation-ui/    GPUI dictation attached to an opted-in text field: recording, shortcuts, live text, insertion and cancellation; shared by desktop and transcript
   dictation/       Hearing speech and turning it into text on the device: the microphone, muting the sound output while it's heard, cutting a recording at its pauses, the trait an engine implements, the engine for NVIDIA's nemotron model on Core ML, the model's files, downloading and deleting them, and a stand-in engine for tests. No UI and no async runtime. Unconfirmed

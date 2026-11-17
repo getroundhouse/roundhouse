@@ -3,14 +3,13 @@
 //! anyone in, or reads a terminal. It's brought into sight as it opens, wherever it is on the page.
 
 use gpui_kit::base::ElementExt as _;
-use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::Input;
 use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::{
     AnyElement, App, Div, InteractiveElement as _, IntoElement, ParentElement as _, Role, SharedString,
     StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, div,
 };
-use look::{Hand as _, Off as _, Shaped as _, Sizing as _, Typeset as _};
+use look::{Shaped as _, Typeset as _};
 
 use super::super::field::{FIELDS_WIDTH, labelled as field};
 use super::Drawing;
@@ -142,19 +141,17 @@ fn buttons(drawing: &Drawing<'_>, act: &'static str, cx: &App) -> Div {
         .justify_end()
         .gap(look::Space::Small)
         .child(
-            Button::new("accounts-cancel")
-                .hand()
-                .outline()
-                .sized(look::ControlSize::Regular)
-                .label("Cancel")
+            look::button("accounts-cancel", look::ButtonKind::Outlined, look::ControlSize::Regular, "Cancel")
                 .on_click(move |_, window, cx| cancel.update(cx, |kept, cx| kept.cancel(window, cx))),
         )
         .child(
-            Button::new("accounts-panel-connect")
-                .primary()
-                .sized(look::ControlSize::Regular)
-                .label(SharedString::from(act))
-                .off_while(!kept.can_connect(cx))
-                .on_click(move |_, window, cx| connect.update(cx, |kept, cx| kept.connect(window, cx))),
+            look::button(
+                "accounts-panel-connect",
+                look::ButtonKind::Main,
+                look::ControlSize::Regular,
+                SharedString::from(act),
+            )
+            .off(!kept.can_connect(cx))
+            .on_click(move |_, window, cx| connect.update(cx, |kept, cx| kept.connect(window, cx))),
         )
 }

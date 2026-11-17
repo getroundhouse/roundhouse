@@ -1,11 +1,10 @@
 //! Default accounts, a list with the hub's one default for each kind whose adapter can accept a held login, and what
 //! chooses it, under a heading as the account pages' lists are.
 
-use gpui_kit::component::button::Button;
-use gpui_kit::component::menu::{DropdownMenu as _, PopupMenu, PopupMenuItem};
-use gpui_kit::component::{IconName, h_flex, v_flex};
-use gpui_kit::{AnyElement, App, Div, IntoElement, ParentElement as _, SharedString, Styled as _, div, px};
-use look::{Off as _, Sizing as _, Typeset as _};
+use gpui_kit::component::menu::{PopupMenu, PopupMenuItem};
+use gpui_kit::component::{h_flex, v_flex};
+use gpui_kit::{Anchor, AnyElement, App, Div, IntoElement, ParentElement as _, SharedString, Styled as _, div, px};
+use look::Typeset as _;
 use protocol::model::{Account, AgentDescription};
 
 use super::super::lists::{heading, list};
@@ -82,22 +81,23 @@ fn picker(
         .defaults
         .and_then(|defaults| defaults.iter().find(|choice| choice.agent == kind))
         .map(|choice| choice.account.clone());
-    Button::new(SharedString::from(format!("account-default-{}", kind.as_str())))
-        .outline()
-        .sized(look::ControlSize::Regular)
-        .label(label)
-        .w(px(200.))
-        .icon(IconName::ChevronDown)
-        .off_while(disabled)
-        .dropdown_menu(move |menu: PopupMenu, _, _| {
-            choices.iter().fold(menu, |menu, (account, name)| {
-                let (kept, account) = (kept.clone(), account.clone());
-                menu.item(PopupMenuItem::new(name.clone()).checked(selected.as_ref() == Some(&account)).on_click(
-                    move |_, _, cx| {
-                        kept.update(cx, |kept, cx| kept.choose_default(kind, account.clone(), cx));
-                    },
-                ))
-            })
+    look::button(
+        SharedString::from(format!("account-default-{}", kind.as_str())),
+        look::ButtonKind::Outlined,
+        look::ControlSize::Regular,
+        label,
+    )
+    .width(px(200.))
+    .off(disabled)
+    .menu(Anchor::TopLeft, move |menu: PopupMenu, _, _| {
+        choices.iter().fold(menu, |menu, (account, name)| {
+            let (kept, account) = (kept.clone(), account.clone());
+            menu.item(PopupMenuItem::new(name.clone()).checked(selected.as_ref() == Some(&account)).on_click(
+                move |_, _, cx| {
+                    kept.update(cx, |kept, cx| kept.choose_default(kind, account.clone(), cx));
+                },
+            ))
         })
-        .into_any_element()
+    })
+    .into_any_element()
 }

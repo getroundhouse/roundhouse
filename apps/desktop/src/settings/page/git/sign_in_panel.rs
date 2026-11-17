@@ -2,12 +2,11 @@
 //! button that copies it, and one that opens where to type it, and then how it ended.
 
 use gpui_kit::assets::IconName as Lucide;
-use gpui_kit::component::button::Button;
 use gpui_kit::component::{Icon, h_flex, v_flex};
 use gpui_kit::{
     AnyElement, App, InteractiveElement as _, IntoElement, ParentElement as _, Styled as _, TestSupportExt as _, div,
 };
-use look::{Hand as _, IconSizing as _, Shaped as _, Sizing as _, Typeset as _};
+use look::{IconSizing as _, Shaped as _, Typeset as _};
 use protocol::model::GithubUserCode;
 
 use super::Drawing;
@@ -79,13 +78,14 @@ fn waiting(code: &GithubUserCode, address: &str, until: Option<&str>, cx: &App) 
         )
         .child(look::copy_button("git-copy-code", code.to_string(), "Copy code", cx));
     let address = address.to_string();
-    let open = Button::new("git-open-address")
-        .hand()
-        .outline()
-        .sized(look::ControlSize::Regular)
-        .icon(Lucide::ExternalLink)
-        .label(format!("Open {}", address.trim_start_matches("https://")))
-        .on_click(move |_, _, cx| cx.open_url(&address));
+    let open = look::button(
+        "git-open-address",
+        look::ButtonKind::Outlined,
+        look::ControlSize::Regular,
+        format!("Open {}", address.trim_start_matches("https://")),
+    )
+    .icon(Lucide::ExternalLink)
+    .on_click(move |_, _, cx| cx.open_url(&address));
     let line = h_flex()
         .gap(look::Space::Small)
         .text_color(colors.text_muted)

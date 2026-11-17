@@ -14,7 +14,7 @@ use gpui_kit::{
     Action, AnyElement, App, Context, ElementId, InteractiveElement as _, IntoElement, MouseButton, ParentElement,
     Pixels, Role, StatefulInteractiveElement as _, Styled, TestSupportExt as _, Window, div, px,
 };
-use look::{Hand as _, IconSizing as _, LineText, Off as _, Placed, Sizing as _, Typeset as _};
+use look::{Hand as _, IconSizing as _, LineText, Placed, Typeset as _};
 use protocol::model::{Workspace, WorkspaceId};
 
 use super::{MARK_GAP, ROW_PAD, ROW_SIZE, Standing, row_inset, standing};
@@ -220,19 +220,20 @@ pub(crate) fn doing(id: String, waiting: &'static str, small: &Placed, cx: &App)
 /// a new workspace, which the row's padding lines it up under.
 fn archive_button(app: &AppView, workspace: &Workspace, cx: &mut Context<AppView>) -> impl IntoElement {
     let id = workspace.id.clone();
-    let button = Button::new(ElementId::Name(format!("archive-{}", workspace.id).into()))
-        .ghost()
-        .sized_square(look::ControlSize::Small)
-        .icon(Lucide::Archive)
-        .text_color(look::colors(cx).text_muted)
-        .tooltip("Archive")
-        // So it can't be pressed twice. A disabled button still takes the click, so the row doesn't open instead.
-        .off_while(!app.busy.is_free())
-        // A left press stops here, so the row under it isn't pressed. A pressed row would open the workspace that's
-        // going once let go. It would also say the pointer had left at the first move, which a quick press makes, and
-        // start this button fading before the press was let go. A right press goes on to the row's menu.
-        .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-        .on_click(cx.listener(move |t, _, _, cx| t.archive(id.clone(), false, cx)));
+    let button = look::icon_button(
+        ElementId::Name(format!("archive-{}", workspace.id).into()),
+        look::ButtonKind::Quiet,
+        look::ControlSize::Small,
+        Lucide::Archive,
+    )
+    .tooltip("Archive")
+    // So it can't be pressed twice. A disabled button still takes the click, so the row doesn't open instead.
+    .off(!app.busy.is_free())
+    // A left press stops here, so the row under it isn't pressed. A pressed row would open the workspace that's
+    // going once let go. It would also say the pointer had left at the first move, which a quick press makes, and
+    // start this button fading before the press was let go. A right press goes on to the row's menu.
+    .keeps_its_press()
+    .on_click(cx.listener(move |t, _, _, cx| t.archive(id.clone(), false, cx)));
     div().flex_none().child(button)
 }
 

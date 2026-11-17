@@ -3,13 +3,12 @@
 //! focus back as it goes.
 
 use gpui_kit::base::ElementExt as _;
-use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::{
     AnyElement, App, ClickEvent, Div, InteractiveElement as _, IntoElement, ParentElement as _, Role, SharedString,
     StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, Window, div,
 };
-use look::{Off as _, Sizing as _, Typeset as _};
+use look::Typeset as _;
 
 use super::Drawing;
 use super::kept::Panel;
@@ -74,8 +73,9 @@ pub(super) fn button(
     primary: bool,
     off: bool,
     act: impl Fn(&mut Window, &mut App) + 'static,
-) -> Button {
-    let button = Button::new(id).sized(look::ControlSize::Regular).label(label).off_while(off);
-    let button = if primary { button.primary() } else { button.outline() };
-    button.on_click(move |_: &ClickEvent, window, cx| act(window, cx))
+) -> look::Button {
+    let kind = if primary { look::ButtonKind::Main } else { look::ButtonKind::Outlined };
+    look::button(id, kind, look::ControlSize::Regular, label)
+        .off(off)
+        .on_click(move |_: &ClickEvent, window, cx| act(window, cx))
 }

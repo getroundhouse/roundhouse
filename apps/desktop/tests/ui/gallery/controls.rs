@@ -6,13 +6,12 @@
 
 use std::sync::Arc;
 
-use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::{IconName, h_flex, v_flex};
 use gpui_kit::{
     Context, InteractiveElement as _, IntoElement, ParentElement as _, PlatformTextSystem, Render, Styled as _,
     TestSupportExt as _, Window, div, px, size,
 };
-use look::{ControlSize, Sizing as _, Type, Typeset as _};
+use look::{ButtonKind, ControlSize, Type, Typeset as _};
 
 use super::capture::Picture;
 use super::headless;
@@ -41,9 +40,9 @@ impl Render for Sheet {
             let place = places::id(KIND, &name);
             let id = |what: &str| format!("{control:?}-{what}");
             let name = div().w(px(NAME_WIDTH)).typeset(Type::Detail).text_color(colors.text_muted).child(name);
-            let words = Button::new(id("words")).outline().sized(control).icon(IconName::Plus).label("Add");
-            let main = Button::new(id("main")).primary().sized(control).label("Create");
-            let square = Button::new(id("square")).outline().sized_square(control).icon(IconName::Close);
+            let words = look::button(id("words"), ButtonKind::Outlined, control, "Add").icon(IconName::Plus);
+            let main = look::button(id("main"), ButtonKind::Main, control, "Create");
+            let square = look::icon_button(id("square"), ButtonKind::Outlined, control, IconName::Close);
             let sample =
                 h_flex().w(px(SAMPLE_WIDTH)).gap_3().child(words).child(main).child(square).id(place).test_support();
             let written = div()

@@ -2,13 +2,12 @@ use super::super::choice::{Choice, next_unanswered};
 use super::{asks, heading, options, pager, typing};
 use crate::transcript::Transcript;
 use asks::Asks;
-use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::{IconName, h_flex, v_flex};
 use gpui_kit::{
     App, Context, FocusHandle, Focusable, InteractiveElement as _, IntoElement, KeyDownEvent, ParentElement, Render,
     Styled, WeakEntity, Window, div,
 };
-use look::{InRegion as _, Off as _, Region, Shaped as _, Sizing as _};
+use look::{InRegion as _, Region, Shaped as _};
 use protocol::event::{ApprovalDecision, Question, QuestionAnswer};
 use protocol::model::{ApprovalId, SubagentId};
 use std::time::{Duration, Instant};
@@ -275,13 +274,11 @@ impl Render for QuestionPanel {
             options::list(self, &question, &other, cx)
         });
         // The composer's Send, since this is in the composer's place.
-        let send = Button::new("question-send")
-            .primary()
-            .sized_square(look::ControlSize::Small)
-            .icon(IconName::ArrowUp)
-            .tooltip(if self.asked.len() > 1 { "Send answers" } else { "Send answer" })
-            .off_while(!ready)
-            .on_click(cx.listener(|this, _, _, cx| this.send(cx)));
+        let send =
+            look::icon_button("question-send", look::ButtonKind::Main, look::ControlSize::Small, IconName::ArrowUp)
+                .tooltip(if self.asked.len() > 1 { "Send answers" } else { "Send answer" })
+                .off(!ready)
+                .on_click(cx.listener(|this, _, _, cx| this.send(cx)));
         let controls =
             self.dictation().and_then(|field| dictation_ui::Field::controls(field, look::ControlSize::Small, cx));
         let footer = match controls {

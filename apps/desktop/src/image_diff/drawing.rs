@@ -4,13 +4,12 @@
 //! of its path and the choices of what to show, and a strip under that of what's shown: each side, named, with what
 //! kind of image it is and how big, and in Difference how much changed.
 
-use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::{Selectable as _, h_flex, v_flex};
+use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::{
     AnyElement, App, Context, Div, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Render,
     SharedString, Styled as _, TestSupportExt as _, WeakEntity, Window, div, px,
 };
-use look::{Hand as _, Shaped as _, Sizing as _, Typeset as _};
+use look::{Shaped as _, Typeset as _};
 
 use super::{Comparison, ImageDiff, Outcome, Shown, Side, choose, comparison, stacked};
 use crate::file_image::{FileImage, Placed, fitted};
@@ -211,8 +210,8 @@ fn choice(
     selected: bool,
     view: WeakEntity<ImageDiff>,
     chosen: impl Fn(&mut App) + 'static,
-) -> Button {
-    Button::new(id).hand().ghost().sized(look::ControlSize::Regular).selected(selected).label(label).on_click(
+) -> look::Button {
+    look::button(id, look::ButtonKind::Borderless, look::ControlSize::Regular, label).on(selected).on_click(
         move |_, _, cx| {
             chosen(cx);
             let _ = view.update(cx, |_, cx| cx.notify());
@@ -221,7 +220,13 @@ fn choice(
 }
 
 /// One side, shown on its own, which Space and a click on the image flip to the other.
-fn side(id: &'static str, label: &'static str, this: Shown, selected: bool, view: WeakEntity<ImageDiff>) -> Button {
+fn side(
+    id: &'static str,
+    label: &'static str,
+    this: Shown,
+    selected: bool,
+    view: WeakEntity<ImageDiff>,
+) -> look::Button {
     let flipping = view.clone();
     choice(id, label, selected, view, move |cx| {
         choose(Comparison::Flip, cx);

@@ -4,14 +4,13 @@
 
 use std::f32::consts::FRAC_PI_2;
 
-use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::{Icon, IconName, h_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, AppContext as _, Context, Div, ElementId, Hsla, InteractiveElement as _, IntoElement, MouseButton,
+    AnyElement, App, AppContext as _, Context, Div, ElementId, Hsla, InteractiveElement as _, IntoElement,
     ParentElement, Role, SharedString, StatefulInteractiveElement as _, Styled, TestSupportExt as _, div, radians,
 };
-use look::{Hand as _, IconSizing as _, Sizing as _, Typeset as _};
+use look::{Hand as _, IconSizing as _, Typeset as _};
 use protocol::model::{Repo, RepoId, WorkspaceId};
 
 use super::drag::{Dragged, Dragging};
@@ -72,21 +71,21 @@ pub(super) fn row(app: &AppView, repo: &Repo, collapsed: bool, out: f32, cx: &mu
 }
 
 /// The button for a new workspace in the project, at its row's right end.
-fn new_workspace(app: &AppView, repo: &Repo, cx: &mut Context<AppView>) -> Button {
+fn new_workspace(app: &AppView, repo: &Repo, cx: &mut Context<AppView>) -> look::Button {
     let new_in = repo.id.clone();
     let creating = app.busy.creating_in() == Some(&repo.id);
-    Button::new(ElementId::Name(format!("new-in-{}", repo.id).into()))
-        .ghost()
-        .sized_square(look::ControlSize::Small)
-        .icon(IconName::Plus)
-        .text_color(look::colors(cx).text_muted)
-        .tooltip("New workspace")
-        .loading(creating)
-        .hand_while(!creating)
-        // A left press stops here, so the row under it isn't pressed too, which would collapse the project, or
-        // start dragging it.
-        .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-        .on_click(cx.listener(move |t, _, window, cx| t.open_new_workspace(new_in.clone(), window, cx)))
+    look::icon_button(
+        ElementId::Name(format!("new-in-{}", repo.id).into()),
+        look::ButtonKind::Quiet,
+        look::ControlSize::Small,
+        IconName::Plus,
+    )
+    .tooltip("New workspace")
+    .waiting(creating)
+    // A left press stops here, so the row under it isn't pressed too, which would collapse the project, or
+    // start dragging it.
+    .keeps_its_press()
+    .on_click(cx.listener(move |t, _, window, cx| t.open_new_workspace(new_in.clone(), window, cx)))
 }
 
 /// How many of a collapsed project's workspaces need a look, before its button for a new workspace, at the brightness

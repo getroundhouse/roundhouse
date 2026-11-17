@@ -7,7 +7,6 @@ use std::time::Duration;
 use client_core::{Client, PairingWait};
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::WindowExt as _;
-use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::{Icon, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
@@ -15,9 +14,7 @@ use gpui_kit::{
     Pixels, Render, Role, SharedString, StatefulInteractiveElement as _, Styled as _, Task, TestSupportExt as _,
     Window, div, px,
 };
-use look::{
-    Corner, Hand as _, IconSize, IconSizing as _, Shaped as _, Sizing as _, Space, TaskRing, Type, Typeset as _,
-};
+use look::{Corner, IconSize, IconSizing as _, Shaped as _, Space, TaskRing, Type, Typeset as _};
 use protocol::pairing::{Device, Pairing};
 
 use super::qr::{self, QrMatrix};
@@ -343,12 +340,13 @@ fn ready_footer(copied: bool, cx: &mut Context<ShareHub>) -> AnyElement {
         .gap(Space::Small)
         .child(close_button("cancel-share-hub", "Cancel", false, cx))
         .child(
-            Button::new("copy-pairing-link")
-                .primary()
-                .sized(look::ControlSize::Large)
-                .hand()
-                .label(if copied { "Copied" } else { "Copy link" })
-                .on_click(cx.listener(|this, _, _, cx| this.copy(cx))),
+            look::button(
+                "copy-pairing-link",
+                look::ButtonKind::Main,
+                look::ControlSize::Large,
+                if copied { "Copied" } else { "Copy link" },
+            )
+            .on_click(cx.listener(|this, _, _, cx| this.copy(cx))),
         )
         .into_any_element()
 }
@@ -359,11 +357,7 @@ fn retry_footer(cx: &mut Context<ShareHub>) -> AnyElement {
         .gap(Space::Small)
         .child(close_button("close-share-hub", "Close", false, cx))
         .child(
-            Button::new("retry-pairing-link")
-                .primary()
-                .sized(look::ControlSize::Large)
-                .hand()
-                .label("Create new link")
+            look::button("retry-pairing-link", look::ButtonKind::Main, look::ControlSize::Large, "Create new link")
                 .on_click(cx.listener(|this, _, _, cx| this.generate(cx))),
         )
         .into_any_element()
@@ -377,10 +371,9 @@ fn done_footer(cx: &mut Context<ShareHub>) -> AnyElement {
     h_flex().justify_end().child(close_button("done-share-hub", "Done", true, cx)).into_any_element()
 }
 
-fn close_button(id: &'static str, label: &'static str, primary: bool, cx: &mut Context<ShareHub>) -> Button {
-    let button = Button::new(id).sized(look::ControlSize::Large).hand().label(label);
-    let button = if primary { button.primary() } else { button };
-    button.on_click(cx.listener(|this, _, window, cx| {
+fn close_button(id: &'static str, label: &'static str, primary: bool, cx: &mut Context<ShareHub>) -> look::Button {
+    let kind = if primary { look::ButtonKind::Main } else { look::ButtonKind::Edged };
+    look::button(id, kind, look::ControlSize::Large, label).on_click(cx.listener(|this, _, window, cx| {
         this.closed(cx);
         window.close_dialog(cx);
     }))

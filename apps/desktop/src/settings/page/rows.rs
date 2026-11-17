@@ -1,12 +1,10 @@
 //! A setting's row: what it's called and what it does on the left, its control on the right, how it stands in a box
 //! under them when there's something to say, and a line under it all that sets it apart from the next.
 
-use gpui_kit::component::button::Button;
-use gpui_kit::component::menu::DropdownMenu as _;
 use gpui_kit::component::switch::Switch;
 use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::{Anchor, AnyElement, App, IntoElement, ParentElement as _, Styled as _, div};
-use look::{Hand as _, Off as _, Sizing as _, Typeset as _};
+use look::{Off as _, Typeset as _};
 
 use super::{Control, Setting};
 
@@ -34,14 +32,10 @@ pub(super) fn row(setting: &Setting, cx: &App) -> AnyElement {
         Control::Choice { id, chosen, menu } => {
             let menu = menu.clone();
             let chosen = chosen(cx);
-            Button::new(*id)
-                .accessibility_label(format!("{}: {chosen}", setting.name))
-                .hand()
-                .outline()
-                .sized(look::ControlSize::Regular)
-                .dropdown_caret(true)
-                .label(chosen)
-                .dropdown_menu_with_anchor(Anchor::TopRight, move |popup, window, cx| menu(popup, window, cx))
+            let named = format!("{}: {chosen}", setting.name);
+            look::button(*id, look::ButtonKind::Outlined, look::ControlSize::Regular, chosen)
+                .accessibility_label(named)
+                .menu(Anchor::TopRight, move |popup, window, cx| menu(popup, window, cx))
                 .into_any_element()
         }
     };

@@ -5,14 +5,13 @@
 //! has no room for.
 
 use gpui_kit::assets::IconName as Lucide;
-use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::menu::{DropdownMenu as _, PopupMenu};
+use gpui_kit::component::menu::PopupMenu;
 use gpui_kit::component::{Icon, IconName, h_flex, v_flex};
 use gpui_kit::{
     Anchor, AnyElement, App, Context, Div, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Role,
     SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled as _, TestSupportExt as _, Window, div, px,
 };
-use look::{IconSizing as _, Off as _, Shaped as _, Sizing as _, Typeset as _};
+use look::{IconSizing as _, Shaped as _, Typeset as _};
 
 use super::lists::badge;
 
@@ -214,12 +213,9 @@ pub(super) fn menu(
     off: bool,
     items: impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
 ) -> AnyElement {
-    Button::new(id)
+    look::icon_button(id, look::ButtonKind::Borderless, look::ControlSize::Small, IconName::Ellipsis)
         .accessibility_label(format!("More for {name}"))
-        .ghost()
-        .sized_square(look::ControlSize::Small)
-        .icon(IconName::Ellipsis)
-        .off_while(off)
-        .dropdown_menu_with_anchor(Anchor::TopRight, items)
+        .off(off)
+        .menu(Anchor::TopRight, items)
         .into_any_element()
 }

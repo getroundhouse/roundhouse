@@ -5,7 +5,6 @@ use std::path::PathBuf;
 
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::WindowExt as _;
-use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::{Input, InputEvent, InputState};
 use gpui_kit::component::{Icon, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
@@ -14,10 +13,7 @@ use gpui_kit::{
     Pixels, Render, Role, SharedString, StatefulInteractiveElement as _, Styled as _, Subscription, Task,
     TestSupportExt as _, Window, div, px,
 };
-use look::{
-    Corner, Hand as _, IconSize, IconSizing as _, Off as _, Shaped as _, Sizing as _, Space, TaskRing, Type,
-    Typeset as _,
-};
+use look::{Corner, IconSize, IconSizing as _, Shaped as _, Space, TaskRing, Type, Typeset as _};
 use protocol::pairing::PairingLink;
 
 use super::words::{ParsedInput, connect_failure, parse_input};
@@ -228,18 +224,15 @@ fn connect_footer(label: &'static str, can_submit: bool, cx: &mut Context<Connec
     h_flex()
         .justify_end()
         .gap(Space::Small)
-        .child(Button::new("cancel-pair-hub").sized(look::ControlSize::Large).hand().label("Cancel").on_click(
+        .child(look::button("cancel-pair-hub", look::ButtonKind::Edged, look::ControlSize::Large, "Cancel").on_click(
             cx.listener(|this, _, window, cx| {
                 this.closed(cx);
                 window.close_dialog(cx);
             }),
         ))
         .child(
-            Button::new("pair-hub")
-                .primary()
-                .sized(look::ControlSize::Large)
-                .label(label)
-                .off_while(!can_submit)
+            look::button("pair-hub", look::ButtonKind::Main, look::ControlSize::Large, label)
+                .off(!can_submit)
                 .on_click(cx.listener(|this, _, window, cx| this.submit(window, cx))),
         )
         .into_any_element()

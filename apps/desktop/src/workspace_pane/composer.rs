@@ -2,7 +2,6 @@
 //! picker at one end, and at the other what the agent says of itself and the microphone, then Send or Stop. Shift-Tab
 //! turns plan mode on and off, as the `+` menu does, and the composer shows it.
 
-use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::{InputEvent, Textarea, TextareaState};
 use gpui_kit::component::{IconName, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
@@ -10,7 +9,7 @@ use gpui_kit::{
     AnyElement, AppContext as _, Context, Div, Entity, Focusable as _, IntoElement, ParentElement, Pixels, Styled,
     Subscription, Window, div, px,
 };
-use look::{Hand as _, InRegion as _, Off as _, Region, Shaped as _, Sizing as _};
+use look::{InRegion as _, Region, Shaped as _};
 use protocol::model::{Effort, ModelName, PermissionMode, SessionId, SessionSettingsChange};
 use protocol::prompt::Prompt;
 
@@ -284,22 +283,16 @@ impl WorkspacePane {
         if working {
             let stop_mark = look::colors(cx).on_main;
             // The same square as Send, with a filled square rather than an icon, which would only be outlined.
-            Button::new("stop")
-                .hand()
-                .primary()
-                .sized_square(look::ControlSize::Small)
-                .child(div().size_2p5().corners(look::Corner::Glyph).bg(stop_mark))
+            let square = div().size_2p5().corners(look::Corner::Glyph).bg(stop_mark);
+            look::glyph_button("stop", look::ButtonKind::Main, look::ControlSize::Small, square)
                 .accessibility_label("Stop")
                 .tooltip_with_action("Stop", &StopAgent, None)
                 .on_click(cx.listener(|t, _, _, cx| t.stop_agent(cx)))
                 .into_any_element()
         } else {
-            Button::new("send")
-                .primary()
-                .sized_square(look::ControlSize::Small)
-                .icon(IconName::ArrowUp)
+            look::icon_button("send", look::ButtonKind::Main, look::ControlSize::Small, IconName::ArrowUp)
                 // What's typed waits for the hub, as `hub_went_away` says.
-                .off_while(self.hub == Hub::Away)
+                .off(self.hub == Hub::Away)
                 .tooltip("Send")
                 .on_click(cx.listener(|t, _, window, cx| t.submit(window, cx)))
                 .into_any_element()

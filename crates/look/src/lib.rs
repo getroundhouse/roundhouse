@@ -53,7 +53,7 @@ pub use clock::{
 #[cfg(feature = "testing")]
 pub use colors::NamedColor;
 pub use colors::{Colors, colors};
-pub use controls::{ControlSize, Sizing};
+pub use controls::{Button, ButtonKind, ControlSize, Menu, Side, Sizing, button, glyph_button, icon_button};
 pub use copy::copy_button;
 pub use fit::{fit, pixels};
 pub use hand::{Hand, Off};

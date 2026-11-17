@@ -1,0 +1,40 @@
+{
+  "look::ButtonKind": {
+    "Borderless": {
+      "x": 212,
+      "y": 231,
+      "width": 256,
+      "height": 64
+    },
+    "Edged": {
+      "x": 212,
+      "y": 679,
+      "width": 256,
+      "height": 64
+    },
+    "Faint": {
+      "x": 212,
+      "y": 455,
+      "width": 256,
+      "height": 64
+    },
+    "Main": {
+      "x": 212,
+      "y": 119,
+      "width": 256,
+      "height": 64
+    },
+    "Outlined": {
+      "x": 212,
+      "y": 567,
+      "width": 256,
+      "height": 64
+    },
+    "Quiet": {
+      "x": 212,
+      "y": 343,
+      "width": 256,
+      "height": 64
+    }
+  }
+}

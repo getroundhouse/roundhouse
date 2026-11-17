@@ -10,7 +10,6 @@ use std::sync::Arc;
 
 use client_core::records::{Changes, Snapshot, subagent_named};
 use gpui_kit::base::Tab;
-use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::component::{Icon, IconName, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
@@ -19,7 +18,7 @@ use gpui_kit::{
     ParentElement as _, Role, StatefulInteractiveElement as _, Styled, Subscription, TestSupportExt as _, div, px,
     relative,
 };
-use look::{Hand as _, IconSizing as _, Shaped as _, Sizing as _, Typeset as _};
+use look::{Hand as _, IconSizing as _, Shaped as _, Typeset as _};
 use protocol::model::{SessionId, Subagent, SubagentId};
 use transcript::{Transcript, TranscriptEvent, shown_kind, subagent_standing};
 
@@ -193,16 +192,18 @@ impl WorkspacePane {
         let title = self.subagents.title(self.shown.all())?;
         let selected = self.showing() == Showing::Subagent;
         let muted = colors.text_muted;
-        let close = Button::new("close-subagent-tab")
-            .ghost()
-            .sized_square(look::ControlSize::Small)
-            .icon(IconName::Close)
-            .tooltip("Close subagent tab")
-            .on_click(cx.listener(|t, _, _, cx| {
-                // The tab under it would take the click too, and show the subagent that's closing.
-                cx.stop_propagation();
-                t.close_subagent_tab(cx);
-            }));
+        let close = look::icon_button(
+            "close-subagent-tab",
+            look::ButtonKind::Borderless,
+            look::ControlSize::Small,
+            IconName::Close,
+        )
+        .tooltip("Close subagent tab")
+        .on_click(cx.listener(|t, _, _, cx| {
+            // The tab under it would take the click too, and show the subagent that's closing.
+            cx.stop_propagation();
+            t.close_subagent_tab(cx);
+        }));
         let name = div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().italic();
         let whole = title.clone();
         let tab = div()

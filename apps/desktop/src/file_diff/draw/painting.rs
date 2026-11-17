@@ -8,7 +8,6 @@ use super::code;
 use crate::file_view::{LINE_HEIGHT, numbers_width};
 use crate::patch::LineKind;
 use code::Code;
-use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::TextareaState;
 use gpui_kit::component::{Icon, IconName, h_flex};
 use gpui_kit::prelude::FluentBuilder as _;
@@ -17,7 +16,7 @@ use gpui_kit::{
     ParentElement as _, Pixels, SharedString, StatefulInteractiveElement as _, Styled, TestSupportExt as _, WeakEntity,
     div, px,
 };
-use look::{Hand as _, IconSizing as _, Shaped as _, Sizing as _, Typeset as _};
+use look::{Hand as _, IconSizing as _, Shaped as _, Typeset as _};
 use protocol::model::{DiffComment, DiffSide};
 use std::sync::Arc;
 
@@ -240,11 +239,7 @@ fn fold_row(fold: &Fold, drawing: &Drawing, cx: &App) -> AnyElement {
     }
     let arrows = arrows.into_iter().map(|(id, icon, tooltip, opens)| {
         let view = drawing.view.clone();
-        Button::new((id, start))
-            .hand()
-            .ghost()
-            .sized_square(look::ControlSize::Small)
-            .icon(icon)
+        look::icon_button((id, start), look::ButtonKind::Borderless, look::ControlSize::Small, icon)
             .tooltip(tooltip)
             .on_click(move |_, _, cx| {
                 let _ = view.update(cx, |t, cx| t.open(opens.clone(), cx));

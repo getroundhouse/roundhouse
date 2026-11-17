@@ -2,16 +2,15 @@
 //! typed, then the `+` menu, the model and effort, and Create, as the composer's bar has them, over plan mode's
 //! texture while it's on.
 
-use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::Textarea;
 use gpui_kit::component::kbd::Kbd;
-use gpui_kit::component::menu::{DropdownMenu as _, PopupMenu, PopupMenuItem};
+use gpui_kit::component::menu::{PopupMenu, PopupMenuItem};
 use gpui_kit::component::{h_flex, v_flex};
+use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     Anchor, AnyElement, Context, Focusable as _, InteractiveElement as _, IntoElement, Keystroke, ParentElement as _,
     Render, Styled as _, TestSupportExt as _, Window, px, transparent_black,
 };
-use look::{Hand as _, Off as _, Sizing as _};
 
 use super::NewWorkspaceDialog;
 use crate::attached;
@@ -62,13 +61,8 @@ impl NewWorkspaceDialog {
             .border_b_1()
             .border_color(self.colors(cx).1)
             .child(
-                Button::new("new-workspace-repo")
-                    .sized(look::ControlSize::Regular)
-                    .hand()
-                    .ghost()
-                    .dropdown_caret(true)
-                    .label(name)
-                    .dropdown_menu_with_anchor(Anchor::TopLeft, menu),
+                look::button("new-workspace-repo", look::ButtonKind::Borderless, look::ControlSize::Regular, name)
+                    .menu(Anchor::TopLeft, menu),
             )
     }
 
@@ -109,13 +103,9 @@ impl NewWorkspaceDialog {
             let this = cx.weak_entity();
             let current = self.agent().map(|a| a.kind);
             let name = self.agent().map_or("Agent", |a| a.name.as_str()).to_string();
-            Button::new("new-workspace-agent")
-                .hand()
-                .ghost()
-                .sized(look::ControlSize::Small)
-                .label(name)
-                .dropdown_caret(true)
-                .dropdown_menu_with_anchor(Anchor::TopLeft, move |mut menu: PopupMenu, _, _| {
+            look::button("new-workspace-agent", look::ButtonKind::Borderless, look::ControlSize::Small, name).menu(
+                Anchor::TopLeft,
+                move |mut menu: PopupMenu, _, _| {
                     for (kind, name) in &agents {
                         let (kind, this) = (*kind, this.clone());
                         menu = menu.item(PopupMenuItem::new(name.clone()).checked(current == Some(kind)).on_click(
@@ -125,19 +115,17 @@ impl NewWorkspaceDialog {
                         ));
                     }
                     menu
-                })
+                },
+            )
         });
         let field = self.prompt.focus_handle(cx);
         let plan = Plan::of(self.planning());
         let plus =
             composing::plus_menu("new-workspace-add", plan, field, cx, |_, paths, cx| Self::attach_paths(paths, cx));
         let enter = Keystroke::parse("enter").ok().map(|key| Kbd::new(key).appearance(false));
-        let create = Button::new("new-workspace-create")
-            .primary()
-            .sized(look::ControlSize::Regular)
-            .label("Create")
-            .children(enter)
-            .off_while(!self.can_create())
+        let create = look::button("new-workspace-create", look::ButtonKind::Main, look::ControlSize::Regular, "Create")
+            .when_some(enter, look::Button::after)
+            .off(!self.can_create())
             .on_click(cx.listener(|t, _, _, cx| t.create(cx)));
         bar.child(plus)
             // A row, so the picker keeps its own width and its caret stays beside what it says.

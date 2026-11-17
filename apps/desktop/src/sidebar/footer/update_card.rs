@@ -1,7 +1,6 @@
 //! Where an update has got to, as a card over the build line.
 
 use gpui_kit::base::ElementExt as _;
-use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
@@ -9,7 +8,7 @@ use gpui_kit::{
     Styled as _, TestSupportExt as _, Window, div,
 };
 use look::{AppIconSize, AppIconStyle};
-use look::{Hand as _, Shaped as _, Sizing as _, Typeset as _};
+use look::{Hand as _, Shaped as _, Typeset as _};
 
 use super::update_details::{Details, Shown};
 use crate::app::{Agents, AppView, BuildLine, UpdateQuestion, Updating};
@@ -110,12 +109,8 @@ fn ready_card(
         asking(question, "Keep working", "Restart", AppView::restart_to_update_anyway, cx)
     } else {
         let restart = cx.listener(|t, _, _, cx| t.restart_to_update(cx));
-        Button::new("restart-to-update")
-            .hand()
-            .primary()
-            .sized(look::ControlSize::Regular)
-            .w_full()
-            .label("Restart to update")
+        look::button("restart-to-update", look::ButtonKind::Main, look::ControlSize::Regular, "Restart to update")
+            .full_width()
             .on_click(restart)
             .into_any_element()
     };
@@ -139,19 +134,11 @@ fn asking(
     cx: &mut Context<AppView>,
 ) -> AnyElement {
     let muted = look::colors(cx).text_muted;
-    let stay = Button::new("update-not-now")
-        .hand()
-        .ghost()
-        .sized(look::ControlSize::Regular)
-        .flex_1()
-        .label(stay)
+    let stay = look::button("update-not-now", look::ButtonKind::Borderless, look::ControlSize::Regular, stay)
+        .grows()
         .on_click(cx.listener(|t, _, _, cx| t.dismiss_update_question(cx)));
-    let go = Button::new("update-go-ahead")
-        .hand()
-        .primary()
-        .sized(look::ControlSize::Regular)
-        .flex_1()
-        .label(go)
+    let go = look::button("update-go-ahead", look::ButtonKind::Main, look::ControlSize::Regular, go)
+        .grows()
         .on_click(cx.listener(move |t, _, _, cx| go_ahead(t, cx)));
     v_flex()
         .id("update-question")
@@ -181,9 +168,10 @@ fn waiting_on(agents: Agents) -> String {
 }
 
 /// A quiet button, since finishing an update now stops the agents it's waiting on, which a dialog says first.
-fn restart_now(cx: &mut Context<AppView>) -> Button {
+fn restart_now(cx: &mut Context<AppView>) -> look::Button {
     let finish = cx.listener(|t, _, _, cx| t.offer_hub_restart(cx));
-    Button::new("finish-update").hand().ghost().sized(look::ControlSize::Small).label("Restart now").on_click(finish)
+    look::button("finish-update", look::ButtonKind::Borderless, look::ControlSize::Small, "Restart now")
+        .on_click(finish)
 }
 
 #[cfg(test)]

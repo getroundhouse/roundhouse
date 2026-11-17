@@ -3,13 +3,12 @@
 //! what started each try.
 
 use gpui_kit::assets::IconName;
-use gpui_kit::component::button::Button;
 use gpui_kit::component::{Icon, h_flex, v_flex};
 use gpui_kit::{
     AnyElement, App, ClickEvent, ElementId, InteractiveElement as _, IntoElement, ParentElement, Styled,
     TestSupportExt as _, Window, div,
 };
-use look::{Hand as _, IconSizing as _, Shaped as _, Sizing as _, Typeset as _};
+use look::{IconSizing as _, Shaped as _, Typeset as _};
 use protocol::event::{FailureKind, RequestFailure};
 use protocol::model::Seq;
 
@@ -161,15 +160,17 @@ fn fold(seq: Seq, tries: &Tries, earlier: usize, shared: &Shared, cx: &App) -> A
 }
 
 /// Asks the agent to carry on from where its request failed, with whatever model the chat runs now.
-fn retry_button(seq: Seq, shared: &Shared) -> Button {
+fn retry_button(seq: Seq, shared: &Shared) -> look::Button {
     let this = shared.this.clone();
-    Button::new(ElementId::NamedInteger("retry".into(), seq.get()))
-        .sized(look::ControlSize::Large)
-        .hand()
-        .label("Retry")
-        .on_click(move |_: &ClickEvent, _: &mut Window, cx: &mut App| {
-            let _ = this.update(cx, Transcript::retry);
-        })
+    look::button(
+        ElementId::NamedInteger("retry".into(), seq.get()),
+        look::ButtonKind::Edged,
+        look::ControlSize::Large,
+        "Retry",
+    )
+    .on_click(move |_: &ClickEvent, _: &mut Window, cx: &mut App| {
+        let _ = this.update(cx, Transcript::retry);
+    })
 }
 
 #[cfg(test)]

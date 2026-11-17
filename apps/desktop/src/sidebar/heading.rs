@@ -1,15 +1,14 @@
 //! The heading over the projects: what the list is, the button that chooses its order, and Add project.
 
 use gpui_kit::assets::IconName as Lucide;
-use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::menu::{DropdownMenu as _, PopupMenu, PopupMenuItem};
+use gpui_kit::component::menu::{PopupMenu, PopupMenuItem};
 use gpui_kit::component::{IconName, h_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    Anchor, AnyElement, Context, Hsla, InteractiveElement as _, IntoElement, ParentElement, Styled,
-    TestSupportExt as _, Window, div,
+    Anchor, AnyElement, Context, InteractiveElement as _, IntoElement, ParentElement, Styled, TestSupportExt as _,
+    Window, div,
 };
-use look::{Hand as _, Off as _, Sizing as _, Typeset as _};
+use look::Typeset as _;
 
 use super::{HEADING_SIZE, ROW_PAD, SORTS};
 use crate::app::AppView;
@@ -31,16 +30,12 @@ pub(super) fn heading(app: &AppView, connected: bool, cx: &mut Context<AppView>)
         .h(HEADING_SIZE.height())
         .px(ROW_PAD)
         .child(div().flex_1().typeset(look::Type::Detail).emphasis().text_color(faint).child("Workspaces"))
-        .child(sort_button(app, faint, cx))
+        .child(sort_button(app, cx))
         .child(
-            Button::new("add-project")
-                .ghost()
-                .sized(look::ControlSize::Small)
+            look::button("add-project", look::ButtonKind::Faint, look::ControlSize::Small, "Add project")
                 .icon(IconName::Plus)
-                .label("Add project")
-                .text_color(faint)
                 .when(connected && remote, |b| b.tooltip("Add projects on that hub’s machine"))
-                .off_while(!can_add)
+                .off(!can_add)
                 .on_click(cx.listener(|t, _, _, cx| t.add_repository(cx))),
         )
         .test_support()
@@ -49,18 +44,13 @@ pub(super) fn heading(app: &AppView, connected: bool, cx: &mut Context<AppView>)
 
 /// The button whose menu chooses the order, with the one chosen ticked. It shows only while the pointer is on the
 /// heading, or its menu is open, so the list stays quiet, as a row's archive button does.
-fn sort_button(app: &AppView, faint: Hsla, cx: &mut Context<AppView>) -> impl IntoElement {
+fn sort_button(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
     let current = crate::settings::get(cx).sidebar_sort;
     let opens = cx.weak_entity();
-    Button::new("sort-workspaces")
-        .hand()
-        .ghost()
-        .sized_square(look::ControlSize::Small)
-        .icon(Lucide::ArrowUpDown)
-        .text_color(faint)
+    look::icon_button("sort-workspaces", look::ButtonKind::Faint, look::ControlSize::Small, Lucide::ArrowUpDown)
         .tooltip("Sort workspaces")
-        .when(!app.sidebar.sort_menu_open, |button| button.invisible().group_hover(GROUP, Styled::visible))
-        .dropdown_menu_with_anchor(Anchor::TopRight, move |menu: PopupMenu, _: &mut Window, _| {
+        .when(!app.sidebar.sort_menu_open, |button| button.shown_while_over(GROUP))
+        .menu(Anchor::TopRight, move |menu: PopupMenu, _: &mut Window, _| {
             // A setting, which lasts once the app quits, and which the app draws again for when it changes.
             SORTS.into_iter().fold(menu.label("Sort by"), |menu, sort| {
                 let item = PopupMenuItem::new(sort.label()).checked(sort == current).on_click(move |_, _, cx| {

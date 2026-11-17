@@ -3,15 +3,14 @@
 
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::base::{Tab, Tabs};
-use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::menu::{ContextMenuExt as _, DropdownMenu as _, PopupMenu, PopupMenuItem};
+use gpui_kit::component::menu::{ContextMenuExt as _, PopupMenu, PopupMenuItem};
 use gpui_kit::component::{IconName, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, Context, ElementId, InteractiveElement, IntoElement, ParentElement, Pixels, Render,
     StatefulInteractiveElement, Styled, TestSupportExt as _, Window, div, px, relative,
 };
-use look::{Hand as _, InRegion as _, LineText, Off as _, Region, Sizing as _, Typeset as _};
+use look::{Hand as _, InRegion as _, LineText, Region, Typeset as _};
 use protocol::model::{Session, SessionStatus};
 
 use super::setup::setup_log_view;
@@ -44,17 +43,18 @@ impl WorkspacePane {
         let expiring = prompt_cache::expiring_in_ms(session, look::now_ms(cx))
             .map(|left_ms| prompt_cache::clock(format!("tab-cache-{}", session.id), left_ms, muted));
         let (to_show, to_close) = (session.id.clone(), session.id.clone());
-        let close = Button::new(ElementId::Name(format!("close-chat-{}", session.id).into()))
-            .hand()
-            .ghost()
-            .sized_square(look::ControlSize::Small)
-            .icon(IconName::Close)
-            .tooltip("Close chat")
-            .on_click(cx.listener(move |t, _, window, cx| {
-                // The tab under it would take the click too, and show the chat that's closing.
-                cx.stop_propagation();
-                t.close_chat(to_close.clone(), window, cx);
-            }));
+        let close = look::icon_button(
+            ElementId::Name(format!("close-chat-{}", session.id).into()),
+            look::ButtonKind::Borderless,
+            look::ControlSize::Small,
+            IconName::Close,
+        )
+        .tooltip("Close chat")
+        .on_click(cx.listener(move |t, _, window, cx| {
+            // The tab under it would take the click too, and show the chat that's closing.
+            cx.stop_propagation();
+            t.close_chat(to_close.clone(), window, cx);
+        }));
         let menu = Self::tab_menu(session, unread, cx);
         let tab = div()
             .id(ElementId::Name(format!("tab-{}", session.id).into()))
@@ -150,19 +150,16 @@ impl WorkspacePane {
     }
 
     fn new_chat_button(&self, cx: &mut Context<Self>) -> AnyElement {
-        let button = Button::new("new-chat")
-            .hand()
-            .ghost()
-            .sized_square(look::ControlSize::Regular)
-            .icon(IconName::Plus)
-            .tooltip("New chat");
+        let button =
+            look::icon_button("new-chat", look::ButtonKind::Borderless, look::ControlSize::Regular, IconName::Plus)
+                .tooltip("New chat");
         let agents: Vec<_> = self.records.snapshot().agents().named().map(|a| (a.kind, a.name.clone())).collect();
         if agents.len() < 2 {
             return button.on_click(cx.listener(|t, _, _, cx| t.new_chat(cx))).into_any_element();
         }
         let this = cx.weak_entity();
         button
-            .dropdown_menu_with_anchor(gpui_kit::Anchor::TopLeft, move |mut menu: PopupMenu, _, _| {
+            .menu(gpui_kit::Anchor::TopLeft, move |mut menu: PopupMenu, _, _| {
                 for (kind, name) in &agents {
                     let (kind, this) = (*kind, this.clone());
                     menu = menu.item(PopupMenuItem::new(format!("New {name} chat")).on_click(move |_, _, cx| {
@@ -184,7 +181,7 @@ impl WorkspacePane {
             Sidebar::Hidden => {
                 let on_action = cx.listener(|t, action, _, cx| t.act(*action, cx));
                 let doing = crate::busy::doing(self.workspace().status);
-                crate::pull_request::controls(&self.pull_request, &self.busy, doing, on_action, cx)
+                crate::pull_request::controls(&self.pull_request, &self.busy, doing, on_action)
             }
         };
         h_flex()
@@ -200,16 +197,17 @@ impl WorkspacePane {
             .child(self.heading(line_text, cx))
             .children(controls)
             .child(
-                Button::new("toggle-diff")
-                    .hand()
-                    .ghost()
-                    .sized_square(look::ControlSize::Regular)
-                    .icon(IconName::PanelRight)
-                    .tooltip(match sidebar {
-                        Sidebar::Open => "Hide diff",
-                        Sidebar::Hidden => "Show diff",
-                    })
-                    .on_click(cx.listener(|t, _, _, cx| t.toggle_changes(cx))),
+                look::icon_button(
+                    "toggle-diff",
+                    look::ButtonKind::Borderless,
+                    look::ControlSize::Regular,
+                    IconName::PanelRight,
+                )
+                .tooltip(match sidebar {
+                    Sidebar::Open => "Hide diff",
+                    Sidebar::Hidden => "Show diff",
+                })
+                .on_click(cx.listener(|t, _, _, cx| t.toggle_changes(cx))),
             )
     }
 
@@ -248,16 +246,16 @@ impl WorkspacePane {
     /// by hand before that has one with nothing to make another from, and the hub says so.
     fn regenerate_title_button(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let id = self.workspace().id.clone();
-        Button::new("regenerate-title")
-            .ghost()
-            .sized_square(look::ControlSize::Regular)
-            .icon(Lucide::PencilSparkles)
-            .text_color(look::colors(cx).text_muted)
-            .tooltip("Regenerate title")
-            .loading(self.retitling)
-            // Under the arrow while it waits, as it is while it's greyed out.
-            .when(!self.retitling, |button| button.off_while(self.workspace().title.is_none()))
-            .on_click(cx.listener(move |_, _, _, cx| cx.emit(PaneEvent::RegenerateTitle(id.clone()))))
+        look::icon_button(
+            "regenerate-title",
+            look::ButtonKind::Quiet,
+            look::ControlSize::Regular,
+            Lucide::PencilSparkles,
+        )
+        .tooltip("Regenerate title")
+        .waiting(self.retitling)
+        .off(!self.retitling && self.workspace().title.is_none())
+        .on_click(cx.listener(move |_, _, _, cx| cx.emit(PaneEvent::RegenerateTitle(id.clone()))))
     }
 }
 

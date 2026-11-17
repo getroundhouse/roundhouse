@@ -1,12 +1,11 @@
 //! The workspace's setup script: its status line and its log.
 
-use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::h_flex;
 use gpui_kit::{
     AnyElement, App, AppContext, Context, IntoElement, ParentElement, SharedString, StatefulInteractiveElement, Styled,
     div, px,
 };
-use look::{Hand as _, InRegion as _, Region, Sizing as _, Typeset as _};
+use look::{InRegion as _, Region, Typeset as _};
 use protocol::model::{Record, SetupStatus};
 
 use super::{PaneEvent, WorkspacePane};
@@ -109,30 +108,18 @@ impl WorkspacePane {
                 .text_color(if running { muted } else { warning })
                 .child(div().flex_1().min_w_0().child(message))
                 .child(
-                    Button::new("setup-log")
-                        .hand()
-                        .ghost()
-                        .sized(look::ControlSize::Small)
-                        .label(log_label)
+                    look::button("setup-log", look::ButtonKind::Borderless, look::ControlSize::Small, log_label)
                         .on_click(cx.listener(|t, _, _, cx| t.toggle_setup_log(cx))),
                 )
                 // The last button out past its own room, so its words end as far in as the message starts.
                 .child(if running {
-                    Button::new("stop-setup")
-                        .hand()
-                        .ghost()
-                        .sized(look::ControlSize::Small)
-                        .mr(-look::ControlSize::Small.padding())
-                        .label("Stop")
+                    look::button("stop-setup", look::ButtonKind::Borderless, look::ControlSize::Small, "Stop")
+                        .stands_out(&[look::Side::Right])
                         .on_click(cx.listener(|t, _, _, cx| t.stop_agent(cx)))
                         .into_any_element()
                 } else {
-                    Button::new("rerun-setup")
-                        .hand()
-                        .ghost()
-                        .sized(look::ControlSize::Small)
-                        .mr(-look::ControlSize::Small.padding())
-                        .label("Run again")
+                    look::button("rerun-setup", look::ButtonKind::Borderless, look::ControlSize::Small, "Run again")
+                        .stands_out(&[look::Side::Right])
                         .on_click(cx.listener(|t, _, _, cx| t.rerun_setup(cx)))
                         .into_any_element()
                 })

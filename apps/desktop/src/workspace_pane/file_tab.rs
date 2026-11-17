@@ -3,7 +3,6 @@
 //! same tab, so reviewing a branch never leaves a trail of tabs.
 
 use gpui_kit::base::Tab;
-use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::component::{Icon, IconName};
 use gpui_kit::prelude::FluentBuilder as _;
@@ -11,7 +10,7 @@ use gpui_kit::{
     AnyElement, Context, InteractiveElement as _, IntoElement as _, ParentElement as _, SharedString,
     StatefulInteractiveElement as _, Styled, Window, div, relative,
 };
-use look::{Hand as _, IconSizing as _, Sizing as _, Typeset as _};
+use look::{Hand as _, IconSizing as _, Typeset as _};
 
 use super::view::{TAB_GROUP, TAB_WIDTH};
 use super::{Showing, WorkspacePane};
@@ -128,17 +127,18 @@ impl WorkspacePane {
             Opened::Diff => format!("Diff of {path}"),
             Opened::File => path.to_string(),
         };
-        let close = Button::new("close-file-tab")
-            .hand()
-            .ghost()
-            .sized_square(look::ControlSize::Small)
-            .icon(IconName::Close)
-            .tooltip("Close file tab")
-            .on_click(cx.listener(|t, _, _, cx| {
-                // The tab under it would take the click too, and show the file that's closing.
-                cx.stop_propagation();
-                t.close_file_tab(cx);
-            }));
+        let close = look::icon_button(
+            "close-file-tab",
+            look::ButtonKind::Borderless,
+            look::ControlSize::Small,
+            IconName::Close,
+        )
+        .tooltip("Close file tab")
+        .on_click(cx.listener(|t, _, _, cx| {
+            // The tab under it would take the click too, and show the file that's closing.
+            cx.stop_propagation();
+            t.close_file_tab(cx);
+        }));
         let tab = div()
             .id("file-tab")
             .group(TAB_GROUP)

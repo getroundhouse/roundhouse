@@ -2,14 +2,13 @@
 //! goes round the one showing. In its place, where what's asked is one question, how many more requests wait behind
 //! it.
 
-use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::{IconName, h_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, Context, ElementId, InteractiveElement as _, IntoElement, ParentElement,
     StatefulInteractiveElement as _, Styled, TestSupportExt as _, div, px,
 };
-use look::{Hand as _, Off as _, Sizing as _, Typeset as _};
+use look::{Hand as _, Typeset as _};
 use protocol::event::QuestionAnswer;
 
 use super::QuestionPanel;
@@ -67,14 +66,9 @@ pub(super) fn pager(
     let arrow =
         |id: &'static str, icon: IconName, tooltip: &'static str, by: isize, cx: &mut Context<QuestionPanel>| {
             let ends = if by < 0 { showing == 0 } else { showing + 1 == count };
-            Button::new(id)
-                .ghost()
-                .sized_square(look::ControlSize::Small)
-                .icon(icon)
-                // Only while it can be pressed, since the kit lays this over its own greyed-out colour.
-                .when(!ends, |b| b.text_color(muted))
+            look::icon_button(id, look::ButtonKind::Quiet, look::ControlSize::Small, icon)
                 .tooltip(tooltip)
-                .off_while(ends)
+                .off(ends)
                 .on_click(cx.listener(move |this, _, window, cx| this.step(by, window, cx)))
         };
     let back = arrow("question-back", IconName::ChevronLeft, "Previous question", -1, cx);
