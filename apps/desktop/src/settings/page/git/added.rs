@@ -1,12 +1,12 @@
 //! Added, the GitHub accounts the person gave the hub: Connect account by its heading, the panel for a new account
-//! under that, what stops the default being used, if anything does, a row for each account, with its menu, and one for
-//! each app of your own installed nowhere yet.
+//! under that, what stops the default being used, as the hub says, if anything does, a row for each account, with its
+//! menu, and one for each app of your own installed nowhere yet.
 
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::{IconName, v_flex};
 use gpui_kit::{AnyElement, App, Div, IntoElement, ParentElement as _, SharedString, Styled as _, div};
 use look::Typeset as _;
-use protocol::model::{GithubAccount, GithubAccountId};
+use protocol::model::{GithubAccount, GithubAccountId, SentCredential};
 
 use super::super::account_row::{self, Detail, Picture, Row, Tone};
 use super::super::lists::{heading, list as rows_of, said_in_the_list};
@@ -58,21 +58,17 @@ pub(super) fn draw_panel(drawing: &Drawing<'_>, panel: &Panel, cx: &App) -> AnyE
     }
 }
 
-/// What stops the default being used, and what to do about it, when it can't be: agents can't push until it's put
-/// right, rather than push as the machine's own.
+/// What stops the default being used, and what to do about it, while the hub blocks every worker: agents can't push
+/// until it's put right, rather than push as the machine's own. In the hub's words, as the block gives them to git,
+/// and as a workspace's line says them.
 fn blocked(drawing: &Drawing<'_>, cx: &App) -> Option<AnyElement> {
-    let account = drawing.records.github_account(drawing.github?.account.as_ref()?)?;
-    let standing = Standing::of(account.held_login.as_ref(), drawing.now_ms, cx);
-    let said = match &account.installation {
-        Some(installed) => app_rows::blocked(drawing, account, installed, &standing)?,
-        None => standing.blocked(account.user.name.as_str())?,
-    };
+    let SentCredential::Blocked { reason, .. } = drawing.sent()? else { return None };
     let said = StatusBox {
         id: "git-blocked",
         icon: Lucide::TriangleAlert,
         tone: status_box::Tone::Problem,
         lead: Some("Agents can't push.".into()),
-        detail: said.into(),
+        detail: reason.clone().into(),
         progress: None,
         action: None,
     };
@@ -81,11 +77,11 @@ fn blocked(drawing: &Drawing<'_>, cx: &App) -> Option<AnyElement> {
 
 /// `account`'s row, with why the hub couldn't do what was asked of it under it, and the panel renewing its login.
 fn account_row(drawing: &Drawing<'_>, account: &GithubAccount, cx: &App) -> AnyElement {
-    let standing = Standing::of(account.held_login.as_ref(), drawing.now_ms, cx);
+    let standing = drawing.standing(account, cx);
     let tone = match standing {
         Standing::Works { .. } | Standing::Disconnected => Tone::Plain,
         Standing::Renewing => Tone::Warning,
-        Standing::Ended { .. } | Standing::SignInAgain => Tone::Problem,
+        Standing::Ended { .. } | Standing::SignInAgain | Standing::CantBeUsed => Tone::Problem,
     };
     let kept = drawing.kept.read(cx);
     let failed = kept.failed(&Asked::Account(account.id.clone())).map(|said| failed_line(said, cx).into_any_element());

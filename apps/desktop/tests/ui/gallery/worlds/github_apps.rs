@@ -1,24 +1,36 @@
 //! An app of your own, `ada-roundhouse`, made under the organization `adalabs`, as Git in Settings lists it: installed
-//! there, as the default, and installed nowhere yet. Its key and its installation's tokens are the hub's, so none is
-//! here.
+//! there, as the default, and as the default whose token has ended while the hub makes the next, and installed nowhere
+//! yet. Its key and its installation's tokens are the hub's, so none is here.
 
 use protocol::client::{ApiError, ErrorCode};
 use protocol::fixtures::github_app;
 use protocol::model::{
-    GithubAccount, GithubApp, GithubAppId, GithubInstallation, GithubInstallationId, GithubLoginKind, GithubSettings,
-    GithubUser, GithubUserId, HeldGithubLogin,
+    GithubAccount, GithubApp, GithubAppId, GithubInstallation, GithubInstallationId, GithubLoginKind, GithubUser,
+    GithubUserId, HeldGithubLogin, UnusableLogin,
 };
 
-use super::github::github_accounts;
+use super::github::{blocking, github_accounts, sending};
 use crate::gallery::world::{HOUR_MS, NOW_MS, World};
 
 /// [`github_accounts`], with the app installed on `adalabs`, made two days ago, whose installation is the default.
 pub(in crate::gallery) fn github_app_installed() -> World {
     let mut world = github_accounts();
     let bot = installation();
-    world.github = Some(GithubSettings { account: Some(bot.id.clone()) });
+    world.github = Some(sending(&bot));
     world.github_accounts.push(bot);
     world.github_apps = vec![app()];
+    world
+}
+
+/// [`github_app_installed`], whose installation's last token has ended while GitHub won't make the next, so the hub
+/// blocks every worker, which only it can say, since the installation's record says nothing of its token's end.
+pub(in crate::gallery) fn github_app_renewing() -> World {
+    let mut world = github_app_installed();
+    let reason = "The token of Roundhouse's default GitHub account, ada-roundhouse[bot], installed on adalabs, has \
+                  ended, and Roundhouse is making another, so this workspace's agents push to GitHub as nobody. It \
+                  tries every minute until GitHub answers. If this goes on, check the app is still on GitHub, or \
+                  choose another default in Roundhouse's Settings.";
+    world.github = Some(blocking(&installation(), UnusableLogin::Renewing, reason));
     world
 }
 
@@ -47,7 +59,7 @@ fn app() -> GithubApp {
 }
 
 /// The app's installation on `adalabs`, as an account whose user is the app's bot, whose token the hub makes from the
-/// app's key, an hour at a time.
+/// app's key, an hour at a time, so its record says no end, as the hub keeps it.
 fn installation() -> GithubAccount {
     let bot = app().bot.unwrap();
     GithubAccount {
@@ -56,7 +68,7 @@ fn installation() -> GithubAccount {
         held_login: Some(HeldGithubLogin {
             how: GithubLoginKind::App,
             connected_at_ms: NOW_MS - 48 * HOUR_MS,
-            ends_at_ms: Some(NOW_MS + HOUR_MS / 2),
+            ends_at_ms: None,
             needs_sign_in: false,
         }),
         installation: Some(GithubInstallation {

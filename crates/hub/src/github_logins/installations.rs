@@ -118,7 +118,9 @@ impl GithubLogins {
                 Ok(((account, settings), replaced))
             })?;
             Ok(Some(GithubAccountChange { account, changed: true, settings }))
-        })
+        })?
+        .map(|change| change.settled(&self.store))
+        .transpose()
     }
 
     /// Each installation whose token has less than [`MINTED_WITH_LEFT`] left at `now_ms`, or has ended, with its app's

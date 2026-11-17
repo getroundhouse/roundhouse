@@ -189,25 +189,6 @@ pub(super) fn disconnect_says(default: bool) -> &'static str {
     }
 }
 
-/// What stops the default, the installation `name`, being used, and what to do, when its login can't be used:
-/// `renewing` for a token that has ended, which the hub is making the next of, and otherwise one it no longer holds,
-/// whose app it still has the key of while `app_held`.
-pub(super) fn blocked(name: &str, renewing: bool, app_held: bool) -> String {
-    if renewing {
-        return format!(
-            "The token of the default, {name}, has ended, and the hub is making its next from the app's key, as it \
-             tries to every minute. If this goes on, make another account the default."
-        );
-    }
-    if app_held {
-        return format!(
-            "The default, {name}, was disconnected, or uninstalled on GitHub. Connect it again from its menu, or \
-             make another account the default."
-        );
-    }
-    format!("The default, {name}, is of an app that was removed. Make another account the default.")
-}
-
 /// The name an app is first given: the username of the first account added that's someone's rather than an app's, in
 /// the order Added lists them, or else of the first `gh` login found, with `-roundhouse` after it, or nothing when
 /// there's neither.

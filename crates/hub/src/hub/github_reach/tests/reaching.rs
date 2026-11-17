@@ -1,7 +1,7 @@
 //! What each of GitHub's answers, and each credential the hub can't check with, comes to. What GitHub's answers are, and
 //! the time limit, is tested in `crate::github`.
 
-use protocol::model::{GithubRepositoryName, GithubToken, InstalledApp, Reach};
+use protocol::model::{GithubRepositoryName, GithubToken, InstalledApp, Reach, UnusableLogin};
 use protocol::worker::{GitCredential, GitIdentity};
 
 use super::super::reaching::reach;
@@ -65,6 +65,7 @@ async fn an_installations_answer_names_its_bot_and_where_its_installed_not_the_u
     };
     let installed = InstalledApp { slug: "ada-roundhouse".into(), on: "adalabs".into() };
     let bots = DefaultCredential::Account {
+        account: "g".into(),
         credential,
         username: "ada-roundhouse[bot]".into(),
         installation: Some(installed.clone()),
@@ -91,7 +92,8 @@ async fn an_installations_answer_names_its_bot_and_where_its_installed_not_the_u
 async fn what_the_hub_cant_check_with_says_why_without_asking_github() {
     let github = StandIn::start(Vec::new()).await;
     let calls = Github::new(GithubConfig::at(github.api()));
-    let blocked = DefaultCredential::Blocked { reason: "ada was disconnected".into() };
+    let why = UnusableLogin::Disconnected;
+    let blocked = DefaultCredential::Blocked { reason: "ada was disconnected".into(), account: Some("g".into()), why };
     let nowhere = Github::new(GithubConfig::at(NO_GITHUB.to_string()));
 
     let machines_own = reach(&calls, Some(CLI), &DefaultCredential::MachineOwn).await;

@@ -1,6 +1,6 @@
 //! The migrations that keep the GitHub accounts the hub holds a login for, the logins found on each provider's
-//! machines, whether the default can push to each repository, and what GitHub's profile of each account's user says,
-//! kept apart since they're long. Each has its place in `MIGRATIONS`.
+//! machines, whether the default can push to each repository, what GitHub's profile of each account's user says, and
+//! what workers are sent for the default, kept apart since they're long. Each has its place in `MIGRATIONS`.
 
 /// Each GitHub account the hub holds, or held, a login for, as a record the feed announces: who it is on GitHub, by the
 /// user's number and the name GitHub last gave, and the login while the hub holds one. `login_kind` is how it was
@@ -123,4 +123,12 @@ pub(super) const GITHUB_PROFILES: &str = r"
         email TEXT,
         read_at_ms INTEGER NOT NULL
     );
+";
+
+/// What the hub sends every worker for the default GitHub account, without its token, as it last worked it out, on the
+/// hub's settings, as `SentCredential` writes it, so every client draws whether agents can push. The hub writes it as
+/// it starts, before any client reads it, so the `NULL` every hub from before has is never read as of this run.
+/// Changing it is a change to the settings' record, so it moves their revision.
+pub(super) const GITHUB_SENT: &str = r"
+    ALTER TABLE hub_settings ADD COLUMN github_sent TEXT;
 ";

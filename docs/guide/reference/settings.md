@@ -127,7 +127,7 @@ Whichever way, the hub keeps the login in its own data, as [Where data is kept](
 - **A sign-in says `Renewing`** while the hub renews a token that has ended, and `Needs signing in again` once GitHub won't renew it. Choose **Sign in again** in its menu, and approve it as the same GitHub user.
 - **Disconnect,** in the same menu, has the hub forget the login, and asks first. The account stays, with **Connect again** and **Sign in again**. It doesn't revoke the token on GitHub.
 
-If the default can't be used, because its token ended, it was disconnected, it needs signing in again, or it's an app's installation that was uninstalled on GitHub, it stays the default, and agents can't push until you put it right or make another the default. They don't fall back on the machine's own login. Git says so at the top of **Added**.
+If the default can't be used, because its token ended, it was disconnected, it needs signing in again, or it's an app's installation that was uninstalled on GitHub, or whose token ended before the hub could make the next, it stays the default, and agents can't push until you put it right or make another the default. They don't fall back on the machine's own login. Git says so at the top of **Added**, with why and what to do, in the words a workspace's line says and git gives as it refuses a push.
 
 ![Git saying agents can't push, since the default's token ended](../../spec/screens/settings-git-default-ended.png)
 

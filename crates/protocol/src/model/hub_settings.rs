@@ -3,7 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::{AccountId, AgentKind, GithubAccountId, Rev};
+use super::{AccountId, AgentKind, GithubAccountId, Rev, SentCredential};
 
 /// A hub's settings. There's one record of them per hub.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -35,6 +35,19 @@ pub struct GithubSettings {
     /// renewed, connected again or another is chosen.
     #[serde(default)]
     pub account: Option<GithubAccountId>,
+    /// What the hub sends every worker for the default, as [`SentCredential`] says, so a client shows whether agents
+    /// can push as the hub has it. It moves the settings' revision only when what's sent changes. `None` from a hub
+    /// from before it said, whose client works nothing out in its place.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sent: Option<SentCredential>,
+}
+
+impl GithubSettings {
+    /// What the hub sends every worker for [`GithubSettings::account`], if it says, and it was worked out for that
+    /// default, as [`SentCredential::is_for`] says. `None` otherwise, which says nothing of whether agents can push.
+    pub fn sent_for_default(&self) -> Option<&SentCredential> {
+        self.sent.as_ref().filter(|sent| sent.is_for(self.account.as_ref()))
+    }
 }
 
 /// Settings to change. One left out is left as it is.

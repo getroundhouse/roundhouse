@@ -14,6 +14,7 @@ use providers::Provider;
 use providers::local::{LocalConfig, LocalProvider};
 use std::path::PathBuf;
 use std::sync::Arc;
+use tokio::task::JoinSet;
 use tracing::{info, warn};
 
 pub struct HubConfig {
@@ -141,6 +142,11 @@ pub async fn run(config: HubConfig) -> Result<(), HubError> {
     hub.tidy_draft_files().await;
     let awake = hub.keep_awake();
     hub.start_queues().await;
+    // What the hub does by itself while it serves, each ended where it is as it stops, since what any would do is done
+    // again as the next hub starts. Telling of what workers are sent comes before any client is served, here or paired,
+    // so each hears every change after the records it lists.
+    let mut serving = JoinSet::new();
+    serving.spawn(hub.tell_of_what_workers_are_sent());
     hub.listen_if_paired().await;
 
     // The lock is held, so nothing else is serving here.
@@ -154,18 +160,16 @@ pub async fn run(config: HubConfig) -> Result<(), HubError> {
         let hub = hub.clone();
         tokio::spawn(crate::server::accept_loop(hub, listener))
     };
-    let watching_deadlines = tokio::spawn(hub.clone().watch_wait_deadlines());
-    let watching_pull_requests = tokio::spawn(hub.clone().watch_pull_requests());
+    serving.spawn(hub.clone().watch_wait_deadlines());
+    serving.spawn(hub.clone().watch_pull_requests());
+    // What it would record is checked again as the next hub starts.
+    serving.spawn(hub.clone().watch_github_reach());
     let watching_github_logins = tokio::spawn(hub.clone().watch_github_logins());
-    let watching_github_reach = tokio::spawn(hub.clone().watch_github_reach());
     let mut terminate = Terminate::listen().map_err(|e| HubError::io("listening for a signal to stop", e))?;
     let signalled = asked_to_go(&hub, &mut terminate).await;
     accept.abort();
     hub.remote.stop_listening().await;
-    watching_pull_requests.abort();
-    watching_deadlines.abort();
-    // What it would record is checked again as the next hub starts.
-    watching_github_reach.abort();
+    serving.abort_all();
     hub.stop_jobs();
     listener::unbind(&paths.socket);
     // Before the lock goes, so what a renewal under way is given is written before the next hub can start.

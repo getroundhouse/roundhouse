@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use protocol::client::github_accounts::GithubAccountConnect;
 use protocol::client::{ApiError, ErrorCode};
-use protocol::model::{GithubAccountId, GithubToken, GithubUser, GithubUserId};
+use protocol::model::{GithubAccountId, GithubToken, GithubUser, GithubUserId, UnusableLogin};
 use protocol::worker::{GitCredential, GitCredentialSet, GitIdentity, GithubCredential, WorkerRequest, WorkerResponse};
 use tokio::sync::watch;
 
@@ -79,9 +79,15 @@ fn account(token: &str) -> GithubCredential {
 /// only the newest after.
 #[tokio::test(start_paused = true)]
 async fn every_link_is_sent_each_change_in_the_order_made_ending_with_the_newest() {
-    let ada =
-        |token| DefaultCredential::Account { credential: adas(token), username: "ada".into(), installation: None };
-    let made = [ada("first"), DefaultCredential::Blocked { reason: "R".into() }, ada("second")];
+    let ada = |token| DefaultCredential::Account {
+        account: "g".into(),
+        credential: adas(token),
+        username: "ada".into(),
+        installation: None,
+    };
+    let blocked =
+        DefaultCredential::Blocked { reason: "R".into(), account: Some("g".into()), why: UnusableLogin::Ended };
+    let made = [ada("first"), blocked, ada("second")];
     let credential = watch::Sender::new(DefaultCredential::MachineOwn);
     let mut links: Vec<_> =
         (0..3).map(|_| following(credential.subscribe(), || Some(Ok(WorkerResponse::Ok)))).collect();

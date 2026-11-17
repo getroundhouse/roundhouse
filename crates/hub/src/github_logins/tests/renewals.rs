@@ -28,7 +28,7 @@ fn only_due(logins: &GithubLogins, now_ms: i64) -> Due {
 }
 
 /// What GitHub gives as it renews a token: `a-renewed-token`, lasting 8 hours, and `a-renewed-refresh`, about 181 days.
-fn renewed() -> Renewal {
+pub(super) fn renewed() -> Renewal {
     let refresh = (GithubRefreshToken::new("a-renewed-refresh"), Some(Duration::from_hours(181 * 24)));
     let lasts = Some(Duration::from_hours(8));
     Renewal::Renewed(Granted { token: GithubToken::new("a-renewed-token"), lasts, refresh: Some(refresh) })

@@ -1,11 +1,14 @@
-//! What Git says in words: what each list says of itself, how an added account's login stands, what stops a default
-//! being used, what a machine's own login is, what disconnecting asks, and what the hub's refusals mean. How a sign-in
-//! goes is in `sign_in_words`, and what's said of apps of your own in `app_words`.
+//! What Git says in words: what each list says of itself, how an added account's login stands, what a machine's own
+//! login is, what disconnecting asks, and what the hub's refusals mean. What stops a default being used is the hub's
+//! to say, in its own words. How a sign-in goes is in `sign_in_words`, and what's said of apps of your own in
+//! `app_words`.
 
 use client_core::ClientError;
 use gpui_kit::App;
 use protocol::client::ErrorCode;
-use protocol::model::{GhLogin, GhLoginWorks, GithubLoginKind, HeldGithubLogin, ProviderName};
+use protocol::model::{
+    GhLogin, GhLoginWorks, GithubLoginKind, HeldGithubLogin, ProviderName, SentCredential, UnusableLogin,
+};
 
 /// What a search finds the page by, besides its name.
 pub(super) const ABOUT: &str = "The GitHub accounts agents push and open pull requests as: signing in with GitHub, \
@@ -39,48 +42,76 @@ pub(super) const OLDER_HUB: &str = "This hub is from before hubs kept GitHub acc
 /// What's said in place of a row's line when the page was to change something with no hub to ask.
 pub(super) const NO_HUB: &str = "There's no hub to ask.";
 
-/// How a login the hub holds, or held, for an account stands, as its row says, and what stops the default being used.
+/// How a login the hub holds, or held, for an account stands, as its row says: the default's as the hub says what
+/// workers are sent for it, and any other's as its record says.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) enum Standing {
     /// It works, and ends on the day said, if its row has to say: a token's, since nothing renews it. A sign-in renews
     /// itself, and the hub makes an installation's next token itself, so when either's ends isn't said.
     Works { ends: Option<String> },
-    /// A token that ended on the day said, so it needs a new one.
+    /// A token that ended on the day said, if its record says one, so it needs a new one.
     Ended { on: String },
-    /// A sign-in whose token has ended, which the hub is renewing, as it tries to every minute, or an installation's,
-    /// which it's making the next of.
+    /// A sign-in whose token has ended, which the hub is renewing, as it tries to every minute, or, as the hub says it
+    /// of the default, an installation's, which it's making the next of.
     Renewing,
     /// A sign-in that can't be renewed, so it needs signing in again.
     SignInAgain,
     /// The hub holds no login for it.
     Disconnected,
+    /// The hub can't use it for a reason no record says, as it says of the default: a login only a newer Roundhouse
+    /// reads, one it can't read, or a reason from a newer hub. What the hub says of it is above the rows.
+    CantBeUsed,
 }
 
 impl Standing {
-    /// How `held`, the login the hub holds for an account, if any, stands at `now_ms`, with days in the local time zone.
+    /// How `held`, the login the hub holds for an account, if any, stands at `now_ms`, as its record says, with days in
+    /// the local time zone. The record of an installation says nothing of when its token ends, so it works for as long
+    /// as the hub holds it, as far as the record says.
     pub(super) fn of(held: Option<&HeldGithubLogin>, now_ms: i64, cx: &App) -> Standing {
         let Some(held) = held else { return Standing::Disconnected };
         if held.needs_sign_in {
             return Standing::SignInAgain;
         }
-        let on = held.ends_at_ms.and_then(|ends_at_ms| look::date(ends_at_ms, cx));
-        // A sign-in's token and an installation's are made again by the hub, so neither's end is said.
-        let renewed = matches!(held.how, GithubLoginKind::SignIn | GithubLoginKind::App);
         if held.works_at(now_ms) {
-            let ends = (!renewed).then_some(on).flatten();
-            return Standing::Works { ends: ends.map(|on| format!("Ends {on}")) };
+            return Standing::Works { ends: ends(held, cx) };
         }
-        if renewed { Standing::Renewing } else { Standing::Ended { on: on.unwrap_or_default() } }
+        match held.how {
+            GithubLoginKind::SignIn => Standing::Renewing,
+            GithubLoginKind::Token | GithubLoginKind::App | GithubLoginKind::Unknown => {
+                Standing::Ended { on: ended_on(held, cx) }
+            }
+        }
+    }
+
+    /// How the default's login stands, as `sent`, what the hub sends every worker for it, says, with `held`, what its
+    /// record says of its login, for when a token ends, which only the record says.
+    pub(super) fn sent(sent: &SentCredential, held: Option<&HeldGithubLogin>, cx: &App) -> Standing {
+        let why = match sent {
+            SentCredential::Account { .. } => {
+                return Standing::Works { ends: held.and_then(|held| ends(held, cx)) };
+            }
+            SentCredential::Blocked { why, .. } => why,
+            SentCredential::MachineOwn | SentCredential::Unknown => return Standing::CantBeUsed,
+        };
+        match why {
+            UnusableLogin::Disconnected => Standing::Disconnected,
+            UnusableLogin::Ended => Standing::Ended { on: held.map_or_default(|held| ended_on(held, cx)) },
+            UnusableLogin::Renewing => Standing::Renewing,
+            UnusableLogin::SignInAgain => Standing::SignInAgain,
+            UnusableLogin::Newer | UnusableLogin::Unreadable | UnusableLogin::Unknown => Standing::CantBeUsed,
+        }
     }
 
     /// What the row says of it, after how it was connected, if anything.
     pub(super) fn said(&self) -> Option<String> {
         match self {
             Standing::Works { ends } => ends.clone(),
+            Standing::Ended { on } if on.is_empty() => Some("Ended".to_string()),
             Standing::Ended { on } => Some(format!("Ended {on}")),
             Standing::Renewing => Some("Renewing".to_string()),
             Standing::SignInAgain => Some("Needs signing in again".to_string()),
             Standing::Disconnected => Some("Disconnected".to_string()),
+            Standing::CantBeUsed => Some("Can't be used".to_string()),
         }
     }
 
@@ -88,25 +119,19 @@ impl Standing {
     pub(super) fn works(&self) -> bool {
         matches!(self, Standing::Works { .. })
     }
+}
 
-    /// What stops the default, called `name`, from being used, and what to do, if it can't be.
-    pub(super) fn blocked(&self, name: &str) -> Option<String> {
-        let what = match self {
-            Standing::Works { .. } => return None,
-            Standing::Ended { on } => format!("The token of the default, {name}, ended {on}. Renew it from its menu"),
-            Standing::Renewing => {
-                return Some(format!(
-                    "The token of the default, {name}, has ended, and Roundhouse is renewing it, as it tries to every \
-                     minute. If this goes on, sign in again from its menu, or make another account the default."
-                ));
-            }
-            Standing::SignInAgain => {
-                format!("The default, {name}, needs signing in with GitHub again. Sign in again from its menu")
-            }
-            Standing::Disconnected => format!("The default, {name}, was disconnected. Connect it again from its menu"),
-        };
-        Some(format!("{what}, or make another account the default."))
-    }
+/// What a row says of when `held` ends while it works: a token's day, as `Ends Feb 3, 2027`, since nothing renews it,
+/// and nothing for a sign-in's or an installation's, which the hub makes again itself, or one that doesn't end.
+fn ends(held: &HeldGithubLogin, cx: &App) -> Option<String> {
+    let renewed = matches!(held.how, GithubLoginKind::SignIn | GithubLoginKind::App);
+    let on = held.ends_at_ms.filter(|_| !renewed).and_then(|ends_at_ms| look::date(ends_at_ms, cx));
+    on.map(|on| format!("Ends {on}"))
+}
+
+/// The day `held` ended, in the local time zone, or nothing when its record says no end.
+fn ended_on(held: &HeldGithubLogin, cx: &App) -> String {
+    held.ends_at_ms.and_then(|ends_at_ms| look::date(ends_at_ms, cx)).unwrap_or_default()
 }
 
 /// How an account's login was connected, as its row says.

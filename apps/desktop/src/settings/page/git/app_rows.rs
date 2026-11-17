@@ -1,6 +1,5 @@
 //! The rows of apps of your own in Added: each installation's, as an account whose user is the app's bot, with the
-//! app's mark, `App`, and where it's installed, and a row for each app installed nowhere yet, which says so, and what
-//! stops a default that's an installation being used.
+//! app's mark, `App`, and where it's installed, and a row for each app installed nowhere yet, which says so.
 
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::{AnyElement, App, IntoElement as _, SharedString};
@@ -30,22 +29,6 @@ pub(super) fn installation_parts(
         Some(_) | None => Detail::Said(app_words::installed_on(installed.on.name.as_str()), Tone::Plain),
     };
     (Picture::Mark(Lucide::Bot), Some(detail), installation_menu(drawing, account, installed, standing.works(), cx))
-}
-
-/// What stops the default, the installation `account`, being used, as its login stands, and what to do, if it can't.
-pub(super) fn blocked(
-    drawing: &Drawing<'_>,
-    account: &GithubAccount,
-    installed: &GithubInstallation,
-    standing: &Standing,
-) -> Option<String> {
-    let renewing = match standing {
-        Standing::Works { .. } => return None,
-        Standing::Renewing | Standing::Ended { .. } => true,
-        Standing::SignInAgain | Standing::Disconnected => false,
-    };
-    let app_held = drawing.records.github_app(installed.app).is_some();
-    Some(app_words::blocked(account.user.name.as_str(), renewing, app_held))
 }
 
 /// A row for each app of your own that no account is an installation of, saying it's installed nowhere.

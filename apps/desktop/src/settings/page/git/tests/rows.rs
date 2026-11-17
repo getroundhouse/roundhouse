@@ -1,9 +1,11 @@
-//! What an account's row says of its login, what stops the default being used, what a found login's row says, the
-//! order Added lists accounts in, and when the page is drawn again.
+//! What an account's row says of its login, as its record says and, for the default, as the hub says what workers are
+//! sent, what a found login's row says, the order Added lists accounts in, and when the page is drawn again.
 
 use gpui_kit::TestAppContext;
 use protocol::fixtures::github_account;
-use protocol::model::{GhLogin, GhLoginWorks, GithubAccount, GithubLoginKind, HeldGithubLogin};
+use protocol::model::{
+    GhLogin, GhLoginWorks, GithubAccount, GithubLoginKind, HeldGithubLogin, SentCredential, UnusableLogin,
+};
 
 use super::super::added::listed;
 use super::super::git_page::changes_at_ms;
@@ -40,26 +42,34 @@ fn a_tokens_row_says_when_it_ends_and_a_sign_ins_says_nothing_of_it_since_the_hu
     assert!(![Standing::Renewing, Standing::SignInAgain, Standing::Disconnected].iter().any(Standing::works));
 }
 
-#[test]
-fn what_stops_the_default_being_used_says_what_to_do_and_a_renewing_one_that_its_renewing() {
-    let blocked = |standing: Standing| standing.blocked("ada");
+/// The default's row says what the hub says of it, whatever its record says at the page's moment, but for when a
+/// token ends, which only its record says.
+#[gpui_kit::test]
+fn the_defaults_row_says_how_it_stands_as_the_hub_says_what_workers_are_sent(cx: &mut TestAppContext) {
+    let token = held(GithubLoginKind::Token, Some(OCT_29_MS), false);
+    let standing = |sent: SentCredential, held: Option<HeldGithubLogin>| {
+        cx.update(|cx| {
+            look::hold_still(NOW_MS, cx);
+            Standing::sent(&sent, held.as_ref(), cx)
+        })
+    };
+    let blocked = |why| SentCredential::Blocked { account: "g".into(), why, reason: "Made up.".to_string() };
 
-    assert_eq!(blocked(Standing::Works { ends: None }), None);
-    assert_eq!(
-        blocked(Standing::Ended { on: "Oct 29, 2026".to_string() }).as_deref(),
-        Some(
-            "The token of the default, ada, ended Oct 29, 2026. Renew it from its menu, or make another account the default."
-        )
-    );
-    assert!(blocked(Standing::Renewing).unwrap().contains("Roundhouse is renewing it"));
-    assert_eq!(
-        blocked(Standing::SignInAgain).as_deref(),
-        Some(
-            "The default, ada, needs signing in with GitHub again. Sign in again from its menu, or make another \
-             account the default."
-        )
-    );
-    assert!(blocked(Standing::Disconnected).unwrap().contains("was disconnected. Connect it again from its menu"));
+    let sent_anyway = standing(SentCredential::Account { account: "g".into() }, Some(token));
+    assert_eq!(sent_anyway.said().as_deref(), Some("Ends Oct 29, 2026"), "the hub hasn't blocked it yet");
+    assert!(sent_anyway.works());
+    let ended = standing(blocked(UnusableLogin::Ended), Some(token));
+    assert_eq!(ended.said().as_deref(), Some("Ended Oct 29, 2026"));
+    let fine_by_its_record = Some(held(GithubLoginKind::App, None, false));
+    assert_eq!(standing(blocked(UnusableLogin::Renewing), fine_by_its_record), Standing::Renewing);
+    assert_eq!(standing(blocked(UnusableLogin::SignInAgain), None), Standing::SignInAgain);
+    assert_eq!(standing(blocked(UnusableLogin::Disconnected), fine_by_its_record), Standing::Disconnected);
+    for why in [UnusableLogin::Newer, UnusableLogin::Unreadable, UnusableLogin::Unknown] {
+        let cant = standing(blocked(why), fine_by_its_record);
+        assert_eq!((cant.said().as_deref(), cant.works()), (Some("Can't be used"), false), "{why:?}");
+    }
+    assert_eq!(standing(SentCredential::Unknown, fine_by_its_record), Standing::CantBeUsed, "a newer hub's word");
+    assert_eq!(Standing::Ended { on: String::new() }.said().as_deref(), Some("Ended"), "with no end on its record");
 }
 
 #[test]
