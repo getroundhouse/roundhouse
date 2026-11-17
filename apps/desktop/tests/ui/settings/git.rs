@@ -153,7 +153,11 @@ fn renew_and_connect_again_from_an_accounts_menu_put_the_token_in_place_of_the_a
     let ids = |accounts: Vec<GithubAccount>| accounts.into_iter().map(|account| account.id).collect::<Vec<_>>();
     let renewed = (ids(the_hubs(&stack)), files_holding(&logins, TOKEN, "").len());
     stack.client().github_account_disconnect(&account).unwrap();
-    ui.wait("agents blocked", |ui| ui.has("git-blocked"));
+    // The hub says agents are blocked apart from saying the account has no login, and the menu offers to connect it
+    // again by the account's own record, so the test waits for both.
+    ui.wait("agents blocked, and the account without a login", |ui| {
+        ui.has("git-blocked") && ui.view().records().github_accounts().iter().all(|a| a.held_login.is_none())
+    });
     ui.click(more(&account));
     ui.click_menu_item("Connect again");
     ui.input(TOKEN);
