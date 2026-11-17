@@ -6,7 +6,7 @@ use crate::find::Part as Text;
 use crate::folds::Fold;
 use crate::item_key::ItemKey;
 use crate::rows::shown::Gather;
-use client_core::calls::typed;
+use client_core::calls::{Recorded, typed};
 use gpui_kit::assets::IconName;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{AnyElement, App, IntoElement, ParentElement};
@@ -16,7 +16,8 @@ use protocol::capability::calls::Call;
 pub(in crate::rows) const ICON: IconName = IconName::Wrench;
 
 pub(super) fn draw(call: &Call, answer: Option<&Answer>, toggle: &Toggle, cx: &App) -> AnyElement {
-    let line = Line::new(ICON, typed::title(call)).part(Part::Code(typed::summary(call).into())).shows_output(true);
+    let about = Recorded::Typed(call).summary().map(|about| Part::Code(about.into()));
+    let line = Line::new(ICON, typed::title(call)).part(about).shows_output(true);
     // What came back, if anything: a failure that says nothing of what went wrong shows no more than its line does.
     let output = answer.and_then(Answer::text_beside_images).filter(|text| !text.trim().is_empty());
     let opened = || {
@@ -31,8 +32,9 @@ pub(super) fn draw(call: &Call, answer: Option<&Answer>, toggle: &Toggle, cx: &A
     line::drawn(line, answer, opened, toggle, cx)
 }
 
+/// What [`draw`] shows open, for finding: its input and what came back. Its title is the app's words for its kind, so
+/// it isn't found, as any other tool's name isn't.
 pub(super) fn shown(call: &Call, answer: Option<&Answer>, key: &ItemKey, gather: &mut Gather) {
-    gather.plain(key, Text::Title, &typed::title(call));
     gather.inside(key, Fold::Output, |gather| {
         gather.plain(key, Text::Input, &typed::input(call));
         if let Some(text) = answer.and_then(Answer::text_beside_images) {

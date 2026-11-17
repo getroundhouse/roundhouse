@@ -5,7 +5,7 @@
 
 use protocol::capability::calls::call::{
     CellEdit, Command, CommandPart, Fetch, FilePatch, FindFiles, NotebookEdit, Patch, PatchChange, PatchHunk, Read,
-    Runs, Search, Shows, WebSearch,
+    Runs, Schedule, Search, Shows, WebSearch, When, Workflow,
 };
 use protocol::capability::calls::output::{Ended, FileOutcome, Found, Lines, McpContent, Paths};
 use protocol::capability::calls::{Call, CallOutput};
@@ -267,5 +267,23 @@ pub(crate) fn mcp_tools() -> Vec<EventBody> {
         typed_result("mcp-2", said("Created issue #271: https://github.com/example/signals/issues/271"), false),
         text("msg-4", reply),
         replied(reply, 14, 0.05),
+    ]
+}
+
+/// A prompt set for later and a workflow left running, as Antigravity's adapter types them, neither done yet: what the
+/// agent does in the background with no drawing of its own.
+pub(crate) fn later() -> Vec<EventBody> {
+    let schedule = Schedule {
+        prompt: "Check whether #182's checks passed, and say which failed.".into(),
+        when: When::After { seconds: 1200 },
+    };
+    let reply = "I'll check on #182 in 20 minutes, while the release checks run.";
+    vec![
+        user_prompt("Run the release checks, and tell me how #182's CI did once it's had time."),
+        taken(Seq::new(1)),
+        typed_call("msg-1", "later-1", Call::Schedule(schedule)),
+        typed_call("msg-2", "flow-1", Call::Workflow(Workflow { name: Some("Release checks".into()) })),
+        text("msg-3", reply),
+        replied(reply, 9, 0.02),
     ]
 }

@@ -172,7 +172,7 @@ impl<'a> ToolCall<'a> {
             ToolCall::Patch(patch) => return Some(super::typed::paths(patch)),
             ToolCall::NotebookEdit(edit) => &edit.path,
             ToolCall::Other(other) => return other.summary.clone(),
-            ToolCall::Typed(call) => return Some(super::typed::summary(call)),
+            ToolCall::Typed(call) => return super::typed::summary(call),
         };
         Some(first_line(about).to_string())
     }
