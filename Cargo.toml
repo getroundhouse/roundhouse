@@ -94,7 +94,7 @@ clap = { version = "4.6.7", features = ["derive"] }
 cpal = "0.18.2"
 # Already under GPUI. Picks the names the hub gives workspaces at random.
 fastrand = "2.5.0"
-flume = "0.11.1"
+flume = "0.12.0"
 # Already under GPUI. Compresses what a test serves, as a web server would.
 flate2 = "1.1.11"
 # Our copy of Longbridge's kit, on the release `tools/kit-sync` pins, with our changes, as `third_party/README.md`
@@ -117,7 +117,7 @@ hyper-util = { version = "0.1.21", features = ["tokio"] }
 libc = "0.2.191"
 # Ghostty's terminal core, through bindings pinned to the commit that builds its 1.0.1, which isn't on crates.io yet.
 # Its build script builds Ghostty with Zig 0.17, which has to be on the PATH, and fetches Ghostty's source as it builds.
-libghostty-vt = { git = "https://github.com/Uzaaft/libghostty-rs", rev = "cd4d497e8c698b27054a677ce19d1bd1a1a4d8bf" }
+libghostty-vt = { git = "https://github.com/Uzaaft/libghostty-rs", rev = "483ea3d5247b214060da58ef6037a95f30ae89fb" }
 # Already under gpui-kit, whose text view parses Markdown with it. Finds the images the agent's text points to as the
 # text view does, and reads the guide's pages as GitHub does. 1.0.0 panics on some texts, as wooorm/markdown-rs#275
 # says, so each call the repo makes into it, directly or through the kit's `parse_markdown`, catches a panic. The kit's
@@ -129,7 +129,7 @@ maud = "0.27.0"
 # Already under serde_json. Finds and counts the line endings in a file the worker reads a few lines of at a time.
 memchr = "2.8.3"
 # Already under gpui-component. Tells a worker when git writes a worktree's branches, from the OS's own file events.
-notify = "8.2.1"
+notify = "8.2.2"
 # Already under GPUI. Gives GPUI's view on a Mac the accessibility answer it lacks.
 objc2 = "0.6.5"
 # Already under GPUI. Taps a Mac's trackpad as a sidebar's edge takes its usual width, and plays the sound for a chat
@@ -157,7 +157,9 @@ raw-window-handle = "0.6.2"
 realfft = "3.5.1"
 # Already under rustls. Checks the update feed's signature.
 ring = "0.17.14"
-rusqlite = { version = "0.37.0", features = ["bundled"] }
+# SQLite bundled, with its statement cache and checked `u64` and `usize` conversions, and without the WASM bindings 0.42
+# turns on by default.
+rusqlite = { version = "0.42.0", default-features = false, features = ["bundled", "cache", "fallible_uint"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 # Already under gpui-kit, whose diff uses it. Works out an edit's lines before its patch comes back, and what changed
@@ -166,14 +168,14 @@ similar = "2.7.0"
 syntect = { version = "5.3.0", default-features = false }
 tempfile = "3.27.0"
 thiserror = "2.0.21"
-toml = "0.9.12"
+toml = "1.2.1"
 tokio = { version = "1.54.1", features = ["io-std", "io-util", "macros", "net", "process", "rt-multi-thread", "signal", "sync", "time"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 two-face = { version = "0.4.5", default-features = false }
 # The one Velopack uses, with its TLS, which `fetching` fetches the update feed and dictation's model with.
-ureq = "3.5.1"
-uuid = { version = "1.29.0", features = ["v4"] }
+ureq = "3.5.2"
+uuid = { version = "1.29.2", features = ["v4"] }
 # Exact, because tools/package/dotnet-tools.json pins vpk, which makes the packages this reads, to the same version.
 # `public-utils` makes public a type that its `UpdateSource` trait names, so another crate can implement it. Its
 # `file-logging` would add a log file and a panic hook, so it stays off.
@@ -188,13 +190,13 @@ windows-sys = "0.61.2"
 rcgen = { version = "0.14.10", default-features = false, features = ["crypto", "ring"] }
 rustls = { version = "0.23.46", default-features = false, features = ["ring", "std"] }
 tokio-rustls = { version = "0.26.6", default-features = false, features = ["ring"] }
-webpki = { package = "rustls-webpki", version = "0.103.16", default-features = false, features = ["std"] }
+webpki = { package = "rustls-webpki", version = "0.103.17", default-features = false, features = ["std"] }
 # TCP keepalive timings; tokio already uses this crate.
 socket2 = { version = "0.6.5", features = ["all"] }
 # A pairing link can be scanned on a phone as well as pasted on a desktop.
 qrcode = { version = "0.14.1", default-features = false }
 # Refuse control and format characters in device names displayed in terminals.
-unicode-properties = { version = "0.1.3", default-features = false, features = ["general-category"] }
+unicode-properties = { version = "0.1.5", default-features = false, features = ["general-category"] }
 
 [workspace.lints.rust]
 unreachable_pub = "warn"
