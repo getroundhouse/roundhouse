@@ -190,7 +190,11 @@ fn a_saved_setting_is_in_force_from_the_start_and_thinking_streams_in_full(cx: &
     let streaming = thinking_shown(&mut ui);
     assert_eq!(streaming.len(), 1);
     thought.open();
-    ui.wait("the thinking to finish", |ui| ui.session_status() == Some(protocol::model::SessionStatus::Idle));
+    // The chat's record says it's idle on the hub's feed, apart from its events, so the recorded thinking is waited
+    // for, with the end of its turn, rather than read as soon as the chat is idle.
+    ui.wait("the thinking to finish, and its turn to be drawn to its end", |ui| {
+        ui.session_status() == Some(protocol::model::SessionStatus::Idle) && ui.turn_drawn_to_its_end()
+    });
     assert_eq!(thinking_open(&mut ui), [true]);
     assert_eq!(thinking_shown(&mut ui), streaming, "the same text, recorded");
 }
