@@ -18,6 +18,7 @@ mod colors;
 mod control_sizes;
 mod controls;
 mod copy;
+mod dialogs;
 mod fan;
 mod fields;
 mod fit;
@@ -62,6 +63,9 @@ pub use colors::{Colors, colors};
 pub use control_sizes::ControlSize;
 pub use controls::{Button, ButtonKind, MenuButton, Side, Sizing, button, glyph_button, icon_button};
 pub use copy::copy_button;
+#[cfg(any(test, feature = "testing"))]
+pub use dialogs::shown_dialog;
+pub use dialogs::{Dialog, DialogWidth, close_dialog, dialog, open_dialog};
 pub use fields::{Field, FieldKind, field};
 pub use fit::{fit, pixels};
 pub use hand::{Hand, Off};

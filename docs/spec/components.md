@@ -16,6 +16,8 @@ The pieces screens are built from, on the foundations in `look.md`: what each is
 
 - **Every button is of a kind, for what it's for,** so two buttons that do the same kind of thing look the same, wherever they are. `look::ButtonKind` holds the kinds. A kind says everything about how a button looks but its size and its state, so a button's look is one of the names below, rather than a colour chosen where it's drawn. A Copy button is the kit's own, as below. *Unconfirmed.*
 
+- **The answer that removes or forgets what can't be had back from where it's asked is filled in the error's colour,** with the main action's dark text, in the main action's place, as the owner decided, from pictures of four, so it can't be taken for an ordinary yes. Disconnecting an account, removing a GitHub app and quitting with something unsent are, and closing or moving a chat, whose history stays, or archiving a workspace, which can be had back, aren't. It's lighter under the pointer, 85%, and pressed, 70%, as a pull request's coloured main action is.
+
 **Every kind of button, by its name.** Each is a kind in `look::ButtonKind`. *Unconfirmed.*
 
 | Name | For |
@@ -26,6 +28,7 @@ The pieces screens are built from, on the foundations in `look.md`: what each is
 | `Faint` | A borderless button whose words and icon are faint, in the heading over a list, such as the sidebar's Add project, or at the window's foot, such as Help and Settings |
 | `Outlined` | One that opens something, such as the pull request or a menu of choices, with an edge |
 | `Edged` | An answer that isn't the main one, to what stands on its own, such as a dialog's Not now, a plan's choices or a failed request's Retry, with an edge and a dark fill |
+| `Removes` | The answer that removes or forgets what can't be had back from where it's asked, such as Disconnect, Remove or Quit with something unsent, filled in the error's colour with dark text, in the main action's place |
 
 **Every kind of button in every state, at the regular size: at rest, under the pointer, pressed, on, as the button that opens a menu is while it's open, off, and waiting, as the app draws each.** The pointer is over each one under it, and presses each pressed one, one at a time, for real. *Unconfirmed.*
 
@@ -120,6 +123,33 @@ The pieces screens are built from, on the foundations in `look.md`: what each is
 **Every kind of row: an icon and a key, an icon, one that's off, a label over rows to choose one of, the one chosen checked, and a note; a shorter menu with the pointer on Rename…; and each kind of note.** *Unconfirmed.*
 
 ![Every kind of menu row](screens/menu-rows.png)
+
+## Dialogs
+
+- **Every dialog is laid out the same,** as the owner decided, from pictures of four: raised, with a card's corners and the one thin edge, 24px in from its edge all round. Its title is a heading, with what it says under it in muted text, then what's in it, such as a field, 16px under, and its answers along its foot, at its end, with the one that confirms last. Anything else at its foot, such as a link to read more, is at the foot's start. It has no close button, since its answers, Escape and a click outside it close it. *Unconfirmed:* 4px between its title and what it says, and 16px between what's in it and its foot.
+
+  **Renaming a workspace: a field, Cancel and Rename.** *Unconfirmed.*
+
+  ![Renaming a workspace](screens/rename.png)
+
+  **Asking before restarting now: what it says, Not now and Restart now.** *Unconfirmed.*
+
+  ![Asking before restarting now](screens/finish-update-question.png)
+
+- **Enter confirms a dialog, as its last answer does, and Escape closes it, as Cancel does.** A dialog that can't be confirmed yet, such as a rename with nothing typed, stays open. *Unconfirmed.*
+- **A dialog is as wide as what it holds needs, of three widths,** unless the window is narrower. `look::DialogWidth` holds them. *Unconfirmed.*
+
+**Every width of dialog, by its name.** Each is a width in `look::DialogWidth`. *Unconfirmed.*
+
+| Name | Width | For |
+|---|---|---|
+| `Small` | 360px | A question and its answers, with nothing in it, such as closing a chat whose agent is working |
+| `Regular` | 448px | What most dialogs hold: a field, a line or two and its answers, such as renaming a chat |
+| `Wide` | 512px | What a line of its own runs across, or three answers, such as sharing the hub's link |
+
+**Every width of dialog, with a dialog of each: a question, one whose answer removes, and sharing the hub's link.** *Unconfirmed.*
+
+![Every width of dialog](screens/dialog-widths.png)
 
 ## The status mark
 

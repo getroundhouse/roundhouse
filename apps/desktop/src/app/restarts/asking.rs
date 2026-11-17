@@ -2,11 +2,7 @@
 
 use std::rc::Rc;
 
-use gpui_kit::component::WindowExt as _;
-use gpui_kit::component::dialog::{DialogAction, DialogClose, DialogFooter};
-use gpui_kit::{App, ParentElement as _, Styled as _, Window, div};
-
-use look::Typeset as _;
+use gpui_kit::{App, Window};
 
 use super::UpdateQuestion;
 
@@ -22,33 +18,21 @@ pub(super) fn open(
 ) {
     let (title, detail) = (question.title(), question.detail());
     let (restart, closed) = (Rc::new(restart), Rc::new(closed));
-    window.open_dialog(cx, move |dialog, _, cx| {
+    look::open_dialog(window, cx, move |_, _| {
         let (restart, closed) = (restart.clone(), closed.clone());
-        let detail = div().typeset(look::Type::Body).text_color(look::colors(cx).text_muted).child(detail.clone());
-        dialog
-            .title(title)
-            // Its two buttons are the ways out of it.
-            .close_button(false)
-            .child(detail)
-            .footer(
-                DialogFooter::new()
-                    .child(DialogClose::new().child(look::button(
-                        "restart-now-not-now",
-                        look::ButtonKind::Edged,
-                        look::ControlSize::Large,
-                        "Not now",
-                    )))
-                    .child(DialogAction::new().child(look::button(
-                        "restart-now-confirm",
-                        look::ButtonKind::Main,
-                        look::ControlSize::Large,
-                        "Restart now",
-                    ))),
-            )
-            .on_ok(move |_, _, cx| {
+        look::dialog(title)
+            .lead(detail.clone())
+            .closes(look::button("restart-now-not-now", look::ButtonKind::Edged, look::ControlSize::Large, "Not now"))
+            .confirms(look::button(
+                "restart-now-confirm",
+                look::ButtonKind::Main,
+                look::ControlSize::Large,
+                "Restart now",
+            ))
+            .on_confirm(move |_, cx| {
                 restart(cx);
                 true
             })
-            .on_close(move |_, _, cx| closed(cx))
+            .on_close(move |_, cx| closed(cx))
     });
 }

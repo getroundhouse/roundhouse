@@ -2,11 +2,8 @@
 //! to say when a title asked of the hub doesn't come.
 
 use client_core::ClientError;
-use gpui_kit::component::WindowExt as _;
-use gpui_kit::component::dialog::{DialogAction, DialogClose, DialogFooter};
 use gpui_kit::component::input::InputState;
 use gpui_kit::{App, AppContext as _, ParentElement as _, Window};
-use look::{Hand as _, Sizing as _};
 use protocol::model::{Title, TitleError};
 
 /// Opens the dialog over the window. `rename` gets what was typed once it's confirmed, for the hub to tidy. A title
@@ -22,25 +19,13 @@ pub(crate) fn open(
     let input = cx.new(|cx| InputState::new(window, cx).default_value(current.to_string()));
     let rename = std::rc::Rc::new(rename);
     let field = input.clone();
-    window.open_dialog(cx, move |dialog, _, _| {
+    look::open_dialog(window, cx, move |_, _| {
         let (typed, rename) = (field.clone(), rename.clone());
-        dialog
-            .title(format!("Rename {}", what.noun()))
+        look::dialog(format!("Rename {}", what.noun()))
             .child(look::field("rename-field", &field, look::FieldKind::Boxed, look::ControlSize::Large))
-            .footer(
-                DialogFooter::new()
-                    .child(
-                        DialogClose::new()
-                            .trigger(|button| button.sized(look::ControlSize::Large).label("Cancel").hand()),
-                    )
-                    .child(DialogAction::new().child(look::button(
-                        "rename-confirm",
-                        look::ButtonKind::Main,
-                        look::ControlSize::Large,
-                        "Rename",
-                    ))),
-            )
-            .on_ok(move |_, _, cx| {
+            .closes(look::button("rename-cancel", look::ButtonKind::Edged, look::ControlSize::Large, "Cancel"))
+            .confirms(look::button("rename-confirm", look::ButtonKind::Main, look::ControlSize::Large, "Rename"))
+            .on_confirm(move |_, cx| {
                 let title = typed.read(cx).value().to_string();
                 if Title::typed(&title) == Err(TitleError::Empty) {
                     return false;
