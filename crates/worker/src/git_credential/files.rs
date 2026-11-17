@@ -1,5 +1,6 @@
 //! The files the worker hands its processes for github.com, in a directory of its state directory that only its user
-//! can open: a git config file, a `gh` config directory, and what its credential helper answers with.
+//! can open: a git config file, who commits are by in a repository on github.com, a `gh` config directory, and what
+//! its credential helper answers with.
 
 use std::ffi::OsString;
 use std::io::{self, Write as _};
@@ -13,6 +14,9 @@ use protocol::worker::{GitCredential, GitIdentity, GithubCredential};
 const DIR: &str = "git-credential";
 /// The git config file every process is given, which git reads again on every run.
 const CONFIG: &str = "config";
+/// Who commits are by, which the git config includes only in a repository on github.com, and which is there only while
+/// the credential has a commit identity. The git config names it by this alone, which git reads as a file beside it.
+const IDENTITY: &str = "identity";
 /// What the credential helper answers with, which is the credential as the hub sent it.
 pub(super) const ANSWER: &str = "credential.json";
 /// The `gh` config directory every process is given, and the file in it where `gh` keeps its logins.
@@ -27,6 +31,14 @@ const BLOCKED_TOKEN: &str = "blocked-by-roundhouse";
 
 /// Taken out of what every process given the files inherits, since `gh` takes any of them over its config directory.
 const GH_TOKENS: [&str; 4] = ["GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN"];
+
+/// How GitHub's SSH addresses start, which the git config sends to `https://github.com/`, so a remote over SSH goes
+/// through the helper too, rather than push with the machine's key.
+const GITHUB_OVER_SSH: [&str; 2] = ["git@github.com:", "ssh://git@github.com/"];
+
+/// How the address of a repository on github.com starts over HTTPS, as a pattern of git's `includeIf`: without a user
+/// or with one, since git asks the helper for `https://github.com` whatever user an address names.
+const GITHUB_OVER_HTTPS: [&str; 2] = ["https://github.com/", "https://*@github.com/"];
 
 /// What a process can be handed for github.com: an account to push as, or a block, with what to do about it.
 pub(super) enum Handed {
@@ -58,10 +70,11 @@ impl Files {
             .with("GH_CONFIG_DIR", self.dir.join(GH))
     }
 
-    /// Rewrites each file for `handed`, the helper's answer and `gh`'s logins before the git config that sends git to
-    /// them. Each is replaced whole, by renaming a new one over it, so a process reading one meanwhile reads the last
-    /// or the next, never part of either. None is synced, since the worker removes them all as it starts, so nothing
-    /// reads what a power cut leaves.
+    /// Rewrites each file for `handed`, the helper's answer, `gh`'s logins and who commits are by before the git config
+    /// that sends git to them. Each is replaced whole, by renaming a new one over it, so a process reading one meanwhile
+    /// reads the last or the next, never part of either. Who commits are by is removed for a credential without a
+    /// commit identity, and for a block, and git passes over an include of a file that isn't there. None is synced,
+    /// since the worker removes them all as it starts, so nothing reads what a power cut leaves.
     pub(super) fn write(&self, handed: &Handed) -> io::Result<()> {
         let gh = self.dir.join(GH);
         private_files::create_dir_all(&gh)?;
@@ -85,7 +98,11 @@ impl Files {
                 None
             }
         };
-        replace(&self.dir.join(CONFIG), &self.config(identity))
+        match identity {
+            Some(identity) => replace(&self.dir.join(IDENTITY), &identity_config(identity))?,
+            None => remove_file(&self.dir.join(IDENTITY))?,
+        }
+        replace(&self.dir.join(CONFIG), &self.config())
     }
 
     /// Removes the directory and everything in it, the git config first, so a process that reads it meanwhile goes
@@ -98,12 +115,14 @@ impl Files {
         }
     }
 
-    /// The machine's helpers for `https://github.com` reset, then the worker's own, which is the same for an account
-    /// and a block, since what it answers says which. And GitHub's SSH addresses sent over HTTPS, so a remote over
-    /// SSH goes through the helper too, rather than push with the machine's key. And `identity`, when there is one, as
-    /// who commits are by, which git takes over the repository's and the person's own, since what's given in
-    /// `GIT_CONFIG_*` comes last, so a credential without one leaves them to say.
-    fn config(&self, identity: Option<&GitIdentity>) -> Vec<u8> {
+    /// The machine's helpers for `https://github.com` reset, then the worker's own, and GitHub's SSH addresses sent
+    /// over HTTPS, so a remote over SSH goes through the helper too. And who commits are by, included only in a
+    /// repository with a remote on github.com, since the helper is only for github.com, so one elsewhere, such as on
+    /// GitLab or GitHub Enterprise, commits as its own config or the machine's says. So does every repository under a
+    /// git before 2.36, the first to know `hasconfig:remote.*.url`, since git takes a condition it doesn't know as
+    /// false. It's the same for every account and block, since what the helper answers says which, and whether who
+    /// commits are by is there says whether there's anyone.
+    fn config(&self) -> Vec<u8> {
         let words =
             self.helper.iter().map(|word| word.as_encoded_bytes()).chain([self.dir.as_os_str().as_encoded_bytes()]);
         let mut helper = b"!".to_vec();
@@ -116,18 +135,32 @@ impl Files {
         let mut config = b"# Rewritten by the Roundhouse worker whenever its hub sets the git credential.\n".to_vec();
         config.extend(b"[credential \"https://github.com\"]\n\thelper =\n\thelper = ");
         config.extend(config_quoted(&helper));
-        config.extend(
-            b"\n[url \"https://github.com/\"]\n\tinsteadOf = git@github.com:\n\tinsteadOf = ssh://git@github.com/\n",
-        );
-        if let Some(identity) = identity {
-            config.extend(b"[user]\n\tname = ");
-            config.extend(config_quoted(identity.name.as_bytes()));
-            config.extend(b"\n\temail = ");
-            config.extend(config_quoted(identity.email.as_bytes()));
-            config.push(b'\n');
+        config.extend(b"\n[url \"https://github.com/\"]\n");
+        for start in GITHUB_OVER_SSH {
+            config.extend(format!("\tinsteadOf = {start}\n").as_bytes());
+        }
+        // git matches the address of each remote as its config has it, before any `insteadOf`, so each of GitHub's is
+        // named. After how it starts, `*` takes the owner, since it takes no `/`, and `**` the rest, so
+        // `git@github.com:**` alone would take only an address with no `/` in it.
+        for start in GITHUB_OVER_HTTPS.into_iter().chain(GITHUB_OVER_SSH) {
+            let include = format!("[includeIf \"hasconfig:remote.*.url:{start}*/**\"]\n\tpath = {IDENTITY}\n");
+            config.extend(include.as_bytes());
         }
         config
     }
+}
+
+/// Who commits are by, as git's own `user.name` and `user.email`, which the git config's include puts in the command's
+/// own config, so git takes them over the repository's and the person's own. Nothing else, since every git would fail
+/// on a remote's address in a file it includes for `hasconfig:remote.*.url`, as git 2.54 does.
+fn identity_config(identity: &GitIdentity) -> Vec<u8> {
+    let mut config = b"# Rewritten by the Roundhouse worker whenever its hub sets the git credential.\n".to_vec();
+    config.extend(b"[user]\n\tname = ");
+    config.extend(config_quoted(identity.name.as_bytes()));
+    config.extend(b"\n\temail = ");
+    config.extend(config_quoted(identity.email.as_bytes()));
+    config.push(b'\n');
+    config
 }
 
 /// `gh`'s logins, as `gh` writes them with the token in the file, logged in to github.com as `credential`. Each value

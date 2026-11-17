@@ -60,13 +60,16 @@ const COMMITS: &str = "git -c user.useConfigOnly=true commit --allow-empty -qm '
 git log -1 --format='%an <%ae>, %cn <%ce>' > by";
 
 /// As GitHub's profile of the account's user says, when the hub asks whose its token is: her name, and the address
-/// GitHub gives her, since she shows no email.
+/// GitHub gives her, since she shows no email. In a repository on github.com, since the commit identity is only for
+/// those, with a stand-in for `gh`, so nothing the worker asks `gh` of it reaches GitHub.
 #[test]
 fn a_workspaces_commits_are_by_the_default_github_account_on_a_machine_with_no_git_identity() {
     let runtime = tokio::runtime::Runtime::new().unwrap();
     let ada = GithubAnswer::user_with_profile(7, "ada", Some("Ada Lovelace"), None);
     let github = runtime.block_on(GithubStandIn::start(vec![(TOKEN, ada)]));
-    let stack = Stack::start_with(vec![(ENV_TEST_GITHUB_API, github.api())]);
+    let mut stack = Stack::start_with(vec![(ENV_TEST_GITHUB_API, github.api())]);
+    let _gh = StandInGh::start(&mut stack);
+    git(&stack.repo(), &["remote", "add", "origin", "https://github.com/ada/rails.git"]);
     commit_settings(&stack, &format!("[scripts]\nsetup = '''\n{COMMITS}\n'''\n"));
     let client = stack.client();
     client.call(GithubAccountConnect { token: GithubToken::new(TOKEN), id: None }).unwrap();
