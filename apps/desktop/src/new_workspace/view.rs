@@ -3,13 +3,11 @@
 //! texture while it's on.
 
 use gpui_kit::component::input::Textarea;
-use gpui_kit::component::kbd::Kbd;
 use gpui_kit::component::menu::{PopupMenu, PopupMenuItem};
 use gpui_kit::component::{h_flex, v_flex};
-use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    Anchor, AnyElement, Context, Focusable as _, InteractiveElement as _, IntoElement, Keystroke, ParentElement as _,
-    Render, Styled as _, TestSupportExt as _, Window, px, transparent_black,
+    Anchor, AnyElement, Context, Focusable as _, InteractiveElement as _, IntoElement, ParentElement as _, Render,
+    Styled as _, TestSupportExt as _, Window, px, transparent_black,
 };
 
 use super::NewWorkspaceDialog;
@@ -122,9 +120,8 @@ impl NewWorkspaceDialog {
         let plan = Plan::of(self.planning());
         let plus =
             composing::plus_menu("new-workspace-add", plan, field, cx, |_, paths, cx| Self::attach_paths(paths, cx));
-        let enter = Keystroke::parse("enter").ok().map(|key| Kbd::new(key).appearance(false));
         let create = look::button("new-workspace-create", look::ButtonKind::Main, look::ControlSize::Regular, "Create")
-            .when_some(enter, look::Button::after)
+            .after(look::key(look::KeyKind::Plain, "enter"))
             .off(!self.can_create())
             .on_click(cx.listener(|t, _, _, cx| t.create(cx)));
         bar.child(plus)

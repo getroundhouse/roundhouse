@@ -1,14 +1,12 @@
 //! Settings' sidebar: the search, then the pages under their headings.
 
 use gpui_kit::component::input::{Input, InputState};
-use gpui_kit::component::kbd::Kbd;
 use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::component::{Icon, IconName, Sizable as _, ThemeStyled as _, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    App, Entity, Focusable as _, InteractiveElement as _, IntoElement, Keystroke, MouseButton, OperatingSystem,
-    ParentElement as _, Pixels, Role, StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, Window, div,
-    px, rems,
+    App, Entity, Focusable as _, InteractiveElement as _, IntoElement, MouseButton, ParentElement as _, Pixels, Role,
+    StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, Window, div, px, rems,
 };
 use look::{Hand as _, IconSizing as _, Shaped as _, Typeset as _};
 
@@ -99,41 +97,7 @@ fn search_field(search: &Entity<InputState>, window: &Window, cx: &App) -> impl 
         })
         .child(Icon::new(IconName::Search).sized(look::IconSize::Regular).text_color(colors.text_muted))
         .child(text)
-        .child(find_key(cx))
-}
-
-/// The key that finds a setting, on a small raised key, with what's held apart from the key pressed.
-fn find_key(cx: &App) -> impl IntoElement {
-    let colors = look::colors(cx);
-    let parts = find_key_says(cx.platform_info().os);
-    let pressed = parts.len().saturating_sub(1);
-    let parts = parts
-        .into_iter()
-        .enumerate()
-        .map(|(ix, part)| div().when(ix < pressed, |held| held.typeset(look::Type::KeyHeld)).child(part));
-    h_flex()
-        .flex_none()
-        .h(px(16.))
-        .px(look::Space::XSmall)
-        .gap(look::Space::XSmall)
-        .corners(look::Corner::InlineControl)
-        .border_1()
-        .border_color(colors.control_edge)
-        .bg(colors.raised)
-        .typeset(look::Type::Key)
-        .line_height(px(10.))
-        .text_color(colors.text_muted)
-        .children(parts)
-}
-
-/// The parts of the key that finds a setting, with `secondary` read as `os` has it, and written as this build writes
-/// keys, with what's held first. On a Mac each part is one symbol or letter, so the symbols for what's held can be
-/// smaller than the key pressed, as they are on its keys. Elsewhere the parts are words, and come as one, with what
-/// goes between them.
-pub(super) fn find_key_says(os: OperatingSystem) -> Vec<String> {
-    // `secondary` is a different key on each system, so it's read for the one at hand.
-    let said = Keystroke::parse_with_os(FIND_KEY, os).map_or_default(|key| Kbd::format(&key));
-    if cfg!(target_os = "macos") { said.chars().map(String::from).collect() } else { vec![said] }
+        .child(look::key(look::KeyKind::Capped, FIND_KEY))
 }
 
 /// A page's row: its icon and name, filled a little lighter than the sidebar while it's the page showing, and while
