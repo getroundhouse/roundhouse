@@ -65,9 +65,17 @@ fn shift_tab_turns_plan_mode_on_and_off_and_the_model_picker_changes_a_running_c
     assert_eq!(ui.cx.read_entity(&pane, |p, _| p.session().map(|s| s.model.clone())), Some(ModelName::named("sonnet")));
 }
 
-/// The second press undoes the first, even before the agent has answered it.
+/// The item labelled Plan mode in the `+` menu, which is open.
+fn plan_item(ui: &mut Ui<'_>) -> ElementSnapshot {
+    let menu = ElementId::Name("popup-menu".into());
+    let found = ui.labelled("Plan mode").into_iter().find(|found| found.path().contains(&menu));
+    found.expect("the menu has plan mode")
+}
+
+/// The second of two presses of Shift-Tab undoes the first, even before the agent has answered it. The `+` menu's Plan
+/// mode does as Shift-Tab does, is checked while it's on, and leaves focus where the prompt is typed.
 #[gpui_kit::test]
-fn shift_tab_twice_at_once_leaves_plan_mode_off(cx: &mut TestAppContext) {
+fn shift_tab_twice_at_once_leaves_plan_mode_off_and_the_add_menu_turns_it_on_and_off(cx: &mut TestAppContext) {
     let stack = Stack::new();
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, &stack);
@@ -88,48 +96,27 @@ fn shift_tab_twice_at_once_leaves_plan_mode_off(cx: &mut TestAppContext) {
             })
             .collect()
     };
-    ui.wait("both presses answered", |ui| changes(ui).len() == 2);
-    assert_eq!(changes(&ui), [Plan, FullAccess]);
-    ui.wait("full access", |ui| ui.chat_mode() == Some(FullAccess));
-    assert!(!planning(&mut ui));
-}
-
-/// The item labelled Plan mode in the `+` menu, which is open.
-fn plan_item(ui: &mut Ui<'_>) -> ElementSnapshot {
-    let menu = ElementId::Name("popup-menu".into());
-    let found = ui.labelled("Plan mode").into_iter().find(|found| found.path().contains(&menu));
-    found.expect("the menu has plan mode")
-}
-
-/// The `+` menu's Plan mode does as Shift-Tab does, is checked while it's on, and leaves focus where the prompt is
-/// typed.
-#[gpui_kit::test]
-fn the_add_menu_turns_plan_mode_on_and_off(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
-    let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
-    ui.new_workspace();
-    ui.input("say:ready");
-    ui.press("enter");
-    ui.wait("the reply", |ui| ui.session_status() == Some(SessionStatus::Idle));
+    ui.wait("both presses of Shift-Tab answered", |ui| changes(ui).len() == 2);
+    assert_eq!(changes(&ui), [Plan, FullAccess], "the second press of Shift-Tab undid the first");
+    ui.wait("full access after Shift-Tab twice", |ui| ui.chat_mode() == Some(FullAccess));
+    assert!(!planning(&mut ui), "Shift-Tab twice leaves plan mode off");
 
     // With nothing focused, so the menu, rather than whatever had focus before it opened, is what puts it in the
     // text field.
     ui.cx.update_window(ui.handle, |_, window, cx| window.blur(cx)).unwrap();
     ui.click(SharedString::from(ADD));
-    assert_ne!(plan_item(&mut ui).checked(), Some(true), "plan mode is off");
+    assert_ne!(plan_item(&mut ui).checked(), Some(true), "the menu's plan mode is off");
     ui.click_menu_item("Plan mode");
-    ui.wait("plan mode", |ui| ui.chat_mode() == Some(Plan));
-    assert!(planning(&mut ui), "the composer shows it's planning");
+    ui.wait("plan mode from the menu", |ui| ui.chat_mode() == Some(Plan));
+    assert!(planning(&mut ui), "the composer shows it's planning, from the menu");
     ui.input("next");
-    assert_eq!(ui.composer_text(), "next", "focus is where the prompt is typed");
+    assert_eq!(ui.composer_text(), "next", "focus is where the prompt is typed, after the menu");
 
     ui.click(SharedString::from(ADD));
-    assert_eq!(plan_item(&mut ui).checked(), Some(true), "plan mode is on");
+    assert_eq!(plan_item(&mut ui).checked(), Some(true), "the menu's plan mode is on");
     ui.click_menu_item("Plan mode");
-    ui.wait("full access", |ui| ui.chat_mode() == Some(FullAccess));
-    assert!(!planning(&mut ui));
+    ui.wait("full access from the menu", |ui| ui.chat_mode() == Some(FullAccess));
+    assert!(!planning(&mut ui), "the menu turned plan mode off");
 }
 
 #[gpui_kit::test]

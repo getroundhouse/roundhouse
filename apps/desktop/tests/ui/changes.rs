@@ -1,13 +1,41 @@
-//! The sidebar of changes, and the workspace's one file tab, which shows whichever file was clicked in it last.
+//! The sidebar of changes, and the workspace's one file tab, which shows whichever file was clicked in it last. The
+//! worker reads a workspace's diff, and what the window shows of it, and which tab shows, is the app's, so those open
+//! on a fake hub holding a made-up diff, with no worker to wait for. A file written since, and a comment, which the
+//! hub keeps, need the real ones.
 
 #![cfg(test)]
 
+use client_core::fake_hub::World;
 use desktop::workspace_pane::Showing;
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{AppContext as _, SharedString, TestAppContext};
-use protocol::model::DiffComment;
+use protocol::model::{CommitId, DiffComment, FileContents, GitDiff, SessionStatus, WorkspaceId};
 
-use crate::support::{Diff, Stack, Ui};
+use crate::support::{Diff, FakeHub, Stack, Ui};
+
+/// What git says of the change [`reviewing`] makes.
+const PATCH: &str = "diff --git a/a.txt b/a.txt
+index 5626abf..814f4a4 100644
+--- a/a.txt
++++ b/a.txt
+@@ -1 +1,2 @@
+ one
++two
+diff --git a/src/app/view.rs b/src/app/view.rs
+new file mode 100644
+index 0000000..2a1b3c4
+--- /dev/null
++++ b/src/app/view.rs
+@@ -0,0 +1 @@
++fn view() {}
+diff --git a/src/lib.rs b/src/lib.rs
+new file mode 100644
+index 0000000..5d6e7f8
+--- /dev/null
++++ b/src/lib.rs
+@@ -0,0 +1 @@
++mod app;
+";
 
 /// A workspace that changes `a.txt` and adds two files in folders, with its sidebar of changes open.
 fn reviewing<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> (Ui<'a>, Diff) {
@@ -24,6 +52,36 @@ fn reviewing<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> (Ui<'a>, Diff) {
     (ui, diff)
 }
 
+/// [`reviewing`] on a fake hub, which goes with the test, so it's returned to be kept, in one of two workspaces that
+/// each make that change and have two chats open, with the other workspace.
+fn reviewing_on_a_fake_hub(cx: &mut TestAppContext) -> (FakeHub, Ui<'_>, Diff, WorkspaceId) {
+    let mut world = World::default();
+    let repo = world.repo("signals");
+    let workspaces = ["ledger", "points"].map(|name| world.workspace(&repo, name));
+    let base_commit = Some(CommitId::from("3f4c19c8a2d1e0b7f6a5c4d3e2f1a0b9c8d7e6f5"));
+    for workspace in &workspaces {
+        for _ in 0..2 {
+            world.chat(workspace, SessionStatus::Idle, Vec::new());
+        }
+        let diff = GitDiff { base_commit: base_commit.clone(), patch: PATCH.to_string(), truncated: false };
+        world.diffs.insert(workspace.clone(), diff);
+    }
+    world.base_files.insert("a.txt".to_string(), FileContents::Text { text: "one\n".to_string() });
+    let fake = FakeHub::holding(world);
+    let mut ui = Ui::open_on(cx, &fake);
+    ui.wait("a workspace", |ui| ui.view().selected.is_some() && ui.pane().is_some());
+    let showing = ui.view().selected.clone().unwrap();
+    let other = workspaces.into_iter().find(|w| *w != showing).unwrap();
+    let diff = ui.open_changes();
+    (fake, ui, diff, other)
+}
+
+/// Shows `workspace` by its row in the sidebar.
+fn show(ui: &mut Ui<'_>, workspace: &WorkspaceId) {
+    ui.click(SharedString::from(format!("workspace-{workspace}")));
+    ui.wait("the workspace", |ui| ui.view().selected.as_ref() == Some(workspace) && ui.pane().is_some());
+}
+
 fn showing(ui: &Ui<'_>) -> Showing {
     ui.cx.read_entity(&ui.pane().unwrap(), |p, _| p.showing())
 }
@@ -34,8 +92,7 @@ fn file_tab(ui: &Ui<'_>) -> Option<String> {
 
 #[gpui_kit::test]
 fn each_file_clicked_shows_in_the_same_file_tab(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let (mut ui, diff) = reviewing(cx, &stack);
+    let (_hub, mut ui, diff, _) = reviewing_on_a_fake_hub(cx);
     let chats = ui.open_chats();
 
     ui.open_diff_of(&diff, "a.txt");
@@ -48,8 +105,7 @@ fn each_file_clicked_shows_in_the_same_file_tab(cx: &mut TestAppContext) {
 
 #[gpui_kit::test]
 fn the_file_tab_stays_behind_a_chat_until_its_closed(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let (mut ui, diff) = reviewing(cx, &stack);
+    let (_hub, mut ui, diff, _) = reviewing_on_a_fake_hub(cx);
     let chats = ui.open_chats();
     ui.open_diff_of(&diff, "a.txt");
 
@@ -69,10 +125,9 @@ fn the_file_tab_stays_behind_a_chat_until_its_closed(cx: &mut TestAppContext) {
 /// there.
 #[gpui_kit::test]
 fn the_file_tab_comes_before_the_chats(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let (mut ui, diff) = reviewing(cx, &stack);
-    ui.new_chat();
+    let (_hub, mut ui, diff, _) = reviewing_on_a_fake_hub(cx);
     let chats = ui.open_chats();
+    assert_eq!(chats.len(), 2);
     ui.open_diff_of(&diff, "a.txt");
 
     let left = |ui: &mut Ui<'_>, id: SharedString| {
@@ -98,13 +153,12 @@ fn the_file_tab_comes_before_the_chats(cx: &mut TestAppContext) {
 /// or the window's keys reach nothing.
 #[gpui_kit::test]
 fn the_window_keys_work_on_the_file_tab_after_coming_back_to_it(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let (mut ui, diff) = reviewing(cx, &stack);
+    let (_hub, mut ui, diff, other) = reviewing_on_a_fake_hub(cx);
     let reviewed = ui.view().selected.clone().unwrap();
     ui.open_diff_of(&diff, "a.txt");
-    ui.new_workspace();
+    show(&mut ui, &other);
 
-    ui.click(SharedString::from(format!("workspace-{reviewed}")));
+    show(&mut ui, &reviewed);
     assert_eq!(showing(&ui), Showing::File);
     ui.press("ctrl-tab");
 
@@ -113,8 +167,7 @@ fn the_window_keys_work_on_the_file_tab_after_coming_back_to_it(cx: &mut TestApp
 
 #[gpui_kit::test]
 fn the_files_show_in_folders_that_close(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let (mut ui, _) = reviewing(cx, &stack);
+    let (_hub, mut ui, _, _) = reviewing_on_a_fake_hub(cx);
     assert!(ui.has("file-src/app/view.rs"));
     assert!(!ui.has("folder-src"), "a list until folders are chosen");
 
@@ -165,32 +218,51 @@ fn comment_on_a_txt(ui: &mut Ui<'_>, stack: &Stack, diff: &Diff, text: &str) -> 
     comment
 }
 
+/// Saving a comment takes its box away, and focus with it, so the window's keys still work. Then it's edited where it
+/// was left, and Add to Chat copies it, as edited, after what was typed in the composer before it was left.
 #[gpui_kit::test]
-fn a_comment_is_edited_where_it_was_left(cx: &mut TestAppContext) {
+fn a_comment_saved_leaves_the_keys_working_is_edited_where_it_was_left_and_is_added_to_the_chat(
+    cx: &mut TestAppContext,
+) {
     let stack = Stack::new();
     let (mut ui, diff) = reviewing(cx, &stack);
     let workspace = ui.view().selected.clone().unwrap();
+    ui.input("Keep it short.");
     let comment = comment_on_a_txt(&mut ui, &stack, &diff, "Why two?");
+
+    assert_eq!(showing(&ui), Showing::File);
+    ui.press("ctrl-tab");
+    assert_eq!(showing(&ui), Showing::Chat, "Ctrl-Tab moved on from the file tab once the comment was saved");
+    ui.click("show-file-tab");
 
     ui.click(SharedString::from(format!("edit-{}", comment.id)));
     let editing = ui.cx.read_entity(&diff.file, |f, cx| f.draft.as_ref().map(|d| d.input.read(cx).text().to_string()));
-    assert_eq!(editing.as_deref(), Some("Why two?"));
+    assert_eq!(editing.as_deref(), Some("Why two?"), "the comment's text, to edit");
     ui.input(" And not three?");
     ui.press("enter");
-
+    let mut edited = Vec::new();
     ui.wait("the edit to be saved", |_| {
-        let saved = stack.client().comment_list(&workspace).unwrap();
-        saved.len() == 1 && saved[0].id == comment.id && saved[0].text == "Why two? And not three?"
+        edited = stack.client().comment_list(&workspace).unwrap();
+        edited.len() == 1 && edited[0].id == comment.id && edited[0].text == "Why two? And not three?"
     });
-    ui.wait("it to show", |ui| ui.comments(&diff).first().is_some_and(|c| c.text == "Why two? And not three?"));
+    ui.wait("the edit to show", |ui| ui.comments(&diff).first().is_some_and(|c| c.text == "Why two? And not three?"));
+
+    ui.click(SharedString::from(format!("add-to-chat-{}", comment.id)));
+    assert_eq!(showing(&ui), Showing::Chat, "Add to Chat shows the chat");
+    ui.frame();
+    let added = "Keep it short.\n`a.txt:2`: Why two? And not three?";
+    assert_eq!(ui.composer_text(), added, "added after what was typed, on a line of its own");
+    // A delete would take it off the diff straight away, before the hub answers.
+    let shown: Vec<_> = ui.comments(&diff).into_iter().map(|c| c.id).collect();
+    assert_eq!(shown, std::slice::from_ref(&comment.id), "added to the chat, it stays on the diff");
+    assert_eq!(stack.client().comment_list(&workspace).unwrap(), edited, "and in the hub");
 }
 
 /// Space is pressed as a key, through the window's bindings, as it is when typed, where a binding for it would take it
-/// from the comment.
+/// from the comment. What's typed is the app's until it's saved.
 #[gpui_kit::test]
 fn space_is_typed_in_a_comment(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let (mut ui, diff) = reviewing(cx, &stack);
+    let (_hub, mut ui, diff, _) = reviewing_on_a_fake_hub(cx);
     ui.open_diff_of(&diff, "a.txt");
     ui.start_comment(&diff, "a.txt", 2);
 
@@ -202,44 +274,11 @@ fn space_is_typed_in_a_comment(cx: &mut TestAppContext) {
     assert_eq!(typed.as_deref(), Some("Why two?"));
 }
 
-/// Saving a comment takes its box away, and focus with it, so the window's keys still work.
-#[gpui_kit::test]
-fn the_window_keys_work_after_a_comment_is_saved(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let (mut ui, diff) = reviewing(cx, &stack);
-    comment_on_a_txt(&mut ui, &stack, &diff, "Why two?");
-    assert_eq!(showing(&ui), Showing::File);
-
-    ui.press("ctrl-tab");
-
-    assert_eq!(showing(&ui), Showing::Chat, "Ctrl-Tab moved on from the file tab");
-}
-
-#[gpui_kit::test]
-fn add_to_chat_copies_a_comment_into_the_composer(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let (mut ui, diff) = reviewing(cx, &stack);
-    let workspace = ui.view().selected.clone().unwrap();
-    ui.input("Keep it short.");
-    let comment = comment_on_a_txt(&mut ui, &stack, &diff, "Why two?");
-
-    ui.click(SharedString::from(format!("add-to-chat-{}", comment.id)));
-
-    assert_eq!(showing(&ui), Showing::Chat);
-    ui.frame();
-    assert_eq!(ui.composer_text(), "Keep it short.\n`a.txt:2`: Why two?", "after what was typed, on a line of its own");
-    // A delete would take it off the diff straight away, before the hub answers.
-    let shown: Vec<_> = ui.comments(&diff).into_iter().map(|c| c.id).collect();
-    assert_eq!(shown, std::slice::from_ref(&comment.id), "it stays on the diff");
-    assert_eq!(stack.client().comment_list(&workspace).unwrap(), [comment], "and in the hub");
-}
-
 #[gpui_kit::test]
 fn hiding_the_sidebar_of_changes_hides_it_in_every_workspace(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let (mut ui, _) = reviewing(cx, &stack);
+    let (_hub, mut ui, _, other) = reviewing_on_a_fake_hub(cx);
     let first = ui.view().selected.clone().unwrap();
-    ui.new_workspace();
+    show(&mut ui, &other);
     assert!(ui.changes_open(), "open in the first, so open in the second");
 
     ui.click("toggle-diff");

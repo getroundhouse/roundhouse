@@ -1,15 +1,88 @@
 //! A file's lines in the file tab: the lines git left out, which fold and open, how they're shown, and selecting
-//! them to copy.
+//! them to copy. The worker reads a diff and the file it was taken from, and how the window shows them is the app's,
+//! so those open on a fake hub holding a made-up diff and base, with no worker to wait for. A diff read again once the
+//! worktree changes, and a file too big to send whole, which the fake hub sends whole, need the real ones.
 
 #![cfg(test)]
 
 use std::fmt::Write as _;
 
+use client_core::fake_hub::World;
 use desktop::file_diff::{DiffView, FileDiff};
 use gpui_kit::test::{TestEventExt as _, TestWindowExt as _};
-use gpui_kit::{AppContext as _, ElementId, MouseButton, ScrollDelta, TestAppContext, point, px};
+use gpui_kit::{AppContext as _, ElementId, MouseButton, ScrollDelta, SharedString, TestAppContext, point, px};
+use protocol::model::{CommitId, FileContents, GitDiff, SessionStatus, WorkspaceId};
 
-use crate::support::{Diff, Stack, Ui, git};
+use crate::support::{Diff, FakeHub, Stack, Ui, git};
+
+/// What git says of a change to line 30 of `long.txt`, 40 lines long, with three lines either side, and of one that
+/// adds `other.txt`, and one that adds a line to `a.txt`.
+const PATCH: &str = "diff --git a/a.txt b/a.txt
+index 5626abf..814f4a4 100644
+--- a/a.txt
++++ b/a.txt
+@@ -1 +1,2 @@
+ one
++two
+diff --git a/long.txt b/long.txt
+index 1f2e3d4..5c6b7a8 100644
+--- a/long.txt
++++ b/long.txt
+@@ -27,7 +27,7 @@
+ line 27
+ line 28
+ line 29
+-line 30
++line thirty
+ line 31
+ line 32
+ line 33
+diff --git a/other.txt b/other.txt
+new file mode 100644
+index 0000000..9d8c7b6
+--- /dev/null
++++ b/other.txt
+@@ -0,0 +1 @@
++other
+";
+
+/// The window on a fake hub holding two workspaces that each make the changes in `patch` to a base that holds each of
+/// `base`, by its path, with one showing, and its sidebar of changes open, and the other workspace. The hub goes with
+/// the test, so it's returned to be kept.
+fn changed_on_a_fake_hub<'a>(
+    cx: &'a mut TestAppContext,
+    patch: &str,
+    base: &[(&str, String)],
+) -> (FakeHub, Ui<'a>, Diff, WorkspaceId) {
+    let mut world = World::default();
+    let repo = world.repo("signals");
+    let workspaces = ["ledger", "points"].map(|name| world.workspace(&repo, name));
+    let base_commit = Some(CommitId::from("3f4c19c8a2d1e0b7f6a5c4d3e2f1a0b9c8d7e6f5"));
+    for workspace in &workspaces {
+        world.chat(workspace, SessionStatus::Idle, Vec::new());
+        let diff = GitDiff { base_commit: base_commit.clone(), patch: patch.to_string(), truncated: false };
+        world.diffs.insert(workspace.clone(), diff);
+    }
+    for (path, text) in base {
+        world.base_files.insert((*path).to_string(), FileContents::Text { text: text.clone() });
+    }
+    let fake = FakeHub::holding(world);
+    let mut ui = Ui::open_on(cx, &fake);
+    ui.wait("a workspace", |ui| ui.view().selected.is_some() && ui.pane().is_some());
+    let showing = ui.view().selected.clone().unwrap();
+    let other = workspaces.into_iter().find(|w| *w != showing).unwrap();
+    let diff = ui.open_changes();
+    (fake, ui, diff, other)
+}
+
+/// [`changing_a_long_file`] on a fake hub, in the first of [`changed_on_a_fake_hub`]'s workspaces, with the other.
+fn a_long_file_on_a_fake_hub(cx: &mut TestAppContext) -> (FakeHub, Ui<'_>, Diff, WorkspaceId) {
+    let long = Vec::from_fn(40, |n| format!("line {}\n", n + 1)).concat();
+    let (fake, mut ui, diff, other) =
+        changed_on_a_fake_hub(cx, PATCH, &[("long.txt", long), ("a.txt", "one\n".to_string())]);
+    ui.open_diff_of(&diff, "long.txt");
+    (fake, ui, diff, other)
+}
 
 /// A workspace that changes line 30 of a file 40 lines long, which its base has, with the file's diff open.
 fn changing_a_long_file<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> (Ui<'a>, Diff) {
@@ -55,8 +128,7 @@ fn shown_as(ui: &Ui<'_>, diff: &Diff) -> DiffView {
 
 #[gpui_kit::test]
 fn the_lines_git_left_out_open_from_the_change_a_step_at_a_time(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let (mut ui, diff) = changing_a_long_file(cx, &stack);
+    let (_hub, mut ui, diff, _) = a_long_file_on_a_fake_hub(cx);
     assert!(ui.cx.read_entity(&diff.file, |f, _| f.has_read_the_base()), "the file as it was fills in the folds");
     assert!(ui.has(up_at_the_top()) && ui.has(down_at_the_end()));
 
@@ -123,12 +195,7 @@ fn what_was_opened_stays_open_when_the_diff_loads_again(cx: &mut TestAppContext)
 
 #[gpui_kit::test]
 fn what_was_opened_stays_open_while_another_file_shows_and_folds_once_the_tab_closes(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let (mut ui, diff) = changing_a_long_file(cx, &stack);
-    let worktree = ui.worktree(ui.view().selected.as_ref().unwrap());
-    std::fs::write(worktree.join("other.txt"), "other\n").unwrap();
-    ui.click("sidebar-tab-changes");
-    ui.wait("the other file", |ui| ui.cx.read_entity(&diff.review, |r, _| r.file("other.txt").is_some()));
+    let (_hub, mut ui, diff, _) = a_long_file_on_a_fake_hub(cx);
     ui.click(down_at_the_end());
 
     ui.open_diff_of(&diff, "other.txt");
@@ -142,8 +209,7 @@ fn what_was_opened_stays_open_while_another_file_shows_and_folds_once_the_tab_cl
 
 #[gpui_kit::test]
 fn the_view_chosen_shows_in_every_workspace(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let (mut ui, diff) = changing_a_long_file(cx, &stack);
+    let (_hub, mut ui, diff, second) = a_long_file_on_a_fake_hub(cx);
     assert_eq!(shown_as(&ui, &diff), DiffView::Unified);
 
     ui.click(DiffView::Split.id());
@@ -153,8 +219,8 @@ fn the_view_chosen_shows_in_every_workspace(cx: &mut TestAppContext) {
     assert_eq!(shown_as(&ui, &diff), DiffView::WholeFile);
     assert!(!ui.has(up_at_the_top()), "nothing folds in the whole file");
 
-    let second = ui.new_workspace();
-    std::fs::write(ui.worktree(&second).join("a.txt"), "one\ntwo\n").unwrap();
+    ui.click(SharedString::from(format!("workspace-{second}")));
+    ui.wait("the other workspace", |ui| ui.view().selected.as_ref() == Some(&second) && ui.pane().is_some());
     let other = ui.open_changes();
     ui.open_diff_of(&other, "a.txt");
     assert_eq!(shown_as(&ui, &other), DiffView::WholeFile, "a workspace opened since shows it too");
@@ -162,8 +228,7 @@ fn the_view_chosen_shows_in_every_workspace(cx: &mut TestAppContext) {
 
 #[gpui_kit::test]
 fn lines_dragged_across_are_copied_as_the_file_has_them(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let (mut ui, diff) = changing_a_long_file(cx, &stack);
+    let (_hub, mut ui, diff, _) = a_long_file_on_a_fake_hub(cx);
     // Just before the start of a line's code, in its numbers, since its button to add a comment is over the start.
     let start = |ui: &mut Ui<'_>, line: u32| {
         ui.frame();
@@ -194,15 +259,17 @@ fn lines_dragged_across_are_copied_as_the_file_has_them(cx: &mut TestAppContext)
 
 #[gpui_kit::test]
 fn a_long_line_scrolls_sideways_under_its_numbers(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
-    let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
-    let workspace = ui.new_workspace();
-    for file in ["wide.txt", "also-wide.txt"] {
-        std::fs::write(ui.worktree(&workspace).join(file), format!("short\n{}\n", "long ".repeat(200))).unwrap();
-    }
-    let diff = ui.open_changes();
+    // Far wider than the diff, by much more than the most it's scrolled, which is all this needs: a longer line would
+    // only cost time to lay out.
+    let long = "long ".repeat(60);
+    let added = |file: &str| {
+        format!(
+            "diff --git a/{file} b/{file}\nnew file mode 100644\nindex 0000000..4b5c6d7\n--- /dev/null\n+++ b/{file}\n\
+             @@ -0,0 +1,2 @@\n+short\n+{long}\n"
+        )
+    };
+    let patch = [added("also-wide.txt"), added("wide.txt")].concat();
+    let (_hub, mut ui, diff, _) = changed_on_a_fake_hub(cx, &patch, &[]);
     ui.open_diff_of(&diff, "wide.txt");
     let across = |ui: &Ui<'_>| ui.cx.read_entity(&diff.file, |f, _| f.scrolled_across());
     let button = |ui: &mut Ui<'_>| {

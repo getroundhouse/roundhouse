@@ -1,21 +1,32 @@
-//! Images a reply points to in the worktree.
+//! Images a reply points to in the worktree. The worker keeps a copy of each with the reply's record, so how the window
+//! draws and opens those is tested on a fake hub holding a made-up reply and its copies, with no worker or agent to
+//! wait for. Only a copy made at the time, and a reply drawn while it's written, need the real ones.
 
 #![cfg(test)]
 
 use std::io::Cursor;
 use std::path::Path;
 
+use client_core::fake_hub::World;
+use client_core::fake_hub::events::{finished_turn, taken, text_pointing, user_prompt};
 use gpui_kit::{AppContext as _, Pixels, TestAppContext, px};
-use protocol::event::{ContentBlock, EventBody};
+use protocol::attachment::{Attachment, MediaType};
+use protocol::event::{ContentBlock, EventBody, LinkedImage};
+use protocol::model::{AttachmentId, Seq, SessionStatus};
 
-use crate::support::{Gate, Stack, Ui};
+use crate::support::{FakeHub, Gate, Stack, Ui};
 
-/// Writes a PNG `height` pixels tall at `path`, so a reply that shows it is at least that tall.
-fn write_png(path: &Path, height: u32) {
+/// A PNG `height` pixels tall, so a reply that shows it is at least that tall.
+fn png(height: u32) -> Vec<u8> {
     let mut png = Cursor::new(Vec::new());
     let image = image::RgbaImage::from_pixel(4, height, image::Rgba([200, 30, 30, 255]));
     image.write_to(&mut png, image::ImageFormat::Png).unwrap();
-    std::fs::write(path, png.into_inner()).unwrap();
+    png.into_inner()
+}
+
+/// Writes a PNG `height` pixels tall at `path`.
+fn write_png(path: &Path, height: u32) {
+    std::fs::write(path, png(height)).unwrap();
 }
 
 /// How tall each reply that points to an image is drawn, in order.
@@ -35,6 +46,41 @@ fn replies(ui: &mut Ui<'_>) -> Vec<Pixels> {
     })
 }
 
+/// The window on a fake hub holding a chat whose one reply says `reply`, with the copy the hub kept of each image in
+/// `kept`, by where the reply says it is and how tall it is, as the worker names one for each place the reply points
+/// to it. The hub goes with the test, so it's returned to be kept.
+fn replied<'a>(cx: &'a mut TestAppContext, reply: &str, kept: &[(&str, u32)]) -> (FakeHub, Ui<'a>) {
+    let mut world = World::default();
+    let mut images = Vec::new();
+    for (address, height) in kept {
+        let data = png(*height);
+        let id = AttachmentId::from(format!("kept-{address}"));
+        let attachment = Attachment {
+            id: id.clone(),
+            name: (*address).to_string(),
+            media_type: MediaType::Png,
+            size_bytes: u64::try_from(data.len()).unwrap(),
+        };
+        let places = reply.matches(&format!("]({address})")).count();
+        images.extend(std::iter::repeat_n(LinkedImage { address: (*address).to_string(), attachment }, places));
+        world.attachments.insert(id, data);
+    }
+    let repo = world.repo("signals");
+    let workspace = world.workspace(&repo, "ledger");
+    let events = vec![
+        user_prompt("Show me."),
+        taken(Seq::new(1)),
+        text_pointing("shown", reply, images),
+        finished_turn(3, 0.01),
+    ];
+    world.chat(&workspace, SessionStatus::Idle, events);
+    let fake = FakeHub::holding(world);
+    let mut ui = Ui::open_on(cx, &fake);
+    ui.wait("the chat", |ui| ui.transcript().is_some());
+    (fake, ui)
+}
+
+/// The worker reads the file as the reply is recorded, so each reply keeps what it was then.
 #[gpui_kit::test]
 fn an_image_pointed_to_again_after_it_changed_shows_as_it_is_then(cx: &mut TestAppContext) {
     let stack = Stack::new();
@@ -62,17 +108,8 @@ fn an_image_pointed_to_again_after_it_changed_shows_as_it_is_then(cx: &mut TestA
 /// Each on a line of its own, with nothing else between them, as an agent shows a before and an after.
 #[gpui_kit::test]
 fn images_one_after_another_are_each_drawn_as_tall_as_they_are(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
-    let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
-    let workspace = ui.new_workspace();
-    for name in ["before.png", "after.png"] {
-        write_png(&ui.worktree(&workspace).join(name), 100);
-    }
-
-    ui.input("say:![Before](before.png)\n![After](after.png)");
-    ui.press("enter");
+    let (_hub, mut ui) =
+        replied(cx, "![Before](before.png)\n![After](after.png)", &[("before.png", 100), ("after.png", 100)]);
 
     ui.wait("both pictures, one under the other", |ui| replies(ui).first().is_some_and(|height| *height >= px(200.)));
 }
@@ -82,17 +119,11 @@ fn images_one_after_another_are_each_drawn_as_tall_as_they_are(cx: &mut TestAppC
 /// heading.
 #[gpui_kit::test]
 fn a_click_on_a_replys_image_opens_it_over_the_window(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = Ui::open_with_a_repository(cx, &stack);
-    let workspace = ui.new_workspace();
-    write_png(&ui.worktree(&workspace).join("shot.png"), 4);
     let ours = "![Alone](shot.png)\n\nIt's ![among words](shot.png) here";
     let the_kits =
         "[![a link](shot.png)](https://example.com) and [in ![a link's](shot.png) words](https://example.com)";
-
-    ui.input(&format!("say:{ours}, with {the_kits} there\n\n- ![In a list](shot.png)\n\n# ![In a heading](shot.png)"));
-    ui.press("enter");
-    ui.wait_idle_with("the turn to finish", |text| text.contains("In a heading"));
+    let reply = format!("{ours}, with {the_kits} there\n\n- ![In a list](shot.png)\n\n# ![In a heading](shot.png)");
+    let (_hub, mut ui) = replied(cx, &reply, &[("shot.png", 4)]);
     ui.wait("the reply's images, from the hub", |ui| ui.shown("linked-image/").len() >= 3);
 
     let images = ui.shown("linked-image/");
@@ -108,13 +139,7 @@ fn a_click_on_a_replys_image_opens_it_over_the_window(cx: &mut TestAppContext) {
 /// The kit still draws an image the transcript leaves to it, from the copy the hub kept.
 #[gpui_kit::test]
 fn an_image_thats_a_link_is_still_drawn_as_tall_as_it_is(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = Ui::open_with_a_repository(cx, &stack);
-    let workspace = ui.new_workspace();
-    write_png(&ui.worktree(&workspace).join("shot.png"), 100);
-
-    ui.input("say:[![A link](shot.png)](https://example.com)");
-    ui.press("enter");
+    let (_hub, mut ui) = replied(cx, "[![A link](shot.png)](https://example.com)", &[("shot.png", 100)]);
 
     ui.wait("the picture", |ui| replies(ui).first().is_some_and(|height| *height >= px(100.)));
     assert!(ui.shown("linked-image/").is_empty(), "and it isn't the transcript's to open");
@@ -123,31 +148,18 @@ fn an_image_thats_a_link_is_still_drawn_as_tall_as_it_is(cx: &mut TestAppContext
 /// The kit looks past a mark for what a paragraph holds, so one that's only an image in bold is an image alone.
 #[gpui_kit::test]
 fn an_image_alone_in_bold_is_drawn_as_tall_as_it_is_and_is_the_transcripts_to_open(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = Ui::open_with_a_repository(cx, &stack);
-    let workspace = ui.new_workspace();
-    write_png(&ui.worktree(&workspace).join("shot.png"), 100);
-
-    ui.input("say:**![In bold](shot.png)**");
-    ui.press("enter");
+    let (_hub, mut ui) = replied(cx, "**![In bold](shot.png)**", &[("shot.png", 100)]);
 
     ui.wait("the picture", |ui| replies(ui).first().is_some_and(|height| *height >= px(100.)));
     assert_eq!(ui.shown("linked-image/").len(), 1, "and it's the transcript's to open");
 }
 
-/// A reply over 4 KB is parsed on another thread, with what draws its images.
+/// A reply over 4 KB is parsed on another thread, with what draws its images, so it's only as long as that needs.
 #[gpui_kit::test]
 fn a_click_on_a_long_replys_image_opens_it_over_the_window(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = Ui::open_with_a_repository(cx, &stack);
-    let workspace = ui.new_workspace();
-    write_png(&ui.worktree(&workspace).join("shot.png"), 4);
     let reply = format!("{}Junctions last\n\n![Alone](shot.png)", "Timetables, sidings and points. ".repeat(140));
     assert!(reply.len() > 4 * 1024, "parsed on another thread: {} bytes", reply.len());
-
-    ui.paste_text(&format!("say:{reply}"));
-    ui.press("enter");
-    ui.wait_idle_with("the turn to finish", |text| text.contains("Junctions last"));
+    let (_hub, mut ui) = replied(cx, &reply, &[("shot.png", 4)]);
     ui.wait("the reply's image, from the hub", |ui| ui.shown("linked-image/").len() == 1);
 
     let image = ui.shown("linked-image/").remove(0);
