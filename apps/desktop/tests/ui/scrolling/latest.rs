@@ -44,7 +44,7 @@ fn the_button_slides_the_chat_down_to_the_latest_row(cx: &mut TestAppContext) {
 
     ui.click(button(&ui));
 
-    assert!(ui.disabled(button(&ui)), "it's on its way out");
+    assert!(ui.off(button(&ui)), "it's on its way out");
     assert!((1. - thumb(&ui) - away).abs() < f32::EPSILON, "nothing has moved yet");
     ui.play(SCROLL / 2);
     let left = (1. - thumb(&ui)) / away;

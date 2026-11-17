@@ -159,7 +159,7 @@ fn what_s_typed_is_found_as_it_s_typed_and_the_bar_says_when_nothing_is(cx: &mut
     ui.input("x");
     ui.cx.executor().advance_clock(PAUSE);
     ui.wait("no match", |ui| says(ui).as_deref() == Some("No matches"));
-    assert!(ui.disabled("find-next"), "with nothing to go to");
+    assert!(ui.off("find-next"), "with nothing to go to");
 }
 
 #[gpui_kit::test]

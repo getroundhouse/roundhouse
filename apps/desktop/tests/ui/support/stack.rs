@@ -224,12 +224,25 @@ impl<'a> Ui<'a> {
         self.frame();
     }
 
-    /// Whether the last frame drew it greyed out, so pressing it does nothing.
-    pub(crate) fn disabled(&mut self, id: impl Into<ElementId>) -> bool {
+    /// Whether the last frame drew it, and drew it so it can be pressed. Not of what it didn't draw, so a wait for a
+    /// button to come on doesn't end while it's missing.
+    pub(crate) fn on(&mut self, id: impl Into<ElementId>) -> bool {
+        self.drawn_off(id) == Some(false)
+    }
+
+    /// Whether the last frame drew it, and drew it greyed out, so pressing it does nothing. Not of what it didn't draw,
+    /// which isn't off but gone.
+    pub(crate) fn off(&mut self, id: impl Into<ElementId>) -> bool {
+        self.drawn_off(id) == Some(true)
+    }
+
+    /// Whether it's off, if the last frame drew it. The kit says only that an element is off, so one it doesn't say
+    /// that of is on.
+    fn drawn_off(&mut self, id: impl Into<ElementId>) -> Option<bool> {
         let id = id.into();
         self.frame();
-        let found = self.cx.update_window(self.handle, |_, window, _| window.try_find(id).and_then(|e| e.disabled()));
-        found.unwrap() == Some(true)
+        let found = self.cx.update_window(self.handle, |_, window, _| window.try_find(id).map(|e| e.disabled()));
+        found.unwrap().map(|off| off == Some(true))
     }
 
     /// Whether the last frame drew it where it can be seen and pressed.

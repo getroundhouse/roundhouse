@@ -94,7 +94,7 @@ fn a_new_title_is_asked_for_from_the_header_and_the_rows_menu(cx: &mut TestAppCo
     ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     let workspace = ui.new_workspace();
     let row = format!("workspace-{workspace}");
-    assert!(ui.disabled(SharedString::from("regenerate-title")), "nothing has been asked, so there's none to make");
+    assert!(ui.off(SharedString::from("regenerate-title")), "nothing has been asked, so there's none to make");
     ui.input("say:fix the login");
     ui.press("enter");
     ui.wait_idle_with("the answer", |text| text.contains("fix the login"));
@@ -106,7 +106,7 @@ fn a_new_title_is_asked_for_from_the_header_and_the_rows_menu(cx: &mut TestAppCo
         ui.view().error.as_deref().is_some_and(|error| error.starts_with("couldn't regenerate the title: "))
     });
     assert!(ui.shows_label(&row, "say:fix the login"));
-    assert!(!ui.disabled(SharedString::from("regenerate-title")), "and can be asked again");
+    assert!(ui.on(SharedString::from("regenerate-title")), "and can be asked again");
 
     ui.input("say:and test it titled:Fix and test the login");
     ui.press("enter");

@@ -54,7 +54,7 @@ fn a_sign_in_shows_its_code_while_it_waits_and_ends_signed_in_as_the_default(cx:
 
     ui.wait("the code", |ui| ui.has("git-code"));
     assert!(ui.has("git-open-address") && ui.has("git-cancel"));
-    assert!(ui.disabled("git-connect"), "while a panel is open there");
+    assert!(ui.off("git-connect"), "while a panel is open there");
     ui.wait("Done", |ui| ui.has("git-close"));
     let account = ui.view().records().github_accounts()[0].clone();
     assert_eq!(account.user.name.as_str(), "ada");
@@ -113,5 +113,5 @@ fn cancelling_a_sign_in_has_the_hub_stop_waiting_and_puts_its_panel_away(cx: &mu
     });
     ui.wait("the app to hear it", |ui| statuses(ui) == [GithubSignInStatus::Cancelled]);
     assert!(!ui.has("git-panel"), "one that ended shows only in the panel that showed it waiting");
-    assert!(!ui.disabled("git-connect"));
+    assert!(ui.on("git-connect"));
 }

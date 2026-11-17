@@ -84,7 +84,7 @@ fn on_windows_a_press_on_the_button_that_opens_the_menus_opens_them_and_stays_it
 fn on_windows_a_press_on_a_greyed_out_button_in_the_strip_stops_there(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = on_windows(cx, &stack);
-    assert!(ui.disabled("regenerate-title"), "a new workspace has no title to make another from");
+    assert!(ui.off("regenerate-title"), "a new workspace has no title to make another from");
     let on = center(&mut ui, "regenerate-title");
 
     let pressed = press(&mut ui, on);

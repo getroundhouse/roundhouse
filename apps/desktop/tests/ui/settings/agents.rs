@@ -28,7 +28,7 @@ pub(super) fn in_agents<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> Ui<'a>
 pub(super) fn to_agents(ui: &mut Ui<'_>) {
     open_settings(ui);
     ui.click("settings-page-agents");
-    ui.wait("Connect account to be on", |ui| ui.has("accounts-connect") && !ui.disabled("accounts-connect"));
+    ui.wait("Connect account to be on", |ui| ui.on("accounts-connect"));
 }
 
 /// The hub's record of the account `id`, as the app shows it.
@@ -94,7 +94,7 @@ fn a_login_connected_here_is_listed_under_added_and_its_token_is_the_hubs_alone(
 
     ui.click("accounts-connect");
     ui.input(TOKEN);
-    assert!(ui.disabled("accounts-panel-connect"), "it needs a name too");
+    assert!(ui.off("accounts-panel-connect"), "it needs a name too");
     ui.click("accounts-name");
     ui.input("Build machines");
     ui.click("accounts-panel-connect");
@@ -183,7 +183,7 @@ fn a_token_the_hub_refuses_says_why_and_is_gone_from_its_field(cx: &mut TestAppC
     ui.wait("the refusal", |ui| ui.has("accounts-refused"));
     assert!(ui.has("accounts-panel"), "it stays open, to paste the token again");
     assert_eq!(typed_where_the_cursor_is(&mut ui).as_deref(), Some(""), "the token's field has the cursor, empty");
-    assert!(ui.disabled("accounts-panel-connect"));
+    assert!(ui.off("accounts-panel-connect"));
     assert!(ui.view().records().accounts().next().is_none());
 }
 
