@@ -20,14 +20,7 @@ fn stand_in(pid_file: &Path) -> Stimulant {
 }
 
 async fn wait_for<T>(what: &str, mut found: impl FnMut() -> Option<T>) -> T {
-    let deadline = Instant::now() + TIMEOUT;
-    loop {
-        if let Some(found) = found() {
-            return found;
-        }
-        assert!(Instant::now() < deadline, "timed out waiting for {what}");
-        tokio::time::sleep(Duration::from_millis(10)).await;
-    }
+    waiting::task::until_ok(TIMEOUT, || found().ok_or_else(|| format!("timed out waiting for {what}"))).await
 }
 
 /// The stand-in a keeper runs, and whether there's work for it, as a test says.

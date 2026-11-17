@@ -15,7 +15,7 @@ use gpui_kit::{
 pub(crate) use process::testing::git;
 use protocol::model::{Effort, ModelName, PermissionMode, Seq};
 use std::path::PathBuf;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tempfile::TempDir;
 use transcript::Transcript;
 
@@ -85,15 +85,8 @@ impl Drop for Stack {
 
 /// Waits for something outside the app, such as a hub before the app has opened. [`Ui::wait`] is for what the app
 /// has to draw first.
-pub(crate) fn wait_until(what: &str, mut done: impl FnMut() -> bool) {
-    let deadline = Instant::now() + TIMEOUT;
-    // Soon at first, since most of what's waited for is a few milliseconds away, and then every 10.
-    let mut pause = Duration::from_millis(1);
-    while !done() {
-        assert!(Instant::now() < deadline, "timed out waiting for {what}");
-        std::thread::sleep(pause);
-        pause = (pause * 2).min(Duration::from_millis(10));
-    }
+pub(crate) fn wait_until(what: &str, done: impl FnMut() -> bool) {
+    waiting::thread::until(TIMEOUT, format!("timed out waiting for {what}"), done);
 }
 
 pub(crate) struct Ui<'a> {
@@ -166,12 +159,15 @@ impl<'a> Ui<'a> {
         self.seen_approval
     }
 
-    /// Runs the app until `done`, on real time, because a real hub is on the other end of the socket.
+    /// Runs the app until `done`, on real time, because a real hub is on the other end of the socket. One that times out
+    /// says what the window showed, such as an error a page drew.
+    #[track_caller]
     pub(crate) fn wait(&mut self, what: &str, mut done: impl FnMut(&mut Self) -> bool) {
-        wait_until(what, || {
-            self.frame();
-            done(self)
-        });
+        let frame_then = |ui: &mut Self| {
+            ui.frame();
+            done(ui)
+        };
+        waiting::thread::until_or_say(TIMEOUT, what, self, frame_then, Ui::texts_shown);
     }
 
     /// Waits until no call the app started is under way, then for the app to take their replies, so whatever a call

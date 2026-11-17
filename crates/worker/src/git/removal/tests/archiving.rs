@@ -3,7 +3,7 @@ use crate::git::tests::{new_repo, run};
 use crate::git::{prepare_workspace, restore_workspace, worktree_there};
 use process::Environment;
 use protocol::worker::{RemoveWorkspace, RepoSource};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 /// Long enough to delete a few files on a busy machine.
 const DELETE_TIMEOUT: Duration = Duration::from_secs(30);
@@ -100,11 +100,11 @@ impl Archived {
     /// Waits for what was moved aside to be deleted, so nothing is still deleting it once the test ends.
     pub(super) async fn wait_until_deleted(&self) {
         assert!(self.deleting().is_dir(), "it was moved aside");
-        let deadline = Instant::now() + DELETE_TIMEOUT;
-        while !self.waiting().is_empty() {
-            assert!(Instant::now() < deadline, "{:?} are still waiting to be deleted", self.waiting());
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        }
+        waiting::task::until_ok(DELETE_TIMEOUT, || {
+            let waiting = self.waiting();
+            if waiting.is_empty() { Ok(()) } else { Err(format!("{waiting:?} are still waiting to be deleted")) }
+        })
+        .await;
     }
 }
 

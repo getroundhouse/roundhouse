@@ -29,11 +29,10 @@ async fn abandoning_initialization_kills_the_process_group_and_removes_its_recor
     }
     assert!(!pid.is_running());
     // Killed with its group, the descendant still has its PID until something reaps it, so wait for it to go.
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
-    while process::testing::is_running(child) {
-        assert!(std::time::Instant::now() < deadline, "the descendant outlived its process group");
-        tokio::time::sleep(std::time::Duration::from_millis(25)).await;
-    }
+    waiting::task::until(std::time::Duration::from_secs(5), "the descendant outlived its process group", || {
+        !process::testing::is_running(child)
+    })
+    .await;
     assert!(!pid_path.exists());
 }
 

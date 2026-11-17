@@ -130,24 +130,18 @@ async fn account_reads_models_and_cancelling_kills_its_process_group() {
     };
     let call_room = room.path().to_owned();
     let call = tokio::spawn(async move { crate::antigravity::account(&hold_options, &call_room).await });
-    tokio::time::timeout(Duration::from_secs(10), async {
-        while !room.path().join("models-ready").exists() {
-            tokio::task::yield_now().await;
-        }
+    waiting::task::until(Duration::from_secs(10), "the models to be ready", || {
+        room.path().join("models-ready").exists()
     })
-    .await
-    .unwrap();
+    .await;
     let record = process::ProcessRecord::read(&pid_path).unwrap();
     let child: u32 = std::fs::read_to_string(room.path().join("descendant")).unwrap().trim().parse().unwrap();
     assert!(record.is_running());
     assert!(process::start_time(child).is_some());
     call.abort();
     let _ = call.await;
-    tokio::time::timeout(Duration::from_secs(10), async {
-        while pid_path.exists() || record.is_running() || process::start_time(child).is_some() {
-            tokio::time::sleep(Duration::from_millis(5)).await;
-        }
+    waiting::task::until(Duration::from_secs(10), "the account call's process and its descendant to go", || {
+        !pid_path.exists() && !record.is_running() && process::start_time(child).is_none()
     })
-    .await
-    .unwrap();
+    .await;
 }

@@ -34,13 +34,7 @@ async fn next(ended: &mut mpsc::UnboundedReceiver<Ended>) -> Ended {
 
 /// Waits until `done`, on the test's paused clock, which moves on while it does.
 async fn until(done: impl Fn() -> bool) {
-    tokio::time::timeout(Duration::from_secs(600), async {
-        while !done() {
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        }
-    })
-    .await
-    .unwrap();
+    waiting::task::until(Duration::from_secs(600), "timed out waiting for the jobs", done).await;
 }
 
 #[tokio::test(start_paused = true)]
@@ -75,6 +69,10 @@ async fn work_still_running_at_its_limit_is_stopped_where_it_said_it_was_and_its
 }
 
 #[tokio::test(start_paused = true)]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "tokio's clock is paused, so the work sleeping moves it past the work's limit"
+)]
 async fn what_a_job_runs_uncut_goes_on_to_its_end_and_its_after_step_runs_after_it() {
     let jobs = Jobs::new();
     let (ends, mut ended) = mpsc::unbounded_channel();
@@ -208,6 +206,10 @@ async fn an_after_step_still_running_at_its_own_limit_is_stopped_and_frees_the_k
 
 /// Called off as it waits, and then as what it runs uncut runs, which goes on to its end before the after-step.
 #[tokio::test(start_paused = true)]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "tokio's clock is paused, so the work sleeping moves it on while the job is called off"
+)]
 async fn a_job_called_off_ends_where_it_is_and_its_after_step_runs_once_what_it_runs_uncut_has_ended() {
     let jobs = Jobs::new();
     let (ends, mut ended) = mpsc::unbounded_channel();

@@ -71,7 +71,7 @@ pub fn instance_claimed(state_dir: &Path) -> io::Result<bool> {
 
 #[cfg(test)]
 mod tests {
-    use std::time::{Duration, Instant};
+    use std::time::Duration;
 
     use super::*;
 
@@ -79,13 +79,14 @@ mod tests {
     /// thread is starting holds a copy of every open file until it has started, so a claim let go a moment ago can
     /// still read as taken. The worker's other tests start processes all the time.
     fn claim_once_let_go(state_dir: &Path) -> Result<InstanceClaim, ClaimError> {
-        let deadline = Instant::now() + Duration::from_secs(5);
-        loop {
-            match claim_instance(state_dir) {
-                Err(ClaimError::Taken(_)) if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(5)),
-                claimed => return claimed,
-            }
-        }
+        let mut claimed = None;
+        waiting::thread::up_to(Duration::from_secs(5), || {
+            let tried = claim_instance(state_dir);
+            let taken = matches!(tried, Err(ClaimError::Taken(_)));
+            claimed = Some(tried);
+            !taken
+        });
+        claimed.expect("a wait looks at least once")
     }
 
     #[test]
@@ -113,11 +114,9 @@ mod tests {
         assert!(instance_claimed(dir.path()).unwrap());
         assert!(instance_claimed(dir.path()).unwrap(), "asking didn't let go of it");
         drop(claim);
-        let deadline = Instant::now() + Duration::from_secs(5);
-        while instance_claimed(dir.path()).unwrap() {
-            assert!(Instant::now() < deadline, "still claimed once let go");
-            std::thread::sleep(Duration::from_millis(5));
-        }
+        waiting::thread::until(Duration::from_secs(5), "still claimed once let go", || {
+            !instance_claimed(dir.path()).unwrap()
+        });
         // Asking holds the lock for a moment, which a process another test is starting can hold on to a moment longer.
         assert!(claim_once_let_go(dir.path()).is_ok(), "asking didn't keep it either");
     }

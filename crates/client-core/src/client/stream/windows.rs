@@ -36,6 +36,10 @@ struct Pipe {
 
 impl Stream {
     /// The hub may only learn who this is, not act as them, in case something else took the pipe's name first.
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "the pace connecting tries again at while every instance of the pipe has a client, until the hub makes the next"
+    )]
     pub(in crate::client) fn connect(path: &Path) -> io::Result<Self> {
         let deadline = Instant::now() + BUSY_TIMEOUT;
         let file = loop {

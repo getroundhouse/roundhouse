@@ -2,7 +2,7 @@
 #![cfg(unix)]
 
 use std::path::Path;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use protocol::client::{ApiError, ClientRequest, ClientResponse, ErrorCode, ReplyOutcome, admin};
 use protocol::model::{AgentDescription, AgentKind, Effort, ModelName, PermissionMode, Rev, SessionSettings};
@@ -53,11 +53,7 @@ fn following(dir: &Path, agents: ReplyOutcome) -> RecordsFeed {
         Does::Answers(Box::new(answer))
     });
     let feed = RecordsFeed::start(&client);
-    let deadline = Instant::now() + TIMEOUT;
-    while !feed.connected() {
-        assert!(Instant::now() < deadline, "the copy never caught up");
-        std::thread::sleep(Duration::from_millis(10));
-    }
+    waiting::thread::until(TIMEOUT, "the copy never caught up", || feed.connected());
     feed
 }
 

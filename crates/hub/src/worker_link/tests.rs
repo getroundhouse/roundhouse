@@ -279,10 +279,6 @@ fn answer_to_file(dir: &Path) -> String {
 /// The answer a script with [`answer_to_file`] in `dir` was given.
 async fn answered(dir: &Path) -> AskAnswer {
     let answered = dir.join("answered");
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
-    while !answered.exists() {
-        assert!(tokio::time::Instant::now() < deadline, "no answer came");
-        tokio::time::sleep(Duration::from_millis(10)).await;
-    }
+    waiting::task::until(Duration::from_secs(10), "no answer came", || answered.exists()).await;
     frame::decode(&std::fs::read(&answered).unwrap()).unwrap()
 }

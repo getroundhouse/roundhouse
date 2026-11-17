@@ -244,9 +244,7 @@ fn the_login_found_is_the_machines_own_while_an_accounts_credential_is_set() {
 }
 
 fn wait_for(path: &Path) {
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
-    while !path.exists() {
-        assert!(std::time::Instant::now() < deadline, "{} never came", path.display());
-        std::thread::sleep(std::time::Duration::from_millis(10));
-    }
+    waiting::thread::until(std::time::Duration::from_secs(10), format!("{} never came", path.display()), || {
+        path.exists()
+    });
 }

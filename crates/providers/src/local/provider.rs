@@ -83,6 +83,10 @@ async fn running_worker(dir: &Path) -> Option<ProcessRecord> {
 }
 
 /// Whether the process exits by itself within `grace`.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the pace a process that's been asked to stop is looked at again until it exits"
+)]
 async fn exits_within(process: &ProcessRecord, grace: Duration) -> bool {
     let deadline = tokio::time::Instant::now() + grace;
     while still_running(process).await {

@@ -12,5 +12,5 @@ pub(crate) use finding::{FoundBothWays, copied_whole, found_both_ways};
 use opening::open;
 
 mod driver;
-use driver::{BETWEEN_PICTURES, Driver, TIMEOUT, selected_pane};
+use driver::{Driver, TIMEOUT, selected_pane};
 pub(crate) use driver::{Picture, take};

@@ -20,9 +20,10 @@ fn a_new_workspace_starts_with_one_chat(cx: &mut TestAppContext) {
     ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     // The first workspace is selected as soon as it exists, which is before its chat does.
     let workspace = ui.new_workspace();
+    // Nothing says the app has done with opening chats for it, so this gives it a while to open a second.
     for _ in 0..30 {
         ui.frame();
-        std::thread::sleep(Duration::from_millis(10));
+        waiting::thread::for_what_mustnt_happen(Duration::from_millis(10));
     }
     assert_eq!(ui.open_chats().len(), 1);
     assert_eq!(client.session_list(&workspace).unwrap().len(), 1);

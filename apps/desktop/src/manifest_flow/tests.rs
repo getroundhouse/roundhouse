@@ -1,7 +1,7 @@
 //! The listener alone, on real sockets on `127.0.0.1`, asked as a browser and GitHub would ask it.
 
 use std::net::{SocketAddr, TcpStream};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use protocol::client::github_apps::GithubManifestCode;
 use serde_json::json;
@@ -36,11 +36,7 @@ fn address_of(url: &str) -> SocketAddr {
 
 /// Waits until nothing listens at `address` any more.
 fn until_refused(address: SocketAddr) {
-    let deadline = Instant::now() + SOON;
-    while TcpStream::connect(address).is_ok() {
-        assert!(Instant::now() < deadline, "still listening at {address}");
-        std::thread::sleep(Duration::from_millis(5));
-    }
+    waiting::thread::until(SOON, format!("still listening at {address}"), || TcpStream::connect(address).is_err());
 }
 
 #[test]

@@ -58,6 +58,10 @@ fn unserved(e: &io::Error) -> bool {
     matches!(e.kind(), io::ErrorKind::NotFound | io::ErrorKind::ConnectionRefused)
 }
 
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the pace connecting looks again at while the worker it started begins to listen"
+)]
 fn connect_within(socket: &Path, wait: Duration) -> io::Result<UnixStream> {
     let deadline = Instant::now() + wait;
     loop {

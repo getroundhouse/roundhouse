@@ -101,13 +101,7 @@ const READS_TWO_LINES: &str = "read first; read second; printf '%s\\n%s\\n' \"$f
 /// The two lines [`READS_TWO_LINES`] read.
 async fn two_lines_read(dir: &Path) -> Vec<serde_json::Value> {
     let read = dir.join("lines");
-    timeout(Duration::from_secs(10), async {
-        while !read.exists() {
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        }
-    })
-    .await
-    .expect("the script to read two lines");
+    waiting::task::until(Duration::from_secs(10), "the script to read two lines", || read.exists()).await;
     let text = std::fs::read_to_string(&read).unwrap();
     text.lines().map(|line| serde_json::from_str(line).unwrap()).collect()
 }

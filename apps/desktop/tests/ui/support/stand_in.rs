@@ -4,7 +4,6 @@
 
 use std::path::PathBuf;
 use std::process::{Child, Stdio};
-use std::time::{Duration, Instant};
 
 use super::{Stack, TIMEOUT, binaries, hub_environment};
 
@@ -62,11 +61,9 @@ impl Stack {
             .spawn()
             .unwrap();
         let hub = StandInHub(hub, self.hub.paths.data_dir.clone());
-        let deadline = Instant::now() + TIMEOUT;
-        while client_core::HubAdmin::connect(&self.hub.paths.socket).is_err() {
-            assert!(Instant::now() < deadline, "timed out waiting for it to listen");
-            std::thread::sleep(Duration::from_millis(10));
-        }
+        waiting::thread::until(TIMEOUT, "timed out waiting for it to listen", || {
+            client_core::HubAdmin::connect(&self.hub.paths.socket).is_ok()
+        });
         hub
     }
 }

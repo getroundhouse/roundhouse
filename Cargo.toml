@@ -19,6 +19,7 @@ members = [
     "crates/dictation-ui",
     "crates/fetching",
     "crates/update-feed",
+    "crates/waiting",
     "tools/policy",
     "tools/guide",
     "tools/kit-sync",
@@ -47,6 +48,7 @@ default-members = [
     "crates/dictation",
     "crates/fetching",
     "crates/update-feed",
+    "crates/waiting",
     "tools/policy",
     "tools/guide",
     "tools/kit-sync",
@@ -83,6 +85,7 @@ dictation = { path = "crates/dictation" }
 dictation-ui = { path = "crates/dictation-ui" }
 fetching = { path = "crates/fetching" }
 update-feed = { path = "crates/update-feed" }
+waiting = { path = "crates/waiting" }
 desktop = { path = "apps/desktop" }
 kit-sync = { path = "tools/kit-sync" }
 

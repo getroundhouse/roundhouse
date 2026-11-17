@@ -5,7 +5,7 @@ use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{AppContext as _, ElementId, Pixels, ScrollDelta, SharedString, TestAppContext, point, px};
 use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{Seq, SessionId, SessionStatus, SettledAt};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 /// Longer than the list waits to open or close.
 const LONGER_THAN_THE_LIST_WAITS: Duration = Duration::from_secs(1);
@@ -235,13 +235,10 @@ fn a_compaction_recorded_while_the_chat_shows_joins_its_outline(cx: &mut TestApp
 pub(super) fn compact(stack: &Stack, session: &SessionId) {
     let client = stack.client();
     client.session_compact(session, None).unwrap();
-    let deadline = Instant::now() + TIMEOUT;
-    while client.session_compaction_list(session).unwrap().is_empty()
-        || client.session_get(session).unwrap().status != SessionStatus::Idle
-    {
-        assert!(Instant::now() < deadline, "the agent never compacted");
-        std::thread::sleep(Duration::from_millis(20));
-    }
+    waiting::thread::until(TIMEOUT, "the agent never compacted", || {
+        !client.session_compaction_list(session).unwrap().is_empty()
+            && client.session_get(session).unwrap().status == SessionStatus::Idle
+    });
 }
 
 pub(super) fn open_the_list(ui: &mut Ui<'_>) {

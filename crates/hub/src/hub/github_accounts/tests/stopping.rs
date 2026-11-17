@@ -45,6 +45,7 @@ async fn a_stop_while_github_renews_a_sign_in_waits_for_its_answer_and_keeps_wha
 /// A sign-in whose token, and what renews it, both ended days ago, which the first check has need signing in again
 /// without asking GitHub, so the hub stops as it waits for the next check.
 #[tokio::test(start_paused = true)]
+#[expect(clippy::disallowed_methods, reason = "tokio's clock is paused, so sleeping moves it to between two checks")]
 async fn a_stop_between_checks_waits_for_no_check() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_in(dir.path());

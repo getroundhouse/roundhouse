@@ -6,7 +6,7 @@ use std::ops::ControlFlow;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use fetching::serving::{Event, Reply, serve};
 use fetching::{CheckError, Expected, FetchError, Fetched, Fetcher, FolderLock};
@@ -270,11 +270,7 @@ fn a_fetch_stopped_while_hashing_what_was_there_asks_for_nothing_and_keeps_it() 
 
 /// Waits until `done`, failing after a while.
 fn wait_for(what: &str, done: impl Fn() -> bool) {
-    let deadline = Instant::now() + Duration::from_secs(10);
-    while !done() {
-        assert!(Instant::now() < deadline, "timed out waiting for {what}");
-        std::thread::sleep(Duration::from_millis(5));
-    }
+    waiting::thread::until(Duration::from_secs(10), format!("timed out waiting for {what}"), done);
 }
 
 /// A fetch of `url` into `dir`'s `model/weights.bin` on a thread of its own, holding `dir`'s lock, until it ends or

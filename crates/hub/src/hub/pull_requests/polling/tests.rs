@@ -26,12 +26,7 @@ type Asked = Arc<Mutex<Vec<Instant>>>;
 
 /// Waits until `done`, failing rather than hanging if it never is.
 async fn until(what: &str, done: impl Fn() -> bool) {
-    let waited = tokio::time::timeout(Duration::from_mins(60), async {
-        while !done() {
-            tokio::time::sleep(Duration::from_millis(100)).await;
-        }
-    });
-    waited.await.unwrap_or_else(|_| panic!("{what} never happened"));
+    waiting::task::until(Duration::from_mins(60), format!("{what} never happened"), done).await;
 }
 
 fn v() -> WorkspaceId {

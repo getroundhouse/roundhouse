@@ -1,7 +1,7 @@
 //! What the pages' tests against a stand-in hub share: a window to act in, and a wait for what a page waits on, which
 //! gives up within CI's limit on a test.
 
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use gpui_kit::{Context, IntoElement, Render, TestAppContext, Window};
 
@@ -19,11 +19,6 @@ impl Render for Blank {
 }
 
 /// Runs what the page waits on until `done`, or fails after [`SOON`].
-pub(super) fn until(cx: &mut TestAppContext, what: &str, mut done: impl FnMut(&mut TestAppContext) -> bool) {
-    let deadline = Instant::now() + SOON;
-    while !done(cx) {
-        assert!(Instant::now() < deadline, "timed out waiting for {what}");
-        cx.run_until_parked();
-        std::thread::sleep(Duration::from_millis(10));
-    }
+pub(super) fn until(cx: &mut TestAppContext, what: &str, done: impl FnMut(&mut TestAppContext) -> bool) {
+    crate::executor_waits::until(cx, SOON, format!("timed out waiting for {what}"), done);
 }

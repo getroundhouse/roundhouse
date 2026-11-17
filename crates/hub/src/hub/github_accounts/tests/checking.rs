@@ -124,6 +124,10 @@ async fn a_sign_in_slept_past_its_tokens_end_is_due_at_the_next_check_and_its_de
 /// A check whose renewals GitHub is slow to answer, for three checks' time, so no check finds a sign-in due while it's
 /// being renewed, and none is renewed twice at once.
 #[tokio::test(start_paused = true)]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "tokio's clock is paused, so sleeping moves it past the checks a check running long misses"
+)]
 async fn a_check_starts_only_once_the_last_has_finished_and_those_missed_meanwhile_arent_caught_up_on() {
     let (started, mut starts) = mpsc::unbounded_channel();
     let finishing = Arc::new(Semaphore::new(0));

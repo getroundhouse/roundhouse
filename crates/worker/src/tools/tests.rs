@@ -22,11 +22,10 @@ async fn free_port() -> u16 {
 /// on a Mac a socket is marked not to be inherited only a moment after it's made, and then the port answers until that
 /// process exits.
 async fn until_nothing_answers(port: u16) {
-    let deadline = std::time::Instant::now() + Duration::from_secs(10);
-    while answered(port).await {
-        assert!(std::time::Instant::now() < deadline, "something went on answering on {port}");
-        tokio::time::sleep(Duration::from_millis(10)).await;
-    }
+    waiting::task::until_ok_async(Duration::from_secs(10), || async move {
+        if answered(port).await { Err(format!("something went on answering on {port}")) } else { Ok(()) }
+    })
+    .await;
 }
 
 #[tokio::test]

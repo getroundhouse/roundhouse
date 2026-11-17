@@ -61,14 +61,9 @@ pub(super) fn files_in(dir: &Path) -> Vec<String> {
 }
 
 fn wait_for<T>(what: &str, mut found: impl FnMut() -> Option<T>) -> T {
-    let deadline = Instant::now() + Duration::from_secs(10);
-    loop {
-        if let Some(found) = found() {
-            return found;
-        }
-        assert!(Instant::now() < deadline, "timed out waiting for {what}");
-        std::thread::sleep(Duration::from_millis(10));
-    }
+    waiting::thread::until_ok(Duration::from_secs(10), || {
+        found().ok_or_else(|| format!("timed out waiting for {what}"))
+    })
 }
 
 /// What [`SAYS_WHERE_IT_RAN`] wrote, once it has.

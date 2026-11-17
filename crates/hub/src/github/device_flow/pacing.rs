@@ -29,6 +29,10 @@ pub(super) enum Asked {
 /// doesn't answer in time, is asked again. No ask starts once the code has ended, but one started just before can wait
 /// out its limit, so it ends at the latest [`ASK_WITHIN`](super::super::ASK_WITHIN) after the code does. Dropping it
 /// stops asking.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the interval GitHub has the hub leave between asks after a sign-in's token"
+)]
 pub(super) async fn paced<F>(interval: Duration, least: Duration, ends: Instant, mut ask: impl FnMut() -> F) -> Approval
 where
     F: Future<Output = Result<Asked, ApiError>>,

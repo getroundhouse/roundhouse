@@ -140,6 +140,10 @@ pub(super) async fn answered(port: u16) -> bool {
     !matches!(tokio::time::timeout(PROBE_TIMEOUT, connecting).await, Ok(Err(_)))
 }
 
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the pause after a connection that couldn't be taken, for what it needed to come free"
+)]
 async fn accept(listener: TcpListener, tools: Arc<Tools>, port: u16) {
     // Dropped when serving stops, which ends every connection with it.
     let mut connections = JoinSet::new();

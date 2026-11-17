@@ -40,12 +40,9 @@ fn app_keeping(
 
 /// Waits for the update a quit would install to be `version`, and checks the card says the same.
 fn ready_to_be(version: Option<&str>, cx: &mut TestAppContext) {
-    let deadline = Instant::now() + LOOK_TIMEOUT;
-    while cx.read(|cx| installs(cx).map(str::to_string)).as_deref() != version {
-        assert!(Instant::now() < deadline, "{version:?} never got ready");
-        cx.run_until_parked();
-        std::thread::sleep(Duration::from_millis(10));
-    }
+    crate::executor_waits::until(cx, LOOK_TIMEOUT, format!("{version:?} never got ready"), |cx| {
+        cx.read(|cx| installs(cx).map(str::to_string)).as_deref() == version
+    });
     assert_eq!(cx.read(|cx| ready(cx).map(str::to_string)).as_deref(), version, "what the card says");
 }
 
@@ -56,12 +53,7 @@ fn check(cx: &mut TestAppContext) {
 }
 
 fn answered_by_the_look(cx: &mut TestAppContext) {
-    let deadline = Instant::now() + LOOK_TIMEOUT;
-    while cx.read(checking) {
-        assert!(Instant::now() < deadline, "no answer");
-        cx.run_until_parked();
-        std::thread::sleep(Duration::from_millis(10));
-    }
+    crate::executor_waits::until(cx, LOOK_TIMEOUT, "no answer", |cx| !cx.read(checking));
     cx.run_until_parked();
     assert!(!cx.has_pending_prompt(), "the sidebar answers, never an alert");
 }
@@ -160,11 +152,7 @@ fn restarting_to_update_has_velopack_install_it_and_open_the_app_again(cx: &mut 
 
     cx.update(restart_to_update);
 
-    let deadline = Instant::now() + LOOK_TIMEOUT;
-    while !noted.exists() {
-        assert!(Instant::now() < deadline, "the updater wasn't started");
-        std::thread::sleep(Duration::from_millis(10));
-    }
+    waiting::thread::until(LOOK_TIMEOUT, "the updater wasn't started", || noted.exists());
     let asked = std::fs::read_to_string(&noted).unwrap();
     assert!(asked.starts_with("apply "), "{asked}");
     assert!(asked.contains(&format!("--waitPid {}", std::process::id())), "{asked}");
@@ -238,11 +226,9 @@ fn workers_to_keep_that_change_during_a_look_are_looked_for_again_at_once(cx: &m
         &pair,
     );
     let _state = app_keeping(&server.base, public(&pair), &installed, WorkersToKeep::oldest_at(Some(3)), cx);
-    let deadline = Instant::now() + LOOK_TIMEOUT;
-    while !server.asked().contains(&package_name("0.1.6")) {
-        assert!(Instant::now() < deadline, "the first look never downloaded 0.1.6");
-        std::thread::sleep(Duration::from_millis(10));
-    }
+    waiting::thread::until(LOOK_TIMEOUT, "the first look never downloaded 0.1.6", || {
+        server.asked().contains(&package_name("0.1.6"))
+    });
 
     cx.update(|cx| keep_workers(Some(4), cx));
     release.now();

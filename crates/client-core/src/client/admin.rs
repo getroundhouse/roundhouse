@@ -43,6 +43,10 @@ fn wait_for_exit(client: &Client) -> Result<()> {
 }
 
 /// Whether the hub this client asked to go has exited within `wait`, which closes the connection.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the pace a client looks again whether the hub it asked to stop has closed the connection"
+)]
 fn exited_within(client: &Client, wait: Duration) -> bool {
     let deadline = Instant::now() + wait;
     while !client.is_disconnected() {

@@ -28,7 +28,7 @@ use std::time::{Duration, Instant};
 pub(super) const TIMEOUT: Duration = Duration::from_secs(20);
 /// How many pictures in a row have to match before a screen counts as finished drawing.
 const SAME_IN_A_ROW: usize = 3;
-pub(super) const BETWEEN_PICTURES: Duration = Duration::from_millis(50);
+const BETWEEN_PICTURES: Duration = Duration::from_millis(50);
 /// A tooltip, or the update card's details, shows once the pointer has rested on it for half a second.
 const LONGER_THAN_A_TOOLTIP_WAITS: Duration = Duration::from_secs(1);
 /// Somewhere to move the pointer that has no hover of its own: the version, at the bottom of the sidebar. It isn't
@@ -303,7 +303,8 @@ impl Driver {
         let deadline = Instant::now() + TIMEOUT;
         let (mut last, mut same) = (self.picture(), 1);
         while same < SAME_IN_A_ROW && Instant::now() < deadline {
-            std::thread::sleep(BETWEEN_PICTURES);
+            // What mustn't happen is the screen changing between pictures.
+            waiting::thread::for_what_mustnt_happen(BETWEEN_PICTURES);
             let next = self.picture();
             same = if next == last { same + 1 } else { 1 };
             last = next;
@@ -325,15 +326,10 @@ impl Driver {
 
     /// Draws until `done`, and fails once the time's up.
     pub(super) fn until(&mut self, what: &str, mut done: impl FnMut(&mut Self) -> bool) {
-        let deadline = Instant::now() + TIMEOUT;
-        loop {
+        waiting::thread::until(TIMEOUT, format!("timed out waiting for {what}"), || {
             self.frame();
-            if done(self) {
-                return;
-            }
-            assert!(Instant::now() < deadline, "timed out waiting for {what}");
-            std::thread::sleep(Duration::from_millis(10));
-        }
+            done(self)
+        });
     }
 
     /// Rests the pointer on `on`, and waits until the window draws `shows`, such as its tooltip.

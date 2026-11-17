@@ -134,11 +134,11 @@ mod tests {
         signal_group(leader.id(), Signal::Kill);
 
         assert_eq!(leader.wait().unwrap().signal(), Some(libc::SIGKILL));
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
-        while start_time(sleeper).is_some() {
-            assert!(std::time::Instant::now() < deadline, "the child of the group leader is still running");
-            std::thread::sleep(std::time::Duration::from_millis(10));
-        }
+        waiting::thread::until(
+            std::time::Duration::from_secs(5),
+            "the child of the group leader is still running",
+            || start_time(sleeper).is_none(),
+        );
     }
 
     #[test]

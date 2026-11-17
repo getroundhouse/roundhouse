@@ -241,13 +241,7 @@ while [ $# -gt 0 ] && [ "$1" != --mcp-config ]; do shift; done
 /// The path a CLI running [`KEEPS_ITS_MCP_CONFIG`] in `dir` was given, and what the file said, once it has written them.
 async fn given(dir: &Path) -> (String, String) {
     let given = dir.join("given");
-    timeout(Duration::from_secs(10), async {
-        while !given.exists() {
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        }
-    })
-    .await
-    .expect("the CLI to start");
+    waiting::task::until(Duration::from_secs(10), "the CLI to start", || given.exists()).await;
     let given = std::fs::read_to_string(given).unwrap();
     let (path, told) = given.split_once('\n').unwrap();
     (path.to_string(), told.to_string())

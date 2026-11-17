@@ -41,9 +41,12 @@ async fn github(device: &'static str, polls: Vec<Answer>) -> StandIn {
     .await
 }
 
+/// How long what's waited for has to come, so a test fails rather than hangs.
+const SOON: Duration = Duration::from_secs(10);
+
 /// What `waited` comes to, failing rather than hanging when it never comes.
 async fn soon<T>(what: &str, waited: impl Future<Output = T>) -> T {
-    tokio::time::timeout(Duration::from_secs(10), waited).await.unwrap_or_else(|_| panic!("{what} never came"))
+    tokio::time::timeout(SOON, waited).await.unwrap_or_else(|_| panic!("{what} never came"))
 }
 
 /// The next notice of a sign-in, or its removal, passing over the rest.
@@ -71,12 +74,7 @@ async fn next_ended(feed: &mut broadcast::Receiver<HubNotice>) -> protocol::mode
 
 /// Once no sign-in's job is running.
 async fn until_no_job_runs(hub: &Hub) {
-    soon("the end of every sign-in's job", async {
-        while !hub.sign_ins.busy().is_empty() {
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        }
-    })
-    .await;
+    ::waiting::task::until(SOON, "the end of every sign-in's job never came", || hub.sign_ins.busy().is_empty()).await;
 }
 
 #[tokio::test]
@@ -208,10 +206,8 @@ async fn a_github_that_never_answers_one_sign_in_holds_up_only_that_one() {
 
     assert_eq!(ended.id.as_str(), "answered");
     assert!(matches!(ended.status, GithubSignInStatus::Approved { .. }), "{ended:?}");
-    soon("the answered one's job ending", async {
-        while hub.sign_ins.busy() != [GithubSignInId::from("stuck")] {
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        }
+    ::waiting::task::until(SOON, "the answered one's job ending never came", || {
+        hub.sign_ins.busy() == [GithubSignInId::from("stuck")]
     })
     .await;
     hub.stop_jobs();

@@ -17,6 +17,7 @@ use std::time::Duration;
 
 use serde_json::{Value, json};
 
+#[expect(clippy::disallowed_methods, reason = "the pace a held title call looks again whether the test has let it go")]
 pub(crate) fn answer(state: &Path) {
     let message = prompt_line();
     let prompt = crate::prompt::read_prompt(&message["message"]["content"]);

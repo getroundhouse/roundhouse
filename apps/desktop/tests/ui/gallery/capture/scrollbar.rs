@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 use gpui_kit::base::ScrollbarHandle as _;
 use gpui_kit::{EntityId, Pixels, px};
 
-use super::{BETWEEN_PICTURES, Driver, Picture, TIMEOUT, selected_pane};
+use super::{Driver, Picture, TIMEOUT, selected_pane};
 use crate::gallery::frame;
 use crate::gallery::steps::Screen;
 
@@ -36,12 +36,10 @@ impl Driver {
         if !shows.unwrap() {
             return picture;
         }
-        let deadline = Instant::now() + TIMEOUT;
-        while self.chat_scrolled_lately() {
-            assert!(Instant::now() < deadline, "the chat kept scrolling, so its scrollbar never faded");
-            std::thread::sleep(BETWEEN_PICTURES);
+        waiting::thread::until(TIMEOUT, "the chat kept scrolling, so its scrollbar never faded", || {
             self.frame();
-        }
+            !self.chat_scrolled_lately()
+        });
         self.settle()
     }
 

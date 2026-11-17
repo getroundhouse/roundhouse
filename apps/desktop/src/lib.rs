@@ -13,6 +13,8 @@ pub mod changes;
 pub mod checkout;
 mod composing;
 pub mod dictating;
+#[cfg(test)]
+mod executor_waits;
 mod failed;
 pub mod file_diff;
 mod file_header;

@@ -66,16 +66,13 @@ async fn a_branch_moving_reads_again_no_sooner_than_an_agent_asking_would() {
     let moved_at = tokio::time::Instant::now();
 
     hub.read_pull_request_after_move(&"w".into(), link, When::Always);
-    let mut title = None;
-    for _ in 0..600 {
-        title = hub.workspace(&"w".into()).await.unwrap().known_pull_request().map(|pr| pr.title.clone());
-        if title.as_deref() == Some("Pushed") {
-            break;
-        }
-        tokio::time::sleep(Duration::from_millis(100)).await;
-    }
+    let hub = &hub;
+    waiting::task::until_ok_async(Duration::from_mins(1), || async move {
+        let title = hub.workspace(&"w".into()).await.unwrap().known_pull_request().map(|pr| pr.title.clone());
+        if title.as_deref() == Some("Pushed") { Ok(()) } else { Err(format!("read again, but it says {title:?}")) }
+    })
+    .await;
 
-    assert_eq!(title.as_deref(), Some("Pushed"), "read again");
     assert!(moved_at.elapsed() >= hub.timers.agent_spacing, "after {:?}", moved_at.elapsed());
 }
 

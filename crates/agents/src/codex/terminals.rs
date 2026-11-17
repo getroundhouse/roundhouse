@@ -4,6 +4,10 @@ use crate::AgentError;
 use serde_json::json;
 use std::time::Duration;
 
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the pace a cancelled turn's commands are looked at again until they've gone"
+)]
 pub(super) async fn stop(shared: &Shared, thread: Option<&ThreadId>) -> Result<(), AgentError> {
     let mut terminals: Vec<_> = shared.state.lock().work(None).terminals.values().cloned().collect();
     terminals.sort();

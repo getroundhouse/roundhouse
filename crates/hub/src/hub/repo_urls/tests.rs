@@ -138,11 +138,7 @@ async fn adding_a_checkout_has_a_worker_on_this_machine_read_its_address_at_once
     let added = hub.repo_add(checkout.clone()).await.unwrap();
     let said = (told(&mut feed).await, told(&mut feed).await);
     let again = hub.repo_add(checkout.clone()).await.unwrap();
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
-    while asked.lock().len() < 2 {
-        assert!(tokio::time::Instant::now() < deadline, "the worker wasn't asked again");
-        tokio::time::sleep(Duration::from_millis(10)).await;
-    }
+    waiting::task::until(Duration::from_secs(5), "the worker wasn't asked again", || asked.lock().len() >= 2).await;
 
     assert_eq!(added.origin, RepoOrigin::Checkout { path: checkout.clone() });
     assert_eq!(said.0, added, "first as it's added");

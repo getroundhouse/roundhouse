@@ -103,6 +103,10 @@ fn reply(writer: &Writer, id: u64, outcome: ReplyOutcome) {
 /// Tells a client following its records that one has changed whenever a test changes how many agents are running from
 /// `said`, as a real hub sends the session that started or finished. The record is a repository, which is simpler to
 /// make.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the pace the stand-in looks again at how many agents a test has said are running"
+)]
 fn notice_agents(writer: &Writer, subscription_id: u64, mut said: u32, args: &Args, paths: &Paths) {
     for rev in 1.. {
         let running = loop {
@@ -223,6 +227,10 @@ fn serve(stream: UnixStream, args: &Arc<Args>, paths: &Arc<Paths>) {
 }
 
 /// Goes once no setup script is running, as a hub asked to restart does, leaving [`RESTARTED`] behind.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the pace the stand-in looks again whether the setup scripts a test said are running have ended"
+)]
 fn restart(args: &Args, paths: &Paths) -> ! {
     while !args.setups_end_as_it_restarts && written(paths, SETUPS, args.setups) > 0 {
         std::thread::sleep(Duration::from_millis(10));

@@ -35,19 +35,16 @@ fn files(dir: &Path) -> std::path::PathBuf {
 /// What the CLI in `dir` wrote of each time it started, sorted, once it has started `times` times.
 async fn started(dir: &Path, times: usize) -> Vec<String> {
     let ran = dir.join("ran");
-    timeout(Duration::from_secs(10), async {
-        loop {
-            let mut lines: Vec<String> =
-                std::fs::read_to_string(&ran).unwrap_or_default().lines().map(str::to_string).collect();
-            if lines.len() >= times {
-                lines.sort();
-                return lines;
-            }
-            tokio::time::sleep(Duration::from_millis(10)).await;
+    waiting::task::until_ok(Duration::from_secs(10), || {
+        let mut lines: Vec<String> =
+            std::fs::read_to_string(&ran).unwrap_or_default().lines().map(str::to_string).collect();
+        if lines.len() < times {
+            return Err(format!("the CLI to have started {times} times: {:?}", std::fs::read_to_string(&ran)));
         }
+        lines.sort();
+        Ok(lines)
     })
     .await
-    .unwrap_or_else(|_| panic!("the CLI to have started {times} times: {:?}", std::fs::read_to_string(&ran)))
 }
 
 /// A one-off call as well as an agent, since each starts the CLI its own way. One started under the machine's own

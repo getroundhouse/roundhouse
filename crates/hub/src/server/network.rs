@@ -27,6 +27,10 @@ const KEEPALIVE: TcpKeepalive =
 
 /// Boxed, because pairing starts this, and a request to pair is served by it. Its type would otherwise be part of
 /// its own definition.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the pause after a connection that couldn't be accepted, for what it needed to come free"
+)]
 pub(crate) fn accept_devices(
     hub: Arc<Hub>,
     listener: TcpListener,

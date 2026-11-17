@@ -10,6 +10,10 @@ impl Hub {
     /// Replaces `link`, the workspace's worker, which is another build, once two looks in a row find nothing in the
     /// workspace at work. Gives up once the worker has gone, or been replaced, or the hub is stopping. Its workspace's
     /// record says which build it is until then, as [`Hub::record_worker_build`] has it say.
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "how often a worker of another build is looked at, to replace it once nothing in its workspace is at work"
+    )]
     pub(in super::super) fn replace_once_idle(self: &Arc<Self>, workspace_id: WorkspaceId, link: Arc<WorkerLink>) {
         let hub = self.clone();
         tokio::spawn(async move {

@@ -31,8 +31,6 @@ pub const KEPT_ENV: &[&str] =
 const SCRIPTED_PATIENCE: Duration = Duration::from_secs(30);
 /// How long a step waits on the real model, which can take minutes, as it plans.
 const REAL_PATIENCE: Duration = Duration::from_secs(180);
-/// How often a step looks for a file the agent is to make.
-const LOOK_AGAIN: Duration = Duration::from_millis(20);
 
 /// The CLI the hub would find with `lookup`.
 pub fn find_cli(lookup: &BinaryLookup) -> Option<PathBuf> {
@@ -300,12 +298,8 @@ impl Launcher for RealCli {
 
     async fn made(&mut self, name: &str) -> Result<(), Failed> {
         let path = self.work.join(name);
-        let deadline = Instant::now() + self.patience();
-        while !path.exists() {
-            if Instant::now() > deadline {
-                return Err(Failed(format!("timed out waiting for the agent to make {name}")));
-            }
-            tokio::time::sleep(LOOK_AGAIN).await;
+        if !waiting::task::up_to(self.patience(), || path.exists()).await {
+            return Err(Failed(format!("timed out waiting for the agent to make {name}")));
         }
         self.tap.note(Entry::Saw(name.to_string()));
         Ok(())

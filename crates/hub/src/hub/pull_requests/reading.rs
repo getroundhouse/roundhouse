@@ -109,6 +109,10 @@ impl Reading {
     }
 
     /// Until `spacing` after the workspace's last read, for an agent asking.
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "the spacing reads of a workspace's pull request that agents ask for keep to"
+    )]
     pub(super) async fn space_out(&self, id: &WorkspaceId, spacing: Duration) {
         let last =
             self.schedules.lock().get(id).map(|last| last.read_at).max(self.remote_read_at.lock().get(id).copied());

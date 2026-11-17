@@ -47,6 +47,10 @@ impl Call {
 /// Starts a task that finishes once `file` exists. The turn goes on without waiting for it, so it's never
 /// interrupted here. The lines come in the real CLI's order: the call, the list with its task, the `task_started`
 /// that names the call, then the call's result.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the pace a background task looks again for the file it waits for, as the real CLI's command does"
+)]
 pub(crate) fn start(turn: &mut Turn, call: Call, file: &str) -> bool {
     let command = format!("until [ -e {file} ]; do sleep 0.05; done");
     let tool_use_id = match call {
@@ -153,6 +157,10 @@ extern "C" fn on_sigterm(_: libc::c_int) {
 }
 
 /// From the first task on, SIGTERM stops every task and reports it, then exits as the real CLI does.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the pace the agent looks again whether SIGTERM has come, since a signal's handler can only set a flag"
+)]
 pub(crate) fn watch_for_sigterm(config: &Config, out: &Out) {
     static WATCHING: AtomicBool = AtomicBool::new(false);
     if WATCHING.swap(true, Ordering::SeqCst) {

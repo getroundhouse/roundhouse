@@ -9,7 +9,7 @@ license.workspace = true
 # What only tests use: a longer wait for an agent's last output, building the programs tests run in place of others,
 # and the conformance runner, whose scripted model serves the Messages API over HTTP, and which checks what it saw
 # against the capability laws.
-testing = ["dep:http-body-util", "dep:hyper", "dep:hyper-util", "process/testing", "protocol/testing"]
+testing = ["dep:http-body-util", "dep:hyper", "dep:hyper-util", "dep:waiting", "process/testing", "protocol/testing"]
 
 [dependencies]
 # Reads when a limit starts again, which `get_usage` says as an ISO time.
@@ -27,6 +27,8 @@ tempfile.workspace = true
 tokio = { workspace = true, features = ["fs"] }
 tracing.workspace = true
 uuid.workspace = true
+# How the conformance runner, and the tests, wait.
+waiting = { workspace = true, optional = true }
 
 [target.'cfg(unix)'.dependencies]
 # The native conformance runner and its scripted model use Unix process isolation.

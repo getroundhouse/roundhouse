@@ -45,6 +45,7 @@ tempfile.workspace = true
 # For tests that pause time, so a timeout passes without being waited for.
 tokio = { workspace = true, features = ["test-util"] }
 tracing-subscriber.workspace = true
+waiting.workspace = true
 
 [lints]
 workspace = true

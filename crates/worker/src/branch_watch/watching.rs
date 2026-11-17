@@ -87,6 +87,10 @@ pub(crate) async fn watch(
 
 /// The worktree's repository, looked for until it's found or the worker stops. `first` is told if it isn't found at
 /// once, since then there's nothing to send.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "how often a worktree whose repository can't be found yet is looked at again"
+)]
 async fn repository(
     given: &watch::Receiver<Arc<Environment>>,
     worktree: &Path,
@@ -184,6 +188,10 @@ async fn read_and_send(given: &Environment, worktree: &Path, whose: Whose, wakes
 
 /// Waits for git to change something that matters and then stop writing, or for long enough to read anyway. False
 /// once the worker's stopping.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the branches are read at least every READ_AT_LEAST_EVERY, and once git has stopped writing for SETTLE"
+)]
 async fn changed(wakes: &Wakes, stopping: &mut watch::Receiver<bool>) -> bool {
     tokio::select! {
         () = wakes.wake.notified() => {}
