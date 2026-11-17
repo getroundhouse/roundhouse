@@ -1284,13 +1284,31 @@ mod tests {
         let mut theme = Theme::default();
         theme.apply_config(&std::rc::Rc::new(config));
 
-        assert_eq!(theme.button_ghost_hover, try_parse_color("#111111").unwrap());
-        assert_eq!(theme.button_ghost_active, try_parse_color("#222222").unwrap());
-        assert_eq!(theme.button_ghost_selected, try_parse_color("#333333").unwrap());
+        assert_eq!(
+            theme.button_ghost_hover,
+            try_parse_color("#111111").unwrap()
+        );
+        assert_eq!(
+            theme.button_ghost_active,
+            try_parse_color("#222222").unwrap()
+        );
+        assert_eq!(
+            theme.button_ghost_selected,
+            try_parse_color("#333333").unwrap()
+        );
         assert_eq!(theme.button_outline, try_parse_color("#444444").unwrap());
-        assert_eq!(theme.button_outline_hover, try_parse_color("#555555").unwrap());
-        assert_eq!(theme.button_outline_active, try_parse_color("#666666").unwrap());
-        assert_eq!(theme.tokens.button_ghost_hover.color, theme.button_ghost_hover);
+        assert_eq!(
+            theme.button_outline_hover,
+            try_parse_color("#555555").unwrap()
+        );
+        assert_eq!(
+            theme.button_outline_active,
+            try_parse_color("#666666").unwrap()
+        );
+        assert_eq!(
+            theme.tokens.button_ghost_hover.color,
+            theme.button_ghost_hover
+        );
     }
 
     #[test]
@@ -1306,14 +1324,33 @@ mod tests {
             theme.apply_config(&std::rc::Rc::new(config));
 
             let dark = mode == "dark";
-            let hover = if dark { theme.accent.opacity(0.5) } else { theme.accent };
+            let hover = if dark {
+                theme.accent.opacity(0.5)
+            } else {
+                theme.accent
+            };
             assert_eq!(theme.button_ghost_hover, hover, "{mode}");
             assert_eq!(theme.button_ghost_active, theme.button_active, "{mode}");
-            assert_eq!(theme.button_ghost_selected, theme.secondary_active, "{mode}");
-            let rest = if dark { theme.input.mix_oklab(transparent, 0.3) } else { theme.background };
+            assert_eq!(
+                theme.button_ghost_selected, theme.secondary_active,
+                "{mode}"
+            );
+            let rest = if dark {
+                theme.input.mix_oklab(transparent, 0.3)
+            } else {
+                theme.background
+            };
             assert_eq!(theme.button_outline, rest, "{mode}");
-            assert_eq!(theme.button_outline_hover, theme.input.mix_oklab(transparent, 0.5), "{mode}");
-            assert_eq!(theme.button_outline_active, theme.input.mix_oklab(transparent, 0.7), "{mode}");
+            assert_eq!(
+                theme.button_outline_hover,
+                theme.input.mix_oklab(transparent, 0.5),
+                "{mode}"
+            );
+            assert_eq!(
+                theme.button_outline_active,
+                theme.input.mix_oklab(transparent, 0.7),
+                "{mode}"
+            );
         }
     }
 
