@@ -1,8 +1,8 @@
 use protocol::event::{EventBody, NoticeLevel};
 use protocol::fixtures::approval_request;
 use protocol::model::{
-    ApprovalId, ClientRequestId, DiffComment, ModelName, Repo, Rev, SessionSettingsChange, SessionStatus, SetupStatus,
-    Title, Workspace,
+    ApprovalId, ClientRequestId, DiffComment, ModelName, Rev, SessionSettingsChange, SessionStatus, SetupStatus, Title,
+    Workspace,
 };
 
 use super::*;
@@ -16,9 +16,7 @@ pub(super) fn open_in(dir: &Path) -> Store {
 pub(crate) fn store_with_session(dir: &Path) -> Store {
     let store = open_in(dir);
     let now = now_ms();
-    let repo =
-        Repo { id: "r".into(), name: "repo".into(), path: "/repo".into(), created_at_ms: now, rev: Rev::default() };
-    store.add_repo(&repo).unwrap();
+    store.add_repo(&"r".into(), "repo", "/repo", now).unwrap();
     store.insert_workspace(&workspace_w(now), None).unwrap();
     store.insert_session(&idle_session(now), None).unwrap();
     store
@@ -241,8 +239,7 @@ fn every_change_to_a_record_gives_it_a_newer_revision() {
     let Made::New(added) = store.add_comment(&comment, None).unwrap().made else { panic!("made before") };
     newer(added.rev, "a comment");
     newer(store.delete_comment(&"c".into()).unwrap().made.unwrap(), "removing a comment");
-    let repo = Repo { id: "r2".into(), name: "two".into(), path: "/two".into(), created_at_ms: 0, rev: Rev::default() };
-    newer(store.add_repo(&repo).unwrap().rev, "a repository");
+    newer(store.add_repo(&"r2".into(), "two", "/two", 0).unwrap().rev, "a repository");
 
     let records = store.list_records().unwrap();
     assert_eq!(records.rev, seen);
@@ -343,15 +340,7 @@ fn a_setup_cut_off_by_a_restart_counts_as_failed() {
 fn adding_a_repo_twice_returns_the_same_record() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
-    let again = store
-        .add_repo(&Repo {
-            id: "other".into(),
-            name: "repo".into(),
-            path: "/repo".into(),
-            created_at_ms: 0,
-            rev: Rev::default(),
-        })
-        .unwrap();
+    let again = store.add_repo(&"other".into(), "repo", "/repo", 0).unwrap();
     assert_eq!(again.id, "r".into());
 }
 

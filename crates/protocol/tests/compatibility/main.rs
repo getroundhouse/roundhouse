@@ -33,6 +33,7 @@ mod previous;
 mod prompts;
 mod refusals;
 mod repo_sources;
+mod repos;
 mod restarts;
 mod sessions;
 mod subagents;

@@ -17,6 +17,7 @@ mod limits;
 mod logins;
 mod providers;
 mod replies;
+mod repos;
 mod session_accounts;
 mod subagents;
 mod tools;

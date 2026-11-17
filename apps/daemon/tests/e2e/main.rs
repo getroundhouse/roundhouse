@@ -44,6 +44,7 @@ mod pull_requests;
 mod questions;
 mod queueing;
 mod reading;
+mod repos;
 mod setup;
 #[cfg(target_os = "macos")]
 mod staying_awake;

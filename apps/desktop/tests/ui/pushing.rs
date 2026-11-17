@@ -13,7 +13,8 @@ use crate::support::{Stack, Ui, git};
 const TOKEN: &str = "github_pat_made_up_for_a_test";
 
 /// From the hub's check to the line in the workspace, and from its button to where it says what to do. The
-/// repository fetches from itself and pushes to `cli/cli` on GitHub, which refuses `ada`, so nothing reaches GitHub.
+/// repository's `origin` is `cli/cli` on GitHub, which refuses `ada`. Nothing has been fetched from it, so the
+/// workspace starts from the checkout's own branch, and nothing reaches GitHub.
 #[gpui_kit::test]
 fn a_workspace_says_why_agents_cant_push_and_its_line_opens_git(cx: &mut TestAppContext) {
     let stack = Stack::new();
@@ -25,8 +26,7 @@ fn a_workspace_says_why_agents_cant_push_and_its_line_opens_git(cx: &mut TestApp
     };
     let _github = stack.start_hub_with_stand_in_github(script);
     let repo = stack.repo();
-    git(&repo, &["remote", "add", "origin", repo.to_str().unwrap()]);
-    git(&repo, &["remote", "set-url", "--push", "origin", "git@github.com:cli/cli.git"]);
+    git(&repo, &["remote", "add", "origin", "git@github.com:cli/cli.git"]);
     let client = stack.client();
     client.github_account_connect(GithubToken::new(TOKEN), None).unwrap();
     client.repo_add(repo.to_str().unwrap()).unwrap();

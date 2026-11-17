@@ -27,6 +27,7 @@ mod pull_requests;
 mod queues;
 mod ready;
 mod repo_source;
+mod repo_urls;
 mod repos;
 mod sessions;
 mod setup;

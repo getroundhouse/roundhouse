@@ -1,6 +1,6 @@
 use super::{
     accounts, activity, cache, comments, drafts, first, github_accounts, github_sign_ins, hub_settings, limits, logins,
-    providers, replies, subagents, tools, waiting, waits, workers, workspaces,
+    providers, replies, repos, subagents, tools, waiting, waits, workers, workspaces,
 };
 
 /// Applied in order. `PRAGMA user_version` records how many have run.
@@ -359,4 +359,6 @@ pub(in super::super) const MIGRATIONS: &[&str] = &[
     // What GitHub's profile of each GitHub account's user says, which its commit identity is made from, in
     // `github_accounts`.
     github_accounts::GITHUB_PROFILES,
+    // The address each repository's checkout fetches from, and whether it's to be read, in `repos`.
+    repos::URLS,
 ];

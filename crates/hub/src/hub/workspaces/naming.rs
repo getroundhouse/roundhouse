@@ -71,7 +71,7 @@ impl Hub {
         name: &str,
         names: &mut Names,
     ) -> Result<(), ApiError> {
-        let asking = NamesGitHas { repo_name: repo.name.clone(), source: repo_source(repo) };
+        let asking = NamesGitHas { repo_name: repo.name.clone(), source: repo_source(repo)? };
         let NamesGitHasReply { names: said } = link.call(asking).await?;
         names.git_has = said.iter().map(|had| had.to_ascii_lowercase()).collect();
         if names.git_has.contains(&name.to_ascii_lowercase()) {

@@ -8,7 +8,7 @@ use protocol::worker::GithubCredential;
 use tokio::sync::watch;
 
 use super::super::CHECKED_AGAIN_EVERY;
-use super::support::{CLI, account, checking, told, told_within, worker_saying};
+use super::support::{CLI, account, checking, reads, told, told_within};
 use crate::github::{Answer, Gate, Script, StandIn};
 use crate::hub::Hub;
 use crate::hub::tests::hub_calling_github;
@@ -23,10 +23,9 @@ async fn refusing() -> StandIn {
     StandIn::with(Script { pushes: vec![("cli/cli", vec![refused])], ..Script::default() }).await
 }
 
-/// Has a worker of `w` say its repository, `r`, pushes to `cli/cli`.
+/// Has a worker read that the checkout of the hub's repository, `r`, fetches from `cli/cli` on GitHub.
 async fn says_cli(hub: &Arc<Hub>) {
-    let (link, _) = worker_saying(Some(CLI));
-    hub.find_github_remote("w".into(), &link).await;
+    reads(hub, "https://github.com/cli/cli.git").await;
 }
 
 /// What the last run recorded, as the hub starts.
@@ -35,8 +34,9 @@ fn left_by_the_last_run(hub: &Hub, reach: &Reach, answered_at_ms: i64) {
     hub.store.github_reach_left_by_the_last_run().unwrap();
 }
 
-/// The last run's record names which repository on GitHub to check, so no worker has to say again first, and once
-/// it's checked, it's this run's, with when GitHub answered.
+/// The repository's address is still to be read, as each is once a hub from before addresses is upgraded, so the last
+/// run's record names which repository on GitHub to check, and no worker has to read it first. Once it's checked, it's
+/// this run's, with when GitHub answered.
 #[tokio::test]
 async fn as_the_hub_starts_each_repository_the_last_run_recorded_is_checked_again_with_the_default() {
     let github = refusing().await;
@@ -76,9 +76,9 @@ async fn a_check_github_doesnt_answer_keeps_what_it_last_answered_for_the_login(
     assert_eq!((unknown.answered_at_ms, unknown.stale), (None, false));
 }
 
-/// A repository is checked once a worker of it says where it pushes, and every client is told, whatever the login.
+/// A repository is checked once a worker reads its address, and every client is told, whatever the login.
 #[tokio::test]
-async fn a_repository_is_checked_once_a_worker_says_where_it_pushes_and_every_client_told() {
+async fn a_repository_is_checked_once_a_worker_reads_its_address_and_every_client_told() {
     let github = refusing().await;
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_calling_github(dir.path(), github.api());
@@ -94,6 +94,29 @@ async fn a_repository_is_checked_once_a_worker_says_where_it_pushes_and_every_cl
     assert_eq!(machines_own.reach, Reach::MachineOwn { repository: CLI });
     assert_eq!(refused.reach, refused_as("ada"));
     assert_eq!(github.asked().len(), 1, "only the account's was asked of GitHub");
+}
+
+/// Its address, once read, names which repository on GitHub it is, over what the last run checked, so one elsewhere
+/// isn't on GitHub, and isn't asked of it. Added again, its address is read again, and a new one is checked for.
+#[tokio::test]
+async fn a_repository_is_checked_for_what_its_address_names_as_each_is_read() {
+    let github = refusing().await;
+    let dir = tempfile::tempdir().unwrap();
+    let hub = hub_calling_github(dir.path(), github.api());
+    left_by_the_last_run(&hub, &refused_as("ada"), 5);
+    reads(&hub, "https://example.com/ada/roundhouse.git").await;
+    let mut feed = hub.subscribe_feed();
+    let (_credential, following) = watch::channel(account("ada", "a-token"));
+    let _checking = checking(&hub, following);
+
+    let elsewhere = told(&mut feed).await;
+    hub.store.add_repo(&"again".into(), "repo", "/repo", 0).unwrap();
+    reads(&hub, "git@github.com:cli/cli.git").await;
+    let on_github = told(&mut feed).await;
+
+    assert_eq!(elsewhere.reach, Reach::NotOnGithub);
+    assert_eq!(on_github.reach, refused_as("ada"));
+    assert_eq!(github.asked().len(), 1, "only cli/cli was asked of GitHub");
 }
 
 /// As when another default is chosen, and as when the default's sign-in is renewed, which changes its token, and so

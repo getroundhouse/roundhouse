@@ -5,6 +5,7 @@ use std::path::PathBuf;
 use anyhow::Context;
 use client_core::{Client, Daemon, FileToSend, HubAdmin, Written};
 use protocol::event::ApprovalDecision;
+use protocol::model::{Repo, RepoOrigin};
 use protocol::paths::Paths;
 use protocol::prompt::Prompt;
 use protocol::versions::Versions;
@@ -83,15 +84,25 @@ fn repo_command(client: &Client, command: RepoCmd) -> anyhow::Result<()> {
         RepoCmd::Add { path } => {
             let absolute = std::path::absolute(&path).with_context(|| format!("resolving {path}"))?;
             let repo = client.repo_add(&absolute.to_string_lossy())?;
-            println!("{}  {}", repo.name, repo.path);
+            println!("{}  {}", repo.name, place(&repo));
         }
         RepoCmd::List => {
             for repo in client.repo_list()? {
-                println!("{}  {}  {}", short(repo.id.as_str()), repo.name, repo.path);
+                println!("{}  {}  {}", short(repo.id.as_str()), repo.name, place(&repo));
             }
         }
     }
     Ok(())
+}
+
+/// Where a repository is, as the repository commands print it: its checkout, as every repository's was before
+/// addresses, or the address of one with no checkout on the hub's machine.
+fn place(repo: &Repo) -> String {
+    match &repo.origin {
+        RepoOrigin::Checkout { path } | RepoOrigin::Linked { path, .. } => path.clone(),
+        RepoOrigin::Remote { url } => url.to_string(),
+        RepoOrigin::Unknown => "somewhere this build can't say".to_owned(),
+    }
 }
 
 /// Through [`HubAdmin`], so these work on a hub of any version.

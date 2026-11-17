@@ -1,4 +1,4 @@
-use super::{awake, feed, found_github_logins, github_reach, pull_requests, sessions, setup};
+use super::{awake, feed, found_github_logins, pull_requests, sessions, setup};
 use crate::attachment_files::AttachmentFiles;
 use crate::error::internal;
 use crate::github::Github;
@@ -61,9 +61,9 @@ pub(crate) struct Hub {
     pub(super) github: Github,
     /// The providers whose machines' own GitHub login has been found since the hub started, or is being asked for.
     pub(super) github_logins_asked: Arc<found_github_logins::ProvidersAsked>,
-    /// Which repository on GitHub each repository pushes to, as a worker of it has said since the hub started, or is being
-    /// asked.
-    pub(super) github_remotes: Arc<github_reach::Remotes>,
+    /// Told each time a worker has read a repository's address, whatever it read, for the check of reach to look again
+    /// at which repository on GitHub each repository's record names.
+    pub(super) addresses_read: Notify,
     pub(super) providers: ProviderSet,
     /// What each kind of agent the hub runs is called and offers, as `HubConfig` gave them.
     pub(super) agents: Vec<AgentDescription>,
@@ -171,7 +171,7 @@ impl Hub {
             github_logins: Arc::new(GithubLogins::new(store.clone(), &dirs.data, now_ms())),
             github,
             github_logins_asked: Arc::default(),
-            github_remotes: Arc::default(),
+            addresses_read: Notify::new(),
             store,
             attachment_files: AttachmentFiles::new(dirs.attachments),
             worker_logs_dir: dirs.worker_logs,

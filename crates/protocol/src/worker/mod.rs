@@ -15,10 +15,10 @@ mod found_login;
 mod frames;
 mod git_credential;
 mod github;
-mod github_remote;
 mod one_off;
 pub mod previous;
 mod repo_source;
+mod repo_url;
 mod tools;
 mod workspaces;
 mod worktree;
@@ -39,9 +39,9 @@ pub use github::{
     GH_RUNS_WITHIN, GithubRateLimit, PullRequest, PullRequestReply, RateLimit, ReadRemotePullRequests,
     RemotePullRequestsReply,
 };
-pub use github_remote::{GithubRemote, GithubRemoteReply};
 pub use one_off::{AccountFor, TitleFor, TitleReply};
 pub use repo_source::RepoSource;
+pub use repo_url::{ReadRepoUrl, RepoUrlReply};
 pub use tools::{ServeTools, ToolsServing, ToolsToken, WAIT_TOOL, WAITS_TOOL};
 pub use workspaces::{
     ArchiveScript, CancelSetup, NamesGitHas, NamesGitHasReply, PrepareWorkspace, RemoveWorkspace, RestoreWorkspace,

@@ -5,13 +5,13 @@ use serde::{Deserialize, Serialize};
 
 use super::super::{GithubUsername, RepoId, Rev};
 
-/// Whether agents can push as the default GitHub account to the repository on GitHub that a repository's `origin`
+/// Whether agents can push as the default GitHub account to the repository on GitHub that a repository's address
 /// names, as the hub last checked, as a record of its own, keyed by the repository, so every workspace of it shows the
 /// same. Whether a push is taken is the repository's and the account's to say, not a workspace's, so it's checked once
-/// a repository and login: as the hub starts, as a worker of the repository first says which repository on GitHub it
-/// pushes to, as the default or its login changes, and every half hour, since what an account can do changes on
-/// GitHub too, as when an organization approves Roundhouse. It blocks nothing: agents push as they would anyway. A
-/// repository no worker has said of since the hub first checked any has none. What GitHub answered is a cache of
+/// a repository and login: as the hub starts, as a worker reads the repository's address, as the default or its login
+/// changes, and every half hour, since what an account can do changes on GitHub too, as when an organization approves
+/// Roundhouse. It blocks nothing: agents push as they would anyway. A repository whose address no worker has read, and
+/// that the hub hasn't checked before, has none. What GitHub answered is a cache of
 /// GitHub's, so it says when GitHub answered, and one the hub's last run left says so until it's checked again.
 /// *Unconfirmed:* a record of its own, the half hour, and `answered_at_ms` and `stale` as the shape.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]

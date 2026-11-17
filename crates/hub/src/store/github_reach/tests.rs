@@ -1,4 +1,4 @@
-use protocol::model::{GithubRepositoryName, Reach, Repo, Rev};
+use protocol::model::{GithubRepositoryName, Reach};
 
 use crate::store::Store;
 use crate::store::older::store_from_before;
@@ -13,14 +13,7 @@ fn pushes() -> Reach {
 
 fn with_repos(store: &Store, ids: &[&str]) {
     for id in ids {
-        let repo = Repo {
-            id: (*id).into(),
-            name: (*id).into(),
-            path: format!("/{id}"),
-            created_at_ms: 0,
-            rev: Rev::default(),
-        };
-        store.add_repo(&repo).unwrap();
+        store.add_repo(&(*id).into(), id, &format!("/{id}"), 0).unwrap();
     }
 }
 

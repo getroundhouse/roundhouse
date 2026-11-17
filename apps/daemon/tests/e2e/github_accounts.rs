@@ -97,10 +97,11 @@ fn a_hub_records_who_its_machines_own_gh_is_logged_in_as_once_a_worker_there_has
     assert_eq!((provider.as_str(), login), ("local", &works));
 }
 
-/// Through the real worker of the local provider, which says where its repository's `origin` pushes, checked with the
-/// default's token against a stand-in for GitHub, to every client, with when GitHub answered. A hub that starts again
-/// has it at once, as the last run's, until it has checked again, which GitHub holds back here until the test has
-/// seen it. It fetches from the repository itself, so nothing reaches GitHub.
+/// Through the real worker of the local provider, which reads the address of its repository's `origin`, checked with
+/// the default's token against a stand-in for GitHub, to every client, with when GitHub answered. A hub that starts
+/// again has it at once, as the last run's, until it has checked again, which GitHub holds back here until the test
+/// has seen it. Nothing has been fetched from `origin`, so the workspace starts from the checkout's own branch, and
+/// nothing reaches GitHub.
 #[test]
 fn a_hub_records_whether_the_default_can_push_to_a_workspaces_repository_on_github_and_when() {
     let runtime = tokio::runtime::Runtime::new().unwrap();
@@ -114,8 +115,7 @@ fn a_hub_records_whether_the_default_can_push_to_a_workspaces_repository_on_gith
     }));
     let mut stack = Stack::start_with(vec![(ENV_TEST_GITHUB_API, github.api())]);
     let repo = stack.repo();
-    git(&repo, &["remote", "add", "origin", repo.to_str().unwrap()]);
-    git(&repo, &["remote", "set-url", "--push", "origin", "git@github.com:cli/cli.git"]);
+    git(&repo, &["remote", "add", "origin", "git@github.com:cli/cli.git"]);
     let client = stack.client();
     client.call(GithubAccountConnect { token: GithubToken::new(TOKEN), id: None }).unwrap();
     let listed = |stack: &Stack| stack.client().records_list().unwrap().github_reach;

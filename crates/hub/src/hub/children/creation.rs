@@ -206,7 +206,7 @@ pub(super) async fn add(making: &Making<'_>, child: &ChildWorktree) -> Result<Ch
         None => ChildBranch::Existing { branch },
     };
     let adding = AddChildWorktree {
-        source: repo_source(making.repo),
+        source: repo_source(making.repo)?,
         own: making.own.to_string(),
         path: child.path.clone(),
         on,

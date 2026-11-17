@@ -24,7 +24,7 @@ use protocol::client::{
     ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HelloReply, HubFrame, HubNotice, HubStatus,
     ReplyOutcome, subscriptions,
 };
-use protocol::model::{Records, Repo, RepoId, Rev};
+use protocol::model::{Records, Repo, RepoId, RepoOrigin, Rev};
 use protocol::paths::Paths;
 
 #[derive(Parser)]
@@ -116,7 +116,7 @@ fn notice_agents(writer: &Writer, subscription_id: u64, mut said: u32, args: &Ar
         let repo = Repo {
             id: RepoId::from("stand-in"),
             name: "stand-in".to_string(),
-            path: "/stand-in".to_string(),
+            origin: RepoOrigin::Checkout { path: "/stand-in".to_string() },
             created_at_ms: 0,
             rev: Rev::new(rev),
         };

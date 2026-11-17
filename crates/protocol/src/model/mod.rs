@@ -76,7 +76,7 @@ pub use ids::{
     ToolUseId, WaitId, WorkerTarget, WorkspaceId,
 };
 mod repo;
-pub use repo::Repo;
+pub use repo::{Repo, RepoOrigin, RepoUrl, RepoUrlError};
 mod comment;
 pub use comment::{DiffComment, DiffSide};
 mod workspace;

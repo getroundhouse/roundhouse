@@ -6,6 +6,9 @@
 mod pr_wait;
 pub use pr_wait::{observed_pull_request, pull_request_wait};
 
+mod repo;
+pub use repo::repo;
+
 mod typed;
 pub use typed::{
     command_output, image, typed_call, typed_command, typed_denied, typed_request, typed_result, with_images,

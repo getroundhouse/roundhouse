@@ -91,7 +91,7 @@ pub(super) const GITHUB_APPS: &str = r"
 /// a record the feed announces, by the repository. `reach` is JSON, as `Reach` has it. `answered_at_ms` is when GitHub
 /// gave that answer, by the hub's clock, and none for what isn't GitHub's answer. `stale` is a row the last run left,
 /// which the hub hasn't checked again since it started. Kept across restarts, so a hub that starts again has it at
-/// once, and knows which repository on GitHub each pushes to, which it checks again then. A change to a row moves its
+/// once, and knows which repository on GitHub each was checked for, which it checks again then. A change to a row moves its
 /// revision only when it's another row, since the update that writes it again leaves the row as it was.
 pub(super) const GITHUB_REACH: &str = r"
     CREATE TABLE github_reach (

@@ -7,8 +7,8 @@ use process::ProcessRecord;
 use protocol::frame;
 use protocol::paths::WORKER_RECORD_FILE;
 use protocol::worker::{
-    AskId, AskOutcome, AskReply, CancelSetup, GitCredentialSet, GitStatus, GithubCredential, GithubRemote,
-    PullRequestAnswer, PullRequestReply, WorkerAsk, WorkerCall, WorkerOutcome, WorkerRequest,
+    AskId, AskOutcome, AskReply, CancelSetup, GitCredentialSet, GitStatus, GithubCredential, PullRequestAnswer,
+    PullRequestReply, WorkerAsk, WorkerCall, WorkerOutcome, WorkerRequest,
 };
 use providers::local::{LocalConfig, LocalProvider};
 
@@ -37,6 +37,8 @@ fn provider_running(dir: &Path, script: &str) -> Arc<dyn Provider> {
 }
 
 /// A hub whose store has the workspace `w`, ready at `/w`, and its session `s`, and whose workers `provider` starts.
+/// Its repository's address has been read, so a worker isn't asked for it, which would come between the calls these
+/// tests spell out, in no order of their own.
 fn hub_using(dir: &Path, provider: &Arc<dyn Provider>) -> Arc<Hub> {
     hub_timed(dir, provider, Timers::DEFAULT)
 }
@@ -45,6 +47,7 @@ fn hub_using(dir: &Path, provider: &Arc<dyn Provider>) -> Arc<Hub> {
 fn hub_timed(dir: &Path, provider: &Arc<dyn Provider>, timers: Timers) -> Arc<Hub> {
     let store = Arc::new(store_with_session(dir));
     store.workspace_ready(&"w".into(), "/w", &"alder".into(), "main", None).unwrap();
+    store.read_repo_url(&"r".into(), "/repo", None).unwrap();
     let providers = ProviderSet::only(provider.clone());
     let github = Github::new(crate::github::GithubConfig::at(NO_GITHUB.to_string()));
     Arc::new(Hub::new(Build::UNSTAMPED, store, HubDirs::in_dir(dir), providers, github, Vec::new(), false, timers))
@@ -146,10 +149,9 @@ async fn a_worker_asking_for_its_pull_request_is_answered_once_it_has_answered_t
         dir.path(),
         &[
             ("ask", WorkerFrame::Ask { id: AskId::new(9), session_id: "s".into(), ask: WorkerAsk::PullRequest }),
-            // How much of GitHub's limit is left, then the pull request, after the hub's asks of the machine's login and
-            // where the repository pushes.
-            ("limit", WorkerFrame::Reply { id: 5, outcome: no_limit }),
-            ("found", WorkerFrame::Reply { id: 6, outcome: WorkerOutcome::Response(none) }),
+            // How much of GitHub's limit is left, then the pull request, after the hub's ask of the machine's login.
+            ("limit", WorkerFrame::Reply { id: 4, outcome: no_limit }),
+            ("found", WorkerFrame::Reply { id: 5, outcome: WorkerOutcome::Response(none) }),
         ],
     );
     let d = dir.path().display();
@@ -198,8 +200,7 @@ async fn an_ask_this_hub_cant_read_is_refused() {
 
 /// The worker answers the hello only once it has read the set too, so a hub that waited for the hello's answer before
 /// it queued the set would fail, and the hub's next call comes after the set. The hub's ask of who its machine's own
-/// `gh` is logged in as comes after the set, then its ask of where the workspace's repository pushes, and the link is
-/// used without waiting for either answer, which never comes.
+/// `gh` is logged in as comes after the set, and the link is used without waiting for its answer, which never comes.
 #[tokio::test]
 async fn a_worker_is_set_the_hubs_git_credential_right_behind_its_hello_before_anything_else() {
     let dir = tempfile::tempdir().unwrap();
@@ -211,9 +212,7 @@ async fn a_worker_is_set_the_hubs_git_credential_right_behind_its_hello_before_a
     let set = WorkerRequest::GitCredentialSet(GitCredentialSet { credential });
     assert_eq!(call("set"), WorkerCall { id: 2, request: set });
     assert_eq!(call("find"), WorkerCall { id: 3, request: WorkerRequest::FindGithubLogin });
-    let remote = WorkerRequest::GithubRemote(GithubRemote { repo_path: "/repo".into() });
-    assert_eq!(call("remote"), WorkerCall { id: 4, request: remote });
-    assert_eq!(call("next"), WorkerCall { id: 5, request: WorkerRequest::CancelSetup });
+    assert_eq!(call("next"), WorkerCall { id: 4, request: WorkerRequest::CancelSetup });
     assert_eq!(cancelled, Ok(()));
     link.kill();
 }
@@ -231,10 +230,9 @@ async fn a_worker_from_before_git_credentials_is_used_all_the_same() {
 }
 
 /// A link to a worker that answers the hub's set of its git credential with `set_answer`, and the call after the hub's
-/// asks of its machine's own login and where its repository pushes, which it keeps in `next` in `dir`, as done, and
-/// what the hub had to set as it opened.
+/// ask of its machine's own login, which it keeps in `next` in `dir`, as done, and what the hub had to set as it opened.
 async fn greeted_link(dir: &Path, set_answer: WorkerOutcome) -> (Arc<WorkerLink>, GithubCredential) {
-    let done = WorkerFrame::Reply { id: 5, outcome: WorkerOutcome::Response(WorkerResponse::Ok) };
+    let done = WorkerFrame::Reply { id: 4, outcome: WorkerOutcome::Response(WorkerResponse::Ok) };
     frames_in(dir, &[("done", done)]);
     let d = dir.display();
     let next = format!("read -r next\nprintf '%s\\n' \"$next\" > '{d}/next'\ncat '{d}/done'\ncat >/dev/null");
@@ -253,8 +251,7 @@ async fn greeted_link(dir: &Path, set_answer: WorkerOutcome) -> (Arc<WorkerLink>
 
 /// For a script: reads the hub's hello and the git credential it sets behind it, keeping the set in `set` in `dir`,
 /// then answers the hello, and the set with `set`, as its first two calls, then reads the hub's ask of who its machine's
-/// own `gh` is logged in as, which it keeps in `find`, and its ask of where its repository pushes, which it keeps in
-/// `remote`, and never answers either.
+/// own `gh` is logged in as, which it keeps in `find`, and never answers.
 fn greeted(dir: &Path, set: WorkerOutcome) -> String {
     let hello = WorkerResponse::Hello(HelloReply { protocol_version: versions::WORKERS.newest, build: None });
     frames_in(
@@ -267,7 +264,7 @@ fn greeted(dir: &Path, set: WorkerOutcome) -> String {
     let d = dir.display();
     format!(
         "read -r call\nread -r set\nprintf '%s\\n' \"$set\" > '{d}/set'\ncat '{d}/hello'\ncat '{d}/set-answer'\n\
-         read -r find\nprintf '%s\\n' \"$find\" > '{d}/find'\nread -r remote\nprintf '%s\\n' \"$remote\" > '{d}/remote'\n"
+         read -r find\nprintf '%s\\n' \"$find\" > '{d}/find'\n"
     )
 }
 

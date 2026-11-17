@@ -105,3 +105,6 @@ pub(crate) const BEFORE_GITHUB_REACH: usize = 63;
 
 /// How many migrations there were before the hub kept what GitHub's profile of each GitHub account's user says.
 pub(crate) const BEFORE_GITHUB_PROFILES: usize = 64;
+
+/// How many migrations there were before the hub kept each repository's address.
+pub(crate) const BEFORE_REPO_URLS: usize = 65;
