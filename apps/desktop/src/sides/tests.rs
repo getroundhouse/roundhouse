@@ -124,40 +124,50 @@ fn a_hidden_sidebar_is_as_wide_as_the_window_leaves_it() {
     assert_eq!(sides(290., 432.).fitted(px(900.), (0., 1.)).0, px(240.), "as it is beside the other");
 }
 
-/// How wide `side` comes out when its edge is dragged to `width` in a window `across`, with the other open.
-fn dragged_beside(sides: Sides, side: Side, width: f32, across: f32) -> Pixels {
-    dragged(side, px(width), px(across) - sides.kept_beside(side))
+/// How wide `side` comes out when its edge is dragged to `width` in a window `across`, through what the window's drag
+/// calls, with both sidebars as `sides` has them and fitted as the frame before drew them.
+fn dragged_beside(cx: &mut TestAppContext, sides: Sides, side: Side, width: f32, across: f32) -> Pixels {
+    let showing = |chosen: Chosen| if chosen.sidebar == Sidebar::Open { 1. } else { 0. };
+    let open = (showing(sides.left), if sides.placed.beside.changes { showing(sides.right) } else { 0. });
+    let placed = Placed { widths: sides.fitted(px(across), open), ..sides.placed };
+    cx.update(|cx| {
+        cx.set_global(Sides { placed, ..sides });
+        side.drag_to(px(width), px(across), cx);
+        side.chosen(cx).width
+    })
 }
 
-#[test]
-fn the_left_sidebar_drags_as_wide_as_leaves_the_right_its_narrowest() {
+#[gpui_kit::test]
+fn the_left_sidebar_drags_as_wide_as_leaves_the_right_its_narrowest(cx: &mut TestAppContext) {
     let both = sides(290., 432.);
 
-    assert_eq!(dragged_beside(both, Side::Left, 470., 1000.), px(340.), "1000 less 300 for the right and 360 between");
-    assert_eq!(
-        dragged_beside(both, Side::Right, 700., 1000.),
-        px(350.),
-        "and the right gives way to the left as it is"
-    );
+    let left = dragged_beside(cx, both, Side::Left, 470., 1000.);
+    assert_eq!(left, px(340.), "1000 less 300 for the right and 360 between");
+    let right = dragged_beside(cx, both, Side::Right, 700., 1000.);
+    assert_eq!(right, px(350.), "and the right gives way to the left as it is");
     // With the other hidden, or not drawn, only its own limits hold it.
     let mut alone = both;
     alone.right.sidebar = Sidebar::Hidden;
-    assert_eq!(dragged_beside(alone, Side::Left, 470., 1000.), px(470.));
+    assert_eq!(dragged_beside(cx, alone, Side::Left, 470., 1000.), px(470.));
     let mut on_home = both;
     on_home.placed.beside.changes = false;
-    assert_eq!(dragged_beside(on_home, Side::Left, 470., 1000.), px(470.));
+    assert_eq!(dragged_beside(cx, on_home, Side::Left, 470., 1000.), px(470.));
+    let mut right_alone = sides(480., 432.);
+    right_alone.left.sidebar = Sidebar::Hidden;
+    let right = dragged_beside(cx, right_alone, Side::Right, 800., 1320.);
+    assert_eq!(right, px(800.), "the right too, wider than fits beside the left");
 }
 
 /// The widest a sidebar drags goes by what's chosen for the other, not by how the two are fitted at that moment.
 /// Going by the fit, narrowing the left let the right widen into the room, which then held the left where it was.
-#[test]
-fn an_edge_dragged_in_and_back_out_gets_back_the_width_it_had() {
+#[gpui_kit::test]
+fn an_edge_dragged_in_and_back_out_gets_back_the_width_it_had(cx: &mut TestAppContext) {
     let mut both = sides(290., 432.);
     assert_eq!(both.fitted(px(1000.), OPEN), (px(290.), px(350.)));
 
-    both.left.width = dragged_beside(both, Side::Left, 250., 1000.);
+    both.left.width = dragged_beside(cx, both, Side::Left, 250., 1000.);
     assert_eq!(both.fitted(px(1000.), OPEN), (px(250.), px(390.)), "the right takes the room");
-    both.left.width = dragged_beside(both, Side::Left, 290., 1000.);
+    both.left.width = dragged_beside(cx, both, Side::Left, 290., 1000.);
 
     assert_eq!(both.fitted(px(1000.), OPEN), (px(290.), px(350.)));
 }

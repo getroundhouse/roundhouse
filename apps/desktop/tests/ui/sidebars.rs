@@ -1,11 +1,15 @@
-//! Hiding, showing and widening the two sidebars: the workspaces on the left, and the changes on the right.
+//! Hiding, showing and widening the two sidebars: the workspaces on the left, and the changes on the right. How wide
+//! each is fitted, dragged and kept is `desktop::sides`' rule, which its unit tests pin, so these show that a click or
+//! a drag reaches a sidebar, and that what's drawn beside one goes by it.
 
 #![cfg(test)]
 
+use client_core::fake_hub::World;
 use gpui_kit::test::TestWindowExt as _;
-use gpui_kit::{AppContext as _, Pixels, TestAppContext, point, px, size};
+use gpui_kit::{AppContext as _, Pixels, SharedString, TestAppContext, point, px, size};
+use protocol::model::{SessionStatus, WorkspaceId};
 
-use crate::support::{Stack, Ui};
+use crate::support::{FakeHub, Ui};
 
 const LEFT_EDGE: &str = "left-sidebar-edge";
 const RIGHT_EDGE: &str = "right-sidebar-edge";
@@ -13,12 +17,28 @@ const RIGHT_EDGE: &str = "right-sidebar-edge";
 const LEFT_USUALLY: Pixels = px(290.);
 const RIGHT_USUALLY: Pixels = px(432.);
 
-/// A window with a workspace showing, and both sidebars open, as they are from the start.
-fn with_a_workspace<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> Ui<'a> {
-    let mut ui = Ui::open_with_a_repository(cx, stack);
-    ui.new_workspace();
+/// A window on a repository with two workspaces, the first showing, and both sidebars open, as they are from the
+/// start. What's chosen for a sidebar stays in the app, and these ask nothing of a hub, so a fake one will do, with no
+/// worker or agent to wait for. It goes with the test, so it's returned to be kept, with the workspace not showing.
+fn with_two_workspaces(cx: &mut TestAppContext) -> (FakeHub, Ui<'_>, WorkspaceId) {
+    let mut world = World::default();
+    let repo = world.repo("signals");
+    let workspaces = ["ledger", "points"].map(|name| world.workspace(&repo, name));
+    for workspace in &workspaces {
+        world.chat(workspace, SessionStatus::Idle, Vec::new());
+    }
+    let fake = FakeHub::holding(world);
+    let mut ui = Ui::open_on(cx, &fake);
     ui.wait("the sidebar of changes", |ui| ui.has(RIGHT_EDGE));
-    ui
+    let showing = ui.view().selected.clone().unwrap();
+    let other = workspaces.into_iter().find(|w| *w != showing).unwrap();
+    (fake, ui, other)
+}
+
+/// Shows `workspace` by its row in the sidebar.
+fn show(ui: &mut Ui, workspace: &WorkspaceId) {
+    ui.click(SharedString::from(format!("workspace-{workspace}")));
+    ui.wait("the workspace", |ui| ui.view().selected.as_ref() == Some(workspace) && ui.has(RIGHT_EDGE));
 }
 
 fn window_width(ui: &mut Ui) -> Pixels {
@@ -72,10 +92,11 @@ pub(crate) fn show_an_error(ui: &mut Ui) {
     ui.frame();
 }
 
+/// The tests run under Reduce Motion, which skips the slide, so each sidebar goes and comes back at once. What's beside
+/// the one on the left, a workspace or Home, has its room while it's hidden, and starts after the button.
 #[gpui_kit::test]
 fn the_button_beside_the_windows_buttons_hides_the_sidebar_and_shows_it_again(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = with_a_workspace(cx, &stack);
+    let (_hub, mut ui, _) = with_two_workspaces(cx);
     assert!(ui.has("add-project") && ui.has(LEFT_EDGE));
     let button = ui.bounds("toggle-sidebar");
     let title = ui.bounds("workspace-title");
@@ -95,29 +116,27 @@ fn the_button_beside_the_windows_buttons_hides_the_sidebar_and_shows_it_again(cx
 
     assert!(ui.has("add-project"));
     assert_eq!(ui.bounds("workspace-title"), title);
-}
+    ui.click("toggle-diff");
+    assert!(!ui.has(RIGHT_EDGE), "the sidebar of changes goes at once too");
 
-#[gpui_kit::test]
-fn home_starts_after_the_button_while_the_sidebar_is_hidden(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = with_a_workspace(cx, &stack);
     ui.click("home");
     ui.wait("Home", |ui| ui.has("home-page"));
-    let button = ui.bounds("toggle-sidebar");
     let search = ui.bounds("home-search");
-    assert_eq!(search.left(), LEFT_USUALLY + px(16.), "beside the sidebar, it starts where a header does");
+    assert_eq!(search.left(), LEFT_USUALLY + px(16.), "beside the sidebar, Home starts where a header does");
 
     ui.click("toggle-sidebar");
 
     let search = ui.bounds("home-search");
-    assert_eq!(search.left(), button.right() + px(16.), "the search starts after the button: {search:?}");
+    assert_eq!(search.left(), button.right() + px(16.), "Home's search starts after the button: {search:?}");
     assert!(ui.has("home-page") && !ui.has("add-project"));
 }
 
+/// Each edge runs up through the strip along the window's top, where a press that nothing takes moves the window, so
+/// it's dragged there as well as halfway down. The test window panics if anything asks it to move. Settings stands in
+/// for the sidebar on the left at the width it was dragged to.
 #[gpui_kit::test]
-fn dragging_a_sidebars_edge_changes_how_wide_it_is(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = with_a_workspace(cx, &stack);
+fn a_sidebar_is_as_wide_as_its_edge_was_dragged_to_in_every_workspace_and_in_settings(cx: &mut TestAppContext) {
+    let (_hub, mut ui, other) = with_two_workspaces(cx);
     assert_eq!(left_shown(&mut ui), LEFT_USUALLY);
     assert_eq!(right_shown(&mut ui), RIGHT_USUALLY);
 
@@ -128,62 +147,30 @@ fn dragging_a_sidebars_edge_changes_how_wide_it_is(cx: &mut TestAppContext) {
     assert_eq!(left_shown(&mut ui), px(350.));
     assert_eq!(right_shown(&mut ui), px(500.));
     assert_eq!(ui.bounds("workspace-title").left(), px(350. + 16.), "the workspace starts where it ends");
-}
 
-/// Each edge runs up through the strip along the window's top, where a press that nothing takes moves the window. The
-/// test window panics if anything asks it to move.
-#[gpui_kit::test]
-fn dragging_an_edge_in_the_strip_along_the_top_widens_the_sidebar_and_leaves_the_window(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = with_a_workspace(cx, &stack);
     let in_the_strip = px(20.);
-
-    drag_edge_at(&mut ui, LEFT_EDGE, in_the_strip, px(350.));
-    let to = window_width(&mut ui) - px(500.);
+    drag_edge_at(&mut ui, LEFT_EDGE, in_the_strip, px(360.));
+    let to = window_width(&mut ui) - px(510.);
     drag_edge_at(&mut ui, RIGHT_EDGE, in_the_strip, to);
 
-    assert_eq!(left_shown(&mut ui), px(350.));
-    assert_eq!(right_shown(&mut ui), px(500.));
-}
-
-#[gpui_kit::test]
-fn a_sidebar_dragged_close_to_its_usual_width_takes_it(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = with_a_workspace(cx, &stack);
-    drag_edge(&mut ui, LEFT_EDGE, px(350.));
-    let to = window_width(&mut ui) - px(500.);
-    drag_edge(&mut ui, RIGHT_EDGE, to);
-
-    drag_edge(&mut ui, LEFT_EDGE, px(296.));
-    let to = window_width(&mut ui) - px(427.);
-    drag_edge(&mut ui, RIGHT_EDGE, to);
-
-    assert_eq!(left_shown(&mut ui), LEFT_USUALLY);
-    assert_eq!(right_shown(&mut ui), RIGHT_USUALLY);
-}
-
-#[gpui_kit::test]
-fn a_sidebar_keeps_its_width_while_its_hidden_and_in_another_workspace(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = with_a_workspace(cx, &stack);
-    drag_edge(&mut ui, LEFT_EDGE, px(350.));
-    let to = window_width(&mut ui) - px(500.);
-    drag_edge(&mut ui, RIGHT_EDGE, to);
+    let dragged = (px(360.), px(510.));
+    assert_eq!((left_shown(&mut ui), right_shown(&mut ui)), dragged, "dragged in the strip along the top");
 
     ui.click("toggle-sidebar");
     ui.click("toggle-sidebar");
-    ui.new_workspace();
-    ui.wait("the sidebar of changes", |ui| ui.has(RIGHT_EDGE));
+    show(&mut ui, &other);
 
-    assert_eq!(left_shown(&mut ui), px(350.));
-    assert_eq!(right_shown(&mut ui), px(500.));
+    assert_eq!((left_shown(&mut ui), right_shown(&mut ui)), dragged, "hidden, shown again and in another workspace");
+
+    ui.press("secondary-,");
+
+    assert_eq!(ui.bounds("settings-back").right(), px(360. - 12.), "Settings has Back at its top right");
 }
 
 /// What's beside a sidebar moves with it, and the header stays clear of the window's buttons all the way.
 #[gpui_kit::test]
 fn a_sidebar_slides_shut_and_whats_beside_it_moves_with_it(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = with_a_workspace(cx, &stack);
+    let (_hub, mut ui, _) = with_two_workspaces(cx);
     ui.allow_motion();
     let button = ui.bounds("toggle-sidebar");
 
@@ -215,8 +202,7 @@ fn a_sidebar_slides_shut_and_whats_beside_it_moves_with_it(cx: &mut TestAppConte
 
 #[gpui_kit::test]
 fn a_sidebar_turned_back_partway_slides_from_where_it_had_got_to(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = with_a_workspace(cx, &stack);
+    let (_hub, mut ui, _) = with_two_workspaces(cx);
     ui.click("toggle-sidebar");
     ui.allow_motion();
 
@@ -233,14 +219,12 @@ fn a_sidebar_turned_back_partway_slides_from_where_it_had_got_to(cx: &mut TestAp
     assert!(!ui.has(LEFT_EDGE));
 }
 
-/// A workspace shown for the first time partway through a slide finds the sidebar where it is, rather than where it's
-/// going.
+/// A workspace shown partway through a slide finds the sidebar where it is, rather than where it's going.
 #[gpui_kit::test]
 fn a_workspace_shown_partway_through_a_slide_starts_its_header_where_the_sidebar_is(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = with_a_workspace(cx, &stack);
+    let (_hub, mut ui, other) = with_two_workspaces(cx);
     let first = ui.view().selected.clone().unwrap();
-    ui.new_workspace();
+    show(&mut ui, &other);
     ui.allow_motion();
     ui.click("toggle-sidebar");
     slide_on(&mut ui, 0.25);
@@ -253,25 +237,23 @@ fn a_workspace_shown_partway_through_a_slide_starts_its_header_where_the_sidebar
     assert_eq!(title, left + px(16.));
 }
 
+/// A sidebar gives up its room where it isn't drawn, as the sidebar of changes isn't on Home, and as it slides away,
+/// and takes it as it slides back. Fitted by which is open and which hidden, the one sliding took its whole width and
+/// the other all the room, in the frame the slide set off.
 #[gpui_kit::test]
-fn reduce_motion_skips_the_slide(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = with_a_workspace(cx, &stack);
-
-    ui.click("toggle-sidebar");
-    ui.click("toggle-diff");
-
-    assert!(!ui.has(LEFT_EDGE) && !ui.has(RIGHT_EDGE));
-}
-
-/// A sidebar gives up its room as it slides away, and takes it as it slides back. Fitted by which is open and which
-/// hidden, the one sliding took its whole width and the other all the room, in the frame the slide set off.
-#[gpui_kit::test]
-fn in_a_narrow_window_a_sidebar_sliding_away_leaves_its_room_as_it_goes(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = with_a_workspace(cx, &stack);
+fn in_a_narrow_window_a_sidebar_leaves_its_room_where_its_not_drawn_and_as_it_slides_away(cx: &mut TestAppContext) {
+    let (_hub, mut ui, _) = with_two_workspaces(cx);
+    let workspace = ui.view().selected.clone().unwrap();
     narrow_the_window(&mut ui);
     assert_eq!((left_shown(&mut ui), right_shown(&mut ui)), (px(240.), px(300.)));
+
+    ui.click("home");
+    ui.wait("Home", |ui| ui.has("home-page"));
+
+    assert_eq!(left_shown(&mut ui), LEFT_USUALLY, "on Home, where no changes show");
+
+    show(&mut ui, &workspace);
+    assert_eq!((left_shown(&mut ui), right_shown(&mut ui)), (px(240.), px(300.)), "back in the workspace");
     ui.allow_motion();
 
     ui.click("toggle-sidebar");
@@ -286,42 +268,12 @@ fn in_a_narrow_window_a_sidebar_sliding_away_leaves_its_room_as_it_goes(cx: &mut
     assert_eq!(right_shown(&mut ui), RIGHT_USUALLY, "and the one on the right has its usual width once it's gone");
 }
 
-/// Dragged narrower in a narrow window, the left sidebar gives the right one its room, and takes it back.
-#[gpui_kit::test]
-fn an_edge_dragged_narrower_and_back_gets_back_the_width_it_had(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = with_a_workspace(cx, &stack);
-    ui.cx.simulate_window_resize(ui.handle, size(px(1000.), px(800.)));
-    ui.frame();
-    assert_eq!((left_shown(&mut ui), right_shown(&mut ui)), (LEFT_USUALLY, px(350.)));
-
-    drag_edge(&mut ui, LEFT_EDGE, px(250.));
-    assert_eq!((left_shown(&mut ui), right_shown(&mut ui)), (px(250.), px(390.)));
-    drag_edge(&mut ui, LEFT_EDGE, LEFT_USUALLY);
-
-    assert_eq!((left_shown(&mut ui), right_shown(&mut ui)), (LEFT_USUALLY, px(350.)));
-}
-
-/// The sidebar of changes takes room only where it's drawn, so Home has the sidebar at the width it was dragged to.
-#[gpui_kit::test]
-fn in_a_narrow_window_the_sidebar_has_its_width_where_no_changes_show(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = with_a_workspace(cx, &stack);
-    narrow_the_window(&mut ui);
-    assert_eq!(left_shown(&mut ui), px(240.));
-
-    ui.click("home");
-    ui.wait("Home", |ui| ui.has("home-page"));
-
-    assert_eq!(left_shown(&mut ui), LEFT_USUALLY);
-}
-
 /// An error sits above the header, in the strip beside the window's buttons, so the header is below them and starts
-/// where it would with nothing to clear.
+/// where it would with nothing to clear. While the sidebar is hidden, its button is over the error, where a click
+/// dismisses the error, and a click on the button only shows the sidebar.
 #[gpui_kit::test]
-fn under_an_error_the_header_starts_at_the_windows_edge_while_the_sidebar_is_hidden(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = with_a_workspace(cx, &stack);
+fn under_an_error_the_header_starts_at_the_windows_edge_and_the_button_leaves_the_error_alone(cx: &mut TestAppContext) {
+    let (_hub, mut ui, _) = with_two_workspaces(cx);
     ui.click("toggle-sidebar");
     let button = ui.bounds("toggle-sidebar");
     assert_eq!(ui.bounds("workspace-title").left(), button.right() + px(16.));
@@ -334,50 +286,9 @@ fn under_an_error_the_header_starts_at_the_windows_edge_while_the_sidebar_is_hid
     // The error is in the strip, so it's what clears the window's buttons.
     let error = ui.bounds("error-text");
     assert!(error.left() >= button.right(), "the error starts after the button: {error:?}");
-}
-
-/// While the sidebar is hidden, its button is over whatever is in the strip along the top, and a click on an error
-/// there dismisses it.
-#[gpui_kit::test]
-fn the_button_leaves_an_error_under_it_alone(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = with_a_workspace(cx, &stack);
-    ui.click("toggle-sidebar");
-    show_an_error(&mut ui);
 
     ui.click("toggle-sidebar");
 
     assert!(ui.has(LEFT_EDGE), "the sidebar shows again");
     assert!(ui.view().error.is_some(), "and the error is still there");
-}
-
-/// Each can be dragged wide while the other is hidden, to more than the window has room for with both showing.
-#[gpui_kit::test]
-fn sidebars_too_wide_for_the_window_together_leave_room_between_them(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = with_a_workspace(cx, &stack);
-    let across = window_width(&mut ui);
-    ui.click("toggle-diff");
-    drag_edge(&mut ui, LEFT_EDGE, px(480.));
-    ui.click("toggle-sidebar");
-    ui.click("toggle-diff");
-    drag_edge(&mut ui, RIGHT_EDGE, across - px(800.));
-    assert_eq!(right_shown(&mut ui), px(800.));
-
-    ui.click("toggle-sidebar");
-
-    let (left, right) = (left_shown(&mut ui), right_shown(&mut ui));
-    assert_eq!(left, px(480.), "the one on the left keeps its width");
-    assert_eq!(across - left - right, px(360.), "and the one on the right gives way: {right:?}");
-}
-
-#[gpui_kit::test]
-fn settings_stands_in_for_the_sidebar_at_the_width_it_was_dragged_to(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = with_a_workspace(cx, &stack);
-    drag_edge(&mut ui, LEFT_EDGE, px(350.));
-
-    ui.press("secondary-,");
-
-    assert_eq!(ui.bounds("settings-back").right(), px(350. - 12.), "Back is at its top right");
 }

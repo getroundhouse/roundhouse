@@ -34,6 +34,10 @@ fn read_at_the_hub(stack: &Stack, chat: &SessionId) -> bool {
     session.has_reply() && !session.unread()
 }
 
+fn unread_at_the_hub(stack: &Stack, chat: &SessionId) -> bool {
+    stack.client().session_get(chat).unwrap().unread()
+}
+
 /// A window in front, with a repository and a workspace whose chat is showing. Returns them.
 fn open_with_a_workspace<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> (Ui<'a>, WorkspaceId, SessionId) {
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
@@ -45,21 +49,59 @@ fn open_with_a_workspace<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> (Ui<'
     (ui, workspace, chat)
 }
 
-#[gpui_kit::test]
-fn a_reply_in_another_workspace_is_unread_until_its_shown(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let (mut ui, elsewhere, chat) = open_with_a_workspace(cx, &stack);
-    let showing = ui.new_workspace();
+/// Marks the chat showing unread from its tab's menu, and waits for its tab and its workspace's row to say so.
+fn mark_unread_from_its_tab(ui: &mut Ui, workspace: &WorkspaceId, chat: &SessionId) {
+    ui.right_click(SharedString::from(format!("chat-{chat}")));
+    ui.click(ElementId::Integer(0));
+    ui.wait("its tab and row to say so", |ui| tab_unread(ui, chat) && row_unread(ui, workspace));
+}
 
-    stack.client().session_prompt(&chat, "say:while you were away", None).unwrap();
+/// Somewhere the person goes from a chat, so a reply that comes to it meanwhile isn't seen.
+#[derive(Clone, Copy, Debug)]
+enum Away {
+    InAnotherApp,
+    InSettings,
+    OnHome,
+    InTheFileTab,
+    InAnotherWorkspace,
+}
 
-    ui.wait("its row to say so", |ui| row_unread(ui, &elsewhere));
-    assert!(replied(&stack, &chat).unread());
-    assert!(!row_unread(&ui, &showing));
-    ui.click(SharedString::from(format!("workspace-{elsewhere}")));
-    ui.wait("it to show", |ui| ui.view().selected.as_ref() == Some(&elsewhere));
-    ui.wait("the hub to have it read", |_| read_at_the_hub(&stack, &chat));
-    ui.wait("the mark to go", |ui| !row_unread(ui, &elsewhere) && !tab_unread(ui, &chat));
+impl Away {
+    /// Goes there from the chat showing in `workspace`. Returns the workspace showing instead, if another is.
+    fn go(self, ui: &mut Ui, workspace: &WorkspaceId) -> Option<WorkspaceId> {
+        match self {
+            Away::InAnotherApp => ui.send_to_back(),
+            Away::InSettings => {
+                ui.press("secondary-,");
+                ui.wait("Settings", |ui| ui.has("settings-back"));
+            }
+            Away::OnHome => {
+                ui.click("home");
+                ui.wait("Home", |ui| ui.has("home-page"));
+            }
+            Away::InTheFileTab => {
+                std::fs::write(ui.worktree(workspace).join("a.txt"), "one\ntwo\n").unwrap();
+                let diff = ui.open_changes();
+                ui.open_diff_of(&diff, "a.txt");
+            }
+            Away::InAnotherWorkspace => return Some(ui.new_workspace()),
+        }
+        None
+    }
+
+    /// Comes back to `chat` in `workspace` from there, as the person would.
+    fn come_back(self, ui: &mut Ui, workspace: &WorkspaceId, chat: &SessionId) {
+        match self {
+            Away::InAnotherApp => ui.bring_to_front(),
+            Away::InSettings => ui.press("escape"),
+            Away::OnHome => ui.click(SharedString::from(format!("home-{workspace}"))),
+            Away::InTheFileTab => ui.click(SharedString::from(format!("chat-{chat}"))),
+            Away::InAnotherWorkspace => {
+                ui.click(SharedString::from(format!("workspace-{workspace}")));
+                ui.wait("it to show", |ui| ui.view().selected.as_ref() == Some(workspace));
+            }
+        }
+    }
 }
 
 #[gpui_kit::test]
@@ -75,103 +117,47 @@ fn a_reply_in_the_chat_showing_is_read_as_it_comes(cx: &mut TestAppContext) {
     assert!(!row_unread(&ui, &workspace) && !tab_unread(&ui, &chat));
 }
 
+/// Wherever the person has gone from the chat, its tab and its workspace's row say it has a reply nobody has read
+/// until they come back to it. Each place is gone to and come back from in turn, in one window.
 #[gpui_kit::test]
-fn a_reply_while_another_app_is_in_front_waits_for_the_app_to_come_back(cx: &mut TestAppContext) {
+fn a_reply_while_its_chat_isnt_in_front_is_unread_until_you_come_back_to_it(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let (mut ui, workspace, chat) = open_with_a_workspace(cx, &stack);
-    ui.send_to_back();
 
-    stack.client().session_prompt(&chat, "say:while you were in another app", None).unwrap();
+    for away in [Away::InAnotherApp, Away::InSettings, Away::OnHome, Away::InTheFileTab, Away::InAnotherWorkspace] {
+        let instead = away.go(&mut ui, &workspace);
 
-    ui.wait("its tab and row to say so", |ui| tab_unread(ui, &chat) && row_unread(ui, &workspace));
-    assert!(replied(&stack, &chat).unread());
-    ui.bring_to_front();
-    ui.wait("the hub to have it read", |_| read_at_the_hub(&stack, &chat));
-    ui.wait("the marks to go", |ui| !tab_unread(ui, &chat) && !row_unread(ui, &workspace));
+        stack.client().session_prompt(&chat, &format!("say:while you were {away:?}"), None).unwrap();
+
+        // Another workspace shows its own tabs, so only the row can say so.
+        let said = |ui: &mut Ui| row_unread(ui, &workspace) && (instead.is_some() || tab_unread(ui, &chat));
+        ui.wait(&format!("{away:?}: its tab and row to say so"), said);
+        assert!(unread_at_the_hub(&stack, &chat), "{away:?}: the hub has it unread");
+        if let Some(showing) = &instead {
+            assert!(!row_unread(&ui, showing), "{away:?}: the workspace showing has nothing unread");
+        }
+        away.come_back(&mut ui, &workspace, &chat);
+        ui.wait(&format!("{away:?}: the hub to have it read"), |_| read_at_the_hub(&stack, &chat));
+        let gone = |ui: &mut Ui| !tab_unread(ui, &chat) && !row_unread(ui, &workspace);
+        ui.wait(&format!("{away:?}: the marks to go"), gone);
+    }
 }
 
 #[gpui_kit::test]
-fn a_reply_while_settings_shows_waits_until_you_go_back(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let (mut ui, workspace, chat) = open_with_a_workspace(cx, &stack);
-    ui.press("secondary-,");
-    ui.wait("Settings", |ui| ui.has("settings-back"));
-
-    stack.client().session_prompt(&chat, "say:while you were in Settings", None).unwrap();
-
-    ui.wait("its tab and row to say so", |ui| tab_unread(ui, &chat) && row_unread(ui, &workspace));
-    assert!(replied(&stack, &chat).unread());
-    ui.press("escape");
-    ui.wait("the hub to have it read", |_| read_at_the_hub(&stack, &chat));
-    ui.wait("the marks to go", |ui| !tab_unread(ui, &chat) && !row_unread(ui, &workspace));
-}
-
-#[gpui_kit::test]
-fn a_reply_while_home_shows_waits_until_its_workspace_does(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let (mut ui, workspace, chat) = open_with_a_workspace(cx, &stack);
-    ui.click("home");
-    ui.wait("Home", |ui| ui.has("home-page"));
-
-    stack.client().session_prompt(&chat, "say:while you were in Home", None).unwrap();
-
-    ui.wait("its tab and row to say so", |ui| tab_unread(ui, &chat) && row_unread(ui, &workspace));
-    assert!(replied(&stack, &chat).unread());
-    ui.click(SharedString::from(format!("home-{workspace}")));
-    ui.wait("the hub to have it read", |_| read_at_the_hub(&stack, &chat));
-    ui.wait("the marks to go", |ui| !tab_unread(ui, &chat) && !row_unread(ui, &workspace));
-}
-
-#[gpui_kit::test]
-fn a_reply_while_the_file_tab_shows_waits_until_the_chat_does(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let (mut ui, workspace, chat) = open_with_a_workspace(cx, &stack);
-    std::fs::write(ui.worktree(&workspace).join("a.txt"), "one\ntwo\n").unwrap();
-    let diff = ui.open_changes();
-    ui.open_diff_of(&diff, "a.txt");
-
-    stack.client().session_prompt(&chat, "say:while you were reading the diff", None).unwrap();
-
-    ui.wait("its tab and row to say so", |ui| tab_unread(ui, &chat) && row_unread(ui, &workspace));
-    assert!(replied(&stack, &chat).unread());
-    ui.click(SharedString::from(format!("chat-{chat}")));
-    ui.wait("the hub to have it read", |_| read_at_the_hub(&stack, &chat));
-    ui.wait("the marks to go", |ui| !tab_unread(ui, &chat) && !row_unread(ui, &workspace));
-}
-
-#[gpui_kit::test]
-fn a_chat_marked_unread_stays_so_until_its_shown_again(cx: &mut TestAppContext) {
+fn a_chat_marked_unread_stays_so_until_its_shown_again_even_across_a_hub_restart(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let (mut ui, workspace, chat) = open_with_a_workspace(cx, &stack);
     ui.input("say:read this later");
     ui.press("enter");
     ui.wait("the hub to have it read", |_| read_at_the_hub(&stack, &chat));
 
-    ui.right_click(SharedString::from(format!("chat-{chat}")));
-    ui.click(ElementId::Integer(0));
+    mark_unread_from_its_tab(&mut ui, &workspace, &chat);
 
-    ui.wait("its tab and row to say so", |ui| tab_unread(ui, &chat) && row_unread(ui, &workspace));
-    assert!(stack.client().session_get(&chat).unwrap().unread());
+    assert!(unread_at_the_hub(&stack, &chat));
     for _ in 0..20 {
         ui.frame();
     }
-    assert!(stack.client().session_get(&chat).unwrap().unread(), "showing it still doesn't read it");
-    let other = ui.new_chat();
-    ui.show_chat(&chat);
-    assert_ne!(other, chat);
-    ui.wait("the hub to have it read", |_| read_at_the_hub(&stack, &chat));
-}
-
-#[gpui_kit::test]
-fn a_chat_marked_unread_stays_so_across_a_hub_restart(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let (mut ui, workspace, chat) = open_with_a_workspace(cx, &stack);
-    ui.input("say:read this later");
-    ui.press("enter");
-    ui.wait("the hub to have it read", |_| read_at_the_hub(&stack, &chat));
-    ui.right_click(SharedString::from(format!("chat-{chat}")));
-    ui.click(ElementId::Integer(0));
-    ui.wait("its tab and row to say so", |ui| tab_unread(ui, &chat) && row_unread(ui, &workspace));
+    assert!(unread_at_the_hub(&stack, &chat), "showing it still doesn't read it");
 
     let pid = stack.client().hub_status().unwrap().pid;
     client_core::stop_hub(&stack.hub.paths.socket).unwrap();
@@ -180,11 +166,12 @@ fn a_chat_marked_unread_stays_so_across_a_hub_restart(cx: &mut TestAppContext) {
         ui.frame();
     }
 
-    assert!(stack.client().session_get(&chat).unwrap().unread(), "a hub restart doesn't read it");
+    assert!(unread_at_the_hub(&stack, &chat), "a hub restart doesn't read it");
     assert!(tab_unread(&ui, &chat) && row_unread(&ui, &workspace));
     // Going elsewhere and coming back still reads it, so it isn't unread only because nothing is read since.
-    ui.new_chat();
+    let other = ui.new_chat();
     ui.show_chat(&chat);
+    assert_ne!(other, chat);
     ui.wait("the hub to have it read", |_| read_at_the_hub(&stack, &chat));
 }
 
@@ -198,9 +185,7 @@ fn a_chat_marked_unread_stays_so_when_the_hub_is_lost_and_found_again(cx: &mut T
     ui.input("say:read this later");
     ui.press("enter");
     ui.wait("the hub to have it read", |_| read_at_the_hub(&stack, &chat));
-    ui.right_click(SharedString::from(format!("chat-{chat}")));
-    ui.click(ElementId::Integer(0));
-    ui.wait("its tab and row to say so", |ui| tab_unread(ui, &chat) && row_unread(ui, &workspace));
+    mark_unread_from_its_tab(&mut ui, &workspace, &chat);
 
     client_core::stop_hub(&stack.hub.paths.socket).unwrap();
     ui.wait("the app to find no hub", |ui| matches!(ui.view().connection(), Connection::Failed(_)));
@@ -211,122 +196,103 @@ fn a_chat_marked_unread_stays_so_when_the_hub_is_lost_and_found_again(cx: &mut T
         ui.frame();
     }
 
-    assert!(stack.client().session_get(&chat).unwrap().unread(), "finding the hub again doesn't read it");
+    assert!(unread_at_the_hub(&stack, &chat), "finding the hub again doesn't read it");
     ui.new_chat();
     ui.show_chat(&chat);
     ui.wait("the hub to have it read", |_| read_at_the_hub(&stack, &chat));
 }
 
-#[gpui_kit::test]
-fn a_chat_shown_while_the_hub_restarts_is_read_once_its_back(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let (mut ui, _, first) = open_with_a_workspace(cx, &stack);
-    let later = ui.new_chat();
-    ui.input("say:read this later");
-    ui.press("enter");
-    ui.wait("the hub to have it read", |_| read_at_the_hub(&stack, &later));
-    ui.right_click(SharedString::from(format!("chat-{later}")));
-    ui.click(ElementId::Integer(0));
-    ui.wait("it to be unread", |_| stack.client().session_get(&later).unwrap().unread());
-    ui.show_chat(&first);
-    let (pane, pid) = (ui.pane().unwrap(), stack.client().hub_status().unwrap().pid);
-
-    // Shown before anything else runs, so the app is surely still connecting, and has no hub to mark it read on.
-    ui.cx.update(|cx| ui.view.update(cx, |view, cx| view.restart_hub(pid, cx)));
-    ui.cx.update(|cx| pane.update(cx, |p, cx| p.activate(later.clone(), cx)));
-    assert!(matches!(ui.view().connection(), Connection::Connecting));
-    assert!(tab_unread(&ui, &later), "nothing is read without a hub");
-
-    ui.wait_for_new_hub(&stack, pid);
-    ui.wait("the hub to have it read", |_| read_at_the_hub(&stack, &later));
+/// How a chat marked unread is shown again while the hub restarts.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ShownAgain {
+    /// From another chat, which was showing.
+    FromAnotherChat,
+    /// By going to another chat and back, from the chat itself.
+    ByGoingAwayAndBack,
 }
 
+/// Shown again before anything else runs, so the app is surely still connecting, and has no hub to mark it read on.
+/// Each way of showing it again is tried in turn, in one window.
 #[gpui_kit::test]
-fn going_to_another_chat_and_back_while_the_hub_restarts_reads_a_chat_marked_unread(cx: &mut TestAppContext) {
+fn a_chat_marked_unread_and_shown_again_while_the_hub_restarts_is_read_once_its_back(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let (mut ui, _, first) = open_with_a_workspace(cx, &stack);
     let later = ui.new_chat();
     ui.input("say:read this later");
     ui.press("enter");
     ui.wait("the hub to have it read", |_| read_at_the_hub(&stack, &later));
-    ui.right_click(SharedString::from(format!("chat-{later}")));
-    ui.click(ElementId::Integer(0));
-    ui.wait("it to be unread", |_| stack.client().session_get(&later).unwrap().unread());
-    let (pane, pid) = (ui.pane().unwrap(), stack.client().hub_status().unwrap().pid);
 
-    // Away and back before anything else runs, so the app is surely still connecting.
-    ui.cx.update(|cx| ui.view.update(cx, |view, cx| view.restart_hub(pid, cx)));
-    ui.cx.update(|cx| {
-        pane.update(cx, |p, cx| {
-            p.activate(first.clone(), cx);
-            p.activate(later.clone(), cx);
+    for shown in [ShownAgain::FromAnotherChat, ShownAgain::ByGoingAwayAndBack] {
+        ui.right_click(SharedString::from(format!("chat-{later}")));
+        ui.click(ElementId::Integer(0));
+        let unread = |ui: &mut Ui| unread_at_the_hub(&stack, &later) && tab_unread(ui, &later);
+        ui.wait(&format!("{shown:?}: it to be unread, and its tab to say so"), unread);
+        if shown == ShownAgain::FromAnotherChat {
+            ui.show_chat(&first);
+        }
+        let (pane, pid) = (ui.pane().unwrap(), stack.client().hub_status().unwrap().pid);
+
+        ui.cx.update(|cx| ui.view.update(cx, |view, cx| view.restart_hub(pid, cx)));
+        ui.cx.update(|cx| {
+            pane.update(cx, |p, cx| {
+                if shown == ShownAgain::ByGoingAwayAndBack {
+                    p.activate(first.clone(), cx);
+                }
+                p.activate(later.clone(), cx);
+            });
         });
-    });
-    assert!(matches!(ui.view().connection(), Connection::Connecting));
 
-    ui.wait_for_new_hub(&stack, pid);
-    ui.wait("the hub to have it read", |_| read_at_the_hub(&stack, &later));
+        assert!(matches!(ui.view().connection(), Connection::Connecting), "{shown:?}: still connecting");
+        assert!(tab_unread(&ui, &later), "{shown:?}: nothing is read without a hub");
+        ui.wait_for_new_hub(&stack, pid);
+        ui.wait(&format!("{shown:?}: the hub to have it read"), |_| read_at_the_hub(&stack, &later));
+    }
 }
 
+/// The sidebar's menu reads a workspace without showing it, and does what it offered when it opened. A reply in the
+/// workspace while it's open is neither read unseen by "Mark as read", nor turns "Mark as unread" into reading it.
 #[gpui_kit::test]
-fn a_workspace_can_be_read_from_the_sidebar_without_showing_it(cx: &mut TestAppContext) {
+fn the_sidebars_menu_marks_a_workspace_without_showing_it_as_it_offered_when_it_opened(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let (mut ui, elsewhere, chat) = open_with_a_workspace(cx, &stack);
-    ui.new_workspace();
-    stack.client().session_prompt(&chat, "say:skim this", None).unwrap();
-    ui.wait("its row to say so", |ui| row_unread(ui, &elsewhere));
-
-    ui.right_click(SharedString::from(format!("workspace-{elsewhere}")));
-    ui.click(ElementId::Integer(0));
-
-    ui.wait("the hub to have it read", |_| read_at_the_hub(&stack, &chat));
-    ui.wait("the mark to go", |ui| !row_unread(ui, &elsewhere));
-    assert_ne!(ui.view().selected.as_ref(), Some(&elsewhere));
-}
-
-/// The sidebar's menu does what it offered when it opened. A reply in another of the workspace's chats while it's open
-/// doesn't turn "Mark as unread" into reading that reply unseen.
-#[gpui_kit::test]
-fn mark_as_unread_still_does_that_when_a_reply_comes_while_the_menu_is_open(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let (mut ui, elsewhere, read) = open_with_a_workspace(cx, &stack);
-    ui.input("say:read this");
-    ui.press("enter");
-    ui.wait("the hub to have it read", |_| read_at_the_hub(&stack, &read));
     let other = ui.new_chat();
-    ui.new_workspace();
-    ui.right_click(SharedString::from(format!("workspace-{elsewhere}")));
-
-    stack.client().session_prompt(&other, "say:while the menu is open", None).unwrap();
-    ui.wait("the other chat to be unread", |ui| row_unread(ui, &elsewhere));
-    ui.click(ElementId::Integer(0));
-
-    ui.wait("the read chat to be unread again", |_| stack.client().session_get(&read).unwrap().unread());
-    assert!(stack.client().session_get(&other).unwrap().unread(), "the reply nobody has seen was read");
-}
-
-/// The same for "Mark as read": it reads what was there when the menu opened, and a reply since stays unread.
-#[gpui_kit::test]
-fn mark_as_read_leaves_a_reply_that_came_while_the_menu_was_open(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let (mut ui, elsewhere, chat) = open_with_a_workspace(cx, &stack);
     ui.new_workspace();
     stack.client().session_prompt(&chat, "say:the first", None).unwrap();
     ui.wait("its row to say so", |ui| row_unread(ui, &elsewhere));
     let first = replied(&stack, &chat).reply_seq;
-    ui.right_click(SharedString::from(format!("workspace-{elsewhere}")));
+    let menu = SharedString::from(format!("workspace-{elsewhere}"));
 
+    // "Mark as read", with a second reply while the menu is open.
+    ui.right_click(menu.clone());
     stack.client().session_prompt(&chat, "say:the second", None).unwrap();
     let mut second = first;
-    ui.wait("the second reply", |_| {
+    ui.wait("Mark as read: the second reply", |_| {
         second = stack.client().session_get(&chat).unwrap().reply_seq;
         second > first
     });
     ui.click(ElementId::Integer(0));
 
-    ui.wait("the first reply to be read", |_| stack.client().session_get(&chat).unwrap().read_seq >= first);
+    let first_read = |_: &mut Ui| stack.client().session_get(&chat).unwrap().read_seq >= first;
+    ui.wait("Mark as read: the first reply to be read", first_read);
     let session = stack.client().session_get(&chat).unwrap();
-    assert!(session.unread() && session.reply_seq == second, "the second reply was read unseen");
+    assert!(session.unread() && session.reply_seq == second, "Mark as read: the second reply was read unseen");
+
+    // "Mark as read" again, with nothing coming, reads it all, and leaves the workspace where it is.
+    ui.right_click(menu.clone());
+    ui.click(ElementId::Integer(0));
+
+    ui.wait("Mark as read again: the hub to have it read", |_| read_at_the_hub(&stack, &chat));
+    ui.wait("Mark as read again: the mark to go", |ui| !row_unread(ui, &elsewhere));
+    assert_ne!(ui.view().selected.as_ref(), Some(&elsewhere), "Mark as read again: it doesn't show the workspace");
+
+    // "Mark as unread", with a reply in another of the workspace's chats while the menu is open.
+    ui.right_click(menu);
+    stack.client().session_prompt(&other, "say:while the menu is open", None).unwrap();
+    ui.wait("Mark as unread: the other chat to be unread", |ui| row_unread(ui, &elsewhere));
+    ui.click(ElementId::Integer(0));
+
+    ui.wait("Mark as unread: the read chat to be unread again", |_| unread_at_the_hub(&stack, &chat));
+    assert!(unread_at_the_hub(&stack, &other), "Mark as unread: the reply nobody has seen was read");
 }
 
 #[gpui_kit::test]
@@ -341,7 +307,7 @@ fn the_key_marks_the_workspace_showing_unread_and_read_again(cx: &mut TestAppCon
     ui.press("secondary-shift-u");
 
     ui.wait("it to be unread", |ui| row_unread(ui, &workspace));
-    assert!(stack.client().session_get(&chat).unwrap().unread(), "the hub has it unread too");
+    assert!(unread_at_the_hub(&stack, &chat), "the hub has it unread too");
 
     ui.press("secondary-shift-u");
 
