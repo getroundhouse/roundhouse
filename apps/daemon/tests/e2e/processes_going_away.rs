@@ -3,9 +3,10 @@
 #![cfg(test)]
 
 use std::process::Command;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use client_core::{Client, ClientError, SubscriptionItem};
+use hub::Timers;
 use protocol::client::ErrorCode;
 use protocol::event::{ApprovalDecision, EventBody, ExitReason, SessionEvent};
 use protocol::model::{Seq, SessionStatus};
@@ -195,8 +196,11 @@ fn killing_the_hub_and_worker_together_cannot_lead_to_two_agents() {
 
 #[test]
 fn the_next_hub_ends_a_worker_the_last_one_left_still_stopping() {
-    // The worker waits a minute for its agent's last output, so it's still stopping when the next hub starts.
-    let mut stack = Stack::start_with(vec![(agents::ENV_DRAIN_GRACE_MS, "60000".into())]);
+    // The worker waits a minute for its agent's last output, so it's still stopping when the next hub starts. The next
+    // hub gives a worker ten minutes to say hello, so one that waited for it to stop would hold the hub up far longer
+    // than the test waits for it to serve, however slow the machine.
+    let hellos = Timers { hello_within: Duration::from_mins(10), ..Timers::FOR_TESTS };
+    let mut stack = Stack::start_with(vec![(agents::ENV_DRAIN_GRACE_MS, "60000".into()), hellos.env()]);
     let client = stack.client();
     let (workspace, session) = stack.workspace(&client);
     let go = stack.path("late-output");
@@ -217,10 +221,8 @@ fn the_next_hub_ends_a_worker_the_last_one_left_still_stopping() {
     stack.kill_hub();
     wait_until("the agent to stop", || !is_alive(agent_pid));
     assert!(is_alive(worker_pid), "the worker should still be waiting for its agent's last output");
-    let starting = Instant::now();
-    stack.start_hub();
     // Rather than waiting for a worker that may be stuck.
-    assert!(starting.elapsed() < Duration::from_secs(5), "took {:?} to serve", starting.elapsed());
+    stack.start_hub();
     let client = stack.client();
     assert_eq!(client.session_get(&session.id).unwrap().status, SessionStatus::Interrupted);
     client.session_prompt(&session.id, "say:second", None).unwrap();
