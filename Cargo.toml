@@ -20,6 +20,7 @@ members = [
     "crates/fetching",
     "crates/update-feed",
     "crates/waiting",
+    "crates/terminal-view",
     "tools/policy",
     "tools/guide",
     "tools/kit-sync",
