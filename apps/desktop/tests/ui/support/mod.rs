@@ -9,6 +9,7 @@ mod click;
 mod daemons;
 mod diff;
 mod drawn;
+mod fake;
 mod files;
 mod frozen;
 mod gate;
@@ -34,6 +35,7 @@ pub(crate) use asked::id;
 pub(crate) use click::{click, under_the_middle_of};
 pub(crate) use daemons::{binaries, hub_environment};
 pub(crate) use diff::Diff;
+pub(crate) use fake::FakeHub;
 pub(crate) use files::files_holding;
 pub(crate) use frozen::Frozen;
 pub(crate) use gate::Gate;
@@ -41,6 +43,8 @@ pub(crate) use held::Held;
 pub(crate) use labels::{MENU, click_menu_item, labelled};
 
 /// For the gallery, which only a Mac draws.
+#[cfg(target_os = "macos")]
+pub(crate) use fake::hub_source;
 #[cfg(target_os = "macos")]
 pub(crate) use labels::first_labelled_in;
 #[cfg(target_os = "macos")]

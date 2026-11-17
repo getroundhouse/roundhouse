@@ -7,6 +7,7 @@
 #![expect(clippy::unwrap_used, reason = "only tests use it, so failing loudly is what it should do")]
 
 mod base_pages;
+pub mod events;
 mod serve;
 mod stand_in;
 mod subagent_records;

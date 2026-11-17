@@ -11,7 +11,7 @@ use protocol::prompt::Prompt;
 use protocol::tail::{BlockKind, Tail, TailBlock, TailMessage};
 use serde_json::json;
 
-use super::events::{replied, taken, text, thought, tool_result, tool_use, user_prompt};
+use client_core::fake_hub::events::{replied, taken, text, thought, tool_result, tool_use, user_prompt};
 
 const ASK: &str = "The sidebar should show each workspace's PR state. Where would that come from?";
 

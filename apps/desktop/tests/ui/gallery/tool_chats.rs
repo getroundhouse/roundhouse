@@ -7,7 +7,7 @@ use protocol::event::EventBody;
 use protocol::model::Seq;
 use serde_json::json;
 
-use super::events::{
+use client_core::fake_hub::events::{
     advice_failed, advised, advised_encrypted, replied, taken, text, tool_failed, tool_result, tool_use, user_prompt,
 };
 

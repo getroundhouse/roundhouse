@@ -9,12 +9,12 @@ use protocol::event::EventBody;
 use protocol::model::{Seq, SessionId, SessionStatus};
 
 use super::chats::{self, finished};
-use super::events::{replied, taken, text, user_prompt};
 use super::frame::{CHAT, Frame, Part, TURN_CARD};
 use super::screens::FOCUS;
 use super::steps::{Screen, Step, Target};
 use super::worlds::{chat_world, conversation, titled};
 use client_core::fake_hub::World;
+use client_core::fake_hub::events::{replied, taken, text, user_prompt};
 
 /// The screens about the cache.
 pub(crate) const SCREENS: &[Screen] = &[

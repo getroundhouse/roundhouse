@@ -1,7 +1,8 @@
 //! The desktop app driven through its real UI, by clicks and typing, against a real hub, real workers
 //! and real git worktrees. Only the agent is fake, and no window appears on screen. See
-//! `tools/stand-ins/fake-claude/` for what prompts can script. The gallery is the exception: it draws
-//! each screen from a fake hub's fixed data, so a screen looks the same every time.
+//! `tools/stand-ins/fake-claude/` for what prompts can script. A test of only what the window draws of
+//! what a hub holds opens it on a fake hub's fixed data instead, with `Ui::open_on`, and the gallery
+//! draws each screen from one, so a screen looks the same every time.
 
 #![cfg(test)]
 

@@ -1,5 +1,5 @@
 //! Everything the fake hub serves, and the builders that make it. Records get IDs and times in the order they're
-//! made, so a screen gets the same data on every run.
+//! made, so a test gets the same data on every run.
 
 use std::collections::HashMap;
 
@@ -48,20 +48,20 @@ pub struct World {
     /// The bytes of the images the hub keeps, by attachment: the files prompts carry, and the images tools send back
     /// and the agent's text points to.
     pub attachments: HashMap<AttachmentId, Vec<u8>>,
-    /// The files and folders in the screen's worktree, as All files lists them.
+    /// The files and folders in the world's worktree, as All files lists them.
     pub worktree: WorktreeFiles,
-    /// What's in each folder of the screen's worktree that's read when it's opened, by its path.
+    /// What's in each folder of the world's worktree that's read when it's opened, by its path.
     pub worktree_folders: HashMap<String, WorktreeFiles>,
-    /// What the files in the screen's worktree that can be opened hold, by path.
+    /// What the files in the world's worktree that can be opened hold, by path.
     pub worktree_files: HashMap<String, FileContents>,
-    /// What the files the screen's diff changes held in the commit it was taken from, by path.
+    /// What the files the world's diff changes held in the commit it was taken from, by path.
     pub base_files: HashMap<String, FileContents>,
     /// Whether the hub is from before it read the agent's own events apart from its subagents', so a chat holds every
     /// event, and a subagent's work is gathered into its call.
     pub reads_every_event_together: bool,
     /// The hub's build, for a screen about a hub that isn't the app's build.
     pub hub: Option<HubBuild>,
-    /// The records of the accounts the screen's chats run under.
+    /// The records of the accounts the world's chats run under.
     pub accounts: Vec<Account>,
     pub account_defaults: Vec<protocol::model::AccountDefault>,
     /// The hub is from before hubs kept settings, so it sends none.
@@ -95,7 +95,7 @@ pub struct PairingWorld {
     pub paired_device: Option<&'static str>,
 }
 
-/// The login capabilities of the hub whose version the screen illustrates.
+/// The login capabilities of the hub whose version the world stands for.
 #[derive(Clone, Copy, Default, Eq, PartialEq)]
 pub enum LoginSupport {
     None,
@@ -127,7 +127,7 @@ impl World {
         id
     }
 
-    /// Ready, with setup done. Change what a screen needs through [`World::workspace_mut`].
+    /// Ready, with setup done. Change what a test needs through [`World::workspace_mut`].
     pub fn workspace(&mut self, repo: &RepoId, name: &str) -> WorkspaceId {
         let id = WorkspaceId::from(format!("ws-{}", self.workspaces.len() + 1));
         let created_at_ms = self.next_time();

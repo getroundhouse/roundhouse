@@ -9,13 +9,13 @@ use protocol::fixtures::{ApprovalRequest, approval_request};
 use protocol::model::{PermissionMode, Seq, SessionStatus, ToolUseId};
 use serde_json::json;
 
-use super::events::{replied, taken, text, tool_result, tool_use, user_prompt};
 use super::frame::{CHAT, CONTEXT};
 use super::screens::FOCUS;
 use super::steps::{Screen, Step, Target};
 use super::worlds::{chat_world, context, in_plan_mode};
 use super::{chats, tool_chats};
 use client_core::fake_hub::World;
+use client_core::fake_hub::events::{replied, taken, text, tool_result, tool_use, user_prompt};
 
 pub(crate) const SCREENS: &[Screen] = &[
     Screen {

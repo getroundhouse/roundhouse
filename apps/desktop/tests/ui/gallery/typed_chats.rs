@@ -14,8 +14,8 @@ use protocol::fixtures::{command_output, typed_command};
 use protocol::model::Seq;
 use serde_json::json;
 
-use super::events::{replied, taken, text, typed_call, typed_result, user_prompt};
 use super::tool_chats::ASK;
+use client_core::fake_hub::events::{replied, taken, text, typed_call, typed_result, user_prompt};
 
 /// What the agent said its command in the background is for.
 pub(crate) const BACKGROUND_LINE: &str = "Start the depot simulator";

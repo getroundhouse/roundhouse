@@ -8,12 +8,12 @@ use protocol::model::{Seq, SessionStatus};
 use serde_json::json;
 
 use super::chats;
-use super::events::{taken, text, tool_result, tool_use, user_prompt};
 use super::frame::{CHAT, Frame, QUEUE, TABS};
 use super::screens::FOCUS;
 use super::steps::{Screen, Step, Target};
 use super::worlds::{chat_world, conversation, queued};
 use client_core::fake_hub::World;
+use client_core::fake_hub::events::{taken, text, tool_result, tool_use, user_prompt};
 
 /// The tab of the chat nothing has been asked in yet, the seventh made in [`untitled`].
 const UNTITLED_TAB: &str = "chat-chat-7";
