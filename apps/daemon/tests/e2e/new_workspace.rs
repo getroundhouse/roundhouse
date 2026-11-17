@@ -1,5 +1,6 @@
 //! Making a workspace from what's in the new-workspace dialog, as the hub keeps it, files and all, so a client sends
-//! none of them again.
+//! none of them again. One example, through a client, a hub and a worker: the hub's own tests, in its
+//! `hub/new_workspace`, have what it does with each thing a dialog can say.
 
 #![cfg(test)]
 
@@ -12,14 +13,14 @@ use protocol::prompt::Prompt;
 use crate::support::{Stack, read_all, wait_until};
 
 /// Keeps a task in the dialog, with a file, for the stack's repository, planning on Sonnet at low effort.
-fn kept_in_the_dialog(stack: &Stack, client: &Client, text: &str) -> NewWorkspaceDraftToKeep {
+fn kept_in_the_dialog(stack: &Stack, client: &Client) -> NewWorkspaceDraftToKeep {
     let repo = client.repo_add(stack.repo().to_str().unwrap()).unwrap();
     let notes = FileToSend::checked("notes.txt", MediaType::Text, b"one\n".to_vec()).unwrap();
     client.new_workspace_draft_file_add(&notes.attachment.id, "notes.txt", MediaType::Text, notes.data).unwrap();
     let draft = NewWorkspaceDraftToKeep {
         agent: None,
         repo_id: Some(repo.id),
-        text: text.to_string(),
+        text: "fix the login".to_string(),
         files: vec![notes.attachment.id],
         model: Some(ModelName::named("sonnet")),
         effort: Some(Effort::Low),
@@ -43,7 +44,7 @@ fn prompts(client: &Client, session: &SessionId) -> Vec<Prompt<Attachment>> {
 fn a_workspace_made_from_the_dialog_has_what_it_said_and_the_dialog_is_emptied() {
     let stack = Stack::start();
     let client = stack.client();
-    let made_of = kept_in_the_dialog(&stack, &client, "fix the login");
+    let made_of = kept_in_the_dialog(&stack, &client);
 
     let made = client.new_workspace_create(&made_of, "make it".into()).unwrap();
 
@@ -69,101 +70,4 @@ fn a_workspace_made_from_the_dialog_has_what_it_said_and_the_dialog_is_emptied()
         "the next one's made the same way"
     );
     assert!(client.new_workspace_draft_file_read(&made_of.files[0]).is_err(), "the dialog's copy is let go of");
-}
-
-/// Such as in another client, as the workspace was being made.
-#[test]
-fn whats_typed_in_the_dialog_since_is_kept() {
-    let stack = Stack::start();
-    let client = stack.client();
-    let made_of = kept_in_the_dialog(&stack, &client, "fix the login");
-    let since = NewWorkspaceDraftToKeep { text: "fix the logout".to_string(), ..made_of.clone() };
-    client.new_workspace_draft_keep(&since).unwrap();
-
-    let made = client.new_workspace_create(&made_of, "make it".into()).unwrap();
-
-    wait_until("the prompt", || !prompts(&client, &made.session.id).is_empty());
-    assert_eq!(prompts(&client, &made.session.id)[0].text, "fix the login");
-    let kept = client.records_list().unwrap().new_workspace_draft.unwrap();
-    assert_eq!(kept.text, "fix the logout");
-    assert_eq!(client.new_workspace_draft_file_read(&made_of.files[0]).unwrap(), b"one\n", "it still names its file");
-}
-
-#[test]
-fn sent_again_it_makes_nothing_more() {
-    let stack = Stack::start();
-    let client = stack.client();
-    let made_of = kept_in_the_dialog(&stack, &client, "fix the login");
-    let first = client.new_workspace_create(&made_of, "make it".into()).unwrap();
-
-    let again = client.new_workspace_create(&made_of, "make it".into()).unwrap();
-
-    assert_eq!((&again.workspace.id, &again.session.id), (&first.workspace.id, &first.session.id));
-    assert_eq!(again.unsent, None);
-    wait_until("the prompt", || !prompts(&client, &first.session.id).is_empty());
-    assert_eq!(prompts(&client, &first.session.id).len(), 1);
-    assert_eq!(client.workspace_list(false).unwrap().len(), 1);
-}
-
-#[test]
-fn with_nothing_typed_the_workspace_and_its_chat_are_made_and_nothing_is_sent() {
-    let stack = Stack::start();
-    let client = stack.client();
-    let made_of =
-        NewWorkspaceDraftToKeep { text: String::new(), files: Vec::new(), ..kept_in_the_dialog(&stack, &client, "") };
-    client.new_workspace_draft_keep(&made_of).unwrap();
-
-    let made = client.new_workspace_create(&made_of, "make it".into()).unwrap();
-
-    assert_eq!(made.session.permission_mode, PermissionMode::Plan);
-    assert_eq!(prompts(&client, &made.session.id), []);
-    assert!(!client.records_list().unwrap().new_workspace_draft.unwrap().plan, "the dialog is emptied, plan mode too");
-}
-
-/// So a chat that's to plan doesn't start on it with full access. Here the effort is one from a newer client, which
-/// this hub doesn't know.
-#[test]
-fn a_prompt_for_a_chat_that_couldnt_be_given_what_was_picked_goes_to_its_composer_with_its_file() {
-    let stack = Stack::start();
-    let client = stack.client();
-    let made_of = NewWorkspaceDraftToKeep {
-        effort: Some(Effort::Unknown),
-        ..kept_in_the_dialog(&stack, &client, "fix the login")
-    };
-    client.new_workspace_draft_keep(&made_of).unwrap();
-
-    let made = client.new_workspace_create(&made_of, "make it".into()).unwrap();
-
-    assert!(made.unchosen.is_some(), "it says the chat couldn't be given what was picked");
-    assert!(made.unsent.as_ref().is_some_and(|unsent| unsent.in_composer), "{:?}", made.unsent);
-    let draft = &made.session.draft;
-    assert_eq!(draft.text, "fix the login");
-    assert_eq!(draft.files.iter().map(|file| &file.id).collect::<Vec<_>>(), [&made_of.files[0]]);
-    assert_eq!(prompts(&client, &made.session.id), []);
-    assert_eq!(client.records_list().unwrap().new_workspace_draft.unwrap().text, "", "the chat has it now");
-}
-
-/// The prompt goes to the chat only whole. Here the hub has lost a file's bytes, so it can't be copied, and the prompt
-/// stays in the dialog, which keeps every file, rather than going to the composer without the one that couldn't.
-#[test]
-fn a_prompt_whose_file_cant_be_copied_stays_in_the_dialog_with_every_file() {
-    let stack = Stack::start();
-    let client = stack.client();
-    let made_of = kept_in_the_dialog(&stack, &client, "fix the login");
-    let lost = FileToSend::checked("lost.txt", MediaType::Text, b"two\n".to_vec()).unwrap();
-    client.new_workspace_draft_file_add(&lost.attachment.id, "lost.txt", MediaType::Text, lost.data).unwrap();
-    let made_of = NewWorkspaceDraftToKeep { files: vec![made_of.files[0].clone(), lost.attachment.id], ..made_of };
-    client.new_workspace_draft_keep(&made_of).unwrap();
-    let bytes = stack.paths().attachments_dir.join("workspace-draft.files").join(made_of.files[1].as_str());
-    std::fs::remove_file(bytes).unwrap();
-
-    let made = client.new_workspace_create(&made_of, "make it".into()).unwrap();
-
-    assert!(made.unsent.as_ref().is_some_and(|unsent| !unsent.in_composer), "{:?}", made.unsent);
-    assert!(made.session.draft.is_empty(), "nothing went to the composer");
-    assert_eq!(prompts(&client, &made.session.id), []);
-    let kept = client.records_list().unwrap().new_workspace_draft.unwrap();
-    assert_eq!(kept.text, "fix the login", "the dialog still has it");
-    assert_eq!(kept.files.iter().map(|file| &file.id).collect::<Vec<_>>(), made_of.files.iter().collect::<Vec<_>>());
-    assert_eq!(client.new_workspace_draft_file_read(&made_of.files[0]).unwrap(), b"one\n");
 }

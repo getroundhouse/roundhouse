@@ -194,7 +194,8 @@ fn a_comment_is_edited_in_place() {
     assert!(client.comment_list(&workspace.id).unwrap().is_empty(), "editing doesn't bring it back");
 }
 
-/// So a client that loses the reply can send it again without making a second one.
+/// So a client that loses the reply can send it again without making a second one. An example of each request that
+/// carries one: the hub's own tests, in its `hub/workspaces`, have that it holds however things have changed since.
 #[test]
 fn creating_again_with_the_same_request_id_returns_what_the_first_made() {
     let stack = Stack::start();
@@ -221,10 +222,6 @@ fn creating_again_with_the_same_request_id_returns_what_the_first_made() {
     assert_eq!(client.workspace_list(false).unwrap().len(), 2);
     assert_eq!(client.session_list(&workspace.id).unwrap().len(), 2);
     assert_eq!(client.comment_list(&workspace.id).unwrap().len(), 1);
-
-    // Sent again after things have changed, it still gets back what it made, rather than a refusal.
-    client.workspace_archive(&workspace.id, true).unwrap();
-    assert_eq!(session(&for_session).unwrap().id, chats[0].id);
 }
 
 #[test]
