@@ -1,5 +1,6 @@
 //! A web server on this computer for tests, standing in for where files are published. It answers each path as it's
-//! told, each request on a thread of its own, and keeps what it was asked for.
+//! told, each request on a thread of its own, and keeps what it was asked for. And an address where nothing is, for a
+//! server that isn't there.
 
 use std::io::{self, Read as _, Write};
 use std::net::{TcpListener, TcpStream};
@@ -147,6 +148,15 @@ pub fn serve(paths: Vec<(String, Vec<Reply>)>) -> io::Result<Server> {
     });
     Ok(Server { base, events, requests })
 }
+
+/// Where nothing listens on this computer, so a connection is refused, as one to a server that isn't there is.
+///
+/// Port 1, which nothing serves on, and which the system never gives a test that asks it for a port, as it gives only
+/// those of a range far above. A port bound and let go again would be free for the system to give the next test that
+/// asks for one, and the tests run side by side, each in a process of its own, so a test that asked there for a server
+/// that isn't there could reach another test's server, and each would hear from the other. Nor can the port be held
+/// without listening on it, since a Mac never answers a connection to a port held that way, so it isn't refused.
+pub const NOWHERE: &str = "http://127.0.0.1:1";
 
 /// A request, up to the end of its headers, however many reads that takes.
 fn read_request(stream: &mut TcpStream) -> io::Result<String> {

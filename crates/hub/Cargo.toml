@@ -37,6 +37,8 @@ uuid.workspace = true
 
 [dev-dependencies]
 client-core = { workspace = true, features = ["testing"] }
+# For an address where nothing listens.
+fetching = { workspace = true, features = ["testing"] }
 hub = { workspace = true, features = ["testing"] }
 process = { workspace = true, features = ["testing"] }
 proptest.workspace = true

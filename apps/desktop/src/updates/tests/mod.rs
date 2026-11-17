@@ -12,7 +12,7 @@ use velopack::locator::VelopackLocatorConfig;
 
 use super::*;
 use crate::updates::signing::{key_pair, public};
-use fetching::serving::{Reply, Server, serve};
+use fetching::serving::{NOWHERE, Reply, Server, serve};
 
 mod app;
 mod looks;
