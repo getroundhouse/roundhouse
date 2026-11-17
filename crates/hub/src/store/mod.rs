@@ -29,7 +29,7 @@ mod instances;
 mod lines;
 mod logins;
 mod made;
-#[cfg(test)]
+#[cfg(any(test, feature = "testing"))]
 mod migrated;
 mod new_workspace_draft;
 #[cfg(test)]
@@ -77,6 +77,8 @@ mod database;
 pub(crate) use database::later_ms;
 pub use database::{Appended, Store, StoredSession, now_ms};
 use database::{current_rev, from_text, json_at, lock, place_column, place_of, rev_of, seq_column, seq_of, text_of};
+#[cfg(feature = "testing")]
+pub use migrated::give_a_migrated_database;
 
 mod devices;
 pub(crate) use devices::TokenHash;

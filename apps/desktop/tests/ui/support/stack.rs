@@ -40,17 +40,16 @@ impl Stack {
         // Under /tmp because of the socket path limit.
         let dir = tempfile::Builder::new().prefix("ahui-").tempdir_in("/tmp").unwrap();
         let root = dir.path();
-        std::fs::create_dir_all(root.join("repo")).unwrap();
-        git(&root.join("repo"), &["init", "-q", "-b", "main"]);
-        std::fs::write(root.join("repo/a.txt"), "one\n").unwrap();
-        git(&root.join("repo"), &["add", "."]);
-        git(&root.join("repo"), &["commit", "-qm", "first"]);
+        process::testing::repository_with_a_commit(&root.join("repo"));
         let paths = protocol::paths::resolve(|name| match name {
             protocol::paths::ENV_HOME => Some(root.join("home").to_string_lossy().into_owned()),
             protocol::paths::ENV_WORKSPACES => Some(root.join("workspaces").to_string_lossy().into_owned()),
             other => std::env::var(other).ok(),
         })
         .unwrap();
+        // So the first hub the app starts opens a store that has run every migration, rather than running them all on
+        // nothing, which no test here is about. Its data directory is made as the app makes it to start one.
+        hub::store::give_a_migrated_database(&paths);
         let hub = HubSource {
             remote: None,
             paths,
