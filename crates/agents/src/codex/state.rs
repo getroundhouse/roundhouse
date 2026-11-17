@@ -25,6 +25,9 @@ pub(super) struct Work {
     /// Native terminal session IDs for unfinished foreground calls, never OS PIDs.
     pub(super) terminals: HashMap<ToolUseId, String>,
     pub(super) calls: HashMap<ToolUseId, protocol::capability::calls::Call>,
+    /// The line that started each web search, until it completes, since only then does Codex say what it searched for,
+    /// so its call is recorded then, from this line.
+    pub(super) searches: HashMap<ToolUseId, String>,
 }
 
 pub(super) enum NativeRequest {

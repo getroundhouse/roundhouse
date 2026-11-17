@@ -3,6 +3,7 @@ mod approvals;
 mod commands;
 mod harness;
 mod images;
+mod items;
 mod lifecycle;
 mod notices;
 mod script;

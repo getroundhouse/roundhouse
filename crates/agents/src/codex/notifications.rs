@@ -103,19 +103,7 @@ async fn dispatch(
         "account/rateLimits/updated" => usage::limits(shared, params, scope, raw).await,
         "warning" => notices::warning(shared, params, scope, raw).await,
         "mcpServer/startupStatus/updated" => notices::mcp_server(shared, params, scope, raw).await,
-        "error" => {
-            let message = params["error"]["message"].as_str().unwrap_or("Codex's request failed");
-            shared
-                .event(
-                    EventBody::Notice {
-                        level: NoticeLevel::Error,
-                        message: message.into(),
-                        subagent: scope.parent.clone(),
-                    },
-                    Some(raw),
-                )
-                .await;
-        }
+        "error" => notices::error(shared, params, scope, raw).await,
         // Idle can precede turn/completed. Only the normalized outcome makes Roundhouse idle.
         "thread/status/changed"
         | "thread/started"
@@ -130,7 +118,11 @@ async fn dispatch(
         // control is connected, and how its moderation classified the turn.
         | "thread/readState/changed"
         | "remoteControl/status/changed"
-        | "turn/moderationMetadata" => {}
+        | "turn/moderationMetadata"
+        // The thread's settings as it starts, which the adapter sets again with each turn it starts.
+        | "thread/settings/updated" => {}
+        // Codex waiting on a running command with nothing to write to it, which the finished command says whole.
+        "item/commandExecution/terminalInteraction" if params["stdin"] == "" => {}
         _ => {
             shared
                 .event(EventBody::AgentOther { kind: method.into(), subagent: scope.parent.clone() }, Some(raw))
