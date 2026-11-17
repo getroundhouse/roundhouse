@@ -5,14 +5,13 @@
 #![cfg(test)]
 
 use std::path::Path;
-use std::time::{Duration, Instant};
 
 use client_core::Client;
 use protocol::attachment::{Attachment, MediaType};
 use protocol::model::{AttachmentId, Session, TitleSource};
 use protocol::prompt::Prompt;
 
-use crate::support::{Stack, is_alive, wait_until, workspace};
+use crate::support::{Stack, TIMEOUT, is_alive, patient_with_workers, wait_until, workspace};
 
 /// Has the fake agent give `title`, and hold the call for it, then prompts the chat, and waits for the call.
 fn prompt_for_a_held_title(stack: &Stack, client: &Client, chat: &Session, title: &str) -> std::path::PathBuf {
@@ -76,18 +75,21 @@ fn a_prompts_images_go_with_it_for_its_title() {
 /// it, and left the call behind.
 #[test]
 fn archiving_stops_a_title_call_under_way_and_what_it_started() {
-    let stack = Stack::start();
+    let stack = Stack::start_with(vec![patient_with_workers().env()]);
     let client = stack.client();
     let (made, chat) = stack.workspace(&client);
     let state = prompt_for_a_held_title(&stack, &client, &chat, "Fix the login redirect");
     let pids: Vec<u32> =
         std::fs::read_to_string(state.join("title-pids")).unwrap().split(' ').map(|pid| pid.parse().unwrap()).collect();
 
-    let stopping = Instant::now();
-    client.workspace_archive(&made.id, true).unwrap();
+    let (socket, id, (archived, archiving)) = (stack.socket(), made.id.clone(), std::sync::mpsc::channel());
+    std::thread::spawn(move || {
+        let answer = Client::connect(&socket, "test").unwrap().workspace_archive(&id, true);
+        archived.send(answer.map(drop).map_err(|e| e.to_string()))
+    });
 
-    // Well within the hub's wait for a worker, which a call keeping it running would use up.
-    assert!(stopping.elapsed() < Duration::from_secs(8), "took {:?}", stopping.elapsed());
+    // Long before the hub would end a worker that a call kept running, which it gives ten minutes here.
+    archiving.recv_timeout(TIMEOUT).expect("the archive to be answered").unwrap();
     for pid in pids {
         wait_until("the call to stop", || !is_alive(pid));
     }

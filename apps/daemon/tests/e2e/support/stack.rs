@@ -1,6 +1,7 @@
 #![cfg(test)]
 
 use super::examples;
+use super::processes::Hub;
 use client_core::{Client, Daemon, Subscription, SubscriptionItem};
 use examples::fake_agent;
 use hub::Timers;
@@ -15,7 +16,7 @@ use protocol::paths::Paths;
 use protocol::tail::Tail;
 use std::fs::File;
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
+use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 use tempfile::TempDir;
 
@@ -23,7 +24,7 @@ pub(crate) const TIMEOUT: Duration = Duration::from_secs(20);
 
 pub(crate) struct Stack {
     pub(crate) dir: TempDir,
-    pub(crate) hub: Option<Child>,
+    pub(crate) hub: Option<Hub>,
     /// The whole environment of every hub this starts, and so of its workers, and of anything else a test starts in
     /// the stack, such as a worker of its own. A test about one of the hub's time limits sets the hub's timers here,
     /// which go in place of [`Timers::FOR_TESTS`], and the workers' the same way.
@@ -104,7 +105,7 @@ impl Stack {
     }
 
     pub(crate) fn start_hub(&mut self) {
-        self.hub = Some(self.command().spawn().unwrap());
+        self.hub = Some(self.command().spawn().unwrap().into());
         wait_until("the hub to accept connections", || Client::connect(&self.socket(), "test").is_ok());
     }
 
@@ -151,6 +152,14 @@ fn hub_environment(dir: &Path) -> WholeEnvironment {
         .set(timers, short)
         .set(worker_timers, worker_short);
     environment
+}
+
+/// A hub's timers for a test that a stop, an archive or a start that gives up doesn't wait for a worker to stop by
+/// itself: [`Timers::FOR_TESTS`], with ten minutes for a worker to stop before the hub ends it as stuck. That's so much
+/// longer than [`TIMEOUT`] that a hub that gets through one within a wait of the test's can't have sat through it,
+/// however slow the machine, where a test against the product's 15 s by the clock fails a slow machine with no bug.
+pub(crate) fn patient_with_workers() -> Timers {
+    Timers { shutdown_grace: Duration::from_mins(10), ..Timers::FOR_TESTS }
 }
 
 /// Settings that set only the approval mode.

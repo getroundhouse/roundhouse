@@ -149,7 +149,7 @@ fn a_missing_agent_binary_is_reported_in_the_log_rather_than_hanging() {
     stack.kill_hub();
     let mut command = stack.command();
     command.env("ROUNDHOUSE_CLAUDE_BIN", "/nonexistent/claude");
-    stack.hub = Some(command.spawn().unwrap());
+    stack.hub = Some(command.spawn().unwrap().into());
     wait_until("the hub", || Client::connect(&stack.socket(), "test").is_ok());
 
     let client = stack.client();

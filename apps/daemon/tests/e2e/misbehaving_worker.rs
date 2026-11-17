@@ -9,14 +9,16 @@ use std::time::{Duration, Instant};
 use client_core::Client;
 use hub::Timers;
 
-use crate::support::{Stack, assistant_text, install_executable, signal, wait_for_turn_end, wait_until};
+use crate::support::{
+    Stack, assistant_text, install_executable, patient_with_workers, signal, wait_for_turn_end, wait_until,
+};
 
 /// Runs the hub from a copy of its binary, so a test can replace what it starts next.
 fn hub_from_copy(stack: &mut Stack) -> PathBuf {
     stack.kill_hub();
     let exe = stack.path("roundhoused-copy");
     install_executable(Path::new(env!("CARGO_BIN_EXE_roundhoused")), &exe);
-    stack.hub = Some(stack.command_at(&exe).spawn().unwrap());
+    stack.hub = Some(stack.command_at(&exe).spawn().unwrap().into());
     wait_until("the hub", || Client::connect(&stack.socket(), "test").is_ok());
     exe
 }
@@ -86,7 +88,7 @@ fn a_worker_that_never_answers_only_affects_its_own_workspace_and_times_out() {
     // Long enough for every real worker this test starts, the last of them the first run of a binary just copied into
     // place, which macOS checks first.
     let hello = Duration::from_secs(3);
-    let mut stack = Stack::start_with(vec![Timers { hello_within: hello, ..Timers::FOR_TESTS }.env()]);
+    let mut stack = Stack::start_with(vec![Timers { hello_within: hello, ..patient_with_workers() }.env()]);
     let exe = hub_from_copy(&mut stack);
     let client = stack.client();
     let (hung, _) = stack.workspace(&client);
@@ -133,10 +135,8 @@ fn a_worker_that_never_answers_only_affects_its_own_workspace_and_times_out() {
     }
     // Each times out on its own. If one start had to wait for the other, they'd take twice as long.
     assert!(started.elapsed() < hello * 2, "took {:?}", started.elapsed());
-    // Each is ended as its start gives up, rather than left until the 10 s a stopping worker gets.
-    let given_up = Instant::now();
+    // Each is ended as its start gives up, long before the hub would end it as a worker that didn't stop.
     wait_until("the workers that never answered to be gone", || children_of(stack.hub_pid()).len() == 1);
-    assert!(given_up.elapsed() < Duration::from_secs(5), "took {:?}", given_up.elapsed());
 
     restore_real_worker(&exe);
     client.workspace_status(&hung.id).unwrap();
