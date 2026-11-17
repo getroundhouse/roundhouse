@@ -31,7 +31,7 @@ mod stand_in_github;
 mod workspaces;
 
 pub(crate) use asked::id;
-pub(crate) use click::click;
+pub(crate) use click::{click, under_the_middle_of};
 pub(crate) use daemons::{binaries, hub_environment};
 pub(crate) use diff::Diff;
 pub(crate) use files::files_holding;

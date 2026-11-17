@@ -2,6 +2,7 @@
 
 #![cfg(test)]
 
+use gpui_kit::base::test_support::snapshots;
 use gpui_kit::test::{TestEventExt as _, TestWindowExt as _};
 use gpui_kit::{App, AppContext as _, ElementId, InputEvent, MouseButton, Pixels, Point, Window, point, px};
 
@@ -28,6 +29,15 @@ pub(crate) fn click_at(window: &mut Window, at: Point<Pixels>, cx: &mut App) {
     let at = at + point(px(1.), px(0.));
     window.pointer_move(at, Some(MouseButton::Left), cx);
     window.pointer_up(at, MouseButton::Left, cx);
+}
+
+/// Every element that shows under the middle of `id` in the frame drawn last, which is where [`click`] presses, by its
+/// path and label, for a test whose click didn't do what it should to say what took it instead.
+pub(crate) fn under_the_middle_of(window: &Window, id: impl Into<ElementId>) -> String {
+    let at = window.find(id).bounds().center();
+    let under = snapshots(window).into_iter().filter(|element| element.visible() && element.bounds().contains(&at));
+    let named = under.map(|element| format!("{:?} {:?}", element.path().last(), element.label()));
+    named.collect::<Vec<_>>().join(", ")
 }
 
 impl Ui<'_> {
