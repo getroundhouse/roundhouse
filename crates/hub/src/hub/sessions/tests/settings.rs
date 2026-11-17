@@ -4,8 +4,6 @@
 //! `session::commands`'. The daemon's `e2e/model_and_mode.rs` has a change reaching a real agent, and a refusal in its
 //! CLI's words.
 
-use std::time::Duration;
-
 use protocol::capability::Control;
 use protocol::capability::settings::{Effort as Level, Settings};
 use protocol::client::{ApiError, ErrorCode, HubNotice};
@@ -19,12 +17,10 @@ use protocol::worker::{SetupDone, WorkerRequest, WorkerResponse};
 use tokio::sync::broadcast;
 
 use crate::hub::Hub;
-use crate::hub::stand_in_workers::{Asked, a_chat, a_turn, answering_first, hub_with_stand_in_workers, the_agent_says};
+use crate::hub::stand_in_workers::{
+    Asked, TIMEOUT, a_chat, a_turn, answering_first, hub_with_stand_in_workers, the_agent_says,
+};
 use crate::hub::tests::claimed;
-
-/// How long the hub has to answer a change, or to give the agent a prompt. Far longer than either takes with a
-/// stand-in for the worker, so only one that waits for something else runs out of it.
-const TIMEOUT: Duration = Duration::from_secs(10);
 
 fn in_mode(mode: PermissionMode) -> SessionSettingsChange {
     SessionSettingsChange { permission_mode: Some(mode), ..SessionSettingsChange::default() }

@@ -3,7 +3,6 @@
 
 use std::path::Path;
 use std::sync::Arc;
-use std::time::Duration;
 
 use protocol::attachment::{Attachment, AttachmentBytes, MediaType};
 use protocol::client::{ApiError, ErrorCode};
@@ -13,12 +12,8 @@ use protocol::worker::{TitleFor, WorkerRequest};
 
 use crate::attachment_files::FileFor;
 use crate::hub::Hub;
-use crate::hub::stand_in_workers::{Asked, a_chat, hub_with_stand_in_workers, titling};
+use crate::hub::stand_in_workers::{Asked, TIMEOUT, a_chat, hub_with_stand_in_workers, titling};
 use crate::store::AddedBy;
-
-/// How long a generated title has to come, which the hub asks for on a task of its own once a prompt is recorded. Far
-/// longer than that takes with a stand-in for the worker, so only a title that never comes runs out of it.
-const TIMEOUT: Duration = Duration::from_secs(10);
 
 /// What a stand-in's agent answers when it's asked for a title, as the worker does once its CLI has answered.
 pub(super) fn answering(title: &str) -> impl Fn(&TitleFor) -> Result<String, ApiError> + Send + 'static {

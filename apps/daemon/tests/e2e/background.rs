@@ -1,17 +1,14 @@
-//! Work an agent leaves running in the background after its turn ends.
+//! Work an agent leaves running in the background after its turn ends, through a real adapter, and the agent, its
+//! worker or its hub going while it runs. What the hub's record makes of the adapter's lists is the hub's, in
+//! `session::tests::status`, `hub::sessions::tests::background` and `hub::sessions::tests::chats`.
 
 #![cfg(test)]
 
-use std::time::Duration;
-
-use client_core::Client;
-use hub::Timers;
-use protocol::event::{EventBody, SessionEvent, TaskKind};
-use protocol::model::{SessionId, SessionStatus};
+use protocol::event::{EventBody, TaskKind};
+use protocol::model::SessionStatus;
 
 use crate::support::{
-    Gate, Stack, assistant_text, is_alive, read_all, signal, started_pid, wait_for_status, wait_for_turn_end,
-    wait_until,
+    Stack, assistant_text, is_alive, read_all, signal, started_pid, wait_for_status, wait_for_turn_end, wait_until,
 };
 
 #[test]
@@ -43,7 +40,8 @@ fn work_left_in_the_background_keeps_the_agent_at_work_until_it_finishes() {
 }
 
 /// Each list the agent writes is the whole list, so the last one it writes as several tasks end together is empty,
-/// and the turns they start leave the chat idle.
+/// and the turns they start leave the chat idle. It's the fake agent's own test too: each task ends on a thread of its
+/// own there, and only a run of it shows that the last list it writes is the list as it is.
 #[test]
 fn several_tasks_ending_together_leave_the_chat_idle_with_none_listed() {
     let stack = Stack::start();
@@ -66,85 +64,6 @@ fn several_tasks_ending_together_leave_the_chat_idle_with_none_listed() {
         let session = now();
         session.status == SessionStatus::Idle && session.background_tasks.is_empty()
     });
-}
-
-/// Starts work in the background that finishes once `done` exists, waits until the turn has ended with it going, and
-/// then has it finish, with the agent picking up again by itself only once the gate this returns is opened.
-fn finish_and_hold(stack: &Stack, client: &Client, session_id: &SessionId) -> Gate {
-    let done = stack.path("done");
-    client.session_prompt(session_id, &format!("background:{}", done.display()), None).unwrap();
-    wait_for_status(client, session_id, SessionStatus::Background);
-    let picks_up = Gate::new(stack, "picks-up");
-    // Moved into place whole, so the agent can't find it before it says what it waits for.
-    let said = stack.path("after");
-    std::fs::write(&said, format!("after:{picks_up}")).unwrap();
-    std::fs::rename(&said, &done).unwrap();
-    wait_until("the work in the background to finish", || {
-        read_all(client, session_id)
-            .iter()
-            .any(|event| matches!(&event.body, EventBody::AgentTasks { tasks, .. } if tasks.is_empty()))
-    });
-    picks_up
-}
-
-/// Between its work in the background finishing and the turn it starts to take that in, nothing has said the agent
-/// is done, so the chat is still at work, and an update still waits for it.
-#[test]
-fn the_agent_is_at_work_from_its_work_in_the_background_finishing_until_it_picks_up_again() {
-    let stack = Stack::start();
-    let client = stack.client();
-    let (_, session) = stack.workspace(&client);
-
-    let picks_up = finish_and_hold(&stack, &client, &session.id);
-
-    assert_eq!(client.session_get(&session.id).unwrap().status, SessionStatus::Background);
-    assert_eq!(client.hub_status().unwrap().running_sessions, 1);
-    picks_up.open();
-    let events = wait_for_turn_end(&client, &session.id, 2);
-    assert!(assistant_text(&events).contains("finished"), "{}", assistant_text(&events));
-    assert_eq!(client.session_get(&session.id).unwrap().status, SessionStatus::Idle);
-}
-
-/// Longer than the hub waits for the agent to pick up again, so it takes the agent to be idle first, and the turn the
-/// agent starts after that is a turn all the same.
-#[test]
-fn an_agent_that_takes_too_long_to_pick_up_again_is_taken_to_be_idle_and_its_turn_is_still_one() {
-    // Long enough for the test to see the chat still at work first, as `the_agent_is_at_work_…` above does.
-    let within = Duration::from_millis(1500);
-    let stack = Stack::start_with(vec![Timers { picks_up_within: within, ..Timers::FOR_TESTS }.env()]);
-    let client = stack.client();
-    let (_, session) = stack.workspace(&client);
-
-    // The agent picks up again only once the test has seen the chat idle with one turn.
-    let picks_up = finish_and_hold(&stack, &client, &session.id);
-    assert_eq!(client.session_get(&session.id).unwrap().status, SessionStatus::Background);
-    wait_for_status(&client, &session.id, SessionStatus::Idle);
-
-    let from_the_hub = |event: &SessionEvent| event.run.is_none() && matches!(event.body, EventBody::AgentState { .. });
-    let idle = read_all(&client, &session.id);
-    assert_eq!(idle.iter().filter(|event| from_the_hub(event)).count(), 1, "{idle:#?}");
-    assert_eq!(idle.iter().filter(|event| matches!(event.body, EventBody::TurnEnded { .. })).count(), 1);
-    picks_up.open();
-    let events = wait_for_turn_end(&client, &session.id, 2);
-    assert!(assistant_text(&events).contains("finished"), "{}", assistant_text(&events));
-    assert_eq!(client.session_get(&session.id).unwrap().status, SessionStatus::Idle);
-}
-
-/// The agent only says a task is a monitor's a line after it first lists it, so the record has to follow the list
-/// said again with the kind, though the same tasks are in it.
-#[test]
-fn a_task_a_monitor_call_started_is_recorded_as_a_monitor_beside_a_commands() {
-    let stack = Stack::start();
-    let client = stack.client();
-    let (_, session) = stack.workspace(&client);
-    let (suite, watch) = (stack.path("suite"), stack.path("watch"));
-    let script = format!("background:{}; monitor:{}; say:started", suite.display(), watch.display());
-
-    client.session_prompt(&session.id, &script, None).unwrap();
-    wait_for_status(&client, &session.id, SessionStatus::Background);
-
-    let kinds: Vec<_> = client.session_get(&session.id).unwrap().background_tasks.iter().map(|t| t.kind).collect();
-    assert_eq!(kinds, [TaskKind::Command, TaskKind::Monitor]);
 }
 
 #[test]
