@@ -136,7 +136,9 @@ fn an_app_is_made_on_github_and_connected_as_the_window_comes_back_once_its_inst
     let account = installation(&ui).unwrap();
     assert_eq!(account.user.name.as_str(), "ada-roundhouse[bot]");
     assert_eq!(account.held_login.map(|held| held.how), Some(GithubLoginKind::App));
-    assert_eq!(default(&ui), Some(account.id.clone()), "the first account is the default");
+    // Which account is the default is on the hub's settings, a record of their own, which reaches the app apart from
+    // the account's, so it's waited for rather than read as soon as the account is there.
+    ui.wait("the first account to be the default", |ui| default(ui) == Some(account.id.clone()));
     assert_eq!(
         says(&mut ui),
         "ada-roundhouse[bot] is installed on adalabs. It's the default, so agents push as it on every machine."
