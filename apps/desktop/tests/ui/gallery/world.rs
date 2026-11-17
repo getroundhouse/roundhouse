@@ -82,6 +82,8 @@ pub(crate) struct World {
     pub(crate) pairing: Option<PairingWorld>,
     /// Saved remote hubs written to `settings.json` before the window opens.
     pub(crate) saved_hubs: Vec<(&'static str, &'static str)>,
+    /// What a push from each repository's workspaces would meet on GitHub, as the hub last checked.
+    pub(crate) github_reach: Vec<protocol::model::GithubReach>,
     records: i64,
 }
 
@@ -164,7 +166,7 @@ impl World {
             github_sign_ins: self.github_sign_ins.clone(),
             found_github_logins: self.found_github_logins.clone(),
             github_apps: Vec::new(),
-            github_reach: Vec::new(),
+            github_reach: self.github_reach.clone(),
             rev: Rev::default(),
         }
     }

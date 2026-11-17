@@ -4,12 +4,14 @@
 #![cfg(test)]
 
 use look::Region;
-use protocol::model::{SetupStatus, Title, WorkspaceStatus};
+use protocol::model::{
+    GithubReach, GithubRepositoryName, Reach, Rev, SessionStatus, SetupStatus, Title, WorkspaceStatus,
+};
 
 use super::frame::{Frame, Part, SIDEBAR, SIDEBAR_MENU};
 use super::screens::FOCUS;
 use super::steps::{Screen, Step};
-use super::world::World;
+use super::world::{NOW_MS, World};
 use super::worlds::{conversation, sidebar, titled};
 
 /// What's typed into the dialog before Create, for a workspace the screen's hub never finishes making.
@@ -66,6 +68,20 @@ pub(crate) const SCREENS: &[Screen] = &[
         steps: &[Step::Select(FOCUS), Step::OpenSetupLog],
     },
     Screen {
+        name: "push-refused",
+        spec: "workspaces.md",
+        world: Some(push_refused),
+        frame: Frame::Around(Part::Region(Region::PushLine), &[Part::Region(Region::Composer)]),
+        steps: &[Step::Select(FOCUS)],
+    },
+    Screen {
+        name: "push-not-found",
+        spec: "workspaces.md",
+        world: Some(push_not_found),
+        frame: Frame::Around(Part::Region(Region::PushLine), &[Part::Region(Region::Composer)]),
+        steps: &[Step::Select(FOCUS)],
+    },
+    Screen {
         name: "titles-in-the-sidebar",
         spec: "workspaces.md",
         world: Some(some_titled),
@@ -114,10 +130,35 @@ fn setting_up() -> World {
     let mut world = World::default();
     let focus = sidebar(&mut world);
     world.workspace_mut(&focus).setup = SetupStatus::Running;
-    world.chat(&focus, protocol::model::SessionStatus::Idle, Vec::new());
+    world.chat(&focus, SessionStatus::Idle, Vec::new());
     let log = "Copying .env\nCopying .env.local\n$ npm install\nadded 1,204 packages in 38s\n$ npm run build\n";
     world.setup_logs.insert(focus, log.to_string());
     world
+}
+
+/// Where the screens' repository's `origin` pushes to on GitHub.
+const ON_GITHUB: GithubRepositoryName = GithubRepositoryName::named("railworks/roundhouse");
+
+/// A workspace with a chat open, whose repository the hub last found a push from as `reach` says.
+fn reaching(reach: Reach) -> World {
+    let mut world = World::default();
+    let focus = sidebar(&mut world);
+    world.chat(&focus, SessionStatus::Idle, Vec::new());
+    let repo = world.workspace_mut(&focus).repo_id.clone();
+    let answered_at_ms = reach.answered_for().is_some().then_some(NOW_MS);
+    world.github_reach.push(GithubReach { repo, reach, answered_at_ms, stale: false, rev: Rev::default() });
+    world
+}
+
+/// GitHub refusing a push as the default, in its own words, as it does for a user who can't write to the repository.
+fn push_refused() -> World {
+    let reason = "Permission to railworks/roundhouse.git denied to ada.";
+    reaching(Reach::Refused { repository: ON_GITHUB, username: "ada".into(), reason: reason.into() })
+}
+
+/// GitHub having no repository there that the default can see, as for a private one that isn't theirs.
+fn push_not_found() -> World {
+    reaching(Reach::NotFound { repository: ON_GITHUB, username: "ada".into() })
 }
 
 /// Workspaces titled each way a title comes: generated, from the first line of a long prompt while the generated one

@@ -1,11 +1,12 @@
 //! What a hub says of GitHub, as views read it: the GitHub accounts it holds, the sign-ins with GitHub it has started,
-//! the apps of your own it holds the key of, and the login found on each provider's machines, each as the hub's records
-//! have it.
+//! the apps of your own it holds the key of, the login found on each provider's machines, and what a push from each
+//! repository would meet, each as the hub's records have it.
 
 use std::collections::HashMap;
 
 use protocol::model::{
-    FoundGithubLogin, GithubAccount, GithubAccountId, GithubApp, GithubAppId, GithubSignIn, GithubSignInId,
+    FoundGithubLogin, GithubAccount, GithubAccountId, GithubApp, GithubAppId, GithubReach, GithubSignIn,
+    GithubSignInId, Reach, RepoId,
 };
 
 use super::Snapshot;
@@ -19,6 +20,8 @@ pub(super) struct GithubListed {
     apps: HashMap<GithubAppId, GithubApp>,
     /// By provider.
     found: Vec<FoundGithubLogin>,
+    /// By the repository it's of.
+    reach: HashMap<RepoId, Reach>,
 }
 
 impl GithubListed {
@@ -36,6 +39,10 @@ impl GithubListed {
 
     pub(super) fn found(&mut self, found: &FoundGithubLogin) {
         self.found.push(found.clone());
+    }
+
+    pub(super) fn reach(&mut self, reach: &GithubReach) {
+        self.reach.insert(reach.repo.clone(), reach.reach.clone());
     }
 
     /// Puts each list in the order views show it, once every record is in.
@@ -79,5 +86,11 @@ impl Snapshot {
     /// the others' by provider.
     pub fn found_github_logins(&self) -> &[FoundGithubLogin] {
         &self.records.github.found
+    }
+
+    /// What a push from the repository `id`'s workspaces would meet, as the hub last checked, or `None` while it hasn't,
+    /// and from a hub that doesn't check.
+    pub fn github_reach(&self, id: &RepoId) -> Option<&Reach> {
+        self.records.github.reach.get(id)
     }
 }

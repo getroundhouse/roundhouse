@@ -4,6 +4,7 @@ use crate::busy::Busy;
 use crate::new_workspace::Request;
 use crate::rename;
 use crate::rename::Renaming;
+use crate::settings::PageId;
 use crate::workspace_pane::{PaneEvent, WorkspacePane};
 use client_core::ClientError;
 use client_core::records::Snapshot;
@@ -36,6 +37,9 @@ impl AppView {
                 PaneEvent::RegenerateTitle(id) => t.regenerate_title(id, cx),
                 PaneEvent::Showing => t.tell_of_needs(cx),
                 PaneEvent::Present(present) => t.present(cx, move |_, window, cx| present(window, cx)),
+                PaneEvent::OpenGit => {
+                    t.present(cx, |t, window, cx| t.open_settings_at(Some(PageId::Git), window, cx));
+                }
             })
             .detach();
             self.panes.insert(id.clone(), pane);

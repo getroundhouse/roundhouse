@@ -29,6 +29,16 @@ If the default's token ends, you disconnect it, or it needs signing in again, it
 
 A signed-in account's token lasts 8 hours, and the hub renews it before it ends, so this happens only if the hub couldn't reach GitHub in time. Git says it's `Renewing` until the hub has.
 
+## When the default can't push to a repository
+
+The hub asks GitHub whether the default can push to the repository each repository's `origin` pushes to, as `git push` would ask, so it meets what a push would: your access, a fine-grained token's repositories, and an organization that hasn't approved Roundhouse. It asks as it starts, whenever the default or its login changes, and every half hour, since what an account can do changes on GitHub too.
+
+If GitHub refuses, has no such repository the default can see, or doesn't take its token, every workspace of that repository says so in a line above the composer, with GitHub's words and what to do. **Open Git** opens the Git page, where you can make another account the default or add one that can push there. It blocks nothing: agents push as they would anyway. The line goes once the hub finds a push would be taken.
+
+![A line above the composer saying GitHub refuses pushes as the default](../../spec/screens/push-refused.png)
+
+While each machine's own login is the default, the hub doesn't ask, and no workspace says.
+
 ## More than one
 
 You can add more than one account, but only the default is used.

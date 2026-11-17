@@ -290,13 +290,14 @@ impl Render for WorkspacePane {
 }
 
 impl WorkspacePane {
-    /// The active chat, under the tabs: its transcript, how setup is going, and the composer.
+    /// The active chat, under the tabs: its transcript, how setup is going, whether agents can push, and the composer.
     fn chat(&self, cx: &mut Context<Self>) -> AnyElement {
         let colors = look::colors(cx);
         let (muted, faint) = (colors.text_muted, colors.text_faint);
         let interrupted = self.session().is_some_and(|s| s.status == SessionStatus::Interrupted);
         let cache_expired = self.session().and_then(|s| prompt_cache::expired_line(s, look::now_ms(cx)));
         let setup_line = self.setup_line(cx);
+        let push_line = self.push_line(cx);
         let composer = self.composer_row(cx).into_any_element();
         let log = self.setup_log.clone();
         let transcript = self.transcript();
@@ -307,6 +308,7 @@ impl WorkspacePane {
             .child(div().flex_1().min_h_0().w_full().when_some(transcript, ParentElement::child))
             .when_some(log, |d, text| d.child(setup_log_view(text, cx)))
             .children(setup_line)
+            .children(push_line)
             // In the transcript's column, so it starts where the rows above it do.
             .when(interrupted, |d| {
                 d.child(

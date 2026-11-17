@@ -1,8 +1,8 @@
 //! Showing Settings in place of the sidebar and the workspace, and going back.
 
-use gpui_kit::{Context, FocusHandle, Window};
+use gpui_kit::{AppContext as _, Context, Entity, FocusHandle, Window};
 
-use crate::settings::{Asking, OfHub};
+use crate::settings::{Asking, OfHub, PageId};
 
 use super::AppView;
 
@@ -10,6 +10,9 @@ use super::AppView;
 pub(super) struct Shown {
     /// What had focus before, to give it back after.
     focus_before: Option<FocusHandle>,
+    /// The page chosen, which the sidebar of pages changes, and `None` for the first. Kept only while Settings shows,
+    /// so it opens on its first page unless it's opened at another.
+    pub(super) chosen: Entity<Option<PageId>>,
 }
 
 impl AppView {
@@ -24,10 +27,15 @@ impl AppView {
     }
 
     pub(crate) fn open_settings(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.open_settings_at(None, window, cx);
+    }
+
+    /// Opens Settings at `page`, or on its first page. Settings already showing stays at the page it's on.
+    pub(crate) fn open_settings_at(&mut self, page: Option<PageId>, window: &mut Window, cx: &mut Context<Self>) {
         if self.settings_open() {
             return;
         }
-        self.settings = Some(Shown { focus_before: window.focused(cx) });
+        self.settings = Some(Shown { focus_before: window.focused(cx), chosen: cx.new(|_| page) });
         crate::sounds::read_list(cx);
         window.focus(&self.settings_focus, cx);
         // The chat showing is hidden, so a reply that comes now isn't read.

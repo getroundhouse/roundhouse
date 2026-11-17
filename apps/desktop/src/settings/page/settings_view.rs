@@ -12,9 +12,9 @@ use gpui_kit::component::menu::PopupMenu;
 use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::component::{IconName, v_flex};
 use gpui_kit::{
-    AnyElement, App, ClickEvent, Context, FocusHandle, InteractiveElement as _, IntoElement, ParentElement as _,
-    Pixels, RenderOnce, ScrollHandle, SharedString, StatefulInteractiveElement as _, Styled as _, TestSupportExt as _,
-    Window, div,
+    AnyElement, App, ClickEvent, Context, Entity, FocusHandle, InteractiveElement as _, IntoElement,
+    ParentElement as _, Pixels, RenderOnce, ScrollHandle, SharedString, StatefulInteractiveElement as _, Styled as _,
+    TestSupportExt as _, Window, div,
 };
 use look::{Hand as _, Sizing as _, Typeset as _};
 use std::rc::Rc;
@@ -46,14 +46,16 @@ pub(crate) struct Asking {
 type Back = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
 
 /// Settings, with `back` going back to where the person was. Keys reach it through `focus`. `width` is how wide the
-/// sidebar it stands in for is, whether or not that's showing. `hub` is what it shows of the hub.
+/// sidebar it stands in for is, whether or not that's showing. `hub` is what it shows of the hub. `chosen` is the page
+/// chosen, which the app keeps while Settings shows, so it can open Settings at a page, and `None` is the first.
 pub(crate) fn page(
     focus: &FocusHandle,
     width: Pixels,
     back: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
     hub: OfHub,
+    chosen: Entity<Option<PageId>>,
 ) -> SettingsView {
-    SettingsView { focus: focus.clone(), width, back: Rc::new(back), hub }
+    SettingsView { focus: focus.clone(), width, back: Rc::new(back), hub, chosen }
 }
 
 #[derive(IntoElement)]
@@ -62,13 +64,14 @@ pub(crate) struct SettingsView {
     pub(super) width: Pixels,
     pub(super) back: Back,
     pub(super) hub: OfHub,
+    pub(super) chosen: Entity<Option<PageId>>,
 }
 
 impl RenderOnce for SettingsView {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        // Kept only while Settings shows, so it opens with nothing typed, on its first page.
+        // Kept only while Settings shows, so it opens with nothing typed.
         let search = window.use_keyed_state("settings-search", cx, InputState::new);
-        let chosen = window.use_keyed_state("settings-chosen", cx, |_, _| None::<PageId>);
+        let chosen = self.chosen;
         let scroll = window.use_keyed_state("settings-scroll", cx, |_, _| ScrollHandle::new()).read(cx).clone();
         let sections = found(sections(&self.hub), &search.read(cx).value());
         let shown = shown(&sections, *chosen.read(cx));
@@ -151,7 +154,7 @@ fn matches(search: &str, said: &[&str]) -> bool {
 
 /// Which page, so a page is known by what it's for rather than by what it says.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub(super) enum PageId {
+pub(crate) enum PageId {
     General,
     Notifications,
     Agents,

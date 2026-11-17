@@ -17,7 +17,7 @@ mod sidebar;
 mod tests;
 
 mod settings_view;
-pub(crate) use settings_view::{Asking, FIND_KEY, KEY_CONTEXT, OfHub, page};
-use settings_view::{Body, Control, Page, PageId, Section, Setting, Within};
+pub(crate) use settings_view::{Asking, FIND_KEY, KEY_CONTEXT, OfHub, PageId, page};
+use settings_view::{Body, Control, Page, Section, Setting, Within};
 #[cfg(test)]
 use settings_view::{found, sections, shown};

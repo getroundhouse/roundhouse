@@ -2,7 +2,7 @@ use super::super::Taken;
 use super::github::GithubListed;
 use crate::Agents;
 use protocol::model::{
-    Account, AccountId, DiffComment, HubSettings, NewWorkspaceDraft, Record, Repo, RepoId, Session, SessionId,
+    Account, AccountId, DiffComment, HubSettings, NewWorkspaceDraft, Reach, Record, Repo, RepoId, Session, SessionId,
     Subagent, SubagentId, Workspace, WorkspaceId,
 };
 use std::collections::HashMap;
@@ -97,9 +97,9 @@ impl Listed {
                 Record::GithubSignIn(sign_in) => listed.github.sign_in(sign_in),
                 Record::FoundGithubLogin(found) => listed.github.found(found),
                 Record::GithubApp(app) => listed.github.app(app),
-                // A subagent's held apart, as `HubRecords::apply_record` says. A repository's reach is held, but not
-                // listed for views. *Not built:* showing it.
-                Record::Subagent(_) | Record::GithubReach(_) => {}
+                Record::GithubReach(reach) => listed.github.reach(reach),
+                // Held apart, as `HubRecords::apply_record` says.
+                Record::Subagent(_) => {}
             }
         }
         listed.github.order();
@@ -302,6 +302,11 @@ impl InWorkspace {
     /// One of its sessions.
     pub fn session(&self, id: &SessionId) -> Option<&Session> {
         self.all.session(id).filter(|session| session.workspace_id == self.workspace().id)
+    }
+
+    /// What a push from it would meet, which is its repository's, as [`Snapshot::github_reach`] says.
+    pub fn github_reach(&self) -> Option<&Reach> {
+        self.all.github_reach(&self.workspace().repo_id)
     }
 
     /// The comments on its diff, oldest first.
