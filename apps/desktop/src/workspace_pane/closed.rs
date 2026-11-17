@@ -96,8 +96,9 @@ impl WorkspacePane {
     }
 }
 
-/// A closed chat in the menu: an icon saying a click reopens it, its title, and how long ago it was closed. It has no
-/// mark, because a mark says what a chat's agent is doing, and closing a chat stops its agent.
+/// A closed chat in the menu: its title, and how long ago it was closed. It has no icon, since every row reopens its
+/// chat, as the button that opens the menu says, so the same icon on each would tell none apart. It has no mark,
+/// because a mark says what a chat's agent is doing, and closing a chat stops its agent.
 fn row(title: SharedString, ago: String) -> look::MenuRow {
-    look::menu_row(title).icon(IconName::RotateCcw).note(ago, look::NoteKind::Detail)
+    look::menu_row(title).note(ago, look::NoteKind::Detail)
 }
