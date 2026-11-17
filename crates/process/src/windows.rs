@@ -151,6 +151,11 @@ pub(crate) fn start_time(pid: u32) -> Option<String> {
     Process::open(pid, 0).map(|process| process.started.to_string())
 }
 
+/// Whether `pid` is the process that started at `started`, as [`start_time`] gave it.
+pub(crate) fn started_at(pid: u32, started: &str) -> bool {
+    start_time(pid).as_deref() == Some(started)
+}
+
 /// Ends `leader` and everything it started. It looks again after each round, because a process can start another
 /// before it's gone. Holding each one open keeps its PID from being reused, so a process naming it as its parent
 /// really is its child, as long as it started later.

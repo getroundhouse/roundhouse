@@ -1,8 +1,10 @@
 use std::io;
 use std::path::Path;
 
-/// When a process started, or `None` if it isn't running. It's as `ps` prints it, or on Windows as a count from the
-/// system's own clock, and only ever compared with another from the same machine.
+/// When a process started, or `None` if it isn't running. On Linux it's a count of clock ticks from when the machine
+/// started and which start that was, on a Mac the wall clock's microseconds as the kernel noted them then, and on
+/// Windows a count from the system's own clock, noted the same way. None of them changes when the clock is set, and
+/// it's only ever compared with another from the same machine.
 pub fn start_time(pid: u32) -> Option<String> {
     crate::sys::start_time(pid)
 }
@@ -36,7 +38,7 @@ impl ProcessRecord {
 
     /// Whether the recorded process is still the one running under this PID.
     pub fn is_running(&self) -> bool {
-        start_time(self.pid).as_deref() == Some(self.started.as_str())
+        crate::sys::started_at(self.pid, &self.started)
     }
 }
 
