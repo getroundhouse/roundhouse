@@ -1,7 +1,7 @@
 use crate::testing::given;
 use std::path::Path;
 
-use protocol::model::{BranchName, CommitId, Head, RemoteName, Upstream};
+use protocol::model::{Apart, BranchName, CommitId, Head, RemoteName, RepoUrl, Upstream};
 
 use super::*;
 use crate::git::tests::{new_repo, run};
@@ -83,9 +83,52 @@ async fn a_branch_pushed_under_another_name_has_that_name_upstream_and_its_tip_a
         remote: RemoteName::from("origin"),
         name: BranchName::from("aspen/fix-the-header"),
         tip: Some(tip(&worktree, "aspen~1")),
+        address: RepoUrl::without_credential(origin.to_str().unwrap()),
+        apart: Some(Apart { ahead: 1, behind: 0 }),
     };
     assert_eq!(branches.had[0].upstream, Some(upstream));
     assert_eq!(branches.had[1].upstream, None);
+}
+
+/// Its remote's address as git gives it, without the token an `https` address can carry, and how far apart it and
+/// the upstream are once a fetch brings someone else's commit.
+#[tokio::test]
+async fn an_upstream_says_its_remotes_address_without_a_credential_and_how_far_apart_they_are() {
+    let dir = tempfile::tempdir().unwrap();
+    let (repo, worktree) = worktree(dir.path());
+    let origin = dir.path().join("origin.git");
+    run(dir.path(), &["init", "-q", "--bare", origin.to_str().unwrap()]);
+    run(&repo, &["remote", "add", "origin", origin.to_str().unwrap()]);
+    run(&worktree, &["commit", "-q", "--allow-empty", "-m", "pushed"]);
+    run(&worktree, &["push", "-q", "-u", "origin", "aspen"]);
+    let elsewhere = dir.path().join("elsewhere");
+    run(dir.path(), &["clone", "-q", "-b", "aspen", origin.to_str().unwrap(), elsewhere.to_str().unwrap()]);
+    run(&elsewhere, &["commit", "-q", "--allow-empty", "-m", "someone else's"]);
+    run(&elsewhere, &["push", "-q", "origin", "aspen"]);
+    run(&worktree, &["fetch", "-q", "origin"]);
+    run(&worktree, &["commit", "-q", "--allow-empty", "-m", "not pushed"]);
+    let fork = "https://ada:a-made-up-token@github.com/ada/project.git";
+    run(&repo, &["remote", "add", "fork", fork]);
+    run(&repo, &["config", "branch.aspen.remote", "fork"]);
+    run(&repo, &["update-ref", "refs/remotes/fork/aspen", "origin/aspen"]);
+
+    let branches = read_branches(&worktree).await;
+
+    let upstream = branches.had[0].upstream.clone().unwrap();
+    assert_eq!(upstream.remote, RemoteName::from("fork"));
+    assert_eq!(upstream.address.unwrap().as_str(), "https://github.com/ada/project.git");
+    assert_eq!(upstream.apart, Some(Apart { ahead: 1, behind: 1 }));
+}
+
+#[test]
+fn how_far_apart_is_read_as_git_writes_it_and_nothing_else() {
+    let apart = |ahead, behind| Some(Apart { ahead, behind });
+    assert_eq!(watching::apart(""), apart(0, 0));
+    assert_eq!(watching::apart("ahead 2"), apart(2, 0));
+    assert_eq!(watching::apart("behind 1"), apart(0, 1));
+    assert_eq!(watching::apart("ahead 2, behind 1"), apart(2, 1));
+    assert_eq!(watching::apart("gone"), None);
+    assert_eq!(watching::apart("ahead two"), None);
 }
 
 #[tokio::test]

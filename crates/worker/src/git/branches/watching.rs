@@ -1,12 +1,14 @@
 use super::super::{commit_of, exists, git, git_error, git_ok};
 use process::Environment;
 use protocol::client::ApiError;
-use protocol::model::{Branch, BranchName, Branches, CommitId, Head, RemoteName, Upstream};
+use protocol::model::{Apart, Branch, BranchName, Branches, CommitId, Head, RemoteName, RepoUrl, Upstream};
 use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 
-/// For each local branch, its name, newest commit and upstream, in fields git can't put in a name.
-const LOCAL_FORMAT: &str = "%(refname)%00%(objectname)%00%(upstream)%00%(upstream:remotename)%00%(upstream:remoteref)";
+/// For each local branch, its name, newest commit and upstream, and how far apart it and the upstream are, in fields
+/// git can't put in a name.
+const LOCAL_FORMAT: &str = "%(refname)%00%(objectname)%00%(upstream)%00%(upstream:remotename)%00%(upstream:remoteref)\
+                            %00%(upstream:track,nobracket)";
 /// For each upstream, its newest commit.
 const TIP_FORMAT: &str = "%(refname)%00%(objectname)";
 
@@ -86,7 +88,8 @@ pub(crate) async fn read(given: &Environment, worktree: &Path, places: &Places) 
     let upstreams: Vec<&str> =
         local.iter().filter_map(|fields| fields.get(2)).map(String::as_str).filter(|name| !name.is_empty()).collect();
     let tips = upstream_tips(given, worktree, &upstreams).await?;
-    let each = local.iter().filter_map(|fields| branch(fields, &tips)).collect();
+    let addresses = addresses(given, worktree, local.iter().filter_map(|fields| fields.get(3))).await?;
+    let each = local.iter().filter_map(|fields| branch(fields, &tips, &addresses)).collect();
     let refs = local.iter().filter_map(|fields| fields.first()).map(String::as_str).chain(upstreams);
     // A part at a time, since `/` doesn't part a path that starts `\\?\`, as one on Windows does once its links are
     // followed.
@@ -186,14 +189,53 @@ async fn upstream_tips(
     Ok(tips)
 }
 
+/// The address of each remote in `remotes`, as `git remote get-url` gives it, without the credential it can hold,
+/// once each. None for `.`, which is the repository itself, nor for a remote git has no address for.
+async fn addresses<'a>(
+    given: &Environment,
+    worktree: &Path,
+    remotes: impl Iterator<Item = &'a String>,
+) -> Result<HashMap<String, RepoUrl>, ApiError> {
+    let remotes: BTreeSet<&String> = remotes.filter(|remote| !remote.is_empty() && remote.as_str() != ".").collect();
+    let mut addresses = HashMap::new();
+    for remote in remotes {
+        let read = git(given, worktree, &["remote", "get-url", "--", remote]).await?;
+        let address = read.success.then(|| RepoUrl::without_credential(read.stdout.trim())).flatten();
+        if let Some(address) = address {
+            addresses.insert(remote.clone(), address);
+        }
+    }
+    Ok(addresses)
+}
+
 /// A branch from what [`LOCAL_FORMAT`] gives it.
-fn branch(fields: &[String], tips: &HashMap<String, CommitId>) -> Option<Branch> {
-    let [refname, tip, upstream, remote, remote_ref] = fields else { return None };
-    let upstream = (!upstream.is_empty() && !remote.is_empty() && !remote_ref.is_empty()).then(|| Upstream {
-        remote: RemoteName::from(remote.as_str()),
-        name: BranchName::from(remote_ref.trim_prefix("refs/heads/")),
-        tip: tips.get(upstream).cloned(),
+fn branch(fields: &[String], tips: &HashMap<String, CommitId>, addresses: &HashMap<String, RepoUrl>) -> Option<Branch> {
+    let [refname, tip, upstream, remote, remote_ref, track] = fields else { return None };
+    let upstream = (!upstream.is_empty() && !remote.is_empty() && !remote_ref.is_empty()).then(|| {
+        let tip = tips.get(upstream).cloned();
+        Upstream {
+            remote: RemoteName::from(remote.as_str()),
+            name: BranchName::from(remote_ref.trim_prefix("refs/heads/")),
+            apart: tip.as_ref().and_then(|_| apart(track)),
+            tip,
+            address: addresses.get(remote).cloned(),
+        }
     });
     let name = BranchName::from(refname.strip_prefix("refs/heads/")?);
     Some(Branch { name, tip: CommitId::from(tip.as_str()), upstream })
+}
+
+/// How far apart a branch and its upstream are, from what `%(upstream:track,nobracket)` gives: empty when they're at one
+/// commit, such as `ahead 2`, `behind 1` or `ahead 2, behind 1` when they aren't, and `gone` once the upstream is.
+/// `None` for that, and for what git didn't write as it does.
+pub(super) fn apart(track: &str) -> Option<Apart> {
+    let mut apart = Apart::default();
+    for part in track.split(", ").filter(|part| !part.is_empty()) {
+        match part.split_once(' ')? {
+            ("ahead", count) => apart.ahead = count.parse().ok()?,
+            ("behind", count) => apart.behind = count.parse().ok()?,
+            _ => return None,
+        }
+    }
+    Some(apart)
 }
