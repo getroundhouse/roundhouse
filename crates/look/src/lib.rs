@@ -15,6 +15,7 @@ mod baseline;
 mod cache;
 mod clock;
 mod colors;
+mod control_sizes;
 mod controls;
 mod copy;
 mod fan;
@@ -54,7 +55,8 @@ pub use clock::{
 #[cfg(feature = "testing")]
 pub use colors::NamedColor;
 pub use colors::{Colors, colors};
-pub use controls::{Button, ButtonKind, ControlSize, Menu, Side, Sizing, button, glyph_button, icon_button};
+pub use control_sizes::ControlSize;
+pub use controls::{Button, ButtonKind, Menu, Side, Sizing, button, glyph_button, icon_button};
 pub use copy::copy_button;
 pub use fit::{fit, pixels};
 pub use hand::{Hand, Off};

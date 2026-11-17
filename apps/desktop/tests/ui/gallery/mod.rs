@@ -5,7 +5,7 @@
 //! picture shows only the part of the window its screen is about, as `gallery/frame.rs` says. What each screen looks
 //! like now goes in `.context/gallery/` at the repo's root, for looking at. The app icon is drawn and checked the same
 //! way, in `gallery/icon.rs`, as are every state of a pull request's bar and of the status mark, and the sheets of the
-//! foundations: every colour, every kind of text, every step of space, every corner, every size of a button, of a bar,
+//! foundations: every colour, every kind of text, every step of space, every corner, every size of a control, of a bar,
 //! of a row and of an icon. Each sheet also keeps where it draws each name beside its image, for the design system's
 //! page, as `gallery/places.rs` says. Text of each kind is drawn the same way at several scales, in
 //! `gallery/baselines.rs`, to check it lines up.

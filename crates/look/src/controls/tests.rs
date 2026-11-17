@@ -2,19 +2,9 @@ use gpui_kit::component::IconName;
 use gpui_kit::component::button::Button as KitButton;
 use gpui_kit::{CursorStyle, DefiniteLength, Length, Styled as _, TestAppContext, px};
 
-use super::{Button, ButtonKind, ControlSize, Sizing as _, button, icon_button};
+use super::{Button, ButtonKind, Sizing as _, button, icon_button};
+use crate::ControlSize;
 use crate::spec_table;
-
-#[test]
-fn the_specs_table_has_every_control_size_in_order_as_the_app_sizes_it() {
-    let table: Vec<[String; 4]> = spec_table::rows("**Every size of a button, by its name.**");
-
-    let sized: Vec<[String; 4]> = ControlSize::ALL.iter().map(|size| size.written()).collect();
-    assert_eq!(
-        table, sized,
-        "docs/spec/components.md's table of button sizes, against crates/look/src/controls/sizing.rs"
-    );
-}
 
 #[test]
 fn a_button_with_words_is_as_tall_as_its_size_with_its_room_at_each_end() {

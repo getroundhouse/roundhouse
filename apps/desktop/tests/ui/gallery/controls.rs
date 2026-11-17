@@ -1,4 +1,4 @@
-//! Every size of a button, in one picture, as `look::ControlSize` has them: each by its name, as an outlined button
+//! Every size of a control, in one picture, as `look::ControlSize` has them: each by its name, as an outlined button
 //! with words and an icon, the main button and an outlined button that's only an icon, so each one's edges show, with
 //! how tall it is, the room beside its words and their kind of text, as the spec's table writes them.
 
@@ -20,7 +20,7 @@ use super::places::{self, Places};
 /// Its image's name, in `docs/spec/screens/`.
 pub(crate) const NAME: &str = "controls";
 /// The spec's file that shows it.
-pub(crate) const SPEC: &str = "components.md";
+pub(crate) const SPEC: &str = "look.md";
 /// What the spec's table calls the type that names each.
 const KIND: &str = "look::ControlSize";
 const NAME_WIDTH: f32 = 90.;
