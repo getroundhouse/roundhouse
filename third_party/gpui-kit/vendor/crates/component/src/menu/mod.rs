@@ -1,3 +1,4 @@
+// Changed in Roundhouse's copy of gpui-kit, as third_party/README.md lists.
 use gpui::App;
 
 mod app_menu_bar;
@@ -10,7 +11,7 @@ pub use app_menu_bar::AppMenuBar;
 pub use context_menu::{ContextMenu, ContextMenuExt, ContextMenuState};
 pub use dropdown_menu::DropdownMenu;
 pub(crate) use menu_item::MenuItemElement;
-pub use popup_menu::{PopupMenu, PopupMenuItem};
+pub use popup_menu::{PopupMenu, PopupMenuItem, PopupMenuStyle};
 
 pub(crate) fn init(cx: &mut App) {
     app_menu_bar::init(cx);

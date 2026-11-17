@@ -101,8 +101,6 @@ fn row(title: SharedString, ago: SharedString) -> impl Fn(&mut Window, &mut App)
         let muted = look::colors(cx).text_muted;
         h_flex()
             .w(ROW_WIDTH)
-            // A little taller than the kit's own menu's rows, so a row with an icon at its end isn't cramped.
-            .h(look::RowSize::Small.height())
             .gap(look::Space::Small)
             .child(div().flex_1().min_w_0().truncate().child(title.clone()))
             .child(div().flex_none().text_color(muted).child(ago.clone()))

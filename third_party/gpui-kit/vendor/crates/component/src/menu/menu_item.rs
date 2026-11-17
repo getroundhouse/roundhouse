@@ -1,6 +1,7 @@
+// Changed in Roundhouse's copy of gpui-kit, as third_party/README.md lists.
 use crate::{ActiveTheme, Disableable, StyledExt, h_flex};
 use gpui::{
-    AnyElement, App, ClickEvent, ElementId, InteractiveElement, IntoElement, MouseButton,
+    AnyElement, App, ClickEvent, ElementId, Hsla, InteractiveElement, IntoElement, MouseButton,
     ParentElement, RenderOnce, Role, SharedString, StatefulInteractiveElement as _,
     StyleRefinement, Styled, Window, accesskit::Toggled, prelude::FluentBuilder as _,
 };
@@ -14,6 +15,7 @@ pub(crate) struct MenuItemElement {
     style: StyleRefinement,
     disabled: bool,
     selected: bool,
+    hover_background: Option<Hsla>,
     checked: Option<bool>,
     on_click: Option<Box<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>>,
     on_hover: Option<Box<dyn Fn(&bool, &mut Window, &mut App) + 'static>>,
@@ -30,6 +32,7 @@ impl MenuItemElement {
             style: StyleRefinement::default(),
             disabled: false,
             selected: false,
+            hover_background: None,
             checked: None,
             on_click: None,
             on_hover: None,
@@ -40,6 +43,13 @@ impl MenuItemElement {
     /// Set ListItem as the selected item style.
     pub(crate) fn selected(mut self, selected: bool) -> Self {
         self.selected = selected;
+        self
+    }
+
+    /// Light the item with `background` under the pointer or while it's
+    /// selected, rather than the theme's accent, where it's given.
+    pub(crate) fn hover_background(mut self, background: Option<Hsla>) -> Self {
+        self.hover_background = background;
         self
     }
 
@@ -101,6 +111,9 @@ impl ParentElement for MenuItemElement {
 
 impl RenderOnce for MenuItemElement {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+        let lit = self
+            .hover_background
+            .map_or(cx.theme().tokens.accent, Into::into);
         h_flex()
             .flex_row_dir(cx)
             .id(self.id)
@@ -131,20 +144,16 @@ impl RenderOnce for MenuItemElement {
                 // Not `group_hover` on the item's own group: GPUI styles an
                 // element before registering its group, and that fallback keeps
                 // the pointer's item lit after a key moves the highlight away.
-                this.hover(|this| {
-                    this.bg(cx.theme().tokens.accent)
-                        .text_color(cx.theme().accent_foreground)
-                })
-                .when(self.selected, |this| {
-                    this.bg(cx.theme().tokens.accent)
-                        .text_color(cx.theme().accent_foreground)
-                })
-                .when_some(self.on_click, |this, on_click| {
-                    this.on_mouse_down(MouseButton::Left, move |_, _, cx| {
-                        cx.stop_propagation();
+                this.hover(|this| this.bg(lit).text_color(cx.theme().accent_foreground))
+                    .when(self.selected, |this| {
+                        this.bg(lit).text_color(cx.theme().accent_foreground)
                     })
-                    .on_click(on_click)
-                })
+                    .when_some(self.on_click, |this, on_click| {
+                        this.on_mouse_down(MouseButton::Left, move |_, _, cx| {
+                            cx.stop_propagation();
+                        })
+                        .on_click(on_click)
+                    })
             })
             .when(self.disabled, |this| {
                 this.text_color(cx.theme().muted_foreground)

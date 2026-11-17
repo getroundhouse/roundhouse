@@ -30,7 +30,7 @@ pub fn raised(cx: &App) -> Div {
         .shadow(shadow(colors))
 }
 
-fn shadow(colors: &Colors) -> Vec<BoxShadow> {
+pub(crate) fn shadow(colors: &Colors) -> Vec<BoxShadow> {
     let layer = |layer: &Layer| BoxShadow {
         color: colors.shadow.opacity(layer.strength),
         offset: point(px(0.), layer.below),
