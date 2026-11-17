@@ -1,4 +1,4 @@
-//! What tests of the crates that start processes share.
+//! Building a program a test runs.
 
 use std::process::Command;
 
@@ -26,22 +26,6 @@ pub fn workspace_build() -> Command {
 
 fn is_set_for_the_package(name: &str) -> bool {
     PACKAGES_OWN_PREFIXES.iter().any(|prefix| name.starts_with(prefix)) || PACKAGES_OWN.contains(&name)
-}
-
-/// Whether a process is running. One that has exited and that nothing has waited for yet isn't, though it still has
-/// its PID.
-///
-/// # Panics
-///
-/// If `ps` can't be run, rather than answering that it isn't, which a test waiting for a process to go would take for
-/// what it waited for.
-pub fn is_running(pid: u32) -> bool {
-    let state = Command::new("ps")
-        .args(["-o", "stat=", "-p", &pid.to_string()])
-        .output()
-        .unwrap_or_else(|e| panic!("couldn't run ps to see whether {pid} is running: {e}"));
-    let state = String::from_utf8_lossy(&state.stdout);
-    !state.trim().is_empty() && !state.trim().starts_with('Z')
 }
 
 #[cfg(test)]

@@ -31,7 +31,7 @@ mod workspaces;
 
 pub(crate) use asked::id;
 pub(crate) use click::click;
-pub(crate) use daemons::binaries;
+pub(crate) use daemons::{binaries, hub_environment};
 pub(crate) use diff::Diff;
 pub(crate) use files::files_holding;
 pub(crate) use frozen::Frozen;

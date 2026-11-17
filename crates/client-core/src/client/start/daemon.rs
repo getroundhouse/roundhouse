@@ -2,6 +2,9 @@ use super::super::{Client, Result, hub_is_missing};
 use super::old_copies;
 use protocol::paths::{DAEMON_NAME, Paths, daemon_file};
 use protocol::{Build, StampedBuild};
+#[cfg(any(test, feature = "testing"))]
+use std::ffi::OsStr;
+use std::ffi::OsString;
 use std::fs::{File, OpenOptions};
 use std::io;
 use std::path::{Path, PathBuf};
@@ -56,6 +59,10 @@ pub struct Daemon {
     /// Which build it is, if it's stamped. Only the daemon beside a client is known to be the client's build, so one
     /// named any other way has none.
     pub build: Option<StampedBuild>,
+    /// The whole environment a hub started from it runs in, in place of this process's, but for where its data and
+    /// workspaces are. Only a test gives one, through [`Daemon::in_environment`], and a hub otherwise inherits this
+    /// process's.
+    pub(super) environment: Option<Vec<(OsString, OsString)>>,
 }
 
 impl Daemon {
@@ -70,13 +77,32 @@ impl Daemon {
 
     /// One started where it is.
     pub fn in_place(path: impl Into<PathBuf>) -> Self {
-        Self { path: path.into(), build: None }
+        Self { path: path.into(), build: None, environment: None }
     }
 
     /// The one that ships next to `exe`, which is `exe`'s build. Follows symlinks first, so a hub started through an
     /// install's `current` link stays on that version, whichever one the link names later.
     pub(super) fn beside(exe: &Path, build: Build) -> io::Result<Self> {
-        Ok(Self { path: exe.canonicalize()?.with_file_name(daemon_file()), build: build.stamped() })
+        Ok(Self { path: exe.canonicalize()?.with_file_name(daemon_file()), build: build.stamped(), environment: None })
+    }
+
+    /// The same, but every hub it starts runs in `vars` alone, as `process::testing::WholeEnvironment` gives them, so
+    /// a test's hubs, those an app it drives starts again among them, run in the environment the test chose rather than
+    /// in this process's.
+    #[cfg(any(test, feature = "testing"))]
+    #[must_use]
+    pub fn in_environment<'a>(mut self, vars: impl IntoIterator<Item = (&'a OsStr, &'a OsStr)>) -> Self {
+        self.environment = Some(vars.into_iter().map(|(name, value)| (name.to_owned(), value.to_owned())).collect());
+        self
+    }
+
+    /// `exe`, to start a hub from, in the environment it's to run in.
+    fn command(&self, exe: &Path) -> Command {
+        let mut command = Command::new(exe);
+        if let Some(vars) = &self.environment {
+            command.env_clear().envs(vars.iter().map(|(name, value)| (name, value)));
+        }
+        command
     }
 
     /// The file to start a hub from: the build's own copy, made the first time it's needed, or else the daemon itself.
@@ -103,7 +129,7 @@ pub(super) fn start_hub(paths: &Paths, daemon: &Daemon) -> io::Result<()> {
     let exe = daemon.to_start(paths)?;
     let exe = if exe.components().count() > 1 { whole(&exe)? } else { exe };
     let data_dir = whole(&paths.data_dir)?;
-    let mut command = Command::new(&exe);
+    let mut command = daemon.command(&exe);
     command
         .args(["hub", "--on-demand"])
         // The hub this client will look for, whatever this process's environment says.

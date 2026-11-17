@@ -1,6 +1,6 @@
 use std::path::Path;
-use std::process::Command;
 
+use process::testing::WholeEnvironment;
 use protocol::model::GithubToken;
 use protocol::worker::{GitCredential, GitIdentity};
 
@@ -21,8 +21,10 @@ fn installation() -> GitCredential {
 
 /// `git` in `repo`, given `files`, without the person's own config, as "What still goes round it" says.
 fn git(repo: &Path, files: &Files, args: &[&str]) -> String {
-    let mut git = Command::new("git");
-    git.args(args).current_dir(repo).env("HOME", repo).env("GIT_CONFIG_NOSYSTEM", "1").env_remove("XDG_CONFIG_HOME");
+    let mut environment = WholeEnvironment::for_a_test(repo);
+    environment.set("GIT_CONFIG_NOSYSTEM", "1");
+    let mut git = environment.command("git");
+    git.args(args).current_dir(repo);
     files.environment().apply(&mut git);
     let output = git.output().unwrap();
     assert!(output.status.success(), "git {args:?}: {}", String::from_utf8_lossy(&output.stderr));

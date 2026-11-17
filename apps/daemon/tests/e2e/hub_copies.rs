@@ -4,10 +4,10 @@
 
 use std::fs::File;
 use std::path::Path;
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::time::{Duration, SystemTime};
 
-use client_core::{Client, Daemon};
+use client_core::Client;
 use protocol::StampedBuild;
 
 use crate::support::{Stack, install_executable, wait_until};
@@ -33,7 +33,9 @@ fn starting_a_hub_removes_the_copies_nothing_runs_from_but_not_a_worker_s() {
         File::options().write(true).open(&copy).unwrap().set_modified(made).unwrap();
     }
     let state_dir = stack.path("old-worker");
-    let mut worker = Command::new(paths.hub_copy(&build(1)))
+    let mut worker = stack
+        .env
+        .command(paths.hub_copy(&build(1)))
         .args(["worker", "--listen", "--workspaces-root"])
         .arg(stack.path("workspaces"))
         .arg("--state-dir")
@@ -43,7 +45,8 @@ fn starting_a_hub_removes_the_copies_nothing_runs_from_but_not_a_worker_s() {
         .spawn()
         .unwrap();
     wait_until("the worker to listen", || state_dir.join(protocol::paths::WORKER_SOCKET_FILE).exists());
-    let daemon = Daemon { path: app.join("roundhoused"), build: Some(build(4)) };
+    let mut daemon = stack.daemon(app.join("roundhoused"));
+    daemon.build = Some(build(4));
 
     let started = Client::connect_or_start(&paths, &daemon, "test");
     let _ = client_core::stop_hub(&stack.socket());

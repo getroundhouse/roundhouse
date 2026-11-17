@@ -3,17 +3,7 @@ use crate::git::worktrees::tests::while_one_is_made;
 use process::Environment;
 
 pub(crate) fn run(cwd: &Path, args: &[&str]) -> String {
-    let output = std::process::Command::new("git")
-        .args(args)
-        .current_dir(cwd)
-        .env("GIT_AUTHOR_NAME", "t")
-        .env("GIT_AUTHOR_EMAIL", "t@example.com")
-        .env("GIT_COMMITTER_NAME", "t")
-        .env("GIT_COMMITTER_EMAIL", "t@example.com")
-        .output()
-        .unwrap();
-    assert!(output.status.success(), "git {args:?}: {}", String::from_utf8_lossy(&output.stderr));
-    String::from_utf8_lossy(&output.stdout).trim().to_string()
+    process::testing::git(cwd, args)
 }
 
 /// What `git status` lists in the repository at `cwd`, each untracked file on its own, leaving out what only this
@@ -97,11 +87,7 @@ async fn fetches_the_latest_remote_commit_and_does_not_track_the_base() {
         "branch: Created from origin/main",
     );
     // A tracking branch would make a bare `git pull` or `git push` act on main.
-    let upstream = std::process::Command::new("git")
-        .args(["rev-parse", "--abbrev-ref", "@{upstream}"])
-        .current_dir(path)
-        .output()
-        .unwrap();
+    let upstream = process::testing::git_in(path).args(["rev-parse", "--abbrev-ref", "@{upstream}"]).output().unwrap();
     assert!(!upstream.status.success());
 }
 

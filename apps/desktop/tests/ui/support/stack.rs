@@ -2,7 +2,7 @@
 
 use super::daemons;
 use client_core::{Client, Daemon};
-use daemons::{binaries, point_daemons_at_the_fake_agent};
+use daemons::{binaries, hub_environment};
 use desktop::app::{AppView, BuildLine, Connection, HubSource};
 use desktop::checkout::Checkout;
 use desktop::workspace_pane::WorkspacePane;
@@ -12,9 +12,9 @@ use gpui_kit::{
     AnyWindowHandle, AppContext as _, Bounds, ElementId, Entity, InputEvent as _, MouseMoveEvent, Pixels, ScrollDelta,
     ScrollEvent, SharedString, TestAppContext,
 };
+pub(crate) use process::testing::git;
 use protocol::model::{Effort, ModelName, PermissionMode, Seq};
-use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use tempfile::TempDir;
 use transcript::Transcript;
@@ -33,7 +33,6 @@ pub(crate) struct Stack {
 
 impl Stack {
     pub(crate) fn new() -> Self {
-        point_daemons_at_the_fake_agent();
         // Under /tmp because of the socket path limit.
         let dir = tempfile::Builder::new().prefix("ahui-").tempdir_in("/tmp").unwrap();
         let root = dir.path();
@@ -51,7 +50,7 @@ impl Stack {
         let hub = HubSource {
             remote: None,
             paths,
-            daemon: Daemon::in_place(binaries().join("roundhoused")),
+            daemon: Daemon::in_place(binaries().join("roundhoused")).in_environment(hub_environment().vars()),
             build_number: None,
             // The daemon's, which was compiled with the same stamp as this test.
             build_version: protocol::this_build!().version(),
@@ -95,20 +94,6 @@ pub(crate) fn wait_until(what: &str, mut done: impl FnMut() -> bool) {
         std::thread::sleep(pause);
         pause = (pause * 2).min(Duration::from_millis(10));
     }
-}
-
-pub(crate) fn git(cwd: &Path, args: &[&str]) -> String {
-    let output = Command::new("git")
-        .args(args)
-        .current_dir(cwd)
-        .env("GIT_AUTHOR_NAME", "t")
-        .env("GIT_AUTHOR_EMAIL", "t@example.com")
-        .env("GIT_COMMITTER_NAME", "t")
-        .env("GIT_COMMITTER_EMAIL", "t@example.com")
-        .output()
-        .unwrap();
-    assert!(output.status.success(), "git {args:?}: {}", String::from_utf8_lossy(&output.stderr));
-    String::from_utf8_lossy(&output.stdout).trim().to_string()
 }
 
 pub(crate) struct Ui<'a> {

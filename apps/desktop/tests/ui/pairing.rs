@@ -10,12 +10,12 @@ use protocol::model::AgentKind;
 use protocol::pairing::{PairingCode, PairingLink};
 use protocol::paths::ENV_LISTEN;
 
-use crate::support::{Stack, Ui, sidebar_row};
+use crate::support::{Stack, Ui, hub_environment, sidebar_row};
 
 #[gpui_kit::test]
 fn pairing_a_device_copies_its_link_and_confirms_when_the_device_connects(cx: &mut TestAppContext) {
     let stack = Stack::new();
-    let _hub = stack.start_hub_ahead(&[(ENV_LISTEN, "127.0.0.1:0".into())]);
+    let _hub = stack.start_hub_ahead(hub_environment().set(ENV_LISTEN, "127.0.0.1:0"));
     let mut ui = Ui::open(cx, &stack);
 
     ui.click("hub-switcher");
@@ -40,12 +40,12 @@ fn connecting_another_hub_previews_it_keeps_errors_inline_and_switches_with_this
     cx: &mut TestAppContext,
 ) {
     let local = Stack::new();
-    let _local_hub = local.start_hub_ahead(&[(ENV_LISTEN, "127.0.0.1:0".into())]);
+    let _local_hub = local.start_hub_ahead(hub_environment().set(ENV_LISTEN, "127.0.0.1:0"));
     let local_repo = local.client().repo_add(local.repo().to_str().unwrap()).unwrap();
     let local_ws = local.client().workspace_create(&local_repo.id, None, None, None).unwrap();
 
     let remote = Stack::new();
-    let _remote_hub = remote.start_hub_ahead(&[(ENV_LISTEN, "127.0.0.1:0".into())]);
+    let _remote_hub = remote.start_hub_ahead(hub_environment().set(ENV_LISTEN, "127.0.0.1:0"));
     let mut ui = Ui::open(cx, &local);
     ui.cx.update(|cx| desktop::app::the_device_name_is("Ada’s MacBook Air", cx));
 
@@ -122,9 +122,9 @@ fn connecting_another_hub_previews_it_keeps_errors_inline_and_switches_with_this
 #[gpui_kit::test]
 fn an_open_workspace_on_a_remote_hub_stays_drawn_when_the_hub_goes_unreachable(cx: &mut TestAppContext) {
     let local = Stack::new();
-    let _local_hub = local.start_hub_ahead(&[(ENV_LISTEN, "127.0.0.1:0".into())]);
+    let _local_hub = local.start_hub_ahead(hub_environment().set(ENV_LISTEN, "127.0.0.1:0"));
     let remote = Stack::new();
-    let remote_hub = remote.start_hub_ahead(&[(ENV_LISTEN, "127.0.0.1:0".into())]);
+    let remote_hub = remote.start_hub_ahead(hub_environment().set(ENV_LISTEN, "127.0.0.1:0"));
     let repo = remote.client().repo_add(remote.repo().to_str().unwrap()).unwrap();
     let ws = remote.client().workspace_create(&repo.id, None, None, None).unwrap();
     let pairing = remote.client().pairing_start().unwrap();

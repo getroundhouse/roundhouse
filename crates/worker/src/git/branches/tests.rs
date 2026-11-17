@@ -96,7 +96,7 @@ async fn a_branch_being_rebased_still_counts_while_head_is_detached() {
     run(&worktree, &["commit", "-qam", "on aspen"]);
     std::fs::write(repo.join("a.txt"), "main's\n").unwrap();
     run(&repo, &["commit", "-qam", "on main"]);
-    let rebasing = std::process::Command::new("git").args(["rebase", "main"]).current_dir(&worktree).output().unwrap();
+    let rebasing = process::testing::git_in(&worktree).args(["rebase", "main"]).output().unwrap();
     assert!(!rebasing.status.success(), "it stops at the conflict");
 
     let branches = read_branches(&worktree).await;
@@ -128,11 +128,8 @@ async fn a_reftable_worktree_counts_every_branch_it_left() {
 /// A repository made with its refs in a reftable, with one commit, or false where git is too old to make one.
 pub(crate) fn reftable(repo: &Path) -> bool {
     std::fs::create_dir_all(repo).unwrap();
-    let made = std::process::Command::new("git")
-        .args(["init", "-q", "--ref-format=reftable", "-b", "main"])
-        .current_dir(repo)
-        .output()
-        .unwrap();
+    let made =
+        process::testing::git_in(repo).args(["init", "-q", "--ref-format=reftable", "-b", "main"]).output().unwrap();
     if made.status.success() {
         run(repo, &["commit", "-q", "--allow-empty", "-m", "first"]);
     }
