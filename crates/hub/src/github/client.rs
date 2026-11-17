@@ -9,6 +9,7 @@ use tracing::warn;
 
 use super::GithubConfig;
 use super::expiration::ends_at_ms;
+use crate::store::GithubProfile;
 
 /// How long a call to GitHub has, from asking to the end of its answer. GitHub answers in well under a second, so this
 /// leaves room for a slow network and a TLS handshake, and doesn't leave a client waiting long on a GitHub it can't
@@ -28,19 +29,26 @@ pub(crate) struct Github {
     client: OnceCell<Octocrab>,
 }
 
-/// Who GitHub says a token is, and when it ends.
+/// Who GitHub says a token is, what its profile says that its commit identity is made from, and when the token ends.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct TokenOwner {
     pub(crate) user: GithubUser,
+    pub(crate) profile: GithubProfile,
     /// By GitHub's word, as [`HeldGithubLogin::ends_at_ms`](protocol::model::HeldGithubLogin::ends_at_ms) says.
     pub(crate) ends_at_ms: Option<i64>,
 }
 
-/// What `GET /user` answers that the hub reads. GitHub calls the user's name its `login`.
+/// What `GET /user` answers that the hub reads. GitHub calls the user's name its `login`, and the name it goes by its
+/// `name`, and gives `email` only as the one its profile shows everyone, whatever the token may read, each as `null`
+/// for a user who hasn't set it.
 #[derive(Deserialize)]
 struct User {
     id: u64,
     login: String,
+    #[serde(default)]
+    name: Option<String>,
+    #[serde(default)]
+    email: Option<String>,
 }
 
 /// What GitHub's API answered, as far as the hub reads it.
@@ -65,10 +73,10 @@ impl Github {
         Self { config, client: OnceCell::new() }
     }
 
-    /// Who `token` is and when it ends, as `GET /user` says, within [`ASK_WITHIN`], whatever GitHub does. Refused with
-    /// `InvalidRequest` when GitHub doesn't take the token as a user's, as with one that has ended or been revoked, and
-    /// with `Unavailable` when GitHub can't be reached, doesn't answer in time, is limiting the hub's calls, or answers
-    /// with anything else.
+    /// Who `token` is, its user's name and public email, and when it ends, as `GET /user` says, within [`ASK_WITHIN`],
+    /// whatever GitHub does. A name or an email that's only blank is none. Refused with `InvalidRequest` when GitHub
+    /// doesn't take the token as a user's, as with one that has ended or been revoked, and with `Unavailable` when
+    /// GitHub can't be reached, doesn't answer in time, is limiting the hub's calls, or answers with anything else.
     pub(crate) async fn token_owner(&self, token: &GithubToken) -> Result<TokenOwner, ApiError> {
         owner(within(self.ask(http::Method::GET, "/user", Some(token.as_str()), None)).await?)
     }
@@ -150,7 +158,10 @@ fn owner(answer: Answered) -> Result<TokenOwner, ApiError> {
         }
         read
     });
-    Ok(TokenOwner { user: GithubUser { id: GithubUserId::new(user.id), name: user.login.into() }, ends_at_ms })
+    let User { id, login, name, email } = user;
+    let said = |text: Option<String>| text.map(|text| text.trim().to_string()).filter(|text| !text.is_empty());
+    let profile = GithubProfile { name: said(name), email: said(email) };
+    Ok(TokenOwner { user: GithubUser { id: GithubUserId::new(id), name: login.into() }, profile, ends_at_ms })
 }
 
 /// What `call` comes to within [`ASK_WITHIN`], from asking to the end of its answer, whatever stage it hangs at, or

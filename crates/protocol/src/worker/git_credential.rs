@@ -72,14 +72,16 @@ pub struct GitCredential {
     /// A worker sets it as git's `user.name` and `user.email` for every process it starts, from their next `git`, over
     /// the repository's and the person's own, and takes them out again with a credential that has none. A worker from
     /// before it reads past it, so it pushes as the account, and commits as whoever the machine's git says. `None`
-    /// from a hub from before it, and from one that gives an account none, which commits as the machine's git says.
-    /// This hub gives one only to an app's installation, as its bot.
+    /// from a hub from before it, and from one that gives an account none, as this one does an account it hasn't asked
+    /// GitHub about, which commits as the machine's git says.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub identity: Option<GitIdentity>,
 }
 
 /// Who a commit is by, as git's `user.name` and `user.email` say it: for an app's installation, its bot,
-/// `ada-roundhouse[bot]`, with the address GitHub links to the bot, `41+ada-roundhouse[bot]@users.noreply.github.com`.
+/// `ada-roundhouse[bot]`, with the address GitHub links to the bot, `41+ada-roundhouse[bot]@users.noreply.github.com`,
+/// and for a token's or a sign-in's account, the name its user goes by on GitHub, or its username, and the email it
+/// shows there, or the address GitHub gives it, such as `7+ada@users.noreply.github.com`.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct GitIdentity {
     pub name: String,

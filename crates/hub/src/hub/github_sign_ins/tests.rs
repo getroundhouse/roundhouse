@@ -8,6 +8,7 @@ use std::time::Duration;
 
 use protocol::client::HubNotice;
 use protocol::model::{GithubLoginKind, GithubSignInId, GithubSignInStatus, RecordKey};
+use protocol::worker::{GitIdentity, GithubCredential};
 use tokio::sync::broadcast;
 
 use super::*;
@@ -29,10 +30,10 @@ fn code(device: &str) -> Answer {
 }
 
 /// A stand-in that gives each sign-in the code `device`, and answers its asks after the token with `polls`, the last
-/// again and again, and `GET /user` with `a-token` as ada's.
+/// again and again, and `GET /user` with `a-token` as ada's, named Ada Lovelace, who shows no email.
 async fn github(device: &'static str, polls: Vec<Answer>) -> StandIn {
     StandIn::with(Script {
-        users: vec![("a-token", Answer::user(7, "ada", None))],
+        users: vec![("a-token", Answer::user_with_profile(7, "ada", Some("Ada Lovelace"), None))],
         codes: vec![code(device)],
         polls: vec![(device, polls)],
         ..Script::default()
@@ -109,6 +110,10 @@ async fn a_sign_in_waits_with_its_code_and_once_approved_every_client_hears_of_i
     assert_eq!(approved.status, GithubSignInStatus::Approved { account: account.id.clone() });
     assert_eq!(&again, approved, "the same start again is the same sign-in");
     assert_eq!(github.asked().len(), 1 + 1 + 1, "the code, an ask after the token, and whose it is, once");
+    let GithubCredential::Account(credential) = hub.git_credential().borrow().clone() else { panic!() };
+    let identity =
+        GitIdentity { name: "Ada Lovelace".to_string(), email: "7+ada@users.noreply.github.com".to_string() };
+    assert_eq!(credential.identity, Some(identity), "workers are sent who it commits as, as whose it is said");
     until_no_job_runs(&hub).await;
 }
 

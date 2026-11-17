@@ -16,8 +16,8 @@ use super::*;
 use crate::github::TokenOwner;
 use crate::github_logins::tests::{ada_signed_in, login_ending};
 use crate::github_logins::{Connect, GithubLogins, RENEWED_WITH_LEFT};
-use crate::store::Store;
 use crate::store::tests::store_with_session;
+use crate::store::{GithubProfile, Store};
 
 const ENDS_AT_MS: i64 = 1_000_000_000;
 
@@ -56,7 +56,9 @@ async fn a_defaults_token_that_ends_while_the_hub_runs_blocks_at_the_next_check_
     let (logins, _) = logins_in(dir.path());
     let connect = Connect::new(GithubAccountConnect { token: GithubToken::new("a-token"), id: None }, 0).unwrap();
     let user = GithubUser { id: GithubUserId::new(7), name: "ada".into() };
-    logins.connect(&connect, &TokenOwner { user, ends_at_ms: Some(ENDS_AT_MS) }).unwrap();
+    logins
+        .connect(&connect, &TokenOwner { user, profile: GithubProfile::default(), ends_at_ms: Some(ENDS_AT_MS) })
+        .unwrap();
     let wall_clock = Arc::new(AtomicI64::new(ENDS_AT_MS - 8 * HOUR_MS));
     let mut checks = checking(&logins, &wall_clock);
     checks.recv().await.unwrap();

@@ -6,6 +6,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use protocol::model::GithubToken;
+use protocol::worker::{GitIdentity, GithubCredential};
 use tokio::sync::broadcast::error::TryRecvError;
 
 use super::*;
@@ -45,6 +46,22 @@ async fn every_client_is_told_of_what_changed_a_github_accounts_record_and_the_d
     assert!(matches!(told_of_settings, Ok(HubNotice::HubSettings(settings)) if settings == machines_own));
     assert_eq!(disconnected.held_login, None);
     assert!(matches!(told_last, Ok(HubNotice::GithubAccount(record)) if record == disconnected));
+}
+
+/// As `GET /user` says, when the hub asks whose the token is.
+#[tokio::test]
+async fn a_connected_default_commits_as_its_users_name_and_public_email_on_github() {
+    let ada = Answer::user_with_profile(7, "ada", Some("Ada Lovelace"), Some("ada@example.com"));
+    let github = StandIn::start(vec![("a-token", ada)]).await;
+    let dir = tempfile::tempdir().unwrap();
+    let hub = hub_calling_github(dir.path(), github.api());
+
+    hub.github_account_connect(asking("a-token")).await.unwrap();
+
+    let GithubCredential::Account(credential) = hub.git_credential().borrow().clone() else { panic!() };
+    let identity = GitIdentity { name: "Ada Lovelace".to_string(), email: "ada@example.com".to_string() };
+    assert_eq!((credential.username.as_str(), credential.identity), ("ada", Some(identity)));
+    assert_eq!(github.asked().len(), 1, "who it is came with whose the token is");
 }
 
 #[tokio::test]

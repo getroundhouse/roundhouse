@@ -12,6 +12,7 @@ use tracing::info;
 
 use super::{GithubLogin, GithubLogins};
 use crate::login_files::{Locked, Stored};
+use crate::store::GithubProfile;
 
 /// Who git says it is as it gives GitHub an installation's token, as GitHub's docs give.
 const INSTALLATION_USERNAME: &str = "x-access-token";
@@ -117,8 +118,10 @@ impl GithubLogins {
     }
 
     /// What workers are to give their processes for github.com at `now_ms`: nothing while the default is each
-    /// machine's own login, the default's username and token while its login can be used, and otherwise a block that
-    /// says what to do, never the machine's own in its place. So is a default the hub can't read.
+    /// machine's own login, the default's username and token while its login can be used, with its commit identity, an
+    /// installation's bot, or as GitHub's profile of a token's or a sign-in's user said, once the hub has asked, and
+    /// otherwise a block that says what to do, never the machine's own in its place. So is a default the hub can't
+    /// read, and one whose profile it can't read.
     fn worked_out(&self, files: &Locked<'_, GithubLogin>, now_ms: i64) -> GithubCredential {
         let unread = |e: &dyn std::fmt::Display| {
             let why = format!("Roundhouse couldn't read its default GitHub account ({e})");
@@ -137,25 +140,53 @@ impl GithubLogins {
             }
             Err(e) => return unread(&e),
         };
-        match self.token_of(files, &account, now_ms) {
-            Ok(Ok(token)) => GithubCredential::Account(credential_of(account, token)),
-            Ok(Err(unusable)) => lost(&account, &unusable),
-            Err(e) => unread(&e.message),
+        let token = match self.token_of(files, &account, now_ms) {
+            Ok(Ok(token)) => token,
+            Ok(Err(unusable)) => return lost(&account, &unusable),
+            Err(e) => return unread(&e.message),
+        };
+        if account.installation.is_some() {
+            return GithubCredential::Account(installation_credential(&account.user, token));
+        }
+        match self.store.github_profile(&account.id) {
+            Ok(profile) => {
+                let identity = profile.map(|profile| identity_of(&account.user, profile));
+                GithubCredential::Account(GitCredential { username: account.user.name, token, identity })
+            }
+            Err(e) => unread(&e),
         }
     }
 }
 
-/// What git and `gh` are given for `account`, whose login's token is `token`: its username, or, for an app's
-/// installation, `x-access-token`, as GitHub's docs give git for an installation's token, with the app's bot as the
-/// commit identity, with the address GitHub links to the bot, so commits, pushes and pull requests all say the bot.
-/// Other accounts are given no commit identity yet, which the credential can carry for any account.
-fn credential_of(account: GithubAccount, token: GithubToken) -> GitCredential {
-    if account.installation.is_none() {
-        return GitCredential { username: account.user.name, token, identity: None };
-    }
-    let GithubUser { id, name } = account.user;
-    let identity = GitIdentity { email: format!("{id}+{name}@users.noreply.github.com"), name: name.to_string() };
+/// What git and `gh` are given for an app's installation, whose user is the app's `bot`, and whose login's token is
+/// `token`: `x-access-token` as its username, as GitHub's docs give git for an installation's token, and the bot as the
+/// commit identity, so commits, pushes and pull requests all say the bot. A bot has no profile, so it's its name and
+/// the address GitHub links to it.
+fn installation_credential(bot: &GithubUser, token: GithubToken) -> GitCredential {
+    let identity = identity_of(bot, GithubProfile::default());
     GitCredential { username: INSTALLATION_USERNAME.into(), token, identity: Some(identity) }
+}
+
+/// Who commits are by as `user`, as its `profile` says: the name it goes by, or its username when it has none, or one
+/// git won't commit as, as [`git_commits_as`] says, and the email it shows everyone, or else the address GitHub gives
+/// it, `<number>+<username>@users.noreply.github.com`, which GitHub links to the user whatever it's named later, and
+/// which no one can mail, as the owner decided. Never the primary email a sign-in can read, since GitHub refuses a push
+/// of commits by one the person keeps private when they've asked it to.
+fn identity_of(user: &GithubUser, profile: GithubProfile) -> GitIdentity {
+    let GithubUser { id, name: username } = user;
+    GitIdentity {
+        name: profile.name.filter(|name| git_commits_as(name)).unwrap_or_else(|| username.to_string()),
+        email: profile.email.unwrap_or_else(|| format!("{id}+{username}@users.noreply.github.com")),
+    }
+}
+
+/// Whether git commits as `name` as its `user.name`. Git takes `<`, `>` and line ends out of a name, trims what it
+/// calls crud from both ends, and refuses to commit as one with nothing left, which is one with nothing but crud: each
+/// byte up to a space, and `.`, `,`, `:`, `;`, `<`, `>`, `"`, `\` and `'`, as git 2.31, the oldest the worker uses,
+/// has it. Later gits, such as 2.54, keep `.`, so a name of only dots, which they'd commit as, is the username on
+/// every git.
+fn git_commits_as(name: &str) -> bool {
+    name.chars().any(|c| c > ' ' && !".,:;<>\"\\'".contains(c))
 }
 
 /// A block, saying `why` agents push as nobody, and `to_do` about it. Git says it as it refuses to push, in a terminal

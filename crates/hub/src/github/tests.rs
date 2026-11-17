@@ -2,6 +2,7 @@ use protocol::model::{GithubRepositoryName, GithubUser, GithubUserId};
 use protocol::worker::GitCredential;
 
 use super::*;
+use crate::store::GithubProfile;
 
 /// 2026-12-31 23:59:59 UTC, in milliseconds since the epoch.
 const NEW_YEARS_EVE_MS: i64 = 1_798_761_599_000;
@@ -18,12 +19,40 @@ async fn a_token_is_whom_github_says_and_ends_when_github_says() {
     let ends = calls.token_owner(&GithubToken::new("ends")).await.unwrap();
     let lasts = calls.token_owner(&GithubToken::new("lasts")).await.unwrap();
 
-    let ada = GithubUser { id: GithubUserId::new(7), name: "ada".into() };
-    assert_eq!(ends, TokenOwner { user: ada.clone(), ends_at_ms: Some(NEW_YEARS_EVE_MS) });
-    assert_eq!(lasts, TokenOwner { user: ada, ends_at_ms: None });
+    let (ada, profile) = (GithubUser { id: GithubUserId::new(7), name: "ada".into() }, GithubProfile::default());
+    assert_eq!(ends, TokenOwner { user: ada.clone(), profile: profile.clone(), ends_at_ms: Some(NEW_YEARS_EVE_MS) });
+    assert_eq!(lasts, TokenOwner { user: ada, profile, ends_at_ms: None });
     let asked = github.asked();
     assert!(asked.iter().all(|head| head.starts_with("get /user http/1.1\r\n")), "{asked:?}");
     assert!(asked[0].contains("authorization: bearer ends\r\n"), "{}", asked[0]);
+}
+
+/// As GitHub gives them: `null` for a user who hasn't set a name, or shows no email, and left out, as from a GitHub
+/// that doesn't say. Blank is none too, and the rest is trimmed.
+#[tokio::test]
+async fn a_tokens_user_has_the_name_and_public_email_github_gives_and_none_for_one_it_doesnt() {
+    let github = StandIn::start(vec![
+        ("both", Answer::user_with_profile(7, "ada", Some("Ada Lovelace"), Some("ada@example.com"))),
+        ("neither", Answer::user_with_profile(7, "ada", None, None)),
+        ("blank", Answer::user_with_profile(7, "ada", Some("  "), Some(""))),
+        ("padded", Answer::user_with_profile(7, "ada", Some(" Ada "), None)),
+        ("unsaid", Answer::With { status: 200, headers: Vec::new(), body: r#"{"login":"ada","id":7}"#.to_string() }),
+    ])
+    .await;
+    let calls = Github::new(GithubConfig::at(github.api()));
+
+    let mut profiles = Vec::new();
+    for token in ["both", "neither", "blank", "padded", "unsaid"] {
+        profiles.push(calls.token_owner(&GithubToken::new(token)).await.unwrap().profile);
+    }
+
+    let profile = |name: Option<&str>, email: Option<&str>| GithubProfile {
+        name: name.map(str::to_string),
+        email: email.map(str::to_string),
+    };
+    let both = profile(Some("Ada Lovelace"), Some("ada@example.com"));
+    let none = profile(None, None);
+    assert_eq!(profiles, [both, none.clone(), none.clone(), profile(Some("Ada"), None), none]);
 }
 
 #[test]

@@ -129,6 +129,7 @@ impl GithubLogins {
                     connected_at_ms: connect.connected_at_ms,
                     ends_at_ms: owner.ends_at_ms,
                     installation: None,
+                    profile: Some(&owner.profile),
                 };
                 let GithubConnected { account, replaced, settings } = self.store.connect_github_login(&connecting)?;
                 Ok(((account, settings), replaced))

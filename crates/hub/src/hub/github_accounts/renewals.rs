@@ -1,7 +1,7 @@
 //! Checking the GitHub logins by the wall clock, renewing each sign-in the check finds due, making each installation of
-//! an app of your own the check finds due a new token, and looking for where each app is installed. GitHub is asked
-//! between two turns at the logins' lock, never under it. What it answers is `crate::github`'s to read, and what's
-//! kept of it, and in what order, is `crate::github_logins`'s.
+//! an app of your own the check finds due a new token, looking for where each app is installed, and asking GitHub who
+//! each account the check finds due is again. GitHub is asked between two turns at the logins' lock, never under it.
+//! What it answers is `crate::github`'s to read, and what's kept of it, and in what order, is `crate::github_logins`'s.
 
 use std::sync::Arc;
 
@@ -16,15 +16,15 @@ use crate::store::now_ms;
 impl Hub {
     /// Checks the GitHub logins at `now_ms` by the wall clock, as `GithubLogins::check` says, tells every client of
     /// each account the check changed, and renews each sign-in it found due, makes each installation it found due a
-    /// token, and looks for where each app is installed, all at once, and waits for them, each call within GitHub's
-    /// time limit. Only [`Hub::watch_github_logins`] checks, once the last check has finished, so no check finds a
-    /// sign-in due while it's being renewed, and none is renewed twice at once, which would send GitHub what renews
-    /// its token after GitHub had revoked it. Each is a task of its own, so one that panics fails only itself. Once the
-    /// hub has stopped checking, as [`Hub::stop_checking_github_logins`] says, a check starts none, and the stop waits
-    /// for the renewals started before, and drops the rest where they are.
+    /// token, looks for where each app is installed, and asks GitHub who each account it found due is, all at once, and
+    /// waits for them, each call within GitHub's time limit. Only [`Hub::watch_github_logins`] checks, once the last
+    /// check has finished, so no check finds a sign-in due while it's being renewed, and none is renewed twice at once,
+    /// which would send GitHub what renews its token after GitHub had revoked it. Each is a task of its own, so one
+    /// that panics fails only itself. Once the hub has stopped checking, as [`Hub::stop_checking_github_logins`] says,
+    /// a check starts none, and the stop waits for the renewals started before, and drops the rest where they are.
     pub(in super::super) async fn check_github_logins(self: &Arc<Self>, now_ms: i64) {
         let logins = Arc::clone(&self.github_logins);
-        let Checked { due, changed, minting, apps } = match off_thread(move || logins.check(now_ms)).await {
+        let Checked { due, changed, minting, apps, profiles } = match off_thread(move || logins.check(now_ms)).await {
             Ok(checked) => checked,
             Err(e) => {
                 error!("couldn't check the GitHub logins: {}", e.message);
@@ -34,7 +34,7 @@ impl Hub {
         for account in changed {
             self.announce_github_account(GithubAccountChange { account, changed: true, settings: None });
         }
-        let (mut renewing, mut with_apps) = (JoinSet::new(), JoinSet::new());
+        let (mut renewing, mut unwaited) = (JoinSet::new(), JoinSet::new());
         {
             // Held while the renewals start, so a stop either comes first, and none starts, or waits for them all.
             let stopped = self.github_checks_stopped.borrow();
@@ -47,19 +47,25 @@ impl Hub {
             }
             for due in minting {
                 let hub = Arc::clone(self);
-                with_apps.spawn(async move { hub.mint(due).await });
+                unwaited.spawn(async move { hub.mint(due).await });
             }
             for app in apps {
                 let hub = Arc::clone(self);
-                with_apps.spawn(async move { hub.look_by_itself(app).await });
+                unwaited.spawn(async move { hub.look_by_itself(app).await });
+            }
+            for due in profiles {
+                let hub = Arc::clone(self);
+                unwaited.spawn(async move { hub.read_profile(due).await });
             }
         }
         let stopping = stopped(self.github_checks_stopped.subscribe());
         tokio::join!(joined(&mut renewing, "renewing a sign-in with GitHub"), async {
-            // A stop doesn't wait for these, since GitHub revokes nothing as it makes an installation's token, so what
-            // it made and the hub dropped costs only another, made from the app's key at the next hub's first check.
+            // A stop doesn't wait for these, since GitHub revokes nothing as it makes an installation's token or says
+            // who a token is, so what it gave and the hub dropped costs only another call, at the next hub's first
+            // check.
+            let what = "making an installation's token, looking for an app's, or asking GitHub who an account is";
             tokio::select! {
-                () = joined(&mut with_apps, "making an installation's token or looking for an app's") => {}
+                () = joined(&mut unwaited, what) => {}
                 () = stopping => {}
             }
         });

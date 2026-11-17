@@ -8,13 +8,14 @@ use std::time::Duration;
 use protocol::client::github_accounts::GithubAccountConnect;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{GithubAccountId, GithubToken, GithubUser, GithubUserId};
-use protocol::worker::{GitCredential, GitCredentialSet, GithubCredential, WorkerRequest, WorkerResponse};
+use protocol::worker::{GitCredential, GitCredentialSet, GitIdentity, GithubCredential, WorkerRequest, WorkerResponse};
 use tokio::sync::watch;
 
 use super::{Following, SET_WITHIN};
 use crate::github::TokenOwner;
 use crate::github_logins::{Connect, GithubLogins};
 use crate::logged::Logs;
+use crate::store::GithubProfile;
 use crate::store::tests::store_with_session;
 use crate::worker_link::WorkerLink;
 
@@ -54,16 +55,20 @@ fn logins_in(dir: &Path) -> GithubLogins {
     GithubLogins::new(Arc::new(store_with_session(dir)), dir, 0)
 }
 
-/// Connects `token`, as ada's, renewing the account `renewing` if it's given one, and returns the account's ID.
+/// Connects `token`, as ada's, who has no name and no public email on GitHub, renewing the account `renewing` if it's
+/// given one, and returns the account's ID.
 fn connect(logins: &GithubLogins, token: &str, renewing: Option<&GithubAccountId>) -> GithubAccountId {
     let asked = GithubAccountConnect { token: GithubToken::new(token), id: renewing.cloned() };
     let user = GithubUser { id: GithubUserId::new(7), name: "ada".into() };
-    let owner = TokenOwner { user, ends_at_ms: None };
+    let owner = TokenOwner { user, profile: GithubProfile::default(), ends_at_ms: None };
     logins.connect(&Connect::new(asked, 0).unwrap(), &owner).unwrap().account.id
 }
 
+/// Ada's `token`, which commits as ada, at the address GitHub gives her.
 fn account(token: &str) -> GithubCredential {
-    GithubCredential::Account(GitCredential { username: "ada".into(), token: GithubToken::new(token), identity: None })
+    let identity = GitIdentity { name: "ada".to_string(), email: "7+ada@users.noreply.github.com".to_string() };
+    let token = GithubToken::new(token);
+    GithubCredential::Account(GitCredential { username: "ada".into(), token, identity: Some(identity) })
 }
 
 /// A set at a time, as fast as the hub can make them, so a link that's applying one when the next comes is sent

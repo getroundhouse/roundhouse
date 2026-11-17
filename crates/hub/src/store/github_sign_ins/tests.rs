@@ -4,7 +4,7 @@ use super::*;
 use crate::store::older::store_from_before;
 use crate::store::schema::BEFORE_GITHUB_SIGN_INS;
 use crate::store::tests::open_in;
-use crate::store::{GithubApproving, Store};
+use crate::store::{GithubApproving, GithubProfile, Store};
 
 fn waiting() -> GithubSignInStatus {
     protocol::fixtures::github_sign_in("s").status
@@ -14,15 +14,16 @@ fn ada() -> GithubUser {
     GithubUser { id: GithubUserId::new(7), name: "ada".into() }
 }
 
-/// The sign-in `sign_in` approved as `user`, kept in `file`, signed in at 100, its token ending at 900, as the account
-/// `new_account` if it's new.
+/// The sign-in `sign_in` approved as `user`, with no name or public email on GitHub, kept in `file`, signed in at 100,
+/// its token ending at 900, as the account `new_account` if it's new.
 fn approving<'a>(
     sign_in: &'a GithubSignInId,
     user: &'a GithubUser,
     file: &'a LoginFile,
     new_account: &'a GithubAccountId,
 ) -> GithubApproving<'a> {
-    GithubApproving { sign_in, user, file, new_account, signed_in_at_ms: 100, ends_at_ms: Some(900) }
+    const NONE: &GithubProfile = &GithubProfile { name: None, email: None };
+    GithubApproving { sign_in, user, profile: NONE, file, new_account, signed_in_at_ms: 100, ends_at_ms: Some(900) }
 }
 
 fn started(store: &Store, id: &str) -> GithubSignInId {
@@ -82,6 +83,7 @@ fn approving_makes_an_account_then_renews_the_one_signed_in_as_the_same_user_in_
         connected_at_ms: 1,
         ends_at_ms: None,
         installation: None,
+        profile: None,
     };
     store.connect_github_login(&connecting).unwrap();
     let [first, second] = ["first", "second"].map(|id| started(&store, id));

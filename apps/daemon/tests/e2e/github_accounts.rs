@@ -1,7 +1,8 @@
 //! A GitHub account connected through a real hub, which asks a stand-in for GitHub whose its token is, as what a
 //! workspace's git uses for github.com: the hub makes it the default and sets it on the workspace's worker, whose setup
-//! script's git gets it, and a block once it's disconnected. And who a provider's machine's own `gh` is logged in as,
-//! which the hub records once a worker there has said, and whether the default can push to a workspace's repository.
+//! script's git gets it, and commits as it, and a block once it's disconnected. And who a provider's machine's own `gh`
+//! is logged in as, which the hub records once a worker there has said, and whether the default can push to a
+//! workspace's repository.
 
 #![cfg(test)]
 
@@ -51,6 +52,31 @@ fn a_workspaces_git_gets_the_default_github_accounts_token_and_a_block_once_its_
     assert_eq!(wait_for_setup(&client, &workspace.id), SetupStatus::Succeeded, "git was blocked");
     let said = std::fs::read_to_string(worktree.join("said")).unwrap();
     assert!(said.contains("Roundhouse's default GitHub account, ada, was disconnected"), "{said}");
+}
+
+/// Commits as git does on a machine with no name or email of its own, since `user.useConfigOnly` takes them only from
+/// git's config, rather than guessing them from the machine, then says who the commit is by and who committed it.
+const COMMITS: &str = "git -c user.useConfigOnly=true commit --allow-empty -qm 'by an agent'
+git log -1 --format='%an <%ae>, %cn <%ce>' > by";
+
+/// As GitHub's profile of the account's user says, when the hub asks whose its token is: her name, and the address
+/// GitHub gives her, since she shows no email.
+#[test]
+fn a_workspaces_commits_are_by_the_default_github_account_on_a_machine_with_no_git_identity() {
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let ada = GithubAnswer::user_with_profile(7, "ada", Some("Ada Lovelace"), None);
+    let github = runtime.block_on(GithubStandIn::start(vec![(TOKEN, ada)]));
+    let stack = Stack::start_with(vec![(ENV_TEST_GITHUB_API, github.api())]);
+    commit_settings(&stack, &format!("[scripts]\nsetup = '''\n{COMMITS}\n'''\n"));
+    let client = stack.client();
+    client.call(GithubAccountConnect { token: GithubToken::new(TOKEN), id: None }).unwrap();
+
+    let (workspace, _) = stack.workspace(&client);
+
+    assert_eq!(wait_for_setup(&client, &workspace.id), SetupStatus::Succeeded, "git couldn't commit");
+    let by = std::fs::read_to_string(PathBuf::from(workspace.path.unwrap()).join("by")).unwrap();
+    let ada = "Ada Lovelace <7+ada@users.noreply.github.com>";
+    assert_eq!(by, format!("{ada}, {ada}\n"));
 }
 
 /// Through the real worker of the local provider, and a stand-in for `gh` on its `PATH`, to every client.

@@ -3,7 +3,7 @@
 
 use std::path::{Path, PathBuf};
 
-use protocol::worker::{GitCredential, GithubCredential};
+use protocol::worker::{GitCredential, GitIdentity, GithubCredential};
 
 use super::super::*;
 use super::sign_ins::{approved, started};
@@ -14,11 +14,14 @@ pub(super) fn sent(logins: &GithubLogins) -> GithubCredential {
     logins.git_credential().borrow().clone()
 }
 
-pub(super) fn account(username: &str, token: &str) -> GithubCredential {
+/// Ada's `token`, as she's connected or signed in with no name or public email on GitHub, so she commits as her
+/// username, at the address GitHub gives her.
+pub(super) fn as_ada(token: &str) -> GithubCredential {
+    let identity = GitIdentity { name: "ada".to_string(), email: "7+ada@users.noreply.github.com".to_string() };
     GithubCredential::Account(GitCredential {
-        username: username.into(),
+        username: "ada".into(),
         token: GithubToken::new(token),
-        identity: None,
+        identity: Some(identity),
     })
 }
 
@@ -60,8 +63,8 @@ fn workers_are_sent_the_defaults_username_and_token_as_its_connected_and_renewed
     logins.connect(&connect("another-token", None, "g3"), &owner(8, "grace", None)).unwrap();
     logins.check(6000).unwrap();
 
-    assert_eq!(connected, account("ada", "first-token"), "the first account became the default");
-    assert_eq!(renewed, account("ada", "renewed-token"));
+    assert_eq!(connected, as_ada("first-token"), "the first account became the default");
+    assert_eq!(renewed, as_ada("renewed-token"));
     assert!(!following.has_changed().unwrap(), "another account, and the first token's end, change nothing");
 }
 
@@ -88,7 +91,7 @@ fn a_default_whose_token_has_ended_blocks_from_its_end_saying_to_renew_it() {
     let before_its_end = sent(&logins);
     logins.check(5000).unwrap();
 
-    assert_eq!(before_its_end, account("ada", "a-token"));
+    assert_eq!(before_its_end, as_ada("a-token"));
     let reason = reason(sent(&logins));
     assert!(reason.contains("ada, has ended") && reason.contains("Renew it"), "{reason}");
 }
@@ -137,8 +140,8 @@ fn workers_are_sent_a_default_signed_in_with_its_access_token_as_its_approved_an
     signed_in(&logins, &store, "again", "renewed-token");
     let renewed = following.borrow_and_update().clone();
 
-    assert_eq!(approved, account("ada", "first-token"), "the first account became the default");
-    assert_eq!(renewed, account("ada", "renewed-token"), "signing in as ada again renewed it in place");
+    assert_eq!(approved, as_ada("first-token"), "the first account became the default");
+    assert_eq!(renewed, as_ada("renewed-token"), "signing in as ada again renewed it in place");
 }
 
 /// As after a Mac wakes from a sleep past its token's end, before the hub has renewed it. Choosing it as the default
@@ -159,7 +162,7 @@ fn a_default_signed_in_blocks_from_its_tokens_end_saying_its_being_renewed_and_o
     let ended = reason(sent(&logins));
     let chosen_once_ended = logins.set_default(Some(&"g".into()), 90_000).unwrap_err();
 
-    assert_eq!(before_its_end, account("ada", "a-token"));
+    assert_eq!(before_its_end, as_ada("a-token"));
     assert!(renewing.contains("default GitHub account, ada, has ended, and Roundhouse is renewing it"), "{renewing}");
     assert!(renewing.contains("If this goes on, sign in with GitHub again"), "{renewing}");
     assert!(ended.contains("The sign-in of Roundhouse's default GitHub account, ada, has ended"), "{ended}");

@@ -56,7 +56,7 @@ Two environment variables move them, for a hub started with them set:
 - **What your agent sends,** to its model provider, through the Claude, Codex or Antigravity CLI under its login. Codex and Antigravity keep their native sign-ins and conversation files in their own data directories.
 - **Your prompts' words and their first images, to write a title,** in a separate call through that chat’s CLI and login: Haiku for Claude, Luna at Low effort for Codex, and Gemini 3.8 Flash at Low effort for Antigravity.
 - **What `git` and `gh` send,** to your remotes and to GitHub, as the default GitHub account in [Settings](settings.md#git), or each machine's own login.
-- **The hub's calls to GitHub,** once you add a GitHub account: to ask whose a token is and when it ends, to sign in, and to renew a sign-in's token. And each time the hub starts, `gh` asks GitHub, once on each machine, whether it takes that machine's own login, which Git's Found says.
+- **The hub's calls to GitHub,** once you add a GitHub account: to ask whose a token is and when it ends, to sign in, to renew a sign-in's token, and once a day to ask again who each account you added is, by the name and email its GitHub profile shows, which agents' commits are by. And each time the hub starts, `gh` asks GitHub, once on each machine, whether it takes that machine's own login, which Git's Found says.
 
 ## Going back a version
 

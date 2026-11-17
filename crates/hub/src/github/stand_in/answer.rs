@@ -38,11 +38,21 @@ impl Gate {
 
 impl Answer {
     /// The user `login`, whose number is `id`, as `GET /user` gives it, with the header that says when its token ends,
-    /// as GitHub writes it, such as `2027-02-11 08:00:00 UTC`.
+    /// as GitHub writes it, such as `2027-02-11 08:00:00 UTC`, and with no name and no public email, as GitHub gives a
+    /// user who has set neither.
     pub fn user(id: u64, login: &str, ends: Option<&'static str>) -> Self {
         let headers = ends.map(|ends| ("github-authentication-token-expiration", ends)).into_iter().collect();
-        let body = json!({"login": login, "id": id, "type": "User"}).to_string();
-        Answer::With { status: 200, headers, body }
+        Answer::With { status: 200, headers, body: Self::profile(id, login, None, None) }
+    }
+
+    /// The user `login`, whose number is `id`, whose token doesn't end, as `GET /user` gives it, with the name its
+    /// profile says, `name`, and the email it shows everyone, `email`, each `null` when it's `None`.
+    pub fn user_with_profile(id: u64, login: &str, name: Option<&str>, email: Option<&str>) -> Self {
+        Answer::With { status: 200, headers: Vec::new(), body: Self::profile(id, login, name, email) }
+    }
+
+    fn profile(id: u64, login: &str, name: Option<&str>, email: Option<&str>) -> String {
+        json!({"login": login, "id": id, "type": "User", "name": name, "email": email}).to_string()
     }
 
     /// Only `status`, with a body that says nothing more, as GitHub's errors are.
