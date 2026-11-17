@@ -138,6 +138,7 @@ The pieces screens are built from, on the foundations in `look.md`: what each is
 
 - **The app asks and tells in its own dialogs, never in the system's alert,** as the owner decided, so each looks and answers like the rest of the app: disconnecting an account, removing a GitHub app, quitting, archiving anyway, closing or moving a chat whose agent is working, what went wrong deleting dictation's model or saving settings, and About Roundhouse. The system's own windows for choosing a file stay.
 - **Enter confirms a dialog, as its last answer does, and Escape closes it, as Cancel does,** but in a dialog that asks before stopping or losing something, where Enter keeps things as they are, as Escape does, so a key pressed without reading loses nothing. A dialog that can't be confirmed yet, such as a rename with nothing typed, stays open. *Unconfirmed.*
+- **A dialog that's only what's in it draws all of itself,** with the one shadow a dialog has: the new workspace's composer, in the composer's fill and corners, and an image opened from a chat, at its own size, in the middle of the window, which a click on closes. *Unconfirmed.*
 - **A dialog is as wide as what it holds needs, of three widths,** unless the window is narrower. `look::DialogWidth` holds them. *Unconfirmed.*
 
 **Every width of dialog, by its name.** Each is a width in `look::DialogWidth`. *Unconfirmed.*

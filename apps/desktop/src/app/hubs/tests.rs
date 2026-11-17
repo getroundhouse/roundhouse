@@ -1,7 +1,6 @@
 use super::*;
 use crate::app::{AppView, HubSource};
 use client_core::RemoteHub;
-use gpui_kit::component::WindowExt as _;
 use gpui_kit::{AnyWindowHandle, TestAppContext};
 use gpui_kit::{AppContext as _, Entity};
 use protocol::pairing::DeviceToken;
@@ -103,7 +102,7 @@ fn hidden_hubs_leave_focus_and_dialogs_with_the_selected_hub(cx: &mut TestAppCon
                 local.update(cx, |view, cx| {
                     view.focus_what_shows(window, cx);
                     view.present(cx, |_, window, cx| {
-                        window.open_dialog(cx, |dialog, _, _| dialog.title("Returned prompt"));
+                        look::open_dialog(window, cx, |_, _| look::dialog("Returned prompt"));
                     });
                 });
                 assert!(other.read(cx).focus.is_focused(window));
@@ -114,13 +113,13 @@ fn hidden_hubs_leave_focus_and_dialogs_with_the_selected_hub(cx: &mut TestAppCon
     cx.update(|cx| {
         window
             .update(cx, |_, window, cx| {
-                assert!(!window.has_active_dialog(cx));
+                assert!(!look::dialog_open(window, cx));
                 assert!(other.read(cx).focus.is_focused(window));
             })
             .unwrap();
     });
     pick(None, window, &host, cx);
-    cx.update(|cx| window.update(cx, |_, window, cx| assert!(window.has_active_dialog(cx))).unwrap());
+    cx.update(|cx| window.update(cx, |_, window, cx| assert!(look::dialog_open(window, cx))).unwrap());
 }
 
 #[gpui_kit::test]

@@ -6,13 +6,12 @@ use std::time::Duration;
 
 use client_core::{Client, PairingWait};
 use gpui_kit::assets::IconName as Lucide;
-use gpui_kit::component::WindowExt as _;
 use gpui_kit::component::{Icon, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, App, AppContext as _, ClipboardItem, Context, InteractiveElement as _, IntoElement, ParentElement as _,
-    Pixels, Render, Role, SharedString, StatefulInteractiveElement as _, Styled as _, Task, TestSupportExt as _,
-    Window, div, px,
+    AnyElement, App, AppContext as _, ClipboardItem, Context, Entity, InteractiveElement as _, IntoElement,
+    ParentElement as _, Role, SharedString, StatefulInteractiveElement as _, Styled as _, Task, TestSupportExt as _,
+    Window, div,
 };
 use look::{Corner, IconSize, IconSizing as _, Shaped as _, Space, TaskRing, Type, Typeset as _};
 use protocol::pairing::{Device, Pairing};
@@ -20,8 +19,6 @@ use protocol::pairing::{Device, Pairing};
 use super::qr::{self, QrMatrix};
 use crate::app::hubs;
 use crate::names::MACHINE;
-
-const DIALOG_WIDTH: Pixels = px(512.);
 
 enum State {
     Creating,
@@ -47,21 +44,7 @@ pub(crate) fn open(window: &mut Window, cx: &mut App) {
         sharing.generate(cx);
         sharing
     });
-    let shown = sharing.clone();
-    window.open_dialog(cx, move |surface, _, cx| {
-        let colors = look::colors(cx);
-        let closing = shown.clone();
-        surface
-            .p_0()
-            .w(DIALOG_WIDTH)
-            .close_button(false)
-            .bg(colors.raised)
-            .border_color(colors.edge)
-            .corners(Corner::Card)
-            .child(shown.clone())
-            .on_ok(|_, _, _| false)
-            .on_close(move |_, _, cx| closing.update(cx, ShareHub::closed))
-    });
+    look::open_dialog(window, cx, move |_, cx| ShareHub::dialog(&sharing, cx));
 }
 
 fn local_hub(cx: &App) -> Option<(Client, PathBuf)> {
@@ -162,90 +145,86 @@ impl ShareHub {
     }
 }
 
-impl Render for ShareHub {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+impl ShareHub {
+    /// The dialog, as it stands now, built each time it's drawn, so it shows each step as `sharing` comes to it.
+    fn dialog(sharing: &Entity<Self>, cx: &App) -> look::Dialog {
         let default_title = format!("Pair a device with this {MACHINE}");
-        match &self.state {
-            State::Creating => frame(
-                default_title,
-                Some("Preparing a single-use pairing link…".into()),
-                Some(waiting_line("Creating pairing link…", cx)),
-                None,
-                close_only("Cancel", cx),
-                cx,
-            ),
+        let closing = sharing.clone();
+        let dialog = match &sharing.read(cx).state {
+            State::Creating => look::dialog(default_title)
+                .lead("Preparing a single-use pairing link…")
+                .child(body(waiting_line("Creating pairing link…", cx)))
+                .closes(answer("cancel-share-hub", look::ButtonKind::Edged, "Cancel")),
             State::Ready { pairing, qr, copied } => {
+                let copied = *copied;
                 let until = look::time_of_day(pairing.expires_at_ms, cx);
                 let status = match until {
                     Some(time) => format!("Waiting for a device · Works until {time}"),
                     None => "Waiting for a device".to_string(),
                 };
-                let body = v_flex()
+                let shown = v_flex()
                     .gap(Space::Large)
                     .child(ready_row(&pairing.link.to_string(), qr.as_ref(), cx))
-                    .child(waiting_line(&status, cx))
-                    .into_any_element();
-                let lead = "Scan on a phone, or choose Connect another hub… on another computer and paste this link. \
-                            Both devices must share a network or VPN.";
-                frame(default_title, Some(lead.into()), Some(body), None, ready_footer(*copied, cx), cx)
+                    .child(waiting_line(&status, cx));
+                let copying = sharing.clone();
+                let copy =
+                    answer("copy-pairing-link", look::ButtonKind::Main, if copied { "Copied" } else { "Copy link" })
+                        .on_click(move |_, _, cx| copying.update(cx, ShareHub::copy));
+                look::dialog(default_title)
+                    .lead(
+                        "Scan on a phone, or choose Connect another hub… on another computer and paste this link. \
+                         Both devices must share a network or VPN.",
+                    )
+                    .child(body(shown))
+                    .closes(answer("cancel-share-hub", look::ButtonKind::Edged, "Cancel"))
+                    .answer(copy)
             }
-            State::Paired { device } => {
-                let title = format!("Paired with {}", device.name);
-                let lead =
-                    format!("It can open and work in this {MACHINE}’s workspaces whenever this {MACHINE} is awake.");
-                let body = paired_body(&device.name, cx);
-                frame(title, Some(lead), Some(body), None, done_footer(cx), cx)
-            }
-            State::Expired => frame(
-                default_title,
-                Some("This pairing link expired before a device connected.".into()),
-                None,
-                None,
-                retry_footer(cx),
-                cx,
+            State::Paired { device } => look::dialog(format!("Paired with {}", device.name))
+                .lead(format!("It can open and work in this {MACHINE}’s workspaces whenever this {MACHINE} is awake."))
+                .child(body(paired_body(&device.name, cx)))
+                .closes(answer("done-share-hub", look::ButtonKind::Main, "Done")),
+            State::Expired => retrying(
+                look::dialog(default_title).lead("This pairing link expired before a device connected."),
+                sharing,
             ),
-            State::Failed(error) => frame(default_title, None, None, Some(error.clone()), retry_footer(cx), cx),
-        }
+            State::Failed(error) => {
+                retrying(look::dialog(default_title).child(body(failure(error.clone(), cx))), sharing)
+            }
+        };
+        dialog.width(look::DialogWidth::Wide).on_close(move |_, cx| closing.update(cx, ShareHub::closed))
     }
 }
 
-fn frame(
-    title: String,
-    lead: Option<String>,
-    body: Option<AnyElement>,
-    error: Option<String>,
-    footer: AnyElement,
-    cx: &App,
-) -> impl IntoElement {
-    let colors = look::colors(cx);
-    let error = error.map(|msg| {
-        let text = SharedString::from(msg);
-        div()
-            .id("share-hub-error")
-            .role(Role::Alert)
-            .aria_label(text.clone())
-            .typeset(Type::Body)
-            .text_color(colors.error)
-            .child(text)
-            .test_support()
-    });
-    v_flex()
-        .id("share-hub-dialog")
-        .w_full()
-        .p(Space::XLarge)
-        .gap(Space::Large)
-        .typeset(Type::Body)
-        .text_color(colors.text)
-        .child(
-            v_flex()
-                .gap(Space::XSmall)
-                .child(div().typeset(Type::Heading).child(title))
-                .when_some(lead, |d, lead| d.child(div().text_color(colors.text_muted).child(lead))),
-        )
-        .children(body)
-        .children(error)
-        .child(footer)
+/// What's in the dialog, by the name tests find it by.
+fn body(shown: impl IntoElement) -> AnyElement {
+    v_flex().id("share-hub-dialog").w_full().child(shown).test_support().into_any_element()
+}
+
+/// What went wrong, in the error's colour, which an assistive app reads out as it comes.
+fn failure(error: String, cx: &App) -> AnyElement {
+    let text = SharedString::from(error);
+    div()
+        .id("share-hub-error")
+        .role(Role::Alert)
+        .aria_label(text.clone())
+        .text_color(look::colors(cx).error)
+        .child(text)
         .test_support()
+        .into_any_element()
+}
+
+/// One of the dialog's answers, as big as a dialog's.
+fn answer(id: &'static str, kind: look::ButtonKind, words: &'static str) -> look::Button {
+    look::button(id, kind, look::ControlSize::Large, words)
+}
+
+/// `dialog`, with Close and Create new link, once a link has expired or couldn't be made.
+fn retrying(dialog: look::Dialog, sharing: &Entity<ShareHub>) -> look::Dialog {
+    let generating = sharing.clone();
+    dialog.closes(answer("close-share-hub", look::ButtonKind::Edged, "Close")).answer(
+        answer("retry-pairing-link", look::ButtonKind::Main, "Create new link")
+            .on_click(move |_, _, cx| generating.update(cx, ShareHub::generate)),
+    )
 }
 
 fn ready_row(link: &str, qr: Option<&QrMatrix>, cx: &App) -> AnyElement {
@@ -332,49 +311,4 @@ fn waiting_line(words: &str, cx: &App) -> AnyElement {
         .child(look::task_ring(TaskRing::Running, cx))
         .child(words.to_string())
         .into_any_element()
-}
-
-fn ready_footer(copied: bool, cx: &mut Context<ShareHub>) -> AnyElement {
-    h_flex()
-        .justify_end()
-        .gap(Space::Small)
-        .child(close_button("cancel-share-hub", "Cancel", false, cx))
-        .child(
-            look::button(
-                "copy-pairing-link",
-                look::ButtonKind::Main,
-                look::ControlSize::Large,
-                if copied { "Copied" } else { "Copy link" },
-            )
-            .on_click(cx.listener(|this, _, _, cx| this.copy(cx))),
-        )
-        .into_any_element()
-}
-
-fn retry_footer(cx: &mut Context<ShareHub>) -> AnyElement {
-    h_flex()
-        .justify_end()
-        .gap(Space::Small)
-        .child(close_button("close-share-hub", "Close", false, cx))
-        .child(
-            look::button("retry-pairing-link", look::ButtonKind::Main, look::ControlSize::Large, "Create new link")
-                .on_click(cx.listener(|this, _, _, cx| this.generate(cx))),
-        )
-        .into_any_element()
-}
-
-fn close_only(label: &'static str, cx: &mut Context<ShareHub>) -> AnyElement {
-    h_flex().justify_end().child(close_button("cancel-share-hub", label, false, cx)).into_any_element()
-}
-
-fn done_footer(cx: &mut Context<ShareHub>) -> AnyElement {
-    h_flex().justify_end().child(close_button("done-share-hub", "Done", true, cx)).into_any_element()
-}
-
-fn close_button(id: &'static str, label: &'static str, primary: bool, cx: &mut Context<ShareHub>) -> look::Button {
-    let kind = if primary { look::ButtonKind::Main } else { look::ButtonKind::Edged };
-    look::button(id, kind, look::ControlSize::Large, label).on_click(cx.listener(|this, _, window, cx| {
-        this.closed(cx);
-        window.close_dialog(cx);
-    }))
 }

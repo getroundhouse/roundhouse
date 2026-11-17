@@ -9,7 +9,6 @@ use desktop::pull_request::Lookup;
 use desktop::sidebar_tabs::SidebarTab;
 use desktop::updates::{Kind, Problem};
 use desktop::workspace_pane::WorkspacePane;
-use gpui_kit::component::WindowExt as _;
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{
     AnyWindowHandle, App, ClipboardEntry, ClipboardItem, Entity, ExternalPaths, HeadlessAppContext, Image, ImageFormat,
@@ -246,7 +245,7 @@ impl Driver {
     /// As Cmd-V does, then waits for where it was pasted to have one more file: the new-workspace dialog while it's
     /// open, or else the composer showing.
     pub(super) fn paste(&mut self, item: ClipboardItem) {
-        let dialog = self.cx.update_window(self.handle, |_, window, cx| window.has_active_dialog(cx)).unwrap();
+        let dialog = self.cx.update_window(self.handle, |_, window, cx| look::dialog_open(window, cx)).unwrap();
         let view = self.view.clone();
         let had = self.cx.update(|cx| attached(view.read(cx), dialog, cx));
         self.cx.update(|cx| cx.write_to_clipboard(item));

@@ -3,7 +3,6 @@
 //! workspace that couldn't be made.
 
 use client_core::Client;
-use gpui_kit::component::WindowExt as _;
 use gpui_kit::{App, AppContext as _, Context, Entity, WeakEntity, Window};
 use protocol::model::{PermissionMode, RepoId, WorkspaceId};
 
@@ -15,7 +14,7 @@ impl AppView {
     /// Opens the new-workspace dialog for `repo`, with whatever was left in it last time. Only one dialog shows at a
     /// time, so this does nothing while another is open. It opens while a workspace is being made, and its Create waits.
     pub fn open_new_workspace(&mut self, repo: RepoId, window: &mut Window, cx: &mut Context<Self>) {
-        if window.has_active_dialog(cx) {
+        if look::dialog_open(window, cx) {
             return;
         }
         let dialog = self.dialog(repo.clone(), window, cx);
@@ -55,7 +54,7 @@ impl AppView {
         match self.create_workspace(request, cx) {
             Ok(()) => {
                 dialog.update(cx, NewWorkspaceDialog::closed);
-                window.close_dialog(cx);
+                look::close_dialog(window, cx);
                 self.dialog_closed(window, cx);
             }
             Err(request) => dialog.update(cx, |dialog, cx| {
@@ -115,7 +114,7 @@ impl AppView {
             dialog.update(cx, |dialog, cx| dialog.give_back(prompt, coming_back, mode, window, cx));
         });
         self.present(cx, move |_, window, cx| {
-            if !window.has_active_dialog(cx) {
+            if !look::dialog_open(window, cx) {
                 new_workspace::open(&dialog, closed(cx.weak_entity()), window, cx);
             }
         });
@@ -129,7 +128,7 @@ impl AppView {
         if !self.visible || self.home_showing() {
             return;
         }
-        if window.has_active_dialog(cx) || self.settings_open() {
+        if look::dialog_open(window, cx) || self.settings_open() {
             self.focus_once_closed = Some(id);
         } else if let Some(pane) = self.panes.get(&id) {
             pane.update(cx, |pane, cx| pane.focus_showing(window, cx));
@@ -185,7 +184,7 @@ mod tests {
         cx.update(|cx| {
             window
                 .update(cx, |_, window, cx| {
-                    assert!(!window.has_active_dialog(cx));
+                    assert!(!look::dialog_open(window, cx));
                     assert!(other.read(cx).focus.is_focused(window));
                     assert_eq!(dialog.read(cx).prompt_text(cx), "Returned work");
                     assert!(!dialog.read(cx).is_shown());

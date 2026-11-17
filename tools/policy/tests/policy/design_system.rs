@@ -51,6 +51,30 @@ const KIT_SWITCH: KitPart = KitPart {
 /// The kit's radio, which nothing draws, since choosing one of a few is a `look::Switch`.
 const KIT_RADIO: KitPart = KitPart { named: "component::radio", instead: "look::switch", allowed: &[] };
 
+/// The kit's dialog, which `look::Dialog` and `look::PlainDialog` hold.
+const KIT_DIALOG: KitPart = KitPart {
+    named: "component::dialog",
+    instead: "look::dialog",
+    allowed: &[
+        ("crates/look/src/dialogs/", "the component library's dialogs, which hold the kit's"),
+        (
+            "apps/desktop/tests/ui/support/new_workspace.rs",
+            "a test's wait for the new-workspace dialog to finish coming in, which takes as long as the kit's says",
+        ),
+    ],
+};
+
+/// Opening the kit's dialog over a window, which `look::open_dialog` and `look::open_plain_dialog` do.
+const KIT_OPEN_DIALOG: KitPart = KitPart {
+    named: ".open_dialog(",
+    instead: "look::open_dialog",
+    allowed: &[("crates/look/src/dialogs/", "the component library's dialogs, which open the kit's")],
+};
+
+/// The system's alert, which the app never asks or tells in, since its own dialogs look and answer like the rest of it,
+/// as the owner decided. A prompt to the system takes how urgent it is, so that's what names it.
+const SYSTEM_ALERT: KitPart = KitPart { named: "PromptLevel", instead: "crate::asking::ask", allowed: &[] };
+
 /// The kit's menu, which `look::Menu` fills, and which opens from a `look::Button` or a right-click through `look`.
 const KIT_MENU: KitPart = KitPart {
     named: "component::menu",
@@ -155,6 +179,17 @@ fn only_the_component_library_uses_the_kits_switch() {
 #[test]
 fn only_the_component_library_fills_the_kits_menu() {
     only_the_component_library_uses(&KIT_MENU);
+}
+
+#[test]
+fn only_the_component_library_uses_the_kits_dialog() {
+    only_the_component_library_uses(&KIT_DIALOG);
+    only_the_component_library_uses(&KIT_OPEN_DIALOG);
+}
+
+#[test]
+fn nothing_asks_or_tells_in_the_systems_alert() {
+    only_the_component_library_uses(&SYSTEM_ALERT);
 }
 
 #[test]

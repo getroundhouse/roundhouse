@@ -2,7 +2,6 @@
 //! microphone dictates or is hidden, or what closing Settings gives focus back to, if that went meanwhile. The window's
 //! keys reach nothing without it, as "Focus stays on something that's drawn" in `docs/gpui.md` says.
 
-use gpui_kit::component::WindowExt as _;
 use gpui_kit::{Context, Focusable as _, Window};
 
 use super::AppView;
@@ -17,7 +16,7 @@ impl AppView {
         }
         if self.settings_open() {
             window.focus(&self.settings_focus, cx);
-        } else if window.has_active_dialog(cx) {
+        } else if look::dialog_open(window, cx) {
             // The retained draft isn't necessarily open. Only the visible prompt gets keys back when its microphone
             // card disappears; another dialog must never send typing into that hidden draft or the composer behind it.
             match self.new_workspace.as_ref().filter(|dialog| dialog.read(cx).is_shown()) {

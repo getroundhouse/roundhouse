@@ -3,7 +3,6 @@
 #![cfg(test)]
 
 use gpui_kit::AppContext as _;
-use gpui_kit::component::WindowExt as _;
 use gpui_kit::test::TestWindowExt as _;
 
 use super::Ui;
@@ -11,7 +10,7 @@ use super::Ui;
 impl Ui<'_> {
     pub(crate) fn has_dialog(&mut self) -> bool {
         self.frame();
-        self.cx.update_window(self.handle, |_, window, cx| window.has_active_dialog(cx)).unwrap()
+        self.cx.update_window(self.handle, |_, window, cx| look::dialog_open(window, cx)).unwrap()
     }
 
     /// What the dialog in front asks, and what it says under that, while one asks, such as before quitting.
@@ -19,7 +18,7 @@ impl Ui<'_> {
         self.frame();
         self.cx
             .update_window(self.handle, |_, window, cx| {
-                if !window.has_active_dialog(cx) {
+                if !look::dialog_open(window, cx) {
                     return None;
                 }
                 let said = |id: &'static str| window.try_find(id).and_then(|e| e.label().map(str::to_string));
