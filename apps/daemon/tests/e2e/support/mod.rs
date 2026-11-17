@@ -2,7 +2,7 @@
 
 #![cfg(test)]
 
-pub(crate) use feed::{next_notice, next_notice_of};
+pub(crate) use feed::{next_notice, next_notice_of, session_of, workspace_of};
 pub(crate) use gate::Gate;
 pub(crate) use processes::{is_alive, parent_of, signal, terminate};
 

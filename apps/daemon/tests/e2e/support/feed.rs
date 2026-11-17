@@ -4,6 +4,7 @@ use std::time::Instant;
 
 use client_core::{Subscription, SubscriptionItem};
 use protocol::client::HubNotice;
+use protocol::model::{Session, Workspace};
 
 use super::TIMEOUT;
 
@@ -24,5 +25,21 @@ pub(crate) fn next_notice_of(feed: &Subscription, what: &str, waited_for: impl F
             Ok(_) => {}
             Err(e) => panic!("timed out waiting for {what}: {e}"),
         }
+    }
+}
+
+/// The workspace `notice` tells of, or a failure that says what the feed sent instead.
+pub(crate) fn workspace_of(notice: HubNotice) -> Workspace {
+    match notice {
+        HubNotice::Workspace(workspace) => workspace,
+        other => panic!("waited for a workspace's notice, and the feed sent {other:?}"),
+    }
+}
+
+/// The chat `notice` tells of, or a failure that says what the feed sent instead.
+pub(crate) fn session_of(notice: HubNotice) -> Session {
+    match notice {
+        HubNotice::Session(session) => session,
+        other => panic!("waited for a chat's notice, and the feed sent {other:?}"),
     }
 }

@@ -14,7 +14,7 @@ use protocol::model::{
 
 use crate::support::{
     Stack, assistant_text, commit_settings, git, is_alive, next_notice_of, read_all, wait_for_setup, wait_for_turn_end,
-    wait_until,
+    wait_until, workspace_of,
 };
 
 #[test]
@@ -284,8 +284,8 @@ fn a_workspace_whose_name_git_has_takes_its_station_with_a_number_keeping_its_id
 
     // Its own, among the others the hub sends then, such as the login its worker finds.
     let of_it = |notice: &HubNotice| matches!(notice, HubNotice::Workspace(_));
-    let HubNotice::Workspace(first) = next_notice_of(&feed, "the workspace on its way", of_it) else { panic!() };
-    let HubNotice::Workspace(renamed) = next_notice_of(&feed, "its next name", of_it) else { panic!() };
+    let first = workspace_of(next_notice_of(&feed, "the workspace on its way", of_it));
+    let renamed = workspace_of(next_notice_of(&feed, "its next name", of_it));
     assert_eq!((renamed.id.as_str(), renamed.status), (first.id.as_str(), WorkspaceStatus::Creating));
     assert_eq!((made.id, made.status), (first.id, WorkspaceStatus::Ready));
     assert_eq!(made.name, renamed.name);
