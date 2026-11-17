@@ -2,6 +2,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use jiff::Timestamp;
 use protocol::client::ApiError;
 use protocol::model::{
     BranchName, CheckState, Checks, CommitId, LeftQueue, Local, Mergeability, ObservedCheck, ObservedPullRequest,
@@ -290,7 +291,5 @@ fn linear(pr: &Value, metadata: &Metadata) -> Result<Option<bool>, ApiError> {
 }
 
 fn time(value: &Value) -> Result<i64, ApiError> {
-    chrono::DateTime::parse_from_rfc3339(value.as_str().ok_or_else(incomplete)?)
-        .map(|time| time.timestamp_millis())
-        .map_err(|_| incomplete())
+    value.as_str().ok_or_else(incomplete)?.parse().map(Timestamp::as_millisecond).map_err(|_| incomplete())
 }

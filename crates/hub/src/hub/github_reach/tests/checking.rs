@@ -250,13 +250,13 @@ async fn the_hub_checks_with_the_default_its_logins_work_out() {
 /// isn't adalabs's, and the record names its bot, and where its app is installed, not the `x-access-token` git gives.
 #[tokio::test]
 async fn an_installation_the_default_refused_a_repository_is_named_as_its_bot() {
-    let ends = chrono::DateTime::from_timestamp_millis(crate::store::now_ms() + 60 * 60 * 1000).unwrap();
+    let ends = jiff::Timestamp::from_millisecond(crate::store::now_ms() + 60 * 60 * 1000).unwrap();
     let denied = "Permission to cli/cli.git denied to ada-roundhouse[bot].";
     let github = StandIn::with(Script {
         conversions: vec![("a-code", Answer::app_made(9, "ada-roundhouse", (2, "adalabs")))],
         named: vec![("ada-roundhouse[bot]", Answer::user(41, "ada-roundhouse[bot]", None))],
         installations: vec![Answer::installations(&[(70, 2, "adalabs")])],
-        minted: vec![(70, vec![Answer::installation_token("ghs_first", &ends.to_rfc3339())])],
+        minted: vec![(70, vec![Answer::installation_token("ghs_first", &ends.to_string())])],
         pushes: vec![("cli/cli", vec![Answer::git_says(403, denied)])],
         ..Script::default()
     })

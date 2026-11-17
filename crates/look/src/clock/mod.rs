@@ -3,9 +3,6 @@
 //! else that moves. Pictures turn it on, and hold the time at one moment too.
 
 #[cfg(test)]
-use chrono::{DateTime, FixedOffset, NaiveDate, NaiveTime, TimeZone, Utc};
-
-#[cfg(test)]
 mod tests;
 
 mod time;

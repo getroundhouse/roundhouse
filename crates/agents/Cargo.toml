@@ -13,7 +13,7 @@ testing = ["dep:http-body-util", "dep:hyper", "dep:hyper-util", "dep:waiting", "
 
 [dependencies]
 # Reads when a limit starts again, which `get_usage` says as an ISO time.
-chrono.workspace = true
+jiff.workspace = true
 process.workspace = true
 parking_lot.workspace = true
 private-files.workspace = true

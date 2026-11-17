@@ -13,7 +13,7 @@ license.workspace = true
 testing = []
 
 [dependencies]
-chrono.workspace = true
+jiff.workspace = true
 gpui-kit.workspace = true
 serde_json.workspace = true
 # Compares the words of a diff's lines, to mark those that changed.

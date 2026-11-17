@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
+use jiff::Timestamp;
 use process::Environment;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{GitHubRepository, PrState, PullRequestNumber, PullRequestSelection, PullRequestsSnapshot};
@@ -112,7 +113,7 @@ impl<Q: Query> Reader<'_, Q> {
         }
         Ok(PullRequestsSnapshot {
             repository: self.repository.clone().ok_or_else(incomplete)?,
-            observed_at_ms: chrono::Utc::now().timestamp_millis(),
+            observed_at_ms: Timestamp::now().as_millisecond(),
             pull_requests: observations,
         })
     }
@@ -150,9 +151,10 @@ impl<Q: Query> Reader<'_, Q> {
             self.rate_limit = Some(protocol::worker::RateLimit {
                 limit: count(usage, "limit")?,
                 remaining: count(usage, "remaining")?,
-                resets_at_ms: chrono::DateTime::parse_from_rfc3339(&string(usage, "resetAt")?)
+                resets_at_ms: string(usage, "resetAt")?
+                    .parse::<Timestamp>()
                     .map_err(|_| incomplete())?
-                    .timestamp_millis(),
+                    .as_millisecond(),
             });
         }
         if let Some(errors) = value.get("errors") {

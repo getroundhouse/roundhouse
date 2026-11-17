@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use chrono::DateTime;
+use jiff::Timestamp;
 use protocol::client::ApiError;
 use protocol::model::{GithubAppId, GithubInstallationId, GithubToken, GithubUser};
 use serde::Deserialize;
@@ -105,13 +105,13 @@ impl Github {
         }
         let given: Given = serde_json::from_str(&as_app(&answered, "for an installation's token")?.body)
             .map_err(|_| unavailable("what GitHub answered when asked for an installation's token isn't one"))?;
-        let ends = given.expires_at.as_deref().and_then(|said| DateTime::parse_from_rfc3339(said).ok());
+        let ends = given.expires_at.as_deref().and_then(|said| said.parse::<Timestamp>().ok());
         let ends_at_ms = ends.map_or_else(
             || {
                 warn!(said = ?given.expires_at, "couldn't read when GitHub says an installation's token ends");
                 later_ms(given_at_ms, INSTALLATION_TOKEN_LASTS)
             },
-            |ends| ends.timestamp_millis(),
+            Timestamp::as_millisecond,
         );
         Ok(Minted::Token { token: GithubToken::new(given.token), ends_at_ms })
     }
