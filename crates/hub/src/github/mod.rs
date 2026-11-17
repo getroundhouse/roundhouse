@@ -22,7 +22,7 @@ pub(crate) use device_flow::{Approval, DeviceCode, GithubRefreshToken, Granted, 
 mod expiration;
 mod found;
 mod pull_requests;
-pub(crate) use pull_requests::{KEPT_FOR_OTHERS_PERCENT, PullRequestsAsk, PullRequestsRead, Unread, first_queries};
+pub(crate) use pull_requests::{Headed, HeadsAsk, Leaving, PullRequestsAsk, Unread, first_queries};
 mod reach;
 #[cfg(test)]
 use expiration::ends_at_ms;

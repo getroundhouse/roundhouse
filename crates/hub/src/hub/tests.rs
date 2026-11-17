@@ -3,22 +3,21 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use parking_lot::Mutex;
 use protocol::Build;
 use protocol::capability::Capabilities;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{
-    AgentDescription, AgentFeature, AgentKind, Checks, Effort, Local, LoginDescription, MergeState, ModelChoice,
-    ModelName, PermissionMode, PrState, PullRequest, Review, RunId, SessionId, SessionSettings,
+    AgentDescription, AgentFeature, AgentKind, Apart, Branch, BranchName, Branches, Checks, CommitId, Effort, Head,
+    Local, LoginDescription, MergeState, ModelChoice, ModelName, PermissionMode, PrState, PullRequest, RemoteName,
+    RepoUrl, Review, RunId, SessionId, SessionSettings, Upstream,
 };
 use protocol::tail::{DeltaChange, StreamDelta, Tail};
-use protocol::worker::{PullRequestReply, RateLimit, WorkerRequest, WorkerResponse};
 use providers::Provider;
 use providers::local::{LocalConfig, LocalProvider};
 use tokio::sync::oneshot;
 
 use super::{Hub, HubDirs};
-use crate::github::{Github, GithubConfig};
+use crate::github::{Github, GithubConfig, PullRequests, Script, StandIn};
 use crate::provider_set::ProviderSet;
 use crate::session::{CarriedOver, Item, LiveSession, Starting};
 use crate::store::Store;
@@ -206,18 +205,28 @@ pub(crate) fn hub_with_worktree(dir: &Path) -> Arc<Hub> {
 /// account, handed it the token `a-token`. It runs with a test's timers, so a test that calls a stand-in, and can't
 /// pause tokio's clock, waits out no spacing or pace.
 pub(crate) fn hub_reading_github(dir: &Path, api: String) -> Arc<Hub> {
-    let hub = hub_timed(dir, vec![described()], Github::new(GithubConfig::at(api)), Timers::FOR_TESTS);
+    hub_reading_github_timed(dir, api, Timers::FOR_TESTS)
+}
+
+/// The same, with `timers`.
+pub(crate) fn hub_reading_github_timed(dir: &Path, api: String, timers: Timers) -> Arc<Hub> {
+    let hub = hub_timed(dir, vec![described()], Github::new(GithubConfig::at(api)), timers);
     hub.store.workspace_ready(&"w".into(), "/w", &"alder".into(), "main", None).unwrap();
     let address = protocol::model::RepoUrl::try_from("https://github.com/example/project".to_string()).unwrap();
     hub.store.read_repo_url(&"r".into(), "/repo", Some(&address), None).unwrap();
-    let provider = hub.store.get_workspace(&"w".into()).unwrap().provider;
-    let token = protocol::worker::FoundToken { token: protocol::model::GithubToken::new("a-token"), renews: false };
-    hub.found_tokens.found(provider, Some(token));
+    handed_a_token(&hub);
     hub
 }
 
+/// Has `w`'s machines' own `gh` have handed the hub the token `a-token`.
+pub(crate) fn handed_a_token(hub: &Hub) {
+    let provider = hub.store.get_workspace(&"w".into()).unwrap().provider;
+    let token = protocol::worker::FoundToken { token: protocol::model::GithubToken::new("a-token"), renews: false };
+    hub.found_tokens.found(provider, Some(token));
+}
+
 /// An open pull request whose checks are running.
-pub(super) fn open() -> PullRequest {
+pub(crate) fn open() -> PullRequest {
     PullRequest {
         number: 7,
         url: "https://example.com/7".into(),
@@ -235,33 +244,33 @@ pub(super) fn open() -> PullRequest {
     }
 }
 
-/// What a stand-in worker says of the pull request when it's read, which a test changes as it goes.
-pub(super) type Says = Arc<Mutex<Result<Option<PullRequest>, ApiError>>>;
-
-pub(super) fn says(pull_request: Option<PullRequest>) -> Says {
-    Arc::new(Mutex::new(Ok(pull_request)))
+/// A stand-in for GitHub answering from the pull requests a test sets, and a hub reading it as [`hub_reading_github`]
+/// makes one, with `w` on `branch` at `head-7`, pushed to origin's `branch` at the same commit, as the stand-in's
+/// pull requests are from, and #7 is at.
+pub(crate) async fn hub_on_github(dir: &Path) -> (Arc<Hub>, PullRequests, StandIn) {
+    hub_on_github_timed(dir, Timers::FOR_TESTS).await
 }
 
-/// A stand-in for `w`'s worker, as the hub's, that reads its pull request as `says` holds then, and does whatever
-/// else it's asked without a word, so it can't say how much of GitHub's limit is left, or how the worktree stands.
-pub(super) fn reading(hub: &Hub, says: &Says) -> Arc<WorkerLink> {
-    reading_within(hub, says, None)
+/// The same, with `timers`.
+pub(crate) async fn hub_on_github_timed(dir: &Path, timers: Timers) -> (Arc<Hub>, PullRequests, StandIn) {
+    let pull_requests = PullRequests::default();
+    let github = StandIn::with(Script { pull_requests: Some(pull_requests.clone()), ..Script::default() }).await;
+    let hub = hub_reading_github_timed(dir, github.api(), timers);
+    hub.store.set_workspace_branches(&"w".into(), &pushed("head-7", "head-7", (0, 0))).unwrap();
+    (hub, pull_requests, github)
 }
 
-/// The same, which says GitHub's limit stands at `limit`, if it's given one.
-pub(super) fn reading_within(hub: &Hub, says: &Says, limit: Option<RateLimit>) -> Arc<WorkerLink> {
-    let says = says.clone();
-    let link = WorkerLink::answering(move |request| {
-        Some(if matches!(request, WorkerRequest::PullRequest(_)) {
-            says.lock()
-                .clone()
-                .map(|pull_request| WorkerResponse::PullRequest(PullRequestReply { pull_request, branch: None }))
-        } else if let (WorkerRequest::GithubRateLimit(_), Some(limit)) = (&request, limit) {
-            Ok(WorkerResponse::GithubRateLimit(limit))
-        } else {
-            Ok(WorkerResponse::Ok)
-        })
-    });
-    hub.workers.lock().insert("w".into(), link.clone());
-    link
+/// `branch` checked out at `tip`, pushed to origin's `branch`, at `pushed`, `apart` from it as (ahead, behind), on
+/// github.com.
+pub(crate) fn pushed(tip: &str, pushed: &str, apart: (u32, u32)) -> Branches {
+    let name = BranchName::from("branch");
+    let upstream = Upstream {
+        remote: RemoteName::from("origin"),
+        name: name.clone(),
+        tip: Some(CommitId::from(pushed)),
+        address: Some(RepoUrl::try_from("https://github.com/example/project.git".to_string()).unwrap()),
+        apart: Some(Apart { ahead: apart.0, behind: apart.1 }),
+    };
+    let branch = Branch { name: name.clone(), tip: CommitId::from(tip), upstream: Some(upstream) };
+    Branches { head: Head::Branch { name }, had: vec![branch] }
 }

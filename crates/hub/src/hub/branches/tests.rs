@@ -1,7 +1,7 @@
 use protocol::model::{Branch, BranchName, CommitId, RemoteName};
 
 use super::*;
-use crate::hub::tests::{hub_with_worktree, reading, says};
+use crate::hub::tests::{hub_with_worktree, taking_worker};
 
 /// Branches with HEAD on `name`, each with its newest commit, and what the worktree knows of its upstream's, if it has
 /// one, which has the same name.
@@ -92,9 +92,8 @@ fn a_fetch_that_moves_the_upstream_away_from_the_branch_isnt_a_push() {
 async fn only_the_worker_the_workspace_has_now_is_heard() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_with_worktree(dir.path());
-    let says = says(None);
-    let replaced = reading(&hub, &says);
-    let current = reading(&hub, &says);
+    let (replaced, _) = taking_worker(&hub);
+    let (current, _) = taking_worker(&hub);
     let id = WorkspaceId::from("w");
 
     let frame = |branch: &str| WorkerFrame::Branches { branches: on(branch, &[]) };

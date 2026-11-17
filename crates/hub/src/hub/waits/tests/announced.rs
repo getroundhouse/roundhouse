@@ -19,12 +19,12 @@ fn announced(feed: &mut Receiver<HubNotice>) -> Vec<Option<WaitId>> {
 }
 
 /// However it starts or ends: as the agent asks, or cancels it, or a read ends it, or its workspace is archived.
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn the_feed_announces_the_chat_with_its_open_wait_as_one_starts_and_with_none_as_it_ends() {
     let dir = tempfile::tempdir().unwrap();
-    let hub = hub_with_worktree(dir.path());
-    let says = says(Some(open()));
-    let link = reading(&hub, &says);
+    let (hub, pull_requests, _github) = hub_on_github(dir.path()).await;
+    pull_requests.set(7, PullRequestState::Open);
+    let (link, _) = taking_worker(&hub);
     let mut feed = hub.subscribe_feed();
     // Told of once already, so each copy after is sent only if the record moved.
     hub.notify(HubNotice::Session(hub.store.get_session(&"s".into()).unwrap().session));
@@ -36,10 +36,10 @@ async fn the_feed_announces_the_chat_with_its_open_wait_as_one_starts_and_with_n
     let cancelled = announced(&mut feed);
     let (second, _) = ask(&hub, &link, start("toolu_2")).await.unwrap();
     announced(&mut feed);
-    *says.lock() = Ok(Some(PullRequest { state: PrState::Merged, ..open() }));
+    pull_requests.set(7, PullRequestState::Merged);
     hub.workspace_pull_request("w".into()).await.unwrap();
     let merged = announced(&mut feed);
-    *says.lock() = Ok(Some(open()));
+    pull_requests.set(7, PullRequestState::Open);
     ask(&hub, &link, start("toolu_3")).await.unwrap();
     announced(&mut feed);
     hub.call_off_waits_of(&"w".into()).await.unwrap();

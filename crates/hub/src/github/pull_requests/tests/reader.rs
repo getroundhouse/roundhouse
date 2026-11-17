@@ -4,7 +4,7 @@
 use protocol::model::{GithubRepositoryName, GithubToken, PullRequestSelection};
 
 use super::*;
-use crate::github::{Answer, Github, GithubConfig, PullRequestsAsk, PullRequestsRead, Script, StandIn};
+use crate::github::{Answer, Github, GithubConfig, PullRequestsAsk, Script, StandIn};
 
 /// What GitHub answers a query whose repositories answer as `repositories` say, costing a point, with `remaining` of
 /// its limit of 5,000 left, and with `errors`.
@@ -113,11 +113,14 @@ pub(super) fn ask(name: &'static str, numbers: &[u64]) -> PullRequestsAsk {
 }
 
 /// What a read of `asks` finds as a stand-in answers its queries with `answers`, in turn, and each query it asked.
-pub(super) async fn read(answers: Vec<Answer>, asks: Vec<PullRequestsAsk>) -> (PullRequestsRead, Vec<String>) {
+pub(super) async fn read(
+    answers: Vec<Answer>,
+    asks: Vec<PullRequestsAsk>,
+) -> (super::super::asked::PullRequestsRead, Vec<String>) {
     let github = StandIn::with(Script { graphql: answers, ..Script::default() }).await;
     let calls = Github::new(GithubConfig::at(github.api()));
 
-    let read = calls.read_pull_requests(&GithubToken::new("a-token"), asks).await;
+    let read = calls.read_pull_requests(&GithubToken::new("a-token"), asks, crate::github::Leaving::ForOthers).await;
 
     let queries = github.asked().into_iter().filter(|asked| asked.starts_with("post /graphql ")).collect();
     (read, queries)
@@ -132,7 +135,6 @@ async fn a_read_takes_in_what_is_under_it_reads_every_page_and_confirms_nothing_
     let (read, queries) = read(rounds(unmoved()), vec![ask("project", &[7])]).await;
 
     let snapshot = read.answers.into_iter().next().unwrap().unwrap();
-    assert_eq!(read.cost, 4);
     assert_eq!(snapshot.repository.name_with_owner, "example/project");
     assert_eq!(snapshot.pull_requests.iter().map(|row| row.pull_request.number).collect::<Vec<_>>(), [3, 7]);
     let upper = snapshot.get(number(7)).unwrap();
@@ -160,7 +162,7 @@ async fn a_read_whose_pull_requests_moved_under_it_reads_again_and_fails_once_th
 
     let snapshot = read_once.answers.into_iter().next().unwrap().unwrap();
     assert_eq!(snapshot.get(number(7)).unwrap().head.as_str(), "head-7");
-    assert_eq!((asked_once.len(), read_once.cost), (8, 8));
+    assert_eq!(asked_once.len(), 8);
     let unread = read_always.answers.into_iter().next().unwrap().unwrap_err();
     assert_eq!((unread.error.code, unread.affected), (ErrorCode::Conflict, vec![number(7)]));
     assert_eq!(asked_always.len(), 12);
@@ -176,5 +178,5 @@ async fn a_pull_request_under_it_that_cant_be_seen_fails_the_read_about_it_and_t
 
     let unread = read.answers.into_iter().next().unwrap().unwrap_err();
     assert_eq!((unread.error.code, unread.affected), (ErrorCode::Unavailable, vec![number(3), number(7)]));
-    assert_eq!((queries.len(), read.cost), (3, 3), "nothing more once it failed");
+    assert_eq!(queries.len(), 3, "nothing more once it failed");
 }

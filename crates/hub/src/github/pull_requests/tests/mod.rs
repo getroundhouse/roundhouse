@@ -7,4 +7,5 @@ use serde_json::{Value, json};
 
 mod batching;
 mod checks;
+mod heads;
 mod reader;

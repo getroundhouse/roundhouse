@@ -1,17 +1,17 @@
-//! Each workspace's pull request, which the hub keeps on the workspace's record, from a stand-in `gh`.
+//! Each workspace's pull request, which the hub keeps on the workspace's record, read from a stand-in for GitHub by
+//! the branch there that the workspace's branch is pushed to.
 
 #![cfg(test)]
 
 use std::path::Path;
 
 use client_core::{Client, ClientError};
+use hub::GithubPullRequestState::{Merged, Open};
 use protocol::client::ErrorCode;
 use protocol::model::{BranchName, Head, PrState, PullRequestFound, WorkspaceId};
 
-use crate::support::gh::{
-    LOGGED_OUT, MERGED, MOVED_ON, NEWER, NONE, OFFLINE, OPEN, OPEN_URL, SOMEONE_ELSES, StandInGh,
-};
-use crate::support::{self, Stack, is_alive, started_pid, wait_for_turn_end, wait_until};
+use crate::support::github::{StandInGithub, push, pushed_workspace, workspace_on_github};
+use crate::support::{self, is_alive, started_pid, wait_for_turn_end, wait_until};
 
 /// The number of the pull request on the workspace's record, as every client gets it.
 fn recorded(client: &Client, id: &WorkspaceId) -> Option<u64> {
@@ -20,117 +20,78 @@ fn recorded(client: &Client, id: &WorkspaceId) -> Option<u64> {
 
 #[test]
 fn one_client_asking_records_the_pull_request_for_every_client_and_for_after_a_restart() {
-    let mut stack = Stack::start();
-    let gh = StandInGh::start(&mut stack);
+    let github = StandInGithub::start();
+    let (mut stack, _gh) = github.stack();
     let client = stack.client();
-    let (workspace, _) = stack.workspace(&client);
-    gh.say(OPEN);
+    let (workspace, _) = pushed_workspace(&stack, &client);
+    github.say_from(7, Open, workspace.branch.as_str());
 
     let asked = client.workspace_pull_request(&workspace.id).unwrap().unwrap();
-    gh.say(OFFLINE);
+    github.fail(true);
     stack.restart_hub();
     let client = stack.client();
 
-    assert_eq!((asked.number, asked.state, asked.url.as_str()), (7, PrState::Open, "https://example.com/7"));
+    let url = "https://github.com/example/project/pull/7";
+    assert_eq!((asked.number, asked.state, asked.url.as_str()), (7, PrState::Open, url));
     // GitHub is out of reach, so this is what the last hub found.
     assert_eq!(recorded(&client, &workspace.id), Some(7), "kept through the restart");
 }
 
-/// Offline, or logged out, says nothing about whether it's there, so it doesn't take away what was known. Only `gh`
-/// saying there's none does.
+/// Which pull request is a workspace's goes by the branch on GitHub its branch is pushed to, as the hub's own tests of
+/// `own::judging` say case by case. This walks them on one branch, through a real worker's reports of it, for what only
+/// the whole read shows: what GitHub is asked, and what the hub records.
 #[test]
-fn a_gh_that_cant_say_keeps_the_pull_request_known_and_one_that_says_none_clears_it() {
-    let mut stack = Stack::start();
-    let gh = StandInGh::start(&mut stack);
+fn which_pull_request_is_the_workspaces_goes_by_the_branch_its_pushed_to() {
+    let github = StandInGithub::start();
+    let (stack, _gh) = github.stack();
     let client = stack.client();
-    let (workspace, _) = stack.workspace(&client);
-    gh.say(OPEN);
-    client.workspace_pull_request(&workspace.id).unwrap();
+    let (workspace, _) = workspace_on_github(&stack, &client);
+    let branch = workspace.branch.as_str();
+    let read = || client.workspace_pull_request(&workspace.id).unwrap();
+    let found = || support::workspace(&client, &workspace.id).pull_request;
+    let looked_and_found_none = Some(PullRequestFound { pull_request: None });
 
-    gh.say(OFFLINE);
-    let offline = client.workspace_pull_request(&workspace.id).unwrap();
-    let kept = recorded(&client, &workspace.id);
-    gh.say(NONE);
-    let gone = client.workspace_pull_request(&workspace.id).unwrap();
+    // Pushed nowhere, so there's none, which needs nothing of GitHub to say.
+    github.say_from(7, Merged, branch);
+    let unpushed = (read(), github.queries());
+    // Pushed, to a branch whose only pull request merged from an earlier branch of the same name, whose newest commit
+    // was never here.
+    push(&client, &workspace);
+    let earlier = (read(), found());
+    // Opened from it, with a commit someone else pushed, which the worktree hasn't fetched.
+    github.say_from(8, Open, branch);
+    let opened = read();
+    // GitHub out of reach says nothing about it, so what was known is kept.
+    github.fail(true);
+    let out_of_reach = read();
+    github.fail(false);
+    // Merged since, and a newer one opened from the branch.
+    github.say_from(8, Merged, branch);
+    github.say_from(9, Open, branch);
+    let newer = read();
+    // Gone from the branch, as when its head is changed to another, so the branch has none of its own.
+    github.say_from(9, Open, "another-branch");
+    let gone = (read(), found());
 
-    assert_eq!(offline.map(|pr| pr.number), Some(7));
-    assert_eq!(kept, Some(7));
-    assert_eq!(gone, None);
-    let found = support::workspace(&client, &workspace.id).pull_request;
-    assert_eq!(found, Some(PullRequestFound { pull_request: None }), "looked, and found none");
+    assert_eq!(unpushed, (None, 0), "pushed nowhere");
+    assert_eq!(earlier, (None, looked_and_found_none.clone()), "an earlier branch's: looked, and found none");
+    let opened = opened.expect("opened from the branch");
+    assert_eq!((opened.number, opened.local.ahead, opened.local.behind), (8, 0, 1), "with a commit to pull");
+    assert_eq!(out_of_reach.map(|pr| pr.number), Some(8), "kept while GitHub is out of reach");
+    assert_eq!(newer.map(|pr| (pr.number, pr.state)), Some((9, PrState::Open)), "the newer one");
+    assert_eq!(gone, (None, looked_and_found_none), "gone from the branch: looked, and found none");
 }
 
-/// `gh` goes by the branch's name, which another machine's workspace can share, so the pull request it finds can be
-/// from there. Which it is, is the worker's to choose, as the table of `choose` in the worker's
-/// `git/pull_request/link/tests.rs` says: a pull request is the branch's once the branch has been at one of its
-/// commits, and from then on by a link the worker keeps with the branch. This walks the table's cases on one branch,
-/// through a real worker, its git and a stand-in `gh`, for what only the whole read shows: when GitHub is asked for a
-/// pull request's commits, which is only until the branch is linked to it, and what the hub records. They cost GitHub
-/// a point by its URL, and 31 by the branch's name.
+/// Out of reach, it may well be there, so with nothing known the read fails, and it stays unread.
 #[test]
-fn which_pull_request_is_the_branchs_goes_by_its_history_until_its_linked_and_by_its_link_after() {
-    let mut stack = Stack::start();
-    let gh = StandInGh::start(&mut stack);
+fn with_nothing_known_a_read_github_cant_answer_fails() {
+    let github = StandInGithub::start();
+    let (stack, _gh) = github.stack();
     let client = stack.client();
-    let (workspace, _) = stack.workspace(&client);
-    let read = || {
-        let views = gh.views();
-        let read = client.workspace_pull_request(&workspace.id).unwrap();
-        (read, gh.views() - views)
-    };
-
-    // Another machine's branch of the same name, whose newest commit the branch was never at, so the worker says
-    // there's none, as when `gh` finds none.
-    gh.say(SOMEONE_ELSES);
-    let (someone_elses, _) = read();
-    let found = support::workspace(&client, &workspace.id).pull_request;
-    // The branch's, as it has been at one of its commits, though someone else has pushed to it since, as GitHub's
-    // Update branch does, and it's found only now, as just after an update to this version.
-    gh.say(MOVED_ON);
-    let (moved_on, linking) = read();
-    gh.say(OPEN);
-    let (_, linked) = read();
-    // Another machine's branch of the same name now has one too, which is the one `gh` finds, so the worker reads the
-    // branch's own by its link.
-    gh.say(SOMEONE_ELSES);
-    gh.say_of(OPEN_URL, MERGED);
-    let (stays, _) = read();
-    // A newer one of the branch's own, as when the first has merged and another is opened from it. Its commits say
-    // it's the branch's, so it takes the link.
-    gh.say(NEWER);
-    let (newer, relinking) = read();
-    let (_, relinked) = read();
-
-    assert_eq!(someone_elses, None, "another machine's");
-    assert_eq!(found, Some(PullRequestFound { pull_request: None }), "another machine's: looked, and found none");
-    let moved_on = moved_on.expect("one someone else has pushed to is the branch's");
-    assert_eq!(
-        (moved_on.number, moved_on.local.behind),
-        (7, 1),
-        "one someone else has pushed to, with a commit to pull"
-    );
-    assert_eq!(linking, 2, "found: GitHub is asked by the branch's name, and then for its commits by its URL");
-    assert_eq!(linked, 1, "linked: its commits are asked for only until the branch is linked to it");
-    let stays = stays.map(|read| (read.number, read.state));
-    assert_eq!(stays, Some((7, PrState::Merged)), "the branch's own, by its link, once another's has the name");
-    assert_eq!(newer.map(|read| read.number), Some(8), "a newer one of the branch's own");
-    assert_eq!(
-        (relinking, relinked),
-        (2, 1),
-        "a newer one: its commits are asked for until the branch is linked to it"
-    );
-}
-
-/// Whether the one found by the branch's name is the branch's is for its commits to say, so a read that can't get
-/// them can't say either, and records nothing.
-#[test]
-fn a_read_that_cant_get_the_found_ones_commits_fails_and_records_nothing() {
-    let mut stack = Stack::start();
-    let gh = StandInGh::start(&mut stack);
-    let client = stack.client();
-    let (workspace, _) = stack.workspace(&client);
-    gh.say(OPEN);
-    gh.say_of(OPEN_URL, OFFLINE);
+    let (workspace, _) = workspace_on_github(&stack, &client);
+    // Before the push, so the read it brings finds nothing either.
+    github.fail(true);
+    push(&client, &workspace);
 
     let failed = client.workspace_pull_request(&workspace.id);
 
@@ -138,43 +99,22 @@ fn a_read_that_cant_get_the_found_ones_commits_fails_and_records_nothing() {
     assert_eq!(support::workspace(&client, &workspace.id).pull_request, None, "still not looked at");
 }
 
-/// Logged out, it can't be read until the user logs in, so with nothing known it's taken to be none, which offers to
-/// create one. Offline, it may well be there, so with nothing known the read fails, and it stays unread.
-#[test]
-fn with_nothing_known_a_gh_logged_out_says_none_and_one_offline_fails() {
-    let mut stack = Stack::start();
-    let gh = StandInGh::start(&mut stack);
-    let client = stack.client();
-    let (offline, _) = stack.workspace(&client);
-    let (logged_out, _) = stack.workspace(&client);
-
-    gh.say(OFFLINE);
-    let failed = client.workspace_pull_request(&offline.id);
-    gh.say(LOGGED_OUT);
-    let none = client.workspace_pull_request(&logged_out.id).unwrap();
-
-    assert!(matches!(&failed, Err(ClientError::Api(e)) if e.code == ErrorCode::Worker), "{failed:?}");
-    assert_eq!(support::workspace(&client, &offline.id).pull_request, None, "still not looked at");
-    assert_eq!(none, None);
-    let found = support::workspace(&client, &logged_out.id).pull_request;
-    assert_eq!(found, Some(PullRequestFound { pull_request: None }));
-}
-
-/// As after an update, when nobody has opened any workspace yet.
+/// As after an update, when nobody has opened any workspace yet. Both are read as the machine's own `gh`, together.
 #[test]
 fn a_starting_hub_reads_every_workspaces_pull_request_without_being_asked() {
-    let mut stack = Stack::start();
-    let gh = StandInGh::start(&mut stack);
+    let github = StandInGithub::start();
+    let (mut stack, _gh) = github.stack();
     let client = stack.client();
-    let (first, _) = stack.workspace(&client);
-    let (second, _) = stack.workspace(&client);
-    gh.say(OPEN);
+    let (first, _) = pushed_workspace(&stack, &client);
+    let (second, _) = pushed_workspace(&stack, &client);
+    github.say_from(7, Open, first.branch.as_str());
+    github.say_from(8, Open, second.branch.as_str());
 
     stack.restart_hub();
     let client = stack.client();
 
     wait_until("both to be read", || {
-        recorded(&client, &first.id) == Some(7) && recorded(&client, &second.id) == Some(7)
+        recorded(&client, &first.id) == Some(7) && recorded(&client, &second.id) == Some(8)
     });
 }
 
@@ -182,11 +122,11 @@ fn a_starting_hub_reads_every_workspaces_pull_request_without_being_asked() {
 /// It was just made, so nothing else reads it this soon.
 #[test]
 fn the_end_of_a_turn_reads_the_pull_request() {
-    let mut stack = Stack::start();
-    let gh = StandInGh::start(&mut stack);
+    let github = StandInGithub::start();
+    let (stack, _gh) = github.stack();
     let client = stack.client();
-    let (workspace, session) = stack.workspace(&client);
-    gh.say(OPEN);
+    let (workspace, session) = pushed_workspace(&stack, &client);
+    github.say_from(7, Open, workspace.branch.as_str());
 
     client.session_prompt(&session.id, "say:opened one", None).unwrap();
     wait_for_turn_end(&client, &session.id, 1);
@@ -199,16 +139,17 @@ fn the_end_of_a_turn_reads_the_pull_request() {
 /// again then, rather than once the turn ends or someone shows the workspace, though a merged one isn't read otherwise.
 #[test]
 fn checking_out_another_branch_reads_the_pull_request_again_though_it_was_merged() {
-    let mut stack = Stack::start();
-    let gh = StandInGh::start(&mut stack);
+    let github = StandInGithub::start();
+    let (stack, _gh) = github.stack();
     let client = stack.client();
-    let (workspace, _) = stack.workspace(&client);
-    gh.say(MERGED);
+    let (workspace, _) = pushed_workspace(&stack, &client);
+    github.say_from(7, Open, workspace.branch.as_str());
     client.workspace_pull_request(&workspace.id).unwrap();
+    github.say_from(7, Merged, workspace.branch.as_str());
+    let merged = client.workspace_pull_request(&workspace.id).unwrap().map(|pr| pr.state);
     let head = |client: &Client| support::workspace(client, &workspace.id).branches.map(|branches| branches.head);
     let started_on = Head::Branch { name: workspace.branch.clone() };
-    assert_eq!(head(&client), Some(started_on), "known before it moves");
-    gh.say(NONE);
+    assert_eq!((head(&client), merged), (Some(started_on), Some(PrState::Merged)), "known before it moves");
 
     support::git(Path::new(&workspace.path.unwrap()), &["switch", "-q", "-c", "next-thing"]);
 
@@ -218,15 +159,16 @@ fn checking_out_another_branch_reads_the_pull_request_again_though_it_was_merged
     assert_eq!(found_on, Some(BranchName::from("next-thing")), "found on the branch it's on now");
 }
 
-/// A workspace nobody has open has no worker once the hub starts again, and one started only to read its pull request
-/// doesn't stay, so two hundred workspaces don't keep two hundred running. The next prompt starts one as usual.
+/// A workspace nobody has open has no worker once the hub starts again. The hub needs one only for its machine's
+/// `gh`'s token, and one started for that doesn't stay, so two hundred workspaces don't keep two hundred running. The
+/// next prompt starts one as usual.
 #[test]
-fn a_worker_started_only_to_read_a_pull_request_is_stopped_after() {
-    let mut stack = Stack::start();
-    let gh = StandInGh::start(&mut stack);
+fn a_worker_started_only_for_a_read_is_stopped_after() {
+    let github = StandInGithub::start();
+    let (mut stack, _gh) = github.stack();
     let client = stack.client();
-    let (workspace, session) = stack.workspace(&client);
-    gh.say(OPEN);
+    let (workspace, session) = pushed_workspace(&stack, &client);
+    github.say_from(7, Open, workspace.branch.as_str());
 
     stack.restart_hub();
     let client = stack.client();
@@ -240,71 +182,73 @@ fn a_worker_started_only_to_read_a_pull_request_is_stopped_after() {
 /// A prompt sent while a read nobody asked for has the worker it started takes the worker over, so it isn't stopped
 /// under the prompt's agent once the read is done.
 #[test]
-fn a_worker_started_only_to_read_stays_once_a_prompt_wants_it() {
-    let mut stack = Stack::start();
-    let gh = StandInGh::start(&mut stack);
+fn a_worker_started_only_for_a_read_stays_once_a_prompt_wants_it() {
+    let github = StandInGithub::start();
+    let (mut stack, _gh) = github.stack();
     let client = stack.client();
-    let (first, session) = stack.workspace(&client);
-    let (second, _) = stack.workspace(&client);
-    gh.say(OPEN);
-    // Known to be open, so it's read before the second once the hub starts again.
-    client.workspace_pull_request(&first.id).unwrap();
-    let views = gh.views();
-    gh.hold();
+    let (workspace, session) = pushed_workspace(&stack, &client);
+    github.say_from(7, Open, workspace.branch.as_str());
+    let asked = github.queries();
+    github.hold();
 
     stack.restart_hub();
     let client = stack.client();
-    wait_until("the first to be read again", || gh.views() == views + 1);
+    wait_until("it to be read again", || github.queries() > asked);
     client.session_prompt(&session.id, "hang", None).unwrap();
     let mut agent = None;
     wait_until("the prompt's agent to start", || {
         agent = started_pid(&support::read_all(&client, &session.id));
         agent.is_some()
     });
-    gh.release();
-    // The second waits for the first's read to be done, worker and all.
-    wait_until("the second to be read", || recorded(&client, &second.id) == Some(7));
+    github.release();
+    wait_until("it to be read", || recorded(&client, &workspace.id) == Some(7));
 
     assert!(is_alive(agent.unwrap()), "the prompt's agent went with the read's worker");
 }
 
-/// A read nobody asked for asks GitHub what's left of its limit before spending any, and leaves the last fifth of it to
-/// agents and to reads someone is waiting on.
+/// A read nobody asked for leaves the last fifth of GitHub's limit to agents and to reads someone is waiting on, so
+/// once GitHub says that's all that's left, it stops, and what's left is there for a read someone waits on.
 #[test]
 fn reads_nobody_asked_for_leave_the_last_of_githubs_limit_to_the_rest() {
-    let mut stack = Stack::start();
-    let gh = StandInGh::start(&mut stack);
+    let github = StandInGithub::start();
+    let (mut stack, _gh) = github.stack();
     let client = stack.client();
-    let (workspace, _) = stack.workspace(&client);
-    gh.say(OPEN);
-    gh.limit_left(900);
-    let asked_before = gh.ran("api rate_limit");
+    let (workspace, _) = pushed_workspace(&stack, &client);
+    github.say_from(7, Open, workspace.branch.as_str());
+    github.leave(900);
+    let asked = github.queries();
 
     stack.restart_hub();
     let client = stack.client();
-    wait_until("GitHub to be asked what's left", || gh.ran("api rate_limit") > asked_before);
-    wait_until("the worker started to ask to stop", || client.hub_status().unwrap().workers == 0);
+    wait_until("GitHub to be asked", || github.queries() > asked);
+    wait_until("the worker started for the token to stop", || client.hub_status().unwrap().workers == 0);
 
-    assert_eq!(gh.views(), 0, "it was read anyway");
-    let asked = client.workspace_pull_request(&workspace.id).unwrap();
-    assert_eq!(asked.map(|pr| pr.number), Some(7), "what's left is there for a read someone waits on");
+    assert_eq!(github.queries(), asked + 1, "it asked only which pull requests the branch has");
+    assert_eq!(recorded(&client, &workspace.id), None, "it wasn't read");
+    let read = client.workspace_pull_request(&workspace.id).unwrap();
+    assert_eq!(read.map(|pr| pr.number), Some(7), "what's left is there for a read someone waits on");
 }
 
 /// GitHub would refuse it anyway, and each refused call is one more against the agents sharing the limit. With
 /// nothing known, that fails, rather than saying there's none, which would offer to create one that may be there.
 #[test]
 fn with_githubs_limit_spent_a_read_says_what_is_known_without_asking_github() {
-    let mut stack = Stack::start();
-    let gh = StandInGh::start(&mut stack);
-    gh.limit_left(0);
+    let github = StandInGithub::start();
+    let (stack, _gh) = github.stack();
     let client = stack.client();
-    let (workspace, _) = stack.workspace(&client);
-    gh.say(OPEN);
+    let (workspace, _) = workspace_on_github(&stack, &client);
+    github.say_from(7, Open, workspace.branch.as_str());
+    // Before the push, so the read it brings finds nothing either.
+    github.leave(0);
+    push(&client, &workspace);
+    // Which GitHub says leaves nothing, if the push's read hasn't.
+    let _ = client.workspace_pull_request(&workspace.id);
+    let asked = github.queries();
 
     let answer = client.workspace_pull_request(&workspace.id);
 
-    assert!(matches!(answer, Err(ClientError::Api(e)) if e.code == ErrorCode::Unavailable));
-    assert_eq!(gh.views(), 0, "nothing asked GitHub for it");
+    assert!(matches!(&answer, Err(ClientError::Api(e)) if e.code == ErrorCode::Unavailable), "{answer:?}");
+    assert_eq!(github.queries(), asked, "nothing asked GitHub for it");
     assert_eq!(support::workspace(&client, &workspace.id).pull_request, None, "it still hasn't been looked at");
 }
 
@@ -312,29 +256,29 @@ fn with_githubs_limit_spent_a_read_says_what_is_known_without_asking_github() {
 /// But a third, asked for while the second waits, has nothing to add once the second has read.
 #[test]
 fn a_read_asked_for_while_another_waits_shares_its_answer() {
-    let mut stack = Stack::start();
-    let gh = StandInGh::start(&mut stack);
+    let github = StandInGithub::start();
+    let (stack, _gh) = github.stack();
     let client = stack.client();
-    let (workspace, _) = stack.workspace(&client);
-    gh.say(OPEN);
-    // Linked to it first, so each read views it once.
+    let (workspace, _) = pushed_workspace(&stack, &client);
+    github.say_from(7, Open, workspace.branch.as_str());
+    let before = github.queries();
     client.workspace_pull_request(&workspace.id).unwrap();
-    let views = gh.views();
-    gh.hold();
+    let (asked, a_read) = (github.queries(), github.queries() - before);
+    github.hold();
     let socket = stack.socket();
     let ask = |id: WorkspaceId| {
         let socket = socket.clone();
         std::thread::spawn(move || Client::connect(&socket, "test").unwrap().workspace_pull_request(&id).unwrap())
     };
     let first = ask(workspace.id.clone());
-    wait_until("the first to reach GitHub", || gh.views() == views + 1);
+    wait_until("the first to reach GitHub", || github.queries() == asked + 1);
     let (second, third) = (ask(workspace.id.clone()), ask(workspace.id.clone()));
     // Each waiting, and the status asked for here.
     wait_until("both to wait", || client.hub_status().unwrap().requests == 4);
 
-    gh.release();
+    github.release();
     let answers: Vec<_> = [first, second, third].into_iter().map(|asked| asked.join().unwrap()).collect();
 
     assert!(answers.iter().all(|pr| pr.as_ref().map(|pr| pr.number) == Some(7)), "{answers:?}");
-    assert_eq!(gh.views(), views + 2, "the third shared the second's read");
+    assert_eq!(github.queries(), asked + 2 * a_read, "the third shared the second's read");
 }

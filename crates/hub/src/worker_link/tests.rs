@@ -5,17 +5,18 @@ use std::path::Path;
 
 use process::ProcessRecord;
 use protocol::frame;
+use protocol::model::{self, GitFile};
 use protocol::paths::WORKER_RECORD_FILE;
 use protocol::worker::{
     AskId, AskOutcome, AskReply, CancelSetup, GitCredentialSet, GitStatus, GithubCredential, PullRequestAnswer,
-    PullRequestReply, WorkerAsk, WorkerCall, WorkerOutcome, WorkerRequest,
+    WorkerAsk, WorkerCall, WorkerOutcome, WorkerRequest,
 };
 use providers::local::{LocalConfig, LocalProvider};
 
 use super::*;
-use crate::github::Github;
+use crate::github::{Github, PullRequestState, PullRequests, Script, StandIn};
 use crate::hub::HubDirs;
-use crate::hub::tests::NO_GITHUB;
+use crate::hub::tests::{NO_GITHUB, handed_a_token, pushed, serving};
 use crate::provider_set::ProviderSet;
 use crate::store::tests::store_with_session;
 use crate::timers::Timers;
@@ -41,6 +42,23 @@ fn provider_running(dir: &Path, script: &str) -> Arc<dyn Provider> {
 /// tests spell out, in no order of their own.
 fn hub_using(dir: &Path, provider: &Arc<dyn Provider>) -> Arc<Hub> {
     hub_timed(dir, provider, Timers::DEFAULT)
+}
+
+/// A hub as [`hub_using`] makes one, which reads pull requests from GitHub's API at `api`, whose repository is
+/// example/project on github.com, and whose workspace `w` is on `branch`, pushed there, as a stand-in's pull requests
+/// are from.
+fn hub_reading(dir: &Path, provider: &Arc<dyn Provider>, api: String) -> Arc<Hub> {
+    let store = Arc::new(store_with_session(dir));
+    store.workspace_ready(&"w".into(), "/w", &"alder".into(), "main", None).unwrap();
+    store.set_workspace_branches(&"w".into(), &pushed("head-7", "head-7", (0, 0))).unwrap();
+    let address = model::RepoUrl::try_from("https://github.com/example/project".to_string()).unwrap();
+    store.read_repo_url(&"r".into(), "/repo", Some(&address), None).unwrap();
+    let providers = ProviderSet::only(provider.clone());
+    let github = Github::new(crate::github::GithubConfig::at(api));
+    let (dirs, timers) = (HubDirs::in_dir(dir), Timers::FOR_TESTS);
+    let hub = Arc::new(Hub::new(Build::UNSTAMPED, store, dirs, providers, github, Vec::new(), false, timers));
+    handed_a_token(&hub);
+    hub
 }
 
 /// The same, with `timers`.
@@ -138,38 +156,54 @@ async fn a_worker_that_chose_another_version_is_not_used() {
     assert_eq!(e.code, ErrorCode::VersionMismatch, "{e:?}");
 }
 
+/// The hub reads it from GitHub, then asks the worker that asked, which is running, how many files are uncommitted,
+/// so its answer waits on the worker answering that.
 #[tokio::test]
 async fn a_worker_asking_for_its_pull_request_is_answered_once_it_has_answered_the_calls_that_takes() {
     let dir = tempfile::tempdir().unwrap();
-    let no_limit = WorkerOutcome::Error(ApiError::new(ErrorCode::Unavailable, "GitHub can't be reached"));
-    let none = WorkerResponse::PullRequest(PullRequestReply { pull_request: None, branch: None });
+    let pull_requests = PullRequests::default();
+    pull_requests.set(7, PullRequestState::Open);
+    let github = StandIn::with(Script { pull_requests: Some(pull_requests), ..Script::default() }).await;
+    let file = GitFile { path: "a".into(), orig_path: None, status: ".M".into() };
+    let status = WorkerResponse::GitStatus(model::GitStatus { files: vec![file], ..model::GitStatus::default() });
     frames_in(
         dir.path(),
         &[
             ("ask", WorkerFrame::Ask { id: AskId::new(9), session_id: "s".into(), ask: WorkerAsk::PullRequest }),
-            // How much of GitHub's limit is left, then the pull request, after the hub's ask of the machine's login.
-            ("limit", WorkerFrame::Reply { id: 4, outcome: no_limit }),
-            ("found", WorkerFrame::Reply { id: 5, outcome: WorkerOutcome::Response(none) }),
+            // After the hub's ask of the machine's login, which it isn't answered.
+            ("status", WorkerFrame::Reply { id: 4, outcome: WorkerOutcome::Response(status) }),
         ],
     );
     let d = dir.path().display();
+    // Once it's the workspace's worker, which is the one a read asks.
     let script = format!(
-        "{}cat '{d}/ask'\nread -r call\ncat '{d}/limit'\nread -r call\ncat '{d}/found'\n{}",
+        "{}while [ ! -e '{d}/go' ]; do sleep 0.05; done\ncat '{d}/ask'\nread -r call\ncat '{d}/status'\n{}",
         greeted(dir.path(), WorkerOutcome::Response(WorkerResponse::Ok)),
         answer_to_file(dir.path())
     );
     let provider = provider_running(dir.path(), &script);
     provider.create(&"i".into(), None, None, "i").await.unwrap();
-    let hub = hub_using(dir.path(), &provider);
+    let hub = hub_reading(dir.path(), &provider, github.api());
 
-    let link =
-        WorkerLink::open(hub, provider, "w".into(), "i".into(), &dir.path().join("logs/i.log"), Opening::Started)
-            .await
-            .unwrap();
+    let link = WorkerLink::open(
+        hub.clone(),
+        provider,
+        "w".into(),
+        "i".into(),
+        &dir.path().join("logs/i.log"),
+        Opening::Started,
+    )
+    .await
+    .unwrap();
+    serving(&hub, &link);
+    std::fs::write(dir.path().join("go"), "").unwrap();
 
     let answer = answered(dir.path()).await;
-    let outcome = AskOutcome::Response(AskReply::PullRequest(PullRequestAnswer { pull_request: None }));
-    assert_eq!(answer, AskAnswer { answer: AskId::new(9), outcome });
+    let AskOutcome::Response(AskReply::PullRequest(PullRequestAnswer { pull_request: Some(pr) })) = answer.outcome
+    else {
+        panic!("not the pull request: {answer:?}")
+    };
+    assert_eq!((answer.answer, pr.number, pr.local.uncommitted), (AskId::new(9), 7, 1));
     link.kill();
 }
 

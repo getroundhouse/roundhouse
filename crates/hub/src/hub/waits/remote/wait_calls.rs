@@ -146,7 +146,7 @@ impl Hub {
         }
     }
 
-    /// Separate from GitHub reads so a stuck network call or an exhausted budget cannot postpone a deadline.
+    /// Separate from GitHub reads so a stuck network call or a spent limit cannot postpone a deadline.
     #[expect(clippy::disallowed_methods, reason = "how often waits are looked at for any past its deadline")]
     pub(crate) async fn watch_wait_deadlines(self: Arc<Self>) {
         loop {

@@ -89,8 +89,9 @@ pub(crate) struct Hub {
     pub(super) setup_gates: Mutex<HashMap<WorkspaceId, SetupGate>>,
     pub(super) terminals: Terminals,
     pub(super) pull_requests: pull_requests::Reading,
-    /// The work the hub does on its own that's running now, by the workspace each job is about.
-    pub(super) jobs: Jobs<WorkspaceId>,
+    /// The reads of workspaces' own pull requests nobody asked for that are running now, by whose token each reads
+    /// as.
+    pub(super) own_reads: Jobs<pull_requests::ReadsAs>,
     /// The reads of the pull requests waits watch that are running now, by whose token each reads as.
     pub(super) wait_reads: Jobs<pull_requests::ReadsAs>,
     /// The sign-ins with GitHub the hub is asking GitHub after, a job for each, as `Hub::wait_for_sign_in` says.
@@ -194,7 +195,7 @@ impl Hub {
             setup_gates: Mutex::new(HashMap::new()),
             terminals: Terminals::default(),
             pull_requests: pull_requests::Reading::new(),
-            jobs: Jobs::new(),
+            own_reads: Jobs::new(),
             wait_reads: Jobs::new(),
             sign_ins: Jobs::new(),
             github_checks_stopped: watch::Sender::new(false),
@@ -233,7 +234,7 @@ impl Hub {
     /// Ends every job where it is, sign-ins' included, and starts none after, as the hub stops, before its workers are
     /// stopped or left. A sign-in left waiting is recorded as ended as the next hub starts.
     pub(crate) fn stop_jobs(&self) {
-        self.jobs.stop();
+        self.own_reads.stop();
         self.wait_reads.stop();
         self.sign_ins.stop();
     }

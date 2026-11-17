@@ -22,7 +22,7 @@ pub struct Timers {
     pub hello_within: Duration,
     /// How often the hub looks at a workspace whose worker is another build.
     pub look_every: Duration,
-    /// How often the hub looks for a pull request to read that nobody asked for, while the budget can spare the calls.
+    /// How often the hub looks for a pull request to read that nobody asked for.
     pub read_pace: Duration,
     /// The least time between two asks after a sign-in's token, whatever GitHub says, so a code that says none between
     /// them isn't asked after in a loop.
@@ -52,7 +52,8 @@ impl Timers {
         // Two looks in a row have to find nothing at work, so a moment with nothing at work, as just before an agent
         // picks up again by itself once its work in the background is done, isn't taken for the workspace being idle.
         look_every: Duration::from_secs(5),
-        // The budget's steady rate is a call a second, so looking more often would find nothing it could spare.
+        // A read in turn is due minutes apart, so looking more often finds nothing new, and costs only a look at the
+        // store.
         read_pace: Duration::from_secs(1),
         // GitHub's docs give five seconds between asks, so only a code that says less than this keeps to it.
         sign_in_pace: Duration::from_secs(1),

@@ -44,14 +44,12 @@ pub(super) fn next(connection: &Value) -> Result<Option<String>, ApiError> {
     }
 }
 
-/// What a query cost, in GitHub's points, and what's left of the limit, from its `rateLimit`.
-pub(super) fn usage(answer: &Value) -> Option<(u32, RateLimit)> {
+/// What's left of GitHub's limit after a query, from its `rateLimit`.
+pub(super) fn usage(answer: &Value) -> Option<RateLimit> {
     let usage = answer.pointer("/data/rateLimit").filter(|usage| usage.is_object())?;
     let count = |key: &str| usage[key].as_u64().and_then(|n| u32::try_from(n).ok());
     let resets_at = usage["resetAt"].as_str()?.parse::<jiff::Timestamp>().ok()?;
-    let limit =
-        RateLimit { limit: count("limit")?, remaining: count("remaining")?, resets_at_ms: resets_at.as_millisecond() };
-    Some((count("cost")?, limit))
+    Some(RateLimit { limit: count("limit")?, remaining: count("remaining")?, resets_at_ms: resets_at.as_millisecond() })
 }
 
 /// What an error GitHub gave means, by its `type` and what it says: GitHub's schema lacking what's asked, as on a

@@ -38,7 +38,6 @@ async fn an_error_about_the_whole_query_fails_every_ask_in_it() {
 
     let codes: Vec<_> = read.answers.into_iter().map(|answer| answer.unwrap_err().error.code).collect();
     assert_eq!(codes, [ErrorCode::Unsupported, ErrorCode::Unsupported]);
-    assert_eq!(read.cost, 1, "a query GitHub says no cost of costs at least one point");
 }
 
 /// GitHub's limit down to a fifth, which is left for agents and the person, once the first round has said so.

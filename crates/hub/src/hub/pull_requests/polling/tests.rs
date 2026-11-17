@@ -1,6 +1,6 @@
-//! The reads nobody asks for, as the hub's own loop starts them: a workspace's own pull request through stand-ins for
-//! its worker, on tokio's clock, which moves on by itself while every task waits for it, and the waits' pull requests
-//! from a stand-in for GitHub, on the real clock, since a call to it would race tokio's.
+//! The reads nobody asks for, as the hub's own loop starts them: workspaces' own pull requests and the waits' from a
+//! stand-in for GitHub, on the real clock, since a call to it would race tokio's, and a read whose token never comes
+//! from a stand-in for its worker, on tokio's clock, which moves on by itself while every task waits for it.
 
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
@@ -12,10 +12,9 @@ use protocol::model::{GhLogin, GhLoginWorks, WaitEnd, WaitId, WorkspaceId};
 use protocol::worker::{FoundToken, GithubLoginReply, WorkerRequest, WorkerResponse};
 use tokio::time::Instant;
 
-use super::scheduler::IN_TURN_RUNS;
 use crate::github::{Answer, PullRequestState, PullRequests, Script, StandIn};
 use crate::hub::Hub;
-use crate::hub::tests::{NO_GITHUB, hub_reading_github, hub_with_worktree};
+use crate::hub::tests::{hub_on_github, hub_reading_github, hub_with_worktree, pushed};
 use crate::store::Seen;
 use crate::store::tests::idle_session;
 use crate::worker_link::WorkerLink;
@@ -61,9 +60,9 @@ fn waiting_by(hub: &Hub, workspace: WorkspaceId, chat: &str) -> WaitId {
     hub.store.start_wait(&wait, Seen::default()).unwrap().id
 }
 
-/// `v`'s worker, which never answers what `never` picks, as one stuck in `gh` doesn't, says when it was asked in
-/// `asked`, and does whatever else it's asked without a word.
-fn stuck_in_v(hub: &Hub, never: fn(&WorkerRequest) -> bool, asked: &Asked) -> Arc<WorkerLink> {
+/// `w`'s worker, which never answers what `never` picks, as one stuck doesn't, says when it was asked in `asked`, and
+/// does whatever else it's asked without a word.
+fn stuck_in_w(hub: &Hub, never: fn(&WorkerRequest) -> bool, asked: &Asked) -> Arc<WorkerLink> {
     let asked = asked.clone();
     let link = WorkerLink::answering(move |request| {
         if !never(&request) {
@@ -72,12 +71,8 @@ fn stuck_in_v(hub: &Hub, never: fn(&WorkerRequest) -> bool, asked: &Asked) -> Ar
         asked.lock().push(Instant::now());
         None
     });
-    hub.workers.lock().insert(v(), link.clone());
+    hub.workers.lock().insert("w".into(), link.clone());
     link
-}
-
-fn its_own_read(request: &WorkerRequest) -> bool {
-    matches!(request, WorkerRequest::PullRequest(_))
 }
 
 fn read_error(hub: &Hub, wait: &WaitId) -> Option<String> {
@@ -88,33 +83,29 @@ fn ended(hub: &Hub, wait: &WaitId) -> Option<WaitEnd> {
     hub.store.wait(wait).unwrap().ended.map(|ended| ended.how)
 }
 
-/// GitHub can't be reached here, so the wait's read, and an agent's read in `v`, which need no worker, say so while
-/// `v`'s read hangs.
-#[tokio::test(start_paused = true)]
-async fn a_read_in_turn_whose_worker_never_answers_holds_up_no_wait_and_is_stopped_at_its_limit() {
+/// `w` and `v` are on the same branch, which nothing stops, so both have its pull request, read as this machine's own
+/// login in one read, whose queries ask after both, and with no worker started for it.
+#[tokio::test]
+async fn workspaces_due_as_one_token_are_read_together_without_a_worker() {
     let dir = tempfile::tempdir().unwrap();
-    let (hub, wait) = waiting_in_w(dir.path(), NO_GITHUB.to_string());
-    let asked = Asked::default();
-    stuck_in_v(&hub, its_own_read, &asked);
-    let limits = hub.read_limits(&v(), IN_TURN_RUNS).await;
+    let (hub, pull_requests, github) = hub_on_github(dir.path()).await;
+    pull_requests.set(7, PullRequestState::Open);
+    hub.store.insert_workspace(&workspace("v"), None).unwrap();
+    hub.store.workspace_ready(&v(), "/v", &"birch".into(), "main", None).unwrap();
+    hub.store.set_workspace_branches(&v(), &pushed("head-7", "head-7", (0, 0))).unwrap();
     // As while a client is connected, so every workspace's pull request is read in turn.
     hub.clients.store(1, Ordering::Relaxed);
+    let number = |id: &WorkspaceId| hub.store.get_workspace(id).unwrap().known_pull_request().map(|pr| pr.number);
 
     let watching = tokio::spawn(hub.clone().watch_pull_requests());
-    until("a read of v's pull request", || !asked.lock().is_empty()).await;
-    let hung_at = asked.lock()[0];
-    until("the wait being read", || read_error(&hub, &wait).is_some()).await;
-    let selection = pull_request_wait("b").watch.unwrap().requested;
-    let agents_read = hub.read_remote_for_agent(&v(), selection).await.map(|read| read.0);
-    let v_still_reading = hub.jobs.busy().contains(&v());
-    until("v's worker being let go of", || hub.workers.lock().get(&v()).is_none()).await;
-    let let_go_after = hung_at.elapsed();
+    soon("both being read", || number(&"w".into()).is_some() && number(&v()).is_some()).await;
     watching.abort();
 
-    assert_eq!(ended(&hub, &wait), None, "a GitHub out of reach is waited out");
-    assert!(agents_read.is_err(), "GitHub can't be reached");
-    assert!(v_still_reading, "the agent's read didn't wait for v's read, which hung");
-    assert!(let_go_after <= limits.work + limits.after, "within its limits, after {let_go_after:?}");
+    assert_eq!((number(&"w".into()), number(&v())), (Some(7), Some(7)));
+    let queries: Vec<_> = github.asked().into_iter().filter(|asked| asked.starts_with("post /graphql ")).collect();
+    assert!(queries[0].contains("r0: repository(") && queries[0].contains("r1: repository("), "{queries:?}");
+    assert_eq!(queries.len(), 3, "which branches have which, then the pull request's two rounds: {queries:?}");
+    assert!(hub.workers.lock().is_empty(), "no worker was started to read them");
 }
 
 /// `w`'s and `v`'s waits are read as this machine's own login, so in one read, whose queries ask of both, and which
@@ -225,19 +216,22 @@ async fn a_read_of_waits_github_fails_says_so_on_them_and_backs_off() {
     assert!(schedule.next > Instant::now() + Duration::from_mins(3), "twice the two minutes between reads that worked");
 }
 
+/// The machine's own `gh` handed the hub no token, and `w`'s worker never hands one over, as one stuck doesn't, so the
+/// read is stopped at its limit, and each time it's read again later than the time before.
 #[tokio::test(start_paused = true)]
 async fn a_read_in_turn_that_doesnt_finish_waits_longer_each_time() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_with_worktree(dir.path());
-    hub.store.insert_workspace(&workspace("v"), None).unwrap();
-    hub.store.workspace_ready(&v(), "/v", &"birch".into(), "main", None).unwrap();
+    let address = protocol::model::RepoUrl::try_from("https://github.com/example/project".to_string()).unwrap();
+    hub.store.read_repo_url(&"r".into(), "/repo", Some(&address), None).unwrap();
+    hub.store.set_workspace_branches(&"w".into(), &pushed("head-7", "head-7", (0, 0))).unwrap();
     let asked = Asked::default();
     // Kept, so it's there to be asked again.
-    stuck_in_v(&hub, its_own_read, &asked).keep();
+    stuck_in_w(&hub, |request| matches!(request, WorkerRequest::FindGithubLogin), &asked).keep();
     hub.clients.store(1, Ordering::Relaxed);
 
     let watching = tokio::spawn(hub.clone().watch_pull_requests());
-    until("three reads of v's pull request", || asked.lock().len() > 2).await;
+    until("three reads of w's pull request", || asked.lock().len() > 2).await;
     watching.abort();
 
     let asked = asked.lock();

@@ -43,6 +43,13 @@ impl PullRequestSelection {
     }
 }
 
+/// Just the one, which can't be empty or name one twice.
+impl From<PullRequestNumber> for PullRequestSelection {
+    fn from(number: PullRequestNumber) -> Self {
+        Self(vec![number])
+    }
+}
+
 impl TryFrom<Vec<PullRequestNumber>> for PullRequestSelection {
     type Error = SelectionError;
 

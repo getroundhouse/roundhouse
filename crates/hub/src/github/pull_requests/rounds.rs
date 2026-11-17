@@ -29,7 +29,37 @@ const ROUNDS_AT_MOST: u32 = 30;
 
 /// The part of GitHub's limit a read leaves alone, for agents and the person, whose own `gh` shares it, as the hub's
 /// reads nobody is waiting on do too.
-pub(crate) const KEPT_FOR_OTHERS_PERCENT: u32 = 20;
+const KEPT_FOR_OTHERS_PERCENT: u32 = 20;
+
+/// What a read leaves of GitHub's limit for the token, once what's left is down to it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Leaving {
+    /// [`KEPT_FOR_OTHERS_PERCENT`] of it, for agents and the person, whose own `gh` shares it.
+    ForOthers,
+    /// Nothing, for a read the person is waiting on, which is the reason the rest is kept.
+    Nothing,
+}
+
+impl Leaving {
+    /// How many of `limit`'s points it leaves.
+    pub(crate) fn kept(self, limit: &RateLimit) -> u32 {
+        match self {
+            Self::ForOthers => limit.limit.saturating_mul(KEPT_FOR_OTHERS_PERCENT) / 100,
+            Self::Nothing => 0,
+        }
+    }
+
+    /// Why no more is asked, once what GitHub last said is left, `limit`, is down to what this leaves.
+    pub(crate) fn stops_at(self, limit: Option<RateLimit>) -> Option<ApiError> {
+        let limit = limit?;
+        (limit.remaining <= self.kept(&limit)).then(|| {
+            ApiError::new(
+                ErrorCode::Worker,
+                "GitHub's limit for reading pull requests is nearly used up until it resets",
+            )
+        })
+    }
+}
 
 /// The queries a read of `asks` makes in its first round, which looks at each pull request asked for,
 /// [`PARTS_A_QUERY`] to a query: what it costs at the least, before GitHub says what it cost.
@@ -40,9 +70,15 @@ pub(crate) fn first_queries(asks: &[PullRequestsAsk]) -> u32 {
 
 impl Github {
     /// Reads each of `asks` as `token`, together, each to its own answer, so one that fails, such as for a pull
-    /// request that isn't there, fails no other.
-    pub(crate) async fn read_pull_requests(&self, token: &GithubToken, asks: Vec<PullRequestsAsk>) -> PullRequestsRead {
-        let mut spent = Spent { cost: 0, rate_limit: None, refused: false };
+    /// request that isn't there, fails no other. Stops asking once GitHub's limit for the token is down to what
+    /// `leaving` leaves.
+    pub(crate) async fn read_pull_requests(
+        &self,
+        token: &GithubToken,
+        asks: Vec<PullRequestsAsk>,
+        leaving: Leaving,
+    ) -> PullRequestsRead {
+        let mut spent = Spent { rate_limit: None, refused: false, leaving };
         let mut answers: Vec<Option<Result<_, Unread>>> = asks.iter().map(|_| None).collect();
         let mut reading: Vec<(usize, Reading)> = asks.iter().cloned().map(Reading::new).enumerate().collect();
         for attempt in 1..=ATTEMPTS {
@@ -61,7 +97,7 @@ impl Github {
         }
         let unanswered = || Err(Unread { error: incomplete(), affected: Vec::new() });
         let answers = answers.into_iter().map(|answer| answer.unwrap_or_else(unanswered)).collect();
-        PullRequestsRead { answers, rate_limit: spent.rate_limit, cost: spent.cost, refused: spent.refused }
+        PullRequestsRead { answers, rate_limit: spent.rate_limit, refused: spent.refused }
     }
 
     /// Asks for what each of `reading` needs, round after round, until none needs more.
@@ -156,33 +192,22 @@ fn take(answer: &Value, batch: &[(usize, Vec<Part>)], reading: &mut [(usize, Rea
 }
 
 /// What a read has spent, and what GitHub last said is left.
-struct Spent {
-    cost: u32,
-    rate_limit: Option<RateLimit>,
-    refused: bool,
+pub(super) struct Spent {
+    pub(super) rate_limit: Option<RateLimit>,
+    pub(super) refused: bool,
+    pub(super) leaving: Leaving,
 }
 
 impl Spent {
-    /// Why no more is asked, once what's left of GitHub's limit is down to the part kept for others.
-    fn exhausted(&self) -> Option<ApiError> {
-        let limit = self.rate_limit?;
-        let kept = limit.limit.saturating_mul(KEPT_FOR_OTHERS_PERCENT) / 100;
-        (limit.remaining <= kept).then(|| {
-            ApiError::new(
-                ErrorCode::Worker,
-                "GitHub's limit for reading pull requests is nearly used up until it resets",
-            )
-        })
+    /// Why no more is asked, once what's left of GitHub's limit is down to what the read leaves.
+    pub(super) fn exhausted(&self) -> Option<ApiError> {
+        self.leaving.stops_at(self.rate_limit)
     }
 
-    /// Counts a query asked: what GitHub said it cost, or one, which any query costs at least.
-    fn took(&mut self, answer: Option<&Value>) {
-        match answer.and_then(usage) {
-            Some((cost, limit)) => {
-                self.cost = self.cost.saturating_add(cost);
-                self.rate_limit = Some(limit);
-            }
-            None => self.cost = self.cost.saturating_add(1),
+    /// Takes in what GitHub said is left of its limit after a query, if it said.
+    pub(super) fn took(&mut self, answer: Option<&Value>) {
+        if let Some(limit) = answer.and_then(usage) {
+            self.rate_limit = Some(limit);
         }
     }
 }

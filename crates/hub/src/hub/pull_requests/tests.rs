@@ -1,76 +1,88 @@
-//! Reading a pull request for an agent and for a client, through a stand-in for the workspace's worker, on tokio's
-//! clock, which moves on by itself while every task waits for it.
+//! Reading a workspace's own pull request for an agent and for a client, from a stand-in for GitHub, by the branch on
+//! GitHub that the branch checked out pushes to, on the real clock, since a call to the stand-in would race tokio's.
 
-use std::sync::atomic::{AtomicUsize, Ordering};
-
-use protocol::model::{Branches, Head};
-use protocol::worker::{RateLimit, WorkerRequest, WorkerResponse};
+use protocol::model::{Branches, GitFile, GitStatus, Head, Local, PrState, PullRequest, PullRequestFound};
+use protocol::worker::{WorkerRequest, WorkerResponse};
 
 use super::*;
-use crate::hub::tests::{hub_with_worktree, open, reading, reading_within, says};
-use crate::store::now_ms;
+use crate::github::PullRequestState;
+use crate::hub::tests::{hub_on_github, hub_on_github_timed, pushed};
+use crate::timers::Timers;
 
-#[tokio::test(start_paused = true)]
+/// The GraphQL queries the stand-in was asked.
+fn queries(github: &crate::github::StandIn) -> Vec<String> {
+    github.asked().into_iter().filter(|asked| asked.starts_with("post /graphql ")).collect()
+}
+
+/// Agents' reads a second apart, many times as long as a read of the stand-in takes, so a read that waited for its turn
+/// can be told from one that's slow.
+const SPACED: Timers = Timers { agent_spacing: Duration::from_secs(1), ..Timers::FOR_TESTS };
+
+fn known(hub: &Hub) -> Option<PullRequest> {
+    hub.store.get_workspace(&"w".into()).unwrap().known_pull_request().cloned()
+}
+
+#[tokio::test]
 async fn an_agent_asking_again_soon_after_a_read_waits_for_a_read_of_its_own() {
     let dir = tempfile::tempdir().unwrap();
-    let hub = hub_with_worktree(dir.path());
-    let says = says(Some(open()));
-    let link = reading(&hub, &says);
-    hub.pull_request_for_agent(&"w".into(), &link).await.unwrap();
-    *says.lock() = Ok(Some(PullRequest { title: "Pushed".into(), ..open() }));
-    let asked_at = tokio::time::Instant::now();
+    let (hub, pull_requests, _github) = hub_on_github_timed(dir.path(), SPACED).await;
+    pull_requests.set(7, PullRequestState::Open);
+    let first_at = tokio::time::Instant::now();
+    hub.pull_request_for_agent(&"w".into()).await.unwrap();
+    pull_requests.set(7, PullRequestState::Passed);
 
-    let again = hub.pull_request_for_agent(&"w".into(), &link).await.unwrap();
+    let again = hub.pull_request_for_agent(&"w".into()).await.unwrap().unwrap();
 
-    assert_eq!(again.unwrap().title, "Pushed", "read again, not what the first read found");
-    assert!(asked_at.elapsed() >= hub.timers.agent_spacing, "after {:?}", asked_at.elapsed());
+    assert_eq!(again.checks.passed, 1, "read again, not what the first read found");
+    assert!(first_at.elapsed() >= hub.timers.agent_spacing, "after {:?}", first_at.elapsed());
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn an_agent_hears_that_a_read_failed_where_a_client_is_shown_what_was_known() {
     let dir = tempfile::tempdir().unwrap();
-    let hub = hub_with_worktree(dir.path());
-    let says = says(Some(open()));
-    let link = reading(&hub, &says);
+    let (hub, pull_requests, _github) = hub_on_github(dir.path()).await;
+    pull_requests.set(7, PullRequestState::Open);
     hub.workspace_pull_request("w".into()).await.unwrap();
-    *says.lock() = Err(ApiError::new(ErrorCode::Unavailable, "GitHub can't be reached"));
+    pull_requests.fail(true);
 
-    let agent = hub.pull_request_for_agent(&"w".into(), &link).await;
+    let agent = hub.pull_request_for_agent(&"w".into()).await;
     let client = hub.workspace_pull_request("w".into()).await;
 
-    assert_eq!(agent.unwrap_err().code, ErrorCode::Unavailable);
-    assert_eq!(client.unwrap(), Some(open()));
+    assert!(agent.is_err(), "{agent:?}");
+    assert_eq!(client.unwrap().map(|pr| pr.number), Some(7));
 }
 
-#[tokio::test(start_paused = true)]
+/// GitHub's answer to a client's read said little is left, which an agent's read leaves for everything else.
+#[tokio::test]
 async fn an_agent_is_refused_the_part_of_githubs_limit_kept_for_everything_else() {
     let dir = tempfile::tempdir().unwrap();
-    let hub = hub_with_worktree(dir.path());
-    let low = RateLimit { limit: 5000, remaining: 10, resets_at_ms: now_ms() + 3_600_000 };
-    let link = reading_within(&hub, &says(Some(open())), Some(low));
+    let (hub, pull_requests, github) = hub_on_github(dir.path()).await;
+    pull_requests.set(7, PullRequestState::Open);
+    pull_requests.leave(10);
     hub.workspace_pull_request("w".into()).await.unwrap();
+    let asked = queries(&github).len();
 
-    let agent = hub.pull_request_for_agent(&"w".into(), &link).await;
+    let agent = hub.pull_request_for_agent(&"w".into()).await;
 
     assert_eq!(agent.unwrap_err().code, ErrorCode::Unavailable, "not what the client's read found");
+    assert_eq!(queries(&github).len(), asked, "GitHub wasn't asked");
 }
 
 /// A branch that's moved is the agent's doing, so the read it brings waits as one an agent asks for does.
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn a_branch_moving_reads_again_no_sooner_than_an_agent_asking_would() {
     let dir = tempfile::tempdir().unwrap();
-    let hub = hub_with_worktree(dir.path());
-    let says = says(Some(open()));
-    let link = reading(&hub, &says);
-    hub.workspace_pull_request("w".into()).await.unwrap();
-    *says.lock() = Ok(Some(PullRequest { title: "Pushed".into(), ..open() }));
+    let (hub, pull_requests, _github) = hub_on_github_timed(dir.path(), SPACED).await;
+    pull_requests.set(7, PullRequestState::Open);
     let moved_at = tokio::time::Instant::now();
+    hub.workspace_pull_request("w".into()).await.unwrap();
+    pull_requests.set(7, PullRequestState::Passed);
 
-    hub.read_pull_request_after_move(&"w".into(), link, When::Always);
+    hub.read_pull_request_after_move(&"w".into(), When::Always);
     let hub = &hub;
-    waiting::task::until_ok_async(Duration::from_mins(1), || async move {
-        let title = hub.workspace(&"w".into()).await.unwrap().known_pull_request().map(|pr| pr.title.clone());
-        if title.as_deref() == Some("Pushed") { Ok(()) } else { Err(format!("read again, but it says {title:?}")) }
+    waiting::task::until_ok_async(Duration::from_secs(30), || async move {
+        let passed = known(hub).map(|pr| pr.checks.passed);
+        if passed == Some(1) { Ok(()) } else { Err(format!("read again, but {passed:?} checks passed")) }
     })
     .await;
 
@@ -79,35 +91,112 @@ async fn a_branch_moving_reads_again_no_sooner_than_an_agent_asking_would() {
 
 /// A read that began once the worktree had checked out another branch may have found that branch's already, and then
 /// the read the switch asked for doesn't read again.
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn a_switch_reads_only_while_what_is_known_is_another_branchs() {
     let dir = tempfile::tempdir().unwrap();
-    let hub = hub_with_worktree(dir.path());
-    let reads = Arc::new(AtomicUsize::new(0));
-    let counted = reads.clone();
-    let link = WorkerLink::answering(move |request| {
-        Some(Ok(if matches!(request, WorkerRequest::PullRequest(_)) {
-            counted.fetch_add(1, Ordering::SeqCst);
-            WorkerResponse::PullRequest(PullRequestReply {
-                pull_request: Some(open()),
-                branch: Some(BranchName::from("header")),
-            })
-        } else {
-            WorkerResponse::Ok
-        }))
-    });
+    let (hub, pull_requests, github) = hub_on_github(dir.path()).await;
+    pull_requests.set(7, PullRequestState::Open);
     let id = WorkspaceId::from("w");
-    let on_header = Branches { head: Head::Branch { name: BranchName::from("header") }, had: Vec::new() };
-    hub.store.set_workspace_branches(&id, &on_header).unwrap();
-    let found = PullRequestFound { pull_request: Some(open()) };
+    let found = PullRequestFound { pull_request: Some(crate::hub::tests::open()) };
 
-    hub.store.set_workspace_pull_request(&id, &found, Some(&BranchName::from("header"))).unwrap();
-    hub.read_pull_request(&id, "/w".into(), &link, Asked::Waiting, When::OnAnotherBranch).await.unwrap();
-    let found_on_it = reads.load(Ordering::SeqCst);
+    hub.store.set_workspace_pull_request(&id, &found, Some(&BranchName::from("branch"))).unwrap();
+    hub.read_pull_request(&id, Asked::Waiting, When::OnAnotherBranch).await.unwrap();
+    let found_on_it = queries(&github).len();
     hub.store.set_workspace_pull_request(&id, &found, Some(&BranchName::from("aspen"))).unwrap();
-    hub.read_pull_request(&id, "/w".into(), &link, Asked::Waiting, When::OnAnotherBranch).await.unwrap();
-    let found_elsewhere = reads.load(Ordering::SeqCst);
+    hub.read_pull_request(&id, Asked::Waiting, When::OnAnotherBranch).await.unwrap();
 
     assert_eq!(found_on_it, 0, "what's known was found on the branch checked out");
-    assert_eq!(found_elsewhere, 1);
+    assert!(!queries(&github).is_empty());
+    assert_eq!(known(&hub).map(|pr| pr.title), Some("Change 7".into()));
+}
+
+/// The branch's pull request is the one GitHub has from the branch it's pushed to, and with none there, it has none,
+/// which is recorded, so the app offers to make one.
+#[tokio::test]
+async fn a_workspace_has_the_pull_request_from_the_branch_its_branch_is_pushed_to() {
+    let dir = tempfile::tempdir().unwrap();
+    let (hub, pull_requests, github) = hub_on_github(dir.path()).await;
+    pull_requests.set_from(8, PullRequestState::Open, "another");
+
+    let none = hub.workspace_pull_request("w".into()).await.unwrap();
+    pull_requests.set(7, PullRequestState::Merged);
+    let merged = hub.workspace_pull_request("w".into()).await.unwrap();
+
+    assert_eq!(none, None, "#8 is from another branch");
+    assert_eq!(
+        hub.store.get_workspace(&"w".into()).unwrap().pull_request,
+        Some(PullRequestFound { pull_request: merged.clone() })
+    );
+    assert_eq!(merged.map(|pr| (pr.number, pr.state)), Some((7, PrState::Merged)));
+    let asked = queries(&github);
+    assert!(asked[0].contains(r#"headRefName:\"branch\""#), "{asked:?}");
+}
+
+/// How the worktree stands against it: the commits its branch has that GitHub's doesn't, those GitHub's has that it
+/// hasn't fetched, and, from its worker, already running, the files it hasn't committed.
+#[tokio::test]
+async fn a_pull_request_read_says_how_the_worktree_stands_against_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let (hub, pull_requests, _github) = hub_on_github(dir.path()).await;
+    pull_requests.set(7, PullRequestState::Open);
+    let file = |path: &str| GitFile { path: path.into(), orig_path: None, status: ".M".into() };
+    let status = GitStatus { files: vec![file("a"), file("b")], ..GitStatus::default() };
+    let link = WorkerLink::answering(move |request| {
+        let asked_status = matches!(request, WorkerRequest::GitStatus(_));
+        Some(Ok(if asked_status { WorkerResponse::GitStatus(status.clone()) } else { WorkerResponse::Ok }))
+    });
+    hub.workers.lock().insert("w".into(), link);
+
+    let pushed_here = hub.workspace_pull_request("w".into()).await.unwrap().unwrap().local;
+    hub.store.set_workspace_branches(&"w".into(), &pushed("local", "head-7", (2, 0))).unwrap();
+    let ahead = hub.workspace_pull_request("w".into()).await.unwrap().unwrap().local;
+    hub.store.set_workspace_branches(&"w".into(), &pushed("local", "older", (0, 0))).unwrap();
+    let unfetched = hub.workspace_pull_request("w".into()).await.unwrap().unwrap().local;
+
+    assert_eq!(pushed_here, Local { uncommitted: 2, ahead: 0, behind: 0 });
+    assert_eq!(ahead, Local { uncommitted: 2, ahead: 2, behind: 0 });
+    assert_eq!(unfetched, Local { uncommitted: 2, ahead: 0, behind: 1 }, "GitHub's has a commit it hasn't fetched");
+}
+
+/// With HEAD detached there's no branch, so nothing is asked of GitHub.
+#[tokio::test]
+async fn a_detached_head_has_no_pull_request_and_asks_github_nothing() {
+    let dir = tempfile::tempdir().unwrap();
+    let (hub, pull_requests, github) = hub_on_github(dir.path()).await;
+    pull_requests.set(7, PullRequestState::Open);
+    let detached = Branches { head: Head::Detached { commit: "head-7".into() }, had: Vec::new() };
+    hub.store.set_workspace_branches(&"w".into(), &detached).unwrap();
+
+    let read = hub.workspace_pull_request("w".into()).await.unwrap();
+
+    assert_eq!(read, None);
+    assert!(queries(&github).is_empty(), "{:?}", queries(&github));
+}
+
+/// Asked for again while a read is on its way, the next read is still needed, since the first began before the ask.
+/// But a third, asked for while the second waits, has nothing to add once the second has read, so it shares its answer.
+#[tokio::test]
+async fn a_read_asked_for_while_another_waits_shares_its_answer() {
+    let dir = tempfile::tempdir().unwrap();
+    let (hub, pull_requests, github) = hub_on_github(dir.path()).await;
+    pull_requests.set(7, PullRequestState::Open);
+    hub.workspace_pull_request("w".into()).await.unwrap();
+    let a_read = queries(&github).len();
+    pull_requests.hold();
+    let ask = || {
+        let hub = hub.clone();
+        tokio::spawn(async move { hub.workspace_pull_request("w".into()).await.unwrap() })
+    };
+
+    let first = ask();
+    waiting::task::until(Duration::from_secs(30), "the first to reach GitHub", || queries(&github).len() > a_read)
+        .await;
+    let (second, third) = (ask(), ask());
+    // Each asks before this test goes on, on a runtime of one thread, and waits for the first.
+    tokio::task::yield_now().await;
+    pull_requests.release();
+    let answers = [first.await.unwrap(), second.await.unwrap(), third.await.unwrap()];
+
+    assert!(answers.iter().all(|pr| pr.as_ref().map(|pr| pr.number) == Some(7)), "{answers:?}");
+    assert_eq!(queries(&github).len(), 3 * a_read, "the third shared the second's read");
 }

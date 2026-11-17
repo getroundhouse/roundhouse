@@ -1,6 +1,5 @@
-//! Background PR reads: choose what's due, and start a job to read it, which spends its calls from the shared budget
-//! once it has a worker to read through, and lets go of that worker once it's done. A read in turn is only started
-//! while the budget can spare its calls.
+//! Background reads: choose the workspaces whose pull requests are due, and start a job for each token they're read as,
+//! which reads them all together, while GitHub's count for that token leaves more than the last fifth.
 
 mod scheduler;
 #[cfg(test)]
