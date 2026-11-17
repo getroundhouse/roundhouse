@@ -99,24 +99,18 @@ fn commits_through_git(repo: &Path, name: &str, email: &str) -> bool {
     command.output().unwrap().status.success()
 }
 
-/// Those that are only what git takes out are sent as the username, and the rest as GitHub gives them.
+/// Those that are only what git takes out are sent as the username, and the rest as GitHub gives them. Then through
+/// the git on this machine, as an agent's commits are. Git 2.31 refuses every name that falls back, but a later one,
+/// such as 2.54, keeps `.`, and so commits as a name with one, so only those without are refused by every git.
 #[test]
-fn a_name_git_wont_commit_as_falls_back_to_the_username() {
-    let named: Vec<String> = identities_of_each_name().into_iter().map(|identity| identity.name).collect();
-
-    assert_eq!(named, ["ada", "ada", "ada", "ada", "Ada.", "<Ada>", "🚀"]);
-}
-
-/// Through the git on this machine, as an agent's commits are. Git 2.31 refuses every name that falls back, but a
-/// later one, such as 2.54, keeps `.`, and so commits as a name with one, so only those without are refused by every
-/// git.
-#[test]
-fn git_commits_as_every_name_sent_and_refuses_each_that_falls_back() {
+fn a_name_git_wont_commit_as_falls_back_to_the_username_and_git_commits_as_every_name_sent() {
     let repo = tempfile::tempdir().unwrap();
     git(repo.path(), &["init", "--quiet"]);
 
     let identities = identities_of_each_name();
 
+    let named: Vec<&str> = identities.iter().map(|identity| identity.name.as_str()).collect();
+    assert_eq!(named, ["ada", "ada", "ada", "ada", "Ada.", "<Ada>", "🚀"]);
     for (name, sent) in NAMES.into_iter().zip(identities) {
         assert!(commits_through_git(repo.path(), &sent.name, &sent.email), "git refused {:?}", sent.name);
         if sent.name != name && !name.contains('.') {

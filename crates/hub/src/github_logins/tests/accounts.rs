@@ -5,6 +5,7 @@ use std::sync::Barrier;
 
 use protocol::model::GithubLoginKind;
 
+use super::sign_ins::{login_ending, sign_in_kept};
 use super::*;
 use crate::login_files::LoginFile;
 use crate::store::GithubProfile;
@@ -194,16 +195,20 @@ fn choosing_the_default_moves_the_settings_revision_and_choosing_it_again_doesnt
     assert_eq!(again, home);
 }
 
+/// A sign-in's login in a form only a newer build reads is kept with its account, for that build.
 #[test]
-fn tidying_clears_a_login_whose_file_isnt_a_token_and_removes_what_no_account_names_but_not_agents_logins() {
+fn tidying_clears_a_login_whose_file_isnt_a_token_and_removes_what_no_account_names_but_not_agents_or_a_newer_form() {
     let dir = tempfile::tempdir().unwrap();
     let (logins, store) = logins_in(dir.path());
     logins.connect(&connect("kept-token", None, "kept"), &ada()).unwrap();
     logins.connect(&connect("garbled-token", None, "garbled"), &ada()).unwrap();
+    sign_in_kept(&logins, &store, &owner(8, "grace", None), "newer", login_ending("newer-token", 9000));
     let github_logins = dir.path().join("github-logins");
     let mut paths = std::fs::read_dir(&github_logins).unwrap().map(|entry| entry.unwrap().path());
     let garbled = paths.find(|path| std::fs::read_to_string(path).unwrap() == "garbled-token").unwrap();
     std::fs::write(garbled, [0xff, 0xfe, 0xfd]).unwrap();
+    let newer = github_logins.join(store.github_login_file(&"newer".into()).unwrap().unwrap().as_str());
+    std::fs::write(newer, NEWER_FORM).unwrap();
     std::fs::write(github_logins.join(LoginFile::new().as_str()), "a-stray-token").unwrap();
     std::fs::create_dir(dir.path().join("logins")).unwrap();
     std::fs::write(dir.path().join("logins").join(LoginFile::new().as_str()), "an-agents-token").unwrap();
@@ -211,10 +216,13 @@ fn tidying_clears_a_login_whose_file_isnt_a_token_and_removes_what_no_account_na
     logins.tidy(2000).unwrap();
 
     let held = |id: &str| store.github_account(&id.into()).unwrap().unwrap().held_login.is_some();
-    assert!(held("kept") && !held("garbled"));
-    assert_eq!(tokens_kept(dir.path()), ["kept-token"]);
+    assert_eq!([held("kept"), held("garbled"), held("newer")], [true, false, true]);
+    assert_eq!(tokens_kept(dir.path()), ["kept-token", NEWER_FORM]);
     assert_eq!(std::fs::read_dir(dir.path().join("logins")).unwrap().count(), 1, "an agent's login is another's");
 }
+
+/// A sign-in in a form a newer build knows, and this one doesn't.
+const NEWER_FORM: &str = r#"{"format":"sign_in_with_a_passkey","passkey":"made-up"}"#;
 
 /// Each would make an account of its own ID, as each request's would be, so only checking again under the lock keeps
 /// them to one.

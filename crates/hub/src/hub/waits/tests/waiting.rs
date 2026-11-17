@@ -56,9 +56,11 @@ async fn a_wait_starts_from_a_read_of_its_own_even_just_after_one() {
     *says.lock() = Ok(Some(open()));
 
     let (wait, pull_request) = ask(&hub, &link, start("toolu_1")).await.unwrap();
+    let (again, _) = ask(&hub, &link, start("toolu_1")).await.unwrap();
 
     assert_eq!((how(&wait), pull_request), (None, Some(open())), "not ended by the checks of the commit it replaced");
-    assert_eq!((wait.number, wait.call), (7, Some("toolu_1".into())));
+    assert_eq!((wait.number, wait.call.clone()), (7, Some("toolu_1".into())));
+    assert_eq!(again, wait, "the same call asking again gets the one it started, as when the agent's CLI asks again");
 }
 
 #[tokio::test(start_paused = true)]
@@ -141,21 +143,6 @@ async fn a_worktree_with_commits_not_pushed_has_nothing_to_wait_on_yet() {
 }
 
 #[tokio::test(start_paused = true)]
-async fn a_chats_waits_coexist_and_the_same_call_asking_again_gets_the_one_it_started() {
-    let dir = tempfile::tempdir().unwrap();
-    let hub = hub_with_worktree(dir.path());
-    let link = reading(&hub, &says(Some(open())));
-
-    let (first, _) = ask(&hub, &link, start("toolu_1")).await.unwrap();
-    let (again, _) = ask(&hub, &link, start("toolu_1")).await.unwrap();
-    let (second, _) = ask(&hub, &link, start("toolu_2")).await.unwrap();
-
-    assert_eq!(again, first, "as when the agent's CLI asks again");
-    assert_eq!(how(&hub.store.wait(&first.id).unwrap()), None);
-    assert_eq!(how(&hub.store.wait(&second.id).unwrap()), None);
-}
-
-#[tokio::test(start_paused = true)]
 async fn a_wait_on_a_pull_request_thats_done_or_needs_the_agent_ends_as_it_starts() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_with_worktree(dir.path());
@@ -231,27 +218,6 @@ async fn cancelling_a_wait_ends_it_once_and_a_wait_that_had_ended_stays_as_it_en
 
     assert_eq!(how(&cancelled), Some(WaitEnd::Cancelled));
     assert_eq!(again.ended, cancelled.ended, "ended once");
-}
-
-#[tokio::test(start_paused = true)]
-async fn closing_its_chat_or_archiving_its_workspace_ends_a_wait() {
-    let dir = tempfile::tempdir().unwrap();
-    let hub = hub_with_worktree(dir.path());
-    let link = reading(&hub, &says(Some(open())));
-    let said = EventBody::Notice { level: NoticeLevel::Info, message: "x".into(), subagent: None };
-    // A chat that's been used, which closing keeps.
-    hub.store.append(&"s".into(), None, &said, None, None, None).unwrap();
-    let (in_chat, _) = ask(&hub, &link, start("toolu_1")).await.unwrap();
-    hub.session_close("s".into()).await.unwrap();
-    // Read before the chat starts another, which would end it anyway.
-    let once_closed = hub.store.wait(&in_chat.id).unwrap();
-    hub.session_reopen("s".into()).await.unwrap();
-    let (in_workspace, _) = ask(&hub, &link, start("toolu_2")).await.unwrap();
-
-    hub.workspace_archive("w".into(), true).await.unwrap();
-
-    assert_eq!(how(&once_closed), Some(WaitEnd::Cancelled));
-    assert_eq!(how(&hub.store.wait(&in_workspace.id).unwrap()), Some(WaitEnd::Cancelled));
 }
 
 /// Before its archive script runs, so a wait that ends meanwhile doesn't start an agent in a worktree that's going.

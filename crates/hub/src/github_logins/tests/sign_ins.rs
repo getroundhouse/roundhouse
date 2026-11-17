@@ -148,26 +148,3 @@ fn a_sign_in_that_ended_first_keeps_nothing_and_ending_one_that_has_ended_change
     assert_eq!(store.list_records().unwrap().github_accounts, []);
     assert_eq!(logins_kept(&logins, dir.path()), [], "nothing was kept");
 }
-
-/// A sign-in's login, one in a form only a newer build reads, and one cut short.
-#[test]
-fn tidying_keeps_a_sign_ins_login_and_one_in_a_newer_form_and_clears_one_cut_short() {
-    let dir = tempfile::tempdir().unwrap();
-    let (logins, store) = logins_in(dir.path());
-    let [kept, newer, cut_short] = ["kept", "newer", "cut-short"].map(|id| started(&store, id));
-    for (id, account, user) in [(&kept, "kept", 1), (&newer, "newer", 2), (&cut_short, "cut-short", 3)] {
-        let user = owner(user, account, None);
-        logins.approve_sign_in(&approved(id, &format!("{account}-token"), account), &user).unwrap();
-    }
-    let github_logins = dir.path().join("github-logins");
-    let file_of =
-        |account: &str| github_logins.join(store.github_login_file(&account.into()).unwrap().unwrap().as_str());
-    std::fs::write(file_of("newer"), r#"{"format":"sign_in_with_a_passkey","passkey":"made-up"}"#).unwrap();
-    std::fs::write(file_of("cut-short"), r#"{"format":"sign_in","tok"#).unwrap();
-
-    logins.tidy(2000).unwrap();
-
-    let held = |id: &str| store.github_account(&id.into()).unwrap().unwrap().held_login.is_some();
-    assert_eq!([held("kept"), held("newer"), held("cut-short")], [true, true, false]);
-    assert_eq!(std::fs::read_dir(&github_logins).unwrap().count(), 2);
-}
