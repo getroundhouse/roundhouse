@@ -3,13 +3,15 @@
 //! token, in as few queries as GitHub allows.
 
 mod asked;
-pub(crate) use asked::{PullRequestsAsk, PullRequestsRead, Unread};
+pub(crate) use asked::{PullRequestsAsk, Unread};
 mod graphql;
+mod heads;
+pub(crate) use heads::{BRANCHES_A_QUERY, Headed, HeadsAsk};
 mod parse;
 mod query;
 mod reading;
 mod rounds;
-pub(crate) use rounds::{KEPT_FOR_OTHERS_PERCENT, first_queries};
+pub(crate) use rounds::{Leaving, first_queries};
 mod said;
 #[cfg(test)]
 mod tests;

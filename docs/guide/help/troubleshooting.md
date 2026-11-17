@@ -18,11 +18,12 @@ The chat ends on a card saying `Usage limit reached`, and when the limit resets.
 
 ## The pull request's bar only offers Create PR
 
-Pull requests are read with GitHub's CLI. Check that:
+Roundhouse reads pull requests from GitHub as the default account in [Settings](../reference/settings.md#git), or without one, as `gh` on the machine running the workspace. Check that:
 
-- `gh` is installed, and either a GitHub account is the default in [Settings](../reference/settings.md#git), or `gh auth status` says you're logged in on the machine running the workspace.
-- The repository has a GitHub remote.
-- The pull request is the branch's own: one the workspace pushed to, or whose branch it checked out. One opened from a branch of the same name somewhere else isn't.
+- A GitHub account is the default, or `gh auth status` says you're logged in on the machine running the workspace.
+- The repository is on github.com.
+- The branch is pushed with its upstream set, to a branch of the same name, as `git push -u origin HEAD` does. One pushed without `-u`, or still tracking the branch it was made from, such as `origin/main`, counts as not pushed.
+- The pull request is from the branch it's pushed to. One opened from a branch of the same name somewhere else isn't.
 
 Everything else works without `gh`.
 

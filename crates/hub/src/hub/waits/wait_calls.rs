@@ -1,6 +1,5 @@
 use super::super::{Hub, new_id, now_ms};
 use super::rules;
-use crate::worker_link::WorkerLink;
 use protocol::client::{ApiError, ErrorCode, HubNotice};
 use protocol::model::{
     PullRequestFound, Session, SessionId, ToolUseId, Wait, WaitEnd, WaitEnded, WaitId, WaitUntil, WorkspaceId,
@@ -20,7 +19,6 @@ impl Hub {
     pub(crate) async fn start_wait(
         self: &Arc<Self>,
         workspace_id: &WorkspaceId,
-        link: &WorkerLink,
         session_id: SessionId,
         until: WaitUntil,
         call: Option<ToolUseId>,
@@ -28,7 +26,7 @@ impl Hub {
         if let Some(started) = self.started_by(&session_id, call.as_ref()).await? {
             return self.with_pull_request(started).await;
         }
-        let reading = tokio::time::timeout(START_WITHIN, self.pull_request_to_wait_on(workspace_id, link));
+        let reading = tokio::time::timeout(START_WITHIN, self.pull_request_to_wait_on(workspace_id));
         let (pull_request, reads_held) = reading.await.map_err(|_| {
             ApiError::new(ErrorCode::Unavailable, format!("the pull request couldn't be read within {START_WITHIN:?}"))
         })??;

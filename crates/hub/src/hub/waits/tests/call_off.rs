@@ -76,13 +76,13 @@ async fn calling_off_a_wait_that_isnt_open_leaves_the_one_that_is() {
 #[tokio::test]
 async fn a_wait_that_ends_with_nobody_to_hear_until_the_next_prompt_comes_off_the_list() {
     let dir = tempfile::tempdir().unwrap();
-    let hub = hub_with_worktree(dir.path());
-    let says = says(Some(open()));
-    reading(&hub, &says);
+    let (hub, pull_requests, _github) = hub_on_github(dir.path()).await;
+    pull_requests.set(7, PullRequestState::Open);
+    taking_worker(&hub);
     kept_with_its_queue(&hub, &wait(WaitUntil::Done), Some(true));
     let session = hub.live_session(&"s".into()).await.unwrap();
 
-    *says.lock() = Ok(Some(PullRequest { state: PrState::Merged, ..open() }));
+    pull_requests.set(7, PullRequestState::Merged);
     hub.workspace_pull_request("w".into()).await.unwrap();
     // Once the wake is done, since a chat carries out what it's asked in turn.
     let _ = hub.session_cancel("s".into()).await;
@@ -98,7 +98,7 @@ async fn a_chat_with_no_agent_running_goes_idle_as_closing_it_or_archiving_its_w
     for archiving in [false, true] {
         let dir = tempfile::tempdir().unwrap();
         let hub = hub_with_worktree(dir.path());
-        reading(&hub, &says(Some(open())));
+        taking_worker(&hub);
         kept_across_a_restart(&hub, &wait(WaitUntil::Done));
         hub.live_session(&"s".into()).await.unwrap();
 

@@ -33,6 +33,11 @@ impl FoundTokens {
         answered.ok()?.ok()?.get(provider).cloned().flatten()
     }
 
+    /// Whether `provider`'s worker said it has none, as one whose `gh` is logged out does, rather than not having said.
+    pub(crate) fn handed_none(&self, provider: &ProviderName) -> bool {
+        self.0.borrow().get(provider).is_some_and(Option::is_none)
+    }
+
     /// Forgets that `provider`'s worker handed none, if it did, saying whether it had, so it's waited for again.
     pub(crate) fn forget_none(&self, provider: &ProviderName) -> bool {
         self.0.send_if_modified(|tokens| {

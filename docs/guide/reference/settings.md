@@ -104,7 +104,7 @@ The GitHub accounts agents push and open pull requests as. [Who agents are on Gi
 ![Git, with three accounts added and the logins found on two machines](../../spec/screens/settings-git.png)
 
 - **Added** has the accounts you've given the hub, the default first. Every machine's `git` and `gh` use the default for github.com, so agents push and open pull requests as it, and Roundhouse reads pull requests with it, wherever they run.
-- **Found** has who `gh` is logged in as on each machine where a workspace has run since the hub last started, and whether GitHub took its token then. Roundhouse asks GitHub with that token, and while it's the default reads the pull requests agents wait on with it, keeping it only in memory. While you've added no account, agents use each machine's own login, and Found has the Default badge. **Make default**, by Found's heading, goes back to each machine's own login once you have.
+- **Found** has who `gh` is logged in as on each machine where a workspace has run since the hub last started, and whether GitHub took its token then. Roundhouse asks GitHub with that token, and while it's the default reads pull requests with it, keeping it only in memory. While you've added no account, agents use each machine's own login, and Found has the Default badge. **Make default**, by Found's heading, goes back to each machine's own login once you have.
 - **Each row** says how the account was connected, `Signed in`, `Token` or `App`, and only what else needs saying, such as when a token ends, or where an app is installed.
 
 The first account you connect becomes the default. To use another, choose **Make default** in its row's **…** menu.

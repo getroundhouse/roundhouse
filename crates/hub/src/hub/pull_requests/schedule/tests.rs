@@ -38,7 +38,7 @@ fn read(ago: &[(&str, Duration)], now: Instant) -> HashMap<WorkspaceId, Schedule
 }
 
 fn next(workspaces: &[Workspace], schedules: &HashMap<WorkspaceId, Schedule>, now: Instant) -> Option<String> {
-    due(workspaces, schedules, &HashSet::new(), now).map(|w| w.id.to_string())
+    due(workspaces, schedules, &HashSet::new(), now).first().map(|w| w.id.to_string())
 }
 
 /// One an agent waits on is read at the soonest, however long it has come back the same, when others are due later.
@@ -53,9 +53,13 @@ fn one_an_agent_waits_on_is_due_at_the_soonest_however_long_it_has_come_back_the
     }
     let schedules = HashMap::from([(WorkspaceId::from("waited"), schedule)]);
 
-    assert_eq!(due(&workspaces, &schedules, &HashSet::new(), now).map(|w| w.id.as_str()), None, "not waited on");
+    assert_eq!(
+        due(&workspaces, &schedules, &HashSet::new(), now).first().map(|w| w.id.as_str()),
+        None,
+        "not waited on"
+    );
     let waited = HashSet::from([WorkspaceId::from("waited")]);
-    assert_eq!(due(&workspaces, &schedules, &waited, now).map(|w| w.id.as_str()), Some("waited"));
+    assert_eq!(due(&workspaces, &schedules, &waited, now).first().map(|w| w.id.as_str()), Some("waited"));
 }
 
 /// As when a read records it merged between a wait's start reading it and the wait being kept, so the read didn't end
@@ -68,8 +72,8 @@ fn one_an_agent_waits_on_is_read_even_when_it_was_last_read_as_done() {
         HashMap::from([(WorkspaceId::from("merged"), Schedule::starting(now.checked_sub(SOONEST).unwrap()))]);
     let waited = HashSet::from([WorkspaceId::from("merged")]);
 
-    assert_eq!(due(&workspaces, &schedules, &HashSet::new(), now).map(|w| w.id.as_str()), None, "done");
-    assert_eq!(due(&workspaces, &schedules, &waited, now).map(|w| w.id.as_str()), Some("merged"));
+    assert_eq!(due(&workspaces, &schedules, &HashSet::new(), now).first().map(|w| w.id.as_str()), None, "done");
+    assert_eq!(due(&workspaces, &schedules, &waited, now).first().map(|w| w.id.as_str()), Some("merged"));
 }
 
 /// After a restart, what's open on GitHub is the likeliest to have moved, then whatever has waited longest.

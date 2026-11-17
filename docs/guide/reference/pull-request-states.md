@@ -60,7 +60,7 @@ With the sidebar of changes hidden, the workspace's header shows the pull reques
 
 ## When it's read
 
-Roundhouse reads the pull request with `gh`, as the default GitHub account in [Settings](settings.md#git), or the machine's own login:
+Roundhouse reads the pull request from GitHub itself, as the default GitHub account in [Settings](settings.md#git), or with none, as the machine's own `gh` login:
 
 - Each time its workspace is shown, and every 30 seconds while it shows.
 - When a turn ends.
@@ -68,8 +68,8 @@ Roundhouse reads the pull request with `gh`, as the default GitHub account in [S
 - On its own, for every workspace, so each row in the sidebar is up to date.
 
 - **Each check counts once, as its latest run,** so a rerun that passed reads as passed.
-- **Reads nobody is waiting on stay within what GitHub can spare,** and leave the last fifth of its hourly limit to your agents.
-- **What was found is kept across restarts,** and `gh` failing, such as while offline, never takes away a pull request already found.
-- **A workspace's pull request is its branch's own:** one it pushed to, or one whose branch you checked out to work on. One from another computer's branch that only has the same name doesn't show. Once found, it stays the branch's, even after someone else pushes to it. Roundhouse keeps which it is as a setting of the branch in the repository's git config, `branch.<name>.roundhouse-pull-request`, which git renames and deletes with the branch.
+- **Reads nobody is waiting on stay within what GitHub can spare,** and leave the last fifth of its hourly limit to your agents. Every workspace's is read together, so many cost little.
+- **What was found is kept across restarts,** and GitHub failing, such as while offline, never takes away a pull request already found.
+- **A workspace's pull request is the one from the branch its branch is pushed to on GitHub.** Two workspaces on the same branch show the same one. A merged or closed one from an earlier branch that had the same name doesn't show, unless the workspace had it.
 
-Without `gh`, a GitHub login for it to use, or a GitHub remote, a pull request can't be read, and the bar offers to create one.
+Until the branch is pushed, with its upstream set to a branch of the same name, as `git push -u origin HEAD` does, or without a GitHub login to read it as, or a repository on github.com, there's no pull request to read, and the bar offers to create one.

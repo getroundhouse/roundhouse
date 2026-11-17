@@ -1,12 +1,12 @@
-//! Waits through the hub, as a worker asks for them, with a stand-in for the workspace's worker that reads its pull
-//! request as each test says.
+//! Waits through the hub, as a worker asks for them, with a stand-in for GitHub whose pull requests each test sets.
 
 use super::*;
+use crate::github::PullRequestState;
 pub(super) use crate::hub::tests::open;
-use crate::hub::tests::{hub_with_worktree, reading, says};
+use crate::hub::tests::{hub_on_github, hub_with_worktree, taking_worker};
 use crate::store::{Seen, SessionChange, StatusChange};
 use protocol::event::{AgentTask, EventBody, TaskKind};
-use protocol::model::{PrState, PullRequest, SessionStatus};
+use protocol::model::SessionStatus;
 use protocol::worker::{CancelWait, WorkerAsk, WorkerRequest, WorkerResponse};
 
 mod announced;

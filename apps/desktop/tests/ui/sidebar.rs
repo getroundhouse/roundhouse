@@ -11,8 +11,7 @@ use gpui_kit::{AppContext as _, ElementId, MouseButton, ScrollDelta, SharedStrin
 use protocol::model::{WorkspaceId, WorkspaceStatus};
 
 use crate::support::{
-    FakeHub, Held, MORE_THAN_FIT, Stack, Ui, home_row, open_on_the_world, pencil, pull_request, sidebar_row as row,
-    with_a_chat,
+    FakeHub, Held, MORE_THAN_FIT, Stack, Ui, home_row, open_on_the_world, pencil, sidebar_row as row, with_a_chat,
 };
 
 /// Off every row, for the pointer to wait on.
@@ -291,9 +290,7 @@ fn the_heading_adds_the_first_project_and_stays_to_add_another(cx: &mut TestAppC
 #[gpui_kit::test]
 fn nothing_else_is_archived_or_restored_while_a_workspace_is_being_archived(cx: &mut TestAppContext) {
     let stack = Stack::new();
-    // Merged, so the pull request's bar offers Archive too.
-    let gh = stack.start_hub_with_stand_in_gh();
-    gh.report(&pull_request("MERGED"));
+    let github = stack.start_hub_reading_stand_in_github();
     let mut ui = Ui::open_with_a_repository(cx, &stack);
     // Made before the script, so archiving it isn't held.
     let earlier = ui.new_workspace();
@@ -302,6 +299,10 @@ fn nothing_else_is_archived_or_restored_while_a_workspace_is_being_archived(cx: 
     let held = Held::archive(&stack);
     let other = ui.new_workspace();
     let id = ui.new_workspace();
+    // Merged, so the pull request's bar offers Archive too.
+    let (branch, at) = ui.push(&id);
+    github.pull_requests.set_at(7, hub::GithubPullRequestState::Merged, &branch, &at);
+    stack.client().workspace_pull_request(&id).unwrap();
     ui.wait("the pull request's Archive", |ui| ui.shows_label("pull-request-action", "Archive"));
 
     ui.press("secondary-shift-a");

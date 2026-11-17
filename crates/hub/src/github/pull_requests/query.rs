@@ -106,7 +106,7 @@ pub(super) fn query(asked: &[Asked<'_>]) -> String {
             )
         })
         .collect();
-    format!("query {{ {} rateLimit {{ cost limit remaining resetAt }} }}", repositories.join(" "))
+    format!("query {{ {} rateLimit {{ limit remaining resetAt }} }}", repositories.join(" "))
 }
 
 pub(super) fn quote(value: &str) -> String {

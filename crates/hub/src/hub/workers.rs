@@ -190,11 +190,6 @@ impl Hub {
         }
     }
 
-    /// Whether the workspace has a worker running, without keeping it for anything, as a read nobody asked for asks.
-    pub(super) fn has_worker(&self, workspace_id: &WorkspaceId) -> bool {
-        self.workers.lock().get(workspace_id).is_some_and(|link| link.is_open())
-    }
-
     /// Stops a worker that only reads nobody asked for have wanted, once none of them holds it, so a hub with many
     /// workspaces doesn't keep one running for each. Under its gate, so a worker wanted meanwhile starts once this one has gone, rather than
     /// finding its instance still taken.

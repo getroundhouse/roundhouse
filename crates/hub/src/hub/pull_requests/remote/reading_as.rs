@@ -2,15 +2,21 @@
 //! while each machine's own login is the default, the one the workspace's provider's `gh` handed the hub.
 
 use protocol::client::{ApiError, ErrorCode};
-use protocol::model::{GithubAccountId, GithubRepositoryName, GithubToken, ProviderName, RepoUrl, Workspace};
+use protocol::model::{
+    GithubAccountId, GithubRepositoryName, GithubToken, ProviderName, RepoUrl, Workspace, WorkspaceId,
+};
+use protocol::worker::RateLimit;
 use tracing::info;
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use super::{Arc, Hub};
+use crate::github::ASK_WITHIN;
 use crate::github_logins::DefaultCredential;
 use crate::hub::found_github_logins::FOUND_WITHIN;
-use crate::worker_link::WorkerLink;
+use crate::jobs::{self, Limits};
+use crate::worker_link::{STOP_GRACE, WorkerLink};
 
 /// Whose token a read goes as.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -19,6 +25,26 @@ pub(in crate::hub) enum ReadsAs {
     Account(GithubAccountId),
     /// The machine's own, of the provider's machines, while that's the default.
     MachineOwn(ProviderName),
+}
+
+/// Why there's no token of a machine's own `gh` to read with.
+#[derive(Debug)]
+pub(in crate::hub) enum NoToken {
+    /// None has been handed over yet, as when no worker could be had to ask, or the one asked hasn't answered in time,
+    /// which may pass.
+    NotYet(ApiError),
+    /// The worker asked said it has none, as a `gh` that isn't logged in does, which asking again won't change until
+    /// it's logged in.
+    NoLogin(ApiError),
+}
+
+impl NoToken {
+    /// What it says, for a read that takes either as one that may work later, as a wait's does.
+    pub(in crate::hub) fn into_error(self) -> ApiError {
+        match self {
+            Self::NotYet(error) | Self::NoLogin(error) => error,
+        }
+    }
 }
 
 impl std::fmt::Display for ReadsAs {
@@ -120,6 +146,47 @@ impl Hub {
         let ReadsAs::MachineOwn(provider) = reads_as else { return };
         self.found_tokens.forget(provider);
         self.github_logins_asked.forget(provider);
+    }
+
+    /// What GitHub said as it answered a read as `reads_as`: what's left of the token's limit, and whether it refused
+    /// the token, which a machine's own is forgotten for.
+    pub(in crate::hub) fn github_said(&self, reads_as: &ReadsAs, rate_limit: Option<RateLimit>, refused: bool) {
+        self.pull_requests.limits.said(reads_as, rate_limit);
+        if refused {
+            self.reading_token_refused(reads_as);
+        }
+    }
+
+    /// How long a read that makes `queries` has: the time the hub gives a call to GitHub for each, and for a machine's
+    /// own token, the time to start the workspace `id`'s worker and for it to hand that over. Then as long as a worker
+    /// that was started takes to stop.
+    pub(in crate::hub) async fn read_limits(&self, id: &WorkspaceId, queries: u32) -> Limits {
+        let provider = self.workspace(id).await.and_then(|workspace| self.provider(&workspace.provider));
+        let provider_takes = provider.map_or(Duration::ZERO, |provider| provider.starts_or_stops_within());
+        let starting = provider_takes.saturating_mul(2).saturating_add(self.timers.hello_within);
+        let work = ASK_WITHIN.saturating_mul(queries).saturating_add(starting).saturating_add(FOUND_WITHIN);
+        Limits { work, after: STOP_GRACE.saturating_add(provider_takes) }
+    }
+
+    /// The token of `provider`'s machines' own `gh`, for a read of the workspace `id`'s pull requests: the one handed
+    /// the hub, or else from the workspace's worker, started for it if it has none, and held until it has, as
+    /// [`Hub::machine_token`] asks for it. `took` is set once a worker is held, so the read lets go of it once it's
+    /// done.
+    pub(in crate::hub) async fn machine_token_for_read(
+        self: &Arc<Self>,
+        provider: &ProviderName,
+        id: &WorkspaceId,
+        took: &AtomicBool,
+    ) -> Result<GithubToken, NoToken> {
+        if let Ok(token) = self.token_of(&ReadsAs::MachineOwn(provider.clone()), Duration::ZERO).await {
+            return Ok(token);
+        }
+        let held = self.worker_to_read(id).await.map_err(NoToken::NotYet)?;
+        took.store(true, Ordering::Relaxed);
+        jobs::step("waiting for the worker to hand over its machine's gh token");
+        self.machine_token(provider, Some(held.link())).await.map_err(|error| {
+            if self.found_tokens.handed_none(provider) { NoToken::NoLogin(error) } else { NoToken::NotYet(error) }
+        })
     }
 
     /// Which repository on GitHub the workspace's is, as its record's address names it.

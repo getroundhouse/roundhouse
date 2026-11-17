@@ -1,17 +1,16 @@
 use super::super::Hub;
-use super::{budget, schedule};
+use super::schedule;
+use super::token_limits::TokenLimits;
+use crate::github::Leaving;
 use crate::jobs;
 use crate::store::now_ms;
-use crate::worker_link::WorkerLink;
-use budget::{Budget, calls_to_read};
 use parking_lot::Mutex;
 use protocol::client::{ApiError, ErrorCode, HubNotice};
 use protocol::model::{BranchName, PullRequest, PullRequestFound, Workspace, WorkspaceId};
-use protocol::worker;
-use protocol::worker::{GithubRateLimit, PullRequestReply};
 use schedule::{Schedule, Went};
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use std::time::Duration;
 use tokio::sync::{Mutex as AsyncMutex, OwnedMutexGuard};
 use tokio::time::Instant;
@@ -19,7 +18,7 @@ use tracing::debug;
 
 /// Who a read is for.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(super) enum Asked {
+pub(in crate::hub::pull_requests) enum Asked {
     /// Someone is waiting on it, so it goes at once: a client that asked, or an agent whose turn has ended, which may
     /// have committed, pushed or opened a pull request.
     Waiting,
@@ -30,8 +29,18 @@ pub(super) enum Asked {
     /// own `gh` and the other agents share. It's never answered with what was known before, which may be from before
     /// the agent pushed.
     Agent,
-    /// Nobody asked, and it's this workspace's turn, so it waits for the budget.
+    /// Nobody asked, and it's this workspace's turn, so it leaves the part of GitHub's limit kept for everything else.
     InTurn,
+}
+
+impl Asked {
+    /// What it leaves of GitHub's limit for its token.
+    pub(in crate::hub::pull_requests) fn leaving(self) -> Leaving {
+        match self {
+            Self::Waiting => Leaving::Nothing,
+            Self::Agent | Self::InTurn => Leaving::ForOthers,
+        }
+    }
 }
 
 /// Whether a read goes ahead whatever's known.
@@ -79,7 +88,8 @@ pub(in super::super) struct Reading {
     pub(super) gates: Mutex<HashMap<WorkspaceId, Arc<AsyncMutex<()>>>>,
     /// When each workspace's was last read since the hub started, and how long it goes before a read nobody asks for.
     pub(super) schedules: Mutex<HashMap<WorkspaceId, Schedule>>,
-    pub(super) budget: Mutex<Budget>,
+    /// What GitHub last said is left of its limit for each token the hub reads as.
+    pub(super) limits: TokenLimits,
     /// Held while an agent's read of pull requests from GitHub, and a wait it starts, go, so the wait is recorded
     /// before another of the workspace's agents' reads can judge it. Apart from [`Reading::gates`], since these need
     /// no worker, and so don't wait behind one stuck in `gh`.
@@ -90,11 +100,10 @@ pub(in super::super) struct Reading {
 
 impl Reading {
     pub(in super::super) fn new() -> Self {
-        let budget = Mutex::new(Budget::new(Instant::now()));
         Self {
             gates: Mutex::new(HashMap::new()),
             schedules: Mutex::new(HashMap::new()),
-            budget,
+            limits: TokenLimits::default(),
             agent_gates: Mutex::new(HashMap::new()),
             remote_read_at: Mutex::new(HashMap::new()),
             remote: Mutex::new(HashMap::new()),
@@ -134,20 +143,15 @@ impl Hub {
         self: &Arc<Self>,
         id: WorkspaceId,
     ) -> Result<Option<PullRequest>, ApiError> {
-        let worktree = self.ready_worktree(&id).await?;
-        let path = worktree.path().to_owned();
-        self.read_pull_request(&id, path, worktree.link(), Asked::Waiting, When::Always).await?.or_known()
+        self.read_pull_request(&id, Asked::Waiting, When::Always).await?.or_known()
     }
 
-    /// Reads it for an agent, through the worker of the agent that asked, as an [`Asked::Agent`] read, so it fails
-    /// rather than say what was known before.
+    /// Reads it for an agent, as an [`Asked::Agent`] read, so it fails rather than say what was known before.
     pub(crate) async fn pull_request_for_agent(
         self: &Arc<Self>,
         id: &WorkspaceId,
-        link: &WorkerLink,
     ) -> Result<Option<PullRequest>, ApiError> {
-        let path = self.ready_workspace(id).await?.path().to_owned();
-        self.read_pull_request(id, path, link, Asked::Agent, When::Always).await?.read()
+        self.read_pull_request(id, Asked::Agent, When::Always).await?.read()
     }
 
     /// Reads it for an agent starting a wait, as [`Hub::pull_request_for_agent`] does, and holds the workspace's next
@@ -155,10 +159,8 @@ impl Hub {
     pub(in super::super) async fn pull_request_to_wait_on(
         self: &Arc<Self>,
         id: &WorkspaceId,
-        link: &WorkerLink,
     ) -> Result<(Option<PullRequest>, ReadsHeld), ApiError> {
-        let path = self.ready_workspace(id).await?.path().to_owned();
-        let (answer, held) = self.read_holding(id, path, link, Asked::Agent, When::Always).await?;
+        let (answer, held) = self.read_holding(id, Asked::Agent, When::Always).await?;
         Ok((answer.read()?, held))
     }
 
@@ -166,28 +168,24 @@ impl Hub {
     pub(super) async fn read_pull_request(
         self: &Arc<Self>,
         id: &WorkspaceId,
-        path: String,
-        link: &WorkerLink,
         asked: Asked,
         when: When,
     ) -> Result<Answer, ApiError> {
-        Ok(self.read_holding(id, path, link, asked, when).await?.0)
+        Ok(self.read_holding(id, asked, when).await?.0)
     }
 
-    /// Reads it through the workspace's worker and records what it finds, one read at a time for each workspace, so an
-    /// older answer can't land after a newer one. A read asked for while another waited shares the answer of the one
-    /// that began after it was asked. One someone is waiting on spends its calls here, and one in turn already has.
+    /// Reads it from GitHub and records what it finds, one read at a time for each workspace, so an older answer can't
+    /// land after a newer one. A read asked for while another waited shares the answer of the one that began after it
+    /// was asked.
     ///
-    /// Says what was known when it can't read: when GitHub's limit can't spare the calls, or the worker can't say,
-    /// such as while GitHub can't be reached. Where it can't be read at all, such as without `gh`, what's known is
-    /// kept, and with nothing known it's recorded as none, so the app offers to create one rather than looking for
-    /// ever. A read that finds it judges the waits on it. Returns the workspace's reads held back, for whoever has more
-    /// to do before the next.
+    /// Says what was known when it can't read: when GitHub's limit for its token can't spare it, or GitHub can't be
+    /// reached. Where it can't be read at all, such as with no login to read it as, what's known is kept, and with
+    /// nothing known it's recorded as none, so the app offers to create one rather than looking for ever. A read that
+    /// finds it judges the waits on it. Returns the workspace's reads held back, for whoever has more to do before the
+    /// next.
     pub(super) async fn read_holding(
         self: &Arc<Self>,
         id: &WorkspaceId,
-        path: String,
-        link: &WorkerLink,
         asked: Asked,
         when: When,
     ) -> Result<(Answer, ReadsHeld), ApiError> {
@@ -212,21 +210,45 @@ impl Hub {
         if when == When::OnAnotherBranch && !workspace.pull_request_found_on_another_branch() {
             return Ok((Answer::Read(known.and_then(|found| found.pull_request)), held));
         }
-        if asked != Asked::InTurn && self.spend(link, &path, calls_to_read(known.as_ref()), asked).await.is_err() {
-            return Ok((Answer::Known(known, limit_used_up()), held));
-        }
         let read_at = Instant::now();
-        self.pull_requests.schedules.lock().insert(id.clone(), Schedule::starting(read_at));
-        jobs::step(format!("waiting for {link} to read the pull request"));
-        let read = ask(link, path).await;
+        // One whose branch needs nothing of GitHub, such as one pushed nowhere yet, needs no token.
+        let asking = self.asking(vec![workspace.clone()]).await;
+        let took_worker = AtomicBool::new(false);
+        let read = match self.reads_as(&workspace) {
+            _ if !asking.needs_github() => asking.settled(),
+            Err(e) => asking.failed(&super::polling::no_login(&e)),
+            Ok(reads_as) => {
+                if self.pull_requests.limits.allows(&reads_as, asked, now_ms()).is_err() {
+                    return Ok((Answer::Known(known, limit_used_up()), held));
+                }
+                match self.token_for_own_reads(&reads_as, id, &took_worker).await {
+                    Err(e) => asking.failed(&e),
+                    Ok(token) => {
+                        self.pull_requests.schedules.lock().insert(id.clone(), Schedule::starting(read_at));
+                        let read = self.read_own(&token, asking, asked).await;
+                        self.github_said(&reads_as, read.rate_limit, read.refused);
+                        read
+                    }
+                }
+            }
+        };
+        let read = read.found.into_iter().next().map_or_else(|| Err(couldnt_read()), |(_, found)| found);
         // However the job this is in goes on, so what's recorded and what's said of it agree.
-        let hub = self.clone();
-        jobs::uncut(async move { hub.take_answer(workspace, read, last, read_at, asked, held).await }).await
+        let (hub, took_worker) = (self.clone(), took_worker.into_inner());
+        jobs::uncut(async move {
+            let id = workspace.id.clone();
+            let answered = hub.clone().take_answer(workspace, read, last, read_at, asked, held).await;
+            if took_worker {
+                hub.let_go_after_read(&id).await;
+            }
+            answered
+        })
+        .await
     }
 
-    /// What a read does once the worker has answered: records what it found, schedules the next read, judges the
-    /// waits on it and says what changed.
-    async fn take_answer(
+    /// What a read does once GitHub has answered: records what it found, schedules the next read, judges the waits on
+    /// it and says what changed.
+    pub(super) async fn take_answer(
         self: Arc<Self>,
         workspace: Workspace,
         read: Result<Found, ApiError>,
@@ -282,58 +304,27 @@ impl Hub {
         Ok((Some(found), changed))
     }
 
-    /// Spends the calls a read takes from the budget, asking GitHub how much of its limit is left first when what it
-    /// last said is old, or else says when it's worth trying again.
-    pub(super) async fn spend(&self, link: &WorkerLink, path: &str, calls: u32, asked: Asked) -> Result<(), Instant> {
-        if self.pull_requests.budget.lock().needs_github(Instant::now()) {
-            jobs::step(format!("asking {link} how much of GitHub's limit is left"));
-            let reply = link.call(GithubRateLimit { path: path.to_string() }).await;
-            let mut budget = self.pull_requests.budget.lock();
-            match reply {
-                Ok(limit) => budget.github_said(limit, Instant::now(), now_ms()),
-                Err(_) => budget.github_unknown(Instant::now()),
-            }
-        }
-        self.pull_requests.budget.lock().take(calls, asked, Instant::now())
-    }
-
     /// For a workspace just made, whose branch was only now taken from its base, so there's no pull request to find
     /// until an agent's turn makes one, and the turn's end reads it. Until then it waits its turn with the rest.
     pub(in super::super) fn nothing_to_read_yet(&self, id: &WorkspaceId) {
         self.pull_requests.schedules.lock().insert(id.clone(), Schedule::starting(Instant::now()));
     }
 
-    /// After an agent's turn. Only through the worker that's running, as the agent's is, so this never starts one.
+    /// After an agent's turn, which may have committed, pushed or opened a pull request.
     pub(crate) fn read_pull_request_after_turn(self: &Arc<Self>, id: &WorkspaceId) {
-        if let Some(link) = self.existing_worker(id) {
-            self.read_pull_request_through(id, link, Asked::Waiting, When::Always);
-        }
+        self.read_pull_request_soon(id, Asked::Waiting, When::Always);
     }
 
-    /// After the worktree checked out another branch or pushed the one it's on, through the worker that saw it, as
-    /// [`Asked::Agent`] says.
-    pub(in super::super) fn read_pull_request_after_move(
-        self: &Arc<Self>,
-        id: &WorkspaceId,
-        link: Arc<WorkerLink>,
-        when: When,
-    ) {
-        self.read_pull_request_through(id, link, Asked::Agent, when);
+    /// After the worktree checked out another branch or pushed the one it's on, as [`Asked::Agent`] says.
+    pub(in super::super) fn read_pull_request_after_move(self: &Arc<Self>, id: &WorkspaceId, when: When) {
+        self.read_pull_request_soon(id, Asked::Agent, when);
     }
 
-    /// For something that may have changed it, through the worker it happened in.
-    pub(super) fn read_pull_request_through(
-        self: &Arc<Self>,
-        id: &WorkspaceId,
-        link: Arc<WorkerLink>,
-        asked: Asked,
-        when: When,
-    ) {
+    /// For something that may have changed it, on its own, so whatever saw it doesn't wait on GitHub.
+    fn read_pull_request_soon(self: &Arc<Self>, id: &WorkspaceId, asked: Asked, when: When) {
         let (hub, id) = (self.clone(), id.clone());
         tokio::spawn(async move {
-            let Ok(ready) = hub.ready_workspace(&id).await else { return };
-            let path = ready.path().to_owned();
-            let read = hub.read_pull_request(&id, path, &link, asked, when).await;
+            let read = hub.read_pull_request(&id, asked, when).await;
             if let Err(e) = read.and_then(Answer::or_known) {
                 debug!(%id, "reading the pull request as it may have changed: {}", e.message);
             }
@@ -348,15 +339,10 @@ pub(super) struct Found {
     pub(super) on: Option<BranchName>,
 }
 
-async fn ask(link: &WorkerLink, path: String) -> Result<Found, ApiError> {
-    let PullRequestReply { pull_request, branch } = link.call(worker::PullRequest { path }).await?;
-    Ok(Found { found: PullRequestFound { pull_request }, on: branch })
-}
-
 fn limit_used_up() -> ApiError {
     ApiError::new(ErrorCode::Unavailable, "GitHub's hourly limit is used up, so it can't be read until it resets")
 }
 
-fn couldnt_read() -> ApiError {
+pub(super) fn couldnt_read() -> ApiError {
     ApiError::new(ErrorCode::Worker, "the pull request couldn't be read")
 }

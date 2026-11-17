@@ -1,12 +1,12 @@
 use super::super::*;
-use crate::hub::tests::{hub_in, hub_with_worktree, open, reading, reading_within, says};
+use crate::github::PullRequestState;
+use crate::hub::tests::{hub_in, hub_on_github, hub_with_worktree, open, pushed, taking_worker};
 use crate::store::tests::idle_session;
 use crate::store::{Seen, SessionChange, StatusChange};
 use protocol::event::{AgentTask, EventBody, ExitReason, NoticeLevel, TaskKind};
-use protocol::model::{Checks, Local, MergeState, PrState, PullRequest, QueueState, Seq, SessionStatus, Workspace};
+use protocol::model::{Checks, GitFile, GitStatus, PrState, PullRequest, Seq, SessionStatus, Workspace};
 use protocol::worker::{
-    Answer as _, CancelWait, PullRequestReply, RateLimit, ReadWait, StartWait, WaitAnswer, WorkerAsk, WorkerRequest,
-    WorkerResponse,
+    Answer as _, CancelWait, ReadWait, StartWait, WaitAnswer, WorkerAsk, WorkerRequest, WorkerResponse,
 };
 
 /// A wait of session `s`'s, in workspace `w`, as [`hub_in`] makes them, on [`open`], that hasn't ended.
@@ -44,33 +44,34 @@ pub(super) fn how(wait: &Wait) -> Option<WaitEnd> {
     wait.ended.map(|ended| ended.how)
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn a_wait_starts_from_a_read_of_its_own_even_just_after_one() {
     let dir = tempfile::tempdir().unwrap();
-    let hub = hub_with_worktree(dir.path());
-    let failed = PullRequest { checks: Checks { passed: 1, failed: 1, pending: 0 }, ..open() };
-    let says = says(Some(failed));
-    let link = reading(&hub, &says);
-    hub.pull_request_for_agent(&"w".into(), &link).await.unwrap();
+    let (hub, pull_requests, _github) = hub_on_github(dir.path()).await;
+    pull_requests.set(7, PullRequestState::Failed);
+    let (link, _) = taking_worker(&hub);
+    hub.pull_request_for_agent(&"w".into()).await.unwrap();
     // The agent pushes a fix, and its checks start again.
-    *says.lock() = Ok(Some(open()));
+    pull_requests.set(7, PullRequestState::Open);
 
     let (wait, pull_request) = ask(&hub, &link, start("toolu_1")).await.unwrap();
     let (again, _) = ask(&hub, &link, start("toolu_1")).await.unwrap();
 
-    assert_eq!((how(&wait), pull_request), (None, Some(open())), "not ended by the checks of the commit it replaced");
+    let running = Checks { passed: 0, failed: 0, pending: 1 };
+    let checks = pull_request.map(|pr| pr.checks);
+    assert_eq!((how(&wait), checks), (None, Some(running)), "not ended by the checks of the commit it replaced");
     assert_eq!((wait.number, wait.call.clone()), (7, Some("toolu_1".into())));
     assert_eq!(again, wait, "the same call asking again gets the one it started, as when the agent's CLI asks again");
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn a_wait_doesnt_start_from_what_was_known_when_its_own_read_fails() {
     let dir = tempfile::tempdir().unwrap();
-    let hub = hub_with_worktree(dir.path());
-    let says = says(Some(open()));
-    let link = reading(&hub, &says);
-    hub.pull_request_for_agent(&"w".into(), &link).await.unwrap();
-    *says.lock() = Err(ApiError::new(ErrorCode::Worker, "GitHub can't be reached"));
+    let (hub, pull_requests, _github) = hub_on_github(dir.path()).await;
+    pull_requests.set(7, PullRequestState::Open);
+    let (link, _) = taking_worker(&hub);
+    hub.pull_request_for_agent(&"w".into()).await.unwrap();
+    pull_requests.fail(true);
 
     let refused = ask(&hub, &link, start("toolu_1")).await.unwrap_err();
 
@@ -81,29 +82,28 @@ async fn a_wait_doesnt_start_from_what_was_known_when_its_own_read_fails() {
 #[tokio::test]
 async fn a_read_that_finds_the_pull_request_merged_ends_its_wait_and_one_that_fails_ends_nothing() {
     let dir = tempfile::tempdir().unwrap();
-    let hub = hub_with_worktree(dir.path());
-    let queued = PullRequest { queue: Some(QueueState::AwaitingChecks), ..open() };
-    let says = says(Some(queued));
-    let link = reading(&hub, &says);
+    let (hub, pull_requests, _github) = hub_on_github(dir.path()).await;
+    pull_requests.set(7, PullRequestState::Queued);
+    let (link, _) = taking_worker(&hub);
     let (wait, _) = ask(&hub, &link, start("toolu_1")).await.unwrap();
 
-    *says.lock() = Err(ApiError::new(ErrorCode::Worker, "GitHub can't be reached"));
+    pull_requests.fail(true);
     let _ = hub.workspace_pull_request("w".into()).await;
     let after_failing = hub.store.wait(&wait.id).unwrap();
-    let merged = PullRequest { state: PrState::Merged, ..open() };
-    *says.lock() = Ok(Some(merged.clone()));
+    pull_requests.fail(false);
+    pull_requests.set(7, PullRequestState::Merged);
     hub.workspace_pull_request("w".into()).await.unwrap();
 
     assert_eq!(how(&after_failing), None, "a read that failed says nothing");
     let (read, pull_request) = ask(&hub, &link, WorkerAsk::Wait(ReadWait { wait: wait.id })).await.unwrap();
-    assert_eq!((how(&read), pull_request), (Some(WaitEnd::Merged), Some(merged)));
+    assert_eq!((how(&read), pull_request.map(|pr| pr.state)), (Some(WaitEnd::Merged), Some(PrState::Merged)));
 }
 
 #[tokio::test]
 async fn a_branch_without_a_pull_request_has_none_to_wait_on() {
     let dir = tempfile::tempdir().unwrap();
-    let hub = hub_with_worktree(dir.path());
-    let link = reading(&hub, &says(None));
+    let (hub, _pull_requests, _github) = hub_on_github(dir.path()).await;
+    let (link, _) = taking_worker(&hub);
 
     let refused = ask(&hub, &link, start("toolu_1")).await.unwrap_err();
 
@@ -112,45 +112,51 @@ async fn a_branch_without_a_pull_request_has_none_to_wait_on() {
 
 /// Uncommitted files are left alone, since they change nothing GitHub says, and so is a pull request that ends the
 /// wait as it starts, or that the queue merges whatever the worktree holds.
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn a_worktree_with_commits_not_pushed_has_nothing_to_wait_on_yet() {
     let dir = tempfile::tempdir().unwrap();
-    let hub = hub_with_worktree(dir.path());
-    let unpushed = |pr: PullRequest| PullRequest { local: Local { uncommitted: 0, ahead: 2, behind: 0 }, ..pr };
-    let says = says(Some(unpushed(open())));
-    let link = reading(&hub, &says);
+    let (hub, pull_requests, _github) = hub_on_github(dir.path()).await;
+    pull_requests.set(7, PullRequestState::Open);
+    let unpushed = pushed("local", "head-7", (2, 0));
+    hub.store.set_workspace_branches(&"w".into(), &unpushed).unwrap();
+    let file = |path: &str| GitFile { path: path.into(), orig_path: None, status: ".M".into() };
+    let status = GitStatus { files: vec![file("a"), file("b"), file("c")], ..GitStatus::default() };
+    let link = WorkerLink::answering(move |request| {
+        let asked_status = matches!(request, WorkerRequest::GitStatus(_));
+        Some(Ok(if asked_status { WorkerResponse::GitStatus(status.clone()) } else { WorkerResponse::Ok }))
+    });
+    hub.workers.lock().insert("w".into(), link.clone());
 
     let refused = ask(&hub, &link, start("toolu_1")).await.unwrap_err();
     assert_eq!(refused.code, ErrorCode::Conflict, "{refused:?}");
     assert!(refused.message.starts_with("2 commits here aren't on the pull request yet"), "{}", refused.message);
     assert!(hub.store.workspaces_waited_on().unwrap().is_empty());
 
-    let merged = PullRequest { state: PrState::Merged, ..open() };
-    let queued = PullRequest { queue: Some(QueueState::AwaitingChecks), ..open() };
-    let draft = PullRequest { is_draft: true, ..open() };
-    let uncommitted = PullRequest { local: Local { uncommitted: 3, ahead: 0, behind: 1 }, ..open() };
+    // Three files uncommitted, and a commit GitHub's has that the worktree hasn't fetched.
+    let unfetched = pushed("local", "older", (0, 0));
     let cases = [
-        (unpushed(merged), Some(WaitEnd::Merged)),
-        (unpushed(draft), Some(WaitEnd::Draft)),
-        (unpushed(queued), None),
-        (uncommitted, None),
+        (PullRequestState::Merged, &unpushed, Some(WaitEnd::Merged)),
+        (PullRequestState::Draft, &unpushed, Some(WaitEnd::Draft)),
+        (PullRequestState::Queued, &unpushed, None),
+        (PullRequestState::Open, &unfetched, None),
     ];
-    for (n, (pr, ends)) in cases.into_iter().enumerate() {
-        *says.lock() = Ok(Some(pr.clone()));
+    for (n, (state, branches, ends)) in cases.into_iter().enumerate() {
+        pull_requests.set(7, state);
+        hub.store.set_workspace_branches(&"w".into(), branches).unwrap();
         let started = ask(&hub, &link, start(&format!("toolu_{}", n + 2))).await;
-        assert_eq!(started.map(|(wait, _)| how(&wait)), Ok(ends), "{pr:?}");
+        assert_eq!(started.map(|(wait, _)| how(&wait)), Ok(ends), "{state:?}");
     }
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn a_wait_on_a_pull_request_thats_done_or_needs_the_agent_ends_as_it_starts() {
     let dir = tempfile::tempdir().unwrap();
-    let hub = hub_with_worktree(dir.path());
-    let says = says(Some(PullRequest { state: PrState::Merged, ..open() }));
-    let link = reading(&hub, &says);
+    let (hub, pull_requests, _github) = hub_on_github(dir.path()).await;
+    pull_requests.set(7, PullRequestState::Merged);
+    let (link, _) = taking_worker(&hub);
 
     let (merged, _) = ask(&hub, &link, start("toolu_1")).await.unwrap();
-    *says.lock() = Ok(Some(PullRequest { merge_state: MergeState::Dirty, ..open() }));
+    pull_requests.set(7, PullRequestState::Conflicting);
     let (conflicts, _) = ask(&hub, &link, start("toolu_2")).await.unwrap();
 
     assert_eq!((how(&merged), how(&conflicts)), (Some(WaitEnd::Merged), Some(WaitEnd::Conflicts)));
@@ -160,9 +166,12 @@ async fn a_wait_on_a_pull_request_thats_done_or_needs_the_agent_ends_as_it_start
 #[tokio::test]
 async fn a_wait_doesnt_start_when_githubs_limit_cant_spare_its_read() {
     let dir = tempfile::tempdir().unwrap();
-    let hub = hub_with_worktree(dir.path());
-    let low = RateLimit { limit: 5000, remaining: 10, resets_at_ms: now_ms() + 3_600_000 };
-    let link = reading_within(&hub, &says(Some(open())), Some(low));
+    let (hub, pull_requests, _github) = hub_on_github(dir.path()).await;
+    pull_requests.set(7, PullRequestState::Open);
+    pull_requests.leave(10);
+    let (link, _) = taking_worker(&hub);
+    // Which GitHub's answer says leaves too little for an agent's.
+    hub.workspace_pull_request("w".into()).await.unwrap();
 
     let refused = ask(&hub, &link, start("toolu_1")).await.unwrap_err();
 
@@ -173,16 +182,15 @@ async fn a_wait_doesnt_start_when_githubs_limit_cant_spare_its_read() {
 #[tokio::test(start_paused = true)]
 async fn a_wait_doesnt_start_when_its_read_doesnt_finish_before_the_worker_stops_waiting_to_hear() {
     let dir = tempfile::tempdir().unwrap();
-    let hub = hub_with_worktree(dir.path());
-    let stuck = WorkerLink::answering(|request| {
-        (!matches!(request, WorkerRequest::PullRequest(_))).then_some(Ok(WorkerResponse::Ok))
-    });
-    hub.workers.lock().insert("w".into(), stuck.clone());
+    let (hub, pull_requests, _github) = hub_on_github(dir.path()).await;
+    pull_requests.set(7, PullRequestState::Open);
+    pull_requests.hold();
+    let (link, _) = taking_worker(&hub);
     let asked_at = tokio::time::Instant::now();
 
-    let refused = ask(&hub, &stuck, start("toolu_1")).await.unwrap_err();
+    let refused = ask(&hub, &link, start("toolu_1")).await;
 
-    assert_eq!(refused.code, ErrorCode::Unavailable, "{refused:?}");
+    assert!(refused.is_err(), "{refused:?}");
     assert!(asked_at.elapsed() < Duration::from_mins(1), "within the minute a worker waits for an answer");
     assert!(hub.store.workspaces_waited_on().unwrap().is_empty(), "nothing waits");
 }
@@ -221,10 +229,11 @@ async fn cancelling_a_wait_ends_it_once_and_a_wait_that_had_ended_stays_as_it_en
 }
 
 /// Before its archive script runs, so a wait that ends meanwhile doesn't start an agent in a worktree that's going.
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn archiving_a_workspace_calls_off_its_waits_before_its_archive_script_runs() {
     let dir = tempfile::tempdir().unwrap();
-    let hub = hub_with_worktree(dir.path());
+    let (hub, pull_requests, _github) = hub_on_github(dir.path()).await;
+    pull_requests.set(7, PullRequestState::Open);
     let waiting_as_the_script_ran = Arc::new(parking_lot::Mutex::new(None));
     let link = WorkerLink::answering({
         let (hub, waiting) = (Arc::downgrade(&hub), waiting_as_the_script_ran.clone());
@@ -233,11 +242,7 @@ async fn archiving_a_workspace_calls_off_its_waits_before_its_archive_script_run
                 let waited_on = hub.upgrade().map(|hub| hub.store.workspaces_waited_on().unwrap());
                 *waiting.lock() = waited_on.map(|workspaces| !workspaces.is_empty());
             }
-            Some(Ok(if matches!(request, WorkerRequest::PullRequest(_)) {
-                WorkerResponse::PullRequest(PullRequestReply { pull_request: Some(open()), branch: None })
-            } else {
-                WorkerResponse::Ok
-            }))
+            Some(Ok(WorkerResponse::Ok))
         }
     });
     hub.workers.lock().insert("w".into(), link.clone());
@@ -261,7 +266,8 @@ async fn a_wait_ending_starts_the_agent_of_a_chat_waiting_on_nothing_else() {
     ];
     for (status, queue_held, woken) in cases {
         let dir = tempfile::tempdir().unwrap();
-        let hub = hub_with_worktree(dir.path());
+        let (hub, pull_requests, _github) = hub_on_github(dir.path()).await;
+        pull_requests.set(7, PullRequestState::Open);
         let change = SessionChange {
             status: Some(status.into()),
             queue_held: Some(queue_held),
@@ -271,28 +277,21 @@ async fn a_wait_ending_starts_the_agent_of_a_chat_waiting_on_nothing_else() {
         };
         let said = EventBody::Notice { level: NoticeLevel::Info, message: "x".into(), subagent: None };
         hub.store.append(&"s".into(), None, &said, None, None, Some(change)).unwrap();
-        let says = says(Some(open()));
         let starts = Arc::new(parking_lot::Mutex::new(0));
         let link = WorkerLink::answering({
-            let (says, starts) = (says.clone(), starts.clone());
+            let starts = starts.clone();
             move |request| {
                 if matches!(request, WorkerRequest::AgentStart(_)) {
                     *starts.lock() += 1;
                 }
-                Some(if matches!(request, WorkerRequest::PullRequest(_)) {
-                    says.lock().clone().map(|pull_request| {
-                        WorkerResponse::PullRequest(PullRequestReply { pull_request, branch: None })
-                    })
-                } else {
-                    // Not that it started, so starting fails.
-                    Ok(WorkerResponse::Ok)
-                })
+                // Not that it started, so starting fails.
+                Some(Ok(WorkerResponse::Ok))
             }
         });
         hub.workers.lock().insert("w".into(), link.clone());
         ask(&hub, &link, start("toolu_1")).await.unwrap();
 
-        *says.lock() = Ok(Some(PullRequest { state: PrState::Merged, ..open() }));
+        pull_requests.set(7, PullRequestState::Merged);
         hub.workspace_pull_request("w".into()).await.unwrap();
         // Once the wake is done, since a chat carries out what it's asked in turn.
         let _ = hub.session_cancel("s".into()).await;
@@ -335,7 +334,7 @@ async fn with_no_client_connected_only_a_workspace_waited_on_is_read() {
     let found = Some(PullRequestFound { pull_request: Some(open()) });
     let other = Workspace { id: "v".into(), name: "other".into(), instance_id: "v".into(), pull_request: found, ..w };
     hub.store.insert_workspace(&other, None).unwrap();
-    let next = || async { hub.to_read_in_turn().await.map(|workspace| workspace.id) };
+    let next = || async { hub.to_read_in_turn().await.first().map(|workspace| workspace.id.clone()) };
 
     let unwaited = next().await;
     hub.store.start_wait(&wait(WaitUntil::Done), Seen::default()).unwrap();

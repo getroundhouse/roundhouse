@@ -3,8 +3,9 @@
 
 use super::WorkspaceId;
 use super::{ApiError, Arc, Asked, ErrorCode, Hub, Instant, PullRequestSelection, PullRequestsSnapshot, ReadsHeld};
-use crate::github::{PullRequestsAsk, PullRequestsRead};
+use crate::github::PullRequestsAsk;
 use crate::jobs;
+use crate::store::now_ms;
 
 impl Hub {
     /// Reads `selection` of the workspace's repository on GitHub, and those open under them in their stacks, for an
@@ -23,27 +24,20 @@ impl Hub {
         let workspace = self.workspace(id).await?;
         let repository = self.on_github(&workspace).await?;
         let (reads_as, token) = self.reading_as(&workspace).await?;
-        self.pull_requests.budget.lock().take(1, Asked::Agent, Instant::now()).map_err(|_| {
-            ApiError::new(ErrorCode::Worker, "GitHub's limit for reading pull requests is used up until it resets")
+        self.pull_requests.limits.allows(&reads_as, Asked::Agent, now_ms()).map_err(|_| {
+            ApiError::new(
+                ErrorCode::Worker,
+                "GitHub's limit for reading pull requests is nearly used up until it resets",
+            )
         })?;
         jobs::step("waiting for GitHub to answer for the pull requests");
-        let read = self.github.read_pull_requests(&token, vec![PullRequestsAsk { repository, selection }]).await;
-        self.spent_reading(&read, 1);
-        if read.refused {
-            self.reading_token_refused(&reads_as);
-        }
+        let read = self
+            .github
+            .read_pull_requests(&token, vec![PullRequestsAsk { repository, selection }], Asked::Agent.leaving())
+            .await;
+        self.github_said(&reads_as, read.rate_limit, read.refused);
         let answer = read.answers.into_iter().next().ok_or_else(|| ApiError::new(ErrorCode::Worker, "no answer"))?;
         let snapshot = answer.map_err(|unread| unread.error)?;
         Ok((snapshot, held))
-    }
-
-    /// Counts what `read` spent against GitHub's limit, beyond the `taken` taken before it, with what GitHub said is
-    /// left.
-    pub(super) fn spent_reading(&self, read: &PullRequestsRead, taken: u32) {
-        let mut budget = self.pull_requests.budget.lock();
-        budget.spent(read.cost.saturating_sub(taken), Instant::now());
-        if let Some(limit) = read.rate_limit {
-            budget.github_said(limit, Instant::now(), crate::store::now_ms());
-        }
     }
 }

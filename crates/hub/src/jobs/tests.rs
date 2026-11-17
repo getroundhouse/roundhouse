@@ -7,7 +7,7 @@ use tokio::sync::mpsc;
 use super::*;
 
 const LIMITS: Limits = Limits { work: Duration::from_secs(60), after: Duration::from_secs(10) };
-const KIND: JobKind = JobKind::ReadPullRequestInTurn;
+const KIND: JobKind = JobKind::ReadOwnPullRequests;
 
 /// Sets its flag once it's dropped, as a job's work is when it's stopped.
 struct Dropped(Arc<AtomicBool>);
@@ -117,28 +117,26 @@ async fn what_a_job_runs_uncut_goes_on_to_its_end_and_its_after_step_runs_after_
 async fn a_job_about_a_busy_key_or_past_what_its_kind_may_run_at_once_isnt_started() {
     let jobs = Jobs::new();
     let (ends, mut ended) = mpsc::unbounded_channel();
-    let (finish, finished) = tokio::sync::oneshot::channel::<()>();
-    jobs.start(
-        KIND,
-        "w",
-        LIMITS,
-        async move {
-            let _ = finished.await;
-        },
-        telling(&ends),
-    )
-    .unwrap();
+    let (finish, _) = tokio::sync::broadcast::channel::<()>(1);
+    // As many as the kind may run at once, the first about `w`.
+    let keys: Vec<String> = (0..KIND.at_once()).map(|n| if n == 0 { "w".into() } else { format!("k{n}") }).collect();
+    for key in &keys {
+        let mut finished = finish.subscribe();
+        jobs.start(KIND, key.clone(), LIMITS, async move { drop(finished.recv().await) }, telling(&ends)).unwrap();
+    }
 
-    let same_key = jobs.start(JobKind::ReadWaitedPullRequests, "w", LIMITS, async {}, telling(&ends));
-    let same_kind = jobs.start(KIND, "v", LIMITS, async {}, telling(&ends));
-    let other_kind = jobs.start(JobKind::ReadWaitedPullRequests, "v", LIMITS, async {}, telling(&ends));
+    let same_key = jobs.start(JobKind::ReadWaitedPullRequests, "w".into(), LIMITS, async {}, telling(&ends));
+    let same_kind = jobs.start(KIND, "v".into(), LIMITS, async {}, telling(&ends));
+    let other_kind = jobs.start(JobKind::ReadWaitedPullRequests, "v".into(), LIMITS, async {}, telling(&ends));
 
     assert_eq!(same_key, Err(NotStarted::KeyBusy));
     assert_eq!(same_kind, Err(NotStarted::KindBusy));
     assert_eq!(other_kind, Ok(()));
     finish.send(()).unwrap();
-    assert_eq!([next(&mut ended).await, next(&mut ended).await], [Ended::Finished, Ended::Finished]);
-    until(|| !jobs.busy().contains(&"w")).await;
+    for _ in 0..=keys.len() {
+        assert_eq!(next(&mut ended).await, Ended::Finished);
+    }
+    until(|| !jobs.busy().contains(&"w".to_string())).await;
     assert!(jobs.has_room(KIND));
 }
 

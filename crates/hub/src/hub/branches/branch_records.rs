@@ -65,7 +65,7 @@ impl Hub {
         let current = || link.is_current(&self.workers.lock(), id);
         if let WorkerFrame::Branches { branches } = frame {
             if current() {
-                self.branches_read(id, link, branches).await;
+                self.branches_read(id, branches).await;
             }
             return None;
         }
@@ -88,7 +88,7 @@ impl Hub {
     }
 
     /// What the workspace's worker read of its own worktree's branches.
-    pub(super) async fn branches_read(self: &Arc<Self>, id: &WorkspaceId, link: &Arc<WorkerLink>, branches: Branches) {
+    pub(super) async fn branches_read(self: &Arc<Self>, id: &WorkspaceId, branches: Branches) {
         let (owned, after) = (id.clone(), branches.clone());
         let (before, workspace) = match self.blocking(move |store| store.set_workspace_branches(&owned, &after)).await {
             Ok(BranchesSet { before, workspace: Some(workspace) }) => (before, workspace),
@@ -102,8 +102,8 @@ impl Hub {
         // With nothing recorded before, there's nothing to say what moved. A pull request found on another branch is
         // read in turn even so, merged or not.
         match before.and_then(|before| moved(&before, &branches)) {
-            Some(Moved::Switched) => self.read_pull_request_after_move(id, link.clone(), When::OnAnotherBranch),
-            Some(Moved::Pushed) => self.read_pull_request_after_move(id, link.clone(), When::Always),
+            Some(Moved::Switched) => self.read_pull_request_after_move(id, When::OnAnotherBranch),
+            Some(Moved::Pushed) => self.read_pull_request_after_move(id, When::Always),
             None => {}
         }
     }

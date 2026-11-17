@@ -74,7 +74,7 @@ impl Hub {
         }
         match ask {
             WorkerAsk::PullRequest => {
-                let pull_request = self.pull_request_for_agent(workspace_id, link).await?;
+                let pull_request = self.pull_request_for_agent(workspace_id).await?;
                 Ok(AskReply::PullRequest(PullRequestAnswer { pull_request }))
             }
             WorkerAsk::PullRequests(asked) => {
@@ -84,7 +84,7 @@ impl Hub {
                 self.start_remote_wait(workspace_id, session_id, asked).await.map(AskReply::Wait)
             }
             WorkerAsk::StartWait(StartWait { until, call }) => {
-                self.start_wait(workspace_id, link, session_id, until, call).await.map(AskReply::Wait)
+                self.start_wait(workspace_id, session_id, until, call).await.map(AskReply::Wait)
             }
             WorkerAsk::Wait(ReadWait { wait }) => self.wait_of(&session_id, wait).await.map(AskReply::Wait),
             WorkerAsk::CancelWait(CancelWait { wait }) => self.cancel_wait(&session_id, wait).await.map(AskReply::Wait),
