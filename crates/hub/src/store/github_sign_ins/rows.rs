@@ -1,5 +1,7 @@
 use super::super::github_accounts::{connect_login, signed_in_as};
-use super::super::{GithubConnected, GithubConnecting, Store, StoreError, current_rev, json_at, lock, rev_of};
+use super::super::{
+    GithubConnected, GithubConnecting, GithubProfile, Store, StoreError, current_rev, json_at, lock, rev_of,
+};
 use crate::login_files::LoginFile;
 use protocol::model::{
     GithubAccountId, GithubLoginKind, GithubSignIn, GithubSignInId, GithubSignInStatus, GithubUser, Rev,
@@ -24,8 +26,9 @@ pub(crate) struct StartedSignIn {
 #[derive(Clone, Copy)]
 pub(crate) struct GithubApproving<'a> {
     pub(crate) sign_in: &'a GithubSignInId,
-    /// Whose GitHub says its token is.
+    /// Whose GitHub says its token is, and what GitHub's profile of that user said then.
     pub(crate) user: &'a GithubUser,
+    pub(crate) profile: &'a GithubProfile,
     pub(crate) file: &'a LoginFile,
     /// The ID of the account it makes, when the hub holds no sign-in as `user`.
     pub(crate) new_account: &'a GithubAccountId,
@@ -113,7 +116,7 @@ impl Store {
     /// the one it held, or else a new account hold it, as connecting a token does, and records the sign-in as approved
     /// as that account, in one transaction. Its commit is on disk before this returns, as connecting a token's is.
     pub(crate) fn approve_github_sign_in(&self, approving: &GithubApproving<'_>) -> Result<GithubApproved, StoreError> {
-        let GithubApproving { sign_in, user, file, new_account, signed_in_at_ms, ends_at_ms } = *approving;
+        let GithubApproving { sign_in, user, profile, file, new_account, signed_in_at_ms, ends_at_ms } = *approving;
         self.lasting(|tx| {
             let account = signed_in_as(tx, user)?.unwrap_or_else(|| new_account.clone());
             let how = GithubLoginKind::SignIn;
@@ -126,6 +129,7 @@ impl Store {
                 connected_at_ms,
                 ends_at_ms,
                 installation: None,
+                profile: Some(profile),
             };
             let connected = connect_login(tx, &connecting)?;
             let approved = GithubSignInStatus::Approved { account };

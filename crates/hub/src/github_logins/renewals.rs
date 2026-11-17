@@ -8,7 +8,7 @@ use protocol::client::ApiError;
 use protocol::model::{GithubAccount, GithubAccountId, GithubAppId};
 use tracing::{error, info, warn};
 
-use super::{GithubAccountChange, GithubLogin, GithubLogins, MintDue, SignedIn};
+use super::{GithubAccountChange, GithubLogin, GithubLogins, MintDue, ProfileDue, SignedIn};
 use crate::error::internal;
 use crate::github::{GithubRefreshToken, Renewal};
 use crate::login_files::{Locked, LoginFile, Stored};
@@ -39,6 +39,8 @@ pub(crate) struct Checked {
     pub(crate) minting: Vec<MintDue>,
     /// Each app of your own, to look for where it's installed.
     pub(crate) apps: Vec<GithubAppId>,
+    /// Each token's or sign-in's account to ask GitHub who it is again, for its commit identity.
+    pub(crate) profiles: Vec<ProfileDue>,
 }
 
 impl GithubLogins {
@@ -48,8 +50,8 @@ impl GithubLogins {
     /// it's the default. Then what workers are sent is worked out again, since the default's token may have ended
     /// since, and the rest of those due are answered with, to renew. One that needs signing in again already isn't
     /// due, and nor is one whose file holds what this build can't renew, which blocks as it is. Each installation of an
-    /// app of your own whose token is due to be made again is answered with too, and each app, to look for where it's
-    /// installed.
+    /// app of your own whose token is due to be made again is answered with too, each app, to look for where it's
+    /// installed, and each account due to be asked who it is again, as [`GithubLogins::profiles_due`] says.
     pub(crate) fn check(&self, now_ms: i64) -> Result<Checked, ApiError> {
         self.changing(now_ms, |files| {
             let renewed_before = later_ms(now_ms, RENEWED_WITH_LEFT);
@@ -71,6 +73,7 @@ impl GithubLogins {
             }
             checked.minting = self.installations_due(files, now_ms)?;
             checked.apps = self.store.github_app_keys()?.into_iter().map(|(app, _)| app).collect();
+            checked.profiles = self.profiles_due(files, &checked.due, now_ms)?;
             Ok(checked)
         })
     }

@@ -356,4 +356,7 @@ pub(in super::super) const MIGRATIONS: &[&str] = &[
     github_accounts::GITHUB_APPS,
     // Whether the default GitHub account can push to each repository, in `github_accounts`.
     github_accounts::GITHUB_REACH,
+    // What GitHub's profile of each GitHub account's user says, which its commit identity is made from, in
+    // `github_accounts`.
+    github_accounts::GITHUB_PROFILES,
 ];

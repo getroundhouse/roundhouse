@@ -1,12 +1,15 @@
-//! Databases as an older build left them, for the tests of what migrating keeps.
+//! Databases as an older build left them, for the tests of what migrating keeps, and of what the hub does with what an
+//! older build kept.
 
 use std::path::Path;
 
 use super::{Store, schema};
 
+pub(crate) use schema::BEFORE_GITHUB_PROFILES;
+
 /// The store in `dir`, opened on a database that a build with only the first `version` migrations left, holding the
 /// repository `r`, its workspace `w`, and `rows`, which are written with that build's columns.
-pub(super) fn store_from_before(dir: &Path, version: usize, rows: &str) -> Store {
+pub(crate) fn store_from_before(dir: &Path, version: usize, rows: &str) -> Store {
     let (path, backups) = (dir.join("hub.db"), dir.join("backups"));
     let mut conn = schema::open_connection(&path).unwrap();
     schema::migrate_to(&mut conn, &backups, version).unwrap();

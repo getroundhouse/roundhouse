@@ -25,9 +25,9 @@ impl Hub {
     /// answer as the repository's `GithubReach`, announced as records are, until the hub stops: as it starts, for each
     /// repository the last run recorded one for, as a worker of a repository says which repository on GitHub it pushes
     /// to, as [`Hub::find_github_remote`] asks, as what workers give their processes for github.com changes, which it
-    /// does as the default or its login changes, and every [`CHECKED_AGAIN_EVERY`]. Once a repository and login, not a
-    /// workspace, and each repository's checks side by side, each within GitHub's time limit, never under the logins'
-    /// lock.
+    /// does as the default, its login or its commit identity changes, and every [`CHECKED_AGAIN_EVERY`]. Once a
+    /// repository and login, not a workspace, and each repository's checks side by side, each within GitHub's time
+    /// limit, never under the logins' lock.
     pub(crate) async fn watch_github_reach(self: Arc<Self>) {
         let credential = self.git_credential();
         Checks::new(self, credential).run().await;

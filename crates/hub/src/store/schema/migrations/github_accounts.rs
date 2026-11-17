@@ -1,6 +1,6 @@
 //! The migrations that keep the GitHub accounts the hub holds a login for, the logins found on each provider's
-//! machines, and whether the default can push to each repository, kept apart since they're long. Each has its place in
-//! `MIGRATIONS`.
+//! machines, whether the default can push to each repository, and what GitHub's profile of each account's user says,
+//! kept apart since they're long. Each has its place in `MIGRATIONS`.
 
 /// Each GitHub account the hub holds, or held, a login for, as a record the feed announces: who it is on GitHub, by the
 /// user's number and the name GitHub last gave, and the login while the hub holds one. `login_kind` is how it was
@@ -109,4 +109,18 @@ pub(super) const GITHUB_REACH: &str = r"
         UPDATE counters SET value = value + 1 WHERE name = 'rev';
         UPDATE github_reach SET rev = (SELECT value FROM counters WHERE name = 'rev') WHERE rowid = NEW.rowid;
     END;
+";
+
+/// What GitHub's profile of each GitHub account's user said as the hub last asked, which its commit identity is made
+/// from: the user's name and public email, either of which GitHub can give as none, and when the hub asked. Only the
+/// hub reads it, for what it sends workers, so it's apart from the accounts' rows and moves no revision. An account
+/// with no row hasn't been read, as none from before was, so the hub's next check reads it. A row stays once the
+/// account's login has gone, since it's of the user, and connecting the account again reads it again.
+pub(super) const GITHUB_PROFILES: &str = r"
+    CREATE TABLE github_profiles (
+        account_id TEXT PRIMARY KEY REFERENCES github_accounts(id),
+        name TEXT,
+        email TEXT,
+        read_at_ms INTEGER NOT NULL
+    );
 ";

@@ -10,7 +10,8 @@ use super::{GithubInstallation, GithubUserId};
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct GithubAccount {
     pub id: GithubAccountId,
-    /// Who it is, as GitHub said when the hub last asked: as the account was connected, or its login renewed.
+    /// Who it is, as GitHub said when the hub last asked: as the account was connected, or its login renewed, and for a
+    /// token's or a sign-in's, as the hub asks again once a day, for its commit identity.
     pub user: GithubUser,
     /// `None` once its login was disconnected, or its file is gone.
     #[serde(default)]

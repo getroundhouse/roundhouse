@@ -90,6 +90,7 @@ impl GithubLogins {
                 let approving = GithubApproving {
                     sign_in: &approved.sign_in,
                     user: &owner.user,
+                    profile: &owner.profile,
                     file,
                     new_account: &approved.new_id,
                     signed_in_at_ms: approved.signed_in_at_ms,

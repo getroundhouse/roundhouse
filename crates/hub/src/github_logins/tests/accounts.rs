@@ -7,6 +7,7 @@ use protocol::model::GithubLoginKind;
 
 use super::*;
 use crate::login_files::LoginFile;
+use crate::store::GithubProfile;
 use crate::store::tests::store_with_session;
 
 /// The GitHub logins of a hub whose data directory is `dir`, started at 1000, and its store.
@@ -25,9 +26,11 @@ pub(super) fn connect(token: &str, id: Option<&str>, new_id: &str) -> Connect {
     }
 }
 
-/// The GitHub user `name`, of the number `user`, whose token ends at `ends_at_ms`.
+/// The GitHub user `name`, of the number `user`, whose token ends at `ends_at_ms`, with no name and no public email on
+/// its profile.
 pub(super) fn owner(user: u64, name: &str, ends_at_ms: Option<i64>) -> TokenOwner {
-    TokenOwner { user: GithubUser { id: GithubUserId::new(user), name: name.into() }, ends_at_ms }
+    let user = GithubUser { id: GithubUserId::new(user), name: name.into() };
+    TokenOwner { user, profile: GithubProfile::default(), ends_at_ms }
 }
 
 pub(super) fn ada() -> TokenOwner {

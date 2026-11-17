@@ -1,5 +1,6 @@
 use super::super::hub_settings::hub_settings;
 use super::super::{Store, StoreError, from_text, lock, rev_of, text_of};
+use super::profiles::{GithubProfile, keep_profile};
 use crate::login_files::LoginFile;
 use protocol::model::{
     GithubAccount, GithubAccountId, GithubAppId, GithubInstallation, GithubInstallationId, GithubLoginKind, GithubUser,
@@ -23,6 +24,9 @@ pub(crate) struct GithubConnecting<'a> {
     pub(crate) ends_at_ms: Option<i64>,
     /// Where it's installed, for an app's installation, and `None` for any other login.
     pub(crate) installation: Option<&'a GithubInstallation>,
+    /// What GitHub's profile of `user` said as the hub asked whose the login is, at `connected_at_ms`, and `None` for
+    /// an app's installation, whose bot has none.
+    pub(crate) profile: Option<&'a GithubProfile>,
 }
 
 /// The account as connecting left it, the file of the login it replaced, for the hub to let go of, and the settings,
@@ -194,13 +198,15 @@ impl Store {
 }
 
 /// Has `connecting.account` hold the login whose token is in `connecting.file`, as `connecting.user`, which needs no
-/// signing in again, in `tx`, and makes the account's record if it has none. The first GitHub account the hub has a
-/// record of becomes the default, in the same transaction.
+/// signing in again, in `tx`, and makes the account's record if it has none, and keeps what GitHub's profile of the
+/// user said, if it was asked. The first GitHub account the hub has a record of becomes the default, in the same
+/// transaction.
 pub(in super::super) fn connect_login(
     tx: &Transaction<'_>,
     connecting: &GithubConnecting<'_>,
 ) -> rusqlite::Result<GithubConnected> {
-    let GithubConnecting { account: id, user, how, file, connected_at_ms, ends_at_ms, installation } = *connecting;
+    let GithubConnecting { account: id, user, how, file, connected_at_ms, ends_at_ms, installation, profile } =
+        *connecting;
     let first = !tx.query_row("SELECT EXISTS (SELECT 1 FROM github_accounts)", [], |row| row.get::<_, bool>(0))?;
     let replaced = row_of(tx, id)?.and_then(|(_, file)| file);
     tx.execute(
@@ -228,6 +234,9 @@ pub(in super::super) fn connect_login(
             installation.map(|installation| installation.on.name.as_str()),
         ],
     )?;
+    if let Some(profile) = profile {
+        keep_profile(tx, id, profile, connected_at_ms)?;
+    }
     if first {
         tx.execute("UPDATE hub_settings SET github_account_id = ?", [id.as_str()])?;
     }
