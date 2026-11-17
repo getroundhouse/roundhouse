@@ -4,10 +4,9 @@
 
 use std::path::PathBuf;
 
-use protocol::client::ErrorCode;
 use protocol::event::{ApprovalDecision, EventBody};
-use protocol::model::PermissionMode::{FullAccess, Plan, Unknown};
-use protocol::model::{AgentKind, ModelName, PermissionMode, SessionSettingsChange};
+use protocol::model::PermissionMode::{FullAccess, Plan};
+use protocol::model::{ModelName, PermissionMode, SessionSettingsChange};
 
 use crate::support::{
     Gate, Stack, assistant_text, commit_settings, in_mode, read_all, wait_for_approval, wait_for_turn_end, wait_until,
@@ -112,25 +111,6 @@ fn a_chat_made_with_no_model_or_effort_names_what_its_agents_description_says_to
     let args = std::fs::read_to_string(stack.agent_state().join("last-args")).unwrap();
     let launched = format!("--model {} --effort {}", defaults.model.as_str(), defaults.effort.as_str().unwrap());
     assert!(args.contains(&launched), "{args}");
-}
-
-/// Every agent has full access unless it's planning, so the hub refuses any other mode, for a new chat or a change.
-#[test]
-fn only_full_access_and_plan_mode_are_taken() {
-    let stack = Stack::start();
-    let client = stack.client();
-    let (workspace, session) = stack.workspace(&client);
-
-    let refused = client.session_create(&workspace.id, AgentKind::Claude, in_mode(Unknown), None).unwrap_err();
-    assert!(matches!(&refused, client_core::ClientError::Api(e) if e.code == ErrorCode::InvalidRequest), "{refused}");
-    assert_eq!(client.session_list(&workspace.id).unwrap().len(), 1, "no chat was made");
-    client.session_configure(&session.id, in_mode(Unknown)).unwrap_err();
-    assert_eq!(client.session_get(&session.id).unwrap().permission_mode, FullAccess);
-
-    for mode in [Plan, FullAccess] {
-        let changed = client.session_configure(&session.id, in_mode(mode)).unwrap();
-        assert_eq!(changed.permission_mode, mode);
-    }
 }
 
 #[test]

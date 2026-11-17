@@ -8,23 +8,11 @@ use std::path::Path;
 use std::time::Instant;
 
 use client_core::{Client, ClientError, Ended, HubAdmin};
-use protocol::client::{ClientRequest, ClientResponse, ErrorCode, Hello, HelloReply, HubFrame, ReplyOutcome, Request};
+use protocol::client::{ClientRequest, ClientResponse, ErrorCode, HubFrame, ReplyOutcome, Request};
 use protocol::event::EventBody;
-use protocol::model::{AgentKind, DiffSide, Seq, SessionSettingsChange};
+use protocol::model::Seq;
 
 use crate::support::{Follower, Stack, TIMEOUT, assert_gapless, terminate, wait_for_turn_end, wait_until};
-
-#[test]
-fn a_client_knows_which_build_its_hub_is() {
-    let stack = Stack::start();
-
-    let client = stack.client();
-
-    // The daemon's build, which was compiled with the same stamp as this test.
-    let build = protocol::this_build!().version();
-    assert_eq!(client.hub_version(), build);
-    assert_eq!(client.hub_status().unwrap().hub_version, build);
-}
 
 /// A connection that sends frames as written here, for what `Client` has no way to send.
 struct RawConnection {
@@ -59,91 +47,43 @@ impl RawConnection {
     }
 }
 
-fn hello() -> String {
-    format!(r#"{{"method":"hello","client":"test","protocol_version":{}}}"#, protocol::client::CLIENT_PROTOCOL_VERSION)
+/// A request no hub knows, as from a client newer than it.
+struct FromANewerClient;
+
+impl Request for FromANewerClient {
+    type Reply = ();
+
+    fn into_request(self) -> ClientRequest {
+        ClientRequest::Unknown
+    }
 }
 
+/// What a hub does with each of a connection's first frames is tested in the hub, in `crates/hub/src/server/tests.rs`.
+/// These show the wiring, on a real hub's socket, each on a connection of its own. None changes the hub, so they share
+/// one.
 #[test]
-fn a_hub_refuses_a_request_it_does_not_know_and_carries_on() {
+fn a_real_hub_says_which_build_it_is_and_carries_on_past_what_it_refuses() {
     let stack = Stack::start();
-    let mut connection = RawConnection::open(&stack);
-    assert!(matches!(connection.ask(1, &hello()), ReplyOutcome::Response(ClientResponse::Hello(_))));
 
-    let refused = connection.ask(2, r#"{"method":"from_a_newer_client","path":"a"}"#);
+    // The build: the daemon's, which was compiled with the same stamp as this test.
+    let client = stack.client();
+    let build = protocol::this_build!().version();
+    assert_eq!(client.hub_version(), build, "the build, from the hello");
+    assert_eq!(client.hub_status().unwrap().hub_version, build, "the build, from the status");
 
-    assert!(matches!(refused, ReplyOutcome::Error(e) if e.code == ErrorCode::Unsupported));
-    let still_there = connection.ask(3, r#"{"method":"hub_status"}"#);
-    assert!(matches!(still_there, ReplyOutcome::Response(ClientResponse::HubStatus(_))));
-}
+    // A request it doesn't know, which a client can tell, on a connection that carries on.
+    let refused = client.call(FromANewerClient).unwrap_err();
+    assert!(refused.is_unsupported(), "a request it doesn't know: {refused}");
+    client.hub_status().expect("the connection to carry on past a request it doesn't know");
 
-/// A hello may name a range, though a client of this build names only its own version: one that reaches this hub's
-/// version is taken, at that version, and one that starts past it is refused.
-#[test]
-fn a_hub_takes_a_client_whose_hello_names_its_version_in_a_range() {
-    let stack = Stack::start();
-    let ours = protocol::client::CLIENT_PROTOCOL_VERSION;
-    let mut connection = RawConnection::open(&stack);
-    let newer = format!(
-        r#"{{"method":"hello","client":"newer","protocol_version":{},"oldest_protocol_version":{ours}}}"#,
-        ours + 1
-    );
-
-    let taken = connection.ask(1, &newer);
-
-    assert!(
-        matches!(&taken, ReplyOutcome::Response(ClientResponse::Hello(HelloReply { protocol_version, .. })) if *protocol_version == ours),
-        "{taken:?}"
-    );
+    // A hello it refuses, from a client that can still see the hub on a new connection.
     let mut refused = RawConnection::open(&stack);
-    let past = format!(
-        r#"{{"method":"hello","client":"newer","protocol_version":{},"oldest_protocol_version":{}}}"#,
-        ours + 2,
-        ours + 1
-    );
-    let refusal = refused.ask(1, &past);
-    assert!(
-        matches!(&refusal, ReplyOutcome::Error(e) if e.code == ErrorCode::VersionMismatch && e.message.contains(&format!("protocols {} to {}", ours + 1, ours + 2))),
-        "{refusal:?}"
-    );
-}
-
-/// As a newer client's known request would be, with a value this hub doesn't know: here, a kind of decision.
-#[test]
-fn a_hub_refuses_a_request_it_cannot_read_and_carries_on() {
-    let stack = Stack::start();
-    let mut connection = RawConnection::open(&stack);
-    assert!(matches!(connection.ask(1, &hello()), ReplyOutcome::Response(ClientResponse::Hello(_))));
-
-    let approve = r#"{"method":"session_approve","id":"s","approval_id":"a","decision":{"decision":"allow_always"}}"#;
-    let refused = connection.ask(2, approve);
-
-    assert!(matches!(&refused, ReplyOutcome::Error(e) if e.code == ErrorCode::Unsupported), "{refused:?}");
-    let still_there = connection.ask(3, r#"{"method":"hub_status"}"#);
-    assert!(matches!(still_there, ReplyOutcome::Response(ClientResponse::HubStatus(_))));
-}
-
-/// One it can't read can't be a hello it answers, so it's refused as any first request but a hello is.
-#[test]
-fn a_first_request_the_hub_cannot_read_is_refused_as_one_that_isnt_a_hello() {
-    let stack = Stack::start();
-    let mut connection = RawConnection::open(&stack);
-
-    let refused = connection.ask(1, r#"{"method":"hello","client":"newer","protocol_version":"3"}"#);
-
-    assert!(matches!(&refused, ReplyOutcome::Error(e) if e.code == ErrorCode::VersionMismatch), "{refused:?}");
-    let mut line = String::new();
-    assert_eq!(connection.replies.read_line(&mut line).unwrap(), 0, "it kept the connection, and said {line}");
-}
-
-#[test]
-fn a_hub_closes_a_connection_that_sends_a_frame_naming_no_call() {
-    let stack = Stack::start();
-    let mut connection = RawConnection::open(&stack);
-
-    writeln!(connection.socket, r#"{{"request":{{"method":"hub_status"}}}}"#).unwrap();
-
-    let mut line = String::new();
-    assert_eq!(connection.replies.read_line(&mut line).unwrap(), 0, "it answered {line}");
+    let hello = r#"{"method":"hello","client":"newer","protocol_version":9999}"#;
+    let refusal = refused.ask(1, hello);
+    assert!(matches!(&refusal, ReplyOutcome::Error(e) if e.code == ErrorCode::VersionMismatch), "a hello: {refusal:?}");
+    let status = HubAdmin::connect(&stack.socket()).unwrap().status().unwrap();
+    assert_eq!(status.pid, stack.hub_pid(), "the hub, after a refused hello");
+    assert!(!status.on_demand, "this stack starts its hub by hand");
 }
 
 /// A client across a real break sends these as written, so a test can't build them from today's types.
@@ -159,51 +99,6 @@ fn a_hub_shows_its_status_and_stops_without_a_hello() {
     // It can stop before its reply gets out, which a client takes as done, as `Client::hub_shutdown` does.
     assert!(matches!(stopped, None | Some(ReplyOutcome::Response(ClientResponse::Ok))), "{stopped:?}");
     stack.hub.take().unwrap().wait().unwrap();
-}
-
-#[test]
-fn nothing_else_works_without_a_hello() {
-    let stack = Stack::start();
-    let mut connection = RawConnection::open(&stack);
-
-    let refused = connection.ask(1, r#"{"method":"repo_list"}"#);
-
-    assert!(matches!(refused, ReplyOutcome::Error(e) if e.code == ErrorCode::VersionMismatch));
-}
-
-#[test]
-fn a_refused_client_can_still_see_the_hub_on_a_new_connection() {
-    let stack = Stack::start();
-    let mut refused = RawConnection::open(&stack);
-    let hello = r#"{"method":"hello","client":"newer","protocol_version":9999}"#;
-    assert!(matches!(refused.ask(1, hello), ReplyOutcome::Error(e) if e.code == ErrorCode::VersionMismatch));
-
-    let status = HubAdmin::connect(&stack.socket()).unwrap().status().unwrap();
-
-    assert_eq!(status.pid, stack.hub_pid());
-    assert!(!status.on_demand, "this stack starts its hub by hand");
-}
-
-/// A request no hub knows, as from a client newer than it.
-struct FromANewerClient;
-
-impl Request for FromANewerClient {
-    type Reply = ();
-
-    fn into_request(self) -> ClientRequest {
-        ClientRequest::Unknown
-    }
-}
-
-#[test]
-fn a_client_can_tell_when_its_hub_does_not_know_a_request() {
-    let stack = Stack::start();
-    let client = stack.client();
-
-    let refused = client.call(FromANewerClient).unwrap_err();
-
-    assert!(refused.is_unsupported());
-    client.hub_status().unwrap();
 }
 
 fn mode(path: &Path) -> u32 {
@@ -283,32 +178,6 @@ fn dropping_a_subscription_stops_its_stream_but_not_the_connection() {
 }
 
 #[test]
-fn a_client_with_the_wrong_protocol_version_is_told_so() {
-    use std::io::{BufRead, BufReader, Write};
-
-    let stack = Stack::start();
-    let mut stream = std::os::unix::net::UnixStream::connect(stack.socket()).unwrap();
-    let hello = protocol::client::ClientFrame {
-        id: 1,
-        request: ClientRequest::Hello(Hello {
-            protocol_version: 9999,
-            client: "old".into(),
-            oldest_protocol_version: None,
-        }),
-    };
-    stream.write_all(&protocol::frame::encode(&hello).unwrap()).unwrap();
-    let mut line = String::new();
-    BufReader::new(stream.try_clone().unwrap()).read_line(&mut line).unwrap();
-    let reply: protocol::client::HubFrame = serde_json::from_str(&line).unwrap();
-    match reply {
-        protocol::client::HubFrame::Reply { outcome: protocol::client::ReplyOutcome::Error(e), .. } => {
-            assert_eq!(e.code, ErrorCode::VersionMismatch);
-        }
-        other => panic!("{other:?}"),
-    }
-}
-
-#[test]
 fn a_second_hub_refuses_to_start_and_leaves_the_first_alone() {
     let stack = Stack::start();
     let mut second = stack.command().spawn().unwrap();
@@ -330,20 +199,4 @@ fn losing_the_hub_ends_a_subscription_with_a_clear_signal() {
     assert_eq!(subscription.ended(), Some(Ended::Disconnected));
     assert!(client.is_disconnected());
     assert!(matches!(client.hub_status().unwrap_err(), ClientError::Disconnected | ClientError::Io(_)));
-}
-
-#[test]
-fn a_kind_of_agent_or_side_of_a_diff_this_hub_doesnt_know_is_refused_and_not_saved() {
-    let stack = Stack::start();
-    let client = stack.client();
-    let (workspace, _) = stack.workspace(&client);
-
-    let refused =
-        client.session_create(&workspace.id, AgentKind::Unknown, SessionSettingsChange::default(), None).unwrap_err();
-    assert!(matches!(refused, ClientError::Api(e) if e.code == ErrorCode::InvalidRequest));
-    assert_eq!(client.session_list(&workspace.id).unwrap().len(), 1);
-
-    let refused = client.comment_add(&workspace.id, "a.txt", DiffSide::Unknown, 1, "Why?", None).unwrap_err();
-    assert!(matches!(refused, ClientError::Api(e) if e.code == ErrorCode::InvalidRequest));
-    assert!(client.comment_list(&workspace.id).unwrap().is_empty());
 }

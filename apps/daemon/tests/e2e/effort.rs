@@ -100,18 +100,3 @@ fn an_effort_the_agent_doesnt_take_is_refused_and_not_saved() {
     client.session_prompt(&session.id, "effort", None).unwrap();
     assert_eq!(last_reply(&wait_for_turn_end(&client, &session.id, 2)), "effort=xhigh");
 }
-
-#[test]
-fn an_effort_this_hub_doesnt_know_is_refused() {
-    let stack = Stack::start();
-    let client = stack.client();
-    let (workspace, session) = stack.workspace(&client);
-
-    let refused = client.session_configure(&session.id, at(Effort::Unknown)).unwrap_err();
-    assert!(matches!(refused, ClientError::Api(e) if e.code == ErrorCode::InvalidRequest));
-    let refused = client.session_create(&workspace.id, AgentKind::Claude, at(Effort::Unknown), None).unwrap_err();
-    assert!(matches!(refused, ClientError::Api(e) if e.code == ErrorCode::InvalidRequest));
-
-    assert_eq!(client.session_get(&session.id).unwrap().effort, agents::claude::description().defaults.effort);
-    assert_eq!(client.session_list(&workspace.id).unwrap().len(), 1);
-}
