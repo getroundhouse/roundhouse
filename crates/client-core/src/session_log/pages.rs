@@ -149,6 +149,24 @@ impl SessionLog {
     }
 }
 
+#[cfg(feature = "testing")]
+impl SessionLog {
+    /// What's loaded of the log and what's on its way, for a test whose wait for a row timed out to say.
+    pub fn loading(&self) -> String {
+        let (last, received) = (self.last.row(), self.received.row());
+        let (pages, in_flight, failed, stale) = (&self.pages, &self.in_flight, &self.failed, &self.stale);
+        format!(
+            "the log has {} rows, the last at row {last:?}, and the subscription has delivered through row {received:?}; \
+             rows {:?} are loaded, from pages {pages:?}, with pages {in_flight:?} on their way, {failed:?} failed and \
+             {stale:?} stale; the view looks at rows {:?} and couldn't draw row {:?}",
+            self.row_count(),
+            self.loaded_rows(),
+            self.focus,
+            self.unfetched,
+        )
+    }
+}
+
 /// The page the event at `position` is in, counting from 0, a page to each [`PAGE_EVENTS`] rows. 0, the end of a log
 /// that reaches nowhere, is in the first.
 fn page_of(position: Position) -> usize {

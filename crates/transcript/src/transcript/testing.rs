@@ -1,7 +1,7 @@
 //! What only tests read of a transcript: how much of it is loaded, what's at a row and which row has what, and what its
 //! texts show.
 
-use client_core::session_log::{By, PromptState, Row};
+use client_core::session_log::{By, PromptState, Row, SessionLog};
 use gpui_kit::{Bounds, Context, Pixels, Window};
 use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{PromptLine, Seq};
@@ -65,6 +65,13 @@ impl Transcript {
     /// settled.
     pub fn long_texts_parsed(&self) -> bool {
         self.texts.all_parsed()
+    }
+
+    /// What's loaded of the chat's log and on its way, and how many long texts are still being parsed, for a test whose
+    /// wait for its rows timed out to say.
+    pub fn loading(&self) -> String {
+        let log = self.session.read(SessionLog::loading);
+        format!("{log}; {} long texts are being parsed", self.texts.still_parsing())
     }
 
     /// What a copy holds with everything selected: the chat's Markdown and the plain text its calls show open, in the

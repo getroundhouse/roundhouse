@@ -300,7 +300,13 @@ impl Texts {
     /// Whether every text drawn has been parsed, so each row has the height it will keep.
     #[cfg(feature = "testing")]
     pub(crate) fn all_parsed(&self) -> bool {
-        self.0.borrow().texts.values().all(|text| !matches!(text, Text::Parsing { .. }))
+        self.still_parsing() == 0
+    }
+
+    /// How many texts drawn are still being parsed.
+    #[cfg(feature = "testing")]
+    pub(crate) fn still_parsing(&self) -> usize {
+        self.0.borrow().texts.values().filter(|text| matches!(text, Text::Parsing { .. })).count()
     }
 
     /// What each text that keeps its blocks was parsed from.
