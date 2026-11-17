@@ -132,6 +132,10 @@ impl SignedSource {
 }
 
 impl UpdateSource for SignedSource {
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "the pause before a feed whose signature didn't match is read again, as one being published can be"
+    )]
     fn get_release_feed(&self, channel: &str, _: &Manifest, _: &str) -> Result<VelopackAssetFeed, velopack::Error> {
         let name = format!("releases.{channel}.json");
         match self.signed_feed(&name) {

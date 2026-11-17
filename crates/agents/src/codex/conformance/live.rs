@@ -221,12 +221,8 @@ impl Launcher for RealCli {
             .map_err(|e| Failed(e.to_string()))
     }
     async fn made(&mut self, name: &str) -> Result<(), Failed> {
-        let deadline = Instant::now() + self.patience();
-        while !self.work.join(name).exists() {
-            if Instant::now() > deadline {
-                return Err(Failed(format!("Codex did not make {name}")));
-            }
-            tokio::time::sleep(Duration::from_millis(20)).await;
+        if !waiting::task::up_to(self.patience(), || self.work.join(name).exists()).await {
+            return Err(Failed(format!("Codex did not make {name}")));
         }
         self.tap.note(Entry::Saw(name.into()));
         Ok(())

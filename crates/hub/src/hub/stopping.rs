@@ -28,6 +28,10 @@ impl Hub {
 
     /// Stops once no setup script is running, and no request but this is under way, leaving the workers running for
     /// the next hub, so their agents carry on.
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "the pace a restart looks again whether the setup scripts and requests it waits for have ended"
+    )]
     pub(crate) fn request_restart(self: &Arc<Self>) -> Result<(), ApiError> {
         if !KEEPS_WORKERS {
             return Err(ApiError::new(ErrorCode::Unsupported, "a restart would stop this hub's agents, so it stops"));

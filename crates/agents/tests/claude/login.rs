@@ -120,13 +120,7 @@ fn mode(dir: &Path, mode: &str) {
 
 /// Wait for the stand-in to reach a particular control request, not for an assumed startup duration.
 async fn ready(path: &Path) {
-    tokio::time::timeout(Duration::from_secs(10), async {
-        while !path.exists() {
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        }
-    })
-    .await
-    .unwrap();
+    waiting::task::until(Duration::from_secs(10), format!("{} never came", path.display()), || path.exists()).await;
 }
 
 #[tokio::test]
@@ -190,11 +184,5 @@ async fn cancelling_startup_stops_the_unverified_process_and_removes_its_record(
     starting.abort();
     assert!(starting.await.err().unwrap().is_cancelled());
     assert!(!record.exists());
-    tokio::time::timeout(Duration::from_secs(5), async {
-        while process.is_running() {
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        }
-    })
-    .await
-    .expect("the cancelled process is reaped");
+    waiting::task::until(Duration::from_secs(5), "the cancelled process is reaped", || !process.is_running()).await;
 }

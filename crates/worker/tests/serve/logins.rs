@@ -28,19 +28,16 @@ fn login(token: &str) -> AgentLogin {
 /// What the CLI in `dir` wrote of each time it ran, sorted, once it has run `times` times.
 async fn ran(dir: &Path, times: usize) -> Vec<String> {
     let ran = dir.join("ran");
-    timeout(Duration::from_secs(10), async {
-        loop {
-            let mut lines: Vec<String> =
-                std::fs::read_to_string(&ran).unwrap_or_default().lines().map(str::to_string).collect();
-            if lines.len() >= times {
-                lines.sort();
-                return lines;
-            }
-            tokio::time::sleep(Duration::from_millis(10)).await;
+    waiting::task::until_ok(Duration::from_secs(10), || {
+        let mut lines: Vec<String> =
+            std::fs::read_to_string(&ran).unwrap_or_default().lines().map(str::to_string).collect();
+        if lines.len() < times {
+            return Err("the CLI to have run");
         }
+        lines.sort();
+        Ok(lines)
     })
     .await
-    .expect("the CLI to have run")
 }
 
 /// Each carries its own, so a worker never has to remember one between them. What a launch sets in the agent's

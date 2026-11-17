@@ -58,11 +58,7 @@ fn a_chat_is_looked_through_on_a_connection_of_its_own() {
         move || store.find_events(&"s".into(), None, &Needle::new("train").unwrap()).unwrap().places
     });
 
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
-    while !finding.is_finished() {
-        assert!(std::time::Instant::now() < deadline, "the find waited for a read");
-        std::thread::sleep(std::time::Duration::from_millis(5));
-    }
+    waiting::thread::until(std::time::Duration::from_secs(5), "the find waited for a read", || finding.is_finished());
     drop(reading);
     assert_eq!(finding.join().unwrap(), [Place::new(1)]);
 }

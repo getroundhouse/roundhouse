@@ -9,7 +9,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Once;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 /// Long enough for git on a busy machine.
 const TIMEOUT: Duration = Duration::from_secs(10);
@@ -110,11 +110,10 @@ impl Logs {
     }
 
     pub(crate) async fn until(&self, line: &str) {
-        let deadline = Instant::now() + TIMEOUT;
-        while !String::from_utf8_lossy(&self.written.borrow()).contains(line) {
-            assert!(Instant::now() < deadline, "nothing logged {line:?}");
-            tokio::time::sleep(Duration::from_millis(1)).await;
-        }
+        waiting::task::until(TIMEOUT, format!("nothing logged {line:?}"), || {
+            String::from_utf8_lossy(&self.written.borrow()).contains(line)
+        })
+        .await;
     }
 }
 
@@ -142,11 +141,7 @@ fn free(worktrees: &Worktrees, how: Hold) -> bool {
 /// it has a copy of the file until it starts its program, which holds the lock a millisecond or so longer. Under
 /// nextest, which runs each test in a process of its own, none does.
 fn comes_free(worktrees: &Worktrees) {
-    let deadline = Instant::now() + TIMEOUT;
-    while !free(worktrees, Hold::Alone) {
-        assert!(Instant::now() < deadline, "the lock was kept after it went");
-        std::thread::sleep(Duration::from_millis(1));
-    }
+    waiting::thread::until(TIMEOUT, "the lock was kept after it went", || free(worktrees, Hold::Alone));
 }
 
 #[tokio::test]

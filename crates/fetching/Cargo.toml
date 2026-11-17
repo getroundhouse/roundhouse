@@ -21,6 +21,7 @@ parking_lot = { workspace = true, optional = true }
 [dev-dependencies]
 fetching = { workspace = true, features = ["testing"] }
 tempfile.workspace = true
+waiting.workspace = true
 
 [lints]
 workspace = true

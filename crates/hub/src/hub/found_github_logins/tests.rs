@@ -51,11 +51,10 @@ async fn told(feed: &mut broadcast::Receiver<HubNotice>) -> FoundGithubLogin {
 
 /// Once the hub has done with `provider`'s ask, which it has once it's no longer asking, or doesn't need to.
 async fn done_asking(hub: &Hub, provider: &ProviderName, answered: bool) {
-    let deadline = tokio::time::Instant::now() + FOUND_WITHIN + Duration::from_secs(1);
-    while hub.github_logins_asked.has(provider) != answered {
-        assert!(tokio::time::Instant::now() < deadline, "the hub was still asking");
-        tokio::time::sleep(Duration::from_millis(10)).await;
-    }
+    waiting::task::until(FOUND_WITHIN + Duration::from_secs(1), "the hub was still asking", || {
+        hub.github_logins_asked.has(provider) == answered
+    })
+    .await;
 }
 
 #[tokio::test]

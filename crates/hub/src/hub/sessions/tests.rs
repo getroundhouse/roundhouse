@@ -3,7 +3,7 @@
 //! agent is writing, against a hub that never starts a worker, with what an agent would say recorded or sent as if it
 //! had.
 
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use protocol::event::{AgentRunState, AgentTask, EventBody, TaskKind, TurnOutcome};
 use protocol::model::{AnswerSoFar, RunId, SessionId, SessionStatus};
@@ -36,11 +36,7 @@ async fn closing_an_unused_chat_lets_go_of_it_and_of_everyone_following_it() {
 
     let heard = tokio::time::timeout(TIMEOUT, follower).await.expect("the follower was never let go").unwrap();
     assert!(matches!(heard, Err(RecvError::Closed)), "{heard:?}");
-    let deadline = Instant::now() + TIMEOUT;
-    while held.upgrade().is_some() {
-        assert!(Instant::now() < deadline, "something still holds the chat");
-        tokio::time::sleep(Duration::from_millis(10)).await;
-    }
+    waiting::task::until(TIMEOUT, "something still holds the chat", || held.upgrade().is_none()).await;
     assert!(hub.sessions.lock().live.is_empty());
 }
 
@@ -136,6 +132,10 @@ fn states_from_the_hub(hub: &Hub) -> usize {
 
 /// One that never does, as a CLI that changed might not, isn't left at work for ever, keeping the machine awake.
 #[tokio::test(start_paused = true)]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "tokio's clock is paused, so sleeping moves it to either side of the time an agent has to pick up"
+)]
 async fn an_agent_that_doesnt_pick_up_again_after_its_work_in_the_background_is_taken_to_be_idle() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_in(dir.path());
@@ -154,6 +154,10 @@ async fn an_agent_that_doesnt_pick_up_again_after_its_work_in_the_background_is_
 }
 
 #[tokio::test(start_paused = true)]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "tokio's clock is paused, so sleeping moves it to either side of the time an agent has to pick up"
+)]
 async fn an_agent_that_picks_up_again_isnt_taken_to_be_idle_later() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_in(dir.path());
@@ -171,6 +175,10 @@ async fn an_agent_that_picks_up_again_isnt_taken_to_be_idle_later() {
 /// The agent picks up again, and its next turn leaves it waiting again just before the first wait's timer is due,
 /// which leaves the second wait to its own.
 #[tokio::test(start_paused = true)]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "tokio's clock is paused, so sleeping moves it to either side of the time an agent has to pick up"
+)]
 async fn the_timer_of_an_earlier_wait_leaves_a_later_one_alone() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_in(dir.path());
@@ -194,6 +202,10 @@ async fn the_timer_of_an_earlier_wait_leaves_a_later_one_alone() {
 
 /// The last hub's timer went with it, so the next, carrying on with the agent, waits again.
 #[tokio::test(start_paused = true)]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "tokio's clock is paused, so sleeping moves it to either side of the time an agent has to pick up"
+)]
 async fn an_agent_carried_on_with_while_it_was_to_pick_up_again_is_taken_to_be_idle_if_it_doesnt() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_in(dir.path());
@@ -217,6 +229,10 @@ async fn an_agent_carried_on_with_while_it_was_to_pick_up_again_is_taken_to_be_i
 /// A prompt the agent has yet to take holds the wait off, since taking it starts a turn, but the agent can drop it
 /// instead.
 #[tokio::test(start_paused = true)]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "tokio's clock is paused, so sleeping moves it to either side of the time an agent has to pick up"
+)]
 async fn an_agent_that_drops_the_prompt_it_was_to_take_is_taken_to_be_idle_after_all() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_in(dir.path());

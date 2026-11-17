@@ -189,6 +189,10 @@ pub(crate) fn follow_again(args: &[String], config: &Config, out: &Out) {
 /// completed, the agent picks up again by itself and says the first line of what the tool said, as the CLI starts a
 /// turn with a `<task-notification>`. Once the server has called it off, the CLI says it failed, and the agent picks up
 /// again the same way, saying what the server last said of it.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the interval the server last gave between asks after a task, as the real CLI keeps to"
+)]
 fn follow(config: &Config, out: &Out, followed: Followed, mut poll: Duration) {
     let (config, out) = (config.clone(), out.clone());
     std::thread::spawn(move || {

@@ -13,8 +13,6 @@ use std::time::Duration;
 use timing::Delays;
 #[cfg(test)]
 use tokio::task::JoinHandle;
-#[cfg(test)]
-use tokio::time::Instant;
 
 #[cfg(test)]
 mod tests;

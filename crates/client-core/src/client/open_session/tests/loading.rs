@@ -6,7 +6,7 @@ use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::Path;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 /// Far enough along that the subscription starts after the first page, so a prompt there comes only from the list.
 pub(in super::super) const LAST_SEQ: Seq = Seq::new(1800);
@@ -82,12 +82,8 @@ pub(in crate::client) fn refused(code: ErrorCode, message: &str) -> ReplyOutcome
     ReplyOutcome::Error(ApiError::new(code, message))
 }
 
-pub(in super::super) fn until(what: &str, mut done: impl FnMut() -> bool) {
-    let deadline = Instant::now() + Duration::from_secs(10);
-    while !done() {
-        assert!(Instant::now() < deadline, "never {what}");
-        std::thread::sleep(Duration::from_millis(5));
-    }
+pub(in super::super) fn until(what: &str, done: impl FnMut() -> bool) {
+    waiting::thread::until(Duration::from_secs(10), format!("never {what}"), done);
 }
 
 /// Every request the hub is sent until the follower's last subscription is let go, which is the last thing the

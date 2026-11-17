@@ -2,7 +2,7 @@
 
 use std::io::{BufRead as _, BufReader, Write as _};
 use std::path::Path;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use protocol::client::{
     ApiError, ClientFrame, ClientRequest, ClientResponse, ErrorCode, HubFrame, ReplyOutcome, log, subscriptions,
@@ -127,15 +127,10 @@ fn said(open: &OpenSession) -> Vec<Option<String>> {
 
 /// Waits until `read` says `wanted` of `open`.
 fn wait_until<T: PartialEq + std::fmt::Debug>(open: &OpenSession, read: impl Fn(&OpenSession) -> T, wanted: &T) {
-    let deadline = Instant::now() + Duration::from_secs(10);
-    loop {
+    waiting::thread::until_ok(Duration::from_secs(10), || {
         let now = read(open);
-        if now == *wanted {
-            return;
-        }
-        assert!(Instant::now() < deadline, "never {wanted:?}, only {now:?}");
-        std::thread::sleep(Duration::from_millis(10));
-    }
+        if now == *wanted { Ok(()) } else { Err(format!("never {wanted:?}, only {now:?}")) }
+    });
 }
 
 /// Waits until `open` holds exactly the events at `seqs`, one to a row, in that order.

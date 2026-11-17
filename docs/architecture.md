@@ -119,6 +119,7 @@ crates/
   dictation/       Hearing speech and turning it into text on the device: the microphone, muting the sound output while it's heard, cutting a recording at its pauses, the trait an engine implements, the engine for NVIDIA's nemotron model on Core ML, the model's files, downloading and deleting them, and a stand-in engine for tests. No UI and no async runtime. Unconfirmed
   fetching/        Fetching files over HTTP(S) on the caller's thread, such as the app's updates and dictation's model, a big file going on from where it stopped, into a folder one fetch at a time writes to, and a server that answers as a test tells it. No UI and no async runtime. Unconfirmed
   terminal-view/   GPUI terminal element. Not built
+  waiting/         How tests wait: until something holds, failing at a time limit, or for a bound in which what mustn't happen could. The one place a test sleeps. Only tests depend on it. Unconfirmed
 apps/
   daemon/          One binary that runs as a hub, a worker or the local provider's adapter
   cli/             Command-line client

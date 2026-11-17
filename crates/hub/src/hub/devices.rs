@@ -37,6 +37,7 @@ impl Hub {
         }
     }
 
+    #[expect(clippy::disallowed_methods, reason = "a pairing code's life, after which it's let go")]
     pub(crate) async fn pairing_start(self: &Arc<Self>) -> Result<Pairing, ApiError> {
         let machine = tokio::task::spawn_blocking(this_machine).await.map_err(|e| internal(e.to_string()))?;
         let hosts = self.remote.hosts(machine.hosts);

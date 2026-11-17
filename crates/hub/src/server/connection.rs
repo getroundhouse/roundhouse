@@ -29,6 +29,10 @@ pub(crate) const PUMP_PAGE_EVENTS: u32 = 256;
 /// Bounded, so a client that stops reading holds back only its own subscriptions.
 const CONNECTION_QUEUE: usize = 1024;
 
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the pause after a connection that couldn't be accepted, for what it needed to come free"
+)]
 pub(crate) async fn accept_loop(hub: Arc<Hub>, mut listener: Listener) {
     loop {
         match listener.accept().await {

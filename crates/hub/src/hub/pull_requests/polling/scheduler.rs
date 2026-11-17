@@ -29,6 +29,7 @@ impl Hub {
     /// Starts reading the pull requests nobody asks for, as jobs, whichever of each kind is due next, as the budget can
     /// spare their calls. It waits on no read, so one that hangs holds up only what can't run beside it, and that only
     /// until its limit. Runs until the hub stops.
+    #[expect(clippy::disallowed_methods, reason = "the pace the pull requests nobody asks for are read at")]
     pub(crate) async fn watch_pull_requests(self: Arc<Self>) {
         let pace = self.timers.read_pace;
         let mut in_turn_after = Instant::now();

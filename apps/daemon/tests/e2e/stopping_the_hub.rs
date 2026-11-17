@@ -82,10 +82,6 @@ fn a_hub_stop_ends_the_agents_of_a_worker_that_doesnt_stop() {
     client.hub_shutdown().unwrap();
 
     let mut hub = stack.hub.take().unwrap();
-    let deadline = Instant::now() + grace + TIMEOUT;
-    while matches!(hub.try_wait(), Ok(None)) {
-        assert!(Instant::now() < deadline, "the hub didn't exit");
-        std::thread::sleep(Duration::from_millis(50));
-    }
+    waiting::thread::until(grace + TIMEOUT, "the hub didn't exit", || !matches!(hub.try_wait(), Ok(None)));
     wait_until("the agent to stop", || !is_alive(agent));
 }

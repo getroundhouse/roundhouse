@@ -24,6 +24,7 @@ mod motion;
 mod new_workspace;
 mod order;
 mod projects;
+mod shown;
 mod stand_in;
 mod stand_in_gh;
 mod stand_in_github;

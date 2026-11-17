@@ -3,7 +3,7 @@
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use super::{TIMEOUT, Ui};
 
@@ -17,21 +17,18 @@ impl Frozen {
     pub(crate) fn stop(pid: u32) -> Self {
         let frozen = Self(pid.to_string());
         frozen.signal("-STOP");
-        let deadline = Instant::now() + TIMEOUT;
-        while !stopped(&frozen.0) {
-            assert!(Instant::now() < deadline, "process {} never stopped", frozen.0);
-            std::thread::sleep(Duration::from_millis(1));
-        }
+        waiting::thread::until(TIMEOUT, format!("process {} never stopped", frozen.0), || stopped(&frozen.0));
         frozen
     }
 
     /// Lets the process go on again after `after`, from another thread, which says so just before, so nothing the
-    /// process does after can come before it's said.
+    /// process does after can come before it's said. Nothing says the app has started waiting for the process, so
+    /// `after` is the time the app has to do what a test checks it doesn't do while it waits, such as quit.
     pub(crate) fn thaw_after(&self, after: Duration) -> Arc<AtomicBool> {
         let (pid, thawing) = (self.0.clone(), Arc::new(AtomicBool::new(false)));
         let said = thawing.clone();
         std::thread::spawn(move || {
-            std::thread::sleep(after);
+            waiting::thread::for_what_mustnt_happen(after);
             said.store(true, Ordering::SeqCst);
             std::process::Command::new("kill").args(["-CONT", &pid]).status().unwrap();
         });

@@ -3,7 +3,6 @@
 #![cfg(test)]
 
 use std::path::PathBuf;
-use std::time::{Duration, Instant};
 
 use client_core::Client;
 use desktop::app::Connection;
@@ -215,11 +214,9 @@ fn an_approval_waiting_when_the_app_opens_can_be_answered(cx: &mut TestAppContex
         )
         .unwrap();
     client.session_prompt(&session.id, "tool:echo answered > answered.txt", None).unwrap();
-    let deadline = Instant::now() + TIMEOUT;
-    while client.session_get(&session.id).unwrap().status != SessionStatus::WaitingApproval {
-        assert!(Instant::now() < deadline, "the agent never asked");
-        std::thread::sleep(Duration::from_millis(20));
-    }
+    waiting::thread::until(TIMEOUT, "the agent never asked", || {
+        client.session_get(&session.id).unwrap().status == SessionStatus::WaitingApproval
+    });
 
     // The app opens after the question was asked, so it has to learn about it from history.
     let mut ui = Ui::open(cx, &stack);

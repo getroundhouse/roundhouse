@@ -10,7 +10,6 @@ use agents::{AgentError, AgentOptions, Instructions, ToolServer};
 use protocol::capability::conversation::Start;
 use protocol::worker::ToolsToken;
 use tokio::sync::mpsc;
-use tokio::time::timeout;
 
 use crate::process::{script, spec, until_exit};
 
@@ -59,13 +58,7 @@ fn keeps_the_file_given_with(flag: &str) -> String {
 /// What the CLI wrote to `given`, such as a file it was given, once it has written it.
 async fn given(dir: &Path) -> Vec<u8> {
     let given = dir.join("given");
-    timeout(Duration::from_secs(10), async {
-        while !given.exists() {
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        }
-    })
-    .await
-    .expect("the CLI to be given the file");
+    waiting::task::until(Duration::from_secs(10), "the CLI to be given the file", || given.exists()).await;
     std::fs::read(given).unwrap()
 }
 

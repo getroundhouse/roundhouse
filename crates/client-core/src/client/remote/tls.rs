@@ -252,6 +252,10 @@ mod tests {
 
     /// Each read waiting its own time would let this one go on for as long as the bytes kept coming.
     #[test]
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "the pace of a host that answers a byte at a time, which keeps each read short of its own time limit"
+    )]
     fn a_host_that_answers_a_byte_at_a_time_is_given_up_on_at_the_deadline() {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let address = listener.local_addr().unwrap();

@@ -130,6 +130,7 @@ dependencies = [
  "tokio",
  "tracing",
  "uuid",
+ "waiting",
 ]
 
 [[package]]
@@ -1215,6 +1216,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.21",
  "uuid",
+ "waiting",
  "windows-sys 0.61.2",
 ]
 
@@ -1684,6 +1686,7 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "waiting",
  "worker",
 ]
 
@@ -1796,6 +1799,7 @@ dependencies = [
  "transcript",
  "update-feed",
  "velopack",
+ "waiting",
  "windows-sys 0.61.2",
  "worker",
 ]
@@ -2234,6 +2238,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.21",
  "ureq",
+ "waiting",
 ]
 
 [[package]]
@@ -3923,6 +3928,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
+ "waiting",
  "windows-sys 0.61.2",
 ]
 
@@ -6422,6 +6428,7 @@ dependencies = [
  "libc",
  "process",
  "tempfile",
+ "waiting",
  "windows-sys 0.61.2",
 ]
 
@@ -9139,6 +9146,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "waiting"
+version = "0.1.0"
+dependencies = [
+ "tokio",
+]
+
+[[package]]
 name = "waitpid-any"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -10297,6 +10311,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
+ "waiting",
  "worker",
 ]
 

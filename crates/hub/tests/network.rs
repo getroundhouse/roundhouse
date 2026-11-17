@@ -44,16 +44,9 @@ impl Running {
             runtime.block_on(hub::run(config)).unwrap();
             runtime.shutdown_timeout(Duration::from_secs(1));
         });
-        let deadline = Instant::now() + Duration::from_secs(10);
-        let local = loop {
-            match Client::connect(&socket, "network-test") {
-                Ok(client) => break client,
-                Err(error) => {
-                    assert!(Instant::now() < deadline, "hub did not start: {error}");
-                    std::thread::sleep(Duration::from_millis(10));
-                }
-            }
-        };
+        let local = waiting::thread::until_ok(Duration::from_secs(10), || {
+            Client::connect(&socket, "network-test").map_err(|error| format!("hub did not start: {error}"))
+        });
         Self { local, task, dir }
     }
 

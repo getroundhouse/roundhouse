@@ -6,7 +6,7 @@
 
 use std::path::PathBuf;
 use std::process::{Child, Stdio};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use client_core::Client;
 use process::testing::WholeEnvironment;
@@ -34,11 +34,9 @@ impl Stack {
             .spawn()
             .unwrap();
         let socket = self.hub.paths.socket.clone();
-        let deadline = Instant::now() + TIMEOUT;
-        while Client::connect(&socket, "test").is_err() {
-            assert!(Instant::now() < deadline, "timed out waiting for the hub to listen");
-            std::thread::sleep(Duration::from_millis(10));
-        }
+        waiting::thread::until(TIMEOUT, "timed out waiting for the hub to listen", || {
+            Client::connect(&socket, "test").is_ok()
+        });
         HubAhead { hub, socket }
     }
 }
@@ -49,10 +47,7 @@ impl Drop for HubAhead {
         if let Ok(client) = Client::connect(&self.socket, "test") {
             let _ = client.hub_shutdown();
         }
-        let deadline = Instant::now() + Duration::from_secs(5);
-        while matches!(self.hub.try_wait(), Ok(None)) && Instant::now() < deadline {
-            std::thread::sleep(Duration::from_millis(20));
-        }
+        waiting::thread::up_to(Duration::from_secs(5), || !matches!(self.hub.try_wait(), Ok(None)));
         let _ = self.hub.kill();
         let _ = self.hub.wait();
     }

@@ -171,18 +171,22 @@ pub(crate) fn wait_while_progressing<P: PartialEq>(
     mut condition: impl FnMut() -> bool,
 ) {
     let mut last = progress();
-    let mut deadline = Instant::now() + TIMEOUT;
-    // Soon at first, since most of what's waited for is a few milliseconds away, and then every 20.
-    let mut pause = Duration::from_millis(1);
-    while !condition() {
-        let now = progress();
-        if now != last {
+    // Each wait ends once the condition holds, or once the progress has moved on, which starts the next.
+    loop {
+        let held = waiting::thread::until_ok(TIMEOUT, || {
+            if condition() {
+                return Ok(true);
+            }
+            let now = progress();
+            if now == last {
+                return Err(format!("timed out waiting for {what}"));
+            }
             last = now;
-            deadline = Instant::now() + TIMEOUT;
+            Ok(false)
+        });
+        if held {
+            return;
         }
-        assert!(Instant::now() < deadline, "timed out waiting for {what}");
-        std::thread::sleep(pause);
-        pause = (pause * 2).min(Duration::from_millis(20));
     }
 }
 

@@ -175,10 +175,9 @@ mod tests {
 
         command.end(Duration::from_millis(100)).await;
 
-        let deadline = Instant::now() + Duration::from_secs(5);
-        while process::testing::is_running(helper) {
-            assert!(Instant::now() < deadline, "what the command started outlived it");
-            tokio::time::sleep(Duration::from_millis(25)).await;
-        }
+        waiting::task::until(Duration::from_secs(5), "what the command started outlived it", || {
+            !process::testing::is_running(helper)
+        })
+        .await;
     }
 }

@@ -53,12 +53,8 @@ async fn said(hub: &Arc<Hub>, link: &WorkerLink, seq: u64) {
     link.acks.routed(&s(), seq);
 }
 
-async fn wait_for(what: &str, mut done: impl FnMut() -> bool) {
-    let deadline = Instant::now() + Duration::from_secs(10);
-    while !done() {
-        assert!(Instant::now() < deadline, "timed out waiting for {what}");
-        tokio::time::sleep(Duration::from_millis(1)).await;
-    }
+async fn wait_for(what: &str, done: impl FnMut() -> bool) {
+    waiting::task::until(Duration::from_secs(10), format!("timed out waiting for {what}"), done).await;
 }
 
 /// So a worker doesn't keep for good what its hub has recorded, and one that crashes leaves it only what came last,

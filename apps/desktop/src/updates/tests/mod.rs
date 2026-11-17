@@ -3,7 +3,6 @@
 
 use std::fmt::Write as _;
 use std::path::Path;
-use std::time::Instant;
 
 use gpui_kit::{IntoElement, Render, TestAppContext, Window};
 use protocol::versions::Versions;

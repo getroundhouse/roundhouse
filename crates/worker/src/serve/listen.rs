@@ -18,6 +18,10 @@ use super::{Config, Worker};
 /// the last hub, if it's still there, what they said as they stopped. A hub that connects while another is connected is
 /// refused, so a hub that asks twice for its connection learns there's one already. The caller holds the instance's
 /// claim, so a socket already there is one a worker left behind.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the pause after a connection that couldn't be accepted, and the time a worker with no hub waits for one"
+)]
 pub async fn listen(socket: &Path, config: Config, idle_limit: Duration) -> io::Result<()> {
     let listener = bind(socket)?;
     let worker = Worker::new(config);

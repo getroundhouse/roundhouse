@@ -38,6 +38,7 @@ libc.workspace = true
 proptest.workspace = true
 protocol = { workspace = true, features = ["testing"] }
 tempfile.workspace = true
+waiting.workspace = true
 
 [lints]
 workspace = true

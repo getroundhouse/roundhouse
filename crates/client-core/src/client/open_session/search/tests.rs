@@ -23,7 +23,8 @@ fn at_each(places: &[u64]) -> Vec<Position> {
     places.iter().copied().map(at).collect()
 }
 
-/// Long enough for a search that's to be held up to have asked for what it's not to.
+/// Long enough for a search that's to be held up to have asked for what it's not to. Nothing it does says it's
+/// holding back, so a test gives it this to go wrong in.
 const A_WHILE: Duration = Duration::from_millis(100);
 
 fn needle(query: &str) -> Needle {
@@ -111,7 +112,7 @@ fn what_the_hub_names_is_read_with_what_s_around_it_a_stretch_at_a_time() {
 
     let search = open.search(&client, needle("parser"), 64);
     until("two stretches are read", || reads_from(&requests, &mut heard).len() == 2);
-    std::thread::sleep(A_WHILE);
+    waiting::thread::for_what_mustnt_happen(A_WHILE);
 
     assert_eq!(starts(reads_from(&requests, &mut heard)), [36, 236], "not the third, with two waiting");
     assert_eq!(queries_asked(&heard), [("parser", Some(&helper))], "of the subagent the view follows");
@@ -154,7 +155,7 @@ fn a_chat_has_one_search_at_the_hub_at_a_time_and_one_typed_over_isn_t_asked() {
     until("the first is asked", || finds() == 1);
     drop(open.search(&client, needle("par"), 64));
     let third = open.search(&client, needle("pars"), 64);
-    std::thread::sleep(A_WHILE);
+    waiting::thread::for_what_mustnt_happen(A_WHILE);
 
     assert_eq!(finds(), 1, "the others wait while the first is at the hub");
     answer.send(()).unwrap();

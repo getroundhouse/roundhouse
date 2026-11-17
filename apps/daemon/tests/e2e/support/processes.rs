@@ -1,7 +1,7 @@
 //! Signalling the processes a stack runs, asking about them, and stopping its hub.
 
 use std::process::Command;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use super::Stack;
 
@@ -48,12 +48,8 @@ impl Stack {
     pub(crate) fn stop_hub(&mut self) {
         let Some(mut hub) = self.hub.take() else { return };
         terminate(hub.id());
-        let deadline = Instant::now() + Duration::from_secs(10);
-        while Instant::now() < deadline {
-            if !matches!(hub.try_wait(), Ok(None)) {
-                return;
-            }
-            std::thread::sleep(Duration::from_millis(20));
+        if waiting::thread::up_to(Duration::from_secs(10), || !matches!(hub.try_wait(), Ok(None))) {
+            return;
         }
         let _ = hub.kill();
         let _ = hub.wait();

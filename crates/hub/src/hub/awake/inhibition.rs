@@ -168,6 +168,7 @@ pub(super) async fn hold_while(awake: Arc<Awake>, at_work: impl Fn() -> bool, st
 }
 
 /// Waits until `at`, or for good if there's nothing to wait for.
+#[expect(clippy::disallowed_methods, reason = "the time the next step of keeping the machine awake is due at")]
 async fn until(at: Option<Instant>) {
     match at {
         Some(at) => tokio::time::sleep_until(at).await,

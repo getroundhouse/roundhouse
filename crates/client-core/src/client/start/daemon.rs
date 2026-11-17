@@ -39,6 +39,10 @@ impl Client {
 }
 
 /// Connects to the hub just started at `socket`, waiting for it to listen.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the pace connecting looks again at while the hub just started begins to listen"
+)]
 fn connect_once_started(socket: &Path, client_name: &str) -> Result<Client> {
     let deadline = Instant::now() + Duration::from_secs(10);
     loop {
@@ -161,6 +165,10 @@ fn whole(path: &Path) -> io::Result<PathBuf> {
 
 /// Runs a freshly written copy, waiting out its being busy. Linux won't run a file while anything has it open for
 /// writing, and a fork on another thread while the copy was being written leaves its child holding it until it execs.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the pace a copy that's busy is run again at, until whatever holds it open for writing lets go"
+)]
 fn waiting_out_busy<T>(mut run: impl FnMut() -> io::Result<T>) -> io::Result<T> {
     let deadline = Instant::now() + BUSY_TIMEOUT;
     loop {

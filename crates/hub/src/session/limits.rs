@@ -100,6 +100,10 @@ impl LiveSession {
     /// Learns which account the agent of `run` runs under, files it on the account's record and the session's, and
     /// then what the agent heard meanwhile. A worker that can't say is asked again a few times. If it still can't,
     /// nothing is known, and it's asked again when the agent next hears of a limit.
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "the pause before a worker that couldn't say which account the agent runs under is asked again"
+    )]
     async fn learn_account(self: Arc<Self>, run: RunId) {
         let Ok(hub) = self.hub() else { return };
         let Filing::AskTheWorker = self.file_given_login(&hub, run).await else { return };

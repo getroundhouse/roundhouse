@@ -39,7 +39,7 @@ pub fn claim_unused(path: &Path) -> io::Result<Option<Claimed>> {
 
 #[cfg(test)]
 mod tests {
-    use std::time::{Duration, Instant};
+    use std::time::Duration;
 
     use super::*;
 
@@ -59,13 +59,12 @@ mod tests {
     /// Claims `path` once it can be, or gives up. A mark only goes once every process holding it has let go, and a
     /// child that another test is starting holds what this process has open until it runs its program.
     fn claimed_once_free(path: &Path) -> Option<Claimed> {
-        let deadline = Instant::now() + Duration::from_secs(10);
-        loop {
-            match claim_unused(path).unwrap() {
-                None if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(10)),
-                claimed => return claimed,
-            }
-        }
+        let mut claimed = None;
+        waiting::thread::up_to(Duration::from_secs(10), || {
+            claimed = claim_unused(path).unwrap();
+            claimed.is_some()
+        });
+        claimed
     }
 
     #[test]

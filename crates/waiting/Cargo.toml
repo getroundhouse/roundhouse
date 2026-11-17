@@ -1,0 +1,16 @@
+[package]
+name = "waiting"
+description = "How tests wait: until something holds, failing once a time limit has passed, or for a bound in which what mustn't happen could. The one place tests sleep."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+tokio.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
+
+[lints]
+workspace = true

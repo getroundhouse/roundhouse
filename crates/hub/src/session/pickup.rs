@@ -13,6 +13,10 @@ use super::{Item, LiveSession, LiveState, Origin};
 impl LiveSession {
     /// Takes the agent to be idle if the session is still in this wait, [`crate::Timers::picks_up_within`] after it
     /// began. A wait begun since has a timer of its own.
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "how long an agent has to pick up again after its work in the background before it's taken to be idle"
+    )]
     pub(super) fn wait_for_pickup(&self) {
         let wait = {
             let mut state = self.state.lock();

@@ -213,7 +213,7 @@ fn parents() -> Vec<(u32, u32)> {
 mod tests {
     use std::io::{BufRead as _, BufReader, Read as _};
     use std::process::Stdio;
-    use std::time::{Duration, Instant};
+    use std::time::Duration;
 
     use windows_sys::Win32::Foundation::GetHandleInformation;
 
@@ -239,11 +239,9 @@ mod tests {
         signal_group(leader.id(), Signal::Terminate);
 
         assert_eq!(leader.wait().unwrap().code(), i32::try_from(ENDED_EXIT_CODE).ok());
-        let deadline = Instant::now() + Duration::from_secs(5);
-        while started.iter().any(|child| start_time(*child).is_some()) {
-            assert!(Instant::now() < deadline, "what the leader started is still running");
-            std::thread::sleep(Duration::from_millis(10));
-        }
+        waiting::thread::until(Duration::from_secs(5), "what the leader started is still running", || {
+            started.iter().all(|child| start_time(*child).is_none())
+        });
     }
 
     #[test]

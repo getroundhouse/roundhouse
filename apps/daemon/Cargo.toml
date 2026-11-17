@@ -35,6 +35,7 @@ worker = { workspace = true, features = ["testing"] }
 flume.workspace = true
 libc.workspace = true
 tempfile.workspace = true
+waiting.workspace = true
 
 [lints]
 workspace = true

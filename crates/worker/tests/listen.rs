@@ -90,16 +90,10 @@ struct Hub {
 
 impl Hub {
     async fn connect(socket: &Path) -> Self {
-        let stream = timeout(WAIT, async {
-            loop {
-                match UnixStream::connect(socket).await {
-                    Ok(stream) => return stream,
-                    Err(_) => tokio::time::sleep(Duration::from_millis(10)).await,
-                }
-            }
+        let stream = waiting::task::until_ok_async(WAIT, || async move {
+            UnixStream::connect(socket).await.map_err(|e| format!("the worker's socket: {e}"))
         })
-        .await
-        .expect("the worker's socket");
+        .await;
         let (frames, calls) = stream.into_split();
         Self { calls, frames: BufReader::new(frames).lines(), next_id: 1 }
     }

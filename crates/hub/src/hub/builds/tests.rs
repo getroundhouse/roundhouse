@@ -74,11 +74,7 @@ async fn a_worker_whose_workspace_has_a_session_at_work_isnt_replaced() {
 
     live.record(Origin::Hub, prompt(), None).await.unwrap();
     // A prompt from the person has the hub read their account through the worker, which isn't what's at work here.
-    let deadline = Instant::now() + TIMEOUT;
-    while link.calls_under_way() > 0 {
-        assert!(Instant::now() < deadline, "a call to the stand-in never ended");
-        tokio::time::sleep(Duration::from_millis(10)).await;
-    }
+    waiting::task::until(TIMEOUT, "a call to the stand-in never ended", || link.calls_under_way() == 0).await;
 
     assert!(!hub.replace_if_idle(&w(), &link).await, "it was replaced");
     assert!(hub.existing_worker(&w()).is_some());
@@ -96,11 +92,7 @@ async fn a_worker_with_a_call_under_way_isnt_replaced() {
     hub.workers.lock().insert(w(), link.clone());
     let calling = link.clone();
     tokio::spawn(async move { calling.call(GitStatus { path: "/w".into() }).await });
-    let deadline = Instant::now() + TIMEOUT;
-    while link.calls_under_way() == 0 {
-        assert!(Instant::now() < deadline, "the call never went");
-        tokio::time::sleep(Duration::from_millis(10)).await;
-    }
+    waiting::task::until(TIMEOUT, "the call never went", || link.calls_under_way() > 0).await;
 
     assert!(!hub.replace_if_idle(&w(), &link).await, "it was replaced");
     assert!(hub.existing_worker(&w()).is_some());
@@ -111,6 +103,10 @@ async fn a_worker_with_a_call_under_way_isnt_replaced() {
 /// script is what's at work, since recording anything would let paused time run on while the record is written, and
 /// there's no session, whose asking which account its agent runs under would be a call under way now and then.
 #[tokio::test(start_paused = true)]
+#[expect(
+    clippy::disallowed_methods,
+    reason = "tokio's clock is paused, so sleeping until halfway between looks moves it there"
+)]
 async fn a_worker_of_another_build_is_replaced_once_two_looks_in_a_row_find_nothing_at_work() {
     let dir = tempfile::tempdir().unwrap();
     let (hub, link) = with_worker(dir.path());

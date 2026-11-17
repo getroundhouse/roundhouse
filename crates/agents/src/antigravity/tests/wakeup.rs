@@ -211,8 +211,10 @@ async fn background_command_lists_task_drains_wakeup_into_own_turn_cancels_befor
             planner_step(&["run_command"]),
         ],
     );
-    // In FullAccess (`--dangerously-skip-permissions`), a wakeup command runs unasked past `UNGATED_PARK_GRACE`.
-    tokio::time::sleep(Duration::from_millis(520)).await;
+    // In FullAccess (`--dangerously-skip-permissions`), a wakeup command runs unasked past `UNGATED_PARK_GRACE`, so
+    // nothing is prompted for it. Nothing says the adapter has read the steps, so this gives it the grace and a little
+    // more to prompt in.
+    waiting::task::for_what_mustnt_happen(Duration::from_millis(520)).await;
     let premature = std::fs::read_to_string(h.room.path().join("native-requests.jsonl")).unwrap();
     assert_eq!(premature.lines().filter(|l| l.contains("\"session/prompt\"")).count(), 1);
 

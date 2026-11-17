@@ -20,7 +20,7 @@ use std::path::{Path, PathBuf};
 #[cfg(test)]
 use std::process::Command;
 #[cfg(test)]
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 #[cfg(test)]
 mod tests;
