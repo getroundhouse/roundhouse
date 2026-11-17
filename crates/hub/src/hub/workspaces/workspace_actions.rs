@@ -173,11 +173,12 @@ impl Hub {
             warn!(workspace = workspace.name, "{warning}");
         }
         let id = workspace.id.clone();
+        // Before it's ready on the record, since the reads nobody asks for start at once on a ready one with no schedule.
+        self.nothing_to_read_yet(&id);
         let ready = self
             .blocking(move |store| store.workspace_ready(&id, &path, &branch, &base_ref, branches.as_ref()))
             .await?;
         let ready = ReadyWorkspace::new(ready)?;
-        self.nothing_to_read_yet(ready.id());
         self.notify(HubNotice::Workspace(ready.workspace().clone()));
         // Once it's announced, so what the watch sees comes after.
         self.watch_branches(&ready, &link).await;
