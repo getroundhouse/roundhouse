@@ -111,9 +111,7 @@ fn checking_again_shows_the_new_answer_for_as_long(cx: &mut TestAppContext) {
 #[gpui_kit::test]
 fn checking_shows_at_once_that_the_update_server_is_out_of_reach(cx: &mut TestAppContext) {
     let (_dir, installed) = installed();
-    // Bound and closed again, so nothing listens there.
-    let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
-    let _state = app_looking_at(&format!("http://127.0.0.1:{port}"), public(&key_pair()), &installed, cx);
+    let _state = app_looking_at(NOWHERE, public(&key_pair()), &installed, cx);
 
     check(cx);
 

@@ -2,6 +2,7 @@
 
 use std::time::Duration;
 
+use fetching::serving::NOWHERE;
 use serde_json::json;
 use tokio::time::Instant;
 
@@ -69,9 +70,7 @@ async fn a_code_github_wont_give_is_unavailable() {
     ];
     let github = StandIn::with(Script { codes, ..Script::default() }).await;
     let calls = calling(&github);
-    let nowhere = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let unreachable = Github::new(GithubConfig::at(format!("http://{}", nowhere.local_addr().unwrap())));
-    drop(nowhere);
+    let unreachable = Github::new(GithubConfig::at(NOWHERE.to_string()));
 
     let mut codes = Vec::new();
     for _ in 0..3 {
@@ -194,9 +193,7 @@ async fn what_renews_a_token_that_github_refuses_is_refused_and_anything_else_is
     ];
     let github = StandIn::with(Script { renewals, ..Script::default() }).await;
     let calls = calling(&github);
-    let nowhere = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let unreachable = Github::new(GithubConfig::at(format!("http://{}", nowhere.local_addr().unwrap())));
-    drop(nowhere);
+    let unreachable = Github::new(GithubConfig::at(NOWHERE.to_string()));
     let renewing = |refresh: &str| GithubRefreshToken::new(refresh);
 
     let refused = calls.renew(&renewing("used-already")).await;

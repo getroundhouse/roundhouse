@@ -1,3 +1,4 @@
+use fetching::serving::NOWHERE;
 use protocol::model::{GithubRepositoryName, GithubUser, GithubUserId};
 use protocol::worker::GitCredential;
 
@@ -89,11 +90,7 @@ async fn a_token_github_refuses_is_refused_and_a_github_that_cant_say_whose_it_i
 
 #[tokio::test]
 async fn a_github_that_cant_be_reached_is_unavailable() {
-    let nowhere = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let api = format!("http://{}", nowhere.local_addr().unwrap());
-    drop(nowhere);
-
-    let refused = Github::new(GithubConfig::at(api)).token_owner(&GithubToken::new("a-token")).await;
+    let refused = Github::new(GithubConfig::at(NOWHERE.to_string())).token_owner(&GithubToken::new("a-token")).await;
 
     assert_eq!(refused.unwrap_err().code, ErrorCode::Unavailable);
 }

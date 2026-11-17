@@ -159,10 +159,8 @@ fn a_package_longer_than_the_feed_says_is_refused() {
 #[test]
 fn a_server_that_isnt_there_is_out_of_reach() {
     let (_dir, installed) = installed();
-    // Bound and closed again, so nothing listens there.
-    let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
 
-    let problem = newest(&manager(&format!("http://127.0.0.1:{port}"), public(&key_pair()), &installed)).unwrap_err();
+    let problem = newest(&manager(NOWHERE, public(&key_pair()), &installed)).unwrap_err();
 
     assert_eq!(problem.kind, Kind::Unreachable);
 }

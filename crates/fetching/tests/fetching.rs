@@ -8,7 +8,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
-use fetching::serving::{Event, Reply, serve};
+use fetching::serving::{Event, NOWHERE, Reply, serve};
 use fetching::{CheckError, Expected, FetchError, Fetched, Fetcher, FolderLock};
 use ring::digest::{SHA256, digest};
 
@@ -90,8 +90,7 @@ fn a_file_that_isnt_there_says_so_and_names_its_address() {
 
 #[test]
 fn a_server_that_isnt_there_says_so_and_names_its_address() {
-    let gone = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap();
-    let url = format!("http://{gone}/feed");
+    let url = format!("{NOWHERE}/feed");
 
     let fetched = fetcher().bytes(&url, 100);
 
@@ -346,7 +345,6 @@ fn a_fetch_that_stops_coming_times_out_and_keeps_what_came() {
 fn only_a_wait_that_ran_out_timed_out() {
     let server = serve(vec![("there".to_string(), vec![Reply::file("not")])]).unwrap();
     let missing = fetcher().bytes(&format!("{}/elsewhere", server.base), 10).unwrap_err();
-    let gone = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap();
-    let refused = fetcher().bytes(&format!("http://{gone}/feed"), 10).unwrap_err();
+    let refused = fetcher().bytes(&format!("{NOWHERE}/feed"), 10).unwrap_err();
     assert!(!missing.timed_out() && !refused.timed_out(), "{missing:?} {refused:?}");
 }
