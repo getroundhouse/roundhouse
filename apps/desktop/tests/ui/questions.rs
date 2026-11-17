@@ -113,8 +113,7 @@ fn several_questions_are_asked_one_at_a_time(cx: &mut TestAppContext) {
     // Only the first question has a third option.
     let showing_the_first = |ui: &mut Ui| ui.has(id("question-answer-2"));
 
-    // Nothing's chosen yet, so the arrow sends nothing, which the answers at the end show.
-    ui.click(id("question-send"));
+    assert!(ui.off(id("question-send")), "nothing's chosen yet, so the arrow sends nothing");
 
     // Several can be chosen for the first, and since more could follow, it stays.
     ui.click(id("question-answer-0"));

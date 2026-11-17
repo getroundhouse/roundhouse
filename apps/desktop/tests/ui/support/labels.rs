@@ -7,7 +7,7 @@ use gpui_kit::{App, AppContext as _, ElementId, SharedString, Window};
 use look::Region;
 
 use super::Ui;
-use super::click::click_at;
+use super::click::{click_at, pressable};
 
 /// The ID the kit gives the menu that's open.
 pub(crate) const MENU: &str = "popup-menu";
@@ -29,11 +29,12 @@ pub(crate) fn labelled(window: &Window, label: &str) -> ElementId {
 
 /// Clicks the item labelled `label` in the menus that are open, rather than anything else with that label, such as the
 /// pull request's button of the same name, where it's drawn, as [`open_menu_item`] finds it. Like
-/// [`click`](super::click), it draws a frame to find it and none after, for a test that counts the frames that follow.
+/// [`click`](super::click), it draws a frame to find it and none after, for a test that counts the frames that follow,
+/// and refuses an item that's off.
 pub(crate) fn click_menu_item(window: &mut Window, label: &str, cx: &mut App) {
     window.render_frame(cx);
     let item = open_menu_item(window, label);
-    assert!(item.visible(), "{label} can't be seen, so it can't be clicked");
+    pressable(&item, label);
     click_at(window, item.bounds().center(), cx);
 }
 
