@@ -28,8 +28,16 @@ async fn abandoning_initialization_kills_the_process_group_and_removes_its_recor
         }
     }
     assert!(!pid.is_running());
-    assert!(process::start_time(child).is_none());
     assert!(!pid_path.exists());
+    // The leader is reaped before the exit is told, but the descendant isn't the adapter's child: the kill reaches
+    // it in its own time, and `ps` lists it until init has reaped it too.
+    tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        while process::start_time(child).is_some() {
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .expect("the descendant outlived its group's kill");
 }
 
 #[tokio::test]
