@@ -6,7 +6,7 @@ use super::*;
 
 /// Archiving waits for one being made before it looks at any, so one made as it starts is checked and removed too.
 /// One asked for after finds the workspace archived.
-#[tokio::test]
+#[tokio::test(start_paused = true)]
 async fn archiving_waits_for_one_being_made_and_removes_it_too() {
     let dir = tempfile::tempdir().unwrap();
     let (hub, link, seen) = workspace(dir.path(), StandIn::default());
@@ -28,7 +28,7 @@ async fn archiving_waits_for_one_being_made_and_removes_it_too() {
 }
 
 /// One asked for while one is removed, or the workspace archived, waits until that's done.
-#[tokio::test]
+#[tokio::test(start_paused = true)]
 async fn one_asked_for_waits_while_one_is_removed() {
     let dir = tempfile::tempdir().unwrap();
     let (hub, link, seen) = workspace(dir.path(), StandIn::default());
@@ -46,7 +46,7 @@ async fn one_asked_for_waits_while_one_is_removed() {
 
 /// One asked for just as archiving starts waits for it, and is refused once it's done, rather than made in a workspace
 /// that's on its way out because it looked before the record said so.
-#[tokio::test]
+#[tokio::test(start_paused = true)]
 async fn one_asked_for_as_archiving_starts_is_refused_rather_than_made() {
     let dir = tempfile::tempdir().unwrap();
     let (hub, link, seen) = workspace(dir.path(), StandIn::default());

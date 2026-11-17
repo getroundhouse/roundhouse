@@ -7,4 +7,5 @@
 mod dependencies;
 mod licenses;
 mod rust_standards;
+mod waits;
 mod workspace;

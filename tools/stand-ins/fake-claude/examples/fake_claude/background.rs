@@ -48,7 +48,7 @@ impl Call {
 /// interrupted here. The lines come in the real CLI's order: the call, the list with its task, the `task_started`
 /// that names the call, then the call's result.
 pub(crate) fn start(turn: &mut Turn, call: Call, file: &str) -> bool {
-    let command = format!("until [ -e {file} ]; do sleep 1; done");
+    let command = format!("until [ -e {file} ]; do sleep 0.05; done");
     let tool_use_id = match call {
         Call::Command => turn.tool_use(&command),
         Call::Monitor => {

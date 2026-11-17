@@ -190,7 +190,7 @@ mod tests {
             "cat [ab].rs",
             "cat {a,b}.rs",
             "cat =ls",
-            "sleep 9 &",
+            "cat a.rs &",
             "cat a.rs |& tee b.rs",
             "cat a.rs |",
             "| cat a.rs",
