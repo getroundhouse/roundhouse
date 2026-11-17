@@ -3,7 +3,7 @@
 use std::os::unix::process::CommandExt as _;
 use std::process::Command;
 
-use crate::Signal;
+use crate::{RunningProgram, Signal};
 
 fn number(signal: Signal) -> i32 {
     match signal {
@@ -48,6 +48,12 @@ pub(crate) fn start_time(pid: u32) -> Option<String> {
     let output = Command::new("ps").args(["-o", "lstart=", "-p", &pid.to_string()]).output().ok()?;
     let started = String::from_utf8_lossy(&output.stdout).trim().to_string();
     (!started.is_empty()).then_some(started)
+}
+
+/// None, since nothing a process has open keeps a folder from being moved on Unix, which is all
+/// [`running_in`](crate::running_in) is for.
+pub(crate) fn running_programs() -> Vec<RunningProgram> {
+    Vec::new()
 }
 
 #[cfg(test)]
