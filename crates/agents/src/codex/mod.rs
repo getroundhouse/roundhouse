@@ -6,6 +6,7 @@ mod control;
 mod description;
 mod items;
 mod launch;
+mod notices;
 mod notifications;
 mod one_off;
 mod rpc;

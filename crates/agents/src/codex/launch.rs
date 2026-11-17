@@ -13,7 +13,7 @@ use super::running::Shared;
 use super::state::ThreadId;
 use crate::{AgentError, AgentOptions};
 
-pub(super) const ARGS: [&str; 8] = [
+pub(super) const ARGS: [&str; 10] = [
     "app-server",
     "--stdio",
     "-c",
@@ -22,6 +22,10 @@ pub(super) const ARGS: [&str; 8] = [
     "features.goals=false",
     "-c",
     "features.default_mode_request_user_input=true",
+    // Codex warns of an under-development feature, such as the one above, in every thread. It's Roundhouse's choice,
+    // so the warning tells the person nothing they can act on.
+    "-c",
+    "suppress_unstable_features_warning=true",
 ];
 
 pub(super) struct Launched {
