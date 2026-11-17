@@ -1,8 +1,31 @@
 # Look
 
-The foundations of the app's design system, the rules every screen follows: colour, type, space and shape, layout and the pointer. The components built on them, such as buttons, the status mark and the app icon, are in `components.md`, and a rule about one place is in that place's file, even when it's about how it looks. Each area's file shows its own screens. `crates/look` holds them in code: every colour, kind of text and corner by what it's for, every step of space, and every size a control, a bar, a row and an icon come in, the theme made from them, the mark, the icon, plan mode's texture, the pointing hand and the baseline text of different sizes shares.
+The foundations of the app's design system, the rules every screen follows: how each client is designed for its device, colour, type, space and shape, layout and the pointer. The components built on them, such as buttons, the status mark and the app icon, are in `components.md`, and a rule about one place is in that place's file, even when it's about how it looks. Each area's file shows its own screens. `crates/look` holds them in code: every colour, kind of text and corner by what it's for, every step of space, and every size a control, a bar, a row and an icon come in, the theme made from them, the mark, the icon, plan mode's texture, the pointing hand and the baseline text of different sizes shares.
 
 It's meant to feel familiar to the people Roundhouse is for, and it sets itself apart with a motif of its own, the status mark.
+
+## Each client
+
+Every client is designed on purpose for the device it's on, rather than another client fitted to it. A phone isn't the desktop made smaller, and a tablet isn't a phone made bigger. What makes them one product is the same records and behaviour, the same chat, and the same look.
+
+- **Not one scale factor,** because a device is more than a size. A phone is held closer and touched rather than pointed at, and has room for one thing at a time, so the desktop scaled up for it would be a magnified desktop, with hover where nothing hovers and three panes where one fits.
+- **Not a design system for each client,** because the brand would be kept twice and drift apart, and a component that means the same thing everywhere, such as a button, would be built twice.
+- **The brand is shared exactly:** the colours, the status mark, the icons, the app icon's drawing and motion.
+- **The foundations are names, with a value for each reach.** A screen asks for a kind of text, a step of space, or a size of control, bar or row, and gets the value for the client it's in. The values below are a desk's. A handheld's are chosen for a device held in the hand, starting from the platform's own guidance, such as iOS's body text at 17 points, and settled by eye on a device, rather than worked out from a desk's. *Not built:* every foundation has a desk's values only.
+- **A component means the same on every client, and responds as its input asks.** On a touch screen a button takes a tap over at least 44 points, as iOS asks, whatever size it's drawn at, shows that it's pressed rather than that something is over it, and has no tooltip. *Not built.*
+- **Some components belong to one kind of client,** such as a handheld's bar across the top, a row that opens what it names and a sheet, or the desktop's sidebar, tabs and menus. *Not built:* a handheld's.
+- **The transcript is the one view every client shares,** since a chat is the same everywhere, and it takes its sizes from the foundations and how it's touched from the input, such as selecting with a long press on a touch screen. *Not built:* it's sized for a desk, and selects only with a pointer.
+- **Screens are never shared.** Each client lays out its own, for what it's used for there.
+- **A layout is designed for a width, not a device.** A compact one serves a phone and a foldable that's closed, a regular one a tablet and a foldable that's open, and a wide one the desktop's sidebar, chat and changes. Each is designed on purpose for that room, and a client lays itself out again as its width changes. *Unconfirmed.*
+- **Each client's screens are in the gallery at each width it lays out, and with each input it takes,** and the tables here and in `components.md` give a value for each reach. *Not built:* a desk's alone, wide, with a pointer.
+
+What a client is, at any moment, is three traits rather than one kind of device, since one device can be several shapes: a foldable is a phone and nearly a tablet in one session, a tablet can have a trackpad attached, and a desktop window can be made narrow. Each decides one thing, and each value comes in with the first client that uses it. *Unconfirmed.*
+
+| Trait | Its values | What it decides | Changes while the app runs |
+|---|---|---|---|
+| Reach | Handheld, Desk | The foundations' values | No: it's the device's |
+| Input | Touch, Pointer | How components respond: how far a press reaches, what shows a press or what's over something, tooltips and gestures | Yes, as a trackpad is attached to a tablet |
+| Width | Compact, Regular, Wide | The layout | Yes, as a foldable opens, a tablet shares its screen or a window is resized |
 
 ## Colour
 
