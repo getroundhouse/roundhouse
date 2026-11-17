@@ -14,7 +14,7 @@ const MAX_FILE_LINES: usize = 400;
 const LONG_FILES: &[(&str, &str)] = &[];
 
 /// The directory of each crate the Rust standards cover, which is every workspace member.
-fn covered_crates(metadata: &Value) -> Vec<PathBuf> {
+pub(super) fn covered_crates(metadata: &Value) -> Vec<PathBuf> {
     let members: HashSet<&str> =
         metadata["workspace_members"].as_array().unwrap().iter().map(|id| id.as_str().unwrap()).collect();
     metadata["packages"]
@@ -26,7 +26,7 @@ fn covered_crates(metadata: &Value) -> Vec<PathBuf> {
         .collect()
 }
 
-fn add_rust_files(dir: &Path, found: &mut Vec<PathBuf>) {
+pub(super) fn add_rust_files(dir: &Path, found: &mut Vec<PathBuf>) {
     for entry in std::fs::read_dir(dir).unwrap() {
         let path = entry.unwrap().path();
         if path.is_dir() {

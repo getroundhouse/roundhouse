@@ -2,7 +2,6 @@
 //! pasted into, for a new account or in place of an account's own login.
 
 use gpui_kit::assets::IconName as Lucide;
-use gpui_kit::component::button::Button;
 use gpui_kit::component::input::Input;
 use gpui_kit::component::{Icon, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
@@ -10,7 +9,7 @@ use gpui_kit::{
     AnyElement, App, Div, InteractiveElement as _, IntoElement, ParentElement as _, SharedString,
     StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, Window, div,
 };
-use look::{Hand as _, IconSizing as _, Sizing as _, Typeset as _};
+use look::{Hand as _, IconSizing as _, Typeset as _};
 
 use super::super::field::labelled;
 use super::Drawing;
@@ -121,13 +120,10 @@ pub(super) fn token(drawing: &Drawing<'_>, panel: &Panel, token: &TokenPanel, cx
             "Connect",
         ),
     };
-    let make = Button::new("git-make-token")
-        .hand()
-        .outline()
-        .sized(look::ControlSize::Regular)
-        .icon(Lucide::ExternalLink)
-        .label("Make one on GitHub")
-        .on_click(|_, _, cx| cx.open_url(MAKE_A_TOKEN));
+    let make =
+        look::button("git-make-token", look::ButtonKind::Outlined, look::ControlSize::Regular, "Make one on GitHub")
+            .icon(Lucide::ExternalLink)
+            .on_click(|_, _, cx| cx.open_url(MAKE_A_TOKEN));
     let field = labelled("Token", "git-token", Input::new(&token.token.input), "Only the hub keeps it.", cx);
     let connecting = drawing.kept.clone();
     let connect = button("git-panel-connect", act, true, !drawing.kept.read(cx).can_connect(cx), move |window, cx| {
@@ -144,7 +140,7 @@ pub(super) fn token(drawing: &Drawing<'_>, panel: &Panel, token: &TokenPanel, cx
 }
 
 /// Cancel, which puts the panel away, and any wait for the hub's answer with it.
-fn cancel(kept: &gpui_kit::Entity<Kept>) -> Button {
+fn cancel(kept: &gpui_kit::Entity<Kept>) -> look::Button {
     let kept = kept.clone();
     button("git-cancel", "Cancel", false, false, move |window: &mut Window, cx| {
         kept.update(cx, |kept, cx| kept.put_away_panel(window, cx));

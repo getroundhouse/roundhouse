@@ -3,7 +3,6 @@
 
 use client_core::ClientError;
 use gpui_kit::component::WindowExt as _;
-use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::dialog::{DialogAction, DialogClose, DialogFooter};
 use gpui_kit::component::input::{Input, InputState};
 use gpui_kit::{App, AppContext as _, ParentElement as _, Window};
@@ -34,9 +33,12 @@ pub(crate) fn open(
                         DialogClose::new()
                             .trigger(|button| button.sized(look::ControlSize::Large).label("Cancel").hand()),
                     )
-                    .child(DialogAction::new().child(
-                        Button::new("rename-confirm").sized(look::ControlSize::Large).hand().primary().label("Rename"),
-                    )),
+                    .child(DialogAction::new().child(look::button(
+                        "rename-confirm",
+                        look::ButtonKind::Main,
+                        look::ControlSize::Large,
+                        "Rename",
+                    ))),
             )
             .on_ok(move |_, _, cx| {
                 let title = typed.read(cx).value().to_string();

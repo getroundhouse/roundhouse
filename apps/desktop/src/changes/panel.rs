@@ -3,14 +3,13 @@ use crate::file_tree::{List, Row, chain, folder_row, row_frame, split};
 use crate::patch::{FilePatch, FileStatus};
 use crate::review::Review;
 use gpui_kit::assets::IconName as Lucide;
-use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::{Icon, IconName, Selectable as _, h_flex, v_flex};
+use gpui_kit::component::{Icon, IconName, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, Context, Entity, EventEmitter, Global, IntoElement, ParentElement, Render, SharedString,
     StatefulInteractiveElement, Styled, Subscription, TestSupportExt as _, Window, div, uniform_list,
 };
-use look::{Hand as _, IconSizing as _, LineText, Placed, Sizing as _, Typeset as _};
+use look::{IconSizing as _, LineText, Placed, Typeset as _};
 use rows::Layout;
 use std::collections::HashSet;
 use std::ops::Range;
@@ -147,11 +146,7 @@ impl Changes {
                     .child(format!("{count} comment{}", if count == 1 { "" } else { "s" })),
             )
             .child(
-                Button::new("send-comments")
-                    .hand()
-                    .primary()
-                    .sized(look::ControlSize::Regular)
-                    .label("Send to agent")
+                look::button("send-comments", look::ButtonKind::Main, look::ControlSize::Regular, "Send to agent")
                     .on_click(move |_, _, cx| {
                         let _ = review.update(cx, Review::send_comments);
                     }),
@@ -219,17 +214,18 @@ pub(crate) fn controls(changes: &Entity<Changes>, code: &Placed, cx: &App) -> An
         // On the baseline of the tabs' names beside it.
         .child(code.set(h_flex().flex_none().gap(look::Space::Small).children(counts(added, removed, cx))))
         .child(
-            Button::new("changes-layout")
-                .hand()
-                .ghost()
-                .sized_square(look::ControlSize::Regular)
-                .icon(Lucide::ListTree)
-                .selected(tree)
-                .tooltip(if tree { "Show as a list" } else { "Show in folders" })
-                .on_click(move |_, _, cx| {
-                    toggle_layout(cx);
-                    let _ = changes.update(cx, |_, cx| cx.notify());
-                }),
+            look::icon_button(
+                "changes-layout",
+                look::ButtonKind::Borderless,
+                look::ControlSize::Regular,
+                Lucide::ListTree,
+            )
+            .on(tree)
+            .tooltip(if tree { "Show as a list" } else { "Show in folders" })
+            .on_click(move |_, _, cx| {
+                toggle_layout(cx);
+                let _ = changes.update(cx, |_, cx| cx.notify());
+            }),
         )
         .into_any_element()
 }

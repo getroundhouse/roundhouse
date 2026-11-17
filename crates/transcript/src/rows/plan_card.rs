@@ -5,7 +5,7 @@ use client_core::Approval;
 use gpui_kit::component::h_flex;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{AnyElement, App, ClickEvent, Div, ElementId, IntoElement, ParentElement, Styled, Window, div};
-use look::{Hand as _, Sizing as _, Typeset as _};
+use look::Typeset as _;
 use protocol::event::{ApprovalDecision, Asking, EventBody};
 use protocol::model::Seq;
 
@@ -16,7 +16,6 @@ use crate::texts::{TextAt, Written};
 /// The card for the request `body`, recorded at `seq`, where it asks to approve a plan, with its buttons while it's
 /// `open`. Nothing for any other request, which isn't drawn where it was asked.
 pub(super) fn plan_card(seq: Seq, body: &EventBody, open: bool, shared: &Shared, cx: &App) -> AnyElement {
-    use gpui_kit::component::button::{Button, ButtonVariants as _};
     let (EventBody::ApprovalRequested { approval_id, .. }, Some(approval)) = (body, Approval::of(body)) else {
         return empty();
     };
@@ -28,11 +27,8 @@ pub(super) fn plan_card(seq: Seq, body: &EventBody, open: bool, shared: &Shared,
         }
     };
     let allow = approval.allowed();
-    let answer_button = |name: &'static str, label: &'static str, decision: ApprovalDecision| {
-        Button::new(ElementId::NamedInteger(name.into(), seq.get()))
-            .sized(look::ControlSize::Large)
-            .hand()
-            .label(label)
+    let answer_button = |name: &'static str, kind, label: &'static str, decision: ApprovalDecision| {
+        look::button(ElementId::NamedInteger(name.into(), seq.get()), kind, look::ControlSize::Large, label)
             .on_click(answer(decision))
     };
     // Nothing's found in what asks the person something.
@@ -43,8 +39,8 @@ pub(super) fn plan_card(seq: Seq, body: &EventBody, open: bool, shared: &Shared,
     );
     let buttons = h_flex()
         .gap(look::Space::Small)
-        .child(answer_button("approve-plan", "Approve plan", allow).primary())
-        .child(answer_button("keep-planning", "Keep planning", approval.refused()));
+        .child(answer_button("approve-plan", look::ButtonKind::Main, "Approve plan", allow))
+        .child(answer_button("keep-planning", look::ButtonKind::Edged, "Keep planning", approval.refused()));
     row()
         .child(
             waiting_card(open, cx)

@@ -3,13 +3,12 @@
 //! says how it stands once it's on, as `docs/spec/chats.md` says.
 
 use gpui_kit::assets::IconName as Lucide;
-use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::popover::Popover;
-use gpui_kit::component::{Icon, Selectable as _, h_flex};
+use gpui_kit::component::{Icon, h_flex};
 use gpui_kit::{
     Anchor, AnyElement, App, Entity, IntoElement as _, ParentElement as _, Styled as _, Subscription, Window, div, px,
 };
-use look::{Hand as _, InRegion as _, Region, Sizing as _, Typeset as _};
+use look::{InRegion as _, Region, Typeset as _};
 
 use crate::HoldToDictate;
 use crate::dictating::{self, DictationChoice};
@@ -62,12 +61,8 @@ pub(crate) fn microphone(field: &Entity<dictation_ui::Field>, cx: &mut App) -> O
             let label = if underway { "Stop dictating" } else { "Dictate" };
             let field = field.downgrade();
             return Some(
-                Button::new(MICROPHONE)
-                    .hand()
-                    .sized_square(look::ControlSize::Small)
-                    .icon(Lucide::Mic)
-                    .ghost()
-                    .selected(underway)
+                look::icon_button(MICROPHONE, look::ButtonKind::Borderless, look::ControlSize::Small, Lucide::Mic)
+                    .on(underway)
                     .accessibility_label(label)
                     .tooltip_with_action(label, &HoldToDictate, None)
                     .on_click(move |_, window, cx| {
@@ -79,11 +74,7 @@ pub(crate) fn microphone(field: &Entity<dictation_ui::Field>, cx: &mut App) -> O
         Microphone::Offers => ("Dictate", Icon::new(Lucide::Mic)),
         Microphone::Stands => ("Dictation isn't ready", Icon::new(Lucide::Mic).text_color(colors.text_faint)),
     };
-    let button = Button::new(MICROPHONE)
-        .hand()
-        .sized_square(look::ControlSize::Small)
-        .icon(icon)
-        .ghost()
+    let button = look::icon_button(MICROPHONE, look::ButtonKind::Borderless, look::ControlSize::Small, icon)
         .accessibility_label(label)
         .tooltip(label);
     Some(
@@ -115,13 +106,9 @@ fn popover(window: &mut Window, cx: &mut App) -> AnyElement {
         let status = dictating::status_box(cx).map(|status| status.draw(cx));
         return said.child(div().pt(look::Space::Small).children(status)).into_any_element();
     }
-    let turn_on = Button::new(TURN_ON)
-        .hand()
-        .primary()
-        .sized(look::ControlSize::Regular)
-        .label("Turn on")
+    let turn_on = look::button(TURN_ON, look::ButtonKind::Main, look::ControlSize::Regular, "Turn on")
         .on_click(|_, _, cx| change(cx, |settings| settings.dictation = DictationChoice::On));
-    let hide = Button::new(HIDE).hand().outline().sized(look::ControlSize::Regular).label("Hide the microphone");
+    let hide = look::button(HIDE, look::ButtonKind::Outlined, look::ControlSize::Regular, "Hide the microphone");
     // The microphone goes, and its popover with it. The app returns focus to the visible prompt.
     let hide = hide.on_click(|_, _, cx| change(cx, |settings| settings.dictation = DictationChoice::Off));
     said.child(div().text_color(colors.text_muted).child(OFFER))

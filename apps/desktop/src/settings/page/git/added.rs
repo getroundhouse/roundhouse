@@ -2,10 +2,9 @@
 //! under that, what stops the default being used, if anything does, and a row for each account, with its menu.
 
 use gpui_kit::assets::IconName as Lucide;
-use gpui_kit::component::button::Button;
 use gpui_kit::component::{IconName, v_flex};
 use gpui_kit::{AnyElement, App, Div, IntoElement, ParentElement as _, SharedString, Styled as _, div};
-use look::{Off as _, Sizing as _, Typeset as _};
+use look::Typeset as _;
 use protocol::model::{GithubAccount, GithubAccountId};
 
 use super::super::account_row::{self, Detail, Picture, Row, Tone};
@@ -20,13 +19,11 @@ pub(super) fn list(drawing: &Drawing<'_>, cx: &App) -> Div {
     let kept = drawing.kept.read(cx);
     let at_top = kept.panel.as_ref().filter(|panel| panel.under().is_none());
     let opening = drawing.kept.clone();
-    let connect = Button::new("git-connect")
-        .outline()
-        .sized(look::ControlSize::Regular)
-        .icon(IconName::Plus)
-        .label("Connect account")
-        .off_while(!drawing.can_ask(cx) || at_top.is_some())
-        .on_click(move |_, _, cx| opening.update(cx, |kept, cx| kept.open(Shows::Choosing, cx)));
+    let connect =
+        look::button("git-connect", look::ButtonKind::Outlined, look::ControlSize::Regular, "Connect account")
+            .icon(IconName::Plus)
+            .off(!drawing.can_ask(cx) || at_top.is_some())
+            .on_click(move |_, _, cx| opening.update(cx, |kept, cx| kept.open(Shows::Choosing, cx)));
     let panel = at_top.map(|panel| div().py(look::Space::Large).child(draw_panel(drawing, panel, cx)));
     let accounts = listed(drawing.records.github_accounts(), drawing.github.and_then(|github| github.account.as_ref()));
     let said = if drawing.older {

@@ -4,14 +4,11 @@
 //! keeps whether it's open in the window's own state and opens it only from its button, so F10 couldn't.
 
 use gpui_kit::base::Popup;
-use gpui_kit::component::button::{Button, ButtonVariants as _};
+use gpui_kit::component::IconName;
 use gpui_kit::component::menu::PopupMenu;
-use gpui_kit::component::{IconName, Selectable as _};
 use gpui_kit::{
-    Anchor, ClickEvent, Context, DismissEvent, Entity, FocusHandle, Focusable as _, InteractiveElement as _,
-    IntoElement, MouseButton, Subscription, Window,
+    Anchor, ClickEvent, Context, DismissEvent, Entity, FocusHandle, Focusable as _, IntoElement, Subscription, Window,
 };
-use look::{Hand as _, Sizing as _};
 
 use super::AppView;
 
@@ -53,23 +50,16 @@ impl AppView {
 /// The button, with the menus under it while they're open. It opens them as it's pressed, as a menu bar does.
 pub(super) fn button(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
     let open = app.menus_open.as_ref().map(|open| open.menu.clone());
-    let button = Button::new("menus")
-        .hand()
-        .ghost()
-        .sized_square(look::ControlSize::Small)
-        .icon(IconName::Menu)
+    let button = look::icon_button("menus", look::ButtonKind::Borderless, look::ControlSize::Small, IconName::Menu)
         .tooltip("Menu")
-        .selected(open.is_some())
-        .on_mouse_down(
-            MouseButton::Left,
-            cx.listener(|t, _, window, cx| {
-                // While the sidebar is hidden the button is over whatever is in the strip, such as an error, which
-                // would take the press too, and the strip would move the window.
-                window.prevent_default();
-                cx.stop_propagation();
-                t.toggle_menus(window, cx);
-            }),
-        )
+        .on(open.is_some())
+        .on_press(cx.listener(|t, _, window, cx| {
+            // While the sidebar is hidden the button is over whatever is in the strip, such as an error, which
+            // would take the press too, and the strip would move the window.
+            window.prevent_default();
+            cx.stop_propagation();
+            t.toggle_menus(window, cx);
+        }))
         // Enter or Space on the button once Tab has reached it, which GPUI gives only what takes a click. A hand's
         // click opened the menus as it went down, and so did an assistive app's, which GPUI makes a press and a
         // release.

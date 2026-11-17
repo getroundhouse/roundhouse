@@ -3,11 +3,10 @@
 //! once it's saved.
 
 use gpui_kit::assets::IconName as Lucide;
-use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::{Textarea, TextareaState};
 use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::{AnyElement, App, Div, ElementId, Entity, IntoElement, ParentElement, Styled, WeakEntity, div, px};
-use look::{Hand as _, Off as _, Shaped as _, Sizing as _, Typeset as _};
+use look::{Shaped as _, Typeset as _};
 use protocol::model::DiffComment;
 
 use super::FileDiff;
@@ -58,20 +57,23 @@ pub(super) fn draft_card(
         .w_full()
         .justify_end()
         .gap(look::Space::Small)
-        .child(Button::new("cancel-comment").sized(look::ControlSize::Regular).hand().ghost().label("Cancel").on_click(
-            move |_, window, cx| {
-                let _ = cancel.update(cx, |t, cx| t.cancel_draft(window, cx));
-            },
-        ))
         .child(
-            Button::new("save-comment")
-                .sized(look::ControlSize::Regular)
-                .primary()
-                .label(if editing { "Save ↵" } else { "Comment ↵" })
-                .off_while(empty)
+            look::button("cancel-comment", look::ButtonKind::Borderless, look::ControlSize::Regular, "Cancel")
                 .on_click(move |_, window, cx| {
-                    let _ = save.update(cx, |t, cx| t.save_draft(window, cx));
+                    let _ = cancel.update(cx, |t, cx| t.cancel_draft(window, cx));
                 }),
+        )
+        .child(
+            look::button(
+                "save-comment",
+                look::ButtonKind::Main,
+                look::ControlSize::Regular,
+                if editing { "Save ↵" } else { "Comment ↵" },
+            )
+            .off(empty)
+            .on_click(move |_, window, cx| {
+                let _ = save.update(cx, |t, cx| t.save_draft(window, cx));
+            }),
         );
     let actions = match dictation_ui::Field::controls(dictation, look::ControlSize::Regular, cx) {
         Some(controls) => controls.into_any_element(),
@@ -91,35 +93,23 @@ pub(super) fn comment_card(comment: DiffComment, view: WeakEntity<FileDiff>, cx:
         .justify_end()
         .gap(look::Space::Small)
         .child(
-            Button::new(named("edit"))
-                .hand()
-                .ghost()
-                .sized(look::ControlSize::Regular)
+            look::button(named("edit"), look::ButtonKind::Borderless, look::ControlSize::Regular, "Edit")
                 .icon(Lucide::Pencil)
-                .label("Edit")
                 .on_click(move |_, window, cx| {
                     let _ = edit.update(cx, |t, cx| t.edit_comment(&to_edit, window, cx));
                 }),
         )
         .child(
-            Button::new(named("delete"))
-                .hand()
-                .ghost()
-                .sized(look::ControlSize::Regular)
+            look::button(named("delete"), look::ButtonKind::Borderless, look::ControlSize::Regular, "Delete")
                 .icon(Lucide::Trash)
-                .label("Delete")
                 .on_click(move |_, _, cx| {
                     let _ = delete.update(cx, |t, cx| t.delete_comment(to_delete.clone(), cx));
                 }),
         )
         // Outlined, as it opens the chat, with the comment in its composer.
         .child(
-            Button::new(named("add-to-chat"))
-                .hand()
-                .outline()
-                .sized(look::ControlSize::Regular)
+            look::button(named("add-to-chat"), look::ButtonKind::Outlined, look::ControlSize::Regular, "Add to chat")
                 .icon(Lucide::MessageSquarePlus)
-                .label("Add to chat")
                 .on_click(move |_, _, cx| {
                     let _ = add.update(cx, |t, cx| t.add_to_chat(&to_add, cx));
                 }),

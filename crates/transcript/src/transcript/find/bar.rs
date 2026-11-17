@@ -3,14 +3,13 @@
 
 use std::time::Duration;
 
-use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::{Escape, Input, InputEvent, InputState};
 use gpui_kit::component::{Icon, IconName, Sizable as _, h_flex};
 use gpui_kit::{
     AppContext as _, Context, Entity, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Styled as _,
     Subscription, Task, TestSupportExt as _, Window, div, px,
 };
-use look::{Hand as _, IconSizing as _, InRegion as _, Off as _, Region, Sizing as _, Typeset as _};
+use look::{IconSizing as _, InRegion as _, Region, Typeset as _};
 
 use crate::transcript::Transcript;
 
@@ -91,23 +90,17 @@ impl Transcript {
         let says = finding.query.as_ref().map_or_default(|query| query.says(everything_held));
         let none = finding.query.as_ref().is_none_or(|query| query.counts.total() == 0);
         let step = |id: &'static str, icon: IconName, what: &'static str, forward: bool| {
-            Button::new(id)
-                .off_while(none)
-                .ghost()
-                .sized_square(look::ControlSize::Small)
-                .icon(icon)
+            look::icon_button(id, look::ButtonKind::Borderless, look::ControlSize::Small, icon)
+                .off(none)
                 .tooltip(what)
                 .on_click(cx.listener(move |t, _, window, cx| t.find_next(forward, window, cx)))
         };
         let up = step("find-previous", IconName::ChevronUp, "Previous match", false);
         let down = step("find-next", IconName::ChevronDown, "Next match", true);
-        let close = Button::new("find-close")
-            .hand()
-            .ghost()
-            .sized_square(look::ControlSize::Small)
-            .icon(IconName::Close)
-            .tooltip("Close")
-            .on_click(cx.listener(|t, _, _, cx| t.close_find(cx)));
+        let close =
+            look::icon_button("find-close", look::ButtonKind::Borderless, look::ControlSize::Small, IconName::Close)
+                .tooltip("Close")
+                .on_click(cx.listener(|t, _, _, cx| t.close_find(cx)));
         let bar = h_flex()
             .w(WIDTH)
             .h(HEIGHT)

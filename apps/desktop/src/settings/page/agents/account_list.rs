@@ -6,14 +6,12 @@ use super::{kept, panel, row, words};
 use client_core::Agents;
 use client_core::records::Snapshot;
 use gpui_kit::assets::IconName as Lucide;
-use gpui_kit::component::button::Button;
-use gpui_kit::component::menu::{DropdownMenu as _, PopupMenu, PopupMenuItem};
+use gpui_kit::component::menu::{PopupMenu, PopupMenuItem};
 use gpui_kit::component::{IconName, v_flex};
 use gpui_kit::{
     Anchor, AnyElement, App, Div, Entity, IntoElement, ParentElement as _, RenderOnce, ScrollHandle, Styled as _,
     Window, div,
 };
-use look::{Off as _, Sizing as _};
 use protocol::model::{Account, AccountDefault, AgentDescription, AgentKind};
 
 pub(in super::super) fn page(hub: &OfHub) -> Page {
@@ -127,12 +125,10 @@ fn added_list(drawing: &Drawing<'_>, added: &[&Account], cx: &App) -> Div {
 /// of the kinds when it can hold one for several, which opens towards the left, so it stays inside the page's column.
 /// It's on only while `on` and there's a kind.
 fn connect_button(drawing: &Drawing<'_>, kinds: &[&AgentDescription], on: bool) -> AnyElement {
-    let button = Button::new("accounts-connect")
-        .outline()
-        .sized(look::ControlSize::Regular)
-        .icon(IconName::Plus)
-        .label("Connect account")
-        .off_while(!on || kinds.is_empty());
+    let button =
+        look::button("accounts-connect", look::ButtonKind::Outlined, look::ControlSize::Regular, "Connect account")
+            .icon(IconName::Plus)
+            .off(!on || kinds.is_empty());
     let open = |kept: &Entity<Kept>, agent: AgentKind| {
         let kept = kept.clone();
         move |window: &mut Window, cx: &mut App| kept.update(cx, |kept, cx| kept.open_new(agent, window, cx))
@@ -144,7 +140,7 @@ fn connect_button(drawing: &Drawing<'_>, kinds: &[&AgentDescription], on: bool) 
     let choices: Vec<(String, AgentKind)> = kinds.iter().map(|agent| (agent.name.clone(), agent.kind)).collect();
     let kept = drawing.kept.clone();
     button
-        .dropdown_menu_with_anchor(Anchor::TopRight, move |menu: PopupMenu, _, _| {
+        .menu(Anchor::TopRight, move |menu: PopupMenu, _, _| {
             choices.iter().fold(menu, |menu, (name, agent)| {
                 let open = open(&kept, *agent);
                 menu.item(PopupMenuItem::new(name.clone()).on_click(move |_, window, cx| open(window, cx)))

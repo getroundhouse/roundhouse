@@ -127,7 +127,7 @@ fn build_line(line: &BuildLine, cx: &mut Context<AppView>) -> impl IntoElement {
         .gap(look::Space::XSmall)
         .typeset(look::Type::Detail)
         .child(div().flex_1().min_w_0().child(said))
-        .child(h_flex().flex_none().child(controls::help(cx)).child(controls::settings(cx)))
+        .child(h_flex().flex_none().child(controls::help()).child(controls::settings(cx)))
         .test_support()
 }
 

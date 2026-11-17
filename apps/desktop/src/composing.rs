@@ -7,16 +7,15 @@ use std::path::PathBuf;
 
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::base::GlobalState;
-use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::{Textarea, TextareaState};
-use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
+use gpui_kit::component::menu::PopupMenuItem;
 use gpui_kit::component::{Icon, IconName, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     Anchor, App, Context, Div, Entity, FocusHandle, Focusable as _, Hsla, InteractiveElement, IntoElement, MouseButton,
     ParentElement, Role, StatefulInteractiveElement as _, Styled, TestSupportExt as _, div,
 };
-use look::{Hand as _, Shaped as _, Sizing as _};
+use look::Shaped as _;
 
 use crate::TogglePlanMode;
 use crate::attached;
@@ -121,14 +120,10 @@ where
     A: Fn(&mut T, Vec<PathBuf>, &mut Context<T>) + Clone + 'static,
 {
     let this = cx.weak_entity();
-    Button::new(id)
-        .hand()
-        .ghost()
-        .sized_square(look::ControlSize::Small)
-        .icon(IconName::Plus)
+    look::icon_button(id, look::ButtonKind::Borderless, look::ControlSize::Small, IconName::Plus)
         .accessibility_label(PLUS_LABEL)
         .tooltip(PLUS_LABEL)
-        .dropdown_menu_with_anchor(Anchor::BottomLeft, move |menu, _, _| {
+        .menu(Anchor::BottomLeft, move |menu, _, _| {
             let (this, attach) = (this.clone(), attach.clone());
             let files = PopupMenuItem::new("Attach files…").icon(Lucide::Paperclip).on_click(move |_, _, cx| {
                 let _ = this.update(cx, |_, cx| attached::pick(cx, attach.clone()));

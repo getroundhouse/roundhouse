@@ -3,10 +3,9 @@
 //! one, so a row has no menu. Each machine's own login is a choice of default too, the one a hub with no account has:
 //! Found's heading says Default while it is, and offers Make default while it isn't. *Unconfirmed:* choosing it there.
 
-use gpui_kit::component::button::Button;
 use gpui_kit::component::v_flex;
 use gpui_kit::{AnyElement, App, Div, IntoElement, ParentElement as _, SharedString, Styled as _, div};
-use look::{Off as _, Sizing as _, Typeset as _};
+use look::Typeset as _;
 use protocol::model::{FoundGithubLogin, GhLogin};
 
 use super::super::account_row::{self, Detail, Picture, Row, Tone};
@@ -39,13 +38,15 @@ pub(super) fn list(drawing: &Drawing<'_>, cx: &App) -> Option<Div> {
 fn make_default(drawing: &Drawing<'_>, cx: &App) -> Option<AnyElement> {
     drawing.github?.account.as_ref()?;
     let kept = drawing.kept.clone();
-    let button = Button::new("git-machines-own-default")
-        .accessibility_label("Make each machine's own login the default")
-        .outline()
-        .sized(look::ControlSize::Regular)
-        .label("Make default")
-        .off_while(!drawing.can_ask(cx) || drawing.kept.read(cx).choosing())
-        .on_click(move |_, _, cx| kept.update(cx, |kept, cx| kept.make_default(None, cx)));
+    let button = look::button(
+        "git-machines-own-default",
+        look::ButtonKind::Outlined,
+        look::ControlSize::Regular,
+        "Make default",
+    )
+    .accessibility_label("Make each machine's own login the default")
+    .off(!drawing.can_ask(cx) || drawing.kept.read(cx).choosing())
+    .on_click(move |_, _, cx| kept.update(cx, |kept, cx| kept.make_default(None, cx)));
     Some(button.into_any_element())
 }
 

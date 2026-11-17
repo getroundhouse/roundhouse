@@ -11,14 +11,13 @@
 use client_core::calls::agent::{self, Agent};
 use client_core::calls::count;
 use gpui_kit::assets::IconName;
-use gpui_kit::component::button::Button;
 use gpui_kit::component::v_flex;
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, App, Div, ElementId, FontWeight, InteractiveElement as _, IntoElement, ParentElement, Styled,
     TestSupportExt as _, WeakEntity, div,
 };
-use look::{Hand as _, Sizing as _, Typeset as _};
+use look::Typeset as _;
 use protocol::event::{AgentTask, ContentBlock, SessionEvent, TaskKind};
 use protocol::model::{SubagentId, SubagentStatus, ToolUseId};
 
@@ -140,11 +139,7 @@ impl Opens {
 
 pub(in crate::rows) fn open_tab(id: ElementId, opens: Opens, title: &str, this: &WeakEntity<Transcript>) -> AnyElement {
     let (this, title) = (this.clone(), title.to_string());
-    Button::new(id)
-        .hand()
-        .outline()
-        .sized(look::ControlSize::Small)
-        .label("Open")
+    look::button(id, look::ButtonKind::Outlined, look::ControlSize::Small, "Open")
         .icon(IconName::ArrowUpRight)
         .tooltip("Open in the subagent tab")
         .on_click(move |_, _, cx| {

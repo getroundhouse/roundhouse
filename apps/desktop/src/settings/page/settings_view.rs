@@ -6,7 +6,6 @@ use client_core::records::Snapshot;
 use client_core::{Client, RecordsFeed};
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::base::ScrollBounce;
-use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::input::InputState;
 use gpui_kit::component::menu::PopupMenu;
 use gpui_kit::component::scroll::ScrollableElement as _;
@@ -16,7 +15,7 @@ use gpui_kit::{
     ParentElement as _, Pixels, RenderOnce, ScrollHandle, SharedString, StatefulInteractiveElement as _, Styled as _,
     TestSupportExt as _, Window, div,
 };
-use look::{Hand as _, Sizing as _, Typeset as _};
+use look::Typeset as _;
 use std::rc::Rc;
 
 /// The key context Settings' own keys are bound in.
@@ -99,7 +98,7 @@ impl RenderOnce for SettingsView {
             .child(takes_focus(&self.focus))
             .child(sidebar)
             .child(div().flex_1().min_w_0().h_full().child(shown_page))
-            .child(way_back(self.width, self.back, cx))
+            .child(way_back(self.width, self.back))
     }
 }
 
@@ -244,7 +243,7 @@ pub(super) fn shown(sections: &[Section], chosen: Option<PageId>) -> Option<&Pag
 
 /// In the strip along the top, level with the window's buttons at the other end, and muted, since it's not what
 /// Settings is for. A press on it is the button's, so it doesn't move the window.
-fn way_back(width: Pixels, back: Back, cx: &App) -> impl IntoElement {
+fn way_back(width: Pixels, back: Back) -> impl IntoElement {
     div()
         .absolute()
         .top_0()
@@ -256,13 +255,8 @@ fn way_back(width: Pixels, back: Back, cx: &App) -> impl IntoElement {
         .justify_end()
         .pr(look::Space::Medium)
         .child(
-            Button::new("settings-back")
-                .hand()
-                .ghost()
-                .sized(look::ControlSize::Regular)
+            look::button("settings-back", look::ButtonKind::Quiet, look::ControlSize::Regular, "Back")
                 .icon(IconName::ArrowLeft)
-                .label("Back")
-                .text_color(look::colors(cx).text_muted)
                 .on_click(move |event, window, cx| back(event, window, cx)),
         )
 }

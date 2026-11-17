@@ -2,11 +2,10 @@
 //! composer while agents can't push there as the default GitHub account, which says why and what to do, and blocks
 //! nothing.
 
-use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::h_flex;
 use gpui_kit::{AnyElement, Context, HighlightStyle, IntoElement as _, ParentElement as _, SharedString, Styled as _};
 use gpui_kit::{StyledText, div};
-use look::{Hand as _, InRegion as _, Region, Sizing as _, Typeset as _};
+use look::{InRegion as _, Region, Typeset as _};
 use protocol::model::{GithubRepositoryName, GithubUsername, Reach};
 
 use super::{PaneEvent, WorkspacePane};
@@ -97,12 +96,8 @@ impl WorkspacePane {
                 .child(div().flex_1().min_w_0().child(words))
                 // Out past its own room, so its words end as far in as the line's start, as the setup line's do.
                 .child(
-                    Button::new(OPEN_GIT)
-                        .hand()
-                        .ghost()
-                        .sized(look::ControlSize::Small)
-                        .mr(-look::ControlSize::Small.padding())
-                        .label("Open Git")
+                    look::button(OPEN_GIT, look::ButtonKind::Borderless, look::ControlSize::Small, "Open Git")
+                        .stands_out(&[look::Side::Right])
                         .on_click(cx.listener(|_, _, _, cx| cx.emit(PaneEvent::OpenGit))),
                 )
                 .into_any_element(),

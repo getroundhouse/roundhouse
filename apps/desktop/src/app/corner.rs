@@ -3,9 +3,7 @@
 //! menus.
 
 use gpui_kit::component::IconName;
-use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::{Context, Div, IntoElement, ParentElement as _, Pixels, Styled as _, Window, div};
-use look::{Hand as _, Sizing as _};
 
 use super::TOP_STRIP_HEIGHT;
 use super::{AppView, menu_button, title_bar};
@@ -49,12 +47,8 @@ fn in_the_corner(starts: Pixels) -> Div {
 
 /// Hides and shows the sidebar, as the button at the other end of the workspace's header does the sidebar of
 /// changes. It stays put whether the sidebar shows or not, beside the window's buttons where they're in the corner.
-fn sidebar_toggle(cx: &mut Context<AppView>) -> Button {
-    Button::new("toggle-sidebar")
-        .hand()
-        .ghost()
-        .sized_square(look::ControlSize::Small)
-        .icon(IconName::PanelLeft)
+fn sidebar_toggle(cx: &mut Context<AppView>) -> look::Button {
+    look::icon_button("toggle-sidebar", look::ButtonKind::Borderless, look::ControlSize::Small, IconName::PanelLeft)
         .tooltip(match Side::Left.chosen(cx).sidebar {
             Sidebar::Open => "Hide sidebar",
             Sidebar::Hidden => "Show sidebar",
