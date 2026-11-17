@@ -3,7 +3,7 @@
 
 #![cfg(test)]
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use client_core::Daemon;
 use client_core::fake_hub::{self, World};
@@ -28,6 +28,12 @@ impl FakeHub {
         std::fs::create_dir_all(&hub.paths.data_dir).unwrap();
         fake_hub::serve(&hub.paths.socket, world);
         Self { _dir: dir, hub }
+    }
+
+    /// Where the app keeps its own settings while it's open on this hub, as [`super::Stack::settings_file`] says for
+    /// a real one.
+    pub(crate) fn settings_file(&self) -> PathBuf {
+        self.hub.paths.data_dir.join("settings.json")
     }
 }
 

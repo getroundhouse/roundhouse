@@ -7,6 +7,6 @@ mod jumps;
 
 mod navigating;
 
-use navigating::{
-    compact, open_the_list, prompt_rows, row_id, scrolled_to, scrolled_to_exactly, selected, wait_out_the_list,
-};
+mod worlds;
+
+use navigating::{open_the_list, prompt_rows, row_id, scrolled_to, scrolled_to_exactly, selected, wait_out_the_list};

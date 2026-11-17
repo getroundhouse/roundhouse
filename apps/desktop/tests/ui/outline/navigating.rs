@@ -1,5 +1,6 @@
 #![cfg(test)]
 
+use super::worlds::{Turns, chat_world, open_on, open_on_a_chat};
 use crate::support::{Stack, TIMEOUT, Ui};
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{AppContext as _, ElementId, Pixels, ScrollDelta, SharedString, TestAppContext, point, px};
@@ -10,13 +11,14 @@ use std::time::Duration;
 /// Longer than the list waits to open or close.
 const LONGER_THAN_THE_LIST_WAITS: Duration = Duration::from_secs(1);
 
+/// The burst makes the first turn long enough for the chat to scroll.
+fn two_turns_the_first_long() -> Turns {
+    Turns::default().burst("first").turn(&["second"])
+}
+
 #[gpui_kit::test]
 fn the_wheel_over_the_ticks_scrolls_the_chat_and_the_lit_tick_follows(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let session = stack.chat_in_a_new_workspace();
-    stack.run(&session, "burst:3000; say:first");
-    stack.run(&session, "say:second");
-    let mut ui = Ui::open(cx, &stack);
+    let (_fake, mut ui, _) = open_on_a_chat(cx, two_turns_the_first_long());
     ui.wait("the outline", |ui| ui.has("outline"));
     let [first, second] = prompt_rows(&ui)[..] else { panic!("two prompts: {:?}", prompt_rows(&ui)) };
     ui.wait("the end of the chat", |ui| ui.transcript().is_some_and(|_| scrolled_to(ui) > first));
@@ -35,11 +37,7 @@ fn the_wheel_over_the_ticks_scrolls_the_chat_and_the_lit_tick_follows(cx: &mut T
 /// turns, which isn't asking for the list.
 #[gpui_kit::test]
 fn the_wheel_over_the_ticks_goes_on_scrolling_the_chat_rather_than_opening_the_list(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let session = stack.chat_in_a_new_workspace();
-    stack.run(&session, "burst:3000; say:first");
-    stack.run(&session, "say:second");
-    let mut ui = Ui::open(cx, &stack);
+    let (_fake, mut ui, _) = open_on_a_chat(cx, two_turns_the_first_long());
     ui.wait("the outline", |ui| ui.has("outline"));
     let first = prompt_rows(&ui)[0];
     ui.wait("the end of the chat", |ui| scrolled_to(ui) > first);
@@ -61,13 +59,9 @@ fn the_wheel_over_the_ticks_goes_on_scrolling_the_chat_rather_than_opening_the_l
 
 #[gpui_kit::test]
 fn the_wheel_over_the_list_scrolls_the_list_and_not_the_chat(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let session = stack.chat_in_a_new_workspace();
     // More than the list has room for, and long enough that the chat can move.
-    for turn in 0..16 {
-        stack.run(&session, &format!("prose:2:{turn}"));
-    }
-    let mut ui = Ui::open(cx, &stack);
+    let turns = (0..16).fold(Turns::default(), |turns, turn| turns.prose(2, turn));
+    let (_fake, mut ui, _) = open_on_a_chat(cx, turns);
     ui.wait("the outline", |ui| ui.has("outline"));
     let first = row_id("outline-prompt", prompt_rows(&ui)[0]);
     ui.wait("the end of the chat", |ui| scrolled_to(ui) > 0);
@@ -81,8 +75,10 @@ fn the_wheel_over_the_list_scrolls_the_list_and_not_the_chat(cx: &mut TestAppCon
     assert_eq!(scrolled_to(&ui), chat, "and the chat under it stays where it was");
 }
 
+/// A prompt joins the open list, which grows to fit it, and then a compaction joins the ticks, under the prompt it came
+/// after. Each is recorded by the hub as the agent works, while the window watches.
 #[gpui_kit::test]
-fn a_prompt_recorded_while_the_list_is_open_joins_it(cx: &mut TestAppContext) {
+fn a_prompt_or_a_compaction_recorded_while_the_chat_shows_joins_its_outline(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let session = stack.chat_in_a_new_workspace();
     stack.run(&session, "say:first");
@@ -93,26 +89,38 @@ fn a_prompt_recorded_while_the_list_is_open_joins_it(cx: &mut TestAppContext) {
     let before = ui.bounds("outline-list");
 
     stack.run(&session, "say:third");
+
     // A prompt is drawn where the agent took it, which comes after it, and before its reply.
     ui.wait_idle_with("the third reply", |text| text.contains("third"));
     let [_, _, third] = prompt_rows(&ui)[..] else { panic!("three prompts: {:?}", prompt_rows(&ui)) };
     let third = row_id("outline-prompt", third);
-    ui.wait("it to join the list", |ui| ui.has(third.clone()));
-
-    assert!(ui.visible(third), "it shows");
+    ui.wait("the third prompt to join the list", |ui| ui.has(third.clone()));
+    assert!(ui.visible(third), "a prompt: it shows");
     let after = ui.bounds("outline-list");
-    assert!(after.size.height > before.size.height, "and the list grows to fit it: {before:?} {after:?}");
+    assert!(after.size.height > before.size.height, "a prompt: and the list grows to fit it: {before:?} {after:?}");
+    ui.hover("new-tab");
+    wait_out_the_list(&mut ui);
+    assert!(!ui.has("outline-list"), "a compaction: the list has gone, so the ticks show");
+
+    compact(&stack, &session);
+
+    let compaction = stack.client().session_compaction_list(&session).unwrap()[0].clone();
+    let event = stack.event(&session, compaction.seq);
+    let transcript = ui.transcript().unwrap();
+    let follows = |ui: &mut Ui| ui.cx.read_entity(&transcript, |t, _| t.event_row(&event).is_some());
+    ui.wait("the chat to have the compaction", follows);
+    let row = ui.row_of(&event);
+    ui.wait("the compaction's dot", |ui| ui.has(row_id("outline-dot", row)));
+    let last = row_id("outline-tick", *prompt_rows(&ui).last().unwrap());
+    let (tick, dot) = (ui.bounds(last), ui.bounds(row_id("outline-dot", row)));
+    assert!(dot.top() >= tick.bottom(), "a compaction: under the prompt it came after: {tick:?} {dot:?}");
 }
 
 #[gpui_kit::test]
 fn the_list_opens_scrolled_to_the_prompt_being_read(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let session = stack.chat_in_a_new_workspace();
     // More than the list has room for.
-    for turn in 0..16 {
-        stack.run(&session, &format!("say:turn {turn}"));
-    }
-    let mut ui = Ui::open(cx, &stack);
+    let turns = (0..16).fold(Turns::default(), |turns, turn| turns.turn(&[&format!("turn {turn}")]));
+    let (_fake, mut ui, _) = open_on_a_chat(cx, turns);
     ui.wait("the outline", |ui| ui.has("outline"));
     let rows = prompt_rows(&ui);
     let (first, last) = (rows[0], rows[rows.len() - 1]);
@@ -126,32 +134,13 @@ fn the_list_opens_scrolled_to_the_prompt_being_read(cx: &mut TestAppContext) {
     assert!(card.size.height <= px(440.), "stopping short of all sixteen rows: {card:?}");
 }
 
+/// The list, opening under the pointer, keeps it while it rests there, and the pointer moving onto the list keeps it
+/// too, until it leaves.
 #[gpui_kit::test]
-fn the_list_stays_while_the_pointer_is_on_it_and_goes_once_it_leaves(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let session = stack.chat_in_a_new_workspace();
-    stack.run(&session, "say:first");
-    stack.run(&session, "say:second");
-    let mut ui = Ui::open(cx, &stack);
-    ui.wait("the outline", |ui| ui.has("outline"));
-    open_the_list(&mut ui);
-
-    ui.hover("outline-list");
-    wait_out_the_list(&mut ui);
-
-    assert!(ui.has("outline-list"), "the pointer moved onto the list");
-    ui.hover("new-tab");
-    wait_out_the_list(&mut ui);
-    assert!(!ui.has("outline-list"), "and once it's left, the list goes");
-}
-
-#[gpui_kit::test]
-fn the_list_opens_over_the_ticks_and_stays_while_the_pointer_rests_there(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let session = stack.chat_in_a_new_workspace();
-    stack.run(&session, "say:first");
-    stack.run(&session, "say:second");
-    let mut ui = Ui::open(cx, &stack);
+fn the_list_opens_over_the_ticks_and_stays_while_the_pointer_rests_there_or_on_it_and_goes_once_it_leaves(
+    cx: &mut TestAppContext,
+) {
+    let (_fake, mut ui, _) = open_on_a_chat(cx, Turns::default().turn(&["first"]).turn(&["second"]));
     ui.wait("the outline", |ui| ui.has("outline"));
 
     open_the_list(&mut ui);
@@ -159,28 +148,28 @@ fn the_list_opens_over_the_ticks_and_stays_while_the_pointer_rests_there(cx: &mu
         wait_out_the_list(&mut ui);
     }
 
-    assert!(ui.has("outline-list"), "the list, opening under the pointer, keeps it");
+    assert!(ui.has("outline-list"), "resting on the ticks: the list, opening under the pointer, keeps it");
     let (list, ticks) = (ui.bounds("outline-list"), ui.bounds("outline"));
     let covers = list.left() <= ticks.left()
         && list.top() <= ticks.top()
         && list.right() >= ticks.right()
         && list.bottom() >= ticks.bottom();
-    assert!(covers, "and hides the ticks: {list:?} {ticks:?}");
-    assert!(list.size.height < px(150.), "as tall as its two rows: {list:?}");
+    assert!(covers, "resting on the ticks: and hides them: {list:?} {ticks:?}");
+    assert!(list.size.height < px(150.), "resting on the ticks: as tall as its two rows: {list:?}");
+    ui.hover("outline-list");
+    wait_out_the_list(&mut ui);
+    assert!(ui.has("outline-list"), "on the list: the pointer moved onto it");
+    ui.hover("new-tab");
+    wait_out_the_list(&mut ui);
+    assert!(!ui.has("outline-list"), "and once it's left, the list goes");
 }
 
 #[gpui_kit::test]
 fn a_list_left_open_in_a_chat_that_stopped_showing_is_closed_when_it_shows_again(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let session = stack.chat_in_a_new_workspace();
-    stack.run(&session, "say:first");
-    stack.run(&session, "say:second");
-    let mut ui = Ui::open(cx, &stack);
-    ui.wait("the outline", |ui| ui.has("outline"));
-    ui.press("secondary-t");
-    ui.wait("a second chat", |ui| !ui.has("outline"));
-    let other = ui.cx.read_entity(&ui.pane().unwrap(), |p, _| p.session().unwrap().id.clone());
-    ui.activate_chat(&session);
+    let (mut world, chat) = chat_world(Turns::default().turn(&["first"]).turn(&["second"]));
+    let workspace = world.session(&chat).unwrap().workspace_id.clone();
+    let other = world.chat(&workspace, SessionStatus::Idle, Vec::new());
+    let (_fake, mut ui, _) = open_on(cx, world, &chat);
     ui.wait("the first chat", |ui| ui.has("outline"));
     open_the_list(&mut ui);
 
@@ -188,7 +177,7 @@ fn a_list_left_open_in_a_chat_that_stopped_showing_is_closed_when_it_shows_again
     ui.activate_chat(&other);
     ui.wait("the second chat", |ui| !ui.has("outline"));
     ui.hover("new-tab");
-    ui.activate_chat(&session);
+    ui.activate_chat(&chat);
     ui.wait("the first chat again", |ui| ui.has("outline"));
     wait_out_the_list(&mut ui);
 
@@ -198,10 +187,7 @@ fn a_list_left_open_in_a_chat_that_stopped_showing_is_closed_when_it_shows_again
 /// The list opens once the pointer moves over the ticks, so one tick alone would be a small place to find.
 #[gpui_kit::test]
 fn a_lone_tick_is_as_easy_to_rest_on_as_three(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let session = stack.chat_in_a_new_workspace();
-    stack.run(&session, "say:only");
-    let mut ui = Ui::open(cx, &stack);
+    let (_fake, mut ui, _) = open_on_a_chat(cx, Turns::default().turn(&["only"]));
     ui.wait("the outline", |ui| ui.has("outline"));
     let only = row_id("outline-tick", prompt_rows(&ui)[0]);
     let (ticks, tick) = (ui.bounds("outline"), ui.bounds(only));
@@ -211,24 +197,6 @@ fn a_lone_tick_is_as_easy_to_rest_on_as_three(cx: &mut TestAppContext) {
     open_the_list(&mut ui);
 
     assert!(ui.has("outline-list"));
-}
-
-#[gpui_kit::test]
-fn a_compaction_recorded_while_the_chat_shows_joins_its_outline(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let session = stack.chat_in_a_new_workspace();
-    stack.run(&session, "say:only");
-    let mut ui = Ui::open(cx, &stack);
-    ui.wait("the outline", |ui| ui.has("outline"));
-
-    compact(&stack, &session);
-
-    let compaction = stack.client().session_compaction_list(&session).unwrap()[0].clone();
-    let row = ui.row_of(&stack.event(&session, compaction.seq));
-    ui.wait("its dot", |ui| ui.has(row_id("outline-dot", row)));
-    let only = row_id("outline-tick", prompt_rows(&ui)[0]);
-    let (tick, dot) = (ui.bounds(only), ui.bounds(row_id("outline-dot", row)));
-    assert!(dot.top() >= tick.bottom(), "under the prompt it came after: {tick:?} {dot:?}");
 }
 
 /// Asks the hub to compact the chat now, and waits for the agent to have.

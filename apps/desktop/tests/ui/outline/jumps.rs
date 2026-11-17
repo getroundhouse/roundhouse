@@ -5,11 +5,14 @@
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{AppContext as _, ElementId, Pixels, ScrollDelta, TestAppContext, point, px};
 
-use super::{
-    compact, open_the_list, prompt_rows, row_id, scrolled_to, scrolled_to_exactly, selected, wait_out_the_list,
-};
+use protocol::model::CompactionLine;
+
+use super::worlds::{Turns, open_on_a_chat};
+use super::{open_the_list, prompt_rows, row_id, scrolled_to, scrolled_to_exactly, selected, wait_out_the_list};
 use crate::support::{Stack, Ui};
 
+/// On a real hub, since the window draws a prompt that isn't loaded where the hub's list of prompts says the agent took
+/// it, and a fake hub's list doesn't say.
 #[gpui_kit::test]
 fn prompts_too_far_back_to_be_loaded_are_listed_and_jumped_to(cx: &mut TestAppContext) {
     let stack = Stack::new();
@@ -46,13 +49,9 @@ fn prompts_too_far_back_to_be_loaded_are_listed_and_jumped_to(cx: &mut TestAppCo
 
 #[gpui_kit::test]
 fn from_the_end_of_a_chat_any_prompt_with_a_screen_above_it_comes_to_the_bottom(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let session = stack.chat_in_a_new_workspace();
     // Long replies, so every prompt but the first few has more than a screen of chat above it.
-    for turn in 0..12 {
-        stack.run(&session, &format!("prose:4:{turn}"));
-    }
-    let mut ui = Ui::open(cx, &stack);
+    let turns = (0..12).fold(Turns::default(), |turns, turn| turns.prose(4, turn));
+    let (_fake, mut ui, _) = open_on_a_chat(cx, turns);
     ui.wait("the outline", |ui| ui.has("outline"));
     let rows = prompt_rows(&ui);
     ui.wait("the end of the chat", |ui| scrolled_to(ui) > rows[10]);
@@ -67,16 +66,10 @@ fn from_the_end_of_a_chat_any_prompt_with_a_screen_above_it_comes_to_the_bottom(
 
 #[gpui_kit::test]
 fn a_prompt_on_the_first_screen_cant_come_to_the_bottom_so_the_chat_goes_to_its_start(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let session = stack.chat_in_a_new_workspace();
     // Short, so the first three prompts are all on the first screen.
-    for turn in 0..3 {
-        stack.run(&session, &format!("say:short turn {turn}"));
-    }
-    for turn in 0..6 {
-        stack.run(&session, &format!("prose:4:{turn}"));
-    }
-    let mut ui = Ui::open(cx, &stack);
+    let short = (0..3).fold(Turns::default(), |turns, turn| turns.turn(&[&format!("short turn {turn}")]));
+    let turns = (0..6).fold(short, |turns, turn| turns.prose(4, turn));
+    let (_fake, mut ui, _) = open_on_a_chat(cx, turns);
     ui.wait("the outline", |ui| ui.has("outline"));
     let rows = prompt_rows(&ui);
     ui.wait("the end of the chat", |ui| scrolled_to(ui) > rows[3]);
@@ -95,10 +88,7 @@ fn a_prompt_on_the_first_screen_cant_come_to_the_bottom_so_the_chat_goes_to_its_
 
 #[gpui_kit::test]
 fn a_chat_with_one_long_turn_jumps_back_up_to_its_prompt(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let session = stack.chat_in_a_new_workspace();
-    stack.run(&session, "burst:3000; say:only");
-    let mut ui = Ui::open(cx, &stack);
+    let (_fake, mut ui, _) = open_on_a_chat(cx, Turns::default().burst("only"));
     ui.wait("the outline", |ui| ui.has("outline"));
     let [only] = prompt_rows(&ui)[..] else { panic!("one prompt: {:?}", prompt_rows(&ui)) };
     ui.wait("the end of the chat", |ui| scrolled_to(ui) > only);
@@ -116,11 +106,7 @@ fn a_chat_with_one_long_turn_jumps_back_up_to_its_prompt(cx: &mut TestAppContext
 
 #[gpui_kit::test]
 fn after_a_jump_the_list_opens_again_only_once_the_pointer_moves_over_the_ticks(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let session = stack.chat_in_a_new_workspace();
-    stack.run(&session, "say:first");
-    stack.run(&session, "say:second");
-    let mut ui = Ui::open(cx, &stack);
+    let (_fake, mut ui, _) = open_on_a_chat(cx, Turns::default().turn(&["first"]).turn(&["second"]));
     ui.wait("the outline", |ui| ui.has("outline"));
     let first = prompt_rows(&ui)[0];
     open_the_list(&mut ui);
@@ -144,23 +130,15 @@ fn after_a_jump_the_list_opens_again_only_once_the_pointer_moves_over_the_ticks(
 
 #[gpui_kit::test]
 fn a_compaction_too_far_back_to_be_loaded_is_marked_and_jumped_to(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let session = stack.chat_in_a_new_workspace();
     // Long replies, so the compaction after them has more than a screen of chat above it and can come to the bottom.
-    for turn in 0..3 {
-        stack.run(&session, &format!("prose:4:{turn}"));
-    }
-    compact(&stack, &session);
+    let turns = (0..3).fold(Turns::default(), |turns, turn| turns.prose(4, turn));
     // Far more events than the transcript loads to start with, so the compaction before them isn't among them.
-    let script = Vec::from_fn(700, |i| format!("say:message {i}"));
-    stack.run(&session, &script.join("; "));
-    stack.run(&session, "say:the last turn");
-    let mut ui = Ui::open(cx, &stack);
-    ui.wait("the workspace", |ui| ui.transcript().is_some());
+    let turns = turns.compacted().messages(700).turn(&["the last turn"]);
+    let (_fake, mut ui, log) = open_on_a_chat(cx, turns);
     let transcript = ui.transcript().unwrap();
-    let listed = stack.client().session_compaction_list(&session).unwrap();
+    let listed: Vec<_> = log.iter().filter_map(CompactionLine::of).collect();
     let [ref compaction] = listed[..] else { panic!("one compaction: {listed:?}") };
-    let row = ui.row_of(&stack.event(&session, compaction.seq));
+    let row = ui.row_of(log.iter().find(|event| event.seq == compaction.seq).unwrap());
     ui.wait("its dot", |ui| ui.has(row_id("outline-dot", row)));
     assert!(ui.cx.read_entity(&transcript, |t, _| t.event_at(row).is_none()), "the compaction isn't loaded");
 
