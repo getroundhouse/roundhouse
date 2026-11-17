@@ -208,6 +208,8 @@ fn host_without_port(host: &str) -> &str {
     host.rsplit_once(':').map_or(host, |(name, _)| name)
 }
 
+/// A row of the switcher: its icon, its name, and a note at its end, such as a hub's address, with the check after it
+/// on the hub that's open, which the menu draws.
 fn menu_row(
     id: impl Into<ElementId>,
     icon: Lucide,
@@ -225,25 +227,13 @@ fn menu_row(
             None => label.clone(),
         };
         let text_color = if disabled { colors.text_faint } else { colors.text };
-        let icon_color = if disabled { colors.text_faint } else { colors.text_muted };
         h_flex()
             .id(id.clone())
             .aria_label(a11y)
-            .w_full()
+            .flex_1()
+            .min_w_0()
             .gap(look::Space::Small)
             .items_center()
-            .child(
-                div()
-                    .w(look::IconSize::Regular.size())
-                    .flex_none()
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .when(checked, |d| {
-                        d.child(Icon::new(gpui_kit::component::IconName::Check).sized(look::IconSize::Small))
-                    }),
-            )
-            .child(Icon::new(icon).sized(look::IconSize::Regular).text_color(icon_color))
             .child(
                 div()
                     .flex_1()
@@ -265,6 +255,8 @@ fn menu_row(
             })
             .test_support()
     })
+    .icon(icon)
+    .checked(checked)
     .disabled(disabled)
 }
 

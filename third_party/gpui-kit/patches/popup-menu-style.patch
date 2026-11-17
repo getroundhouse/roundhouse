@@ -1,5 +1,5 @@
 diff --git a/crates/component/src/menu/menu_item.rs b/crates/component/src/menu/menu_item.rs
-index a0763c0b..df8a01cc 100644
+index a0763c0..df8a01c 100644
 --- a/crates/component/src/menu/menu_item.rs
 +++ b/crates/component/src/menu/menu_item.rs
 @@ -1,6 +1,6 @@
@@ -81,7 +81,7 @@ index a0763c0b..df8a01cc 100644
              .when(self.disabled, |this| {
                  this.text_color(cx.theme().muted_foreground)
 diff --git a/crates/component/src/menu/mod.rs b/crates/component/src/menu/mod.rs
-index 4c60d6d0..89f436fe 100644
+index 4c60d6d..89f436f 100644
 --- a/crates/component/src/menu/mod.rs
 +++ b/crates/component/src/menu/mod.rs
 @@ -10,7 +10,7 @@ pub use app_menu_bar::AppMenuBar;
@@ -94,7 +94,7 @@ index 4c60d6d0..89f436fe 100644
  pub(crate) fn init(cx: &mut App) {
      app_menu_bar::init(cx);
 diff --git a/crates/component/src/menu/popup_menu.rs b/crates/component/src/menu/popup_menu.rs
-index d9e9cb13..752fac75 100644
+index d9e9cb1..aab3d28 100644
 --- a/crates/component/src/menu/popup_menu.rs
 +++ b/crates/component/src/menu/popup_menu.rs
 @@ -6,9 +6,9 @@ use crate::scroll::ScrollableElement;
@@ -110,7 +110,7 @@ index d9e9cb13..752fac75 100644
      StatefulInteractiveElement, Styled, WeakEntity, Window, anchored, deferred, div,
      prelude::FluentBuilder, px, rems,
  };
-@@ -20,6 +20,54 @@ use std::rc::Rc;
+@@ -20,6 +20,57 @@ use std::rc::Rc;
  
  const CONTEXT: &str = "PopupMenu";
  
@@ -145,6 +145,9 @@ index d9e9cb13..752fac75 100644
 +    /// How far a separator reaches past the rows at each side, or short of
 +    /// them where it's negative.
 +    pub separator_overhang: Option<Pixels>,
++    /// Which side a checked row's check is on, for a menu that doesn't
++    /// choose its own.
++    pub check_side: Option<Side>,
 +    /// The menu's corners.
 +    pub radius: Option<Pixels>,
 +    /// A one pixel edge around the menu, in this colour.
@@ -165,7 +168,27 @@ index d9e9cb13..752fac75 100644
  /// How many frames a newly opened scrollable menu waits for its items to be
  /// measured before it gives up scrolling to the checked item.
  const SCROLL_TO_CHECKED_FRAMES: u8 = 4;
-@@ -1257,6 +1305,7 @@ impl PopupMenu {
+@@ -344,6 +395,10 @@ pub struct PopupMenu {
+ 
+ impl PopupMenu {
+     pub(crate) fn new(cx: &mut App) -> Self {
++        let check_side = cx
++            .try_global::<PopupMenuStyle>()
++            .and_then(|style| style.check_side)
++            .unwrap_or(Side::Left);
+         Self {
+             focus_handle: cx.focus_handle(),
+             action_context: None,
+@@ -355,7 +410,7 @@ impl PopupMenu {
+             min_width: None,
+             max_width: None,
+             max_height: None,
+-            check_side: Side::Left,
++            check_side,
+             checkable: HashSet::new(),
+             bounds: Bounds::default(),
+             scrollable: false,
+@@ -1257,6 +1312,7 @@ impl PopupMenu {
          has_icon: bool,
          checked: bool,
          icon: Option<Icon>,
@@ -173,7 +196,7 @@ index d9e9cb13..752fac75 100644
          _: &mut Window,
          _: &mut Context<Self>,
      ) -> Option<impl IntoElement> {
-@@ -1265,14 +1314,14 @@ impl PopupMenu {
+@@ -1265,14 +1321,14 @@ impl PopupMenu {
          }
  
          let icon = if let Some(icon) = icon {
@@ -190,7 +213,7 @@ index d9e9cb13..752fac75 100644
      }
  
      /// Calculate the anchor corner and left offset for child submenu
-@@ -1317,14 +1366,16 @@ impl PopupMenu {
+@@ -1317,14 +1373,16 @@ impl PopupMenu {
          &self,
          ix: usize,
          item: &PopupMenuItem,
@@ -209,7 +232,7 @@ index d9e9cb13..752fac75 100644
          } else {
              None
          };
-@@ -1335,18 +1386,34 @@ impl PopupMenu {
+@@ -1335,18 +1393,34 @@ impl PopupMenu {
  
          let is_submenu = matches!(item, PopupMenuItem::Submenu { .. });
  
@@ -248,7 +271,7 @@ index d9e9cb13..752fac75 100644
              .selected(selected)
              .on_hover(cx.listener(move |this, hovered, window, cx| {
                  if *hovered {
-@@ -1381,20 +1448,39 @@ impl PopupMenu {
+@@ -1381,20 +1455,39 @@ impl PopupMenu {
              PopupMenuItem::Separator => this
                  .h_auto()
                  .p_0()
@@ -300,7 +323,7 @@ index d9e9cb13..752fac75 100644
              PopupMenuItem::ElementItem {
                  render,
                  icon,
-@@ -1413,11 +1499,12 @@ impl PopupMenu {
+@@ -1413,11 +1506,12 @@ impl PopupMenu {
                          .flex_1()
                          .min_h(item_height)
                          .items_center()
@@ -314,7 +337,7 @@ index d9e9cb13..752fac75 100644
                              window,
                              cx,
                          ))
-@@ -1443,11 +1530,12 @@ impl PopupMenu {
+@@ -1443,11 +1537,12 @@ impl PopupMenu {
                  })
                  .disabled(*disabled)
                  .h(item_height)
@@ -328,7 +351,15 @@ index d9e9cb13..752fac75 100644
                      window,
                      cx,
                  ))
-@@ -1470,7 +1558,7 @@ impl PopupMenu {
+@@ -1459,7 +1554,6 @@ impl PopupMenu {
+                         .items_center()
+                         .justify_between()
+                         .when(!show_link_icon, |this| this.child(label.clone()))
+-                        .children(right_check_icon)
+                         .when(show_link_icon, |this| {
+                             this.child(
+                                 h_flex()
+@@ -1470,12 +1564,23 @@ impl PopupMenu {
                                      .child(label.clone())
                                      .child(
                                          Icon::new(IconName::ExternalLink)
@@ -337,7 +368,24 @@ index d9e9cb13..752fac75 100644
                                              .text_color(cx.theme().muted_foreground),
                                      ),
                              )
-@@ -1498,11 +1586,12 @@ impl PopupMenu {
+                         })
+-                        .children(key),
++                        // A key, then a check at the end, together, so a check
++                        // stays at the row's end whether it has a key or not.
++                        .when(key.is_some() || right_check_icon.is_some(), |this| {
++                            this.child(
++                                h_flex()
++                                    .flex_row_dir(cx)
++                                    .gap_x(item_gap)
++                                    .items_center()
++                                    .children(key)
++                                    .children(right_check_icon),
++                            )
++                        }),
+                 )
+             }
+             PopupMenuItem::Submenu {
+@@ -1498,11 +1603,12 @@ impl PopupMenu {
                          .min_h(item_height)
                          .size_full()
                          .items_center()
@@ -351,7 +399,7 @@ index d9e9cb13..752fac75 100644
                              window,
                              cx,
                          ))
-@@ -1520,7 +1609,7 @@ impl PopupMenu {
+@@ -1520,7 +1626,7 @@ impl PopupMenu {
                                      } else {
                                          IconName::ChevronRight
                                      })
@@ -360,7 +408,7 @@ index d9e9cb13..752fac75 100644
                                      .text_color(cx.theme().muted_foreground),
                                  ),
                          ),
-@@ -1560,11 +1649,12 @@ impl Focusable for PopupMenu {
+@@ -1560,11 +1666,12 @@ impl Focusable for PopupMenu {
      }
  }
  
@@ -374,7 +422,7 @@ index d9e9cb13..752fac75 100644
  }
  
  impl Render for PopupMenu {
-@@ -1608,6 +1698,7 @@ impl Render for PopupMenu {
+@@ -1608,6 +1715,7 @@ impl Render for PopupMenu {
              has_left_icon,
              check_side: self.check_side,
              radius: cx.theme().radius.min(px(8.)),
@@ -382,7 +430,7 @@ index d9e9cb13..752fac75 100644
          };
  
          v_flex()
-@@ -1624,14 +1715,27 @@ impl Render for PopupMenu {
+@@ -1624,14 +1732,27 @@ impl Render for PopupMenu {
              .on_action(cx.listener(Self::dismiss))
              .on_mouse_down_out(cx.listener(Self::on_mouse_down_out))
              .popover_style(cx)
@@ -412,7 +460,7 @@ index d9e9cb13..752fac75 100644
                      .min_w(rems(8.))
                      .when_some(self.min_width, |this, min_width| this.min_w(min_width))
                      .map(|this| match self.max_width {
-@@ -1649,7 +1753,7 @@ impl Render for PopupMenu {
+@@ -1649,7 +1770,7 @@ impl Render for PopupMenu {
                              .enumerate()
                              // Ignore last separator
                              .filter(|(ix, item)| !(*ix + 1 == items_count && item.is_separator()))

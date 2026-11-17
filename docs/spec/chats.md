@@ -621,7 +621,7 @@ Every call is drawn the same way, as the first rule below says, and each kind fi
 
   ![A plan waiting to be approved](screens/plan-approval.png)
 
-- **The `+`'s menu has two items, each with an icon: Attach files…, which opens the file picker, and Plan mode, with `Shift-Tab` beside it, and a check in place of its icon while it's on.** However it closes, focus goes where the prompt is typed. The new-workspace dialog has the same `+` and menu, as `workspaces.md` says. *Unconfirmed.*
+- **The `+`'s menu has two items, each with an icon: Attach files…, which opens the file picker, and Plan mode, with `Shift-Tab` beside it, and a check after that while it's on.** However it closes, focus goes where the prompt is typed. The new-workspace dialog has the same `+` and menu, as `workspaces.md` says. *Unconfirmed.*
 
   **The `+`'s menu, open, in a chat with full access.** *Unconfirmed.*
 

@@ -1,5 +1,5 @@
-use gpui_kit::component::Size;
 use gpui_kit::component::menu::PopupMenuStyle;
+use gpui_kit::component::{Side, Size};
 
 use crate::colors::Colors;
 use crate::control_sizes::ControlSize;
@@ -33,6 +33,9 @@ pub(crate) fn style(colors: &Colors) -> PopupMenuStyle {
         separator_width: Some(EDGE),
         separator_margin: Some(Space::XSmall.size()),
         separator_overhang: Some(gpui_kit::px(0.)),
+        // At the row's end, so a menu where only some rows can be chosen, such as the hub switcher, doesn't push them
+        // all over to keep room for one, and a check takes room only in the row that has it.
+        check_side: Some(Side::Right),
         radius: Some(CORNER.radius()),
         border: Some(colors.edge),
         shadow: Some(shadow(colors)),

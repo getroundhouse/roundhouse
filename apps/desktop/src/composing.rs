@@ -9,7 +9,7 @@ use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::base::GlobalState;
 use gpui_kit::component::input::{Textarea, TextareaState};
 use gpui_kit::component::menu::PopupMenuItem;
-use gpui_kit::component::{Icon, IconName, v_flex};
+use gpui_kit::component::{IconName, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     Anchor, App, Context, Div, Entity, FocusHandle, Focusable as _, Hsla, InteractiveElement, IntoElement, MouseButton,
@@ -128,10 +128,8 @@ where
             let files = PopupMenuItem::new("Attach files…").icon(Lucide::Paperclip).on_click(move |_, _, cx| {
                 let _ = this.update(cx, |_, cx| attached::pick(cx, attach.clone()));
             });
-            // The kit draws an item's own icon rather than its check, so the check takes the icon's place.
-            let icon = if plan == Plan::On { Icon::new(IconName::Check) } else { Icon::new(Lucide::Map) };
             let planning = PopupMenuItem::new(PLAN_LABEL)
-                .icon(icon)
+                .icon(Lucide::Map)
                 .checked(plan == Plan::On)
                 .disabled(plan == Plan::Unavailable)
                 .action(Box::new(TogglePlanMode));

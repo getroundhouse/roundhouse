@@ -52,6 +52,9 @@ pub struct PopupMenuStyle {
     /// How far a separator reaches past the rows at each side, or short of
     /// them where it's negative.
     pub separator_overhang: Option<Pixels>,
+    /// Which side a checked row's check is on, for a menu that doesn't
+    /// choose its own.
+    pub check_side: Option<Side>,
     /// The menu's corners.
     pub radius: Option<Pixels>,
     /// A one pixel edge around the menu, in this colour.
@@ -393,6 +396,10 @@ pub struct PopupMenu {
 
 impl PopupMenu {
     pub(crate) fn new(cx: &mut App) -> Self {
+        let check_side = cx
+            .try_global::<PopupMenuStyle>()
+            .and_then(|style| style.check_side)
+            .unwrap_or(Side::Left);
         Self {
             focus_handle: cx.focus_handle(),
             action_context: None,
@@ -404,7 +411,7 @@ impl PopupMenu {
             min_width: None,
             max_width: None,
             max_height: None,
-            check_side: Side::Left,
+            check_side,
             checkable: HashSet::new(),
             bounds: Bounds::default(),
             scrollable: false,
@@ -1548,7 +1555,6 @@ impl PopupMenu {
                         .items_center()
                         .justify_between()
                         .when(!show_link_icon, |this| this.child(label.clone()))
-                        .children(right_check_icon)
                         .when(show_link_icon, |this| {
                             this.child(
                                 h_flex()
@@ -1564,7 +1570,18 @@ impl PopupMenu {
                                     ),
                             )
                         })
-                        .children(key),
+                        // A key, then a check at the end, together, so a check
+                        // stays at the row's end whether it has a key or not.
+                        .when(key.is_some() || right_check_icon.is_some(), |this| {
+                            this.child(
+                                h_flex()
+                                    .flex_row_dir(cx)
+                                    .gap_x(item_gap)
+                                    .items_center()
+                                    .children(key)
+                                    .children(right_check_icon),
+                            )
+                        }),
                 )
             }
             PopupMenuItem::Submenu {
