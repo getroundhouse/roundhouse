@@ -159,16 +159,21 @@ async fn a_diff_with_no_base_names_head_s_commit() {
     assert!(diff(&given(), empty.to_str().unwrap(), None).await.is_err(), "no commit at HEAD, so nothing to diff from");
 }
 
+/// Commits on a detached HEAD that no branch holds would go with the worktree, which the status says, and a detached
+/// HEAD on a commit a branch holds has none.
 #[tokio::test]
-async fn a_detached_head_that_a_branch_holds_has_nothing_to_lose() {
+async fn a_detached_head_has_commits_to_lose_only_where_no_branch_holds_them() {
     let dir = tempfile::tempdir().unwrap();
     let repo = new_repo(dir.path());
     let prepared = prepare(&dir.path().join("ws"), &repo, "alder", None).await.unwrap();
     run(Path::new(&prepared.path), &["checkout", "-q", "--detach"]);
 
-    let current = status(&given(), &prepared.path).await.unwrap();
-    assert_eq!(current.branch, None);
-    assert!(!current.unreferenced_commits);
+    let held = status(&given(), &prepared.path).await.unwrap();
+    run(Path::new(&prepared.path), &["commit", "-q", "--allow-empty", "-m", "on no branch"]);
+    let unheld = status(&given(), &prepared.path).await.unwrap();
+
+    assert_eq!((held.branch, held.unreferenced_commits), (None, false), "on a commit a branch holds");
+    assert_eq!((unheld.branch, unheld.unreferenced_commits), (None, true), "on a commit of its own");
 }
 
 #[tokio::test]

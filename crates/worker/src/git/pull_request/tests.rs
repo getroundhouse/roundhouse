@@ -1,8 +1,13 @@
+use std::path::Path;
+
 use crate::testing::given;
-use protocol::model::{Checks, LeftQueue, Local, MergeState, PrState, PullRequest, QueueState, Review};
+use process::Environment;
+use protocol::model::{BranchName, Checks, LeftQueue, Local, MergeState, PrState, PullRequest, QueueState, Review};
 
 use super::super::tests::{new_repo, run};
+use super::link::linked;
 use super::local::local;
+use super::pull_request;
 use super::{ByUrl, Failing, Viewed, failing, parse_by_url, parse_commits, parse_pull_request, parse_rate_limit};
 
 #[test]
@@ -207,4 +212,101 @@ async fn a_commit_pushed_before_github_says_so_isnt_counted_as_not_pushed() {
     let lagging = local(&given(), repo.to_str().unwrap(), Some(&before)).await;
 
     assert_eq!(lagging, Local { uncommitted: 0, ahead: 0, behind: 0 });
+}
+
+/// A stand-in for `gh`, first on the `PATH` of what it's given, which writes down what it's asked in `dir/asked`, and
+/// answers `gh pr view` from files in `dir`: by the branch's name from `by-name`, and by a URL ending in a number from
+/// `pr-` and that number, as `gh` prints them, commits and all. With no file, it says there's none, as `gh` does. It
+/// says no pull request is in a merge queue, and fails anything else.
+fn gh(dir: &Path) -> Environment {
+    use std::os::unix::fs::PermissionsExt as _;
+    let (bin, at) = (dir.join("bin"), dir.display());
+    std::fs::create_dir_all(&bin).unwrap();
+    let script = format!(
+        r#"#!/bin/sh
+printf '%s\n' "$*" >> '{at}/asked'
+case "$1 $2" in
+'api graphql') echo '{{"data":{{"resource":{{"mergeQueueEntry":null}}}}}}'; exit 0 ;;
+'pr view') ;;
+*) exit 9 ;;
+esac
+case "$3" in
+http*) said='{at}/pr-'"${{3##*/}}" ;;
+*) said='{at}/by-name' ;;
+esac
+[ -f "$said" ] && exec cat "$said"
+echo 'no pull requests found for branch "aspen"' >&2
+exit 1
+"#
+    );
+    std::fs::write(bin.join("gh"), script).unwrap();
+    std::fs::set_permissions(bin.join("gh"), std::fs::Permissions::from_mode(0o755)).unwrap();
+    let path = std::env::var_os("PATH").unwrap_or_default();
+    given().with("PATH", std::env::join_paths(std::iter::once(bin).chain(std::env::split_paths(&path))).unwrap())
+}
+
+/// An open pull request numbered `number`, from a branch named `aspen`, whose one commit is `commit`.
+fn open_at(number: u64, commit: &str) -> String {
+    format!(
+        r#"{{"number":{number},"url":"https://example.com/pull/{number}","title":"T","state":"OPEN",
+        "headRefName":"aspen","headRefOid":"{commit}","commits":[{{"oid":"{commit}"}}]}}"#
+    )
+}
+
+/// What each run of the stand-in in `dir` asked, since the last look, in short: `by name`, or the number of one asked
+/// for by its URL, each with `commits of` before it when it asked for those, and `queue` for its place in the queue.
+fn asked_since(dir: &Path) -> Vec<String> {
+    let asked = std::fs::read_to_string(dir.join("asked")).unwrap_or_default();
+    std::fs::remove_file(dir.join("asked")).unwrap_or_default();
+    let short = |line: &str| {
+        let args: Vec<&str> = line.split(' ').collect();
+        let (which, fields) = match args.as_slice() {
+            ["api", "graphql", ..] => return "queue".to_string(),
+            ["pr", "view", "--json", fields] => ("by name".to_string(), *fields),
+            ["pr", "view", url, "--json", fields] => (url.rsplit('/').next().unwrap().to_string(), *fields),
+            _ => return format!("something else: {line}"),
+        };
+        if fields.split(',').any(|field| field == "commits") { format!("commits of {which}") } else { which }
+    };
+    asked.lines().map(short).collect()
+}
+
+/// Which pull request is a branch's is `of_branch`'s to say, as the table of `choose` in `link/tests.rs` has it. Here,
+/// through a stand-in for `gh`, is what each read of it asks GitHub, and what it links: the one found by the branch's
+/// name is asked for its commits only until the branch is linked to it, and once another has the name, the linked one
+/// is read by its URL. A branch with none has none, rather than a failure.
+#[tokio::test]
+async fn a_found_pull_request_s_commits_are_asked_for_only_until_the_branch_is_linked_to_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = new_repo(dir.path());
+    run(&repo, &["switch", "-q", "-c", "aspen"]);
+    run(&repo, &["commit", "-q", "--allow-empty", "-m", "work"]);
+    let own = open_at(7, &run(&repo, &["rev-parse", "HEAD"]));
+    let someone_elses = open_at(9, "fedcba9876543210fedcba9876543210fedcba98");
+    std::fs::write(dir.path().join("pr-7"), &own).unwrap();
+    std::fs::write(dir.path().join("pr-9"), &someone_elses).unwrap();
+    let (given, branch) = (gh(dir.path()), BranchName::from("aspen"));
+    let read = async |by_name: Option<&str>| {
+        match by_name {
+            Some(found) => std::fs::write(dir.path().join("by-name"), found).unwrap(),
+            None => std::fs::remove_file(dir.path().join("by-name")).unwrap_or_default(),
+        }
+        let read = pull_request(&given, repo.to_str().unwrap(), Some(&branch)).await.unwrap();
+        let linked = linked(&given, &repo, &branch).await.unwrap();
+        (read.map(|read| read.number), asked_since(dir.path()), linked)
+    };
+    let url = Some("https://example.com/pull/7".to_string());
+
+    let none = read(None).await;
+    let only_the_name = read(Some(&someone_elses)).await;
+    let found = read(Some(&own)).await;
+    let linked = read(Some(&own)).await;
+    let by_its_link = read(Some(&someone_elses)).await;
+
+    assert_eq!(none, (None, vec!["by name".into()], None), "none");
+    assert_eq!(only_the_name, (None, vec!["by name".into(), "commits of 9".into()], None), "another's, by name");
+    assert_eq!(found, (Some(7), vec!["by name".into(), "commits of 7".into(), "queue".into()], url.clone()), "found");
+    assert_eq!(linked, (Some(7), vec!["by name".into(), "queue".into()], url.clone()), "linked");
+    let read_by_link = vec!["by name".into(), "commits of 9".into(), "7".into(), "queue".into()];
+    assert_eq!(by_its_link, (Some(7), read_by_link, url), "the branch's own by its link, once another has the name");
 }

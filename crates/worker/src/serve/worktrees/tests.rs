@@ -258,6 +258,26 @@ async fn a_removal_that_s_refused_leaves_the_worktree_watched() {
     assert!(state.watches.lock().children.contains_key(Path::new(&path)), "its watch stopped");
 }
 
+/// An archive script runs in the worktree, and one that fails refuses the archive as what forcing goes past, so the
+/// hub leaves the workspace as it was unless it's forced.
+#[tokio::test]
+async fn an_archive_script_that_fails_refuses_the_archive_and_one_that_passes_lets_it_go_on() {
+    for (exits, refused) in [(0, None), (1, Some(ErrorCode::NeedsForce))] {
+        let served = served().await;
+        let worker = &served.worker;
+        let worktree = Path::new(&served.own);
+        std::fs::create_dir_all(worktree.join(".conductor")).unwrap();
+        let settings = format!("[scripts]\narchive = \"touch ran && exit {exits}\"\n");
+        std::fs::write(worktree.join(".conductor/settings.toml"), settings).unwrap();
+        let script = ArchiveScript { source: served.source.clone(), path: served.own.clone(), env: vec![] };
+
+        let answer = handle(&worker.state, &worker.forwarders, Ok(script.into_request())).await;
+
+        assert_eq!(answer.as_ref().err().map(|e| e.code), refused, "exiting {exits}: {answer:?}");
+        assert!(worktree.join("ran").exists(), "exiting {exits}: it didn't run in the worktree");
+    }
+}
+
 /// Through what the worker does with each request: another worktree is made beside the workspace's own, its watch
 /// sends frames naming it while the watch of the workspace's own goes on, and removing it stops its watch, and only
 /// its.

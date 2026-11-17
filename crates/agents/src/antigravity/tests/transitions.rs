@@ -351,16 +351,15 @@ async fn an_interrupt_while_the_turn_is_recorded_as_ended_waits_for_it_rather_th
         async move { agent.interrupt().await }
     });
     // Until the interrupt waits on the count of ends, or has finished without waiting.
-    tokio::time::timeout(std::time::Duration::from_secs(10), async {
-        while !interrupting.is_finished() && agent.shared.turn_done.receiver_count() == watching {
-            tokio::task::yield_now().await;
-        }
+    let failure = "the interrupt neither waited on the count of ends nor finished";
+    waiting::task::until(std::time::Duration::from_secs(10), failure, || {
+        interrupting.is_finished() || agent.shared.turn_done.receiver_count() != watching
     })
-    .await
-    .unwrap();
+    .await;
     assert!(!interrupting.is_finished(), "the interrupt waits for the end");
     agent.shared.count_end(&mut agent.shared.state.lock(), Ending::Not);
-    tokio::time::timeout(std::time::Duration::from_secs(10), interrupting).await.unwrap().unwrap().unwrap();
+    let interrupted = tokio::time::timeout(std::time::Duration::from_secs(10), interrupting).await;
+    interrupted.expect("the interrupt never finished once the turn's end was counted").unwrap().unwrap();
 
     while let Ok(output) = h.rx.try_recv() {
         if let AgentOutput::Event { body: EventBody::TurnEnded { outcome, .. }, .. } = output {

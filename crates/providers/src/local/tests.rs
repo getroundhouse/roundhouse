@@ -107,28 +107,36 @@ async fn what_a_recorded_group_leaves_once_its_leader_exits_is_stopped() {
     assert!(!left_running, "what it left was stopped too");
 }
 
-/// Each is asked at once, so they share one grace, rather than each waiting for the one before.
+/// Each is asked at once, so they share one grace, rather than each waiting for the one before. Each here stops only
+/// once both have been asked, so one asked only after the other had gone would wait out a grace far longer than the
+/// test waits.
 #[tokio::test]
-async fn recorded_groups_that_ignore_being_asked_are_stopped_together() {
+async fn recorded_groups_are_all_asked_to_stop_before_any_is_waited_for() {
+    const PATIENT: Duration = Duration::from_secs(600);
     let dir = tempfile::tempdir().unwrap();
-    let stubborn = |ready: &Path| format!("trap '' TERM; : > {}; while :; do sleep 0.05; done", ready.display());
-    let ready = [dir.path().join("a.ready"), dir.path().join("b.ready")];
-    let (first, first_reaped) = recorded_group(dir.path(), "a.pid", &stubborn(&ready[0]));
-    let (second, second_reaped) = recorded_group(dir.path(), "b.pid", &stubborn(&ready[1]));
-    // A shell asked before it gets to its `trap` would stop when asked, as these mustn't.
-    for ready in &ready {
-        until_there(ready, "a group never got to ignoring being asked").await;
+    let at = |name: &str| dir.path().join(name).display().to_string();
+    let until_both_asked = |me: &str, other: &str| {
+        let (asked, other_asked, ready) = (at(&format!("{me}.asked")), at(&format!("{other}.asked")), at(me));
+        format!(
+            "trap ': > {asked}' TERM; : > {ready}; until [ -f {asked} ] && [ -f {other_asked} ]; do sleep 0.05; done"
+        )
+    };
+    let (first, first_reaped) = recorded_group(dir.path(), "a.pid", &until_both_asked("a", "b"));
+    let (second, second_reaped) = recorded_group(dir.path(), "b.pid", &until_both_asked("b", "a"));
+    // A shell asked before it gets to its `trap` would stop when asked, rather than once both had been.
+    for ready in ["a", "b"] {
+        until_there(Path::new(&at(ready)), "a group never got to waiting to be asked").await;
     }
-    let started = std::time::Instant::now();
 
-    stop_orphans(dir.path(), GRACE).await;
-    let took = started.elapsed();
+    let instance = dir.path().to_owned();
+    let stopping = tokio::spawn(async move { stop_orphans(&instance, PATIENT).await });
+    let stopped = waiting::task::up_to(Duration::from_secs(10), || stopping.is_finished()).await;
     let left = [first, second].map(killed_if_left);
 
-    assert!(took < GRACE * 2, "took {took:?}");
-    assert_eq!(left, [false, false], "each was stopped");
+    assert!(stopped, "one was asked only once the other had gone, or neither was asked");
+    assert_eq!(left, [false, false], "each stopped");
     for reaped in [first_reaped, second_reaped] {
-        assert_eq!(reaped.join().unwrap().signal(), Some(libc::SIGKILL));
+        assert_eq!(reaped.join().unwrap().signal(), None, "each stopped by itself, once both had been asked");
     }
 }
 
