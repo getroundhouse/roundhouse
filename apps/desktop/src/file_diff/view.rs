@@ -2,9 +2,7 @@
 //! until the app quits, as it shares the sidebar's, and the switch for it is at the right end of the file tab's bar.
 
 use gpui_kit::assets::IconName as Lucide;
-use gpui_kit::component::h_flex;
-use gpui_kit::{AnyElement, App, Global, IntoElement as _, ParentElement as _, Styled as _};
-use look::Shaped as _;
+use gpui_kit::{AnyElement, App, Global, IntoElement as _};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum DiffView {
@@ -67,26 +65,17 @@ pub(super) fn chosen(cx: &App) -> DiffView {
     cx.try_global::<Chosen>().map_or_default(|chosen| chosen.0)
 }
 
-/// The three views, as one switch, with the one showing pressed in: small segments with room around them that makes
-/// the switch as tall as a regular button, as the bar's own are.
+/// The three views, as one switch on a track, with the one showing on.
 pub(super) fn switch(cx: &App) -> AnyElement {
     let showing = chosen(cx);
-    let room = (look::ControlSize::Regular.height() - look::ControlSize::Small.height()) / 2.;
-    h_flex()
-        .flex_none()
-        .p(room)
-        .gap(room)
-        .corners(look::Corner::Control)
-        .bg(look::colors(cx).raised)
-        .children(DiffView::ALL.map(|view| {
-            look::icon_button(view.id(), look::ButtonKind::Borderless, look::ControlSize::Small, view.icon())
-                .on(view == showing)
-                .tooltip(view.name())
-                .on_click(move |_, _, cx| {
-                    if chosen(cx) != view {
-                        cx.set_global(Chosen(view));
-                    }
-                })
-        }))
+    DiffView::ALL
+        .into_iter()
+        .fold(look::switch(look::SwitchKind::Tracked), |switch, view| {
+            switch.icon(view.id(), view.icon(), view.name(), view == showing, move |_, cx| {
+                if chosen(cx) != view {
+                    cx.set_global(Chosen(view));
+                }
+            })
+        })
         .into_any_element()
 }

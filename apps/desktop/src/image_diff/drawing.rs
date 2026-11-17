@@ -29,7 +29,7 @@ impl Render for ImageDiff {
             Drawn::Why(why) => placeholder(why.clone(), cx),
         };
         let strip = self.told(&drawn).map(|told| strip(told, cx));
-        let choices = self.images().is_some().then(|| choices(self.shown, cx.weak_entity(), cx));
+        let choices = self.images().is_some().then(|| choices(self.shown, &cx.weak_entity(), cx));
         v_flex().size_full().child(header(self.path.clone(), choices, cx)).children(strip).child(body)
     }
 }
@@ -161,7 +161,7 @@ const FOLDERS_SHRINK: f32 = 1000.;
 const FOLDERS_LEAST: Pixels = px(16.);
 
 /// Its path, as its folders, muted, and its name, and the choices of what to show, while there are two images.
-fn header(path: Option<SharedString>, choices: Option<Div>, cx: &App) -> Div {
+fn header(path: Option<SharedString>, choices: Option<look::Switch>, cx: &App) -> Div {
     let colors = look::colors(cx);
     let muted = colors.text_muted;
     let path = path.unwrap_or_default();
@@ -184,55 +184,44 @@ fn header(path: Option<SharedString>, choices: Option<Div>, cx: &App) -> Div {
         .typeset(look::Type::Body)
         .child(folders)
         .child(div().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().child(name.to_string()))
-        .children(choices.map(|choices| choices.ml_auto().pl(look::Space::Large)))
+        .children(choices.map(|choices| div().flex_none().ml_auto().pl(look::Space::Large).child(choices)))
 }
 
 /// Side by side, Before, After and Difference, of which Before and After flip one image between the two sides.
-fn choices(shown: Shown, view: WeakEntity<ImageDiff>, cx: &App) -> Div {
+fn choices(shown: Shown, view: &WeakEntity<ImageDiff>, cx: &App) -> look::Switch {
     let chosen = comparison(cx);
     let flipped = |side: Shown| chosen == Comparison::Flip && shown == side;
-    h_flex()
-        .flex_none()
-        .gap(look::Space::XSmall)
-        .child(choice("image-side-by-side", "Side by side", chosen == Comparison::SideBySide, view.clone(), |cx| {
-            choose(Comparison::SideBySide, cx);
-        }))
-        .child(side("image-before", "Before", Shown::Before, flipped(Shown::Before), view.clone()))
-        .child(side("image-after", "After", Shown::After, flipped(Shown::After), view.clone()))
-        .child(choice("image-difference", "Difference", chosen == Comparison::Difference, view, |cx| {
-            choose(Comparison::Difference, cx);
-        }))
+    let flips = "Space flips between them";
+    look::switch(look::SwitchKind::Trackless)
+        .words(
+            "image-side-by-side",
+            "Side by side",
+            chosen == Comparison::SideBySide,
+            shows(Comparison::SideBySide, view),
+        )
+        .words("image-before", "Before", flipped(Shown::Before), flips_to(Shown::Before, view))
+        .tooltip(flips)
+        .words("image-after", "After", flipped(Shown::After), flips_to(Shown::After, view))
+        .tooltip(flips)
+        .words("image-difference", "Difference", chosen == Comparison::Difference, shows(Comparison::Difference, view))
 }
 
-fn choice(
-    id: &'static str,
-    label: &'static str,
-    selected: bool,
-    view: WeakEntity<ImageDiff>,
-    chosen: impl Fn(&mut App) + 'static,
-) -> look::Button {
-    look::button(id, look::ButtonKind::Borderless, look::ControlSize::Regular, label).on(selected).on_click(
-        move |_, _, cx| {
-            chosen(cx);
-            let _ = view.update(cx, |_, cx| cx.notify());
-        },
-    )
+/// Shows the images as `comparison` has them.
+fn shows(comparison: Comparison, view: &WeakEntity<ImageDiff>) -> impl Fn(&mut Window, &mut App) + 'static {
+    let view = view.clone();
+    move |_, cx| {
+        choose(comparison, cx);
+        let _ = view.update(cx, |_, cx| cx.notify());
+    }
 }
 
-/// One side, shown on its own, which Space and a click on the image flip to the other.
-fn side(
-    id: &'static str,
-    label: &'static str,
-    this: Shown,
-    selected: bool,
-    view: WeakEntity<ImageDiff>,
-) -> look::Button {
-    let flipping = view.clone();
-    choice(id, label, selected, view, move |cx| {
+/// Shows one side on its own, which Space and a click on the image flip to the other.
+fn flips_to(side: Shown, view: &WeakEntity<ImageDiff>) -> impl Fn(&mut Window, &mut App) + 'static {
+    let view = view.clone();
+    move |_, cx| {
         choose(Comparison::Flip, cx);
-        let _ = flipping.update(cx, |t, cx| t.show_side(this, cx));
-    })
-    .tooltip("Space flips between them")
+        let _ = view.update(cx, |t, cx| t.show_side(side, cx));
+    }
 }
 
 /// A file the change adds or removes, which has one side, which the strip names.

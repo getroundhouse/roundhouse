@@ -48,6 +48,9 @@ const KIT_SWITCH: KitPart = KitPart {
     allowed: &[("crates/look/src/toggles/", "the component library's toggle, which holds the kit's switch")],
 };
 
+/// The kit's radio, which nothing draws, since choosing one of a few is a `look::Switch`.
+const KIT_RADIO: KitPart = KitPart { named: "component::radio", instead: "look::switch", allowed: &[] };
+
 const KIT_BUTTON_ALLOWED: &[(&str, &str)] = &[
     ("crates/look/src/controls/", "the component library's button, which holds the kit's"),
     (
@@ -91,7 +94,12 @@ fn using(part: &KitPart) -> BTreeSet<String> {
 /// it.
 fn only_the_component_library_uses(part: &KitPart) {
     let using = using(part);
-    assert!(!using.is_empty(), "found nothing using {}, so this isn't looking in the right place", part.named);
+    // A part nothing may use but its component is found there, so finding none means the search went wrong.
+    assert!(
+        part.allowed.is_empty() || !using.is_empty(),
+        "found nothing using {}, so this isn't looking in the right place",
+        part.named
+    );
     let allowed = |path: &str, (place, _): &(&str, &str)| match place.strip_suffix('/') {
         Some(folder) => path.starts_with(&format!("{folder}/")),
         None => path == *place,
@@ -122,6 +130,11 @@ fn only_the_component_library_uses_the_kits_input() {
 #[test]
 fn only_the_component_library_uses_the_kits_switch() {
     only_the_component_library_uses(&KIT_SWITCH);
+}
+
+#[test]
+fn nothing_uses_the_kits_radio() {
+    only_the_component_library_uses(&KIT_RADIO);
 }
 
 #[test]

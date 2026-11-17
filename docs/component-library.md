@@ -93,3 +93,13 @@ A key in one of the kit's menus or tooltips is the kit's, from the action it's b
 | Do something as it's flipped | `on_flip` |
 | Say what an assistive app calls it, such as the setting's name | `accessibility_label` |
 | Grey it out, so it can't be flipped | `off` |
+
+## Switches
+
+`docs/spec/components.md` has a switch's kinds, and `crates/look/src/switches` the code. A switch makes its segments itself, as borderless buttons of the size its kind has, so none has a look of its own.
+
+| To | Call |
+|---|---|
+| Make one, of a kind, with no segments yet | `look::switch(kind)` |
+| Add a segment that says words, or that's only an icon, which says what it is while the pointer rests on it, each on while it's chosen, with what choosing it does | `words`, `icon` |
+| Say what the segment added last does while the pointer rests on it | `tooltip` |

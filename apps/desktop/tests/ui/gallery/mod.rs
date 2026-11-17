@@ -75,6 +75,8 @@ mod key_kinds;
 
 mod toggle_states;
 
+mod switch_kinds;
+
 mod field_states;
 
 mod heights;
