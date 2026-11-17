@@ -49,35 +49,6 @@ fn open_the_menu(ui: &mut Ui<'_>, slot: &str) {
 }
 
 #[gpui_kit::test]
-fn the_menu_beside_whose_account_it_is_moves_the_chat_and_back(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let (mut ui, work, personal) = under_work(cx, &stack);
-    let before = on(&ui);
-
-    open_the_menu(&mut ui, "usage");
-    // The menu is drawn outside the card, so with the pointer on it, only the menu keeps the card open, and with it
-    // the menu.
-    ui.hover(MENU);
-    ui.wait_out_a_tooltip();
-    let held = ui.visible("usage-card") && ui.visible(MENU);
-    ui.click_menu_item("Personal");
-    ui.wait("the chat to move", |ui| on(ui).as_ref() == Some(&personal));
-    let moved_names = named(&ui);
-    // Nothing has been heard of Personal's limits, so there are no bars, and the ring's card says whose it is.
-    ui.wait("the bars to go", |ui| !ui.has("usage"));
-    open_the_menu(&mut ui, "context");
-    ui.click_menu_item("Work");
-    ui.wait("the chat to move back", |ui| on(ui).as_ref() == Some(&work));
-
-    assert_eq!(before.as_ref(), Some(&work), "its first turn put it on the default");
-    assert!(held, "the card and its menu stayed open with the pointer on the menu");
-    assert_eq!(moved_names, Some(personal), "the chat names the account it was moved to");
-    let hubs = stack.client().records_list().unwrap().sessions.into_iter().next().unwrap();
-    let hubs = (hubs.hub_account().cloned(), hubs.account);
-    assert_eq!(hubs, (Some(work.clone()), Some(work)), "and the hub has it as the app shows it");
-}
-
-#[gpui_kit::test]
 fn moving_a_chat_whose_agent_is_working_asks_first_and_moves_it_only_if_told_to(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let (mut ui, work, personal) = under_work(cx, &stack);
@@ -103,14 +74,27 @@ fn moving_a_chat_whose_agent_is_working_asks_first_and_moves_it_only_if_told_to(
     assert_eq!(kept, (Some(work), Some(SessionStatus::Running)), "kept working, and not moved");
 }
 
-/// Once it's back on Work, there's no other login that works, so nowhere to move it.
+/// The chat moves to Personal from the menu beside the bars, and back from the one beside the ring. Personal is
+/// disconnected meanwhile, which the chat says until it's moved back, and once it's back on Work, there's no other
+/// login that works, so nowhere to move it.
 #[gpui_kit::test]
-fn a_chat_moved_to_an_account_since_disconnected_says_so_until_its_moved_again(cx: &mut TestAppContext) {
+fn the_menu_beside_whose_account_it_is_moves_the_chat_and_back_and_a_lost_login_says_so_until_then(
+    cx: &mut TestAppContext,
+) {
     let stack = Stack::new();
     let (mut ui, work, personal) = under_work(cx, &stack);
+    let before = on(&ui);
     open_the_menu(&mut ui, "usage");
+    // The menu is drawn outside the card, so with the pointer on it, only the menu keeps the card open, and with it
+    // the menu.
+    ui.hover(MENU);
+    ui.wait_out_a_tooltip();
+    let held = ui.visible("usage-card") && ui.visible(MENU);
     ui.click_menu_item("Personal");
     ui.wait("the chat to move", |ui| on(ui).as_ref() == Some(&personal));
+    let moved_names = named(&ui);
+    // Nothing has been heard of Personal's limits, so there are no bars, and the ring's card says whose it is.
+    ui.wait("the bars to go", |ui| !ui.has("usage"));
     stack.client().account_disconnect(&personal).unwrap();
 
     ui.input("say:blocked");
@@ -122,6 +106,8 @@ fn a_chat_moved_to_an_account_since_disconnected_says_so_until_its_moved_again(c
     let listed = ui.labelled("Personal").iter().any(|item| item.path().contains(&menu));
     ui.click_menu_item("Work");
     ui.wait("the chat to move back", |ui| on(ui).as_ref() == Some(&work));
+    let hubs = stack.client().records_list().unwrap().sessions.into_iter().next().unwrap();
+    let hubs = (hubs.hub_account().cloned(), hubs.account);
     ui.input("say:unblocked");
     ui.press("enter");
     ui.wait_idle_with("a turn under Work", |text| text.contains("unblocked"));
@@ -131,6 +117,10 @@ fn a_chat_moved_to_an_account_since_disconnected_says_so_until_its_moved_again(c
     ui.wait("the card", |ui| ui.visible("usage-card"));
     let nowhere_to_go = !ui.has("account-move");
 
+    assert_eq!(before.as_ref(), Some(&work), "its first turn put it on the default");
+    assert!(held, "the card and its menu stayed open with the pointer on the menu");
+    assert_eq!(moved_names, Some(personal), "the chat names the account it was moved to");
+    assert_eq!(hubs, (Some(work.clone()), Some(work)), "moved back, the hub has it as the app shows it");
     assert!(listed, "the menu still says which account the chat is on, though it can't be chosen");
     let Some(EventBody::AgentExited { stderr_tail, .. }) = said else { panic!("{said:?}") };
     assert!(stderr_tail.iter().any(|line| line.contains("Personal needs a login")), "{stderr_tail:?}");

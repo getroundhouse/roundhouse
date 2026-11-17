@@ -1,14 +1,18 @@
-//! The sidebar's list of workspaces.
+//! The sidebar's list of workspaces. What a row shows of a workspace's record, and what the pointer and the keys do to
+//! it, are the app's, so those open on a fake hub, with no worker or agent to wait for. Archiving, sending and adding a
+//! project are the hub's, so those open on a real one.
 
 #![cfg(test)]
 
+use client_core::fake_hub::World;
 use desktop::busy::Busy;
 use gpui_kit::test::{TestEventExt as _, TestWindowExt as _};
 use gpui_kit::{AppContext as _, ElementId, MouseButton, ScrollDelta, SharedString, TestAppContext, point, px};
 use protocol::model::{WorkspaceId, WorkspaceStatus};
 
 use crate::support::{
-    Held, MORE_THAN_FIT, Stack, Ui, home_row, more_than_fit, pencil, pull_request, sidebar_row as row,
+    FakeHub, Held, MORE_THAN_FIT, Stack, Ui, home_row, open_on_the_world, pencil, pull_request, sidebar_row as row,
+    with_a_chat,
 };
 
 /// Off every row, for the pointer to wait on.
@@ -23,11 +27,23 @@ fn archived(ui: &Ui, id: &WorkspaceId) -> bool {
     listed && ui.view().busy == Busy::Free
 }
 
+/// A window on a fake hub with two workspaces in one repository, each with a chat that's had nothing said in it, as a
+/// new one's hasn't, and the second the newer. The hub goes with the test, so it's returned to be kept.
+fn two_on_a_fake_hub(cx: &mut TestAppContext) -> (FakeHub, Ui<'_>, [WorkspaceId; 2]) {
+    let mut world = World::default();
+    let repo = world.repo("signals");
+    let made = ["ledger", "points"].map(|name| with_a_chat(&mut world, &repo, name));
+    let (fake, ui) = open_on_the_world(cx, world);
+    (fake, ui, made)
+}
+
 #[gpui_kit::test]
 fn a_long_list_draws_only_the_workspaces_on_screen_and_scrolls_to_the_rest(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let (mut ui, made) = more_than_fit(cx, &stack);
-    // Nobody has worked in any of them, so the sidebar lists the newest first.
+    let mut world = World::default();
+    let repo = world.repo("signals");
+    let made = Vec::from_fn(MORE_THAN_FIT, |i| with_a_chat(&mut world, &repo, &format!("more-{i}")));
+    let (_fake, mut ui) = open_on_the_world(cx, world);
+    // Each was worked in as it was made, so the sidebar lists the newest first.
     let (first, last) = (row(&made[MORE_THAN_FIT - 1]), row(&made[0]));
 
     assert!(ui.has(first.clone()));
@@ -40,8 +56,11 @@ fn a_long_list_draws_only_the_workspaces_on_screen_and_scrolls_to_the_rest(cx: &
     assert!(!ui.has(first), "a row above the top isn't drawn");
 }
 
+/// Once it's let go, archiving runs through, so the row's menu archives the workspace showing without waiting.
 #[gpui_kit::test]
-fn a_rows_archive_button_shows_under_the_pointer_and_archives_it_without_opening_it(cx: &mut TestAppContext) {
+fn a_rows_archive_button_shows_under_the_pointer_and_archives_it_without_opening_it_as_its_menu_does(
+    cx: &mut TestAppContext,
+) {
     let stack = Stack::new();
     let held = Held::archive(&stack);
     let mut ui = Ui::open_with_a_repository(cx, &stack);
@@ -64,29 +83,30 @@ fn a_rows_archive_button_shows_under_the_pointer_and_archives_it_without_opening
     held.release();
     ui.wait("it to be archived", |ui| archived(ui, &going));
     assert!(!ui.has(row(&going)), "it leaves the list");
+
+    ui.right_click(row(&showing));
+    ui.click_menu_item("Archive");
+
+    ui.wait("the one showing to be archived by its menu", |ui| archived(ui, &showing));
+    assert!(!ui.has(row(&showing)), "it leaves the list, and only Home shows it");
 }
 
-/// The hub's record says a workspace is being archived, so every client shows it, wherever it was asked for, here the
-/// command line, and this app goes on archiving others meanwhile.
+/// The hub's record says a workspace is being archived, so every client shows it, wherever it was asked for, such as
+/// the command line, and this app goes on archiving others meanwhile. That a workspace leaves the list once its
+/// record says it's archived is the test above's.
 #[gpui_kit::test]
-fn a_workspace_archived_from_elsewhere_says_so_here_until_it_has_gone(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let held = Held::archive(&stack);
-    let mut ui = Ui::open_with_a_repository(cx, &stack);
-    let (going, other) = (ui.new_workspace(), ui.new_workspace());
-    let (client, target) = (stack.client(), going.clone());
+fn a_workspace_being_archived_from_elsewhere_says_so_here_and_another_can_still_be_archived(cx: &mut TestAppContext) {
+    let mut world = World::default();
+    let repo = world.repo("signals");
+    let [going, other] = ["ledger", "points"].map(|name| with_a_chat(&mut world, &repo, name));
+    world.workspace_mut(&going).status = WorkspaceStatus::Archiving;
 
-    let archiving = std::thread::spawn(move || client.workspace_archive(&target, false));
+    let (_fake, mut ui) = open_on_the_world(cx, world);
 
-    ui.wait("it to start archiving", |_| held.runs() == 1);
     ui.wait("its row to say so", |ui| ui.shows_label(&format!("doing-{going}"), "Archiving…"));
     assert_eq!(ui.view().busy, Busy::Free, "this app asked for nothing");
     ui.hover(row(&other));
     assert!(ui.on(archive_button(&other)), "so it can archive another");
-    held.release();
-    archiving.join().unwrap().unwrap();
-    ui.wait("it to be archived", |ui| archived(ui, &going));
-    assert!(!ui.has(row(&going)), "it leaves the list");
 }
 
 /// A quick press is made as the pointer comes to rest, so it moves while the button is down. Once pressed, the row says
@@ -126,9 +146,8 @@ fn a_rows_archive_button_stays_under_a_press_while_the_pointer_moves(cx: &mut Te
 /// button, and what made room for it, would go and come back around every click.
 #[gpui_kit::test]
 fn a_rows_archive_button_stays_while_the_row_is_pressed_and_goes_if_its_let_go_elsewhere(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = Ui::open_with_a_repository(cx, &stack);
-    let (pressed, showing) = (ui.new_workspace(), ui.new_workspace());
+    let (_fake, mut ui, [pressed, showing]) = two_on_a_fake_hub(cx);
+    show(&mut ui, &showing);
     let button = archive_button(&pressed);
     ui.hover(row(&pressed));
     let on_row = ui.bounds(row(&pressed)).center();
@@ -170,11 +189,17 @@ fn show(ui: &mut Ui, id: &WorkspaceId) {
     ui.wait("the workspace", |ui| ui.view().selected.as_ref() == Some(id) && !ui.has("home-page"));
 }
 
+/// Shows Home in place of the workspace showing, and waits until it's there.
+fn show_home(ui: &mut Ui) {
+    ui.click("home");
+    ui.wait("Home", |ui| ui.has("home-page"));
+}
+
+/// What's typed and not sent is kept in the app, so sending it, which only a real hub takes, is the next test's.
 #[gpui_kit::test]
 fn a_rows_pencil_shows_while_something_typed_in_it_isnt_sent(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = Ui::open_with_a_repository(cx, &stack);
-    let (other, typed_in) = (ui.new_workspace(), ui.new_workspace());
+    let (_fake, mut ui, [other, typed_in]) = two_on_a_fake_hub(cx);
+    show(&mut ui, &typed_in);
     ui.input("  ");
     show(&mut ui, &other);
     assert!(!ui.has(pencil(&typed_in)), "spaces alone aren't a prompt");
@@ -182,19 +207,29 @@ fn a_rows_pencil_shows_while_something_typed_in_it_isnt_sent(cx: &mut TestAppCon
     show(&mut ui, &typed_in);
     ui.input("half typed");
     assert!(!ui.has(pencil(&typed_in)), "not on the workspace showing, whose composer is in view");
-    ui.click("home");
-    ui.wait("Home", |ui| ui.has("home-page"));
+    show_home(&mut ui);
     assert!(ui.visible(pencil(&typed_in)), "but while Home shows in its place");
     show(&mut ui, &other);
     assert!(ui.visible(pencil(&typed_in)), "and once another workspace shows");
     assert!(!ui.has(pencil(&other)), "nothing's typed in that one");
     ui.hover(row(&typed_in));
     assert!(ui.visible(pencil(&typed_in)) && ui.visible(archive_button(&typed_in)), "it shows beside the button");
+}
+
+#[gpui_kit::test]
+fn a_rows_pencil_goes_once_whats_typed_in_it_is_sent(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = Ui::open_with_a_repository(cx, &stack);
+    let typed_in = ui.new_workspace();
+    ui.input("half typed");
+    show_home(&mut ui);
+    assert!(ui.visible(pencil(&typed_in)), "while it isn't sent");
 
     show(&mut ui, &typed_in);
     ui.press("enter");
+
     ui.wait("the prompt to be taken", |ui| ui.composer_text().is_empty());
-    show(&mut ui, &other);
+    show_home(&mut ui);
     assert!(!ui.has(pencil(&typed_in)), "sending it leaves nothing unsent");
 }
 
@@ -202,9 +237,8 @@ fn a_rows_pencil_shows_while_something_typed_in_it_isnt_sent(cx: &mut TestAppCon
 /// a button that isn't there.
 #[gpui_kit::test]
 fn a_rows_pencil_rests_in_its_buttons_place_and_slides_aside_while_the_button_shows(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = Ui::open_with_a_repository(cx, &stack);
-    let (other, typed_in) = (ui.new_workspace(), ui.new_workspace());
+    let (_fake, mut ui, [other, typed_in]) = two_on_a_fake_hub(cx);
+    show(&mut ui, &typed_in);
     ui.input("half typed");
     show(&mut ui, &other);
     // Somewhere with no tooltip, which would ask for frames of its own as it came.
@@ -238,19 +272,6 @@ fn a_rows_pencil_rests_in_its_buttons_place_and_slides_aside_while_the_button_sh
     assert_eq!(ui.bounds(pencil.clone()), rests, "back where it rests");
     assert!(!ui.has(button), "and the button has gone");
     assert_eq!(ui.play(look::motion::FADE), 0, "nothing asks for another frame");
-}
-
-#[gpui_kit::test]
-fn a_rows_menu_archives_it(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = Ui::open_with_a_repository(cx, &stack);
-    let id = ui.new_workspace();
-
-    ui.right_click(row(&id));
-    ui.click_menu_item("Archive");
-
-    ui.wait("it to be archived", |ui| archived(ui, &id));
-    assert!(!ui.has(row(&id)), "it leaves the list, and only Home shows it");
 }
 
 #[gpui_kit::test]

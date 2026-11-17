@@ -6,80 +6,60 @@ use std::path::PathBuf;
 
 use client_core::Client;
 use desktop::app::Connection;
-use desktop::busy::Busy;
 use gpui_kit::{AppContext as _, SharedString, TestAppContext};
 use protocol::model::SessionStatus;
 
 use crate::support::{Diff, Stack, TIMEOUT, Ui};
 
+/// The same workspace view carries on on the new hub, with the history it had and what was typed: a comment on the
+/// diff, which is only in the app until it's sent, and each chat's composer, which is in the app as well as the hub,
+/// which keeps it once it's had the change.
 #[gpui_kit::test]
-fn losing_the_hub_starts_a_new_one_and_picks_up_where_it_left_off(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
-    let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
-    ui.new_workspace();
-    ui.input("say:before");
-    ui.press("enter");
-    ui.wait_idle_with("the first turn", |text| text.contains("before"));
-    ui.input("say:after");
-    let (pane, transcript) = (ui.pane().unwrap(), ui.transcript().unwrap());
-
-    let pid = stack.crash_hub();
-
-    ui.wait_for_new_hub(&stack, pid);
-    // The same workspace view, with what was typed and the history it had, carrying on on the new hub.
-    assert_eq!(ui.pane().unwrap().entity_id(), pane.entity_id());
-    assert_eq!(ui.transcript().unwrap().entity_id(), transcript.entity_id());
-    assert_eq!(ui.composer_text(), "say:after");
-    ui.wait("the history", |ui| ui.assistant_text().contains("before"));
-    ui.press("enter");
-    ui.wait_idle_with("the next turn", |text| text.contains("after"));
-}
-
-/// What's typed in a comment on the diff is only in the app until it's sent, and a composer's is in the app as well as
-/// the hub, which keeps it once it's had the change.
-#[gpui_kit::test]
-fn whats_typed_is_still_there_after_the_hub_restarts(cx: &mut TestAppContext) {
+fn losing_the_hub_starts_a_new_one_and_picks_up_where_it_left_off_with_whats_typed(cx: &mut TestAppContext) {
     let stack = Stack::new();
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, &stack);
     ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
     let id = ui.new_workspace();
     let first = ui.active_chat();
+    ui.input("say:before");
+    ui.press("enter");
+    ui.wait_idle_with("the first turn", |text| text.contains("before"));
     let second = ui.new_chat();
     ui.input("say:from the second chat");
     ui.show_chat(&first);
     ui.frame();
-    ui.input("say:from the first chat");
+    ui.input("say:after");
     std::fs::write(ui.worktree(&id).join("a.txt"), "one\ntwo\n").unwrap();
     let diff = ui.open_changes();
     ui.open_diff_of(&diff, "a.txt");
     ui.start_comment(&diff, "a.txt", 2);
     ui.input("Why");
+    let (pane, transcript) = (ui.pane().unwrap(), ui.transcript().unwrap());
 
-    let pid = stack.client().hub_status().unwrap().pid;
-    client_core::stop_hub(&stack.hub.paths.socket).unwrap();
+    let pid = stack.crash_hub();
+
     ui.wait_for_new_hub(&stack, pid);
-
+    assert_eq!(ui.pane().unwrap().entity_id(), pane.entity_id(), "the same workspace view");
+    assert_eq!(ui.transcript().unwrap().entity_id(), transcript.entity_id(), "the same chat's view");
     // The comment still has the keys, so the rest of it doesn't go to the agent, and saves in the new hub.
     ui.input(" two?");
     ui.press("enter");
     ui.wait("the comment to be saved", |_| {
         stack.client().comment_list(&id).unwrap().iter().map(|c| c.text.clone()).collect::<Vec<_>>() == ["Why two?"]
     });
-    assert_eq!(ui.composer_text(), "say:from the first chat");
-
+    assert_eq!(ui.composer_text(), "say:after", "the first chat's draft");
+    ui.wait("the history", |ui| ui.assistant_text().contains("before"));
     // Each chat keeps its draft, and sends it on the new hub.
     ui.show_chat(&second);
     ui.frame();
-    assert_eq!(ui.composer_text(), "say:from the second chat");
+    assert_eq!(ui.composer_text(), "say:from the second chat", "the second chat's draft");
     ui.press("enter");
     ui.wait_idle_with("the second chat's reply", |text| text.contains("from the second chat"));
     ui.show_chat(&first);
     ui.frame();
     ui.press("enter");
-    ui.wait_idle_with("the first chat's reply", |text| text.contains("from the first chat"));
+    ui.wait_idle_with("the first chat's next turn", |text| text.contains("after"));
 }
 
 /// After a reconnect, a pane reads the worktree again once it's on screen, so the hub doesn't start a worker for
@@ -122,7 +102,8 @@ fn after_a_reconnect_panes_catch_up_when_shown_and_an_archived_ones_goes(cx: &mu
 }
 
 /// A pane still behind from one reconnect, and shown while the hub's gone again, doesn't try the lost
-/// connection. It catches up on the next.
+/// connection. It catches up on the next. While the hub is gone, the heading stays over the repositories, which are
+/// still listed, and Add project waits for it.
 #[gpui_kit::test]
 fn a_pane_shown_while_the_hub_is_gone_catches_up_once_it_is_back(cx: &mut TestAppContext) {
     let mut stack = Stack::new();
@@ -133,7 +114,11 @@ fn a_pane_shown_while_the_hub_is_gone_catches_up_once_it_is_back(cx: &mut TestAp
     let behind = ui.new_workspace();
     let diff = open_empty_diff(&mut ui);
     ui.new_workspace();
+    assert!(ui.on("add-project"), "with a hub, a project can be added");
     lose_the_hub(&mut ui, &stack);
+    assert_eq!(ui.view().records().repos().len(), 1, "the repository is still listed");
+    assert!(ui.has("add-project"), "so the heading stays over it");
+    assert!(ui.off("add-project"), "with no hub to add one to");
     Client::connect_or_start(&stack.hub.paths, &daemon, "test").unwrap();
     ui.click("try-hub-again");
     ui.wait("the hub to come back", |ui| matches!(ui.view().connection(), Connection::Ready(_)));
@@ -182,21 +167,6 @@ fn a_failed_connection_can_be_tried_again(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
-fn a_failure_from_the_hub_is_shown_rather_than_lost(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
-    let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
-    // The repository disappears, so a new worktree can't be made from it.
-    std::fs::remove_dir_all(stack.repo()).unwrap();
-    ui.open_new_workspace();
-    ui.click("new-workspace-create");
-    ui.wait("the error", |ui| ui.view().error.is_some());
-    assert!(ui.view().error.clone().unwrap().contains("couldn't create the workspace"));
-    assert_eq!(ui.view().busy, Busy::Free, "the button works again");
-}
-
-#[gpui_kit::test]
 fn an_approval_waiting_when_the_app_opens_can_be_answered(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let client = stack.client();
@@ -238,23 +208,6 @@ fn losing_the_hub_with_nothing_open_still_reconnects(cx: &mut TestAppContext) {
     // And it's really connected: something added elsewhere still shows up.
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
-}
-
-#[gpui_kit::test]
-fn the_heading_stays_over_the_repositories_while_the_hub_is_gone_and_add_project_waits_for_it(cx: &mut TestAppContext) {
-    let mut stack = Stack::new();
-    stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
-    // So the app can't start another hub.
-    let _daemon = stack.without_a_daemon();
-    let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
-    assert!(ui.on("add-project"));
-
-    lose_the_hub(&mut ui, &stack);
-
-    assert_eq!(ui.view().records().repos().len(), 1, "the repository is still listed");
-    assert!(ui.has("add-project"), "so the heading stays over it");
-    assert!(ui.off("add-project"), "with no hub to add one to");
 }
 
 /// The app restarts an older hub the moment it's idle, which is often just as someone starts typing their next
