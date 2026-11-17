@@ -61,10 +61,13 @@ mod tests {
         assert_eq!(login.lasts_ms, Some(31_536_000_000));
     }
 
+    /// Listed least first, as a description lists them, so `max`, the most the CLI takes, comes last.
     #[test]
-    fn every_level_offered_has_a_name_the_cli_takes() {
-        for effort in description().efforts {
-            assert!(crate::claude::effort::level(effort).is_some(), "{effort:?}");
+    fn every_level_offered_has_a_name_the_cli_takes_and_max_is_the_most() {
+        let efforts = description().efforts;
+        for effort in &efforts {
+            assert!(crate::claude::effort::level(*effort).is_some(), "{effort:?}");
         }
+        assert_eq!(efforts.last(), Some(&Effort::Max), "{efforts:?}");
     }
 }

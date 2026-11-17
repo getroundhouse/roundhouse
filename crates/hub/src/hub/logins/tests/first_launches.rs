@@ -26,9 +26,9 @@ async fn used_after(feed: &mut broadcast::Receiver<HubNotice>, id: &AccountId, a
 }
 
 /// A chat's first launch under a held login puts it on that login's account, its kind's default, and every client
-/// hears so as it launches, before its turn ends. Choosing another default then changes only which account new chats
-/// are put on.
-#[tokio::test]
+/// hears so as it launches, before its worker has answered the launch, and so before its turn ends. Choosing another
+/// default then changes only which account new chats are put on.
+#[tokio::test(flavor = "multi_thread")]
 async fn a_chat_is_put_on_the_default_as_it_first_launches_and_stays_on_it_when_another_is_chosen() {
     let dir = tempfile::tempdir().unwrap();
     let accounts = TwoAccounts::start(dir.path()).await;
@@ -36,10 +36,23 @@ async fn a_chat_is_put_on_the_default_as_it_first_launches_and_stays_on_it_when_
     let fresh = accounts.another_chat().await;
     let before = chats.on(&fresh);
     let mut feed = chats.hub.subscribe_feed();
+    let (answer_the_launch, held) = std::sync::mpsc::channel::<()>();
+    let held_for = fresh.clone();
+    // Its worker holds its launch until the test lets it go, or for twice the test's limit, and then answers it.
+    crate::hub::stand_in_workers::answering_first(&chats.hub, &accounts.workspace.id, &chats.asked, move |request| {
+        let protocol::worker::WorkerRequest::AgentStart(spec) = request else { return None };
+        if spec.session_id == held_for {
+            let _ = tokio::task::block_in_place(|| held.recv_timeout(TIMEOUT * 2));
+        }
+        None
+    });
 
     // Its agent takes the prompt and is still at work on it.
     chats.hub.session_prompt(fresh.clone(), None, protocol::prompt::Prompt::new("work")).await.unwrap();
     let announced = announced_on(&mut feed, &fresh).await;
+    answer_the_launch.send(()).unwrap();
+    let given = || !chats.asked.prompts_given(&fresh).is_empty();
+    waiting::task::until(TIMEOUT, "the prompt to be given once the launch was answered", given).await;
     let personal = AccountSetDefault { agent: AgentKind::Claude, account: accounts.personal.id.clone() };
     chats.hub.account_set_default(personal).await.unwrap();
     chats.crash(&accounts.chat).await;

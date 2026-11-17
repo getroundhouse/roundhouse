@@ -62,6 +62,8 @@ enum Then {
     Greets(u32),
     /// Says its status.
     ShowsStatus,
+    /// Takes it as a request, whatever it answers, rather than refusing it for want of a hello.
+    Handles,
     /// Refuses it with this code, saying this in its message.
     Refuses(ErrorCode, String),
     /// Closes the connection without a reply.
@@ -82,6 +84,8 @@ impl Then {
                 (Then::ShowsStatus, ReplyOutcome::Response(ClientResponse::HubStatus(status))) => {
                     status.pid == std::process::id()
                 }
+                (Then::Handles, ReplyOutcome::Response(_)) => true,
+                (Then::Handles, ReplyOutcome::Error(error)) => error.code != ErrorCode::VersionMismatch,
                 (Then::Refuses(code, says), ReplyOutcome::Error(error)) => {
                     error.code == *code && error.message.contains(says.as_str())
                 }
@@ -141,6 +145,16 @@ fn cases() -> Vec<(&'static str, Vec<Step>)> {
             calls(vec![(&hello_ours, Then::Greets(ours)), (approve, unsupported()), (STATUS, Then::ShowsStatus)]),
         ),
         ("a frame naming no call", vec![(r#"{"request":{"method":"hub_status"}}"#.to_string(), 1, Then::Closes)]),
+        // Last, since they leave the hub restarting and then stopping, which in a test's process stops nothing. A
+        // restart is refused where it would stop the hub's agents, which is still answering it.
+        (
+            "restarting or stopping the hub without a hello",
+            calls(vec![
+                (r#"{"method":"hub_restart"}"#, Then::Handles),
+                (r#"{"method":"hub_shutdown"}"#, Then::Handles),
+                (repos, mismatch("")),
+            ]),
+        ),
     ]
 }
 

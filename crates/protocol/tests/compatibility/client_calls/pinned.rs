@@ -53,8 +53,8 @@ pinned! {
     "terminals.rs" => [TerminalOpen(_), TerminalAttach(_), TerminalInput(_), TerminalResize(_), TerminalClose(_)],
 }
 
-/// The request's `method`, as serde's `snake_case` makes it from the variant's name.
-fn method(variant: &str) -> String {
+/// A request's `method`, or a reply's `result`, as serde's `snake_case` makes it from the variant's name.
+pub(super) fn method(variant: &str) -> String {
     let mut method = String::new();
     for (at, letter) in variant.char_indices() {
         if letter.is_uppercase() && at > 0 {

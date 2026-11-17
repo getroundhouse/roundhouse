@@ -4,6 +4,7 @@
 mod devices;
 mod github_apps;
 mod pinned;
+mod pinned_replies;
 mod replies;
 mod requests;
 mod session_requests;
