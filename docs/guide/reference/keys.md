@@ -29,7 +29,7 @@ The app's keyboard shortcuts. They're written as a Mac's. On Windows and Linux, 
 
 ## A terminal
 
-What's typed in a terminal goes to its shell, apart from the app's shortcuts.
+Every key typed in a terminal goes to its program, as in a terminal app, but the app's keys on `Cmd` on a Mac and on `Ctrl-Shift` on Windows and Linux, and `Ctrl-Tab` on both.
 
 | Key | Action |
 |---|---|
@@ -37,8 +37,13 @@ What's typed in a terminal goes to its shell, apart from the app's shortcuts.
 | `Cmd-V` | Paste. `Ctrl-Shift-V` on Windows and Linux |
 | `Cmd-A` | Select everything, the history too. `Ctrl-Shift-A` on Windows and Linux |
 | `Cmd-Shift-T` | Another terminal |
+| `Cmd-Left`, `Cmd-Right` | On a Mac, the start of the line, and its end, in a shell |
+| `Cmd-Backspace` | On a Mac, delete back to the start of the line in bash and fish, or the whole line in zsh |
+| `Option-Left`, `Option-Right` | On a Mac, back a word, and on one, in a shell |
 
-On Windows and Linux, `Ctrl` with a letter goes to the shell, as `Ctrl-W` deletes a word there, so in a terminal the app's own keys take `Shift` too: `Ctrl-Shift-W` closes the terminal, `Ctrl-Shift-N` makes a new workspace and `Ctrl-Shift-Q` quits. New chat and the workspace before and after are in the menus there, and Find, which is for a chat, does nothing in a terminal. `Ctrl-Shift-C`, `Ctrl-Shift-V` and `Ctrl-Shift-A` copy, paste and select all there, so Archive has no key in a terminal.
+On Windows and Linux, `Ctrl` with a letter goes to the program, as `Ctrl-W` deletes a word in a shell, so in a terminal the app's own keys take `Shift` too: `Ctrl-Shift-W` closes the terminal, `Ctrl-Shift-N` makes a new workspace and `Ctrl-Shift-Q` quits. The app's other keys go to the program there, `F10` and `Ctrl-,` too, so New chat, Settings and the workspace before and after are in the menus, which the button in the corner opens. `Ctrl-Shift-C`, `Ctrl-Shift-V` and `Ctrl-Shift-A` copy, paste and select all there, so Archive is in the File menu.
+
+Find and stopping the agent are for a chat, so they do nothing unless the chat shows, such as while a terminal, a file tab or a subagent tab does.
 
 ## The composer
 

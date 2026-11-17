@@ -10,5 +10,7 @@ mod file_and_view;
 
 mod bindings;
 
-pub(crate) use bindings::{CHECK_FOR_UPDATES, QUIT, SETTINGS, choose, items};
+pub(crate) use bindings::{
+    CHECK_FOR_UPDATES, QUIT, SETTINGS, bound_where_focus_is, choose, every_key_bound_where_focus_is, items,
+};
 use bindings::{action, enabled, key, keyed, with_a_repository};
