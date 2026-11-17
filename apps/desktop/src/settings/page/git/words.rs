@@ -68,7 +68,9 @@ impl Standing {
         }
         match held.how {
             GithubLoginKind::SignIn => Standing::Renewing,
-            GithubLoginKind::Token | GithubLoginKind::Unknown => Standing::Ended { on: on.unwrap_or_default() },
+            GithubLoginKind::Token | GithubLoginKind::App | GithubLoginKind::Unknown => {
+                Standing::Ended { on: on.unwrap_or_default() }
+            }
         }
     }
 
@@ -113,8 +115,9 @@ pub(super) fn connected_by(how: GithubLoginKind) -> &'static str {
     match how {
         GithubLoginKind::SignIn => "Signed in",
         GithubLoginKind::Token => "Token",
-        // A way a newer hub connects one.
-        GithubLoginKind::Unknown => "Another way",
+        // A way a newer hub connects one, and an app's installation, as an older client takes it, until the page shows
+        // apps of your own.
+        GithubLoginKind::App | GithubLoginKind::Unknown => "Another way",
     }
 }
 

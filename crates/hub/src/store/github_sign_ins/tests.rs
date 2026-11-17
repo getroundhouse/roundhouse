@@ -81,6 +81,7 @@ fn approving_makes_an_account_then_renews_the_one_signed_in_as_the_same_user_in_
         file: &token_file,
         connected_at_ms: 1,
         ends_at_ms: None,
+        installation: None,
     };
     store.connect_github_login(&connecting).unwrap();
     let [first, second] = ["first", "second"].map(|id| started(&store, id));

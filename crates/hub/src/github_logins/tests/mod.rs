@@ -2,6 +2,7 @@ use super::*;
 
 mod accounts;
 use accounts::{ada, connect, default_of, logins_in, owner};
+mod apps;
 mod credential;
 mod renewals;
 mod secret;

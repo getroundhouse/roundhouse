@@ -46,7 +46,9 @@ impl Hub {
     /// within [`ASK_WITHIN`](crate::github::ASK_WITHIN), 15 s, and then its write, which waits on nothing outside the
     /// hub. So the wait is at most the check's own work, a renewal's call and its write. GitHub revokes what a renewal
     /// renews as it gives the next, so a stop that dropped what GitHub gave would have the account need signing in
-    /// again, where waiting makes a stop at most about 15 s longer.
+    /// again, where waiting makes a stop at most about 15 s longer. Making an installation's token, and looking for
+    /// where an app of your own is installed, are dropped where they are, since GitHub revokes nothing as it makes a
+    /// token, so dropping one costs only another call, at the next hub's first check.
     pub(crate) async fn stop_checking_github_logins(&self, watching: JoinHandle<()>) {
         self.github_checks_stopped.send_replace(true);
         if let Err(e) = watching.await {
@@ -56,7 +58,7 @@ impl Hub {
 }
 
 /// Once `checks_stopped` says the hub has stopped checking, or the hub has gone.
-async fn stopped(mut checks_stopped: watch::Receiver<bool>) {
+pub(super) async fn stopped(mut checks_stopped: watch::Receiver<bool>) {
     // An error says the hub has gone, which stops the checks too.
     let _gone = checks_stopped.wait_for(|stopped| *stopped).await;
 }

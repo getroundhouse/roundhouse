@@ -267,7 +267,11 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         | R::GithubAccountConnect(_)
         | R::GithubAccountDisconnect(_)
         | R::GithubAccountSetDefault(_)
-        | R::GithubSignInCancel(_) => Err(read_only("change anything")),
+        | R::GithubSignInCancel(_)
+        | R::GithubAppMake(_)
+        | R::GithubAppInstallationsConnect(_)
+        | R::GithubAppRemove(_) => Err(read_only("change anything")),
+        R::GithubAppManifestWrite(_) => Err(read_only("make an app of your own")),
         // So a screen can show the app waiting on a workspace it asked for, or on a new title. The workspace's record
         // saying it's being made, or on its way out, is the world's to say.
         R::WorkspaceCreate(_) | R::WorkspaceRegenerateTitle(_) => Ok(Outcome::Never),

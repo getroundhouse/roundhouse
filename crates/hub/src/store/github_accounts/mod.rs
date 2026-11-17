@@ -10,6 +10,7 @@ use protocol::model::{GithubAccountId, GithubLoginKind, GithubUser, GithubUserId
 #[cfg(test)]
 mod tests;
 
+mod installations;
 mod rows;
 pub(crate) use rows::{GithubConnected, GithubConnecting};
 pub(super) use rows::{connect_login, github_accounts, signed_in_as};

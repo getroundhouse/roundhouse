@@ -141,7 +141,11 @@ impl Drop for Worker {
 }
 
 fn account(username: &str, token: &str) -> GithubCredential {
-    GithubCredential::Account(GitCredential { username: username.into(), token: GithubToken::new(token) })
+    GithubCredential::Account(GitCredential {
+        username: username.into(),
+        token: GithubToken::new(token),
+        identity: None,
+    })
 }
 
 fn blocked(reason: &str) -> GithubCredential {

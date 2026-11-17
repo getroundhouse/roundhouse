@@ -63,7 +63,7 @@ fn connect(logins: &GithubLogins, token: &str, renewing: Option<&GithubAccountId
 }
 
 fn account(token: &str) -> GithubCredential {
-    GithubCredential::Account(GitCredential { username: "ada".into(), token: GithubToken::new(token) })
+    GithubCredential::Account(GitCredential { username: "ada".into(), token: GithubToken::new(token), identity: None })
 }
 
 /// A set at a time, as fast as the hub can make them, so a link that's applying one when the next comes is sent

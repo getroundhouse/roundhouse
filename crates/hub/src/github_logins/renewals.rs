@@ -5,10 +5,10 @@
 use std::time::Duration;
 
 use protocol::client::ApiError;
-use protocol::model::{GithubAccount, GithubAccountId};
+use protocol::model::{GithubAccount, GithubAccountId, GithubAppId};
 use tracing::{error, info, warn};
 
-use super::{GithubAccountChange, GithubLogin, GithubLogins, SignedIn};
+use super::{GithubAccountChange, GithubLogin, GithubLogins, MintDue, SignedIn};
 use crate::error::internal;
 use crate::github::{GithubRefreshToken, Renewal};
 use crate::login_files::{Locked, LoginFile, Stored};
@@ -35,6 +35,10 @@ pub(crate) struct Checked {
     pub(crate) due: Vec<Due>,
     /// The record of each account the check changed, as one it found nothing can renew.
     pub(crate) changed: Vec<GithubAccount>,
+    /// Each installation of an app of your own to make a token for now, at most one an account.
+    pub(crate) minting: Vec<MintDue>,
+    /// Each app of your own, to look for where it's installed.
+    pub(crate) apps: Vec<GithubAppId>,
 }
 
 impl GithubLogins {
@@ -43,7 +47,9 @@ impl GithubLogins {
     /// renew, since GitHub gave nothing that renews it, or that has ended, needs signing in again, so it blocks once
     /// it's the default. Then what workers are sent is worked out again, since the default's token may have ended
     /// since, and the rest of those due are answered with, to renew. One that needs signing in again already isn't
-    /// due, and nor is one whose file holds what this build can't renew, which blocks as it is.
+    /// due, and nor is one whose file holds what this build can't renew, which blocks as it is. Each installation of an
+    /// app of your own whose token is due to be made again is answered with too, and each app, to look for where it's
+    /// installed.
     pub(crate) fn check(&self, now_ms: i64) -> Result<Checked, ApiError> {
         self.changing(now_ms, |files| {
             let renewed_before = later_ms(now_ms, RENEWED_WITH_LEFT);
@@ -63,6 +69,8 @@ impl GithubLogins {
                     None => checked.changed.extend(self.store.github_login_needs_sign_in(&account.id)?),
                 }
             }
+            checked.minting = self.installations_due(files, now_ms)?;
+            checked.apps = self.store.github_app_keys()?.into_iter().map(|(app, _)| app).collect();
             Ok(checked)
         })
     }

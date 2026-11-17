@@ -117,8 +117,16 @@ impl Store {
         self.lasting(|tx| {
             let account = signed_in_as(tx, user)?.unwrap_or_else(|| new_account.clone());
             let how = GithubLoginKind::SignIn;
-            let connecting =
-                GithubConnecting { account: &account, user, how, file, connected_at_ms: signed_in_at_ms, ends_at_ms };
+            let connected_at_ms = signed_in_at_ms;
+            let connecting = GithubConnecting {
+                account: &account,
+                user,
+                how,
+                file,
+                connected_at_ms,
+                ends_at_ms,
+                installation: None,
+            };
             let connected = connect_login(tx, &connecting)?;
             let approved = GithubSignInStatus::Approved { account };
             let status =

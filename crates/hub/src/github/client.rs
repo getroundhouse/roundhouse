@@ -43,14 +43,21 @@ struct User {
     login: String,
 }
 
-/// What GitHub answered, as far as the hub reads it.
-struct Answered {
-    status: u16,
+/// What GitHub's API answered, as far as the hub reads it.
+pub(super) struct Answered {
+    pub(super) status: u16,
     /// Whether it says GitHub is limiting how often the hub calls, rather than refusing the token: a 429, or a 403 that
     /// says when to call again or that none of the hub's calls are left.
-    limited: bool,
+    pub(super) limited: bool,
     expiration: Option<String>,
-    body: String,
+    pub(super) body: String,
+}
+
+impl Answered {
+    /// Whether GitHub did as it was asked.
+    pub(super) fn succeeded(&self) -> bool {
+        (200..300).contains(&self.status)
+    }
 }
 
 impl Github {
@@ -63,12 +70,29 @@ impl Github {
     /// with `Unavailable` when GitHub can't be reached, doesn't answer in time, is limiting the hub's calls, or answers
     /// with anything else.
     pub(crate) async fn token_owner(&self, token: &GithubToken) -> Result<TokenOwner, ApiError> {
-        owner(within(self.ask_who(token)).await?)
+        owner(within(self.ask(http::Method::GET, "/user", Some(token.as_str()), None)).await?)
     }
 
-    async fn ask_who(&self, token: &GithubToken) -> Result<Answered, ApiError> {
-        let client = self.client().await?.user_access_token(token.as_str().to_string()).map_err(|e| not_reached(&e))?;
-        let response = client._get("/user").await.map_err(|e| not_reached(&e))?;
+    /// Asks GitHub's API to `method` `path`, as whoever `bearer` is, if anyone, with `body` as JSON, and answers with
+    /// what GitHub answered, whatever it is. Unbounded, so its caller puts its own limit on the whole call.
+    pub(super) async fn ask(
+        &self,
+        method: http::Method,
+        path: &str,
+        bearer: Option<&str>,
+        body: Option<&serde_json::Value>,
+    ) -> Result<Answered, ApiError> {
+        let anyone = self.client().await?;
+        let bearing;
+        let client = match bearer {
+            Some(bearer) => {
+                bearing = anyone.user_access_token(bearer.to_string()).map_err(|e| not_reached(&e))?;
+                &bearing
+            }
+            None => anyone,
+        };
+        let request = client.build_request(http::Request::builder().method(method).uri(path), body);
+        let response = client.execute(request.map_err(|e| not_reached(&e))?).await.map_err(|e| not_reached(&e))?;
         let status = response.status().as_u16();
         let header =
             |name: &str| response.headers().get(name).and_then(|value| value.to_str().ok()).map(str::to_string);
@@ -108,7 +132,7 @@ impl Github {
 fn owner(answer: Answered) -> Result<TokenOwner, ApiError> {
     let Answered { status, limited, expiration, body } = answer;
     if limited {
-        return Err(unavailable("GitHub is limiting how often the hub calls it; try again in a minute"));
+        return Err(limited_now());
     }
     if matches!(status, 401 | 403) {
         let message = "GitHub doesn't take that token as a user's, as when it has ended or been revoked";
@@ -136,6 +160,11 @@ pub(super) async fn within<T>(call: impl Future<Output = Result<T, ApiError>>) -
         Ok(answer) => answer,
         Err(_) => Err(unavailable(format!("GitHub didn't answer within {} s", ASK_WITHIN.as_secs()))),
     }
+}
+
+/// `Unavailable`, as GitHub limits how often the hub calls it.
+pub(super) fn limited_now() -> ApiError {
+    unavailable("GitHub is limiting how often the hub calls it; try again in a minute")
 }
 
 pub(super) fn not_reached(e: &octocrab::Error) -> ApiError {

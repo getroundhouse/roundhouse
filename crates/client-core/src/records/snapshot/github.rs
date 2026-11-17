@@ -1,9 +1,12 @@
 //! What a hub says of GitHub, as views read it: the GitHub accounts it holds, the sign-ins with GitHub it has started,
-//! and the login found on each provider's machines, each as the hub's records have it.
+//! the apps of your own it holds the key of, and the login found on each provider's machines, each as the hub's records
+//! have it.
 
 use std::collections::HashMap;
 
-use protocol::model::{FoundGithubLogin, GithubAccount, GithubAccountId, GithubSignIn, GithubSignInId};
+use protocol::model::{
+    FoundGithubLogin, GithubAccount, GithubAccountId, GithubApp, GithubAppId, GithubSignIn, GithubSignInId,
+};
 
 use super::Snapshot;
 
@@ -13,6 +16,7 @@ pub(super) struct GithubListed {
     accounts: Vec<GithubAccount>,
     account_at: HashMap<GithubAccountId, usize>,
     sign_ins: HashMap<GithubSignInId, GithubSignIn>,
+    apps: HashMap<GithubAppId, GithubApp>,
     /// By provider.
     found: Vec<FoundGithubLogin>,
 }
@@ -24,6 +28,10 @@ impl GithubListed {
 
     pub(super) fn sign_in(&mut self, sign_in: &GithubSignIn) {
         self.sign_ins.insert(sign_in.id.clone(), sign_in.clone());
+    }
+
+    pub(super) fn app(&mut self, app: &GithubApp) {
+        self.apps.insert(app.id, app.clone());
     }
 
     pub(super) fn found(&mut self, found: &FoundGithubLogin) {
@@ -59,6 +67,12 @@ impl Snapshot {
     /// Every sign-in with GitHub the hub keeps a record of, in no order.
     pub fn github_sign_ins(&self) -> impl Iterator<Item = &GithubSignIn> {
         self.records.github.sign_ins.values()
+    }
+
+    /// The record of the app of your own `id`, until it's removed, as the Git page's panel for making one shows it, in
+    /// the plan #1208 has for its next part.
+    pub fn github_app(&self, id: GithubAppId) -> Option<&GithubApp> {
+        self.records.github.apps.get(&id)
     }
 
     /// The login found on each provider's machines that the hub has asked since it started: this machine's first, then

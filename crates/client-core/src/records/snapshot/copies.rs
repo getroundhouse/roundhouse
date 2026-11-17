@@ -96,6 +96,7 @@ impl Listed {
                 Record::GithubAccount(account) => listed.github.account(account),
                 Record::GithubSignIn(sign_in) => listed.github.sign_in(sign_in),
                 Record::FoundGithubLogin(found) => listed.github.found(found),
+                Record::GithubApp(app) => listed.github.app(app),
                 // Held apart, as `HubRecords::apply_record` says.
                 Record::Subagent(_) => {}
             }

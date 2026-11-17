@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 
 use process::Environment;
 use protocol::model::GithubToken;
-use protocol::worker::{GitCredential, GithubCredential};
+use protocol::worker::{GitCredential, GitIdentity, GithubCredential};
 
 /// The directory in the worker's state directory that holds them.
 const DIR: &str = "git-credential";
@@ -70,14 +70,22 @@ impl Files {
             Handed::Blocked(reason) => GithubCredential::Blocked { reason: reason.clone() },
         };
         replace(&self.dir.join(ANSWER), &serde_json::to_vec(&answer).map_err(io::Error::other)?)?;
-        match handed {
-            Handed::Account(credential) => replace(&gh.join(HOSTS), hosts(credential).as_bytes())?,
-            Handed::Blocked(_) => {
-                let refused = GitCredential { username: BLOCKED_USER.into(), token: GithubToken::new(BLOCKED_TOKEN) };
-                replace(&gh.join(HOSTS), hosts(&refused).as_bytes())?;
+        let identity = match handed {
+            Handed::Account(credential) => {
+                replace(&gh.join(HOSTS), hosts(credential).as_bytes())?;
+                credential.identity.as_ref()
             }
-        }
-        replace(&self.dir.join(CONFIG), &self.config())
+            Handed::Blocked(_) => {
+                let refused = GitCredential {
+                    username: BLOCKED_USER.into(),
+                    token: GithubToken::new(BLOCKED_TOKEN),
+                    identity: None,
+                };
+                replace(&gh.join(HOSTS), hosts(&refused).as_bytes())?;
+                None
+            }
+        };
+        replace(&self.dir.join(CONFIG), &self.config(identity))
     }
 
     /// Removes the directory and everything in it, the git config first, so a process that reads it meanwhile goes
@@ -92,8 +100,10 @@ impl Files {
 
     /// The machine's helpers for `https://github.com` reset, then the worker's own, which is the same for an account
     /// and a block, since what it answers says which. And GitHub's SSH addresses sent over HTTPS, so a remote over
-    /// SSH goes through the helper too, rather than push with the machine's key.
-    fn config(&self) -> Vec<u8> {
+    /// SSH goes through the helper too, rather than push with the machine's key. And `identity`, when there is one, as
+    /// who commits are by, which git takes over the repository's and the person's own, since what's given in
+    /// `GIT_CONFIG_*` comes last, so a credential without one leaves them to say.
+    fn config(&self, identity: Option<&GitIdentity>) -> Vec<u8> {
         let words =
             self.helper.iter().map(|word| word.as_encoded_bytes()).chain([self.dir.as_os_str().as_encoded_bytes()]);
         let mut helper = b"!".to_vec();
@@ -109,6 +119,13 @@ impl Files {
         config.extend(
             b"\n[url \"https://github.com/\"]\n\tinsteadOf = git@github.com:\n\tinsteadOf = ssh://git@github.com/\n",
         );
+        if let Some(identity) = identity {
+            config.extend(b"[user]\n\tname = ");
+            config.extend(config_quoted(identity.name.as_bytes()));
+            config.extend(b"\n\temail = ");
+            config.extend(config_quoted(identity.email.as_bytes()));
+            config.push(b'\n');
+        }
         config
     }
 }

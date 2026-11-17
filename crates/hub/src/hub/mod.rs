@@ -15,6 +15,7 @@ mod comments;
 mod feed;
 mod found_github_logins;
 mod github_accounts;
+mod github_apps;
 mod github_sign_ins;
 mod hub_settings;
 mod instances;

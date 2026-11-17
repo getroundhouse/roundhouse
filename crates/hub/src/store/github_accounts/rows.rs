@@ -2,13 +2,15 @@ use super::super::hub_settings::hub_settings;
 use super::super::{Store, StoreError, from_text, lock, rev_of, text_of};
 use crate::login_files::LoginFile;
 use protocol::model::{
-    GithubAccount, GithubAccountId, GithubLoginKind, GithubUser, GithubUserId, HeldGithubLogin, HubSettings,
+    GithubAccount, GithubAccountId, GithubAppId, GithubInstallation, GithubInstallationId, GithubLoginKind, GithubUser,
+    GithubUserId, HeldGithubLogin, HubSettings,
 };
 use rusqlite::{Connection, OptionalExtension as _, Row, Transaction, params};
 
 /// The columns every read of a GitHub account's row takes, in this order, as [`account_at`] reads them.
-const COLUMNS: &str = "id, user_id, username, login_kind, login_file, login_connected_at_ms, login_ends_at_ms, rev, \
-                       login_needs_sign_in FROM github_accounts";
+pub(super) const COLUMNS: &str = "id, user_id, username, login_kind, login_file, login_connected_at_ms, \
+                                  login_ends_at_ms, rev, login_needs_sign_in, app_id, installation_id, \
+                                  installed_on_id, installed_on FROM github_accounts";
 
 /// A login being connected to a GitHub account, which is made if the hub has no record of it.
 #[derive(Clone, Copy)]
@@ -19,6 +21,8 @@ pub(crate) struct GithubConnecting<'a> {
     pub(crate) file: &'a LoginFile,
     pub(crate) connected_at_ms: i64,
     pub(crate) ends_at_ms: Option<i64>,
+    /// Where it's installed, for an app's installation, and `None` for any other login.
+    pub(crate) installation: Option<&'a GithubInstallation>,
 }
 
 /// The account as connecting left it, the file of the login it replaced, for the hub to let go of, and the settings,
@@ -32,7 +36,7 @@ pub(crate) struct GithubConnected {
 /// A row's record, and the file of the login it holds. It holds one only when the file is one the hub names, and it
 /// says how and when it was connected, so every read takes the same to be held. One that names another file is cleared
 /// as the hub starts.
-fn account_at(row: &Row<'_>) -> rusqlite::Result<(GithubAccount, Option<LoginFile>)> {
+pub(super) fn account_at(row: &Row<'_>) -> rusqlite::Result<(GithubAccount, Option<LoginFile>)> {
     let file = row.get::<_, Option<String>>(4)?.as_deref().and_then(LoginFile::parse);
     let held = match (file, row.get::<_, Option<String>>(3)?, row.get::<_, Option<i64>>(5)?) {
         (Some(file), Some(how), Some(connected_at_ms)) => {
@@ -50,9 +54,21 @@ fn account_at(row: &Row<'_>) -> rusqlite::Result<(GithubAccount, Option<LoginFil
         id: row.get::<_, String>(0)?.into(),
         user: GithubUser { id: GithubUserId::new(row.get(1)?), name: row.get::<_, String>(2)?.into() },
         held_login: held.as_ref().map(|(_, held)| *held),
+        installation: installation_at(row)?,
         rev: rev_of(row, 7)?,
     };
     Ok((account, held.map(|(file, _)| file)))
+}
+
+/// Where a row's account is installed, when it's an app's installation, as all four of its columns say.
+fn installation_at(row: &Row<'_>) -> rusqlite::Result<Option<GithubInstallation>> {
+    let columns = (row.get::<_, Option<u64>>(9)?, row.get(10)?, row.get(11)?, row.get::<_, Option<String>>(12)?);
+    let (Some(app), Some(id), Some(on_id), Some(on)) = columns else { return Ok(None) };
+    Ok(Some(GithubInstallation {
+        app: GithubAppId::new(app),
+        id: GithubInstallationId::new(id),
+        on: GithubUser { id: GithubUserId::new(on_id), name: on.into() },
+    }))
 }
 
 /// Every GitHub account, oldest first, for a list of every record.
@@ -62,7 +78,10 @@ pub(in super::super) fn github_accounts(conn: &Connection) -> rusqlite::Result<V
 }
 
 /// The row of `id`, as [`account_at`] reads it.
-fn row_of(conn: &Connection, id: &GithubAccountId) -> rusqlite::Result<Option<(GithubAccount, Option<LoginFile>)>> {
+pub(super) fn row_of(
+    conn: &Connection,
+    id: &GithubAccountId,
+) -> rusqlite::Result<Option<(GithubAccount, Option<LoginFile>)>> {
     conn.query_row(&format!("SELECT {COLUMNS} WHERE id = ?"), [id.as_str()], account_at).optional()
 }
 
@@ -181,18 +200,20 @@ pub(in super::super) fn connect_login(
     tx: &Transaction<'_>,
     connecting: &GithubConnecting<'_>,
 ) -> rusqlite::Result<GithubConnected> {
-    let GithubConnecting { account: id, user, how, file, connected_at_ms, ends_at_ms } = *connecting;
+    let GithubConnecting { account: id, user, how, file, connected_at_ms, ends_at_ms, installation } = *connecting;
     let first = !tx.query_row("SELECT EXISTS (SELECT 1 FROM github_accounts)", [], |row| row.get::<_, bool>(0))?;
     let replaced = row_of(tx, id)?.and_then(|(_, file)| file);
     tx.execute(
         "INSERT INTO github_accounts
              (id, user_id, username, login_kind, login_file, login_connected_at_ms, login_ends_at_ms,
-              login_needs_sign_in)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 0)
+              login_needs_sign_in, app_id, installation_id, installed_on_id, installed_on)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 0, ?8, ?9, ?10, ?11)
              ON CONFLICT (id) DO UPDATE
              SET user_id = excluded.user_id, username = excluded.username, login_kind = excluded.login_kind,
                  login_file = excluded.login_file, login_connected_at_ms = excluded.login_connected_at_ms,
-                 login_ends_at_ms = excluded.login_ends_at_ms, login_needs_sign_in = 0",
+                 login_ends_at_ms = excluded.login_ends_at_ms, login_needs_sign_in = 0, app_id = excluded.app_id,
+                 installation_id = excluded.installation_id, installed_on_id = excluded.installed_on_id,
+                 installed_on = excluded.installed_on",
         params![
             id.as_str(),
             user.id.get(),
@@ -200,7 +221,11 @@ pub(in super::super) fn connect_login(
             text_of(&how),
             file.as_str(),
             connected_at_ms,
-            ends_at_ms
+            ends_at_ms,
+            installation.map(|installation| installation.app.get()),
+            installation.map(|installation| installation.id.get()),
+            installation.map(|installation| installation.on.id.get()),
+            installation.map(|installation| installation.on.name.as_str()),
         ],
     )?;
     if first {

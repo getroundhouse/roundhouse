@@ -1,9 +1,12 @@
+use std::fmt;
 use std::path::Path;
 use std::sync::Arc;
 
 use protocol::client::github_accounts::GithubAccountConnect;
 use protocol::client::{ApiError, ErrorCode};
-use protocol::model::{GithubAccount, GithubAccountId, GithubLoginKind, GithubToken, GithubUser, HubSettings};
+use protocol::model::{
+    GithubAccount, GithubAccountId, GithubAppId, GithubLoginKind, GithubToken, GithubUser, HubSettings,
+};
 use protocol::worker::GithubCredential;
 use tokio::sync::watch;
 
@@ -64,6 +67,21 @@ impl GithubAccountChange {
     }
 }
 
+/// What a file in the GitHub logins' directory is kept for, as tidying names it: an account's login, or an app's key.
+enum KeptFor {
+    Account(GithubAccountId),
+    App(GithubAppId),
+}
+
+impl fmt::Display for KeptFor {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            KeptFor::Account(id) => id.fmt(f),
+            KeptFor::App(id) => write!(f, "the app {id}"),
+        }
+    }
+}
+
 /// What connecting a token comes to, as the files and the rows say.
 enum Plan {
     /// An account holds it already, as when a client sends the same again, so nothing changes.
@@ -110,6 +128,7 @@ impl GithubLogins {
                     file,
                     connected_at_ms: connect.connected_at_ms,
                     ends_at_ms: owner.ends_at_ms,
+                    installation: None,
                 };
                 let GithubConnected { account, replaced, settings } = self.store.connect_github_login(&connecting)?;
                 Ok(((account, settings), replaced))
@@ -146,9 +165,18 @@ impl GithubLogins {
     /// [`Locked::tidy`] says.
     pub(crate) fn tidy(&self, now_ms: i64) -> Result<(), ApiError> {
         self.changing(now_ms, |files| {
-            files.tidy(self.store.github_login_files()?, |id| {
-                self.store.clear_github_login(id)?;
-                Ok(())
+            let accounts = self.store.github_login_files()?.into_iter().map(|(id, file)| (KeptFor::Account(id), file));
+            let apps = self.store.github_app_keys()?.into_iter().map(|(id, file)| (KeptFor::App(id), file));
+            files.tidy(accounts.chain(apps).collect(), |kept_for| match kept_for {
+                KeptFor::Account(id) => {
+                    self.store.clear_github_login(id)?;
+                    Ok(())
+                }
+                // As removing it would have, had the hub not stopped between letting go of its key and its record.
+                KeptFor::App(id) => {
+                    self.store.remove_github_app(*id)?;
+                    Ok(())
+                }
             })
         })
     }
@@ -201,8 +229,8 @@ impl GithubLogins {
                 Err(ApiError::new(ErrorCode::Conflict, message))
             }
             Err(Unusable::Renewing) => {
-                let message =
-                    format!("{}'s sign-in with GitHub is being renewed; try again in a minute", account.user.name);
+                let renewing = if account.installation.is_some() { "token" } else { "sign-in with GitHub" };
+                let message = format!("{}'s {renewing} is being renewed; try again in a minute", account.user.name);
                 Err(ApiError::new(ErrorCode::Conflict, message))
             }
             Err(Unusable::Newer) => {

@@ -22,6 +22,7 @@ fn account() -> GithubAccount {
             ends_at_ms: None,
             needs_sign_in: false,
         }),
+        installation: None,
         rev: Rev::new(2),
     }
 }

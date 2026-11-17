@@ -14,6 +14,7 @@ pub mod drafts;
 mod feed;
 pub mod files;
 pub mod github_accounts;
+pub mod github_apps;
 mod hello;
 pub mod log;
 pub mod new_workspace;

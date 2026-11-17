@@ -11,7 +11,8 @@ fn ada() -> GithubUser {
 
 /// A token of `user`'s for `id`, kept in `file`, connected at 100.
 fn connecting<'a>(id: &'a GithubAccountId, user: &'a GithubUser, file: &'a LoginFile) -> GithubConnecting<'a> {
-    GithubConnecting { account: id, user, how: GithubLoginKind::Token, file, connected_at_ms: 100, ends_at_ms: None }
+    let how = GithubLoginKind::Token;
+    GithubConnecting { account: id, user, how, file, connected_at_ms: 100, ends_at_ms: None, installation: None }
 }
 
 #[test]
