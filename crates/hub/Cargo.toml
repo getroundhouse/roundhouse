@@ -21,6 +21,7 @@ async-trait.workspace = true
 jiff.workspace = true
 fastrand.workspace = true
 http.workspace = true
+memchr.workspace = true
 octocrab.workspace = true
 parking_lot.workspace = true
 private-files.workspace = true

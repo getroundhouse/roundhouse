@@ -18,6 +18,9 @@ const EXIT_CODE: &str = "Exit code ";
 /// What the CLI puts around a tool's own refusal.
 const TOOL_ERROR_OPEN: &str = "<tool_use_error>";
 const TOOL_ERROR_CLOSE: &str = "</tool_use_error>";
+/// How the CLI starts the result of a subagent's call that only says the subagent started in the background, whose
+/// report comes as it ends.
+const LAUNCHED: &str = "Async agent launched";
 
 /// Says what came back for each result in `body`, which come as the CLI's words, as what the call it answers sends
 /// back, from those words and from what `line`, the line they were read from, says beside them. `answered` is each
@@ -63,6 +66,7 @@ pub(super) fn of(call: Option<&Call>, text: String, is_error: bool, line: &Value
             text,
         },
         Some(Call::WebSearch(_)) => web_results(&text),
+        Some(Call::Subagent(_)) if text.starts_with(LAUNCHED) => CallOutput::Backgrounded { task: None },
         Some(Call::Subagent(_)) => CallOutput::Report { report: text },
         Some(Call::Mcp { .. }) => {
             let content = if text.is_empty() { Vec::new() } else { vec![McpContent::Text { text }] };

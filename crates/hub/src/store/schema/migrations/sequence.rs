@@ -1,4 +1,4 @@
-use super::super::migration::Migration::{self, Sql};
+use super::super::migration::Migration::{self, Rust, Sql};
 use super::{
     accounts, activity, cache, comments, drafts, first, github_accounts, github_sign_ins, hub_settings, limits, logins,
     providers, replies, repos, subagents, tools, waiting, waits, workers, workspaces,
@@ -368,4 +368,7 @@ pub(in super::super) const MIGRATIONS: &[Migration] = &[
     Sql(repos::PUSH_ROUTES),
     // What each subagent has done lately, with each call typed, which its record shows while it works.
     Sql(subagents::LATELY),
+    // Each call Claude's adapter recorded before it typed them typed, with what came back for it, the call each request
+    // for approval asked to make, and what each working subagent has done lately, in `typed_calls`.
+    Rust(super::typed_calls::typed_calls),
 ];

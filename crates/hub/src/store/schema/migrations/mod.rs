@@ -21,6 +21,7 @@ mod repos;
 mod session_accounts;
 mod subagents;
 mod tools;
+mod typed_calls;
 mod waiting;
 mod waits;
 mod workers;

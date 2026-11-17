@@ -364,7 +364,9 @@ fn a_fetch_is_its_page_a_subagent_its_report_and_an_mcp_tool_what_it_said() {
         output(fetch, false, "It's new.", &json!({"code": 200})),
         CallOutput::Page { url: "https://a.dev".into(), status: Some(200), text: "It's new.".into() }
     );
-    assert_eq!(output(agent, false, "Done.", &Value::Null), CallOutput::Report { report: "Done.".into() });
+    assert_eq!(output(agent.clone(), false, "Done.", &Value::Null), CallOutput::Report { report: "Done.".into() });
+    let launched = "Async agent launched successfully.\nagentId: a1 (internal ID - do not mention to user.)";
+    assert_eq!(output(agent, false, launched, &Value::Null), CallOutput::Backgrounded { task: None });
     let CallOutput::Mcp { content, .. } = output(mcp(), false, "an issue", &Value::Null) else { panic!() };
     assert_eq!(content.len(), 1);
     assert_eq!(output(mcp(), false, "", &Value::Null), CallOutput::Mcp { content: Vec::new(), structured: None });
