@@ -26,7 +26,7 @@ const STATUS_WITHIN: Duration = Duration::from_secs(10);
 /// What reading workspaces' pull requests found, and what GitHub last said of its limit for the token.
 pub(in crate::hub::pull_requests) struct OwnRead {
     pub(in crate::hub::pull_requests) found: Vec<(WorkspaceId, Result<Found, ApiError>)>,
-    pub(in crate::hub::pull_requests) rate_limit: Option<protocol::worker::RateLimit>,
+    pub(in crate::hub::pull_requests) rate_limit: Option<crate::github::RateLimit>,
     pub(in crate::hub::pull_requests) refused: bool,
 }
 

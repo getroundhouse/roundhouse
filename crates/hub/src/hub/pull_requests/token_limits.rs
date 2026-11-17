@@ -6,10 +6,10 @@
 use std::collections::HashMap;
 
 use parking_lot::Mutex;
-use protocol::worker::RateLimit;
 
 use super::Asked;
 use super::remote::ReadsAs;
+use crate::github::RateLimit;
 
 #[derive(Default)]
 pub(in crate::hub::pull_requests) struct TokenLimits(Mutex<HashMap<ReadsAs, RateLimit>>);

@@ -4,13 +4,13 @@
 
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::GithubToken;
-use protocol::worker::RateLimit;
 use serde_json::Value;
 
 use super::asked::{PullRequestsAsk, PullRequestsRead, Unread};
 use super::graphql::NoAnswer;
 use super::query::{self, Asked, Part};
 use super::reading::Reading;
+use super::said::RateLimit;
 use super::said::{failed, incomplete, usage};
 use crate::github::Github;
 

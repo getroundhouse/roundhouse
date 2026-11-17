@@ -1,5 +1,5 @@
 use super::{
-    agents, children, connection, found_login, git_credential, github, one_off, previous, repo_url, terminals, tools,
+    agents, children, connection, found_login, git_credential, one_off, previous, repo_url, terminals, tools,
     workspaces, worktree,
 };
 use crate::client::Outcome;
@@ -17,7 +17,6 @@ use connection::{RunningAgents, Stop};
 use found_login::FindGithubLogin;
 use found_login::GithubLoginReply;
 use git_credential::GitCredentialSet;
-use github::{GithubRateLimit, PullRequest, PullRequestReply, RateLimit};
 use one_off::{AccountFor, TitleFor, TitleReply};
 use repo_url::{ReadRepoUrl, RepoUrlReply};
 use serde::{Deserialize, Serialize};
@@ -99,10 +98,8 @@ pub enum WorkerRequest {
     AddChildWorktree(AddChildWorktree),
     GitStatus(GitStatus),
     GitDiff(GitDiff),
-    PullRequest(PullRequest),
     WatchBranches(WatchBranches),
     WatchChildBranches(WatchChildBranches),
-    GithubRateLimit(GithubRateLimit),
     SetupWorkspace(SetupWorkspace),
     /// See [`CancelSetup`](super::CancelSetup).
     CancelSetup,
@@ -152,8 +149,6 @@ pub enum WorkerResponse {
     ChildWorktreeAdded(ChildWorktreeAdded),
     GitStatus(model::GitStatus),
     GitDiff(model::GitDiff),
-    PullRequest(PullRequestReply),
-    GithubRateLimit(RateLimit),
     SetupDone(SetupDone),
     SetupLog(SetupLogReply),
     AttachmentWritten(AttachmentWritten),
