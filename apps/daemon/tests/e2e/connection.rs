@@ -76,7 +76,8 @@ fn a_hub_refuses_a_request_it_does_not_know_and_carries_on() {
     assert!(matches!(still_there, ReplyOutcome::Response(ClientResponse::HubStatus(_))));
 }
 
-/// One newer than this hub that still speaks its version, as a client does for 30 days after a break.
+/// A hello may name a range, though a client of this build names only its own version: one that reaches this hub's
+/// version is taken, at that version, and one that starts past it is refused.
 #[test]
 fn a_hub_takes_a_client_whose_hello_names_its_version_in_a_range() {
     let stack = Stack::start();

@@ -43,7 +43,7 @@ async fn a_refused_worker_says_so_even_to_a_request_it_cant_read() {
     assert!(matches!(&answered[&1], WorkerOutcome::Error(e) if e.code == ErrorCode::Conflict), "{answered:?}");
 }
 
-/// A hub speaks the version before its own too, for 30 days after a break, and a worker takes one whose hello names
+/// A hub speaks the version before its own too, until the next break, and a worker takes one whose hello names
 /// its own version, but not one that no longer speaks it. It says which build it was given.
 #[tokio::test]
 async fn a_worker_takes_a_hub_whose_hello_names_its_version_in_a_range() {
