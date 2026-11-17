@@ -1,7 +1,6 @@
 //! Default accounts, a list with the hub's one default for each kind whose adapter can accept a held login, and what
 //! chooses it, under a heading as the account pages' lists are.
 
-use gpui_kit::component::menu::{PopupMenu, PopupMenuItem};
 use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::{Anchor, AnyElement, App, Div, IntoElement, ParentElement as _, SharedString, Styled as _, div, px};
 use look::Typeset as _;
@@ -89,11 +88,11 @@ fn picker(
     )
     .width(px(200.))
     .off(disabled)
-    .menu(Anchor::TopLeft, move |menu: PopupMenu, _, _| {
+    .menu(Anchor::TopLeft, move |menu: look::Menu, _, _| {
         choices.iter().fold(menu, |menu, (account, name)| {
             let (kept, account) = (kept.clone(), account.clone());
-            menu.item(PopupMenuItem::new(name.clone()).checked(selected.as_ref() == Some(&account)).on_click(
-                move |_, _, cx| {
+            menu.row(look::menu_row(name.clone()).chosen(selected.as_ref() == Some(&account)).on_choose(
+                move |_, cx| {
                     kept.update(cx, |kept, cx| kept.choose_default(kind, account.clone(), cx));
                 },
             ))

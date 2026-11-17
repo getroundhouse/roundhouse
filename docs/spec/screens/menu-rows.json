@@ -1,0 +1,22 @@
+{
+  "look::NoteKind": {
+    "Count": {
+      "x": 1508,
+      "y": 198,
+      "width": 560,
+      "height": 84
+    },
+    "Detail": {
+      "x": 1508,
+      "y": 70,
+      "width": 560,
+      "height": 84
+    },
+    "Failure": {
+      "x": 1508,
+      "y": 326,
+      "width": 560,
+      "height": 84
+    }
+  }
+}

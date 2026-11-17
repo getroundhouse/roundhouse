@@ -83,6 +83,24 @@ A key in one of the kit's menus or tooltips is the kit's, from the action it's b
 | Mark it off | `off` |
 | Share a row, rather than fill the width it's in | `grows` |
 
+
+## Menus
+
+`docs/spec/components.md` has how a menu looks and a note's kinds, and `crates/look/src/menus` the code. A menu is filled each time it opens, with `look`'s rows, so none draws a row of its own, and the kit's menu draws them in the style `look::apply` sets once for the whole app.
+
+| To | Call |
+|---|---|
+| Open one from a button | `look::Button::menu(anchor, build)`, where `build` fills a `look::Menu` |
+| Open one where something is right-clicked | `right_click_menu(build)`, from `look::RightClickMenu` |
+| Open one from something that isn't `look`'s, such as the kit's own button | `look::menu(build)`, which gives what the kit opens |
+| Add a row, a line between groups of rows, or a label over some | `row`, `separator`, `label` |
+| Make a row that says words | `look::menu_row(words)` |
+| Put an icon before a row's words, its key or a note of a kind at its end, or say what it does while the pointer rests on it | `icon`, `key`, `note`, `tooltip` |
+| Check a row as the one chosen, or grey it out | `chosen`, `off` |
+| Do something as a row is chosen | `on_choose` |
+| Find the keys rows show from where the keyboard's focus is, such as the field a menu is beside | `keys_from` |
+| Set how wide a menu is, such as as wide as what opens it | `width` |
+| Know when a menu closes, such as to hold something still while it's open | `open`, then the `look::OpenMenu`'s `on_close` |
 ## Toggles
 
 `docs/spec/components.md` has a toggle's states, and `crates/look/src/toggles` the code. A toggle draws whether it's on from what the place that holds the setting gives it, and says when it's flipped, so the place sets what it holds and draws it again.

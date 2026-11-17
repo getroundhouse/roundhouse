@@ -3,8 +3,7 @@
 use std::rc::Rc;
 
 use gpui_kit::assets::IconName as Lucide;
-use gpui_kit::component::menu::{PopupMenu, PopupMenuItem};
-use gpui_kit::{Context, Window};
+use gpui_kit::{App, Window};
 
 use super::{Body, Control, Page, PageId, Setting};
 use crate::settings::{change, get};
@@ -49,14 +48,14 @@ pub(super) fn page() -> Page {
 
 /// Chime, then a line, then the computer's own, with the one chosen ticked. Choosing one plays it, so it can be heard
 /// before it's needed.
-fn sounds_menu(mut menu: PopupMenu, _: &mut Window, cx: &mut Context<PopupMenu>) -> PopupMenu {
+fn sounds_menu(mut menu: look::Menu, _: &mut Window, cx: &mut App) -> look::Menu {
     let chosen = get(cx).sound;
     for (at, sound) in sounds::choices(&chosen, cx).into_iter().enumerate() {
         if at == 1 {
             menu = menu.separator();
         }
-        let item = PopupMenuItem::new(sound.name().to_string()).checked(sound == chosen);
-        menu = menu.item(item.on_click(move |_, _, cx| {
+        let item = look::menu_row(sound.name().to_string()).chosen(sound == chosen);
+        menu = menu.row(item.on_choose(move |_, cx| {
             change(cx, |settings| settings.sound = sound.clone());
             sounds::play(&sound, cx);
         }));

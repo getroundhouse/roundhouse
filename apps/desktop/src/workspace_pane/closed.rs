@@ -4,12 +4,11 @@
 use std::cmp::Reverse;
 
 use gpui_kit::assets::IconName;
+use gpui_kit::component::Icon;
 use gpui_kit::component::button::{Button, ButtonCustomVariant, ButtonVariants as _};
-use gpui_kit::component::menu::{DropdownMenu as _, PopupMenuItem};
-use gpui_kit::component::{Icon, h_flex};
+use gpui_kit::component::menu::DropdownMenu as _;
 use gpui_kit::{
-    Anchor, AnyElement, App, Context, InteractiveElement as _, IntoElement, ParentElement, Pixels, SharedString,
-    Styled, Window, div, px,
+    Anchor, Context, InteractiveElement as _, IntoElement, ParentElement, Pixels, SharedString, Styled, div, px,
 };
 use look::{Hand as _, IconSizing as _, Sizing as _};
 use protocol::model::SessionId;
@@ -17,10 +16,9 @@ use protocol::model::SessionId;
 use super::WorkspacePane;
 use super::view::chat_title;
 
-/// Room for a title of a few words beside how long ago, which a tab's width doesn't leave. It's the row's rather than
-/// the menu's, because the kit lets a row of an app's own grow to its whole title instead of shortening it to fit
-/// the menu, and the menu fits itself around its rows.
-const ROW_WIDTH: Pixels = px(280.);
+/// Room for a title of a few words beside how long ago, which a tab's width doesn't leave, so a long one is cut short
+/// rather than widening the menu.
+const MENU_WIDTH: Pixels = px(320.);
 /// The button's, so its icon lights up wherever the pointer is over it, not only over the icon.
 const BUTTON_GROUP: &str = "closed-chats";
 
@@ -72,17 +70,21 @@ impl WorkspacePane {
             .accessibility_label("Closed chats")
             .tooltip("Closed chats")
             // From its right edge, since the button is at the end of the row.
-            .dropdown_menu_with_anchor(Anchor::TopRight, move |mut menu, _, cx| {
-                let now_ms = look::now_ms(cx);
-                for chat in &closed {
-                    let (this, id) = (this.clone(), chat.id.clone());
-                    let row = row(chat.title.clone(), crate::ago::ago(chat.closed_at_ms, now_ms).into());
-                    menu = menu.item(PopupMenuItem::element(row).on_click(move |_, _, cx| {
-                        let _ = this.update(cx, |t, cx| t.reopen_chat(id.clone(), cx));
-                    }));
-                }
-                menu
-            })
+            .dropdown_menu_with_anchor(
+                Anchor::TopRight,
+                look::menu(move |mut menu, _, cx| {
+                    let now_ms = look::now_ms(cx);
+                    menu = menu.width(MENU_WIDTH);
+                    for chat in &closed {
+                        let (this, id) = (this.clone(), chat.id.clone());
+                        let row = row(chat.title.clone(), crate::ago::ago(chat.closed_at_ms, now_ms));
+                        menu = menu.row(row.on_choose(move |_, cx| {
+                            let _ = this.update(cx, |t, cx| t.reopen_chat(id.clone(), cx));
+                        }));
+                    }
+                    menu
+                }),
+            )
             .on_open_change(move |open, _, cx| {
                 let menu = if *open { Menu::Open } else { Menu::Shut };
                 let _ = on_open.update(cx, |t, cx| {
@@ -94,17 +96,8 @@ impl WorkspacePane {
     }
 }
 
-/// A closed chat in the menu: its title, how long ago it was closed, and an icon saying a click reopens it. It has no
+/// A closed chat in the menu: an icon saying a click reopens it, its title, and how long ago it was closed. It has no
 /// mark, because a mark says what a chat's agent is doing, and closing a chat stops its agent.
-fn row(title: SharedString, ago: SharedString) -> impl Fn(&mut Window, &mut App) -> AnyElement {
-    move |_, cx| {
-        let muted = look::colors(cx).text_muted;
-        h_flex()
-            .w(ROW_WIDTH)
-            .gap(look::Space::Small)
-            .child(div().flex_1().min_w_0().truncate().child(title.clone()))
-            .child(div().flex_none().text_color(muted).child(ago.clone()))
-            .child(Icon::new(IconName::RotateCcw).sized(look::IconSize::Regular).text_color(muted))
-            .into_any_element()
-    }
+fn row(title: SharedString, ago: String) -> look::MenuRow {
+    look::menu_row(title).icon(IconName::RotateCcw).note(ago, look::NoteKind::Detail)
 }

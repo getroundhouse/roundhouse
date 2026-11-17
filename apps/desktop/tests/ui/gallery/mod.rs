@@ -78,6 +78,8 @@ mod toggle_states;
 
 mod switch_kinds;
 
+mod menu_rows;
+
 mod field_states;
 
 mod heights;

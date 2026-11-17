@@ -5,7 +5,6 @@
 
 use std::rc::Rc;
 
-use gpui_kit::component::menu::{PopupMenu, PopupMenuItem};
 use gpui_kit::{AnyElement, App, Context, Entity, SharedString, Window};
 use protocol::model::{GithubAccount, GithubApp, GithubInstallation};
 
@@ -95,11 +94,11 @@ fn remove(app: &GithubApp, default: bool, at: Asked) -> Item {
 /// A row's `…` menu of `items`, for what's called `name`, known to tests by `id`, off while `off`.
 fn menu_of(kept: &Entity<Kept>, id: SharedString, name: &str, off: bool, items: Vec<Item>) -> AnyElement {
     let kept = kept.clone();
-    account_row::menu(id, name, off, move |menu: PopupMenu, _, _| {
+    account_row::menu(id, name, off, move |menu: look::Menu, _, _| {
         items.iter().fold(menu, |menu, item| {
             let (kept, act) = (kept.clone(), Rc::clone(&item.act));
-            let made = PopupMenuItem::new(item.label).disabled(item.off);
-            menu.item(made.on_click(move |_, window, cx| kept.update(cx, |kept, cx| act(kept, window, cx))))
+            let made = look::menu_row(item.label).off(item.off);
+            menu.row(made.on_choose(move |window, cx| kept.update(cx, |kept, cx| act(kept, window, cx))))
         })
     })
 }

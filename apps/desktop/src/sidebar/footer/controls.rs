@@ -2,7 +2,6 @@
 //! Settings' gear, as `docs/spec/updates.md` says.
 
 use gpui_kit::assets::IconName as Lucide;
-use gpui_kit::component::menu::{PopupMenu, PopupMenuItem};
 use gpui_kit::{Anchor, Context, IntoElement, Window};
 
 use crate::OpenSettings;
@@ -21,13 +20,13 @@ fn faint_button(id: &'static str, icon: Lucide, name: &'static str) -> look::But
 pub(super) fn help() -> impl IntoElement {
     faint_button("help", Lucide::CircleQuestionMark, "Help").tooltip("Help").menu(
         Anchor::BottomRight,
-        |menu: PopupMenu, _: &mut Window, _| {
-            let check = PopupMenuItem::new("Check for Updates")
+        |menu: look::Menu, _: &mut Window, _| {
+            let check = look::menu_row("Check for Updates")
                 .icon(Lucide::RefreshCw)
-                .on_click(|_, _, cx| crate::updates::check_now(cx));
+                .on_choose(|_, cx| crate::updates::check_now(cx));
             let changelog =
-                PopupMenuItem::new("Changelog").icon(Lucide::ScrollText).on_click(|_, _, cx| cx.open_url(CHANGELOG));
-            menu.item(check).item(changelog)
+                look::menu_row("Changelog").icon(Lucide::ScrollText).on_choose(|_, cx| cx.open_url(CHANGELOG));
+            menu.row(check).row(changelog)
         },
     )
 }

@@ -6,11 +6,11 @@
 use std::rc::Rc;
 
 use gpui_kit::component::button::{Button as KitButton, ButtonCustomVariant, ButtonVariants as _};
-use gpui_kit::component::menu::{DropdownMenu, PopupMenu};
+use gpui_kit::component::menu::DropdownMenu;
 use gpui_kit::component::{Disableable as _, Icon, Selectable};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    Action, Anchor, App, ClickEvent, Context, ElementId, InteractiveElement, Interactivity, IntoElement, MouseButton,
+    Action, Anchor, App, ClickEvent, ElementId, InteractiveElement, Interactivity, IntoElement, MouseButton,
     MouseDownEvent, ParentElement as _, Pixels, RenderOnce, SharedString, StyleRefinement, Styled, Window,
 };
 
@@ -199,11 +199,11 @@ impl Button {
     pub fn menu(
         self,
         anchor: Anchor,
-        build: impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
-    ) -> Menu {
+        build: impl Fn(crate::Menu, &mut Window, &mut App) -> crate::Menu + 'static,
+    ) -> MenuButton {
         let caret = matches!(self.shape, Shape::Words(_));
         let trigger = Trigger(self.kit(|kit| kit.dropdown_caret(caret)));
-        Menu { trigger, anchor, build: Rc::new(build), on_open_change: None }
+        MenuButton { trigger, anchor, build: Rc::new(build), on_open_change: None }
     }
 
     /// The kit's button, as it's drawn now: its kind's words, and the hand while pressing it does something.
@@ -264,7 +264,7 @@ impl Selectable for Button {
 }
 
 /// How a menu is built each time it opens.
-type Build = Rc<dyn Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu>;
+type Build = Rc<dyn Fn(crate::Menu, &mut Window, &mut App) -> crate::Menu>;
 
 /// What's done as a menu opens or closes, told whether it's open now.
 type OpenChange = Rc<dyn Fn(&bool, &mut Window, &mut App)>;
@@ -272,14 +272,14 @@ type OpenChange = Rc<dyn Fn(&bool, &mut Window, &mut App)>;
 /// A button that opens a menu, made with [`Button::menu`].
 #[derive(IntoElement)]
 #[must_use]
-pub struct Menu {
+pub struct MenuButton {
     trigger: Trigger,
     anchor: Anchor,
     build: Build,
     on_open_change: Option<OpenChange>,
 }
 
-impl Menu {
+impl MenuButton {
     /// What's done as the menu opens or closes, told whether it's open now.
     pub fn on_open_change(mut self, change: impl Fn(&bool, &mut Window, &mut App) + 'static) -> Self {
         self.on_open_change = Some(Rc::new(change));
@@ -287,10 +287,12 @@ impl Menu {
     }
 }
 
-impl RenderOnce for Menu {
+impl RenderOnce for MenuButton {
     fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
         let build = self.build;
-        let menu = self.trigger.dropdown_menu_with_anchor(self.anchor, move |menu, window, cx| build(menu, window, cx));
+        let menu = self
+            .trigger
+            .dropdown_menu_with_anchor(self.anchor, crate::menu(move |menu, window, cx| build(menu, window, cx)));
         menu.when_some(self.on_open_change, |menu, change| {
             menu.on_open_change(move |open, window, cx| change(open, window, cx))
         })
@@ -298,7 +300,7 @@ impl RenderOnce for Menu {
 }
 
 /// The button a menu opens from, which the kit's menu needs to be able to style, to mark it on while the menu is open.
-/// It's no one's but [`Menu`]'s, so nothing else styles a button.
+/// It's no one's but [`MenuButton`]'s, so nothing else styles a button.
 #[derive(IntoElement)]
 struct Trigger(Button);
 

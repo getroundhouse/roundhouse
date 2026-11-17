@@ -7,14 +7,13 @@ use std::rc::Rc;
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::base::motion::transition;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
-use gpui_kit::component::menu::{ContextMenuExt as _, PopupMenu, PopupMenuItem};
 use gpui_kit::component::{Icon, Selectable as _, h_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     Action, AnyElement, App, Context, ElementId, InteractiveElement as _, IntoElement, MouseButton, ParentElement,
     Pixels, Role, StatefulInteractiveElement as _, Styled, TestSupportExt as _, Window, div, px,
 };
-use look::{Hand as _, IconSizing as _, LineText, Placed, Typeset as _};
+use look::{Hand as _, IconSizing as _, LineText, Placed, RightClickMenu as _, Typeset as _};
 use protocol::model::{Workspace, WorkspaceId};
 
 use super::{MARK_GAP, ROW_PAD, ROW_SIZE, Standing, row_inset, standing};
@@ -92,7 +91,7 @@ pub(super) fn workspace_row(
                         .children(end),
                 ),
         );
-    row.context_menu(menu).into_any_element()
+    row.right_click_menu(menu).into_any_element()
 }
 
 /// Has the row say when the pointer is over it, which is when it shows its archive button.
@@ -245,7 +244,7 @@ fn row_menu(
     app: &AppView,
     workspace: &Workspace,
     cx: &mut Context<AppView>,
-) -> impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static {
+) -> impl Fn(look::Menu, &mut Window, &mut App) -> look::Menu + 'static {
     let marking = app.workspace_marking(&workspace.id, cx);
     let (this, id) = (cx.weak_entity(), workspace.id.clone());
     let to_mark = this.clone();
@@ -274,14 +273,13 @@ fn row_menu(
     });
     move |menu, window, cx| {
         // Built as it opens, so this is when the order starts to hold still for it.
-        let opened = cx.entity();
+        let opened = menu.open();
         let _ = holds.update(cx, |t, cx| crate::reorder::hold_while_open(t, &opened, |t| &mut t.sidebar.hold, cx));
         let (retitle, archive) = (retitle.clone(), archive.clone());
-        let regenerate = PopupMenuItem::new("Regenerate title").icon(Lucide::PencilSparkles);
-        let menu =
-            shared(menu, window, cx).item(regenerate.disabled(cant_retitle).on_click(move |_, _, cx| retitle(cx)));
-        let item = PopupMenuItem::new("Archive").icon(Lucide::Archive);
-        let item = item.when(showing, |item| item.action(Box::new(ArchiveWorkspace)));
-        menu.separator().item(item.disabled(busy || going).on_click(move |_, _, cx| archive(cx)))
+        let regenerate = look::menu_row("Regenerate title").icon(Lucide::PencilSparkles);
+        let menu = shared(menu, window, cx).row(regenerate.off(cant_retitle).on_choose(move |_, cx| retitle(cx)));
+        let row = look::menu_row("Archive").icon(Lucide::Archive);
+        let row = row.when(showing, |row| row.key(Box::new(ArchiveWorkspace)));
+        menu.separator().row(row.off(busy || going).on_choose(move |_, cx| archive(cx)))
     }
 }

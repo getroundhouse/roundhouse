@@ -21,3 +21,11 @@ fn the_row_under_the_pointer_is_washed_as_a_borderless_button_is() {
         .map(|(_, value)| value);
     assert_eq!(style.hover.map(crate::theme::hex), button);
 }
+
+#[test]
+fn the_specs_table_has_every_kind_of_note_in_order() {
+    let table: Vec<[String; 1]> = crate::spec_table::rows("**Every kind of note at a menu's row's end, by its name.**");
+
+    let kinds: Vec<[String; 1]> = super::NoteKind::ALL.iter().map(|kind| kind.written()).collect();
+    assert_eq!(table, kinds, "docs/spec/components.md's table of kinds of note, against crates/look/src/menus");
+}

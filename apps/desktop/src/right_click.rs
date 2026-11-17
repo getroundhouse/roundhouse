@@ -3,9 +3,8 @@
 use std::rc::Rc;
 
 use gpui_kit::assets::IconName as Lucide;
-use gpui_kit::component::menu::{PopupMenu, PopupMenuItem};
 use gpui_kit::prelude::FluentBuilder as _;
-use gpui_kit::{Action, App, Context, Window};
+use gpui_kit::{Action, App, Window};
 
 use crate::workspace_pane::Mark;
 
@@ -15,7 +14,7 @@ pub(crate) fn menu(
     marking: Option<(Mark, impl Fn(&mut App) + 'static)>,
     marking_key: Option<Box<dyn Action>>,
     rename: impl Fn(&mut Window, &mut App) + 'static,
-) -> impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static {
+) -> impl Fn(look::Menu, &mut Window, &mut App) -> look::Menu + 'static {
     let marking = marking.map(|(marking, mark)| (marking, Rc::new(mark)));
     let rename = Rc::new(rename);
     move |menu, _, _| {
@@ -26,15 +25,15 @@ pub(crate) fn menu(
                     Mark::Read => Lucide::MailOpen,
                     Mark::Unread => Lucide::Mail,
                 };
-                let item = PopupMenuItem::new(format!("Mark as {}", marking.word()))
+                let row = look::menu_row(format!("Mark as {}", marking.word()))
                     .icon(icon)
-                    .when_some(marking_key.as_ref(), |item, key| item.action(key.boxed_clone()))
-                    .on_click(move |_, _, cx| mark(cx));
-                menu.item(item)
+                    .when_some(marking_key.as_ref(), |row, key| row.key(key.boxed_clone()))
+                    .on_choose(move |_, cx| mark(cx));
+                menu.row(row)
             }
             None => menu,
         };
         let rename = rename.clone();
-        menu.item(PopupMenuItem::new("Rename…").icon(Lucide::Pencil).on_click(move |_, window, cx| rename(window, cx)))
+        menu.row(look::menu_row("Rename…").icon(Lucide::Pencil).on_choose(move |window, cx| rename(window, cx)))
     }
 }

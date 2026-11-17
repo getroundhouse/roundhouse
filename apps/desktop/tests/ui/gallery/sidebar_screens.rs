@@ -79,7 +79,7 @@ pub(crate) const SCREENS: &[Screen] = &[
         steps: &[
             Step::Select(FOCUS),
             Step::Click("hub-switcher"),
-            Step::Click("hub-menu-connect"),
+            Step::ClickItem("Connect another hub…"),
             Step::WaitFor("connect-hub-dialog"),
             Step::Type(SAMPLE_PAIR_LINK),
             Step::WaitFor("pair-link-device-name"),
@@ -94,7 +94,7 @@ pub(crate) const SCREENS: &[Screen] = &[
         steps: &[
             Step::Select(FOCUS),
             Step::Click("hub-switcher"),
-            Step::Click("hub-menu-pair"),
+            Step::ClickItem("Pair a device with this Mac…"),
             Step::WaitFor("pairing-link-text"),
             Step::MoveAway,
         ],
@@ -107,7 +107,7 @@ pub(crate) const SCREENS: &[Screen] = &[
         steps: &[
             Step::Select(FOCUS),
             Step::Click("hub-switcher"),
-            Step::Click("hub-menu-pair"),
+            Step::ClickItem("Pair a device with this Mac…"),
             Step::WaitFor("paired-device-card"),
             Step::MoveAway,
         ],

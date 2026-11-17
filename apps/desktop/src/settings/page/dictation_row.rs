@@ -4,8 +4,7 @@
 
 use std::rc::Rc;
 
-use gpui_kit::component::menu::{PopupMenu, PopupMenuItem};
-use gpui_kit::{Context, Window};
+use gpui_kit::{App, Window};
 
 use super::{Control, Setting};
 use crate::dictating::DictationChoice;
@@ -43,11 +42,11 @@ pub(super) fn muting() -> Setting {
 }
 
 /// Ask first, On and Off, with the one chosen ticked.
-fn choices(mut menu: PopupMenu, _: &mut Window, cx: &mut Context<PopupMenu>) -> PopupMenu {
+fn choices(mut menu: look::Menu, _: &mut Window, cx: &mut App) -> look::Menu {
     let chosen = get(cx).dictation;
     for choice in DictationChoice::ALL {
-        let item = PopupMenuItem::new(choice.label()).checked(choice == chosen);
-        menu = menu.item(item.on_click(move |_, _, cx| change(cx, |settings| settings.dictation = choice)));
+        let item = look::menu_row(choice.label()).chosen(choice == chosen);
+        menu = menu.row(item.on_choose(move |_, cx| change(cx, |settings| settings.dictation = choice)));
     }
     menu
 }

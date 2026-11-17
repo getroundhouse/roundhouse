@@ -6,12 +6,10 @@ use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::Icon;
 use gpui_kit::component::button::{Button, ButtonCustomVariant, ButtonVariants as _};
 use gpui_kit::component::h_flex;
-use gpui_kit::component::menu::{DropdownMenu as _, PopupMenu, PopupMenuItem};
-use gpui_kit::prelude::FluentBuilder as _;
+use gpui_kit::component::menu::DropdownMenu as _;
 use gpui_kit::{
-    Anchor, AnyElement, App, Context, ElementId, Entity, Hsla, InteractiveElement as _, IntoElement,
-    ParentElement as _, Role, SharedString, StatefulInteractiveElement as _, Styled as _, TestSupportExt as _,
-    WeakEntity, Window, div, px,
+    Anchor, AnyElement, App, Context, Entity, Hsla, InteractiveElement as _, IntoElement, ParentElement as _, Role,
+    SharedString, StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, WeakEntity, Window, div, px,
 };
 use look::{Hand as _, IconSizing as _, Shaped as _, Typeset};
 use protocol::pairing::Fingerprint;
@@ -56,17 +54,12 @@ pub(super) fn render(app: &AppView, cx: &mut Context<AppView>) -> impl IntoEleme
             .border_color(colors.control_edge)
             .corners(look::Corner::Control)
             .child(switcher_face(icon, name, trailing, cx))
-            .dropdown_menu_with_anchor(Anchor::TopLeft, move |menu: PopupMenu, _: &mut Window, cx| {
-                hub_menu(
-                    menu.min_w(menu_width).max_w(menu_width),
-                    selected.as_ref(),
-                    &saved,
-                    &view,
-                    &data_dir,
-                    local_connected,
-                    cx,
-                )
-            }),
+            .dropdown_menu_with_anchor(
+                Anchor::TopLeft,
+                look::menu(move |menu: look::Menu, _: &mut Window, cx| {
+                    hub_menu(menu.width(menu_width), selected.as_ref(), &saved, &view, &data_dir, local_connected, cx)
+                }),
+            ),
     )
 }
 
@@ -134,130 +127,75 @@ fn inline_detail(text: &'static str, color: Hsla) -> AnyElement {
 }
 
 fn hub_menu(
-    menu: PopupMenu,
+    menu: look::Menu,
     selected: Option<&Fingerprint>,
     saved: &[saved_hubs::SavedHub],
     view: &WeakEntity<AppView>,
     data_dir: &Path,
     local_connected: bool,
     cx: &App,
-) -> PopupMenu {
-    let local_right = menu_detail_for(None, selected.is_none(), None, cx);
-    let menu = menu.item(
-        menu_row("hub-menu-local", Lucide::Laptop, THIS_MACHINE.into(), selected.is_none(), false, local_right)
-            .on_click(|_, window, cx| hubs::select(None, window, cx)),
-    );
+) -> look::Menu {
+    let local = hub_row(Lucide::Laptop, THIS_MACHINE, selected.is_none(), note_for(None, selected.is_none(), None, cx));
+    let menu = menu.row(local.on_choose(|window, cx| hubs::select(None, window, cx)));
     let menu = saved.iter().fold(menu, |menu, hub| {
         let is_selected = selected == Some(&hub.fingerprint);
-        let right = menu_detail_for(Some(&hub.fingerprint), is_selected, hub.hosts.first().map(String::as_str), cx);
-        let chosen = hub.clone();
-        let target = view.clone();
-        let id = SharedString::from(format!("hub-menu-{}", hub.device));
-        menu.item(
-            menu_row(id, Lucide::Server, hub.name.clone().into(), is_selected, false, right)
-                .on_click(move |_, window, cx| saved_hubs::open(chosen.clone(), target.clone(), window, cx)),
+        let note = note_for(Some(&hub.fingerprint), is_selected, hub.hosts.first().map(String::as_str), cx);
+        let (chosen, target) = (hub.clone(), view.clone());
+        menu.row(
+            hub_row(Lucide::Server, hub.name.clone(), is_selected, note)
+                .on_choose(move |window, cx| saved_hubs::open(chosen.clone(), target.clone(), window, cx)),
         )
     });
-    let pair_label = format!("Pair a device with this {MACHINE}…");
+    let pair = format!("Pair a device with this {MACHINE}…");
     let connect_data = data_dir.to_path_buf();
     menu.separator()
-        .item(
-            menu_row("hub-menu-pair", Lucide::QrCode, pair_label.into(), false, !local_connected, None)
-                .on_click(|_, window, cx| share_hub::open(window, cx)),
-        )
-        .item(
-            menu_row("hub-menu-connect", Lucide::Plus, "Connect another hub…".into(), false, false, None)
-                .on_click(move |_, window, cx| pairing::open(connect_data.clone(), window, cx)),
+        .row(look::menu_row(pair).icon(Lucide::QrCode).off(!local_connected).on_choose(share_hub::open))
+        .row(
+            look::menu_row("Connect another hub…")
+                .icon(Lucide::Plus)
+                .on_choose(move |window, cx| pairing::open(connect_data.clone(), window, cx)),
         )
 }
 
-#[derive(Clone)]
-struct RightNote {
-    text: SharedString,
-    color: Hsla,
-    strong: bool,
+/// A hub's row: its machine's icon, its name, and its note at the end, checked while it's the one open.
+fn hub_row(
+    icon: Lucide,
+    name: impl Into<SharedString>,
+    chosen: bool,
+    note: Option<(SharedString, look::NoteKind)>,
+) -> look::MenuRow {
+    let row = look::menu_row(name).icon(icon).chosen(chosen);
+    match note {
+        Some((note, kind)) => row.note(note, kind),
+        None => row,
+    }
 }
 
-fn menu_detail_for(
+/// What a hub's row says at its end: how many of its workspaces need a look, while it's not the one open, or how
+/// connecting to it went wrong, or else its first address.
+fn note_for(
     fingerprint: Option<&Fingerprint>,
     is_selected: bool,
     first_host: Option<&str>,
     cx: &App,
-) -> Option<RightNote> {
-    let colors = look::colors(cx);
+) -> Option<(SharedString, look::NoteKind)> {
     if let Some(view) = hubs::view_of(fingerprint, cx).as_ref().map(|v: &Entity<AppView>| v.read(cx)) {
         if !is_selected {
             let count = needing_a_look(view, cx);
             if count > 0 {
-                return Some(RightNote { text: count.to_string().into(), color: colors.text, strong: true });
+                return Some((count.to_string().into(), look::NoteKind::Count));
             }
         }
         if let Connection::Failed(failure) = view.connection() {
-            let color = if failure.needs_attention() { colors.error } else { colors.text_faint };
-            return Some(RightNote { text: failure.switcher_label().into(), color, strong: false });
+            let kind = if failure.needs_attention() { look::NoteKind::Failure } else { look::NoteKind::Detail };
+            return Some((failure.switcher_label().into(), kind));
         }
     }
-    first_host.map(|host| RightNote {
-        text: host_without_port(host).to_string().into(),
-        color: colors.text_faint,
-        strong: false,
-    })
+    first_host.map(|host| (host_without_port(host).to_string().into(), look::NoteKind::Detail))
 }
 
 fn host_without_port(host: &str) -> &str {
     host.rsplit_once(':').map_or(host, |(name, _)| name)
-}
-
-/// A row of the switcher: its icon, its name, and a note at its end, such as a hub's address, with the check after it
-/// on the hub that's open, which the menu draws.
-fn menu_row(
-    id: impl Into<ElementId>,
-    icon: Lucide,
-    label: SharedString,
-    checked: bool,
-    disabled: bool,
-    right: Option<RightNote>,
-) -> PopupMenuItem {
-    let id = id.into();
-    PopupMenuItem::element(move |_, cx| {
-        let colors = look::colors(cx);
-        let right = right.clone();
-        let a11y = match &right {
-            Some(note) => SharedString::from(format!("{label}, {}", note.text)),
-            None => label.clone(),
-        };
-        let text_color = if disabled { colors.text_faint } else { colors.text };
-        h_flex()
-            .id(id.clone())
-            .aria_label(a11y)
-            .flex_1()
-            .min_w_0()
-            .gap(look::Space::Small)
-            .items_center()
-            .child(
-                div()
-                    .flex_1()
-                    .min_w_0()
-                    .truncate()
-                    .typeset(look::Type::Body)
-                    .text_color(text_color)
-                    .child(label.clone()),
-            )
-            .when_some(right, |d, note| {
-                d.child(
-                    div()
-                        .flex_none()
-                        .typeset(look::Type::Detail)
-                        .when(note.strong, Typeset::emphasis)
-                        .text_color(note.color)
-                        .child(note.text),
-                )
-            })
-            .test_support()
-    })
-    .icon(icon)
-    .checked(checked)
-    .disabled(disabled)
 }
 
 fn attention_words(count: usize) -> String {

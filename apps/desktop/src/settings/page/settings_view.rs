@@ -7,13 +7,12 @@ use client_core::{Client, RecordsFeed};
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::base::ScrollBounce;
 use gpui_kit::component::input::InputState;
-use gpui_kit::component::menu::PopupMenu;
 use gpui_kit::component::scroll::ScrollableElement as _;
 use gpui_kit::component::{IconName, v_flex};
 use gpui_kit::{
-    AnyElement, App, ClickEvent, Context, Entity, FocusHandle, InteractiveElement as _, IntoElement,
-    ParentElement as _, Pixels, RenderOnce, ScrollHandle, SharedString, StatefulInteractiveElement as _, Styled as _,
-    TestSupportExt as _, Window, div,
+    AnyElement, App, ClickEvent, Entity, FocusHandle, InteractiveElement as _, IntoElement, ParentElement as _, Pixels,
+    RenderOnce, ScrollHandle, SharedString, StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, Window,
+    div,
 };
 use look::Typeset as _;
 use std::rc::Rc;
@@ -122,7 +121,7 @@ type Chosen = Box<dyn Fn(&App) -> SharedString>;
 /// How things stand with a setting, as a box under its row, when there's something to say.
 type StatusBoxOf = Box<dyn Fn(&App) -> Option<StatusBox>>;
 /// Fills the menu a setting chooses from, as it opens.
-type Menu = Rc<dyn Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu>;
+type Menu = Rc<dyn Fn(look::Menu, &mut Window, &mut App) -> look::Menu>;
 
 /// A setting, as a row on its page.
 pub(super) struct Setting {
