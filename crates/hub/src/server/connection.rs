@@ -1,6 +1,7 @@
 //! Serving clients, on the Unix socket and over TLS for paired devices. Each connection reads its requests in order,
 //! and answers them alongside one another.
 
+use super::terminals::{self, Answering};
 use super::{admit, dispatch};
 
 use std::collections::HashMap;
@@ -163,10 +164,16 @@ where
             Admit::Handle(handled) => {
                 let (hub, connection) = (hub.clone(), connection.clone());
                 hub.requests.fetch_add(1, Ordering::Relaxed);
+                let read = match unreadable {
+                    Some(error) => Err(error),
+                    None => Ok(handled),
+                };
+                let answering = terminals::in_order(&hub, read).await;
                 tokio::spawn(async move {
-                    let answered = match unreadable {
-                        Some(error) => Err(hub.unsupported(Some(&error))),
-                        None => dispatch::handle(&hub, &connection, handled).await,
+                    let answered = match answering {
+                        Answering::Queued(queued) => queued.await,
+                        Answering::OnATask(Ok(request)) => dispatch::handle(&hub, &connection, request).await,
+                        Answering::OnATask(Err(error)) => Err(hub.unsupported(Some(&error))),
                     };
                     let outcome = match answered {
                         Ok(response) => ReplyOutcome::Response(response),

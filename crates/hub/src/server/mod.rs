@@ -2,6 +2,7 @@
 
 mod pump;
 mod subscribing;
+mod terminals;
 
 mod connection;
 use connection::Connection;

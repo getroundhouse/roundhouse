@@ -10,12 +10,12 @@ use protocol::client::{ApiError, ErrorCode, HubNotice};
 use protocol::event::{EventBody, ExitReason};
 use protocol::model::{RunId, SessionStatus};
 use protocol::prompt::Prompt;
-use protocol::worker::{GitStatus, WorkerRequest, previous};
+use protocol::worker::{GitStatus, WorkerRequest, WorkerResponse, previous};
 use tokio::sync::broadcast::error::TryRecvError;
 
 use super::*;
 use crate::hub::setup::SetupGate;
-use crate::hub::tests::{carried_on, flushed, hub_in, stand_in_worker};
+use crate::hub::tests::{carried_on, flushed, hub_in, hub_with_worktree, serving, stand_in_worker, terminal_in_w};
 use crate::session::{Item, LiveSession, Origin};
 use crate::versions;
 
@@ -75,6 +75,19 @@ async fn a_worker_whose_workspace_has_a_session_at_work_isnt_replaced() {
     live.record(Origin::Hub, prompt(), None).await.unwrap();
     // A prompt from the person has the hub read their account through the worker, which isn't what's at work here.
     waiting::task::until(TIMEOUT, "a call to the stand-in never ended", || link.calls_under_way() == 0).await;
+
+    assert!(!hub.replace_if_idle(&w(), &link).await, "it was replaced");
+    assert!(hub.existing_worker(&w()).is_some());
+}
+
+/// Its shell would end with it, which only closing the terminal or archiving the workspace does.
+#[tokio::test]
+async fn a_worker_with_a_terminal_open_isnt_replaced() {
+    let dir = tempfile::tempdir().unwrap();
+    let hub = hub_with_worktree(dir.path());
+    let link = WorkerLink::answering(|_| Some(Ok(WorkerResponse::Ok)));
+    serving(&hub, &link);
+    hub.terminal_open(terminal_in_w("t")).await.unwrap();
 
     assert!(!hub.replace_if_idle(&w(), &link).await, "it was replaced");
     assert!(hub.existing_worker(&w()).is_some());
