@@ -101,8 +101,8 @@ fn finishing(app: &str, hub: &str, agents: Agents) -> String {
     let start = format!("You're on version {app} of the app, and");
     match (agents.working, agents.waiting_on_you) {
         (0, 0) => format!(
-            "{start} a previous version, {hub}, is still busy, such as with a setup script or the command line \
-             connected to it. The update finishes by itself once it's free."
+            "{start} a previous version, {hub}, is still busy, such as with a setup script, or creating or \
+             archiving a workspace. The update finishes by itself once it's free."
         ),
         (_, 0) => format!(
             "{start} agents are still running on a previous version, {hub}. The update finishes by itself once \

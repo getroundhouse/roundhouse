@@ -38,7 +38,7 @@ impl Request for HubShutdown {
     }
 }
 
-/// Stops the hub as [`HubShutdown`] does, but only if nothing would notice, as [`HubStatus::is_idle`] says of the one
+/// Stops the hub as [`HubShutdown`] does, but only if that cuts nothing off, as [`HubStatus::is_idle`] says of the one
 /// asking. The hub decides as it stops, so nothing can start between a client seeing it idle and stopping it. One
 /// that's busy refuses with `Conflict`, and carries on. Needs a hello, unlike `HubShutdown`.
 ///

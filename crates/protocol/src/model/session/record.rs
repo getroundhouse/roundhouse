@@ -83,7 +83,7 @@ impl SessionStatus {
     }
 
     /// Whether the hub counts the agent as running, with `background` running there, since stopping the hub now would
-    /// cut short what it's doing, so a hub asked to stop only if nothing would notice, as to update it, carries on for
+    /// cut short what it's doing, so a hub asked to stop only if that cuts nothing off, as to update it, carries on for
     /// it, and the app counts it as what the update waits on. Waits don't, since the next hub keeps them and starts the
     /// agent again once one ends, though the agent is at work meanwhile, and keeps the machine awake, so its pull
     /// request goes on being read.

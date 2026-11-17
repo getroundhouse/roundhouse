@@ -24,7 +24,7 @@ impl super::LiveSession {
         self.state.lock().progress.outlive_this_hub(true);
     }
 
-    /// Whether the hub counts this session's agent as running, so a hub asked to stop only if nothing would notice
+    /// Whether the hub counts this session's agent as running, so a hub asked to stop only if that cuts nothing off
     /// carries on for it, as [`SessionStatus::counts_as_running`] says.
     pub(crate) fn counts_as_running(&self) -> bool {
         let progress = &self.state.lock().progress;

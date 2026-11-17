@@ -42,6 +42,7 @@ A hub from before agents could outlive a restart still has to wait for its agent
 ![The card while an update finishes](../../spec/screens/finishing-update.png)
 
 - **An agent waiting on you never finishes by itself,** so the card says that apart, as `1 agent is waiting on you`.
+- **`Waiting on other work` is a setup script, or something still under way,** such as creating or archiving a workspace. The app on another device, or the command line, being connected doesn't hold the update up. The app connects again once the hub has restarted, and `roundhouse attach` stops and says how to pick up where it was.
 - **`Restart now` restarts the hub without waiting,** which stops those agents. A dialog asks first, and says how many. Each stopped agent picks up its conversation at its next prompt.
 
 ## Problems

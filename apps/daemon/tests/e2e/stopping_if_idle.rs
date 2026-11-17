@@ -1,5 +1,5 @@
-//! Asking a hub to stop only if nothing would notice, which is how the app replaces an older one without cutting
-//! anything off. The hub decides, since a prompt can be sent between a client seeing it idle and stopping it.
+//! Asking a hub to stop only if that cuts nothing off, which is how the app replaces an older one without stopping
+//! anything. The hub decides, since a prompt can be sent between a client seeing it idle and stopping it.
 
 #![cfg(test)]
 
@@ -13,7 +13,7 @@ fn a_hub_with_nothing_on_it_stops_when_asked_to_if_idle() {
     let mut stack = Stack::start();
     let client = stack.client();
     let pid = client.hub_status().unwrap().pid;
-    // A connection that has just closed counts until the hub has seen it go, such as the one that waited for it.
+    // So nothing asked for as the stack started is still under way.
     wait_until("the hub to be idle", || client.hub_status().unwrap().is_idle());
 
     let stopped = stop_hub_if_idle(&client, &stack.socket(), pid).unwrap();
@@ -42,20 +42,17 @@ fn a_hub_refuses_to_stop_if_idle_straight_after_a_prompt() {
     assert_eq!(client.hub_status().unwrap().pid, pid);
 }
 
-/// Another client would notice, whatever it's doing, so the hub is kept while one is connected.
+/// Another client that's only connected loses nothing, since it connects again to the next hub, so it doesn't keep
+/// this one, and the update waiting on it, for as long as it stays open, as an app on another device can.
 #[test]
-fn a_hub_refuses_to_stop_if_idle_while_another_client_is_connected() {
+fn a_hub_stops_if_idle_while_another_client_is_connected() {
     let mut stack = Stack::start();
     let client = stack.client();
     let pid = client.hub_status().unwrap().pid;
     wait_until("the hub to be idle", || client.hub_status().unwrap().is_idle());
-    let other = stack.client();
+    let _other = stack.client();
+    wait_until("the hub to count the other client", || client.hub_status().unwrap().clients == 2);
 
-    assert_eq!(stop_hub_if_idle(&client, &stack.socket(), pid).unwrap(), IdleStop::Busy);
-    assert_eq!(client.hub_status().unwrap().pid, pid);
-
-    drop(other);
-    wait_until("the hub to be idle again", || client.hub_status().unwrap().is_idle());
     assert_eq!(stop_hub_if_idle(&client, &stack.socket(), pid).unwrap(), IdleStop::Stopped);
     assert!(stack.hub.take().unwrap().wait().unwrap().success());
 }

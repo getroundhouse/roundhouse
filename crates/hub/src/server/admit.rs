@@ -35,9 +35,9 @@ enum Stage {
     /// place among the connections that haven't authenticated.
     Authenticating { deadline: Instant, _unproven: OwnedSemaphorePermit },
     /// Counted among the hub's clients, which only a client on the hub's machine, or a device that has
-    /// authenticated, is. The app replaces an older hub only while it's the one client, so a connection from anyone
-    /// on the network could otherwise hold that up. Saying hello doesn't change the stage, since moving the count to
-    /// another would need a third stage to leave behind meanwhile.
+    /// authenticated, is, so a connection from anyone on the network can't make the count say more than who's using
+    /// it. Saying hello doesn't change the stage, since moving the count to another would need a third stage to leave
+    /// behind meanwhile.
     Admitted { greeted: bool, _counted: Counted },
 }
 

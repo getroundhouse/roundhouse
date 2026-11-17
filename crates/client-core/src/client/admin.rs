@@ -110,9 +110,9 @@ pub enum IdleStop {
     Busy,
 }
 
-/// Stops the hub this client is connected to if nothing would notice, and returns once it has exited, or says it's
+/// Stops the hub this client is connected to if that cuts nothing off, and returns once it has exited, or says it's
 /// busy. The hub decides as it stops, so a prompt sent after the client last saw it idle isn't cut off. Asked on the
-/// client's own connection, since the hub counts any other as someone who'd notice.
+/// client's own connection, since the hub counts a request on any other as one it would cut off.
 ///
 /// A hub from before it could decide is stopped as [`stop_hub_if_still`] does, if it's still the one with this `pid`,
 /// on the caller's word that it was idle, which is all there was to go on before.

@@ -235,7 +235,7 @@ fn a_wait_lasts_across_the_hub_stopping_and_starting_again() {
     a_wait_lasts_across_a_restart(stop, false);
 }
 
-/// As the app stops an older hub to update it, only if nothing would notice, which a chat whose only work is a wait
+/// As the app stops an older hub to update it, only if that cuts nothing off, which a chat whose only work is a wait
 /// doesn't.
 #[test]
 fn a_wait_lasts_across_the_hub_stopping_for_an_update() {

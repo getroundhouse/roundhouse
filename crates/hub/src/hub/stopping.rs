@@ -51,9 +51,11 @@ impl Hub {
         self.restarting.load(Ordering::SeqCst) && !self.stopping.load(Ordering::SeqCst)
     }
 
-    /// Stops if nothing would notice, as the one asking sees it, and refuses otherwise. What that client sent before
-    /// this either still counts as a request or has left its mark, such as an agent at work, since a prompt's agent
-    /// is at work from when the prompt is recorded.
+    /// Stops if that cuts nothing off, as [`HubStatus::is_idle`] says of the one asking, and refuses otherwise. What
+    /// that client sent before this either still counts as a request or has left its mark, such as an agent at work,
+    /// since a prompt's agent is at work from when the prompt is recorded.
+    ///
+    /// [`HubStatus::is_idle`]: protocol::client::HubStatus::is_idle
     pub(crate) fn shutdown_if_idle(&self) -> Result<(), ApiError> {
         if !self.status().is_idle() {
             return Err(ApiError::new(ErrorCode::Conflict, "the hub is busy, so it wasn't stopped"));
