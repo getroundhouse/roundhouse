@@ -35,6 +35,7 @@ pub struct Subagent {
     #[serde(default)]
     pub model: Option<ModelName>,
     pub status: SubagentStatus,
+    /// When it started, or started again once it had ended, so how long it's been at it, or took, is from then.
     pub started_at_ms: i64,
     #[serde(default)]
     pub ended_at_ms: Option<i64>,

@@ -39,7 +39,7 @@ pub(in super::super) struct Listed {
 /// The subagents of the sessions views asked for, as views read them.
 #[derive(Debug, Default)]
 pub(in super::super) struct SubagentsListed {
-    /// Each session's, in the order they started. Each is shared with what client-core holds, since one can hold a
+    /// Each session's, in the order they started, or last started again. Each is shared with what client-core holds, since one can hold a
     /// call's whole input, such as all of a file it wrote, and with what each frame draws.
     pub(super) sessions: HashMap<SessionId, Group<Arc<Subagent>>>,
     /// Where each is in its session's.
@@ -208,7 +208,7 @@ impl Snapshot {
         self.records.new_workspace_draft.as_ref()
     }
 
-    /// The session's subagents, in the order they started, once a view has asked for them with
+    /// The session's subagents, in the order they started, or last started again, once a view has asked for them with
     /// [`crate::RecordsFeed::follow_subagents`] and they've been listed.
     pub fn subagents(&self, session: &SessionId) -> &[Arc<Subagent>] {
         self.subagents.sessions.get(session).map_or(&[], |its| &its.items)
