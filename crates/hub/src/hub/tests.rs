@@ -13,6 +13,7 @@ use protocol::model::{
 };
 use protocol::tail::{DeltaChange, StreamDelta, Tail};
 use protocol::worker::{PullRequestReply, RateLimit, WorkerRequest, WorkerResponse};
+use providers::Provider;
 use providers::local::{LocalConfig, LocalProvider};
 use tokio::sync::oneshot;
 
@@ -69,7 +70,9 @@ pub(crate) fn claimed() -> Capabilities {
 pub(crate) const A_TOKEN_LASTS_MS: i64 = 24 * 60 * 60 * 1000;
 
 /// A hub whose store has the workspace `w` and its session `s`, with nothing sent in it, and that never starts a
-/// worker. Its agents are as [`described`] says.
+/// worker, so it can't make a workspace, which a hub with
+/// [stand-ins for its workers](super::stand_in_workers::hub_with_stand_in_workers) can. Its agents are as
+/// [`described`] says.
 pub(crate) fn hub_in(dir: &Path) -> Arc<Hub> {
     hub_describing(dir, vec![described()])
 }
@@ -96,7 +99,6 @@ fn hub_of(dir: &Path, agents: Vec<AgentDescription>, github: Github) -> Arc<Hub>
 }
 
 fn hub_timed(dir: &Path, agents: Vec<AgentDescription>, github: Github, timers: Timers) -> Arc<Hub> {
-    let store = Arc::new(store_with_session(dir));
     let config = LocalConfig {
         worker_exe: dir.join("no-worker"),
         instances_dir: dir.join("instances"),
@@ -105,8 +107,23 @@ fn hub_timed(dir: &Path, agents: Vec<AgentDescription>, github: Github, timers: 
         shell: Some("/bin/sh".to_string()),
         path: None,
     };
-    let providers = ProviderSet::only(Arc::new(LocalProvider::new(config)));
-    Arc::new(Hub::new(Build::UNSTAMPED, store, HubDirs::in_dir(dir), providers, github, agents, false, timers))
+    Arc::new(hub_on(dir, Arc::new(LocalProvider::new(config)), agents, github, timers))
+}
+
+fn hub_on(
+    dir: &Path,
+    provider: Arc<dyn Provider>,
+    agents: Vec<AgentDescription>,
+    github: Github,
+    timers: Timers,
+) -> Hub {
+    let (store, providers) = (Arc::new(store_with_session(dir)), ProviderSet::only(provider));
+    Hub::new(Build::UNSTAMPED, store, HubDirs::in_dir(dir), providers, github, agents, false, timers)
+}
+
+/// A hub as [`hub_in`] makes one, before anything shares it, whose workspaces are all `provider`'s.
+pub(super) fn hub_provided_by(dir: &Path, provider: Arc<dyn Provider>) -> Hub {
+    hub_on(dir, provider, vec![described()], Github::new(GithubConfig::at(NO_GITHUB.to_string())), Timers::DEFAULT)
 }
 
 /// A stand-in for `w`'s worker, which fails every call, as `hub`'s worker.

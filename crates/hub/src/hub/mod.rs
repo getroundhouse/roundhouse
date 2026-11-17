@@ -31,6 +31,8 @@ mod repo_urls;
 mod repos;
 mod sessions;
 mod setup;
+#[cfg(test)]
+mod stand_in_workers;
 mod stopping;
 #[cfg(test)]
 pub(crate) mod tests;
