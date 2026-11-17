@@ -35,6 +35,12 @@ pub(super) enum Item {
         result: Option<Value>,
         error: Option<Value>,
     },
+    /// A look at an image, which Codex says it started and completed at once, once it has read the image.
+    ImageView {
+        id: String,
+        path: String,
+    },
+    ImageGeneration(super::images::Made),
     #[serde(other)]
     Unknown,
 }

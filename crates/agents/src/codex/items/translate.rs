@@ -1,3 +1,4 @@
+use protocol::attachment::NewAttachment;
 use protocol::capability::calls::{
     Call, CallOutput,
     call::{Command, Runs},
@@ -9,6 +10,7 @@ use protocol::tail::{BlockKind, DeltaChange, StreamDelta};
 use serde_json::Value;
 
 use super::{
+    images,
     native::{Item, Status},
     patches,
 };
@@ -62,6 +64,8 @@ impl Reader<'_> {
                 };
                 self.tool(id, call, output, status, completed, raw).await;
             }
+            Item::ImageView { id, path } => self.looked(id, path, completed, raw).await,
+            Item::ImageGeneration(made) => self.made(made, completed, raw).await,
             Item::Unknown => {
                 self.shared
                     .event(
@@ -160,49 +164,83 @@ impl Reader<'_> {
         }
     }
 
-    async fn tool(&self, id: String, call: Call, output: CallOutput, status: Status, completed: bool, raw: String) {
-        let id = ToolUseId::from(id);
+    /// A look at the image at `path`, or once it's `completed`, the image it saw.
+    async fn looked(&self, id: String, path: String, completed: bool, raw: String) {
         if completed {
-            let existed = {
-                let mut state = self.shared.state.lock();
-                let work = state.work(self.scope.parent.as_ref());
-                work.terminals.remove(&id);
-                work.calls.remove(&id).is_some()
-            };
-            if !existed {
-                return;
-            } // A cancelled call was already settled; its delayed native completion cannot settle it again.
-            let denied = matches!(status, Status::Declined).then_some(Denied { said: None });
-            self.shared
-                .event(
-                    EventBody::AgentUser {
-                        subagent: self.scope.parent.clone(),
-                        blocks: vec![ContentBlock::CallResult {
-                            tool_use_id: id,
-                            output,
-                            is_error: !matches!(status, Status::Completed),
-                            denied,
-                            images: Vec::new(),
-                        }],
-                    },
-                    Some(raw),
-                )
-                .await;
+            let kept = images::looked_at(&path).await;
+            self.settled(id.into(), kept.output, kept.images, Status::Completed, raw).await;
         } else {
-            self.shared.state.lock().work(self.scope.parent.as_ref()).calls.insert(id.clone(), call.clone());
-            self.shared
-                .event(
-                    EventBody::Assistant {
-                        message_id: Some(id.to_string().into()),
-                        subagent: self.scope.parent.clone(),
-                        model: self.scope.model.clone(),
-                        blocks: vec![ContentBlock::Call { id, call }],
-                        first_index: None,
-                    },
-                    Some(raw),
-                )
-                .await;
+            self.started(id.into(), images::look(path), raw).await;
         }
+    }
+
+    /// Making an image, or once it's `completed`, the image it made, or why there isn't one.
+    async fn made(&self, made: images::Made, completed: bool, raw: String) {
+        if completed {
+            let (id, ended) = (made.id.clone(), made.ended());
+            let kept = made.kept().await;
+            self.settled(id.into(), kept.output, kept.images, ended, raw).await;
+        } else {
+            self.started(made.id.clone().into(), made.call(), raw).await;
+        }
+    }
+
+    /// A call Codex started, or, once it's `completed`, what came back from it.
+    async fn tool(&self, id: String, call: Call, output: CallOutput, status: Status, completed: bool, raw: String) {
+        if completed {
+            self.settled(id.into(), output, Vec::new(), status, raw).await;
+        } else {
+            self.started(id.into(), call, raw).await;
+        }
+    }
+
+    async fn started(&self, id: ToolUseId, call: Call, raw: String) {
+        self.shared.state.lock().work(self.scope.parent.as_ref()).calls.insert(id.clone(), call.clone());
+        self.shared
+            .event(
+                EventBody::Assistant {
+                    message_id: Some(id.to_string().into()),
+                    subagent: self.scope.parent.clone(),
+                    model: self.scope.model.clone(),
+                    blocks: vec![ContentBlock::Call { id, call }],
+                    first_index: None,
+                },
+                Some(raw),
+            )
+            .await;
+    }
+
+    /// What came back from the call `id`, with `images` it names for the hub to keep, such as the one a look at an
+    /// image saw.
+    async fn settled(
+        &self,
+        id: ToolUseId,
+        output: CallOutput,
+        images: Vec<NewAttachment>,
+        status: Status,
+        raw: String,
+    ) {
+        let existed = {
+            let mut state = self.shared.state.lock();
+            let work = state.work(self.scope.parent.as_ref());
+            work.terminals.remove(&id);
+            work.calls.remove(&id).is_some()
+        };
+        if !existed {
+            return;
+        } // A cancelled call was already settled; its delayed native completion cannot settle it again.
+        let denied = matches!(status, Status::Declined).then_some(Denied { said: None });
+        let body = EventBody::AgentUser {
+            subagent: self.scope.parent.clone(),
+            blocks: vec![ContentBlock::CallResult {
+                tool_use_id: id,
+                output,
+                is_error: !matches!(status, Status::Completed),
+                denied,
+                images: Vec::new(),
+            }],
+        };
+        self.shared.emit(AgentOutput::Event { body, raw: Some(raw), attachments: images }).await;
     }
 }
 
