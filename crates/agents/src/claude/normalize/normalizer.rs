@@ -1,7 +1,7 @@
 use super::super::kinds;
 use super::{
-    blocks, calls, compaction, denied, limits, own_turns, pending, prompt, request, said, subagents, surrogates, tasks,
-    turn_end, user,
+    blocks, calls, compaction, denied, limits, own_turns, pending, prompt, request, retrying, said, subagents,
+    surrogates, tasks, turn_end, user,
 };
 use calls::OpenCalls;
 use compaction::Compactions;
@@ -291,7 +291,7 @@ fn system(value: &Value) -> Parsed {
             (None, Some("requesting")) => Parsed::Drop,
             (None, _) => other("system/status"),
         },
-        "api_retry" => retrying(value),
+        "api_retry" => retrying::read(value),
         // A running token count for a spinner. Several arrive per second while thinking.
         "thinking_tokens"
         // What the CLI's own interface shows of git and GitHub: that the agent committed, pushed, rebased or merged,
@@ -301,23 +301,6 @@ fn system(value: &Value) -> Parsed {
         | "code_change_published" => Parsed::Drop,
         other_subtype => other(&format!("system/{other_subtype}")),
     }
-}
-
-/// `api_retry`, which the CLI sends before each try of a request that failed: which try comes next, of how many, the
-/// HTTP status the last failed with, when it got one, and how long it waits first. One with no try is kept for a later
-/// build.
-fn retrying(value: &Value) -> Parsed {
-    let Some(attempt) = value.get("attempt").and_then(Value::as_u64).and_then(|n| u32::try_from(n).ok()) else {
-        return other("system/api_retry");
-    };
-    let number = |key: &str| value.get(key).and_then(Value::as_u64);
-    Parsed::Retrying(Retrying {
-        run: None,
-        attempt,
-        of: number("max_retries").and_then(|n| u32::try_from(n).ok()),
-        status: number("error_status").and_then(|n| u16::try_from(n).ok()),
-        delay_ms: number("retry_delay_ms"),
-    })
 }
 
 fn assistant(value: &Value, subagent: Option<SubagentId>) -> EventBody {

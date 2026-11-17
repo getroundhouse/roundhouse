@@ -25,6 +25,7 @@ mod pending;
 mod prompt;
 mod request;
 mod result_text;
+mod retrying;
 mod said;
 mod subagents;
 mod surrogates;
