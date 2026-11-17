@@ -8,6 +8,10 @@
 mod tests;
 
 mod activity;
+mod typed;
 pub(super) use activity::add;
 #[cfg(test)]
 use activity::{CALLS_KEPT, RESULT_KEPT, TEXT_KEPT};
+pub(super) use typed::add as add_typed;
+#[cfg(test)]
+use typed::kept;

@@ -365,4 +365,6 @@ pub(in super::super) const MIGRATIONS: &[&str] = &[
     github_accounts::GITHUB_SENT,
     // Whether a push from each repository's checkout goes round the git credential, in `repos`.
     repos::PUSH_ROUTES,
+    // What each subagent has done lately, with each call typed, which its record shows while it works.
+    subagents::LATELY,
 ];

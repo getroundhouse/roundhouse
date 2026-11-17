@@ -123,6 +123,11 @@ pub(super) const RECORDS: &str = r"
 /// still working has none until its next event.
 pub(super) const RECENT_WORK: &str = "ALTER TABLE subagents ADD COLUMN recent TEXT;";
 
+/// What each subagent has done lately, as `recent` keeps it, but with each call typed, as JSON, for one whose agent
+/// types its calls. It's kept while it works, and emptied when it ends, as `recent` is. One still working has none
+/// until its next event.
+pub(super) const LATELY: &str = "ALTER TABLE subagents ADD COLUMN lately TEXT;";
+
 /// The model each subagent's replies come from, as its newest reply named it, which its record shows. One from before
 /// this has it filled in from its replies in the log, and only one that has a model is changed, so the rest keep their
 /// revisions. A log from before the adapter left out the CLI's name for a message no model wrote, `<synthetic>`, has

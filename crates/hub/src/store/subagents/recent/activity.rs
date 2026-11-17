@@ -20,18 +20,7 @@ pub(in super::super) fn add(work: &mut RecentWork, blocks: &[ContentBlock], wrot
     let mut changed = false;
     for block in blocks {
         match block {
-            ContentBlock::Text { text, .. } if wrote && !text.trim().is_empty() => {
-                // Once what it's written since is cut short, more of it changes nothing, so it sends no notice.
-                if work.since.as_ref().is_some_and(|since| since.cut) {
-                    continue;
-                }
-                let joined = match work.since.take() {
-                    Some(since) => said(&format!("{}\n\n{text}", since.text)),
-                    None => said(text),
-                };
-                work.since = Some(joined);
-                changed = true;
-            }
+            ContentBlock::Text { text, .. } if wrote => changed |= wrote_text(&mut work.since, text),
             ContentBlock::ToolUse { .. } => {
                 let Some(call) = Call::of(block) else { continue };
                 work.calls.push(RecentCall { before: work.since.take(), call, result: None });
@@ -59,6 +48,20 @@ pub(in super::super) fn add(work: &mut RecentWork, blocks: &[ContentBlock], wrot
         }
     }
     changed
+}
+
+/// Adds `text`, which it wrote, to what it's written `since` its newest call, and says whether that changed it.
+pub(super) fn wrote_text(since: &mut Option<Said>, text: &str) -> bool {
+    // Once what it's written since is cut short, more of it changes nothing, so it sends no notice.
+    if text.trim().is_empty() || since.as_ref().is_some_and(|since| since.cut) {
+        return false;
+    }
+    let joined = match since.take() {
+        Some(since) => said(&format!("{}\n\n{text}", since.text)),
+        None => said(text),
+    };
+    *since = Some(joined);
+    true
 }
 
 fn said(text: &str) -> Said {

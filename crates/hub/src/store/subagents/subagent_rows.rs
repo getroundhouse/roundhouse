@@ -1,12 +1,12 @@
 use super::super::{Store, StoreError, current_rev, from_text, json_at, lock, rev_of, text_of};
 use super::recent;
 use protocol::event::{ContentBlock, EventBody, SessionEvent};
-use protocol::model::{Call, ModelName, RecentWork, Rev, SessionId, Subagent, SubagentId, SubagentStatus};
+use protocol::model::{Call, Lately, ModelName, RecentWork, Rev, SessionId, Subagent, SubagentId, SubagentStatus};
 use rusqlite::types::ValueRef;
 use rusqlite::{Connection, OptionalExtension, Row, params};
 
 const SUBAGENT_COLUMNS: &str = "session_id, call, kind, description, prompt, in_background, status, started_at_ms, \
-     ended_at_ms, calls, latest_call, report, rev, recent, model, context_tokens, id";
+     ended_at_ms, calls, latest_call, report, rev, recent, model, context_tokens, id, lately";
 
 impl Store {
     /// The session's subagents, oldest first, read in one transaction with the revision they're as of.
@@ -62,7 +62,7 @@ const STARTED: &str = "INSERT INTO subagents
      ON CONFLICT DO NOTHING";
 
 // What it's done lately is only shown while it works. An end that counts no tokens leaves the count it had.
-const ENDED: &str = "UPDATE subagents SET status = ?, ended_at_ms = ?, report = ?, recent = NULL,
+const ENDED: &str = "UPDATE subagents SET status = ?, ended_at_ms = ?, report = ?, recent = NULL, lately = NULL,
          context_tokens = coalesce(?, context_tokens)
      WHERE session_id = ? AND id = ? AND status = ?";
 
@@ -98,7 +98,8 @@ pub(in super::super) fn note_subagents(tx: &Connection, event: &SessionEvent) ->
         }
         EventBody::AgentExited { .. } => {
             let mut statement = tx.prepare_cached(
-                "UPDATE subagents SET status = ?, ended_at_ms = ?, recent = NULL WHERE session_id = ? AND status = ?
+                "UPDATE subagents SET status = ?, ended_at_ms = ?, recent = NULL, lately = NULL
+                 WHERE session_id = ? AND status = ?
                  RETURNING id",
             )?;
             let stopped = text_of(&SubagentStatus::Stopped);
@@ -152,18 +153,23 @@ fn note_work(
     let session = event.session_id.as_str();
     let model = note_model(tx, session, subagent, &event.body)?;
     let made: Vec<Call> = blocks.iter().filter_map(Call::of).collect();
+    // A typed call counts as one too. Only the older form is the record's newest call, which only a client from before
+    // `recent` reads.
+    let typed = blocks.iter().filter(|block| matches!(block, ContentBlock::Call { .. })).count();
     let latest = made.last().map(serde_json::to_string).transpose()?;
-    let mut recent = recent_work(tx, session, subagent)?;
     let wrote = matches!(event.body, EventBody::Assistant { .. });
+    let (mut recent, mut lately) = working_on(tx, session, subagent)?.unzip();
     let added = recent.as_mut().is_some_and(|work| recent::add(work, blocks, wrote));
-    if made.is_empty() && !added {
+    let added_typed = lately.as_mut().is_some_and(|work| recent::add_typed(work, blocks, wrote));
+    if made.is_empty() && typed == 0 && !added && !added_typed {
         return Ok(changed(model, subagent));
     }
     let recent = recent.filter(|_| added).map(|work| serde_json::to_string(&work)).transpose()?;
+    let lately = lately.filter(|_| added_typed).map(|work| serde_json::to_string(&work)).transpose()?;
     let rows = tx.execute(
         "UPDATE subagents SET calls = calls + ?, latest_call = coalesce(?, latest_call),
-             recent = coalesce(?, recent) WHERE session_id = ? AND id = ?",
-        params![made.len(), latest, recent, session, subagent.as_str()],
+             recent = coalesce(?, recent), lately = coalesce(?, lately) WHERE session_id = ? AND id = ?",
+        params![made.len() + typed, latest, recent, lately, session, subagent.as_str()],
     )?;
     Ok(changed(rows + model, subagent))
 }
@@ -178,15 +184,22 @@ fn note_model(tx: &Connection, session: &str, subagent: &SubagentId, body: &Even
     Ok(tx.prepare_cached(sql)?.execute(params![model.as_str(), session, subagent.as_str()])?)
 }
 
-/// What `subagent` has done lately, if it's still working, since that's only kept while it works.
-fn recent_work(tx: &Connection, session: &str, subagent: &SubagentId) -> Result<Option<RecentWork>, StoreError> {
+/// What `subagent` has done lately, in both forms, if it's still working, since that's only kept while it works.
+fn working_on(
+    tx: &Connection,
+    session: &str,
+    subagent: &SubagentId,
+) -> Result<Option<(RecentWork, Lately)>, StoreError> {
     let working = text_of(&SubagentStatus::Working);
-    let recent = tx
-        .prepare_cached("SELECT recent FROM subagents WHERE session_id = ? AND id = ? AND status = ?")?
-        .query_row(params![session, subagent.as_str(), working], |row| json_at::<RecentWork>(row, 0))
+    let sql = "SELECT recent, lately FROM subagents WHERE session_id = ? AND id = ? AND status = ?";
+    let work = tx
+        .prepare_cached(sql)?
+        .query_row(params![session, subagent.as_str(), working], |row| {
+            Ok((json_at::<RecentWork>(row, 0)?, json_at::<Lately>(row, 1)?))
+        })
         .optional()?;
     // Written only by this hub, as JSON. What it can't read is nothing it knows of.
-    Ok(recent.map(Option::unwrap_or_default))
+    Ok(work.map(|(recent, lately)| (recent.unwrap_or_default(), lately.unwrap_or_default())))
 }
 
 fn subagent_from_row(row: &Row<'_>) -> rusqlite::Result<Subagent> {
@@ -209,10 +222,11 @@ fn subagent_from_row(row: &Row<'_>) -> rusqlite::Result<Subagent> {
         latest_call: json_at(row, 10)?,
         report: text_at(row, 11)?,
         rev: rev_of(row, 12)?,
-        // As in `recent_work`.
+        // As in `working_on`.
         recent: json_at(row, 13)?.unwrap_or_default(),
-        // This hub keeps a record's calls only in the agent's shape, so it sends what a hub from before sends.
-        lately: None,
+        // Once it's made a typed call. Until then, `recent` says what it's written as well, and one whose agent records
+        // its calls in the older form makes none, so its call is drawn from `recent`.
+        lately: json_at::<Lately>(row, 17)?.filter(|work| !work.calls.is_empty()),
     })
 }
 
