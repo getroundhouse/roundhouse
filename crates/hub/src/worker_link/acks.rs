@@ -3,7 +3,6 @@
 
 use std::collections::HashSet;
 use std::sync::Arc;
-use std::time::Duration;
 
 use parking_lot::Mutex;
 use protocol::model::SessionId;
@@ -13,10 +12,6 @@ use tokio::sync::{Notify, oneshot};
 use super::WorkerLink;
 use crate::hub::Hub;
 use crate::session::Item;
-
-/// How long the hub waits after something numbered arrives before saying it's recorded, so one acknowledgement covers
-/// a burst, as when an agent writes a long reply.
-const GATHERING: Duration = Duration::from_millis(100);
 
 #[derive(Default)]
 pub(crate) struct Acks {
@@ -43,10 +38,10 @@ impl Acks {
         self.more.notify_one();
     }
 
-    /// Waits for more to acknowledge, and a moment longer for the rest of a burst.
+    /// Waits for more to acknowledge. What arrives while the last is acknowledged leaves one wake, which waits for the
+    /// next look, so one acknowledgement covers all of it, and a burst gets few without waiting for the rest of it.
     pub(super) async fn more(&self) {
         self.more.notified().await;
-        tokio::time::sleep(GATHERING).await;
     }
 
     /// Once each session has recorded what went to it, which is what's ahead of a flush in its queue, the number of
