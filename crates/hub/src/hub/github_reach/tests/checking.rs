@@ -3,18 +3,20 @@
 use std::sync::Arc;
 
 use protocol::client::github_accounts::GithubAccountConnect;
-use protocol::model::{GithubToken, Reach};
-use protocol::worker::GithubCredential;
+use protocol::client::github_apps::GithubManifestCode;
+use protocol::model::{GithubToken, InstalledApp, Reach};
 use tokio::sync::watch;
 
 use super::super::CHECKED_AGAIN_EVERY;
 use super::support::{CLI, account, checking, reads, told, told_within};
 use crate::github::{Answer, Gate, Script, StandIn};
+use crate::github_logins::DefaultCredential;
 use crate::hub::Hub;
 use crate::hub::tests::hub_calling_github;
 
 fn refused_as(username: &str) -> Reach {
-    Reach::Refused { repository: CLI, username: username.into(), reason: "Permission to cli/cli.git denied.".into() }
+    let reason = "Permission to cli/cli.git denied.".into();
+    Reach::Refused { repository: CLI, username: username.into(), reason, installation: None }
 }
 
 /// GitHub, refusing every push to `cli/cli`.
@@ -83,7 +85,7 @@ async fn a_repository_is_checked_once_a_worker_reads_its_address_and_every_clien
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_calling_github(dir.path(), github.api());
     let mut feed = hub.subscribe_feed();
-    let (credential, following) = watch::channel(GithubCredential::MachineOwn);
+    let (credential, following) = watch::channel(DefaultCredential::MachineOwn);
     let _checking = checking(&hub, following);
 
     says_cli(&hub).await;
@@ -157,7 +159,7 @@ async fn an_answer_for_a_login_that_has_since_changed_is_let_go_of() {
     says_cli(&hub).await;
     github.until_asked(1).await;
 
-    credential.send_replace(GithubCredential::MachineOwn);
+    credential.send_replace(DefaultCredential::MachineOwn);
     let machines_own = told(&mut feed).await;
     gate.open();
     credential.send_replace(account("grace", "g-token"));
@@ -175,7 +177,7 @@ async fn every_half_hour_each_repository_is_checked_again() {
     let dir = tempfile::tempdir().unwrap();
     let hub = hub_calling_github(dir.path(), crate::hub::tests::NO_GITHUB.to_string());
     let mut feed = hub.subscribe_feed();
-    let (_credential, following) = watch::channel(GithubCredential::MachineOwn);
+    let (_credential, following) = watch::channel(DefaultCredential::MachineOwn);
     let _checking = checking(&hub, following);
     says_cli(&hub).await;
     told(&mut feed).await;
@@ -190,11 +192,11 @@ async fn every_half_hour_each_repository_is_checked_again() {
 }
 
 /// The hub's own checks follow what its logins have workers sent, so connecting the first account, which makes it the
-/// default, has it checked with that account's token.
+/// default, has it checked with that account's token, and named by its username, not the name it commits as.
 #[tokio::test]
 async fn the_hub_checks_with_the_default_its_logins_work_out() {
     let github = StandIn::with(Script {
-        users: vec![("a-token", Answer::user(7, "ada", None))],
+        users: vec![("a-token", Answer::user_with_profile(7, "ada", Some("Ada Lovelace"), None))],
         pushes: vec![("cli/cli", vec![Answer::takes_pushes()])],
         ..Script::default()
     })
@@ -210,4 +212,33 @@ async fn the_hub_checks_with_the_default_its_logins_work_out() {
     let reach = told(&mut feed).await;
 
     assert_eq!(reach.reach, Reach::Pushes { repository: CLI, username: "ada".into() });
+}
+
+/// An app of your own's installation on adalabs, which making the app makes the default, is refused `cli/cli`, which
+/// isn't adalabs's, and the record names its bot, and where its app is installed, not the `x-access-token` git gives.
+#[tokio::test]
+async fn an_installation_the_default_refused_a_repository_is_named_as_its_bot() {
+    let ends = chrono::DateTime::from_timestamp_millis(crate::store::now_ms() + 60 * 60 * 1000).unwrap();
+    let denied = "Permission to cli/cli.git denied to ada-roundhouse[bot].";
+    let github = StandIn::with(Script {
+        conversions: vec![("a-code", Answer::app_made(9, "ada-roundhouse", (2, "adalabs")))],
+        named: vec![("ada-roundhouse[bot]", Answer::user(41, "ada-roundhouse[bot]", None))],
+        installations: vec![Answer::installations(&[(70, 2, "adalabs")])],
+        minted: vec![(70, vec![Answer::installation_token("ghs_first", &ends.to_rfc3339())])],
+        pushes: vec![("cli/cli", vec![Answer::git_says(403, denied)])],
+        ..Script::default()
+    })
+    .await;
+    let dir = tempfile::tempdir().unwrap();
+    let hub = hub_calling_github(dir.path(), github.api());
+    hub.github_app_make(GithubManifestCode::new("a-code")).await.unwrap();
+    let mut feed = hub.subscribe_feed();
+    let _checking = tokio::spawn(Arc::clone(&hub).watch_github_reach());
+
+    says_cli(&hub).await;
+    let reach = told(&mut feed).await;
+
+    let installation = Some(InstalledApp { slug: "ada-roundhouse".into(), on: "adalabs".into() });
+    let username = "ada-roundhouse[bot]".into();
+    assert_eq!(reach.reach, Reach::Refused { repository: CLI, username, reason: denied.into(), installation });
 }

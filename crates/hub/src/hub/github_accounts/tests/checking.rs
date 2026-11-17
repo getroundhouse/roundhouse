@@ -34,7 +34,7 @@ fn logins_in(dir: &std::path::Path) -> (Arc<GithubLogins>, Arc<Store>) {
 }
 
 fn sent(logins: &GithubLogins) -> GithubCredential {
-    logins.git_credential().borrow().clone()
+    logins.git_credential().borrow().for_workers()
 }
 
 /// Checks `logins` at once, and every [`CHECKED_EVERY`] after, at what `wall_clock` says then, on a task of its own,

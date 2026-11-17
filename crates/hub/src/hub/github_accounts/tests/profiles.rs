@@ -41,7 +41,7 @@ async fn a_check_asks_github_who_an_account_is_and_clients_hear_of_its_new_usern
     let told: Vec<HubNotice> = std::iter::from_fn(|| feed.try_recv().ok()).collect();
     let [HubNotice::GithubAccount(account)] = told.as_slice() else { panic!("{told:?}") };
     assert_eq!(account.user.name.as_str(), "ada-lovelace");
-    let GithubCredential::Account(credential) = hub.git_credential().borrow().clone() else { panic!() };
+    let GithubCredential::Account(credential) = hub.git_credential().borrow().for_workers() else { panic!() };
     let identity = GitIdentity { name: "Ada Lovelace".to_string(), email: "ada@example.com".to_string() };
     assert_eq!((credential.username.as_str(), credential.identity), ("ada-lovelace", Some(identity)));
     assert_eq!(github.asked().len(), 1, "the check waited for GitHub's answer, and the next didn't ask again");

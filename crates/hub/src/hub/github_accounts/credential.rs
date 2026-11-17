@@ -5,19 +5,19 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use protocol::worker::GithubCredential;
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use tokio::time::MissedTickBehavior;
 use tracing::error;
 
 use super::super::Hub;
+use crate::github_logins::DefaultCredential;
 use crate::store::now_ms;
 
 impl Hub {
     /// What workers are to give their processes for github.com, from now on, as it changes, as
     /// [`GithubLogins::git_credential`](crate::github_logins::GithubLogins::git_credential) says.
-    pub(crate) fn git_credential(&self) -> watch::Receiver<GithubCredential> {
+    pub(crate) fn git_credential(&self) -> watch::Receiver<DefaultCredential> {
         self.github_logins.git_credential()
     }
 

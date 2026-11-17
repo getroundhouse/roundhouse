@@ -38,7 +38,7 @@ fn told(feed: &mut broadcast::Receiver<HubNotice>) -> Vec<HubNotice> {
 }
 
 fn sent(hub: &Hub) -> GithubCredential {
-    hub.git_credential().borrow().clone()
+    hub.git_credential().borrow().for_workers()
 }
 
 /// Ada's `token`, which commits as ada, at the address GitHub gives her, since she shows no name or email on GitHub.

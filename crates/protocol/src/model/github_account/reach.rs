@@ -3,7 +3,7 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-use super::super::{GithubUsername, RepoId, Rev};
+use super::super::{GithubAppSlug, GithubUsername, RepoId, Rev};
 
 /// Whether agents can push as the default GitHub account to the repository on GitHub that a repository's address
 /// names, as the hub last checked, as a record of its own, keyed by the repository, so every workspace of it shows the
@@ -31,7 +31,12 @@ pub struct GithubReach {
 }
 
 /// What a push from a repository's workspaces would meet, as the hub last checked, by GitHub's own answer to what
-/// `git push` asks before it sends anything.
+/// `git push` asks before it sends anything. Each of GitHub's answers names the default by `username` as GitHub knows
+/// it: a token's or a sign-in's user, or an app's installation's bot, such as `ada-roundhouse[bot]`, rather than the
+/// `x-access-token` git gives GitHub with an installation's token, which a hub from before named. Each that stops a
+/// push says too, for an installation, where its app is installed, in `installation`, since what to do is done there.
+/// It's `None` for a token's or a sign-in's account, and from a hub from before it said. *Unconfirmed:*
+/// `installation`, and none on `Pushes`, of which a workspace says nothing.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 #[serde(tag = "state", rename_all = "snake_case")]
 pub enum Reach {
@@ -41,11 +46,28 @@ pub enum Reach {
     /// GitHub refused a push to `repository` as `username`, saying why in `reason`, in its own words, as `git` prints
     /// them after `remote:`, such as `Permission to cli/cli.git denied to ada.`, or what an organization's SAML SSO or
     /// its restrictions on OAuth Apps ask for.
-    Refused { repository: GithubRepositoryName, username: GithubUsername, reason: String },
+    Refused {
+        repository: GithubRepositoryName,
+        username: GithubUsername,
+        reason: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        installation: Option<InstalledApp>,
+    },
     /// GitHub has no repository `repository` that `username` can see: it isn't there, or it's private and not theirs.
-    NotFound { repository: GithubRepositoryName, username: GithubUsername },
-    /// GitHub didn't take `username`'s token at all, as when it has been revoked on GitHub.
-    TokenRefused { repository: GithubRepositoryName, username: GithubUsername },
+    NotFound {
+        repository: GithubRepositoryName,
+        username: GithubUsername,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        installation: Option<InstalledApp>,
+    },
+    /// GitHub didn't take `username`'s token at all, as when it has been revoked on GitHub, or the app whose
+    /// installation it is has been uninstalled there.
+    TokenRefused {
+        repository: GithubRepositoryName,
+        username: GithubUsername,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        installation: Option<InstalledApp>,
+    },
     /// GitHub couldn't be asked, or didn't say, as `why` says, such as while it can't be reached.
     CouldntTell { repository: GithubRepositoryName, why: String },
     /// Not checked, since the default is each machine's own login, which the hub holds no token for, so a push goes as
@@ -59,6 +81,17 @@ pub enum Reach {
     /// From a newer hub.
     #[serde(other)]
     Unknown,
+}
+
+/// Where the app of your own is installed whose installation GitHub answered for, as a [`Reach`] that names its bot
+/// says. The bot reaches only the repositories of the user or organization it's installed on, which for an app of your
+/// own is the app's owner, the only one it can be installed on, and of those only the ones the person gave it there.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct InstalledApp {
+    /// What GitHub calls the app in addresses, which it's installed from, at `https://github.com/apps/{slug}`.
+    pub slug: GithubAppSlug,
+    /// The user or organization it's installed on, as GitHub named it when the hub last looked.
+    pub on: GithubUsername,
 }
 
 impl Reach {
@@ -82,8 +115,8 @@ impl Reach {
         match self {
             Reach::Pushes { repository, username }
             | Reach::Refused { repository, username, .. }
-            | Reach::NotFound { repository, username }
-            | Reach::TokenRefused { repository, username } => Some((repository, username)),
+            | Reach::NotFound { repository, username, .. }
+            | Reach::TokenRefused { repository, username, .. } => Some((repository, username)),
             Reach::CouldntTell { .. }
             | Reach::MachineOwn { .. }
             | Reach::Blocked { .. }

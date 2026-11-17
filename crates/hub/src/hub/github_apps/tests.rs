@@ -53,7 +53,7 @@ fn told(feed: &mut broadcast::Receiver<HubNotice>) -> Vec<HubNotice> {
 }
 
 fn sent(hub: &Hub) -> GithubCredential {
-    hub.git_credential().borrow().clone()
+    hub.git_credential().borrow().for_workers()
 }
 
 /// What workers are sent while the default is the app's installation on adalabs, whose token is `token`.

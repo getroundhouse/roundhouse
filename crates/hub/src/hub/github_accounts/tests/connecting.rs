@@ -58,7 +58,7 @@ async fn a_connected_default_commits_as_its_users_name_and_public_email_on_githu
 
     hub.github_account_connect(asking("a-token")).await.unwrap();
 
-    let GithubCredential::Account(credential) = hub.git_credential().borrow().clone() else { panic!() };
+    let GithubCredential::Account(credential) = hub.git_credential().borrow().for_workers() else { panic!() };
     let identity = GitIdentity { name: "Ada Lovelace".to_string(), email: "ada@example.com".to_string() };
     assert_eq!((credential.username.as_str(), credential.identity), ("ada", Some(identity)));
     assert_eq!(github.asked().len(), 1, "who it is came with whose the token is");

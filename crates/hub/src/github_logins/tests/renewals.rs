@@ -113,7 +113,7 @@ fn a_renewal_replaces_the_sign_ins_file_in_place_reaches_every_worker_and_moves_
     assert_eq!(when, (1000, Some(renewed_ends), false), "when it was signed in stays");
     assert!(change.changed);
     assert!(following.has_changed().unwrap());
-    assert_eq!(*following.borrow_and_update(), as_ada("a-renewed-token"));
+    assert_eq!(following.borrow_and_update().for_workers(), as_ada("a-renewed-token"));
     assert_eq!(due_at(&logins, ENDS + 1), [], "it isn't due past its old end");
     assert!(!following.has_changed().unwrap(), "and workers are sent the same then");
 }

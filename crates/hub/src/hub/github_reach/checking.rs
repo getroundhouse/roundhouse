@@ -6,13 +6,13 @@ use protocol::client::HubNotice;
 #[cfg(doc)]
 use protocol::model::RepoUrl;
 use protocol::model::{GithubReach, GithubRepositoryName, GithubUsername, Reach, RepoId};
-use protocol::worker::GithubCredential;
 use tokio::sync::watch;
 use tokio::task::JoinSet;
 use tokio::time::{Instant, MissedTickBehavior};
 use tracing::{error, warn};
 
 use super::super::Hub;
+use crate::github_logins::DefaultCredential;
 use crate::store::{Store, StoreError, now_ms};
 
 /// How often every repository is checked again, though nothing the hub knows of has changed, since what an account can
@@ -44,8 +44,9 @@ impl Hub {
 /// one.
 pub(super) struct Checks {
     hub: Arc<Hub>,
-    /// What workers give their processes for github.com, which a push meets, as the logins work it out.
-    credential: watch::Receiver<GithubCredential>,
+    /// What workers give their processes for github.com, which a push meets, and who GitHub knows that as, as the
+    /// logins work it out.
+    credential: watch::Receiver<DefaultCredential>,
     /// Which repository on GitHub each repository was last checked for, by its record's address.
     pushes_to: HashMap<RepoId, Option<GithubRepositoryName>>,
     under_way: JoinSet<Checked>,
@@ -61,12 +62,12 @@ struct Checked {
     reach: Reach,
     /// When GitHub answered, if `reach` is its answer.
     answered_at_ms: Option<i64>,
-    /// Whose token it asked GitHub with, if any.
+    /// Who GitHub knows the account it asked with as, if any.
     asked_as: Option<GithubUsername>,
 }
 
 impl Checks {
-    pub(super) fn new(hub: Arc<Hub>, credential: watch::Receiver<GithubCredential>) -> Self {
+    pub(super) fn new(hub: Arc<Hub>, credential: watch::Receiver<DefaultCredential>) -> Self {
         Self {
             hub,
             credential,
@@ -146,7 +147,7 @@ impl Checks {
 
     /// Starts checking each of `repos` with `credential`, each on a task of its own, so a GitHub that doesn't answer
     /// for one holds up none of the others.
-    fn check(&mut self, credential: &GithubCredential, repos: Vec<RepoId>) {
+    fn check(&mut self, credential: &DefaultCredential, repos: Vec<RepoId>) {
         for repo in repos {
             let Some(repository) = self.pushes_to.get(&repo).cloned() else { continue };
             self.started += 1;
@@ -154,8 +155,8 @@ impl Checks {
             self.newest.insert(repo.clone(), number);
             let (hub, credential) = (Arc::clone(&self.hub), credential.clone());
             let asked_as = match &credential {
-                GithubCredential::Account(account) => Some(account.username.clone()),
-                GithubCredential::MachineOwn | GithubCredential::Blocked { .. } | GithubCredential::Unknown => None,
+                DefaultCredential::Account { username, .. } => Some(username.clone()),
+                DefaultCredential::MachineOwn | DefaultCredential::Blocked { .. } => None,
             };
             self.under_way.spawn(async move {
                 let reach = super::reaching::reach(&hub.github, repository, &credential).await;

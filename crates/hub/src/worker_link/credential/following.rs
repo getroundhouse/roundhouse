@@ -5,12 +5,13 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use protocol::client::{ApiError, ErrorCode};
-use protocol::worker::{GitCredentialSet, GithubCredential};
+use protocol::worker::GitCredentialSet;
 use tokio::sync::watch;
 use tokio::time::error::Elapsed;
 use tracing::warn;
 
 use super::super::WorkerLink;
+use crate::github_logins::DefaultCredential;
 
 /// How long a worker has to answer a set, from when it's queued. A worker applies one by writing three small files,
 /// and the first time, asking its git's version, so it answers in milliseconds, and one that hasn't by now is taken for
@@ -23,20 +24,20 @@ pub(crate) const SET_WITHIN: Duration = Duration::from_secs(10);
 /// so one that changes twice while the worker applies a set is sent only the second after it.
 pub(crate) struct Following {
     link: Arc<WorkerLink>,
-    credential: watch::Receiver<GithubCredential>,
+    credential: watch::Receiver<DefaultCredential>,
     /// Whether the log has said the worker doesn't know the request, which it says once a link.
     said_unsupported: bool,
 }
 
 impl Following {
-    pub(crate) fn new(link: Arc<WorkerLink>, credential: watch::Receiver<GithubCredential>) -> Self {
+    pub(crate) fn new(link: Arc<WorkerLink>, credential: watch::Receiver<DefaultCredential>) -> Self {
         Self { link, credential, said_unsupported: false }
     }
 
     /// Queues the set of the credential the hub has now, and returns the worker's answer to wait for, which
     /// [`Following::answered`] reads.
     pub(crate) async fn queue(&mut self) -> Result<impl Future<Output = Result<(), ApiError>> + use<>, ApiError> {
-        let credential = self.credential.borrow_and_update().clone();
+        let credential = self.credential.borrow_and_update().for_workers();
         self.link.send(GitCredentialSet { credential }).await
     }
 

@@ -13,7 +13,7 @@ use tokio::sync::watch;
 
 use super::{Following, SET_WITHIN};
 use crate::github::TokenOwner;
-use crate::github_logins::{Connect, GithubLogins};
+use crate::github_logins::{Connect, DefaultCredential, GithubLogins};
 use crate::logged::Logs;
 use crate::store::GithubProfile;
 use crate::store::tests::store_with_session;
@@ -22,7 +22,7 @@ use crate::worker_link::WorkerLink;
 /// A stand-in for a worker, following `credential` as an opened link does, which keeps each credential it's set, in
 /// turn, and answers each as `answer` says, or never, for `None`.
 fn following(
-    credential: watch::Receiver<GithubCredential>,
+    credential: watch::Receiver<DefaultCredential>,
     answer: impl Fn() -> Option<Result<WorkerResponse, ApiError>> + Send + 'static,
 ) -> (Arc<WorkerLink>, watch::Receiver<Vec<GithubCredential>>) {
     let (kept, sets) = watch::channel(Vec::new());
@@ -65,18 +65,24 @@ fn connect(logins: &GithubLogins, token: &str, renewing: Option<&GithubAccountId
 }
 
 /// Ada's `token`, which commits as ada, at the address GitHub gives her.
-fn account(token: &str) -> GithubCredential {
+fn adas(token: &str) -> GitCredential {
     let identity = GitIdentity { name: "ada".to_string(), email: "7+ada@users.noreply.github.com".to_string() };
-    let token = GithubToken::new(token);
-    GithubCredential::Account(GitCredential { username: "ada".into(), token, identity: Some(identity) })
+    GitCredential { username: "ada".into(), token: GithubToken::new(token), identity: Some(identity) }
+}
+
+/// What a worker is sent while the default is ada's `token`.
+fn account(token: &str) -> GithubCredential {
+    GithubCredential::Account(adas(token))
 }
 
 /// A set at a time, as fast as the hub can make them, so a link that's applying one when the next comes is sent
 /// only the newest after.
 #[tokio::test(start_paused = true)]
 async fn every_link_is_sent_each_change_in_the_order_made_ending_with_the_newest() {
-    let made = [account("first"), GithubCredential::Blocked { reason: "R".into() }, account("second")];
-    let credential = watch::Sender::new(GithubCredential::MachineOwn);
+    let ada =
+        |token| DefaultCredential::Account { credential: adas(token), username: "ada".into(), installation: None };
+    let made = [ada("first"), DefaultCredential::Blocked { reason: "R".into() }, ada("second")];
+    let credential = watch::Sender::new(DefaultCredential::MachineOwn);
     let mut links: Vec<_> =
         (0..3).map(|_| following(credential.subscribe(), || Some(Ok(WorkerResponse::Ok)))).collect();
 
@@ -87,6 +93,7 @@ async fn every_link_is_sent_each_change_in_the_order_made_ending_with_the_newest
         }
     }
 
+    let made: Vec<_> = made.iter().map(DefaultCredential::for_workers).collect();
     for (link, sets) in &mut links {
         let sets = until(sets, |sets| sets.last() == made.last()).await;
         let mut in_order = made.iter();
