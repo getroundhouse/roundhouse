@@ -130,40 +130,31 @@ mod tests {
         Updating::Ready { next: "ghi".to_string() }
     }
 
-    #[test]
-    fn the_same_build_is_only_named_once() {
-        assert_eq!(BuildLine::new("abc", Some("abc"), true, NOTHING, None), line(None, None));
-    }
+    /// A case of the line for an app that's `abc`: the hub it's connected to, whether it may restart that hub, what
+    /// holds that up, an update downloaded, and what the line says.
+    type Case = (&'static str, Option<&'static str>, bool, Holding, Option<&'static str>, BuildLine);
 
-    #[test]
-    fn with_no_connection_there_is_nothing_to_compare() {
-        assert_eq!(BuildLine::new("abc", None, true, NOTHING, None), line(None, None));
-    }
-
-    #[test]
-    fn an_older_hub_the_app_may_restart_is_finishing_the_update() {
+    fn lines() -> [Case; 6] {
         let agents = Agents { working: 2, waiting_on_you: 1 };
-
-        let built = BuildLine::new("abc", Some("def"), true, Holding { agents, terminals: 3 }, None);
-
-        let finishing = Updating::Finishing { hub: "def".to_string(), agents, terminals: 3 };
-        assert_eq!(built, line(None, Some(finishing)));
+        let held = Holding { agents, terminals: 3 };
+        let finishing = line(None, Some(Updating::Finishing { hub: "def".to_string(), agents, terminals: 3 }));
+        let under_the_card = line(Some("def"), Some(ready()));
+        [
+            ("the same build is only named once", Some("abc"), true, NOTHING, None, line(None, None)),
+            ("with no connection there's nothing to compare", None, true, NOTHING, None, line(None, None)),
+            ("an older hub it may restart is finishing the update", Some("def"), true, held, None, finishing),
+            ("a hub it leaves alone is named", Some("def"), false, NOTHING, None, line(Some("def"), None)),
+            ("a downloaded update comes first", Some("def"), true, NOTHING, Some("ghi"), line(None, Some(ready()))),
+            // The card is over the build line, which still says which hub it is.
+            ("a hub it leaves alone, and an update", Some("def"), false, NOTHING, Some("ghi"), under_the_card),
+        ]
     }
 
     #[test]
-    fn a_hub_the_app_leaves_alone_is_named() {
-        assert_eq!(BuildLine::new("abc", Some("def"), false, NOTHING, None), line(Some("def"), None));
-    }
-
-    #[test]
-    fn a_downloaded_update_comes_first() {
-        assert_eq!(BuildLine::new("abc", Some("def"), true, NOTHING, Some("ghi")), line(None, Some(ready())));
-    }
-
-    /// The card is over the build line, which still says which hub it is.
-    #[test]
-    fn a_hub_the_app_leaves_alone_is_named_with_an_update_downloaded() {
-        assert_eq!(BuildLine::new("abc", Some("def"), false, NOTHING, Some("ghi")), line(Some("def"), Some(ready())));
+    fn the_line_names_the_hub_only_when_its_another_the_app_leaves_alone_and_says_where_an_update_has_got_to() {
+        for (name, hub, may_restart, holding, downloaded, want) in lines() {
+            assert_eq!(BuildLine::new("abc", hub, may_restart, holding, downloaded), want, "{name}");
+        }
     }
 
     fn task(kind: TaskKind) -> AgentTask {

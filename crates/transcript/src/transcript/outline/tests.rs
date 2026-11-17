@@ -27,34 +27,31 @@ fn compaction_at(row: usize) -> Line {
     Line { kind: Kind::Compaction(line), row }
 }
 
-#[test]
-fn a_compaction_is_never_the_one_being_read() {
-    let lines = [prompt_at(0, 1), compaction_at(10), prompt_at(20, 2), compaction_at(30)];
-
-    assert_eq!(being_read(&lines, 15, false), 0, "the prompt before it is");
-    assert_eq!(being_read(&lines, 35, false), 2);
-    assert_eq!(being_read(&lines, 35, true), 2, "and at the end, the last prompt is");
-    assert_eq!(being_read(&[compaction_at(0), prompt_at(5, 1)], 0, false), 1, "and before any, the first");
+/// The outline's lines, the row at the bottom of the chat's window, whether the chat is at its end, and which line is
+/// being read.
+fn readings() -> Vec<(&'static str, Vec<Line>, usize, bool, usize)> {
+    let three = at_rows(&[0, 10, 20]);
+    let compacted = vec![prompt_at(0, 1), compaction_at(10), prompt_at(20, 2), compaction_at(30)];
+    vec![
+        ("the first, from its row", three.clone(), 0, false, 0),
+        ("the first, above the second", three.clone(), 9, false, 0),
+        ("a prompt at the bottom", three.clone(), 10, false, 1),
+        ("the last, below it", three.clone(), 25, false, 2),
+        ("above the first prompt, the first", at_rows(&[3, 10]), 1, false, 0),
+        ("at the end, the last, whatever the bottom row", three, 12, true, 2),
+        // A compaction is never the one being read.
+        ("the prompt before a compaction", compacted.clone(), 15, false, 0),
+        ("the prompt before the last compaction", compacted.clone(), 35, false, 2),
+        ("at the end, the last prompt", compacted, 35, true, 2),
+        ("before any prompt, the first", vec![compaction_at(0), prompt_at(5, 1)], 0, false, 1),
+    ]
 }
 
 #[test]
 fn the_prompt_being_read_is_the_last_at_or_above_the_bottom() {
-    let lines = at_rows(&[0, 10, 20]);
-
-    assert_eq!(being_read(&lines, 0, false), 0);
-    assert_eq!(being_read(&lines, 9, false), 0);
-    assert_eq!(being_read(&lines, 10, false), 1, "a prompt at the bottom is the one being read");
-    assert_eq!(being_read(&lines, 25, false), 2);
-}
-
-#[test]
-fn above_the_first_prompt_the_first_is_being_read() {
-    assert_eq!(being_read(&at_rows(&[3, 10]), 1, false), 0);
-}
-
-#[test]
-fn at_the_end_the_last_prompt_is_being_read_whatever_the_bottom_row() {
-    assert_eq!(being_read(&at_rows(&[0, 10, 20]), 12, true), 2);
+    for (name, lines, bottom, at_end, want) in readings() {
+        assert_eq!(being_read(&lines, bottom, at_end), want, "{name}");
+    }
 }
 
 #[test]

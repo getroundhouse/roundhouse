@@ -84,52 +84,40 @@ fn going_on(was: &str, source: &str) -> (String, String) {
     (drawn(&gone), drawn(&parse(source.to_owned(), TheKits)))
 }
 
-#[test]
-fn a_list_takes_in_an_item_after_a_blank_line_as_it_goes_on() {
-    let (gone, whole) = going_on("1. first\n\n\n1", "1. first\n\n\n1. second\n");
-
-    assert_eq!(gone, whole);
-}
-
-#[test]
-fn a_paragraph_takes_back_what_turns_out_not_to_be_a_heading_as_it_goes_on() {
-    let (gone, whole) = going_on("Some text\n#", "Some text\n#2 isn't a heading");
-
-    assert_eq!(gone, whole);
-}
-
-#[test]
-fn a_text_that_goes_on_to_define_a_link_is_parsed_whole() {
-    let was = "See [docs].\n\nAnd more.\n\n";
-
-    let (gone, whole) = going_on(was, &format!("{was}[docs]: https://example.com\n"));
-
-    assert_eq!(gone, whole);
-}
-
-#[test]
-fn an_indented_fence_is_parsed_again_from_the_start_of_its_line() {
-    let (gone, whole) = going_on("Run this:\n\n  ```sh\n  cargo test", "Run this:\n\n  ```sh\n  cargo test\n  ```\n");
-
-    assert_eq!(gone, whole);
-}
+/// A text as it was parsed, and what it went on to, for each rule of where [`again`] parses it from. At the cases they
+/// run, the laws below come on few of these, so each rule has a row of its own.
+const GOING_ON: &[(&str, &str, &str)] = &[
+    ("a list takes in an item after a blank line", "1. first\n\n\n1", "1. first\n\n\n1. second\n"),
+    ("a paragraph takes back what turns out not to be a heading", "Some text\n#", "Some text\n#2 isn't a heading"),
+    (
+        "a text that goes on to define a link is parsed whole",
+        "See [docs].\n\nAnd more.\n\n",
+        "See [docs].\n\nAnd more.\n\n[docs]: https://example.com\n",
+    ),
+    (
+        "an indented fence is parsed again from the start of its line",
+        "Run this:\n\n  ```sh\n  cargo test",
+        "Run this:\n\n  ```sh\n  cargo test\n  ```\n",
+    ),
+    (
+        "a text that goes on to define a link over two lines is parsed whole",
+        "See [foo bar].\n\nAnd more.\n\n[foo\n",
+        "See [foo bar].\n\nAnd more.\n\n[foo\nbar]: https://example.com\n",
+    ),
+    (
+        "a text that defines a link is parsed whole",
+        "[docs]: https://example.com\n\n- one\n- two",
+        "[docs]: https://example.com\n\n- one\n- two\n- [docs]",
+    ),
+];
 
 #[test]
-fn a_text_that_goes_on_to_define_a_link_over_two_lines_is_parsed_whole() {
-    let was = "See [foo bar].\n\nAnd more.\n\n[foo\n";
+fn a_text_parsed_again_from_near_its_end_as_it_goes_on_is_drawn_as_it_would_be_parsed_whole() {
+    for &(name, was, source) in GOING_ON {
+        let (gone, whole) = going_on(was, source);
 
-    let (gone, whole) = going_on(was, &format!("{was}bar]: https://example.com\n"));
-
-    assert_eq!(gone, whole);
-}
-
-#[test]
-fn a_text_that_defines_a_link_is_parsed_whole_as_it_goes_on() {
-    let was = "[docs]: https://example.com\n\n- one\n- two";
-
-    let (gone, whole) = going_on(was, &format!("{was}\n- [docs]"));
-
-    assert_eq!(gone, whole);
+        assert_eq!(gone, whole, "{name}");
+    }
 }
 
 proptest! {
@@ -189,17 +177,28 @@ fn in_pieces(bits: &[&str], cuts: &[usize]) -> (String, String, String) {
 }
 
 #[test]
-fn each_paragraph_heading_code_block_and_cell_is_a_leaf_in_order() {
-    let source = "# Title\n\nSome **bold** text.\n\n- one\n- two\n\n```rust\nlet x = 1;\n```\n\n| a | b |\n|---|---|\n| c | d |\n";
+fn a_text_s_leaves_are_its_blocks_of_words_in_order_as_they_show() {
+    let cases = [
+        (
+            "each paragraph, heading, code block and cell",
+            "# Title\n\nSome **bold** text.\n\n- one\n- two\n\n```rust\nlet x = 1;\n```\n\n| a | b |\n|---|---|\n| c | d |\n",
+            ["Title", "Some bold text.", "one", "two", "let x = 1;", "a", "b", "c", "d"].map(String::from).to_vec(),
+        ),
+        (
+            "an image in text is one character of its leaf, and one alone is no leaf",
+            "Before ![a picture](a.png) after\n\n![alone](b.png)\n\nThe end",
+            vec![format!("Before {ATOM} after"), "The end".to_string()],
+        ),
+        (
+            "a link is its words and not its address",
+            "See [the docs](https://example.com) and `cargo test`.",
+            vec!["See the docs and cargo test.".to_string()],
+        ),
+    ];
 
-    assert_eq!(*leaves(source), ["Title", "Some bold text.", "one", "two", "let x = 1;", "a", "b", "c", "d"]);
-}
-
-#[test]
-fn an_image_in_text_is_one_character_of_its_leaf_and_one_alone_is_no_leaf() {
-    let source = "Before ![a picture](a.png) after\n\n![alone](b.png)\n\nThe end";
-
-    assert_eq!(*leaves(source), [format!("Before {ATOM} after"), "The end".to_string()]);
+    for (name, source, want) in cases {
+        assert_eq!(*leaves(source), want, "{name}");
+    }
 }
 
 #[test]
@@ -255,9 +254,4 @@ fn a_text_the_parser_panics_on_is_one_paragraph_as_it_is_written() {
     let source = "a\n===\n---\nb\n===";
 
     assert_eq!(*leaves(source), [source]);
-}
-
-#[test]
-fn a_link_is_its_words_and_not_its_address() {
-    assert_eq!(*leaves("See [the docs](https://example.com) and `cargo test`."), ["See the docs and cargo test."]);
 }

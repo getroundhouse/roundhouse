@@ -99,26 +99,15 @@ fn agents_is_found_by_what_someone_would_look_for_it_by() {
 }
 
 #[test]
-fn the_page_chosen_shows() {
-    let sections = real();
+fn the_page_chosen_shows_or_the_first_with_none_chosen_or_none_with_nothing_left_by_the_search() {
+    let first = real()[0].pages[0].id;
+    let cases = [
+        ("the page chosen", real(), Some(PageId::Agents), Some(PageId::Agents)),
+        ("nothing chosen", real(), None, Some(first)),
+        ("nothing left by the search", found(real(), "nothing like it"), Some(PageId::General), None),
+    ];
 
-    let page = shown(&sections, Some(PageId::Agents));
-
-    assert_eq!(page.map(|page| page.id), Some(PageId::Agents));
-}
-
-#[test]
-fn with_nothing_chosen_the_first_page_shows() {
-    let sections = real();
-
-    let page = shown(&sections, None);
-
-    assert_eq!(page.map(|page| page.id), Some(sections[0].pages[0].id));
-}
-
-#[test]
-fn with_nothing_left_by_the_search_no_page_shows() {
-    let sections = found(real(), "nothing like it");
-
-    assert!(shown(&sections, Some(PageId::General)).is_none());
+    for (name, sections, chosen, want) in cases {
+        assert_eq!(shown(&sections, chosen).map(|page| page.id), want, "{name}");
+    }
 }

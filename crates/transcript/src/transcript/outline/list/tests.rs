@@ -1,3 +1,5 @@
+use std::ops::Range;
+
 use super::*;
 use protocol::model::Seq;
 
@@ -10,42 +12,37 @@ fn lines(seqs: &[u64]) -> Vec<Line> {
     seqs.iter().map(|seq| prompt(PromptLine::new(Seq::new(*seq), "a prompt", 0))).collect()
 }
 
-#[test]
-fn a_prompt_recorded_joins_the_end_and_nothing_before_it_is_measured_again() {
-    assert_eq!(changed(&lines(&[1, 5]), &lines(&[1, 5, 9])), (2..2, 1));
-}
+/// Which rows of the prompts before a change are measured again, as how many of those after.
+type Changed = (Range<usize>, usize);
 
-#[test]
-fn prompts_the_hub_lists_before_those_the_chat_has_go_in_before_them() {
-    assert_eq!(changed(&lines(&[700, 900]), &lines(&[3, 40, 700, 900])), (0..0, 2));
-    assert_eq!(changed(&lines(&[3, 900]), &lines(&[3, 40, 700, 900])), (1..1, 2), "or between them");
-}
-
-#[test]
-fn a_prompt_whose_line_changed_is_measured_again_where_it_is() {
-    let was = lines(&[1, 5, 9]);
-    let mut now = was.clone();
-    now[1] = prompt(PromptLine::new(
+/// The prompts before and after a change, and what of them changed.
+fn changes() -> Vec<(&'static str, Vec<Line>, Vec<Line>, Changed)> {
+    let mut longer = lines(&[1, 5, 9]);
+    longer[1] = prompt(PromptLine::new(
         Seq::new(5),
         "a prompt, and a much longer one, which may take two lines where it took one",
         0,
     ));
-
-    assert_eq!(changed(&was, &now), (1..2, 1));
-}
-
-#[test]
-fn the_same_prompts_change_nothing() {
-    assert_eq!(changed(&lines(&[1, 5]), &lines(&[1, 5])), (2..2, 0));
-    assert_eq!(changed(&[], &[]), (0..0, 0));
-}
-
-#[test]
-fn rows_alike_at_the_edge_of_what_changed_are_counted_once() {
     let same = |count| vec![prompt(PromptLine::new(Seq::new(1), "a prompt", 0)); count];
+    vec![
+        // Nothing before it is measured again.
+        ("a prompt recorded joins the end", lines(&[1, 5]), lines(&[1, 5, 9]), (2..2, 1)),
+        ("prompts the hub lists go in before the chat's", lines(&[700, 900]), lines(&[3, 40, 700, 900]), (0..0, 2)),
+        ("or between them", lines(&[3, 900]), lines(&[3, 40, 700, 900]), (1..1, 2)),
+        ("a prompt whose line changed is measured again where it is", lines(&[1, 5, 9]), longer, (1..2, 1)),
+        ("the same prompts change nothing", lines(&[1, 5]), lines(&[1, 5]), (2..2, 0)),
+        ("nor do none", Vec::new(), Vec::new(), (0..0, 0)),
+        // Rows alike at the edge of what changed are counted once.
+        ("one more alike", same(1), same(2), (1..1, 1)),
+        ("one fewer alike", same(2), same(1), (1..2, 0)),
+    ]
+}
 
-    assert_eq!(changed(&same(1), &same(2)), (1..1, 1));
-    assert_eq!(changed(&same(2), &same(1)), (1..2, 0));
+#[test]
+fn only_the_prompts_between_the_start_and_the_end_the_two_share_are_measured_again() {
+    for (name, was, now, want) in changes() {
+        assert_eq!(changed(&was, &now), want, "{name}");
+    }
 }
 
 #[test]
