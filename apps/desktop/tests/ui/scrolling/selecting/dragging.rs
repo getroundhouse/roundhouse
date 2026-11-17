@@ -1,4 +1,6 @@
 use super::super::{A_FRAME, press, settle_at_the_end};
+use super::kinds::settled_at_its_last_row;
+use super::made_up::{Said, open_on_a_chat, open_on_chats, prose, reply};
 use crate::support::{Stack, Ui};
 use crate::tools::COMMAND_LINE;
 use gpui_kit::base::TextSelection;
@@ -14,6 +16,8 @@ use protocol::model::SessionId;
 pub(super) const LAST: &str = "Signal boxes keep ledgers, and the lever frame holds each route clear.";
 /// What a command prints, in words nothing else in the chat says but the prompt that runs it.
 pub(super) const PRINTED: &str = "the-points-are-set";
+/// The command that prints it.
+const ECHO: &str = "echo the-points-are-set";
 
 /// How many frames the pointer is held past the bottom edge, and then twice that past the top, to go back past where
 /// it started.
@@ -21,15 +25,11 @@ const HELD: u16 = 60;
 
 #[gpui_kit::test]
 fn dragging_a_selection_past_the_windows_edge_scrolls_on_either_way_and_keeps_it(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let session = stack.chat_in_a_new_workspace();
     // Short prompts, each answered by a run of replies of a few paragraphs.
-    for prompt in 0..8 {
-        let replies = Vec::from_fn(25, |reply| format!("prose:3:{}", prompt * 25 + reply));
-        stack.run(&session, &replies.join("; "));
-    }
-    let mut ui = open(cx, &stack);
-    let window = settled(&mut ui, &stack, &session);
+    let turns = Vec::from_fn(8, |prompt| {
+        (format!("Keep ledger {prompt}."), Vec::from_fn(25, |reply| prose(3, prompt * 25 + reply)))
+    });
+    let (_hub, mut ui, window) = open_on_a_chat(cx, turns);
     // Some way up from the end, so there's room to scroll either way.
     for _ in 0..20 {
         ui.scroll("transcript", ScrollDelta::Pixels(point(px(0.), px(300.))));
@@ -75,14 +75,10 @@ fn dragging_a_selection_past_the_windows_edge_scrolls_on_either_way_and_keeps_it
 /// can't hear it. So with the pointer left past the window's edge, the chat doesn't scroll on once it's back.
 #[gpui_kit::test]
 fn a_drag_is_over_once_its_chat_has_not_shown(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let session = stack.chat_in_a_new_workspace();
-    let replies = Vec::from_fn(25, |reply| format!("prose:3:{reply}"));
-    stack.run(&session, &replies.join("; "));
-    let mut ui = open(cx, &stack);
-    let other = ui.new_chat();
-    ui.activate_chat(&session);
-    let window = settled(&mut ui, &stack, &session);
+    let replies = Vec::from_fn(25, |reply| prose(3, reply));
+    let other = vec![("Keep another ledger.".to_owned(), vec![reply("Kept.")])];
+    let (_hub, mut ui, chats, window) = open_on_chats(cx, vec![vec![("Keep the ledger.".to_owned(), replies)], other]);
+    let (session, other) = (&chats[0], &chats[1]);
     for _ in 0..10 {
         ui.scroll("transcript", ScrollDelta::Pixels(point(px(0.), px(300.))));
     }
@@ -94,9 +90,9 @@ fn a_drag_is_over_once_its_chat_has_not_shown(cx: &mut TestAppContext) {
     press(&mut ui, MouseMoveEvent { position: below, pressed_button: held, ..Default::default() });
     let before = hold(&mut ui, 5);
 
-    ui.activate_chat(&other);
+    ui.activate_chat(other);
     ui.play(A_FRAME);
-    ui.activate_chat(&session);
+    ui.activate_chat(session);
     let back = hold(&mut ui, 30);
 
     let moved = |steps: &[Pixels]| steps.last().copied().unwrap_or_default() - steps[0];
@@ -108,14 +104,11 @@ fn a_drag_is_over_once_its_chat_has_not_shown(cx: &mut TestAppContext) {
 /// between them shows, its command and what it printed, and a copy has each where it's shown, a blank line apart.
 #[gpui_kit::test]
 fn a_drag_from_one_reply_into_the_next_selects_the_call_between_too(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let session = stack.chat_in_a_new_workspace();
     let (first, second) = ("Signal boxes keep ledgers of every train.", "The lever frame holds each route clear.");
-    stack.run(&session, &format!("say:{first}; tool:echo {PRINTED}; say:{second}"));
-    let mut ui = open(cx, &stack);
-    settled(&mut ui, &stack, &session);
+    let said = vec![reply(first), Said::Command(ECHO, PRINTED), reply(second)];
+    let (_hub, mut ui, _) = open_on_a_chat(cx, vec![("Check the points.".to_owned(), said)]);
     ui.click_labelled(COMMAND_LINE, 0);
-    let window = settled(&mut ui, &stack, &session);
+    let window = settled_at_its_last_row(&mut ui);
     let (from, to) = (on_the_reply_saying(&ui, window, first), on_the_reply_saying(&ui, window, second));
 
     let (button, held) = (MouseButton::Left, Some(MouseButton::Left));
@@ -144,11 +137,8 @@ fn a_drag_from_one_reply_into_the_next_selects_the_call_between_too(cx: &mut Tes
 /// A press on the scrollbar scrolls, and leaves what's selected as it was, so the far end of it can be scrolled to.
 #[gpui_kit::test]
 fn a_press_on_the_scrollbar_keeps_what_s_selected(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let session = stack.chat_in_a_new_workspace();
-    stack.run(&session, &format!("prose:12:1; prose:12:2; say:{LAST}"));
-    let mut ui = open(cx, &stack);
-    let window = settled(&mut ui, &stack, &session);
+    let said = vec![prose(12, 1), prose(12, 2), reply(LAST)];
+    let (_hub, mut ui, window) = open_on_a_chat(cx, vec![("Keep the ledger.".to_owned(), said)]);
     let on_it = on_the_reply_saying(&ui, window, LAST);
     click(&mut ui, on_it, 2);
     let word = copy(&mut ui);
@@ -163,12 +153,9 @@ fn a_press_on_the_scrollbar_keeps_what_s_selected(cx: &mut TestAppContext) {
 /// focus, all of the words the chat has, the person's and the agent's, in order.
 #[gpui_kit::test]
 fn a_word_a_paragraph_or_everything_written_can_be_selected(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let session = stack.chat_in_a_new_workspace();
-    let prompt = format!("say:The first reply; prose:3:1; say:{LAST}");
-    stack.run(&session, &prompt);
-    let mut ui = open(cx, &stack);
-    let window = settled(&mut ui, &stack, &session);
+    let prompt = "Keep the ledger.";
+    let said = vec![reply("The first reply"), prose(3, 1), reply(LAST)];
+    let (_hub, mut ui, window) = open_on_a_chat(cx, vec![(prompt.to_owned(), said)]);
     let on_it = on_the_reply_saying(&ui, window, LAST);
 
     click(&mut ui, on_it, 2);
@@ -187,12 +174,9 @@ fn a_word_a_paragraph_or_everything_written_can_be_selected(cx: &mut TestAppCont
 /// A shift-click selects from where a press started what's selected to where it's clicked.
 #[gpui_kit::test]
 fn a_shift_click_selects_from_where_a_press_was_to_it(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let session = stack.chat_in_a_new_workspace();
     let (first, second) = ("Signal boxes keep ledgers of every train.", "The lever frame holds each route clear.");
-    stack.run(&session, &format!("say:{first}; prose:3:1; say:{second}"));
-    let mut ui = open(cx, &stack);
-    let window = settled(&mut ui, &stack, &session);
+    let said = vec![reply(first), prose(3, 1), reply(second)];
+    let (_hub, mut ui, window) = open_on_a_chat(cx, vec![("Keep the ledger.".to_owned(), said)]);
     let (from, to) = (on_the_reply_saying(&ui, window, first), on_the_reply_saying(&ui, window, second));
 
     click(&mut ui, from, 1);
@@ -207,17 +191,17 @@ fn a_shift_click_selects_from_where_a_press_was_to_it(cx: &mut TestAppContext) {
     assert!(extended.split("\n\n").count() > 2, "with what's between");
 }
 
-/// A click on a link opens it, but a drag that selects some of a reply and ends on a link doesn't.
+/// A click on a link opens it, but a drag that selects some of a reply and ends on a link doesn't. A link that names a
+/// definition elsewhere in the text goes where the definition says, as in the kit's text view.
 #[gpui_kit::test]
-fn a_drag_that_ends_on_a_link_selects_rather_than_opening_it(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let session = stack.chat_in_a_new_workspace();
-    let reply = "[Signal boxes](https://example.com/boxes) keep ledgers, and the lever frame holds each route clear.";
-    stack.run(&session, &format!("say:{reply}"));
-    let mut ui = open(cx, &stack);
-    let window = settled(&mut ui, &stack, &session);
-    let on_the_link = on_the_reply_saying(&ui, window, reply);
+fn a_click_opens_a_link_where_it_or_its_definition_says_but_a_drag_that_ends_on_one_selects(cx: &mut TestAppContext) {
+    let linked = "[Signal boxes](https://example.com/boxes) keep ledgers, and the lever frame holds each route clear.";
+    let by_reference = "[The lever frame][frame] holds each route.\n\n[frame]: https://example.com/frame";
+    let said = vec![reply(linked), reply(by_reference)];
+    let (_hub, mut ui, window) = open_on_a_chat(cx, vec![("Keep the ledger.".to_owned(), said)]);
+    let on_the_link = on_the_reply_saying(&ui, window, linked);
     let along = point(on_the_link.x + px(200.), on_the_link.y);
+    let on_the_reference = on_the_reply_saying(&ui, window, by_reference);
 
     let (button, held) = (MouseButton::Left, Some(MouseButton::Left));
     press(&mut ui, MouseDownEvent { button, position: along, click_count: 1, ..Default::default() });
@@ -227,36 +211,18 @@ fn a_drag_that_ends_on_a_link_selects_rather_than_opening_it(cx: &mut TestAppCon
     let selected = copy(&mut ui);
     click(&mut ui, on_the_link, 1);
     let clicked = ui.cx.opened_url();
+    click(&mut ui, on_the_reference, 1);
+    let referred = ui.cx.opened_url();
 
     assert_eq!(dragged, None, "the drag opened nothing");
     assert!(selected.contains("boxes keep"), "it selected from the link on: {selected:?}");
     assert_eq!(clicked.as_deref(), Some("https://example.com/boxes"), "a click opens it");
-}
-
-/// A link that names a definition elsewhere in the text goes where the definition says, as in the kit's text view.
-#[gpui_kit::test]
-fn a_reference_link_opens_where_its_definition_says(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let session = stack.chat_in_a_new_workspace();
-    let reply = "[Signal boxes][boxes] keep ledgers.\n\n[boxes]: https://example.com/boxes";
-    stack.run(&session, &format!("say:{reply}"));
-    let mut ui = open(cx, &stack);
-    let window = settled(&mut ui, &stack, &session);
-
-    let on_the_link = on_the_reply_saying(&ui, window, reply);
-
-    click(&mut ui, on_the_link, 1);
-
-    assert_eq!(ui.cx.opened_url().as_deref(), Some("https://example.com/boxes"));
+    assert_eq!(referred.as_deref(), Some("https://example.com/frame"), "and one by reference, its definition's");
 }
 
 #[gpui_kit::test]
 fn what_s_selected_in_a_chat_copies_from_the_composer_while_nothing_is_selected_there(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let session = stack.chat_in_a_new_workspace();
-    stack.run(&session, &format!("say:{LAST}"));
-    let mut ui = open(cx, &stack);
-    let window = settled(&mut ui, &stack, &session);
+    let (_hub, mut ui, window) = open_on_a_chat(cx, vec![("Keep the ledger.".to_owned(), vec![reply(LAST)])]);
     let on_it = on_the_reply_saying(&ui, window, LAST);
 
     click(&mut ui, on_it, 3);

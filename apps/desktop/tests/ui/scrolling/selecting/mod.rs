@@ -4,9 +4,10 @@
 
 use crate::tools::COMMAND_LINE;
 
-mod calls;
+mod areas;
 mod end;
 mod kinds;
+mod made_up;
 mod tab;
 
 mod dragging;
