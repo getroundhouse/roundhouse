@@ -36,9 +36,19 @@ use crate::worker_link::WorkerLink;
 /// A hub as [`hub_in`](super::tests::hub_in) makes one, which gives each workspace it makes a stand-in for its worker,
 /// and what those are asked. Each answers as [`answer`] says.
 pub(super) fn hub_with_stand_in_workers(dir: &Path) -> (Arc<Hub>, Arc<Asked>) {
-    let asked = Arc::new(Asked::default());
+    hub_whose_stand_ins_answer_first(dir, |_| None)
+}
+
+/// The same, whose every stand-in answers what `first` answers, from the moment its workspace's instance is made, and
+/// everything else as [`answer`] says, as [`answering_first`] has a workspace's do once it's made. So a test can have
+/// git have a name, or a worktree not be made.
+pub(super) fn hub_whose_stand_ins_answer_first(
+    dir: &Path,
+    first: impl Fn(&WorkerRequest) -> Option<Result<WorkerResponse, ApiError>> + Send + Sync + 'static,
+) -> (Arc<Hub>, Arc<Asked>) {
+    let (asked, first) = (Arc::new(Asked::default()), Arc::new(first));
     let hub = Arc::new_cyclic(|hub| {
-        let provider = WithWorkers { hub: hub.clone(), asked: asked.clone() };
+        let provider = WithWorkers { hub: hub.clone(), asked: asked.clone(), first };
         hub_provided_by(dir, Arc::new(provider))
     });
     (hub, asked)
@@ -102,7 +112,11 @@ fn answer(request: WorkerRequest) -> WorkerResponse {
 struct WithWorkers {
     hub: Weak<Hub>,
     asked: Arc<Asked>,
+    first: Arc<First>,
 }
+
+/// What a test has a stand-in answer before anything else, if it's what the stand-in is asked.
+type First = dyn Fn(&WorkerRequest) -> Option<Result<WorkerResponse, ApiError>> + Send + Sync;
 
 #[async_trait]
 impl Provider for WithWorkers {
@@ -130,10 +144,10 @@ impl Provider for WithWorkers {
         let workspaces = hub.store.list_workspaces(true).expect("the store lists its workspaces");
         let its = |workspace: &Workspace| workspace.instance_id == *instance_id;
         let workspace = workspaces.into_iter().find(its).expect("a hub records a workspace before its instance");
-        let asked = self.asked.clone();
+        let (asked, first) = (self.asked.clone(), self.first.clone());
         let link = WorkerLink::answering(move |request| {
             asked.0.lock().push(request.clone());
-            Some(Ok(answer(request)))
+            Some(first(&request).unwrap_or_else(|| Ok(answer(request))))
         });
         hub.workers.lock().insert(workspace.id, link);
         Ok(())

@@ -4,121 +4,136 @@
 
 use std::path::PathBuf;
 
-use client_core::ClientError;
 use client_core::calls::typed::output as said;
+use client_core::{Client, ClientError};
 use protocol::capability::calls::{CallKind, CallOutput};
 use protocol::client::ErrorCode;
-use protocol::event::{ApprovalDecision, ApprovalOutcome, Asking, ContentBlock, Denied, EventBody};
-use protocol::model::SessionStatus;
+use protocol::event::{ApprovalDecision, ApprovalOutcome, Asking, ContentBlock, Denied, EventBody, SessionEvent};
+use protocol::model::{ApprovalId, SessionId, SessionStatus};
 
-use crate::support::{Stack, wait_for_approval, wait_for_status, wait_for_turn_end};
+use crate::support::{Stack, read_all, wait_for_approval, wait_for_status, wait_for_turn_end};
 
+fn allow() -> ApprovalDecision {
+    ApprovalDecision::Allow { updated_input: None, updated_permissions: None }
+}
+
+fn deny(said: Option<&str>) -> ApprovalDecision {
+    ApprovalDecision::Deny { message: said.map(str::to_string), interrupt: false }
+}
+
+/// A chat in plan mode, which asks before each command, and the worktree its commands run in.
+struct Planning {
+    stack: Stack,
+    client: Client,
+    chat: SessionId,
+    worktree: PathBuf,
+}
+
+impl Planning {
+    fn start() -> Self {
+        let stack = Stack::start();
+        let client = stack.client();
+        let (workspace, chat) = stack.workspace_planning(&client);
+        let worktree = PathBuf::from(workspace.path.unwrap());
+        Self { stack, client, chat: chat.id, worktree }
+    }
+
+    /// Has the agent run `command` in the chat's `turn`th turn, answers the approval it asks for as `answer` says,
+    /// through `client`, and returns the approval and what that turn recorded.
+    fn run(
+        &self,
+        client: &Client,
+        turn: usize,
+        command: &str,
+        answer: ApprovalDecision,
+    ) -> (ApprovalId, Vec<SessionEvent>) {
+        let before = read_all(client, &self.chat).len();
+        client.session_prompt(&self.chat, &format!("tool:{command}"), None).unwrap();
+        let approval = wait_for_approval(client, &self.chat);
+        client.session_approve(&self.chat, &approval, answer).unwrap();
+        (approval, wait_for_turn_end(client, &self.chat, turn)[before..].to_vec())
+    }
+}
+
+/// Each way an approval is answered, one after another in one chat in plan mode, each the answer to a request of its
+/// own, and what each leaves on the record.
 #[test]
-fn an_approval_can_be_answered_by_a_different_client_after_a_restart() {
-    let stack = Stack::start();
-    let client = stack.client();
-    let (workspace, session) = stack.workspace_planning(&client);
-    client.session_prompt(&session.id, "tool:echo approved > approved.txt", None).unwrap();
-    let approval_id = wait_for_approval(&client, &session.id);
-    wait_for_status(&client, &session.id, SessionStatus::WaitingApproval);
-    let worktree = PathBuf::from(workspace.path.unwrap());
+fn an_approval_is_answered_and_recorded_as_it_was_given_however_it_was_given() {
+    let chat = Planning::start();
+
+    allowed_by_a_different_client_once(&chat);
+    denied_with_why_and_without(&chat);
+    edited_and_then_allowed(&chat);
+    a_failed_command_recorded_as_one(&chat);
+}
+
+/// It doesn't run before it's approved, and a client other than the one that saw it asked, which has gone since, can
+/// answer it, once: answering twice is an error rather than sending the agent a second response.
+fn allowed_by_a_different_client_once(chat: &Planning) {
+    let Planning { stack, chat: id, worktree, .. } = chat;
+    let first = stack.client();
+    first.session_prompt(id, "tool:echo approved > approved.txt", None).unwrap();
+    let approval = wait_for_approval(&first, id);
+    wait_for_status(&first, id, SessionStatus::WaitingApproval);
     assert!(!worktree.join("approved.txt").exists(), "must not run before it's approved");
-    drop(client);
+    drop(first);
 
     let other = stack.client();
-    other
-        .session_approve(
-            &session.id,
-            &approval_id,
-            ApprovalDecision::Allow { updated_input: None, updated_permissions: None },
-        )
-        .unwrap();
-    let events = wait_for_turn_end(&other, &session.id, 1);
-    assert!(worktree.join("approved.txt").exists());
-    assert!(events.iter().any(|e| matches!(
-        &e.body,
-        EventBody::ApprovalResolved { approval_id: id, outcome: ApprovalOutcome::Allowed, .. } if *id == approval_id
-    )));
+    other.session_approve(id, &approval, allow()).unwrap();
+    let events = wait_for_turn_end(&other, id, 1);
+    let twice = other.session_approve(id, &approval, allow());
 
-    // Answering twice is an error rather than sending the agent a second response.
-    let err = other
-        .session_approve(
-            &session.id,
-            &approval_id,
-            ApprovalDecision::Allow { updated_input: None, updated_permissions: None },
-        )
-        .unwrap_err();
-    assert!(matches!(err, ClientError::Api(e) if e.code == ErrorCode::Conflict));
-}
-
-#[test]
-fn a_denied_tool_does_not_run_and_the_agent_hears_why_and_its_result_says_it_was_denied() {
-    let stack = Stack::start();
-    let client = stack.client();
-    let (workspace, session) = stack.workspace_planning(&client);
-    let worktree = PathBuf::from(workspace.path.unwrap());
-    let deny = |said: Option<&str>| ApprovalDecision::Deny { message: said.map(str::to_string), interrupt: false };
-    // Each result to a call, by what it told the agent, with what it says of a denial.
-    let results = |events: &[protocol::event::SessionEvent]| -> Vec<(String, Option<Denied>)> {
-        let blocks = events.iter().flat_map(|e| match &e.body {
-            EventBody::AgentUser { blocks, .. } => blocks.as_slice(),
-            _ => &[],
-        });
-        let result = |block: &ContentBlock| match block {
-            ContentBlock::CallResult { output, is_error: true, denied, .. } => Some((said(output), denied.clone())),
-            _ => None,
-        };
-        blocks.filter_map(result).collect()
+    assert!(worktree.join("approved.txt").exists(), "it ran once the other client allowed it");
+    let allowed = |body: &EventBody| {
+        let EventBody::ApprovalResolved { approval_id, outcome, .. } = body else { return false };
+        (approval_id, *outcome) == (&approval, ApprovalOutcome::Allowed)
     };
-
-    client.session_prompt(&session.id, "tool:echo nope > nope.txt", None).unwrap();
-    let approval_id = wait_for_approval(&client, &session.id);
-    client.session_approve(&session.id, &approval_id, deny(Some("not that"))).unwrap();
-    let events = wait_for_turn_end(&client, &session.id, 1);
-    assert!(!worktree.join("nope.txt").exists());
-    let said = Denied { said: Some("not that".into()) };
-    assert_eq!(results(&events), [("not that".to_string(), Some(said))], "the agent is told, and it says who said");
-
-    // With nothing said, the agent is told in the adapter's words, which aren't the person's.
-    client.session_prompt(&session.id, "tool:echo nope > nope.txt", None).unwrap();
-    let approval_id = wait_for_approval(&client, &session.id);
-    client.session_approve(&session.id, &approval_id, deny(None)).unwrap();
-    let events = wait_for_turn_end(&client, &session.id, 2);
-    let (_, denied) = results(&events).pop().unwrap();
-    assert_eq!(denied, Some(Denied { said: None }));
+    assert!(events.iter().any(|e| allowed(&e.body)), "recorded as allowed");
+    assert!(matches!(&twice, Err(ClientError::Api(e)) if e.code == ErrorCode::Conflict), "answered twice: {twice:?}");
 }
 
-#[test]
-fn an_approved_edit_to_a_tools_input_is_what_runs() {
-    let stack = Stack::start();
-    let client = stack.client();
-    let (workspace, session) = stack.workspace_planning(&client);
-    client.session_prompt(&session.id, "tool:echo original > out.txt", None).unwrap();
-    let approval_id = wait_for_approval(&client, &session.id);
-    let decision = ApprovalDecision::Allow {
+/// Each result to a call, by what it told the agent, with what it says of a denial.
+fn denials(events: &[SessionEvent]) -> Vec<(String, Option<Denied>)> {
+    let blocks = events.iter().flat_map(|e| match &e.body {
+        EventBody::AgentUser { blocks, .. } => blocks.as_slice(),
+        _ => &[],
+    });
+    let result = |block: &ContentBlock| match block {
+        ContentBlock::CallResult { output, is_error: true, denied, .. } => Some((said(output), denied.clone())),
+        _ => None,
+    };
+    blocks.filter_map(result).collect()
+}
+
+/// A denied tool doesn't run, and the agent hears why, and its result says it was denied, and who said why. With
+/// nothing said, the agent is told in the adapter's words, which aren't the person's.
+fn denied_with_why_and_without(chat: &Planning) {
+    let (_, events) = chat.run(&chat.client, 2, "echo nope > nope.txt", deny(Some("not that")));
+    assert!(!chat.worktree.join("nope.txt").exists(), "a denied tool ran");
+    let said = Denied { said: Some("not that".into()) };
+    assert_eq!(denials(&events), [("not that".to_string(), Some(said))], "the agent is told, and it says who said");
+
+    let (_, events) = chat.run(&chat.client, 3, "echo nope > nope.txt", deny(None));
+    let (_, denied) = denials(&events).pop().expect("the denied call's result");
+    assert_eq!(denied, Some(Denied { said: None }), "denied with nothing said");
+}
+
+/// What runs is the input as the person edited it, rather than as the agent asked.
+fn edited_and_then_allowed(chat: &Planning) {
+    let edited = ApprovalDecision::Allow {
         updated_input: Some(serde_json::json!({"command": "echo edited > out.txt"})),
         updated_permissions: None,
     };
-    client.session_approve(&session.id, &approval_id, decision).unwrap();
-    wait_for_turn_end(&client, &session.id, 1);
-    let out = std::fs::read_to_string(PathBuf::from(workspace.path.unwrap()).join("out.txt")).unwrap();
-    assert_eq!(out, "edited\n");
+    chat.run(&chat.client, 4, "echo original > out.txt", edited);
+    let out = std::fs::read_to_string(chat.worktree.join("out.txt")).unwrap();
+    assert_eq!(out, "edited\n", "the edited input ran");
 }
 
 /// So a client draws each from what's recorded, with none of the agent's names for its tools: the request to run a
 /// command, the call, and what came back all say it's a command, and what came back says how the command exited
 /// apart from what it printed.
-#[test]
-fn a_failed_command_is_recorded_as_one_from_its_request_to_how_it_exited() {
-    let stack = Stack::start();
-    let client = stack.client();
-    let (_, session) = stack.workspace_planning(&client);
-    client.session_prompt(&session.id, "tool:echo kinds && exit 3", None).unwrap();
-    let approval_id = wait_for_approval(&client, &session.id);
-    let allow = ApprovalDecision::Allow { updated_input: None, updated_permissions: None };
-    client.session_approve(&session.id, &approval_id, allow).unwrap();
-
-    let events = wait_for_turn_end(&client, &session.id, 1);
+fn a_failed_command_recorded_as_one(chat: &Planning) {
+    let (_, events) = chat.run(&chat.client, 5, "echo kinds && exit 3", allow());
 
     let command = Some(CallKind::Command);
     let asked: Vec<_> = events
@@ -128,7 +143,7 @@ fn a_failed_command_is_recorded_as_one_from_its_request_to_how_it_exited() {
             _ => None,
         })
         .collect();
-    assert_eq!(asked, std::slice::from_ref(&command));
+    assert_eq!(asked, std::slice::from_ref(&command), "the request says it's a command");
     let blocks: Vec<_> = events
         .iter()
         .flat_map(|event| match &event.body {
@@ -144,7 +159,7 @@ fn a_failed_command_is_recorded_as_one_from_its_request_to_how_it_exited() {
     else {
         panic!("the call, then what it printed: {blocks:?}")
     };
-    assert_eq!(Some(made.kind()), command);
+    assert_eq!(Some(made.kind()), command, "the call says it's a command");
     let ended = (*is_error, printed.exit_code, printed.output.as_str());
     assert_eq!(ended, (true, Some(3), "kinds\n"), "how it exited isn't in what it printed");
 }

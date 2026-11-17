@@ -4,10 +4,11 @@
 
 use std::collections::BTreeMap;
 
+use client_core::Client;
 use protocol::event::{ApprovalDecision, ApprovalOutcome, ContentBlock, EventBody, QuestionAnswer, SessionEvent};
-use protocol::model::{ApprovalId, SessionStatus};
+use protocol::model::{ApprovalId, SessionId, SessionStatus};
 
-use crate::support::{Stack, wait_for_approval, wait_for_turn_end};
+use crate::support::{Stack, read_all, wait_for_approval, wait_for_turn_end};
 
 /// Whether a tool's result among `events` says `said`.
 fn told(events: &[SessionEvent], said: &str) -> bool {
@@ -35,72 +36,58 @@ fn recorded(events: &[SessionEvent], approval: &ApprovalId) -> Option<Recorded> 
     })
 }
 
+/// Has the agent ask what `asking` says, in the chat's `turn`th turn, answers it as `answer` says, and returns the
+/// question, and what that turn recorded.
+fn answered(
+    client: &Client,
+    chat: &SessionId,
+    turn: usize,
+    asking: &str,
+    answer: ApprovalDecision,
+) -> (ApprovalId, Vec<SessionEvent>) {
+    let before = read_all(client, chat).len();
+    client.session_prompt(chat, &format!("ask:{asking}"), None).unwrap();
+    let approval = wait_for_approval(client, chat);
+    client.session_approve(chat, &approval, answer).unwrap();
+    let events = wait_for_turn_end(client, chat, turn);
+    (approval, events[before..].to_vec())
+}
+
+/// Each way a question is answered, one after another in one chat, each from a question of its own: what the agent is
+/// told, and what the hub keeps on the record, as it was given, so the transcript can say what was decided, whatever
+/// the agent was told.
 #[test]
-fn an_answer_gets_back_to_the_agent_in_every_mode() {
+fn an_answer_gets_back_to_the_agent_and_is_kept_as_it_was_given_however_it_was_given() {
     let stack = Stack::start();
     let client = stack.client();
     // It asks even with full access, because only a person can answer it.
     let (_, session) = stack.workspace(&client);
-    client.session_prompt(&session.id, "ask:Red or blue?=Red/Blue", None).unwrap();
-    let approval = wait_for_approval(&client, &session.id);
+    let both = "*Which days?=Monday/Friday|Why?=Because";
 
-    let answers = vec![QuestionAnswer { picked: vec![1], typed: None }];
-    client.session_approve(&session.id, &approval, ApprovalDecision::AnswerByPosition { answers }).unwrap();
-
-    let events = wait_for_turn_end(&client, &session.id, 1);
-    assert!(told(&events, r#""Red or blue?"=Blue"#), "{events:?}");
+    let picked = vec![QuestionAnswer { picked: vec![1], typed: None }];
+    let (_, events) = answered(&client, &session.id, 1, "Red or blue?=Red/Blue", by_position(picked));
+    assert!(told(&events, r#""Red or blue?"=Blue"#), "by position, in full access: {events:?}");
     assert_eq!(client.session_get(&session.id).unwrap().status, SessionStatus::Idle);
-}
-
-/// So the transcript can say what was decided, whatever the agent was told.
-#[test]
-fn what_was_answered_is_kept_on_the_record_as_it_was_given() {
-    let stack = Stack::start();
-    let client = stack.client();
-    let (_, session) = stack.workspace(&client);
-    client.session_prompt(&session.id, "ask:*Which days?=Monday/Friday|Why?=Because", None).unwrap();
-    let approval = wait_for_approval(&client, &session.id);
 
     let answers = vec![QuestionAnswer { picked: vec![0, 1], typed: Some("Sunday".into()) }, QuestionAnswer::default()];
-    let decision = ApprovalDecision::AnswerByPosition { answers: answers.clone() };
-    client.session_approve(&session.id, &approval, decision).unwrap();
-
-    let events = wait_for_turn_end(&client, &session.id, 1);
-    assert_eq!(recorded(&events, &approval), Some((None, Some(answers))), "{events:?}");
-    assert!(told(&events, r#""Which days?"=Monday, Friday, Sunday"#), "{events:?}");
+    let (approval, events) = answered(&client, &session.id, 2, both, by_position(answers.clone()));
+    assert_eq!(recorded(&events, &approval), Some((None, Some(answers))), "kept by position: {events:?}");
+    assert!(told(&events, r#""Which days?"=Monday, Friday, Sunday"#), "picked and typed: {events:?}");
     assert!(!told(&events, r#""Why?"="#), "one left without an answer is left out");
-}
 
-/// As a client from before answers went by position sends them.
-#[test]
-fn answers_by_the_questions_text_still_get_to_the_agent_and_are_kept() {
-    let stack = Stack::start();
-    let client = stack.client();
-    let (_, session) = stack.workspace(&client);
-    client.session_prompt(&session.id, "ask:*Which days?=Monday/Friday|Why?=Because", None).unwrap();
-    let approval = wait_for_approval(&client, &session.id);
-
+    // As a client from before answers went by position sends them.
     let answers: BTreeMap<String, String> = [("Which days?".to_string(), "Monday, Friday".to_string())].into();
-    let decision = ApprovalDecision::AnswerByText { answers: answers.clone() };
-    client.session_approve(&session.id, &approval, decision).unwrap();
+    let by_text = ApprovalDecision::AnswerByText { answers: answers.clone() };
+    let (approval, events) = answered(&client, &session.id, 3, both, by_text);
+    assert_eq!(recorded(&events, &approval), Some((Some(answers), None)), "kept by text: {events:?}");
+    assert!(told(&events, r#""Which days?"=Monday, Friday"#), "by text: {events:?}");
 
-    let events = wait_for_turn_end(&client, &session.id, 1);
-    assert_eq!(recorded(&events, &approval), Some((Some(answers), None)), "{events:?}");
-    assert!(told(&events, r#""Which days?"=Monday, Friday"#), "{events:?}");
+    // The words are the adapter's, since they're addressed to the agent.
+    let skipped = ApprovalDecision::Deny { message: None, interrupt: false };
+    let (_, events) = answered(&client, &session.id, 4, "Red or blue?=Red/Blue", skipped);
+    assert!(told(&events, "The user chose not to answer."), "left without words: {events:?}");
 }
 
-/// The words are the adapter's, since they're addressed to the agent.
-#[test]
-fn a_question_left_without_words_tells_the_agent_it_wasnt_answered() {
-    let stack = Stack::start();
-    let client = stack.client();
-    let (_, session) = stack.workspace(&client);
-    client.session_prompt(&session.id, "ask:Red or blue?=Red/Blue", None).unwrap();
-    let approval = wait_for_approval(&client, &session.id);
-
-    let skipped = ApprovalDecision::Deny { message: None, interrupt: false };
-    client.session_approve(&session.id, &approval, skipped).unwrap();
-
-    let events = wait_for_turn_end(&client, &session.id, 1);
-    assert!(told(&events, "The user chose not to answer."), "{events:?}");
+fn by_position(answers: Vec<QuestionAnswer>) -> ApprovalDecision {
+    ApprovalDecision::AnswerByPosition { answers }
 }

@@ -1,4 +1,5 @@
-//! A workspace's setup script.
+//! A workspace's setup script, which a real worker runs and stops. What the hub records of it, and what waits on it,
+//! are the hub's own tests, in its `hub/workspaces`.
 
 #![cfg(test)]
 
@@ -7,11 +8,10 @@ use std::process::Command;
 
 use client_core::ClientError;
 use protocol::client::ErrorCode;
-use protocol::event::{ContentBlock, EventBody};
-use protocol::model::{PORTS_PER_WORKSPACE, Seq};
+use protocol::model::PORTS_PER_WORKSPACE;
 
 use crate::support::{
-    Gate, Stack, assistant_text, commit_settings, git, is_alive, parent_of, patient_with_workers, read_all, signal,
+    Gate, Stack, assistant_text, commit_settings, git, is_alive, parent_of, patient_with_workers, signal,
     wait_for_setup, wait_for_turn_end, wait_until,
 };
 
@@ -42,48 +42,6 @@ echo "$CONDUCTOR_WORKSPACE_NAME $CONDUCTOR_PORT $CONDUCTOR_ROOT_PATH" > setup-ra
     assert!(ran.trim_end().ends_with("repo"), "{ran}");
     let log = client.workspace_setup_log(&workspace.id).unwrap();
     assert!(log.contains("Copied .env.local") && log.contains("found-env"), "{log}");
-}
-
-#[test]
-fn a_prompt_sent_during_setup_is_recorded_at_once_and_delivered_when_it_finishes() {
-    let stack = Stack::start();
-    let setting_up = Gate::new(&stack, "setting-up");
-    commit_settings(&stack, &format!("[scripts]\nsetup = \"{}; touch ready.txt\"\n", setting_up.shell_wait()));
-    let client = stack.client();
-    let (_, session) = stack.workspace(&client);
-    let (seq, _) = client.session_prompt(&session.id, "tool:test -f ready.txt && echo was-ready", None).unwrap();
-    assert_eq!(seq, Seq::new(1));
-    assert!(!read_all(&client, &session.id).iter().any(|e| matches!(e.body, EventBody::AgentStarted { .. })));
-    setting_up.open();
-    let events = wait_for_turn_end(&client, &session.id, 1);
-    let saw_it = events.iter().any(|e| match &e.body {
-        EventBody::AgentUser { blocks, .. } => {
-            blocks.iter().any(|b| matches!(b, ContentBlock::CallResult { output, .. } if client_core::calls::typed::output(output).contains("was-ready")))
-        }
-        _ => false,
-    });
-    assert!(saw_it, "{events:#?}");
-}
-
-#[test]
-fn a_failed_setup_warns_once_and_leaves_the_workspace_usable() {
-    let stack = Stack::start();
-    commit_settings(&stack, "[scripts]\nsetup = \"echo nope; exit 7\"\n");
-    let client = stack.client();
-    let (workspace, session) = stack.workspace(&client);
-    assert_eq!(wait_for_setup(&client, &workspace.id), protocol::model::SetupStatus::Failed { code: Some(7) });
-    assert!(client.workspace_setup_log(&workspace.id).unwrap().contains("nope"));
-
-    client.session_prompt(&session.id, "say:one", None).unwrap();
-    wait_for_turn_end(&client, &session.id, 1);
-    client.session_prompt(&session.id, "say:two", None).unwrap();
-    let events = wait_for_turn_end(&client, &session.id, 2);
-    assert!(assistant_text(&events).ends_with("two"));
-    let warnings = events
-        .iter()
-        .filter(|e| matches!(&e.body, EventBody::Notice { message, .. } if message.contains("setup")))
-        .count();
-    assert_eq!(warnings, 1);
 }
 
 /// The app won't replace a hub that says this, since restarting would cut the script off.
@@ -225,26 +183,6 @@ fn archiving_runs_the_archive_script_and_a_failure_blocks_unless_forced() {
 
     client.workspace_archive(&workspace.id, true).unwrap();
     assert!(!PathBuf::from(workspace.path.unwrap()).exists());
-}
-
-#[test]
-fn restoring_runs_setup_again_because_what_it_made_went_with_the_worktree() {
-    let stack = Stack::start();
-    std::fs::write(stack.repo().join(".gitignore"), "made.txt\n").unwrap();
-    git(&stack.repo(), &["add", "."]);
-    git(&stack.repo(), &["commit", "-qm", "ignore"]);
-    commit_settings(&stack, "[scripts]\nsetup = \"touch made.txt\"\n");
-    let client = stack.client();
-    let (workspace, _) = stack.workspace(&client);
-    let worktree = PathBuf::from(workspace.path.clone().unwrap());
-    wait_for_setup(&client, &workspace.id);
-    assert!(worktree.join("made.txt").exists());
-
-    client.workspace_archive(&workspace.id, false).unwrap();
-    assert!(!worktree.exists());
-    client.workspace_restore(&workspace.id).unwrap();
-    wait_until("setup to run again", || worktree.join("made.txt").exists());
-    assert_eq!(wait_for_setup(&client, &workspace.id), protocol::model::SetupStatus::Succeeded);
 }
 
 #[test]

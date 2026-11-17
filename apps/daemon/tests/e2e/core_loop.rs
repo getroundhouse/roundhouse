@@ -56,27 +56,6 @@ fn a_session_runs_in_a_real_worktree_with_the_worker_as_a_separate_process() {
 }
 
 #[test]
-fn prompts_are_recorded_before_anything_else_and_retries_are_recorded_once() {
-    let stack = Stack::start();
-    let client = stack.client();
-    let (_, session) = stack.workspace(&client);
-
-    let (first, duplicate) = client.session_prompt(&session.id, "say:once", Some("msg-1".into())).unwrap();
-    assert!(!duplicate);
-    assert_eq!(first, Seq::new(1));
-    let (again, duplicate) = client.session_prompt(&session.id, "say:once", Some("msg-1".into())).unwrap();
-    assert!(duplicate);
-    assert_eq!(again, first);
-
-    let events = wait_for_turn_end(&client, &session.id, 1);
-    let prompts = events.iter().filter(|e| matches!(e.body, EventBody::UserPrompt { .. })).count();
-    assert_eq!(prompts, 1);
-    assert_eq!(assistant_text(&events), "once");
-    let ended = events.iter().filter(|e| matches!(e.body, EventBody::TurnEnded { .. })).count();
-    assert_eq!(ended, 1, "the agent must only receive it once");
-}
-
-#[test]
 fn a_prompt_sent_mid_turn_folds_in_and_the_session_stays_running_until_it_is_done() {
     let stack = Stack::start();
     let client = stack.client();
@@ -163,44 +142,4 @@ fn raw_agent_lines_are_kept_so_the_log_can_be_rebuilt() {
     assert_eq!(raw["message"]["content"][0]["text"], "hello");
     // The prompt was the hub's own record, so it has no raw line.
     assert!(events[0].raw.is_none());
-}
-
-#[test]
-fn a_session_says_when_its_newest_turn_started() {
-    let stack = Stack::start();
-    let client = stack.client();
-    let (_, session) = stack.workspace(&client);
-
-    let (seq, _) = client.session_prompt(&session.id, "say:hello", None).unwrap();
-    let events = wait_for_turn_end(&client, &session.id, 1);
-
-    let prompt = events.iter().find(|e| e.seq == seq).unwrap();
-    assert_eq!(client.session_get(&session.id).unwrap().turn_started_at_ms, Some(prompt.ts_ms));
-}
-
-#[test]
-fn each_turn_ends_saying_when_it_started() {
-    let stack = Stack::start();
-    let client = stack.client();
-    let (_, session) = stack.workspace(&client);
-
-    let mut prompts = Vec::new();
-    for turn in 1..=2 {
-        let (seq, _) = client.session_prompt(&session.id, "say:hello", None).unwrap();
-        prompts.push(seq);
-        wait_for_turn_end(&client, &session.id, turn);
-    }
-    let events = read_all(&client, &session.id);
-
-    let started: Vec<Option<i64>> =
-        prompts.iter().map(|seq| events.iter().find(|e| e.seq == *seq).map(|prompt| prompt.ts_ms)).collect();
-    let ends: Vec<Option<i64>> = events
-        .iter()
-        .filter_map(|e| match e.body {
-            EventBody::TurnEnded { started_at_ms, .. } => Some(started_at_ms),
-            _ => None,
-        })
-        .collect();
-    assert_ne!(started[0], started[1], "the turns have to start apart to tell them apart");
-    assert_eq!(ends, started);
 }

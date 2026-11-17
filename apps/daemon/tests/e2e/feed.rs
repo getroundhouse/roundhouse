@@ -10,9 +10,7 @@ use protocol::model::{
     WorkspaceStatus,
 };
 
-use crate::support::{
-    Stack, next_notice, next_notice_of, session_of, wait_for_setup, wait_for_turn_end, wait_until, workspace_of,
-};
+use crate::support::{Stack, next_notice_of, session_of, wait_for_setup, wait_for_turn_end, wait_until, workspace_of};
 
 /// What a sidebar shows of the chat the feed last told of, its status and title, and the copy of its record that
 /// said so.
@@ -127,66 +125,6 @@ fn the_feed_reports_what_a_sidebar_shows() {
     assert_eq!((coming.id.as_str(), coming.status), (restored.id.as_str(), WorkspaceStatus::Restoring));
     let seen = workspace_of(sidebar.next_notice(&feed, "the restore"));
     assert_eq!((seen.id.as_str(), seen.status), (restored.id.as_str(), WorkspaceStatus::Ready));
-}
-
-/// So a client shows it on its way until it goes.
-#[test]
-fn a_workspace_that_cant_be_made_is_announced_on_its_way_and_then_removed() {
-    let stack = Stack::start();
-    let client = stack.client();
-    let feed = client.feed_subscribe().unwrap();
-    let repo = client.repo_add(stack.repo().to_str().unwrap()).unwrap();
-    next_notice_of(&feed, "the repo", shown);
-    std::fs::remove_dir_all(stack.repo()).unwrap();
-
-    client.workspace_create(&repo.id, Some("doomed".into()), None, None).unwrap_err();
-
-    let making = workspace_of(next_notice_of(&feed, "the workspace on its way", shown));
-    assert_eq!((making.name.as_str(), making.status), ("doomed", WorkspaceStatus::Creating));
-    let removal = next_notice_of(&feed, "its removal", shown);
-    let HubNotice::Removed { record, rev } = removal else {
-        panic!("waited for its removal, and the feed sent {removal:?}")
-    };
-    assert_eq!(record, RecordKey::Workspace { id: making.id });
-    assert!(rev > making.rev);
-    assert!(client.workspace_list(true).unwrap().is_empty());
-}
-
-#[test]
-fn a_list_and_the_feed_agree_on_which_copy_is_newer() {
-    let stack = Stack::start();
-    let client = stack.client();
-    let feed = client.feed_subscribe().unwrap();
-    let (workspace, session) = stack.workspace(&client);
-    let before = client.records_list().unwrap();
-
-    client.session_prompt(&session.id, "say:hello", None).unwrap();
-    wait_for_turn_end(&client, &session.id, 1);
-    let comment = client.comment_add(&workspace.id, "a.txt", DiffSide::New, 1, "Rename this", None).unwrap();
-    client.comment_delete(&comment.id).unwrap();
-    let mut notices = Vec::new();
-    while !matches!(notices.last(), Some(HubNotice::Removed { .. })) {
-        notices.push(next_notice(&feed, "the comment's removal"));
-    }
-    let after = client.records_list().unwrap();
-
-    // Each change since the first list is newer than it, and the second list is at least as new.
-    let newest_session = notices.iter().rev().find_map(|n| match n {
-        HubNotice::Session(s) if s.id == session.id && s.rev > before.rev => Some(s),
-        _ => None,
-    });
-    let listed = after.sessions.iter().find(|s| s.id == session.id).unwrap();
-    assert!(listed.rev >= newest_session.unwrap().rev);
-    assert_eq!(listed.status, SessionStatus::Idle);
-    let added = notices.iter().find_map(|n| match n {
-        HubNotice::Comment(c) if c.id == comment.id => Some(c),
-        _ => None,
-    });
-    assert_eq!(added, Some(&comment));
-    let Some(HubNotice::Removed { record, rev }) = notices.last() else { unreachable!() };
-    assert_eq!(record, &RecordKey::Comment { id: comment.id.clone() });
-    assert!(before.rev < comment.rev && comment.rev < *rev && *rev <= after.rev);
-    assert!(after.comments.is_empty());
 }
 
 #[test]

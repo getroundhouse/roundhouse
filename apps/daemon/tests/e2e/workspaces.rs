@@ -174,26 +174,6 @@ fn comments_are_kept_by_the_hub_and_survive_a_restart() {
     assert_eq!(client.comment_list(&workspace.id).unwrap(), vec![]);
 }
 
-#[test]
-fn a_comment_is_edited_in_place() {
-    let stack = Stack::start();
-    let client = stack.client();
-    let (workspace, _) = stack.workspace(&client);
-    let added = client.comment_add(&workspace.id, "a.txt", DiffSide::New, 1, "Rename this", None).unwrap();
-
-    let edited = client.comment_edit(&added.id, "Rename this to `count`").unwrap();
-
-    assert_eq!((&edited.id, edited.line, edited.text.as_str()), (&added.id, 1, "Rename this to `count`"));
-    assert!(edited.rev > added.rev, "so clients can tell which copy is newer");
-    assert_eq!(client.comment_list(&workspace.id).unwrap(), vec![edited.clone()]);
-    let empty = client.comment_edit(&added.id, "  ").unwrap_err();
-    assert!(matches!(empty, ClientError::Api(e) if e.code == ErrorCode::InvalidRequest));
-    client.comment_delete(&added.id).unwrap();
-    let gone = client.comment_edit(&added.id, "Too late").unwrap_err();
-    assert!(matches!(gone, ClientError::Api(e) if e.code == ErrorCode::NotFound));
-    assert!(client.comment_list(&workspace.id).unwrap().is_empty(), "editing doesn't bring it back");
-}
-
 /// So a client that loses the reply can send it again without making a second one. An example of each request that
 /// carries one: the hub's own tests, in its `hub/workspaces`, have that it holds however things have changed since.
 #[test]
@@ -230,34 +210,6 @@ fn a_workspace_with_no_pull_request_reports_none_rather_than_failing() {
     let client = stack.client();
     let (workspace, _) = stack.workspace(&client);
     assert_eq!(client.workspace_pull_request(&workspace.id).unwrap(), None);
-}
-
-#[test]
-fn workspace_names_are_checked_and_collisions_are_handled() {
-    let stack = Stack::start();
-    let client = stack.client();
-    let repo = client.repo_add(stack.repo().to_str().unwrap()).unwrap();
-
-    let err = client.workspace_create(&repo.id, Some("../escape".into()), None, None).unwrap_err();
-    assert!(matches!(err, ClientError::Api(e) if e.code == ErrorCode::InvalidRequest));
-
-    let first = client.workspace_create(&repo.id, Some("mine".into()), None, None).unwrap();
-    let err = client.workspace_create(&repo.id, Some("mine".into()), None, None).unwrap_err();
-    assert!(matches!(err, ClientError::Api(e) if e.code == ErrorCode::NameTaken));
-
-    // A branch that exists outside the hub also blocks a chosen name, and so does one in its folder, and either leaves
-    // nothing behind.
-    git(&stack.repo(), &["branch", "taken"]);
-    git(&stack.repo(), &["branch", "folder/fix"]);
-    for name in ["taken", "folder"] {
-        let err = client.workspace_create(&repo.id, Some(name.into()), None, None).unwrap_err();
-        assert!(matches!(err, ClientError::Api(e) if e.code == ErrorCode::NameTaken), "{name}");
-    }
-    assert_eq!(client.workspace_list(true).unwrap().len(), 1);
-    assert_eq!(client.workspace_list(true).unwrap()[0].id, first.id);
-
-    let generated = client.workspace_create(&repo.id, None, None, None).unwrap();
-    assert!(hub::workspace_names().contains(&generated.name.as_str()), "{}", generated.name);
 }
 
 /// A name git has a branch by, or a folder of branches, is refused before anything is made, so the workspace takes
