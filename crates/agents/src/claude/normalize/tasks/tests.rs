@@ -1,6 +1,6 @@
-use protocol::event::{AgentTask, EventBody, TaskKind};
+use protocol::event::{AgentTask, EventBody, TaskChange, TaskKind};
 use protocol::model::TaskId;
-use serde_json::json;
+use serde_json::{Value, json};
 
 use super::super::{Normalizer, Parsed, parse_line};
 
@@ -99,7 +99,7 @@ fn a_task_a_monitor_call_started_is_a_monitor_from_the_line_that_says_so() {
 
     normalizer.line(&call("Bash", "c1"));
     assert_eq!(kinds(normalizer.line(&listed(&["t1"])).parsed), [("t1".into(), command)]);
-    let other = Parsed::Event(EventBody::AgentOther { kind: "system/task_started".into(), subagent: None });
+    let other = Parsed::Event(EventBody::TaskChanged { task: "t1".into(), change: TaskChange::Started });
     assert_eq!(normalizer.line(&started("t1", "c1")).parsed, other, "a command's call changes nothing shown");
 
     normalizer.line(&call("Monitor", "c2"));
@@ -134,7 +134,7 @@ fn a_monitor_that_starts_before_its_listed_is_one_in_its_first_list() {
     let start = normalizer.line(&started.to_string()).parsed;
     let list = normalizer.line(&listed.to_string()).parsed;
 
-    assert_eq!(start, Parsed::Event(EventBody::AgentOther { kind: "system/task_started".into(), subagent: None }));
+    assert_eq!(start, Parsed::Event(EventBody::TaskChanged { task: "t1".into(), change: TaskChange::Started }));
     let Parsed::Event(EventBody::AgentTasks { tasks, .. }) = list else { panic!("{list:?}") };
     assert_eq!((tasks[0].kind, tasks[0].call.clone()), (TaskKind::Monitor, Some("c1".into())));
 }
@@ -165,7 +165,7 @@ fn a_monitor_call_that_was_answered_without_starting_a_task_starts_no_monitor() 
     normalizer.line(&listed.to_string());
     let start = normalizer.line(&started.to_string()).parsed;
 
-    assert_eq!(start, Parsed::Event(EventBody::AgentOther { kind: "system/task_started".into(), subagent: None }));
+    assert_eq!(start, Parsed::Event(EventBody::TaskChanged { task: "t1".into(), change: TaskChange::Started }));
     let again = normalizer.line(&listed.to_string()).parsed;
     let Parsed::Event(EventBody::AgentTasks { tasks, .. }) = again else { panic!("{again:?}") };
     assert_eq!(tasks[0].kind, TaskKind::Command);
@@ -264,6 +264,57 @@ fn a_task_that_ends_without_being_listed_is_forgotten() {
 
     let Parsed::Event(EventBody::AgentTasks { tasks, .. }) = list else { panic!("{list:?}") };
     assert_eq!(tasks[0].call, None);
+}
+
+/// The CLI makes a task of every command, in the foreground too, which its call and result say all of.
+#[test]
+fn a_command_in_the_foreground_says_nothing_until_its_moved_to_the_background() {
+    let mut normalizer = Normalizer::default();
+    let mut parsed = |line: Value| normalizer.line(&line.to_string()).parsed;
+    let started = |task: &str, in_background: bool| {
+        json!({"type":"system","subtype":"task_started","task_id":task,"tool_use_id":"c1","task_type":"local_bash",
+            "is_backgrounded":in_background})
+    };
+    let updated =
+        |task: &str, patch: Value| json!({"type":"system","subtype":"task_updated","task_id":task,"patch":patch});
+    let ended = |task: &str| json!({"type":"system","subtype":"task_notification","task_id":task,"status":"completed"});
+
+    assert_eq!(parsed(started("t1", false)), Parsed::Drop);
+    assert_eq!(parsed(updated("t1", json!({"status":"completed","end_time":1}))), Parsed::Drop);
+    assert_eq!(parsed(ended("t1")), Parsed::Drop);
+
+    assert_eq!(parsed(started("t2", false)), Parsed::Drop);
+    let moved = Parsed::Event(EventBody::TaskChanged { task: "t2".into(), change: TaskChange::Updated });
+    assert_eq!(parsed(updated("t2", json!({"is_backgrounded":true}))), moved);
+    let kept = Parsed::Event(EventBody::TaskChanged { task: "t2".into(), change: TaskChange::Ended });
+    assert_eq!(parsed(ended("t2")), kept, "kept once it's in the background");
+    assert_eq!(
+        parsed(started("t1", true)),
+        Parsed::Event(EventBody::TaskChanged { task: "t1".into(), change: TaskChange::Started }),
+        "an ended task in the foreground is forgotten"
+    );
+    assert_eq!(parsed(started("t3", false)), Parsed::Drop);
+    parsed(started("t3", true));
+    assert_eq!(
+        parsed(ended("t3")),
+        Parsed::Event(EventBody::TaskChanged { task: "t3".into(), change: TaskChange::Ended }),
+        "a task started again is where its new start says"
+    );
+}
+
+/// A subagent's start and end are read as its own events, but its task in the foreground is still forgotten as it ends.
+#[test]
+fn a_subagent_in_the_foreground_is_forgotten_as_it_ends() {
+    let mut normalizer = Normalizer::default();
+    let started = json!({"type":"system","subtype":"task_started","task_id":"t1","tool_use_id":"agent",
+        "task_type":"local_agent","is_backgrounded":false});
+    let ended = json!({"type":"system","subtype":"task_notification","task_id":"t1","status":"completed"});
+
+    normalizer.line(&started.to_string());
+    assert!(normalizer.tasks.foreground.contains(&TaskId::from("t1")), "it's in the foreground while it runs");
+    normalizer.line(&ended.to_string());
+
+    assert!(normalizer.tasks.foreground.is_empty());
 }
 
 fn event(parsed: Parsed) -> EventBody {

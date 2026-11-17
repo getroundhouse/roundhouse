@@ -49,6 +49,7 @@ pub(super) fn work(body: &EventBody) -> Work {
         | EventBody::SubagentStarted { .. }
         | EventBody::SubagentContext { .. }
         | EventBody::SubagentEnded { .. }
+        | EventBody::TaskChanged { .. }
         | EventBody::AgentOther { .. }
         | EventBody::AgentCompacting { .. }
         | EventBody::CacheExpired { .. }

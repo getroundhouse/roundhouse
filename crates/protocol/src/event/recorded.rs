@@ -14,7 +14,7 @@ use failure::{Again, RequestFailure};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeMap;
-use task::AgentTask;
+use task::{AgentTask, TaskChange};
 use tokens::TokenUsage;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -105,6 +105,14 @@ pub enum EventBody {
         /// itself is stopped.
         #[serde(default)]
         stopped: Vec<TaskId>,
+    },
+    /// What the agent said of one of its background tasks as it started, went on, changed or ended. It draws nothing,
+    /// since [`EventBody::AgentTasks`] says what's running and [`EventBody::OwnTurn`] what the agent heard had ended,
+    /// both worked out from these. It's kept so the raw line it came from can be read again. Its adapter says nothing of a
+    /// task in the foreground, whose call and result say everything.
+    TaskChanged {
+        task: TaskId,
+        change: TaskChange,
     },
     /// The agent started a turn by itself, with no prompt, and this says why, and what it took in. It's recorded as the
     /// turn starts, before anything the turn does. The agent's adapter says, since only it knows what its agent heard,

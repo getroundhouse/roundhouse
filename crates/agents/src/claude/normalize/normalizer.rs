@@ -89,6 +89,7 @@ impl Normalizer {
         let dropped = self.pending_calls.note(&value);
         let own_turn = self.own_turns.note(&value, &self.tasks);
         let noted = self.tasks.note(&value, &self.calls);
+        let in_foreground = self.tasks.in_foreground(&value);
         if let Some(body) = self.subagents.read(&value) {
             let relisted = noted.map(|mut list| {
                 self.list(&mut list);
@@ -100,7 +101,10 @@ impl Normalizer {
         if let Some(parsed) = self.compactions.read(&value) {
             return Normalized { dropped, parsed, after: own_turn };
         }
-        let mut parsed = noted.map_or_else(|| parse_value(&value, &self.subagents), Parsed::Event);
+        let mut parsed = match noted {
+            Some(list) => Parsed::Event(list),
+            None => tasks::changed(&value, in_foreground).unwrap_or_else(|| parse_value(&value, &self.subagents)),
+        };
         if let Parsed::Event(body) = &mut parsed {
             self.list(body);
         }
@@ -112,18 +116,7 @@ impl Normalizer {
             *asked_by = Subagents::asked_by(&value);
         }
         if let Parsed::Delta(delta) = &parsed {
-            match delta.change {
-                DeltaChange::BlockStart { index, .. }
-                | DeltaChange::Text { index, .. }
-                | DeltaChange::Thinking { index, .. }
-                | DeltaChange::ToolInput { index, .. } => {
-                    self.streaming.insert(delta.message_id.clone(), (index, delta.subagent.clone()));
-                }
-                DeltaChange::MessageStop => {
-                    self.streaming.remove(&delta.message_id);
-                }
-                DeltaChange::Unknown => {}
-            }
+            self.streamed(delta);
         }
         if let Parsed::Event(EventBody::Assistant { message_id: Some(id), blocks, first_index, .. }) = &mut parsed {
             // The block that streamed is this one, so no later block can take its place. Claude sends one block
@@ -147,6 +140,22 @@ impl Normalizer {
             self.calls.turn_ended();
         }
         Normalized { dropped, parsed, after: own_turn }
+    }
+
+    /// Notes which block of its message `delta` streams, or that the message is over.
+    fn streamed(&mut self, delta: &StreamDelta) {
+        match delta.change {
+            DeltaChange::BlockStart { index, .. }
+            | DeltaChange::Text { index, .. }
+            | DeltaChange::Thinking { index, .. }
+            | DeltaChange::ToolInput { index, .. } => {
+                self.streaming.insert(delta.message_id.clone(), (index, delta.subagent.clone()));
+            }
+            DeltaChange::MessageStop => {
+                self.streaming.remove(&delta.message_id);
+            }
+            DeltaChange::Unknown => {}
+        }
     }
 
     /// Gives a list of background tasks what the lines before it said of them.

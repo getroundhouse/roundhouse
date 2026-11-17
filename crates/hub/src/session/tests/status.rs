@@ -1,4 +1,4 @@
-use protocol::event::{AgentRunState, AgentTask, ApprovalOutcome, ExitReason, TaskKind, TurnOutcome};
+use protocol::event::{AgentRunState, AgentTask, ApprovalOutcome, ExitReason, TaskChange, TaskKind, TurnOutcome};
 use protocol::prompt::Prompt;
 
 use super::super::status::{Known, Open, after_background, next_status, turn_edge, works_unattended};
@@ -63,7 +63,7 @@ fn init() -> EventBody {
 }
 
 fn notified() -> EventBody {
-    EventBody::AgentOther { kind: "system/task_notification".into(), subagent: None }
+    EventBody::TaskChanged { task: "t1".into(), change: TaskChange::Ended }
 }
 
 /// The status after each event in turn, with what's open after each.

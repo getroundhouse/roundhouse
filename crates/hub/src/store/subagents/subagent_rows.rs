@@ -127,6 +127,7 @@ pub(in super::super) fn note_subagents(tx: &Connection, event: &SessionEvent) ->
         | EventBody::Notice { .. }
         | EventBody::RequestFailed { .. }
         | EventBody::AgentMode { .. }
+        | EventBody::TaskChanged { .. }
         | EventBody::AgentOther { .. }
         | EventBody::AgentCompacting { .. }
         | EventBody::AgentCompacted { .. }

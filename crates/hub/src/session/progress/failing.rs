@@ -74,8 +74,8 @@ pub(super) fn after(failing: Option<&Failing>, body: &mut EventBody) -> FailingA
 
 /// Whether the agent's own failed requests either side of `body` can still be failures in a row. Everything of a
 /// subagent's keeps them, since the subagent's tab shows it, and so does what the agent does by itself that comes to
-/// nothing else: starting a turn, such as to take in a task's end, saying what it's running or of its limits, a line
-/// its adapter has no form for, and ending a turn that only failed or said nothing. What the log records of the person
+/// nothing else: starting a turn, such as to take in a task's end, saying what it's running, what changed of one of its
+/// tasks or of its limits, a line its adapter has no form for, and ending a turn that only failed or said nothing. What the log records of the person
 /// ends the row, such as a prompt, Retry among them, a change of approval mode or a turn they stopped, and so does
 /// anything the agent says or does, the agent going or starting, and anything this build can't tell.
 pub(super) fn keeps(body: &EventBody) -> bool {
@@ -88,6 +88,7 @@ pub(super) fn keeps(body: &EventBody) -> bool {
         | EventBody::AgentTasks { .. }
         | EventBody::OwnTurn(_)
         | EventBody::AgentLimits { .. }
+        | EventBody::TaskChanged { .. }
         | EventBody::AgentOther { .. }
         | EventBody::SubagentContext { .. }
         | EventBody::SubagentEnded { .. } => true,

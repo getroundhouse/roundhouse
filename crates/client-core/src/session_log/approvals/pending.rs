@@ -173,6 +173,7 @@ fn follow<'a>(open: &mut Vec<&'a SessionEvent>, event: &'a SessionEvent) {
         | EventBody::SubagentStarted { .. }
         | EventBody::SubagentContext { .. }
         | EventBody::SubagentEnded { .. }
+        | EventBody::TaskChanged { .. }
         | EventBody::AgentOther { .. }
         | EventBody::AgentCompacting { .. }
         | EventBody::AgentCompacted { .. }

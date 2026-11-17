@@ -1,7 +1,7 @@
 use super::super::calls::OpenCalls;
 use super::super::{Parsed, id_of, other, str_of, string_of};
 use crate::claude::TOOLS_SERVER;
-use protocol::event::{AgentTask, EventBody, TaskKind, TaskOutcome};
+use protocol::event::{AgentTask, EventBody, TaskChange, TaskKind, TaskOutcome};
 use protocol::model::{TaskId, ToolUseId};
 use protocol::worker::{WAIT_TOOL, WAITS_TOOL};
 use serde_json::Value;
@@ -68,6 +68,10 @@ pub(in super::super) struct Tasks {
     pub(super) calls: BTreeMap<TaskId, ToolUseId>,
     /// The newest list, to say again once `task_started` says more of one of its tasks that changes what's shown.
     pub(super) newest: Vec<AgentTask>,
+    /// The tasks running in the foreground, as every command the agent runs is, from its `task_started` until its
+    /// `task_notification`, or until it's moved to the background. Its call and result say everything of it, so the
+    /// lines about it are kept for nothing.
+    pub(super) foreground: BTreeSet<TaskId>,
 }
 
 impl Tasks {
@@ -112,6 +116,36 @@ impl Tasks {
         (shown && already_listed).then(|| EventBody::AgentTasks { tasks: self.newest.clone(), stopped: Vec::new() })
     }
 
+    /// Whether this line is about a task in the foreground, noting what it says of which are: one whose `task_started`
+    /// says `is_backgrounded: false`, until a `task_updated` moves it to the background, which is the first of its lines
+    /// that isn't, or its `task_notification`, the last that is, after which it's forgotten. Every line comes here, a
+    /// subagent's among them, though what it makes is read from elsewhere, so no task is noted after it ends.
+    pub(in super::super) fn in_foreground(&mut self, value: &Value) -> bool {
+        if str_of(value, "type") != Some("system") {
+            return false;
+        }
+        let Some(id) = id_of::<TaskId>(value, "task_id") else { return false };
+        match str_of(value, "subtype") {
+            // A task started again, as a subagent can be, is where its new start says.
+            Some("task_started") => {
+                let in_foreground = value.get("is_backgrounded").and_then(Value::as_bool) == Some(false);
+                if in_foreground {
+                    self.foreground.insert(id);
+                } else {
+                    self.foreground.remove(&id);
+                }
+                in_foreground
+            }
+            Some("task_updated") if value.pointer("/patch/is_backgrounded").and_then(Value::as_bool) == Some(true) => {
+                self.foreground.remove(&id);
+                false
+            }
+            Some("task_progress" | "task_updated") => self.foreground.contains(&id),
+            Some("task_notification") => self.foreground.remove(&id),
+            _ => false,
+        }
+    }
+
     /// The task `id` as the newest list has it, with what the lines before it said.
     pub(in super::super) fn task(&self, id: &TaskId) -> Option<&AgentTask> {
         self.newest.iter().find(|task| task.id == *id)
@@ -141,6 +175,24 @@ impl Tasks {
         self.stopped = still_listed;
         gone.into_iter().collect()
     }
+}
+
+/// What a line about one task makes: nothing for a task in the foreground, as [`Tasks::in_foreground`] says, and for one
+/// in the background a [`EventBody::TaskChanged`], so the line is kept with a form of its own, though the list and the
+/// turns the agent starts by itself say what it means. `None` for any other line, and for one that names no task.
+pub(in super::super) fn changed(value: &Value, in_foreground: bool) -> Option<Parsed> {
+    if str_of(value, "type") != Some("system") {
+        return None;
+    }
+    let change = match str_of(value, "subtype")? {
+        "task_started" => TaskChange::Started,
+        "task_progress" => TaskChange::Progressed,
+        "task_updated" => TaskChange::Updated,
+        "task_notification" => TaskChange::Ended,
+        _ => return None,
+    };
+    let task = id_of::<TaskId>(value, "task_id")?;
+    Some(if in_foreground { Parsed::Drop } else { Parsed::Event(EventBody::TaskChanged { task, change }) })
 }
 
 /// How the task a `task_notification` is about ended, as its `status` says.

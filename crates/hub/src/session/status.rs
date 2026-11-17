@@ -117,6 +117,7 @@ pub(crate) fn next_status(current: SessionStatus, body: &EventBody, open: Open, 
         | EventBody::SubagentStarted { .. }
         | EventBody::SubagentContext { .. }
         | EventBody::SubagentEnded { .. }
+        | EventBody::TaskChanged { .. }
         | EventBody::AgentOther { .. }
         | EventBody::AgentCompacting { .. }
         | EventBody::AgentCompacted { .. }
@@ -218,6 +219,7 @@ pub(crate) fn open_after(
         | EventBody::SubagentStarted { .. }
         | EventBody::SubagentContext { .. }
         | EventBody::SubagentEnded { .. }
+        | EventBody::TaskChanged { .. }
         | EventBody::AgentOther { .. }
         | EventBody::AgentCompacting { .. }
         | EventBody::AgentCompacted { .. }
