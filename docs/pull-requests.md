@@ -44,7 +44,7 @@ The parts come in this order. The last four start with their label in bold, writ
 6. **Checked:** what was run, and what it showed:
    - the full checks from `AGENTS.md`, or that the PR changes only Markdown or the marketing site and needs none;
    - for a change to what the product does, which pages of `docs/guide/` changed with it, or that none says what changed, since no test fails when a guide page goes stale;
-   - each new test, and what it covers;
+   - each test that changed, and what it now covers, and for each new test, what it covers and why no test there already could take it as a case, as "Tests" in `docs/rust.md` asks;
    - what was broken on purpose, and which test failed;
    - anything checked by hand, with the machine, the OS, what was done and what was seen;
    - any review the owner asked for, as `docs/reviews.md` has it: which lanes it took, whether the fixes were checked, what was found that changed the PR, any must fix answered rather than fixed, and the issues filed for bugs passed on. The fixes themselves go in part 3, with the rest of the change, rather than as a list of review findings. A stack reviewed whole says what that review found in its top PR.
