@@ -55,3 +55,30 @@ pub struct GitDiff {
     /// True when untracked files were left out to keep the response bounded.
     pub truncated: bool,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// What would go with the worktree: changes not yet committed, and commits on no branch, which a branch would
+    /// otherwise outlive the worktree to keep.
+    #[test]
+    fn removing_a_worktree_would_lose_what_isnt_committed_and_commits_no_branch_holds() {
+        let changed = GitFile { path: "a.txt".into(), orig_path: None, status: ".M".into() };
+        let on_a_branch = GitStatus { branch: Some(BranchName::from("alder")), ..GitStatus::default() };
+        let on_no_branch = GitStatus { unreferenced_commits: true, ..GitStatus::default() };
+        let cases = [
+            ("nothing", on_a_branch.clone(), None),
+            ("an uncommitted change", GitStatus { files: vec![changed], ..on_a_branch }, Some("uncommitted")),
+            ("commits on no branch", on_no_branch, Some("detached")),
+            ("a detached HEAD a branch holds", GitStatus::default(), None),
+        ];
+
+        for (name, status, says) in cases {
+            let loss = status.loss_if_removed();
+
+            let said = loss.as_deref().map(|loss| ["uncommitted", "detached"].into_iter().find(|w| loss.contains(w)));
+            assert_eq!(said, says.map(Some), "{name}: {loss:?}");
+        }
+    }
+}

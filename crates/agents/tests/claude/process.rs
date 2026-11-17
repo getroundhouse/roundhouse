@@ -6,9 +6,9 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use agents::claude::spawn_at;
-use agents::{AgentOptions, AgentOutput};
+use agents::{AgentError, AgentOptions, AgentOutput};
 use protocol::event::{CompactedBy, CompactionOutcome, ContentBlock, EventBody, NoticeLevel};
-use protocol::model::{AgentKind, PermissionMode, RunId, Seq, SessionSettings};
+use protocol::model::{AgentKind, Effort, PermissionMode, RunId, Seq, SessionSettings, SessionSettingsChange};
 use protocol::prompt::Prompt;
 use protocol::worker::AgentSpec;
 use tokio::sync::mpsc;
@@ -221,6 +221,49 @@ exec sleep 100"#;
     let started = seen.iter().any(|item| matches!(item, AgentOutput::Event { body: EventBody::AgentInit { .. }, .. }));
     assert!(!started, "{seen:?}");
     assert!(matches!(seen.last(), Some(AgentOutput::Exited { signal: Some(15), requested: false, .. })), "{seen:?}");
+}
+
+/// What stands in for the CLI's answers to control requests: success to each, with nothing to say, but for
+/// `get_settings`, which it answers with what `dir/settings.json` holds.
+fn answering_with_settings(dir: &Path) -> String {
+    let settings = dir.join("settings.json");
+    format!(
+        r#"while read -r line; do
+id=$(printf '%s' "$line" | sed -n 's/.*"request_id":"\([^"]*\)".*/\1/p')
+case "$line" in *'"get_settings"'*) said=$(cat '{}') ;; *) said=null ;; esac
+[ -n "$id" ] && printf '{{"type":"control_response","response":{{"subtype":"success","request_id":"%s","response":%s}}}}\n' "$id" "$said"
+done"#,
+        settings.display()
+    )
+}
+
+/// The CLI answers success to a level of effort it doesn't take, and changes nothing, so a change of effort has been
+/// made only once the level it then reports in use is the one asked for.
+#[tokio::test]
+async fn an_effort_the_cli_says_it_took_and_doesnt_report_in_use_is_refused_as_not_applied() {
+    let reported = [
+        ("the level asked for", r#"{"applied":{"effort":"max"}}"#, None),
+        ("another level", r#"{"applied":{"effort":"high"}}"#, Some(Some("high"))),
+        ("no level", r#"{"applied":{}}"#, Some(None)),
+    ];
+
+    for (name, settings, refused) in reported {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("settings.json"), settings).unwrap();
+        let (tx, _rx) = mpsc::channel(16);
+        let cli = script(dir.path(), &answering_with_settings(dir.path()));
+        let agent = spawn_at(cli, spec(dir.path()), tx, AgentOptions::default()).await.unwrap();
+
+        let changed = agent.configure(&SessionSettingsChange { effort: Some(Effort::Max), ..Default::default() }).await;
+
+        let not_applied = match changed {
+            Ok(()) => None,
+            Err(AgentError::NotApplied { asked: "max", applied }) => Some(applied),
+            Err(other) => panic!("{name}: {other:?}"),
+        };
+        assert_eq!(not_applied.as_ref().map(Option::as_deref), refused, "{name}");
+        agent.stop().await;
+    }
 }
 
 /// Only the adapter knows how Claude is asked to compact, and which recorded request each line it sent is, so the

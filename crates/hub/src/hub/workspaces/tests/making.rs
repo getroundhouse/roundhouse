@@ -90,29 +90,64 @@ async fn a_request_sent_again_gets_what_it_made_however_things_have_changed_sinc
     assert_eq!(another.err(), Some(ErrorCode::Conflict), "a new one is checked, and refused");
 }
 
-/// The worker that was putting the worktree back says whether it's there once it has finished, so the hub records what
-/// it says, even with the worktree's folder there, which git makes before it has finished with it.
+/// How far an earlier hub got with archiving or restoring a workspace is for the worker that was doing it to say, by
+/// whether the worktree is there once it has finished with it. The hub records what it says, even with the worktree's
+/// folder there, which git makes before it has finished with it. An archive that left the worktree, or a restore that
+/// didn't put it back, got no further than that, so the workspace is as it was. An archive that removed it is done, on
+/// the branch the worktree was last seen on, and a restore that put it back is done, and sets the worktree up again,
+/// as one that wasn't cut short does. One the worker can't say of is put back as it was.
 #[tokio::test]
-async fn a_restore_cut_short_is_settled_by_what_its_worker_says_rather_than_by_the_folder() {
-    let dir = tempfile::tempdir().unwrap();
-    let hub = hub_in(dir.path());
-    let id = WorkspaceId::from("w");
-    let worktree = dir.path().join("ws/alder");
-    std::fs::create_dir_all(&worktree).unwrap();
-    hub.store.workspace_ready(&id, worktree.to_str().unwrap(), &"alder".into(), "main", None).unwrap();
-    hub.store.start_move(&id, Move::Archive).unwrap();
-    hub.store.end_move(&id, Move::Archive, Ended::Done).unwrap();
-    hub.store.start_move(&id, Move::Restore).unwrap();
-    let link = WorkerLink::answering(|request| {
-        Some(if matches!(request, WorkerRequest::WorktreeThere(_)) {
-            Ok(WorkerResponse::WorktreeThere(WorktreeThereReply { there: false }))
-        } else {
-            Err(ApiError::new(ErrorCode::Worker, "a stand-in does nothing else"))
-        })
-    });
-    serving(&hub, &link);
+async fn a_move_cut_short_is_settled_by_whether_its_worker_says_the_worktree_is_there() {
+    use WorkspaceStatus::{Archived, Ready};
+    use protocol::model::{Branch, Branches, Head, SetupStatus};
+    use protocol::worker::SetupDone;
+    let there = |there| Ok(WorkerResponse::WorktreeThere(WorktreeThereReply { there }));
+    let cant_say = Err(ApiError::new(ErrorCode::Worker, "a worker that doesn't know the question"));
+    let (seen_on, made_on) = ("fix-the-login-bug", "alder");
+    let last_seen = Branch { name: seen_on.into(), tip: "c1".into(), upstream: None };
+    let last_seen = Branches { head: Head::Branch { name: seen_on.into() }, had: vec![last_seen] };
+    let cases = [
+        ("an archive that left the worktree", Move::Archive, there(true), (Ready, made_on, false)),
+        ("an archive that removed it", Move::Archive, there(false), (Archived, seen_on, false)),
+        ("a restore that put it back", Move::Restore, there(true), (Ready, made_on, true)),
+        ("a restore that didn't", Move::Restore, there(false), (Archived, made_on, false)),
+        ("an archive the worker can't say of", Move::Archive, cant_say, (Ready, made_on, false)),
+    ];
 
-    hub.clone().settle_moves(vec![(id.clone(), Move::Restore)]).await;
+    let mut wrong = Vec::new();
+    for (name, moving, said, settled) in cases {
+        let dir = tempfile::tempdir().unwrap();
+        let hub = hub_in(dir.path());
+        let id = WorkspaceId::from("w");
+        let worktree = dir.path().join("ws/alder");
+        std::fs::create_dir_all(&worktree).unwrap();
+        hub.store.workspace_ready(&id, worktree.to_str().unwrap(), &made_on.into(), "main", None).unwrap();
+        hub.store.set_workspace_branches(&id, &last_seen).unwrap();
+        hub.store.start_move(&id, Move::Archive).unwrap();
+        if moving == Move::Restore {
+            hub.store.end_move(&id, Move::Archive, Ended::Done).unwrap();
+            hub.store.start_move(&id, Move::Restore).unwrap();
+        }
+        // Its setup script passes, and it does whatever else it's asked.
+        let link = WorkerLink::answering(move |request| {
+            Some(if let WorkerRequest::WorktreeThere(_) = request {
+                said.clone()
+            } else if let WorkerRequest::SetupWorkspace(_) = request {
+                Ok(WorkerResponse::SetupDone(SetupDone { code: Some(0) }))
+            } else {
+                Ok(WorkerResponse::Ok)
+            })
+        });
+        serving(&hub, &link);
 
-    assert_eq!(hub.store.get_workspace(&id).unwrap().status, WorkspaceStatus::Archived);
+        hub.clone().settle_moves(vec![(id.clone(), moving)]).await;
+
+        let workspace = hub.store.get_workspace(&id).unwrap();
+        let set_up_again = workspace.setup != SetupStatus::NotStarted;
+        let got = (workspace.status, workspace.branch.as_str(), set_up_again);
+        if got != settled {
+            wrong.push(format!("{name}: {got:?}, not {settled:?}"));
+        }
+    }
+    assert!(wrong.is_empty(), "status, branch and whether it was set up again, as each was settled: {wrong:#?}");
 }

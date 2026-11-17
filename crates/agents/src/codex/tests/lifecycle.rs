@@ -50,23 +50,14 @@ async fn cancelling_an_account_call_stops_its_native_process() {
     };
     let call_room = room.clone();
     let call = tokio::spawn(async move { crate::codex::account(&options, &call_room).await });
-    tokio::time::timeout(std::time::Duration::from_secs(10), async {
-        while !room.join("account-ready").exists() {
-            tokio::task::yield_now().await;
-        }
-    })
-    .await
-    .unwrap();
+    let ready = room.join("account-ready");
+    waiting::task::until(std::time::Duration::from_secs(10), "the account call never started Codex", || ready.exists())
+        .await;
     let record = process::ProcessRecord::read(&pid_path).unwrap();
     assert!(record.is_running());
     call.abort();
     let _ = call.await;
-    tokio::time::timeout(std::time::Duration::from_secs(10), async {
-        while pid_path.exists() {
-            tokio::task::yield_now().await;
-        }
-    })
-    .await
-    .unwrap();
+    let failure = "cancelling the call never took its process's record away";
+    waiting::task::until(std::time::Duration::from_secs(10), failure, || !pid_path.exists()).await;
     assert!(!record.is_running());
 }
