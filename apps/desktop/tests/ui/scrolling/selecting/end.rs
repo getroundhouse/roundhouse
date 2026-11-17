@@ -51,7 +51,7 @@ fn what_the_agent_is_writing_is_selected_with_the_rest_and_stays_selected_once_i
 
 /// A prompt sent while the agent thinks waits at the end of the chat, after the thought it's writing, until the agent
 /// takes it once the thought's done. It's copied after the thought there, and from the row where it was taken once
-/// it has been.
+/// it has been, which is after the thought too, where it's drawn, as a new selection of everything has it.
 #[gpui_kit::test]
 fn a_prompt_the_agent_has_not_read_is_copied_after_what_it_s_writing_and_once_it_s_taken(cx: &mut TestAppContext) {
     let stack = Stack::new();
@@ -78,8 +78,10 @@ fn a_prompt_the_agent_has_not_read_is_copied_after_what_it_s_writing_and_once_it
     let untaken = still_writing(&ui, &transcript);
     thought_done.open_once_the_agent_has_a_prompt();
     ui.wait_idle_with("the answer", |text| text.contains("Then the sidings."));
-    settled(&mut ui, &stack, &session);
+    let window = settled(&mut ui, &stack, &session);
     let taken = copy(&mut ui);
+    let on_it = on_the_reply_saying(&ui, window, "Then the sidings.");
+    let all = everything(&mut ui, on_it);
 
     assert!(untaken, "the agent was still thinking, so the prompt was waiting");
     let started = format!("\n\n{thinking}\n\nidea0 idea1 idea2 idea3");
@@ -87,8 +89,11 @@ fn a_prompt_the_agent_has_not_read_is_copied_after_what_it_s_writing_and_once_it
     assert!(waiting.ends_with(&format!("\n\n{steered}")), "then the prompt: {:?}", tail(&waiting));
     // Drawn, the thought doesn't end with the space it was recorded with.
     let thought = thought(&ui);
-    assert!(taken.contains(thought.trim_end()), "all of the thought, once it's done: {:?}", tail(&taken));
+    let thought = thought.trim_end();
+    assert!(taken.contains(thought), "all of the thought, once it's done: {:?}", tail(&taken));
     assert!(taken.ends_with(&format!("\n\n{steered}")), "then the prompt, where it was taken: {:?}", tail(&taken));
+    let answered = format!("say:{LAST}\n\n{LAST}\n\n{thinking}\n\n{thought}\n\n{steered}\n\nThen the sidings.");
+    assert_eq!(all, answered, "and a new selection of everything has it there, in the order they're drawn");
 }
 
 /// Whether the agent is still writing something the session's log hasn't recorded.
