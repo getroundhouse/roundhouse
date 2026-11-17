@@ -301,6 +301,12 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         | R::DeviceList
         | R::DeviceRevoke(_)
         | R::Unknown => Err(ApiError::new(ErrorCode::Unsupported, "a fake hub doesn't know that request")),
+        // No screen shows a terminal yet, so a fake hub runs none, as a hub from before terminals.
+        R::TerminalOpen(_)
+        | R::TerminalAttach(_)
+        | R::TerminalInput(_)
+        | R::TerminalResize(_)
+        | R::TerminalClose(_) => Err(ApiError::new(ErrorCode::Unsupported, "a fake hub doesn't run terminals")),
     }
 }
 

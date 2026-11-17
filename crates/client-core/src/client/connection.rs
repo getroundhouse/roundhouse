@@ -306,6 +306,8 @@ fn read_frames(inner: &Arc<Inner>, stream: impl std::io::Read) {
             HubFrame::Notice { subscription_id, notice } => {
                 deliver(inner, subscription_id, SubscriptionItem::Notice(Box::new(notice)));
             }
+            // Nothing attaches to a terminal yet, so no subscription follows one.
+            HubFrame::Terminal { .. } => {}
         }
     }
     end_connection(inner);

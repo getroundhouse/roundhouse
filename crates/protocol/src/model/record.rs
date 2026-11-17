@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use super::{
     Account, AccountId, CommentId, DiffComment, FoundGithubLogin, GithubAccount, GithubAccountId, GithubApp,
     GithubAppId, GithubReach, GithubSignIn, GithubSignInId, HubSettings, NewWorkspaceDraft, ProviderName, Repo, RepoId,
-    Rev, Session, SessionId, Subagent, SubagentId, Workspace, WorkspaceId,
+    Rev, Session, SessionId, Subagent, SubagentId, Terminal, TerminalId, Workspace, WorkspaceId,
 };
 
 /// Which record, of which kind. A kind this build doesn't know reads as `Unknown`.
@@ -64,6 +64,9 @@ pub enum RecordKey {
     GithubReach {
         repo: RepoId,
     },
+    Terminal {
+        id: TerminalId,
+    },
     #[serde(other)]
     Unknown,
 }
@@ -85,6 +88,7 @@ pub enum Record {
     FoundGithubLogin(FoundGithubLogin),
     GithubApp(GithubApp),
     GithubReach(GithubReach),
+    Terminal(Terminal),
 }
 
 impl Record {
@@ -105,6 +109,7 @@ impl Record {
             Record::FoundGithubLogin(found) => RecordKey::FoundGithubLogin { provider: found.provider.clone() },
             Record::GithubApp(app) => RecordKey::GithubApp { id: app.id },
             Record::GithubReach(reach) => RecordKey::GithubReach { repo: reach.repo.clone() },
+            Record::Terminal(terminal) => RecordKey::Terminal { id: terminal.id.clone() },
         }
     }
 
@@ -124,6 +129,7 @@ impl Record {
             Record::FoundGithubLogin(found) => found.rev,
             Record::GithubApp(app) => app.rev,
             Record::GithubReach(reach) => reach.rev,
+            Record::Terminal(terminal) => terminal.rev,
         }
     }
 }
@@ -160,6 +166,9 @@ pub struct Records {
     /// the hub hasn't checked before.
     #[serde(default)]
     pub github_reach: Vec<GithubReach>,
+    /// The terminals open in every workspace. Empty from a hub from before terminals.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub terminals: Vec<Terminal>,
     /// The hub's newest revision when this was read. A record missing from the list is gone, unless
     /// a client holds a copy newer than this.
     pub rev: Rev,
@@ -181,6 +190,7 @@ impl Records {
             found_github_logins,
             github_apps,
             github_reach,
+            terminals,
             rev: _,
         } = self;
         let records = repos.into_iter().map(Record::Repo);
@@ -194,7 +204,8 @@ impl Records {
         let records = records.chain(github_sign_ins.into_iter().map(Record::GithubSignIn));
         let records = records.chain(found_github_logins.into_iter().map(Record::FoundGithubLogin));
         let records = records.chain(github_apps.into_iter().map(Record::GithubApp));
-        records.chain(github_reach.into_iter().map(Record::GithubReach))
+        let records = records.chain(github_reach.into_iter().map(Record::GithubReach));
+        records.chain(terminals.into_iter().map(Record::Terminal))
     }
 }
 

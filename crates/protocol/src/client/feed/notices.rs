@@ -1,6 +1,6 @@
 use crate::model::{
     Account, DiffComment, FoundGithubLogin, GithubAccount, GithubApp, GithubReach, GithubSignIn, HubSettings,
-    NewWorkspaceDraft, Record, RecordKey, Repo, Rev, Session, Subagent, Workspace,
+    NewWorkspaceDraft, Record, RecordKey, Repo, Rev, Session, Subagent, Terminal, Workspace,
 };
 use serde::{Deserialize, Serialize};
 
@@ -24,6 +24,9 @@ pub enum HubNotice {
     FoundGithubLogin(FoundGithubLogin),
     GithubApp(GithubApp),
     GithubReach(GithubReach),
+    /// A terminal was opened, and a hub that kept its workers learned of it again as it started. One that ended or
+    /// was closed is `Removed`.
+    Terminal(Terminal),
     /// The record is gone, as of `rev`.
     Removed {
         record: RecordKey,
@@ -86,6 +89,7 @@ impl TryFrom<HubNotice> for RecordNotice {
             HubNotice::FoundGithubLogin(found) => Record::FoundGithubLogin(found),
             HubNotice::GithubApp(app) => Record::GithubApp(app),
             HubNotice::GithubReach(reach) => Record::GithubReach(reach),
+            HubNotice::Terminal(terminal) => Record::Terminal(terminal),
             HubNotice::Removed { record, rev } => return Ok(RecordNotice::Removed { record, rev }),
             HubNotice::Resync | HubNotice::Unknown => return Err(notice),
         };
@@ -109,6 +113,7 @@ impl From<Record> for HubNotice {
             Record::FoundGithubLogin(found) => HubNotice::FoundGithubLogin(found),
             Record::GithubApp(app) => HubNotice::GithubApp(app),
             Record::GithubReach(reach) => HubNotice::GithubReach(reach),
+            Record::Terminal(terminal) => HubNotice::Terminal(terminal),
         }
     }
 }

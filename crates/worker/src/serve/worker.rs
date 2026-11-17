@@ -17,12 +17,11 @@ use protocol::Build;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{RunId, SessionId};
 use protocol::prompt::Prompt;
-use protocol::versions::Versions;
 use protocol::worker::{
     AccountFor, AgentApproval, AgentStop, AttachmentWrite, AttachmentWritten, FileOpenAt, FilePages, FileRead,
-    FileReadAt, FolderRead, GitDiff, GitStatus, HelloReply, PullRequest, PullRequestReply, ReadRepoUrl, Received,
-    RunningAgentsReply, ServeTools, SetupLog, SetupLogReply, TitleFor, ToolsServing, WORKER_PROTOCOL_VERSION,
-    WorkerFrame, WorkerRequest, WorkerResponse,
+    FileReadAt, FolderRead, GitDiff, GitStatus, PullRequest, PullRequestReply, ReadRepoUrl, Received,
+    RunningAgentsReply, ServeTools, SetupLog, SetupLogReply, TitleFor, ToolsServing, WorkerFrame, WorkerRequest,
+    WorkerResponse,
 };
 use scripts::{Setup, run_archive_script, run_setup, stop_setup_script};
 use std::collections::HashMap;
@@ -243,7 +242,14 @@ pub(super) async fn handle(
             Ok(WorkerResponse::Ok)
         }
         WorkerRequest::RunningAgents => Ok(running_agents(state)),
-        WorkerRequest::Unknown => Err(unsupported(None)),
+        // And those about terminals, which it refuses as a worker from before them does, until it runs them.
+        WorkerRequest::Unknown
+        | WorkerRequest::TerminalStart(_)
+        | WorkerRequest::TerminalInput(_)
+        | WorkerRequest::TerminalResize(_)
+        | WorkerRequest::TerminalShow(_)
+        | WorkerRequest::TerminalStop(_)
+        | WorkerRequest::RunningTerminals => Err(unsupported(None)),
         WorkerRequest::NamesGitHas(asked) => worktrees::names_git_has(state, asked).await,
         WorkerRequest::PrepareWorkspace(asked) => worktrees::prepare(state, asked).await,
         WorkerRequest::RestoreWorkspace(asked) => worktrees::restore(state, asked).await,
@@ -353,31 +359,6 @@ pub(super) async fn handle(
         }
     }
 }
-
-/// A worker speaks only its own version, and takes a hub whose hello names it, since a hub speaks the one before its
-/// own too once a protocol breaks, as "Changing the protocol" in `docs/architecture.md` says.
-pub(super) fn hello(build: Build, newest: u32, oldest: Option<u32>) -> Result<WorkerResponse, ApiError> {
-    let (ours, hub) = (Versions::only(WORKER_PROTOCOL_VERSION), Versions::from_hello(newest, oldest));
-    let Some(chosen) = ours.newest_shared(hub) else {
-        let message = format!("the hub speaks {hub}, and this worker speaks {ours}");
-        return Err(ApiError::new(ErrorCode::VersionMismatch, message));
-    };
-    Ok(WorkerResponse::Hello(HelloReply { protocol_version: chosen, build: Some(said(build)) }))
-}
-
-/// Which build this worker is, as its hello says. A test can have it say another, with [`TEST_BUILD`], as a worker an
-/// earlier hub left would.
-fn said(build: Build) -> String {
-    #[cfg(feature = "testing")]
-    if let Ok(build) = std::env::var(TEST_BUILD) {
-        return build;
-    }
-    build.version().to_string()
-}
-
-/// The variable that names the build a worker says it is, in tests.
-#[cfg(feature = "testing")]
-pub const TEST_BUILD: &str = "ROUNDHOUSE_TEST_WORKER_BUILD";
 
 /// Those whose process hasn't gone, which is every one whose session a hub connecting again can carry on with.
 fn running_agents(state: &State) -> WorkerResponse {

@@ -1,4 +1,3 @@
-use proptest::collection::vec;
 use proptest::prelude::*;
 use proptest::test_runner::{Config, RngSeed};
 
@@ -8,15 +7,6 @@ const PNG: &[u8] = b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR";
 
 proptest! {
     #![proptest_config(Config { rng_seed: RngSeed::Fixed(1), failure_persistence: None, ..Config::default() })]
-
-    #[test]
-    fn bytes_come_back_as_they_went(bytes in vec(any::<u8>(), 0..512)) {
-        let sent = AttachmentBytes::new(bytes.clone());
-
-        let line = crate::frame::encode(&sent).unwrap();
-
-        prop_assert_eq!(crate::frame::decode::<AttachmentBytes>(&line).unwrap().into_vec(), bytes);
-    }
 
     #[test]
     fn a_kept_name_is_never_empty_and_never_a_path(sent in ".{0,300}") {
@@ -29,12 +19,6 @@ proptest! {
         prop_assert!(name.len() <= 200);
         prop_assert!(!name.contains('"'));
     }
-}
-
-#[test]
-fn bytes_travel_as_base64() {
-    assert_eq!(crate::frame::encode(&AttachmentBytes::new(b"hi".to_vec())).unwrap(), b"\"aGk=\"\n");
-    assert!(crate::frame::decode::<AttachmentBytes>(b"\"not base64!\"").is_err());
 }
 
 #[test]

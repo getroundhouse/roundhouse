@@ -23,6 +23,7 @@ mod record;
 mod session;
 mod settings;
 mod subagent;
+mod terminal;
 mod title;
 mod wait;
 mod worktrees;
@@ -63,6 +64,7 @@ pub use settings::{SessionSettings, SessionSettingsChange};
 pub use subagent::{
     Call, CallResult, Lately, LatelyCall, LatelyResult, RecentCall, RecentWork, Said, Subagent, SubagentStatus,
 };
+pub use terminal::Terminal;
 pub use title::{Title, TitleError, TitleSource};
 pub use wait::{EndedWait, Wait, WaitEnd, WaitEnded, WaitUntil, Watching};
 pub use worktrees::{CHILDREN, ChildStatus, ChildWorktree, MadeBy, WorkName, WorkNameError};
@@ -74,7 +76,7 @@ pub use ids::{
     AccountId, AgentSessionId, ApprovalId, AskKey, AttachmentId, BranchName, ChildWorktreeId, ClientMessageId,
     ClientRequestId, CommentId, CommitId, DeviceId, GithubAccountId, GithubAppSlug, GithubSignInId, GithubUserCode,
     GithubUsername, HubId, InstanceId, MessageId, ProviderName, RemoteName, RepoId, SessionId, SubagentId, TaskId,
-    ToolUseId, WaitId, WorkerTarget, WorkspaceId,
+    TerminalId, ToolUseId, WaitId, WorkerTarget, WorkspaceId,
 };
 mod repo;
 pub use repo::{Repo, RepoOrigin, RepoUrl, RepoUrlError};

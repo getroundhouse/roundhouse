@@ -47,6 +47,8 @@ impl Store {
             found_github_logins: found_github_logins(&tx)?,
             github_apps: github_apps(&tx)?,
             github_reach: github_reach(&tx)?,
+            // Kept in memory rather than here, as `Terminal` says, and none is opened yet.
+            terminals: Vec::new(),
             rev: current_rev(&tx)?,
         };
         tx.commit()?;

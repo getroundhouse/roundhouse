@@ -310,6 +310,8 @@ impl Hub {
             keeps_workers: KEEPS_WORKERS,
             oldest_protocol_version: Some(versions::CLIENTS.oldest),
             oldest_running_worker_protocol: Some(oldest_running_worker_protocol),
+            // It refuses to open one.
+            open_terminals: 0,
         }
     }
 

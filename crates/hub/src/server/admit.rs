@@ -277,6 +277,11 @@ fn local_only(request: &ClientRequest) -> bool {
         | R::NewWorkspaceDraftFileRemove(..)
         | R::NewWorkspaceCreate(..)
         | R::SessionRename(..)
+        | R::TerminalOpen(..)
+        | R::TerminalAttach(..)
+        | R::TerminalInput(..)
+        | R::TerminalResize(..)
+        | R::TerminalClose(..)
         | R::Unknown => false,
     }
 }

@@ -1,6 +1,6 @@
 use crate::model::{
     DiffComment, DiffSide, FoundGithubLogin, GithubAccount, GithubReach, GithubSignIn, HubSettings, NewWorkspaceDraft,
-    Record, RecordKey, Repo, Rev, Subagent,
+    Record, RecordKey, Repo, Rev, Subagent, Terminal,
 };
 
 use super::{HubNotice, RecordNotice};
@@ -23,6 +23,7 @@ fn of_a_record() -> Vec<(HubNotice, RecordKey, Rev)> {
         rev: Rev::new(3),
     };
     let draft = NewWorkspaceDraft { rev: Rev::new(5), ..NewWorkspaceDraft::default() };
+    let terminal = Terminal { id: "t".into(), workspace_id: "w".into(), opened_at_ms: 0, rev: Rev::new(8) };
     let gone = RecordKey::Session { id: "s".into() };
     vec![
         (HubNotice::Repo(repo), RecordKey::Repo { id: "r".into() }, Rev::new(2)),
@@ -44,6 +45,7 @@ fn of_a_record() -> Vec<(HubNotice, RecordKey, Rev)> {
             RecordKey::Subagent { session_id: "s".into(), subagent: "c".into() },
             Rev::new(6),
         ),
+        (HubNotice::Terminal(terminal), RecordKey::Terminal { id: "t".into() }, Rev::new(8)),
         (HubNotice::Removed { record: gone.clone(), rev: Rev::new(7) }, gone, Rev::new(7)),
         (
             HubNotice::GithubAccount(GithubAccount { rev: Rev::new(8), ..crate::fixtures::github_account("g") }),

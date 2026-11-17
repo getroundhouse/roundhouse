@@ -7,10 +7,11 @@ use crate::event::SessionEvent;
 use crate::find::Found;
 use crate::model::{
     Account, DiffComment, FileContents, FileOpened, FilePages, GitDiff, GitStatus, GithubAccount, GithubApp,
-    GithubSignIn, HubSettings, NewWorkspaceDraft, Records, Repo, Session, SessionAccount, TitleError, Workspace,
-    WorktreeFiles,
+    GithubSignIn, HubSettings, NewWorkspaceDraft, Records, Repo, Session, SessionAccount, Terminal, TitleError,
+    Workspace, WorktreeFiles,
 };
 use crate::tail::{StreamDelta, Tail};
+use crate::terminal::TerminalUpdate;
 use feed::HubNotice;
 use hello::HelloReply;
 use request::ClientRequest;
@@ -102,6 +103,7 @@ pub enum ClientResponse {
     FileContents(FileContents),
     FileOpened(FileOpened),
     FilePages(FilePages),
+    Terminal(Terminal),
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -148,15 +150,19 @@ pub struct HubStatus {
     /// hub doesn't, as "Managing a hub" in `docs/architecture.md` says. `None` from a hub from before this.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub oldest_running_worker_protocol: Option<u32>,
+    /// Terminals open in its workspaces, or being opened, whose shells stopping their workers would end. A hub from
+    /// before terminals has none.
+    #[serde(default)]
+    pub open_terminals: u32,
 }
 
 impl HubStatus {
-    /// Whether stopping the hub would cut nothing off: nothing is running on it, and the request asking for this is
-    /// the one thing it's doing. Other clients don't count. One that's only connected loses nothing, since it connects
-    /// again to the next hub, and what's typed in it is kept by the hub, while counting it would keep an older hub,
-    /// and the update waiting on it, for as long as an app on another device stays open.
+    /// Whether stopping the hub would cut nothing off: nothing is running on it, no terminal is open, and the request
+    /// asking for this is the one thing it's doing. Other clients don't count. One that's only connected loses nothing,
+    /// since it connects again to the next hub, and what's typed in it is kept by the hub, while counting it would keep
+    /// an older hub, and the update waiting on it, for as long as an app on another device stays open.
     pub fn is_idle(&self) -> bool {
-        self.running_sessions == 0 && self.running_setups == 0 && self.requests <= 1
+        self.running_sessions == 0 && self.running_setups == 0 && self.open_terminals == 0 && self.requests <= 1
     }
 }
 
@@ -249,6 +255,11 @@ pub enum HubFrame {
     Notice {
         subscription_id: u64,
         notice: HubNotice,
+    },
+    /// What happens next in the terminal a `TerminalAttach` follows, in order, starting with what it shows.
+    Terminal {
+        subscription_id: u64,
+        update: TerminalUpdate,
     },
 }
 
