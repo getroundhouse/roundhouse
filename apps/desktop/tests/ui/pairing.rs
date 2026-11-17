@@ -51,12 +51,12 @@ fn connecting_another_hub_previews_it_keeps_errors_inline_and_switches_with_this
 
     ui.click("hub-switcher");
     ui.click("hub-menu-connect");
-    assert!(ui.disabled("pair-hub"));
+    assert!(ui.off("pair-hub"));
 
     // A malformed string disables Connect and explains what a pairing link looks like inline.
     ui.input("not-a-link");
     ui.frame();
-    assert!(ui.disabled("pair-hub"));
+    assert!(ui.off("pair-hub"));
     assert!(ui.has("connect-hub-error"));
 
     // Replace with a link whose code isn't live on the remote hub: preview resolves this computer's name in the
@@ -81,10 +81,10 @@ fn connecting_another_hub_previews_it_keeps_errors_inline_and_switches_with_this
         .len(),
         1
     );
-    assert!(!ui.disabled("pair-hub"));
+    assert!(ui.on("pair-hub"));
 
     ui.click("pair-hub");
-    ui.wait("the inline rejection", |ui| ui.has("connect-hub-error") && !ui.disabled("pair-hub"));
+    ui.wait("the inline rejection", |ui| ui.has("connect-hub-error") && ui.on("pair-hub"));
     assert!(ui.has_dialog());
     assert!(ui.view().error.is_none(), "connection failures stay inside the dialog");
 
@@ -92,7 +92,7 @@ fn connecting_another_hub_previews_it_keeps_errors_inline_and_switches_with_this
     ui.input(&pairing.link.to_string());
     ui.press("enter");
     ui.wait("the app to switch to the remote hub", |ui| !ui.has_dialog() && ui.has("first-switch-local"));
-    assert!(ui.disabled("add-project"), "adding a repository is local to that hub's machine");
+    assert!(ui.off("add-project"), "adding a repository is local to that hub's machine");
 
     let devices = remote.client().device_list().unwrap();
     assert_eq!(devices.len(), 1);

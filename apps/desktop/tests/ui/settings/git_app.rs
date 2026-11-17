@@ -97,7 +97,7 @@ fn an_app_is_made_on_github_and_connected_as_the_window_comes_back_once_its_inst
     let first = "Choose where to make it, and its name";
     assert_eq!(steps(&mut ui), [first, "Make it on GitHub", "Install it on the repositories agents should reach"]);
     assert!(ui.has("git-app-under-account") && ui.has("git-app-name") && !ui.has("git-app-organization"));
-    assert!(ui.disabled("git-make-on-github"), "with no name, as no account or login says one");
+    assert!(ui.off("git-make-on-github"), "with no name, as no account or login says one");
     ui.input("ada-roundhouse");
 
     let page = on_github(&mut ui);
@@ -157,7 +157,7 @@ fn an_app_under_an_organization_is_made_at_its_form_and_check_again_asks_the_hub
     ui.input("ada-roundhouse");
     ui.click("git-app-under-organization");
     assert!(ui.has("git-app-organization"));
-    assert!(ui.disabled("git-make-on-github"), "until there's an organization's name");
+    assert!(ui.off("git-make-on-github"), "until there's an organization's name");
     ui.input("ada labs");
     ui.click("git-make-on-github");
     ui.wait("why", |ui| ui.has("git-refused"));
@@ -199,7 +199,7 @@ fn a_code_github_no_longer_takes_says_why_and_starting_again_makes_the_app(cx: &
 
     ui.click("git-start-again");
 
-    ui.wait("the first step", |ui| ui.has("git-make-on-github") && !ui.disabled("git-make-on-github"));
+    ui.wait("the first step", |ui| ui.on("git-make-on-github"));
     let again = on_github(&mut ui);
     assert_ne!(again, first, "a new listener, with a state of its own");
     come_back(&again, CODE);

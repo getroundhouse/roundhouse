@@ -99,7 +99,7 @@ fn the_cards_button_asks_the_agent_to_compact(cx: &mut TestAppContext) {
     let mut ui = after_a_turn(cx, &stack);
     ui.hover("context");
     ui.wait_out_a_tooltip();
-    assert!(!ui.disabled("context-compact"));
+    assert!(ui.on("context-compact"));
 
     // Off the ring, and onto the card, which waits for the pointer to cross.
     ui.click("context-compact");
@@ -153,7 +153,7 @@ fn the_cards_button_is_off_while_the_agent_is_on_a_turn(cx: &mut TestAppContext)
     ui.hover("context");
     ui.wait_out_a_tooltip();
 
-    assert!(ui.disabled("context-compact"));
+    assert!(ui.off("context-compact"));
 }
 
 #[gpui_kit::test]

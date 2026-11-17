@@ -29,7 +29,7 @@ pub(super) fn in_git<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> Ui<'a> {
     let mut ui = Ui::open(cx, stack);
     open_settings(&mut ui);
     ui.click("settings-page-git");
-    ui.wait("Connect account to be on", |ui| ui.has("git-connect") && !ui.disabled("git-connect"));
+    ui.wait("Connect account to be on", |ui| ui.on("git-connect"));
     ui
 }
 
@@ -67,7 +67,7 @@ fn a_token_connected_here_becomes_the_default_and_only_the_hub_keeps_it(cx: &mut
 
     ui.click("git-connect");
     ui.click("git-use-token");
-    assert!(ui.disabled("git-panel-connect"), "until there's a token");
+    assert!(ui.off("git-panel-connect"), "until there's a token");
     ui.input(TOKEN);
     ui.click("git-panel-connect");
 
@@ -95,7 +95,7 @@ fn a_token_github_refuses_says_why_and_is_gone_from_its_field(cx: &mut TestAppCo
 
     ui.wait("the refusal", |ui| ui.has("git-refused"));
     assert!(ui.has("git-panel"), "it stays open, to paste another");
-    assert!(ui.disabled("git-panel-connect"), "its field is empty");
+    assert!(ui.off("git-panel-connect"), "its field is empty");
     assert!(ui.view().records().github_accounts().is_empty());
     assert!(the_hubs(&stack).is_empty());
 }
@@ -145,7 +145,7 @@ fn the_default_is_chosen_from_an_accounts_menu_or_as_each_machines_own_by_found(
     assert_eq!(the_hubs_default(&stack), Some(grace));
 
     // The hub's notice of the new default can come before its reply, and Make default stays off until the reply.
-    ui.wait("Make default to be on", |ui| !ui.disabled("git-machines-own-default"));
+    ui.wait("Make default to be on", |ui| ui.on("git-machines-own-default"));
     ui.click("git-machines-own-default");
 
     ui.wait("each machine's own the default", |ui| default(ui).is_none() && !ui.has("git-machines-own-default"));

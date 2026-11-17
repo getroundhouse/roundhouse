@@ -82,7 +82,7 @@ fn a_workspace_archived_from_elsewhere_says_so_here_until_it_has_gone(cx: &mut T
     ui.wait("its row to say so", |ui| ui.shows_label(&format!("doing-{going}"), "Archiving…"));
     assert_eq!(ui.view().busy, Busy::Free, "this app asked for nothing");
     ui.hover(row(&other));
-    assert!(!ui.disabled(archive_button(&other)), "so it can archive another");
+    assert!(ui.on(archive_button(&other)), "so it can archive another");
     held.release();
     archiving.join().unwrap().unwrap();
     ui.wait("it to be archived", |ui| archived(ui, &going));
@@ -285,11 +285,11 @@ fn nothing_else_is_archived_or_restored_while_a_workspace_is_being_archived(cx: 
 
     ui.press("secondary-shift-a");
     ui.wait("it to start archiving", |_| held.runs() == 1);
-    assert!(ui.disabled("pull-request-action"), "the pull request's Archive can't be pressed meanwhile");
+    assert!(ui.off("pull-request-action"), "the pull request's Archive can't be pressed meanwhile");
     assert!(ui.shows_label("pull-request-action", "Archiving…"), "and says why");
     assert!(ui.shows_label(&format!("doing-{id}"), "Archiving…"), "as its row does, in place of its button");
     ui.hover(row(&other));
-    assert!(ui.disabled(archive_button(&other)), "another row's can't be pressed either");
+    assert!(ui.off(archive_button(&other)), "another row's can't be pressed either");
     ui.press("secondary-shift-a");
     // Only Home lists an archived workspace, and pressing its row there brings it back.
     ui.click("home");

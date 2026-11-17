@@ -251,13 +251,13 @@ fn the_heading_stays_over_the_repositories_while_the_hub_is_gone_and_add_project
     let _daemon = stack.without_a_daemon();
     let mut ui = Ui::open(cx, &stack);
     ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
-    assert!(!ui.disabled("add-project"));
+    assert!(ui.on("add-project"));
 
     lose_the_hub(&mut ui, &stack);
 
     assert_eq!(ui.view().records().repos().len(), 1, "the repository is still listed");
     assert!(ui.has("add-project"), "so the heading stays over it");
-    assert!(ui.disabled("add-project"), "with no hub to add one to");
+    assert!(ui.off("add-project"), "with no hub to add one to");
 }
 
 /// The app restarts an older hub the moment it's idle, which is often just as someone starts typing their next
