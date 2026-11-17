@@ -36,6 +36,7 @@ thiserror.workspace = true
 velopack.workspace = true
 update-feed.workspace = true
 flume.workspace = true
+percent-encoding.workspace = true
 qrcode.workspace = true
 parking_lot.workspace = true
 ring.workspace = true

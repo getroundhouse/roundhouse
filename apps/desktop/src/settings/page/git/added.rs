@@ -1,5 +1,6 @@
 //! Added, the GitHub accounts the person gave the hub: Connect account by its heading, the panel for a new account
-//! under that, what stops the default being used, if anything does, and a row for each account, with its menu.
+//! under that, what stops the default being used, if anything does, a row for each account, with its menu, and one for
+//! each app of your own installed nowhere yet.
 
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::{IconName, v_flex};
@@ -12,7 +13,7 @@ use super::super::lists::{heading, list as rows_of, said_in_the_list};
 use super::git_page::COLUMNS;
 use super::kept::{Asked, Panel, Shows};
 use super::words::{self, Standing};
-use super::{Drawing, account_menu, connect_panels, sign_in_panel};
+use super::{Drawing, account_menu, app_panel_drawn, app_rows, connect_panels, sign_in_panel};
 use crate::status_box::{self, StatusBox};
 
 pub(super) fn list(drawing: &Drawing<'_>, cx: &App) -> Div {
@@ -34,6 +35,7 @@ pub(super) fn list(drawing: &Drawing<'_>, cx: &App) -> Div {
     let said = said.map(|(id, said)| said_in_the_list(id, said.into(), cx));
     let rows = accounts.iter().map(|account| account_row(drawing, account, cx));
     let list = rows_of(cx).children(panel).children(blocked(drawing, cx)).children(said).children(rows);
+    let list = list.children(app_rows::not_installed(drawing, cx));
     let says = if drawing.older { words::ADDED_SAYS_OLDER } else { words::ADDED_SAYS };
     v_flex().child(heading("Added", None, says, Some(connect.into_any_element()), cx)).child(list)
 }
@@ -52,6 +54,7 @@ pub(super) fn draw_panel(drawing: &Drawing<'_>, panel: &Panel, cx: &App) -> AnyE
         Shows::Choosing => connect_panels::choosing(drawing, panel, cx),
         Shows::Token(token) => connect_panels::token(drawing, panel, token, cx),
         Shows::SignIn(sign_in) => sign_in_panel::sign_in(drawing, panel, sign_in, cx),
+        Shows::App(app) => app_panel_drawn::app(drawing, panel, app, cx),
     }
 }
 
@@ -59,7 +62,11 @@ pub(super) fn draw_panel(drawing: &Drawing<'_>, panel: &Panel, cx: &App) -> AnyE
 /// right, rather than push as the machine's own.
 fn blocked(drawing: &Drawing<'_>, cx: &App) -> Option<AnyElement> {
     let account = drawing.records.github_account(drawing.github?.account.as_ref()?)?;
-    let said = Standing::of(account.held_login.as_ref(), drawing.now_ms, cx).blocked(account.user.name.as_str())?;
+    let standing = Standing::of(account.held_login.as_ref(), drawing.now_ms, cx);
+    let said = match &account.installation {
+        Some(installed) => app_rows::blocked(drawing, account, installed, &standing)?,
+        None => standing.blocked(account.user.name.as_str())?,
+    };
     let said = StatusBox {
         id: "git-blocked",
         icon: Lucide::TriangleAlert,
@@ -74,7 +81,6 @@ fn blocked(drawing: &Drawing<'_>, cx: &App) -> Option<AnyElement> {
 
 /// `account`'s row, with why the hub couldn't do what was asked of it under it, and the panel renewing its login.
 fn account_row(drawing: &Drawing<'_>, account: &GithubAccount, cx: &App) -> AnyElement {
-    let colors = look::colors(cx);
     let standing = Standing::of(account.held_login.as_ref(), drawing.now_ms, cx);
     let tone = match standing {
         Standing::Works { .. } | Standing::Disconnected => Tone::Plain,
@@ -82,24 +88,35 @@ fn account_row(drawing: &Drawing<'_>, account: &GithubAccount, cx: &App) -> AnyE
         Standing::Ended { .. } | Standing::SignInAgain => Tone::Problem,
     };
     let kept = drawing.kept.read(cx);
-    let failed = kept.failed(&Asked::Account(account.id.clone())).map(|said| {
-        let line = div().pb(look::Space::Medium).typeset(look::Type::Body).text_color(colors.error);
-        line.child(said.to_string()).into_any_element()
-    });
+    let failed = kept.failed(&Asked::Account(account.id.clone())).map(|said| failed_line(said, cx).into_any_element());
     let panel = kept.panel.as_ref().filter(|panel| panel.under() == Some(&account.id));
     let panel =
         panel.map(|panel| div().pb(look::Space::Large).child(draw_panel(drawing, panel, cx)).into_any_element());
+    let (picture, detail, menu) = match &account.installation {
+        Some(installed) => app_rows::installation_parts(drawing, account, installed, &standing, tone, cx),
+        None => (
+            Picture::of(account.user.name.as_str()),
+            standing.said().map(|said| Detail::Said(said, tone)),
+            Some(account_menu::menu(drawing, account, standing.works(), cx)),
+        ),
+    };
     let shown = Row {
         id: SharedString::from(format!("git-account-{}", account.id)),
-        picture: Picture::of(account.user.name.as_str()),
+        picture,
         name: account.user.name.to_string(),
         dim: standing == Standing::Disconnected,
         default: drawing.is_default(account),
         how: account.held_login.map(|held| words::connected_by(held.how).into()),
-        detail: standing.said().map(|said| Detail::Said(said, tone)),
-        menu: Some(account_menu::menu(drawing, account, standing.works(), cx)),
+        detail,
+        menu,
         card: None,
         under: failed.into_iter().chain(panel).collect(),
     };
     account_row::row(shown, COLUMNS, cx)
+}
+
+/// Why the hub couldn't do what was asked of a row, or of Found, in red, under it.
+pub(super) fn failed_line(said: &str, cx: &App) -> Div {
+    let line = div().pb(look::Space::Medium).typeset(look::Type::Body).text_color(look::colors(cx).error);
+    line.child(said.to_string())
 }

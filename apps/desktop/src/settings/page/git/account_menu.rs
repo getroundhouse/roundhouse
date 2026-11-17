@@ -10,6 +10,7 @@ use super::super::account_row;
 use super::Drawing;
 use super::kept::Kept;
 use super::token::Renewing;
+use super::words;
 
 /// What an item does to the page's state, for `account`, the default when `default`.
 type Act = fn(&mut Kept, &GithubAccount, bool, &mut Window, &mut Context<Kept>);
@@ -29,7 +30,8 @@ pub(super) fn menu(drawing: &Drawing<'_>, account: &GithubAccount, works: bool, 
         let menu = if default { menu } else { menu.item(item("Make default", make_default).disabled(!works)) };
         let menu = match account.held_login.map(|held| held.how) {
             Some(GithubLoginKind::SignIn) => menu.item(item("Sign in again", sign_in_again)),
-            // An app's installation, as an older client takes it, until the page shows apps of your own.
+            // An app's installation has a menu of its own, in `app_menu`, so one here is from a hub whose record says
+            // it's no installation, and a token can renew it, as it can one connected a way this app doesn't know.
             Some(GithubLoginKind::Token | GithubLoginKind::App | GithubLoginKind::Unknown) => {
                 menu.item(item("Renew", renew))
             }
@@ -57,5 +59,6 @@ fn sign_in_again(kept: &mut Kept, account: &GithubAccount, _: bool, _: &mut Wind
 }
 
 fn disconnect(kept: &mut Kept, account: &GithubAccount, default: bool, window: &mut Window, cx: &mut Context<Kept>) {
-    kept.ask_to_disconnect(account.id.clone(), account.user.name.as_str(), default, window, cx);
+    let says = words::disconnect_says(default);
+    kept.ask_to_disconnect(account.id.clone(), account.user.name.as_str(), says, window, cx);
 }

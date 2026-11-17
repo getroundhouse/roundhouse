@@ -20,7 +20,7 @@ In it:
 | `backups/` | Copies of the database from before each migration |
 | `attachments/` | The files prompts carried |
 | `logins/` | The tokens of the logins you've added in [Settings](settings.md#agents), a file each, which only you can open. Disconnecting one removes its file |
-| `github-logins/` | The tokens of the GitHub accounts you've added in [Settings](settings.md#git), a file each, which only you can open. Disconnecting one removes its file |
+| `github-logins/` | The tokens of the GitHub accounts you've added in [Settings](settings.md#git), and the key of each app of your own, a file each, which only you can open. Disconnecting an account, or removing an app, removes its file |
 | `hub.log` | The hub's log |
 | `worker-logs/` | Each workspace's worker's log |
 | `instances/` | A directory for each workspace's worker, with the workspace's setup log, which its archive script adds to. While an agent or the setup script runs, the directory also holds a record of it, so it can be stopped if the worker is killed, and while a Claude agent runs, the files its CLI reads, such as the one that tells it where Roundhouse's tools are |
@@ -56,7 +56,8 @@ Two environment variables move them, for a hub started with them set:
 - **What your agent sends,** to its model provider, through the Claude, Codex or Antigravity CLI under its login. Codex and Antigravity keep their native sign-ins and conversation files in their own data directories.
 - **Your prompts' words and their first images, to write a title,** in a separate call through that chat’s CLI and login: Haiku for Claude, Luna at Low effort for Codex, and Gemini 3.8 Flash at Low effort for Antigravity.
 - **What `git` and `gh` send,** to your remotes and to GitHub, as the default GitHub account in [Settings](settings.md#git), or each machine's own login.
-- **The hub's calls to GitHub,** once you add a GitHub account: to ask whose a token is and when it ends, to sign in, to renew a sign-in's token, and once a day to ask again who each account you added is, by the name and email its GitHub profile shows, which agents' commits are by. And each time the hub starts, `gh` asks GitHub, once on each machine, whether it takes that machine's own login, which Git's Found says.
+- **The app's manifest, as you make an app of your own,** which your browser posts to GitHub, from a page the app serves on your machine, on `127.0.0.1` alone, until GitHub sends you back with a code.
+- **The hub's calls to GitHub,** once you add a GitHub account: to ask whose a token is and when it ends, to sign in, to renew a sign-in's token, and once a day to ask again who each account you added is, by the name and email its GitHub profile shows, which agents' commits are by. For an app of your own, it makes the app from GitHub's code, looks for where it's installed, and makes its installation's tokens. And each time the hub starts, `gh` asks GitHub, once on each machine, whether it takes that machine's own login, which Git's Found says.
 
 ## Going back a version
 

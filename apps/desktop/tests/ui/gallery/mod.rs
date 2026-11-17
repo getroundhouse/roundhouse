@@ -35,6 +35,7 @@ mod fake_hub;
 mod file_chats;
 mod finding;
 mod frame;
+mod git_app_screens;
 mod git_screens;
 mod headless;
 mod home_screens;

@@ -150,6 +150,7 @@ fn screens() -> impl Iterator<Item = &'static steps::Screen> {
         .chain(home_screens::SCREENS)
         .chain(settings_screens::SCREENS)
         .chain(super::git_screens::SCREENS)
+        .chain(super::git_app_screens::SCREENS)
         .chain(dictation_screens::SCREENS)
         .chain(component_screens::SCREENS)
         .chain(super::prompt_screens::SCREENS)

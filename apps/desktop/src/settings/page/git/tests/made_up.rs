@@ -33,6 +33,11 @@ pub(super) fn named(id: &str, name: &str, disconnected: bool) -> GithubAccount {
 
 /// The hub's records: `accounts`, `sign_ins`, and settings that make `default` the default.
 pub(super) fn records(accounts: Vec<GithubAccount>, sign_ins: Vec<GithubSignIn>, default: Option<&str>) -> Snapshot {
+    listed(Records { github_accounts: accounts, github_sign_ins: sign_ins, ..Records::default() }, default)
+}
+
+/// `records`, with settings that make `default` the default, as the hub lists them.
+pub(super) fn listed(records: Records, default: Option<&str>) -> Snapshot {
     let settings = HubSettings {
         keep_awake: true,
         allow_asked_in_full_access: None,
@@ -41,13 +46,7 @@ pub(super) fn records(accounts: Vec<GithubAccount>, sign_ins: Vec<GithubSignIn>,
         rev: Rev::default(),
     };
     let mut held = HubRecords::default();
-    held.apply_list(Records {
-        hub_settings: Some(settings),
-        github_accounts: accounts,
-        github_sign_ins: sign_ins,
-        rev: Rev::new(1),
-        ..Records::default()
-    });
+    held.apply_list(Records { hub_settings: Some(settings), rev: Rev::new(1), ..records });
     held.snapshot()
 }
 

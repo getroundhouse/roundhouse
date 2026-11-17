@@ -6,6 +6,8 @@ mod account_card;
 mod account_rows;
 mod agents;
 mod git;
+mod git_app;
+mod git_app_rows;
 mod git_sign_in;
 mod search;
 

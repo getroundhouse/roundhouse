@@ -70,6 +70,20 @@ The app hands the token to the hub, which keeps it in its own data, as [Where da
 
 A chat under the account names it by the name you gave it, where a login of the machine's own shows its email: on the card of its limits, beside Send, or on the context's card when there are no limits.
 
+### Make an app of your own
+
+Click **Connect account**, then **Make an app**. Agents act as the app's bot, as [Who agents are on GitHub](../concepts/who-agents-are-on-github.md#an-app-of-your-own) says. The panel takes you through three steps, and **Cancel** puts it away at any of them:
+
+1. **Choose where to make it,** under your account or an organization, by its name as in its address on GitHub, and the app's name, which starts as the username of an account you've added, or that `gh` is logged in as, with `-roundhouse` after it. Click **Make on GitHub**.
+2. **Make it on GitHub,** on the page your browser opens, where GitHub says if another app has the name, and you can change it. Once it's made, GitHub sends you back to Roundhouse, which waits for 30 minutes, and gives the hub the code GitHub sends, which the hub makes into the app's key. **Open GitHub again** opens the page again.
+3. **Install it,** with **Install on GitHub**: choose the repositories agents should reach, and come back. Roundhouse looks for it as you do, and the hub every minute, or click **Check again**. Once it's installed, the panel says where, and **Done** puts it away.
+
+![Making an app, waiting for GitHub](../../spec/screens/settings-git-app-on-github.png)
+
+If the hub couldn't take the app's key, as when GitHub didn't answer, **Try again** gives it the same code, which GitHub takes for an hour. After that, the app GitHub made has no key here: delete it on GitHub, or choose another name, and **Start again**.
+
+The installation is a row in **Added**, by its bot's name, which you make the default from its **…** menu, as you would an account. An app installed nowhere yet has a row of its own, saying `Not installed`, with **Install on GitHub** in its menu. **Remove app**, in either menu, has the hub forget the app's key and its installation's login, and asks first. It deletes nothing on GitHub, so delete the app there to be rid of it.
+
 ### Renew and disconnect
 
 - **A login warns a month before it ends,** in amber, and in red once it has. Choose **Renew** in the row's **…** menu, run `claude setup-token` again for the same account, and paste the new token in the panel that opens under it. The account keeps its name, its limits and its chats.
@@ -91,7 +105,7 @@ The GitHub accounts agents push and open pull requests as. [Who agents are on Gi
 
 - **Added** has the accounts you've given the hub, the default first. Every machine's `git` and `gh` use the default for github.com, so agents push and open pull requests as it, and Roundhouse reads pull requests with it, wherever they run.
 - **Found** has who `gh` is logged in as on each machine where a workspace has run since the hub last started, and whether GitHub took its token then. Roundhouse never copies it. While you've added no account, agents use each machine's own login, and Found has the Default badge. **Make default**, by Found's heading, goes back to each machine's own login once you have.
-- **Each row** says how the account was connected, `Signed in` or `Token`, and only what else needs saying, such as when a token ends.
+- **Each row** says how the account was connected, `Signed in`, `Token` or `App`, and only what else needs saying, such as when a token ends, or where an app is installed.
 
 The first account you connect becomes the default. To use another, choose **Make default** in its row's **…** menu.
 
@@ -101,10 +115,11 @@ Click **Connect account**, then:
 
 - **Sign in:** the hub asks GitHub for a code, which the panel shows. Copy it, click **Open github.com/login/device**, type it there, and approve Roundhouse. The panel says when you're signed in, or why not, with **Sign in again**. The hub renews the login by itself, so there's no end to watch for.
 - **Paste a token:** click **Make one on GitHub**, make a token for the repositories agents should reach, paste it, and click **Connect**. The hub asks GitHub whose it is and when it ends.
+- **Make an app:** agents act as its bot, as the next section says.
 
 ![Signing in with GitHub, with the code to type](../../spec/screens/settings-git-signing-in.png)
 
-Either way, the hub keeps the login in its own data, as [Where data is kept](where-data-is-kept.md) says, and the app writes it nowhere. A sign-in that waits shows on Git in every window until it's approved or cancelled, so you can finish one you started before the app quit.
+Whichever way, the hub keeps the login in its own data, as [Where data is kept](where-data-is-kept.md) says, and the app writes it nowhere. A sign-in that waits shows on Git in every window until it's approved or cancelled, so you can finish one you started before the app quit.
 
 ### Renew and disconnect
 
@@ -112,7 +127,7 @@ Either way, the hub keeps the login in its own data, as [Where data is kept](whe
 - **A sign-in says `Renewing`** while the hub renews a token that has ended, and `Needs signing in again` once GitHub won't renew it. Choose **Sign in again** in its menu, and approve it as the same GitHub user.
 - **Disconnect,** in the same menu, has the hub forget the login, and asks first. The account stays, with **Connect again** and **Sign in again**. It doesn't revoke the token on GitHub.
 
-If the default can't be used, because its token ended, it was disconnected or it needs signing in again, it stays the default, and agents can't push until you put it right or make another the default. They don't fall back on the machine's own login. Git says so at the top of **Added**.
+If the default can't be used, because its token ended, it was disconnected, it needs signing in again, or it's an app's installation that was uninstalled on GitHub, it stays the default, and agents can't push until you put it right or make another the default. They don't fall back on the machine's own login. Git says so at the top of **Added**.
 
 ![Git saying agents can't push, since the default's token ended](../../spec/screens/settings-git-default-ended.png)
 

@@ -37,7 +37,7 @@ Everything the app does today, on one page, with where to read more. What's desi
 - **Every file in the workspace can be read,** ignored ones too.
 - **A bar says the first thing in the way of merging,** and offers the one thing to do about it, such as Push, Fix checks, Resolve or Merge. See [Take a pull request to merge](../guides/take-a-pull-request-to-merge.md).
 - **Every row in the sidebar shows where its pull request stands.**
-- **Agents push as the GitHub account you choose,** on every machine, or as each machine's own login. See [Who agents are on GitHub](../concepts/who-agents-are-on-github.md).
+- **Agents push as the GitHub account you choose,** or the bot of an app of your own, on every machine, or as each machine's own login. See [Who agents are on GitHub](../concepts/who-agents-are-on-github.md).
 
 ## Keep long chats in hand
 

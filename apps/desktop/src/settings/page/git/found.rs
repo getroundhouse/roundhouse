@@ -4,12 +4,12 @@
 //! Found's heading says Default while it is, and offers Make default while it isn't. *Unconfirmed:* choosing it there.
 
 use gpui_kit::component::v_flex;
-use gpui_kit::{AnyElement, App, Div, IntoElement, ParentElement as _, SharedString, Styled as _, div};
-use look::Typeset as _;
+use gpui_kit::{AnyElement, App, Div, IntoElement, ParentElement as _, SharedString};
 use protocol::model::{FoundGithubLogin, GhLogin};
 
 use super::super::account_row::{self, Detail, Picture, Row, Tone};
 use super::super::lists::{badge, heading, list as rows_of, said_in_the_list};
+use super::added::failed_line;
 use super::git_page::COLUMNS;
 use super::kept::Asked;
 use super::{Drawing, words};
@@ -22,10 +22,7 @@ pub(super) fn list(drawing: &Drawing<'_>, cx: &App) -> Option<Div> {
     let machines_own = drawing.github.is_some_and(|github| github.account.is_none());
     let found = drawing.records.found_github_logins();
     let none = found.is_empty().then(|| said_in_the_list("git-none-found", words::NONE_FOUND.into(), cx));
-    let failed = drawing.kept.read(cx).failed(&Asked::MachinesOwn).map(|said| {
-        let line = div().pb(look::Space::Medium).typeset(look::Type::Body).text_color(look::colors(cx).error);
-        line.child(said.to_string())
-    });
+    let failed = drawing.kept.read(cx).failed(&Asked::MachinesOwn).map(|said| failed_line(said, cx));
     let rows = found.iter().map(|found| found_row(found, cx));
     let heading =
         heading("Found", machines_own.then(|| badge("Default", cx)), words::FOUND_SAYS, make_default(drawing, cx), cx);

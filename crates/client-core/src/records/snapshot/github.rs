@@ -17,7 +17,9 @@ pub(super) struct GithubListed {
     accounts: Vec<GithubAccount>,
     account_at: HashMap<GithubAccountId, usize>,
     sign_ins: HashMap<GithubSignInId, GithubSignIn>,
-    apps: HashMap<GithubAppId, GithubApp>,
+    /// By name, in any case, then by number.
+    apps: Vec<GithubApp>,
+    app_at: HashMap<GithubAppId, usize>,
     /// By provider.
     found: Vec<FoundGithubLogin>,
     /// By the repository it's of.
@@ -34,7 +36,7 @@ impl GithubListed {
     }
 
     pub(super) fn app(&mut self, app: &GithubApp) {
-        self.apps.insert(app.id, app.clone());
+        self.apps.push(app.clone());
     }
 
     pub(super) fn found(&mut self, found: &FoundGithubLogin) {
@@ -49,6 +51,8 @@ impl GithubListed {
     pub(super) fn order(&mut self) {
         self.accounts.sort_by_cached_key(|account| (account.user.name.as_str().to_lowercase(), account.id.clone()));
         self.account_at = self.accounts.iter().enumerate().map(|(at, account)| (account.id.clone(), at)).collect();
+        self.apps.sort_by_cached_key(|app| (app.name.to_lowercase(), app.id.get()));
+        self.app_at = self.apps.iter().enumerate().map(|(at, app)| (app.id, at)).collect();
         self.found.sort_by(|a, b| (!a.provider.is_local(), &a.provider).cmp(&(!b.provider.is_local(), &b.provider)));
     }
 }
@@ -76,10 +80,14 @@ impl Snapshot {
         self.records.github.sign_ins.values()
     }
 
-    /// The record of the app of your own `id`, until it's removed, as the Git page's panel for making one shows it, in
-    /// the plan #1208 has for its next part.
+    /// Every app of your own the hub holds the key of, by name, in any case.
+    pub fn github_apps(&self) -> &[GithubApp] {
+        &self.records.github.apps
+    }
+
+    /// The record of the app of your own `id`, until it's removed.
     pub fn github_app(&self, id: GithubAppId) -> Option<&GithubApp> {
-        self.records.github.apps.get(&id)
+        self.records.github.app_at.get(&id).map(|&at| &self.records.github.apps[at])
     }
 
     /// The login found on each provider's machines that the hub has asked since it started: this machine's first, then

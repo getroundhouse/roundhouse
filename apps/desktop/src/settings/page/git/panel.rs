@@ -25,12 +25,7 @@ pub(super) struct Framed {
 
 /// `panel`, as `framed` says.
 pub(super) fn framed(drawing: &Drawing<'_>, panel: &Panel, framed: Framed, cx: &App) -> AnyElement {
-    let colors = look::colors(cx);
-    let refused = framed.refused.map(|refused| {
-        let refused = SharedString::from(refused);
-        let said = div().id("git-refused").role(Role::Alert).aria_label(refused.clone());
-        said.typeset(look::Type::Body).text_color(colors.error).child(refused).test_support()
-    });
+    let refused = framed.refused.map(|refused| refusal(refused, cx));
     let (kept, scroll) = (drawing.kept.clone(), drawing.scroll.clone());
     look::raised(cx)
         .id("git-panel")
@@ -53,6 +48,14 @@ pub(super) fn framed(drawing: &Drawing<'_>, panel: &Panel, framed: Framed, cx: &
         .on_prepaint(move |bounds, window, cx| kept.update(cx, |kept, _| kept.laid_out(bounds, &scroll, window)))
         .test_support()
         .into_any_element()
+}
+
+/// Why the hub, or GitHub, refused what a panel asked, in red, as an alert, so assistive apps say it as it comes. Tests
+/// find it by `git-refused`.
+pub(super) fn refusal(refused: String, cx: &App) -> impl IntoElement + use<> {
+    let refused = SharedString::from(refused);
+    let said = div().id("git-refused").role(Role::Alert).aria_label(refused.clone());
+    said.typeset(look::Type::Body).text_color(look::colors(cx).error).child(refused).test_support()
 }
 
 /// What a panel says under its title, which tests read by `git-panel-says`, as assistive apps do.
