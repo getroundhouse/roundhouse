@@ -1,11 +1,12 @@
 use crate::hub::Hub;
 use crate::session::{Live, LiveItem, LiveSession};
-use protocol::client::HubFrame;
+use protocol::client::{ApiError, HubFrame};
 use protocol::event::SessionEvent;
 use protocol::model::{Place, Seq, SessionId, SubagentId};
 use protocol::tail::Tail;
 use std::sync::Arc;
 use tokio::sync::{broadcast, mpsc};
+
 use tracing::warn;
 
 /// What a subscription follows, and how far it has been sent.
@@ -13,11 +14,49 @@ pub(in super::super) enum Following {
     /// Every event, and the next `seq` to send.
     Log { next: Seq },
     /// The agent's own events, or those of the subagent `subagent`, and the next place to send. Its tail and
-    /// deltas are only what that one is writing.
-    Places { subagent: Option<SubagentId>, next: Place },
+    /// deltas are only what that one is writing. `unrecorded` while the hub has no record of a subagent so named, as
+    /// when a client names one by the call that started it before the agent has said it started.
+    Places { subagent: Option<SubagentId>, next: Place, unrecorded: bool },
 }
 
 impl Following {
+    /// The agent's own events, or those of the subagent `named` names, as the hub finds it, from `next` on.
+    pub(in super::super) async fn places(
+        hub: &Hub,
+        id: &SessionId,
+        named: Option<SubagentId>,
+        next: Place,
+    ) -> Result<Following, ApiError> {
+        let Some(named) = named else { return Ok(Following::Places { subagent: None, next, unrecorded: false }) };
+        let recorded = hub.recorded_subagent(id.clone(), named.clone()).await?;
+        Ok(Following::Places { unrecorded: recorded.is_none(), subagent: Some(recorded.unwrap_or(named)), next })
+    }
+
+    /// Whether this now follows another subagent, the one its name names now that the hub has a record of it, as a
+    /// client that named it by its call before the agent said it started means. Only while nothing of it has been
+    /// sent, since then its name was its own.
+    async fn recorded_now(&mut self, hub: &Hub, id: &SessionId) -> bool {
+        let Following::Places { subagent: Some(named), next, unrecorded } = self else { return false };
+        if !*unrecorded {
+            return false;
+        }
+        if *next > Place::FIRST {
+            *unrecorded = false;
+            return false;
+        }
+        match hub.recorded_subagent(id.clone(), named.clone()).await {
+            Ok(None) => false,
+            Ok(Some(found)) => {
+                *unrecorded = false;
+                std::mem::replace(named, found) != *named
+            }
+            Err(e) => {
+                warn!(session = %id, "finding the subagent a subscriber follows failed: {e}");
+                false
+            }
+        }
+    }
+
     /// Whether what the agent, or the subagent `subagent`, records or writes is part of this.
     pub(super) fn takes(&self, subagent: Option<&SubagentId>) -> bool {
         match self {
@@ -53,6 +92,9 @@ pub(in super::super) async fn pump(
     frames: mpsc::Sender<HubFrame>,
 ) {
     'resync: loop {
+        // Its start may have been recorded since the subscription named it, before the snapshot, which the items for
+        // it don't come after.
+        following.recorded_now(&hub, &id).await;
         let snapshot = session.snapshot();
         if send_through(&hub, &id, subscription_id, &mut following, snapshot.last_seq, &frames).await.is_err() {
             return;
@@ -71,6 +113,11 @@ pub(in super::super) async fn pump(
             };
             if item.version <= snapshot.version {
                 continue;
+            }
+            // The agent's own events say when a subagent starts, which can give a record to the name this follows.
+            if matches!(item.item, LiveItem::Appended { subagent: None, .. }) && following.recorded_now(&hub, &id).await
+            {
+                continue 'resync;
             }
             let sent = match item.item {
                 LiveItem::Appended { seq, subagent, .. } if following.takes(subagent.as_ref()) => {
@@ -106,7 +153,7 @@ async fn send_through(
         let page = match following {
             Following::Log { next } if *next > through => return Ok(()),
             Following::Log { next } => hub.read_page(id.clone(), *next, through).await,
-            Following::Places { subagent, next } => {
+            Following::Places { subagent, next, .. } => {
                 hub.read_places_page(id.clone(), subagent.clone(), *next, through).await
             }
         };

@@ -11,3 +11,6 @@ mod tests;
 
 mod calls;
 pub(crate) use calls::Subagents;
+
+mod named;
+pub use named::subagent_named;

@@ -19,6 +19,7 @@ mod snapshot;
 mod subagents;
 
 pub use snapshot::{Changes, InWorkspace, Snapshot};
+pub use subagents::subagent_named;
 
 mod cache;
 pub use cache::HubRecords;

@@ -8,7 +8,7 @@
 
 use std::sync::Arc;
 
-use client_core::records::{Changes, Snapshot};
+use client_core::records::{Changes, Snapshot, subagent_named};
 use gpui_kit::base::Tab;
 use gpui_kit::component::button::{Button, ButtonVariants as _};
 use gpui_kit::component::tooltip::Tooltip;
@@ -111,6 +111,8 @@ impl WorkspacePane {
         title: String,
         cx: &mut Context<Self>,
     ) {
+        // One named by the call that started it is named as its record names it, once that's come.
+        let subagent = subagent_named(self.subagents_of(&session), &subagent).map_or(subagent, |named| named.id());
         let tab = self.subagents.tab.as_ref();
         let showing = tab.is_some_and(|tab| tab.session == session && tab.subagent == subagent);
         if !showing && let Some(chat) = self.shown.session(&session).cloned() {
@@ -162,7 +164,15 @@ impl WorkspacePane {
 
     /// Passes each chat's subagents on to its transcript, and to the tab if it shows one of them, when they've changed
     /// since the pane last looked, as `changes` says.
-    pub(super) fn pass_on_subagents(&self, changes: &Changes<'_>, cx: &mut Context<Self>) {
+    pub(super) fn pass_on_subagents(&mut self, changes: &Changes<'_>, cx: &mut Context<Self>) {
+        // A tab opened on the subagent a call started, before its record came, names it by that call, and the hub
+        // follows it by the ID its agent gives it once the agent says it started. Its record names it so, as its
+        // transcript does once it has the record.
+        if let Some(tab) = &mut self.subagents.tab
+            && let Some(named) = subagent_named(self.shown.all().subagents(&tab.session), &tab.subagent)
+        {
+            tab.subagent = named.id();
+        }
         for (id, chat) in &self.chats {
             let Some((transcript, _)) = &chat.transcript else { continue };
             if !changes.subagents(id) {

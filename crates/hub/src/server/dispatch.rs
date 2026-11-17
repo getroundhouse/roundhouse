@@ -147,9 +147,8 @@ pub(super) async fn handle(
             from_place,
             subscription_id,
         }) => {
-            let next = from_place.max(Place::FIRST);
-            let subagent = hub.subagent_named(id.clone(), subagent).await?;
-            follow_log(hub, connection, id, subscription_id, Following::Places { subagent, next }).await?;
+            let following = Following::places(hub, &id, subagent, from_place.max(Place::FIRST)).await?;
+            follow_log(hub, connection, id, subscription_id, following).await?;
             C::Ok
         }
         R::FeedSubscribe(subscriptions::FeedSubscribe { subscription_id }) => {

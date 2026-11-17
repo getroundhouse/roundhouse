@@ -203,14 +203,14 @@ impl Hub {
         .await
     }
 
-    /// The subagent `named` names in the session `id`, as [`Store::subagent_named`] finds it, so a client from before
-    /// subagents had IDs of their own, which names one by its call, follows its events. `None` is the agent's own.
-    pub(crate) async fn subagent_named(
+    /// The subagent `named` names in the session `id`, as [`Store::recorded_subagent`] finds it, if there's a record
+    /// of it.
+    pub(crate) async fn recorded_subagent(
         &self,
         id: SessionId,
-        named: Option<SubagentId>,
+        named: SubagentId,
     ) -> Result<Option<SubagentId>, ApiError> {
-        self.blocking(move |store| named.map(|named| store.subagent_named(&id, &named)).transpose()).await
+        self.blocking(move |store| store.recorded_subagent(&id, &named)).await
     }
 
     /// Reads for a subscriber, never past `through`.
