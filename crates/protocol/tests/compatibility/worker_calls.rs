@@ -212,6 +212,9 @@ fn every_request_of_an_agents_cli_outside_any_session_keeps_its_form() {
     let images = vec![NewAttachment { attachment: shot, data: AttachmentBytes::new(b"\x89PNG".to_vec()) }];
     let title = worker::TitleFor { agent: AgentKind::Claude, prompt: "Fix this".into(), images, login: None };
     let under_a_login = worker::TitleFor { images: vec![], login: Some(login()), ..title.clone() };
+    // As it was before images and logins.
+    let words_alone = worker::TitleFor { images: vec![], ..title.clone() };
+    asked(WorkerRequest::TitleFor(words_alone), r#"{"method":"title_for","agent":"claude","prompt":"Fix this"}"#);
     asked(
         WorkerRequest::TitleFor(under_a_login),
         r#"{"method":"title_for","agent":"claude","prompt":"Fix this","login":{"token":"made-up"}}"#,

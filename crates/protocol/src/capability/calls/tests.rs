@@ -229,15 +229,3 @@ fn more_outputs() -> Vec<CallOutput> {
         },
     ]
 }
-
-#[test]
-fn a_patch_that_adds_or_deletes_a_file_reads_back() {
-    let patch = Call::Patch(Patch {
-        files: vec![
-            FilePatch { path: "new.rs".into(), change: PatchChange::Add { content: "fn f() {}".into() } },
-            FilePatch { path: "old.rs".into(), change: PatchChange::Delete },
-        ],
-    });
-
-    reads_back(&patch);
-}

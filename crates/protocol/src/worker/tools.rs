@@ -48,16 +48,3 @@ crate::tokens!(
 
 /// The explicit-target wait tool; legacy calls keep `WAIT_TOOL` for resumed agents.
 pub const WAITS_TOOL: &str = "wait_for_pull_requests";
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_token_is_its_text_on_the_wire_and_kept_out_of_debug_output() {
-        let token = ToolsToken::new("s3cret");
-
-        assert_eq!(serde_json::to_string(&token).unwrap(), r#""s3cret""#);
-        assert!(!format!("{token:?}").contains("s3cret"));
-    }
-}

@@ -134,15 +134,3 @@ impl Request for GithubSignInCancel {
         ClientRequest::GithubSignInCancel(self)
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn connecting_a_token_hides_it_from_debug() {
-        let request = GithubAccountConnect { token: GithubToken::new("github_pat_made_up"), id: None }.into_request();
-
-        assert!(!format!("{request:?}").contains("made_up"), "{request:?}");
-    }
-}

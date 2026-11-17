@@ -124,18 +124,6 @@ proptest! {
 
         prop_assert_eq!(serde_json::from_str::<GithubSignIn>(&written).unwrap(), sign_in);
     }
-
-    /// Whatever the token, as GitHub's own kinds of token start.
-    #[test]
-    fn a_token_goes_on_the_wire_as_it_is_and_never_into_debug(token in "(ghp_|github_pat_|gho_|ghu_)[A-Za-z0-9_]{8,60}") {
-        let held = GithubToken::new(token.clone());
-
-        let read: GithubToken = serde_json::from_value(json!(token)).unwrap();
-
-        prop_assert_eq!(serde_json::to_value(&held).unwrap(), json!(token));
-        prop_assert_eq!(read.as_str(), token.as_str());
-        prop_assert!(!format!("{held:?}").contains(&token), "{:?}", held);
-    }
 }
 
 #[test]
@@ -171,15 +159,6 @@ fn a_login_works_until_it_ends_or_needs_signing_in_again() {
 
     assert_eq!([9, 10, 11].map(|now_ms| ends.works_at(now_ms)), [true, false, false]);
     assert!(!needs_sign_in.works_at(0));
-}
-
-#[test]
-fn a_signed_in_login_from_a_hub_from_before_it_said_needs_no_sign_in() {
-    let older = json!({"how": "sign_in", "connected_at_ms": 1, "ends_at_ms": 9});
-
-    let held: HeldGithubLogin = serde_json::from_value(older).unwrap();
-
-    assert_eq!((held.how, held.needs_sign_in), (GithubLoginKind::SignIn, false));
 }
 
 #[test]

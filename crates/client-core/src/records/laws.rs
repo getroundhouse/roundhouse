@@ -170,6 +170,123 @@ proptest! {
     }
 }
 
+/// A kind of record other than a session, for what the laws above say of sessions, which holds for every kind.
+struct Kind {
+    name: &'static str,
+    /// The record of this kind the rule is tried on, as it is at `rev`. Each `version` is a different copy of it.
+    copy: fn(version: u8, rev: u64) -> Record,
+    /// Another record of the kind, for a kind the hub has more than one of.
+    other: Option<fn(rev: u64) -> Record>,
+    /// The copy held of the record with this key, read as a view reads it, where a view does.
+    shown: fn(&HubRecords, &RecordKey) -> Option<Record>,
+}
+
+fn kinds() -> [Kind; 5] {
+    [
+        Kind {
+            name: "a hub's settings",
+            copy: |version, rev| Record::HubSettings(settings(version == 2, rev)),
+            other: None,
+            shown: |held, _| held.snapshot().hub_settings().cloned().map(Record::HubSettings),
+        },
+        Kind {
+            name: "what's in the new workspace dialog",
+            copy: |version, rev| Record::NewWorkspaceDraft(dialog(&format!("fix the login {version}"), rev)),
+            other: None,
+            shown: |held, _| held.snapshot().new_workspace_draft().cloned().map(Record::NewWorkspaceDraft),
+        },
+        Kind {
+            name: "an account",
+            copy: |version, rev| Record::Account(account("ada", version * 4, rev)),
+            other: Some(|rev| Record::Account(account("grace", 80, rev))),
+            shown: |held, key| {
+                let RecordKey::Account { id } = key else { return None };
+                held.snapshot().account(id).cloned().map(Record::Account)
+            },
+        },
+        // Held, though no view draws one yet.
+        Kind {
+            name: "a found GitHub login",
+            copy: |version, rev| {
+                let login = GhLogin::LoggedIn { username: format!("user {version}").into(), works: GhLoginWorks::Yes };
+                Record::FoundGithubLogin(found("local", login, rev))
+            },
+            other: Some(|rev| Record::FoundGithubLogin(found("incus", GhLogin::NotInstalled, rev))),
+            shown: kept,
+        },
+        // Held by its repository, though no view draws one yet.
+        Kind {
+            name: "a repository's reach",
+            copy: |version, rev| {
+                let cli = GithubRepositoryName::named("cli/cli");
+                let username = format!("user {version}").into();
+                Record::GithubReach(reach("r", Reach::Pushes { repository: cli, username }, rev))
+            },
+            other: Some(|rev| Record::GithubReach(reach("s", Reach::NotOnGithub, rev))),
+            shown: kept,
+        },
+    ]
+}
+
+fn kept(held: &HubRecords, key: &RecordKey) -> Option<Record> {
+    held.held.get(key).map(|kept| kept.record.clone())
+}
+
+/// A list at `rev` of these records.
+fn listed(records: impl IntoIterator<Item = Record>, rev: u64) -> Records {
+    let mut list = Records { rev: Rev::new(rev), ..Records::default() };
+    for record in records {
+        match record {
+            Record::Repo(repo) => list.repos.push(repo),
+            Record::Workspace(workspace) => list.workspaces.push(workspace),
+            Record::Session(session) => list.sessions.push(session),
+            Record::Comment(comment) => list.comments.push(comment),
+            Record::HubSettings(settings) => list.hub_settings = Some(settings),
+            Record::Account(account) => list.accounts.push(account),
+            Record::NewWorkspaceDraft(draft) => list.new_workspace_draft = Some(draft),
+            Record::GithubAccount(account) => list.github_accounts.push(account),
+            Record::GithubSignIn(sign_in) => list.github_sign_ins.push(sign_in),
+            Record::FoundGithubLogin(found) => list.found_github_logins.push(found),
+            Record::GithubApp(app) => list.github_apps.push(app),
+            Record::GithubReach(reach) => list.github_reach.push(reach),
+            Record::Terminal(terminal) => list.terminals.push(terminal),
+            Record::Subagent(_) => panic!("a subagent is listed with its session, not in a list of everything"),
+        }
+    }
+    list
+}
+
+/// Through a list, the feed, and lists from before and after a change, as a reconnect brings, each kind keeps its
+/// newest copy and drops what a newer list leaves out.
+#[test]
+fn every_kind_of_record_keeps_its_newest_copy_as_a_session_does() {
+    for Kind { name, copy, other, shown } in kinds() {
+        let mut held = HubRecords::default();
+        let other = other.map(|other| other(3));
+        let with_other = |record: Record| [Some(record), other.clone()].into_iter().flatten();
+        let key = copy(1, 2).key();
+        assert_eq!(shown(&held, &key), None, "{name}, until the list has arrived");
+        held.apply_list(listed([], 1));
+        assert_eq!(shown(&held, &key), None, "{name}, from a hub from before it kept them");
+
+        assert!(held.apply_list(listed(with_other(copy(1, 2)), 3)), "{name}, in a list");
+        assert!(held.apply_notice(copy(2, 5).into()), "{name}, in a newer notice");
+        assert!(!held.apply_notice(copy(3, 4).into()), "{name}, in an older copy that arrives late");
+
+        assert_eq!(shown(&held, &key), Some(copy(2, 5)), "{name}");
+        if let Some(other) = &other {
+            assert_eq!(shown(&held, &other.key()), Some(other.clone()), "another of {name} is its own");
+        }
+        held.apply_list(listed(with_other(copy(1, 2)), 4));
+        assert_eq!(shown(&held, &key), Some(copy(2, 5)), "{name}, after a list from before the change");
+        held.apply_list(listed(with_other(copy(2, 5)), 6));
+        assert_eq!(shown(&held, &key), Some(copy(2, 5)), "{name}, after a list from after it");
+        held.apply_list(listed([], 9));
+        let other_shown = other.as_ref().and_then(|other| shown(&held, &other.key()));
+        assert_eq!((shown(&held, &key), other_shown), (None, None), "{name}, after a list without it");
+    }
+}
+
 fn settings(keep_awake: bool, rev: u64) -> HubSettings {
     HubSettings {
         account_defaults: None,
@@ -180,60 +297,8 @@ fn settings(keep_awake: bool, rev: u64) -> HubSettings {
     }
 }
 
-#[test]
-fn a_hubs_settings_are_a_record_like_the_rest() {
-    let mut held = HubRecords::default();
-    assert_eq!(held.snapshot().hub_settings().cloned(), None);
-
-    assert!(held.apply_list(Records { hub_settings: Some(settings(true, 2)), rev: Rev::new(2), ..Records::default() }));
-    assert!(held.apply_notice(HubNotice::HubSettings(settings(false, 5))));
-    assert!(!held.apply_notice(HubNotice::HubSettings(settings(true, 4))), "an older copy that arrives late");
-
-    assert_eq!(held.snapshot().hub_settings().cloned(), Some(settings(false, 5)));
-    // A list from before the change, and one from after it, as a reconnect brings.
-    held.apply_list(Records { hub_settings: Some(settings(true, 2)), rev: Rev::new(3), ..Records::default() });
-    assert_eq!(held.snapshot().hub_settings().cloned(), Some(settings(false, 5)));
-    held.apply_list(Records { hub_settings: Some(settings(false, 5)), rev: Rev::new(6), ..Records::default() });
-    assert_eq!(held.snapshot().hub_settings().cloned(), Some(settings(false, 5)));
-}
-
-#[test]
-fn a_hub_from_before_it_kept_settings_has_none() {
-    let mut held = HubRecords::default();
-
-    held.apply_list(Records { rev: Rev::new(3), ..Records::default() });
-
-    assert_eq!(held.snapshot().hub_settings().cloned(), None);
-}
-
 fn dialog(text: &str, rev: u64) -> NewWorkspaceDraft {
     NewWorkspaceDraft { text: text.to_string(), rev: Rev::new(rev), ..NewWorkspaceDraft::default() }
-}
-
-#[test]
-fn whats_in_the_new_workspace_dialog_is_a_record_like_the_rest() {
-    let mut held = HubRecords::default();
-    assert_eq!(
-        held.snapshot().new_workspace_draft().cloned(),
-        None,
-        "from a hub from before it kept one, and until the list has arrived"
-    );
-
-    assert!(held.apply_list(Records {
-        new_workspace_draft: Some(dialog("", 2)),
-        rev: Rev::new(2),
-        ..Records::default()
-    }));
-    assert!(held.apply_notice(HubNotice::NewWorkspaceDraft(dialog("fix the login", 5))));
-    assert!(!held.apply_notice(HubNotice::NewWorkspaceDraft(dialog("fix", 4))), "an older copy that arrives late");
-
-    assert_eq!(held.snapshot().new_workspace_draft().cloned(), Some(dialog("fix the login", 5)));
-    held.apply_list(Records { new_workspace_draft: Some(dialog("", 2)), rev: Rev::new(3), ..Records::default() });
-    assert_eq!(
-        held.snapshot().new_workspace_draft().cloned(),
-        Some(dialog("fix the login", 5)),
-        "a list from before the change"
-    );
 }
 
 fn account(id: &str, used_percent: u8, rev: u64) -> Account {
@@ -247,73 +312,10 @@ fn account(id: &str, used_percent: u8, rev: u64) -> Account {
     }
 }
 
-#[test]
-fn each_account_is_a_record_like_the_rest() {
-    let mut held = HubRecords::default();
-    assert_eq!(held.snapshot().account(&"ada".into()).cloned(), None);
-
-    let listed = vec![account("ada", 4, 2), account("grace", 80, 3)];
-    assert!(held.apply_list(Records { accounts: listed, rev: Rev::new(3), ..Records::default() }));
-    assert!(held.apply_notice(HubNotice::Account(account("ada", 9, 5))));
-    assert!(!held.apply_notice(HubNotice::Account(account("ada", 6, 4))), "an older copy that arrives late");
-
-    assert_eq!(held.snapshot().account(&"ada".into()).cloned(), Some(account("ada", 9, 5)));
-    assert_eq!(
-        held.snapshot().account(&"grace".into()).cloned(),
-        Some(account("grace", 80, 3)),
-        "another account is its own"
-    );
-    // A list from before the change, as a reconnect can bring.
-    held.apply_list(Records { accounts: vec![account("ada", 4, 2)], rev: Rev::new(4), ..Records::default() });
-    assert_eq!(held.snapshot().account(&"ada".into()).cloned(), Some(account("ada", 9, 5)));
-}
-
 fn found(provider: &str, login: GhLogin, rev: u64) -> FoundGithubLogin {
     FoundGithubLogin { provider: provider.into(), login, rev: Rev::new(rev) }
 }
 
-/// Held, though no view draws one yet, and gone once a hub that started again lists none, as it does until it has
-/// asked again.
-#[test]
-fn each_found_github_login_is_a_record_like_the_rest() {
-    let mut held = HubRecords::default();
-    let ada = || GhLogin::LoggedIn { username: "ada".into(), works: GhLoginWorks::Yes };
-    let kept = |held: &HubRecords, provider: &str| {
-        held.held.get(&RecordKey::FoundGithubLogin { provider: provider.into() }).map(|kept| kept.record.clone())
-    };
-
-    let listed = vec![found("local", GhLogin::LoggedOut, 2), found("incus", GhLogin::NotInstalled, 3)];
-    assert!(held.apply_list(Records { found_github_logins: listed, rev: Rev::new(3), ..Records::default() }));
-    assert!(held.apply_notice(HubNotice::FoundGithubLogin(found("local", ada(), 5))));
-    assert!(!held.apply_notice(HubNotice::FoundGithubLogin(found("local", GhLogin::LoggedOut, 4))), "a late copy");
-
-    assert_eq!(kept(&held, "local"), Some(Record::FoundGithubLogin(found("local", ada(), 5))));
-    assert_eq!(kept(&held, "incus"), Some(Record::FoundGithubLogin(found("incus", GhLogin::NotInstalled, 3))));
-    held.apply_list(Records { rev: Rev::new(9), ..Records::default() });
-    assert_eq!((kept(&held, "local"), kept(&held, "incus")), (None, None));
-}
-
 fn reach(repo: &str, reach: Reach, rev: u64) -> GithubReach {
     GithubReach { repo: repo.into(), reach, answered_at_ms: None, stale: false, rev: Rev::new(rev) }
-}
-
-/// Held by its repository, newest copy kept, though no view draws one yet.
-#[test]
-fn each_repositorys_reach_is_a_record_like_the_rest() {
-    let mut held = HubRecords::default();
-    let cli = GithubRepositoryName::named("cli/cli");
-    let pushes = Reach::Pushes { repository: cli.clone(), username: "ada".into() };
-    let reason = "Permission denied.".into();
-    let refused = Reach::Refused { repository: cli, username: "ada".into(), reason, installation: None };
-    let kept = |held: &HubRecords, repo: &str| {
-        held.held.get(&RecordKey::GithubReach { repo: repo.into() }).map(|kept| kept.record.clone())
-    };
-
-    let listed = vec![reach("r", pushes.clone(), 2), reach("s", Reach::NotOnGithub, 3)];
-    assert!(held.apply_list(Records { github_reach: listed, rev: Rev::new(3), ..Records::default() }));
-    assert!(held.apply_notice(HubNotice::GithubReach(reach("r", refused.clone(), 5))));
-    assert!(!held.apply_notice(HubNotice::GithubReach(reach("r", pushes, 4))), "a late copy");
-
-    assert_eq!(kept(&held, "r"), Some(Record::GithubReach(reach("r", refused, 5))));
-    assert_eq!(kept(&held, "s"), Some(Record::GithubReach(reach("s", Reach::NotOnGithub, 3))));
 }

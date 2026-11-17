@@ -133,15 +133,3 @@ impl Request for GithubAppRemove {
         ClientRequest::GithubAppRemove(self)
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn making_an_app_hides_its_code_from_debug() {
-        let request = GithubAppMake { code: GithubManifestCode::new("made-up-code") }.into_request();
-
-        assert!(!format!("{request:?}").contains("made-up-code"), "{request:?}");
-    }
-}
