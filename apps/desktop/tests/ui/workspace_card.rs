@@ -1,23 +1,23 @@
 //! The card a workspace's name in its header shows while the pointer rests on it: where its worktree is, with a button
-//! that copies the path, which it waits for the pointer to cross to.
+//! that copies the path, which it waits for the pointer to cross to. Where the worktree is comes from the workspace's
+//! record, and the card is the window's, so it opens on a fake hub.
 
 #![cfg(test)]
 
 use gpui_kit::TestAppContext;
+use protocol::model::SessionStatus;
 
-use crate::support::{Stack, Ui};
+use crate::support::{Ui, one_chat, open_on_the_chat};
 
 #[gpui_kit::test]
 fn resting_on_a_workspace_s_name_shows_where_it_is_and_its_button_copies_the_path_until_the_pointer_has_gone(
     cx: &mut TestAppContext,
 ) {
-    let stack = Stack::new();
-    stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
-    let mut ui = Ui::open(cx, &stack);
-    ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
-    let id = ui.new_workspace();
+    let (world, chat) = one_chat(SessionStatus::Idle, Vec::new());
+    let id = world.workspaces[0].id.clone();
+    let (_fake, mut ui) = open_on_the_chat(cx, world, &chat);
     let path = |ui: &Ui| ui.view().records().workspace(&id).and_then(|workspace| workspace.path.clone());
-    ui.wait("the worktree to be made", |ui| path(ui).is_some());
+    assert!(path(&ui).is_some(), "the record says where its worktree is");
 
     ui.hover("workspace-title");
     assert!(!ui.has("workspace-card"), "passing over the name shows nothing");

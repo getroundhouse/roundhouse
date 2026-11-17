@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 use client_core::Daemon;
 use client_core::fake_hub::{self, World};
 use desktop::app::HubSource;
+use desktop::checkout::Checkout;
 use gpui_kit::TestAppContext;
 use protocol::event::EventBody;
 use protocol::model::{SessionId, SessionStatus};
@@ -66,7 +67,12 @@ pub(crate) fn hub_source(dir: &Path) -> HubSource {
 impl<'a> Ui<'a> {
     /// Opens the window on the fake hub, as a stamped build, so with no checkout, and waits for it to connect.
     pub(crate) fn open_on(cx: &'a mut TestAppContext, fake: &FakeHub) -> Self {
-        let mut ui = Self::open_window(cx, fake.hub.clone(), None);
+        Self::open_on_from(cx, fake, None)
+    }
+
+    /// The same, told it was built from `checkout`, for a test of what the window says of where it was built.
+    pub(crate) fn open_on_from(cx: &'a mut TestAppContext, fake: &FakeHub, checkout: Option<Checkout>) -> Self {
+        let mut ui = Self::open_window(cx, fake.hub.clone(), checkout);
         ui.wait_to_connect();
         ui
     }

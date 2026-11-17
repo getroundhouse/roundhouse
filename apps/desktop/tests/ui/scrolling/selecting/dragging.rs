@@ -277,13 +277,16 @@ pub(super) fn on_the_end_of_the_chat(ui: &Ui<'_>, window: Bounds<Pixels>) -> gpu
     })
 }
 
-/// A point on the first line of the reply that says `text`, which is in the window.
+/// A point on the first line of the first reply from the top of the window that says `text` and has that line in the
+/// window. Two replies can say the same, and the higher one's first line can be above the window, where a press
+/// would miss it.
 pub(super) fn on_the_reply_saying(ui: &Ui<'_>, window: Bounds<Pixels>, text: &str) -> gpui_kit::Point<Pixels> {
     let transcript = ui.transcript().unwrap();
     ui.cx.read_entity(&transcript, |t, _| {
         let list = t.list();
         let top = list.top();
         let mut y = window.top() - top.offset;
+        let mut out_of_view = Vec::new();
         for row in top.row..list.row_count() {
             let says = t.event_at(row).is_some_and(|event| match event.body {
                 EventBody::Assistant { blocks, .. } => blocks.iter().any(
@@ -291,12 +294,16 @@ pub(super) fn on_the_reply_saying(ui: &Ui<'_>, window: Bounds<Pixels>, text: &st
                 ),
                 _ => false,
             });
+            let on_it = point(window.left() + px(40.), y + px(12.));
+            if says && window.contains(&on_it) {
+                return on_it;
+            }
             if says {
-                return point(window.left() + px(40.), y + px(12.));
+                out_of_view.push(row);
             }
             y += list.row_height(row).unwrap_or_default();
         }
-        panic!("no reply saying {text:?} in the window")
+        panic!("no reply saying {text:?} has its first line in the window, though rows {out_of_view:?} say it")
     })
 }
 

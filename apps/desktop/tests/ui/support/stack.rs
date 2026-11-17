@@ -28,8 +28,6 @@ pub(crate) const TIMEOUT: Duration = Duration::from_secs(20);
 pub(crate) struct Stack {
     pub(crate) dir: TempDir,
     pub(crate) hub: HubSource,
-    /// What the app is told it was built from. None, as for a stamped build, unless a test is about it.
-    pub(crate) checkout: Option<Checkout>,
 }
 
 impl Stack {
@@ -61,7 +59,7 @@ impl Stack {
             // The daemon's, which was compiled with the same stamp as this test.
             build_version: protocol::this_build!().version(),
         };
-        Self { dir, hub, checkout: None }
+        Self { dir, hub }
     }
 
     pub(crate) fn repo(&self) -> PathBuf {
@@ -110,8 +108,9 @@ impl<'a> Ui<'a> {
         ui
     }
 
+    /// Told it's a build from no checkout, as a stamped one is: what one says of its checkout is tested on the fake hub.
     pub(crate) fn open_without_waiting(cx: &'a mut TestAppContext, stack: &Stack) -> Self {
-        Self::open_window(cx, stack.hub.clone(), stack.checkout.clone())
+        Self::open_window(cx, stack.hub.clone(), None)
     }
 
     /// Opens the app's main window on `hub`, told it was built from `checkout`.

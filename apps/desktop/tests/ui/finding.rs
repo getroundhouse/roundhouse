@@ -145,16 +145,18 @@ fn cmd_f_finds_in_the_whole_chat_and_opens_what_a_match_is_in(cx: &mut TestAppCo
 
 /// The agent's words, which the transcript draws from the kit's blocks, say where they drew the match being shown, so
 /// one far up the chat is brought into view below the bar. What's counted in them is what they show, and not a link's
-/// address.
+/// address. The match ends a reply taller than the window, whose row is sent to the top, so it's below the window
+/// until the list scrolls to it.
 #[gpui_kit::test]
 fn a_match_in_a_reply_far_up_the_chat_is_brought_into_view_below_the_bar(cx: &mut TestAppContext) {
     let mut events = Vec::new();
-    let reply = "The **needle** is in [this reply](https://example.com/needle), once";
-    turn(&mut events, "Where's the needle?", [text("found", reply)]);
-    // Enough replies after it, each a few short paragraphs, to put it well above the window, which is all this needs:
-    // longer ones would only cost time to lay out.
-    let paragraphs = |reply: usize| Vec::from_fn(5, |part| format!("Reply {reply}, part {part}.")).join("\n\n");
-    turn(&mut events, "Go on.", Vec::from_fn(30, |reply| text(&format!("on-{reply}"), &paragraphs(reply))));
+    // Short paragraphs, as few as put it past the window's bottom, since longer ones only cost time to lay out.
+    let paragraphs =
+        |reply: usize, parts: usize| Vec::from_fn(parts, |part| format!("Reply {reply}, part {part}.")).join("\n\n");
+    let reply = format!("{}\n\nThe **needle** is in [this reply](https://example.com/needle), once", paragraphs(0, 40));
+    turn(&mut events, "Where's the needle?", [text("found", &reply)]);
+    // Enough replies after it to put it well above the window.
+    turn(&mut events, "Go on.", Vec::from_fn(10, |reply| text(&format!("on-{reply}"), &paragraphs(reply + 1, 5))));
     let (world, _) = chat_of(events, 0);
     let (_hub, mut ui) = open(cx, world);
     let transcript = ui.transcript().unwrap();
