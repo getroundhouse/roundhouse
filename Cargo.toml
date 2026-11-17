@@ -88,6 +88,7 @@ fetching = { path = "crates/fetching" }
 update-feed = { path = "crates/update-feed" }
 waiting = { path = "crates/waiting" }
 terminal-state = { path = "crates/terminal-state" }
+terminal-view = { path = "crates/terminal-view" }
 desktop = { path = "apps/desktop" }
 kit-sync = { path = "tools/kit-sync" }
 

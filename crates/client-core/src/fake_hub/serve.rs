@@ -56,10 +56,10 @@ fn serve_connection(world: &World, stream: UnixStream) {
     }
 }
 
-type Answer = Result<Outcome, ApiError>;
+pub(super) type Answer = Result<Outcome, ApiError>;
 
 #[expect(clippy::large_enum_variant, reason = "one is made for each request and sent straight away, never kept")]
-enum Outcome {
+pub(super) enum Outcome {
     /// The reply, and any frames that go after it.
     Reply(ClientResponse, Vec<HubFrame>),
     /// Left unanswered, so the app stays waiting, as for a screen that shows something under way.
@@ -301,12 +301,10 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         | R::DeviceList
         | R::DeviceRevoke(_)
         | R::Unknown => Err(ApiError::new(ErrorCode::Unsupported, "a fake hub doesn't know that request")),
-        // No screen shows a terminal yet, so a fake hub runs none, as a hub from before terminals.
-        R::TerminalOpen(_)
-        | R::TerminalAttach(_)
-        | R::TerminalInput(_)
-        | R::TerminalResize(_)
-        | R::TerminalClose(_) => Err(ApiError::new(ErrorCode::Unsupported, "a fake hub doesn't run terminals")),
+        R::TerminalAttach(attach) => super::terminals::attach(world, &attach),
+        R::TerminalOpen(_) | R::TerminalInput(_) | R::TerminalResize(_) | R::TerminalClose(_) => {
+            Err(read_only("change a terminal"))
+        }
     }
 }
 

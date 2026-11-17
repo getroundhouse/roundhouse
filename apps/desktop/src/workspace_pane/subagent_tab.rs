@@ -9,21 +9,18 @@
 use std::sync::Arc;
 
 use client_core::records::{Changes, Snapshot, subagent_named};
-use gpui_kit::base::Tab;
 use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::component::{Icon, IconName, h_flex, v_flex};
-use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
     AnyElement, AppContext as _, Context, Entity, FocusHandle, InteractiveElement as _, IntoElement as _,
     ParentElement as _, Role, StatefulInteractiveElement as _, Styled, Subscription, TestSupportExt as _, div, px,
-    relative,
 };
 use look::{Hand as _, IconSizing as _, Shaped as _, Typeset as _};
 use protocol::model::{SessionId, Subagent, SubagentId};
 use transcript::{Transcript, TranscriptEvent, shown_kind, subagent_standing};
 
-use super::view::{TAB_GROUP, TAB_WIDTH, chat_title};
-use super::{PaneEvent, Showing, WorkspacePane};
+use super::view::chat_title;
+use super::{PaneEvent, Showing, WorkspacePane, tab};
 
 /// The subagent tab, while it's open.
 #[derive(Default)]
@@ -194,52 +191,19 @@ impl WorkspacePane {
     /// The subagent tab, built as the file tab is. It has the call's icon, and what the subagent is for, in italics,
     /// since it's replaced rather than added to.
     pub(super) fn subagent_tab_element(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
-        let colors = look::colors(cx);
         let title = self.subagents.title(self.shown.all())?;
         let selected = self.showing() == Showing::Subagent;
-        let muted = colors.text_muted;
-        let close = look::icon_button(
-            "close-subagent-tab",
-            look::ButtonKind::Borderless,
-            look::ControlSize::Small,
-            IconName::Close,
-        )
-        .tooltip("Close subagent tab")
-        .on_click(cx.listener(|t, _, _, cx| {
-            // The tab under it would take the click too, and show the subagent that's closing.
-            cx.stop_propagation();
-            t.close_subagent_tab(cx);
-        }));
-        let name = div().flex_1().min_w_0().overflow_hidden().whitespace_nowrap().text_ellipsis().italic();
+        let muted = look::colors(cx).text_muted;
+        let close =
+            tab::close_button("close-subagent-tab", "Close subagent tab", cx, |t, _, cx| t.close_subagent_tab(cx));
         let whole = title.clone();
-        let tab = div()
-            .id("subagent-tab")
-            .group(TAB_GROUP)
-            .relative()
-            .flex_none()
-            .w(TAB_WIDTH)
-            .h_full()
-            .child(
-                Tab::new("show-subagent-tab")
-                    .selected(selected)
-                    .accessibility_label(format!("Subagent: {title}"))
-                    .tooltip(move |window, cx| Tooltip::new(whole.clone()).build(window, cx))
-                    .size_full()
-                    .justify_start()
-                    .gap(look::Space::Small)
-                    .pl(look::Space::Medium)
-                    .pr(look::Space::Small)
-                    .typeset(look::Type::Body)
-                    .line_height(relative(1.25))
-                    .text_color(muted)
-                    .on_click(cx.listener(|t, _, _, cx| t.bring_to_front(Showing::Subagent, cx)))
-                    .child(Icon::new(IconName::Bot).sized(look::IconSize::Large))
-                    .child(name.child(title))
-                    .child(div().flex_none().invisible().group_hover(TAB_GROUP, Styled::visible).child(close)),
-            )
-            .when(selected, |d| {
-                d.child(div().absolute().left_0().right_0().bottom_0().h(look::TAB_LINE).bg(colors.current))
-            });
+        let face = tab::face("show-subagent-tab", selected, format!("Subagent: {title}"))
+            .tooltip(move |window, cx| Tooltip::new(whole.clone()).build(window, cx))
+            .text_color(muted)
+            .on_click(cx.listener(|t, _, _, cx| t.bring_to_front(Showing::Subagent, cx)))
+            .child(Icon::new(IconName::Bot).sized(look::IconSize::Large))
+            .child(tab::name().italic().child(title));
+        let tab = tab::tab("subagent-tab", face, close, selected, cx);
         Some(tab.into_any_element())
     }
 

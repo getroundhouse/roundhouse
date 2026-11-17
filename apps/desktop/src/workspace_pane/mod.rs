@@ -1,4 +1,5 @@
-//! One workspace: its chats, the composer, the file tab, and the sidebar of changes beside them when it's open.
+//! One workspace: its chats, the composer, the file tab, its terminals, and the sidebar of changes beside them when
+//! it's open.
 
 pub use dictation_ui::{LIVE_LINE, NOTHING_HEARD, SPACE_DICTATES_AFTER, SPACE_LISTENS_AFTER};
 pub use file_tab::Opened;
@@ -27,6 +28,8 @@ mod queue;
 mod reading;
 mod setup;
 mod subagent_tab;
+mod tab;
+mod terminals;
 #[cfg(test)]
 mod tests;
 mod view;
@@ -34,5 +37,5 @@ mod waiting;
 mod workspace_card;
 
 mod pane;
-use pane::Chat;
+use pane::{Chat, Next};
 pub use pane::{Diff, PaneEvent, Showing, WorkspacePane};

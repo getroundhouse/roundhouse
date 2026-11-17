@@ -55,6 +55,7 @@ mod settings_screens;
 mod sidebar_screens;
 mod steps;
 mod subagent_chats;
+mod terminal_screens;
 mod tool_chats;
 mod tool_screens;
 mod turn_screens;

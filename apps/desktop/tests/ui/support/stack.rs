@@ -12,6 +12,7 @@ use gpui_kit::{
     AnyWindowHandle, AppContext as _, Bounds, ElementId, Entity, InputEvent as _, MouseMoveEvent, Pixels, ScrollDelta,
     ScrollEvent, SharedString, TestAppContext,
 };
+use process::testing::WholeEnvironment;
 pub(crate) use process::testing::git;
 use protocol::model::{Effort, ModelName, PermissionMode, Seq};
 use std::path::PathBuf;
@@ -33,6 +34,11 @@ pub(crate) struct Stack {
 
 impl Stack {
     pub(crate) fn new() -> Self {
+        Self::in_environment(&hub_environment())
+    }
+
+    /// With every hub the app starts in `environment`, which [`hub_environment`] gives with what a test adds.
+    pub(crate) fn in_environment(environment: &WholeEnvironment) -> Self {
         // Under /tmp because of the socket path limit.
         let dir = tempfile::Builder::new().prefix("ahui-").tempdir_in("/tmp").unwrap();
         let root = dir.path();
@@ -50,7 +56,7 @@ impl Stack {
         let hub = HubSource {
             remote: None,
             paths,
-            daemon: Daemon::in_place(binaries().join("roundhoused")).in_environment(hub_environment().vars()),
+            daemon: Daemon::in_place(binaries().join("roundhoused")).in_environment(environment.vars()),
             build_number: None,
             // The daemon's, which was compiled with the same stamp as this test.
             build_version: protocol::this_build!().version(),

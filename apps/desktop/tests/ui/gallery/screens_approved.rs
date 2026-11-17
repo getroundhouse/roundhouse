@@ -5,7 +5,7 @@ use super::{
     colours, compaction_chats, component_screens, context_screens, controls, corners, dictation_screens, diff_screens,
     failure_chats, failures_in_a_row, field_states, heights, home_screens, icon_sizes, key_kinds, kinds_of_text,
     mark_states, own_turn_chats, pull_requests, settings_screens, sidebar_screens, spaces, steps, subagent_chats,
-    switch_kinds, toggle_states, tool_screens, turn_screens, update_screens, workspace_screens,
+    switch_kinds, terminal_screens, toggle_states, tool_screens, turn_screens, update_screens, workspace_screens,
 };
 use approved::Verdict;
 use capture::Picture;
@@ -146,6 +146,7 @@ fn screens() -> impl Iterator<Item = &'static steps::Screen> {
         .chain(failure_chats::SCREENS)
         .chain(failures_in_a_row::SCREENS)
         .chain(cache_screens::SCREENS)
+        .chain(terminal_screens::SCREENS)
         .chain(UPDATE_SCREENS)
         .chain(workspace_screens::SCREENS)
         .chain(turn_screens::SCREENS)

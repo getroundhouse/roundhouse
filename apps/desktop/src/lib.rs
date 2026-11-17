@@ -113,6 +113,7 @@ actions!(
         NextWorkspace,
         PreviousWorkspace,
         NewChat,
+        NewTerminal,
         CloseChat,
         NextChat,
         PreviousChat,

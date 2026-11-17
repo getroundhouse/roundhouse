@@ -72,7 +72,7 @@ pub(super) fn status(world: &World) -> HubStatus {
         keeps_workers: false,
         oldest_protocol_version: None,
         oldest_running_worker_protocol: None,
-        open_terminals: 0,
+        open_terminals: u32::try_from(world.terminals.len()).unwrap(),
     }
 }
 

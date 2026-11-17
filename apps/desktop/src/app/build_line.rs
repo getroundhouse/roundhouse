@@ -14,8 +14,10 @@ impl AppView {
         // As the hub counts them, from what the sidebar already has, so it's current without asking.
         let restarting = self.restartable_hub.is_some_and(|older| older.restarting);
         let chats = self.records.every_session().map(|s| (s.status, s.background_tasks.as_slice()));
-        let agents = Agents::holding_up(restarting, chats);
-        BuildLine::new(self.hub.build_version, hub, self.restartable_hub.is_some(), agents, crate::updates::ready(cx))
+        let terminals = self.records.workspaces().iter().map(|workspace| self.records.terminals(&workspace.id).len());
+        let holding = Holding::of(restarting, chats, terminals.sum());
+        let may_restart = self.restartable_hub.is_some();
+        BuildLine::new(self.hub.build_version, hub, may_restart, holding, crate::updates::ready(cx))
     }
 }
 
@@ -36,9 +38,10 @@ pub struct BuildLine {
 pub enum Updating {
     /// A newer build, `next`, is downloaded, which installs when the app restarts or quits.
     Ready { next: String },
-    /// The app has updated, and its hub is still the older build, `hub`, with work on it, such as `agents`. The app
-    /// restarts the hub once that work is done, or sooner if asked.
-    Finishing { hub: String, agents: Agents },
+    /// The app has updated, and its hub is still the older build, `hub`, with work on it, such as `agents`, and
+    /// `terminals` open that restarting it would end. The app restarts the hub once that work is done, or sooner if
+    /// asked.
+    Finishing { hub: String, agents: Agents, terminals: usize },
 }
 
 /// The agents on a turn, which is what keeps an older hub from being replaced. Apart, because an update that waits
@@ -53,15 +56,6 @@ pub struct Agents {
 }
 
 impl Agents {
-    /// The agents an update waits on, of these chats on an older hub: none, on one `restarting`, which stops none of
-    /// them and waits only on a setup script, and otherwise the ones [`Agents::of`] counts.
-    pub(super) fn holding_up<'a>(
-        restarting: bool,
-        chats: impl IntoIterator<Item = (SessionStatus, &'a [AgentTask])>,
-    ) -> Self {
-        if restarting { Self::default() } else { Self::of(chats) }
-    }
-
     /// Counts the same chats the hub does, from each one's status and what it has in the background, as
     /// [`SessionStatus::counts_as_running`] says. One that only waits on its pull request isn't counted, since the next
     /// hub keeps the wait.
@@ -78,16 +72,40 @@ impl Agents {
     }
 }
 
+/// What holds up restarting an older hub: its agents on a turn, and the terminals restarting it would end.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(super) struct Holding {
+    pub(super) agents: Agents,
+    pub(super) terminals: usize,
+}
+
+impl Holding {
+    /// What holds up an older hub with these chats and this many `terminals` open: nothing an app can count, on one
+    /// `restarting`, which keeps its workers, so it stops none of its agents, ends no terminal, and waits only on a
+    /// setup script. Otherwise the agents [`Agents::of`] counts, and every terminal, which restarting it ends, as on
+    /// Windows, whose workers stop with their hub.
+    pub(super) fn of<'a>(
+        restarting: bool,
+        chats: impl IntoIterator<Item = (SessionStatus, &'a [AgentTask])>,
+        terminals: usize,
+    ) -> Self {
+        if restarting { Self::default() } else { Self { agents: Agents::of(chats), terminals } }
+    }
+}
+
 impl BuildLine {
     /// `hub` is `None` while there's no connection. `may_restart` says whether the app may restart the hub it's
-    /// connected to, `agents` which are on a turn on it, and `ready` is the version of an update that's downloaded.
-    /// A downloaded update comes first, since it's what installs.
-    pub(super) fn new(app: &str, hub: Option<&str>, may_restart: bool, agents: Agents, ready: Option<&str>) -> Self {
+    /// connected to, `holding` what's on it that holds that up, and `ready` is the version of an update that's
+    /// downloaded. A downloaded update comes first, since it's what installs.
+    pub(super) fn new(app: &str, hub: Option<&str>, may_restart: bool, holding: Holding, ready: Option<&str>) -> Self {
         let another = hub.filter(|hub| *hub != app).map(str::to_string);
         let other_hub = another.clone().filter(|_| !may_restart);
         let update = match (ready, another) {
             (Some(next), _) => Some(Updating::Ready { next: next.to_string() }),
-            (None, Some(hub)) if may_restart => Some(Updating::Finishing { hub, agents }),
+            (None, Some(hub)) if may_restart => {
+                let Holding { agents, terminals } = holding;
+                Some(Updating::Finishing { hub, agents, terminals })
+            }
             (None, _) => None,
         };
         Self { app: app.to_string(), other_hub, update }
@@ -102,6 +120,7 @@ mod tests {
     use super::*;
 
     const NONE: Agents = Agents { working: 0, waiting_on_you: 0 };
+    const NOTHING: Holding = Holding { agents: NONE, terminals: 0 };
 
     fn line(other_hub: Option<&str>, update: Option<Updating>) -> BuildLine {
         BuildLine { app: "abc".to_string(), other_hub: other_hub.map(str::to_string), update }
@@ -113,37 +132,38 @@ mod tests {
 
     #[test]
     fn the_same_build_is_only_named_once() {
-        assert_eq!(BuildLine::new("abc", Some("abc"), true, NONE, None), line(None, None));
+        assert_eq!(BuildLine::new("abc", Some("abc"), true, NOTHING, None), line(None, None));
     }
 
     #[test]
     fn with_no_connection_there_is_nothing_to_compare() {
-        assert_eq!(BuildLine::new("abc", None, true, NONE, None), line(None, None));
+        assert_eq!(BuildLine::new("abc", None, true, NOTHING, None), line(None, None));
     }
 
     #[test]
     fn an_older_hub_the_app_may_restart_is_finishing_the_update() {
         let agents = Agents { working: 2, waiting_on_you: 1 };
 
-        let built = BuildLine::new("abc", Some("def"), true, agents, None);
+        let built = BuildLine::new("abc", Some("def"), true, Holding { agents, terminals: 3 }, None);
 
-        assert_eq!(built, line(None, Some(Updating::Finishing { hub: "def".to_string(), agents })));
+        let finishing = Updating::Finishing { hub: "def".to_string(), agents, terminals: 3 };
+        assert_eq!(built, line(None, Some(finishing)));
     }
 
     #[test]
     fn a_hub_the_app_leaves_alone_is_named() {
-        assert_eq!(BuildLine::new("abc", Some("def"), false, NONE, None), line(Some("def"), None));
+        assert_eq!(BuildLine::new("abc", Some("def"), false, NOTHING, None), line(Some("def"), None));
     }
 
     #[test]
     fn a_downloaded_update_comes_first() {
-        assert_eq!(BuildLine::new("abc", Some("def"), true, NONE, Some("ghi")), line(None, Some(ready())));
+        assert_eq!(BuildLine::new("abc", Some("def"), true, NOTHING, Some("ghi")), line(None, Some(ready())));
     }
 
     /// The card is over the build line, which still says which hub it is.
     #[test]
     fn a_hub_the_app_leaves_alone_is_named_with_an_update_downloaded() {
-        assert_eq!(BuildLine::new("abc", Some("def"), false, NONE, Some("ghi")), line(Some("def"), Some(ready())));
+        assert_eq!(BuildLine::new("abc", Some("def"), false, NOTHING, Some("ghi")), line(Some("def"), Some(ready())));
     }
 
     fn task(kind: TaskKind) -> AgentTask {
@@ -175,12 +195,14 @@ mod tests {
         assert_eq!(Agents::of([(Background, &wait[..])]), NONE);
     }
 
-    /// It stops none of them, and waits only on a setup script.
+    /// A hub restarting keeps its workers, so it stops none of its agents, ends no terminal, and waits only on a
+    /// setup script. One that doesn't keep them ends both.
     #[test]
-    fn an_update_waits_on_no_agent_of_an_older_hub_restarting() {
+    fn an_update_waits_on_no_agent_or_terminal_of_an_older_hub_restarting() {
         let command = [task(TaskKind::Command)];
         let chats = [(Running, &[][..]), (WaitingApproval, &[][..]), (Background, &command[..])];
-        assert_eq!(Agents::holding_up(true, chats), NONE);
-        assert_eq!(Agents::holding_up(false, chats), Agents { working: 2, waiting_on_you: 1 });
+        assert_eq!(Holding::of(true, chats, 2), NOTHING);
+        let agents = Agents { working: 2, waiting_on_you: 1 };
+        assert_eq!(Holding::of(false, chats, 2), Holding { agents, terminals: 2 });
     }
 }

@@ -2,18 +2,15 @@
 //! clicked in Changes, and the file itself when it's clicked in All files. Clicking another file shows that one in the
 //! same tab, so reviewing a branch never leaves a trail of tabs.
 
-use gpui_kit::base::Tab;
 use gpui_kit::component::tooltip::Tooltip;
 use gpui_kit::component::{Icon, IconName};
-use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    AnyElement, Context, InteractiveElement as _, IntoElement as _, ParentElement as _, SharedString,
-    StatefulInteractiveElement as _, Styled, Window, div, relative,
+    AnyElement, Context, IntoElement as _, ParentElement as _, SharedString, StatefulInteractiveElement as _, Styled,
+    Window,
 };
-use look::{Hand as _, IconSizing as _, Typeset as _};
+use look::IconSizing as _;
 
-use super::view::{TAB_GROUP, TAB_WIDTH};
-use super::{Showing, WorkspacePane};
+use super::{Showing, WorkspacePane, tab};
 use crate::file_diff::FileDiff;
 
 /// What the file tab shows of its file, which depends on where it was opened from.
@@ -109,6 +106,8 @@ impl WorkspacePane {
             self.close_subagent_tab(cx);
         } else if self.showing() == Showing::File {
             self.close_file_tab(cx);
+        } else if let Some(id) = self.terminal_in_front().cloned() {
+            self.close_terminal(id, cx);
         } else if let Some(id) = self.active.clone() {
             self.close_chat(id, window, cx);
         }
@@ -118,68 +117,24 @@ impl WorkspacePane {
     /// name is in italics, because it's replaced rather than added to. It's built as a chat's tab is, with the same
     /// width, underline and close button, so the row reads as one row of tabs.
     pub(super) fn file_tab_element(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
-        let colors = look::colors(cx);
         let (path, opened) = (self.file_tab()?, self.file_tab_opened()?);
         let name = path.rsplit('/').next().unwrap_or_default().to_string();
         let selected = self.showing() == Showing::File;
-        let muted = colors.text_muted;
+        let muted = look::colors(cx).text_muted;
         let label = match opened {
             Opened::Diff => format!("Diff of {path}"),
             Opened::File => path.to_string(),
         };
-        let close = look::icon_button(
-            "close-file-tab",
-            look::ButtonKind::Borderless,
-            look::ControlSize::Small,
-            IconName::Close,
-        )
-        .tooltip("Close file tab")
-        .on_click(cx.listener(|t, _, _, cx| {
-            // The tab under it would take the click too, and show the file that's closing.
-            cx.stop_propagation();
-            t.close_file_tab(cx);
-        }));
-        let tab = div()
-            .id("file-tab")
-            .group(TAB_GROUP)
-            .relative()
-            .flex_none()
-            .w(TAB_WIDTH)
-            .h_full()
-            .child(
-                Tab::new("show-file-tab")
-                    .hand()
-                    .selected(selected)
-                    .accessibility_label(label)
-                    // Two files can share a name, so the whole path is a hover away.
-                    .tooltip(move |window, cx| Tooltip::new(path.clone()).build(window, cx))
-                    .size_full()
-                    .justify_start()
-                    .gap(look::Space::Small)
-                    .pl(look::Space::Medium)
-                    .pr(look::Space::Small)
-                    .typeset(look::Type::Body)
-                    .line_height(relative(1.25))
-                    // Muted whether or not it's showing, as the chats' titles are: the underline says which tab is.
-                    .text_color(muted)
-                    .on_click(cx.listener(|t, _, _, cx| t.show_file_tab(cx)))
-                    .child(Icon::new(IconName::File).sized(look::IconSize::Large))
-                    .child(
-                        div()
-                            .flex_1()
-                            .min_w_0()
-                            .overflow_hidden()
-                            .whitespace_nowrap()
-                            .text_ellipsis()
-                            .italic()
-                            .child(name),
-                    )
-                    // Hidden rather than left out, so the name doesn't move when it shows.
-                    .child(div().flex_none().invisible().group_hover(TAB_GROUP, Styled::visible).child(close)),
-            )
-            .when(selected, |d| {
-                d.child(div().absolute().left_0().right_0().bottom_0().h(look::TAB_LINE).bg(colors.current))
-            });
+        let close = tab::close_button("close-file-tab", "Close file tab", cx, |t, _, cx| t.close_file_tab(cx));
+        let face = tab::face("show-file-tab", selected, label)
+            // Two files can share a name, so the whole path is a hover away.
+            .tooltip(move |window, cx| Tooltip::new(path.clone()).build(window, cx))
+            // Muted whether or not it's showing, as the chats' titles are: the underline says which tab is.
+            .text_color(muted)
+            .on_click(cx.listener(|t, _, _, cx| t.show_file_tab(cx)))
+            .child(Icon::new(IconName::File).sized(look::IconSize::Large))
+            .child(tab::name().italic().child(name));
+        let tab = tab::tab("file-tab", face, close, selected, cx);
         Some(tab.into_any_element())
     }
 }
