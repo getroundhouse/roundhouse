@@ -4,7 +4,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::{BranchName, CommitId, RemoteName};
+use super::{BranchName, CommitId, RemoteName, RepoUrl};
 
 /// What a worktree's git said of its branches when its worker last read them.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -60,4 +60,23 @@ pub struct Upstream {
     /// a fetch finds it deleted.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tip: Option<CommitId>,
+    /// The address of the repository `remote` names, as `git remote get-url` gives it, without any credential it can
+    /// hold, so the hub can tell which repository on GitHub the branch is pushed to without asking the worker. A
+    /// remote's own, which can be a fork's, rather than the repository's. `None` for `.`, for a remote git has no
+    /// address for, and from a worker from before it said.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub address: Option<RepoUrl>,
+    /// How far apart the branch and its `tip` are. `None` while there's no `tip`, and from a worker from before it
+    /// said.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub apart: Option<Apart>,
+}
+
+/// How far apart a branch and its upstream are, in commits, as of the last push or fetch.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub struct Apart {
+    /// The branch's that its upstream doesn't have, which haven't been pushed.
+    pub ahead: u32,
+    /// The upstream's that the branch doesn't have, such as someone else's push, once it's been fetched.
+    pub behind: u32,
 }

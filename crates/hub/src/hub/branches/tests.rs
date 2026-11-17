@@ -15,6 +15,8 @@ fn on(name: &str, had: &[(&str, &str, Option<&str>)]) -> Branches {
                 remote: RemoteName::from("origin"),
                 name: BranchName::from(name),
                 tip: Some(CommitId::from(tip)),
+                address: None,
+                apart: None,
             }),
         })
         .collect();
