@@ -269,6 +269,7 @@ impl Conversation {
                         description,
                         kind: TaskKind::Command,
                         call: Some(id.clone()),
+                        subagent: None,
                     },
                 ))
             })

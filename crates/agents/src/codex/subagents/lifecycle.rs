@@ -174,13 +174,14 @@ pub(in crate::codex) async fn tasks(shared: &Shared) {
         let tasks: Vec<_> = state
             .subagents
             .runs
-            .values()
-            .filter(|run| !run.ended)
-            .map(|run| AgentTask {
+            .iter()
+            .filter(|(_, run)| !run.ended)
+            .map(|(subagent, run)| AgentTask {
                 id: run.call.to_string().into(),
                 description: run.details.description.clone(),
                 kind: TaskKind::Subagent,
                 call: Some(run.call.clone()),
+                subagent: Some(subagent.clone()),
             })
             .collect();
         let idle = state.turn.is_none();

@@ -243,7 +243,7 @@ fn what_a_run_records_needs_only_what_it_claims_and_the_hubs_own_records_are_its
 }
 
 fn task(kind: TaskKind) -> AgentTask {
-    AgentTask { id: TaskId::from("t"), description: None, kind, call: None }
+    AgentTask { id: TaskId::from("t"), description: None, kind, call: None, subagent: None }
 }
 
 #[test]

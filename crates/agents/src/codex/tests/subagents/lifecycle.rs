@@ -90,6 +90,11 @@ async fn root_completion_preserves_child_calls_and_approvals_until_the_child_fin
         .filter_map(|body| if let EventBody::AgentTasks { tasks, .. } = body { Some(tasks.len()) } else { None })
         .collect();
     assert_eq!(snapshots, [1, 0]);
+    let listed = events.iter().find_map(|body| {
+        let EventBody::AgentTasks { tasks, .. } = body else { return None };
+        tasks.first()
+    });
+    assert_eq!(listed.and_then(|task| task.subagent.as_ref()), Some(&"child".into()), "its task names its thread");
     assert!(matches!(events.last(), Some(EventBody::AgentState { state: AgentRunState::Idle })));
 }
 

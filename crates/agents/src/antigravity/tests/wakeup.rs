@@ -197,6 +197,7 @@ async fn background_command_lists_task_drains_wakeup_into_own_turn_cancels_befor
         description: Some("Unit test execution".into()),
         kind: TaskKind::Command,
         call: Some(ToolUseId::from("bg-1")),
+        subagent: None,
     };
     assert!(turn1.contains(&EventBody::AgentTasks { tasks: vec![expected_task.clone()], stopped: Vec::new() }));
 

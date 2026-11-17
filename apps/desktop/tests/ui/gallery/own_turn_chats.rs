@@ -41,6 +41,7 @@ fn picked_up() -> Vec<EventBody> {
         description: Some(WAIT_TOOL.into()),
         kind: TaskKind::Wait,
         call: Some("toolu-2".into()),
+        subagent: None,
     };
     let found = "The depot releases a train as soon as its route is set, before the signal clears.";
     let fixing = "The review found that the depot lets a train go before its signal clears. I'll fix that once #7 is in the queue.";

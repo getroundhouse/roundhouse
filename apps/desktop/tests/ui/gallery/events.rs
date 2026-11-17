@@ -186,6 +186,7 @@ pub(crate) fn task(kind: TaskKind, call: &str, description: &str) -> AgentTask {
         description: Some(description.to_string()),
         kind,
         call: Some(ToolUseId::from(call)),
+        subagent: None,
     }
 }
 

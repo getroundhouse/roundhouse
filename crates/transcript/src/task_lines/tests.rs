@@ -12,6 +12,7 @@ fn tasks(kinds: &[TaskKind]) -> Vec<AgentTask> {
         description: None,
         kind: *kind,
         call: None,
+        subagent: None,
     };
     kinds.iter().enumerate().map(task).collect()
 }

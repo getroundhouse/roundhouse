@@ -9,9 +9,10 @@ use std::time::Duration;
 
 use gpui_kit::{Context, SharedString, Task};
 use protocol::event::AgentTask;
-use protocol::model::{AgentDescription, PromptCache, Seq, Session, Subagent, SubagentStatus, ToolUseId, Wait};
+use protocol::model::{AgentDescription, PromptCache, Seq, Session, Subagent, SubagentStatus, Wait};
 
 use super::{Transcript, TranscriptEvent};
+use crate::rows::Opens;
 use crate::task_lines;
 use crate::texts::Of;
 
@@ -149,10 +150,12 @@ impl Transcript {
         }
     }
 
-    /// Asks for the work of the subagent `call` started in the subagent tab, named `title` until its record comes, as
-    /// its record names it, since a call's row and a task's line know only the call.
-    pub(crate) fn open_subagent_started_by(&self, call: &ToolUseId, title: String, cx: &mut Context<Self>) {
-        let subagent = self.model.borrow().subagents.subagent_started_by(call);
+    /// Asks for the work of the subagent `opens` names in the subagent tab, named `title` until its record comes.
+    pub(crate) fn open_subagent(&self, opens: &Opens, title: String, cx: &mut Context<Self>) {
+        let subagent = match opens {
+            Opens::Subagent(subagent) => subagent.clone(),
+            Opens::StartedBy(call) => self.model.borrow().subagents.subagent_started_by(call),
+        };
         cx.emit(TranscriptEvent::OpenSubagent { subagent, title });
     }
 

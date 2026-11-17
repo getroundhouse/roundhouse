@@ -131,11 +131,11 @@ fn a_subagent_s_line_in_the_background_opens_the_subagent_tab(cx: &mut TestAppCo
     ui.press("enter");
     let named = || {
         let tasks = stack.client().session_get(&chat).unwrap().background_tasks;
-        tasks.into_iter().find_map(|task| Some((task.id, task.call?)))
+        tasks.into_iter().find_map(|task| task.subagent.is_some().then_some(task.id))
     };
-    ui.wait("its task to name its call", |_| named().is_some());
-    let (task, call) = named().unwrap();
-    let open = SharedString::from(format!("background-open/{call}"));
+    ui.wait("its task to name its subagent", |_| named().is_some());
+    let task = named().unwrap();
+    let open = SharedString::from(format!("background-open/{task}"));
     // And its call's line, since the line in the background follows the session's record, which can come before the
     // call's row is taken in. The background line has the same label, so it's found as the only call.
     ui.wait("the button on its line, and its call's line", |ui| ui.has(open.clone()) && ui.shown("call/").len() == 1);

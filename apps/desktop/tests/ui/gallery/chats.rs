@@ -56,6 +56,7 @@ pub(crate) fn started_in_background() -> Vec<EventBody> {
         description: Some("Run the full test suite".to_string()),
         kind: TaskKind::Command,
         call: Some("toolu-3".into()),
+        subagent: None,
     };
     events.push(EventBody::AgentTasks { tasks: vec![suite.clone()], stopped: Vec::new() });
     events.push(tool_result("toolu-3", "Command running in background with ID: b1"));
@@ -67,6 +68,7 @@ pub(crate) fn started_in_background() -> Vec<EventBody> {
         description: Some("Watch the run for failures".to_string()),
         kind: TaskKind::Monitor,
         call: Some("toolu-4".into()),
+        subagent: None,
     };
     events.push(EventBody::AgentTasks { tasks: vec![suite, watcher], stopped: Vec::new() });
     events.push(tool_result("toolu-4", "Monitor started (task b2). You will be notified on each event."));
@@ -83,6 +85,7 @@ pub(crate) fn waiting() -> Vec<EventBody> {
         description: Some("roundhouse/wait_for_pull_request".to_string()),
         kind: TaskKind::Wait,
         call: Some("toolu-1".into()),
+        subagent: None,
     };
     vec![
         user_prompt("Open a PR for this, and queue it once its checks pass."),

@@ -8,7 +8,7 @@ use crate::model::{CacheTtl, WaitUntil};
 #[test]
 fn an_agent_with_only_waits_in_the_background_isnt_counted_as_running() {
     use SessionStatus::{Background, Idle, Running, WaitingApproval};
-    let task = |id: &str, kind| AgentTask { id: id.into(), description: None, kind, call: None };
+    let task = |id: &str, kind| AgentTask { id: id.into(), description: None, kind, call: None, subagent: None };
     let (wait, other_wait, command) =
         (task("w", TaskKind::Wait), task("x", TaskKind::Wait), task("c", TaskKind::Command));
 

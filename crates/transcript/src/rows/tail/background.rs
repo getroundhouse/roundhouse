@@ -19,7 +19,7 @@ use super::{clipped, tail_line};
 use crate::folds::{Fold, Folds};
 use crate::rows::Shared;
 use crate::rows::line::{START_CHARS, lead, opening};
-use crate::rows::tools::agent::open_tab;
+use crate::rows::tools::agent::{Opens, open_tab};
 use crate::task_lines::{TaskGroup, TaskLine, task_lines};
 use crate::transcript::{PullRequestStanding, Transcript};
 use client_core::calls::agent;
@@ -86,13 +86,13 @@ fn what_for(tasks: &[&AgentTask]) -> String {
 
 /// A background task's line: its group's mark, and what the agent said it's for. A subagent has the robot its call's
 /// line has, so its line reads as that call, and it ends with the button that opens the subagent tab, as its call's
-/// line does, once the agent has said which call started it.
+/// line does, once the agent has said which subagent it is, or which call started it.
 fn going(group: TaskGroup, task: &AgentTask, by: By, shared: &Shared, cx: &App) -> Div {
     let (mark, pointed_at) = mark(group, cx);
     let text = task.description.clone().unwrap_or_else(|| group.one().to_string());
-    let open = task.call.as_ref().filter(|_| by == By::Place && group == TaskGroup::Subagents).map(|call| {
-        let id = ElementId::Name(format!("background-open/{call}").into());
-        open_tab(id, call.clone(), task.description.as_deref().unwrap_or(agent::UNTITLED), &shared.this)
+    let open = Opens::task(task).filter(|_| by == By::Place).map(|opens| {
+        let id = ElementId::Name(format!("background-open/{}", task.id).into());
+        open_tab(id, opens, task.description.as_deref().unwrap_or(agent::UNTITLED), &shared.this)
     });
     in_the_background(("background", task.id.as_str()), mark, text, pointed_at, open, cx)
 }
