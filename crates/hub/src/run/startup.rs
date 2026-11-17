@@ -57,6 +57,7 @@ pub(super) fn recover(store: &Store) -> Result<LeftHalfDone, StoreError> {
     store.end_waiting_github_sign_ins()?;
     store.forget_worker_builds()?;
     store.forget_found_github_logins()?;
+    store.github_reach_left_by_the_last_run()?;
     let moves = store.moves_left()?;
     for workspace in store.take_unfinished_workspaces()? {
         warn!(workspace = workspace.name, "discarding a workspace left half-made by the last run");
@@ -155,12 +156,15 @@ pub async fn run(config: HubConfig) -> Result<(), HubError> {
     let watching_deadlines = tokio::spawn(hub.clone().watch_wait_deadlines());
     let watching_pull_requests = tokio::spawn(hub.clone().watch_pull_requests());
     let watching_github_logins = tokio::spawn(hub.clone().watch_github_logins());
+    let watching_github_reach = tokio::spawn(hub.clone().watch_github_reach());
     let mut terminate = Terminate::listen().map_err(|e| HubError::io("listening for a signal to stop", e))?;
     let signalled = asked_to_go(&hub, &mut terminate).await;
     accept.abort();
     hub.remote.stop_listening().await;
     watching_pull_requests.abort();
     watching_deadlines.abort();
+    // What it would record is checked again as the next hub starts.
+    watching_github_reach.abort();
     hub.stop_jobs();
     listener::unbind(&paths.socket);
     // Before the lock goes, so what a renewal under way is given is written before the next hub can start.

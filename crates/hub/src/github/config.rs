@@ -10,6 +10,9 @@ const GITHUB_API: &str = "https://api.github.com";
 /// Where GitHub's own device flow is.
 const GITHUB_LOGIN: &str = "https://github.com";
 
+/// Where GitHub serves its own repositories over HTTPS.
+const GITHUB_GIT: &str = "https://github.com";
+
 /// Roundhouse's OAuth App on GitHub, which every hub has people sign in with GitHub through. The device flow needs no
 /// client secret, so the ID is all a hub has of the app, and it's no secret.
 const ROUNDHOUSE_APP: &str = "Ov23liWtqywYN3M2m6EU";
@@ -23,6 +26,9 @@ pub struct GithubConfig {
     pub(crate) api: String,
     /// Where GitHub's device flow is, such as `https://github.com`, which the hub asks for a sign-in's code and token.
     pub(crate) login: String,
+    /// Where GitHub serves repositories over HTTPS, such as `https://github.com`, which the hub asks whether a push
+    /// would be taken, as `git push` asks it.
+    pub(crate) git: String,
     /// The OAuth App a sign-in is through, which is what GitHub shows the person as they approve.
     pub(crate) client_id: GithubClientId,
 }
@@ -47,27 +53,28 @@ impl GithubConfig {
     /// another, and the product is never built with it.
     #[cfg(not(feature = "testing"))]
     pub fn from_env(_var: impl Fn(&str) -> Option<String>) -> Self {
-        Self::of(GITHUB_API.to_string(), GITHUB_LOGIN.to_string())
+        Self::of(GITHUB_API.to_string(), GITHUB_LOGIN.to_string(), GITHUB_GIT.to_string())
     }
 
-    /// GitHub's API and its device flow both at what `var` gives for [`ENV_TEST_GITHUB_API`], such as a stand-in's
-    /// address, which serves both, and otherwise GitHub's own, through Roundhouse's app.
+    /// GitHub's API, its device flow and its repositories all at what `var` gives for [`ENV_TEST_GITHUB_API`], such as
+    /// a stand-in's address, which serves them all, and otherwise GitHub's own, through Roundhouse's app.
     #[cfg(feature = "testing")]
     pub fn from_env(var: impl Fn(&str) -> Option<String>) -> Self {
         match var(ENV_TEST_GITHUB_API) {
-            Some(address) => Self::of(address.clone(), address),
-            None => Self::of(GITHUB_API.to_string(), GITHUB_LOGIN.to_string()),
+            Some(address) => Self::of(address.clone(), address.clone(), address),
+            None => Self::of(GITHUB_API.to_string(), GITHUB_LOGIN.to_string(), GITHUB_GIT.to_string()),
         }
     }
 
-    fn of(api: String, login: String) -> Self {
-        Self { api, login, client_id: GithubClientId::new(ROUNDHOUSE_APP) }
+    fn of(api: String, login: String, git: String) -> Self {
+        Self { api, login, git, client_id: GithubClientId::new(ROUNDHOUSE_APP) }
     }
 
-    /// A GitHub whose API and device flow are both at `address`, such as a stand-in's, signed in through an app of
-    /// a made-up ID.
+    /// A GitHub whose API, device flow and repositories are all at `address`, such as a stand-in's, signed in through an
+    /// app of a made-up ID.
     #[cfg(test)]
     pub(crate) fn at(address: String) -> Self {
-        Self { api: address.clone(), login: address, client_id: GithubClientId::new("a-made-up-client-id") }
+        let client_id = GithubClientId::new("a-made-up-client-id");
+        Self { api: address.clone(), login: address.clone(), git: address, client_id }
     }
 }

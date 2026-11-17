@@ -164,6 +164,7 @@ impl World {
             github_sign_ins: self.github_sign_ins.clone(),
             found_github_logins: self.found_github_logins.clone(),
             github_apps: Vec::new(),
+            github_reach: Vec::new(),
             rev: Rev::default(),
         }
     }

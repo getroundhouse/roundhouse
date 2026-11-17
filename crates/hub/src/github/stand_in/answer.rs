@@ -125,6 +125,19 @@ impl Answer {
         Answer::With { status: 201, headers: Vec::new(), body: body.to_string() }
     }
 
+    /// GitHub's git taking a push's first request, as it does when it would take the push, with the start of the refs it
+    /// advertises.
+    pub fn takes_pushes() -> Self {
+        let headers = vec![("content-type", "application/x-git-receive-pack-advertisement")];
+        Answer::With { status: 200, headers, body: "001f# service=git-receive-pack\n0000".to_string() }
+    }
+
+    /// GitHub's git answering with `status`, saying `text`, as it refuses a push or has no such repository.
+    pub fn git_says(status: u16, text: &str) -> Self {
+        let headers = vec![("content-type", "text/plain; charset=UTF-8")];
+        Answer::With { status, headers, body: format!("{text}\n") }
+    }
+
     fn json(body: &serde_json::Value) -> Self {
         Answer::With { status: 200, headers: Vec::new(), body: body.to_string() }
     }

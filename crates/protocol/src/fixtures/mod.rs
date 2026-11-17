@@ -14,6 +14,6 @@ pub use typed::{
 mod builders;
 pub use builders::{
     ApprovalRequest, account, approval_request, call, call_result, child_worktree, command_failed, event,
-    found_github_login, github_account, github_app, github_sign_in, of_kind, request_failed, session, subagent,
-    subagent_started, tool_denied, tool_result, tool_use, turn_ended, workspace,
+    found_github_login, github_account, github_app, github_reach, github_sign_in, of_kind, request_failed, session,
+    subagent, subagent_started, tool_denied, tool_result, tool_use, turn_ended, workspace,
 };

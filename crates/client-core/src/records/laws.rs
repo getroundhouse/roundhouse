@@ -6,8 +6,8 @@ use proptest::sample::Index;
 use proptest::test_runner::{Config, RngSeed};
 
 use protocol::model::{
-    Account, FoundGithubLogin, GhLogin, GhLoginWorks, HubSettings, LimitWindow, NewWorkspaceDraft, Record, Session,
-    SessionId, Title, UsageLimit,
+    Account, FoundGithubLogin, GhLogin, GhLoginWorks, GithubReach, GithubRepositoryName, HubSettings, LimitWindow,
+    NewWorkspaceDraft, Reach, Record, Session, SessionId, Title, UsageLimit,
 };
 
 use super::*;
@@ -291,4 +291,28 @@ fn each_found_github_login_is_a_record_like_the_rest() {
     assert_eq!(kept(&held, "incus"), Some(Record::FoundGithubLogin(found("incus", GhLogin::NotInstalled, 3))));
     held.apply_list(Records { rev: Rev::new(9), ..Records::default() });
     assert_eq!((kept(&held, "local"), kept(&held, "incus")), (None, None));
+}
+
+fn reach(repo: &str, reach: Reach, rev: u64) -> GithubReach {
+    GithubReach { repo: repo.into(), reach, answered_at_ms: None, stale: false, rev: Rev::new(rev) }
+}
+
+/// Held by its repository, newest copy kept, though no view draws one yet.
+#[test]
+fn each_repositorys_reach_is_a_record_like_the_rest() {
+    let mut held = HubRecords::default();
+    let cli = GithubRepositoryName::named("cli/cli");
+    let pushes = Reach::Pushes { repository: cli.clone(), username: "ada".into() };
+    let refused = Reach::Refused { repository: cli, username: "ada".into(), reason: "Permission denied.".into() };
+    let kept = |held: &HubRecords, repo: &str| {
+        held.held.get(&RecordKey::GithubReach { repo: repo.into() }).map(|kept| kept.record.clone())
+    };
+
+    let listed = vec![reach("r", pushes.clone(), 2), reach("s", Reach::NotOnGithub, 3)];
+    assert!(held.apply_list(Records { github_reach: listed, rev: Rev::new(3), ..Records::default() }));
+    assert!(held.apply_notice(HubNotice::GithubReach(reach("r", refused.clone(), 5))));
+    assert!(!held.apply_notice(HubNotice::GithubReach(reach("r", pushes, 4))), "a late copy");
+
+    assert_eq!(kept(&held, "r"), Some(Record::GithubReach(reach("r", refused, 5))));
+    assert_eq!(kept(&held, "s"), Some(Record::GithubReach(reach("s", Reach::NotOnGithub, 3))));
 }

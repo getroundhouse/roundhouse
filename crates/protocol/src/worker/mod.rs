@@ -15,6 +15,7 @@ mod found_login;
 mod frames;
 mod git_credential;
 mod github;
+mod github_remote;
 mod one_off;
 pub mod previous;
 mod tools;
@@ -37,6 +38,7 @@ pub use github::{
     GH_RUNS_WITHIN, GithubRateLimit, PullRequest, PullRequestReply, RateLimit, ReadRemotePullRequests,
     RemotePullRequestsReply,
 };
+pub use github_remote::{GithubRemote, GithubRemoteReply};
 pub use one_off::{AccountFor, TitleFor, TitleReply};
 pub use tools::{ServeTools, ToolsServing, ToolsToken, WAIT_TOOL, WAITS_TOOL};
 pub use workspaces::{

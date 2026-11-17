@@ -1,19 +1,21 @@
 //! A GitHub account connected through a real hub, which asks a stand-in for GitHub whose its token is, as what a
 //! workspace's git uses for github.com: the hub makes it the default and sets it on the workspace's worker, whose setup
 //! script's git gets it, and a block once it's disconnected. And who a provider's machine's own `gh` is logged in as,
-//! which the hub records once a worker there has said.
+//! which the hub records once a worker there has said, and whether the default can push to a workspace's repository.
 
 #![cfg(test)]
 
 use std::path::PathBuf;
 
-use hub::{GithubAnswer, GithubStandIn};
+use hub::{GithubAnswer, GithubGate, GithubScript, GithubStandIn};
 use protocol::client::github_accounts::{GithubAccountConnect, GithubAccountDisconnect};
-use protocol::model::{FoundGithubLogin, GhLogin, GhLoginWorks, GithubToken, SetupStatus};
+use protocol::model::{
+    FoundGithubLogin, GhLogin, GhLoginWorks, GithubReach, GithubRepositoryName, GithubToken, Reach, SetupStatus,
+};
 use protocol::paths::ENV_TEST_GITHUB_API;
 
 use crate::support::gh::{LOGGED_IN_AS, StandInGh};
-use crate::support::{Stack, commit_settings, wait_for_setup, wait_until};
+use crate::support::{Stack, commit_settings, git, wait_for_setup, wait_until};
 
 /// Asks git for github.com's credential at once, keeping what it filled in `first`, then asks again until git can't
 /// fill it, as once the hub has blocked it, keeping what git said then in `said`, or fails after five seconds or so.
@@ -67,4 +69,45 @@ fn a_hub_records_who_its_machines_own_gh_is_logged_in_as_once_a_worker_there_has
     let [FoundGithubLogin { provider, login, .. }] = &listed()[..] else { panic!("{:?}", listed()) };
     let works = GhLogin::LoggedIn { username: LOGGED_IN_AS.into(), works: GhLoginWorks::Yes };
     assert_eq!((provider.as_str(), login), ("local", &works));
+}
+
+/// Through the real worker of the local provider, which says where its repository's `origin` pushes, checked with the
+/// default's token against a stand-in for GitHub, to every client, with when GitHub answered. A hub that starts again
+/// has it at once, as the last run's, until it has checked again, which GitHub holds back here until the test has
+/// seen it. It fetches from the repository itself, so nothing reaches GitHub.
+#[test]
+fn a_hub_records_whether_the_default_can_push_to_a_workspaces_repository_on_github_and_when() {
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let refused = GithubAnswer::git_says(403, "Permission to cli/cli.git denied to ada.");
+    let gate = GithubGate::closed();
+    let held = GithubAnswer::After(gate.clone(), Box::new(refused.clone()));
+    let github = runtime.block_on(GithubStandIn::with(GithubScript {
+        users: vec![(TOKEN, GithubAnswer::user(7, "ada", None))],
+        pushes: vec![("cli/cli", vec![refused, held])],
+        ..GithubScript::default()
+    }));
+    let mut stack = Stack::start_with(vec![(ENV_TEST_GITHUB_API, github.api())]);
+    let repo = stack.repo();
+    git(&repo, &["remote", "add", "origin", repo.to_str().unwrap()]);
+    git(&repo, &["remote", "set-url", "--push", "origin", "git@github.com:cli/cli.git"]);
+    let client = stack.client();
+    client.call(GithubAccountConnect { token: GithubToken::new(TOKEN), id: None }).unwrap();
+    let listed = |stack: &Stack| stack.client().records_list().unwrap().github_reach;
+
+    stack.workspace(&client);
+    wait_until("the repository's reach", || !listed(&stack).is_empty());
+    let [checked] = &listed(&stack)[..] else { panic!("{:?}", listed(&stack)) };
+    stack.restart_hub();
+    let [left] = &listed(&stack)[..] else { panic!("{:?}", listed(&stack)) };
+    gate.open();
+    wait_until("it checked again", || listed(&stack).first().is_some_and(|reach| !reach.stale));
+
+    let reason = "Permission to cli/cli.git denied to ada.".to_string();
+    let cli = GithubRepositoryName::named("cli/cli");
+    assert_eq!(checked.reach, Reach::Refused { repository: cli, username: "ada".into(), reason });
+    assert!(!checked.stale && checked.answered_at_ms.is_some(), "{checked:?}");
+    let as_it_was = GithubReach { stale: true, rev: left.rev, ..checked.clone() };
+    assert_eq!(left, &as_it_was, "the last run's, as it was, with when GitHub answered");
+    let [again] = &listed(&stack)[..] else { panic!() };
+    assert!(again.answered_at_ms > checked.answered_at_ms, "{again:?}");
 }

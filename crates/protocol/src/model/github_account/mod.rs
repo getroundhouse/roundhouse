@@ -1,6 +1,7 @@
 //! The GitHub accounts the hub holds a login for, which agents push and open pull requests as, the apps of your own
-//! whose installations some of them are, and the login found on each provider's machines, which they push as while the
-//! default is the machine's own.
+//! whose installations some of them are, the login found on each provider's machines, which they push as while the
+//! default is the machine's own, and whether the default can push to the repository on GitHub that each repository's
+//! `origin` names.
 
 #[cfg(test)]
 use super::{GithubAccountId, GithubAppSlug, GithubSignInId, GithubUserCode, GithubUsername, ProviderName, Rev};
@@ -14,6 +15,8 @@ mod found;
 pub use found::{FoundGithubLogin, GhLogin, GhLoginWorks};
 mod numbers;
 pub use numbers::{GithubAppId, GithubInstallationId, GithubUserId};
+mod reach;
+pub use reach::{GithubReach, GithubRepositoryName, GithubRepositoryNameError, Reach};
 mod record;
 pub use record::{GithubAccount, GithubLoginKind, GithubToken, GithubUser, HeldGithubLogin};
 mod sign_in;

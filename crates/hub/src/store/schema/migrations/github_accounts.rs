@@ -1,5 +1,6 @@
-//! The migrations that keep the GitHub accounts the hub holds a login for, and the logins found on each provider's
-//! machines, kept apart since they're long. Each has its place in `MIGRATIONS`.
+//! The migrations that keep the GitHub accounts the hub holds a login for, the logins found on each provider's
+//! machines, and whether the default can push to each repository, kept apart since they're long. Each has its place in
+//! `MIGRATIONS`.
 
 /// Each GitHub account the hub holds, or held, a login for, as a record the feed announces: who it is on GitHub, by the
 /// user's number and the name GitHub last gave, and the login while the hub holds one. `login_kind` is how it was
@@ -84,4 +85,28 @@ pub(super) const GITHUB_APPS: &str = r"
     ALTER TABLE github_accounts ADD COLUMN installation_id INTEGER;
     ALTER TABLE github_accounts ADD COLUMN installed_on_id INTEGER;
     ALTER TABLE github_accounts ADD COLUMN installed_on TEXT;
+";
+
+/// Whether the default GitHub account can push to each repository's repository on GitHub, as the hub last checked, as
+/// a record the feed announces, by the repository. `reach` is JSON, as `Reach` has it. `answered_at_ms` is when GitHub
+/// gave that answer, by the hub's clock, and none for what isn't GitHub's answer. `stale` is a row the last run left,
+/// which the hub hasn't checked again since it started. Kept across restarts, so a hub that starts again has it at
+/// once, and knows which repository on GitHub each pushes to, which it checks again then. A change to a row moves its
+/// revision only when it's another row, since the update that writes it again leaves the row as it was.
+pub(super) const GITHUB_REACH: &str = r"
+    CREATE TABLE github_reach (
+        repo_id TEXT PRIMARY KEY REFERENCES repos(id),
+        reach TEXT NOT NULL,
+        answered_at_ms INTEGER,
+        stale INTEGER NOT NULL DEFAULT 0,
+        rev INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE TRIGGER github_reach_rev_on_insert AFTER INSERT ON github_reach BEGIN
+        UPDATE counters SET value = value + 1 WHERE name = 'rev';
+        UPDATE github_reach SET rev = (SELECT value FROM counters WHERE name = 'rev') WHERE rowid = NEW.rowid;
+    END;
+    CREATE TRIGGER github_reach_rev_on_update AFTER UPDATE ON github_reach WHEN NEW.rev = OLD.rev BEGIN
+        UPDATE counters SET value = value + 1 WHERE name = 'rev';
+        UPDATE github_reach SET rev = (SELECT value FROM counters WHERE name = 'rev') WHERE rowid = NEW.rowid;
+    END;
 ";

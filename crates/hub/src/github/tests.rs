@@ -1,4 +1,5 @@
-use protocol::model::{GithubUser, GithubUserId};
+use protocol::model::{GithubRepositoryName, GithubUser, GithubUserId};
+use protocol::worker::GitCredential;
 
 use super::*;
 
@@ -81,6 +82,84 @@ async fn a_github_that_never_answers_fails_the_call_at_its_time_limit() {
     let ended = tokio::time::timeout(ASK_WITHIN * 2, call).await;
 
     let refused = ended.expect("the call was still waiting on GitHub").unwrap();
+    assert_eq!(refused.unwrap_err().code, ErrorCode::Unavailable);
+    assert!(started.elapsed() >= ASK_WITHIN, "it ended after {:?}, before its limit", started.elapsed());
+}
+
+fn ada(token: &str) -> GitCredential {
+    GitCredential { username: "ada".into(), token: GithubToken::new(token), identity: None }
+}
+
+/// As GitHub answered for a repository a login could push to, one it couldn't, one that isn't there, and a token it
+/// doesn't take, in November 2026, as `docs/architecture.md` says.
+#[tokio::test]
+async fn a_push_meets_what_github_answers_git_as_it_asks_before_sending_anything() {
+    let github = StandIn::with(Script {
+        pushes: vec![
+            ("ada/app", vec![Answer::takes_pushes()]),
+            ("cli/cli", vec![Answer::git_says(403, "Permission to cli/cli.git denied to ada.")]),
+            ("ada/revoked", vec![Answer::git_says(401, "Invalid username or token.")]),
+        ],
+        ..Script::default()
+    })
+    .await;
+    let calls = Github::new(GithubConfig::at(github.api()));
+    let reach = |repository: &'static str| {
+        let calls = &calls;
+        async move { calls.push_reach(&GithubRepositoryName::named(repository), &ada("a-token")).await.unwrap() }
+    };
+
+    let answers = [reach("ada/app").await, reach("cli/cli").await, reach("ada/gone").await, reach("ada/revoked").await];
+
+    let refused = PushAnswer::Refused("Permission to cli/cli.git denied to ada.".to_string());
+    assert_eq!(answers, [PushAnswer::Takes, refused, PushAnswer::NotFound, PushAnswer::TokenRefused]);
+    let asked = github.asked();
+    assert!(asked[0].starts_with("get /ada/app.git/info/refs?service=git-receive-pack http/1.1\r\n"), "{}", asked[0]);
+    // `ada:a-token`, as git's credential helper gives them.
+    assert!(asked[0].contains("authorization: basic ywrhometdg9rzw4=\r\n"), "{}", asked[0]);
+}
+
+/// A network that answers with a page of its own, GitHub limiting how often it's asked, failing, or saying nothing.
+#[tokio::test]
+async fn a_push_github_doesnt_answer_for_is_unavailable_and_a_refusal_without_a_reason_says_so() {
+    let page = Answer::With { status: 200, headers: vec![("content-type", "text/html")], body: "<html>".into() };
+    let github = StandIn::with(Script {
+        pushes: vec![
+            ("a/portal", vec![page]),
+            ("a/limited", vec![Answer::git_says(429, "Too many requests.")]),
+            ("a/down", vec![Answer::git_says(503, "Unavailable.")]),
+            ("a/quiet", vec![Answer::git_says(403, " \n ")]),
+        ],
+        ..Script::default()
+    })
+    .await;
+    let calls = Github::new(GithubConfig::at(github.api()));
+
+    let mut codes = Vec::new();
+    for repository in ["a/portal", "a/limited", "a/down"] {
+        let answer = calls.push_reach(&GithubRepositoryName::named(repository), &ada("a-token")).await;
+        codes.push(answer.unwrap_err().code);
+    }
+    let quiet = calls.push_reach(&GithubRepositoryName::named("a/quiet"), &ada("a-token")).await.unwrap();
+
+    assert_eq!(codes, [ErrorCode::Unavailable; 3]);
+    assert_eq!(quiet, PushAnswer::Refused("GitHub refused it, and said nothing more".to_string()));
+}
+
+/// Time stands still once GitHub has the request, and moves only by tokio's paused clock, so nothing is waited out.
+#[tokio::test]
+async fn a_github_that_never_answers_a_push_fails_the_check_at_its_time_limit() {
+    let github = StandIn::with(Script { pushes: vec![("a/app", vec![Answer::Never])], ..Script::default() }).await;
+    let calls = Github::new(GithubConfig::at(github.api()));
+    let started = tokio::time::Instant::now();
+    let check =
+        tokio::spawn(async move { calls.push_reach(&GithubRepositoryName::named("a/app"), &ada("a-token")).await });
+    github.until_asked(1).await;
+
+    tokio::time::pause();
+    let ended = tokio::time::timeout(ASK_WITHIN * 2, check).await;
+
+    let refused = ended.expect("the check was still waiting on GitHub").unwrap();
     assert_eq!(refused.unwrap_err().code, ErrorCode::Unavailable);
     assert!(started.elapsed() >= ASK_WITHIN, "it ended after {:?}, before its limit", started.elapsed());
 }

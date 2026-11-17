@@ -354,4 +354,6 @@ pub(in super::super) const MIGRATIONS: &[&str] = &[
     super::devices::DEVICES,
     // Each app of your own, and which GitHub accounts are its installations, in `github_accounts`.
     github_accounts::GITHUB_APPS,
+    // Whether the default GitHub account can push to each repository, in `github_accounts`.
+    github_accounts::GITHUB_REACH,
 ];
