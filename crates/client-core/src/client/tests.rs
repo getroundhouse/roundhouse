@@ -125,3 +125,21 @@ fn a_hub_that_chose_another_version_is_refused() {
         connected.err()
     );
 }
+
+/// A hub that takes the request to stop and goes before its reply gets out did what was asked, so stopping it is done,
+/// as it is for one that had already gone.
+#[test]
+fn a_hub_that_goes_before_its_reply_to_stop_gets_out_has_stopped() {
+    let dir = tempfile::tempdir().unwrap();
+    let socket = dir.path().join("hub.sock");
+    let listener = std::os::unix::net::UnixListener::bind(&socket).unwrap();
+    let hub = std::thread::spawn(move || {
+        let (stream, _) = listener.accept().unwrap();
+        let asked = std::io::BufRead::lines(std::io::BufReader::new(&stream)).next().unwrap().unwrap();
+        serde_json::from_str::<protocol::client::ClientFrame>(&asked).unwrap().request
+    });
+
+    stop_hub(&socket).unwrap();
+
+    assert!(matches!(hub.join().unwrap(), ClientRequest::HubShutdown), "it was asked to stop");
+}
