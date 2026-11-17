@@ -10,6 +10,7 @@ use client_core::session_log::SessionLog;
 use desktop::workspace_pane::Showing;
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{AppContext as _, ElementId, SharedString, TestAppContext};
+use protocol::capability::calls::Call;
 use protocol::event::{ContentBlock, EventBody};
 use protocol::model::{SessionId, SettledAt, SubagentId};
 
@@ -38,7 +39,7 @@ fn records_held(ui: &Ui<'_>, chat: &SessionId) -> usize {
 fn agent_call(ui: &Ui<'_>) -> Option<protocol::model::ToolUseId> {
     ui.events().iter().find_map(|event| match &event.body {
         EventBody::Assistant { blocks, .. } => blocks.iter().find_map(|block| match block {
-            ContentBlock::ToolUse { id, name, .. } if name == "Agent" => Some(id.clone()),
+            ContentBlock::Call { id, call: Call::Subagent(_) } => Some(id.clone()),
             _ => None,
         }),
         _ => None,

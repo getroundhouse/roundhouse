@@ -58,7 +58,7 @@ fn a_prompt_sent_during_setup_is_recorded_at_once_and_delivered_when_it_finishes
     let events = wait_for_turn_end(&client, &session.id, 1);
     let saw_it = events.iter().any(|e| match &e.body {
         EventBody::AgentUser { blocks, .. } => {
-            blocks.iter().any(|b| matches!(b, ContentBlock::ToolResult { text, .. } if text.contains("was-ready")))
+            blocks.iter().any(|b| matches!(b, ContentBlock::CallResult { output, .. } if client_core::calls::typed::output(output).contains("was-ready")))
         }
         _ => false,
     });

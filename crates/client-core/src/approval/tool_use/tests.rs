@@ -8,11 +8,11 @@ use crate::calls::{EditFile, WriteFile};
 
 const COMMAND: &str = "rm -rf \"$(cat path)\"\necho done";
 
-fn request(tool: &str, kind: CallKind, input: Value, description: Option<&str>) -> ApprovalRequest {
+fn request(tool: &str, _kind: CallKind, input: Value, description: Option<&str>) -> ApprovalRequest {
     ApprovalRequest {
         input,
         description: description.map(str::to_string),
-        asking: Some(Asking::ToolUse { call: Some(kind) }),
+        asking: Some(Asking::ToolUse { typed: None }),
         ..approval_request("a", tool)
     }
 }

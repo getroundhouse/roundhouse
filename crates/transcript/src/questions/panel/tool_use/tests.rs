@@ -15,11 +15,11 @@ fn given(asked: &ToolUse) -> Option<&str> {
     })
 }
 
-fn asked(tool: &str, kind: CallKind, input: Value, description: Option<&str>, reason: Option<&str>) -> ToolUse {
+fn asked(tool: &str, _kind: CallKind, input: Value, description: Option<&str>, reason: Option<&str>) -> ToolUse {
     let body: EventBody = ApprovalRequest {
         input,
         description: description.map(str::to_string),
-        asking: Some(Asking::ToolUse { call: Some(kind) }),
+        asking: Some(Asking::ToolUse { typed: None }),
         reason: reason.map(str::to_string),
         ..approval_request("a", tool)
     }

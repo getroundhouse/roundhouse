@@ -13,7 +13,7 @@ use crate::support::{Stack, wait_for_approval, wait_for_turn_end};
 fn told(events: &[SessionEvent], said: &str) -> bool {
     events.iter().any(|e| match &e.body {
         EventBody::AgentUser { blocks, .. } => {
-            blocks.iter().any(|b| matches!(b, ContentBlock::ToolResult { text, .. } if text.contains(said)))
+            blocks.iter().any(|b| matches!(b, ContentBlock::CallResult { output, .. } if client_core::calls::typed::output(output).contains(said)))
         }
         _ => false,
     })

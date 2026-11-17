@@ -3,9 +3,7 @@ use std::sync::Arc;
 use client_core::Answered;
 use client_core::session_log::{RecordedApprovals, SessionLog};
 use protocol::attachment::{Attachment, MediaType};
-use protocol::event::{
-    ApprovalOutcome, Asking, CallKind, ContentBlock, EventBody, Question, QuestionAnswer, SessionEvent,
-};
+use protocol::event::{ApprovalOutcome, Asking, ContentBlock, EventBody, Question, QuestionAnswer, SessionEvent};
 use protocol::fixtures::{ApprovalRequest, approval_request};
 use protocol::model::{
     CallResult, OpenApproval, PermissionMode, Place, RecentCall, RecentWork, Seq, Subagent, SubagentStatus,
@@ -54,7 +52,7 @@ fn a_question_is_drawn_only_once_it_s_no_longer_waiting() {
 fn a_request_its_adapter_says_asks_questions_is_drawn_as_one() {
     let question = Question { text: "Red or blue?".into(), header: None, options: Vec::new(), multiple: false };
     let questions = asking("q", Asking::Questions { questions: vec![question.clone()] });
-    let tool = asking("t", Asking::ToolUse { call: None });
+    let tool = asking("t", Asking::ToolUse { typed: None });
     let answered = closed_by_position("q", vec![QuestionAnswer { picked: Vec::new(), typed: Some("Blue".into()) }]);
     let log = log([
         event(Seq::new(1), questions.clone()),
@@ -80,7 +78,7 @@ fn a_request_its_adapter_says_asks_questions_is_drawn_as_one() {
 /// A command the agent asked to run, as the call `call`, and for the subagent `asked_by` if it's a subagent's.
 fn asked_to_run(id: &str, call: &str, asked_by: Option<&str>) -> EventBody {
     let input = json!({ "command": "rm -rf build" });
-    let asking = Some(Asking::ToolUse { call: Some(CallKind::Command) });
+    let asking = Some(Asking::ToolUse { typed: None });
     let (tool_use_id, asked_by) = (Some(call.into()), asked_by.map(Into::into));
     ApprovalRequest { tool_use_id, input, asking, asked_by, ..approval_request(id, "Bash") }.into()
 }

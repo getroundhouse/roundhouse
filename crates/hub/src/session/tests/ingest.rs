@@ -41,7 +41,7 @@ fn what_a_worker_sends_again_is_taken_in_once() {
 fn the_hub_allows_only_a_tools_use_asked_about_with_full_access_and_only_when_set_to() {
     use protocol::capability::approvals::{Asks, Request};
     use protocol::capability::calls::Call;
-    use protocol::event::{Asking, CallKind};
+    use protocol::event::Asking;
     use protocol::model::PermissionMode::{FullAccess, Plan, Unknown};
 
     let asked = |asking: Option<Asking>| {
@@ -56,10 +56,10 @@ fn the_hub_allows_only_a_tools_use_asked_about_with_full_access_and_only_when_se
         *request = Some(Box::new(Request { asks, suggested: Vec::new(), always, why: None }));
         body
     };
-    let tool = asked(Some(Asking::ToolUse { call: Some(CallKind::Command) }));
+    let tool = asked(Some(Asking::ToolUse { typed: None }));
     let call = || Asks::Call { call: Call::Other { tool: "t".into(), input: serde_json::Value::Null } };
     assert!(the_hub_allows(FullAccess, &tool, true));
-    assert!(the_hub_allows(FullAccess, &asked(Some(Asking::ToolUse { call: None })), true), "whatever kind of call");
+    assert!(the_hub_allows(FullAccess, &asked(Some(Asking::ToolUse { typed: None })), true), "whatever kind of call");
     for always in [true, false] {
         assert!(the_hub_allows(FullAccess, &typed(call(), always), true), "a typed call, asked always or not");
     }

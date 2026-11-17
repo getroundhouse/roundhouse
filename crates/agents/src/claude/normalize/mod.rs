@@ -17,7 +17,7 @@ mod blocks;
 mod calls;
 mod compaction;
 mod denied;
-mod file_change;
+pub(super) mod file_change;
 mod images;
 mod limits;
 mod own_turns;

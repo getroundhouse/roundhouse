@@ -1,5 +1,6 @@
 //! What has to stay readable of a tool call and its result, which the log holds for good.
 
+use protocol::capability::calls::Call as Typed;
 use protocol::event::{Asking, CallKind, ContentBlock, Denied, EventBody};
 use protocol::model::{Call, CallResult};
 
@@ -102,20 +103,32 @@ fn every_kind_of_call_keeps_its_name() {
 }
 
 #[test]
-fn a_request_for_approval_says_the_kind_of_the_call_it_asks_to_make() {
-    let request = br#"{"type":"approval_requested","approval_id":"a","tool_name":"Bash","tool_use_id":"toolu_1","input":{"command":"ls"},"description":null,"suggestions":null,"asking":{"kind":"tool_use","call":{"kind":"command"}}}"#;
+fn a_request_for_approval_says_the_call_it_asks_to_make() {
+    let request = br#"{"type":"approval_requested","approval_id":"a","tool_name":"Bash","tool_use_id":"toolu_1","input":{"command":"ls"},"description":null,"suggestions":null,"asking":{"kind":"tool_use","typed":{"kind":"command","command":"ls","runs":"waits"}}}"#;
 
     let body: EventBody = serde_json::from_slice(request).unwrap();
 
     let EventBody::ApprovalRequested { asking, .. } = &body else { panic!("a request reads as one") };
-    assert_eq!(asking.as_deref().and_then(Asking::call), Some(&CallKind::Command));
+    let Some(Asking::ToolUse { typed: Some(Typed::Command(command)) }) = asking.as_deref() else {
+        panic!("{asking:?}")
+    };
+    assert_eq!(command.command, "ls");
     assert_eq!(serde_json::to_vec(&body).unwrap(), request);
+}
+
+/// One recorded when requests said only their call's kind still reads, as one whose call this build can't read, rather
+/// than failing as a whole. The hub's migration turns each into its call.
+#[test]
+fn a_request_that_says_only_its_call_s_kind_reads_as_one_whose_call_isnt_known() {
+    let request = br#"{"kind":"tool_use","call":{"kind":"command"}}"#;
+
+    assert_eq!(serde_json::from_slice::<Asking>(request).unwrap(), Asking::ToolUse { typed: None });
 }
 
 /// One recorded before adapters said the kind, which is written back as it was.
 #[test]
 fn a_request_from_before_kinds_keeps_its_form() {
-    let before = Asking::ToolUse { call: None };
+    let before = Asking::ToolUse { typed: None };
 
     assert_eq!(serde_json::to_string(&before).unwrap(), r#"{"kind":"tool_use"}"#);
     assert_eq!(serde_json::from_str::<Asking>(r#"{"kind":"tool_use"}"#).unwrap(), before);
@@ -146,8 +159,10 @@ fn a_build_from_before_kinds_reads_a_request_that_says_its_kind() {
     }
 
     let newer = r#"{"kind":"tool_use","call":{"kind":"command"}}"#;
+    let typed = r#"{"kind":"tool_use","typed":{"kind":"command","command":"ls"}}"#;
 
     assert_eq!(serde_json::from_str::<AskingBefore>(newer).unwrap(), AskingBefore::ToolUse);
+    assert_eq!(serde_json::from_str::<AskingBefore>(typed).unwrap(), AskingBefore::ToolUse);
 }
 
 /// A denied call's result, with and without the person's words, as the log and a subagent's recent work hold it for

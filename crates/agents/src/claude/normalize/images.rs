@@ -24,7 +24,7 @@ pub(super) fn take(content: Option<&Value>, blocks: &mut [ContentBlock]) -> Vec<
     let Some(Value::Array(items)) = content else { return Vec::new() };
     let mut taken = Vec::new();
     for (block, item) in blocks.iter_mut().zip(items) {
-        let ContentBlock::ToolResult { images, .. } = block else { continue };
+        let ContentBlock::CallResult { images, .. } = block else { continue };
         let Some(Value::Array(parts)) = item.get("content") else { continue };
         for found in parts.iter().filter_map(image) {
             images.push(found.kept.attachment.clone());

@@ -1,5 +1,5 @@
-use super::super::kinds;
-use super::super::kinds::{PLAN, QUESTIONS};
+use super::super::typed;
+use super::super::typed::{PLAN, QUESTIONS};
 use protocol::event::{Asking, Question, QuestionOption};
 use serde_json::Value;
 
@@ -9,7 +9,7 @@ pub(in super::super) fn asking(tool: &str, input: &Value) -> Asking {
     match tool {
         QUESTIONS => Asking::Questions { questions: questions(input) },
         PLAN => Asking::Plan { plan: text_of(input, "plan").unwrap_or_default() },
-        _ => Asking::ToolUse { call: Some(kinds::of(tool)) },
+        _ => Asking::ToolUse { typed: Some(typed::call(tool, input)) },
     }
 }
 
@@ -43,7 +43,8 @@ fn text_of(value: &Value, key: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use protocol::event::{Asking, CallKind, Question, QuestionOption};
+    use protocol::capability::calls::Call;
+    use protocol::event::{Asking, Question, QuestionOption};
     use serde_json::json;
 
     use super::asking;
@@ -81,12 +82,14 @@ mod tests {
 
         assert_eq!(asking("ExitPlanMode", &plan), Asking::Plan { plan: "1. Read\n2. Change".into() });
         assert_eq!(asking("ExitPlanMode", &json!({})), Asking::Plan { plan: String::new() });
-        let command = Asking::ToolUse { call: Some(CallKind::Command) };
-        assert_eq!(asking("Bash", &json!({"command": "ls"})), command, "and says what kind of call that is");
-        let theirs = CallKind::Other { server: Some("team".into()), tool: "AskUserQuestion".into() };
+        let Asking::ToolUse { typed: Some(Call::Command(command)) } = asking("Bash", &json!({"command": "ls"})) else {
+            panic!("not the command it makes");
+        };
+        assert_eq!(command.command, "ls", "and says what call that is");
+        let theirs = Call::Mcp { server: "team".into(), tool: "AskUserQuestion".into(), input: json!({}) };
         assert_eq!(
             asking("mcp__team__AskUserQuestion", &json!({})),
-            Asking::ToolUse { call: Some(theirs) },
+            Asking::ToolUse { typed: Some(theirs) },
             "only the CLI's own"
         );
     }

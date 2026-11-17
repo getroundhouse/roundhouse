@@ -60,9 +60,10 @@ impl<'a> Recorded<'a> {
         }
     }
 
-    /// The call the request for approval `body` asks to make, or `None` for any other event. A request that asks
-    /// something else is one too, to the tool that asks it, and what it asks says its kind. Only one that says no
-    /// kind, which is one recorded before adapters said, leaves the kind to its tool's name.
+    /// The call the request for approval `body` asks to make, or `None` for any other event: the typed call it names,
+    /// or for one in the form Claude's adapter still asks in, the call it says it asks to make. One that asks something
+    /// else is one too, to the tool that asks it, and what it asks says its kind. Only one that says nothing of its
+    /// call, which is one recorded before adapters said, leaves the kind to its tool's name.
     pub fn asked(body: &'a EventBody) -> Option<Self> {
         let EventBody::ApprovalRequested { tool_name, input, asking, request, .. } = body else { return None };
         if let Some(request) = request {
@@ -76,7 +77,14 @@ impl<'a> Recorded<'a> {
                 | protocol::capability::approvals::Asks::Unknown => None,
             };
         }
-        Some(Self::Legacy { kind: asking.as_deref().and_then(Asking::call), name: tool_name, input })
+        let kind = match asking.as_deref() {
+            Some(Asking::ToolUse { typed: Some(call) }) => return Some(Self::Typed(call)),
+            Some(Asking::Questions { .. }) => Some(&CallKind::Questions),
+            Some(Asking::Plan { .. }) => Some(&CallKind::Plan),
+            Some(Asking::Unknown) => Some(&CallKind::Unknown),
+            Some(Asking::ToolUse { typed: None }) | None => None,
+        };
+        Some(Self::Legacy { kind, name: tool_name, input })
     }
 
     /// What kind of call it is: what its adapter said, or for one recorded before adapters said, what Claude's tool of

@@ -91,13 +91,13 @@ fn subagents_that_ask_at_once_are_asked_in_turn_with_who_asks_and_how_many_wait(
 
     // Two subagents ask before either is answered. The first is asked, by what it's for, and the other waits.
     ui.ask(&format!("agents-ask:2:{REMOVAL}"));
-    ui.wait("who asks", |ui| ui.shows_label("question-header", "Bash · Check 1"));
+    ui.wait("who asks", |ui| ui.shows_label("question-header", "Command · Check 1"));
     ui.wait("the count of what waits", |ui| ui.shows_label("question-more-waiting", "1 more waiting"));
 
     // Denied, the next is asked, with nothing waiting behind it.
     ui.click(id("question-answer-1"));
     ui.click(id("question-send"));
-    ui.wait("the second to be asked", |ui| ui.shows_label("question-header", "Bash · Check 2"));
+    ui.wait("the second to be asked", |ui| ui.shows_label("question-header", "Command · Check 2"));
     assert!(!ui.has(id("question-more-waiting")));
     assert!(gone.exists(), "the first was denied");
 

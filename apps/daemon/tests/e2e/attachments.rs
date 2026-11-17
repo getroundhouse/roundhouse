@@ -118,7 +118,7 @@ fn an_image_a_tool_sends_back_is_kept_as_a_prompt_s_is_and_left_out_of_the_log()
     let (events, _) = client.session_read(&session.id, Seq::new(1), 100, true).unwrap();
     let result = events.iter().find_map(|e| match &e.body {
         EventBody::AgentUser { blocks, .. } => match blocks.as_slice() {
-            [ContentBlock::ToolResult { images, .. }] => Some((images.clone(), e.raw.clone().unwrap())),
+            [ContentBlock::CallResult { images, .. }] => Some((images.clone(), e.raw.clone().unwrap())),
             _ => None,
         },
         _ => None,

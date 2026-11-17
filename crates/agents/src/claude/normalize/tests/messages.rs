@@ -1,7 +1,7 @@
 use super::super::*;
 use protocol::attachment::{AttachmentBytes, MediaType};
+use protocol::capability::calls::{Call, CallOutput};
 use protocol::event::{ContentBlock, FileChange, TurnOutcome};
-use protocol::fixtures;
 use protocol::model::{PermissionMode, SubagentId};
 use serde_json::json;
 
@@ -118,7 +118,9 @@ fn a_tool_result_s_images_become_attachments_kept_apart_from_the_line() {
         panic!()
     };
 
-    let [ContentBlock::ToolResult { text, images: named, .. }] = blocks.as_slice() else { panic!("{blocks:?}") };
+    let [ContentBlock::CallResult { output: CallOutput::Words { text }, images: named, .. }] = blocks.as_slice() else {
+        panic!("{blocks:?}")
+    };
     assert_eq!(text, "a\nb");
     let [kept] = images.as_slice() else { panic!("{images:?}") };
     assert_eq!(named, std::slice::from_ref(&kept.attachment), "the result names what's kept");
@@ -137,7 +139,7 @@ fn an_image_block_that_isn_t_an_image_stays_in_the_line() {
 
     for line in [read_an_image(&not_an_image), read_an_image("not base64!")] {
         let Parsed::Event(EventBody::AgentUser { blocks, .. }) = parse_line(&line) else { panic!("{line}") };
-        assert!(matches!(blocks.as_slice(), [ContentBlock::ToolResult { images, .. }] if images.is_empty()));
+        assert!(matches!(blocks.as_slice(), [ContentBlock::CallResult { images, .. }] if images.is_empty()));
     }
 }
 
@@ -178,9 +180,11 @@ fn a_result_written_for_the_model_is_still_its_call_s_result() {
 
     let Parsed::Event(EventBody::AgentUser { blocks, .. }) = parse_line(&line.to_string()) else { panic!() };
 
-    assert!(matches!(blocks.as_slice(), [ContentBlock::ToolResult { is_error: true, .. }]), "{blocks:?}");
+    assert!(matches!(blocks.as_slice(), [ContentBlock::CallResult { is_error: true, .. }]), "{blocks:?}");
 }
 
+/// Even when the call it answers isn't known, as when the CLI answers one from before it was started again, since the
+/// CLI names the file.
 #[test]
 fn an_edit_s_result_carries_what_it_changed() {
     let line = json!({"type":"user","message":{"role":"user","content":[{
@@ -190,11 +194,14 @@ fn an_edit_s_result_carries_what_it_changed() {
     ]}})
     .to_string();
 
-    let Parsed::Event(EventBody::AgentUser { blocks, .. }) = parse_line(&line) else { panic!() };
+    let Parsed::Event(EventBody::AgentUser { blocks, .. }) = Normalizer::default().line(&line).parsed else { panic!() };
 
-    let [ContentBlock::ToolResult { change: Some(FileChange::Changed { hunks }), .. }] = blocks.as_slice() else {
+    let [ContentBlock::CallResult { output: CallOutput::Changed { files }, .. }] = blocks.as_slice() else {
         panic!("{blocks:?}")
     };
+    let [file] = files.as_slice() else { panic!("{files:?}") };
+    let Some(FileChange::Changed { hunks }) = &file.change else { panic!("{file:?}") };
+    assert_eq!(file.path, "/w/a.rs");
     assert_eq!(hunks[0].new_start, 3);
     assert_eq!(hunks[0].lines.len(), 2);
 }
@@ -207,7 +214,9 @@ fn a_command_that_printed_nothing_has_an_empty_result() {
         }]},"tool_use_result":{"stdout":stdout,"stderr":"","interrupted":false}})
         .to_string();
         let Parsed::Event(EventBody::AgentUser { blocks, .. }) = parse_line(&line) else { panic!() };
-        let [ContentBlock::ToolResult { text, .. }] = blocks.as_slice() else { panic!("{blocks:?}") };
+        let [ContentBlock::CallResult { output: CallOutput::Words { text }, .. }] = blocks.as_slice() else {
+            panic!("{blocks:?}")
+        };
         text.clone()
     };
 
@@ -316,11 +325,7 @@ fn a_call_to_the_advisor_is_a_call_like_any_other() {
     let streamed = parse_line(&start.to_string());
 
     let Parsed::Event(EventBody::Assistant { blocks, .. }) = recorded else { panic!("{recorded:?}") };
-    assert_eq!(
-        blocks,
-        [fixtures::tool_use("srvtoolu_1", "advisor", json!({}))],
-        "as a line alone reads, before the normalizer says what kind of call it is"
-    );
+    assert_eq!(blocks, [ContentBlock::Call { id: "srvtoolu_1".into(), call: Call::Advisor }]);
     let Parsed::Delta(StreamDelta { change: DeltaChange::BlockStart { kind, .. }, .. }) = streamed else {
         panic!("{streamed:?}")
     };
@@ -333,11 +338,15 @@ fn the_advisor_s_result_has_its_advice_only_when_it_can_be_read() {
         let block = json!({"type":"advisor_tool_result","tool_use_id":"srvtoolu_1","content":content});
         let parsed = parse_line(&from_the_agent(&block));
         let Parsed::Event(EventBody::Assistant { blocks, .. }) = parsed else { panic!("{parsed:?}") };
-        let [ContentBlock::ToolResult { tool_use_id, is_error, text, encrypted, .. }] = blocks.as_slice() else {
+        let [ContentBlock::CallResult { tool_use_id, is_error, output, .. }] = blocks.as_slice() else {
             panic!("{blocks:?}")
         };
         assert_eq!(tool_use_id.as_str(), "srvtoolu_1");
-        (*is_error, text.clone(), *encrypted)
+        if let CallOutput::Words { text } = output {
+            return (*is_error, text.clone(), false);
+        }
+        assert_eq!(*output, CallOutput::Encrypted, "advice is its words, or encrypted");
+        (*is_error, String::new(), true)
     };
     let said = |text: &str| (false, text.to_string(), false);
     let failed = |text: &str| (true, text.to_string(), false);

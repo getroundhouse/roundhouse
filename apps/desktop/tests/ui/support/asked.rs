@@ -64,8 +64,8 @@ impl Ui<'_> {
         for event in self.events() {
             if let EventBody::AgentUser { blocks, .. } = &event.body {
                 for block in blocks {
-                    if let ContentBlock::ToolResult { text, .. } = block {
-                        told.push_str(text);
+                    if let ContentBlock::CallResult { output, .. } = block {
+                        told.push_str(&client_core::calls::typed::output(output));
                     }
                 }
             }

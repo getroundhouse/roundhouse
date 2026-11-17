@@ -1,7 +1,7 @@
 use client_core::{Answered, Approval};
 use protocol::capability::calls::Call;
 use protocol::capability::calls::call::{FilePatch, Patch, PatchChange, PatchHunk};
-use protocol::event::{ApprovalOutcome, Asking, CallKind, Question, QuestionAnswer, QuestionOption, SessionEvent};
+use protocol::event::{ApprovalOutcome, Asking, Question, QuestionAnswer, QuestionOption, SessionEvent};
 use protocol::event::{HunkLine, LineMark};
 use protocol::fixtures::{ApprovalRequest, approval_request, typed_request};
 use protocol::model::Seq;
@@ -47,7 +47,7 @@ fn a_plan_prints_whole_and_a_tool_by_its_input() {
     let plan = Asking::Plan { plan: "# Plan\n\n1. Read".into() };
 
     let planned = lines(&event("ExitPlanMode", json!({}), Some(plan)));
-    let tool = lines(&event("Bash", json!({"command": "ls -la"}), Some(Asking::ToolUse { call: None })));
+    let tool = lines(&event("Bash", json!({"command": "ls -la"}), Some(Asking::ToolUse { typed: None })));
 
     assert_eq!(
         planned,
@@ -61,7 +61,7 @@ fn a_tools_use_prints_its_command_whole_under_what_its_for_with_why_and_who_asks
     let asked = ApprovalRequest {
         input: json!({"command": "D=\"$(cat path)\"\nrm -rf \"$D\""}),
         description: Some("Remove the scratch directory".into()),
-        asking: Some(Asking::ToolUse { call: None }),
+        asking: Some(Asking::ToolUse { typed: None }),
         reason: Some("The target is only known once it runs".into()),
         asked_by: Some("toolu_agent".into()),
         ..approval_request("req_1", "Bash")
@@ -88,7 +88,7 @@ fn an_edit_prints_its_file_and_what_it_takes_out_and_puts_in() {
     let described = ApprovalRequest {
         input: input.clone(),
         description: Some("Fix the numbers".into()),
-        asking: Some(Asking::ToolUse { call: Some(CallKind::Edit) }),
+        asking: Some(Asking::ToolUse { typed: None }),
         ..approval_request("req_1", "Edit")
     };
     let plain = ApprovalRequest { description: None, ..described.clone() };

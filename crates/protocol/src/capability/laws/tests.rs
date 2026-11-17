@@ -364,7 +364,7 @@ fn what_the_agent_says_of_its_mode_limits_and_questions_needs_their_capabilities
     assert_eq!(needs(&asking(Asking::Plan { plan: "1.".into() })), [asking::Capability::PlanApproval.into()]);
     assert_eq!(needs(&asking(Asking::Questions { questions: vec![] })), [asking::Capability::Questions.into()]);
     assert_eq!(needs(&asked("a")), [approvals::Capability::Requests.into()]);
-    let tool_use = Asking::ToolUse { call: Some(crate::event::CallKind::Command) };
+    let tool_use = Asking::ToolUse { typed: Some(crate::capability::calls::Call::Advisor) };
     assert_eq!(needs(&asking(tool_use)), [approvals::Capability::Requests.into()]);
     assert_eq!(needs(&asking(Asking::Unknown)), [approvals::Capability::Requests.into()]);
 }

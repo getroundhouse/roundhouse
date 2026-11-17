@@ -146,7 +146,7 @@ fn a_call_is_read_from_its_block_and_from_a_request_to_make_it_with_the_kind_eac
     assert!(Recorded::of(&fixtures::tool_result("c", "a.rs", false)).is_none(), "a result is no call");
 
     let request = |asking| request("shell", json!({ "command": "ls -la" }), asking);
-    let said = request(Some(Asking::ToolUse { call: Some(CallKind::Command) }));
+    let said = request(Some(Asking::ToolUse { typed: Some(Call::Command(fixtures::typed_command("ls -la"))) }));
     assert!(matches!(ToolCall::read(Recorded::asked(&said).unwrap()), ToolCall::Command(_)));
     assert_eq!(asked_about(&said).as_deref(), Some("ls -la"));
     let before = request(None);
@@ -162,7 +162,7 @@ fn a_request_that_says_its_kind_is_never_read_by_its_tool_s_name() {
     let questions = asking("Grep", Asking::Questions { questions: Vec::new() });
     let plan = asking("Bash", Asking::Plan { plan: String::new() });
     let newer = asking("Bash", Asking::Unknown);
-    let no_kind = asking("Bash", Asking::ToolUse { call: None });
+    let no_kind = asking("Bash", Asking::ToolUse { typed: None });
 
     assert!(Recorded::asked(&questions).unwrap().asks_the_person());
     assert!(Recorded::asked(&plan).unwrap().asks_the_person());

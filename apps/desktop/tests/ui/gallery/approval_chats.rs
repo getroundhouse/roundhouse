@@ -5,7 +5,7 @@
 #![cfg(test)]
 
 use protocol::capability::calls::Call;
-use protocol::event::{ApprovalOutcome, Asking, CallKind, EventBody};
+use protocol::event::{ApprovalOutcome, Asking, EventBody};
 use protocol::fixtures::{ApprovalRequest, approval_request, typed_request};
 use protocol::model::{Seq, SessionStatus};
 use serde_json::json;
@@ -98,7 +98,7 @@ fn edit() -> Vec<EventBody> {
     let request = ApprovalRequest {
         tool_use_id: Some("toolu-3".into()),
         input,
-        asking: Some(Asking::ToolUse { call: Some(CallKind::Edit) }),
+        asking: Some(Asking::ToolUse { typed: None }),
         ..approval_request("approval-1", "Edit")
     };
     events.push(request.into());
@@ -167,7 +167,7 @@ fn removal(asking: usize) -> Vec<EventBody> {
             tool_use_id: Some(run.as_str().into()),
             input,
             description: Some(described.to_string()),
-            asking: Some(Asking::ToolUse { call: Some(CallKind::Command) }),
+            asking: Some(Asking::ToolUse { typed: None }),
             reason: Some(WHY.to_string()),
             asked_by: Some((*call).into()),
             ..approval_request(&approval, "Bash")

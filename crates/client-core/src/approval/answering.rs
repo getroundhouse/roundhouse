@@ -45,7 +45,7 @@ impl<'a> Approval<'a> {
                     },
                     questions.iter().map(|q| q.typed).collect::<Vec<TypedAnswer>>(),
                 ),
-                Asks::Call { .. } => (Asking::ToolUse { call: None }, Vec::new()),
+                Asks::Call { call } => (Asking::ToolUse { typed: Some(call.clone()) }, Vec::new()),
                 Asks::Network { .. } | Asks::Access { .. } | Asks::Server(_) | Asks::Unknown => {
                     (Asking::Unknown, Vec::new())
                 }
