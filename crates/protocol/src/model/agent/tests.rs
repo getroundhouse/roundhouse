@@ -57,8 +57,9 @@ fn a_model_offered_is_called_by_its_label_and_any_other_has_none() {
     assert_eq!(agent.label(&ModelName::named("claude-opus-5-5")), None);
 }
 
+/// What a newer hub adds is in the compatibility tests.
 #[test]
-fn on_the_wire_it_reads_as_it_was_written_and_a_feature_from_a_newer_hub_is_unknown() {
+fn on_the_wire_it_reads_as_it_was_written() {
     let agent = described();
     let wire = serde_json::to_value(&agent).unwrap();
     assert_eq!(
@@ -71,14 +72,7 @@ fn on_the_wire_it_reads_as_it_was_written_and_a_feature_from_a_newer_hub_is_unkn
             "features": ["compacts"],
         })
     );
-    assert_eq!(serde_json::from_value::<AgentDescription>(wire.clone()).unwrap(), agent);
-
-    let mut newer = wire;
-    newer["features"] = json!(["compacts", "flies"]);
-    newer["efforts"] = json!(["low", "future"]);
-    let read: AgentDescription = serde_json::from_value(newer).unwrap();
-    assert_eq!(read.features, [AgentFeature::Compacts, AgentFeature::Unknown]);
-    assert_eq!(read.efforts, [Effort::Low, Effort::Unknown]);
+    assert_eq!(serde_json::from_value::<AgentDescription>(wire).unwrap(), agent);
 }
 
 #[test]

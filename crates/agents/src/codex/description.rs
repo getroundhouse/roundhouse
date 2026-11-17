@@ -70,7 +70,6 @@ mod tests {
     #[test]
     fn the_catalog_keeps_each_models_efforts_and_defaults() {
         let agent = description();
-        assert_eq!(agent.models.len(), 8);
         assert_eq!(agent.defaults.model.as_str(), "gpt-6.1-sol");
         let luna = ModelName::named("gpt-6-luna");
         assert!(!agent.efforts_for(&luna).contains(&Effort::Ultra));

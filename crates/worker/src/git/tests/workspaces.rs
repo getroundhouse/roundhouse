@@ -1,59 +1,16 @@
-use super::*;
+//! Making a workspace's own worktree and putting it back, and what git says of a workspace. What making any worktree
+//! decides is tested in `making`, so these have one example of it, and what making a workspace adds: its path, its
+//! branch and its base.
+
+use super::super::{command, diff, git_ok, names_git_has, prepare_workspace, restore_workspace, status};
+use super::support::{cloned, new_repo, prepare, run};
 use crate::git::worktrees::tests::while_one_is_made;
 use crate::testing::given;
+use protocol::client::ErrorCode;
+use protocol::model::CommitId;
+use std::path::Path;
 
-pub(crate) fn run(cwd: &Path, args: &[&str]) -> String {
-    process::testing::git(cwd, args)
-}
-
-/// What `git status` lists in the repository at `cwd`, each untracked file on its own, leaving out what only this
-/// machine's own git ignores, so a test of what a repository ignores can't pass because of it.
-pub(crate) fn changes(cwd: &Path) -> String {
-    run(cwd, &["-c", "core.excludesFile=/dev/null", "status", "--porcelain", "--untracked-files=all"])
-}
-
-pub(crate) fn new_repo(dir: &Path) -> PathBuf {
-    let repo = dir.join("repo");
-    std::fs::create_dir_all(&repo).unwrap();
-    run(&repo, &["init", "-q", "-b", "main"]);
-    std::fs::write(repo.join("a.txt"), "one\n").unwrap();
-    std::fs::write(repo.join(".gitignore"), "ignored/\n").unwrap();
-    run(&repo, &["add", "."]);
-    run(&repo, &["commit", "-qm", "first"]);
-    repo
-}
-
-/// On the branch the hub starts a workspace on.
-pub(crate) async fn prepare(
-    root: &Path,
-    repo: &Path,
-    name: &str,
-    base: Option<&str>,
-) -> Result<WorkspaceReady, ApiError> {
-    let branch = BranchName::from(format!("{name}/start"));
-    prepare_workspace(&given(), root, "repo", repo, name, &branch, base).await
-}
-
-/// Gives `repo` a `post-checkout` hook running `body` under `/bin/sh`.
-pub(crate) fn post_checkout_hook(repo: &Path, body: &str) {
-    let hooks = repo.with_file_name("hooks");
-    std::fs::create_dir_all(&hooks).unwrap();
-    let hook = hooks.join("post-checkout");
-    std::fs::write(&hook, format!("#!/bin/sh\n{body}\n")).unwrap();
-    make_executable(&hook);
-    run(repo, &["config", "core.hooksPath", hooks.to_str().unwrap()]);
-}
-
-#[cfg(unix)]
-fn make_executable(path: &Path) {
-    use std::os::unix::fs::PermissionsExt as _;
-    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).unwrap();
-}
-
-/// Git for Windows runs a hook with a `#!` line without Unix mode bits.
-#[cfg(windows)]
-fn make_executable(_path: &Path) {}
-
+/// From the branch checked out in a repository with no remote, as the branches it reads back say.
 #[tokio::test]
 async fn creates_a_worktree_on_a_new_branch_from_the_current_branch() {
     let dir = tempfile::tempdir().unwrap();
@@ -63,67 +20,38 @@ async fn creates_a_worktree_on_a_new_branch_from_the_current_branch() {
     assert_eq!(prepared.base_ref, "main");
     assert_eq!(run(Path::new(&prepared.path), &["branch", "--show-current"]), "alder/start");
     assert!(Path::new(&prepared.path).join("a.txt").exists());
+    assert_eq!(prepared.branches.as_ref().and_then(|b| b.checked_out()).map(|b| b.name.as_str()), Some("alder/start"));
 }
 
+/// From `origin`'s default branch, where there's a remote, as fetched.
 #[tokio::test]
-async fn fetches_the_latest_remote_commit_and_does_not_track_the_base() {
+async fn a_clone_s_workspace_starts_from_the_latest_of_origin_s_default_branch() {
     let dir = tempfile::tempdir().unwrap();
-    let origin = new_repo(dir.path());
-    let clone = dir.path().join("clone");
-    run(dir.path(), &["clone", "-q", origin.to_str().unwrap(), clone.to_str().unwrap()]);
+    let (origin, clone) = cloned(dir.path());
     // origin moves on after the clone, so only a fetch can find this commit.
-    std::fs::write(origin.join("b.txt"), "new\n").unwrap();
-    run(&origin, &["add", "."]);
-    run(&origin, &["commit", "-qm", "second"]);
+    run(&origin, &["commit", "-q", "--allow-empty", "-m", "second"]);
     let latest = run(&origin, &["rev-parse", "HEAD"]);
 
     let prepared = prepare(&dir.path().join("ws"), &clone, "alder", None).await.unwrap();
+
     assert_eq!(prepared.base_ref, "origin/main");
     assert!(prepared.warnings.is_empty(), "{:?}", prepared.warnings);
-    let path = Path::new(&prepared.path);
-    assert_eq!(run(path, &["rev-parse", "HEAD"]), latest);
-    assert_eq!(
-        run(path, &["reflog", "show", "--format=%gs", "refs/heads/alder/start", "--"]),
-        "branch: Created from origin/main",
-    );
-    // A tracking branch would make a bare `git pull` or `git push` act on main.
-    let upstream = process::testing::git_in(path).args(["rev-parse", "--abbrev-ref", "@{upstream}"]).output().unwrap();
-    assert!(!upstream.status.success());
+    assert_eq!(run(Path::new(&prepared.path), &["rev-parse", "HEAD"]), latest);
 }
 
+/// Before anything is made. What git can't make is refused in `making`.
 #[tokio::test]
-async fn an_unreachable_remote_warns_and_uses_the_local_copy() {
-    let dir = tempfile::tempdir().unwrap();
-    let origin = new_repo(dir.path());
-    let clone = dir.path().join("clone");
-    run(dir.path(), &["clone", "-q", origin.to_str().unwrap(), clone.to_str().unwrap()]);
-    std::fs::remove_dir_all(&origin).unwrap();
-    let prepared = prepare(&dir.path().join("ws"), &clone, "alder", None).await.unwrap();
-    assert_eq!(prepared.warnings.len(), 1, "{:?}", prepared.warnings);
-    assert!(Path::new(&prepared.path).join("a.txt").exists());
-}
-
-#[tokio::test]
-async fn existing_branches_paths_and_bad_input_are_refused() {
+async fn a_workspace_s_path_that_s_taken_or_a_branch_git_can_t_name_is_refused() {
     let dir = tempfile::tempdir().unwrap();
     let repo = new_repo(dir.path());
     let root = dir.path().join("ws");
     prepare(&root, &repo, "alder", None).await.unwrap();
-    // Same path and branch.
-    assert_eq!(prepare(&root, &repo, "alder", None).await.err().unwrap().code, ErrorCode::NameTaken);
-    // Same branch, different path.
-    let err =
-        prepare_workspace(&given(), &root, "repo", &repo, "birch", &"alder/start".into(), None).await.err().unwrap();
-    assert_eq!(err.code, ErrorCode::NameTaken);
-    // A branch git can't have beside it, whatever its case.
-    run(&repo, &["branch", "Elm"]);
-    assert_eq!(prepare(&root, &repo, "elm", None).await.err().unwrap().code, ErrorCode::NameTaken);
-    let err = prepare(&root, &repo, "cedar", Some("--upload-pack=evil")).await.err().unwrap();
-    assert_eq!(err.code, ErrorCode::InvalidRequest);
-    let err = prepare(&root, &repo, "cedar", Some("no-such-ref")).await.err().unwrap();
-    assert_eq!(err.code, ErrorCode::InvalidRequest);
-    let err = prepare_workspace(&given(), &root, "repo", &repo, "x", &"--bad".into(), None).await.err().unwrap();
-    assert_eq!(err.code, ErrorCode::InvalidRequest);
+
+    let again = prepare(&root, &repo, "alder", None).await;
+    let bad = prepare_workspace(&given(), &root, "repo", &repo, "x", &"--bad".into(), None).await;
+
+    assert_eq!(again.err().map(|e| e.code), Some(ErrorCode::NameTaken), "the same path and branch");
+    assert_eq!(bad.err().map(|e| e.code), Some(ErrorCode::InvalidRequest), "a branch git can't name");
 }
 
 /// A workspace's folder of branches is its own, so the hub skips a name git has a branch by or in, here or among
@@ -244,30 +172,6 @@ async fn a_detached_head_that_a_branch_holds_has_nothing_to_lose() {
 }
 
 #[tokio::test]
-async fn making_a_workspace_waits_for_a_worktree_being_made_rather_than_failing_on_it() {
-    let dir = tempfile::tempdir().unwrap();
-    let repo = new_repo(dir.path());
-
-    let made = while_one_is_made(&repo, prepare(&dir.path().join("ws"), &repo, "alder", None)).await;
-
-    assert!(Path::new(&made.unwrap().path).join("a.txt").exists());
-}
-
-/// The fetch before a workspace is made reads every worktree too, and a failed one only warns.
-#[tokio::test]
-async fn making_a_workspace_from_origin_fetches_once_a_worktree_being_made_is_done() {
-    let dir = tempfile::tempdir().unwrap();
-    let origin = new_repo(dir.path());
-    let clone = dir.path().join("clone");
-    run(dir.path(), &["clone", "-q", origin.to_str().unwrap(), clone.to_str().unwrap()]);
-
-    let made = while_one_is_made(&clone, prepare(&dir.path().join("ws"), &clone, "alder", None)).await.unwrap();
-
-    assert_eq!(made.base_ref, "origin/main");
-    assert!(made.warnings.is_empty(), "{:?}", made.warnings);
-}
-
-#[tokio::test]
 async fn restoring_a_workspace_waits_for_a_worktree_being_made() {
     let dir = tempfile::tempdir().unwrap();
     let repo = new_repo(dir.path());
@@ -278,65 +182,6 @@ async fn restoring_a_workspace_waits_for_a_worktree_being_made() {
     while_one_is_made(&repo, restore_workspace(&given(), &repo, &path, &"alder".into())).await.unwrap();
 
     assert!(Path::new(&path).join("a.txt").exists());
-}
-
-/// Git runs `post-checkout` after it has made and unlocked the worktree, so a failing hook leaves a ready worktree and
-/// warns rather than failing the workspace.
-#[tokio::test]
-async fn a_workspace_whose_post_checkout_hook_fails_is_made_with_a_warning() {
-    let dir = tempfile::tempdir().unwrap();
-    let repo = new_repo(dir.path());
-    post_checkout_hook(&repo, "echo 'hook failed' >&2 && exit 1");
-
-    let prepared = prepare(&dir.path().join("ws"), &repo, "alder", None).await.unwrap();
-
-    let warned = prepared.warnings.iter().any(|w| w.starts_with("git made the worktree") && w.contains("hook failed"));
-    assert!(warned, "{:?}", prepared.warnings);
-    let path = Path::new(&prepared.path);
-    assert!(path.join("a.txt").exists());
-    assert_eq!(run(path, &["branch", "--show-current"]), "alder/start");
-    assert_eq!(prepared.branches.as_ref().and_then(|b| b.checked_out()).map(|b| b.name.as_str()), Some("alder/start"));
-}
-
-/// Git makes the new branch before it checks the files out, and keeps the branch when checkout fails and removes the
-/// worktree. Deleting that branch leaves the name free to try again.
-#[tokio::test]
-async fn a_workspace_git_fails_to_check_out_leaves_neither_worktree_nor_branch() {
-    let dir = tempfile::tempdir().unwrap();
-    let repo = new_repo(dir.path());
-    std::fs::write(repo.join(".gitattributes"), "a.txt filter=broken\n").unwrap();
-    run(&repo, &["add", ".gitattributes"]);
-    run(&repo, &["commit", "-qm", "filter"]);
-    run(&repo, &["config", "filter.broken.smudge", "false"]);
-    run(&repo, &["config", "filter.broken.required", "true"]);
-    let root = dir.path().join("ws");
-
-    let failed = prepare(&root, &repo, "alder", None).await.unwrap_err();
-
-    assert_eq!(failed.code, ErrorCode::Worker);
-    assert!(!root.join("repo").join("alder").exists());
-    assert!(run(&repo, &["branch", "--list", "alder/start"]).is_empty());
-    assert_eq!(names_git_has(&given(), &root, "repo", &repo).await.unwrap(), ["main"]);
-
-    run(&repo, &["config", "filter.broken.required", "false"]);
-    let retried = prepare(&root, &repo, "alder", None).await.unwrap();
-    assert_eq!(run(Path::new(&retried.path), &["branch", "--show-current"]), "alder/start");
-}
-
-/// A worktree that still carries git's `initializing` lock isn't finished, so a failing `git worktree add` that leaves
-/// one neither prepares the workspace nor keeps the branch git made for it.
-#[tokio::test]
-async fn a_worktree_left_locked_as_part_made_is_neither_taken_for_ready_nor_keeps_its_branch() {
-    let dir = tempfile::tempdir().unwrap();
-    let repo = new_repo(dir.path());
-    post_checkout_hook(&repo, "git worktree lock --reason initializing \"$PWD\" && exit 1");
-    let root = dir.path().join("ws");
-
-    let failed = prepare(&root, &repo, "alder", None).await.unwrap_err();
-
-    assert_eq!(failed.code, ErrorCode::Worker);
-    assert!(!made_there(&given(), &repo, &root.join("repo").join("alder"), &"alder/start".into()).await);
-    assert!(run(&repo, &["branch", "--list", "alder/start"]).is_empty());
 }
 
 /// What a test gives the worker's git takes the place of the test's own environment, so the git the worker runs has

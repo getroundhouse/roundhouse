@@ -4,9 +4,7 @@
 //! `origin` names, and what the hub sends every worker for the default.
 
 #[cfg(test)]
-use super::{
-    GithubAccountId, GithubAppSlug, GithubSettings, GithubSignInId, GithubUserCode, GithubUsername, ProviderName, Rev,
-};
+use super::{GithubAccountId, GithubAppSlug, GithubSettings, GithubSignInId, GithubUserCode, GithubUsername, Rev};
 
 #[cfg(test)]
 mod tests;

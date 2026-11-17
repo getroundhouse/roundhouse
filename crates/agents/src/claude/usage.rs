@@ -185,17 +185,20 @@ mod tests {
     }
 
     #[test]
-    fn a_reply_that_says_the_account_has_no_limits_to_tell_of_gives_none() {
-        let reply = json!({"rate_limits_available": false, "rate_limits": {"seven_day": {"utilization": 4}}});
+    fn a_reply_that_says_the_account_has_no_limits_to_tell_of_or_nothing_of_them_gives_none() {
+        let none = [
+            (
+                "one that says the account has none to tell of",
+                json!({"rate_limits_available": false, "rate_limits": {"seven_day": {"utilization": 4}}}),
+            ),
+            ("one that says nothing", json!({})),
+            ("a use that isn't a number", reply(&json!({"seven_day": {"utilization": "most"}}))),
+            ("a window with no name here", reply(&json!({"thirty_day": {"utilization": 4}}))),
+        ];
 
-        assert_eq!(usage_limits(&reply), []);
-    }
-
-    #[test]
-    fn a_reply_that_says_nothing_of_limits_gives_none() {
-        assert_eq!(usage_limits(&json!({})), []);
-        assert_eq!(usage_limits(&reply(&json!({"seven_day": {"utilization": "most"}}))), []);
-        assert_eq!(usage_limits(&reply(&json!({"thirty_day": {"utilization": 4}}))), [], "a window with no name here");
+        for (case, reply) in none {
+            assert_eq!(usage_limits(&reply), [], "{case}");
+        }
     }
 
     #[test]

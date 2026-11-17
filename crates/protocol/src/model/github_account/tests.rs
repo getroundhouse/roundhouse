@@ -76,30 +76,8 @@ fn any_app() -> impl Strategy<Value = GithubApp> {
     )
 }
 
-fn any_gh_login() -> impl Strategy<Value = GhLogin> {
-    let works = prop_oneof![
-        Just(GhLoginWorks::Yes),
-        Just(GhLoginWorks::Refused),
-        Just(GhLoginWorks::CouldntTell),
-        Just(GhLoginWorks::Unknown),
-    ];
-    let logged_in = ("[a-z][a-z0-9-]{0,38}", works)
-        .prop_map(|(name, works)| GhLogin::LoggedIn { username: GithubUsername::from(name), works });
-    prop_oneof![logged_in, Just(GhLogin::LoggedOut), Just(GhLogin::NotInstalled)]
-}
-
 proptest! {
     #![proptest_config(Config { rng_seed: RngSeed::Fixed(1), failure_persistence: None, ..Config::default() })]
-
-    /// Logged in as someone, logged in to nothing, and with no `gh` there.
-    #[test]
-    fn a_found_login_reads_back_as_it_was(provider in "[a-z]{1,8}", login in any_gh_login(), rev in any::<u64>()) {
-        let found = FoundGithubLogin { provider: ProviderName::from(provider), login, rev: Rev::new(rev) };
-
-        let written = serde_json::to_string(&found).unwrap();
-
-        prop_assert_eq!(serde_json::from_str::<FoundGithubLogin>(&written).unwrap(), found);
-    }
 
     /// Whoever's bot it is, numbered or not.
     #[test]
@@ -181,18 +159,6 @@ fn a_found_login_in_a_state_from_a_newer_peer_reads_as_unknown() {
     assert_eq!((found.login, found.rev), (GhLogin::Unknown, Rev::default()));
 }
 
-/// Whether its token works, as a newer worker might say it, and as a peer that doesn't say it leaves it out.
-#[test]
-fn whether_a_found_login_works_reads_as_unknown_when_its_from_a_newer_peer_or_not_said() {
-    let newer = json!({"state": "logged_in", "username": "ada", "works": "only_on_tuesdays"});
-    let unsaid = json!({"state": "logged_in", "username": "ada"});
-
-    for login in [newer, unsaid] {
-        let login: GhLogin = serde_json::from_value(login).unwrap();
-        assert_eq!(login, GhLogin::LoggedIn { username: "ada".into(), works: GhLoginWorks::Unknown });
-    }
-}
-
 /// As GitHub writes its addresses, and nothing an address could be moved by, or that has no owner or no name.
 #[test]
 fn a_repository_on_github_is_an_owner_and_a_name_of_githubs_letters() {
@@ -219,15 +185,11 @@ fn a_repository_on_github_is_an_owner_and_a_name_of_githubs_letters() {
     assert_eq!(GithubRepositoryName::named("get-round_house/app.rs").owner(), "get-round_house");
 }
 
-/// So a newer hub's word reaches no client as one this build knows, and a name that isn't one fails only its record.
+/// So a name that isn't one fails only its record. One in a state from a newer hub is in the compatibility tests.
 #[test]
-fn a_reach_in_a_state_from_a_newer_hub_reads_as_unknown_and_one_naming_no_repository_isnt_read() {
-    let newer = json!({"repo": "r", "reach": {"state": "pushes_sometimes", "repository": "cli/cli"}});
+fn a_reach_naming_no_repository_on_github_isnt_read() {
     let not_one = json!({"repo": "r", "reach": {"state": "pushes", "repository": "cli", "username": "ada"}});
 
-    let read: GithubReach = serde_json::from_value(newer).unwrap();
-
-    assert_eq!((read.reach, read.rev), (Reach::Unknown, Rev::default()));
     assert!(serde_json::from_value::<GithubReach>(not_one).is_err());
 }
 

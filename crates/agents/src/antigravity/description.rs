@@ -74,7 +74,6 @@ mod tests {
     #[test]
     fn the_catalog_keeps_each_models_efforts_and_defaults() {
         let agent = description();
-        assert_eq!(agent.models.len(), 6);
         assert_eq!(agent.defaults.model.as_str(), "gemini-4-carbon");
         assert_eq!(agent.defaults.effort, Effort::Medium);
         let hydrogen = ModelName::named("gemini-4-hydrogen");

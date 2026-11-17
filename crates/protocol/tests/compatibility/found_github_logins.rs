@@ -81,6 +81,8 @@ fn finding_the_machines_own_login_keeps_its_form() {
     answered(reply(ada()), &logged_in("yes"));
     answered(reply(ada_and(GhLoginWorks::Refused)), &logged_in("refused"));
     answered(reply(ada_and(GhLoginWorks::CouldntTell)), &logged_in("couldnt_tell"));
+    // As a hub passes on what a newer worker said.
+    answered(reply(ada_and(GhLoginWorks::Unknown)), &logged_in("unknown"));
     answered(reply(GhLogin::LoggedOut), r#"{"result":"github_login","login":{"state":"logged_out"}}"#);
     answered(reply(GhLogin::NotInstalled), r#"{"result":"github_login","login":{"state":"not_installed"}}"#);
     let with_token = |renews| {
@@ -106,13 +108,17 @@ fn finding_one_reads_with_what_a_newer_peer_adds() {
     assert_eq!(reply, WorkerFrame::Reply { id: 7, outcome: WorkerOutcome::Response(unknown) });
 }
 
-/// From a newer worker, which may say whether a token works in a way this build has no word for.
+/// From a newer worker, which may say whether a token works in a way this build has no word for, and from a worker that
+/// doesn't say.
 #[test]
-fn a_login_that_works_in_a_newer_way_reads_as_not_said() {
+fn a_login_that_works_in_a_newer_way_or_doesnt_say_reads_as_not_said() {
     let newer = r#"{"result":"github_login","login":{"state":"logged_in","username":"ada","works":"for_now"}}"#;
+    let unsaid = r#"{"result":"github_login","login":{"state":"logged_in","username":"ada"}}"#;
 
-    let reply = frame::decode::<WorkerResponse>(newer.as_bytes()).unwrap();
+    for line in [newer, unsaid] {
+        let reply = frame::decode::<WorkerResponse>(line.as_bytes()).unwrap();
 
-    let login = ada_and(GhLoginWorks::Unknown);
-    assert_eq!(reply, WorkerResponse::GithubLogin(GithubLoginReply { login, token: None }));
+        let login = ada_and(GhLoginWorks::Unknown);
+        assert_eq!(reply, WorkerResponse::GithubLogin(GithubLoginReply { login, token: None }), "{line}");
+    }
 }
