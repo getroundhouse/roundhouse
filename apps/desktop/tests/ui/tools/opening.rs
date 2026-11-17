@@ -1,10 +1,16 @@
 #![cfg(test)]
 
-use crate::support::{Stack, Ui};
+use crate::support::{FakeHub, Stack, Ui};
+use client_core::fake_hub::World;
+use client_core::fake_hub::events::{
+    advice_failed, advised, advised_encrypted, finished_turn, taken, text, tool_result, tool_use, user_prompt,
+};
 use gpui_kit::test::ElementSnapshot;
 use gpui_kit::{AppContext as _, ElementId, TestAppContext};
 use image::ImageFormat;
 use protocol::event::EventBody;
+use protocol::model::{Seq, SessionStatus};
+use serde_json::json;
 use std::io::Cursor;
 
 /// The fake agent's commands come with no description, so their line says they run something.
@@ -12,45 +18,43 @@ pub(crate) const COMMAND_LINE: &str = "Run";
 /// Asking the advisor, which the API runs rather than the agent.
 const ADVISOR_LINE: &str = "Ask the advisor";
 
+/// One walk through opening a command: it opens to what it printed, closes again, and one that printed nothing says so.
 #[gpui_kit::test]
 fn a_call_opens_to_what_it_did_and_closes_again(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = in_a_new_workspace(cx, &stack);
-    ui.input("tool:echo printed-by-the-tool; say:done");
-    ui.press("enter");
-    ui.wait_idle_with("the turn to finish", |text| text.contains("done"));
-    assert_eq!(command_open(&mut ui), Some(false), "a call starts closed");
+    // The hub records nothing for what `true` printed, where the CLI sends a sentence saying it printed nothing.
+    let (_fake, mut ui) =
+        open_on_a_turn(cx, [ran(1, "echo printed-by-the-tool", "printed-by-the-tool\n"), ran(2, "true", "")].concat());
+    assert_eq!(command_open(&mut ui, 0), Some(false), "a call starts closed");
     assert!(ui.shown("output/").is_empty());
 
     ui.click_labelled(COMMAND_LINE, 0);
 
-    assert_eq!(command_open(&mut ui), Some(true));
+    assert_eq!(command_open(&mut ui, 0), Some(true));
     assert_eq!(ui.shown("command/").len(), 1, "the command");
     assert_eq!(ui.shown("output/").len(), 1, "and what it printed");
 
     ui.click_labelled(COMMAND_LINE, 0);
 
-    assert_eq!(command_open(&mut ui), Some(false));
+    assert_eq!(command_open(&mut ui, 0), Some(false));
     assert!(ui.shown("output/").is_empty());
+
+    ui.click_labelled(COMMAND_LINE, 1);
+
+    assert_eq!(command_open(&mut ui, 1), Some(true), "the command that printed nothing opens");
+    assert!(ui.shown("output/").is_empty(), "it printed nothing to show");
+    assert_eq!(ui.shown("no-output/").len(), 1, "so it says so");
 }
 
+/// As a prompt's does, so a screenshot made smaller to fit the column can be looked at closely. On a real hub, as the
+/// one window test of an image a tool sent back reaching the window from where the hub keeps it.
 #[gpui_kit::test]
-fn a_read_of_an_image_opens_to_the_image_the_hub_kept(cx: &mut TestAppContext) {
+fn a_read_of_an_image_opens_to_the_image_the_hub_kept_which_opens_over_the_window(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let mut ui = after_reading_an_image(cx, &stack);
     assert!(ui.shown("picture/").is_empty(), "a call starts closed");
 
     ui.click_labelled("Read 1 image", 0);
 
-    ui.wait("the image, from the hub", |ui| ui.shown("picture/").len() == 1);
-}
-
-/// As a prompt's does, so a screenshot made smaller to fit the column can be looked at closely.
-#[gpui_kit::test]
-fn an_image_a_tool_sent_back_opens_over_the_window(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = after_reading_an_image(cx, &stack);
-    ui.click_labelled("Read 1 image", 0);
     ui.wait("the image, from the hub", |ui| ui.shown("picture/").len() == 1);
     assert!(!ui.has_dialog(), "nothing is over the window until it's clicked");
 
@@ -89,7 +93,7 @@ pub(crate) fn in_a_new_workspace<'a>(cx: &'a mut TestAppContext, stack: &Stack) 
 /// Runs `command`, opens its call as [`open_a_call`] does, and gives the IDs of the block's command and of its output.
 pub(crate) fn open_a_command(ui: &mut Ui<'_>, command: &str) -> (ElementId, ElementId) {
     open_a_call(ui, &format!("tool:{command}"), COMMAND_LINE);
-    assert_eq!(command_open(ui), Some(true));
+    assert_eq!(command_open(ui, 0), Some(true));
     (ui.shown("command/").remove(0), ui.shown("output/").remove(0))
 }
 
@@ -103,64 +107,88 @@ pub(super) fn open_a_call(ui: &mut Ui<'_>, step: &str, line: &str) {
     // The line the turn ends with can come just after, and drawn mid-click it would move the call's line away from
     // under the pointer.
     ui.wait("the turn's end", |ui| ui.events().iter().any(|e| matches!(e.body, EventBody::TurnEnded { .. })));
+    to_the_end(ui);
+    ui.click_labelled(line, 0);
+}
+
+/// A chat held by a fake hub, of one turn in which the agent did what `did` records. It's open at its end, with the
+/// turn's end drawn. The hub goes with the test, so it's returned to be kept.
+pub(super) fn open_on_a_turn(cx: &mut TestAppContext, did: Vec<EventBody>) -> (FakeHub, Ui<'_>) {
+    let mut events = vec![user_prompt("Check the signals."), taken(Seq::new(1))];
+    events.extend(did);
+    events.push(finished_turn(12, 0.04));
+    let mut world = World::default();
+    let repo = world.repo("signals");
+    let workspace = world.workspace(&repo, "ledger");
+    world.chat(&workspace, SessionStatus::Idle, events);
+    let fake = FakeHub::holding(world);
+    let mut ui = Ui::open_on(cx, &fake);
+    ui.wait("the turn's end", |ui| ui.events().iter().any(|e| matches!(e.body, EventBody::TurnEnded { .. })));
+    (fake, ui)
+}
+
+/// A command the agent ran, as its `n`th call, and what it printed, as the hub records them from Claude.
+pub(super) fn ran(n: usize, command: &str, printed: &str) -> Vec<EventBody> {
+    let call = format!("toolu-{n}");
+    vec![tool_use(&format!("msg-{n}"), &call, "Bash", json!({ "command": command })), tool_result(&call, printed)]
+}
+
+/// Whether the `n`th command's line says it's open, as it tells assistive apps.
+fn command_open(ui: &mut Ui<'_>, n: usize) -> Option<bool> {
+    ui.labelled(COMMAND_LINE).get(n).and_then(ElementSnapshot::expanded)
+}
+
+/// One walk through what a call to the advisor opens to, in the order the calls were made: its advice, or a line
+/// saying why there's nothing to read.
+#[gpui_kit::test]
+fn a_call_to_the_advisor_opens_to_its_advice_or_a_line_saying_why_there_is_none(cx: &mut TestAppContext) {
+    let advisor = |id: &str| tool_use(&format!("msg-{id}"), id, "advisor", json!({}));
+    let (_fake, mut ui) = open_on_a_turn(
+        cx,
+        vec![
+            advisor("srvtoolu-1"),
+            advised_encrypted("msg-srvtoolu-1", "srvtoolu-1"),
+            advisor("srvtoolu-2"),
+            advised("msg-srvtoolu-2", "srvtoolu-2", "Test it first."),
+            advisor("srvtoolu-3"),
+            advice_failed("msg-srvtoolu-3", "srvtoolu-3", "overloaded"),
+            advisor("srvtoolu-4"),
+            EventBody::ToolCallDropped { tool_use_id: "srvtoolu-4".into() },
+            advisor("srvtoolu-5"),
+            advised("msg-srvtoolu-5", "srvtoolu-5", ""),
+            // Last, so the turn ends on it, and nothing went on without it.
+            text("msg-before-the-last", "One more thing to ask."),
+            advisor("srvtoolu-6"),
+        ],
+    );
+    assert_eq!(ui.labelled(ADVISOR_LINE).len(), 6, "a line for each call, the failed one too");
+    let parts = ["encrypted/", "advice/", "dropped/", "empty-reply/", "no-reply/"];
+    let shown = |ui: &mut Ui<'_>| parts.map(|part| ui.shown(part).len());
+    assert_eq!(shown(&mut ui), [0; 5], "a call starts closed");
+
+    // Each call, opened alone, shows the one part that says what came back for it, if any. The chat is taken to its
+    // end each time, since a call opens under its line, which a click keeps still, and the last is at the bottom.
+    let cases = [
+        (Some("encrypted/"), "a reply only the agent can read"),
+        (Some("advice/"), "a reply that can be read"),
+        (None, "a call that failed, whose line says so, and opens to nothing more"),
+        (Some("dropped/"), "a call the agent went on without, rather than one whose reply might still come"),
+        (Some("empty-reply/"), "a reply with nothing in it"),
+        (Some("no-reply/"), "a call the turn ended on, with no reply at all"),
+    ];
+    for (at, (part, case)) in cases.into_iter().enumerate() {
+        ui.click_labelled(ADVISOR_LINE, at);
+        to_the_end(&mut ui);
+
+        assert_eq!(shown(&mut ui), parts.map(|shows| usize::from(Some(shows) == part)), "{case}, of {parts:?}");
+        ui.click_labelled(ADVISOR_LINE, at);
+    }
+}
+
+/// Takes the chat to its end, where the button that jumps there would leave it.
+pub(super) fn to_the_end(ui: &mut Ui<'_>) {
     ui.cx.update_entity(&ui.transcript().unwrap(), |t, cx| {
         t.list().go_to_latest();
         cx.notify();
     });
-    ui.click_labelled(line, 0);
-}
-
-/// Whether the command's line says it's open, as it tells assistive apps.
-fn command_open(ui: &mut Ui<'_>) -> Option<bool> {
-    ui.labelled(COMMAND_LINE).first().and_then(ElementSnapshot::expanded)
-}
-
-#[gpui_kit::test]
-fn asking_the_advisor_opens_to_its_advice_or_says_only_the_agent_can_read_it(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = in_a_new_workspace(cx, &stack);
-    ui.input("advise; advise:Test it first.; advise-failed:overloaded; say:done");
-    ui.press("enter");
-    ui.wait_idle_with("the turn to finish", |text| text.contains("done"));
-    assert_eq!(ui.labelled(ADVISOR_LINE).len(), 3, "a line for each call, the failed one too");
-    assert!(ui.shown("encrypted/").is_empty(), "a call starts closed");
-
-    ui.click_labelled(ADVISOR_LINE, 0);
-    ui.click_labelled(ADVISOR_LINE, 1);
-
-    assert_eq!(ui.shown("encrypted/").len(), 1, "the reply only the agent can read");
-    assert_eq!(ui.shown("advice/").len(), 1, "and the one that can be read");
-}
-
-#[gpui_kit::test]
-fn a_call_to_the_advisor_the_agent_went_on_without_says_so(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = in_a_new_workspace(cx, &stack);
-    ui.input("advise-unanswered; advise; say:done");
-    ui.press("enter");
-    ui.wait_idle_with("the turn to finish", |text| text.contains("done"));
-    assert_eq!(ui.labelled(ADVISOR_LINE).len(), 2, "the call with no reply, and the one the agent made again");
-
-    ui.click_labelled(ADVISOR_LINE, 0);
-    ui.click_labelled(ADVISOR_LINE, 1);
-
-    assert_eq!(ui.shown("dropped/").len(), 1, "the first says the agent went on without a reply");
-    assert!(ui.shown("no-reply/").is_empty(), "rather than that one might still come");
-    assert_eq!(ui.shown("encrypted/").len(), 1, "and the second opens to its reply");
-}
-
-#[gpui_kit::test]
-fn a_call_to_the_advisor_with_nothing_to_read_opens_to_a_line_saying_why(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = in_a_new_workspace(cx, &stack);
-    ui.input("advise:; say:done; advise-unanswered");
-    ui.press("enter");
-    ui.wait_idle_with("the turn to finish", |text| text.contains("done"));
-    assert_eq!(ui.labelled(ADVISOR_LINE).len(), 2, "a call the turn ended on stays, since nothing went on without it");
-
-    ui.click_labelled(ADVISOR_LINE, 0);
-    ui.click_labelled(ADVISOR_LINE, 1);
-
-    assert_eq!(ui.shown("empty-reply/").len(), 1, "a reply with nothing in it");
-    assert_eq!(ui.shown("no-reply/").len(), 1, "and no reply at all");
 }

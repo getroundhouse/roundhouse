@@ -1,14 +1,16 @@
 //! Scrolling through rows whose height comes late, such as a long text parsed on another thread, which moves
-//! nothing in the window when it does.
+//! nothing in the window when it does. Only what the hub recorded matters, so each chat is made up for a fake hub.
 
+use client_core::fake_hub::events::{text, thought, tool_result, tool_use};
 use gpui_kit::test::{ElementSnapshot, TestWindowExt as _};
 use gpui_kit::{AppContext as _, Entity, Pixels, ScrollDelta, TestAppContext, point, px};
-use protocol::event::{ContentBlock, EventBody};
-use protocol::model::SessionStatus;
+use protocol::event::{ApprovalOutcome, Asking, ContentBlock, EventBody, SessionEvent};
+use protocol::fixtures::{ApprovalRequest, approval_request};
+use serde_json::json;
 use transcript::{Place, Transcript};
 
-use super::{A_FRAME, settle_at_the_end};
-use crate::support::{Stack, Ui};
+use super::{A_FRAME, just_over_4_kb, open_on_a_chat, turns, wait_for_the_list_to_settle};
+use crate::support::Ui;
 
 /// How far each turn of the wheel goes, about what a trackpad sends at once.
 const STEP: Pixels = px(40.);
@@ -19,15 +21,12 @@ const STEP: Pixels = px(40.);
 /// of its length, which took the window up to the thought's start, past the reply being scrolled up through.
 #[gpui_kit::test]
 fn scrolling_up_into_a_long_open_thought_moves_as_far_as_the_wheel_turns(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let session = stack.chat_in_a_new_workspace();
-    stack.run(&session, "say:a short reply first");
-    stack.run(&session, "ponder:40:1; prose:40:2");
-    let mut ui = Ui::open(cx, &stack);
-    ui.wait("the workspace", |ui| ui.transcript().is_some());
+    let (_fake, mut ui, newest) = open_on_a_chat(cx, a_long_thought_then(&taller_than_the_window()));
     let transcript = ui.transcript().unwrap();
     ui.cx.update_entity(&transcript, |t, cx| t.set_thinking_open(true, cx));
-    settle_at_the_end(&mut ui, &stack, &session);
+    settle_at(&mut ui, &newest);
+    let thought = thought_row(&ui, &transcript);
+    assert!(ui.cx.read_entity(&transcript, |t, _| t.list().top().row) > thought, "the thought starts out of sight");
 
     let steps = steps_up_to_the_start(&mut ui, &transcript);
 
@@ -38,20 +37,15 @@ fn scrolling_up_into_a_long_open_thought_moves_as_far_as_the_wheel_turns(cx: &mu
 /// another thread, and drawn as a line with nothing under it meanwhile.
 #[gpui_kit::test]
 fn a_long_thought_opened_again_has_its_height_at_once(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let session = stack.chat_in_a_new_workspace();
-    stack.run(&session, "say:a short reply first");
-    stack.run(&session, "ponder:40:1; say:the end");
-    let mut ui = Ui::open(cx, &stack);
-    ui.wait("the workspace", |ui| ui.transcript().is_some());
+    let (_fake, mut ui, newest) = open_on_a_chat(cx, a_long_thought_then("the end"));
     let transcript = ui.transcript().unwrap();
     let thought = thought_row(&ui, &transcript);
     let height = |ui: &Ui<'_>| ui.cx.read_entity(&transcript, |t, _| t.list().row_height(thought));
     ui.cx.update_entity(&transcript, |t, cx| t.set_thinking_open(true, cx));
-    settle_at_the_end(&mut ui, &stack, &session);
+    settle_at(&mut ui, &newest);
     let opened = height(&ui);
     ui.cx.update_entity(&transcript, |t, cx| t.set_thinking_open(false, cx));
-    settle_at_the_end(&mut ui, &stack, &session);
+    settle_at(&mut ui, &newest);
 
     ui.cx.update_entity(&transcript, |t, cx| t.set_thinking_open(true, cx));
     // One frame, with nothing else let run, so a text parsed on another thread wouldn't be in yet.
@@ -65,23 +59,45 @@ fn a_long_thought_opened_again_has_its_height_at_once(cx: &mut TestAppContext) {
 /// this shows that whatever long text a row draws is kept.
 #[gpui_kit::test]
 fn scrolling_up_into_a_long_plan_moves_as_far_as_the_wheel_turns(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let session = stack.chat_in_a_new_workspace();
-    stack.run(&session, "say:a short reply first");
-    let plan = vec!["the signal box keeps a ledger of every train that passes. ".repeat(12); 12].join("\n\n");
-    assert!(plan.len() > 4 * 1024, "a plan parsed on another thread");
-    stack.client().session_prompt(&session, &format!("plan:{plan}"), None).unwrap();
-    let mut ui = Ui::open(cx, &stack);
-    ui.wait("the workspace", |ui| ui.transcript().is_some());
-    ui.approve_plan();
-    ui.wait("the plan's turn to end", |ui| ui.session_status() == Some(SessionStatus::Idle));
-    stack.run(&session, "prose:40:2");
+    let plan = just_over_4_kb(&"Each train waits at the signal until the block ahead is clear. ".repeat(6));
+    // As the hub records a plan from Claude, approved.
+    let request = ApprovalRequest {
+        tool_use_id: Some("toolu-plan".into()),
+        input: json!({ "plan": plan, "planFilePath": "/tmp/plan.md" }),
+        asking: Some(Asking::Plan { plan: plan.clone() }),
+        ..approval_request("approval-plan", "ExitPlanMode")
+    };
+    let approved = EventBody::ApprovalResolved {
+        approval_id: "approval-plan".into(),
+        outcome: ApprovalOutcome::Allowed,
+        answers_by_text: None,
+        answers_by_position: None,
+        by_setting: false,
+    };
+    let planned = vec![
+        tool_use("msg-plan", "toolu-plan", "ExitPlanMode", json!({})),
+        request.into(),
+        approved,
+        tool_result("toolu-plan", "User has approved your plan."),
+    ];
+    let (_fake, mut ui, _) = open_on_a_chat(
+        cx,
+        turns(vec![
+            ("say:a short reply first".to_string(), vec![text("msg-1", "a short reply first")]),
+            ("Plan the change first.".to_string(), planned),
+            ("reply".to_string(), vec![text("msg-2", &taller_than_the_window())]),
+        ]),
+    );
     let transcript = ui.transcript().unwrap();
-    settle_at_the_end(&mut ui, &stack, &session);
+    let at_the_top = ui.cx.read_entity(&transcript, |t, _| t.event_at(t.list().top().row));
+    let reply = |event: SessionEvent| matches!(event.body, EventBody::Assistant { message_id: Some(id), .. } if id == "msg-2".into());
+    assert!(at_the_top.is_some_and(reply), "the reply fills the window, so the plan starts out of sight");
 
     let steps = steps_up_to_the_start(&mut ui, &transcript);
 
     each_went_as_far_as_the_wheel(&steps);
+    let kept = ui.cx.read_entity(&transcript, |t, _| t.kept_texts());
+    assert!(kept.contains(&plan), "the plan, drawn in its card, was parsed as the wheel passed it");
 }
 
 /// A long thought whose parse lands once it's at the top of the window, as when it takes longer to parse than
@@ -90,16 +106,9 @@ fn scrolling_up_into_a_long_plan_moves_as_far_as_the_wheel_turns(cx: &mut TestAp
 /// What's on screen stays where it is.
 #[gpui_kit::test]
 fn a_long_text_parsed_once_it_is_at_the_top_of_the_window_moves_nothing_on_screen(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let session = stack.chat_in_a_new_workspace();
-    stack.run(&session, "say:a short reply first");
-    // A reply of a few screens, so the thought starts out of sight, and the way up to it isn't longer than it needs.
-    stack.run(&session, "ponder:40:1; prose:12:2");
-    let mut ui = Ui::open(cx, &stack);
-    ui.wait("the workspace", |ui| ui.transcript().is_some());
+    // Settled closed, so the thought's text isn't drawn, and nothing has parsed it.
+    let (_fake, mut ui, _) = open_on_a_chat(cx, a_long_thought_then(&taller_than_the_window()));
     let transcript = ui.transcript().unwrap();
-    // Closed, so the thought's text isn't drawn, and nothing has parsed it.
-    settle_at_the_end(&mut ui, &stack, &session);
     let thought = thought_row(&ui, &transcript);
     ui.cx.update_entity(&transcript, |t, cx| t.set_thinking_open(true, cx));
     let top = |ui: &Ui<'_>| ui.cx.read_entity(&transcript, |t, _| t.list().top());
@@ -124,14 +133,8 @@ fn a_long_text_parsed_once_it_is_at_the_top_of_the_window_moves_nothing_on_scree
 /// window's top and taking the line with it.
 #[gpui_kit::test]
 fn a_long_thought_opened_from_its_line_at_the_top_of_the_window_opens_under_it(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let session = stack.chat_in_a_new_workspace();
-    stack.run(&session, "say:a short reply first");
-    stack.run(&session, "ponder:40:1; prose:40:2");
-    let mut ui = Ui::open(cx, &stack);
-    ui.wait("the workspace", |ui| ui.transcript().is_some());
+    let (_fake, mut ui, _) = open_on_a_chat(cx, a_long_thought_then(&taller_than_the_window()));
     let transcript = ui.transcript().unwrap();
-    settle_at_the_end(&mut ui, &stack, &session);
     let thought = thought_row(&ui, &transcript);
     while ui.cx.read_entity(&transcript, |t, _| t.list().top().row) > thought {
         ui.scroll("transcript", ScrollDelta::Pixels(point(px(0.), STEP)));
@@ -154,6 +157,28 @@ fn a_long_thought_opened_from_its_line_at_the_top_of_the_window_opens_under_it(c
     assert!(ui.cx.read_entity(&transcript, |t, _| t.long_texts_parsed()), "and parsed");
     let moved = line(&mut ui).bounds().top() - before;
     assert!(moved.abs() < px(0.5), "the line moved {moved:?} as the thought opened under it");
+}
+
+/// A chat of a short reply, and then a turn in which the agent thinks a text long enough to be parsed on another
+/// thread and replies `reply`, each its own message, as the hub records them from Claude.
+fn a_long_thought_then(reply: &str) -> Vec<EventBody> {
+    let thinking = just_over_4_kb(&"the signal box keeps a ledger of every train that passes. ".repeat(6));
+    turns(vec![
+        ("say:a short reply first".to_string(), vec![text("msg-1", "a short reply first")]),
+        ("ponder:12:1".to_string(), vec![thought("msg-2", &thinking), text("msg-3", reply)]),
+    ])
+}
+
+/// A reply a little taller than the window, so what's above it starts out of sight, which each test checks, and the
+/// way up to it, which the wheel goes a little at a time, is no longer than that.
+fn taller_than_the_window() -> String {
+    vec!["The lever frame holds each route clear until the train has gone by. ".repeat(4); 8].join("\n\n")
+}
+
+/// Waits for the list to settle with `newest`, the chat's newest event, loaded in its row.
+fn settle_at(ui: &mut Ui<'_>, newest: &SessionEvent) {
+    let last = ui.row_of(newest);
+    wait_for_the_list_to_settle(ui, last);
 }
 
 /// How much of the thought's line is above the window's top in the test of opening it there.
