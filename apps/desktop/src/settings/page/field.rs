@@ -1,11 +1,10 @@
 //! A field of a panel on a page of its own, such as the one a token is pasted into, which does what the panel does as
 //! Enter is pressed in it, and how it's drawn: what it's called above it, and what goes in it under it.
 
-use gpui_kit::component::input::{Input, InputEvent, InputState};
+use gpui_kit::component::input::{InputEvent, InputState};
 use gpui_kit::component::v_flex;
 use gpui_kit::{
-    App, AppContext as _, Context, Div, Entity, InteractiveElement as _, ParentElement as _, Pixels, Styled as _,
-    Subscription, TestSupportExt as _, Window, div, px,
+    App, AppContext as _, Context, Div, Entity, ParentElement as _, Pixels, Styled as _, Subscription, Window, div, px,
 };
 use look::Typeset as _;
 
@@ -55,10 +54,17 @@ impl Field {
     }
 }
 
-/// A field `called` something, with what goes in it said under it. `id` is its own, for tests to find it by.
-pub(super) fn labelled(called: &'static str, id: &'static str, input: Input, says: &'static str, cx: &App) -> Div {
+/// A field `called` something, of what `input` holds, with what goes in it said under it. `id` is its own, for tests to
+/// find it by. It's a setting's, so it's a regular one, as tall as the panel's buttons.
+pub(super) fn labelled(
+    called: &'static str,
+    id: &'static str,
+    input: &Entity<InputState>,
+    says: &'static str,
+    cx: &App,
+) -> Div {
     let colors = look::colors(cx);
-    let input = div().id(id).child(input.aria_label(called)).test_support();
+    let input = look::field(id, input, look::FieldKind::Boxed, look::ControlSize::Regular).accessibility_label(called);
     v_flex()
         .w_full()
         .max_w(FIELDS_WIDTH)

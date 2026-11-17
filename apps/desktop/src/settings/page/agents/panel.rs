@@ -3,7 +3,6 @@
 //! anyone in, or reads a terminal. It's brought into sight as it opens, wherever it is on the page.
 
 use gpui_kit::base::ElementExt as _;
-use gpui_kit::component::input::Input;
 use gpui_kit::component::{h_flex, v_flex};
 use gpui_kit::{
     AnyElement, App, Div, InteractiveElement as _, IntoElement, ParentElement as _, Role, SharedString,
@@ -22,18 +21,13 @@ pub(super) fn panel(drawing: &Drawing<'_>, panel: &Panel, cx: &App) -> AnyElemen
     let login = agent.and_then(|agent| agent.login.as_ref());
     let lasting = login.and_then(|login| login.lasts_ms).and_then(words::lasting);
     let said = Said::of(&panel.to, agent.map(|agent| agent.name.as_str()), lasting.as_deref());
-    let token = field(
-        "Token",
-        "accounts-token",
-        Input::new(&panel.token.input),
-        "Paste what it prints. Only the hub keeps it.",
-        cx,
-    );
+    let token =
+        field("Token", "accounts-token", &panel.token.input, "Paste what it prints. Only the hub keeps it.", cx);
     let name = match &panel.to {
         To::New { name } => Some(field(
             "Name",
             "accounts-name",
-            Input::new(&name.input),
+            &name.input,
             "So you can tell it from the others. A chat under it shows this name.",
             cx,
         )),

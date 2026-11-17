@@ -3,7 +3,6 @@
 //! `app_panel`'s.
 
 use gpui_kit::assets::IconName as Lucide;
-use gpui_kit::component::input::Input;
 use gpui_kit::component::{Icon, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
@@ -143,7 +142,7 @@ pub(super) fn token(drawing: &Drawing<'_>, panel: &Panel, token: &TokenPanel, cx
         look::button("git-make-token", look::ButtonKind::Outlined, look::ControlSize::Regular, "Make one on GitHub")
             .icon(Lucide::ExternalLink)
             .on_click(|_, _, cx| cx.open_url(MAKE_A_TOKEN));
-    let field = labelled("Token", "git-token", Input::new(&token.token.input), "Only the hub keeps it.", cx);
+    let field = labelled("Token", "git-token", &token.token.input, "Only the hub keeps it.", cx);
     let connecting = drawing.kept.clone();
     let connect = button("git-panel-connect", act, true, !drawing.kept.read(cx).can_connect(cx), move |window, cx| {
         connecting.update(cx, |kept, cx| kept.connect(window, cx));

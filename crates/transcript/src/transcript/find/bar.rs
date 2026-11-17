@@ -3,13 +3,13 @@
 
 use std::time::Duration;
 
-use gpui_kit::component::input::{Escape, Input, InputEvent, InputState};
-use gpui_kit::component::{Icon, IconName, Sizable as _, h_flex};
+use gpui_kit::component::input::{Escape, InputEvent, InputState};
+use gpui_kit::component::{IconName, h_flex};
 use gpui_kit::{
     AppContext as _, Context, Entity, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Styled as _,
     Subscription, Task, TestSupportExt as _, Window, div, px,
 };
-use look::{IconSizing as _, InRegion as _, Region, Typeset as _};
+use look::{InRegion as _, Region, Typeset as _};
 
 use crate::transcript::Transcript;
 
@@ -108,11 +108,9 @@ impl Transcript {
             .pr(look::Space::XSmall)
             .gap(look::Space::XSmall)
             .child(
-                Input::new(&finding.bar.input)
-                    .appearance(false)
-                    .small()
-                    .prefix(Icon::new(IconName::Search).sized(look::IconSize::Regular).text_color(muted))
-                    .flex_1(),
+                look::field("find-field", &finding.bar.input, look::FieldKind::Bare, look::ControlSize::Small)
+                    .icon(IconName::Search)
+                    .grows(),
             )
             .child(
                 div()

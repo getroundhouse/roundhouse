@@ -1,13 +1,9 @@
 //! Home's bar, along the window's top: the search, what the list shows and in what order, and Create.
 
 use gpui_kit::assets::IconName as Lucide;
-use gpui_kit::component::input::Input;
 use gpui_kit::component::menu::{PopupMenu, PopupMenuItem};
 use gpui_kit::component::{Icon, IconName, h_flex};
-use gpui_kit::{
-    Context, InteractiveElement as _, IntoElement, ParentElement, Styled, TestSupportExt as _, WeakEntity, Window, div,
-};
-use look::IconSizing as _;
+use gpui_kit::{Context, InteractiveElement as _, IntoElement, ParentElement, Styled, WeakEntity, Window, div};
 
 use super::{ArchiveFilter, SORTS};
 use crate::app::AppView;
@@ -16,7 +12,7 @@ use crate::sides::{self, AtTheTop};
 /// In the strip, clear of the window's buttons at both ends as the workspace's header is.
 pub(super) fn bar(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement {
     let colors = look::colors(cx);
-    let (border, muted) = (colors.edge, colors.text_muted);
+    let border = colors.edge;
     let clear = sides::clearance(AtTheTop::Header, cx);
     h_flex()
         .flex_none()
@@ -31,17 +27,12 @@ pub(super) fn bar(app: &AppView, cx: &mut Context<AppView>) -> impl IntoElement 
             // In a box of its own, so a test can see where the search starts. It hides the strip it's in from the
             // pointer, so on Windows a press here is an ordinary one in the window rather than one on a title bar,
             // and the search hears where it goes as it selects.
-            div()
-                .id("home-search")
-                .flex_1()
-                .min_w_0()
-                .occlude()
-                .child(
-                    Input::new(&app.home.search)
-                        .appearance(false)
-                        .prefix(Icon::new(IconName::Search).sized(look::IconSize::Regular).text_color(muted)),
-                )
-                .test_support(),
+            // It hides the strip it's in from the pointer, so on Windows a press here is an ordinary one in the window
+            // rather than one on a title bar, and the search hears where it goes as it selects.
+            div().flex_1().min_w_0().occlude().child(
+                look::field("home-search", &app.home.search, look::FieldKind::Bare, look::ControlSize::Regular)
+                    .icon(IconName::Search),
+            ),
         )
         .child(repos(app, cx))
         .child(archived(app, cx))

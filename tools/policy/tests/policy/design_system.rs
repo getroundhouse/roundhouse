@@ -7,24 +7,38 @@ use std::path::Path;
 use super::rust_standards::{add_rust_files, covered_crates};
 use super::workspace::workspace;
 
-/// One of the kit's parts that a component holds: its module, as code names it, the component's maker, which the
-/// failure says to use, and where it's used other than through the component, as (path from the repo root, why). A
-/// path that ends in `/` is a folder, and covers everything in it.
+/// One of the kit's parts that a component holds: what names it in code, such as its module or the call that makes it,
+/// the component's maker, which the failure says to use, and where it's used other than through the component, as
+/// (path from the repo root, why). A path that ends in `/` is a folder, and covers everything in it.
 struct KitPart {
-    module: &'static str,
+    named: &'static str,
     instead: &'static str,
     allowed: &'static [(&'static str, &'static str)],
 }
 
 /// The kit's button, which `look::Button` holds.
 const KIT_BUTTON: KitPart =
-    KitPart { module: "component::button", instead: "look::button", allowed: KIT_BUTTON_ALLOWED };
+    KitPart { named: "component::button", instead: "look::button", allowed: KIT_BUTTON_ALLOWED };
 
 /// The kit's key, which `look::Key` holds.
 const KIT_KEY: KitPart = KitPart {
-    module: "component::kbd",
+    named: "component::kbd",
     instead: "look::key",
     allowed: &[("crates/look/src/keys/", "the component library's key, which writes a key as the kit does")],
+};
+
+/// The kit's single-line input, which `look::Field` holds, named by the call that makes it, since what it holds, the
+/// kit's `InputState`, is made where it's kept, such as by the composer, whose text area is the kit's own.
+const KIT_INPUT: KitPart = KitPart {
+    named: "Input::new(",
+    instead: "look::field",
+    allowed: &[
+        ("crates/look/src/fields/", "the component library's field, which holds the kit's input"),
+        (
+            "crates/transcript/src/questions/panel/options.rs",
+            "a question's typed answer, masked, set as its options' text, which the questions' component will draw",
+        ),
+    ],
 };
 
 const KIT_BUTTON_ALLOWED: &[(&str, &str)] = &[
@@ -51,7 +65,7 @@ fn names_in_code(line: &str, path: &str) -> bool {
     line.match_indices(path).any(|(at, _)| line[..at].matches('"').count().is_multiple_of(2))
 }
 
-/// Every file of the crates the checks cover that names `part`'s module in its code, by its path from the repo root.
+/// Every file of the crates the checks cover that names `part` in its code, by its path from the repo root.
 fn using(part: &KitPart) -> BTreeSet<String> {
     let metadata = workspace();
     let root = Path::new(metadata["workspace_root"].as_str().unwrap());
@@ -61,7 +75,7 @@ fn using(part: &KitPart) -> BTreeSet<String> {
     }
     files
         .iter()
-        .filter(|file| std::fs::read_to_string(file).unwrap().lines().any(|line| names_in_code(line, part.module)))
+        .filter(|file| std::fs::read_to_string(file).unwrap().lines().any(|line| names_in_code(line, part.named)))
         .map(|file| file.strip_prefix(root).unwrap().display().to_string())
         .collect()
 }
@@ -70,16 +84,16 @@ fn using(part: &KitPart) -> BTreeSet<String> {
 /// it.
 fn only_the_component_library_uses(part: &KitPart) {
     let using = using(part);
-    assert!(!using.is_empty(), "found nothing using {}, so this isn't looking in the right place", part.module);
+    assert!(!using.is_empty(), "found nothing using {}, so this isn't looking in the right place", part.named);
     let allowed = |path: &str, (place, _): &(&str, &str)| match place.strip_suffix('/') {
         Some(folder) => path.starts_with(&format!("{folder}/")),
         None => path == *place,
     };
     let unexplained: Vec<_> =
         using.iter().filter(|path| !part.allowed.iter().any(|entry| allowed(path, entry))).collect();
-    assert!(unexplained.is_empty(), "these use the kit's {}, so use `{}`: {unexplained:?}", part.module, part.instead);
+    assert!(unexplained.is_empty(), "these use the kit's {}, so use `{}`: {unexplained:?}", part.named, part.instead);
     let stale: Vec<_> = part.allowed.iter().filter(|entry| !using.iter().any(|path| allowed(path, entry))).collect();
-    assert!(stale.is_empty(), "these don't use the kit's {} now, so take them off its list: {stale:?}", part.module);
+    assert!(stale.is_empty(), "these don't use the kit's {} now, so take them off its list: {stale:?}", part.named);
 }
 
 #[test]
@@ -94,9 +108,14 @@ fn only_the_component_library_uses_the_kits_key() {
 }
 
 #[test]
+fn only_the_component_library_uses_the_kits_input() {
+    only_the_component_library_uses(&KIT_INPUT);
+}
+
+#[test]
 fn a_path_in_a_string_isnt_a_use() {
     // Made from the path, so this file doesn't name it in code.
-    let used = format!("use gpui_kit::{}::Button;", KIT_BUTTON.module);
-    assert!(names_in_code(&used, KIT_BUTTON.module));
-    assert!(!names_in_code(&format!("tool_result(\"1\", \"{used}\")"), KIT_BUTTON.module));
+    let used = format!("use gpui_kit::{}::Button;", KIT_BUTTON.named);
+    assert!(names_in_code(&used, KIT_BUTTON.named));
+    assert!(!names_in_code(&format!("tool_result(\"1\", \"{used}\")"), KIT_BUTTON.named));
 }

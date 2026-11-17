@@ -69,3 +69,15 @@ A button's hand is its own: it has the hand while a press does something, and th
 | Show it after a button's words | the button's `after`, with a `Plain` key |
 
 A key in one of the kit's menus or tooltips is the kit's, from the action it's bound to, so it isn't made with `look::key`.
+
+## Fields
+
+`docs/spec/components.md` has a field's kinds and states, and `crates/look/src/fields` the code. A field holds the kit's `InputState`, which the place that keeps what's typed makes, with what the field says while it's empty, and the kit's input draws what's typed inside a frame of `look`'s own, since the kit sets its own room at an input's end, past what a style from outside reaches.
+
+| To | Call |
+|---|---|
+| Make one, of what an `InputState` holds | `look::field(id, input, kind, size)` |
+| Put an icon before what's typed, such as a search's, or something at its end, such as a key | `icon`, `after` |
+| Say what an assistive app calls it, where nothing beside it says | `accessibility_label` |
+| Mark it off | `off` |
+| Share a row, rather than fill the width it's in | `grows` |

@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 use gpui_kit::assets::IconName as Lucide;
 use gpui_kit::component::WindowExt as _;
-use gpui_kit::component::input::{Input, InputEvent, InputState};
+use gpui_kit::component::input::{InputEvent, InputState};
 use gpui_kit::component::{Icon, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
@@ -188,7 +188,10 @@ impl Render for ConnectHub {
                         .child("Paste a single-use pairing link from the other machine’s hub switcher."),
                 ),
             )
-            .child(div().id("pair-link-input").child(Input::new(&self.input).disabled(connecting)).test_support())
+            .child(
+                look::field("pair-link-input", &self.input, look::FieldKind::Boxed, look::ControlSize::Large)
+                    .off(connecting),
+            )
             .children(preview)
             .when_some(self.connecting_to.as_deref(), |d, hub| d.child(reaching_line(hub, cx)))
             .when_some(feedback, |d, msg| d.child(feedback_alert(msg, cx)))

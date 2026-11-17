@@ -4,7 +4,7 @@
 use client_core::ClientError;
 use gpui_kit::component::WindowExt as _;
 use gpui_kit::component::dialog::{DialogAction, DialogClose, DialogFooter};
-use gpui_kit::component::input::{Input, InputState};
+use gpui_kit::component::input::InputState;
 use gpui_kit::{App, AppContext as _, ParentElement as _, Window};
 use look::{Hand as _, Sizing as _};
 use protocol::model::{Title, TitleError};
@@ -26,7 +26,7 @@ pub(crate) fn open(
         let (typed, rename) = (field.clone(), rename.clone());
         dialog
             .title(format!("Rename {}", what.noun()))
-            .child(Input::new(&field))
+            .child(look::field("rename-field", &field, look::FieldKind::Boxed, look::ControlSize::Large))
             .footer(
                 DialogFooter::new()
                     .child(

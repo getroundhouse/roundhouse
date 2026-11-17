@@ -1,0 +1,16 @@
+{
+  "look::FieldKind": {
+    "Bare": {
+      "x": 212,
+      "y": 227,
+      "width": 368,
+      "height": 72
+    },
+    "Boxed": {
+      "x": 212,
+      "y": 115,
+      "width": 368,
+      "height": 72
+    }
+  }
+}

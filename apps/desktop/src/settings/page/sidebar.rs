@@ -1,12 +1,12 @@
 //! Settings' sidebar: the search, then the pages under their headings.
 
-use gpui_kit::component::input::{Input, InputState};
+use gpui_kit::component::input::InputState;
 use gpui_kit::component::scroll::ScrollableElement as _;
-use gpui_kit::component::{Icon, IconName, Sizable as _, ThemeStyled as _, h_flex, v_flex};
+use gpui_kit::component::{Icon, IconName, h_flex, v_flex};
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    App, Entity, Focusable as _, InteractiveElement as _, IntoElement, MouseButton, ParentElement as _, Pixels, Role,
-    StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, Window, div, px, rems,
+    App, Entity, InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Role,
+    StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, Window, div,
 };
 use look::{Hand as _, IconSizing as _, Shaped as _, Typeset as _};
 
@@ -14,8 +14,8 @@ use super::{FIND_KEY, Page, PageId, Section};
 use crate::app::TOP_STRIP_HEIGHT;
 
 /// What the search says while nothing is typed in it, and what it's called to assistive apps.
-const SEARCH_SAYS: &str = "Search settings";
-const SEARCH_HEIGHT: Pixels = px(28.);
+/// What the search says it's for, while nothing is typed in it, and what assistive apps call it.
+pub(super) const SEARCH_SAYS: &str = "Search settings";
 /// How far a page's row sets its icon in from its edge, and a heading its name, so the two line up.
 const ROW_INSET: look::Space = look::Space::Small;
 
@@ -28,7 +28,7 @@ pub(super) fn sidebar(
     shown: Option<PageId>,
     chosen: &Entity<Option<PageId>>,
     width: Pixels,
-    window: &Window,
+    _window: &Window,
     cx: &App,
 ) -> impl IntoElement {
     let colors = look::colors(cx);
@@ -54,50 +54,16 @@ pub(super) fn sidebar(
         .bg(colors.sidebar)
         .border_r_1()
         .border_color(colors.edge)
-        .child(search_field(search, window, cx))
+        .child(search_field(search))
         .child(v_flex().id("settings-pages").flex_1().min_h_0().children(headed).overflow_y_scrollbar())
 }
 
-/// A field on the pane's colour, saying what it's for in faint text while it's empty, with the key that finds a
-/// setting at its right end. The kit's input draws only the text, since it would leave its own room before the key,
-/// and say what it's for in muted text.
-fn search_field(search: &Entity<InputState>, window: &Window, cx: &App) -> impl IntoElement {
-    let colors = look::colors(cx);
-    let focused = search.read(cx).focus_handle(cx).is_focused(window);
-    let empty = search.read(cx).value().is_empty();
-    // Laid under the text, so the caret is drawn over it, and a press on it reaches the text.
-    let says = div().absolute().inset_0().flex().items_center().line_height(rems(1.25)).text_color(colors.text_faint);
-    let text = div()
-        .relative()
-        .flex_1()
-        .min_w_0()
-        .h_full()
-        .flex()
-        .items_center()
-        .when(empty, |text| text.child(says.child(SEARCH_SAYS)))
-        .child(Input::new(search).appearance(false).small().px_0().aria_label(SEARCH_SAYS));
-    // A press on the icon or the key puts the cursor in the search too, as a press on the text does.
-    let to_focus = search.clone();
-    h_flex()
-        .id("settings-search")
-        .flex_none()
-        .w_full()
-        .h(SEARCH_HEIGHT)
-        // Spaced to the point rather than the grid, as `docs/spec/look.md` says Settings' search is.
-        .pl(px(9.))
-        .pr(px(7.))
-        .gap(px(9.))
-        .corners(look::Corner::Control)
-        .border_1()
-        .border_color(colors.control_edge)
-        .bg(colors.pane)
-        .when(focused, |field| field.focus_ring_style(window, cx))
-        .on_mouse_down(MouseButton::Left, move |_, window, cx| {
-            to_focus.update(cx, |search, cx| search.focus(window, cx));
-        })
-        .child(Icon::new(IconName::Search).sized(look::IconSize::Regular).text_color(colors.text_muted))
-        .child(text)
-        .child(look::key(look::KeyKind::Capped, FIND_KEY))
+/// The search, with the key that finds a setting at its end. It's a regular field, as tall as a setting's.
+fn search_field(search: &Entity<InputState>) -> impl IntoElement {
+    look::field("settings-search", search, look::FieldKind::Boxed, look::ControlSize::Regular)
+        .icon(IconName::Search)
+        .after(look::key(look::KeyKind::Capped, FIND_KEY))
+        .accessibility_label(SEARCH_SAYS)
 }
 
 /// A page's row: its icon and name, filled a little lighter than the sidebar while it's the page showing, and while

@@ -136,11 +136,9 @@ fn choose(drawing: &Drawing<'_>, choosing: &Choosing, cx: &App) -> AnyElement {
         .child(under("git-app-under-account", "Your account", false))
         .child(under("git-app-under-organization", "An organization", true));
     let organization = choosing.under_organization.then(|| {
-        let input = gpui_kit::component::input::Input::new(&choosing.organization.input);
-        labelled("Organization", "git-app-organization", input, app_words::ORGANIZATION_SAYS, cx)
+        labelled("Organization", "git-app-organization", &choosing.organization.input, app_words::ORGANIZATION_SAYS, cx)
     });
-    let input = gpui_kit::component::input::Input::new(&choosing.name.input);
-    let name = labelled("Name", "git-app-name", input, app_words::NAME_SAYS, cx);
+    let name = labelled("Name", "git-app-name", &choosing.name.input, app_words::NAME_SAYS, cx);
     let making = drawing.kept.clone();
     let make = button("git-make-on-github", "Make on GitHub", true, !drawing.kept.read(cx).can_make_on_github(cx), {
         move |window, cx| making.update(cx, |kept, cx| kept.make_on_github(window, cx))
