@@ -11,7 +11,9 @@ use protocol::prompt::Prompt;
 
 use crate::attachments::{png, refused_with};
 use crate::steering::wait_for_tool;
-use crate::support::{Stack, assistant_text, next_notice, read_all, wait_for_status, wait_for_turn_end, wait_until};
+use crate::support::{
+    Gate, Stack, assistant_text, next_notice, read_all, wait_for_status, wait_for_turn_end, wait_until,
+};
 
 /// Where the prompt queued under `id` was recorded, once it has been.
 fn sent_at(events: &[SessionEvent], id: &str) -> Option<Seq> {
@@ -38,13 +40,15 @@ fn queued_prompts_are_sent_in_order_each_as_a_turn_once_the_agent_has_finished()
     let stack = Stack::start();
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
-    client.session_prompt(&session.id, "hang:1000; say:working", None).unwrap();
+    let tool = Gate::new(&stack, "tool");
+    client.session_prompt(&session.id, &format!("hang-until:{tool}; say:working"), None).unwrap();
     wait_for_tool(&client, &session.id);
 
     queue(&client, &session.id, "q1", "say:first queued");
     let queued = queue(&client, &session.id, "q2", "say:second queued");
 
     assert_eq!(queued.iter().map(|q| q.client_msg_id.as_str()).collect::<Vec<_>>(), ["q1", "q2"]);
+    tool.open();
     let events = wait_for_turn_end(&client, &session.id, 3);
     let ends = turn_ends(&events);
     assert_eq!(ends.len(), 3, "each queued prompt is a turn of its own");
@@ -59,7 +63,8 @@ fn a_queued_prompt_changes_or_goes_until_its_sent_and_not_after() {
     let stack = Stack::start();
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
-    client.session_prompt(&session.id, "hang:1000", None).unwrap();
+    let tool = Gate::new(&stack, "tool");
+    client.session_prompt(&session.id, &format!("hang-until:{tool}"), None).unwrap();
     wait_for_tool(&client, &session.id);
     queue(&client, &session.id, "q1", "say:before");
     queue(&client, &session.id, "q2", "say:taken out");
@@ -71,6 +76,7 @@ fn a_queued_prompt_changes_or_goes_until_its_sent_and_not_after() {
     assert_eq!(changed[0].prompt.text, "say:after", "a change keeps its place");
     assert_eq!(left.iter().map(|q| q.client_msg_id.as_str()).collect::<Vec<_>>(), ["q1"]);
     assert_eq!(refused_with(taken_out), ErrorCode::NotFound, "out, so a change doesn't queue it again");
+    tool.open();
     let events = wait_for_turn_end(&client, &session.id, 2);
     assert_eq!(assistant_text(&events), "after");
     let late = change(&client, &session.id, "q1", "say:too late");
@@ -85,7 +91,8 @@ fn a_queued_prompt_moves_its_workspace_as_its_queued_and_not_again_as_its_sent()
     let stack = Stack::start();
     let client = stack.client();
     let (workspace, session) = stack.workspace(&client);
-    client.session_prompt(&session.id, "hang:1000", None).unwrap();
+    let tool = Gate::new(&stack, "tool");
+    client.session_prompt(&session.id, &format!("hang-until:{tool}"), None).unwrap();
     wait_for_tool(&client, &session.id);
     let feed = client.feed_subscribe().unwrap();
 
@@ -100,6 +107,7 @@ fn a_queued_prompt_moves_its_workspace_as_its_queued_and_not_again_as_its_sent()
         }
     };
     assert_eq!(told.user_active_at_ms, queued);
+    tool.open();
     wait_for_turn_end(&client, &session.id, 2);
     let listed = client.records_list().unwrap().workspaces.into_iter().find(|w| w.id == workspace.id).unwrap();
     assert_eq!(listed.user_active_at_ms, queued);
@@ -110,7 +118,8 @@ fn a_queued_prompt_carries_its_files_to_the_agent_and_a_change_keeps_them() {
     let stack = Stack::start();
     let client = stack.client();
     let (workspace, session) = stack.workspace(&client);
-    client.session_prompt(&session.id, "hang:1000; say:working", None).unwrap();
+    let tool = Gate::new(&stack, "tool");
+    client.session_prompt(&session.id, &format!("hang-until:{tool}; say:working"), None).unwrap();
     wait_for_tool(&client, &session.id);
     let log = b"error at line 42".to_vec();
     let log = client.attachment_add(&session.id, &"a1".into(), "build.log", MediaType::Text, log).unwrap();
@@ -122,6 +131,7 @@ fn a_queued_prompt_carries_its_files_to_the_agent_and_a_change_keeps_them() {
 
     assert_eq!(queued.queued[0].prompt.files, std::slice::from_ref(&log));
     assert_eq!(changed[0].prompt.files, std::slice::from_ref(&log), "a change keeps them");
+    tool.open();
     let events = wait_for_turn_end(&client, &session.id, 2);
     assert_eq!(assistant_text(&events), "workingattached: build.log: error at line 42");
     let recorded = events.iter().find_map(|e| match &e.body {
@@ -299,7 +309,8 @@ fn a_queued_prompt_sent_now_steers_the_turn_and_the_rest_wait_their_turn() {
     let stack = Stack::start();
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
-    client.session_prompt(&session.id, "hang:1000; say:working", None).unwrap();
+    let tool = Gate::new(&stack, "tool");
+    client.session_prompt(&session.id, &format!("hang-until:{tool}; say:working"), None).unwrap();
     wait_for_tool(&client, &session.id);
     queue(&client, &session.id, "q1", "say:later");
     queue(&client, &session.id, "q2", "say:steered");
@@ -309,6 +320,7 @@ fn a_queued_prompt_sent_now_steers_the_turn_and_the_rest_wait_their_turn() {
 
     assert_eq!(left.iter().map(|q| q.client_msg_id.as_str()).collect::<Vec<_>>(), ["q1"]);
     assert_eq!(again, left, "sent already, so nothing changes");
+    tool.open_once_the_agent_has_a_prompt();
     let events = wait_for_turn_end(&client, &session.id, 2);
     let ends = turn_ends(&events);
     let (steered, later) = (sent_at(&events, "q2").unwrap(), sent_at(&events, "q1").unwrap());
