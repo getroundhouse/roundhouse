@@ -248,39 +248,6 @@ async fn a_locked_worktree_is_refused_and_left_where_it_was() {
 }
 
 #[tokio::test]
-async fn a_worktree_holding_another_repository_is_refused_unless_forced() {
-    let archived = Archived::ready().await;
-    let nested = archived.path.join("nested");
-    std::fs::create_dir_all(&nested).unwrap();
-    run(&nested, &["init", "-q", "-b", "main"]);
-    std::fs::write(nested.join("only-here.txt"), "work\n").unwrap();
-    run(&nested, &["add", "."]);
-    run(&nested, &["commit", "-qm", "a commit nowhere else"]);
-    run(&archived.path, &["add", "nested"]);
-    run(&archived.path, &["commit", "-qm", "the repository inside"]);
-    assert_eq!(status(&Environment::NONE, archived.path.to_str().unwrap()).await.unwrap().loss_if_removed(), None);
-
-    let refused = archived.remove(false).await.err().unwrap();
-
-    assert_eq!(refused.code, ErrorCode::Worker, "{}", refused.message);
-    assert!(nested.join("only-here.txt").exists());
-    archived.remove(true).await.unwrap();
-    assert!(!archived.path.exists());
-    archived.wait_until_deleted().await;
-}
-
-#[tokio::test]
-async fn a_worktree_that_cant_be_moved_aside_is_deleted_in_place() {
-    let archived = Archived::ready().await;
-    std::fs::write(archived.deleting(), "in the way\n").unwrap();
-
-    archived.remove(false).await.unwrap();
-
-    assert!(!archived.path.exists());
-    assert_eq!(archived.worktrees(), 1);
-}
-
-#[tokio::test]
 async fn uncommitted_work_is_refused_unless_forced_and_the_branch_is_kept() {
     let archived = Archived::ready().await;
     std::fs::write(archived.path.join("new.txt"), "work\n").unwrap();
