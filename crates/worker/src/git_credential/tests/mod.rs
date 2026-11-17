@@ -4,4 +4,4 @@ mod identity;
 mod made_up;
 mod writing;
 
-use made_up::{ada, files};
+use made_up::{ada, files, installation};

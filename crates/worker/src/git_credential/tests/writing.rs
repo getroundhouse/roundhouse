@@ -5,7 +5,7 @@ use process::testing::WholeEnvironment;
 use protocol::worker::GithubCredential;
 
 use super::super::files::{Files, Handed};
-use super::{ada, files};
+use super::{ada, files, installation};
 
 fn read(path: impl AsRef<Path>) -> String {
     std::fs::read_to_string(path).unwrap()
@@ -16,11 +16,38 @@ fn config(dir: &Path) -> String {
     // As a git config file quotes it, which on Windows doubles each of the path's backslashes.
     let dir = dir.display().to_string().replace('\\', r"\\");
     let helper = format!("!'/opt/Round House/roundhoused' 'git-credential' '--' '{dir}'");
+    let on_github = |start: &str| format!("[includeIf \"hasconfig:remote.*.url:{start}*/**\"]\n\tpath = identity\n");
     format!(
         "# Rewritten by the Roundhouse worker whenever its hub sets the git credential.\n\
          [credential \"https://github.com\"]\n\thelper =\n\thelper = \"{helper}\"\n\
-         [url \"https://github.com/\"]\n\tinsteadOf = git@github.com:\n\tinsteadOf = ssh://git@github.com/\n"
+         [url \"https://github.com/\"]\n\tinsteadOf = git@github.com:\n\tinsteadOf = ssh://git@github.com/\n\
+         {}{}{}{}",
+        on_github("https://github.com/"),
+        on_github("https://*@github.com/"),
+        on_github("git@github.com:"),
+        on_github("ssh://git@github.com/"),
     )
+}
+
+/// In a file of its own, which the git config includes only in a repository on github.com, and which goes with a
+/// credential that has none.
+#[test]
+fn a_commit_identity_is_in_a_file_the_config_includes_only_on_github() {
+    let state = tempfile::tempdir().unwrap();
+    let dir = state.path().join("git-credential");
+    let files = files(state.path());
+
+    files.write(&Handed::Account(installation())).unwrap();
+    let written = (read(dir.join("config")), read(dir.join("identity")));
+    files.write(&Handed::Account(ada())).unwrap();
+
+    let bot = "ada-roundhouse[bot]";
+    let identity = format!(
+        "# Rewritten by the Roundhouse worker whenever its hub sets the git credential.\n\
+         [user]\n\tname = \"{bot}\"\n\temail = \"41+{bot}@users.noreply.github.com\"\n"
+    );
+    assert_eq!(written, (config(&dir), identity));
+    assert!(!dir.join("identity").exists(), "a credential without one removes it");
 }
 
 #[test]
@@ -141,10 +168,10 @@ fn only_this_user_can_open_them() {
     let state = tempfile::tempdir().unwrap();
     let dir = state.path().join("git-credential");
 
-    files(state.path()).write(&Handed::Account(ada())).unwrap();
+    files(state.path()).write(&Handed::Account(installation())).unwrap();
 
     assert_eq!((mode(&dir), mode(&dir.join("gh"))), (0o700, 0o700));
-    for file in ["config", "credential.json", "gh/hosts.yml"] {
+    for file in ["config", "identity", "credential.json", "gh/hosts.yml"] {
         assert_eq!(mode(&dir.join(file)), 0o600, "{file}");
     }
 }
