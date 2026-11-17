@@ -2,7 +2,7 @@ use super::super::around::{Answer, BlockAround};
 use super::super::line::{Line, Part};
 use super::super::shown::Gather;
 use super::super::{InRow, Shared, line};
-use super::{advisor, agent, block, command, files, notebook, other, patch, search, to_subagents, web};
+use super::{advisor, agent, block, command, files, image, notebook, other, patch, search, to_subagents, web};
 use crate::find::{FindLook, Marks, Part as Text};
 use crate::folds::Fold;
 use crate::item_key::ItemKey;
@@ -56,6 +56,7 @@ pub(in super::super) fn call(toggle: &Toggle, recorded: Recorded<'_>, drawing: &
         ToolCall::Advisor => advisor::draw(reply, toggle, cx),
         ToolCall::Patch(patch) => patch::draw(patch, answer, toggle, cx),
         ToolCall::NotebookEdit(edit) => notebook::draw(edit, answer, toggle, cx),
+        ToolCall::MakeImage(made) => image::draw(made, answer, toggle, cx),
         ToolCall::Typed(call) => super::typed::draw(call, answer, toggle, cx),
         ToolCall::Other(other) => other::draw(&other, input, answer, toggle, cx),
     }
@@ -82,6 +83,7 @@ pub(in super::super) fn shown(key: &ItemKey, recorded: Recorded<'_>, drawing: &B
         ToolCall::Advisor => advisor::shown(reply, key, gather),
         ToolCall::Patch(patch) => patch::shown(patch, answer, key, gather),
         ToolCall::NotebookEdit(edit) => notebook::shown(edit, answer, key, gather),
+        ToolCall::MakeImage(made) => image::shown(made, answer, key, gather),
         ToolCall::Typed(call) => super::typed::shown(call, answer, key, gather),
         ToolCall::Other(other) => other::shown(&other, input, answer, key, gather),
     }

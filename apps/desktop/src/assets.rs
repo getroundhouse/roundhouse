@@ -30,6 +30,7 @@ gpui_kit::assets::icon_assets!(
         GitPullRequest,
         HardDrive,
         House,
+        ImagePlus,
         KeyRound,
         Laptop,
         Lightbulb,

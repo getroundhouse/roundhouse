@@ -254,7 +254,7 @@ impl HintCollector {
                 }
             }
             ToolCall::ToSubagents(ToSubagents::Message { message, .. }) => self.add_prose(message),
-            ToolCall::Typed(_) | ToolCall::Other(_) => {
+            ToolCall::Typed(_) | ToolCall::Other(_) | ToolCall::MakeImage(_) => {
                 if let Some(summary) = call.summary() {
                     self.add_prose(&summary);
                 }

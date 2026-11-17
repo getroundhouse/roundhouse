@@ -11,6 +11,7 @@ mod change_asked;
 pub(super) mod command;
 mod files;
 mod highlight;
+mod image;
 mod marks;
 mod notebook;
 mod numbered;

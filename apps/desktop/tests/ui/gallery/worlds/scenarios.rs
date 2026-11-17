@@ -1,7 +1,7 @@
 #![cfg(test)]
 
 use super::super::screens::FOCUS;
-use super::super::{chats, file_chats, patch, pictures, pull_requests, worktree};
+use super::super::{chats, file_chats, patch, pictures, pull_requests, typed_chats, worktree};
 use super::accounts;
 use client_core::fake_hub::{HOUR_MS, HubBuild, NOW_MS, World};
 use protocol::attachment::{Attachment, MediaType};
@@ -303,6 +303,31 @@ pub(in super::super) fn read_image() -> World {
     world.attachments.insert(image.id.clone(), shot);
     world.chat(&focus, SessionStatus::Idle, file_chats::read_image(image));
     world
+}
+
+/// The screen's chat, with Codex looking at a screenshot and making an image, both of which the hub keeps.
+pub(in super::super) fn made_image() -> World {
+    let mut world = World::default();
+    let focus = sidebar(&mut world);
+    let (looked_at, made) = codex_images(&mut world);
+    world.chat(&focus, SessionStatus::Idle, typed_chats::images(looked_at, made));
+    world
+}
+
+/// The screenshot Codex looks at and the image it makes in [`typed_chats::images`], kept in `world` as the hub keeps
+/// them.
+pub(in super::super) fn codex_images(world: &mut World) -> (Attachment, Attachment) {
+    let mut kept = |id: &str, name: &str, bytes: Vec<u8>| {
+        let size_bytes = u64::try_from(bytes.len()).unwrap();
+        let image =
+            Attachment { id: AttachmentId::from(id), name: name.into(), media_type: MediaType::Png, size_bytes };
+        world.attachments.insert(image.id.clone(), bytes);
+        image
+    };
+    (
+        kept("look-1", "signal-board.png", pictures::signal_board()),
+        kept("make-1", "ig_0a1b2c.png", pictures::signal_at_caution()),
+    )
 }
 
 pub(in super::super) fn diff() -> World {

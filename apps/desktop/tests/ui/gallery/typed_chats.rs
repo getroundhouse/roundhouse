@@ -3,9 +3,10 @@
 
 #![cfg(test)]
 
+use protocol::attachment::Attachment;
 use protocol::capability::calls::call::{
-    CellEdit, Command, CommandPart, Fetch, FilePatch, FindFiles, NotebookEdit, Patch, PatchChange, PatchHunk, Read,
-    Runs, Schedule, Search, Shows, WebSearch, When, Workflow,
+    CellEdit, Command, CommandPart, Fetch, FilePatch, FindFiles, GenerateImage, NotebookEdit, Patch, PatchChange,
+    PatchHunk, Read, Runs, Schedule, Search, Shows, ViewImage, WebSearch, When, Workflow,
 };
 use protocol::capability::calls::output::{Ended, FileOutcome, Found, Lines, McpContent, Paths};
 use protocol::capability::calls::{Call, CallOutput};
@@ -285,5 +286,26 @@ pub(crate) fn later() -> Vec<EventBody> {
         typed_call("msg-2", "flow-1", Call::Workflow(Workflow { name: Some("Release checks".into()) })),
         text("msg-3", reply),
         replied(reply, 9, 0.02),
+    ]
+}
+
+/// What the agent was asked to make an image of, as Codex says it once the image is made.
+pub(crate) const MADE_FROM: &str = "A flat railway signal at caution on a slate ground: a black head of three lamps \
+     on a grey post, the middle lamp lit amber, the others dark.";
+
+/// Codex looking at a screenshot, which the hub keeps as `looked_at`, then making an image, which it keeps as `made`.
+/// Codex says what it was asked to make only once it's made, so the call says nothing of it.
+pub(crate) fn images(looked_at: Attachment, made: Attachment) -> Vec<EventBody> {
+    let shot = "/workspaces/aspen/.context/attachments/signal-board.png";
+    let reply = "Made it from the board's amber: it's in Codex's generated images, ready to copy into the README.";
+    vec![
+        user_prompt("Make a signal at caution for the README, in the amber the board uses. The board's in .context."),
+        taken(Seq::new(1)),
+        typed_call("msg-1", "look-1", Call::ViewImage(ViewImage { path: shot.into() })),
+        typed_result("look-1", CallOutput::Image { image: looked_at, prompt: None }, false),
+        typed_call("msg-2", "make-1", Call::GenerateImage(GenerateImage { prompt: String::new(), from: Vec::new() })),
+        typed_result("make-1", CallOutput::Image { image: made, prompt: Some(MADE_FROM.into()) }, false),
+        text("msg-3", reply),
+        replied(reply, 21, 0.06),
     ]
 }

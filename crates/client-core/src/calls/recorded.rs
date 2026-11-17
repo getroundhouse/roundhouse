@@ -3,7 +3,7 @@ use agent::Agent;
 use command::Command;
 use files::{EditFile, ReadFile, WriteFile};
 use other::Other;
-use protocol::capability::calls::call::{NotebookEdit, Patch};
+use protocol::capability::calls::call::{GenerateImage, NotebookEdit, Patch};
 use protocol::event::{Asking, CallKind, ContentBlock, EventBody};
 use search::{Looks, Search};
 use serde_json::Value;
@@ -30,6 +30,8 @@ pub enum ToolCall<'a> {
     Patch(&'a Patch),
     /// Changing one cell of a notebook.
     NotebookEdit(&'a NotebookEdit),
+    /// Making an image, from what it was asked for. Codex says that only once it's made, in what came back.
+    MakeImage(&'a GenerateImage),
     Other(Other),
     Typed(&'a protocol::capability::calls::Call),
 }
@@ -171,6 +173,9 @@ impl<'a> ToolCall<'a> {
             ToolCall::Advisor => return None,
             ToolCall::Patch(patch) => return Some(super::typed::paths(patch)),
             ToolCall::NotebookEdit(edit) => &edit.path,
+            ToolCall::MakeImage(made) => {
+                return Some(first_line(&made.prompt)).filter(|about| !about.is_empty()).map(str::to_string);
+            }
             ToolCall::Other(other) => return other.summary.clone(),
             ToolCall::Typed(call) => return super::typed::summary(call),
         };

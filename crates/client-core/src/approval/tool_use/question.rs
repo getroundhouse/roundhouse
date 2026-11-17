@@ -103,6 +103,7 @@ impl<'a> ToolUseAsked<'a> {
             | ToolCall::Search(_)
             | ToolCall::Agent(_)
             | ToolCall::ToSubagents(_)
+            | ToolCall::MakeImage(_)
             | ToolCall::Typed(_)
             | ToolCall::Fetch(_)
             | ToolCall::WebSearch(_)
