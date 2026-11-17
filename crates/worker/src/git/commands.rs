@@ -29,10 +29,18 @@ pub(super) async fn run(given: &Environment, cwd: &Path, args: &[&str]) -> Resul
     output.map_err(|e| git_error(format!("could not run git in {}: {e}", cwd.display())))
 }
 
+/// What every git the worker starts is told before its own arguments. On Windows, to read and write paths longer than
+/// the 260 characters Git for Windows keeps to unless told, as a build's output in a worktree can have, such as Ghostty's
+/// source unpacked under `target/`, or removing a worktree fails part way. As arguments, since the worker gives every
+/// process its own git settings through `GIT_CONFIG_COUNT`, and only for the worker's own git, so a person's own
+/// settings aren't changed. Git elsewhere has no such limit.
+const GIT_FIRST: &[&str] = if cfg!(windows) { &["-c", "core.longpaths=true"] } else { &[] };
+
 /// Git, ready to start, as everything here starts it, with what the worker gives every process it starts.
 pub(super) fn command(given: &Environment, cwd: &Path, args: &[&str]) -> Command {
     let mut command = Command::new("git");
     command
+        .args(GIT_FIRST)
         .args(args)
         .current_dir(cwd)
         // Never wait on a credentials prompt nobody can see.
