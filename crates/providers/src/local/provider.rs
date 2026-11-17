@@ -15,8 +15,8 @@ use tokio::sync::OnceCell;
 use tracing::{debug, warn};
 
 const LOGIN_SHELL_TIMEOUT: Duration = Duration::from_secs(5);
-/// How long an orphaned agent, or a worker still running when its instance is stopped, gets to stop by itself. An
-/// agent stops its own tools if given this.
+/// How long what a killed worker left running, such as an agent, or a worker still running when its instance is
+/// stopped, gets to stop by itself, with all it started. An agent stops its own tools if given this.
 const ORPHAN_GRACE: Duration = Duration::from_secs(3);
 pub(super) const PATH_MARKER: &str = "__ROUNDHOUSE_LOGIN_PATH__";
 /// How the hub reaches a worker. Through its socket, so the worker can outlive its hub, but on Windows, where there's
@@ -65,14 +65,14 @@ impl LocalProvider {
         self.config.instances_dir.join(instance_id.as_str())
     }
 
-    /// Ends the instance's worker, if one is still running, and then any agent a worker left behind.
+    /// Ends the instance's worker, if one is still running, and then whatever a worker left behind.
     pub(super) async fn end(&self, instance_id: &InstanceId, grace: Duration) {
         let dir = self.instance_dir(instance_id);
         if let Some(worker) = running_worker(&dir).await {
             warn!(pid = worker.pid, %instance_id, "ending a worker still running in an instance that's stopping");
-            stop_group(&worker, grace).await;
+            stop_groups(&[worker], grace).await;
         }
-        stop_orphaned_agents(&dir).await;
+        stop_orphans(&dir, ORPHAN_GRACE).await;
     }
 }
 
@@ -82,35 +82,46 @@ async fn running_worker(dir: &Path) -> Option<ProcessRecord> {
     still_running(&worker).await.then_some(worker)
 }
 
-/// Whether the process exits by itself within `grace`.
+/// Asks the process groups `leaders` lead to stop, all at once, so each gets the whole of `grace`, and makes whatever is
+/// left of them stop after it, or at once if that's zero. Returns once they've gone. A group can outlast its leader, as
+/// a server started by a script that exits on SIGTERM does, so it's gone once nothing is left of it, as
+/// [`ProcessRecord::group_running`] says, and is set aside then, since its ID can be another's after.
+async fn stop_groups(leaders: &[ProcessRecord], grace: Duration) {
+    let mut left: Vec<&ProcessRecord> = leaders.iter().collect();
+    if !grace.is_zero() {
+        for leader in &left {
+            signal_group(leader.pid, Signal::Terminate);
+        }
+        if gone_within(&mut left, grace).await {
+            return;
+        }
+    }
+    left.retain(|leader| leader.group_running());
+    for leader in &left {
+        warn!(pid = leader.pid, "its group is still running, sending SIGKILL");
+        signal_group(leader.pid, Signal::Kill);
+    }
+    if !gone_within(&mut left, KILLED_GRACE).await {
+        warn!("a group is still running after SIGKILL");
+    }
+}
+
+/// Whether every group in `left` has gone within `grace`, setting each aside as it goes.
 #[expect(
     clippy::disallowed_methods,
-    reason = "the pace a process that's been asked to stop is looked at again until it exits"
+    reason = "the pace groups that have been asked to stop are looked at again until they've gone"
 )]
-async fn exits_within(process: &ProcessRecord, grace: Duration) -> bool {
+async fn gone_within(left: &mut Vec<&ProcessRecord>, grace: Duration) -> bool {
     let deadline = tokio::time::Instant::now() + grace;
-    while still_running(process).await {
+    loop {
+        left.retain(|leader| leader.group_running());
+        if left.is_empty() {
+            return true;
+        }
         if tokio::time::Instant::now() >= deadline {
             return false;
         }
         tokio::time::sleep(Duration::from_millis(25)).await;
-    }
-    true
-}
-
-/// Asks the process group to stop, and makes it after `grace`, or at once if that's zero. Returns once its leader
-/// has gone.
-async fn stop_group(leader: &ProcessRecord, grace: Duration) {
-    if !grace.is_zero() {
-        signal_group(leader.pid, Signal::Terminate);
-        if exits_within(leader, grace).await {
-            return;
-        }
-        warn!(pid = leader.pid, "it ignored SIGTERM, sending SIGKILL");
-    }
-    signal_group(leader.pid, Signal::Kill);
-    if !exits_within(leader, KILLED_GRACE).await {
-        warn!(pid = leader.pid, "it's still running after SIGKILL");
     }
 }
 
@@ -198,24 +209,30 @@ async fn still_running(agent: &ProcessRecord) -> bool {
     tokio::task::spawn_blocking(move || agent.is_running()).await.unwrap_or(false)
 }
 
-/// A worker records each agent it runs, and removes the record when that agent exits. Any record
-/// still here means the worker was killed without stopping it. An orphan runs on until its turn ends,
-/// with nobody reading its output, and a new agent would be working in the same worktree on the same
-/// conversation. So it goes first. Every other file here is a run's too, such as the one that tells an
+/// A worker records each process it runs that would outlive it, such as an agent, and removes the record when that
+/// process exits. Any record still here means the worker was killed without stopping it. An orphaned agent runs on
+/// until its turn ends, with nobody reading its output, and a new agent would be working in the same worktree on the
+/// same conversation. So each recorded process that's still the one recorded, by its start time, goes first, with its
+/// group, which gets `grace` to stop by itself. Every other file here is a run's too, such as the one that tells an
 /// agent's CLI where the worker's tools are, which holds the agent's token, so everything here goes.
-pub(super) async fn stop_orphaned_agents(instance_dir: &Path) {
+pub(super) async fn stop_orphans(instance_dir: &Path, grace: Duration) {
     let Ok(records) = std::fs::read_dir(instance_dir.join(AGENTS_DIR)) else {
         return;
     };
+    let (mut orphans, mut files) = (Vec::new(), Vec::new());
     for record in records.flatten() {
         let path = record.path();
-        if let Some(agent) = ProcessRecord::read(&path).filter(|agent| agent.pid > 1)
-            && still_running(&agent).await
+        if let Some(orphan) = ProcessRecord::read(&path).filter(|orphan| orphan.pid > 1)
+            && still_running(&orphan).await
         {
-            warn!(pid = agent.pid, "stopping an agent left behind by a worker that was killed");
-            stop_group(&agent, ORPHAN_GRACE).await;
+            warn!(pid = orphan.pid, "stopping what a worker that was killed left running");
+            orphans.push(orphan);
         }
-        let _ = std::fs::remove_file(&path);
+        files.push(path);
+    }
+    stop_groups(&orphans, grace).await;
+    for file in files {
+        let _ = std::fs::remove_file(&file);
     }
 }
 
@@ -270,7 +287,7 @@ impl Provider for LocalProvider {
         create_dir(&dir)?;
         if running_worker(&dir).await.is_none() {
             // For when the hub was killed along with its worker, so `stop` never ran.
-            stop_orphaned_agents(&dir).await;
+            stop_orphans(&dir, ORPHAN_GRACE).await;
         }
         Ok(())
     }

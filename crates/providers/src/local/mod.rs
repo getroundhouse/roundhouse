@@ -22,6 +22,4 @@ mod provider;
 
 pub use provider::{LocalConfig, LocalProvider};
 #[cfg(test)]
-use provider::{
-    PATH_MARKER, merge_paths, parse_marked_path, read_login_path, read_until_second_marker, stop_orphaned_agents,
-};
+use provider::{PATH_MARKER, merge_paths, parse_marked_path, read_login_path, read_until_second_marker, stop_orphans};

@@ -40,6 +40,18 @@ impl ProcessRecord {
     pub fn is_running(&self) -> bool {
         crate::sys::started_at(self.pid, &self.started)
     }
+
+    /// Whether anything is left of the group the recorded process leads, once [`ProcessRecord::is_running`] has shown
+    /// the record is still that process's. On Unix that's any process in it, since a group can outlast its leader, and
+    /// its ID can't be another's while any of them runs, but can once none does, so a group seen gone is gone for good.
+    /// On Windows, where stopping a group ends all of it at once, it's the leader, which Windows looks up without
+    /// running anything.
+    pub fn group_running(&self) -> bool {
+        #[cfg(unix)]
+        return crate::group_running(self.pid);
+        #[cfg(windows)]
+        return self.is_running();
+    }
 }
 
 #[cfg(test)]
