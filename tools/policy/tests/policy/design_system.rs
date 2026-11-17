@@ -7,11 +7,26 @@ use std::path::Path;
 use super::rust_standards::{add_rust_files, covered_crates};
 use super::workspace::workspace;
 
-/// The kit's button, which `look::Button` holds, named in code as its module is.
-const KIT_BUTTON: &str = "component::button";
+/// One of the kit's parts that a component holds: its module, as code names it, the component's maker, which the
+/// failure says to use, and where it's used other than through the component, as (path from the repo root, why). A
+/// path that ends in `/` is a folder, and covers everything in it.
+struct KitPart {
+    module: &'static str,
+    instead: &'static str,
+    allowed: &'static [(&'static str, &'static str)],
+}
 
-/// Where the kit's button is used other than through `look::Button`, as (path from the repo root, why). A path that
-/// ends in `/` is a folder, and covers everything in it.
+/// The kit's button, which `look::Button` holds.
+const KIT_BUTTON: KitPart =
+    KitPart { module: "component::button", instead: "look::button", allowed: KIT_BUTTON_ALLOWED };
+
+/// The kit's key, which `look::Key` holds.
+const KIT_KEY: KitPart = KitPart {
+    module: "component::kbd",
+    instead: "look::key",
+    allowed: &[("crates/look/src/keys/", "the component library's key, which writes a key as the kit does")],
+};
+
 const KIT_BUTTON_ALLOWED: &[(&str, &str)] = &[
     ("crates/look/src/controls/", "the component library's button, which holds the kit's"),
     (
@@ -36,36 +51,52 @@ fn names_in_code(line: &str, path: &str) -> bool {
     line.match_indices(path).any(|(at, _)| line[..at].matches('"').count().is_multiple_of(2))
 }
 
-#[test]
-fn only_the_component_library_uses_the_kits_button() {
+/// Every file of the crates the checks cover that names `part`'s module in its code, by its path from the repo root.
+fn using(part: &KitPart) -> BTreeSet<String> {
     let metadata = workspace();
     let root = Path::new(metadata["workspace_root"].as_str().unwrap());
     let mut files = Vec::new();
     for dir in covered_crates(&metadata) {
         add_rust_files(&dir, &mut files);
     }
-    let using: BTreeSet<String> = files
+    files
         .iter()
-        .filter(|file| std::fs::read_to_string(file).unwrap().lines().any(|line| names_in_code(line, KIT_BUTTON)))
+        .filter(|file| std::fs::read_to_string(file).unwrap().lines().any(|line| names_in_code(line, part.module)))
         .map(|file| file.strip_prefix(root).unwrap().display().to_string())
-        .collect();
-    assert!(using.len() > 2, "found only {using:?}, so this isn't looking in the right place");
+        .collect()
+}
+
+/// That `part` is used only through its component, but in the places its list names, and that each of those still uses
+/// it.
+fn only_the_component_library_uses(part: &KitPart) {
+    let using = using(part);
+    assert!(!using.is_empty(), "found nothing using {}, so this isn't looking in the right place", part.module);
     let allowed = |path: &str, (place, _): &(&str, &str)| match place.strip_suffix('/') {
         Some(folder) => path.starts_with(&format!("{folder}/")),
         None => path == *place,
     };
     let unexplained: Vec<_> =
-        using.iter().filter(|path| !KIT_BUTTON_ALLOWED.iter().any(|entry| allowed(path, entry))).collect();
-    assert!(unexplained.is_empty(), "these use the kit's button, so make theirs with `look::button`: {unexplained:?}");
-    let stale: Vec<_> =
-        KIT_BUTTON_ALLOWED.iter().filter(|entry| !using.iter().any(|path| allowed(path, entry))).collect();
-    assert!(stale.is_empty(), "these don't use the kit's button now, so take them off `KIT_BUTTON_ALLOWED`: {stale:?}");
+        using.iter().filter(|path| !part.allowed.iter().any(|entry| allowed(path, entry))).collect();
+    assert!(unexplained.is_empty(), "these use the kit's {}, so use `{}`: {unexplained:?}", part.module, part.instead);
+    let stale: Vec<_> = part.allowed.iter().filter(|entry| !using.iter().any(|path| allowed(path, entry))).collect();
+    assert!(stale.is_empty(), "these don't use the kit's {} now, so take them off its list: {stale:?}", part.module);
+}
+
+#[test]
+fn only_the_component_library_uses_the_kits_button() {
+    assert!(using(&KIT_BUTTON).len() > 2, "found too few, so this isn't looking in the right place");
+    only_the_component_library_uses(&KIT_BUTTON);
+}
+
+#[test]
+fn only_the_component_library_uses_the_kits_key() {
+    only_the_component_library_uses(&KIT_KEY);
 }
 
 #[test]
 fn a_path_in_a_string_isnt_a_use() {
     // Made from the path, so this file doesn't name it in code.
-    let used = format!("use gpui_kit::{KIT_BUTTON}::Button;");
-    assert!(names_in_code(&used, KIT_BUTTON));
-    assert!(!names_in_code(&format!("tool_result(\"1\", \"{used}\")"), KIT_BUTTON));
+    let used = format!("use gpui_kit::{}::Button;", KIT_BUTTON.module);
+    assert!(names_in_code(&used, KIT_BUTTON.module));
+    assert!(!names_in_code(&format!("tool_result(\"1\", \"{used}\")"), KIT_BUTTON.module));
 }

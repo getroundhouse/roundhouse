@@ -3,9 +3,9 @@ use super::screens::SCREENS;
 use super::{
     approval_chats, approved, background_chats, baselines, button_states, cache_screens, call_screens, capture,
     colours, compaction_chats, component_screens, context_screens, controls, corners, dictation_screens, diff_screens,
-    failure_chats, failures_in_a_row, heights, home_screens, icon_sizes, kinds_of_text, mark_states, own_turn_chats,
-    pull_requests, settings_screens, sidebar_screens, spaces, steps, subagent_chats, tool_screens, turn_screens,
-    update_screens, workspace_screens,
+    failure_chats, failures_in_a_row, heights, home_screens, icon_sizes, key_kinds, kinds_of_text, mark_states,
+    own_turn_chats, pull_requests, settings_screens, sidebar_screens, spaces, steps, subagent_chats, tool_screens,
+    turn_screens, update_screens, workspace_screens,
 };
 use approved::Verdict;
 use capture::Picture;
@@ -104,6 +104,7 @@ fn every_screen_looks_as_approved() {
             corners::NAME,
             button_states::NAME,
             controls::NAME,
+            key_kinds::NAME,
             heights::NAME,
             icon_sizes::NAME,
             spaces::NAME,
@@ -225,6 +226,17 @@ fn every_kind_of_button_in_every_state_looks_as_approved() {
 
     let mut problems = look_at(button_states::NAME, button_states::SPEC, &picture);
     problems.extend(places.look_at(button_states::NAME));
+    report(&problems);
+}
+
+#[test]
+fn every_kind_of_key_looks_as_approved() {
+    let text_system: Arc<dyn PlatformTextSystem> = Arc::new(gpui_apple::AppleTextSystem::new());
+
+    let (picture, places) = key_kinds::draw(&text_system);
+
+    let mut problems = look_at(key_kinds::NAME, key_kinds::SPEC, &picture);
+    problems.extend(places.look_at(key_kinds::NAME));
     report(&problems);
 }
 

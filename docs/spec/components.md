@@ -56,6 +56,21 @@ The pieces screens are built from, on the foundations in `look.md`: what each is
 
 ![Every size of a button](screens/controls.png)
 
+## Keys
+
+- **A key to press is shown where it's pressed, as the system it's on writes keys,** so the same key reads the same everywhere: Cmd on a Mac and Ctrl elsewhere, Return as `⏎`. A key on its own, beside what it does, is on a small raised key, such as `⌘ F` at the end of Settings' search. A key after a button's words is written as text, in the button's colour, such as Return after Create and after a comment's Comment and Save. `look::KeyKind` holds the kinds. The keys in the kit's menus and tooltips are the kit's own, written as text. *Unconfirmed.*
+
+**Every kind of key, by its name.** Each is a kind in `look::KeyKind`. *Unconfirmed.*
+
+| Name | For |
+|---|---|
+| `Capped` | On a small raised key of its own, 16px tall, with what's held smaller than the key pressed on a Mac, as on its keys, set on its own beside what it does, such as `⌘ F` at the end of Settings' search |
+| `Plain` | Written as text, in the colour of what it's in, such as the Return after the words of the button it presses |
+
+**Every kind of key, as the app draws it, with Find, Return and Shift-Tab.** *Unconfirmed.*
+
+![Every kind of key](screens/key-kinds.png)
+
 ## The status mark
 
 Every workspace and chat has a mark: a half circle of fine dots around a turntable, like a roundhouse seen from above. It has four rows of 9, 13, 17 and 21 dots, the same distance apart along every row. Each row has four more dots than the one inside it, so the fan keeps the same pattern with any number of rows, the rows sit a little further apart than the dots in them, and every row has a dot on the middle line, so the rows line up down it. The inner row has the fewest dots that keep it at least 2/5 of the way out to the outer row, which leaves room for the turntable. Fine dots give it a texture of its own. It's 26px wide in the sidebar, where it fills the room before a workspace's name and its dots are big enough to tell apart at a glance, and 16px in chat tabs, the working line and Home. A much bigger fan, such as the brand in an empty state, has more rows rather than bigger dots, so the texture stays fine, and its turntable stays the same share of its width.

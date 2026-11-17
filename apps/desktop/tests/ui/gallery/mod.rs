@@ -76,6 +76,8 @@ mod button_states;
 
 mod controls;
 
+mod key_kinds;
+
 mod heights;
 
 mod icon_sizes;

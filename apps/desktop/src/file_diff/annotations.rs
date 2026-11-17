@@ -68,8 +68,9 @@ pub(super) fn draft_card(
                 "save-comment",
                 look::ButtonKind::Main,
                 look::ControlSize::Regular,
-                if editing { "Save ↵" } else { "Comment ↵" },
+                if editing { "Save" } else { "Comment" },
             )
+            .after(look::key(look::KeyKind::Plain, "enter"))
             .off(empty)
             .on_click(move |_, window, cx| {
                 let _ = save.update(cx, |t, cx| t.save_draft(window, cx));

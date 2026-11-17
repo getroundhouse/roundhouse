@@ -13,7 +13,7 @@ How code makes and uses the components screens are built from. `docs/spec/compon
 
 Each component follows the same pattern, so one that's learned reads like the others. *Unconfirmed.*
 
-- **It's made by a function that takes what it can't be without:** an ID, which tests find it by, its kind, its size and what it shows, such as a button's words or a square's icon. So none is made without them, and the function says its shape: `look::button` makes one with words, and `look::icon_button` one that's only an icon.
+- **It's made by a function that takes what it can't be without:** an ID, which tests find it by, for one that's pressed or typed in, its kind, its size, for one that comes in sizes, and what it shows, such as a button's words, a square's icon or the key a key names. So none is made without them, and the function says its shape: `look::button` makes one with words, and `look::icon_button` one that's only an icon.
 - **Its kinds are one enum of what each is for, declared with `named!`,** such as `look::ButtonKind`. A kind says everything about how the component looks but its size and its state, so each look it has is one name in one list, which the spec's table, the component's sheet and the design system's page all go through. A look that differs, such as a button's muted words, is a kind of its own rather than an option on top of the kinds, since an option would make every kind come with it and without it, including some that mean nothing, such as a main action with muted words.
 - **Its sizes are a type of its own while no other component has them,** as `look::ControlSize` is a button's, and a foundation once another component shares them, as `docs/spec/README.md` says.
 - **Its states are methods named for what they mean,** such as `on`, `off` and `waiting`, rather than the kit's `selected`, `disabled` and `loading`, each taking whether it's in that state, so the state can come straight from what the area holds.
@@ -27,7 +27,7 @@ Each component follows the same pattern, so one that's learned reads like the ot
 - **Each of a component's tables in `docs/spec/components.md` is held to its names in `look`** by a test, through `written`, as the foundations' tables are.
 - **Each component has a sheet in the gallery of every kind in every state,** drawn with the same calls the app makes. A state the pointer brings, such as under the pointer or pressed, is drawn by pointing at each one or pressing it, for real, one at a time, and the sheet takes its pixels from that picture, with `headless::draw_pointing`. The design system's page shows each kind beside its name, cut from the sheet.
 - **A test in `look` holds what's built in,** such as which buttons have the hand.
-- **`tools/policy`'s `only_the_component_library_uses_the_kits_button` refuses the kit's button outside `look`,** but in the places its list names, each with why: what a later component will draw, such as the sidebar's rows, and the few buttons with a look of their own.
+- **`tools/policy`'s `design_system.rs` refuses each of the kit's parts that a component holds outside `look`,** with a test for each, such as `only_the_component_library_uses_the_kits_button`, but in the places its list names, each with why: what a later component will draw, such as the sidebar's rows, and the few buttons with a look of their own.
 
 ## Adding a component, or a kind
 
@@ -58,3 +58,14 @@ Each component follows the same pattern, so one that's learned reads like the ot
 | Show it only while the pointer is over a group, such as a heading | `shown_while_over` |
 
 A button's hand is its own: it has the hand while a press does something, and the arrow while it's off or waiting. A quiet or faint button's words take the kit's greyed-out colour while it's off.
+
+## Keys
+
+`docs/spec/components.md` has a key's kinds, and `crates/look/src/keys` the code.
+
+| To | Call |
+|---|---|
+| Show a key to press, as a binding names it, such as `secondary-f` or `enter`, written as the system it's drawn on writes keys | `look::key(kind, binding)` |
+| Show it after a button's words | the button's `after`, with a `Plain` key |
+
+A key in one of the kit's menus or tooltips is the kit's, from the action it's bound to, so it isn't made with `look::key`.
