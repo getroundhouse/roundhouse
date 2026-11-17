@@ -10,7 +10,8 @@ use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{AgentKind, RecordKey, SessionSettingsChange};
 
 use crate::support::{
-    Stack, assistant_text, commit_settings, is_alive, next_notice, read_all, started_pid, wait_for_turn_end, wait_until,
+    Gate, Stack, assistant_text, commit_settings, is_alive, next_notice, read_all, started_pid, wait_for_turn_end,
+    wait_until,
 };
 
 #[test]
@@ -20,8 +21,16 @@ fn chats_in_a_workspace_run_side_by_side_and_keep_to_themselves() {
     let (workspace, first) = stack.workspace(&client);
     let second =
         client.session_create(&workspace.id, AgentKind::Claude, SessionSettingsChange::default(), None).unwrap();
-    client.session_prompt(&first.id, "slow:15:from the first", None).unwrap();
-    client.session_prompt(&second.id, "slow:15:from the second", None).unwrap();
+    // Each says what it's from until both are at work, so each is at work while the other is.
+    let (first_says, second_says) = (Gate::new(&stack, "first"), Gate::new(&stack, "second"));
+    let first_prompt = format!("slow-until:{first_says}:from the first");
+    client.session_prompt(&first.id, &first_prompt, None).unwrap();
+    client.session_prompt(&second.id, &format!("slow-until:{second_says}:from the second"), None).unwrap();
+    // The fake agent says a line beside the gate for each chunk it has sent.
+    let said = |gate: &Gate| std::path::Path::new(&format!("{gate}.said")).exists();
+    wait_until("both agents to say something", || said(&first_says) && said(&second_says));
+    first_says.open();
+    second_says.open();
     let first_events = wait_for_turn_end(&client, &first.id, 1);
     let second_events = wait_for_turn_end(&client, &second.id, 1);
     assert!(assistant_text(&first_events).contains("first") && !assistant_text(&first_events).contains("second"));
@@ -38,7 +47,7 @@ fn chats_in_a_workspace_run_side_by_side_and_keep_to_themselves() {
     // The first prompt names a chat, and later ones don't rename it.
     client.session_prompt(&first.id, "say:again", None).unwrap();
     wait_for_turn_end(&client, &first.id, 2);
-    assert_eq!(client.session_get(&first.id).unwrap().title.as_deref(), Some("slow:15:from the first"));
+    assert_eq!(client.session_get(&first.id).unwrap().title.as_deref(), Some(first_prompt.as_str()));
 }
 
 #[test]

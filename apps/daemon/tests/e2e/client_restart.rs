@@ -13,7 +13,7 @@ use protocol::model::{Seq, SessionStatus};
 use protocol::tail::Tail;
 
 use crate::support::{
-    Follower, Stack, TIMEOUT, assert_gapless, assistant_text, is_alive, wait_for_status, wait_for_turn_end,
+    Follower, Gate, Stack, TIMEOUT, assert_gapless, assistant_text, is_alive, wait_for_status, wait_for_turn_end,
     wait_for_turn_end_while_progressing, wait_until,
 };
 
@@ -108,11 +108,20 @@ fn every_chunk_reaches_the_tail_exactly_once_while_streaming() {
     let stack = Stack::start();
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
-    client.session_prompt(&session.id, "slow:8:x", None).unwrap();
+    let streaming = Gate::new(&stack, "streaming");
+    client.session_prompt(&session.id, &format!("slow-until:{streaming}:x"), None).unwrap();
     let subscription = client.session_subscribe(&session.id, Seq::new(1)).unwrap();
     let mut follower = Follower::default();
-    follower.drain_until(&subscription, "the last chunk", |f| f.tail_text().contains("x7"));
-    assert_eq!(follower.tail_text(), "x0 x1 x2 x3 x4 x5 x6 x7 ");
+    follower.drain_until(&subscription, "a chunk after the first", |f| f.tail_text().contains("x1 "));
+    streaming.open();
+    wait_for_turn_end(&client, &session.id, 1);
+
+    // The fake agent says a line beside the gate for each chunk it has sent.
+    let sent = std::fs::read_to_string(format!("{streaming}.said")).unwrap().lines().count();
+    let every_chunk = Vec::from_iter((0..sent).map(|i| format!("x{i} "))).concat();
+    let last = format!("x{} ", sent - 1);
+    follower.drain_until(&subscription, "the last chunk", |f| f.tail_text().contains(&last));
+    assert_eq!(follower.tail_text(), every_chunk);
 }
 
 /// Sets a flag even if the test is panicking, so a scoped thread watching it still finishes.
