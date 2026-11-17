@@ -69,42 +69,32 @@ fn work_shown(ui: &mut Ui<'_>, id: &WorkspaceId) -> Option<Work> {
     ui.cx.update(|cx| view.read(cx).work_shown(id, cx))
 }
 
-/// The hub keeps every workspace's pull request on its record, so a row shows it without its workspace being opened.
+/// The hub keeps every workspace's pull request on its record, so a row shows it without its workspace being opened,
+/// and, as after an update, what the hub found is there the moment the app connects, even with GitHub out of reach.
 #[gpui_kit::test]
-fn a_row_shows_its_pull_request_without_its_workspace_being_opened(cx: &mut TestAppContext) {
+fn a_rows_pull_request_shows_without_it_being_opened_and_at_once_when_the_app_opens_again(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let gh = stack.start_hub_with_stand_in_gh();
     let mut ui = Ui::open_with_a_repository(cx, &stack);
-    ui.new_workspace();
-    let elsewhere = stack.client().workspace_create(&ui.first_repo_id(), None, None, None).unwrap().id;
-    ui.wait("its row", |ui| ui.view().records().workspaces().iter().any(|w| w.id == elsewhere));
+    let first = ui.new_workspace();
+    let second = stack.client().workspace_create(&ui.first_repo_id(), None, None, None).unwrap().id;
+    ui.wait("its row", |ui| ui.view().records().workspaces().iter().any(|w| w.id == second));
 
     gh.report(&pull_request("OPEN"));
     // Another client asking has the hub read it, as the hub does by itself every so often.
-    stack.client().workspace_pull_request(&elsewhere).unwrap();
-
-    ui.wait("its row to show the pull request", |ui| work_shown(ui, &elsewhere) == Some(Work::Open));
-    assert!(!ui.view().panes.contains_key(&elsewhere), "it was never opened");
-}
-
-/// As after an update: what the hub found is there the moment the app connects, even with GitHub out of reach.
-#[gpui_kit::test]
-fn an_app_that_opens_again_shows_every_rows_pull_request_at_once(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let gh = stack.start_hub_with_stand_in_gh();
-    let mut ui = Ui::open_with_a_repository(cx, &stack);
-    let (first, second) = (ui.new_workspace(), ui.new_workspace());
-    gh.report(&pull_request("OPEN"));
     for id in [&first, &second] {
         stack.client().workspace_pull_request(id).unwrap();
     }
-    ui.wait("both rows to show it", |ui| [&first, &second].iter().all(|id| work_shown(ui, id) == Some(Work::Open)));
+
+    let both = |ui: &mut Ui| [&first, &second].iter().all(|id| work_shown(ui, id) == Some(Work::Open));
+    ui.wait("both rows to show it, the second unopened", both);
+    assert!(!ui.view().panes.contains_key(&second), "the second was never opened");
     drop(ui);
     gh.go_offline();
 
     let mut ui = Ui::open(cx, &stack);
 
-    ui.wait("both rows to show it", |ui| [&first, &second].iter().all(|id| work_shown(ui, id) == Some(Work::Open)));
+    ui.wait("both rows to show it once the app opens again", both);
     // `gh` can't say, so the bar of the one showing has it from the record too, rather than looking for it.
     ui.wait("the bar to show it", |ui| state(ui) == Some(PrState::Open));
 }

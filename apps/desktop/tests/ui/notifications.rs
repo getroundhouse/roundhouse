@@ -2,11 +2,12 @@
 
 #![cfg(test)]
 
+use client_core::fake_hub::World;
 use gpui_kit::{SharedString, SystemNotification, SystemNotificationResponse, TestAppContext};
-use protocol::model::{SessionId, WorkspaceId};
+use protocol::model::{AgentKind, SessionId, WorkspaceId};
 
 use crate::settings::open_settings;
-use crate::support::{Stack, Ui};
+use crate::support::{FakeHub, Stack, Ui};
 
 /// The notifications shown so far whose title is this workspace's name.
 fn told_of(ui: &mut Ui<'_>, workspace: &WorkspaceId) -> Vec<SystemNotification> {
@@ -31,8 +32,12 @@ fn open_with_one_elsewhere<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> (Ui
     (ui, elsewhere, chat)
 }
 
+/// The chat being read is the one showing in the window in front, so with another app in front, a reply in the chat
+/// showing is told of too.
 #[gpui_kit::test]
-fn a_reply_elsewhere_is_told_of_with_a_sound_and_one_in_the_chat_being_read_isnt(cx: &mut TestAppContext) {
+fn a_reply_elsewhere_or_behind_another_app_is_told_of_with_a_sound_and_one_in_the_chat_being_read_isnt(
+    cx: &mut TestAppContext,
+) {
     let stack = Stack::new();
     let (mut ui, elsewhere, chat) = open_with_one_elsewhere(cx, &stack);
     let showing = ui.view().selected.clone().unwrap();
@@ -48,19 +53,11 @@ fn a_reply_elsewhere_is_told_of_with_a_sound_and_one_in_the_chat_being_read_isnt
     assert!(notes[0].body.starts_with("Finished"), "says why: {}", notes[0].body);
     assert!(told_of(&mut ui, &showing).is_empty(), "the chat being read isn't told of");
     assert_eq!(sounds_played(&mut ui), ["Chime"]);
-}
-
-#[gpui_kit::test]
-fn with_another_app_in_front_a_reply_in_the_chat_showing_is_told_of(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let (mut ui, _, _) = open_with_one_elsewhere(cx, &stack);
-    let showing = ui.view().selected.clone().unwrap();
-    let chat = ui.active_chat();
 
     ui.send_to_back();
-    stack.client().session_prompt(&chat, "say:while you were in another app", None).unwrap();
+    stack.client().session_prompt(&ui.active_chat(), "say:while you were in another app", None).unwrap();
 
-    ui.wait("a notification", |ui| !told_of(ui, &showing).is_empty());
+    ui.wait("with another app in front, a notification of the chat showing", |ui| !told_of(ui, &showing).is_empty());
 }
 
 /// The notification of this workspace's whose body has `said` in it, once there is one.
@@ -98,32 +95,26 @@ fn clicking_a_notification_shows_its_chat_and_reads_no_other_on_the_way(cx: &mut
     assert!(stack.client().session_get(&showing_there).unwrap().unread(), "the chat showing there wasn't read");
 }
 
+/// A chat that finished is read by showing its workspace, and one that waits on you by showing it in its own.
 #[gpui_kit::test]
-fn reading_a_chat_takes_its_notification_back(cx: &mut TestAppContext) {
+fn reading_a_chat_or_showing_one_that_waits_on_you_takes_its_notification_back(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let (mut ui, elsewhere, chat) = open_with_one_elsewhere(cx, &stack);
     stack.client().session_prompt(&chat, "say:read me", None).unwrap();
-    let note = told_of_saying(&mut ui, &elsewhere, "Finished");
+    let finished = told_of_saying(&mut ui, &elsewhere, "Finished");
 
     ui.click(SharedString::from(format!("workspace-{elsewhere}")));
 
-    ui.wait("the notification to go", |ui| taken_back(ui, &note));
-}
-
-#[gpui_kit::test]
-fn showing_a_chat_that_waits_on_you_takes_its_notification_back(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let (mut ui, workspace, showing) = open_with_one_elsewhere(cx, &stack);
-    ui.click(SharedString::from(format!("workspace-{workspace}")));
-    ui.wait("it to show", |ui| ui.view().selected.as_ref() == Some(&workspace));
+    ui.wait("read: the notification to go", |ui| taken_back(ui, &finished));
+    ui.wait("read: its workspace to show", |ui| ui.view().selected.as_ref() == Some(&elsewhere));
     let asking = ui.new_chat();
-    ui.show_chat(&showing);
+    ui.show_chat(&chat);
     stack.client().session_prompt(&asking, "ask:Red or blue?=Red/Blue", None).unwrap();
-    let note = told_of_saying(&mut ui, &workspace, "Waiting on you");
+    let waiting = told_of_saying(&mut ui, &elsewhere, "Waiting on you");
 
     ui.show_chat(&asking);
 
-    ui.wait("the notification to go", |ui| taken_back(ui, &note));
+    ui.wait("waiting on you: the notification to go", |ui| taken_back(ui, &waiting));
 }
 
 /// Two chats coming to need you one after another, each told of on its own, sound once while the app's clock stands
@@ -132,13 +123,14 @@ fn showing_a_chat_that_waits_on_you_takes_its_notification_back(cx: &mut TestApp
 fn chats_that_need_you_within_two_seconds_sound_once_and_later_sound_again(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let (mut ui, elsewhere, first) = open_with_one_elsewhere(cx, &stack);
-    let second = ui.new_workspace();
-    let second_chat = ui.active_chat();
-    ui.new_workspace();
+    // Made by the hub alone, so no other workspace needs making to leave it, and nobody is reading it.
+    let settings = protocol::model::SessionSettingsChange::default();
+    let second = stack.client().session_create(&elsewhere, AgentKind::Claude, settings, None).unwrap().id;
+    ui.wait("the second chat", |ui| ui.view().records().every_session().any(|s| s.id == second));
     stack.client().session_prompt(&first, "say:one", None).unwrap();
     told_of_saying(&mut ui, &elsewhere, "one");
-    stack.client().session_prompt(&second_chat, "say:two", None).unwrap();
-    told_of_saying(&mut ui, &second, "two");
+    stack.client().session_prompt(&second, "say:two", None).unwrap();
+    told_of_saying(&mut ui, &elsewhere, "two");
     assert_eq!(sounds_played(&mut ui), ["Chime"]);
 
     ui.cx.executor().advance_clock(desktop::app::SOUNDS_APART);
@@ -161,10 +153,11 @@ fn turned_off_nothing_is_told_of_and_the_sound_still_plays(cx: &mut TestAppConte
     assert!(told_of(&mut ui, &elsewhere).is_empty());
 }
 
+/// The sound is the app's setting, and asks nothing of a hub, so a fake one will do.
 #[gpui_kit::test]
 fn choosing_a_sound_plays_it(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = Ui::open(cx, &stack);
+    let fake = FakeHub::holding(World::default());
+    let mut ui = Ui::open_on(cx, &fake);
     open_settings(&mut ui);
     ui.click("settings-page-notifications");
 

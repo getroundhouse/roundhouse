@@ -1,9 +1,11 @@
 //! The strip along the window's top, which stands in for a title bar. Moving the window is the platform's, so it's
 //! checked by hand. The test window can't move, and panics if anything asks it to, so these check what the strip
-//! leaves alone, and on Windows, which presses go on to Windows, which moves the window from them.
+//! leaves alone, and on Windows, which presses go on to Windows, which moves the window from them. Where a press goes
+//! is the app's alone, so a fake hub will do, with no worker or agent to wait for.
 
 #![cfg(test)]
 
+use client_core::fake_hub::World;
 use desktop::app::{TitleBar, the_title_bar_is};
 use desktop::lost_release::{self, Button};
 use gpui_kit::test::TestWindowExt as _;
@@ -12,16 +14,14 @@ use gpui_kit::{
     MouseUpEvent, Pixels, Point, TestAppContext, point, px,
 };
 
-use crate::support::{Stack, Ui};
-use crate::tools::in_a_new_workspace;
+use crate::support::{FakeHub, Ui, with_a_chat};
 
 /// In the header, between the workspace's name and its buttons, where a title bar would be.
 const ON_THE_STRIP: Point<Pixels> = point(px(700.), px(20.));
 
 #[gpui_kit::test]
 fn a_click_on_the_strip_leaves_the_composer_focused(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = in_a_new_workspace(cx, &stack);
+    let (_fake, mut ui) = in_a_new_workspace(cx);
     ui.input("half");
 
     press(&mut ui, ON_THE_STRIP);
@@ -33,8 +33,7 @@ fn a_click_on_the_strip_leaves_the_composer_focused(cx: &mut TestAppContext) {
 
 #[gpui_kit::test]
 fn a_drag_from_a_button_in_the_strip_is_the_buttons(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = in_a_new_workspace(cx, &stack);
+    let (_fake, mut ui) = in_a_new_workspace(cx);
 
     // Let go off the button, so it isn't a click either.
     let from = center(&mut ui, "toggle-diff");
@@ -51,8 +50,7 @@ fn a_drag_from_a_button_in_the_strip_is_the_buttons(cx: &mut TestAppContext) {
 /// its title bar's, so one on a button has to stop.
 #[gpui_kit::test]
 fn on_windows_a_press_on_a_button_in_the_strip_stays_the_buttons(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = on_windows(cx, &stack);
+    let (_fake, mut ui) = on_windows(cx);
     let on = center(&mut ui, "toggle-diff");
 
     let pressed = press(&mut ui, on);
@@ -68,8 +66,7 @@ fn on_windows_a_press_on_a_button_in_the_strip_stays_the_buttons(cx: &mut TestAp
 #[cfg(not(target_os = "macos"))]
 #[gpui_kit::test]
 fn on_windows_a_press_on_the_button_that_opens_the_menus_opens_them_and_stays_its(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = on_windows(cx, &stack);
+    let (_fake, mut ui) = on_windows(cx);
     let on = center(&mut ui, "menus");
 
     let pressed = press(&mut ui, on);
@@ -82,8 +79,7 @@ fn on_windows_a_press_on_the_button_that_opens_the_menus_opens_them_and_stays_it
 /// A greyed-out button stops a press itself, so Windows doesn't move the window from it either.
 #[gpui_kit::test]
 fn on_windows_a_press_on_a_greyed_out_button_in_the_strip_stops_there(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = on_windows(cx, &stack);
+    let (_fake, mut ui) = on_windows(cx);
     assert!(ui.off("regenerate-title"), "a new workspace has no title to make another from");
     let on = center(&mut ui, "regenerate-title");
 
@@ -94,8 +90,7 @@ fn on_windows_a_press_on_a_greyed_out_button_in_the_strip_stops_there(cx: &mut T
 
 #[gpui_kit::test]
 fn on_windows_a_press_on_the_empty_strip_goes_on_to_windows_and_leaves_focus_where_it_was(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = on_windows(cx, &stack);
+    let (_fake, mut ui) = on_windows(cx);
     ui.input("half");
 
     let pressed = press(&mut ui, ON_THE_STRIP);
@@ -111,8 +106,7 @@ fn on_windows_a_press_on_the_empty_strip_goes_on_to_windows_and_leaves_focus_whe
 /// the strip, which would stop it as it does a press that a control took, never hears it.
 #[gpui_kit::test]
 fn on_windows_a_press_on_homes_search_never_reaches_the_strip(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = on_windows(cx, &stack);
+    let (_fake, mut ui) = on_windows(cx);
     ui.click("home");
     ui.wait("Home", |ui| ui.has("home-page"));
     let on = center(&mut ui, "home-search");
@@ -128,8 +122,7 @@ fn on_windows_a_press_on_homes_search_never_reaches_the_strip(cx: &mut TestAppCo
 /// where the pointer is, so the button isn't clicked by a release over it later.
 #[gpui_kit::test]
 fn on_windows_a_press_on_a_button_let_go_off_the_window_is_let_go(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = on_windows(cx, &stack);
+    let (_fake, mut ui) = on_windows(cx);
     let on = center(&mut ui, "toggle-diff");
     assert!(!press(&mut ui, on).propagate, "the press is the button's");
     ui.frame();
@@ -143,10 +136,22 @@ fn on_windows_a_press_on_a_button_let_go_off_the_window_is_let_go(cx: &mut TestA
     assert!(ui.changes_open(), "the button wasn't clicked");
 }
 
-/// A new workspace, open in a window that goes by Windows' title bar, as it does on Windows.
-fn on_windows<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> Ui<'a> {
+/// A window on a fake hub, showing a workspace whose chat has had nothing said in it, as a new one's hasn't, once its
+/// composer shows. The hub goes with the test, so it's returned to be kept.
+fn in_a_new_workspace(cx: &mut TestAppContext) -> (FakeHub, Ui<'_>) {
+    let mut world = World::default();
+    let repo = world.repo("signals");
+    with_a_chat(&mut world, &repo, "ledger");
+    let fake = FakeHub::holding(world);
+    let mut ui = Ui::open_on(cx, &fake);
+    ui.wait("the composer", |ui| ui.has(look::Region::Composer.id()));
+    (fake, ui)
+}
+
+/// [`in_a_new_workspace`], in a window that goes by Windows' title bar, as it does on Windows.
+fn on_windows(cx: &mut TestAppContext) -> (FakeHub, Ui<'_>) {
     cx.update(|cx| the_title_bar_is(TitleBar::Windows, cx));
-    in_a_new_workspace(cx, stack)
+    in_a_new_workspace(cx)
 }
 
 fn center(ui: &mut Ui<'_>, id: impl Into<ElementId>) -> Point<Pixels> {

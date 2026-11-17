@@ -28,26 +28,6 @@ fn changed(ui: &Ui<'_>) -> Option<usize> {
     ui.cx.read_entity(&review, |r, _| r.files.as_ref().map(Vec::len))
 }
 
-#[gpui_kit::test]
-fn a_workspace_that_changes_nothing_starts_on_all_files(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-
-    let (ui, _) = in_a_new_workspace(cx, &stack);
-
-    assert_eq!(tab(&ui), Some(SidebarTab::AllFiles));
-}
-
-#[gpui_kit::test]
-fn a_workspace_s_first_change_shows_changes(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let (mut ui, _) = in_a_new_workspace(cx, &stack);
-
-    ui.have_the_agent_run("echo new > new.txt");
-
-    ui.wait("its change", |ui| ui.has("file-new.txt"));
-    assert_eq!(tab(&ui), Some(SidebarTab::Changes));
-}
-
 /// A change made outside a turn is found when a tab's click reads the changes again, and the tab clicked is the one
 /// that shows.
 #[gpui_kit::test]
@@ -64,12 +44,15 @@ fn a_tab_clicked_shows_even_when_its_click_finds_the_first_change(cx: &mut TestA
 
 /// Each workspace shows the tab that suits it, so one that changes something isn't on All files because another was.
 #[gpui_kit::test]
-fn each_workspace_has_its_own_tab(cx: &mut TestAppContext) {
+fn each_workspace_starts_on_all_files_and_shows_changes_from_its_own_first_change_on(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let (mut ui, first) = in_a_new_workspace(cx, &stack);
-    ui.have_the_agent_run("echo new > new.txt");
-    ui.wait("its change", |ui| ui.has("file-new.txt"));
+    assert_eq!(tab(&ui), Some(SidebarTab::AllFiles), "a new workspace changes nothing");
 
+    ui.have_the_agent_run("echo new > new.txt");
+
+    ui.wait("its change", |ui| ui.has("file-new.txt"));
+    assert_eq!(tab(&ui), Some(SidebarTab::Changes), "its first change shows Changes");
     ui.new_workspace();
     ui.wait("the new workspace's files", |ui| ui.has("all-file-a.txt"));
     assert_eq!(tab(&ui), Some(SidebarTab::AllFiles), "it changes nothing");

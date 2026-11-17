@@ -16,25 +16,20 @@ use desktop::workspace_pane::Showing;
 use crate::support::{Stack, Ui, git, home_row};
 
 #[gpui_kit::test]
-fn starts_empty_and_shows_a_repository_added_from_elsewhere(cx: &mut TestAppContext) {
+fn starts_empty_and_dark_says_which_build_is_running_and_shows_a_repository_added_from_elsewhere(
+    cx: &mut TestAppContext,
+) {
     let stack = Stack::new();
     let mut ui = Ui::open(cx, &stack);
     assert!(ui.view().records().repos().is_empty());
     assert!(ui.pane().is_none());
+    assert!(ui.cx.update(|cx| Theme::global(cx).mode.is_dark()), "the theme is dark");
+    let app = protocol::this_build!().version().to_string();
+    assert_eq!(ui.build_line(), BuildLine { app, other_hub: None, update: None }, "on a hub of its own build");
 
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     ui.wait("the repository to appear", |ui| ui.view().records().repos().len() == 1);
     assert_eq!(ui.view().records().repos()[0].name, "repo");
-}
-
-#[gpui_kit::test]
-fn says_which_build_is_running(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-
-    let mut ui = Ui::open(cx, &stack);
-
-    let app = protocol::this_build!().version().to_string();
-    assert_eq!(ui.build_line(), BuildLine { app, other_hub: None, update: None });
 }
 
 fn review_and_comment(ui: &mut Ui<'_>, stack: &Stack, id: &WorkspaceId) {
@@ -211,19 +206,14 @@ fn new_shows_its_working_until_the_workspace_is_ready_or_fails(cx: &mut TestAppC
     // The hub announced it on its way, and then removed it, so its note goes too.
     let gone = |ui: &mut Ui| ui.view().records().workspaces().iter().all(|w| w.status != WorkspaceStatus::Creating);
     ui.wait("the failure", |ui| ui.view().error.is_some() && ui.view().busy.is_free() && gone(ui));
+    let error = ui.view().error.clone().unwrap();
+    assert!(error.contains("couldn't create the workspace"), "the hub's failure is shown rather than lost: {error}");
 }
 
 /// What the new-workspace dialog asks for when Create is pressed with nothing in it.
 fn nothing_typed(repo: &RepoId) -> Request {
     let (agent, permission_mode) = (AgentKind::Claude, PermissionMode::FullAccess);
     Request::new(repo.clone(), Prompt::default(), agent, (None, None), permission_mode)
-}
-
-#[gpui_kit::test]
-fn theme_is_dark(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let ui = Ui::open(cx, &stack);
-    assert!(ui.cx.update(|cx| Theme::global(cx).mode.is_dark()));
 }
 
 #[gpui_kit::test]
