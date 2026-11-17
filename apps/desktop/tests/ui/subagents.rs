@@ -2,20 +2,23 @@
 //! which is in the subagent tab. The button at the end of its line, or of its line in the background while it works
 //! there, opens the tab, which sits at the far left, after the file tab, where `Ctrl-Tab` comes to it, names its chat
 //! in its band, and closes with `Cmd-W`, or with its chat. The chat holds its subagents' records until it closes, and
-//! its outline counts only the agent's own events. Each needs the hub's records of the subagent, so these run on one.
+//! its outline counts only the agent's own events. Each needs the hub's records of the subagent, so these run on one,
+//! but for a tab opened before its subagent's record comes, which only a fake hub with no record holds back.
 
 #![cfg(test)]
 
+use client_core::fake_hub::events::{finished_turn, launched, subagent, taken, user_prompt};
 use client_core::session_log::SessionLog;
 use desktop::workspace_pane::Showing;
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{AppContext as _, ElementId, SharedString, TestAppContext};
 use protocol::capability::calls::Call;
+use protocol::capability::calls::call::Runs;
 use protocol::event::{ContentBlock, EventBody};
-use protocol::model::{SessionId, SettledAt, SubagentId};
+use protocol::model::{Record, Rev, Seq, SessionId, SessionStatus, SettledAt, Subagent, SubagentId};
 
 use crate::menus::items;
-use crate::support::{Gate, Stack, Ui};
+use crate::support::{Gate, Stack, Ui, one_chat, open_on_the_chat};
 use crate::tools::in_a_new_workspace;
 
 /// What the fake agent says its subagent is for, and the description of the call the subagent makes.
@@ -84,8 +87,9 @@ fn a_finished_subagent_s_line_opens_its_tab_which_sits_after_the_file_tab_names_
     assert_eq!(items(&ui, "File")[5], "Close Subagent Tab", "⌘W closes the tab, not the chat behind it");
     let second = the_band_names_the_chat_and_shows_it(&mut ui, &first);
     the_tab_sits_after_the_file_tab_and_cmd_w_closes_it(&mut ui, &first, &second);
-    // With the file tab, the subagent tab and the other chat's beside it, the first chat's close button can't be seen
-    // in the test's window, as #1716 says of a third tab's.
+    // With the file tab, the subagent tab and the other chat's beside it, the first chat's close button can't be seen:
+    // the window opens 1,320 px wide, which leaves the row of tabs 546 px beside both sidebars, and a tab is 200 px,
+    // so the third is cut off before its close button, which scrolling the row would bring into view.
     ui.hover("show-file-tab");
     ui.click("close-file-tab");
 
@@ -225,11 +229,12 @@ fn a_long_title_gives_way_to_the_button_a_prompt_after_is_in_the_outline_at_its_
     assert_eq!(records_held(&ui, &chat), 0, "an archived workspace's chats let go of their subagents' records");
 }
 
-/// A tab opened on the subagent a call started before its record has come, as one opened as soon as its call shows can
-/// be, names it by that call. It shows the subagent's work all the same, which the hub follows by the ID the agent
-/// gives it once the agent says it started, and once the record comes, the tab names it as the record does, and shows
-/// what it was asked. It draws what its subagent is still writing, as a chat draws what its agent is, and then what it
-/// wrote, once it's recorded.
+/// A tab opened on the subagent a call started, by that call, as one opened as soon as its call shows can be, shows the
+/// subagent's work all the same, which the hub follows by the ID the agent gives it once the agent says it started. The
+/// tab names it as the record does, and shows what it was asked. Here the record has nearly always come by the time the
+/// tab opens, so the tab is named by it as it opens, and one named by its call until the record comes is the last
+/// test's. It draws what its subagent is still writing, as a chat draws what its agent is, and then what it wrote, once
+/// it's recorded.
 #[gpui_kit::test]
 fn a_subagent_tab_opened_by_its_call_names_it_as_its_record_does_and_draws_what_it_is_still_writing(
     cx: &mut TestAppContext,
@@ -315,4 +320,41 @@ fn a_working_subagent_s_line_opens_its_tab_and_its_call_opened_meanwhile_makes_r
     let (report, after) = (bounds(&mut ui, report).bottom(), ui.labelled(COMMAND_LINE)[0].bounds().top());
     assert!(report <= after, "what came after is below the report: {report:?} {after:?}");
     assert!(ui.labelled(SUBAGENT_CALL).is_empty(), "its newest call shows only while it works");
+}
+
+/// A tab opened on a subagent by the call that started it, before the hub's record of the subagent has come, is named
+/// by what the call says it's for, and once the record comes, as the record names it. The fake hub's chat has the call
+/// and no record, and the record is then handed to client-core as a reply would hand it, which the feed tells of.
+#[gpui_kit::test]
+fn a_subagent_tab_opened_before_its_record_comes_is_named_as_the_record_names_it_once_it_does(cx: &mut TestAppContext) {
+    let call = "toolu-agent";
+    let events = vec![
+        user_prompt("Look around"),
+        taken(Seq::new(1)),
+        subagent("msg-1", call, "Explore", AGENT_LINE, "Look around.", Runs::Background),
+        launched(call),
+        finished_turn(4, 0.01),
+    ];
+    let (world, chat) = one_chat(SessionStatus::Idle, events);
+    let (_fake, mut ui) = open_on_the_chat(cx, world, &chat);
+    let pane = ui.pane().unwrap();
+    let by_call = SubagentId::of_call(&call.into());
+    ui.cx.update_entity(&pane, |p, cx| p.open_subagent_tab(chat.clone(), by_call, AGENT_LINE.into(), cx));
+    ui.wait("the tab, named by its call", |ui| !ui.labelled(&format!("Subagent: {AGENT_LINE}")).is_empty());
+    let id = SubagentId::from("agent-a1b2");
+    let recorded = "Look around the crates";
+    let record = Subagent {
+        session_id: chat.clone(),
+        id: Some(id.clone()),
+        description: Some(recorded.to_string()),
+        rev: Rev::new(1),
+        ..protocol::fixtures::subagent(call)
+    };
+
+    ui.view().feed().unwrap().take_reply(Record::Subagent(record));
+
+    ui.wait("the tab, named as the record names it", |ui| {
+        ui.cx.read_entity(&pane, |p, _| p.subagent_tab() == Some(&id))
+    });
+    assert!(!ui.labelled(&format!("Subagent: {recorded}")).is_empty(), "called what the record says it's for");
 }

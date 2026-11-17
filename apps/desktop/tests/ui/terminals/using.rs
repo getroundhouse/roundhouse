@@ -4,6 +4,7 @@
 use desktop::app::Connection;
 use desktop::workspace_pane::Showing;
 use gpui_kit::{AppContext as _, SharedString, TestAppContext, WeakEntity};
+use protocol::model::SessionStatus;
 use terminal_view::TerminalView;
 
 use crate::support::{Stack, Ui, hub_environment};
@@ -105,8 +106,19 @@ fn a_terminal_that_ends_takes_its_tab_with_it_and_leaves_the_keys_to_the_chat(cx
     ending_in_a_workspace_behind(&mut ui, &stack);
 }
 
+/// A reply that came while the terminal covered its chat is read once the chat shows in the terminal's place, though
+/// nothing on the chat's record changes then. Only a chat in the window in front is read, so the window is brought
+/// there first.
 fn its_shell_ending(ui: &mut Ui<'_>, stack: &Stack) {
     let view = view(ui);
+    ui.bring_to_front();
+    let chat = ui.active_chat();
+    stack.client().session_prompt(&chat, "say:while the terminal was in front", None).unwrap();
+    let finished_unread = |ui: &mut Ui<'_>| {
+        let session = ui.view().records().session(&chat).cloned();
+        session.is_some_and(|s| s.unread() && s.status == SessionStatus::Idle)
+    };
+    ui.wait("exit: the reply, finished and unread behind the terminal", finished_unread);
 
     type_line(ui, "exit");
 
@@ -114,6 +126,7 @@ fn its_shell_ending(ui: &mut Ui<'_>, stack: &Stack) {
     crate::support::wait_until("exit: the terminal's record to go", || {
         stack.client().records_list().unwrap().terminals.is_empty()
     });
+    ui.wait("exit: the reply to be read", |_| !stack.client().session_get(&chat).unwrap().unread());
     assert!(!ui.has(terminal_view::SHOWN_ID), "exit: the terminal is gone");
     the_composer_has_the_keys(ui, "exit");
     ui.wait("exit: the view to be let go", |_| view.upgrade().is_none());

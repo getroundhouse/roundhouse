@@ -4,7 +4,7 @@
 
 use client_core::fake_hub::World;
 use gpui_kit::{SharedString, SystemNotification, SystemNotificationResponse, TestAppContext};
-use protocol::model::{AgentKind, SessionId, WorkspaceId};
+use protocol::model::{AgentKind, Record, SessionId, SessionStatus, WorkspaceId};
 
 use crate::settings::open_settings;
 use crate::support::{FakeHub, Stack, Ui};
@@ -95,9 +95,10 @@ fn clicking_a_notification_shows_its_chat_and_reads_no_other_on_the_way(cx: &mut
     assert!(stack.client().session_get(&showing_there).unwrap().unread(), "the chat showing there wasn't read");
 }
 
-/// A chat that finished is read by showing its workspace, and one that waits on you by showing it in its own.
+/// A chat that finished is read by showing its workspace, which takes its notification back. One that waits on you is
+/// the next test's.
 #[gpui_kit::test]
-fn reading_a_chat_or_showing_one_that_waits_on_you_takes_its_notification_back(cx: &mut TestAppContext) {
+fn reading_a_chat_takes_its_notification_back(cx: &mut TestAppContext) {
     let stack = Stack::new();
     let (mut ui, elsewhere, chat) = open_with_one_elsewhere(cx, &stack);
     stack.client().session_prompt(&chat, "say:read me", None).unwrap();
@@ -105,16 +106,35 @@ fn reading_a_chat_or_showing_one_that_waits_on_you_takes_its_notification_back(c
 
     ui.click(SharedString::from(format!("workspace-{elsewhere}")));
 
-    ui.wait("read: the notification to go", |ui| taken_back(ui, &finished));
-    ui.wait("read: its workspace to show", |ui| ui.view().selected.as_ref() == Some(&elsewhere));
-    let asking = ui.new_chat();
-    ui.show_chat(&chat);
-    stack.client().session_prompt(&asking, "ask:Red or blue?=Red/Blue", None).unwrap();
-    let waiting = told_of_saying(&mut ui, &elsewhere, "Waiting on you");
+    ui.wait("the notification to go", |ui| taken_back(ui, &finished));
+    ui.wait("its workspace to show", |ui| ui.view().selected.as_ref() == Some(&elsewhere));
+}
+
+/// One that waits on you isn't read, so nothing on its record changes as it shows, and showing it in its workspace is
+/// what takes its notification back. Which chat is read is the app's, so a fake hub will do, and the chat's coming to
+/// wait is handed to client-core as a reply would hand it, since what a fake hub holds never changes.
+#[gpui_kit::test]
+fn showing_a_chat_that_waits_on_you_takes_its_notification_back(cx: &mut TestAppContext) {
+    let mut world = World::default();
+    let repo = world.repo("signals");
+    let workspace = world.workspace(&repo, "ledger");
+    let reading = world.chat(&workspace, SessionStatus::Idle, Vec::new());
+    let asking = world.chat(&workspace, SessionStatus::Idle, Vec::new());
+    let fake = FakeHub::holding(world);
+    let mut ui = Ui::open_on(cx, &fake);
+    ui.bring_to_front();
+    ui.wait("the workspace", |ui| ui.transcript().is_some());
+    // Each shown once, so showing it again has nothing to ask of the hub.
+    ui.show_chat(&asking);
+    ui.show_chat(&reading);
+    let mut waiting = ui.view().records().session(&asking).unwrap().clone();
+    waiting.status = SessionStatus::WaitingApproval;
+    ui.view().feed().unwrap().take_reply(Record::Session(waiting));
+    let note = told_of_saying(&mut ui, &workspace, "Waiting on you");
 
     ui.show_chat(&asking);
 
-    ui.wait("waiting on you: the notification to go", |ui| taken_back(ui, &waiting));
+    ui.wait("the notification to go", |ui| taken_back(ui, &note));
 }
 
 /// Two chats coming to need you one after another, each told of on its own, sound once while the app's clock stands

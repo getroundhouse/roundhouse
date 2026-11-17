@@ -9,7 +9,7 @@ use protocol::model::{Effort, ModelName, NewWorkspaceDraft, NewWorkspaceDraftToK
 use protocol::prompt::Prompt;
 
 use super::open_with_a_repo;
-use crate::support::{CLAUDE_STARTS_WITH, Frozen, Stack, Ui, wait_until};
+use crate::support::{CLAUDE_STARTS_WITH, Frozen, Held, Stack, Ui, wait_until};
 
 /// What the hub keeps of the dialog.
 fn kept(stack: &Stack) -> NewWorkspaceDraft {
@@ -59,7 +59,13 @@ fn whats_in_the_dialog_is_there_when_the_app_opens_again_and_is_the_first_chats(
     let picked = (ModelName::named("sonnet"), Effort::High);
     assert_eq!(chosen(&ui), picked, "the model and effort it kept");
     let before = ui.view().records().workspaces().len();
+    let making = Held::checkout(&stack);
     ui.press("enter");
+    ui.wait("it to start making it", |_| making.runs() == 1);
+    // The hub goes on keeping plan mode until the first chat has it, and one from before it kept the dialog never
+    // empties it, so it's the dialog that turns it off for the next workspace.
+    assert!(!ui.dialog_planning(), "Create turns plan mode off in the dialog itself");
+    making.release();
     ui.wait_for_a_new_workspace(before);
     ui.wait("the first prompt, with the file read back", |ui| {
         let carried = ui.events().into_iter().find_map(|e| match e.body {

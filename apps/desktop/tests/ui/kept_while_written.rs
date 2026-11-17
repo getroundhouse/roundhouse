@@ -3,10 +3,14 @@
 
 #![cfg(test)]
 
+use client_core::fake_hub::events::{taken, typed_call, user_prompt};
 use gpui_kit::{AppContext as _, TestAppContext};
-use protocol::model::{AnswerDraft, AnswerSoFar, CommentDraft, DiffSide, SessionStatus, WorkspaceId};
+use protocol::capability::calls::Call;
+use protocol::event::{Asking, Question, QuestionOption};
+use protocol::fixtures::{ApprovalRequest, approval_request};
+use protocol::model::{AnswerDraft, AnswerSoFar, CommentDraft, DiffSide, Seq, SessionStatus, WorkspaceId};
 
-use crate::support::{Diff, Stack, Ui, id};
+use crate::support::{Diff, Stack, Ui, id, one_chat, open_on_the_chat};
 
 /// The comment the hub keeps as being written on the workspace's diff.
 fn kept_comment(stack: &Stack, id: &WorkspaceId) -> Option<CommentDraft> {
@@ -80,6 +84,32 @@ fn whats_typed_in_answer_is_there_when_the_app_opens_again_until_its_sent(cx: &m
     ui.wait("what was typed in answer", |ui| typed_in_answer(so_far(ui).as_ref()) == Some("Friday"));
     ui.click(id("question-send"));
     ui.wait("sending it to clear what's kept", |_| kept().is_none());
+}
+
+/// What the hub kept in answer to a question is taken as the question is asked, as it is in a chat that's waiting when
+/// the window opens. One changed elsewhere is taken as a record changes, which after the app opens again a real hub's
+/// often do, so a fake hub's, which never change, leave it to the asking to bring it back.
+#[gpui_kit::test]
+fn whats_kept_in_answer_is_taken_as_the_question_is_asked_though_no_record_changes_after(cx: &mut TestAppContext) {
+    let options = ["Monday", "Tuesday"].map(|label| QuestionOption { label: label.into(), description: None });
+    let asked =
+        Question { text: "Which day?".into(), header: Some("Day".into()), options: options.into(), multiple: false };
+    let request = ApprovalRequest {
+        tool_use_id: Some("toolu-1".into()),
+        asking: Some(Asking::Questions { questions: vec![asked] }),
+        ..approval_request("approval-1", "AskUserQuestion")
+    };
+    let asking = typed_call("msg-1", "toolu-1", Call::Questions);
+    let events = vec![user_prompt("Ask me"), taken(Seq::new(1)), asking, request.into()];
+    let (mut world, chat) = one_chat(SessionStatus::WaitingApproval, events);
+    let typed = AnswerSoFar { picked: Vec::new(), typed: "Friday".to_string(), other: true };
+    let kept = AnswerDraft { approval_id: "approval-1".into(), answers: vec![typed] };
+    world.sessions.last_mut().unwrap().answer_draft = Some(kept.clone());
+
+    let (_fake, mut ui) = open_on_the_chat(cx, world, &chat);
+
+    ui.wait("the question", |ui| ui.has(id("question")));
+    ui.wait("what was typed in answer", |ui| so_far(ui).as_ref() == Some(&kept));
 }
 
 /// A comment changed elsewhere shows in the box, which keeps the focus as the change moves it, and goes once it's put
