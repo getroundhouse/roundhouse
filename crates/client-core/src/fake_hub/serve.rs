@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::io::{BufRead as _, BufReader, Write as _};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::Path;
@@ -14,7 +15,7 @@ use protocol::event::SessionEvent;
 use protocol::find::{Found, Needle};
 use protocol::frame;
 use protocol::model::{
-    CompactionLine, GitDiff, GitStatus, GithubSignIn, Place, PromptLine, Rev, Seq, SessionId, SubagentId,
+    CompactionLine, GitDiff, GitStatus, GithubSignIn, Place, PromptLine, Rev, Seq, SessionId, SettledAt, SubagentId,
     WorkspaceStatus,
 };
 
@@ -141,7 +142,7 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
             Err(ApiError::new(ErrorCode::Unsupported, "a fake hub doesn't keep what's in the new-workspace dialog"))
         }
         R::SessionEnsure(sessions::SessionEnsure { workspace_id, .. }) => {
-            let open = world.sessions.iter().rev().find(|s| s.workspace_id == workspace_id && s.closed_at_ms.is_none());
+            let open = world.sessions.iter().rev().find(|s| s.workspace_id == workspace_id && s.is_open());
             reply(C::Session(open.cloned().ok_or_else(|| read_only("give this workspace a chat"))?))
         }
         R::SessionRead(log::SessionRead { id, from_seq, limit, .. }) => {
@@ -155,8 +156,7 @@ fn answer(world: &World, request: ClientRequest) -> Answer {
         }
         R::SessionPromptList(log::SessionPromptList { id }) => {
             world.session(&id)?;
-            let prompts = world.events_from(&id, Seq::new(1)).filter_map(PromptLine::of);
-            reply(C::Prompts(log::Prompts { prompts: prompts.collect() }))
+            reply(C::Prompts(log::Prompts { prompts: prompt_lines(world, &id) }))
         }
         // An older hub's build is from before compactions were listed too.
         R::SessionCompactionList(_) if world.hub.is_some() => {
@@ -330,6 +330,16 @@ fn subscribe_places(
     let tail = world.tails.get(id).map_or_default(|tail| tail.of(subagent));
     let tail = HubFrame::Tail { subscription_id, tail };
     Ok(Outcome::Reply(ClientResponse::Ok, events.chain(std::iter::once(tail)).collect()))
+}
+
+/// Each prompt in the chat as a line, oldest first, with where it was settled, which is the last event to settle it.
+fn prompt_lines(world: &World, id: &SessionId) -> Vec<PromptLine> {
+    let settled: HashMap<Seq, SettledAt> = world.events_from(id, Seq::new(1)).filter_map(SettledAt::of).collect();
+    let line = |line: PromptLine| match settled.get(&line.seq()) {
+        Some(at) => line.settled_at(*at),
+        None => line,
+    };
+    world.events_from(id, Seq::new(1)).filter_map(PromptLine::of).map(line).collect()
 }
 
 fn read_only(what: &str) -> ApiError {
