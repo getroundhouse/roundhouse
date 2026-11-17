@@ -24,4 +24,5 @@ patches = [
     "ghost-and-outline-button-tokens",
     "button-content-style",
     "input-placeholder-color",
+    "switch-thumb-unchecked",
 ]

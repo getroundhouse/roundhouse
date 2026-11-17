@@ -73,6 +73,8 @@ mod controls;
 
 mod key_kinds;
 
+mod toggle_states;
+
 mod field_states;
 
 mod heights;

@@ -121,6 +121,10 @@ fn controls(c: &Colors) -> Vec<(&'static str, String)> {
         ("button.outline.hover.background", hex(c.text.opacity(0.06))),
         ("button.outline.active.background", hex(c.text.opacity(0.12))),
         ("input.border", hex(c.control_edge)),
+        // A toggle's knob is the pane's while it's on, on the main action's light fill, and muted while it's off, so an
+        // off toggle still reads as one, as `components.md` says.
+        ("switch.thumb.background", hex(c.pane)),
+        ("switch.thumb.unchecked.background", hex(c.text_muted)),
         // A field's placeholder is a hint, so it takes the hints' colour, as `look.md`'s table of colours says.
         ("input.placeholder", hex(c.text_faint)),
         ("ring", hex(c.brand)),

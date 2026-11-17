@@ -41,6 +41,13 @@ const KIT_INPUT: KitPart = KitPart {
     ],
 };
 
+/// The kit's switch, which `look::Toggle` holds.
+const KIT_SWITCH: KitPart = KitPart {
+    named: "component::switch",
+    instead: "look::toggle",
+    allowed: &[("crates/look/src/toggles/", "the component library's toggle, which holds the kit's switch")],
+};
+
 const KIT_BUTTON_ALLOWED: &[(&str, &str)] = &[
     ("crates/look/src/controls/", "the component library's button, which holds the kit's"),
     (
@@ -110,6 +117,11 @@ fn only_the_component_library_uses_the_kits_key() {
 #[test]
 fn only_the_component_library_uses_the_kits_input() {
     only_the_component_library_uses(&KIT_INPUT);
+}
+
+#[test]
+fn only_the_component_library_uses_the_kits_switch() {
+    only_the_component_library_uses(&KIT_SWITCH);
 }
 
 #[test]

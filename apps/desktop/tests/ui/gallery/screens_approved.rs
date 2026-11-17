@@ -5,7 +5,7 @@ use super::{
     colours, compaction_chats, component_screens, context_screens, controls, corners, dictation_screens, diff_screens,
     failure_chats, failures_in_a_row, field_states, heights, home_screens, icon_sizes, key_kinds, kinds_of_text,
     mark_states, own_turn_chats, pull_requests, settings_screens, sidebar_screens, spaces, steps, subagent_chats,
-    tool_screens, turn_screens, update_screens, workspace_screens,
+    toggle_states, tool_screens, turn_screens, update_screens, workspace_screens,
 };
 use approved::Verdict;
 use capture::Picture;
@@ -105,6 +105,7 @@ fn every_screen_looks_as_approved() {
             button_states::NAME,
             controls::NAME,
             key_kinds::NAME,
+            toggle_states::NAME,
             field_states::NAME,
             heights::NAME,
             icon_sizes::NAME,
@@ -239,6 +240,15 @@ fn every_kind_of_field_in_every_state_looks_as_approved() {
     let mut problems = look_at(field_states::NAME, field_states::SPEC, &picture);
     problems.extend(places.look_at(field_states::NAME));
     report(&problems);
+}
+
+#[test]
+fn every_state_of_a_toggle_looks_as_approved() {
+    let text_system: Arc<dyn PlatformTextSystem> = Arc::new(gpui_apple::AppleTextSystem::new());
+
+    let picture = toggle_states::draw(&text_system);
+
+    report(&look_at(toggle_states::NAME, toggle_states::SPEC, &picture));
 }
 
 #[test]

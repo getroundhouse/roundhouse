@@ -596,6 +596,9 @@ pub struct ThemeConfigColors {
     /// Switch thumb background color.
     #[serde(rename = "switch.thumb.background")]
     pub switch_thumb: Option<SharedString>,
+    /// Switch thumb background color while the switch is off, fallback to `switch.thumb.background`.
+    #[serde(rename = "switch.thumb.unchecked.background")]
+    pub switch_thumb_unchecked: Option<SharedString>,
     /// Tab background color.
     #[serde(rename = "tab.background")]
     pub tab: Option<SharedString>,
@@ -1058,6 +1061,7 @@ impl ThemeColor {
         apply_background_color!(slider_thumb, fallback = self.primary_foreground);
         apply_background_color!(switch, fallback = tokens.secondary_active);
         apply_background_color!(switch_thumb, fallback = tokens.background);
+        apply_background_color!(switch_thumb_unchecked, fallback = tokens.switch_thumb);
         apply_background_color!(tab, fallback = tokens.background);
         apply_background_color!(tab_active, fallback = tokens.background);
         apply_color!(tab_active_foreground, fallback = self.foreground);
@@ -1267,6 +1271,43 @@ mod tests {
         assert_eq!(theme.window_radius, px(0.));
         theme.apply_config(&std::rc::Rc::new(config));
         assert_eq!(theme.window_radius, px(10.));
+    }
+
+    #[test]
+    fn test_apply_config_reads_the_unchecked_switch_thumb_color() {
+        let config = serde_json::from_value::<ThemeConfig>(serde_json::json!({
+            "name": "Switch",
+            "mode": "dark",
+            "colors": { "switch.thumb.unchecked.background": "#123456" }
+        }))
+        .unwrap();
+
+        let mut theme = Theme::default();
+        theme.apply_config(&std::rc::Rc::new(config));
+
+        assert_eq!(
+            theme.switch_thumb_unchecked,
+            try_parse_color("#123456").unwrap()
+        );
+        assert_eq!(
+            theme.tokens.switch_thumb_unchecked.color,
+            theme.switch_thumb_unchecked
+        );
+    }
+
+    #[test]
+    fn test_unchecked_switch_thumb_color_falls_back_to_the_thumbs() {
+        for mode in ["dark", "light"] {
+            let config = serde_json::from_value::<ThemeConfig>(serde_json::json!({
+                "name": "Derived",
+                "mode": mode,
+            }))
+            .unwrap();
+            let mut theme = Theme::default();
+            theme.apply_config(&std::rc::Rc::new(config));
+
+            assert_eq!(theme.switch_thumb_unchecked, theme.switch_thumb, "{mode}");
+        }
     }
 
     #[test]
