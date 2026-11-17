@@ -121,9 +121,9 @@ fn a_subagent_that_starts_again_after_it_ended_works_again_under_the_call_that_f
     record(&store, &ended("task-1", TaskOutcome::Finished, Some("They're in tests/.")));
     let finished = subagent(&store, "task-1");
     // So it starts again later than it ended, as it would after any time finished.
-    while now_ms() <= finished.ended_at_ms.unwrap() {
-        std::thread::yield_now();
-    }
+    let ended_at = finished.ended_at_ms.unwrap();
+    let later = || now_ms() > ended_at;
+    waiting::thread::until(std::time::Duration::from_secs(10), "the clock never passed when it ended", later);
 
     let (restart, changed) = record(&store, &start("toolu_send", true));
     assert_eq!(changed, ["task-1"]);

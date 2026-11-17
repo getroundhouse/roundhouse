@@ -96,17 +96,15 @@ async fn a_reply_this_hub_cant_read_fails_its_call_rather_than_leaving_it_waitin
     let provider = provider_running(dir.path(), &format!("read call\necho '{reply}'\ncat >/dev/null"));
     let instance_id: InstanceId = "i".into();
     provider.create(&instance_id, None, None, "i").await.unwrap();
-    let hub = hub_using(dir.path(), &provider);
-    let within = hub.timers.hello_within;
-    let asked = std::time::Instant::now();
+    // A time limit far longer than the test waits, so a call that waits for it rather than failing fails the test.
+    let hub = hub_timed(dir.path(), &provider, Timers { hello_within: Duration::from_mins(10), ..Timers::DEFAULT });
 
-    let opened =
-        WorkerLink::open(hub, provider, "w".into(), instance_id, &dir.path().join("logs/i.log"), Opening::Started)
-            .await;
+    let log = dir.path().join("logs/i.log");
+    let opening = WorkerLink::open(hub, provider, "w".into(), instance_id, &log, Opening::Started);
+    let opened = tokio::time::timeout(Duration::from_secs(10), opening).await.expect("it waited for the time limit");
 
     let Err(e) = opened else { panic!("the hello's reply was read") };
     assert_eq!(e.code, ErrorCode::Worker, "{e:?}");
-    assert!(asked.elapsed() < within / 2, "it waited for the time limit");
 }
 
 /// A call reads its reply as what its request is answered with, so one of another kind fails it here, rather than in

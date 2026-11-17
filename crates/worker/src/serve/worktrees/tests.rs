@@ -1,5 +1,6 @@
 use std::path::Path;
 use std::sync::Arc;
+use std::time::Duration;
 
 use protocol::Build;
 use protocol::client::{ApiError, ErrorCode};
@@ -24,12 +25,10 @@ fn watch() -> AbortHandle {
     tokio::spawn(std::future::pending::<()>()).abort_handle()
 }
 
-/// Whether the task has ended, given the runtime a chance to end it.
-async fn ended(watch: &AbortHandle) -> bool {
-    for _ in 0..100 {
-        tokio::task::yield_now().await;
-    }
-    watch.is_finished()
+/// Waits for the task to end, as it does once it has been stopped and the runtime has run it.
+async fn ends(watch: &AbortHandle, which: &str) {
+    let failure = format!("the watch {which} was never stopped");
+    waiting::task::until(Duration::from_secs(10), failure, || watch.is_finished()).await;
 }
 
 /// A watch of a worktree replaces the earlier one of it and no other, and stopping one, as removing it does, leaves
@@ -45,11 +44,13 @@ async fn a_watch_replaces_only_its_own_worktree_s_and_stopping_one_leaves_the_re
     watches.start("/c/a".into(), Whose::Child, again.clone());
     watches.stop(Path::new("/c/b"));
 
-    assert!(ended(&first).await, "replaced");
-    assert!(ended(&other).await, "stopped");
-    assert!(!ended(&own).await && !ended(&again).await, "the rest go on");
+    ends(&first, "replaced").await;
+    ends(&other, "stopped").await;
+    // A wait lets the runtime run every task woken before it, so one stopped along with those has ended by now too.
+    assert!(!own.is_finished() && !again.is_finished(), "the rest go on");
     watches.stop_all();
-    assert!(ended(&own).await && ended(&again).await);
+    ends(&own, "of the workspace's own worktree").await;
+    ends(&again, "that replaced another").await;
 }
 
 /// The next frame `wanted` takes, of what the worker sent its hub, skipping the rest.

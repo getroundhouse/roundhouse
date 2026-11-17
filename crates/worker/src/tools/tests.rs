@@ -117,9 +117,5 @@ async fn a_port_is_chosen_when_there_was_none_before_and_freed_once_it_stops() {
     tools.stop().await;
 
     assert_ne!(port, 0);
-    let deadline = std::time::Instant::now() + Duration::from_secs(10);
-    while TcpStream::connect((Ipv4Addr::LOCALHOST, port)).await.is_ok() {
-        assert!(std::time::Instant::now() < deadline, "it went on serving");
-        tokio::task::yield_now().await;
-    }
+    until_nothing_answers(port).await;
 }

@@ -250,7 +250,8 @@ mod tests {
     #[cfg(windows)]
     fn keepalive_timing(_: &SockRef<'_>) {}
 
-    /// Each read waiting its own time would let this one go on for as long as the bytes kept coming.
+    /// Each read waiting its own time would let this one go on for as long as the bytes kept coming, which is far
+    /// longer than the test waits for it to give up, so one that gives up within that gave up at its deadline.
     #[test]
     #[expect(
         clippy::disallowed_methods,
@@ -261,23 +262,26 @@ mod tests {
         let address = listener.local_addr().unwrap();
         std::thread::spawn(move || {
             let (mut stream, _) = listener.accept().unwrap();
-            // The start of a TLS record 255 bytes long, then the record a byte at a time.
-            let mut next: &[u8] = &[0x16, 0x03, 0x03, 0x00, 0xff];
+            // The start of a TLS record of 16 KiB, the most one holds, then the record a byte at a time, which at
+            // this pace takes over ten minutes.
+            let mut next: &[u8] = &[0x16, 0x03, 0x03, 0x40, 0x00];
             while stream.write_all(next).is_ok() {
                 std::thread::sleep(Duration::from_millis(50));
                 next = &[0];
             }
         });
-        let started = Instant::now();
+        let (gave_up, given_up) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let deadline = Instant::now() + Duration::from_millis(500);
+            let failed = connect(address, &Fingerprint::of_sha256([0; 32]), deadline, Duration::from_secs(1));
+            let timed_out = matches!(&failed, Err(Failure::Io(e)) if e.kind() == io::ErrorKind::TimedOut);
+            gave_up.send(timed_out).unwrap();
+        });
 
-        let failed = connect(
-            address,
-            &Fingerprint::of_sha256([0; 32]),
-            started + Duration::from_millis(500),
-            Duration::from_secs(1),
-        );
+        let timed_out = waiting::thread::until_ok(Duration::from_secs(10), || {
+            given_up.try_recv().map_err(|_| "it went on reading for as long as the bytes kept coming")
+        });
 
-        assert!(matches!(&failed, Err(Failure::Io(e)) if e.kind() == io::ErrorKind::TimedOut));
-        assert!(started.elapsed() < Duration::from_secs(2), "took {:?}", started.elapsed());
+        assert!(timed_out, "it failed, but not by timing out");
     }
 }

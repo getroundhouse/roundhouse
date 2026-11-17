@@ -41,12 +41,8 @@ async fn each_record_is_settled_from_whether_its_worktree_is_there() {
 /// Which worktrees the stand-in has been asked to watch since it last had none, once it has been asked for any,
 /// which the settling does on a task of its own.
 async fn watched(link: &WorkerLink, seen: &Mutex<Seen>) -> Vec<String> {
-    let asked = async {
-        while seen.lock().watched.is_empty() {
-            tokio::task::yield_now().await;
-        }
-    };
-    tokio::time::timeout(Duration::from_secs(20), asked).await.expect("its other worktree was never watched");
+    let asked = || !seen.lock().watched.is_empty();
+    waiting::task::until(Duration::from_secs(20), "its other worktree was never watched", asked).await;
     taken_so_far(link).await;
     std::mem::take(&mut seen.lock().watched)
 }

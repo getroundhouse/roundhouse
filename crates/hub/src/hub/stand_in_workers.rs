@@ -221,10 +221,11 @@ impl Asked {
     }
 }
 
-/// How long a test gives the hub to give the agent a prompt, which it does on a task of its own once the prompt is
-/// recorded. Far longer than that takes with a stand-in for the worker, so only a prompt that's never given runs out of
-/// it.
-const TIMEOUT: Duration = Duration::from_secs(10);
+/// How long a test gives a hub with stand-ins for its workers to do what it does on a task of its own, such as giving
+/// the agent a prompt once it's recorded, or learning whose a launch's login is, or to answer what needs a worker,
+/// such as a move that stops the agent. Far longer than any of that takes with a stand-in, so only what never comes
+/// runs out of it.
+pub(super) const TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Sends the chat `session` `prompt`, which its agent takes once the hub has given it, and then ends its turn, as
 /// Claude's CLI does. An agent the prompt launched first says it has opened the conversation the hub launched it on, as

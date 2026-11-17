@@ -1,16 +1,11 @@
 //! A chat whose first launch, while its kind had no default, ran under its machine's own login, or found nobody logged
 //! in there, and what its launches are handed once the hub holds a login.
 
-use std::time::Duration;
-
 use protocol::model::AccountSource;
 use protocol::worker::WorkerRequest;
 
 use super::two_accounts::{Chats, cold};
-use crate::hub::stand_in_workers::{a_chat, logged_in, logged_in_as};
-
-/// How long the hub has to learn whose a launch's login is, which it does on a task of its own as the agent starts.
-const TIMEOUT: Duration = Duration::from_secs(10);
+use crate::hub::stand_in_workers::{TIMEOUT, a_chat, logged_in, logged_in_as};
 
 /// On a machine with an ambient login, a chat's first launch while its kind has no default puts it on that login, and
 /// it stays there once the hub holds a login, which a new chat on the same machine is put on instead, since the hub's
