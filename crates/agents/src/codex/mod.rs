@@ -15,6 +15,7 @@ mod subagents;
 mod supervise;
 mod terminals;
 mod turn;
+mod usage;
 
 pub use description::description;
 pub use one_off::{account, title_for};

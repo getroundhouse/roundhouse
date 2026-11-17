@@ -41,7 +41,7 @@ Everything the app does today, on one page, with where to read more. What's desi
 
 ## Keep long chats in hand
 
-Context, limits, compacting and cache estimates depend on what the agent reports. Claude provides all of these; Antigravity reports context usage alongside replies, thinking, tool calls, questions and plans; Codex chats show replies, available thinking summaries, tool calls, subagent tabs, questions and plans.
+Context, limits, compacting and cache estimates depend on what the agent reports. Claude provides all of these; Antigravity reports context usage alongside replies, thinking, tool calls, questions and plans; Codex chats show replies, available thinking summaries, tool calls, subagent tabs, questions and plans, and report context usage and plan limits.
 
 - **A ring shows how full the context is,** and bars beside it show what's left of your plan's limits. See [Watch context and limits](../guides/watch-context-and-limits.md).
 - **Compact when you choose,** and say what to keep.

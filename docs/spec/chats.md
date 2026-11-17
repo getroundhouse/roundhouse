@@ -615,7 +615,7 @@ Every call is drawn the same way, as the first rule below says, and each kind fi
 
 ## The context and the account
 
-- **An agent reports only what its adapter can establish.** Codex does not supply context, cache, token, cost or account-limit reports through this adapter, and Antigravity supplies context window usage and per-turn token counts without prompt-cache, cost or account-limit reports; indicators an agent does not supply stay absent. *Unconfirmed.*
+- **An agent reports only what its adapter can establish.** Codex supplies context window usage and account limits without cache, token or cost reports, and Antigravity supplies context window usage and per-turn token counts without prompt-cache, cost or account-limit reports; indicators an agent does not supply stay absent. *Unconfirmed.*
 
 - **A ring beside Send shows how full the agent's context is,** filled clockwise from the top. It shows once the agent has said, so a new chat has none until its first turn starts. It follows the agent as it works: the agent says when a turn starts, a few times a minute during one, and when it ends. It's in muted text's colour however full it is, since amber and red already mean something, and it doesn't move by itself, since only a working agent moves anything. *Unconfirmed.*
 - **Resting the pointer on the ring shows a card above it,** with its right edge on the edge of the ring's place in the bar, so it covers neither the ring nor Send. It goes a third of a second after the pointer leaves, so the pointer can cross to its button. *Unconfirmed.*
