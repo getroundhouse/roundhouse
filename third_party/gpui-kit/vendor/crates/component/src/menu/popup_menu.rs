@@ -1,3 +1,4 @@
+// Changed in Roundhouse's copy of gpui-kit, as third_party/README.md lists.
 use crate::ThemeStyled as _;
 use crate::actions::{Cancel, Confirm, SelectDown, SelectUp};
 use crate::actions::{SelectLeft, SelectRight};
@@ -6,9 +7,9 @@ use crate::scroll::ScrollableElement;
 use crate::{ActiveTheme, ElementExt, Icon, IconName, Sizable as _, h_flex, v_flex};
 use crate::{Side, Size, kbd::Kbd};
 use gpui::{
-    Action, Anchor, AnyElement, App, AppContext, Bounds, Context, DismissEvent, Edges, Entity,
-    EventEmitter, FocusHandle, Focusable, InteractiveElement, IntoElement, KeyBinding,
-    ParentElement, Pixels, Rems, Render, Role, ScrollHandle, SharedString,
+    Action, Anchor, AnyElement, App, AppContext, Bounds, BoxShadow, Context, DismissEvent, Edges,
+    Entity, EventEmitter, FocusHandle, Focusable, Global, Hsla, InteractiveElement, IntoElement,
+    KeyBinding, ParentElement, Pixels, Rems, Render, Role, ScrollHandle, SharedString,
     StatefulInteractiveElement, Styled, WeakEntity, Window, anchored, deferred, div,
     prelude::FluentBuilder, px, rems,
 };
@@ -19,6 +20,54 @@ use std::collections::HashSet;
 use std::rc::Rc;
 
 const CONTEXT: &str = "PopupMenu";
+
+/// How every menu is drawn, set once for the app as a global: its rows'
+/// height, room and corners, their icons, the light under the pointer, its
+/// separators, and the surface around them. Each that's `None` keeps the
+/// menu's own.
+#[derive(Clone, Default)]
+pub struct PopupMenuStyle {
+    /// A row's height, for a menu that isn't small.
+    pub item_height: Option<Pixels>,
+    /// The room at each end of a row.
+    pub item_padding: Option<Pixels>,
+    /// Between a row's icon and its label.
+    pub item_gap: Option<Pixels>,
+    /// A row's corners, for a menu that isn't small.
+    pub item_radius: Option<Pixels>,
+    /// The room around the rows, inside the menu's edge.
+    pub padding: Option<Pixels>,
+    /// Between one row and the next.
+    pub row_gap: Option<Pixels>,
+    /// The size of a row's icon, its check and its submenu's arrow.
+    pub icon_size: Option<Size>,
+    /// A row's own icon's colour. A check keeps the row's.
+    pub icon_color: Option<Hsla>,
+    /// The row under the pointer, or chosen by the keyboard.
+    pub hover: Option<Hsla>,
+    /// How thick a separator is.
+    pub separator_width: Option<Pixels>,
+    /// The room above and below a separator.
+    pub separator_margin: Option<Pixels>,
+    /// How far a separator reaches past the rows at each side, or short of
+    /// them where it's negative.
+    pub separator_overhang: Option<Pixels>,
+    /// The menu's corners.
+    pub radius: Option<Pixels>,
+    /// A one pixel edge around the menu, in this colour.
+    pub border: Option<Hsla>,
+    /// The menu's shadow, in place of the popover's.
+    pub shadow: Option<Vec<BoxShadow>>,
+}
+
+impl Global for PopupMenuStyle {}
+
+impl PopupMenuStyle {
+    /// The app's, or the menu's own if none has been set.
+    fn current(cx: &App) -> Self {
+        cx.try_global::<Self>().cloned().unwrap_or_default()
+    }
+}
 
 /// How many frames a newly opened scrollable menu waits for its items to be
 /// measured before it gives up scrolling to the checked item.
@@ -1257,6 +1306,7 @@ impl PopupMenu {
         has_icon: bool,
         checked: bool,
         icon: Option<Icon>,
+        style: &PopupMenuStyle,
         _: &mut Window,
         _: &mut Context<Self>,
     ) -> Option<impl IntoElement> {
@@ -1265,14 +1315,14 @@ impl PopupMenu {
         }
 
         let icon = if let Some(icon) = icon {
-            icon
+            icon.when_some(style.icon_color, |icon, color| icon.text_color(color))
         } else if checked {
             Icon::new(IconName::Check)
         } else {
             Icon::empty()
         };
 
-        Some(icon.xsmall())
+        Some(icon.with_size(style.icon_size.unwrap_or(Size::XSmall)))
     }
 
     /// Calculate the anchor corner and left offset for child submenu
@@ -1317,14 +1367,16 @@ impl PopupMenu {
         &self,
         ix: usize,
         item: &PopupMenuItem,
-        options: RenderOptions,
+        options: &RenderOptions,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> MenuItemElement {
+        let style = &options.style;
+        let icon_size = style.icon_size.unwrap_or(Size::XSmall);
         let has_left_icon = options.has_left_icon;
         let is_left_check = options.check_side.is_left() && item.is_checked();
         let right_check_icon = if options.check_side.is_right() && item.is_checked() {
-            Some(Icon::new(IconName::Check).xsmall())
+            Some(Icon::new(IconName::Check).with_size(icon_size))
         } else {
             None
         };
@@ -1335,18 +1387,34 @@ impl PopupMenu {
 
         let is_submenu = matches!(item, PopupMenuItem::Submenu { .. });
 
-        let (item_height, radius) = match self.size {
-            Size::Small => (rems(1.25), options.radius.half()),
-            _ => (rems(1.625), options.radius),
+        let (item_height, radius): (Pixels, Pixels) = match self.size {
+            Size::Small => (
+                rems(1.25).to_pixels(window.rem_size()),
+                options.radius.half(),
+            ),
+            _ => (
+                style
+                    .item_height
+                    .unwrap_or_else(|| rems(1.625).to_pixels(window.rem_size())),
+                style.item_radius.unwrap_or(options.radius),
+            ),
         };
+        let item_gap = style
+            .item_gap
+            .unwrap_or_else(|| rems(0.25).to_pixels(window.rem_size()));
 
         let this = MenuItemElement::new(ix)
             .relative()
             .text_sm()
             .py_0()
-            .px(INNER_PADDING)
+            .map(|this| match style.item_padding {
+                Some(padding) => this.px(padding),
+                None => this.px(INNER_PADDING),
+            })
+            .gap_x(item_gap)
             .rounded(radius)
             .items_center()
+            .hover_background(style.hover)
             .selected(selected)
             .on_hover(cx.listener(move |this, hovered, window, cx| {
                 if *hovered {
@@ -1381,20 +1449,39 @@ impl PopupMenu {
             PopupMenuItem::Separator => this
                 .h_auto()
                 .p_0()
-                .my_0p5()
-                .mx_neg_1()
-                .border_b(px(2.))
+                .map(|this| match style.separator_margin {
+                    Some(margin) => this.my(margin),
+                    None => this.my_0p5(),
+                })
+                .map(|this| match style.separator_overhang {
+                    Some(overhang) => this.mx(-overhang),
+                    None => this.mx_neg_1(),
+                })
+                .border_b(style.separator_width.unwrap_or(px(2.)))
                 .border_color(cx.theme().border)
                 .disabled(true),
-            PopupMenuItem::Label(label) => this.disabled(true).cursor_default().child(
-                h_flex()
-                    .flex_row_dir(cx)
-                    .cursor_default()
-                    .items_center()
-                    .gap_x_1()
-                    .children(Self::render_icon(has_left_icon, false, None, window, cx))
-                    .child(div().flex_1().child(label.clone())),
-            ),
+            PopupMenuItem::Label(label) => this
+                .disabled(true)
+                .cursor_default()
+                // A label is as tall as a row only where the app gives rows a
+                // height of its own.
+                .when(style.item_height.is_some(), |this| this.h(item_height))
+                .child(
+                    h_flex()
+                        .flex_row_dir(cx)
+                        .cursor_default()
+                        .items_center()
+                        .gap_x(item_gap)
+                        .children(Self::render_icon(
+                            has_left_icon,
+                            false,
+                            None,
+                            style,
+                            window,
+                            cx,
+                        ))
+                        .child(div().flex_1().child(label.clone())),
+                ),
             PopupMenuItem::ElementItem {
                 render,
                 icon,
@@ -1413,11 +1500,12 @@ impl PopupMenu {
                         .flex_1()
                         .min_h(item_height)
                         .items_center()
-                        .gap_x_1()
+                        .gap_x(item_gap)
                         .children(Self::render_icon(
                             has_left_icon,
                             is_left_check,
                             icon.clone(),
+                            style,
                             window,
                             cx,
                         ))
@@ -1443,11 +1531,12 @@ impl PopupMenu {
                 })
                 .disabled(*disabled)
                 .h(item_height)
-                .gap_x_1()
+                .gap_x(item_gap)
                 .children(Self::render_icon(
                     has_left_icon,
                     is_left_check,
                     icon.clone(),
+                    style,
                     window,
                     cx,
                 ))
@@ -1470,7 +1559,7 @@ impl PopupMenu {
                                     .child(label.clone())
                                     .child(
                                         Icon::new(IconName::ExternalLink)
-                                            .xsmall()
+                                            .with_size(icon_size)
                                             .text_color(cx.theme().muted_foreground),
                                     ),
                             )
@@ -1498,11 +1587,12 @@ impl PopupMenu {
                         .min_h(item_height)
                         .size_full()
                         .items_center()
-                        .gap_x_1()
+                        .gap_x(item_gap)
                         .children(Self::render_icon(
                             has_left_icon,
                             false,
                             icon.clone(),
+                            style,
                             window,
                             cx,
                         ))
@@ -1520,7 +1610,7 @@ impl PopupMenu {
                                     } else {
                                         IconName::ChevronRight
                                     })
-                                    .xsmall()
+                                    .with_size(icon_size)
                                     .text_color(cx.theme().muted_foreground),
                                 ),
                         ),
@@ -1560,11 +1650,12 @@ impl Focusable for PopupMenu {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 struct RenderOptions {
     has_left_icon: bool,
     check_side: Side,
     radius: Pixels,
+    style: PopupMenuStyle,
 }
 
 impl Render for PopupMenu {
@@ -1608,6 +1699,7 @@ impl Render for PopupMenu {
             has_left_icon,
             check_side: self.check_side,
             radius: cx.theme().radius.min(px(8.)),
+            style: PopupMenuStyle::current(cx),
         };
 
         v_flex()
@@ -1624,14 +1716,27 @@ impl Render for PopupMenu {
             .on_action(cx.listener(Self::dismiss))
             .on_mouse_down_out(cx.listener(Self::on_mouse_down_out))
             .popover_style(cx)
+            .when_some(options.style.radius, |this, radius| this.rounded(radius))
+            .when_some(options.style.border, |this, color| {
+                this.border_1().border_color(color)
+            })
+            .when_some(options.style.shadow.clone(), |this, shadow| {
+                this.shadow(shadow)
+            })
             .text_color(cx.theme().popover_foreground)
             .relative()
             .occlude()
             .child(
                 v_flex()
                     .id("items")
-                    .p_1()
-                    .gap_y_0p5()
+                    .map(|this| match options.style.padding {
+                        Some(padding) => this.p(padding),
+                        None => this.p_1(),
+                    })
+                    .map(|this| match options.style.row_gap {
+                        Some(gap) => this.gap_y(gap),
+                        None => this.gap_y_0p5(),
+                    })
                     .min_w(rems(8.))
                     .when_some(self.min_width, |this, min_width| this.min_w(min_width))
                     .map(|this| match self.max_width {
@@ -1649,7 +1754,7 @@ impl Render for PopupMenu {
                             .enumerate()
                             // Ignore last separator
                             .filter(|(ix, item)| !(*ix + 1 == items_count && item.is_separator()))
-                            .map(|(ix, item)| self.render_item(ix, item, options, window, cx)),
+                            .map(|(ix, item)| self.render_item(ix, item, &options, window, cx)),
                     )
                     .on_prepaint(move |bounds, _, cx| {
                         view.update(cx, |menu, cx| {

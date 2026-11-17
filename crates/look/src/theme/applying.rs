@@ -6,6 +6,10 @@ use gpui_kit::{App, Hsla, Pixels, Rgba};
 use serde_json::{Map, Value, json};
 use std::rc::Rc;
 
+/// How much of the text's colour washes what's under the pointer and can be pressed, such as a borderless button or a
+/// menu's row, so it shows on whatever ground it's on.
+pub(crate) const UNDER_POINTER: f32 = 0.06;
+
 /// Installs the app's colours, and its theme as the kit's dark theme, and switches to it. Going through the kit,
 /// rather than setting colours on the theme directly, is what lets its other layers, such as rich text, pick the
 /// colours up too.
@@ -18,6 +22,8 @@ pub fn apply(cx: &mut App) {
     }
     Theme::global_mut(cx).dark_theme = config.clone();
     Theme::change(ThemeMode::Dark, None, cx);
+    let menus = crate::menus::style(crate::colors::colors(cx));
+    cx.set_global(menus);
     // The kit can't tell a code font chosen to be the same as its own default from no choice, and swaps either for
     // one it finds installed. It finds that once for the whole process, from whichever app asks first, and in a test
     // that can be one that lists no fonts, which would leave every later picture with code in the system font. The
@@ -51,7 +57,7 @@ pub(super) fn config(colors: &Colors) -> ThemeConfig {
 /// The kit's name for each of its colours, and the app's colour it takes: the role whose value it had, and of those,
 /// the one nearest what the kit uses it for. A few are drawn only by the kit's own parts, such as the text on its
 /// danger button, and have no role, so they're given here.
-pub(super) fn kit_colors(c: &Colors) -> Vec<(&'static str, String)> {
+pub(crate) fn kit_colors(c: &Colors) -> Vec<(&'static str, String)> {
     [surfaces(c), controls(c), meanings(c)].concat()
 }
 
@@ -113,12 +119,12 @@ fn controls(c: &Colors) -> Vec<(&'static str, String)> {
         ("button.primary.active.background", hex(c.main_pressed)),
         // A borderless button: a wash of the text's colour, under the pointer, pressed and on, so it shows on whatever
         // ground the button is on, as `components.md` says.
-        ("button.ghost.hover.background", hex(c.text.opacity(0.06))),
+        ("button.ghost.hover.background", hex(c.text.opacity(UNDER_POINTER))),
         ("button.ghost.active.background", hex(c.text.opacity(0.12))),
         ("button.ghost.selected.background", hex(c.text.opacity(0.09))),
         // An outlined button: clear at rest, so only its edge shows, then washed as a borderless one is.
         ("button.outline.background", "#00000000".into()),
-        ("button.outline.hover.background", hex(c.text.opacity(0.06))),
+        ("button.outline.hover.background", hex(c.text.opacity(UNDER_POINTER))),
         ("button.outline.active.background", hex(c.text.opacity(0.12))),
         ("input.border", hex(c.control_edge)),
         // A toggle's knob is the pane's while it's on, on the main action's light fill, and muted while it's off, so an

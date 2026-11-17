@@ -28,6 +28,7 @@ mod hover;
 mod icon_sizes;
 mod keys;
 mod mark;
+mod menus;
 pub mod motion;
 mod named;
 mod plan;

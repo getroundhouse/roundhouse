@@ -99,6 +99,12 @@ The pieces screens are built from, on the foundations in `look.md`: what each is
 
 ![Every kind of field in every state](screens/field-states.png)
 
+## Menus
+
+- **A menu's rows are as tall as a large control, with room to read and to aim at,** as the owner decided, from pictures of four, since menus are used all over and were among the weakest things to look at. A row's icon, or its check, is a large icon, in the muted text's colour, then the row's words, in body text, and its key or a note faint at its end. A label over some rows is as tall as a row, in the muted text's colour. A thin line separates groups of rows. *Unconfirmed:* the room at each end of a row, 12px, and between its icon and its words, 8px.
+- **A menu is what opens over the rest, with a card's corners, the one thin edge and the one shadow,** and its rows sit 4px in from its edge, with a control's corners, so they follow the menu's. *Unconfirmed.*
+- **The row under the pointer, or chosen with the keyboard, is washed as a borderless button is,** `text` at 6%, as the owner decided, so it shows on the menu as a button's does on whatever it's on, where the grey a step above the menu barely did.
+
 ## The status mark
 
 Every workspace and chat has a mark: a half circle of fine dots around a turntable, like a roundhouse seen from above. It has four rows of 9, 13, 17 and 21 dots, the same distance apart along every row. Each row has four more dots than the one inside it, so the fan keeps the same pattern with any number of rows, the rows sit a little further apart than the dots in them, and every row has a dot on the middle line, so the rows line up down it. The inner row has the fewest dots that keep it at least 2/5 of the way out to the outer row, which leaves room for the turntable. Fine dots give it a texture of its own. It's 26px wide in the sidebar, where it fills the room before a workspace's name and its dots are big enough to tell apart at a glance, and 16px in chat tabs, the working line and Home. A much bigger fan, such as the brand in an empty state, has more rows rather than bigger dots, so the texture stays fine, and its turntable stays the same share of its width.
