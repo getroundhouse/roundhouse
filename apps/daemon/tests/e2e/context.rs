@@ -87,18 +87,3 @@ fn how_full_the_context_is_stays_out_of_the_log_and_the_accounts_limits_go_in() 
     assert_eq!(heard[0].body, EventBody::AgentLimits { limits: vec![the_week()] });
     assert!(heard[0].raw.as_deref().is_some_and(|raw| raw.contains("rate_limit_event")));
 }
-
-#[test]
-fn a_chat_still_says_how_full_its_context_was_after_the_hub_restarts() {
-    let mut stack = Stack::start();
-    let client = stack.client();
-    let (_, session) = stack.workspace(&client);
-    client.session_prompt(&session.id, "say:hello", None).unwrap();
-    wait_for_turn_end(&client, &session.id, 1);
-    wait_for_context(&client, &session.id, &after_prompts(1));
-
-    stack.kill_hub();
-    stack.start_hub();
-
-    assert_eq!(stack.client().session_get(&session.id).unwrap().context, Some(after_prompts(1)));
-}

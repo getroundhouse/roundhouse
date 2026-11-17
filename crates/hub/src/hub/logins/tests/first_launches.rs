@@ -1,14 +1,34 @@
-//! Which account a chat's first launch puts it on, and a chat whose account, or whose kind's default, can't be
-//! launched under.
+//! Which account a chat's first launch puts it on, when every client hears it was used, and a chat whose account, or
+//! whose kind's default, can't be launched under.
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use parking_lot::Mutex;
+use protocol::client::HubNotice;
 use protocol::client::accounts::AccountSetDefault;
-use protocol::model::{AgentKind, TitleSource};
+use protocol::model::{AccountId, AgentKind, TitleSource};
+use tokio::sync::broadcast;
 
-use super::two_accounts::{TwoAccounts, announced_on};
-use crate::hub::stand_in_workers::titling;
+use super::two_accounts::{Chats, TwoAccounts, announced_on};
+use crate::hub::stand_in_workers::{a_chat, titling};
+
+/// How long the hub has to announce what a test waits for, which it does on a task of its own. Far longer than that
+/// takes with a stand-in for the worker, so only what never comes runs out of it.
+const TIMEOUT: Duration = Duration::from_secs(10);
+
+/// When the feed next announces the account `id` as used after `after_ms`.
+async fn used_after(feed: &mut broadcast::Receiver<HubNotice>, id: &AccountId, after_ms: i64) -> i64 {
+    loop {
+        let told = tokio::time::timeout(TIMEOUT, feed.recv()).await.expect("the account to be announced as used");
+        if let HubNotice::Account(told) = told.expect("the feed goes on")
+            && told.id == *id
+            && let Some(used) = told.used_at_ms.filter(|used| *used > after_ms)
+        {
+            return used;
+        }
+    }
+}
 
 /// A chat's first launch under a held login puts it on that login's account, its kind's default, and every client
 /// hears so as it launches, before its turn ends. Choosing another default then changes only which account new chats
@@ -114,4 +134,30 @@ async fn a_chat_moved_before_its_first_prompt_is_titled_under_its_accounts_login
     assert_eq!(*titled_under.lock(), [Some("personal-token".to_string())]);
     assert_eq!(launched_under.as_deref(), Some("personal-token"));
     assert_eq!(chats.on(&fresh), Some(accounts.personal.id.clone()));
+}
+
+/// Every client hears when a chat's account was last used: by its first prompt, once the launch that prompt brought
+/// puts the chat on the account, and then by each prompt sent. Nobody is logged in on the machine, so no account of its
+/// own is filed beside the login's.
+#[tokio::test]
+async fn a_chats_account_is_announced_as_used_by_its_first_prompt_once_its_launch_names_it_and_by_each_after() {
+    let dir = tempfile::tempdir().unwrap();
+    let chats = Chats::new(dir.path());
+    let work = chats.connect("Work").await;
+    let (_, chat) = a_chat(&chats.hub).await;
+    let mut feed = chats.hub.subscribe_feed();
+
+    let first_under = chats.token_in_turn(&chat.id, None).await;
+    let first = used_after(&mut feed, &work.id, 0).await;
+    // A use is when the prompt was recorded, to the millisecond, and only a later one is news, so the next prompt is
+    // sent once the clock has moved past the first.
+    let later = || crate::store::now_ms() > first;
+    waiting::task::until(TIMEOUT, "the clock to move past the first prompt", later).await;
+    chats.token_in_turn(&chat.id, None).await;
+    let second = used_after(&mut feed, &work.id, first).await;
+
+    assert_eq!(first_under.as_deref(), Some("work-token"));
+    assert!(second > first, "the next prompt was announced as a use: {first} then {second}");
+    assert_eq!(chats.on(&chat.id), Some(work.id));
+    assert_eq!(chats.hub.store.list_records().unwrap().accounts.len(), 1, "no account but the login's");
 }

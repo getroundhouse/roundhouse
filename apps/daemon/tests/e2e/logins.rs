@@ -1,16 +1,17 @@
-//! The logins a hub holds for agents' accounts, through a real hub, and the agents it launches under them on a machine
-//! with no login of its own, on any provider.
+//! The logins a hub holds for agents' accounts, through a real hub, and the agents it launches under them on another
+//! provider's machine, with no login of its own: what spans processes, a restart of the hub and the login reaching the
+//! agent through an adapter. Which login a launch is handed, which account a chat is on and when every client hears
+//! an account was used are the hub's, and its own tests in `hub/logins/tests/` prove them on stand-ins for its workers.
 
 #![cfg(test)]
 
-use client_core::{Client, Subscription, SubscriptionItem};
-use protocol::client::HubNotice;
+use client_core::Client;
 use protocol::event::EventBody;
-use protocol::model::{Account, AccountId, AgentKind, LoginToken, SessionSettingsChange};
+use protocol::model::{Account, AccountId, AgentKind, LoginToken};
 
 use crate::accounts::log_out;
 use crate::carrying_on::restart;
-use crate::support::{Stack, TIMEOUT, assistant_text, wait_for_turn_end, wait_until};
+use crate::support::{Stack, assistant_text, wait_for_turn_end, wait_until};
 
 fn listed(client: &Client, id: &AccountId) -> Account {
     client.records_list().unwrap().accounts.into_iter().find(|account| account.id == *id).unwrap()
@@ -108,75 +109,4 @@ fn an_agent_left_running_under_a_held_login_is_still_filed_under_it_once_the_hub
     assert_eq!(client.session_get(&session.id).unwrap().account, Some(connected.id));
     assert_eq!(client.records_list().unwrap().accounts.len(), 1, "no account but the login's");
     assert!(!asked_under_a_token(&stack), "nothing asked the CLI whose the token is");
-}
-
-/// When the feed next announces the account `id` as used after `after_ms`.
-fn announced_used_after(feed: &Subscription, id: &AccountId, after_ms: i64) -> Option<i64> {
-    std::iter::from_fn(|| feed.items.recv_timeout(TIMEOUT).ok()).find_map(|item| match item {
-        SubscriptionItem::Notice(notice) => match *notice {
-            HubNotice::Account(told) if told.id == *id => told.used_at_ms.filter(|used| *used > after_ms),
-            _ => None,
-        },
-        _ => None,
-    })
-}
-
-/// On this machine, through the local provider, as for a hub on a server the person never logged in on, which hands
-/// the login they gave it to every workspace. The feed tells every client when the account was last used: by the first
-/// prompt, once the launch it brought names the account, and then by each prompt sent. The agent hears of no limits,
-/// so the account is announced for nothing else.
-#[test]
-fn an_agent_on_this_machine_runs_under_the_login_the_hub_holds_when_the_machine_has_none_of_its_own() {
-    let stack = Stack::start();
-    log_out(&stack);
-    std::fs::write(stack.agent_state().join("no-limits"), "").unwrap();
-    let client = stack.client();
-    let connected = connect_work(&client);
-    let (_, session) = stack.workspace(&client);
-    let feed = client.feed_subscribe().unwrap();
-
-    client.session_prompt(&session.id, "env:CLAUDE_CODE_OAUTH_TOKEN", None).unwrap();
-    let text = assistant_text(&wait_for_turn_end(&client, &session.id, 1));
-    let first = announced_used_after(&feed, &connected.id, 0);
-    client.session_prompt(&session.id, "say:again", None).unwrap();
-    wait_for_turn_end(&client, &session.id, 2);
-    let second = first.and_then(|first| announced_used_after(&feed, &connected.id, first));
-
-    assert!(text.contains("CLAUDE_CODE_OAUTH_TOKEN=a-made-up-token"), "{text}");
-    assert_eq!(client.session_get(&session.id).unwrap().account, Some(connected.id.clone()));
-    assert!(first.is_some(), "the first prompt was announced as a use");
-    assert!(second.is_some(), "and so was the next");
-    assert_eq!(client.records_list().unwrap().accounts.len(), 1, "no account but the login's");
-}
-
-/// Through a real worker whose machine has its own login. The hub default wins, a running agent keeps its login, and a
-/// new chat takes a changed choice.
-#[test]
-fn an_added_default_wins_even_on_a_machine_with_its_own_login() {
-    let mut stack = Stack::start();
-    stack.make_through_an_adapter();
-    let client = stack.client();
-    let connected = connect_work(&client);
-    let (_, session) = stack.workspace(&client);
-
-    client.session_prompt(&session.id, "env:CLAUDE_CODE_OAUTH_TOKEN", None).unwrap();
-    let text = assistant_text(&wait_for_turn_end(&client, &session.id, 1));
-    wait_until("the chat to name the hub's selected account", || {
-        client.session_get(&session.id).unwrap().account == Some(connected.id.clone())
-    });
-
-    assert!(text.contains("CLAUDE_CODE_OAUTH_TOKEN=a-made-up-token"), "{text}");
-    assert!(listed(&client, &connected.id).used_at_ms.is_some());
-    let other = client.account_connect(AgentKind::Claude, "Personal", LoginToken::new("personal-token"), None).unwrap();
-    client.account_set_default(AgentKind::Claude, &other.id).unwrap();
-    client.session_prompt(&session.id, "env:CLAUDE_CODE_OAUTH_TOKEN", None).unwrap();
-    let text = assistant_text(&wait_for_turn_end(&client, &session.id, 2));
-    assert!(text.contains("CLAUDE_CODE_OAUTH_TOKEN=a-made-up-token"), "the running process keeps its login");
-    let fresh = client
-        .session_create(&session.workspace_id, AgentKind::Claude, SessionSettingsChange::default(), None)
-        .unwrap();
-    client.session_prompt(&fresh.id, "env:CLAUDE_CODE_OAUTH_TOKEN", None).unwrap();
-    let text = assistant_text(&wait_for_turn_end(&client, &fresh.id, 1));
-    assert!(text.contains("CLAUDE_CODE_OAUTH_TOKEN=personal-token"), "{text}");
-    assert_eq!(client.session_get(&fresh.id).unwrap().account, Some(other.id));
 }

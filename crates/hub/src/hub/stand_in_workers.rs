@@ -13,7 +13,7 @@ use std::time::Duration;
 use async_trait::async_trait;
 use parking_lot::Mutex;
 use protocol::capability::conversation::Start;
-use protocol::capability::{Control, turns};
+use protocol::capability::{Control, settings, turns};
 use protocol::client::ApiError;
 use protocol::event::{AgentRunState, EventBody, TurnOutcome};
 use protocol::fixtures::turn_ended;
@@ -280,46 +280,51 @@ fn opened(start: &Start) -> EventBody {
     }
 }
 
+/// Has the worker of `workspace` be a stand-in that answers what `first` answers, as a test says, and everything else
+/// as [`answer`] says, and keeps each request in `asked`, as the stand-in it replaces did. So a test sets it before
+/// anything it's about is asked of the workspace's worker.
+pub(super) fn answering_first(
+    hub: &Hub,
+    workspace: &WorkspaceId,
+    asked: &Arc<Asked>,
+    first: impl Fn(&WorkerRequest) -> Option<Result<WorkerResponse, ApiError>> + Send + 'static,
+) {
+    let asked = asked.clone();
+    let link = WorkerLink::answering(move |request| {
+        asked.0.lock().push(request.clone());
+        Some(first(&request).unwrap_or_else(|| Ok(answer(request))))
+    });
+    hub.workers.lock().insert(workspace.clone(), link);
+}
+
 /// Has the worker of `workspace` be a stand-in that answers a call for a title as the worker does once it has asked its
 /// agent's CLI, with what `title` makes of the call: the title the model gave, tidied as the worker tidies it, or why
-/// there's none. It answers everything else as [`answer`] says, and keeps each request in `asked`, as the stand-in it
-/// replaces did, so a test sets it before anything is asked of the workspace's worker that it's about.
+/// there's none, as [`answering_first`] has it.
 pub(super) fn titling(
     hub: &Hub,
     workspace: &WorkspaceId,
     asked: &Arc<Asked>,
     title: impl Fn(&TitleFor) -> Result<String, ApiError> + Send + 'static,
 ) {
-    let asked = asked.clone();
-    let link = WorkerLink::answering(move |request| {
-        asked.0.lock().push(request.clone());
-        if let WorkerRequest::TitleFor(call) = &request {
-            return Some(title(call).map(|title| WorkerResponse::Title(TitleReply { title })));
-        }
-        Some(Ok(answer(request)))
+    answering_first(hub, workspace, asked, move |request| {
+        let WorkerRequest::TitleFor(call) = request else { return None };
+        Some(title(call).map(|title| WorkerResponse::Title(TitleReply { title })))
     });
-    hub.workers.lock().insert(workspace.clone(), link);
 }
 
 /// Has the worker of `workspace` be a stand-in on a machine whose agent's CLI is logged in as `machine` says, each time
 /// it's asked, so a test can log in as someone else meanwhile: the account it reads, as the worker answers once it has
-/// asked the CLI, or why it couldn't say. It answers everything else as [`answer`] says, and keeps each request in
-/// `asked`, as [`titling`] does, so a test sets it before anything is asked of the workspace's worker that it's about.
+/// asked the CLI, or why it couldn't say, as [`answering_first`] has it.
 pub(super) fn logged_in(
     hub: &Hub,
     workspace: &WorkspaceId,
     asked: &Arc<Asked>,
     machine: impl Fn(&AccountFor) -> Result<AgentAccount, ApiError> + Send + 'static,
 ) {
-    let asked = asked.clone();
-    let link = WorkerLink::answering(move |request| {
-        asked.0.lock().push(request.clone());
-        if let WorkerRequest::AccountFor(call) = &request {
-            return Some(machine(call).map(WorkerResponse::Account));
-        }
-        Some(Ok(answer(request)))
+    answering_first(hub, workspace, asked, move |request| {
+        let WorkerRequest::AccountFor(call) = request else { return None };
+        Some(machine(call).map(WorkerResponse::Account))
     });
-    hub.workers.lock().insert(workspace.clone(), link);
 }
 
 /// What a worker reads of the account Claude's CLI runs under on a machine where `email` is logged in to it, on `plan`.
@@ -348,9 +353,13 @@ pub(super) async fn the_agent_asks_its_model(
 }
 
 /// What a stand-in's agent claims as it starts: what Claude claims as the hub's tests describe it, as [`claimed`] says,
-/// and cancelling a turn, as Claude's CLI claims it, so a test can stop a turn as the person does.
+/// and cancelling a turn and taking a change of its model, mode and effort as it runs, as Claude's CLI claims them, so
+/// a test can stop a turn, or change a chat's settings, as the person does.
 fn claims() -> protocol::capability::Capabilities {
     let mut claims = claimed();
     claims.turns.cancel = Some(turns::Cancel { stops: turns::CancelStops::Nothing });
+    let (now, next_turn) = (Some(settings::Takes::Now), Some(settings::Takes::NextTurn));
+    let live = settings::LiveChanges { model: next_turn, mode: now, effort: next_turn, ..Default::default() };
+    claims.settings.live_changes = Some(live);
     claims
 }

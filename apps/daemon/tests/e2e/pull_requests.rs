@@ -61,82 +61,64 @@ fn a_gh_that_cant_say_keeps_the_pull_request_known_and_one_that_says_none_clears
 }
 
 /// `gh` goes by the branch's name, which another machine's workspace can share, so the pull request it finds can be
-/// from there. The branch was never at its newest commit, so the worker says there's none, as when `gh` finds none.
+/// from there. Which it is, is the worker's to choose, as the table of `choose` in the worker's
+/// `git/pull_request/link/tests.rs` says: a pull request is the branch's once the branch has been at one of its
+/// commits, and from then on by a link the worker keeps with the branch. This walks the table's cases on one branch,
+/// through a real worker, its git and a stand-in `gh`, for what only the whole read shows: when GitHub is asked for a
+/// pull request's commits, which is only until the branch is linked to it, and what the hub records. They cost GitHub
+/// a point by its URL, and 31 by the branch's name.
 #[test]
-fn a_pull_request_from_another_machines_branch_of_the_same_name_reads_as_none() {
+fn which_pull_request_is_the_branchs_goes_by_its_history_until_its_linked_and_by_its_link_after() {
     let mut stack = Stack::start();
     let gh = StandInGh::start(&mut stack);
     let client = stack.client();
     let (workspace, _) = stack.workspace(&client);
+    let read = || {
+        let views = gh.views();
+        let read = client.workspace_pull_request(&workspace.id).unwrap();
+        (read, gh.views() - views)
+    };
+
+    // Another machine's branch of the same name, whose newest commit the branch was never at, so the worker says
+    // there's none, as when `gh` finds none.
     gh.say(SOMEONE_ELSES);
-
-    let read = client.workspace_pull_request(&workspace.id).unwrap();
-
-    assert_eq!(read, None);
+    let (someone_elses, _) = read();
     let found = support::workspace(&client, &workspace.id).pull_request;
-    assert_eq!(found, Some(PullRequestFound { pull_request: None }), "looked, and found none");
-}
-
-/// The branch has been at one of its commits, so it's the branch's, though someone else has pushed to it since, as
-/// GitHub's Update branch does, and it's read for the first time only now, as just after an update to this version.
-#[test]
-fn a_pull_request_someone_else_has_pushed_to_is_the_branchs_from_its_first_read() {
-    let mut stack = Stack::start();
-    let gh = StandInGh::start(&mut stack);
-    let client = stack.client();
-    let (workspace, _) = stack.workspace(&client);
+    // The branch's, as it has been at one of its commits, though someone else has pushed to it since, as GitHub's
+    // Update branch does, and it's found only now, as just after an update to this version.
     gh.say(MOVED_ON);
-
-    let views = gh.views();
-    let read = client.workspace_pull_request(&workspace.id).unwrap().unwrap();
-    let views = gh.views() - views;
-
-    assert_eq!((read.number, read.local.behind), (7, 1), "with a commit to pull");
-    assert_eq!(views, 2, "GitHub is asked by the branch's name, and then for its commits by its URL");
-}
-
-/// The worker asks for a pull request's commits only to tell whether it's the branch's, so once the branch is linked
-/// to it, a read views it once. They cost GitHub a point by its URL, and 31 by the branch's name.
-#[test]
-fn once_the_branch_is_linked_to_its_pull_request_a_read_views_it_once() {
-    let mut stack = Stack::start();
-    let gh = StandInGh::start(&mut stack);
-    let client = stack.client();
-    let (workspace, _) = stack.workspace(&client);
+    let (moved_on, linking) = read();
     gh.say(OPEN);
-    let views = gh.views();
-    client.workspace_pull_request(&workspace.id).unwrap();
-    let linking = gh.views() - views;
-
-    let views = gh.views();
-    client.workspace_pull_request(&workspace.id).unwrap();
-    let linked = gh.views() - views;
-
-    assert_eq!((linking, linked), (2, 1), "its commits are asked for only until the branch is linked to it");
-}
-
-/// A branch linked to one pull request can have a newer one of its own, as when the first has merged and another is
-/// opened from it. That one is found by the branch's name, and its commits say it's the branch's, so it takes the
-/// link.
-#[test]
-fn a_newer_pull_request_from_the_branch_takes_the_link_from_the_one_before() {
-    let mut stack = Stack::start();
-    let gh = StandInGh::start(&mut stack);
-    let client = stack.client();
-    let (workspace, _) = stack.workspace(&client);
-    gh.say(OPEN);
-    client.workspace_pull_request(&workspace.id).unwrap();
-
+    let (_, linked) = read();
+    // Another machine's branch of the same name now has one too, which is the one `gh` finds, so the worker reads the
+    // branch's own by its link.
+    gh.say(SOMEONE_ELSES);
+    gh.say_of(OPEN_URL, MERGED);
+    let (stays, _) = read();
+    // A newer one of the branch's own, as when the first has merged and another is opened from it. Its commits say
+    // it's the branch's, so it takes the link.
     gh.say(NEWER);
-    let views = gh.views();
-    let read = client.workspace_pull_request(&workspace.id).unwrap().unwrap();
-    let relinking = gh.views() - views;
-    let views = gh.views();
-    client.workspace_pull_request(&workspace.id).unwrap();
-    let relinked = gh.views() - views;
+    let (newer, relinking) = read();
+    let (_, relinked) = read();
 
-    assert_eq!(read.number, 8);
-    assert_eq!((relinking, relinked), (2, 1), "its commits are asked for until the branch is linked to it");
+    assert_eq!(someone_elses, None, "another machine's");
+    assert_eq!(found, Some(PullRequestFound { pull_request: None }), "another machine's: looked, and found none");
+    let moved_on = moved_on.expect("one someone else has pushed to is the branch's");
+    assert_eq!(
+        (moved_on.number, moved_on.local.behind),
+        (7, 1),
+        "one someone else has pushed to, with a commit to pull"
+    );
+    assert_eq!(linking, 2, "found: GitHub is asked by the branch's name, and then for its commits by its URL");
+    assert_eq!(linked, 1, "linked: its commits are asked for only until the branch is linked to it");
+    let stays = stays.map(|read| (read.number, read.state));
+    assert_eq!(stays, Some((7, PrState::Merged)), "the branch's own, by its link, once another's has the name");
+    assert_eq!(newer.map(|read| read.number), Some(8), "a newer one of the branch's own");
+    assert_eq!(
+        (relinking, relinked),
+        (2, 1),
+        "a newer one: its commits are asked for until the branch is linked to it"
+    );
 }
 
 /// Whether the one found by the branch's name is the branch's is for its commits to say, so a read that can't get
@@ -154,25 +136,6 @@ fn a_read_that_cant_get_the_found_ones_commits_fails_and_records_nothing() {
 
     assert!(matches!(&failed, Err(ClientError::Api(e)) if e.code == ErrorCode::Worker), "{failed:?}");
     assert_eq!(support::workspace(&client, &workspace.id).pull_request, None, "still not looked at");
-}
-
-/// A branch's pull request stays its own once it's been found, by a link the worker keeps with the branch. So when
-/// another machine's branch of the same name has one, which is then the one `gh` finds, the worker reads the branch's
-/// own by its URL.
-#[test]
-fn a_pull_request_found_stays_the_branchs_once_another_machines_branch_of_the_same_name_has_one() {
-    let mut stack = Stack::start();
-    let gh = StandInGh::start(&mut stack);
-    let client = stack.client();
-    let (workspace, _) = stack.workspace(&client);
-    gh.say(OPEN);
-    client.workspace_pull_request(&workspace.id).unwrap();
-
-    gh.say(SOMEONE_ELSES);
-    gh.say_of(OPEN_URL, MERGED);
-    let read = client.workspace_pull_request(&workspace.id).unwrap().unwrap();
-
-    assert_eq!((read.number, read.state), (7, PrState::Merged));
 }
 
 /// Logged out, it can't be read until the user logs in, so with nothing known it's taken to be none, which offers to

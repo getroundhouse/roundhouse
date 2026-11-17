@@ -1,16 +1,19 @@
-//! Model and approval mode: full access, unless the agent is planning.
+//! Model, approval mode and effort, through to a real agent: full access, unless the agent is planning. What the hub
+//! saves, logs and refuses of a change, and what it gives the next launch, are its own tests', in
+//! `hub/sessions/tests/settings.rs`, on stand-ins for its workers.
 
 #![cfg(test)]
 
 use std::path::PathBuf;
 
+use client_core::ClientError;
+use protocol::client::ErrorCode;
 use protocol::event::{ApprovalDecision, EventBody};
+use protocol::model::Effort::{self, Medium};
 use protocol::model::PermissionMode::{FullAccess, Plan};
-use protocol::model::{ModelName, PermissionMode, SessionSettingsChange};
+use protocol::model::{ModelName, PermissionMode, SessionSettings, SessionSettingsChange};
 
-use crate::support::{
-    Gate, Stack, assistant_text, commit_settings, in_mode, read_all, wait_for_approval, wait_for_turn_end, wait_until,
-};
+use crate::support::{Stack, assistant_text, in_mode, read_all, wait_for_approval, wait_for_turn_end, wait_until};
 
 /// The changes of mode in the log.
 fn mode_changes(client: &client_core::Client, session: &protocol::model::SessionId) -> Vec<PermissionMode> {
@@ -28,34 +31,51 @@ fn on_model(model: &'static str) -> SessionSettingsChange {
     SessionSettingsChange { model: Some(ModelName::named(model)), ..SessionSettingsChange::default() }
 }
 
+/// Settings that set only the effort.
+fn at(effort: Effort) -> SessionSettingsChange {
+    SessionSettingsChange { effort: Some(effort), ..SessionSettingsChange::default() }
+}
+
+/// What the fake agent's CLI was last launched with.
+fn last_args(stack: &Stack) -> String {
+    std::fs::read_to_string(stack.agent_state().join("last-args")).unwrap()
+}
+
+/// The first launch names what the agent's description gives a new chat. A change then reaches the agent that's
+/// running, which takes it without being started again, and one started after the hub restarts, from the hub's own
+/// record.
 #[test]
-fn a_change_reaches_the_running_agent_and_the_next_launch() {
+fn a_change_of_model_mode_and_effort_reaches_the_running_agent_and_the_next_launch() {
     let mut stack = Stack::start();
     let client = stack.client();
     let (workspace, session) = stack.workspace_planning(&client);
+    let defaults = agents::claude::description().defaults;
+    assert_eq!(session.settings(), SessionSettings { permission_mode: Plan, ..defaults.clone() });
     client.session_prompt(&session.id, "tool:echo first > first.txt", None).unwrap();
     let approval = wait_for_approval(&client, &session.id);
     let allow = ApprovalDecision::Allow { updated_input: None, updated_permissions: None };
     client.session_approve(&session.id, &approval, allow).unwrap();
     wait_for_turn_end(&client, &session.id, 1);
+    let launched = format!("--model {} --effort {}", defaults.model.as_str(), defaults.effort.as_str().unwrap());
+    assert!(last_args(&stack).contains(&launched), "the description's: {}", last_args(&stack));
 
-    let changed = client
-        .session_configure(
-            &session.id,
-            SessionSettingsChange { model: Some(ModelName::named("sonnet")), ..in_mode(FullAccess) },
-        )
-        .unwrap();
-    assert_eq!(changed.permission_mode, FullAccess);
-    assert_eq!(changed.model, ModelName::named("sonnet"));
+    let change =
+        SessionSettingsChange { model: Some(ModelName::named("sonnet")), effort: Some(Medium), ..in_mode(FullAccess) };
+    let changed = client.session_configure(&session.id, change).unwrap();
+    assert_eq!(
+        (changed.model, changed.permission_mode, changed.effort),
+        (ModelName::named("sonnet"), FullAccess, Medium)
+    );
 
-    // The same process, and it no longer asks.
-    client.session_prompt(&session.id, "tool:echo second > second.txt", None).unwrap();
+    // The same process, and it no longer asks, at the new level.
+    client.session_prompt(&session.id, "tool:echo second > second.txt;effort", None).unwrap();
     let events = wait_for_turn_end(&client, &session.id, 2);
     // The agent reports its new mode after taking it, so the report can come after the reply. It comes before what the
     // next turn says, though, so it's in the log by the turn's end.
     assert_eq!(mode_changes(&client, &session.id), [FullAccess], "reported by the agent, and only by it");
     let path = PathBuf::from(workspace.path.clone().unwrap());
     assert!(path.join("second.txt").exists());
+    assert!(assistant_text(&events).ends_with("effort=medium"), "{}", assistant_text(&events));
     assert_eq!(events.iter().filter(|e| matches!(e.body, EventBody::AgentStarted { .. })).count(), 1);
     assert_eq!(events.iter().filter(|e| matches!(e.body, EventBody::ApprovalRequested { .. })).count(), 1);
     let last_init = events.iter().rev().find_map(|e| match &e.body {
@@ -69,66 +89,42 @@ fn a_change_reaches_the_running_agent_and_the_next_launch() {
     stack.stop_hub();
     stack.start_hub();
     let client = stack.client();
-    assert_eq!(client.session_get(&session.id).unwrap().permission_mode, FullAccess);
-    client.session_prompt(&session.id, "tool:echo third > third.txt", None).unwrap();
+    let kept = client.session_get(&session.id).unwrap();
+    assert_eq!((kept.permission_mode, kept.effort), (FullAccess, Medium));
+    client.session_prompt(&session.id, "tool:echo third > third.txt;effort", None).unwrap();
     wait_until("the third file", || path.join("third.txt").exists());
-    let args = std::fs::read_to_string(stack.agent_state().join("last-args")).unwrap();
+    assert!(assistant_text(&wait_for_turn_end(&client, &session.id, 3)).ends_with("effort=medium"));
+    let args = last_args(&stack);
     assert!(args.contains("--permission-mode bypassPermissions") && args.contains("--model sonnet"), "{args}");
+    assert!(args.contains("--effort medium"), "{args}");
 }
 
-/// No agent will report the change of mode, so the hub records it, and the log says when plan mode began.
+/// The agent's own refusals, which reach a client as a worker's error, so only the message says which this is: a model
+/// its CLI doesn't know, and an effort it says it took and didn't, which only reading the level back shows. That a
+/// refused change saves nothing is the hub's, and in its own tests.
 #[test]
-fn a_change_with_no_agent_running_is_saved_and_a_change_of_mode_goes_in_the_log() {
+fn a_change_the_agent_refuses_or_doesnt_take_is_refused_and_changes_nothing() {
     let stack = Stack::start();
     let client = stack.client();
     let (_, session) = stack.workspace(&client);
-    let changed = client.session_configure(&session.id, in_mode(Plan)).unwrap();
-    assert_eq!(changed.permission_mode, Plan);
-    assert_eq!(changed.model, agents::claude::description().defaults.model, "None leaves a setting as it is");
-    let changed = client.session_configure(&session.id, on_model("haiku")).unwrap();
-    assert_eq!(changed.permission_mode, Plan, "None leaves a setting as it is");
-    client.session_configure(&session.id, in_mode(Plan)).unwrap();
-    let saved = client.session_get(&session.id).unwrap();
-    assert_eq!((saved.model, saved.permission_mode), (ModelName::named("haiku"), Plan));
-    assert_eq!(mode_changes(&client, &session.id), [Plan], "once, since the others changed no mode");
-
-    client.session_prompt(&session.id, "say:planning", None).unwrap();
-    wait_for_turn_end(&client, &session.id, 1);
-    assert_eq!(mode_changes(&client, &session.id), [Plan], "an agent that starts in plan mode doesn't say so again");
-}
-
-#[test]
-fn a_chat_made_with_no_model_or_effort_names_what_its_agents_description_says_to_its_agent() {
-    let stack = Stack::start();
-    let client = stack.client();
-    let (_, session) = stack.workspace(&client);
-    let defaults = agents::claude::description().defaults;
-    assert_eq!(session.settings(), defaults);
-
-    client.session_prompt(&session.id, "say:ready", None).unwrap();
-    wait_for_turn_end(&client, &session.id, 1);
-
-    let args = std::fs::read_to_string(stack.agent_state().join("last-args")).unwrap();
-    let launched = format!("--model {} --effort {}", defaults.model.as_str(), defaults.effort.as_str().unwrap());
-    assert!(args.contains(&launched), "{args}");
-}
-
-#[test]
-fn a_change_the_agent_refuses_changes_nothing() {
-    let stack = Stack::start();
-    let client = stack.client();
-    let (_, session) = stack.workspace(&client);
-    client.session_prompt(&session.id, "say:ready", None).unwrap();
+    client.session_prompt(&session.id, "keep-effort", None).unwrap();
     wait_for_turn_end(&client, &session.id, 1);
     let before = client.session_get(&session.id).unwrap();
 
-    let refused = client.session_configure(&session.id, on_model("not-a-model")).unwrap_err();
-    assert!(refused.to_string().contains("not found"), "{refused}");
-    let after = client.session_get(&session.id).unwrap();
-    assert_eq!((after.model, after.permission_mode), (before.model, before.permission_mode));
+    let unknown_model = client.session_configure(&session.id, on_model("not-a-model")).unwrap_err();
+    let after_the_model = client.session_get(&session.id).unwrap();
+    let effort_not_taken = client.session_configure(&session.id, at(Effort::Max)).unwrap_err();
+    let after_the_effort = client.session_get(&session.id).unwrap();
 
-    client.session_prompt(&session.id, "say:still fine", None).unwrap();
-    assert!(assistant_text(&wait_for_turn_end(&client, &session.id, 2)).contains("still fine"));
+    assert!(unknown_model.to_string().contains("not found"), "a model: {unknown_model}");
+    assert_eq!(after_the_model.settings(), before.settings(), "a model: nothing changed");
+    assert!(matches!(&effort_not_taken, ClientError::Api(e) if e.code == ErrorCode::Worker), "{effort_not_taken:?}");
+    assert!(effort_not_taken.to_string().contains("kept its effort at xhigh"), "an effort: {effort_not_taken}");
+    assert_eq!(after_the_effort.settings(), before.settings(), "an effort: nothing changed");
+    assert_eq!(before.effort, Effort::Xhigh);
+    client.session_prompt(&session.id, "say:still fine;effort", None).unwrap();
+    let text = assistant_text(&wait_for_turn_end(&client, &session.id, 2));
+    assert!(text.contains("still fine") && text.ends_with("effort=xhigh"), "the agent works on as it was: {text}");
 }
 
 #[test]
@@ -157,7 +153,7 @@ fn approving_a_plan_leaves_plan_mode_and_the_next_launch_agrees() {
     let client = stack.client();
     client.session_prompt(&session.id, "say:back", None).unwrap();
     assert!(assistant_text(&wait_for_turn_end(&client, &session.id, 2)).contains("back"));
-    let args = std::fs::read_to_string(stack.agent_state().join("last-args")).unwrap();
+    let args = last_args(&stack);
     assert!(args.contains("--permission-mode bypassPermissions"), "{args}");
 }
 
@@ -170,7 +166,7 @@ fn an_agent_that_starts_in_plan_mode_has_full_access_once_its_plan_is_approved()
     let (workspace, session) = stack.workspace_planning(&client);
     client.session_prompt(&session.id, "plan:Make the file", None).unwrap();
     let approval = wait_for_approval(&client, &session.id);
-    let args = std::fs::read_to_string(stack.agent_state().join("last-args")).unwrap();
+    let args = last_args(&stack);
     assert!(args.contains("--permission-mode bypassPermissions"), "{args}");
 
     let allow = ApprovalDecision::Allow { updated_input: None, updated_permissions: None };
@@ -195,30 +191,6 @@ fn a_chat_with_no_mode_chosen_has_full_access() {
 
     assert!(PathBuf::from(workspace.path.unwrap()).join("made.txt").exists());
     assert!(!events.iter().any(|e| matches!(e.body, EventBody::ApprovalRequested { .. })));
-    let args = std::fs::read_to_string(stack.agent_state().join("last-args")).unwrap();
-    assert!(args.contains("--permission-mode bypassPermissions"), "{args}");
-}
-
-#[test]
-fn a_mode_chosen_during_setup_applies_to_the_prompt_waiting_on_it() {
-    let stack = Stack::start();
-    let setting_up = Gate::new(&stack, "setting-up");
-    commit_settings(&stack, &format!("[scripts]\nsetup = \"{}\"\n", setting_up.shell_wait()));
-    let client = stack.client();
-    let (workspace, session) = stack.workspace_planning(&client);
-    client.session_prompt(&session.id, "tool:echo done > done.txt", None).unwrap();
-
-    // The setup runs until it's let go, so a mode that waited for it would never be set.
-    let configuring = stack.client();
-    let id = session.id.clone();
-    let configured = std::thread::spawn(move || configuring.session_configure(&id, in_mode(FullAccess)));
-    wait_until("the mode to be set during setup", || configured.is_finished());
-    configured.join().unwrap().unwrap();
-    assert_eq!(client.workspace_list(false).unwrap()[0].setup, protocol::model::SetupStatus::Running);
-    setting_up.open();
-
-    let path = PathBuf::from(workspace.path.unwrap());
-    wait_until("the tool to run without asking", || path.join("done.txt").exists());
-    let args = std::fs::read_to_string(stack.agent_state().join("last-args")).unwrap();
+    let args = last_args(&stack);
     assert!(args.contains("--permission-mode bypassPermissions"), "{args}");
 }

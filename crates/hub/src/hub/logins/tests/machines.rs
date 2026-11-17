@@ -13,7 +13,8 @@ use crate::hub::stand_in_workers::{a_chat, logged_in, logged_in_as};
 const TIMEOUT: Duration = Duration::from_secs(10);
 
 /// On a machine with an ambient login, a chat's first launch while its kind has no default puts it on that login, and
-/// it stays there once the hub holds a login, which a new chat is put on instead. Moving it puts it on the hub's, and
+/// it stays there once the hub holds a login, which a new chat on the same machine is put on instead, since the hub's
+/// default wins over the machine's own. Moving it puts it on the hub's, and
 /// that launch's first request isn't taken for one that found the cache expired, since the ambient account's cache is
 /// another.
 #[tokio::test]
@@ -31,8 +32,8 @@ async fn a_chat_on_the_ambient_login_stays_on_it_once_a_login_is_added_until_its
     let work = chats.connect("Work").await;
     chats.crash(&chat.id).await;
     let still_ambient = chats.token_in_turn(&chat.id, None).await;
-    let (_, new_chat) = a_chat(&chats.hub).await;
-    let under_the_default = chats.token_in_turn(&new_chat.id, None).await;
+    let new_chat = chats.another_chat(&workspace).await;
+    let under_the_default = chats.token_in_turn(&new_chat, None).await;
     chats.assign(&chat.id, &work.id, false).await.unwrap();
     let under_work = chats.token_in_turn(&chat.id, Some(cold())).await;
 
@@ -41,6 +42,7 @@ async fn a_chat_on_the_ambient_login_stays_on_it_once_a_login_is_added_until_its
     assert_eq!(still_ambient, None, "it was handed no login");
     assert_eq!(chats.launches(&chat.id), [false, true, true], "launched again, and again once it was moved");
     assert_eq!(under_the_default.as_deref(), Some("work-token"));
+    assert_eq!(chats.on(&new_chat), Some(work.id.clone()), "the new chat is on the default, not the machine's login");
     assert_eq!(under_work.as_deref(), Some("work-token"));
     assert_eq!(chats.on(&chat.id), Some(work.id));
     assert_eq!(chats.found_expired(&chat.id), []);
