@@ -67,6 +67,21 @@ The pieces screens are built from, on the foundations in `look.md`: what each is
 
   ![Every state of a toggle](screens/toggle-states.png)
 
+## Switches
+
+- **A choice of one of a few is a switch, its segments in a row, with the one chosen on,** such as the diff's views, the image comparison's and where a GitHub app is made. Each segment is a borderless button, with an icon or words, so it lights under the pointer and is on while it's chosen as any button is. `look::SwitchKind` holds the kinds, as the owner decided: one on a track, as the diff's, and one without, as the image comparison's. Where a GitHub app is made is a switch without a track rather than a pair of radios, as the owner decided, so choosing one of a few looks the same wherever it is. A track there would be the card's own colour, so it wouldn't show.
+
+**Every kind of switch, by its name.** Each is a kind in `look::SwitchKind`. *Unconfirmed.*
+
+| Name | For |
+|---|---|
+| `Tracked` | Its segments small, on a raised track as tall as a regular button, such as the diff's views at the right end of a file's path |
+| `Trackless` | Its segments regular borderless buttons, with nothing around them, such as the image comparison's or where a GitHub app is made |
+
+**Every kind of switch, as a switch of icons and of words, with the first chosen.** *Unconfirmed.*
+
+![Every kind of switch](screens/switch-kinds.png)
+
 ## Fields
 
 - **A field on its own is boxed, and one in what frames it is bare,** as the owner decided. A boxed field has the edge of something to use, a faint fill and a copper ring while it's typed in, such as the rename dialog's, a setting's and Settings' search. A bare field is set in something that frames it already, such as Home's search in its bar and the find bar's, so it has none of them. `look::FieldKind` holds the kinds. *Unconfirmed:* the fill, `control_edge` at 30%, and the edge turning copper with the ring.

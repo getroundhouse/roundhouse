@@ -1,0 +1,16 @@
+{
+  "look::SwitchKind": {
+    "Tracked": {
+      "x": 212,
+      "y": 59,
+      "width": 160,
+      "height": 56
+    },
+    "Trackless": {
+      "x": 212,
+      "y": 171,
+      "width": 184,
+      "height": 56
+    }
+  }
+}

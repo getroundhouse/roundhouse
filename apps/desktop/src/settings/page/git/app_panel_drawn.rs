@@ -3,13 +3,12 @@
 //! app and its installation. Cancel puts it away at any step, and Done once the app is installed.
 
 use gpui_kit::assets::IconName as Lucide;
-use gpui_kit::component::radio::Radio;
 use gpui_kit::component::{Icon, IconName, h_flex, v_flex};
 use gpui_kit::{
     AnyElement, App, Div, Entity, InteractiveElement as _, IntoElement, ParentElement as _, Role, SharedString,
-    StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, div,
+    StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, Window, div,
 };
-use look::{Hand as _, IconSizing as _, Typeset as _};
+use look::{IconSizing as _, Typeset as _};
 
 use super::super::field::labelled;
 use super::Drawing;
@@ -125,16 +124,16 @@ fn step(number: u8, reached: Reached, said: String, body: Option<AnyElement>, cx
 
 /// The first step: under the person's account, or an organization by its name, the app's name, and Make on GitHub.
 fn choose(drawing: &Drawing<'_>, choosing: &Choosing, cx: &App) -> AnyElement {
-    let under = |id: &'static str, label: &'static str, organization: bool| {
+    let under = |organization: bool| {
         let kept = drawing.kept.clone();
-        Radio::new(id).hand().label(label).checked(choosing.under_organization == organization).on_click(
-            move |_, window, cx| kept.update(cx, |kept, cx| kept.choose_organization(organization, window, cx)),
-        )
+        move |window: &mut Window, cx: &mut App| {
+            kept.update(cx, |kept, cx| kept.choose_organization(organization, window, cx));
+        }
     };
-    let unders = h_flex()
-        .gap(look::Space::XLarge)
-        .child(under("git-app-under-account", "Your account", false))
-        .child(under("git-app-under-organization", "An organization", true));
+    let organization = choosing.under_organization;
+    let unders = look::switch(look::SwitchKind::Trackless)
+        .words("git-app-under-account", "Your account", !organization, under(false))
+        .words("git-app-under-organization", "An organization", organization, under(true));
     let organization = choosing.under_organization.then(|| {
         labelled("Organization", "git-app-organization", &choosing.organization.input, app_words::ORGANIZATION_SAYS, cx)
     });
