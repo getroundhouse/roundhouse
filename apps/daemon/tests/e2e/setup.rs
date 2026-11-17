@@ -12,8 +12,8 @@ use protocol::event::{ContentBlock, EventBody};
 use protocol::model::{PORTS_PER_WORKSPACE, Seq};
 
 use crate::support::{
-    Gate, Stack, assistant_text, commit_settings, git, parent_of, read_all, signal, wait_for_setup, wait_for_turn_end,
-    wait_until,
+    Gate, Stack, assistant_text, commit_settings, git, is_alive, parent_of, read_all, signal, wait_for_setup,
+    wait_for_turn_end, wait_until,
 };
 
 #[test]
@@ -161,22 +161,30 @@ fn stopping_setup_before_its_script_has_started_still_stops_it() {
     assert_eq!(wait_for_setup(&client, &workspace.id), protocol::model::SetupStatus::Failed { code: None });
 }
 
-/// A process running a command line containing this, or none.
-fn pid_running(pattern: &str) -> Option<u32> {
-    let out = Command::new("pgrep").args(["-f", pattern]).output().unwrap();
-    String::from_utf8_lossy(&out.stdout).split_whitespace().next().and_then(|p| p.parse().ok())
+/// The PID of a process running a command line containing `pattern`, once there is one. From the look that found it,
+/// rather than a second, which can find nothing just after the first found it, as it once did here under load.
+fn wait_for_pid(what: &str, pattern: &str) -> u32 {
+    let mut found = None;
+    wait_until(what, || {
+        let out = Command::new("pgrep").args(["-f", pattern]).output().unwrap();
+        found = String::from_utf8_lossy(&out.stdout).split_whitespace().next().and_then(|p| p.parse().ok());
+        found.is_some()
+    });
+    found.unwrap()
 }
 
 #[test]
 fn a_setup_script_stops_with_its_hub_and_with_a_killed_worker() {
     let mut stack = Stack::start();
-    // Unique to this test, so it can only find what this test started.
-    let seconds = 7000 + std::process::id() % 1000;
+    // Unique to this run, since another checkout's can be running at once, so it finds only the script this run
+    // started. It's once found, and then followed by its PID.
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap();
+    let seconds = format!("{}.{:09}", 7000 + std::process::id() % 1000, now.subsec_nanos());
     commit_settings(&stack, &format!("[scripts]\nsetup = \"sleep {seconds}\"\n"));
     let needle = format!("sleep {seconds}");
     let client = stack.client();
     let (workspace, _) = stack.workspace(&client);
-    wait_until("the script to start", || pid_running(&needle).is_some());
+    let script = wait_for_pid("the script to start", &needle);
 
     // A clean stop, promptly, and not after the hub gives up waiting on its worker.
     let stopping = Instant::now();
@@ -184,7 +192,7 @@ fn a_setup_script_stops_with_its_hub_and_with_a_killed_worker() {
     let mut hub = stack.hub.take().unwrap();
     wait_until("the hub to exit", || !matches!(hub.try_wait(), Ok(None)));
     assert!(stopping.elapsed() < Duration::from_secs(8), "took {:?}", stopping.elapsed());
-    wait_until("the script to stop with it", || pid_running(&needle).is_none());
+    wait_until("the script to stop with it", || !is_alive(script));
     drop(client);
 
     // A killed worker, which can't clean up after itself.
@@ -196,12 +204,11 @@ fn a_setup_script_stops_with_its_hub_and_with_a_killed_worker() {
         "it never finished"
     );
     client.workspace_rerun_setup(&workspace.id).unwrap();
-    wait_until("the script to start again", || pid_running(&needle).is_some());
-    let script = pid_running(&needle).unwrap();
+    let script = wait_for_pid("the script to start again", &needle);
     // SAFETY: kill(2) has no memory effects. This is the script's parent, the worker, by the chain below.
     let group_leader = parent_of(script);
     signal(parent_of(group_leader), libc::SIGKILL);
-    wait_until("the script to be stopped", || pid_running(&needle).is_none());
+    wait_until("the script to be stopped", || !is_alive(script));
 }
 
 #[test]
