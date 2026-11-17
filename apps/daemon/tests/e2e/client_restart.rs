@@ -6,10 +6,10 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
 use client_core::session_log::{Row, SessionLog};
-use client_core::{OpenSession, SubscriptionItem};
+use client_core::{Client, OpenSession, SubscriptionItem};
 use protocol::client::{ClientRequest, Hello, subscriptions};
 use protocol::event::{EventBody, SessionEvent};
-use protocol::model::{Seq, SessionStatus};
+use protocol::model::{Seq, SessionId, SessionStatus};
 use protocol::tail::Tail;
 
 use crate::support::{
@@ -268,24 +268,41 @@ fn a_client_that_stalled_during_a_message_ends_with_nothing_left_in_its_tail() {
 #[test]
 fn status_is_already_current_when_an_event_is_delivered() {
     // A client that sees the agent go idle and then asks for status must not read an old value:
-    // with nothing more coming, it would wait forever.
+    // with nothing more coming, it would wait forever. A stale read is a race that shows on few
+    // turns, so it takes many, in chats side by side, which take less time than one after another
+    // and give the race as many chances. Each chat is in a workspace of its own, as a single one
+    // would be, so none waits on another's worker.
+    const CHATS: usize = 4;
+    const TURNS: usize = 50;
     let stack = Stack::start();
     let client = stack.client();
-    let (_, session) = stack.workspace(&client);
-    let subscription = client.session_subscribe(&session.id, Seq::new(1)).unwrap();
+    let chats = Vec::from_fn(CHATS, |_| stack.workspace(&client).1);
+
+    std::thread::scope(|scope| {
+        for (chat, session) in chats.iter().enumerate() {
+            let stack = &stack;
+            scope.spawn(move || idle_whenever_a_turn_ends(&stack.client(), &session.id, chat, TURNS));
+        }
+    });
+}
+
+/// Has the chat take `turns` turns, one after another, and checks the status as each one's end arrives.
+fn idle_whenever_a_turn_ends(client: &Client, session: &SessionId, chat: usize, turns: usize) {
+    let subscription = client.session_subscribe(session, Seq::new(1)).unwrap();
     let mut idles = 0;
-    client.session_prompt(&session.id, "say:0", None).unwrap();
+    client.session_prompt(session, "say:0", None).unwrap();
     let deadline = Instant::now() + TIMEOUT;
-    while idles < 200 {
+    while idles < turns {
         let wait = deadline.saturating_duration_since(Instant::now());
         let SubscriptionItem::Event(event) = subscription.items.recv_timeout(wait).expect("more events") else {
             continue;
         };
         // The event that moves the status from running to idle.
         if matches!(event.body, EventBody::TurnEnded { .. }) {
-            assert_eq!(client.session_get(&session.id).unwrap().status, SessionStatus::Idle, "after {idles} turns");
+            let status = client.session_get(session).unwrap().status;
+            assert_eq!(status, SessionStatus::Idle, "chat {chat}, after {idles} turns");
             idles += 1;
-            client.session_prompt(&session.id, &format!("say:{idles}"), None).unwrap();
+            client.session_prompt(session, &format!("say:{idles}"), None).unwrap();
         }
     }
 }
