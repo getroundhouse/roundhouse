@@ -14,9 +14,9 @@ use protocol::model::{AttachmentId, SessionId, WorkspaceId};
 use protocol::worker::AttachmentWrite;
 use tracing::warn;
 
-use super::Hub;
 use crate::attachment_files::FileFor;
 use crate::error::internal;
+use crate::hub::Hub;
 use crate::store::AddedBy;
 use crate::worker_link::WorkerLink;
 

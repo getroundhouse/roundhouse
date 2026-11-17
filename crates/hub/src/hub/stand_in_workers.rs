@@ -12,15 +12,19 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 use parking_lot::Mutex;
+use protocol::capability::conversation::Start;
 use protocol::capability::{Control, turns};
 use protocol::client::ApiError;
-use protocol::event::EventBody;
+use protocol::event::{AgentRunState, EventBody, TurnOutcome};
+use protocol::fixtures::turn_ended;
 use protocol::model::{
-    AgentKind, InstanceId, ProviderName, Seq, Session, SessionId, SessionSettingsChange, Workspace, WorkspaceId,
+    AgentAccount, AgentKind, AgentSessionId, AttachmentId, CacheRequest, InstanceId, ProviderName, RunId, Seq, Session,
+    SessionId, SessionSettingsChange, Workspace, WorkspaceId,
 };
+use protocol::prompt::Prompt;
 use protocol::worker::{
-    AgentStarted, AttachmentWritten, NamesGitHasReply, SetupDone, TitleFor, TitleReply, WorkerRequest, WorkerResponse,
-    WorkspaceReady,
+    AccountFor, AgentSpec, AgentStarted, AttachmentWritten, NamesGitHasReply, SetupDone, TitleFor, TitleReply,
+    WorkerRequest, WorkerResponse, WorkspaceReady,
 };
 use providers::{Capabilities, Instance, Provider, ProviderError, Size, WorkerBinary, WorkerCommand};
 
@@ -55,7 +59,8 @@ impl Asked {
 
 /// What a stand-in worker answers, which refuses nothing. Git has no name a workspace might take, so each worktree
 /// asked for is made, in `/ws`, on the branch asked for, its setup script passes, a file a prompt carries is written
-/// to it, and an agent starts there and takes what it's sent. Anything else is answered as done, with nothing to say.
+/// to it, and an agent starts there and takes what it's sent. Nobody is logged in to an agent's CLI on its machine,
+/// so the account it's asked an agent runs under is nobody's. Anything else is answered as done, with nothing to say.
 fn answer(request: WorkerRequest) -> WorkerResponse {
     if let WorkerRequest::NamesGitHas(_) = request {
         return WorkerResponse::NamesGitHas(NamesGitHasReply { names: Vec::new() });
@@ -75,6 +80,9 @@ fn answer(request: WorkerRequest) -> WorkerResponse {
     if let WorkerRequest::AttachmentWrite(write) = request {
         let path = format!("{}/.context/attachments/{}", write.path, write.name);
         return WorkerResponse::AttachmentWritten(AttachmentWritten { path });
+    }
+    if let WorkerRequest::AccountFor(_) = request {
+        return WorkerResponse::Account(AgentAccount { logged_in: false, ..AgentAccount::default() });
     }
     if let WorkerRequest::AgentStart(spec) = request {
         let capabilities = Some(Box::new(claims()));
@@ -190,16 +198,86 @@ pub(super) async fn the_agent_says(
     session: &SessionId,
     said: impl IntoIterator<Item = EventBody>,
 ) {
-    let launched = |request: &WorkerRequest| {
-        let WorkerRequest::AgentStart(spec) = request else { return None };
-        (spec.session_id == *session).then_some(spec.run)
-    };
-    let run = asked.requests(launched).pop().expect("only an agent that was started says anything");
+    let run = last_started(asked, session).expect("only an agent that was started says anything");
     for body in said {
         hub.route(session, Item::Event { run, body: Box::new(body), raw: None, attachments: Vec::new(), seq: None })
             .await;
     }
     flushed(&hub.live_session(session).await.expect("a chat that's there")).await;
+}
+
+/// The run a stand-in last started for the chat `session`, if any.
+fn last_started(asked: &Asked, session: &SessionId) -> Option<RunId> {
+    asked.launches(session).pop().map(|spec| spec.run)
+}
+
+impl Asked {
+    /// Each launch of the agent of `session` a stand-in was asked for, in the order it was asked.
+    pub(super) fn launches(&self, session: &SessionId) -> Vec<AgentSpec> {
+        self.requests(|request| {
+            let WorkerRequest::AgentStart(spec) = request else { return None };
+            (spec.session_id == *session).then(|| spec.clone())
+        })
+    }
+}
+
+/// How long a test gives the hub to give the agent a prompt, which it does on a task of its own once the prompt is
+/// recorded. Far longer than that takes with a stand-in for the worker, so only a prompt that's never given runs out of
+/// it.
+const TIMEOUT: Duration = Duration::from_secs(10);
+
+/// Sends the chat `session` `prompt`, which its agent takes once the hub has given it, and then ends its turn, as
+/// Claude's CLI does. An agent the prompt launched first says it has opened the conversation the hub launched it on, as
+/// the CLI does as it starts, and the agent asks its model `asking` before it takes the prompt, if anything. Gives back
+/// the launch whose agent took it, which is the one that ran last.
+pub(super) async fn a_turn(
+    hub: &Arc<Hub>,
+    asked: &Asked,
+    session: &SessionId,
+    prompt: Prompt<AttachmentId>,
+    asking: Option<CacheRequest>,
+) -> AgentSpec {
+    let before = asked.launches(session).len();
+    let (seq, _) = hub.session_prompt(session.clone(), None, prompt).await.expect("a prompt the hub takes");
+    let given = || {
+        let given = asked.prompts_given(session);
+        if given.contains(&seq) { Ok(()) } else { Err(format!("the agent was given only {given:?}")) }
+    };
+    waiting::task::until_ok(TIMEOUT, given).await;
+    let launches = asked.launches(session);
+    let spec = launches.last().expect("an agent was launched to give it to").clone();
+    if launches.len() > before {
+        the_agent_says(hub, asked, session, [opened(&spec.start)]).await;
+    }
+    if let Some(request) = asking {
+        the_agent_asks_its_model(hub, asked, session, request).await;
+    }
+    let ended = [
+        EventBody::PromptTaken { prompt: seq },
+        turn_ended(TurnOutcome::Success),
+        EventBody::AgentState { state: AgentRunState::Idle },
+    ];
+    the_agent_says(hub, asked, session, ended).await;
+    spec
+}
+
+/// What Claude's CLI says as it starts on `start`: that it has opened the conversation it was given, or a new one of
+/// its own when it was given none.
+fn opened(start: &Start) -> EventBody {
+    let conversation = match start {
+        Start::New { conversation: Some(conversation) } | Start::Resume { conversation } => conversation.clone(),
+        Start::New { conversation: None } | Start::Fork { .. } | Start::Import { .. } => {
+            AgentSessionId::from("a-conversation-of-its-own")
+        }
+    };
+    EventBody::AgentInit {
+        capabilities: None,
+        agent_session_id: Some(conversation),
+        model: None,
+        cwd: None,
+        permission_mode: None,
+        agent_version: None,
+    }
 }
 
 /// Has the worker of `workspace` be a stand-in that answers a call for a title as the worker does once it has asked its
@@ -221,6 +299,52 @@ pub(super) fn titling(
         Some(Ok(answer(request)))
     });
     hub.workers.lock().insert(workspace.clone(), link);
+}
+
+/// Has the worker of `workspace` be a stand-in on a machine whose agent's CLI is logged in as `machine` says, each time
+/// it's asked, so a test can log in as someone else meanwhile: the account it reads, as the worker answers once it has
+/// asked the CLI, or why it couldn't say. It answers everything else as [`answer`] says, and keeps each request in
+/// `asked`, as [`titling`] does, so a test sets it before anything is asked of the workspace's worker that it's about.
+pub(super) fn logged_in(
+    hub: &Hub,
+    workspace: &WorkspaceId,
+    asked: &Arc<Asked>,
+    machine: impl Fn(&AccountFor) -> Result<AgentAccount, ApiError> + Send + 'static,
+) {
+    let asked = asked.clone();
+    let link = WorkerLink::answering(move |request| {
+        asked.0.lock().push(request.clone());
+        if let WorkerRequest::AccountFor(call) = &request {
+            return Some(machine(call).map(WorkerResponse::Account));
+        }
+        Some(Ok(answer(request)))
+    });
+    hub.workers.lock().insert(workspace.clone(), link);
+}
+
+/// What a worker reads of the account Claude's CLI runs under on a machine where `email` is logged in to it, on `plan`.
+pub(super) fn logged_in_as(email: &str, plan: &str) -> AgentAccount {
+    AgentAccount {
+        id: Some(format!("claude-{email}").into()),
+        logged_in: true,
+        model_provider: Some("Anthropic API".to_string()),
+        plan: Some(plan.to_string()),
+        login: Some("Claude account".to_string()),
+        email: Some(email.to_string()),
+    }
+}
+
+/// One of the requests the agent of the chat `session` makes of its model, as its worker passes it on, from the run
+/// its stand-in last started for the chat, once the chat has taken it in, as [`the_agent_says`] has the agent speak.
+pub(super) async fn the_agent_asks_its_model(
+    hub: &Arc<Hub>,
+    asked: &Asked,
+    session: &SessionId,
+    request: CacheRequest,
+) {
+    let run = last_started(asked, session).expect("only an agent that was started asks its model anything");
+    hub.route(session, Item::Cache { run, request, seq: None }).await;
+    flushed(&hub.live_session(session).await.expect("a chat that's there")).await;
 }
 
 /// What a stand-in's agent claims as it starts: what Claude claims as the hub's tests describe it, as [`claimed`] says,

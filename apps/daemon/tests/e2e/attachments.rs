@@ -1,18 +1,19 @@
 //! Files sent with a prompt, from the client to the agent, and back to anyone reading the chat, and the images in the
-//! worktree that the agent's replies point to.
+//! worktree that the agent's replies point to. What the hub keeps, refuses and gives the agent of a file is the hub's,
+//! and its own tests in `hub/attachments/` prove it on stand-ins for its workers. These are what spans processes: the
+//! files a real worker writes in a real worktree, and what it and the agent's adapter make of the images there.
 
 #![cfg(test)]
 
 use std::path::PathBuf;
 
-use client_core::{Client, ClientError};
+use client_core::Client;
 use protocol::attachment::{Attachment, AttachmentBytes, MediaType};
-use protocol::client::ErrorCode;
 use protocol::event::{ContentBlock, EventBody, LinkedImage};
-use protocol::model::{AgentKind, AttachmentId, Seq, SessionId, SessionSettingsChange};
+use protocol::model::{AttachmentId, Seq, SessionId};
 use protocol::prompt::Prompt;
 
-use crate::support::{Stack, assistant_text, git, read_all, wait_for_turn_end};
+use crate::support::{Stack, assistant_text, git, wait_for_turn_end};
 
 /// Enough of a PNG for anything that only looks at how it starts, which is all the hub and the fake agent do.
 pub(crate) fn png(len: usize) -> Vec<u8> {
@@ -23,13 +24,6 @@ pub(crate) fn png(len: usize) -> Vec<u8> {
 
 fn add(client: &Client, session: &SessionId, id: &str, name: &str, media_type: MediaType, data: &[u8]) -> Attachment {
     client.attachment_add(session, &AttachmentId::from(id), name, media_type, data.to_vec()).unwrap()
-}
-
-pub(crate) fn refused_with(result: Result<impl std::fmt::Debug, ClientError>) -> ErrorCode {
-    match result {
-        Err(ClientError::Api(e)) => e.code,
-        other => panic!("expected a refusal, got {other:?}"),
-    }
 }
 
 #[test]
@@ -63,113 +57,6 @@ fn every_file_goes_in_the_worktree_and_the_agent_is_given_what_it_can_take_in_th
     assert_eq!(std::fs::read(folder.join("build.log")).unwrap(), b"error at line 42\nmore");
     assert_eq!(std::fs::read(folder.join("shot.png")).unwrap(), png(300));
     assert_eq!(git(&worktree, &["status", "--porcelain", "--untracked-files=all"]), "", "git never sees them");
-}
-
-#[test]
-fn the_hub_keeps_an_image_once_its_sent_and_lets_go_of_anything_else() {
-    let stack = Stack::start();
-    let client = stack.client();
-    let (_, session) = stack.workspace(&client);
-    let shot = add(&client, &session.id, "a1", "shot.png", MediaType::Png, &png(64));
-    let log = add(&client, &session.id, "a2", "build.log", MediaType::Text, b"error at line 42");
-    assert_eq!(client.attachment_read(&session.id, &log.id).unwrap(), b"error at line 42", "until it's sent");
-
-    client
-        .session_prompt_with(&session.id, None, Prompt::carrying("attached", vec![shot.id.clone(), log.id.clone()]))
-        .unwrap();
-    let first = assistant_text(&wait_for_turn_end(&client, &session.id, 1));
-
-    assert_eq!(client.attachment_read(&session.id, &shot.id).unwrap(), png(64));
-    assert_eq!(refused_with(client.attachment_read(&session.id, &log.id)), ErrorCode::NotFound);
-    // A later prompt can carry it again, from where it went.
-    client.session_prompt_with(&session.id, None, Prompt::carrying("attached", vec![log.id.clone()])).unwrap();
-    let both = assistant_text(&wait_for_turn_end(&client, &session.id, 2));
-    assert_eq!(both.strip_prefix(&first), Some("attached: build.log: error at line 42"));
-}
-
-/// Files are added just before the prompt that carries them, so these are from a prompt that never arrived.
-#[test]
-fn closing_a_chat_whose_files_no_prompt_carried_deletes_them_with_it() {
-    let stack = Stack::start();
-    let client = stack.client();
-    let (_, session) = stack.workspace(&client);
-    let log = add(&client, &session.id, "a1", "build.log", MediaType::Text, b"error at line 42");
-    let kept = stack.paths().attachments_dir.join(session.id.as_str());
-    assert!(kept.join(log.id.as_str()).exists());
-
-    client.session_close(&session.id).unwrap();
-
-    assert!(!kept.exists());
-    assert_eq!(refused_with(client.attachment_read(&session.id, &log.id)), ErrorCode::NotFound);
-}
-
-#[test]
-fn a_prompt_can_be_only_files() {
-    let stack = Stack::start();
-    let client = stack.client();
-    let (_, session) = stack.workspace(&client);
-    let shot = add(&client, &session.id, "a1", "shot.png", MediaType::Png, &png(64));
-
-    client.session_prompt_with(&session.id, None, Prompt::carrying("", vec![shot.id.clone()])).unwrap();
-
-    let events = wait_for_turn_end(&client, &session.id, 1);
-    assert!(events.iter().any(
-        |e| matches!(&e.body, EventBody::UserPrompt { prompt: Prompt { files: attachments, .. }, .. } if attachments == std::slice::from_ref(&shot))
-    ));
-    let refused = client.session_prompt(&session.id, " ", None);
-    assert_eq!(refused_with(refused), ErrorCode::InvalidRequest, "with no files, it still needs text");
-}
-
-#[test]
-fn adding_the_same_attachment_again_keeps_the_first() {
-    let stack = Stack::start();
-    let client = stack.client();
-    let (_, session) = stack.workspace(&client);
-    let first = add(&client, &session.id, "a1", "one.log", MediaType::Text, b"one");
-
-    let again = add(&client, &session.id, "a1", "two.log", MediaType::Text, b"two");
-
-    assert_eq!(again, first);
-    assert_eq!(client.attachment_read(&session.id, &first.id).unwrap(), b"one");
-}
-
-#[test]
-fn a_chat_refuses_a_file_that_isnt_what_it_says_and_records_nothing() {
-    let stack = Stack::start();
-    let client = stack.client();
-    let (_, session) = stack.workspace(&client);
-    let id = AttachmentId::from("a1");
-
-    let renamed = client.attachment_add(&session.id, &id, "shot.png", MediaType::Png, vec![0xff, 0xd8, 0xff, 0xe0]);
-    let not_text = client.attachment_add(&session.id, &id, "a.bin", MediaType::Text, vec![0, 1, 2]);
-    let empty = client.attachment_add(&session.id, &id, "empty.log", MediaType::Text, Vec::new());
-    let unknown = client.attachment_add(&session.id, &id, "a.pdf", MediaType::Unknown, b"%PDF-1.4".to_vec());
-    let climbing = client.attachment_add(&session.id, &"../../hub".into(), "a.log", MediaType::Text, b"x".to_vec());
-    let shouting = client.attachment_add(&session.id, &"A1".into(), "a.log", MediaType::Text, b"x".to_vec());
-
-    for refused in [renamed, not_text, empty, climbing, shouting] {
-        assert_eq!(refused_with(refused), ErrorCode::InvalidRequest);
-    }
-    assert_eq!(refused_with(unknown), ErrorCode::Unsupported, "so a newer client can send it as a plain file");
-    assert_eq!(refused_with(client.attachment_read(&session.id, &id)), ErrorCode::NotFound);
-}
-
-#[test]
-fn a_prompt_can_only_carry_what_was_added_to_its_own_chat() {
-    let stack = Stack::start();
-    let client = stack.client();
-    let (workspace, session) = stack.workspace(&client);
-    let other =
-        client.session_create(&workspace.id, AgentKind::Claude, SessionSettingsChange::default(), None).unwrap();
-    let shot = add(&client, &other.id, "a1", "shot.png", MediaType::Png, &png(64));
-
-    let elsewhere = client.session_prompt_with(&session.id, None, Prompt::carrying("attached", vec![shot.id.clone()]));
-    let too_many = client.session_prompt_with(&other.id, None, Prompt::carrying("attached", vec![shot.id.clone(); 11]));
-
-    assert_eq!(refused_with(elsewhere), ErrorCode::NotFound);
-    assert_eq!(refused_with(too_many), ErrorCode::InvalidRequest);
-    assert_eq!(refused_with(client.attachment_read(&session.id, &shot.id)), ErrorCode::NotFound);
-    assert!(read_all(&client, &session.id).is_empty(), "nothing is recorded for a refused prompt");
 }
 
 /// The images the text of each of the agent's replies names, in order, by address.

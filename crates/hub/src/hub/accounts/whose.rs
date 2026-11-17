@@ -9,7 +9,7 @@ use protocol::model::{
 use protocol::worker::AccountFor;
 use tracing::error;
 
-use super::Hub;
+use crate::hub::Hub;
 use crate::store::Launched;
 
 impl Hub {
