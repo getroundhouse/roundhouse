@@ -2,7 +2,7 @@ use crate::dictating::DictationChoice;
 use crate::saving::{Failure, Saver, write_json};
 use crate::sounds::Sound;
 use crate::workspace_order::Sort;
-use gpui_kit::{App, BorrowAppContext as _, Context, Global, PromptLevel, Subscription};
+use gpui_kit::{App, BorrowAppContext as _, Context, Global, Subscription};
 use protocol::model::RepoId;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -129,7 +129,7 @@ pub(crate) fn load(data_dir: &Path, cx: &mut App) {
     cx.spawn(async move |cx| {
         while let Ok(failure) = failed.recv_async().await {
             let detail = format!("They're in force until the app quits. {failure}");
-            cx.update(|cx| crate::alert::show(PromptLevel::Warning, "Couldn't save settings".into(), detail, cx));
+            cx.update(|cx| crate::asking::tell("Couldn't save settings", detail, cx));
         }
     })
     .detach();

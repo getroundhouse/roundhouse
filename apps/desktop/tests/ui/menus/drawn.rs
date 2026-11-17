@@ -156,7 +156,7 @@ fn about_can_be_chosen_from_the_menus(cx: &mut TestAppContext) {
 
     choose(&mut ui, "Help", "About Roundhouse");
 
-    ui.wait("the alert", |ui| ui.cx.has_pending_prompt());
+    ui.wait("the alert", |ui| ui.asked().is_some());
 }
 
 /// While the sidebar is hidden the button is over the strip, and over an error in it, which a press that opens the

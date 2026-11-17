@@ -4,7 +4,7 @@
 use std::io;
 
 use dictation::model::{self, FolderError};
-use gpui_kit::{App, AsyncApp, PromptLevel};
+use gpui_kit::{App, AsyncApp};
 
 use super::DictationChoice;
 use super::readiness::{dictating, dictating_mut, follow_the_choice, reread_whats_on_disk};
@@ -53,7 +53,7 @@ fn deleted(gone: Result<(), NotDeleted>, cx: &mut App) {
     dictating_mut(cx).deleting = None;
     reread_whats_on_disk(cx);
     if let Err(why) = gone {
-        crate::alert::show(PromptLevel::Warning, "Couldn't delete the model".to_string(), format!("{why}."), cx);
+        crate::asking::tell("Couldn't delete the model", format!("{why}."), cx);
     }
     follow_the_choice(cx);
 }

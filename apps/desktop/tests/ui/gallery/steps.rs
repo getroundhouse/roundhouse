@@ -88,6 +88,8 @@ pub(crate) enum Step {
     UpdateChecking,
     /// Has the app show a check as having found nothing newer.
     UpToDate,
+    /// Chooses About Roundhouse, as from the Help menu.
+    About,
     /// Opens Settings, as its menu item does.
     OpenSettings,
     /// Clicks the transcript's line with this label, such as a tool call, to open it, has the chat go back to its end,

@@ -99,6 +99,20 @@ pub(crate) const SCREENS: &[Screen] = &[
         steps: &[Step::Select(FOCUS), Step::OpenSettings, AGENTS, Step::Click("account-more-claude-login-0002")],
     },
     Screen {
+        name: "settings-agents-disconnect",
+        spec: "settings.md",
+        world: Some(accounts),
+        frame: Frame::Dialog,
+        steps: &[
+            Step::Select(FOCUS),
+            Step::OpenSettings,
+            AGENTS,
+            Step::Click("account-more-claude-login-0002"),
+            Step::ClickItem("Disconnect"),
+            Step::WaitFor("disconnect-agent-account-act"),
+        ],
+    },
+    Screen {
         name: "settings-agents-card",
         spec: "settings.md",
         world: Some(accounts),

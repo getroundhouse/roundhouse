@@ -4,13 +4,14 @@ use std::time::Duration;
 
 use client_core::ClientError;
 use client_core::records::InWorkspace;
-use gpui_kit::{AppContext, Context, PromptLevel, Result, Window};
+use gpui_kit::{AppContext, Context, Result, Window};
 use protocol::client::ErrorCode;
 use protocol::model::{Effort, Record, Session, SessionId, SessionSettingsChange, TerminalId};
 use transcript::{Transcript, TranscriptEvent};
 
 use super::attaching::Composed;
 use super::{Chat, Next, PaneEvent, Showing, WorkspacePane};
+use crate::asking::{self, Question};
 use crate::prompt_cache;
 use crate::rename::{self, Renaming};
 
@@ -241,19 +242,18 @@ impl WorkspacePane {
             self.finish_closing(id, cx);
             return;
         }
-        let answer = window.prompt(
-            PromptLevel::Warning,
-            "Close this chat?",
-            Some("Its agent is still working, and closing the chat stops it. The history stays."),
-            &["Close chat", "Cancel"],
-            cx,
-        );
-        cx.spawn(async move |this, cx| {
-            if answer.await == Ok(0) {
-                let _ = this.update(cx, |t, cx| t.finish_closing(id, cx));
-            }
-        })
-        .detach();
+        let asked = Question {
+            id: "close-chat",
+            title: "Close this chat?".into(),
+            says: "Its agent is still working, and closing the chat stops it. The history stays.".into(),
+            keep: "Cancel",
+            act: "Close chat",
+            removes: false,
+        };
+        let this = cx.weak_entity();
+        asking::ask(asked, window, cx, move |_, cx| {
+            let _ = this.update(cx, |t, cx| t.finish_closing(id.clone(), cx));
+        });
     }
 
     fn finish_closing(&mut self, id: SessionId, cx: &mut Context<Self>) {

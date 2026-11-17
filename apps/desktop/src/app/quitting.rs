@@ -8,9 +8,10 @@
 use std::time::{Duration, Instant};
 
 use client_core::{Client, Commands, Drafts};
-use gpui_kit::{App, AppContext as _, Context, Global, PromptLevel, WeakEntity, Window};
+use gpui_kit::{App, AppContext as _, Context, Global, WeakEntity, Window};
 
 use super::{AppView, restarts};
+use crate::asking::{self, Question};
 use crate::window_place;
 
 /// The longest quitting, or restarting to update, waits for what's on its way to the hub, such as a file attached just
@@ -149,20 +150,36 @@ impl AppView {
         .detach();
     }
 
-    /// Asks in the system's alert, as archiving anyway does, with keeping working first, so Return loses nothing.
+    /// Asks in a dialog, as archiving anyway does, with Keep working as what Return answers, so it loses nothing.
+    /// Quitting is filled in the error's colour, since what's unsent can't be had back.
     fn ask_to_quit(&mut self, chats: usize, comments: usize, cx: &mut Context<Self>) {
-        let detail = restarts::unsent_note(chats, comments, "quitting").unwrap_or_default();
-        let answer = self.window.update(cx, |_, window, cx| {
-            window.prompt(PromptLevel::Warning, "Quit Roundhouse?", Some(&detail), &["Keep working", "Quit"], cx)
+        let asked = Question {
+            id: "quit",
+            title: "Quit Roundhouse?".into(),
+            says: restarts::unsent_note(chats, comments, "quitting").unwrap_or_default().into(),
+            keep: "Keep working",
+            act: "Quit",
+            removes: true,
+        };
+        let (quitting, kept) = (cx.weak_entity(), cx.weak_entity());
+        let asking = self.window.update(cx, |_, window, cx| {
+            let quit = move |_: &mut Window, cx: &mut App| {
+                let _ = quitting.update(cx, AppView::quit_now);
+            };
+            // However it's answered, after quitting if it was, so keeping working lets quitting ask again.
+            let closed = move |_: &mut Window, cx: &mut App| {
+                let _ = kept.update(cx, |t, _| {
+                    if t.quitting == Quitting::Waiting {
+                        t.quitting = Quitting::No;
+                    }
+                });
+            };
+            asking::ask_and_hear(asked, window, cx, quit, closed);
         });
-        let Ok(answer) = answer else { return };
-        // So quitting again while it asks doesn't ask twice.
-        self.quitting = Quitting::Waiting;
-        cx.spawn(async move |this, cx| {
-            let quit = answer.await == Ok(1);
-            let _ = this.update(cx, |t, cx| if quit { t.quit_now(cx) } else { t.quitting = Quitting::No });
-        })
-        .detach();
+        if asking.is_ok() {
+            // So quitting again while it asks doesn't ask twice.
+            self.quitting = Quitting::Waiting;
+        }
     }
 
     fn quit_now(&mut self, cx: &mut Context<Self>) {

@@ -200,9 +200,9 @@ fn closing_a_chat_thats_working_asks_first_and_its_tabs_button_closes_only_it(cx
 
     ui.click(close(&working));
 
-    ui.wait("the question", |ui| ui.cx.has_pending_prompt());
+    ui.wait("the question", |ui| ui.asked().is_some());
     assert_eq!(ui.active_chat(), showing, "pressing a tab's close button doesn't also show its chat");
-    ui.cx.simulate_prompt_answer("Cancel");
+    ui.click("close-chat-keep");
     ui.frame();
     assert_eq!(ui.open_chats(), [working.clone(), showing.clone()], "cancelling leaves it alone");
     let status =
@@ -211,8 +211,8 @@ fn closing_a_chat_thats_working_asks_first_and_its_tabs_button_closes_only_it(cx
 
     ui.close_from_tab(&working);
 
-    ui.wait("the question again", |ui| ui.cx.has_pending_prompt());
-    ui.cx.simulate_prompt_answer("Close chat");
+    ui.wait("the question again", |ui| ui.asked().is_some());
+    ui.click("close-chat-act");
     ui.wait("it to close", |ui| ui.open_chats() == [showing.clone()]);
     assert_eq!(ui.active_chat(), showing);
 }
@@ -238,8 +238,8 @@ fn whats_running_in_the_background_shows_until_it_finishes_and_closing_its_chat_
     ui.wait("its line", |ui| ui.has(line.clone()));
     assert!(ui.has("send") && !ui.has("stop"), "it takes a prompt");
     ui.close_from_tab(&chat);
-    ui.wait("the question", |ui| ui.cx.has_pending_prompt());
-    ui.cx.simulate_prompt_answer("Cancel");
+    ui.wait("the question", |ui| ui.asked().is_some());
+    ui.click("close-chat-keep");
     ui.frame();
     assert_eq!(ui.open_chats(), std::slice::from_ref(&chat), "cancelling leaves it open");
     std::fs::write(&done, "").unwrap();

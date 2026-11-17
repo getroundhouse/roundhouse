@@ -106,15 +106,15 @@ fn disconnecting_asks_first_and_the_default_stays_the_default_with_agents_blocke
 
     ui.click(more(&account));
     ui.click_menu_item("Disconnect");
-    ui.wait("the question", |ui| ui.cx.has_pending_prompt());
-    ui.cx.simulate_prompt_answer("Cancel");
+    ui.wait("the question", |ui| ui.asked().is_some());
+    ui.click("disconnect-github-account-keep");
     ui.wait_for_every_call();
     assert!(the_hubs(&stack)[0].held_login.is_some(), "nothing is forgotten without asking");
 
     ui.click(more(&account));
     ui.click_menu_item("Disconnect");
-    ui.wait("the question", |ui| ui.cx.has_pending_prompt());
-    ui.cx.simulate_prompt_answer("Disconnect");
+    ui.wait("the question", |ui| ui.asked().is_some());
+    ui.click("disconnect-github-account-act");
 
     ui.wait("agents blocked", |ui| ui.has("git-blocked"));
     assert_eq!(the_hubs(&stack)[0].held_login, None);

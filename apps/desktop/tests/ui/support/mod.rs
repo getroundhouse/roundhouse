@@ -7,6 +7,7 @@ mod attachments;
 mod chats;
 mod click;
 mod daemons;
+mod dialogs;
 mod diff;
 mod drawn;
 mod fake;

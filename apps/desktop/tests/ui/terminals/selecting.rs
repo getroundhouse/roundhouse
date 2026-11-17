@@ -177,6 +177,6 @@ fn what_is_selected_in_a_terminal_is_what_is_copied(cx: &mut TestAppContext) {
     let select_all = crate::menus::bound_where_focus_is(&mut ui, SELECT_ALL);
     assert!(select_all.is_some_and(|bound| bound.partial_eq(&SelectAll)), "{SELECT_ALL} is the terminal's");
     let archived = ui.view().records().workspaces().iter().any(|w| w.status != WorkspaceStatus::Ready);
-    assert!(!archived && !ui.cx.has_pending_prompt(), "the workspace is left as it was");
+    assert!(!archived && ui.asked().is_none(), "the workspace is left as it was");
     assert_eq!(showing(&ui), Showing::Terminal);
 }

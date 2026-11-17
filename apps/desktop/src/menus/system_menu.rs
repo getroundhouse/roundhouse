@@ -5,7 +5,7 @@ use crate::{
     ShowAll, ToggleDiff, Zoom,
 };
 use gpui_kit::component::input::{Copy, Cut, Paste, Redo, SelectAll, Undo};
-use gpui_kit::{App, Menu, MenuItem, OsAction, PromptLevel, SystemMenuType, Window};
+use gpui_kit::{App, Menu, MenuItem, OsAction, SystemMenuType, Window};
 
 /// The system whose menus the app has, which is the one it's built for.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -200,7 +200,7 @@ fn help_menu() -> Menu {
 /// Says which build this is, the same as the sidebar does.
 fn about(build_version: &str, cx: &mut App) {
     let version = format!("Version {build_version}");
-    crate::alert::show(PromptLevel::Info, "Roundhouse".to_string(), version, cx);
+    crate::asking::tell("Roundhouse", version, cx);
 }
 
 /// Does something to the window in front, once the action that asked for it is done. GPUI lends a window out while
