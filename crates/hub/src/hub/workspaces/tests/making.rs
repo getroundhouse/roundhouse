@@ -1,11 +1,11 @@
 //! Making a workspace, with a stand-in for its worker, and settling one an earlier hub left part way through being
 //! archived or restored.
 
-use protocol::client::{ApiError, ErrorCode};
-use protocol::model::{AgentKind, ClientRequestId, SessionSettingsChange, WorkspaceId, WorkspaceStatus};
+use protocol::client::{ApiError, ErrorCode, HubNotice};
+use protocol::model::{AgentKind, ClientRequestId, RecordKey, SessionSettingsChange, WorkspaceId, WorkspaceStatus};
 use protocol::worker::{PrepareWorkspace, RepoSource, WorkerRequest, WorkerResponse, WorktreeThereReply};
 
-use crate::hub::stand_in_workers::hub_with_stand_in_workers;
+use crate::hub::stand_in_workers::{hub_whose_stand_ins_answer_first, hub_with_stand_in_workers};
 use crate::hub::tests::{hub_in, serving};
 use crate::store::{Ended, Move};
 use crate::worker_link::WorkerLink;
@@ -38,6 +38,32 @@ async fn a_workspace_is_ready_where_its_worker_made_the_worktree_it_was_asked_fo
         (WorkspaceStatus::Ready, Some("/ws/birch"), "birch/start", Some("origin/next"))
     );
     assert_eq!(hub.workspace(&made.id).await.unwrap().path.as_deref(), Some("/ws/birch"), "as its record says");
+}
+
+/// So a client shows it on its way until it goes: it's announced as soon as it's recorded, and once its worker couldn't
+/// make the worktree, its removal, which is newer, and nothing of it is left.
+#[tokio::test]
+async fn a_workspace_that_cant_be_made_is_announced_on_its_way_and_then_removed() {
+    let dir = tempfile::tempdir().unwrap();
+    let (hub, _) = hub_whose_stand_ins_answer_first(dir.path(), |request| {
+        let WorkerRequest::PrepareWorkspace(_) = request else { return None };
+        Some(Err(ApiError::new(ErrorCode::Worker, "the repository has gone")))
+    });
+    let mut feed = hub.subscribe_feed();
+
+    let refused = hub.workspace_create("r".into(), Some("doomed".into()), None, None).await.map_err(|e| e.code);
+
+    let told: Vec<_> = std::iter::from_fn(|| feed.try_recv().ok())
+        .filter(|notice| matches!(notice, HubNotice::Workspace(_) | HubNotice::Removed { .. }))
+        .collect();
+    let [HubNotice::Workspace(making), HubNotice::Removed { record, rev }] = told.as_slice() else {
+        panic!("the workspace on its way, then its removal: {told:?}")
+    };
+    assert_eq!(refused.err(), Some(ErrorCode::Worker));
+    assert_eq!((making.name.as_str(), making.status), ("doomed", WorkspaceStatus::Creating));
+    assert_eq!(record, &RecordKey::Workspace { id: making.id.clone() });
+    assert!(*rev > making.rev, "{rev:?} after {:?}", making.rev);
+    assert!(hub.workspace_list(true).await.unwrap().iter().all(|workspace| workspace.id != making.id));
 }
 
 /// So a client that loses the reply can send it again, whatever has happened meanwhile, and get what it made rather

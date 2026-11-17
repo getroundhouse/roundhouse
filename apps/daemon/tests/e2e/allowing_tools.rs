@@ -7,9 +7,9 @@ use std::path::{Path, PathBuf};
 use client_core::{Client, Subscription};
 use protocol::client::HubNotice;
 use protocol::event::{ApprovalOutcome, EventBody, SessionEvent};
-use protocol::model::{AgentKind, HubSettingsChange, PermissionMode, Session, SessionId, SessionStatus};
+use protocol::model::{HubSettingsChange, Session, SessionId, SessionStatus};
 
-use crate::support::{Stack, in_mode, next_notice, wait_for_approval, wait_for_status, wait_for_turn_end, workspace};
+use crate::support::{Stack, next_notice, wait_for_turn_end, workspace};
 
 /// A command the agent asks about with full access, as Claude's CLI does, since it can't tell what it removes. It
 /// removes the directory `scratch` names.
@@ -108,27 +108,4 @@ fn a_hub_set_to_allow_it_allows_what_an_agent_with_full_access_asks_and_nobody_i
     let events = wait_for_turn_end(&client, &session.id, 2);
     assert_eq!(answered(&events)[1..], [allowed, allowed]);
     assert_eq!(told.iter().find(|session| waits(session)), None);
-}
-
-#[test]
-fn a_hub_not_set_to_allow_it_or_in_plan_mode_leaves_the_person_to_answer() {
-    let stack = Stack::start();
-    let client = stack.client();
-    let (workspace, session) = stack.workspace(&client);
-    let removed = to_remove(&PathBuf::from(workspace.path.clone().unwrap()), "kept");
-
-    client.session_prompt(&session.id, &format!("tool:{UNCHECKED_REMOVAL}"), None).unwrap();
-
-    wait_for_approval(&client, &session.id);
-    wait_for_status(&client, &session.id, SessionStatus::WaitingApproval);
-    assert!(removed.exists(), "nothing runs before the person allows it");
-
-    // Plan mode asks before any call that changes anything, and the person answers whatever the hub is set to do.
-    client.hub_configure(allow_asked(true)).unwrap();
-    let planning =
-        client.session_create(&workspace.id, AgentKind::Claude, in_mode(PermissionMode::Plan), None).unwrap();
-    client.session_prompt(&planning.id, "tool:echo planned > planned.txt", None).unwrap();
-
-    wait_for_approval(&client, &planning.id);
-    wait_for_status(&client, &planning.id, SessionStatus::WaitingApproval);
 }

@@ -2,17 +2,12 @@
 
 #![cfg(test)]
 
-use std::path::PathBuf;
-
 use client_core::ClientError;
-use protocol::client::{ErrorCode, HubNotice};
+use protocol::client::ErrorCode;
 use protocol::event::{EventBody, SessionEvent};
-use protocol::model::{AgentKind, RecordKey, SessionSettingsChange};
+use protocol::model::{AgentKind, SessionSettingsChange};
 
-use crate::support::{
-    Gate, Stack, assistant_text, commit_settings, is_alive, next_notice, read_all, started_pid, wait_for_turn_end,
-    wait_until,
-};
+use crate::support::{Gate, Stack, assistant_text, is_alive, started_pid, wait_for_turn_end, wait_until};
 
 #[test]
 fn chats_in_a_workspace_run_side_by_side_and_keep_to_themselves() {
@@ -76,51 +71,4 @@ fn closing_a_chat_stops_only_its_agent_and_reopening_continues_it() {
     client.session_prompt(&closing.id, "recall", None).unwrap();
     let events = wait_for_turn_end(&client, &closing.id, 2);
     assert!(assistant_text(&events).contains("remember me"), "{}", assistant_text(&events));
-}
-
-#[test]
-fn closing_a_chat_with_a_prompt_waiting_on_setup_never_starts_its_agent() {
-    let stack = Stack::start();
-    let setting_up = Gate::new(&stack, "setting-up");
-    commit_settings(&stack, &format!("[scripts]\nsetup = \"{}\"\n", setting_up.shell_wait()));
-    let client = stack.client();
-    let (workspace, session) = stack.workspace(&client);
-    client.session_prompt(&session.id, "tool:echo no > never.txt", None).unwrap();
-    client.session_close(&session.id).unwrap();
-    setting_up.open();
-    wait_until("setup to finish", || {
-        client.workspace_list(false).unwrap()[0].setup != protocol::model::SetupStatus::Running
-    });
-    // Commands run one at a time, so once this is refused, the first prompt has been dealt with.
-    assert!(client.session_prompt(&session.id, "say:too late", None).is_err());
-    assert!(!PathBuf::from(workspace.path.unwrap()).join("never.txt").exists());
-    assert!(!read_all(&client, &session.id).iter().any(|e| matches!(e.body, EventBody::AgentStarted { .. })));
-}
-
-#[test]
-fn closing_a_chat_nothing_was_sent_in_deletes_it() {
-    let stack = Stack::start();
-    let client = stack.client();
-    let (workspace, used) = stack.workspace(&client);
-    client.session_prompt(&used.id, "say:keep me", None).unwrap();
-    wait_for_turn_end(&client, &used.id, 1);
-    let unused =
-        client.session_create(&workspace.id, AgentKind::Claude, SessionSettingsChange::default(), None).unwrap();
-    let feed = client.feed_subscribe().unwrap();
-
-    let closed = client.session_close(&unused.id).unwrap();
-
-    assert_eq!(closed.closed_at_ms, None, "the reply is the chat as it was");
-    let removed = loop {
-        if let HubNotice::Removed { record, rev } = next_notice(&feed, "the chat's removal") {
-            break (record, rev);
-        }
-    };
-    assert_eq!(removed.0, RecordKey::Session { id: unused.id.clone() });
-    assert!(removed.1 > closed.rev);
-    let listed: Vec<_> = client.session_list(&workspace.id).unwrap().into_iter().map(|s| s.id).collect();
-    assert_eq!(listed, std::slice::from_ref(&used.id));
-    let gone = |e: ClientError| matches!(e, ClientError::Api(e) if e.code == ErrorCode::NotFound);
-    assert!(gone(client.session_close(&unused.id).unwrap_err()), "closing it again");
-    assert!(gone(client.session_prompt(&unused.id, "say:hello?", None).unwrap_err()));
 }

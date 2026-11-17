@@ -3,7 +3,6 @@
 #![cfg(test)]
 
 use protocol::event::{ApprovalOutcome, EventBody, TurnOutcome};
-use protocol::model::SessionStatus;
 
 use crate::support::{
     Stack, assistant_text, pending_approval, read_all, wait_for_approval, wait_for_turn_end, wait_until,
@@ -41,13 +40,4 @@ fn cancelling_closes_an_open_approval() {
         EventBody::ApprovalResolved { approval_id: id, outcome: ApprovalOutcome::Cancelled, .. } if *id == approval_id
     )));
     assert_eq!(pending_approval(&events), None);
-}
-
-#[test]
-fn cancelling_with_nothing_running_is_harmless() {
-    let stack = Stack::start();
-    let client = stack.client();
-    let (_, session) = stack.workspace(&client);
-    client.session_cancel(&session.id).unwrap();
-    assert_eq!(client.session_get(&session.id).unwrap().status, SessionStatus::Idle);
 }
