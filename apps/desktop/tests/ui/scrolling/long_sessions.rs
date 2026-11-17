@@ -6,7 +6,7 @@
 use client_core::fake_hub::World;
 use client_core::fake_hub::events::{finished_turn, taken, text, user_prompt};
 use gpui_kit::TestAppContext;
-use protocol::event::SessionEvent;
+use protocol::event::{EventBody, SessionEvent};
 use protocol::model::{Seq, SessionStatus};
 
 use super::wait_for_the_list_to_settle;
@@ -92,4 +92,66 @@ pub(super) fn session_of(stack: &Stack, prompts: &[String]) -> SessionEvent {
         stack.run(&session, prompt);
     }
     stack.newest_event(&session)
+}
+
+/// A chat held by a fake hub of `events`, open as [`open_on_a_long_chat`] opens its own. Gives the newest event too,
+/// to settle at again. The hub goes with the test, so it's returned to be kept.
+pub(super) fn open_on_a_chat(cx: &mut TestAppContext, events: Vec<EventBody>) -> (FakeHub, Ui<'_>, SessionEvent) {
+    let mut world = World::default();
+    let repo = world.repo("signals");
+    let workspace = world.workspace(&repo, "ledger");
+    let chat = world.chat(&workspace, SessionStatus::Idle, events);
+    let newest = world.events_from(&chat, Seq::default()).last().cloned().unwrap();
+    let fake = FakeHub::holding(world);
+    let mut ui = Ui::open_on(cx, &fake);
+    ui.wait("the workspace", |ui| ui.transcript().is_some());
+    let last = ui.row_of(&newest);
+    wait_for_the_list_to_settle(&mut ui, last);
+    (fake, ui, newest)
+}
+
+/// The events of a chat of `turns`, as the hub records them: each prompt, the agent taking it, what it did, and the end
+/// of the turn.
+pub(super) fn turns(turns: Vec<(String, Vec<EventBody>)>) -> Vec<EventBody> {
+    let mut events = Vec::new();
+    for (asked, did) in turns {
+        let prompt = Seq::new(u64::try_from(events.len() + 1).unwrap());
+        events.extend([user_prompt(&asked), taken(prompt)]);
+        events.extend(did);
+        events.push(finished_turn(12, 0.04));
+    }
+    events
+}
+
+/// Paragraphs of `paragraph`, as few as make a text over 4 KB, which is parsed on another thread. For a test that needs
+/// a long text only for that, since the window lays out every line of one it scrolls through, which in a debug build
+/// on Linux is most of such a test's time.
+pub(super) fn just_over_4_kb(paragraph: &str) -> String {
+    let text = vec![paragraph; 4 * 1024 / (paragraph.len() + 2) + 1].join("\n\n");
+    assert!(text.len() > 4 * 1024, "parsed on another thread");
+    text
+}
+
+/// `paragraphs` paragraphs of made-up prose, the same for the same `seed`, of lengths as a reply's vary: some a line,
+/// some several, with now and then a list or a block of code, as the fake agent's `prose:` writes them.
+pub(super) fn prose(paragraphs: usize, seed: usize) -> String {
+    const WORDS: [&str; 16] = [
+        "signal", "box", "keeps", "the", "ledger", "of", "every", "train", "that", "passes", "and", "lever", "frame",
+        "holds", "route", "clear",
+    ];
+    let mut state = u64::try_from(seed).unwrap();
+    let mut next = move |n: usize| {
+        state = state.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1_442_695_040_888_963_407);
+        usize::try_from(state >> 33).unwrap() % n
+    };
+    let paragraph = |_| {
+        let words = [6, 14, 30, 60, 120][next(5)];
+        let text = Vec::from_fn(words, |_| WORDS[next(16)]).join(" ");
+        match next(8) {
+            0 => format!("- {}\n- {text}\n- {}\n\n", WORDS[next(16)], WORDS[next(16)]),
+            1 => format!("```rust\nfn {}() {{\n    {text}\n}}\n```\n\n", WORDS[next(16)]),
+            _ => format!("{text}.\n\n"),
+        }
+    };
+    Vec::from_fn(paragraphs, paragraph).concat()
 }

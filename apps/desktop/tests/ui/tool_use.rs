@@ -2,12 +2,16 @@
 
 #![cfg(test)]
 
+use client_core::fake_hub::World;
+use client_core::fake_hub::events::{taken, tool_use, user_prompt};
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{AppContext as _, ClipboardItem, TestAppContext, point, px};
-use protocol::event::{ApprovalOutcome, EventBody};
-use protocol::model::SessionStatus;
+use protocol::event::{ApprovalOutcome, Asking, CallKind, EventBody};
+use protocol::fixtures::{ApprovalRequest, approval_request};
+use protocol::model::{Seq, SessionStatus};
+use serde_json::json;
 
-use crate::support::{Stack, Ui, id};
+use crate::support::{FakeHub, Stack, Ui, id};
 
 /// A removal the agent asks about even with full access, since what it removes is only known once it runs.
 const REMOVAL: &str = r#"rm -rf "$(cat gone-path)""#;
@@ -104,11 +108,10 @@ fn subagents_that_ask_at_once_are_asked_in_turn_with_who_asks_and_how_many_wait(
     assert_eq!(outcomes(&ui), [ApprovalOutcome::Denied, ApprovalOutcome::Allowed]);
 }
 
+/// Only what's asked matters here, and nothing is answered, so the chat is made up for a fake hub.
 #[gpui_kit::test]
 fn the_command_asked_about_can_be_selected_and_copied_while_the_typing_row_has_focus(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let (mut ui, _gone) = with_something_to_remove(cx, &stack);
-    ui.ask(&format!("tool:{REMOVAL}"));
+    let (_fake, mut ui) = asked_to_remove(cx);
     ui.click(id("question-other"));
 
     let given = ui.bounds(id("question-given"));
@@ -121,4 +124,33 @@ fn the_command_asked_about_can_be_selected_and_copied_while_the_typing_row_has_f
 
     let copied = ui.cx.read_from_clipboard().and_then(|item| item.text());
     assert_eq!(copied.as_deref(), Some(REMOVAL));
+}
+
+/// A chat held by a fake hub whose agent asks to run [`REMOVAL`], as the hub records it from Claude, open with the
+/// request asked in the composer's place. The hub goes with the test, so it's returned to be kept.
+fn asked_to_remove(cx: &mut TestAppContext) -> (FakeHub, Ui<'_>) {
+    let says_its_for = "Run a command the test asked for";
+    let input = json!({ "command": REMOVAL, "description": says_its_for });
+    let request = ApprovalRequest {
+        tool_use_id: Some("toolu-1".into()),
+        input: input.clone(),
+        description: Some(says_its_for.to_string()),
+        asking: Some(Asking::ToolUse { call: Some(CallKind::Command) }),
+        reason: Some("Dangerous rm operation on statically-unresolvable target: command substitution output".into()),
+        ..approval_request("approval-1", "Bash")
+    };
+    let events = vec![
+        user_prompt(&format!("tool:{REMOVAL}")),
+        taken(Seq::new(1)),
+        tool_use("msg-1", "toolu-1", "Bash", input),
+        request.into(),
+    ];
+    let mut world = World::default();
+    let repo = world.repo("signals");
+    let workspace = world.workspace(&repo, "ledger");
+    world.chat(&workspace, SessionStatus::WaitingApproval, events);
+    let fake = FakeHub::holding(world);
+    let mut ui = Ui::open_on(cx, &fake);
+    ui.wait("the request", |ui| ui.shows_label("question-given", REMOVAL));
+    (fake, ui)
 }

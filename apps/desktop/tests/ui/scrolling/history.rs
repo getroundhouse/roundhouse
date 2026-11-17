@@ -1,11 +1,14 @@
 #![cfg(test)]
 
-use super::{LONG, open_on_a_long_session, prompts, session_of, session_saying};
-use crate::support::{Stack, Ui};
+use super::{
+    LONG, just_over_4_kb, open_on_a_chat, open_on_a_chat_saying, open_on_a_long_chat, prose, session_saying, turns,
+};
+use crate::support::{FakeHub, Stack, Ui};
+use client_core::fake_hub::events::text;
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{
-    AppContext as _, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, ScrollDelta, TestAppContext,
-    point, px,
+    AppContext as _, InputEvent as _, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, ScrollDelta,
+    TestAppContext, point, px,
 };
 use protocol::event::{EventBody, SessionEvent};
 use protocol::model::SessionId;
@@ -15,6 +18,8 @@ use transcript::Place;
 /// A frame's length, for letting the list measure what it does a few rows to a frame.
 pub(super) const A_FRAME: Duration = Duration::from_millis(16);
 
+/// On a real hub, as the one window test of pages of history coming from where the hub keeps them. What the window
+/// does as they come is tested on a fake hub, which pages its made-up chats the same way.
 #[gpui_kit::test]
 fn long_history_loads_a_page_at_a_time_as_it_is_scrolled_to(cx: &mut TestAppContext) {
     let stack = Stack::new();
@@ -40,22 +45,18 @@ fn long_history_loads_a_page_at_a_time_as_it_is_scrolled_to(cx: &mut TestAppCont
 
 #[gpui_kit::test]
 fn the_scrollbar_s_thumb_goes_up_a_long_session_as_steadily_as_the_wheel_does(cx: &mut TestAppContext) {
-    let stack = Stack::new();
     // Replies of a line, a paragraph or a few, and a few screens, in no order, since rows alike hide what an estimate
-    // gets wrong, and more rows than a chat loads as it opens. Those a few screens long are parsed on another thread,
-    // which the wheel's check below is about.
-    let newest = session_of(
-        &stack,
-        &prompts(450, |i| match i {
-            _ if i % 100 == 50 => format!("prose:22:{i}"),
-            _ if i % 5 == 0 => format!("prose:{}:{i}", [1, 2, 1, 3][i / 5 % 4]),
-            _ => format!("whole:{}", "train {i} is on the main line. ".repeat([1, 2, 1, 1, 1][i * 3 % 5])),
-        }),
-    );
-    let mut ui = Ui::open(cx, &stack);
-    ui.wait("the workspace", |ui| ui.transcript().is_some());
+    // gets wrong. As many as take the chat past the two pages that load as it opens, so an older page arrives on the
+    // way up, which is what bounds the walk, since the wheel goes through every row. The few screens long are only
+    // as long as being parsed on another thread takes, which the wheel's check below is about.
+    let (_fake, mut ui) = open_on_a_chat_saying(cx, 450, |i| match i {
+        _ if i % 100 == 50 => {
+            just_over_4_kb(&format!("Train {i} keeps to the main line through the junction. ").repeat(6))
+        }
+        _ if i % 5 == 0 => vec![format!("Train {i} waits for the block ahead. "); [1, 2, 1, 3][i / 5 % 4]].join("\n\n"),
+        _ => "train {i} is on the main line. ".repeat([1, 2, 1, 1, 1][i * 3 % 5]),
+    });
     let transcript = ui.transcript().unwrap();
-    wait_for_the_tail(&mut ui, &newest);
     ui.frame();
     assert!((thumb(&ui) - 1.).abs() < f32::EPSILON, "it starts at the end, not at {}", thumb(&ui));
 
@@ -94,10 +95,16 @@ fn the_scrollbar_s_thumb_goes_up_a_long_session_as_steadily_as_the_wheel_does(cx
     assert!(steady > steps.len() / 2, "only {steady} of {} steps had no page arriving to excuse them", steps.len());
 
     // With every row loaded and measured, back down is as steady as can be, however far a turn goes.
-    let mut down = vec![thumb(&ui)];
-    while thumb(&ui) < 1. {
-        ui.scroll("transcript", ScrollDelta::Pixels(point(px(0.), -wheel * 3.)));
-        down.push(thumb(&ui));
+    goes_back_down_steadily(&mut ui, wheel * 3.);
+}
+
+/// Turns the wheel down by `turn` at a time from where the list is to the end, and checks every turn moved the thumb
+/// as far as the others, but the last, which stops at the end however far that is.
+fn goes_back_down_steadily(ui: &mut Ui<'_>, turn: Pixels) {
+    let mut down = vec![thumb(ui)];
+    while thumb(ui) < 1. {
+        ui.scroll("transcript", ScrollDelta::Pixels(point(px(0.), -turn)));
+        down.push(thumb(ui));
         assert!(down.len() < 5000, "the end is never reached");
     }
     let mut moved: Vec<f32> = down.windows(2).map(|pair| pair[1] - pair[0]).collect();
@@ -160,13 +167,8 @@ fn went_up_steadily(steps: &[Step]) -> usize {
 
 #[gpui_kit::test]
 fn dragging_the_scrollbar_s_thumb_stops_part_way_through_a_long_reply(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    // Three replies, each several screens long.
-    let newest = session_saying(&stack, 3, |_| vec!["the signal box keeps a ledger. ".repeat(40); 30].join("\n\n"));
-    let mut ui = Ui::open(cx, &stack);
-    ui.wait("the workspace", |ui| ui.transcript().is_some());
+    let (_fake, mut ui) = open_on_a_few_very_long_rows(cx);
     let transcript = ui.transcript().unwrap();
-    wait_for_the_tail(&mut ui, &newest);
     // The bar shows once the transcript has moved.
     ui.scroll("transcript", ScrollDelta::Pixels(point(px(0.), px(20.))));
     let bar = ui.cx.update_window(ui.handle, |_, window, _| window.find("transcript").bounds()).unwrap();
@@ -186,14 +188,10 @@ fn dragging_the_scrollbar_s_thumb_stops_part_way_through_a_long_reply(cx: &mut T
 
 #[gpui_kit::test]
 fn the_scrollbar_s_thumb_keeps_its_length_through_a_few_very_long_rows(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    // A prompt screens long, since it holds the script, and three replies as long. Whichever is drawn first says
-    // little about the height of the rest unless their lengths are gone by.
-    let newest = session_saying(&stack, 3, |_| vec!["the signal box keeps a ledger. ".repeat(40); 30].join("\n\n"));
-    let mut ui = Ui::open(cx, &stack);
-    ui.wait("the workspace", |ui| ui.transcript().is_some());
+    // Whichever of the long rows is drawn first says little about the height of the rest unless their lengths are gone
+    // by.
+    let (_fake, mut ui) = open_on_a_few_very_long_rows(cx);
     let transcript = ui.transcript().unwrap();
-    wait_for_the_tail(&mut ui, &newest);
     ui.frame();
     let height = |ui: &Ui<'_>| ui.cx.read_entity(&transcript, |t, _| t.list().thumb().1);
     let top = |ui: &Ui<'_>| ui.cx.read_entity(&transcript, |t, _| t.list().top());
@@ -213,13 +211,10 @@ fn the_scrollbar_s_thumb_keeps_its_length_through_a_few_very_long_rows(cx: &mut 
 
 #[gpui_kit::test]
 fn dragging_the_scrollbar_s_thumb_goes_through_the_session_only_the_way_the_thumb_goes(cx: &mut TestAppContext) {
-    let stack = Stack::new();
     // Short prompts, and replies from a line to a few screens long, more than a transcript loads at once.
-    let newest = session_of(&stack, &prompts(450, |i| format!("prose:{}:{i}", [1, 2, 8, 1, 3, 20][i % 6])));
-    let mut ui = Ui::open(cx, &stack);
-    ui.wait("the workspace", |ui| ui.transcript().is_some());
+    let (_fake, mut ui) = open_on_a_chat_saying(cx, 450, |i| prose([1, 2, 8, 1, 3, 20][i % 6], i));
     let transcript = ui.transcript().unwrap();
-    let total = wait_for_the_tail(&mut ui, &newest);
+    let total = ui.cx.read_entity(&transcript, |t, _| t.row_count());
     assert!(ui.cx.read_entity(&transcript, |t, _| t.event_at(0).is_none()), "the start isn't loaded yet");
     // The bar shows once the transcript has moved, with the thumb at the bottom of its track.
     ui.scroll("transcript", ScrollDelta::Pixels(point(px(0.), px(20.))));
@@ -302,8 +297,7 @@ pub(super) fn wait_for_the_list_to_settle(ui: &mut Ui<'_>, row: usize) {
 /// with them. Going by that while the thumb is held moved the page under a pointer that was holding still.
 #[gpui_kit::test]
 fn a_place_on_the_scrollbars_track_is_the_same_row_however_long_the_thumb_rests_there(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = open_on_a_long_session(cx, &stack);
+    let (_fake, mut ui) = open_on_a_long_chat(cx);
     let transcript = ui.transcript().unwrap();
     ui.scroll("transcript", ScrollDelta::Pixels(point(px(0.), px(20.))));
     let bar = ui.cx.update_window(ui.handle, |_, window, _| window.find("transcript").bounds()).unwrap();
@@ -315,12 +309,16 @@ fn a_place_on_the_scrollbars_track_is_the_same_row_however_long_the_thumb_rests_
     let before = tall(&ui);
     press(&mut ui, MouseDownEvent { button: MouseButton::Left, position: from, click_count: 1, ..Default::default() });
 
-    // Up to the middle of the track, into rows that haven't been fetched. The scrollbar draws a drag no more often
-    // than the display does, so the list is drawn there a frame on.
+    // Up to the middle of the track, into rows that haven't been fetched. The row is the one the move sends the list
+    // to, read before anything else runs. Read after a frame, it's that row only if the page there hasn't been taken
+    // up yet: once it has, the list keeps what's on screen still, which can leave a row before it at the top until the
+    // pointer says where it is again, two rows from where it then rests.
     let rest = point(from.x, bar.center().y);
-    press(&mut ui, MouseMoveEvent { position: rest, pressed_button: held, ..Default::default() });
-    ui.play(A_FRAME);
+    let moved = MouseMoveEvent { position: rest, pressed_button: held, ..Default::default() };
+    ui.cx.update_window(ui.handle, |_, window, cx| window.dispatch_event(moved.to_platform_input(), cx)).unwrap();
     let row = top(&ui);
+    // The scrollbar draws a drag no more often than the display does, so the list is drawn there a frame on.
+    ui.play(A_FRAME);
     // And the list to be told of them, since the rows are drawn from the log as the transcript last caught up with it.
     ui.wait("the rows there to load", |ui| {
         ui.cx.read_entity(&transcript, |t, _| t.event_at(row).is_some() && t.list().loaded_rows() == t.loaded_rows())
@@ -348,6 +346,18 @@ pub(super) fn press(ui: &mut Ui<'_>, event: impl gpui_kit::InputEvent) {
 /// How far down the session the transcript's scrollbar says it is.
 pub(super) fn thumb(ui: &Ui<'_>) -> f32 {
     ui.cx.read_entity(&ui.transcript().unwrap(), |t, _| t.list().thumb().0)
+}
+
+/// A chat held by a fake hub of a prompt screens long, as one is that holds the fake agent's script, and three replies
+/// as long, open at its end. The hub goes with the test, so it's returned to be kept.
+fn open_on_a_few_very_long_rows(cx: &mut TestAppContext) -> (FakeHub, Ui<'_>) {
+    // Each reply a few windows tall, which is all a row whose length is gone by needs, and what a short drag of the
+    // thumb needs to stay in one, and no taller, since the wheel goes through all of them.
+    let reply = vec!["the signal box keeps a ledger. ".repeat(40); 8].join("\n\n");
+    let script = vec![format!("whole:{reply}"); 3].join("; ");
+    let said = Vec::from_fn(3, |i| text(&format!("msg-{i}"), &reply));
+    let (fake, ui, _) = open_on_a_chat(cx, turns(vec![(script, said)]));
+    (fake, ui)
 }
 
 /// Starts a session and has the agent say [`LONG`] things in it, which is more than a transcript loads at once.
