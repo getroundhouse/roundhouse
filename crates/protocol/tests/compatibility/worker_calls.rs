@@ -12,8 +12,8 @@ use protocol::model::{
     Head, LoginToken, ModelName, PageLine, RunId, WorktreeFiles,
 };
 use protocol::worker::{
-    self, AgentSpec, RateLimit, RunningAgent, ToolsToken, WorkerCall, WorkerFrame, WorkerOutcome, WorkerRequest,
-    WorkerResponse,
+    self, AgentSpec, RateLimit, RepoSource, RunningAgent, ToolsToken, WorkerCall, WorkerFrame, WorkerOutcome,
+    WorkerRequest, WorkerResponse,
 };
 
 use super::keeps_its_form;
@@ -42,7 +42,7 @@ pub(super) fn answered(response: WorkerResponse, form: &str) {
 }
 
 #[test]
-fn every_request_about_the_connection_and_the_workspace_keeps_its_form() {
+fn every_request_about_the_connection_keeps_its_form() {
     let hello = WorkerRequest::Hello(worker::Hello {
         protocol_version: 4,
         oldest_protocol_version: Some(3),
@@ -55,49 +55,63 @@ fn every_request_about_the_connection_and_the_workspace_keeps_its_form() {
     asked(WorkerRequest::Stop, r#"{"method":"stop"}"#);
     asked(WorkerRequest::RunningAgents, r#"{"method":"running_agents"}"#);
     asked(WorkerRequest::Received(worker::Received { through: 12 }), r#"{"method":"received","through":12}"#);
-    let names = WorkerRequest::NamesGitHas(worker::NamesGitHas { repo_name: "r".into(), repo_path: "/r".into() });
-    asked(names, r#"{"method":"names_git_has","repo_name":"r","repo_path":"/r"}"#);
+    asked(
+        WorkerRequest::ServeTools(worker::ServeTools { port: Some(50_123) }),
+        r#"{"method":"serve_tools","port":50123}"#,
+    );
+    asked(WorkerRequest::ServeTools(worker::ServeTools { port: None }), r#"{"method":"serve_tools"}"#);
+}
+
+/// The repository's checkout, as a hub of this build names it. `repo_sources.rs` spells out its other forms, and a
+/// clone's.
+fn checkout() -> RepoSource {
+    RepoSource::Checkout { path: "/r".into() }
+}
+
+#[test]
+fn every_request_about_the_workspace_keeps_its_form() {
+    let names = worker::NamesGitHas { repo_name: "r".into(), source: checkout() };
+    asked(
+        WorkerRequest::NamesGitHas(names),
+        r#"{"method":"names_git_has","repo_name":"r","repo_path":"/r","source":{"kind":"checkout","path":"/r"}}"#,
+    );
     let prepare = WorkerRequest::PrepareWorkspace(worker::PrepareWorkspace {
         repo_name: "r".into(),
-        repo_path: "/r".into(),
+        source: checkout(),
         workspace_name: "aspen".into(),
         branch: "aspen".into(),
         base_ref: None,
     });
     asked(
         prepare,
-        r#"{"method":"prepare_workspace","repo_name":"r","repo_path":"/r","workspace_name":"aspen","branch":"aspen","base_ref":null}"#,
+        r#"{"method":"prepare_workspace","repo_name":"r","repo_path":"/r","source":{"kind":"checkout","path":"/r"},"workspace_name":"aspen","branch":"aspen","base_ref":null}"#,
     );
-    let restore = WorkerRequest::RestoreWorkspace(worker::RestoreWorkspace {
-        repo_path: "/r".into(),
-        path: "/w".into(),
-        branch: "birch".into(),
-    });
-    asked(restore, r#"{"method":"restore_workspace","repo_path":"/r","path":"/w","branch":"birch"}"#);
-    let remove = worker::RemoveWorkspace { repo_path: "/r".into(), path: "/w".into(), force: true, own: None };
+    let restore = worker::RestoreWorkspace { source: checkout(), path: "/w".into(), branch: "birch".into() };
+    asked(
+        WorkerRequest::RestoreWorkspace(restore),
+        r#"{"method":"restore_workspace","repo_path":"/r","source":{"kind":"checkout","path":"/r"},"path":"/w","branch":"birch"}"#,
+    );
+    let remove = worker::RemoveWorkspace { source: checkout(), path: "/w".into(), force: true, own: None };
     let another = worker::RemoveWorkspace { path: "/c".into(), own: Some("/w".into()), ..remove.clone() };
     asked(
         WorkerRequest::RemoveWorkspace(remove),
-        r#"{"method":"remove_workspace","repo_path":"/r","path":"/w","force":true}"#,
+        r#"{"method":"remove_workspace","repo_path":"/r","source":{"kind":"checkout","path":"/r"},"path":"/w","force":true}"#,
     );
     asked(
         WorkerRequest::RemoveWorkspace(another),
-        r#"{"method":"remove_workspace","repo_path":"/r","path":"/c","force":true,"own":"/w"}"#,
+        r#"{"method":"remove_workspace","repo_path":"/r","source":{"kind":"checkout","path":"/r"},"path":"/c","force":true,"own":"/w"}"#,
     );
     let env = vec![("PORT".to_string(), "55000".to_string())];
-    let setup =
-        WorkerRequest::SetupWorkspace(worker::SetupWorkspace { repo_path: "/r".into(), path: "/w".into(), env });
-    asked(setup, r#"{"method":"setup_workspace","repo_path":"/r","path":"/w","env":[["PORT","55000"]]}"#);
+    asked(
+        WorkerRequest::SetupWorkspace(worker::SetupWorkspace { source: checkout(), path: "/w".into(), env }),
+        r#"{"method":"setup_workspace","repo_path":"/r","source":{"kind":"checkout","path":"/r"},"path":"/w","env":[["PORT","55000"]]}"#,
+    );
     asked(WorkerRequest::CancelSetup, r#"{"method":"cancel_setup"}"#);
     asked(WorkerRequest::SetupLog(worker::SetupLog { path: "/w".into() }), r#"{"method":"setup_log","path":"/w"}"#);
-    let archive =
-        WorkerRequest::ArchiveScript(worker::ArchiveScript { repo_path: "/r".into(), path: "/w".into(), env: vec![] });
-    asked(archive, r#"{"method":"archive_script","repo_path":"/r","path":"/w","env":[]}"#);
     asked(
-        WorkerRequest::ServeTools(worker::ServeTools { port: Some(50_123) }),
-        r#"{"method":"serve_tools","port":50123}"#,
+        WorkerRequest::ArchiveScript(worker::ArchiveScript { source: checkout(), path: "/w".into(), env: vec![] }),
+        r#"{"method":"archive_script","repo_path":"/r","source":{"kind":"checkout","path":"/r"},"path":"/w","env":[]}"#,
     );
-    asked(WorkerRequest::ServeTools(worker::ServeTools { port: None }), r#"{"method":"serve_tools"}"#);
 }
 
 #[test]

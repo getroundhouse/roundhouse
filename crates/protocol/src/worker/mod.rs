@@ -18,6 +18,7 @@ mod github;
 mod github_remote;
 mod one_off;
 pub mod previous;
+mod repo_source;
 mod tools;
 mod workspaces;
 mod worktree;
@@ -40,6 +41,7 @@ pub use github::{
 };
 pub use github_remote::{GithubRemote, GithubRemoteReply};
 pub use one_off::{AccountFor, TitleFor, TitleReply};
+pub use repo_source::RepoSource;
 pub use tools::{ServeTools, ToolsServing, ToolsToken, WAIT_TOOL, WAITS_TOOL};
 pub use workspaces::{
     ArchiveScript, CancelSetup, NamesGitHas, NamesGitHasReply, PrepareWorkspace, RemoveWorkspace, RestoreWorkspace,

@@ -11,7 +11,7 @@ use process::testing::WholeEnvironment;
 use protocol::frame;
 use protocol::model::{GhLogin, GhLoginWorks, GithubToken};
 use protocol::worker::{
-    GitCredential, GitCredentialSet, GithubCredential, GithubLoginReply, Hello, SetupDone, SetupWorkspace,
+    GitCredential, GitCredentialSet, GithubCredential, GithubLoginReply, Hello, RepoSource, SetupDone, SetupWorkspace,
     WORKER_PROTOCOL_VERSION, WorkerCall, WorkerFrame, WorkerOutcome, WorkerRequest, WorkerResponse,
 };
 
@@ -59,6 +59,8 @@ impl Worker {
             .arg(dir.path().join("workspaces"))
             .arg("--state-dir")
             .arg(dir.path().join("instance"))
+            .arg("--clones-dir")
+            .arg(dir.path().join("clones"))
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
@@ -106,7 +108,11 @@ impl Worker {
 
     fn setup(&self) -> WorkerRequest {
         let path = self.work().to_string_lossy().into_owned();
-        WorkerRequest::SetupWorkspace(SetupWorkspace { repo_path: path.clone(), path, env: vec![] })
+        WorkerRequest::SetupWorkspace(SetupWorkspace {
+            source: RepoSource::Checkout { path: path.clone() },
+            path,
+            env: vec![],
+        })
     }
 
     /// What the script's git said, once the worker has set each of `credentials` in turn: what it filled in, what it

@@ -36,6 +36,8 @@ pub struct LocalConfig {
     /// One directory per instance, holding its worker's records.
     pub instances_dir: PathBuf,
     pub workspaces_root: PathBuf,
+    /// Where every worker keeps its clones, which they share.
+    pub clones_dir: PathBuf,
     /// The user's shell, which has the real `PATH`. Found from the user's account if this is `None`.
     pub shell: Option<String>,
     /// This process's own `PATH`, which workers get as well as the login shell's.
@@ -332,6 +334,8 @@ impl Provider for LocalProvider {
                 text(&self.config.workspaces_root),
                 "--state-dir".into(),
                 text(&dir),
+                "--clones-dir".into(),
+                text(&self.config.clones_dir),
             ],
             env,
         })

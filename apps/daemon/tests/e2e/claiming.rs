@@ -17,6 +17,8 @@ fn worker(dir: &Path) -> Child {
         .arg(dir.join("workspaces"))
         .arg("--state-dir")
         .arg(dir.join("instance"))
+        .arg("--clones-dir")
+        .arg(dir.join("clones"))
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())

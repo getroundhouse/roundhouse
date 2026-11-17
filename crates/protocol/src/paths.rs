@@ -96,6 +96,10 @@ pub struct Paths {
     pub attachments_dir: PathBuf,
     pub log: PathBuf,
     pub instances_dir: PathBuf,
+    /// Where the local provider's workers keep their clones of the repositories they're told of by their address, one
+    /// for each address, which every one of them shares, and which outlives any instance. The hub only names it to its
+    /// workers, since a clone is theirs.
+    pub clones_dir: PathBuf,
     /// What each workspace's worker writes to stderr, a file per instance, whichever provider runs it.
     pub worker_logs_dir: PathBuf,
     /// The token of each login the hub holds for an agent's account, a file each, out of the database.
@@ -170,6 +174,7 @@ pub fn resolve(env: impl Fn(&str) -> Option<String>) -> Result<Paths, String> {
         attachments_dir: data_dir.join("attachments"),
         log: data_dir.join("hub.log"),
         instances_dir: data_dir.join("instances"),
+        clones_dir: data_dir.join("clones"),
         worker_logs_dir: data_dir.join("worker-logs"),
         logins_dir: data_dir.join(LOGINS_DIR),
         providers: data_dir.join("providers.json"),

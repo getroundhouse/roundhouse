@@ -17,6 +17,7 @@ use crate::error::internal;
 use crate::hub::Hub;
 use crate::hub::children::would_lose;
 use crate::hub::ready::ReadyWorkspace;
+use crate::hub::repo_source::repo_source;
 use crate::session::Command;
 use crate::store::{Ended, Move};
 use crate::worker_link::WorkerLink;
@@ -89,7 +90,7 @@ impl Hub {
         let _ = link.call(CancelSetup).await;
         self.call_off_waits_of(id).await?;
         let script =
-            ArchiveScript { repo_path: repo.path.clone(), path: path.clone(), env: workspace_env(workspace, &repo) };
+            ArchiveScript { source: repo_source(&repo), path: path.clone(), env: workspace_env(workspace, &repo) };
         match link.call(script).await {
             Ok(()) => {}
             Err(e) if !force => return Err(e),
@@ -104,7 +105,7 @@ impl Hub {
         // way, which the next then finds ready. Each checks again unless forced, because an agent may have written
         // files before it stopped.
         self.remove_children(&repo, &link, &path, &children, force).await?;
-        link.call(RemoveWorkspace { repo_path: repo.path, path, force, own: None }).await?;
+        link.call(RemoveWorkspace { source: repo_source(&repo), path, force, own: None }).await?;
         let provider = self.provider(&workspace.provider)?;
         self.close_worker(workspace, &link, provider.as_ref()).await;
         // Agents are expected to rename their branch to match the work. Restoring needs its real name.
@@ -172,7 +173,7 @@ impl Hub {
         let repo = self.repo_of(workspace).await?;
         let path = workspace.path.clone().ok_or_else(|| internal("an archived workspace has no path"))?;
         let link = self.ensure_worker(&workspace.id).await?;
-        let request = RestoreWorkspace { repo_path: repo.path.clone(), path, branch: workspace.branch.clone() };
+        let request = RestoreWorkspace { source: repo_source(&repo), path, branch: workspace.branch.clone() };
         link.call(request).await?;
         Ok((repo, link))
     }

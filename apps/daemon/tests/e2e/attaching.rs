@@ -37,6 +37,8 @@ impl Attached {
             .arg(workspaces_root)
             .arg("--state-dir")
             .arg(state_dir)
+            .arg("--clones-dir")
+            .arg(workspaces_root.with_file_name("clones"))
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::null())

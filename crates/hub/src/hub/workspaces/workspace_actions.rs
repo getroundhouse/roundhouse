@@ -1,4 +1,5 @@
 use super::super::ready::ReadyWorkspace;
+use super::super::repo_source::repo_source;
 use super::super::{Hub, new_id};
 use super::naming;
 use crate::error::{internal, provider_failed};
@@ -143,7 +144,7 @@ impl Hub {
             let link = self.ensure_worker(&workspace.id).await?;
             let prepare = PrepareWorkspace {
                 repo_name: repo.name.clone(),
-                repo_path: repo.path.clone(),
+                source: repo_source(repo),
                 workspace_name: workspace.name.clone(),
                 branch: workspace.branch.clone(),
                 base_ref: base_ref.clone(),

@@ -7,33 +7,34 @@ use process::Environment;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::BranchName;
 use protocol::worker::WorkspaceReady;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::time::Duration;
 
 /// Long enough for a fetch over a slow connection, and short enough that a hung remote doesn't stall making a worktree.
 const FETCH_TIMEOUT: Duration = Duration::from_secs(15);
 
+/// Makes the workspace's worktree from the repository `repo`, its checkout or its clone, under `root`, in a folder of
+/// the repository's name.
 pub async fn prepare_workspace(
     given: &Environment,
     root: &Path,
     repo_name: &str,
-    repo_path: &str,
+    repo: &Path,
     workspace_name: &str,
     branch: &BranchName,
     base_ref: Option<&str>,
 ) -> Result<WorkspaceReady, ApiError> {
-    let repo = PathBuf::from(repo_path);
     let path = root.join(repo_name).join(workspace_name);
-    valid_branch_name(given, &repo, branch).await?;
+    valid_branch_name(given, repo, branch).await?;
     if exists(&path).await {
         return Err(ApiError::new(ErrorCode::NameTaken, format!("{} already exists", path.display())));
     }
     let base = match base_ref {
         Some(base) => base.to_string(),
-        None => default_base(given, &repo).await?,
+        None => default_base(given, repo).await?,
     };
     let mut warnings = Vec::new();
-    make_on_new_branch(given, &repo, branch, &base, &path, &mut warnings).await?;
+    make_on_new_branch(given, repo, branch, &base, &path, &mut warnings).await?;
     let branches = branches::read_now(given, &path).await.ok();
     let path = path.to_string_lossy().into_owned();
     Ok(WorkspaceReady { path, branch: branch.clone(), base_ref: base, warnings, branches })

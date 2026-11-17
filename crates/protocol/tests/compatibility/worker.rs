@@ -4,7 +4,7 @@ use protocol::frame::{self, Call};
 use protocol::model::{Wait, WaitEnd, WaitEnded, WaitUntil};
 use protocol::worker::Request as _;
 use protocol::worker::{
-    AskAnswer, AskId, AskOutcome, AskReply, CancelWait, PrepareWorkspace, PullRequestAnswer, ReadWait,
+    AskAnswer, AskId, AskOutcome, AskReply, CancelWait, PrepareWorkspace, PullRequestAnswer, ReadWait, RepoSource,
     RestoreWorkspace, ServeTools, StartWait, ToWorker, ToolsServing, WaitAnswer, WorkerAsk, WorkerCall, WorkerFrame,
     WorkerOutcome, WorkerRequest, WorkerResponse, WorkspaceReady, WorktreeThere, WorktreeThereReply,
 };
@@ -114,23 +114,23 @@ fn a_branch_keeps_its_form_in_what_a_hub_and_its_worker_send() {
     };
     let prepare = WorkerRequest::PrepareWorkspace(PrepareWorkspace {
         repo_name: "r".into(),
-        repo_path: "/r".into(),
+        source: RepoSource::Checkout { path: "/r".into() },
         workspace_name: "aspen".into(),
         branch: "aspen".into(),
         base_ref: Some("origin/main".into()),
     });
     keeps_its_form(
         WorkerCall { id: 1, request: prepare },
-        r#"{"id":1,"request":{"method":"prepare_workspace","repo_name":"r","repo_path":"/r","workspace_name":"aspen","branch":"aspen","base_ref":"origin/main"}}"#,
+        r#"{"id":1,"request":{"method":"prepare_workspace","repo_name":"r","repo_path":"/r","source":{"kind":"checkout","path":"/r"},"workspace_name":"aspen","branch":"aspen","base_ref":"origin/main"}}"#,
     );
     let restore = WorkerRequest::RestoreWorkspace(RestoreWorkspace {
-        repo_path: "/r".into(),
+        source: RepoSource::Checkout { path: "/r".into() },
         path: "/w".into(),
         branch: "birch".into(),
     });
     keeps_its_form(
         WorkerCall { id: 2, request: restore },
-        r#"{"id":2,"request":{"method":"restore_workspace","repo_path":"/r","path":"/w","branch":"birch"}}"#,
+        r#"{"id":2,"request":{"method":"restore_workspace","repo_path":"/r","source":{"kind":"checkout","path":"/r"},"path":"/w","branch":"birch"}}"#,
     );
 
     keeps_its_form(

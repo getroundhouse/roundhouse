@@ -45,10 +45,18 @@ impl Settings {
     }
 }
 
-/// Most specific first: your local overrides, then what's committed on this branch, then your defaults.
-/// A file that doesn't parse is skipped with a warning, because a typo shouldn't stop a workspace.
-pub fn load_settings(repo: &Path, worktree: &Path, home: Option<&Path>, warnings: &mut Vec<String>) -> Settings {
-    let mut files = vec![repo.join(".conductor/settings.local.toml"), worktree.join(".conductor/settings.toml")];
+/// Most specific first: your local overrides, in the repository's checkout, then what's committed on this branch, then
+/// your defaults. A worktree made from a clone has no checkout, and so no local overrides. A file that doesn't parse is
+/// skipped with a warning, because a typo shouldn't stop a workspace.
+pub fn load_settings(
+    checkout: Option<&Path>,
+    worktree: &Path,
+    home: Option<&Path>,
+    warnings: &mut Vec<String>,
+) -> Settings {
+    let mut files: Vec<PathBuf> =
+        checkout.map(|checkout| checkout.join(".conductor/settings.local.toml")).into_iter().collect();
+    files.push(worktree.join(".conductor/settings.toml"));
     files.extend(home.map(|home| home.join(".conductor/settings.toml")));
     let mut settings = Settings::default();
     for file in files {
@@ -72,14 +80,16 @@ fn include_patterns(repo: &Path, settings: &Settings) -> Vec<String> {
 /// Copies gitignored files matching the patterns from the main checkout into the worktree, so they
 /// don't have to be recreated by hand. Git does the matching, so patterns mean what they do in
 /// `.gitignore`. Only ignored files qualify: anything else is either tracked, and already there, or
-/// the user's work in progress. Returns what was copied.
+/// the user's work in progress. Returns what was copied, which is nothing for a worktree made from a clone, since a
+/// clone has no files of its own.
 pub async fn copy_local_files(
     given: &Environment,
-    repo: &Path,
+    checkout: Option<&Path>,
     worktree: &Path,
     settings: &Settings,
     warnings: &mut Vec<String>,
 ) -> Vec<String> {
+    let Some(repo) = checkout else { return Vec::new() };
     let patterns = include_patterns(repo, settings);
     if patterns.is_empty() {
         return Vec::new();
@@ -215,7 +225,7 @@ mod tests {
         );
         write(home.join(".conductor/settings.toml"), "[scripts]\nsetup = \"user\"\narchive = \"user-archive\"\n");
         let mut warnings = Vec::new();
-        let settings = load_settings(&repo, &worktree, Some(&home), &mut warnings);
+        let settings = load_settings(Some(&repo), &worktree, Some(&home), &mut warnings);
         assert_eq!(settings.setup.as_deref(), Some("local"));
         assert_eq!(settings.archive.as_deref(), Some("shared-archive"));
         assert_eq!(settings.file_include_globs.as_deref(), Some("a\nb\n"));
@@ -229,7 +239,7 @@ mod tests {
         write(repo.join(".conductor/settings.local.toml"), "not [ toml");
         write(worktree.join(".conductor/settings.toml"), "[scripts]\nsetup = \"shared\"\n");
         let mut warnings = Vec::new();
-        let settings = load_settings(&repo, &worktree, None, &mut warnings);
+        let settings = load_settings(Some(&repo), &worktree, None, &mut warnings);
         assert_eq!(settings.setup.as_deref(), Some("shared"));
         assert_eq!(warnings.len(), 1);
     }
@@ -246,7 +256,7 @@ mod tests {
 
         let mut warnings = Vec::new();
         let mut copied =
-            copy_local_files(&Environment::NONE, &repo, &worktree, &Settings::default(), &mut warnings).await;
+            copy_local_files(&Environment::NONE, Some(&repo), &worktree, &Settings::default(), &mut warnings).await;
         copied.sort();
         assert!(copied.contains(&".env.local".to_string()), "{copied:?}");
         assert_eq!(std::fs::read_to_string(worktree.join(".env.local")).unwrap(), "A=1\n");
@@ -263,7 +273,7 @@ mod tests {
         write(repo.join("config/app.local.json"), "{}\n");
         write(repo.join(".env"), "A=1\n");
         let copied =
-            copy_local_files(&Environment::NONE, &repo, &worktree, &Settings::default(), &mut Vec::new()).await;
+            copy_local_files(&Environment::NONE, Some(&repo), &worktree, &Settings::default(), &mut Vec::new()).await;
         assert_eq!(copied, vec!["config/app.local.json".to_string()]);
         assert!(!worktree.join(".env").exists(), "an include file replaces the default, it doesn't add to it");
     }
@@ -274,7 +284,7 @@ mod tests {
         let (repo, worktree) = repo_and_worktree(dir.path(), "certs/\n");
         write(repo.join("certs/local.pem"), "pem\n");
         let settings = Settings { file_include_globs: Some("certs/*.pem\n".into()), ..Default::default() };
-        let copied = copy_local_files(&Environment::NONE, &repo, &worktree, &settings, &mut Vec::new()).await;
+        let copied = copy_local_files(&Environment::NONE, Some(&repo), &worktree, &settings, &mut Vec::new()).await;
         assert_eq!(copied, vec!["certs/local.pem".to_string()]);
     }
 
@@ -286,7 +296,7 @@ mod tests {
         write(worktree.join(".env"), "already here\n");
         std::os::unix::fs::symlink("/etc/hosts", repo.join(".env.link")).unwrap();
         let copied =
-            copy_local_files(&Environment::NONE, &repo, &worktree, &Settings::default(), &mut Vec::new()).await;
+            copy_local_files(&Environment::NONE, Some(&repo), &worktree, &Settings::default(), &mut Vec::new()).await;
         assert!(copied.is_empty(), "{copied:?}");
         assert_eq!(std::fs::read_to_string(worktree.join(".env")).unwrap(), "already here\n");
         assert!(!worktree.join(".env.link").exists());

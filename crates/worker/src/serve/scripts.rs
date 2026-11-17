@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use protocol::client::{ApiError, ErrorCode};
 use protocol::paths::AGENTS_DIR;
-use protocol::worker::{SetupDone, WorkerResponse};
+use protocol::worker::{RepoSource, SetupDone, WorkerResponse};
 
 use super::State;
 use crate::setup;
@@ -37,17 +37,17 @@ pub(crate) fn stop_setup_script(state: &State) {
 
 pub(crate) async fn run_setup(
     state: &Arc<State>,
-    repo: &str,
+    source: &RepoSource,
     path: &str,
     env: &[(String, String)],
 ) -> Result<WorkerResponse, ApiError> {
-    let (repo, worktree) = (Path::new(repo), Path::new(path));
+    let (checkout, worktree) = (source.checkout().map(Path::new), Path::new(path));
     let log = setup::setup_log_path(&state.config.state_dir);
     let _ = std::fs::remove_file(&log);
     let mut warnings = Vec::new();
     let given = state.credentials.given();
-    let settings = setup::load_settings(repo, worktree, state.config.home.as_deref(), &mut warnings);
-    let copied = setup::copy_local_files(&given, repo, worktree, &settings, &mut warnings).await;
+    let settings = setup::load_settings(checkout, worktree, state.config.home.as_deref(), &mut warnings);
+    let copied = setup::copy_local_files(&given, checkout, worktree, &settings, &mut warnings).await;
     for file in &copied {
         setup::append_log(&log, &format!("Copied {file}"));
     }
@@ -84,15 +84,15 @@ pub(crate) async fn run_setup(
 
 pub(crate) async fn run_archive_script(
     state: &Arc<State>,
-    repo: &str,
+    source: &RepoSource,
     path: &str,
     env: &[(String, String)],
 ) -> Result<WorkerResponse, ApiError> {
-    let (repo, worktree) = (Path::new(repo), Path::new(path));
+    let (checkout, worktree) = (source.checkout().map(Path::new), Path::new(path));
     if !worktree.exists() {
         return Ok(WorkerResponse::Ok);
     }
-    let settings = setup::load_settings(repo, worktree, state.config.home.as_deref(), &mut Vec::new());
+    let settings = setup::load_settings(checkout, worktree, state.config.home.as_deref(), &mut Vec::new());
     let Some(script) = settings.archive else { return Ok(WorkerResponse::Ok) };
     let log = setup::setup_log_path(&state.config.state_dir);
     setup::append_log(&log, "Running the archive script");

@@ -5,7 +5,8 @@ use protocol::Build;
 use protocol::client::{ApiError, ErrorCode};
 use protocol::model::{BranchName, Head};
 use protocol::worker::{
-    AddChildWorktree, ChildBranch, ChildWorktreeAdded, RemoveWorkspace, Request as _, RestoreWorkspace, WatchBranches,
+    AddChildWorktree, ArchiveScript, ChildBranch, ChildWorktreeAdded, NamesGitHas, NamesGitHasReply, PrepareWorkspace,
+    RemoveWorkspace, RepoSource, Request as _, RestoreWorkspace, SetupDone, SetupWorkspace, WatchBranches,
     WatchChildBranches, WorkerFrame, WorkerResponse, WorktreeThere, WorktreeThereReply,
 };
 use tokio::sync::mpsc;
@@ -70,6 +71,7 @@ fn config(dir: &Path) -> Config {
         build: Build::UNSTAMPED,
         workspaces_root: dir.join("ws"),
         state_dir: dir.join("state"),
+        clones_dir: dir.join("clones"),
         home: None,
         path: None,
         claude_bin: None,
@@ -89,7 +91,7 @@ fn config(dir: &Path) -> Config {
 struct Served {
     dir: tempfile::TempDir,
     worker: Worker,
-    repo_path: String,
+    source: RepoSource,
     own: String,
 }
 
@@ -101,7 +103,7 @@ async fn served() -> Served {
     std::fs::write(repo.join(".env"), "SECRET=1\n").unwrap();
     let worker = Worker::new(config(dir.path()));
     let own = prepare(&dir.path().join("ws"), &repo, "alder", None).await.unwrap().path;
-    Served { worker, repo_path: repo.to_str().unwrap().to_string(), own, dir }
+    Served { worker, source: RepoSource::Checkout { path: repo.to_str().unwrap().to_string() }, own, dir }
 }
 
 impl Served {
@@ -114,13 +116,13 @@ impl Served {
     /// The request for that worktree, on a new branch from what the workspace has checked out.
     fn adding(&self) -> AddChildWorktree {
         let on = ChildBranch::New { branch: BranchName::from("alder/try"), base: "HEAD".into() };
-        AddChildWorktree { repo_path: self.repo_path.clone(), own: self.own.clone(), path: self.child(), on }
+        AddChildWorktree { source: self.source.clone(), own: self.own.clone(), path: self.child(), on }
     }
 
     /// The request to remove the worktree at `path`, the workspace's own or that other one.
     fn removing(&self, path: &str, force: bool) -> RemoveWorkspace {
         let own = (path != self.own).then(|| self.own.clone());
-        RemoveWorkspace { repo_path: self.repo_path.clone(), path: path.to_string(), force, own }
+        RemoveWorkspace { source: self.source.clone(), path: path.to_string(), force, own }
     }
 }
 
@@ -230,8 +232,7 @@ async fn whether_a_worktree_is_there_is_answered_once_it_s_been_put_back() {
     let state = &served.worker.state;
     let own = served.own.clone();
     remove(state, served.removing(&own, false)).await.unwrap();
-    let restoring =
-        RestoreWorkspace { repo_path: served.repo_path.clone(), path: own.clone(), branch: "alder/start".into() };
+    let restoring = RestoreWorkspace { source: served.source.clone(), path: own.clone(), branch: "alder/start".into() };
 
     // Joined, so the restore is polled first and has the worktree to itself before the question is asked.
     let (restored, there) = tokio::join!(restore(state, restoring), there(state, WorktreeThere { path: own }));
@@ -287,4 +288,47 @@ async fn a_child_worktree_is_made_watched_and_removed_through_the_worker_s_reque
     let left = worker.state.watches.lock();
     assert!(left.children.is_empty(), "its watch stopped");
     assert!(left.own.is_some(), "the workspace's own goes on");
+}
+
+/// A workspace whose repository is given by its address is named, made, set up, archived and put back through the
+/// worker's requests as one from a checkout is, from the one clone the first of them makes, which has no local files
+/// to copy.
+#[tokio::test]
+async fn a_workspace_made_from_a_clone_is_archived_and_put_back_through_the_worker_s_requests() {
+    let dir = tempfile::tempdir().unwrap();
+    let remote = dir.path().join("remote.git");
+    run(dir.path(), &["clone", "-q", "--bare", new_repo(dir.path()).to_str().unwrap(), remote.to_str().unwrap()]);
+    let worker = Worker::new(config(dir.path()));
+    let ask = |request| handle(&worker.state, &worker.forwarders, Ok(request));
+    let (source, branch) = (RepoSource::Clone { url: remote.to_string_lossy().into_owned() }, "alder/start");
+    let making = PrepareWorkspace {
+        repo_name: "repo".into(),
+        source: source.clone(),
+        workspace_name: "alder".into(),
+        branch: branch.into(),
+        base_ref: None,
+    };
+
+    let named = ask(NamesGitHas { repo_name: "repo".into(), source: source.clone() }.into_request()).await;
+    let Ok(WorkerResponse::WorkspaceReady(ready)) = ask(making.into_request()).await else { panic!("not made") };
+    let (path, worktree) = (ready.path.clone(), Path::new(&ready.path));
+    run(worktree, &["commit", "-q", "--allow-empty", "-m", "work"]);
+    let work = run(worktree, &["rev-parse", "HEAD"]);
+    let set_up = ask(SetupWorkspace { source: source.clone(), path: path.clone(), env: vec![] }.into_request()).await;
+    ask(ArchiveScript { source: source.clone(), path: path.clone(), env: vec![] }.into_request()).await.unwrap();
+    let removing = RemoveWorkspace { source: source.clone(), path: path.clone(), force: false, own: None };
+    ask(removing.into_request()).await.unwrap();
+    let archived = !worktree.exists();
+    ask(RestoreWorkspace { source, path, branch: branch.into() }.into_request()).await.unwrap();
+
+    let git_has = ["HEAD", "main", "origin"].map(String::from).to_vec();
+    assert_eq!(named.unwrap(), WorkerResponse::NamesGitHas(NamesGitHasReply { names: git_has }));
+    assert_eq!(set_up.unwrap(), WorkerResponse::SetupDone(SetupDone { code: Some(0) }));
+    assert!(archived, "its worktree was removed");
+    assert_eq!(run(worktree, &["rev-parse", "HEAD"]), work, "back on its branch, with its work");
+    let clones = std::fs::read_dir(dir.path().join("clones")).unwrap().map(|entry| entry.unwrap().path());
+    let common = std::fs::canonicalize(run(worktree, &["rev-parse", "--path-format=absolute", "--git-common-dir"]));
+    let clones: Vec<_> = clones.filter(|clone| !clone.ends_with(".making")).collect();
+    assert_eq!(clones.len(), 1, "{clones:?}");
+    assert_eq!(std::fs::canonicalize(&clones[0]).unwrap(), common.unwrap(), "made from the clone");
 }

@@ -31,7 +31,7 @@ pub(crate) async fn prepare(
     base: Option<&str>,
 ) -> Result<WorkspaceReady, ApiError> {
     let branch = BranchName::from(format!("{name}/start"));
-    prepare_workspace(&Environment::NONE, root, "repo", repo.to_str().unwrap(), name, &branch, base).await
+    prepare_workspace(&Environment::NONE, root, "repo", repo, name, &branch, base).await
 }
 
 /// Gives `repo` a `post-checkout` hook running `body` under `/bin/sh`.
@@ -112,18 +112,10 @@ async fn existing_branches_paths_and_bad_input_are_refused() {
     // Same path and branch.
     assert_eq!(prepare(&root, &repo, "alder", None).await.err().unwrap().code, ErrorCode::NameTaken);
     // Same branch, different path.
-    let err = prepare_workspace(
-        &Environment::NONE,
-        &root,
-        "repo",
-        repo.to_str().unwrap(),
-        "birch",
-        &"alder/start".into(),
-        None,
-    )
-    .await
-    .err()
-    .unwrap();
+    let err = prepare_workspace(&Environment::NONE, &root, "repo", &repo, "birch", &"alder/start".into(), None)
+        .await
+        .err()
+        .unwrap();
     assert_eq!(err.code, ErrorCode::NameTaken);
     // A branch git can't have beside it, whatever its case.
     run(&repo, &["branch", "Elm"]);
@@ -132,10 +124,8 @@ async fn existing_branches_paths_and_bad_input_are_refused() {
     assert_eq!(err.code, ErrorCode::InvalidRequest);
     let err = prepare(&root, &repo, "cedar", Some("no-such-ref")).await.err().unwrap();
     assert_eq!(err.code, ErrorCode::InvalidRequest);
-    let err = prepare_workspace(&Environment::NONE, &root, "repo", repo.to_str().unwrap(), "x", &"--bad".into(), None)
-        .await
-        .err()
-        .unwrap();
+    let err =
+        prepare_workspace(&Environment::NONE, &root, "repo", &repo, "x", &"--bad".into(), None).await.err().unwrap();
     assert_eq!(err.code, ErrorCode::InvalidRequest);
 }
 
@@ -155,7 +145,7 @@ async fn the_names_git_has_are_each_branch_s_first_part_here_and_among_origin_s_
     let root = dir.path().join("ws");
     std::fs::create_dir_all(root.join("repo").join("Dogwood")).unwrap();
 
-    let names = names_git_has(&Environment::NONE, &root, "repo", clone.to_str().unwrap()).await.unwrap();
+    let names = names_git_has(&Environment::NONE, &root, "repo", &clone).await.unwrap();
 
     assert_eq!(names, ["Alder", "Dogwood", "HEAD", "birch", "cedar", "main", "origin"], "each once, as it's spelled");
 }
@@ -167,7 +157,7 @@ async fn head_is_a_name_git_has_once_there_s_a_remote() {
     let dir = tempfile::tempdir().unwrap();
     let repo = new_repo(dir.path());
     let none = Environment::NONE;
-    let names = || names_git_has(&none, dir.path(), "none", repo.to_str().unwrap());
+    let names = || names_git_has(&none, dir.path(), "none", &repo);
 
     let with_no_remote = names().await.unwrap();
     run(&repo, &["remote", "add", "upstream", "https://example.invalid/repo.git"]);
@@ -289,15 +279,10 @@ async fn restoring_a_workspace_waits_for_a_worktree_being_made() {
     let repo = new_repo(dir.path());
     let root = dir.path().join("ws");
     let path =
-        prepare_workspace(&Environment::NONE, &root, "repo", repo.to_str().unwrap(), "alder", &"alder".into(), None)
-            .await
-            .unwrap()
-            .path;
+        prepare_workspace(&Environment::NONE, &root, "repo", &repo, "alder", &"alder".into(), None).await.unwrap().path;
     run(&repo, &["worktree", "remove", &path]);
 
-    while_one_is_made(&repo, restore_workspace(&Environment::NONE, repo.to_str().unwrap(), &path, &"alder".into()))
-        .await
-        .unwrap();
+    while_one_is_made(&repo, restore_workspace(&Environment::NONE, &repo, &path, &"alder".into())).await.unwrap();
 
     assert!(Path::new(&path).join("a.txt").exists());
 }
@@ -338,7 +323,7 @@ async fn a_workspace_git_fails_to_check_out_leaves_neither_worktree_nor_branch()
     assert_eq!(failed.code, ErrorCode::Worker);
     assert!(!root.join("repo").join("alder").exists());
     assert!(run(&repo, &["branch", "--list", "alder/start"]).is_empty());
-    assert_eq!(names_git_has(&Environment::NONE, &root, "repo", repo.to_str().unwrap()).await.unwrap(), ["main"]);
+    assert_eq!(names_git_has(&Environment::NONE, &root, "repo", &repo).await.unwrap(), ["main"]);
 
     run(&repo, &["config", "filter.broken.required", "false"]);
     let retried = prepare(&root, &repo, "alder", None).await.unwrap();

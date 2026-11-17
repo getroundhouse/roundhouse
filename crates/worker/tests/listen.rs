@@ -43,6 +43,7 @@ impl Listening {
             build: Build::UNSTAMPED,
             workspaces_root: dir.path().to_path_buf(),
             state_dir: dir.path().join("state"),
+            clones_dir: dir.path().join("clones"),
             home: None,
             path: None,
             claude_bin: Some(cli),

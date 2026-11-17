@@ -4,6 +4,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use super::repo_source::{RepoSource, beside_repo_path};
 use super::{Reply, Request, WorkerRequest, WorkerResponse};
 use crate::model::{BranchName, Branches, CommitId};
 
@@ -13,7 +14,9 @@ use crate::model::{BranchName, Branches, CommitId};
 /// something else has the path, or, for a new branch, if the branch exists or git can't have it beside one that does.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct AddChildWorktree {
-    pub repo_path: String,
+    /// The workspace's repository, whose checkout's ignored files are copied in. A clone has none.
+    #[serde(flatten, with = "beside_repo_path")]
+    pub source: RepoSource,
     /// The workspace's own worktree, which git runs in, so a base of `HEAD` is the commit it has checked out.
     pub own: String,
     /// Where the hub has recorded it, which is its to choose, as a workspace's own worktree's isn't: in

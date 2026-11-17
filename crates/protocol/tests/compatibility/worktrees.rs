@@ -8,7 +8,7 @@ use protocol::model::{
 };
 use protocol::worker::{
     AddChildWorktree, Ask as _, AskReply, ChildBranch, ChildWorktreeAdded, CreateWorktree, ListWorktrees, ListedChild,
-    NewWorktreeOn, OwnWorktree, RemoveWorktree, Request as _, WatchChildBranches, WorkerAsk, WorkerFrame,
+    NewWorktreeOn, OwnWorktree, RemoveWorktree, RepoSource, Request as _, WatchChildBranches, WorkerAsk, WorkerFrame,
     WorkerRequest, WorkerResponse, WorktreeCreated, WorktreeRemoved, Worktrees, WouldLose,
 };
 
@@ -162,7 +162,7 @@ fn a_record_keeps_the_form_of_each_kind_and_reads_kinds_it_doesnt_know() {
 fn the_folder_keeps_its_name_and_a_branch_of_a_kind_this_build_doesnt_know_isnt_read() {
     assert_eq!(CHILDREN, ".children");
 
-    let newer = br#"{"id":7,"request":{"method":"add_child_worktree","repo_path":"/r","own":"/w/holly","path":"/w/.children/holly/x","on":{"kind":"detached","at":"abc"}}}"#;
+    let newer = br#"{"id":7,"request":{"method":"add_child_worktree","repo_path":"/r","source":{"kind":"checkout","path":"/r"},"own":"/w/holly","path":"/w/.children/holly/x","on":{"kind":"detached","at":"abc"}}}"#;
     let call = frame::read_call::<WorkerRequest>(newer).unwrap();
     assert!((call.id, call.request.is_err()) == (7, true), "{call:?}");
     let ask = r#"{"method":"create_worktree","on":{"kind":"detached"},"key":"k"}"#;
@@ -173,18 +173,18 @@ fn the_folder_keeps_its_name_and_a_branch_of_a_kind_this_build_doesnt_know_isnt_
 #[test]
 fn the_child_worktree_requests_and_frames_keep_their_form() {
     let add = |on| AddChildWorktree {
-        repo_path: "/r".into(),
+        source: RepoSource::Checkout { path: "/r".into() },
         own: "/w/holly".into(),
         path: "/w/.children/holly/x".into(),
         on,
     };
     asked(
         add(ChildBranch::New { branch: BranchName::from("holly/x"), base: "HEAD".into() }).into_request(),
-        r#"{"method":"add_child_worktree","repo_path":"/r","own":"/w/holly","path":"/w/.children/holly/x","on":{"kind":"new","branch":"holly/x","base":"HEAD"}}"#,
+        r#"{"method":"add_child_worktree","repo_path":"/r","source":{"kind":"checkout","path":"/r"},"own":"/w/holly","path":"/w/.children/holly/x","on":{"kind":"new","branch":"holly/x","base":"HEAD"}}"#,
     );
     asked(
         add(ChildBranch::Existing { branch: BranchName::from("holly/x") }).into_request(),
-        r#"{"method":"add_child_worktree","repo_path":"/r","own":"/w/holly","path":"/w/.children/holly/x","on":{"kind":"existing","branch":"holly/x"}}"#,
+        r#"{"method":"add_child_worktree","repo_path":"/r","source":{"kind":"checkout","path":"/r"},"own":"/w/holly","path":"/w/.children/holly/x","on":{"kind":"existing","branch":"holly/x"}}"#,
     );
     asked(
         WatchChildBranches { path: "/c/holly/x".into() }.into_request(),

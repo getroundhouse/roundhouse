@@ -73,7 +73,7 @@ thread_local! {
 
 /// What's logged on this thread, as it's logged, for as long as this is held. A `#[tokio::test]` runs everything it
 /// awaits on its own thread.
-struct Logs {
+pub(crate) struct Logs {
     written: Buffer,
 }
 
@@ -93,7 +93,7 @@ impl Write for Writing {
 }
 
 impl Logs {
-    fn capture() -> Self {
+    pub(crate) fn capture() -> Self {
         // With a thread-local subscriber, another test can first reach a callsite without one and cache that
         // nobody wants it. Keep one global subscriber, and route its writes to the capture on this thread only.
         static SUBSCRIBER: Once = Once::new();
@@ -109,7 +109,7 @@ impl Logs {
         Self { written }
     }
 
-    async fn until(&self, line: &str) {
+    pub(crate) async fn until(&self, line: &str) {
         let deadline = Instant::now() + TIMEOUT;
         while !String::from_utf8_lossy(&self.written.borrow()).contains(line) {
             assert!(Instant::now() < deadline, "nothing logged {line:?}");

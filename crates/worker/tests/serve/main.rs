@@ -13,8 +13,8 @@ use protocol::Build;
 use protocol::frame;
 use protocol::model::{AgentKind, RunId};
 use protocol::worker::{
-    AgentSpec, AskAnswer, AskOutcome, AskReply, Hello, PullRequestAnswer, RunningAgentsReply, ServeTools, SetupDone,
-    SetupWorkspace, ToolsServing, ToolsToken, WORKER_PROTOCOL_VERSION, WorkerAsk, WorkerCall, WorkerFrame,
+    AgentSpec, AskAnswer, AskOutcome, AskReply, Hello, PullRequestAnswer, RepoSource, RunningAgentsReply, ServeTools,
+    SetupDone, SetupWorkspace, ToolsServing, ToolsToken, WORKER_PROTOCOL_VERSION, WorkerAsk, WorkerCall, WorkerFrame,
     WorkerOutcome, WorkerRequest, WorkerResponse,
 };
 use tokio::io::{
@@ -77,7 +77,11 @@ async fn a_stop_right_behind_a_setup_stops_it_even_before_its_script_starts() {
     let path = dir.path().to_string_lossy().into_owned();
     let calls = [
         hello(),
-        WorkerRequest::SetupWorkspace(SetupWorkspace { repo_path: path.clone(), path, env: vec![] }),
+        WorkerRequest::SetupWorkspace(SetupWorkspace {
+            source: RepoSource::Checkout { path: path.clone() },
+            path,
+            env: vec![],
+        }),
         WorkerRequest::CancelSetup,
     ];
     let mut lines = Vec::new();
@@ -180,6 +184,7 @@ fn config(dir: &Path, claude_bin: Option<PathBuf>) -> Config {
         build: Build::UNSTAMPED,
         workspaces_root: dir.to_path_buf(),
         state_dir: dir.join("state"),
+        clones_dir: dir.join("clones"),
         home: None,
         path: None,
         claude_bin,

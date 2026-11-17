@@ -10,6 +10,7 @@ use tracing::warn;
 
 use super::Hub;
 use super::ready::ReadyWorkspace;
+use super::repo_source::repo_source;
 use super::workspaces::workspace_env;
 
 /// A workspace's setup, from when the hub records it as running until it records how it ended.
@@ -84,8 +85,8 @@ impl Hub {
                 return SetupStatus::Failed { code: None };
             }
         };
-        let (repo_path, path, env) = (repo.path.clone(), ready.path().to_owned(), workspace_env(workspace, repo));
-        let request = SetupWorkspace { repo_path, path, env };
+        let (source, path, env) = (repo_source(repo), ready.path().to_owned(), workspace_env(workspace, repo));
+        let request = SetupWorkspace { source, path, env };
         let finished = async {
             let running = link.send(request).await?;
             tokio::pin!(running);

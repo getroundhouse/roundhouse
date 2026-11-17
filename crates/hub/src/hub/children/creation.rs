@@ -1,5 +1,6 @@
 use self::naming::Try;
 use super::super::ready::ReadyWorkspace;
+use super::super::repo_source::repo_source;
 use super::super::{Hub, new_id};
 use super::naming;
 use crate::error::internal;
@@ -205,7 +206,7 @@ pub(super) async fn add(making: &Making<'_>, child: &ChildWorktree) -> Result<Ch
         None => ChildBranch::Existing { branch },
     };
     let adding = AddChildWorktree {
-        repo_path: making.repo.path.clone(),
+        source: repo_source(making.repo),
         own: making.own.to_string(),
         path: child.path.clone(),
         on,

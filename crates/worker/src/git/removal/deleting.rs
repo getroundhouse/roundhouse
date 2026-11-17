@@ -27,14 +27,19 @@ pub(super) enum Force {
 
 /// Removes the worktree asked, a workspace's own or another made for it, and keeps its branch, so committed work is
 /// never lost by archiving. Returns once the worktree's path is free and git has forgotten it, which can be before its
-/// files are deleted.
-pub async fn remove_workspace(given: &Environment, asked: &RemoveWorkspace, deleter: &Deleter) -> Result<(), ApiError> {
+/// files are deleted. `repo` is the repository the worktree was made from, the checkout or the clone that `asked`
+/// names.
+pub async fn remove_workspace(
+    given: &Environment,
+    repo: &Path,
+    asked: &RemoveWorkspace,
+    deleter: &Deleter,
+) -> Result<(), ApiError> {
     let worktree = Path::new(&asked.path);
     // Another of a workspace's worktrees waits to be deleted where the workspace's own would, beside the workspaces,
     // since every archive in the repository clears what waits there, and nothing clears a folder of `.children/`.
     let beside = asked.own.as_deref().map_or(worktree, Path::new);
-    remove(given, Path::new(&asked.repo_path), worktree, asked.force, &beside.with_file_name(DELETING), deleter)
-        .await?;
+    remove(given, repo, worktree, asked.force, &beside.with_file_name(DELETING), deleter).await?;
     if asked.own.is_some()
         && let Some(folder) = worktree.parent()
     {

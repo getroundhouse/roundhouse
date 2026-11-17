@@ -9,6 +9,7 @@ use tracing::warn;
 use super::git_status;
 use crate::hub::Hub;
 use crate::hub::ready::ReadyWorkspace;
+use crate::hub::repo_source::repo_source;
 use crate::worker_link::WorkerLink;
 
 impl Hub {
@@ -88,7 +89,7 @@ impl Hub {
         force: bool,
     ) -> Result<ChildWorktree, ApiError> {
         let removing =
-            RemoveWorkspace { repo_path: repo.path.clone(), path: child.path.clone(), force, own: Some(own.into()) };
+            RemoveWorkspace { source: repo_source(repo), path: child.path.clone(), force, own: Some(own.into()) };
         link.call(removing).await?;
         let id = child.id.clone();
         self.blocking(move |store| store.child_removed(&id)).await
