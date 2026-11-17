@@ -7,6 +7,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use client_core::records::subagent_named;
 use gpui_kit::{Context, SharedString, Task};
 use protocol::event::AgentTask;
 use protocol::model::{AgentDescription, PromptCache, Seq, Session, Subagent, SubagentStatus, Wait};
@@ -164,6 +165,12 @@ impl Transcript {
     pub fn set_subagents(&mut self, subagents: &[Arc<Subagent>], cx: &mut Context<Self>) {
         let (rows, shown) = {
             let mut m = self.model.borrow_mut();
+            // A tab opened on the subagent a call started, before its record came, names it by that call, and the hub
+            // follows it by the ID its agent gives it once the agent says it started. Its record names it so.
+            let named = m.alone.as_ref().and_then(|alone| subagent_named(subagents, alone)).map(|named| named.id());
+            if named.is_some() {
+                m.alone = named;
+            }
             let held = |subagent: &Arc<Subagent>| {
                 m.subagents.get(&subagent.id()).is_some_and(|held| Arc::ptr_eq(held, subagent))
             };

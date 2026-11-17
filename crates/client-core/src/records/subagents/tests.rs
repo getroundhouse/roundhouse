@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use protocol::model::{Rev, Subagent, SubagentStatus};
 
-use super::Subagents;
+use super::{Subagents, subagent_named};
 use crate::records::Snapshot;
 
 fn subagent(session: &str, call: &str, started_at_ms: i64, rev: u64) -> Subagent {
@@ -109,4 +109,18 @@ fn a_session_let_go_of_while_it_was_being_listed_and_wanted_again_is_listed_agai
 
     assert_eq!(subagents.to_list(), ["s".into()], "so the list it took in is no longer good");
     assert!(calls(&subagents, "s").is_empty());
+}
+
+/// A subagent is found by its ID, or else by the call that started it, as a tab opened before its record came names it,
+/// and by its ID first, since that's what a subagent's events name.
+#[test]
+fn a_subagent_is_named_by_its_id_or_else_by_its_call() {
+    let named = |id: &str, call: &str| Arc::new(Subagent { id: Some(id.into()), ..subagent("s", call, 1, 1) });
+    let subagents = [named("task_1", "toolu_1"), named("toolu_2", "toolu_3"), named("task_2", "toolu_2")];
+    let found = |name: &str| subagent_named(&subagents, &name.into()).map(|subagent| subagent.id().to_string());
+
+    assert_eq!(found("task_1").as_deref(), Some("task_1"));
+    assert_eq!(found("toolu_1").as_deref(), Some("task_1"), "by its call");
+    assert_eq!(found("toolu_2").as_deref(), Some("toolu_2"), "by its ID first");
+    assert_eq!(found("toolu_9"), None);
 }

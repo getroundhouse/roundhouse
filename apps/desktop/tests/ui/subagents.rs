@@ -11,7 +11,7 @@ use desktop::workspace_pane::Showing;
 use gpui_kit::test::TestWindowExt as _;
 use gpui_kit::{AppContext as _, ElementId, SharedString, TestAppContext};
 use protocol::event::{ContentBlock, EventBody};
-use protocol::model::{SessionId, SettledAt};
+use protocol::model::{SessionId, SettledAt, SubagentId};
 
 use crate::menus::items;
 use crate::support::{Gate, Stack, Ui};
@@ -151,6 +151,48 @@ fn a_subagent_s_line_in_the_background_opens_the_subagent_tab(cx: &mut TestAppCo
     ui.click(open);
 
     ui.wait("the subagent tab", |ui| showing(ui) == Showing::Subagent);
+    done.open();
+    ui.wait("the subagent's work, in its tab", |ui| ui.labelled(SUBAGENT_CALL).len() == 1);
+}
+
+/// A tab opened on the subagent a call started before its record has come, as one opened as soon as its call shows can
+/// be, names it by that call. It shows the subagent's work all the same, which the hub follows by the ID the agent
+/// gives it once the agent says it started, and once the record comes, the tab names it as the record does, and shows
+/// what it was asked.
+#[gpui_kit::test]
+fn a_subagent_tab_opened_by_its_call_shows_its_work_and_then_what_its_record_says(cx: &mut TestAppContext) {
+    let stack = Stack::new();
+    let mut ui = in_a_new_workspace(cx, &stack);
+    let chat = ui.active_chat();
+    let done = Gate::new(&stack, "done");
+    ui.paste_text(&format!("agent-until:{done}:{AGENT_LINE}; say:done"));
+    ui.press("enter");
+    let call = |ui: &Ui<'_>| {
+        ui.events().iter().find_map(|event| match &event.body {
+            EventBody::Assistant { blocks, .. } => blocks.iter().find_map(|block| match block {
+                ContentBlock::ToolUse { id, name, .. } if name == "Agent" => Some(id.clone()),
+                _ => None,
+            }),
+            _ => None,
+        })
+    };
+    ui.wait("the agent's call that starts the subagent", |ui| call(ui).is_some());
+    let call = call(&ui).unwrap();
+    let pane = ui.pane().unwrap();
+    let by_call = SubagentId::of_call(&call);
+    ui.cx.update(|cx| pane.update(cx, |p, cx| p.open_subagent_tab(chat.clone(), by_call.clone(), "?".into(), cx)));
+
+    let recorded = |ui: &Ui<'_>| {
+        let records = ui.view().feed().unwrap().snapshot();
+        records.subagents(&chat).iter().find(|subagent| subagent.call == call).map(|subagent| subagent.id())
+    };
+    ui.wait("the subagent's record", |ui| recorded(ui).is_some());
+    let id = recorded(&ui).unwrap();
+    assert_ne!(id, by_call, "a subagent named by its call can't tell the two apart");
+    ui.wait("the tab, named as the record names it", |ui| {
+        ui.cx.read_entity(&pane, |p, _| p.subagent_tab() == Some(&id))
+    });
+    ui.wait("what it was asked, from its record", |ui| ui.has(format!("prompt/call/{call}")));
     done.open();
     ui.wait("the subagent's work, in its tab", |ui| ui.labelled(SUBAGENT_CALL).len() == 1);
 }
