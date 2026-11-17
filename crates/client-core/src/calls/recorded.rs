@@ -1,4 +1,4 @@
-use super::{agent, command, files, older, other, search, web};
+use super::{agent, command, files, older, other, search, subagents, web};
 use agent::Agent;
 use command::Command;
 use files::{EditFile, ReadFile, WriteFile};
@@ -8,6 +8,7 @@ use protocol::event::{Asking, CallKind, ContentBlock, EventBody};
 use search::{Looks, Search};
 use serde_json::Value;
 use std::borrow::Cow;
+use subagents::ToSubagents;
 use web::{Fetch, WebSearch};
 
 /// A call, by what kind of thing it does.
@@ -18,6 +19,8 @@ pub enum ToolCall<'a> {
     Edit(EditFile<'a>),
     Search(Search<'a>),
     Agent(Agent<'a>),
+    /// Telling a subagent at work something, waiting for some, or stopping one.
+    ToSubagents(ToSubagents<'a>),
     Fetch(Fetch<'a>),
     WebSearch(WebSearch<'a>),
     /// Asking the advisor, a stronger model that reads the whole conversation and advises the agent. It takes no
@@ -162,6 +165,7 @@ impl<'a> ToolCall<'a> {
             | ToolCall::Edit(EditFile { path, .. }) => path,
             ToolCall::Search(search) => search.pattern,
             ToolCall::Agent(agent) => agent.described().or(agent.prompt)?,
+            ToolCall::ToSubagents(to) => return to.summary(),
             ToolCall::Fetch(fetch) => fetch.url,
             ToolCall::WebSearch(search) => search.query,
             ToolCall::Advisor => return None,

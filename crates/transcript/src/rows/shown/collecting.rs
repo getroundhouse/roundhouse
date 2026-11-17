@@ -185,7 +185,7 @@ pub(in crate::rows) fn of_block(block: &ContentBlock, drawing: &BlockAround, gat
         ContentBlock::ToolUse { .. } | ContentBlock::Call { .. } => {
             // One that asks the person something is drawn from its approval, which has everything that was asked.
             if let Some(recorded) = Recorded::of(block).filter(|call| !call.asks_the_person()) {
-                tools::shown(key, recorded, &drawing.reply, drawing.subagent.as_ref(), gather);
+                tools::shown(key, recorded, drawing, gather);
             }
         }
         ContentBlock::ToolResult { .. } | ContentBlock::CallResult { .. } if drawing.with_call => {}

@@ -1,8 +1,8 @@
-use super::super::around::{Answer, Reply, Subagent};
+use super::super::around::{Answer, BlockAround};
 use super::super::line::{Line, Part};
 use super::super::shown::Gather;
 use super::super::{InRow, Shared, line};
-use super::{advisor, agent, block, command, files, notebook, other, patch, search, web};
+use super::{advisor, agent, block, command, files, notebook, other, patch, search, to_subagents, web};
 use crate::find::{FindLook, Marks, Part as Text};
 use crate::folds::Fold;
 use crate::item_key::ItemKey;
@@ -33,16 +33,11 @@ impl Toggle<'_> {
     }
 }
 
-/// A call's line, with its result under it once it's back, as its kind draws it. Only a tool the API runs itself is
-/// ever recorded as dropped, and the advisor is the one such tool drawn in a way of its own, so only it says so. Any
-/// other draws as it does while it waits.
-pub(in super::super) fn call(
-    toggle: &Toggle,
-    recorded: Recorded<'_>,
-    reply: &Reply,
-    subagent: Option<&Subagent>,
-    cx: &App,
-) -> AnyElement {
+/// A call's line, with its result under it once it's back, as its kind draws it, from what's been read around it,
+/// `drawing`. Only a tool the API runs itself is ever recorded as dropped, and the advisor is the one such tool drawn
+/// in a way of its own, so only it says so. Any other draws as it does while it waits.
+pub(in super::super) fn call(toggle: &Toggle, recorded: Recorded<'_>, drawing: &BlockAround, cx: &App) -> AnyElement {
+    let (reply, subagent) = (&drawing.reply, drawing.subagent.as_ref());
     let (answer, input) = (reply.result(), recorded.input());
     match ToolCall::read(recorded) {
         ToolCall::Command(command) => match only(&command, answer) {
@@ -55,6 +50,7 @@ pub(in super::super) fn call(
         ToolCall::Edit(file) => files::edit(&file, answer, toggle, cx),
         ToolCall::Search(search) => search::draw(&search, answer, toggle, cx),
         ToolCall::Agent(call) => agent::draw(&call, answer, subagent, toggle, cx),
+        ToolCall::ToSubagents(to) => to_subagents::draw(&to, answer, drawing.names.as_ref(), toggle, cx),
         ToolCall::Fetch(fetch) => web::fetch(&fetch, answer, toggle, cx),
         ToolCall::WebSearch(search) => web::search(&search, answer, toggle, cx),
         ToolCall::Advisor => advisor::draw(reply, toggle, cx),
@@ -66,13 +62,8 @@ pub(in super::super) fn call(
 }
 
 /// What a call shows, as [`call`] draws it open, for finding.
-pub(in super::super) fn shown(
-    key: &ItemKey,
-    recorded: Recorded<'_>,
-    reply: &Reply,
-    subagent: Option<&Subagent>,
-    gather: &mut Gather,
-) {
+pub(in super::super) fn shown(key: &ItemKey, recorded: Recorded<'_>, drawing: &BlockAround, gather: &mut Gather) {
+    let (reply, subagent) = (&drawing.reply, drawing.subagent.as_ref());
     let (answer, input) = (reply.result(), recorded.input());
     match ToolCall::read(recorded) {
         ToolCall::Command(command) => match only(&command, answer) {
@@ -85,6 +76,7 @@ pub(in super::super) fn shown(
         ToolCall::Edit(file) => files::shown_edit(&file, answer, key, gather),
         ToolCall::Search(search) => search::shown(&search, answer, key, gather),
         ToolCall::Agent(call) => agent::shown(&call, answer, subagent, key, gather),
+        ToolCall::ToSubagents(to) => to_subagents::shown(&to, answer, key, gather),
         ToolCall::Fetch(fetch) => web::shown_fetch(&fetch, answer, key, gather),
         ToolCall::WebSearch(search) => web::shown_search(&search, answer, key, gather),
         ToolCall::Advisor => advisor::shown(reply, key, gather),

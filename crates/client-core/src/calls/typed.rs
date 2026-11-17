@@ -5,6 +5,7 @@ use std::fmt::Write as _;
 use super::agent::Agent;
 use super::command::Only;
 use super::search::{Looks, Search};
+use super::subagents::ToSubagents;
 use super::web::{Fetch, WebSearch};
 use super::{Command, EditFile, ReadFile, ToolCall, WriteFile};
 use protocol::capability::calls::call::{CellEdit, CommandPart, FilePatch, NotebookEdit, Patch, PatchChange};
@@ -35,15 +36,15 @@ pub(super) fn read(call: &Call) -> ToolCall<'_> {
         Call::Fetch(fetch) => ToolCall::Fetch(Fetch { url: &fetch.url, prompt: fetch.asking.as_deref() }),
         Call::WebSearch(search) => ToolCall::WebSearch(WebSearch { query: &search.query }),
         Call::Subagent(start) => ToolCall::Agent(Agent::typed(start)),
+        Call::MessageSubagent(to) => ToolCall::ToSubagents(to.into()),
+        Call::WaitForSubagents(wait) => ToolCall::ToSubagents(wait.into()),
+        Call::StopSubagent(stop) => ToolCall::ToSubagents(stop.into()),
         // Drawn as any typed call until each is drawn as its kind.
         Call::ViewImage(_)
         | Call::GenerateImage(_)
         | Call::WriteInput(_)
         | Call::FindInPage(_)
         | Call::Todos(_)
-        | Call::MessageSubagent(_)
-        | Call::WaitForSubagents(_)
-        | Call::StopSubagent(_)
         | Call::Skill(_)
         | Call::Lsp(_)
         | Call::Advisor
@@ -89,15 +90,15 @@ pub fn title(call: &Call) -> String {
         Call::Fetch(_) => Fetch::TITLE.into(),
         Call::WebSearch(_) => WebSearch::TITLE.into(),
         Call::Mcp { tool, .. } | Call::Other { tool, .. } => tool.clone(),
+        Call::MessageSubagent(to) => ToSubagents::from(to).title().into(),
+        Call::WaitForSubagents(wait) => ToSubagents::from(wait).title().into(),
+        Call::StopSubagent(stop) => ToSubagents::from(stop).title().into(),
         Call::Unknown => "Unknown tool".into(),
         Call::Command(_)
         | Call::WriteInput(_)
         | Call::FindInPage(_)
         | Call::Todos(_)
         | Call::Subagent(_)
-        | Call::MessageSubagent(_)
-        | Call::WaitForSubagents(_)
-        | Call::StopSubagent(_)
         | Call::Skill(_)
         | Call::Lsp(_)
         | Call::Advisor

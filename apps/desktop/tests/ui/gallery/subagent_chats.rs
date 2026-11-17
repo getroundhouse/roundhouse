@@ -3,7 +3,7 @@
 
 #![cfg(test)]
 
-use protocol::capability::calls::call::{Runs, StartSubagent};
+use protocol::capability::calls::call::{MessageSubagent, Runs, StartSubagent, StopSubagent};
 use protocol::capability::calls::output::Ended;
 use protocol::capability::calls::{Call, CallOutput};
 use protocol::event::EventBody;
@@ -35,6 +35,13 @@ pub(crate) const SCREENS: &[Screen] = &[
         world: Some(|| chat_world(SessionStatus::Idle, typed_subagent())),
         frame: CHAT,
         steps: &[Step::Select(FOCUS), Step::Open(REVIEWER)],
+    },
+    Screen {
+        name: "tool-subagent-messaged",
+        spec: "chats.md",
+        world: Some(|| chat_world(SessionStatus::Running, messaged_subagents())),
+        frame: CHAT,
+        steps: &[Step::Select(FOCUS), Step::Open("Message")],
     },
     Screen {
         name: "subagent-tab",
@@ -226,19 +233,39 @@ const REVIEWER: &str = "/root/reviewer";
 /// The model the subagent runs on, one of Codex's.
 const LUNA: &str = "gpt-6-luna";
 
-/// A subagent an agent that types its calls started, as Codex's adapter records one: its call, typed, with its
-/// persona and no prompt, since Codex doesn't say one, named by its thread, which ran the signal tests in its own
-/// conversation, and its report as its call's result.
-pub(crate) fn typed_subagent() -> Vec<EventBody> {
-    let start = StartSubagent {
+/// The task path of another subagent, which checks what the docs say.
+const DOCS: &str = "/root/docs";
+
+/// A call that hands work to a subagent for `task`, as Codex's adapter types it: with its persona and no prompt, since
+/// Codex doesn't say one.
+fn codex_subagent(task: &str) -> StartSubagent {
+    StartSubagent {
         persona: Some("explorer".into()),
-        description: Some(REVIEWER.into()),
+        description: Some(task.into()),
         prompt: String::new(),
         model: Some(ModelName::named(LUNA)),
         effort: None,
         runs: Runs::Background,
         resumes: None,
-    };
+    }
+}
+
+/// That the subagent `call` started for `task` did, named by its thread, as Codex's adapter says it.
+fn codex_started(call: &str, thread: &str, task: &str) -> EventBody {
+    EventBody::SubagentStarted {
+        call: call.into(),
+        subagent: Some(thread.into()),
+        kind: Some("explorer".into()),
+        description: Some(task.into()),
+        prompt: None,
+        in_background: true,
+    }
+}
+
+/// A subagent an agent that types its calls started, as Codex's adapter records one: its call, typed, named by its
+/// thread, which ran the signal tests in its own conversation, and its report as its call's result.
+pub(crate) fn typed_subagent() -> Vec<EventBody> {
+    let start = codex_subagent(REVIEWER);
     let report = "Both checks use `may_pass` now, and the signal tests pass.";
     let tested = command_output("test result: ok. 5 passed; 0 failed", Some(0), Ended::Exited);
     let reply = "The reviewer says both checks use `may_pass`, and the tests pass.";
@@ -247,14 +274,7 @@ pub(crate) fn typed_subagent() -> Vec<EventBody> {
         taken(Seq::new(1)),
         text("msg-1", "I'll have a reviewer check the change."),
         typed_call("msg-2", "spawn-1", Call::Subagent(start)),
-        EventBody::SubagentStarted {
-            call: "spawn-1".into(),
-            subagent: Some("thread-1".into()),
-            kind: Some("explorer".into()),
-            description: Some(REVIEWER.into()),
-            prompt: None,
-            in_background: true,
-        },
+        codex_started("spawn-1", "thread-1", REVIEWER),
         on(
             LUNA,
             within("thread-1", typed_call("sub-1", "run-1", Call::Command(typed_command("cargo test -p signals")))),
@@ -265,5 +285,28 @@ pub(crate) fn typed_subagent() -> Vec<EventBody> {
         typed_result("spawn-1", CallOutput::Report { report: report.into() }, false),
         text("msg-3", reply),
         replied(reply, 41, 0.12),
+    ]
+}
+
+/// Two subagents an agent that types its calls started, as Codex's adapter records them, partway through the turn:
+/// the agent stops one, and tells the other to look at another file, and Codex hasn't answered either yet.
+fn messaged_subagents() -> Vec<EventBody> {
+    let message = MessageSubagent {
+        subagent: "thread-1".into(),
+        message: "Look at depot.rs too. It checks the signal before it sends a train out, so it should use `may_pass` \
+                  as train.rs does now."
+            .into(),
+    };
+    vec![
+        user_prompt("Have someone check that train.rs uses `may_pass` now, and that the docs say so."),
+        taken(Seq::new(1)),
+        text("msg-1", "I'll have one reviewer check the code, and another the docs."),
+        typed_call("msg-2", "spawn-1", Call::Subagent(codex_subagent(REVIEWER))),
+        typed_call("msg-3", "spawn-2", Call::Subagent(codex_subagent(DOCS))),
+        codex_started("spawn-1", "thread-1", REVIEWER),
+        codex_started("spawn-2", "thread-2", DOCS),
+        text("msg-4", "The docs never name the check, so I'll stop that one, and have the reviewer look at depot.rs."),
+        typed_call("msg-5", "stop-1", Call::StopSubagent(StopSubagent { subagent: "thread-2".into() })),
+        typed_call("msg-6", "tell-1", Call::MessageSubagent(message)),
     ]
 }

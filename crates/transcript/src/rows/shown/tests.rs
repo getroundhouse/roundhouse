@@ -2,8 +2,10 @@ use client_core::session_log::{Position, SessionLog};
 use protocol::event::{ApprovalOutcome, CallKind, ContentBlock, EventBody, ExitReason, TurnOutcome};
 use serde_json::json;
 
+use protocol::capability::calls::call::MessageSubagent;
+use protocol::capability::calls::{Call, CallOutput};
 use protocol::find::Needle;
-use protocol::fixtures::{ApprovalRequest, approval_request};
+use protocol::fixtures::{ApprovalRequest, approval_request, typed_call, typed_result};
 use protocol::model::Seq;
 use protocol::prompt::Prompt;
 
@@ -156,6 +158,21 @@ fn a_call_s_result_is_found_in_the_call_s_row_which_draws_it() {
         [0, 1],
         "but its call's row is counted again"
     );
+}
+
+/// A message to a subagent at work is found as its call shows it open: what it said, as what the subagent was asked,
+/// then what came back. The subagent's ID, which only names it, isn't.
+#[test]
+fn a_message_to_a_subagent_is_found_as_what_it_was_asked() {
+    let message = MessageSubagent { subagent: "thread-1".into(), message: "Look at the parser too".into() };
+    let came = CallOutput::Words { text: "thread-1 is on the parser".into() };
+    let log = log([
+        event(Seq::new(1), agent(vec![typed_call("tell", Call::MessageSubagent(message))])),
+        event(Seq::new(2), came_back(typed_result("tell", came, false))),
+    ]);
+
+    assert_eq!(parts(&log, "parser", 0), [Part::Asked, Part::Output]);
+    assert_eq!(parts(&log, "thread-1", 0), [Part::Output], "only where it came back");
 }
 
 /// A call the person denied never ran, so what the agent was told is found once, as what the person said, and not as

@@ -13,7 +13,7 @@ use protocol::event::{ApprovalOutcome, ContentBlock, EventBody, Question, Sessio
 use protocol::model::{ApprovalId, PermissionMode, Seq, ToolUseId};
 use reply::{Answer, Reply};
 use settled::Settled;
-use subagent::Subagent;
+use subagent::{Names, Subagent};
 
 /// How many events apart a call and its result can be and still be drawn together. A result follows its call
 /// within a few events. One further away is drawn where it is.
@@ -119,6 +119,8 @@ pub(in super::super) struct BlockAround {
     pub(in super::super) reply: Reply,
     /// For a call that handed work to a subagent: what the subagent has done.
     pub(in super::super) subagent: Option<Subagent>,
+    /// For a call to subagents at work: the subagents it names.
+    pub(in super::super) names: Option<Names>,
     /// For a result: whether it's drawn with its call instead.
     pub(in super::super) with_call: bool,
 }
@@ -225,23 +227,24 @@ impl BlockAround {
         // Drawn with its call when the call is close enough before it to have found it.
         let with_call = matches!(block, ContentBlock::ToolResult { tool_use_id, .. } | ContentBlock::CallResult { tool_use_id, .. }
             if nearby::call_before(log, seq, tool_use_id, NEAR).is_some());
-        let (reply, subagent) = match block {
+        let (reply, subagent, names) = match block {
             ContentBlock::ToolUse { id, .. } | ContentBlock::Call { id, .. } => {
-                let hands_off = Recorded::of(block).is_some_and(|call| call.hands_off());
+                let recorded = Recorded::of(block);
+                let hands_off = recorded.is_some_and(|call| call.hands_off());
                 let subagent = hands_off.then(|| Subagent::read(log, m, seq, id, open, opening));
-                (Reply::to(log, m, seq, id), subagent)
+                (Reply::to(log, m, seq, id), subagent, recorded.and_then(|call| Names::read(log, m, call)))
             }
             ContentBlock::ToolResult { .. } | ContentBlock::CallResult { .. } if !with_call => {
-                (Reply::of(block, m), None)
+                (Reply::of(block, m), None, None)
             }
             ContentBlock::ToolResult { .. }
             | ContentBlock::CallResult { .. }
             | ContentBlock::Text { .. }
             | ContentBlock::Thinking { .. }
             | ContentBlock::Image { .. }
-            | ContentBlock::Unknown => (Reply::Nothing, None),
+            | ContentBlock::Unknown => (Reply::Nothing, None, None),
         };
-        Self { key, fold, open, reply, subagent, with_call }
+        Self { key, fold, open, reply, subagent, names, with_call }
     }
 }
 

@@ -6,7 +6,7 @@ use std::collections::HashSet;
 use protocol::event::{ContentBlock, EventBody, Question};
 
 use super::english::{all_common_english, is_boilerplate};
-use crate::calls::{EditFile, ReadFile, Recorded, ToolCall, WriteFile, typed};
+use crate::calls::{EditFile, ReadFile, Recorded, ToSubagents, ToolCall, WriteFile, typed};
 use crate::records::InWorkspace;
 use crate::session_log::{Row, SessionLog};
 
@@ -252,13 +252,18 @@ impl HintCollector {
                     self.add_prose(desc);
                 }
             }
+            ToolCall::ToSubagents(ToSubagents::Message { message, .. }) => self.add_prose(message),
             ToolCall::Typed(typed_call) => self.add_prose(&typed::summary(typed_call)),
             ToolCall::Other(_) => {
                 if let Some(summary) = call.summary() {
                     self.add_prose(&summary);
                 }
             }
-            ToolCall::Fetch(_) | ToolCall::WebSearch(_) | ToolCall::Advisor => {}
+            // A wait or a stop names its subagents by their IDs, which aren't anyone's words.
+            ToolCall::ToSubagents(ToSubagents::Wait { .. } | ToSubagents::Stop { .. })
+            | ToolCall::Fetch(_)
+            | ToolCall::WebSearch(_)
+            | ToolCall::Advisor => {}
         }
     }
 }

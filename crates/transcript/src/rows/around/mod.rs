@@ -11,7 +11,7 @@ pub(crate) use failures::redrawn_with;
 pub(super) use failures::{Started, Tries, Try};
 pub(super) use reply::{Answer, Outcome, Reply};
 pub(super) use settled::{AnswerTo, Settled};
-pub(super) use subagent::Subagent;
+pub(super) use subagent::{Names, Subagent};
 pub(crate) use subagent::{REACH, SubagentCalls, drawn_in_its_call, its_call};
 
 #[cfg(test)]
