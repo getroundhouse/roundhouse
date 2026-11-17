@@ -41,6 +41,8 @@ mod reading;
 mod records;
 mod repos;
 mod run_logins;
+#[cfg(test)]
+mod same_again;
 mod schema;
 mod sent;
 mod sessions;

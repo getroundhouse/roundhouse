@@ -13,20 +13,19 @@ fn started(build: Option<&str>) -> EventBody {
     }
 }
 
-/// Only a change moves the revision, so the hub announces a worker's build only when it's news.
+/// The hub announces a worker's build only when it's news, so saying the same again changes nothing, as `same_again`
+/// has it of every record.
 #[test]
-fn saying_the_same_build_again_changes_nothing() {
+fn a_workers_build_is_kept_until_its_the_hubs_own_again() {
     let dir = tempfile::tempdir().unwrap();
     let store = store_with_session(dir.path());
     let id = WorkspaceId::from("w");
 
     let older = store.set_workspace_worker_build(&id, Some("0.9.0")).unwrap().expect("a change");
     assert_eq!(older.worker_build.as_deref(), Some("0.9.0"));
-    assert_eq!(store.set_workspace_worker_build(&id, Some("0.9.0")).unwrap(), None);
     let own = store.set_workspace_worker_build(&id, None).unwrap().expect("a change");
     assert_eq!(own.worker_build, None);
     assert!(own.rev > older.rev, "moving back to the hub's build moves the revision");
-    assert_eq!(store.set_workspace_worker_build(&id, None).unwrap(), None);
 }
 
 #[test]

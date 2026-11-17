@@ -29,9 +29,10 @@ fn a_hub_from_before_reach_has_none_and_records_one_once_migrated() {
     assert_eq!(store.github_reach_of(&"r".into()).unwrap().map(|r| r.answered_at_ms), Some(Some(5)));
 }
 
-/// So a client takes each in with the rest, and doesn't take one checked again for a change.
+/// So a client takes each in with the rest. One checked again with the same answer at the same time moves nothing, as
+/// `same_again` has it of every record, but one answered again later is newer.
 #[test]
-fn each_repository_has_one_whose_revision_moves_only_when_it_changes() {
+fn each_repository_has_one_whose_revision_moves_as_it_changes() {
     let dir = tempfile::tempdir().unwrap();
     let store = open_in(dir.path());
     with_repos(&store, &["a", "b"]);
@@ -39,14 +40,12 @@ fn each_repository_has_one_whose_revision_moves_only_when_it_changes() {
 
     let a = store.record_github_reach(&"a".into(), &pushes(), Some(5)).unwrap();
     let b = store.record_github_reach(&"b".into(), &Reach::NotOnGithub, None).unwrap();
-    let same_again = store.record_github_reach(&"a".into(), &pushes(), Some(5)).unwrap();
     let answered_again = store.record_github_reach(&"a".into(), &pushes(), Some(6)).unwrap();
     let reason = "Permission denied.".into();
     let refused = Reach::Refused { repository: CLI, username: "ada".into(), reason, installation: None };
     let changed = store.record_github_reach(&"a".into(), &refused, Some(7)).unwrap();
 
     assert!(before < a.rev && a.rev < b.rev && b.rev < answered_again.rev && answered_again.rev < changed.rev);
-    assert_eq!(same_again, a);
     assert_eq!((answered_again.answered_at_ms, b.answered_at_ms), (Some(6), None));
     assert_eq!(changed.reach, refused);
     let listed = store.list_records().unwrap();
