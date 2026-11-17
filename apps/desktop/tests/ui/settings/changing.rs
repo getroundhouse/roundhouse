@@ -2,8 +2,11 @@
 
 use crate::menus::{SETTINGS, choose};
 use crate::support;
-use crate::support::{Gate, Stack, Ui, labelled};
+use crate::support::{FakeHub, Gate, Stack, Ui, labelled};
+use client_core::fake_hub::World;
 use gpui_kit::{AppContext as _, ElementId, TestAppContext};
+
+use super::made_up::in_a_workspace;
 
 /// Whether Settings is showing, by its way back.
 pub(super) fn settings_showing(ui: &mut Ui<'_>) -> bool {
@@ -37,7 +40,7 @@ fn click_thinking(ui: &mut Ui<'_>, position: usize) {
 }
 
 /// Opens a workspace, with something typed in its composer.
-pub(super) fn typing<'a>(cx: &'a mut TestAppContext, stack: &Stack, typed: &str) -> Ui<'a> {
+fn typing<'a>(cx: &'a mut TestAppContext, stack: &Stack, typed: &str) -> Ui<'a> {
     stack.client().repo_add(stack.repo().to_str().unwrap()).unwrap();
     let mut ui = Ui::open(cx, stack);
     ui.wait("the repository", |ui| ui.view().records().repos().len() == 1);
@@ -54,48 +57,49 @@ fn after_thinking<'a>(cx: &'a mut TestAppContext, stack: &Stack) -> Ui<'a> {
     ui
 }
 
+/// Whether the app's settings file says thinking is always expanded, as `on` says.
+fn saved_as(fake: &FakeHub, on: bool) -> bool {
+    std::fs::read_to_string(fake.settings_file())
+        .is_ok_and(|saved| saved.contains(&format!(r#""always_expand_thinking": {on}"#)))
+}
+
+/// Every way into Settings and back, in one window on a fake hub, since none asks the hub for anything: from the menu
+/// and back by its button, by Cmd-, and back by Escape, and back by Cmd-W, with the workspace's keys doing nothing
+/// meanwhile.
 #[gpui_kit::test]
-fn settings_shows_in_place_of_the_workspace_and_goes_back_to_it(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = typing(cx, &stack, "half");
+fn settings_shows_in_place_of_the_workspace_and_each_way_back_leaves_it_as_it_was(cx: &mut TestAppContext) {
+    let (_hub, mut ui) = in_a_workspace(cx);
+    ui.input("half");
     assert!(ui.has("toggle-diff") && ui.has("add-project"));
+    assert!(ui.changes_open(), "the sidebar of changes starts open");
 
     open_settings(&mut ui);
     assert!(!ui.has("toggle-diff"), "the workspace is hidden");
     assert!(!ui.has("add-project"), "and so is the sidebar");
     ui.click("settings-back");
-
-    assert!(!settings_showing(&mut ui));
+    assert!(!settings_showing(&mut ui), "the button goes back");
     assert!(ui.has("toggle-diff"));
     ui.input(" typed");
-    assert_eq!(ui.composer_text(), "half typed", "focus is back where it was");
-}
-
-#[gpui_kit::test]
-fn cmd_comma_opens_settings_and_escape_goes_back(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = typing(cx, &stack, "half");
+    assert_eq!(ui.composer_text(), "half typed", "focus is back where it was, after the button");
 
     ui.press("secondary-,");
-    assert!(settings_showing(&mut ui));
+    assert!(settings_showing(&mut ui), "Cmd-, opens it");
     ui.press("secondary-,");
-    assert!(settings_showing(&mut ui), "still showing");
+    assert!(settings_showing(&mut ui), "Cmd-, again leaves it showing");
+    ui.press("secondary-shift-d");
     ui.press("escape");
+    assert!(!settings_showing(&mut ui), "Escape goes back");
+    assert!(ui.changes_open(), "the sidebar of changes is still open, since its key did nothing in Settings");
+    assert_eq!(ui.composer_text(), "half typed", "and Escape left the composer as it was");
 
-    assert!(!settings_showing(&mut ui));
-    assert_eq!(ui.composer_text(), "half");
-}
-
-#[gpui_kit::test]
-fn cmd_w_goes_back_from_settings_and_leaves_the_chat_open(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = typing(cx, &stack, "");
     open_settings(&mut ui);
-
     ui.press("secondary-w");
-
-    assert!(!settings_showing(&mut ui));
-    assert_eq!(ui.open_chats().len(), 1);
+    assert!(!settings_showing(&mut ui), "Cmd-W goes back");
+    // A fake hub refuses to close a chat, so the chat staying open proves nothing alone. The window would say it
+    // couldn't close it.
+    ui.wait_for_every_call();
+    assert_eq!(ui.open_chats().len(), 1, "Cmd-W leaves the chat open");
+    assert_eq!(ui.view().error, None, "and asked the hub to close nothing");
 }
 
 /// Archived from elsewhere while Settings shows, so the app selects another workspace behind it, whose composer isn't
@@ -117,22 +121,10 @@ fn a_workspace_selected_behind_settings_has_the_keys_once_settings_goes(cx: &mut
     assert_eq!(ui.composer_text(), "here", "and then the workspace showing");
 }
 
-#[gpui_kit::test]
-fn the_workspaces_keys_do_nothing_while_settings_shows(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = typing(cx, &stack, "");
-    open_settings(&mut ui);
-
-    ui.press("secondary-shift-d");
-    ui.press("escape");
-
-    assert!(ui.changes_open(), "the sidebar of changes is still open");
-}
-
+/// The setting is the app's own, kept in its settings file, so a fake hub will do.
 #[gpui_kit::test]
 fn always_expand_thinking_opens_thinking_and_is_saved(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = after_thinking(cx, &stack);
+    let (hub, mut ui) = in_a_workspace(cx);
     assert_eq!(thinking_open(&mut ui), [false], "thinking starts as a line to open");
     assert!(thinking_shown(&mut ui).is_empty());
 
@@ -142,10 +134,7 @@ fn always_expand_thinking_opens_thinking_and_is_saved(cx: &mut TestAppContext) {
 
     assert_eq!(thinking_open(&mut ui), [true]);
     assert_eq!(thinking_shown(&mut ui).len(), 1);
-    ui.wait("the setting to be saved", |_| {
-        std::fs::read_to_string(stack.settings_file())
-            .is_ok_and(|saved| saved.contains(r#""always_expand_thinking": true"#))
-    });
+    ui.wait("the setting to be saved", |_| saved_as(&hub, true));
     open_settings(&mut ui);
     flip_always_expand_thinking(&mut ui);
     ui.click("settings-back");
@@ -154,8 +143,7 @@ fn always_expand_thinking_opens_thinking_and_is_saved(cx: &mut TestAppContext) {
 
 #[gpui_kit::test]
 fn a_setting_changed_just_before_quitting_is_saved(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = typing(cx, &stack, "");
+    let (hub, mut ui) = in_a_workspace(cx);
     open_settings(&mut ui);
     let id = ui.cx.update_window(ui.handle, |_, window, _| labelled(window, "Always expand thinking")).unwrap();
 
@@ -163,7 +151,7 @@ fn a_setting_changed_just_before_quitting_is_saved(cx: &mut TestAppContext) {
     ui.cx.update_window(ui.handle, |_, window, cx| support::click(window, id, cx)).unwrap();
     ui.cx.update(gpui_kit::App::shutdown);
 
-    let saved = std::fs::read_to_string(stack.settings_file()).unwrap();
+    let saved = std::fs::read_to_string(hub.settings_file()).unwrap();
     assert!(saved.contains(r#""always_expand_thinking": true"#), "{saved}");
 }
 
@@ -234,60 +222,52 @@ fn hub_allows_what_full_access_asks(stack: &Stack) -> Option<bool> {
     stack.client().records_list().unwrap().hub_settings.unwrap().allow_asked_in_full_access
 }
 
+/// Each of the hub's own settings that General shows, as one walk through one window, since each switch is the same
+/// control: what was chosen before the app opened, each switch flipped both ways and the other left as it was, and
+/// what another client chose. What a hub starts out with is the hub's own rule, which its store's tests pin.
 #[gpui_kit::test]
-fn the_switch_for_skipping_claudes_safety_checks_changes_the_hubs_own_setting(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = typing(cx, &stack, "");
-    open_settings(&mut ui);
-    ui.wait("the switch to show the hub asks the person", |ui| switch(ui, SKIP_SAFETY_CHECKS) == (false, true));
-
-    ui.click_label(SKIP_SAFETY_CHECKS);
-
-    ui.wait("the hub to be told", |_| hub_allows_what_full_access_asks(&stack) == Some(true));
-    ui.wait("the switch to show on", |ui| switch(ui, SKIP_SAFETY_CHECKS) == (true, true));
-    assert_eq!(keep_awake_switch(&mut ui), (true, true), "the other is left as it was");
-    ui.click_label(SKIP_SAFETY_CHECKS);
-    ui.wait("the hub to be told again", |_| hub_allows_what_full_access_asks(&stack) == Some(false));
-}
-
-#[gpui_kit::test]
-fn the_switch_for_keeping_the_computer_awake_changes_the_hubs_own_setting(cx: &mut TestAppContext) {
-    let stack = Stack::new();
-    let mut ui = typing(cx, &stack, "");
-    open_settings(&mut ui);
-    ui.wait("the switch to show what a hub starts out doing", |ui| keep_awake_switch(ui) == (true, true));
-
-    ui.click_label(KEEP_AWAKE);
-
-    ui.wait("the hub to be told", |_| !hub_keeps_awake(&stack));
-    ui.wait("the switch to show off", |ui| keep_awake_switch(ui) == (false, true));
-    let saved = std::fs::read_to_string(stack.settings_file()).unwrap_or_default();
-    assert!(!saved.contains("keep_awake"), "it's the hub's to keep, not the app's: {saved}");
-    ui.click_label(KEEP_AWAKE);
-    ui.wait("the hub to be told again", |_| hub_keeps_awake(&stack));
-}
-
-#[gpui_kit::test]
-fn the_switch_shows_what_the_hub_says_whoever_chose_it(cx: &mut TestAppContext) {
+fn each_switch_for_the_hubs_own_settings_changes_it_and_shows_what_the_hub_says_whoever_chose_it(
+    cx: &mut TestAppContext,
+) {
     let stack = Stack::new();
     let change = protocol::model::HubSettingsChange { keep_awake: Some(false), ..Default::default() };
     stack.client().hub_configure(change).unwrap();
-    let mut ui = typing(cx, &stack, "");
+    let mut ui = Ui::open(cx, &stack);
     open_settings(&mut ui);
-    ui.wait("the switch to show what was chosen before the app opened", |ui| keep_awake_switch(ui) == (false, true));
+    ui.wait("Keep awake to show what was chosen before the app opened", |ui| keep_awake_switch(ui) == (false, true));
+    ui.wait("Skip safety checks to show the hub asks the person", |ui| switch(ui, SKIP_SAFETY_CHECKS) == (false, true));
+
+    ui.click_label(KEEP_AWAKE);
+    ui.wait("the hub to be told to keep the computer awake", |_| hub_keeps_awake(&stack));
+    ui.wait("Keep awake to show on", |ui| keep_awake_switch(ui) == (true, true));
+    assert_eq!(switch(&mut ui, SKIP_SAFETY_CHECKS), (false, true), "Skip safety checks is left as it was");
+    let saved = std::fs::read_to_string(stack.settings_file()).unwrap_or_default();
+    assert!(!saved.contains("keep_awake"), "it's the hub's to keep, not the app's: {saved}");
+    ui.click_label(KEEP_AWAKE);
+    ui.wait("the hub to be told to let the computer sleep again", |_| !hub_keeps_awake(&stack));
+    ui.wait("Keep awake to show off again", |ui| keep_awake_switch(ui) == (false, true));
+
+    ui.click_label(SKIP_SAFETY_CHECKS);
+    ui.wait("the hub to be told to skip the safety checks", |_| hub_allows_what_full_access_asks(&stack) == Some(true));
+    ui.wait("Skip safety checks to show on", |ui| switch(ui, SKIP_SAFETY_CHECKS) == (true, true));
+    assert_eq!(keep_awake_switch(&mut ui), (false, true), "Keep awake is left as it was");
+    ui.click_label(SKIP_SAFETY_CHECKS);
+    ui.wait("the hub to be told to ask again", |_| hub_allows_what_full_access_asks(&stack) == Some(false));
+    ui.wait("Skip safety checks to show off again", |ui| switch(ui, SKIP_SAFETY_CHECKS) == (false, true));
 
     let change = protocol::model::HubSettingsChange { keep_awake: Some(true), ..Default::default() };
     stack.client().hub_configure(change).unwrap();
 
-    ui.wait("the switch to show what another client chose", |ui| keep_awake_switch(ui) == (true, true));
+    ui.wait("Keep awake to show what another client chose", |ui| keep_awake_switch(ui) == (true, true));
 }
 
+/// A hub from before hubs kept settings sends none, which a fake hub can be.
 #[gpui_kit::test]
 fn the_switch_cant_be_flipped_with_a_hub_from_before_it_kept_settings(cx: &mut TestAppContext) {
-    let mut stack = Stack::new();
-    stack.hub.build_number = Some(2);
-    let _older = stack.start_stand_in_hub(&["--speaks-this-protocol", "--build", "1", "--not-on-demand"]);
-    let mut ui = Ui::open(cx, &stack);
+    let mut older = World::default();
+    older.keeps_no_settings = true;
+    let fake = FakeHub::holding(older);
+    let mut ui = Ui::open_on(cx, &fake);
     open_settings(&mut ui);
 
     assert_eq!(keep_awake_switch(&mut ui), (false, false), "an older hub doesn't keep the computer awake at all");
