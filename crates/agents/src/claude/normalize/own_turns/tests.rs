@@ -51,13 +51,14 @@ fn init() -> String {
     json!({"type":"system","subtype":"init","session_id":"s"}).to_string()
 }
 
+/// A task as the agent heard it ended. A subagent's names the subagent, which is the task it runs as.
 fn task(id: &str, kind: TaskKind, description: &str, call: &str, outcome: TaskOutcome) -> EndedTask {
     let task = AgentTask {
         id: id.into(),
         description: Some(description.into()),
         kind,
         call: Some(call.into()),
-        subagent: None,
+        subagent: (kind == TaskKind::Subagent).then(|| id.into()),
     };
     EndedTask { task, outcome, wait: None }
 }
